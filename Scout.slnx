@@ -24,6 +24,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj" />
     <Project Path="tests/Scout.Foundation.Tests/Scout.Foundation.Tests.csproj" />
+    <Project Path="tests/Scout.Regex.Tests/Scout.Regex.Tests.csproj" />
   </Folder>
   <Folder Name="/bench/">
     <Project Path="bench/Scout.Benchmarks/Scout.Benchmarks.csproj" />
