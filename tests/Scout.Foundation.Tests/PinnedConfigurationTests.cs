@@ -60,6 +60,9 @@ public sealed class PinnedConfigurationTests
 
         Assert.Contains("dotnet-version: 10.0.102", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet build Scout.slnx --no-restore", workflow, StringComparison.Ordinal);
+        Assert.Contains("dotnet run --project fuzz/Scout.Fuzz/Scout.Fuzz.csproj --no-build -- regex-parse", workflow, StringComparison.Ordinal);
+        Assert.Contains("dotnet run --project fuzz/Scout.Fuzz/Scout.Fuzz.csproj --no-build -- glob-compile", workflow, StringComparison.Ordinal);
+        Assert.Contains("dotnet run --project fuzz/Scout.Fuzz/Scout.Fuzz.csproj --no-build -- search-loop", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet test Scout.slnx --no-restore", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet format Scout.slnx --no-restore --verify-no-changes", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/preflight.sh", workflow, StringComparison.Ordinal);
@@ -392,7 +395,7 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("-P -o '.*o(?!.*\\s)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --count 'o(?=o)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --count-matches 'o(?=o)'", appBuildScript, StringComparison.Ordinal);
-        Assert.Contains("(cd \"$BIN/implicit-cwd\" && \"$BIN/scout\" needle", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("(cd \"$BIN/explicit-cwd\" && \"$BIN/scout\" needle .", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --files-with-matches 'foo(?=bar)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --files-without-match 'nomatch(?=bar)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P -n 'foo(?=bar)'", appBuildScript, StringComparison.Ordinal);

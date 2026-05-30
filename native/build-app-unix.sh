@@ -140,11 +140,11 @@ expect_equal_file "PCRE2 count" "$BIN/pcre2-count.expected" "$BIN/pcre2-count.ou
 "$BIN/scout" -P --count-matches 'o(?=o)' "$BIN/pcre2-smoke.txt" > "$BIN/pcre2-count-matches.out"
 printf '4\n' > "$BIN/pcre2-count-matches.expected"
 expect_equal_file "PCRE2 count-matches" "$BIN/pcre2-count-matches.expected" "$BIN/pcre2-count-matches.out"
-mkdir -p "$BIN/implicit-cwd"
-printf 'needle\n' > "$BIN/implicit-cwd/file"
-(cd "$BIN/implicit-cwd" && "$BIN/scout" needle > "$BIN/implicit-cwd.out")
-printf 'file:needle\n' > "$BIN/implicit-cwd.expected"
-expect_equal_file "implicit current directory search" "$BIN/implicit-cwd.expected" "$BIN/implicit-cwd.out"
+mkdir -p "$BIN/explicit-cwd"
+printf 'needle\n' > "$BIN/explicit-cwd/file"
+(cd "$BIN/explicit-cwd" && "$BIN/scout" needle . > "$BIN/explicit-cwd.out")
+printf './file:needle\n' > "$BIN/explicit-cwd.expected"
+expect_equal_file "explicit current directory search" "$BIN/explicit-cwd.expected" "$BIN/explicit-cwd.out"
 "$BIN/scout" -P --files-with-matches 'foo(?=bar)' "$BIN/pcre2-smoke.txt" > "$BIN/pcre2-files-with-matches.out"
 printf '%s\n' "$BIN/pcre2-smoke.txt" > "$BIN/pcre2-files-with-matches.expected"
 expect_equal_file "PCRE2 files-with-matches" "$BIN/pcre2-files-with-matches.expected" "$BIN/pcre2-files-with-matches.out"

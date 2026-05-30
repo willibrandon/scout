@@ -48,6 +48,12 @@ jobs:
         run: dotnet restore Scout.slnx
       - name: Build
         run: dotnet build Scout.slnx --no-restore
+      - name: Fuzz smoke
+        shell: pwsh
+        run: |
+          dotnet run --project fuzz/Scout.Fuzz/Scout.Fuzz.csproj --no-build -- regex-parse
+          dotnet run --project fuzz/Scout.Fuzz/Scout.Fuzz.csproj --no-build -- glob-compile
+          dotnet run --project fuzz/Scout.Fuzz/Scout.Fuzz.csproj --no-build -- search-loop
       - name: Format
         run: dotnet format Scout.slnx --no-restore --verify-no-changes
       - name: Publish Native AOT static library
