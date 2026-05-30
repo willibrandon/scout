@@ -1,13 +1,16 @@
+using System.Collections.Generic;
+
 namespace Scout;
 
 internal sealed class RegexCorpusCase
 {
-    public RegexCorpusCase(string name, string pattern, string haystack, RegexMatch? expectedMatch)
+    public RegexCorpusCase(string name, string pattern, string haystack, IReadOnlyList<RegexMatch> expectedMatches, int? matchLimit)
     {
         Name = name;
         Pattern = pattern;
         Haystack = haystack;
-        ExpectedMatch = expectedMatch;
+        ExpectedMatches = expectedMatches;
+        MatchLimit = matchLimit;
     }
 
     public string Name { get; }
@@ -16,5 +19,7 @@ internal sealed class RegexCorpusCase
 
     public string Haystack { get; }
 
-    public RegexMatch? ExpectedMatch { get; }
+    public IReadOnlyList<RegexMatch> ExpectedMatches { get; }
+
+    public int? MatchLimit { get; }
 }

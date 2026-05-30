@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -16,8 +17,9 @@ internal static class RegexCorpusLoader
         string block = FindBlock(text, name, path);
         string pattern = ReadString(block, "regex", path, name);
         string haystack = ReadString(block, "haystack", path, name);
-        RegexMatch? expectedMatch = ReadExpectedMatch(block, path, name);
-        return new RegexCorpusCase(name, pattern, haystack, expectedMatch);
+        RegexMatch[] expectedMatches = ReadExpectedMatches(block, path, name);
+        int? matchLimit = ReadOptionalInt(block, "match-limit", path, name);
+        return new RegexCorpusCase(name, pattern, haystack, expectedMatches, matchLimit);
     }
 
     private static string FindBlock(string text, string name, string path)
@@ -69,7 +71,30 @@ internal static class RegexCorpusLoader
         return null;
     }
 
-    private static RegexMatch? ReadExpectedMatch(string block, string path, string name)
+    private static int? ReadOptionalInt(string block, string key, string path, string name)
+    {
+        string prefix = key + " = ";
+        using var reader = new StringReader(block);
+        while (reader.ReadLine() is string line)
+        {
+            line = line.Trim();
+            if (!line.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (int.TryParse(line.AsSpan(prefix.Length), NumberStyles.None, CultureInfo.InvariantCulture, out int value))
+            {
+                return value;
+            }
+
+            throw new InvalidOperationException("Regex corpus case '" + name + "' in " + path + " has an invalid '" + key + "'.");
+        }
+
+        return null;
+    }
+
+    private static RegexMatch[] ReadExpectedMatches(string block, string path, string name)
     {
         string prefix = "matches = ";
         using var reader = new StringReader(block);
@@ -81,42 +106,136 @@ internal static class RegexCorpusLoader
                 continue;
             }
 
-            string value = line[prefix.Length..].Trim();
-            if (value == "[]")
-            {
-                return null;
-            }
-
-            if (!TryParseFirstSpan(value, out int start, out int end))
-            {
-                break;
-            }
-
-            return new RegexMatch(start, end - start);
+            string value = ReadTomlArrayValue(line[prefix.Length..], reader);
+            return ParseMatchSpans(value);
         }
 
         throw new InvalidOperationException("Regex corpus case '" + name + "' in " + path + " has an unsupported matches shape.");
     }
 
-    private static bool TryParseFirstSpan(string value, out int start, out int end)
+    private static string ReadTomlArrayValue(string firstLine, StringReader reader)
+    {
+        var builder = new StringBuilder(firstLine.Trim());
+        int depth = CountBracketDepth(builder.ToString());
+        while (depth > 0 && reader.ReadLine() is string line)
+        {
+            builder.Append(' ');
+            string trimmed = line.Trim();
+            builder.Append(trimmed);
+            depth += CountBracketDepth(trimmed);
+        }
+
+        return builder.ToString();
+    }
+
+    private static int CountBracketDepth(string value)
+    {
+        int depth = 0;
+        for (int index = 0; index < value.Length; index++)
+        {
+            depth += value[index] switch
+            {
+                '[' => 1,
+                ']' => -1,
+                _ => 0,
+            };
+        }
+
+        return depth;
+    }
+
+    private static RegexMatch[] ParseMatchSpans(string value)
+    {
+        var matches = new List<RegexMatch>();
+        int index = 0;
+        while (index < value.Length)
+        {
+            int open = value.IndexOf('[', index);
+            if (open < 0)
+            {
+                break;
+            }
+
+            int itemStart = open + 1;
+            while (itemStart < value.Length && char.IsWhiteSpace(value[itemStart]))
+            {
+                itemStart++;
+            }
+
+            if (itemStart >= value.Length || !char.IsDigit(value[itemStart]))
+            {
+                index = open + 1;
+                continue;
+            }
+
+            if (!TryParseSpan(value, itemStart, out int start, out int end, out int nextIndex))
+            {
+                index = open + 1;
+                continue;
+            }
+
+            matches.Add(new RegexMatch(start, end - start));
+            index = nextIndex;
+        }
+
+        return matches.ToArray();
+    }
+
+    private static bool TryParseSpan(string value, int startIndex, out int start, out int end, out int nextIndex)
     {
         start = 0;
         end = 0;
-        int open = value.IndexOf("[[", StringComparison.Ordinal);
-        if (open < 0)
+        nextIndex = startIndex;
+        if (!TryReadInt(value, startIndex, out start, out int afterStart))
         {
             return false;
         }
 
-        int comma = value.IndexOf(',', open + 2);
-        int close = value.IndexOf(']', comma + 1);
-        if (comma < 0 || close < 0)
+        int comma = SkipWhitespace(value, afterStart);
+        if (comma >= value.Length || value[comma] != ',')
         {
             return false;
         }
 
-        return int.TryParse(value.AsSpan(open + 2, comma - open - 2), NumberStyles.None, CultureInfo.InvariantCulture, out start) &&
-            int.TryParse(value.AsSpan(comma + 1, close - comma - 1).Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out end);
+        int endIndex = SkipWhitespace(value, comma + 1);
+        if (!TryReadInt(value, endIndex, out end, out int afterEnd))
+        {
+            return false;
+        }
+
+        int close = SkipWhitespace(value, afterEnd);
+        if (close >= value.Length || value[close] != ']')
+        {
+            return false;
+        }
+
+        nextIndex = close + 1;
+        return true;
+    }
+
+    private static bool TryReadInt(string value, int startIndex, out int number, out int nextIndex)
+    {
+        number = 0;
+        int end = startIndex;
+        while (end < value.Length && char.IsDigit(value[end]))
+        {
+            end++;
+        }
+
+        nextIndex = end;
+        return end > startIndex &&
+            int.TryParse(value.AsSpan(startIndex, end - startIndex), NumberStyles.None, CultureInfo.InvariantCulture, out number);
+    }
+
+    private static int SkipWhitespace(string value, int startIndex)
+    {
+        int index = startIndex;
+        while (index < value.Length && char.IsWhiteSpace(value[index]))
+        {
+            index++;
+        }
+
+        return index;
     }
 
     private static string ParseTomlString(string value)

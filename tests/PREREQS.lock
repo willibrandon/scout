@@ -77,3 +77,13 @@ sha256 = "resolved@fetch"
 name = "regex-1.12.2-misc"
 path = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/misc.toml"
 sha256 = "32c9591655c6fb118dfefcb4de49a04820a63cb960533dfc2538cdaabf4f4047"
+
+[[corpus]]
+name = "regex-1.12.2-flags"
+path = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/flags.toml"
+sha256 = "9a7e001808195c84f2a7d3e18bc0a82c7386e60f03a616e99af00c3f7f2c3fd4"
+
+[[corpus]]
+name = "regex-1.12.2-iter"
+path = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/iter.toml"
+sha256 = "6875460302974a5b3073a7304a865c45aba9653c54afea2c4d26e1ea248a81f7"

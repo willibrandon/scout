@@ -125,21 +125,38 @@ public sealed class PinnedConfigurationTests
     }
 
     /// <summary>
-    /// Verifies the initial regex conformance corpus file is pinned by hash.
+    /// Verifies the regex conformance corpus files are pinned by hash.
     /// </summary>
     [Fact]
-    public void RegexCorpusFileMatchesPinnedHash()
+    public void RegexCorpusFilesMatchPinnedHashes()
     {
-        const string expectedSha256 = "32C9591655C6FB118DFEFCB4DE49A04820A63CB960533DFC2538CDAABF4F4047";
-        const string corpusPath = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/misc.toml";
+        (string Name, string Path, string Sha256)[] corpora =
+        [
+            (
+                "regex-1.12.2-misc",
+                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/misc.toml",
+                "32C9591655C6FB118DFEFCB4DE49A04820A63CB960533DFC2538CDAABF4F4047"),
+            (
+                "regex-1.12.2-flags",
+                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/flags.toml",
+                "9A7E001808195C84F2A7D3E18BC0A82C7386E60F03A616E99AF00C3F7F2C3FD4"),
+            (
+                "regex-1.12.2-iter",
+                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/iter.toml",
+                "6875460302974A5B3073A7304A865C45ABA9653C54AFEA2C4D26E1EA248A81F7"),
+        ];
 
         string root = FindRepositoryRoot();
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
-        Assert.Contains("name = \"regex-1.12.2-misc\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("sha256 = \"" + expectedSha256.ToLowerInvariant() + "\"", prerequisiteLock, StringComparison.Ordinal);
+        for (int index = 0; index < corpora.Length; index++)
+        {
+            (string name, string path, string expectedSha256) = corpora[index];
+            Assert.Contains("name = \"" + name + "\"", prerequisiteLock, StringComparison.Ordinal);
+            Assert.Contains("sha256 = \"" + expectedSha256.ToLowerInvariant() + "\"", prerequisiteLock, StringComparison.Ordinal);
 
-        byte[] hash = SHA256.HashData(File.ReadAllBytes(corpusPath));
-        Assert.Equal(expectedSha256, Convert.ToHexString(hash));
+            byte[] hash = SHA256.HashData(File.ReadAllBytes(path));
+            Assert.Equal(expectedSha256, Convert.ToHexString(hash));
+        }
     }
 
     private static void AssertPackageVersion(XDocument document, string packageId, string expectedVersion)
