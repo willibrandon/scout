@@ -1040,6 +1040,54 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies multiline regex search honors inverted line selection.
+    /// </summary>
+    [Fact]
+    public void MultilineInvertMatchMatchesPinnedRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "pre\nfoo\nbar\nmid\nfoo\nbar baz\npost\n");
+
+        (int exitCode, byte[] output, string error) = RunScout("-n", "-v", "-U", "foo\nbar", path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-v", "-U", "foo\nbar", path);
+        (int countExitCode, byte[] countOutput, string countError) = RunScout("-c", "-v", "-U", "foo\nbar", path);
+        (int pinnedCountExitCode, byte[] pinnedCountOutput, string pinnedCountError) = RunPinnedRipgrep("-c", "-v", "-U", "foo\nbar", path);
+        (int countMatchesExitCode, byte[] countMatchesOutput, string countMatchesError) = RunScout("--count-matches", "-v", "-U", "foo\nbar", path);
+        (int pinnedCountMatchesExitCode, byte[] pinnedCountMatchesOutput, string pinnedCountMatchesError) = RunPinnedRipgrep("--count-matches", "-v", "-U", "foo\nbar", path);
+        (int onlyExitCode, byte[] onlyOutput, string onlyError) = RunScout("-n", "-o", "-v", "-U", "foo\nbar", path);
+        (int pinnedOnlyExitCode, byte[] pinnedOnlyOutput, string pinnedOnlyError) = RunPinnedRipgrep("-n", "-o", "-v", "-U", "foo\nbar", path);
+        (int vimgrepExitCode, byte[] vimgrepOutput, string vimgrepError) = RunScout("--vimgrep", "-v", "-U", "foo\nbar", path);
+        (int pinnedVimgrepExitCode, byte[] pinnedVimgrepOutput, string pinnedVimgrepError) = RunPinnedRipgrep("--vimgrep", "-v", "-U", "foo\nbar", path);
+        (int lineRegexpExitCode, byte[] lineRegexpOutput, string lineRegexpError) = RunScout("-n", "-x", "-v", "-U", "foo\nbar", path);
+        (int pinnedLineRegexpExitCode, byte[] pinnedLineRegexpOutput, string pinnedLineRegexpError) = RunPinnedRipgrep("-n", "-x", "-v", "-U", "foo\nbar", path);
+        (int jsonExitCode, byte[] jsonOutput, string jsonError) = RunScout("--json", "-v", "-U", "foo\nbar", path);
+        (int pinnedJsonExitCode, byte[] pinnedJsonOutput, string pinnedJsonError) = RunPinnedRipgrep("--json", "-v", "-U", "foo\nbar", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+        Assert.Equal(pinnedCountExitCode, countExitCode);
+        Assert.Equal(pinnedCountOutput, countOutput);
+        Assert.Equal(pinnedCountError, countError);
+        Assert.Equal(pinnedCountMatchesExitCode, countMatchesExitCode);
+        Assert.Equal(pinnedCountMatchesOutput, countMatchesOutput);
+        Assert.Equal(pinnedCountMatchesError, countMatchesError);
+        Assert.Equal(pinnedOnlyExitCode, onlyExitCode);
+        Assert.Equal(pinnedOnlyOutput, onlyOutput);
+        Assert.Equal(pinnedOnlyError, onlyError);
+        Assert.Equal(pinnedVimgrepExitCode, vimgrepExitCode);
+        Assert.Equal(pinnedVimgrepOutput, vimgrepOutput);
+        Assert.Equal(pinnedVimgrepError, vimgrepError);
+        Assert.Equal(pinnedLineRegexpExitCode, lineRegexpExitCode);
+        Assert.Equal(pinnedLineRegexpOutput, lineRegexpOutput);
+        Assert.Equal(pinnedLineRegexpError, lineRegexpError);
+        Assert.Equal(pinnedJsonExitCode, jsonExitCode);
+        Assert.Equal(NormalizeJsonTimings(pinnedJsonOutput), NormalizeJsonTimings(jsonOutput));
+        Assert.Equal(pinnedJsonError, jsonError);
+    }
+
+    /// <summary>
     /// Verifies line-regexp mode applies default regex semantics to full-line matches.
     /// </summary>
     [Fact]

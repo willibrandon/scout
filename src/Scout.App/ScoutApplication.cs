@@ -2619,8 +2619,7 @@ internal static class ScoutApplication
         out bool matched)
     {
         matched = false;
-        if (invertMatch ||
-            replacement is not null ||
+        if ((replacement is not null && !invertMatch) ||
             beforeContext > 0 ||
             afterContext > 0 ||
             passthru ||
@@ -2628,6 +2627,12 @@ internal static class ScoutApplication
             separators.NullData)
         {
             return false;
+        }
+
+        if (invertMatch)
+        {
+            matched = SearchMultilineInvertedBytes(searchSpan, patterns, output, prefix, separators, lineLimit, color, searchMode, lineNumber, column, byteOffset, maxCount, quiet, trim, includeZero, nullPathTerminator, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall);
+            return true;
         }
 
         if (!TryFindMultilineMatch(searchSpan, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, startAt: 0, out RegexMatch firstMatch))
@@ -2693,6 +2698,73 @@ internal static class ScoutApplication
 
         WriteMultilineMatchedLines(outputSpan, patterns, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
         return true;
+    }
+
+    private static bool SearchMultilineInvertedBytes(
+        ReadOnlySpan<byte> bytes,
+        IReadOnlyList<byte[]> patterns,
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        CliSearchMode searchMode,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        ulong? maxCount,
+        bool quiet,
+        bool trim,
+        bool includeZero,
+        bool nullPathTerminator,
+        bool asciiCaseInsensitive,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool multilineDotall)
+    {
+        List<ContextLineInfo> lines = BuildMultilineInvertedLines(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall);
+        long count = CountSelectedMultilineLines(lines, maxCount);
+        bool hasSelectedMatch = count > 0;
+
+        if (quiet)
+        {
+            return searchMode == CliSearchMode.FilesWithoutMatch ? !hasSelectedMatch : hasSelectedMatch;
+        }
+
+        if (searchMode == CliSearchMode.FilesWithMatches)
+        {
+            return WritePathIf(output, prefix, color, hasSelectedMatch, nullPathTerminator, separators.LineTerminator);
+        }
+
+        if (searchMode == CliSearchMode.FilesWithoutMatch)
+        {
+            return WritePathIf(output, prefix, color, !hasSelectedMatch, nullPathTerminator, separators.LineTerminator);
+        }
+
+        if (searchMode == CliSearchMode.Count || searchMode == CliSearchMode.CountMatches)
+        {
+            return WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, separators.LineTerminator);
+        }
+
+        var sink = new StandardSearchSink(output, prefix, separators.FieldMatch, separators.FieldContext, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
+        ulong emitted = 0;
+        for (int index = 0; index < lines.Count; index++)
+        {
+            ContextLineInfo line = lines[index];
+            if (!line.SelectedMatch)
+            {
+                continue;
+            }
+
+            sink.MatchedLine(line.LineNumber, line.Start, matchColumn: 0, bytes.Slice(line.Start, line.Length));
+            emitted++;
+            if (maxCount is ulong limit && emitted >= limit)
+            {
+                break;
+            }
+        }
+
+        return hasSelectedMatch;
     }
 
     private static long CountMultilineMatches(ReadOnlySpan<byte> bytes, IReadOnlyList<byte[]> patterns, bool asciiCaseInsensitive, bool lineRegexp, bool wordRegexp, bool multilineDotall, ulong? maxCount)
@@ -2888,6 +2960,79 @@ internal static class ScoutApplication
         }
 
         return found;
+    }
+
+    private static List<ContextLineInfo> BuildMultilineInvertedLines(ReadOnlySpan<byte> bytes, IReadOnlyList<byte[]> patterns, bool asciiCaseInsensitive, bool lineRegexp, bool wordRegexp, bool multilineDotall)
+    {
+        var physicalLines = new List<ContextLineInfo>();
+        int lineStart = 0;
+        long lineNumber = 1;
+        while (lineStart < bytes.Length)
+        {
+            int lineLength = GetLineLength(bytes[lineStart..], nullData: false);
+            physicalLines.Add(new ContextLineInfo(lineStart, lineLength, lineNumber, selectedMatch: false, matchColumn: 0, originalMatch: false, contextColumn: 0));
+            lineStart += lineLength;
+            lineNumber++;
+        }
+
+        bool[] matchedLines = new bool[physicalLines.Count];
+        int offset = 0;
+        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, offset, out RegexMatch match))
+        {
+            MarkMultilineMatchedLines(bytes, physicalLines, matchedLines, match);
+            offset = MatchIterator.AdvanceAfter(new MatcherMatch(match.Start, match.Length), bytes.Length);
+        }
+
+        var lines = new List<ContextLineInfo>(physicalLines.Count);
+        for (int index = 0; index < physicalLines.Count; index++)
+        {
+            ContextLineInfo line = physicalLines[index];
+            bool originalMatch = matchedLines[index];
+            lines.Add(new ContextLineInfo(line.Start, line.Length, line.LineNumber, selectedMatch: !originalMatch, matchColumn: 0, originalMatch, contextColumn: 0));
+        }
+
+        return lines;
+    }
+
+    private static void MarkMultilineMatchedLines(ReadOnlySpan<byte> bytes, List<ContextLineInfo> lines, bool[] matchedLines, RegexMatch match)
+    {
+        int firstLineStart = GetLineStart(bytes, match.Start);
+        int lastLineStart = GetLineStart(bytes, GetInclusiveMatchEnd(match));
+        for (int index = 0; index < lines.Count; index++)
+        {
+            int lineStart = lines[index].Start;
+            if (lineStart < firstLineStart)
+            {
+                continue;
+            }
+
+            if (lineStart > lastLineStart)
+            {
+                break;
+            }
+
+            matchedLines[index] = true;
+        }
+    }
+
+    private static long CountSelectedMultilineLines(List<ContextLineInfo> lines, ulong? maxCount)
+    {
+        long count = 0;
+        for (int index = 0; index < lines.Count; index++)
+        {
+            if (!lines[index].SelectedMatch)
+            {
+                continue;
+            }
+
+            count++;
+            if (maxCount is ulong limit && (ulong)count >= limit)
+            {
+                return count;
+            }
+        }
+
+        return count;
     }
 
     private static bool IsLineMatch(ReadOnlySpan<byte> bytes, int start, int end)
@@ -3179,8 +3324,7 @@ internal static class ScoutApplication
         out bool matched)
     {
         matched = false;
-        if (invertMatch ||
-            replacement is not null ||
+        if ((replacement is not null && !invertMatch) ||
             crlf ||
             nullData ||
             beforeContext > 0 ||
@@ -3188,6 +3332,12 @@ internal static class ScoutApplication
             passthru)
         {
             return false;
+        }
+
+        if (invertMatch)
+        {
+            matched = WriteJsonMultilineInvertedMatches(bytes, patterns, writer, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
+            return true;
         }
 
         int offset = 0;
@@ -3218,6 +3368,40 @@ internal static class ScoutApplication
         }
 
         return true;
+    }
+
+    private static bool WriteJsonMultilineInvertedMatches(
+        ReadOnlySpan<byte> bytes,
+        IReadOnlyList<byte[]> patterns,
+        JsonFileWriter writer,
+        bool asciiCaseInsensitive,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool multilineDotall,
+        ulong? maxCount)
+    {
+        List<ContextLineInfo> lines = BuildMultilineInvertedLines(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall);
+        var matches = new List<JsonMatchSpan>(capacity: 0);
+        ulong emitted = 0;
+        bool matched = false;
+        for (int index = 0; index < lines.Count; index++)
+        {
+            ContextLineInfo line = lines[index];
+            if (!line.SelectedMatch)
+            {
+                continue;
+            }
+
+            matched = true;
+            writer.WriteMatchLine(line.LineNumber, line.Start, bytes.Slice(line.Start, line.Length), matches);
+            emitted++;
+            if (maxCount is ulong limit && emitted >= limit)
+            {
+                break;
+            }
+        }
+
+        return matched;
     }
 
     private static bool SearchJsonLines(
