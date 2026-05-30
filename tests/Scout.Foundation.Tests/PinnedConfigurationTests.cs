@@ -168,6 +168,7 @@ public sealed class PinnedConfigurationTests
         string upstream = File.ReadAllText(Path.Combine(root, "native", "pcre2", "UPSTREAM"));
         string sourceRoot = Path.Combine(root, "native", "pcre2", "pcre2-10.46");
         string buildScript = File.ReadAllText(Path.Combine(root, "native", "pcre2", "build-unix.sh"));
+        string appBuildScript = File.ReadAllText(Path.Combine(root, "native", "build-app-unix.sh"));
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
         string headerPath = Path.Combine(sourceRoot, "include", "pcre2.h");
 
@@ -193,6 +194,9 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("-DSUPPORT_PCRE2_8=1", buildScript, StringComparison.Ordinal);
         Assert.Contains("-DSUPPORT_UNICODE=1", buildScript, StringComparison.Ordinal);
         Assert.Contains("-DSUPPORT_JIT=1", buildScript, StringComparison.Ordinal);
+        Assert.Contains("\"$ROOT/native/pcre2/build-unix.sh\" \"$RID\"", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("artifacts/native/pcre2/$RID/lib/libpcre2-8.a", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("-Wl,-force_load,\"$PCRE2_LIB\"", appBuildScript, StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -5,7 +5,18 @@ RID="$1"
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 OUT="$ROOT/artifacts/app/$RID"
 BIN="$ROOT/artifacts/bin/$RID"
+PCRE2_LIB="$ROOT/artifacts/native/pcre2/$RID/lib/libpcre2-8.a"
 
+case "$RID" in
+    osx-arm64|osx-x64)
+        ;;
+    *)
+        printf 'RID %s is not implemented in this local app linker yet.\n' "$RID" >&2
+        exit 1
+        ;;
+esac
+
+"$ROOT/native/pcre2/build-unix.sh" "$RID"
 dotnet publish "$ROOT/src/Scout.App/Scout.App.csproj" -r "$RID" -c Release -p:NativeLib=Static -o "$OUT"
 mkdir -p "$BIN"
 
@@ -19,6 +30,7 @@ if [ "$RID" = "osx-arm64" ]; then
         "$RT/libSystem.Native.a" "$RT/libSystem.Globalization.Native.a" \
         "$RT/libSystem.IO.Compression.Native.a" "$RT/libSystem.Net.Security.Native.a" \
         "$RT/libSystem.Security.Cryptography.Native.Apple.a" \
+        -Wl,-force_load,"$PCRE2_LIB" \
         -lc++ -lobjc -lz \
         -framework Foundation -framework Security -framework GSS -framework CryptoKit -framework Network \
         -o "$BIN/scout"
@@ -31,12 +43,10 @@ elif [ "$RID" = "osx-x64" ]; then
         "$RT/libSystem.Native.a" "$RT/libSystem.Globalization.Native.a" \
         "$RT/libSystem.IO.Compression.Native.a" "$RT/libSystem.Net.Security.Native.a" \
         "$RT/libSystem.Security.Cryptography.Native.Apple.a" \
+        -Wl,-force_load,"$PCRE2_LIB" \
         -lc++ -lobjc -lz \
         -framework Foundation -framework Security -framework GSS -framework CryptoKit -framework Network \
         -o "$BIN/scout"
-else
-    printf 'RID %s is not implemented in this local app linker yet.\n' "$RID" >&2
-    exit 1
 fi
 
 "$BIN/scout" -V > "$BIN/version.out"
