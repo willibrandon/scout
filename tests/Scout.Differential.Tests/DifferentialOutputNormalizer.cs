@@ -130,6 +130,11 @@ internal static class DifferentialOutputNormalizer
             return SortNullSeparatedRecords(text);
         }
 
+        if (LooksLikeStatsFooter(text))
+        {
+            return text;
+        }
+
         string sortableText = text;
         string footer = string.Empty;
         if (TrySplitStatsFooter(text, out string? body, out string? statsFooter))

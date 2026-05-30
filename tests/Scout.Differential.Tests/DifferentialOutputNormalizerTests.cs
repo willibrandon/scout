@@ -154,6 +154,36 @@ public sealed class DifferentialOutputNormalizerTests
     }
 
     /// <summary>
+    /// Verifies stats-only output is not alphabetically sorted when path-order normalization is enabled.
+    /// </summary>
+    [Fact]
+    public void SortLinesAndMaskElapsedKeepsStatsOnlyOutputOrder()
+    {
+        string input =
+            "0 matches\n" +
+            "0 matched lines\n" +
+            "0 files contained matches\n" +
+            "2 files searched\n" +
+            "0 bytes printed\n" +
+            "40 bytes searched\n" +
+            "0.123456 seconds spent searching\n" +
+            "0.234567 seconds total\n";
+
+        byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes(input), DifferentialComparisonMode.SortLinesAndMaskElapsed);
+
+        Assert.Equal(
+            "0 matches\n" +
+            "0 matched lines\n" +
+            "0 files contained matches\n" +
+            "2 files searched\n" +
+            "0 bytes printed\n" +
+            "40 bytes searched\n" +
+            "0.000000 seconds spent searching\n" +
+            "0.000000 seconds total\n",
+            Utf8.GetString(normalized));
+    }
+
+    /// <summary>
     /// Verifies JSON output is sorted by path while preserving each file's begin/match/end order.
     /// </summary>
     [Fact]
