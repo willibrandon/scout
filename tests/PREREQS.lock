@@ -9,6 +9,13 @@ ripgrep_rg_profile = "release-lto"
 ripgrep_rg_path = "/Users/brandon/src/ripgrep/target/release-lto/rg"
 ripgrep_rg_sha256 = "44e33a21be51a0d6dce82a7c7610ee835f565a74499d34190ad4dcf4d709239e"
 
+[linux_container]
+base_image = "debian:bookworm-slim"
+index_digest = "sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb"
+amd64_digest = "sha256:b29f74a267526ae6ea104eed6c46133b0ca70ce812525df8cd5817698f0a624a"
+arm64_digest = "sha256:f1433d3ee18e12f45682b29d91b6356e54e40d6b47f5f8ac81e80f35cca8cfe7"
+snapshot_url = "http://snapshot.debian.org/archive/debian/20260501T000000Z"
+
 [pcre2]
 binding = "pcre2"
 binding_version = "0.2.11"
@@ -83,53 +90,130 @@ bottle_sha256 = "2a79829da44dc03e12ea4977b6bfa122cea8487e741c24a7fbcc7ce6a4788db
 sha256 = "b7272e98214e951452bcbc81eaf0b8f0db391dce05b58ce8ab42985b632c5e94"
 
 [[tool.linux]]
+rid = "linux-x64"
 name = "gzip"
 package = "gzip"
 binary = "gzip"
-version = "resolved@build"
-sha256 = "resolved@build"
+path = "/usr/bin/gzip"
+version = "1.12-1"
+sha256 = "953d326212574b5ad3cbe5f87034b0c142b6e6d71bb619c51eaa3d2ce47f7e24"
 
 [[tool.linux]]
+rid = "linux-x64"
 name = "bzip2"
 package = "bzip2"
 binary = "bzip2"
-version = "resolved@build"
-sha256 = "resolved@build"
+path = "/usr/bin/bzip2"
+version = "1.0.8-5+b1"
+sha256 = "0295484aea2cd54ad0cc4f09fbea5a3285c3361d7db716809d1421a39adb8b91"
 
 [[tool.linux]]
+rid = "linux-x64"
 name = "xz"
 package = "xz-utils"
 binary = "xz"
-version = "resolved@build"
-sha256 = "resolved@build"
+path = "/usr/bin/xz"
+version = "5.4.1-1"
+sha256 = "31c8422d8432de91ffa9b3713743c98cb8011c561546c76759600c9476357dc0"
 
 [[tool.linux]]
+rid = "linux-x64"
 name = "lz4"
 package = "lz4"
 binary = "lz4"
-version = "resolved@build"
-sha256 = "resolved@build"
+path = "/usr/bin/lz4"
+version = "1.9.4-1"
+sha256 = "d7958b8fa6659cb45852d061dcecd84a897f26a0f98a8b52d787b35db3791dbb"
 
 [[tool.linux]]
+rid = "linux-x64"
 name = "brotli"
 package = "brotli"
 binary = "brotli"
-version = "resolved@build"
-sha256 = "resolved@build"
+path = "/usr/bin/brotli"
+version = "1.0.9-2+b6"
+sha256 = "b111a83afdee0f0555f988968d2de0e7ddb4561db36ef31f71a1d1d95af937ce"
 
 [[tool.linux]]
+rid = "linux-x64"
 name = "zstd"
 package = "zstd"
 binary = "zstd"
-version = "resolved@build"
-sha256 = "resolved@build"
+path = "/usr/bin/zstd"
+version = "1.5.4+dfsg2-5"
+sha256 = "cee5aaa2d86c0bf168fc57b759439f5900f2a3b55a9250271c473a7b08e3d3e3"
 
 [[tool.linux]]
+rid = "linux-x64"
 name = "uncompress"
 package = "ncompress"
 binary = "uncompress"
-version = "resolved@build"
-sha256 = "resolved@build"
+path = "/usr/bin/uncompress"
+version = "4.2.4.6-6"
+sha256 = "55c2f67ca4c3cca0ebac659f0075461dd671ec4937ecd6c71123bb49ed322ebd"
+
+[[tool.linux]]
+rid = "linux-arm64"
+name = "gzip"
+package = "gzip"
+binary = "gzip"
+path = "/usr/bin/gzip"
+version = "1.12-1"
+sha256 = "d3afaebcb97bf6fa214a813d89b108f48955665ea596228340ec80580ee55a0e"
+
+[[tool.linux]]
+rid = "linux-arm64"
+name = "bzip2"
+package = "bzip2"
+binary = "bzip2"
+path = "/usr/bin/bzip2"
+version = "1.0.8-5+b1"
+sha256 = "40cbbed6f2decef80c0620931b095623705422c19cb5c14b8b27f125a3a5be21"
+
+[[tool.linux]]
+rid = "linux-arm64"
+name = "xz"
+package = "xz-utils"
+binary = "xz"
+path = "/usr/bin/xz"
+version = "5.4.1-1"
+sha256 = "26c98f8bc8f57e82b65b015cb699088ea1da2fc29557f4bc97bbce4fc0069cc8"
+
+[[tool.linux]]
+rid = "linux-arm64"
+name = "lz4"
+package = "lz4"
+binary = "lz4"
+path = "/usr/bin/lz4"
+version = "1.9.4-1"
+sha256 = "0cb356909741a31909cebbae5120e1faff61c265857b18f35fe96a157f1fd377"
+
+[[tool.linux]]
+rid = "linux-arm64"
+name = "brotli"
+package = "brotli"
+binary = "brotli"
+path = "/usr/bin/brotli"
+version = "1.0.9-2+b6"
+sha256 = "bc0ff60a77a83a039e136e6b77d4373ef5a01f233f7d42360aef5ce9a70194e5"
+
+[[tool.linux]]
+rid = "linux-arm64"
+name = "zstd"
+package = "zstd"
+binary = "zstd"
+path = "/usr/bin/zstd"
+version = "1.5.4+dfsg2-5"
+sha256 = "f3336accc2f38ffc03c3ee4b123b53d06ce14abfb4d19028841883c408fdbaf2"
+
+[[tool.linux]]
+rid = "linux-arm64"
+name = "uncompress"
+package = "ncompress"
+binary = "uncompress"
+path = "/usr/bin/uncompress"
+version = "4.2.4.6-6"
+sha256 = "55c2f67ca4c3cca0ebac659f0075461dd671ec4937ecd6c71123bb49ed322ebd"
 
 [[corpus]]
 name = "opensubtitles-en"

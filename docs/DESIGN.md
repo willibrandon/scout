@@ -462,7 +462,7 @@ Flag tables, help/man text, and shell completions are generated deterministicall
 
 **Open for reviewer sign-off:** none. All previously open *design* items are decided above.
 
-**Inception-captured values (not design decisions; pinned-inputs in plan, literals captured at first build/fetch, verified in CI):** the SDK patch level (`global.json`), the PCRE2 upstream commit SHA (`native/pcre2/UPSTREAM`), the reference `rg` binary hash, macOS decompression tool hashes, regex/encoding corpus hashes, and the remaining CI base-image digest + Linux tool versions/SHA-256 + external corpus SHA-256 values (`tests/PREREQS.lock`, §8.5, Appendix B). The literal values that already exist are committed in `tests/PREREQS.lock`.
+**Inception-captured values (not design decisions; pinned-inputs in plan, literals captured at first build/fetch, verified in CI):** the SDK patch level (`global.json`), the PCRE2 upstream commit SHA (`native/pcre2/UPSTREAM`), the reference `rg` binary hash, macOS decompression tool hashes, Linux base-image/tool hashes, regex/encoding corpus hashes, and the remaining external corpus SHA-256 values (`tests/PREREQS.lock`, §8.5, Appendix B). The literal values that already exist are committed in `tests/PREREQS.lock`.
 
 **Implementation-risk gate (partly discharged — 2 of 6 RIDs proven):** the native-entry byte-boundary mechanism was **actually executed and PASSED on osx-arm64 (native) and osx-x64 (cross-compiled, run under Rosetta)** with .NET SDK 10.0.102; Appendix A holds both transcripts (`0xFF` argv byte round-tripped verbatim on each). The only per-arch link delta was the x64-only `libRuntime.VxsortEnabled.a`. Still **not** proven on `linux-x64`, `linux-arm64`, `win-x64`, `win-arm64` (they need their own OS/CI environments); reproducing them in CI is the remaining M0 gate before the byte-boundary claim is treated as fully proven cross-platform. *(Correction of record: an earlier version of this line wrongly stated this environment had no .NET SDK and the spike had not run — false. The SDK is installed and the spike ran and passed on both macOS architectures.)*
 
@@ -589,7 +589,7 @@ On x64 the link additionally needs `libRuntime.VxsortEnabled.a` (the GC's AVX2/A
 
 **This file exists in the repo at `tests/PREREQS.lock`.** It is not a sketch — the values below were measured on this machine and the authoritative copy is the file; this appendix summarizes it.
 
-**Literal-and-final today** (measured/known): the ripgrep commit and release-LTO reference `rg` binary hash; the .NET SDK/runtime that built the verified spikes (`10.0.102`/`10.0.2`); the macOS host (`macOS 26.3.1`, `arm64`, `Apple clang 17.0.0 (clang-1700.6.4.2)`, `cargo 1.91.1`); the PCRE2 binding/sys/C-library versions, tag, and upstream commit; the macOS decompression tool versions and binary hashes (`gzip` Apple gzip 475, `bzip2` 1.0.8, `xz` 5.8.2, `zstd` 1.5.7, `lz4` 1.10.0, `brotli` 1.2.0, `uncompress` Apple compress file_cmds-475 — all read from the host); the macOS `hyperfine` 1.20.0 Homebrew source checksum, bottle checksum, and binary hash; and the **real spike-binary hashes**:
+**Literal-and-final today** (measured/known): the ripgrep commit and release-LTO reference `rg` binary hash; the .NET SDK/runtime that built the verified spikes (`10.0.102`/`10.0.2`); the macOS host (`macOS 26.3.1`, `arm64`, `Apple clang 17.0.0 (clang-1700.6.4.2)`, `cargo 1.91.1`); the PCRE2 binding/sys/C-library versions, tag, and upstream commit; the macOS decompression tool versions and binary hashes (`gzip` Apple gzip 475, `bzip2` 1.0.8, `xz` 5.8.2, `zstd` 1.5.7, `lz4` 1.10.0, `brotli` 1.2.0, `uncompress` Apple compress file_cmds-475 — all read from the host); the Linux `debian:bookworm-slim` index/amd64/arm64 digests plus pinned-snapshot decompressor package versions and binary hashes; the macOS `hyperfine` 1.20.0 Homebrew source checksum, bottle checksum, and binary hash; and the **real spike-binary hashes**:
 
 ```toml
 [[spike_artifact]]
@@ -605,8 +605,7 @@ sha256 = "010ff1889ab16bd5e314f0578e567b5895ee5c9b4e54c6b4e777c6ec5d14614a"  # L
 result = "PASS; needs libRuntime.VxsortEnabled.a"
 ```
 
-**Honestly `resolved@*` (cannot be literal yet, and saying otherwise would be a lie):** a SHA-256 exists only after an artifact is first built/pulled/fetched. These are **not invented**; each is fully *determined* by inputs pinned here and frozen on first run, then CI-verified forever:
-- `[linux_container].base_image_digest` + every `[[tool.linux]]` `version`/`sha256` = `resolved@build` — fully determined by `(base image, snapshot date 2026-05-01, package)`; written back as exact values at first container build. (These genuinely require building the Linux image, which cannot be done on this macOS host.)
+**Honestly `resolved@*` (cannot be literal yet, and saying otherwise would be a lie):** a SHA-256 exists only after an artifact is first fetched. These are **not invented**; each is fully *determined* by inputs pinned here and frozen on first run, then CI-verified forever:
 - OpenSubtitles and linux-kernel `[[corpus]]` URL/SHA-256 values = `resolved@fetch` — frozen on first download from the pinned URLs.
 
 This is the same discipline already applied to the SDK patch (§5.1), PCRE2 commit (§4.3), reference `rg`, regex/encoding corpora, and local macOS decompression tools: pin the determining **inputs** now, capture the resulting **hash** at inception, verify forever after.

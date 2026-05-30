@@ -284,30 +284,46 @@ public sealed class PinnedConfigurationTests
     [Fact]
     public void LinuxDecompressionToolsCoverPinnedDefaultCommandTable()
     {
-        (string Name, string Package, string Binary)[] tools =
+        (string Rid, string Name, string Package, string Binary, string Path, string Version, string Sha256)[] tools =
         [
-            ("gzip", "gzip", "gzip"),
-            ("bzip2", "bzip2", "bzip2"),
-            ("xz", "xz-utils", "xz"),
-            ("lz4", "lz4", "lz4"),
-            ("brotli", "brotli", "brotli"),
-            ("zstd", "zstd", "zstd"),
-            ("uncompress", "ncompress", "uncompress"),
+            ("linux-x64", "gzip", "gzip", "gzip", "/usr/bin/gzip", "1.12-1", "953d326212574b5ad3cbe5f87034b0c142b6e6d71bb619c51eaa3d2ce47f7e24"),
+            ("linux-x64", "bzip2", "bzip2", "bzip2", "/usr/bin/bzip2", "1.0.8-5+b1", "0295484aea2cd54ad0cc4f09fbea5a3285c3361d7db716809d1421a39adb8b91"),
+            ("linux-x64", "xz", "xz-utils", "xz", "/usr/bin/xz", "5.4.1-1", "31c8422d8432de91ffa9b3713743c98cb8011c561546c76759600c9476357dc0"),
+            ("linux-x64", "lz4", "lz4", "lz4", "/usr/bin/lz4", "1.9.4-1", "d7958b8fa6659cb45852d061dcecd84a897f26a0f98a8b52d787b35db3791dbb"),
+            ("linux-x64", "brotli", "brotli", "brotli", "/usr/bin/brotli", "1.0.9-2+b6", "b111a83afdee0f0555f988968d2de0e7ddb4561db36ef31f71a1d1d95af937ce"),
+            ("linux-x64", "zstd", "zstd", "zstd", "/usr/bin/zstd", "1.5.4+dfsg2-5", "cee5aaa2d86c0bf168fc57b759439f5900f2a3b55a9250271c473a7b08e3d3e3"),
+            ("linux-x64", "uncompress", "ncompress", "uncompress", "/usr/bin/uncompress", "4.2.4.6-6", "55c2f67ca4c3cca0ebac659f0075461dd671ec4937ecd6c71123bb49ed322ebd"),
+            ("linux-arm64", "gzip", "gzip", "gzip", "/usr/bin/gzip", "1.12-1", "d3afaebcb97bf6fa214a813d89b108f48955665ea596228340ec80580ee55a0e"),
+            ("linux-arm64", "bzip2", "bzip2", "bzip2", "/usr/bin/bzip2", "1.0.8-5+b1", "40cbbed6f2decef80c0620931b095623705422c19cb5c14b8b27f125a3a5be21"),
+            ("linux-arm64", "xz", "xz-utils", "xz", "/usr/bin/xz", "5.4.1-1", "26c98f8bc8f57e82b65b015cb699088ea1da2fc29557f4bc97bbce4fc0069cc8"),
+            ("linux-arm64", "lz4", "lz4", "lz4", "/usr/bin/lz4", "1.9.4-1", "0cb356909741a31909cebbae5120e1faff61c265857b18f35fe96a157f1fd377"),
+            ("linux-arm64", "brotli", "brotli", "brotli", "/usr/bin/brotli", "1.0.9-2+b6", "bc0ff60a77a83a039e136e6b77d4373ef5a01f233f7d42360aef5ce9a70194e5"),
+            ("linux-arm64", "zstd", "zstd", "zstd", "/usr/bin/zstd", "1.5.4+dfsg2-5", "f3336accc2f38ffc03c3ee4b123b53d06ce14abfb4d19028841883c408fdbaf2"),
+            ("linux-arm64", "uncompress", "ncompress", "uncompress", "/usr/bin/uncompress", "4.2.4.6-6", "55c2f67ca4c3cca0ebac659f0075461dd671ec4937ecd6c71123bb49ed322ebd"),
         ];
 
         string root = FindRepositoryRoot();
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+
+        Assert.Contains("base_image = \"debian:bookworm-slim\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("index_digest = \"sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("amd64_digest = \"sha256:b29f74a267526ae6ea104eed6c46133b0ca70ce812525df8cd5817698f0a624a\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("arm64_digest = \"sha256:f1433d3ee18e12f45682b29d91b6356e54e40d6b47f5f8ac81e80f35cca8cfe7\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("snapshot_url = \"http://snapshot.debian.org/archive/debian/20260501T000000Z\"", prerequisiteLock, StringComparison.Ordinal);
+
         for (int index = 0; index < tools.Length; index++)
         {
-            (string name, string package, string binary) = tools[index];
+            (string rid, string name, string package, string binary, string path, string version, string sha256) = tools[index];
             string block = string.Join(
                 "\n",
                 "[[tool.linux]]",
+                "rid = \"" + rid + "\"",
                 "name = \"" + name + "\"",
                 "package = \"" + package + "\"",
                 "binary = \"" + binary + "\"",
-                "version = \"resolved@build\"",
-                "sha256 = \"resolved@build\"");
+                "path = \"" + path + "\"",
+                "version = \"" + version + "\"",
+                "sha256 = \"" + sha256 + "\"");
             Assert.Contains(block, prerequisiteLock, StringComparison.Ordinal);
         }
     }
