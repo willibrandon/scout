@@ -45,6 +45,31 @@ internal static class DifferentialRunner
             DifferentialOutputNormalizer.NormalizeStderr(scout.Error, testCase.ComparisonMode));
     }
 
+    public static void AssertMatchesPinned(DifferentialCase testCase, RgTestDirectory scoutDirectory, RgTestDirectory pinnedDirectory, string? scoutWorkingDirectory, string? pinnedWorkingDirectory)
+    {
+        ArgumentNullException.ThrowIfNull(testCase);
+        ArgumentNullException.ThrowIfNull(scoutDirectory);
+        ArgumentNullException.ThrowIfNull(pinnedDirectory);
+
+        string[] scoutArguments = testCase.GetArguments(scoutDirectory);
+        string[] pinnedArguments = testCase.GetArguments(pinnedDirectory);
+        DifferentialRunResult scout = RunScout(scoutArguments, testCase.StandardInput, testCase.RelativeConfigPath, scoutWorkingDirectory);
+        DifferentialRunResult pinned = RunPinnedRipgrep(pinnedArguments, testCase.StandardInput, testCase.RelativeConfigPath, pinnedWorkingDirectory);
+
+        if (pinned.ExitCode != scout.ExitCode)
+        {
+            Assert.Fail(BuildFailureMessage(pinnedArguments, scoutArguments, pinned, scout));
+        }
+
+        AssertEqualBytes(
+            scoutArguments,
+            DifferentialOutputNormalizer.NormalizeStdout(pinned.Output, testCase.ComparisonMode),
+            DifferentialOutputNormalizer.NormalizeStdout(scout.Output, testCase.ComparisonMode));
+        Assert.Equal(
+            DifferentialOutputNormalizer.NormalizeStderr(pinned.Error, testCase.ComparisonMode),
+            DifferentialOutputNormalizer.NormalizeStderr(scout.Error, testCase.ComparisonMode));
+    }
+
     private static DifferentialRunResult RunScout(string[] arguments, byte[]? standardInput, string? relativeConfigPath, string? workingDirectory)
     {
         if (workingDirectory is null)
@@ -206,6 +231,18 @@ internal static class DifferentialRunner
     {
         string joinedArguments = string.Join(" ", arguments);
         return "arguments: " + joinedArguments +
+            "\nexpected exit code: " + expected.ExitCode +
+            "\nactual exit code: " + actual.ExitCode +
+            "\nexpected stdout:\n" + Utf8.GetString(expected.Output) +
+            "\nactual stdout:\n" + Utf8.GetString(actual.Output) +
+            "\nexpected stderr:\n" + expected.Error +
+            "\nactual stderr:\n" + actual.Error;
+    }
+
+    private static string BuildFailureMessage(string[] expectedArguments, string[] actualArguments, DifferentialRunResult expected, DifferentialRunResult actual)
+    {
+        return "expected arguments: " + string.Join(" ", expectedArguments) +
+            "\nactual arguments: " + string.Join(" ", actualArguments) +
             "\nexpected exit code: " + expected.ExitCode +
             "\nactual exit code: " + actual.ExitCode +
             "\nexpected stdout:\n" + Utf8.GetString(expected.Output) +

@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 
 namespace Scout;
@@ -11,6 +12,8 @@ internal sealed class RgTestDirectory : IDisposable
     }
 
     public string RootPath { get; }
+
+    public string PhysicalRootPath => GetPhysicalPath(RootPath);
 
     public static RgTestDirectory Create(string name)
     {
@@ -173,5 +176,57 @@ internal sealed class RgTestDirectory : IDisposable
         File.SetCreationTimeUtc(destinationPath, File.GetCreationTimeUtc(sourcePath));
         File.SetLastWriteTimeUtc(destinationPath, File.GetLastWriteTimeUtc(sourcePath));
         File.SetLastAccessTimeUtc(destinationPath, File.GetLastAccessTimeUtc(sourcePath));
+    }
+
+    private static string GetPhysicalPath(string path)
+    {
+        string fullPath = Path.GetFullPath(path);
+        if (OperatingSystem.IsWindows())
+        {
+            return fullPath;
+        }
+
+        try
+        {
+            ProcessStartInfo startInfo = new("/bin/pwd")
+            {
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                WorkingDirectory = fullPath,
+            };
+            startInfo.ArgumentList.Add("-P");
+            using Process process = new()
+            {
+                StartInfo = startInfo,
+            };
+            if (!process.Start())
+            {
+                return fullPath;
+            }
+
+            string output = process.StandardOutput.ReadToEnd();
+            _ = process.StandardError.ReadToEnd();
+            if (!process.WaitForExit(5_000))
+            {
+                process.Kill(entireProcessTree: true);
+                return fullPath;
+            }
+
+            string physicalPath = output.TrimEnd('\r', '\n');
+            return process.ExitCode == 0 && physicalPath.Length > 0 ? physicalPath : fullPath;
+        }
+        catch (InvalidOperationException)
+        {
+            return fullPath;
+        }
+        catch (IOException)
+        {
+            return fullPath;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return fullPath;
+        }
     }
 }

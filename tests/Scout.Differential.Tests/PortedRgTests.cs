@@ -1937,6 +1937,26 @@ internal static class PortedRgTests
                 DifferentialCase.ExactInDirectory("subdir", "--path-separator", "/", "--files", "."),
                 DifferentialCase.ExactInDirectory("subdir", "--path-separator", "/", "--files", "./")),
             new(
+                "tests/regression.rs",
+                "r3179_global_gitignore_cwd",
+                dir =>
+                {
+                    dir.CreateDirectory("a/b/c");
+                    dir.CreateFile("a/b/c/haystack", string.Empty);
+                    dir.CreateFile(".test.gitignore", "/haystack");
+                },
+                DifferentialCase.ExactInDirectoryWithArguments(
+                    "a/b/c",
+                    dir =>
+                    [
+                        "--path-separator",
+                        "/",
+                        "--files",
+                        "--ignore-file",
+                        Path.Combine(dir.PhysicalRootPath, ".test.gitignore"),
+                        dir.PhysicalRootPath,
+                    ])),
+            new(
                 "tests/feature.rs",
                 "f419_zero_as_shortcut_for_null",
                 dir => dir.CreateFile("sherlock", "Sherlock\nSherlock\n"),
@@ -2392,7 +2412,7 @@ internal static class PortedRgTests
             using RgTestDirectory pinnedDirectory = directory.Clone(testCase.Name + "-pinned");
             string scoutWorkingDirectory = GetWorkingDirectory(scoutDirectory, command);
             string pinnedWorkingDirectory = GetWorkingDirectory(pinnedDirectory, command);
-            DifferentialRunner.AssertMatchesPinned(command, scoutWorkingDirectory, pinnedWorkingDirectory);
+            DifferentialRunner.AssertMatchesPinned(command, scoutDirectory, pinnedDirectory, scoutWorkingDirectory, pinnedWorkingDirectory);
         }
     }
 
