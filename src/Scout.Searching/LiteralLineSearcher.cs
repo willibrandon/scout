@@ -1155,21 +1155,30 @@ public static class LiteralLineSearcher
     {
         bool matched = false;
         int offset = 0;
-        while (offset < line.Length || HasAnyEmptyPattern(needles))
+        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
+        while (offset <= line.Length)
         {
             if (!TryFindPatternMatch(line, needles, offset, asciiCaseInsensitive, lineRegexp: false, wordRegexp, crlf: false, nullData: false, out int start, out int length))
             {
                 return matched;
             }
 
-            if (!HasAnyEmptyPattern(needles) && IsTrailingLineTerminatorEmptyMatch(line, start, length, matched))
+            var match = new MatcherMatch(start, length);
+            if (MatchIterator.IsSuppressedEmpty(match, suppressedEmptyStart))
+            {
+                offset = MatchIterator.AdvanceAfterSuppressedEmpty(match, line.Length);
+                suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
+                continue;
+            }
+
+            if (!HasAnyEmptyPattern(needles) && IsLineEndEmptyMatch(line, start, length))
             {
                 return matched;
             }
 
             sink.Matched(lineNumber, lineStart + start, start + 1, line.Slice(start, length));
             matched = true;
-            offset = AdvanceAfterMatch(start, length);
+            offset = MatchIterator.AdvanceAfterReported(match, line.Length, ref suppressedEmptyStart);
             if (offset > line.Length)
             {
                 return matched;
@@ -1192,21 +1201,30 @@ public static class LiteralLineSearcher
     {
         bool matched = false;
         int offset = 0;
-        while (offset < content.Length || HasAnyEmptyPattern(needles))
+        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
+        while (offset <= content.Length)
         {
             if (!TryFindPatternMatch(content, needles, offset, asciiCaseInsensitive, lineRegexp: false, wordRegexp, crlf: false, nullData: false, out int start, out int length))
             {
                 return matched;
             }
 
-            if (!HasAnyEmptyPattern(needles) && IsTrailingLineTerminatorEmptyMatch(content, start, length, matched))
+            var match = new MatcherMatch(start, length);
+            if (MatchIterator.IsSuppressedEmpty(match, suppressedEmptyStart))
+            {
+                offset = MatchIterator.AdvanceAfterSuppressedEmpty(match, content.Length);
+                suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
+                continue;
+            }
+
+            if (!HasAnyEmptyPattern(needles) && IsLineEndEmptyMatch(content, start, length))
             {
                 return matched;
             }
 
             sink.MatchedLine(lineNumber, lineStart, lineStart + start, start + 1, line, content.Slice(start, length));
             matched = true;
-            offset = AdvanceAfterMatch(start, length);
+            offset = MatchIterator.AdvanceAfterReported(match, content.Length, ref suppressedEmptyStart);
             if (offset > content.Length)
             {
                 return matched;
@@ -1689,15 +1707,29 @@ public static class LiteralLineSearcher
     {
         long count = 0;
         int offset = 0;
-        while (offset < haystack.Length || HasAnyEmptyPattern(needles))
+        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
+        while (offset <= haystack.Length)
         {
             if (!TryFindPatternMatch(haystack, needles, offset, asciiCaseInsensitive, lineRegexp: false, wordRegexp, crlf: false, nullData: false, out int start, out int length))
             {
                 return count;
             }
 
+            var match = new MatcherMatch(start, length);
+            if (MatchIterator.IsSuppressedEmpty(match, suppressedEmptyStart))
+            {
+                offset = MatchIterator.AdvanceAfterSuppressedEmpty(match, haystack.Length);
+                suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
+                continue;
+            }
+
+            if (!HasAnyEmptyPattern(needles) && IsLineEndEmptyMatch(haystack, start, length))
+            {
+                return count;
+            }
+
             count++;
-            offset = AdvanceAfterMatch(start, length);
+            offset = MatchIterator.AdvanceAfterReported(match, haystack.Length, ref suppressedEmptyStart);
             if (offset > haystack.Length)
             {
                 return count;
@@ -1716,9 +1748,23 @@ public static class LiteralLineSearcher
     {
         long count = 0;
         int offset = 0;
-        while (offset < haystack.Length || HasAnyEmptyPattern(needles))
+        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
+        while (offset <= haystack.Length)
         {
             if (!TryFindPatternMatch(haystack, needles, offset, asciiCaseInsensitive, lineRegexp: false, wordRegexp, crlf: false, nullData: false, out int start, out int length))
+            {
+                return count;
+            }
+
+            var match = new MatcherMatch(start, length);
+            if (MatchIterator.IsSuppressedEmpty(match, suppressedEmptyStart))
+            {
+                offset = MatchIterator.AdvanceAfterSuppressedEmpty(match, haystack.Length);
+                suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
+                continue;
+            }
+
+            if (!HasAnyEmptyPattern(needles) && IsLineEndEmptyMatch(haystack, start, length))
             {
                 return count;
             }
@@ -1728,7 +1774,7 @@ public static class LiteralLineSearcher
                 count++;
             }
 
-            offset = AdvanceAfterMatch(start, length);
+            offset = MatchIterator.AdvanceAfterReported(match, haystack.Length, ref suppressedEmptyStart);
             if (offset > haystack.Length)
             {
                 return count;
@@ -1884,12 +1930,41 @@ public static class LiteralLineSearcher
             return true;
         }
 
+        if (ContainsNonCapturingGroup(pattern))
+        {
+            var automaton = RegexAutomaton.Compile(pattern, asciiCaseInsensitive, multiLine: false, dotMatchesNewline: false);
+            RegexMatch? match = automaton.Find(haystack, offset);
+            if (match.HasValue)
+            {
+                matchStart = match.Value.Start;
+                matchLength = match.Value.Length;
+                return true;
+            }
+
+            return false;
+        }
+
         for (int index = offset; index <= haystack.Length; index++)
         {
             if (TryMatchRegexAt(haystack, pattern, index, asciiCaseInsensitive, ignoreWhitespace: false, swapGreed: false, out int length))
             {
                 matchStart = index;
                 matchLength = length;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsNonCapturingGroup(ReadOnlySpan<byte> pattern)
+    {
+        for (int index = 0; index + 2 < pattern.Length; index++)
+        {
+            if (pattern[index] == (byte)'(' &&
+                pattern[index + 1] == (byte)'?' &&
+                pattern[index + 2] == (byte)':')
+            {
                 return true;
             }
         }
@@ -3566,11 +3641,6 @@ public static class LiteralLineSearcher
         return asciiCaseInsensitive ? FoldAscii(value) : value;
     }
 
-    private static int AdvanceAfterMatch(int start, int length)
-    {
-        return start + (length == 0 ? 1 : length);
-    }
-
     private static bool HasAnyEmptyPattern(IReadOnlyList<byte[]> needles)
     {
         for (int index = 0; index < needles.Count; index++)
@@ -3725,13 +3795,9 @@ public static class LiteralLineSearcher
         return true;
     }
 
-    private static bool IsTrailingLineTerminatorEmptyMatch(ReadOnlySpan<byte> line, int start, int length, bool alreadyMatched)
+    private static bool IsLineEndEmptyMatch(ReadOnlySpan<byte> line, int start, int length)
     {
-        return alreadyMatched &&
-            length == 0 &&
-            start == line.Length - 1 &&
-            !line.IsEmpty &&
-            line[^1] == (byte)'\n';
+        return line.Length > 0 && length == 0 && start == line.Length;
     }
 
     private static bool ContainsNonAscii(ReadOnlySpan<byte> bytes)

@@ -3145,7 +3145,8 @@ internal static class ScoutApplication
     {
         long count = 0;
         int offset = 0;
-        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, offset, out RegexMatch match))
+        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
+        while (TryFindNextMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, ref offset, ref suppressedEmptyStart, out RegexMatch match))
         {
             count++;
             if (maxCount is ulong limit && (ulong)count >= limit)
@@ -3153,10 +3154,42 @@ internal static class ScoutApplication
                 return count;
             }
 
-            offset = MatchIterator.AdvanceAfter(new MatcherMatch(match.Start, match.Length), bytes.Length);
+            offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
         }
 
         return count;
+    }
+
+    private static bool TryFindNextMultilineMatch(
+        ReadOnlySpan<byte> bytes,
+        IReadOnlyList<byte[]> patterns,
+        bool asciiCaseInsensitive,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool multilineDotall,
+        ref int offset,
+        ref int suppressedEmptyStart,
+        out RegexMatch match)
+    {
+        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, offset, out match))
+        {
+            var matcherMatch = new MatcherMatch(match.Start, match.Length);
+            if (!MatchIterator.IsSuppressedEmpty(matcherMatch, suppressedEmptyStart))
+            {
+                return true;
+            }
+
+            offset = MatchIterator.AdvanceAfterSuppressedEmpty(matcherMatch, bytes.Length);
+            suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
+        }
+
+        match = default;
+        return false;
+    }
+
+    private static int AdvanceAfterReportedMultilineMatch(RegexMatch match, int haystackLength, ref int suppressedEmptyStart)
+    {
+        return MatchIterator.AdvanceAfterReported(new MatcherMatch(match.Start, match.Length), haystackLength, ref suppressedEmptyStart);
     }
 
     private static void WriteMultilineContextMatchedLines(
@@ -3236,9 +3269,10 @@ internal static class ScoutApplication
     {
         var sink = new StandardSearchSink(output, prefix, separators.FieldMatch, separators.FieldContext, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
         int offset = 0;
+        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         int lastWrittenLineStart = -1;
         ulong emitted = 0;
-        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, offset, out RegexMatch match))
+        while (TryFindNextMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, ref offset, ref suppressedEmptyStart, out RegexMatch match))
         {
             int firstLineStart = GetLineStart(bytes, match.Start);
             int lastLineStart = GetLineStart(bytes, GetInclusiveMatchEnd(match));
@@ -3261,7 +3295,7 @@ internal static class ScoutApplication
                 lineStart = GetNextLineStart(lineEnd, bytes.Length);
             }
 
-            offset = MatchIterator.AdvanceAfter(new MatcherMatch(match.Start, match.Length), bytes.Length);
+            offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
         }
     }
 
@@ -3286,11 +3320,12 @@ internal static class ScoutApplication
         ulong? maxCount)
     {
         int offset = 0;
+        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         ulong emitted = 0;
         int groupStart = -1;
         int groupEnd = -1;
         List<RegexMatch> groupMatches = [];
-        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, offset, out RegexMatch match))
+        while (TryFindNextMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, ref offset, ref suppressedEmptyStart, out RegexMatch match))
         {
             GetMultilineReplacementRange(bytes, match, out int rangeStart, out int rangeEnd);
             if (groupStart >= 0 && rangeStart >= groupEnd)
@@ -3318,7 +3353,7 @@ internal static class ScoutApplication
                 break;
             }
 
-            offset = MatchIterator.AdvanceAfter(new MatcherMatch(match.Start, match.Length), bytes.Length);
+            offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
         }
 
         if (groupStart >= 0)
@@ -3348,8 +3383,9 @@ internal static class ScoutApplication
         ulong? maxCount)
     {
         int offset = 0;
+        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         ulong emitted = 0;
-        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, offset, out RegexMatch match))
+        while (TryFindNextMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, ref offset, ref suppressedEmptyStart, out RegexMatch match))
         {
             byte[] body = ReplacementFormatter.Expand(replacement.Span, bytes.Slice(match.Start, match.Length), patterns, asciiCaseInsensitive);
             int lineStart = GetLineStart(bytes, match.Start);
@@ -3360,7 +3396,7 @@ internal static class ScoutApplication
                 break;
             }
 
-            offset = MatchIterator.AdvanceAfter(new MatcherMatch(match.Start, match.Length), bytes.Length);
+            offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
         }
     }
 
@@ -3467,24 +3503,32 @@ internal static class ScoutApplication
     {
         var sink = new StandardMatchSink(output, prefix, separators.FieldMatch, lineNumber, column, byteOffset, trim, nullPathTerminator: nullPathTerminator, color: color, lineTerminator: separators.LineTerminator);
         int offset = 0;
+        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         ulong emitted = 0;
-        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, offset, out RegexMatch match))
+        while (TryFindNextMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, ref offset, ref suppressedEmptyStart, out RegexMatch match))
         {
             int firstLineStart = GetLineStart(bytes, match.Start);
             long firstLineNumber = GetLineNumber(bytes, firstLineStart);
             long matchColumn = match.Start - firstLineStart + 1L;
             int matchEnd = match.Start + match.Length;
-            for (int lineStart = firstLineStart; lineStart < matchEnd;)
+            if (match.Length == 0)
             {
-                int lineEnd = GetLineEnd(bytes, lineStart);
-                int segmentStart = Math.Max(lineStart, match.Start);
-                int segmentEnd = Math.Min(lineEnd, matchEnd);
-                if (segmentStart < segmentEnd)
+                sink.Matched(firstLineNumber, match.Start, matchColumn, []);
+            }
+            else
+            {
+                for (int lineStart = firstLineStart; lineStart < matchEnd;)
                 {
-                    sink.Matched(firstLineNumber + CountLineFeeds(bytes[firstLineStart..lineStart]), match.Start, matchColumn, bytes[segmentStart..segmentEnd]);
-                }
+                    int lineEnd = GetLineEnd(bytes, lineStart);
+                    int segmentStart = Math.Max(lineStart, match.Start);
+                    int segmentEnd = Math.Min(lineEnd, matchEnd);
+                    if (segmentStart < segmentEnd)
+                    {
+                        sink.Matched(firstLineNumber + CountLineFeeds(bytes[firstLineStart..lineStart]), match.Start, matchColumn, bytes[segmentStart..segmentEnd]);
+                    }
 
-                lineStart = GetNextLineStart(lineEnd, bytes.Length);
+                    lineStart = GetNextLineStart(lineEnd, bytes.Length);
+                }
             }
 
             emitted++;
@@ -3493,7 +3537,7 @@ internal static class ScoutApplication
                 return;
             }
 
-            offset = MatchIterator.AdvanceAfter(new MatcherMatch(match.Start, match.Length), bytes.Length);
+            offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
         }
     }
 
@@ -3515,8 +3559,9 @@ internal static class ScoutApplication
     {
         var sink = new StandardSearchSink(output, prefix, separators.FieldMatch, separators.FieldContext, lineNumber: true, column: true, byteOffset: false, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
         int offset = 0;
+        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         ulong emitted = 0;
-        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, offset, out RegexMatch match))
+        while (TryFindNextMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, ref offset, ref suppressedEmptyStart, out RegexMatch match))
         {
             int lineStart = GetLineStart(bytes, match.Start);
             int lineEnd = GetLineEnd(bytes, lineStart);
@@ -3529,7 +3574,7 @@ internal static class ScoutApplication
                 return;
             }
 
-            offset = MatchIterator.AdvanceAfter(new MatcherMatch(match.Start, match.Length), bytes.Length);
+            offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
         }
     }
 
@@ -3590,10 +3635,11 @@ internal static class ScoutApplication
         bool[] matchedLines = new bool[physicalLines.Count];
         long[] matchColumns = new long[physicalLines.Count];
         int offset = 0;
-        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, offset, out RegexMatch match))
+        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
+        while (TryFindNextMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, ref offset, ref suppressedEmptyStart, out RegexMatch match))
         {
             MarkMultilineContextMatch(bytes, physicalLines, matchedLines, matchColumns, match);
-            offset = MatchIterator.AdvanceAfter(new MatcherMatch(match.Start, match.Length), bytes.Length);
+            offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
         }
 
         var lines = new List<ContextLineInfo>(physicalLines.Count);
@@ -3621,10 +3667,11 @@ internal static class ScoutApplication
 
         bool[] matchedLines = new bool[physicalLines.Count];
         int offset = 0;
-        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, offset, out RegexMatch match))
+        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
+        while (TryFindNextMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, ref offset, ref suppressedEmptyStart, out RegexMatch match))
         {
             MarkMultilineMatchedLines(bytes, physicalLines, matchedLines, match);
-            offset = MatchIterator.AdvanceAfter(new MatcherMatch(match.Start, match.Length), bytes.Length);
+            offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
         }
 
         var lines = new List<ContextLineInfo>(physicalLines.Count);
@@ -4129,9 +4176,10 @@ internal static class ScoutApplication
         }
 
         int offset = 0;
+        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         ulong emitted = 0;
         var matches = new List<JsonMatchSpan>(capacity: 1);
-        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, offset, out RegexMatch match))
+        while (TryFindNextMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, ref offset, ref suppressedEmptyStart, out RegexMatch match))
         {
             matched = true;
             int firstLineStart = GetLineStart(bytes, match.Start);
@@ -4152,7 +4200,7 @@ internal static class ScoutApplication
                 return true;
             }
 
-            offset = MatchIterator.AdvanceAfter(new MatcherMatch(match.Start, match.Length), bytes.Length);
+            offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
         }
 
         return true;

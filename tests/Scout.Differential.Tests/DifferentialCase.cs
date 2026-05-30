@@ -263,6 +263,12 @@ internal sealed class DifferentialCase
         }
 
         int firstPathIndex = GetFirstPathIndex(parsed);
+        int searchedPathCount = parsed.Positional.Count - firstPathIndex;
+        if (searchedPathCount > 1)
+        {
+            return true;
+        }
+
         for (int index = firstPathIndex; index < parsed.Positional.Count; index++)
         {
             if (!parsed.Positional[index].TryGetText(out string path))

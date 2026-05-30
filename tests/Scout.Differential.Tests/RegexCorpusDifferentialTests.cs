@@ -10,7 +10,7 @@ namespace Scout;
 /// </summary>
 public sealed class RegexCorpusDifferentialTests
 {
-    private const int ExpectedDifferentialCaseCount = 70;
+    private const int ExpectedDifferentialCaseCount = 83;
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
@@ -44,8 +44,17 @@ public sealed class RegexCorpusDifferentialTests
         ("iter.toml", "empty2"),
         ("iter.toml", "empty3"),
         ("iter.toml", "empty4"),
+        ("iter.toml", "empty5"),
         ("iter.toml", "empty6"),
         ("iter.toml", "empty7"),
+        ("iter.toml", "empty8"),
+        ("iter.toml", "empty9"),
+        ("iter.toml", "empty10"),
+        ("iter.toml", "empty11"),
+        ("iter.toml", "nonempty-followedby-empty"),
+        ("iter.toml", "nonempty-followedby-oneempty"),
+        ("iter.toml", "nonempty-followedby-onemixed"),
+        ("iter.toml", "nonempty-followedby-twomixed"),
         ("iter.toml", "start1"),
         ("iter.toml", "start2"),
         ("empty.toml", "100"),
@@ -54,14 +63,18 @@ public sealed class RegexCorpusDifferentialTests
         ("empty.toml", "200"),
         ("empty.toml", "210"),
         ("empty.toml", "220"),
+        ("empty.toml", "230"),
         ("empty.toml", "240"),
         ("empty.toml", "300"),
+        ("empty.toml", "310"),
         ("empty.toml", "320"),
         ("empty.toml", "330"),
         ("empty.toml", "400"),
         ("empty.toml", "500"),
         ("empty.toml", "510"),
         ("empty.toml", "520"),
+        ("empty.toml", "600"),
+        ("empty.toml", "610"),
         ("crazy.toml", "ranges-not"),
         ("crazy.toml", "float1"),
         ("crazy.toml", "float3"),

@@ -100,6 +100,39 @@ public sealed class DifferentialCasePolicyTests
     }
 
     /// <summary>
+    /// Verifies multiple explicit search paths resolve to path-order normalization because ripgrep can search them in parallel.
+    /// </summary>
+    [Fact]
+    public void ExactNormalizesMultipleExplicitPaths()
+    {
+        var testCase = DifferentialCase.Exact("needle", "first", "second");
+
+        Assert.Equal(DifferentialComparisonMode.SortLines, testCase.ComparisonMode);
+    }
+
+    /// <summary>
+    /// Verifies elapsed-field comparisons over multiple explicit paths also sort path output.
+    /// </summary>
+    [Fact]
+    public void MaskElapsedNormalizesMultipleExplicitPathStatsOutput()
+    {
+        var testCase = DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--stats", "needle", "first", "second");
+
+        Assert.Equal(DifferentialComparisonMode.SortLinesAndMaskElapsed, testCase.ComparisonMode);
+    }
+
+    /// <summary>
+    /// Verifies forced serial multi-path searches keep exact comparisons available.
+    /// </summary>
+    [Fact]
+    public void ExactAllowsForcedSerialMultipleExplicitPaths()
+    {
+        var testCase = DifferentialCase.Exact("-j1", "needle", "first", "second");
+
+        Assert.Equal(DifferentialComparisonMode.Exact, testCase.ComparisonMode);
+    }
+
+    /// <summary>
     /// Verifies elapsed-only normalization is not enough for explicitly parallel text output.
     /// </summary>
     [Fact]

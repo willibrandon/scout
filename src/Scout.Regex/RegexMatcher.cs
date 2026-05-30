@@ -57,6 +57,7 @@ public sealed class RegexMatcher
     {
         int count = 0;
         int offset = 0;
+        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         while (offset <= haystack.Length)
         {
             RegexMatch? regexMatch = automaton.Find(haystack, offset);
@@ -66,13 +67,20 @@ public sealed class RegexMatcher
             }
 
             var match = new MatcherMatch(regexMatch.Value.Start, regexMatch.Value.Length);
+            if (MatchIterator.IsSuppressedEmpty(match, suppressedEmptyStart))
+            {
+                offset = MatchIterator.AdvanceAfterSuppressedEmpty(match, haystack.Length);
+                suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
+                continue;
+            }
+
             if (!sink.Matched(haystack, match))
             {
                 return count;
             }
 
             count++;
-            offset = MatchIterator.AdvanceAfter(match, haystack.Length);
+            offset = MatchIterator.AdvanceAfterReported(match, haystack.Length, ref suppressedEmptyStart);
         }
 
         return count;
@@ -92,6 +100,7 @@ public sealed class RegexMatcher
     {
         int count = 0;
         int offset = 0;
+        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         while (offset <= haystack.Length)
         {
             RegexMatch? regexMatch = automaton.Find(haystack, offset);
@@ -101,13 +110,20 @@ public sealed class RegexMatcher
             }
 
             var match = new MatcherMatch(regexMatch.Value.Start, regexMatch.Value.Length);
+            if (MatchIterator.IsSuppressedEmpty(match, suppressedEmptyStart))
+            {
+                offset = MatchIterator.AdvanceAfterSuppressedEmpty(match, haystack.Length);
+                suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
+                continue;
+            }
+
             if (!callback(state, haystack, match))
             {
                 return count;
             }
 
             count++;
-            offset = MatchIterator.AdvanceAfter(match, haystack.Length);
+            offset = MatchIterator.AdvanceAfterReported(match, haystack.Length, ref suppressedEmptyStart);
         }
 
         return count;

@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\Scout.Automata\Scout.Automata.csproj" />
     <ProjectReference Include="..\Scout.Automata.Memmem\Scout.Automata.Memmem.csproj" />
     <ProjectReference Include="..\Scout.Bytes\Scout.Bytes.csproj" />
     <ProjectReference Include="..\Scout.Encoding.Io\Scout.Encoding.Io.csproj" />

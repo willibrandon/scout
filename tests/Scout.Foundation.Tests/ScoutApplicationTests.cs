@@ -4174,6 +4174,52 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies regexes that can match empty iterate only the ripgrep-reported offsets.
+    /// </summary>
+    [Fact]
+    public void OnlyMatchingRegexEmptyIterationMatchesRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "b\n");
+
+        (int alternationExitCode, byte[] alternationOutput, string alternationError) = RunScout("-o", "b|", path);
+        (int pinnedAlternationExitCode, byte[] pinnedAlternationOutput, string pinnedAlternationError) = RunPinnedRipgrep("-o", "b|", path);
+        (int emptyRepeatExitCode, byte[] emptyRepeatOutput, string emptyRepeatError) = RunScout("-o", "(?:)+", path);
+        (int pinnedEmptyRepeatExitCode, byte[] pinnedEmptyRepeatOutput, string pinnedEmptyRepeatError) = RunPinnedRipgrep("-o", "(?:)+", path);
+        (int countExitCode, byte[] countOutput, string countError) = RunScout("--count-matches", "(?:)+", path);
+        (int pinnedCountExitCode, byte[] pinnedCountOutput, string pinnedCountError) = RunPinnedRipgrep("--count-matches", "(?:)+", path);
+
+        Assert.Equal(pinnedAlternationExitCode, alternationExitCode);
+        Assert.Equal(pinnedAlternationOutput, alternationOutput);
+        Assert.Equal(pinnedAlternationError, alternationError);
+        Assert.Equal(pinnedEmptyRepeatExitCode, emptyRepeatExitCode);
+        Assert.Equal(pinnedEmptyRepeatOutput, emptyRepeatOutput);
+        Assert.Equal(pinnedEmptyRepeatError, emptyRepeatError);
+        Assert.Equal(pinnedCountExitCode, countExitCode);
+        Assert.Equal(pinnedCountOutput, countOutput);
+        Assert.Equal(pinnedCountError, countError);
+    }
+
+    /// <summary>
+    /// Verifies JSON only-matching emits empty regex submatches at ripgrep-compatible offsets.
+    /// </summary>
+    [Fact]
+    public void JsonOnlyMatchingRegexEmptyIterationMatchesRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "b\n");
+
+        (int exitCode, byte[] output, string error) = RunScout("--json", "-o", "-U", "(?:)+", path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--json", "-o", "-U", "(?:)+", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(NormalizeJsonTimings(pinnedOutput), NormalizeJsonTimings(output));
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies max-count limits matching lines in standard output.
     /// </summary>
     [Fact]
