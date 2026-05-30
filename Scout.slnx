@@ -22,6 +22,7 @@
     <Project Path="src/Scout.SourceGen/Scout.SourceGen.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj" />
     <Project Path="tests/Scout.Foundation.Tests/Scout.Foundation.Tests.csproj" />
   </Folder>
   <Folder Name="/bench/">
