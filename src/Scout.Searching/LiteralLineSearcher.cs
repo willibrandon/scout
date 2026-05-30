@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 
 namespace Scout;
 
@@ -8,6 +9,8 @@ namespace Scout;
 /// </summary>
 public static class LiteralLineSearcher
 {
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
     private const int RegexAtomLiteral = 0;
     private const int RegexAtomDot = 1;
     private const int RegexAtomClass = 2;
@@ -1159,6 +1162,11 @@ public static class LiteralLineSearcher
                 return matched;
             }
 
+            if (!HasAnyEmptyPattern(needles) && IsTrailingLineTerminatorEmptyMatch(line, start, length, matched))
+            {
+                return matched;
+            }
+
             sink.Matched(lineNumber, lineStart + start, start + 1, line.Slice(start, length));
             matched = true;
             offset = AdvanceAfterMatch(start, length);
@@ -1187,6 +1195,11 @@ public static class LiteralLineSearcher
         while (offset < content.Length || HasAnyEmptyPattern(needles))
         {
             if (!TryFindPatternMatch(content, needles, offset, asciiCaseInsensitive, lineRegexp: false, wordRegexp, crlf: false, nullData: false, out int start, out int length))
+            {
+                return matched;
+            }
+
+            if (!HasAnyEmptyPattern(needles) && IsTrailingLineTerminatorEmptyMatch(content, start, length, matched))
             {
                 return matched;
             }
@@ -1861,6 +1874,16 @@ public static class LiteralLineSearcher
     {
         matchStart = -1;
         matchLength = 0;
+        if (asciiCaseInsensitive &&
+            ContainsNonAscii(pattern) &&
+            IsLiteralRegex(pattern) &&
+            TryFindUtf8IgnoreCase(haystack[offset..], pattern, out int utf8Start, out int utf8Length))
+        {
+            matchStart = offset + utf8Start;
+            matchLength = utf8Length;
+            return true;
+        }
+
         for (int index = offset; index <= haystack.Length; index++)
         {
             if (TryMatchRegexAt(haystack, pattern, index, asciiCaseInsensitive, ignoreWhitespace: false, swapGreed: false, out int length))
@@ -3672,6 +3695,11 @@ public static class LiteralLineSearcher
             return -1;
         }
 
+        if (ContainsNonAscii(needle) && TryFindUtf8IgnoreCase(haystack, needle, out int utf8Start, out _))
+        {
+            return utf8Start;
+        }
+
         int lastStart = haystack.Length - needle.Length;
         for (int index = 0; index <= lastStart; index++)
         {
@@ -3695,6 +3723,78 @@ public static class LiteralLineSearcher
         }
 
         return true;
+    }
+
+    private static bool IsTrailingLineTerminatorEmptyMatch(ReadOnlySpan<byte> line, int start, int length, bool alreadyMatched)
+    {
+        return alreadyMatched &&
+            length == 0 &&
+            start == line.Length - 1 &&
+            !line.IsEmpty &&
+            line[^1] == (byte)'\n';
+    }
+
+    private static bool ContainsNonAscii(ReadOnlySpan<byte> bytes)
+    {
+        for (int index = 0; index < bytes.Length; index++)
+        {
+            if (bytes[index] >= 0x80)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsLiteralRegex(ReadOnlySpan<byte> pattern)
+    {
+        for (int index = 0; index < pattern.Length; index++)
+        {
+            if (pattern[index] is (byte)'\\'
+                or (byte)'.'
+                or (byte)'['
+                or (byte)']'
+                or (byte)'('
+                or (byte)')'
+                or (byte)'{'
+                or (byte)'}'
+                or (byte)'*'
+                or (byte)'+'
+                or (byte)'?'
+                or (byte)'|'
+                or (byte)'^'
+                or (byte)'$')
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryFindUtf8IgnoreCase(ReadOnlySpan<byte> haystack, ReadOnlySpan<byte> needle, out int start, out int length)
+    {
+        start = -1;
+        length = 0;
+        try
+        {
+            string haystackText = StrictUtf8.GetString(haystack);
+            string needleText = StrictUtf8.GetString(needle);
+            int charStart = haystackText.IndexOf(needleText, StringComparison.OrdinalIgnoreCase);
+            if (charStart < 0)
+            {
+                return false;
+            }
+
+            start = StrictUtf8.GetByteCount(haystackText.AsSpan(0, charStart));
+            length = StrictUtf8.GetByteCount(haystackText.AsSpan(charStart, needleText.Length));
+            return true;
+        }
+        catch (DecoderFallbackException)
+        {
+            return false;
+        }
     }
 
     private static byte FoldAscii(byte value)

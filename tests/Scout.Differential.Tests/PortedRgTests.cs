@@ -810,6 +810,26 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "-n", "x", ".")),
             new(
                 "tests/regression.rs",
+                "r156",
+                dir => dir.CreateFile(
+                    "testcase.txt",
+                    "#parse('widgets/foo_bar_macros.vm')\n" +
+                    "#parse ( 'widgets/mobile/foo_bar_macros.vm' )\n" +
+                    "#parse (\"widgets/foobarhiddenformfields.vm\")\n" +
+                    "#parse ( \"widgets/foo_bar_legal.vm\" )\n" +
+                    "#include( 'widgets/foo_bar_tips.vm' )\n" +
+                    "#include('widgets/mobile/foo_bar_macros.vm')\n" +
+                    "#include (\"widgets/mobile/foo_bar_resetpw.vm\")\n" +
+                    "#parse('widgets/foo-bar-macros.vm')\n" +
+                    "#parse ( 'widgets/mobile/foo-bar-macros.vm' )\n" +
+                    "#parse (\"widgets/foo-bar-hiddenformfields.vm\")\n" +
+                    "#parse ( \"widgets/foo-bar-legal.vm\" )\n" +
+                    "#include( 'widgets/foo-bar-tips.vm' )\n" +
+                    "#include('widgets/mobile/foo-bar-macros.vm')\n" +
+                    "#include (\"widgets/mobile/foo-bar-resetpw.vm\")\n"),
+                DifferentialCase.Exact("--path-separator", "/", "-N", @"#(?:parse|include)\s*\(\s*(?:""|')[./A-Za-z_-]+(?:""|')", "testcase.txt")),
+            new(
+                "tests/regression.rs",
                 "r184",
                 dir =>
                 {
@@ -843,6 +863,11 @@ internal static class PortedRgTests
                 "r229",
                 dir => dir.CreateFile("foo", "economie"),
                 DifferentialCase.Exact("--path-separator", "/", "-S", "[E]conomie", ".")),
+            new(
+                "tests/regression.rs",
+                "r251",
+                dir => dir.CreateFile("foo", "привет\nПривет\nПрИвЕт"),
+                DifferentialCase.Exact("--path-separator", "/", "-i", "привет", ".")),
             new(
                 "tests/regression.rs",
                 "r270",
@@ -947,6 +972,141 @@ internal static class PortedRgTests
                     dir.CreateFile(".a/c/file", "test");
                 },
                 DifferentialCase.Exact("--path-separator", "/", "--hidden", "test", ".")),
+            new(
+                "tests/regression.rs",
+                "r900",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.CreateFile("pat", string.Empty);
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-fpat", "sherlock")),
+            new(
+                "tests/regression.rs",
+                "r1064",
+                dir => dir.CreateFile("input", "abc"),
+                DifferentialCase.Exact("--path-separator", "/", "a(.*c)", ".")),
+            new(
+                "tests/regression.rs",
+                "r1130",
+                dir => dir.CreateFile("foo", "test"),
+                DifferentialCase.Exact("--path-separator", "/", "--files-with-matches", "test", "foo"),
+                DifferentialCase.Exact("--path-separator", "/", "--files-without-match", "nada", "foo")),
+            new(
+                "tests/regression.rs",
+                "r1163",
+                dir => dir.CreateFile("bom.txt", "\uFEFFtest123\ntest123"),
+                DifferentialCase.Exact("--path-separator", "/", "^test123", ".")),
+            new(
+                "tests/regression.rs",
+                "r1164",
+                dir =>
+                {
+                    dir.CreateDirectory(".git");
+                    dir.CreateFile(".gitignore", "myfile");
+                    dir.CreateFile("MYFILE", "test");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--ignore-file-case-insensitive", "test", "."),
+                DifferentialCase.Exact("--path-separator", "/", "--ignore-file-case-insensitive", "--no-ignore-file-case-insensitive", "test", ".")),
+            new(
+                "tests/regression.rs",
+                "r1173",
+                dir =>
+                {
+                    dir.CreateDirectory(".git");
+                    dir.CreateFile(".gitignore", "**");
+                    dir.CreateFile("foo", "test");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "test", ".")),
+            new(
+                "tests/regression.rs",
+                "r1174",
+                dir =>
+                {
+                    dir.CreateDirectory(".git");
+                    dir.CreateFile(".gitignore", "**/**/*");
+                    dir.CreateDirectory("a");
+                    dir.CreateFile("a/foo", "test");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "test", ".")),
+            new(
+                "tests/regression.rs",
+                "r1176_literal_file",
+                dir =>
+                {
+                    dir.CreateFile("patterns", "foo(bar\n");
+                    dir.CreateFile("test", "foo(bar");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-F", "-f", "patterns", "test")),
+            new(
+                "tests/regression.rs",
+                "r1176_line_regex",
+                dir =>
+                {
+                    dir.CreateFile("patterns", "foo\n");
+                    dir.CreateFile("test", "foobar\nfoo\nbarfoo\n");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-x", "-f", "patterns", "test")),
+            new(
+                "tests/regression.rs",
+                "r1203_reverse_suffix_literal",
+                dir => dir.CreateFile("test", "153.230000\n"),
+                DifferentialCase.Exact("--path-separator", "/", @"\d\d\d00", "test"),
+                DifferentialCase.Exact("--path-separator", "/", @"\d\d\d000", "test")),
+            new(
+                "tests/regression.rs",
+                "r1259_drop_last_byte_nonl",
+                dir =>
+                {
+                    dir.CreateFile("patterns-nonl", "[foo]");
+                    dir.CreateFile("patterns-nl", "[foo]\n");
+                    dir.CreateFile("test", "fz");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-f", "patterns-nonl", "test"),
+                DifferentialCase.Exact("--path-separator", "/", "-f", "patterns-nl", "test")),
+            new(
+                "tests/regression.rs",
+                "r1311_multi_line_term_replace",
+                dir => dir.CreateFile("input", "hello\nworld\n"),
+                DifferentialCase.Exact("--path-separator", "/", "-U", "-r?", "-n", "\n", "input")),
+            new(
+                "tests/regression.rs",
+                "r1319",
+                dir => dir.CreateFile("input", "CCAGCTACTCGGGAGGCTGAGGCTGGAGGATCGCTTGAGTCCAGGAGTTC"),
+                DifferentialCase.Exact("--path-separator", "/", "TTGAGTCCAGGAG[ATCG]{2}C", ".")),
+            new(
+                "tests/regression.rs",
+                "r1380",
+                dir => dir.CreateFile("foo", "a\nb\nc\nd\ne\nd\ne\nd\ne\nd\ne\n"),
+                DifferentialCase.Exact("--path-separator", "/", "-A2", "-m1", "d", "foo")),
+            new(
+                "tests/regression.rs",
+                "r1537",
+                dir => dir.CreateFile("foo", "abc;de,fg"),
+                DifferentialCase.Exact("--path-separator", "/", ";(.*,){1}", ".")),
+            new(
+                "tests/regression.rs",
+                "r1559",
+                dir => dir.CreateFile(
+                    "foo",
+                    "type A struct {\n" +
+                    "\tTaskID int `json:\"taskID\"`\n" +
+                    "}\n\n" +
+                    "type B struct {\n" +
+                    "\tObjectID string `json:\"objectID\"`\n" +
+                    "\tTaskID   int    `json:\"taskID\"`\n" +
+                    "}\n"),
+                DifferentialCase.Exact("--path-separator", "/", "TaskID +int", ".")),
+            new(
+                "tests/regression.rs",
+                "r1638",
+                dir => dir.CreateBytes("foo", [0xEF, 0xBB, 0xBF, (byte)'x']),
+                DifferentialCase.Exact("--path-separator", "/", "--column", "x", ".")),
+            new(
+                "tests/regression.rs",
+                "r1739_replacement_lineterm_match",
+                dir => dir.CreateFile("test", "a\n"),
+                DifferentialCase.Exact("--path-separator", "/", "-r${0}f", ".*", "test")),
             new(
                 "tests/feature.rs",
                 "f419_zero_as_shortcut_for_null",

@@ -2672,7 +2672,7 @@ internal static class ScoutApplication
     {
         matched = false;
         bool contextOutputRequested = (beforeContext > 0 || afterContext > 0) && searchMode == CliSearchMode.Standard;
-        if ((replacement is not null && !invertMatch) ||
+        if ((replacement is not null && !invertMatch && onlyMatching) ||
             (contextOutputRequested && (onlyMatching || invertMatch)) ||
             passthru ||
             separators.Crlf ||
@@ -2733,6 +2733,12 @@ internal static class ScoutApplication
         if (contextOutputRequested)
         {
             WriteMultilineContextMatchedLines(outputSpan, patterns, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, beforeContext, afterContext, maxCount);
+            return true;
+        }
+
+        if (replacement is ReadOnlyMemory<byte> replacementValue)
+        {
+            WriteMultilineReplacedLines(outputSpan, patterns, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
             return true;
         }
 
@@ -2947,6 +2953,59 @@ internal static class ScoutApplication
 
             offset = MatchIterator.AdvanceAfter(new MatcherMatch(match.Start, match.Length), bytes.Length);
         }
+    }
+
+    private static void WriteMultilineReplacedLines(
+        ReadOnlySpan<byte> bytes,
+        IReadOnlyList<byte[]> patterns,
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool trim,
+        bool nullPathTerminator,
+        ReadOnlyMemory<byte> replacement,
+        bool asciiCaseInsensitive,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool multilineDotall,
+        ulong? maxCount)
+    {
+        var sink = new ReplacementLineSink(
+            output,
+            prefix,
+            separators.FieldMatch,
+            replacement,
+            patterns,
+            asciiCaseInsensitive,
+            lineNumber,
+            column,
+            byteOffset,
+            trim,
+            nullPathTerminator,
+            vimgrep: false,
+            lineLimit,
+            color: color,
+            lineTerminator: separators.LineTerminator);
+        int offset = 0;
+        ulong emitted = 0;
+        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, offset, out RegexMatch match))
+        {
+            sink.MatchedLine(1, 0, match.Start, match.Start + 1L, bytes, bytes.Slice(match.Start, match.Length));
+            emitted++;
+            if (maxCount is ulong limit && emitted >= limit)
+            {
+                break;
+            }
+
+            offset = MatchIterator.AdvanceAfter(new MatcherMatch(match.Start, match.Length), bytes.Length);
+        }
+
+        sink.Flush();
     }
 
     private static void WriteMultilineOnlyMatches(
