@@ -3948,12 +3948,27 @@ internal static class ScoutApplication
             : IncludeContextLines(lines, included, beforeContext, afterContext, maxCount);
         var lineSink = new StandardSearchSink(output, prefix, separators.FieldMatch, separators.FieldContext, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
         int previousLineIndex = -1;
+        ulong passthruPrimaryMatches = 0;
         bool wrote = false;
         for (int index = 0; index < lines.Count; index++)
         {
             if (!included[index])
             {
                 continue;
+            }
+
+            ContextLineInfo line = lines[index];
+            bool selectedMatch = line.SelectedMatch;
+            if (passthru && selectedMatch && maxCount is ulong limit)
+            {
+                if (passthruPrimaryMatches >= limit)
+                {
+                    selectedMatch = false;
+                }
+                else
+                {
+                    passthruPrimaryMatches++;
+                }
             }
 
             if (!passthru && wrote && index > previousLineIndex + 1)
@@ -3967,7 +3982,8 @@ internal static class ScoutApplication
 
             WriteContextOutputLine(
                 bytes,
-                lines[index],
+                line,
+                selectedMatch,
                 output,
                 prefix,
                 lineNumber,
@@ -4143,6 +4159,7 @@ internal static class ScoutApplication
     private static void WriteContextOutputLine(
         byte[] bytes,
         ContextLineInfo line,
+        bool selectedMatch,
         RawByteWriter output,
         OutputPath? prefix,
         bool lineNumber,
@@ -4163,7 +4180,7 @@ internal static class ScoutApplication
         ref StandardSearchSink lineSink)
     {
         ReadOnlySpan<byte> lineBytes = bytes.AsSpan(line.Start, line.Length);
-        if (line.SelectedMatch)
+        if (selectedMatch)
         {
             if (onlyMatching && !invertMatch)
             {

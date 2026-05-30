@@ -218,6 +218,7 @@ tests/regression.rs|r1259_drop_last_byte_nonl
 tests/regression.rs|r1311_multi_line_term_replace
 tests/regression.rs|r1319
 tests/regression.rs|r1334_invert_empty_patterns
+tests/regression.rs|r1334_crazy_literals
 tests/regression.rs|r1380
 tests/regression.rs|r1389_bad_symlinks_no_biscuit
 tests/regression.rs|r1537
@@ -225,6 +226,17 @@ tests/regression.rs|r1559
 tests/regression.rs|r1638
 tests/regression.rs|r1739_replacement_lineterm_match
 tests/regression.rs|f1757
+tests/regression.rs|r1866
+tests/regression.rs|r1868_context_passthru_override
+tests/regression.rs|r1878
+tests/regression.rs|r1891
+tests/regression.rs|r2094
+tests/regression.rs|r2198
+tests/regression.rs|r2236
+tests/regression.rs|r2574
+tests/regression.rs|r2658_null_data_line_regexp
+tests/regression.rs|r3067_gitignore_error
+tests/regression.rs|r3108_files_without_match_quiet_exit
 tests/feature.rs|f419_zero_as_shortcut_for_null
 tests/feature.rs|f740_passthru
 tests/feature.rs|f740_passthru_single

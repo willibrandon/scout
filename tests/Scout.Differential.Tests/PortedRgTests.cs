@@ -1604,6 +1604,21 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "-vf", "one-pattern", "haystack")),
             new(
                 "tests/regression.rs",
+                "r1334_crazy_literals",
+                dir =>
+                {
+                    StringBuilder patterns = new();
+                    for (int index = 0; index < 40; index++)
+                    {
+                        patterns.Append("1.208.0.0/12\n");
+                    }
+
+                    dir.CreateFile("patterns", patterns.ToString());
+                    dir.CreateFile("corpus", "1.208.0.0/12\n");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-Ff", "patterns", "corpus")),
+            new(
+                "tests/regression.rs",
                 "r1380",
                 dir => dir.CreateFile("foo", "a\nb\nc\nd\ne\nd\ne\nd\ne\nd\ne\n"),
                 DifferentialCase.Exact("--path-separator", "/", "-A2", "-m1", "d", "foo")),
@@ -1662,6 +1677,100 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "--files-with-matches", "needle", "./rust"),
                 DifferentialCase.Exact("--path-separator", "/", "--files-with-matches", "needle", "rust1"),
                 DifferentialCase.Exact("--path-separator", "/", "--files-with-matches", "needle", "./rust1")),
+            new(
+                "tests/regression.rs",
+                "r1866",
+                dir => dir.CreateFile("test", "foobar\nfoobar\nfoo quux"),
+                DifferentialCase.Exact("--path-separator", "/", "--multiline", "--vimgrep", @"foobar\nfoobar\nfoo|quux", "test")),
+            new(
+                "tests/regression.rs",
+                "r1868_context_passthru_override",
+                dir => dir.CreateFile("test", "foo\nbar\nbaz\nquux\n"),
+                DifferentialCase.Exact("--path-separator", "/", "-C1", "bar", "test"),
+                DifferentialCase.Exact("--path-separator", "/", "--passthru", "bar", "test"),
+                DifferentialCase.Exact("--path-separator", "/", "--passthru", "-C1", "bar", "test"),
+                DifferentialCase.Exact("--path-separator", "/", "-C1", "--passthru", "bar", "test"),
+                DifferentialCase.Exact("--path-separator", "/", "--passthru", "-B1", "bar", "test"),
+                DifferentialCase.Exact("--path-separator", "/", "-B1", "--passthru", "bar", "test"),
+                DifferentialCase.Exact("--path-separator", "/", "--passthru", "-A1", "bar", "test"),
+                DifferentialCase.Exact("--path-separator", "/", "-A1", "--passthru", "bar", "test")),
+            new(
+                "tests/regression.rs",
+                "r1878",
+                dir => dir.CreateFile("test", "a\nbaz\nabc\n"),
+                DifferentialCase.Exact("--path-separator", "/", "-U", "--no-mmap", "^baz", "test"),
+                DifferentialCase.Exact("--path-separator", "/", "-U", "--mmap", "^baz", "test"),
+                DifferentialCase.Exact("--path-separator", "/", "-U", "--no-mmap", "(?-m)^baz", "test"),
+                DifferentialCase.Exact("--path-separator", "/", "-U", "--mmap", "(?-m)^baz", "test"),
+                DifferentialCase.Exact("--path-separator", "/", "-U", "--no-mmap", @"\Abaz", "test"),
+                DifferentialCase.Exact("--path-separator", "/", "-U", "--mmap", @"\Abaz", "test")),
+            new(
+                "tests/regression.rs",
+                "r1891",
+                dir => dir.CreateFile("test", "\n##\n"),
+                DifferentialCase.Exact("--path-separator", "/", "-won", string.Empty, "test")),
+            new(
+                "tests/regression.rs",
+                "r2094",
+                dir => dir.CreateFile("haystack", "a\nb\nc\na\nb\nc"),
+                DifferentialCase.Exact("--path-separator", "/", "--no-line-number", "--no-filename", "--multiline", "--max-count=1", "--passthru", "--replace=B", "b", "haystack")),
+            new(
+                "tests/regression.rs",
+                "r2198",
+                dir =>
+                {
+                    dir.CreateFile(".ignore", "a");
+                    dir.CreateFile(".rgignore", "b");
+                    dir.CreateFile("a", string.Empty);
+                    dir.CreateFile("b", string.Empty);
+                    dir.CreateFile("c", string.Empty);
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--files", "--sort", "path"),
+                DifferentialCase.Exact("--path-separator", "/", "--files", "--sort", "path", "--no-ignore-dot")),
+            new(
+                "tests/regression.rs",
+                "r2236",
+                dir =>
+                {
+                    dir.CreateFile(".ignore", @"foo\/");
+                    dir.CreateDirectory("foo");
+                    dir.CreateFile("foo/bar", "test\n");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "test")),
+            new(
+                "tests/regression.rs",
+                "r2574",
+                dir => dir.CreateFile("haystack", "some.domain.com\nsome.domain.com/x\n"),
+                DifferentialCase.Exact("--path-separator", "/", "--no-filename", "--no-unicode", "-w", "-o", @"(\w+\.)*domain\.(\w+)")),
+            new(
+                "tests/regression.rs",
+                "r2658_null_data_line_regexp",
+                dir => dir.CreateFile("haystack", "foo\0bar\0quux\0"),
+                DifferentialCase.Exact("--path-separator", "/", "--null-data", "--line-regexp", "bar")),
+            new(
+                "tests/regression.rs",
+                "r3067_gitignore_error",
+                dir =>
+                {
+                    dir.CreateFile(".git", string.Empty);
+                    dir.CreateFile(".gitignore", "foobar/debug");
+                    dir.CreateDirectory("foobar/some/debug");
+                    dir.CreateDirectory("foobar/debug");
+                    dir.CreateFile("foobar/some/debug/flag", "baz");
+                    dir.CreateFile("foobar/debug/flag2", "baz");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "baz")),
+            new(
+                "tests/regression.rs",
+                "r3108_files_without_match_quiet_exit",
+                dir =>
+                {
+                    dir.CreateFile("yes-match", "abc");
+                    dir.CreateFile("non-match", "xyz");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-q", "abc", "non-match"),
+                DifferentialCase.Exact("--path-separator", "/", "-q", "abc", "yes-match"),
+                DifferentialCase.Exact("--path-separator", "/", "--files-with-matches", "-q", "abc", "non-match")),
             new(
                 "tests/feature.rs",
                 "f419_zero_as_shortcut_for_null",
