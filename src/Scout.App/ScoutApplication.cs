@@ -18,6 +18,7 @@ internal static class ScoutApplication
     private static readonly byte[] LineFeed = [(byte)'\n'];
     private static readonly byte[] CrlfLineTerminator = [(byte)'\r', (byte)'\n'];
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    private const int BinaryDetectionInitialBufferLength = 65_536;
 
     internal static int Run(ReadOnlySpan<OsString> arguments, RawByteWriter output, RawByteWriter error)
     {
@@ -2354,7 +2355,7 @@ internal static class ScoutApplication
             return SearchBytes(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary);
         }
 
-        if (TrySearchBinarySuppressed(bytes, pattern, output, prefix, color, searchMode, textMode, quiet, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, separators.Crlf, separators.NullData, maxCount, beforeContext, afterContext, passthru, quitOnBinary, out bool binaryMatched))
+        if (TrySearchBinarySuppressed(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary, out bool binaryMatched))
         {
             return binaryMatched;
         }
@@ -2528,7 +2529,7 @@ internal static class ScoutApplication
             return false;
         }
 
-        if (TrySearchBinarySuppressed(bytes, pattern, output, prefix, color, searchMode, textMode, quiet, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, separators.Crlf, separators.NullData, maxCount, beforeContext, afterContext, passthru, quitOnBinary, out bool binaryMatched))
+        if (TrySearchBinarySuppressed(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary, out bool binaryMatched))
         {
             return binaryMatched;
         }
@@ -3367,25 +3368,37 @@ internal static class ScoutApplication
         IReadOnlyList<byte[]> pattern,
         RawByteWriter output,
         OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
         OutputColor color,
         CliSearchMode searchMode,
-        bool textMode,
-        bool quiet,
+        bool vimgrep,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
         bool asciiCaseInsensitive,
         bool invertMatch,
         bool lineRegexp,
         bool wordRegexp,
-        bool crlf,
-        bool nullData,
+        bool multiline,
+        bool multilineDotall,
+        bool onlyMatching,
+        ReadOnlyMemory<byte>? replacement,
         ulong? maxCount,
+        bool textMode,
+        bool quiet,
+        bool trim,
         ulong beforeContext,
         ulong afterContext,
         bool passthru,
+        bool includeZero,
+        bool nullPathTerminator,
+        bool stopOnNonmatch,
         bool quitOnBinary,
         out bool matched)
     {
         matched = false;
-        BinaryDetectionResult binaryDetection = BinaryDetection.Detect(bytes, textMode, nullData, quitOnBinary);
+        BinaryDetectionResult binaryDetection = BinaryDetection.Detect(bytes, textMode, separators.NullData, quitOnBinary);
         if (!binaryDetection.IsBinary)
         {
             return false;
@@ -3393,13 +3406,30 @@ internal static class ScoutApplication
 
         if (binaryDetection.Kind == BinaryDetectionKind.Quit)
         {
+            if (quiet)
+            {
+                matched = HasBinarySafePrefixMatch(bytes, binaryDetection.Offset, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf);
+                return true;
+            }
+
+            if (searchMode is not (CliSearchMode.Standard or CliSearchMode.FilesWithMatches))
+            {
+                return true;
+            }
+
+            matched = SearchBinarySafePrefix(bytes, binaryDetection.Offset, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch);
+            if (matched && searchMode == CliSearchMode.Standard)
+            {
+                WriteBinaryFileStoppedWarning(output, prefix, color, binaryDetection.Offset);
+            }
+
             return true;
         }
 
         if (quiet)
         {
             byte[] convertedBytes = BinaryDetection.ConvertNulToLineFeed(bytes);
-            matched = LiteralLineSearcher.HasMatch(convertedBytes, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, crlf);
+            matched = LiteralLineSearcher.HasMatch(convertedBytes, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf);
             return true;
         }
 
@@ -3410,20 +3440,95 @@ internal static class ScoutApplication
 
         if (passthru || beforeContext > 0 || afterContext > 0)
         {
-            matched = LiteralLineSearcher.HasMatch(bytes.AsSpan(0, binaryDetection.Offset), pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, crlf);
+            matched = LiteralLineSearcher.HasMatch(bytes.AsSpan(0, binaryDetection.Offset), pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf);
         }
         else
         {
             byte[] convertedBytes = BinaryDetection.ConvertNulToLineFeed(bytes);
-            matched = LiteralLineSearcher.HasMatch(convertedBytes, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, crlf);
+            matched = LiteralLineSearcher.HasMatch(convertedBytes, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf);
         }
 
         if (matched)
         {
+            if (!passthru && beforeContext == 0 && afterContext == 0)
+            {
+                SearchBinarySafePrefix(bytes, binaryDetection.Offset, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch);
+            }
+
             WriteBinaryFileMatches(output, prefix, color, binaryDetection.Offset);
         }
 
         return true;
+    }
+
+    private static bool HasBinarySafePrefixMatch(
+        byte[] bytes,
+        int binaryOffset,
+        IReadOnlyList<byte[]> pattern,
+        bool asciiCaseInsensitive,
+        bool invertMatch,
+        bool lineRegexp,
+        bool wordRegexp,
+        ulong? maxCount,
+        bool crlf)
+    {
+        int safeLength = GetBinarySafePrefixLength(bytes, binaryOffset);
+        return safeLength > 0 &&
+            LiteralLineSearcher.HasMatch(bytes.AsSpan(0, safeLength), pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, crlf);
+    }
+
+    private static bool SearchBinarySafePrefix(
+        byte[] bytes,
+        int binaryOffset,
+        IReadOnlyList<byte[]> pattern,
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        CliSearchMode searchMode,
+        bool vimgrep,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool asciiCaseInsensitive,
+        bool invertMatch,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool multiline,
+        bool multilineDotall,
+        bool onlyMatching,
+        ReadOnlyMemory<byte>? replacement,
+        ulong? maxCount,
+        bool quiet,
+        bool trim,
+        ulong beforeContext,
+        ulong afterContext,
+        bool passthru,
+        bool includeZero,
+        bool nullPathTerminator,
+        bool stopOnNonmatch)
+    {
+        int safeLength = GetBinarySafePrefixLength(bytes, binaryOffset);
+        if (safeLength == 0)
+        {
+            return false;
+        }
+
+        byte[] safeBytes = bytes.AsSpan(0, safeLength).ToArray();
+        return SearchBytes(safeBytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode: true, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary: false);
+    }
+
+    private static int GetBinarySafePrefixLength(byte[] bytes, int binaryOffset)
+    {
+        if (binaryOffset <= BinaryDetectionInitialBufferLength)
+        {
+            return 0;
+        }
+
+        int length = Math.Min(binaryOffset, BinaryDetectionInitialBufferLength);
+        int lastLineFeed = bytes.AsSpan(0, length).LastIndexOf((byte)'\n');
+        return lastLineFeed < 0 ? 0 : lastLineFeed + 1;
     }
 
     private static byte[] GetBinaryConvertedSearchBytes(byte[] bytes, bool textMode, bool nullData)
@@ -3509,6 +3614,20 @@ internal static class ScoutApplication
         }
 
         output.Write("binary file matches (found \"\\0\" byte around offset "u8);
+        output.Write(Utf8.GetBytes(binaryOffset.ToString(CultureInfo.InvariantCulture)));
+        output.Write(")"u8);
+        output.Write(LineFeed);
+    }
+
+    private static void WriteBinaryFileStoppedWarning(RawByteWriter output, OutputPath? prefix, OutputColor color, int binaryOffset)
+    {
+        if (prefix is not null)
+        {
+            prefix.WriteLabel(output, color);
+            output.Write(": "u8);
+        }
+
+        output.Write("WARNING: stopped searching binary file after match (found \"\\0\" byte around offset "u8);
         output.Write(Utf8.GetBytes(binaryOffset.ToString(CultureInfo.InvariantCulture)));
         output.Write(")"u8);
         output.Write(LineFeed);

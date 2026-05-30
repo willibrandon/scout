@@ -1397,6 +1397,101 @@ internal static class PortedRgTests
                 "f411_search_stats",
                 dir => dir.CreateFile("sherlock", "needle\nmiss\nneedle\n"),
                 DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--path-separator", "/", "-j1", "--stats", "needle", ".")),
+            new(
+                "tests/binary.rs",
+                "after_match1_implicit",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "-n", "Project Gutenberg EBook", "-g", "hay")),
+            new(
+                "tests/binary.rs",
+                "after_match1_implicit_binary",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "-n", "--binary", "Project Gutenberg EBook", "-g", "hay")),
+            new(
+                "tests/binary.rs",
+                "after_match1_implicit_text",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "-n", "--text", "Project Gutenberg EBook", "-g", "hay")),
+            new(
+                "tests/binary.rs",
+                "after_match1_explicit",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "-n", "Project Gutenberg EBook", "hay")),
+            new(
+                "tests/binary.rs",
+                "after_match1_explicit_text",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "-n", "--text", "Project Gutenberg EBook", "hay")),
+            new(
+                "tests/binary.rs",
+                "after_match1_explicit_count",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "-c", "Project Gutenberg EBook", "hay")),
+            new(
+                "tests/binary.rs",
+                "after_match1_implicit_path",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "-l", "Project Gutenberg EBook", "-g", "hay")),
+            new(
+                "tests/binary.rs",
+                "after_match1_implicit_quiet",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "-q", "Project Gutenberg EBook", "-g", "hay")),
+            new(
+                "tests/binary.rs",
+                "after_match1_implicit_count",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "-c", "Project Gutenberg EBook", "-g", "hay")),
+            new(
+                "tests/binary.rs",
+                "after_match1_implicit_count_binary",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "-c", "--binary", "Project Gutenberg EBook", "-g", "hay")),
+            new(
+                "tests/binary.rs",
+                "after_match2_implicit",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "-n", "Project Gutenberg EBook|a medical student", "-g", "hay")),
+            new(
+                "tests/binary.rs",
+                "after_match2_implicit_text",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "-n", "--text", "Project Gutenberg EBook|a medical student", "-g", "hay")),
+            new(
+                "tests/binary.rs",
+                "before_match1_implicit",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "-n", "Heaven", "-g", "hay")),
+            new(
+                "tests/binary.rs",
+                "before_match1_explicit",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "-n", "Heaven", "hay")),
+            new(
+                "tests/binary.rs",
+                "before_match1_implicit_binary",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "-n", "--binary", "Heaven", "-g", "hay")),
+            new(
+                "tests/binary.rs",
+                "before_match1_implicit_text",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "-n", "--text", "Heaven", "-g", "hay")),
+            new(
+                "tests/binary.rs",
+                "before_match2_implicit",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "-n", "a medical student", "-g", "hay")),
+            new(
+                "tests/binary.rs",
+                "before_match2_explicit",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "-n", "a medical student", "hay")),
+            new(
+                "tests/binary.rs",
+                "before_match2_implicit_text",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "-n", "--text", "a medical student", "-g", "hay")),
         ];
 
     internal static void Run(string sourceFile, string name)
@@ -1467,6 +1562,13 @@ internal static class PortedRgTests
         return string.Equals(testCase.SourceFile, sourceFile, StringComparison.Ordinal) &&
             string.Equals(testCase.Name, name, StringComparison.Ordinal);
     }
+
+    private static void CreateSherlockNul(RgTestDirectory dir)
+    {
+        dir.CreateBytes("hay", File.ReadAllBytes(UpstreamSherlockNulPath));
+    }
+
+    private const string UpstreamSherlockNulPath = "/Users/brandon/src/ripgrep/tests/data/sherlock-nul.txt";
 
     private const string Sherlock =
         "For the Doctor Watsons of this world, as opposed to the Sherlock\n" +

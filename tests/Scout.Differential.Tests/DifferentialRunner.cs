@@ -87,7 +87,7 @@ internal static class DifferentialRunner
         ProcessStartInfo startInfo = new(PinnedRipgrepPath)
         {
             RedirectStandardError = true,
-            RedirectStandardInput = standardInput is not null,
+            RedirectStandardInput = true,
             RedirectStandardOutput = true,
             UseShellExecute = false,
         };
@@ -110,8 +110,9 @@ internal static class DifferentialRunner
         if (standardInput is not null)
         {
             process.StandardInput.BaseStream.Write(standardInput);
-            process.StandardInput.Close();
         }
+
+        process.StandardInput.Close();
 
         using MemoryStream output = new();
         string error = string.Empty;
