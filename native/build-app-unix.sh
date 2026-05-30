@@ -1,6 +1,11 @@
 #!/usr/bin/env sh
 set -eu
 
+if [ "$#" -ne 1 ]; then
+    printf 'usage: %s <rid>\n' "$0" >&2
+    exit 2
+fi
+
 RID="$1"
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 OUT="$ROOT/artifacts/app/$RID"
@@ -8,10 +13,10 @@ BIN="$ROOT/artifacts/bin/$RID"
 PCRE2_LIB="$ROOT/artifacts/native/pcre2/$RID/lib/libpcre2-8.a"
 
 case "$RID" in
-    osx-arm64|osx-x64)
+    osx-arm64|osx-x64|linux-x64|linux-arm64)
         ;;
     *)
-        printf 'RID %s is not implemented in this local app linker yet.\n' "$RID" >&2
+        printf 'RID %s is not supported by this Unix app linker.\n' "$RID" >&2
         exit 1
         ;;
 esac
@@ -46,6 +51,26 @@ elif [ "$RID" = "osx-x64" ]; then
         -Wl,-force_load,"$PCRE2_LIB" \
         -lc++ -lobjc -lz \
         -framework Foundation -framework Security -framework GSS -framework CryptoKit -framework Network \
+        -o "$BIN/scout"
+elif [ "$RID" = "linux-x64" ] || [ "$RID" = "linux-arm64" ]; then
+    CC="${CC:-cc}"
+    VXSORT_ARCHIVE=
+    if [ -f "$RT/libRuntime.VxsortEnabled.a" ]; then
+        VXSORT_ARCHIVE="$RT/libRuntime.VxsortEnabled.a"
+    fi
+
+    "$CC" "$ROOT/native/entry/scout_main.c" \
+        -Wl,--start-group \
+        "$OUT/scout.a" \
+        "$RT/libbootstrapperdll.o" "$RT/libaotminipal.a" \
+        "$RT/libRuntime.WorkstationGC.a" ${VXSORT_ARCHIVE:+"$VXSORT_ARCHIVE"} \
+        "$RT/libeventpipe-disabled.a" "$RT/libstandalonegc-disabled.a" \
+        "$RT/libSystem.Native.a" "$RT/libSystem.Globalization.Native.a" \
+        "$RT/libSystem.IO.Compression.Native.a" "$RT/libSystem.Net.Security.Native.a" \
+        "$RT/libSystem.Security.Cryptography.Native.OpenSsl.a" \
+        -Wl,--whole-archive "$PCRE2_LIB" -Wl,--no-whole-archive \
+        -Wl,--end-group \
+        -lstdc++ -lz -lpthread -ldl -lm -lrt \
         -o "$BIN/scout"
 fi
 

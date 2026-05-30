@@ -261,9 +261,15 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("-DSUPPORT_PCRE2_8=1", buildScript, StringComparison.Ordinal);
         Assert.Contains("-DSUPPORT_UNICODE=1", buildScript, StringComparison.Ordinal);
         Assert.Contains("-DSUPPORT_JIT=1", buildScript, StringComparison.Ordinal);
+        Assert.Contains("osx-arm64|osx-x64|linux-x64|linux-arm64", appBuildScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("not implemented", appBuildScript, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("\"$ROOT/native/pcre2/build-unix.sh\" \"$RID\"", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("artifacts/native/pcre2/$RID/lib/libpcre2-8.a", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-Wl,-force_load,\"$PCRE2_LIB\"", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("-Wl,--whole-archive \"$PCRE2_LIB\" -Wl,--no-whole-archive", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("-Wl,--start-group", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("libSystem.Security.Cryptography.Native.OpenSsl.a", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("-lstdc++ -lz -lpthread -ldl -lm -lrt", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("_pcre2_config_8", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("_pcre2_compile_8", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("_pcre2_match_8", appBuildScript, StringComparison.Ordinal);
