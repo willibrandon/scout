@@ -368,7 +368,7 @@ Six layers, all required. **No-skip policy (hard):** a skipped, ignored, or quar
 
 **Benchmark & differential tooling:** `hyperfine` installed from a checksum-verified release pinned in `PREREQS.lock`; the **reference `rg`** is **built from the pinned upstream commit** (§0) with `--profile release-lto`, and **its binary SHA-256 is recorded** in `PREREQS.lock` (we never download a prebuilt release — we compile the exact pinned source); BenchmarkDotNet pinned via central package management (§5.1).
 
-**Corpora:** OpenSubtitles `en.txt` (the canonical ripgrep benchmark corpus) and a pinned linux-kernel source snapshot, each **fetched by pinned URL + SHA-256** recorded in `PREREQS.lock` and cached; CI fails on hash mismatch.
+**Corpora:** OpenSubtitles `en.txt` (the canonical ripgrep benchmark corpus) and a pinned linux-kernel source snapshot, each **fetched by pinned URL + SHA-256** recorded in `PREREQS.lock` and cached; the Linux tree is verified by a deterministic per-file manifest hash. CI fails on hash mismatch.
 
 **RID matrix (all jobs):** `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`, `win-x64`, `win-arm64`.
 
@@ -606,7 +606,9 @@ result = "PASS; needs libRuntime.VxsortEnabled.a"
 ```
 
 **Honestly `resolved@*` (cannot be literal yet, and saying otherwise would be a lie):** a SHA-256 exists only after an artifact is first fetched. These are **not invented**; each is fully *determined* by inputs pinned here and frozen on first run, then CI-verified forever:
-- OpenSubtitles and linux-kernel `[[corpus]]` URL/SHA-256 values = `resolved@fetch` — frozen on first download from the pinned URLs.
+- OpenSubtitles `[[corpus]]` archive/content SHA-256 values = `resolved@fetch` for `https://object.pouta.csc.fi/OPUS-OpenSubtitles/v2016/mono/en.txt.gz`.
+- linux-kernel `[[corpus]]` archive/tree SHA-256 values = `resolved@fetch` for commit `84e57d292203a45c96dbcb2e6be9dd80961d981a` from `https://codeload.github.com/BurntSushi/linux/tar.gz/84e57d292203a45c96dbcb2e6be9dd80961d981a`.
+- `eng/fetch-corpora.sh` fetches those inputs, writes the cached artifacts under `artifacts/corpora`, and prints the replacement lockfile blocks with literal hashes.
 
 This is the same discipline already applied to the SDK patch (§5.1), PCRE2 commit (§4.3), reference `rg`, regex/encoding corpora, and local macOS decompression tools: pin the determining **inputs** now, capture the resulting **hash** at inception, verify forever after.
 

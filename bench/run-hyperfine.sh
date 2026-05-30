@@ -121,8 +121,43 @@ sha256_file() {
     fi
 }
 
+sha256_stream() {
+    if command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 | awk '{ print $1 }'
+    elif command -v sha256sum >/dev/null 2>&1; then
+        sha256sum | awk '{ print $1 }'
+    elif command -v openssl >/dev/null 2>&1; then
+        openssl dgst -sha256 -r | awk '{ print $1 }'
+    else
+        fail "No SHA-256 tool found."
+    fi
+}
+
+sha256_tree() {
+    tree="$1"
+    [ -d "$tree" ] || fail "Missing tree corpus: $tree"
+    (
+        cd "$tree"
+        find . -type f -print | sed 's#^\./##' | LC_ALL=C sort | while IFS= read -r relative_path; do
+            file_sha256="$(sha256_file "$relative_path")"
+            printf '%s  %s\n' "$file_sha256" "$relative_path"
+        done
+    ) | sha256_stream
+}
+
 shell_quote() {
     printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
+resolve_repo_path() {
+    case "$1" in
+        /*)
+            printf '%s\n' "$1"
+            ;;
+        *)
+            printf '%s/%s\n' "$ROOT" "$1"
+            ;;
+    esac
 }
 
 host_rid() {
@@ -170,13 +205,40 @@ check_file_hash() {
     [ "$actual" = "$expected" ] || fail "$label hash mismatch: expected $expected, got $actual"
 }
 
+check_tree_hash() {
+    label="$1"
+    path="$2"
+    expected="$3"
+    require_frozen_value "$expected" "$label tree_sha256"
+    [ -d "$path" ] || fail "Missing $label tree: $path"
+    actual="$(sha256_tree "$path")"
+    [ "$actual" = "$expected" ] || fail "$label tree hash mismatch: expected $expected, got $actual"
+}
+
 require_gate_corpus_file() {
     name="$1"
     path_value="$2"
     expected_sha256="$(read_corpus_value "$name" "sha256")" || fail "Missing corpus hash for $name in tests/PREREQS.lock."
     require_frozen_value "$expected_sha256" "corpus $name"
-    [ -n "$path_value" ] || fail "Missing path for corpus $name."
+    if [ -z "$path_value" ]; then
+        path_value="$(read_corpus_value "$name" "path")" || fail "Missing path for corpus $name."
+        path_value="$(resolve_repo_path "$path_value")"
+    fi
     check_file_hash "corpus $name" "$path_value" "$expected_sha256"
+    printf '%s\n' "$path_value"
+}
+
+require_gate_corpus_tree() {
+    name="$1"
+    path_value="$2"
+    expected_sha256="$(read_corpus_value "$name" "tree_sha256")" || fail "Missing tree hash for $name in tests/PREREQS.lock."
+    require_frozen_value "$expected_sha256" "corpus $name"
+    if [ -z "$path_value" ]; then
+        path_value="$(read_corpus_value "$name" "tree_path")" || fail "Missing tree_path for corpus $name."
+        path_value="$(resolve_repo_path "$path_value")"
+    fi
+    check_tree_hash "corpus $name" "$path_value" "$expected_sha256"
+    printf '%s\n' "$path_value"
 }
 
 make_smoke_corpus() {
@@ -403,9 +465,8 @@ fi
 
 OPENSUBTITLES_EN="${SCOUT_BENCH_OPENSUBTITLES_EN:-}"
 LINUX_TREE="${SCOUT_BENCH_LINUX_TREE:-}"
-require_gate_corpus_file "opensubtitles-en" "$OPENSUBTITLES_EN"
-require_gate_corpus_file "linux-kernel" "$LINUX_TREE"
-[ -d "$LINUX_TREE" ] || fail "Linux corpus is not a directory: $LINUX_TREE"
+OPENSUBTITLES_EN="$(require_gate_corpus_file "opensubtitles-en" "$OPENSUBTITLES_EN")"
+LINUX_TREE="$(require_gate_corpus_tree "linux-kernel" "$LINUX_TREE")"
 
 Q_OPEN="$(shell_quote "$OPENSUBTITLES_EN")"
 Q_LINUX="$(shell_quote "$LINUX_TREE")"

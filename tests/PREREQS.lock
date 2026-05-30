@@ -217,13 +217,23 @@ sha256 = "55c2f67ca4c3cca0ebac659f0075461dd671ec4937ecd6c71123bb49ed322ebd"
 
 [[corpus]]
 name = "opensubtitles-en"
-url = "resolved@fetch"
+kind = "file"
+archive_url = "https://object.pouta.csc.fi/OPUS-OpenSubtitles/v2016/mono/en.txt.gz"
+archive_path = "artifacts/corpora/opensubtitles/en.txt.gz"
+archive_sha256 = "resolved@fetch"
+path = "artifacts/corpora/opensubtitles/en.txt"
 sha256 = "resolved@fetch"
+bytes = "resolved@fetch"
 
 [[corpus]]
 name = "linux-kernel"
-url = "resolved@fetch"
-sha256 = "resolved@fetch"
+kind = "tree"
+commit = "84e57d292203a45c96dbcb2e6be9dd80961d981a"
+archive_url = "https://codeload.github.com/BurntSushi/linux/tar.gz/84e57d292203a45c96dbcb2e6be9dd80961d981a"
+archive_path = "artifacts/corpora/linux/linux-84e57d292203a45c96dbcb2e6be9dd80961d981a.tar.gz"
+archive_sha256 = "resolved@fetch"
+tree_path = "artifacts/corpora/linux/linux-84e57d292203a45c96dbcb2e6be9dd80961d981a"
+tree_sha256 = "resolved@fetch"
 
 [[corpus]]
 name = "regex-1.12.2-misc"

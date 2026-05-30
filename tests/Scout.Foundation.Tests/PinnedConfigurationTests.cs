@@ -365,6 +365,41 @@ public sealed class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies the external benchmark corpora have pinned fetch inputs.
+    /// </summary>
+    [Fact]
+    public void ExternalBenchmarkCorporaHavePinnedInputs()
+    {
+        string root = FindRepositoryRoot();
+        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+
+        Assert.Contains("name = \"opensubtitles-en\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("kind = \"file\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains(
+            "archive_url = \"https://object.pouta.csc.fi/OPUS-OpenSubtitles/v2016/mono/en.txt.gz\"",
+            prerequisiteLock,
+            StringComparison.Ordinal);
+        Assert.Contains("archive_path = \"artifacts/corpora/opensubtitles/en.txt.gz\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("path = \"artifacts/corpora/opensubtitles/en.txt\"", prerequisiteLock, StringComparison.Ordinal);
+
+        Assert.Contains("name = \"linux-kernel\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("kind = \"tree\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("commit = \"84e57d292203a45c96dbcb2e6be9dd80961d981a\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains(
+            "archive_url = \"https://codeload.github.com/BurntSushi/linux/tar.gz/84e57d292203a45c96dbcb2e6be9dd80961d981a\"",
+            prerequisiteLock,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "archive_path = \"artifacts/corpora/linux/linux-84e57d292203a45c96dbcb2e6be9dd80961d981a.tar.gz\"",
+            prerequisiteLock,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "tree_path = \"artifacts/corpora/linux/linux-84e57d292203a45c96dbcb2e6be9dd80961d981a\"",
+            prerequisiteLock,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies the regex conformance corpus files are pinned by hash.
     /// </summary>
     [Fact]

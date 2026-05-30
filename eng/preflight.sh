@@ -101,6 +101,17 @@ sha256_file() {
     fi
 }
 
+resolve_repo_path() {
+    case "$1" in
+        /*)
+            printf '%s\n' "$1"
+            ;;
+        *)
+            printf '%s/%s\n' "$ROOT" "$1"
+            ;;
+    esac
+}
+
 check_file_hash() {
     label="$1"
     path="$2"
@@ -157,6 +168,12 @@ check_pinned_path_corpora() {
             flush()
         }
     ' "$LOCK" | while IFS='|' read -r name path sha256; do
+        case "$sha256" in
+            resolved@*)
+                continue
+                ;;
+        esac
+        path="$(resolve_repo_path "$path")"
         check_file_hash "corpus $name" "$path" "$sha256"
     done
 }
