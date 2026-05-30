@@ -245,12 +245,17 @@ public sealed class Walk : IEnumerable<DirEntry>
             return false;
         }
 
-        state = new WalkEntryState(entry, childIgnoreStack, ShouldYield(entry), ShouldRecurse(entry, rootDevice, isRoot));
+        state = new WalkEntryState(entry, childIgnoreStack, ShouldYield(entry, isRoot), ShouldRecurse(entry, rootDevice, isRoot));
         return true;
     }
 
-    private bool ShouldYield(DirEntry entry)
+    private bool ShouldYield(DirEntry entry, bool isRoot)
     {
+        if (!isRoot && entry.IsSymbolicLink && !followLinks)
+        {
+            return false;
+        }
+
         if (minDepth.HasValue && entry.Depth < minDepth.Value)
         {
             return false;

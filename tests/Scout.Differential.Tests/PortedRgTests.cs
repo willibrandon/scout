@@ -1169,6 +1169,16 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "-n", "x", ".")),
             new(
                 "tests/regression.rs",
+                "r137",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.LinkFile("sherlock", "sym1");
+                    dir.LinkFile("sherlock", "sym2");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-j1", "Sherlock", "./", "sym1", "sym2")),
+            new(
+                "tests/regression.rs",
                 "r156",
                 dir => dir.CreateFile(
                     "testcase.txt",
@@ -1227,6 +1237,26 @@ internal static class PortedRgTests
                 "r251",
                 dir => dir.CreateFile("foo", "привет\nПривет\nПрИвЕт"),
                 DifferentialCase.Exact("--path-separator", "/", "-i", "привет", ".")),
+            new(
+                "tests/regression.rs",
+                "r256",
+                dir =>
+                {
+                    dir.CreateDirectory("bar");
+                    dir.CreateFile("bar/baz", "test");
+                    dir.LinkDirectory("bar", "foo");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "test", "foo")),
+            new(
+                "tests/regression.rs",
+                "r256_j1",
+                dir =>
+                {
+                    dir.CreateDirectory("bar");
+                    dir.CreateFile("bar/baz", "test");
+                    dir.LinkDirectory("bar", "foo");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-j1", "test", "foo")),
             new(
                 "tests/regression.rs",
                 "r270",
@@ -1577,6 +1607,16 @@ internal static class PortedRgTests
                 "r1380",
                 dir => dir.CreateFile("foo", "a\nb\nc\nd\ne\nd\ne\nd\ne\nd\ne\n"),
                 DifferentialCase.Exact("--path-separator", "/", "-A2", "-m1", "d", "foo")),
+            new(
+                "tests/regression.rs",
+                "r1389_bad_symlinks_no_biscuit",
+                dir =>
+                {
+                    dir.CreateDirectory("mydir");
+                    dir.CreateFile("mydir/file.txt", "test");
+                    dir.LinkDirectory("mydir", "mylink");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "test", "--no-ignore", "--sort", "path", "mylink")),
             new(
                 "tests/regression.rs",
                 "r1537",

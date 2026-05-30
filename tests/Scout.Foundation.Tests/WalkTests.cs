@@ -149,7 +149,7 @@ public sealed class WalkTests
     }
 
     /// <summary>
-    /// Verifies symbolic links are yielded by default and traversed when requested.
+    /// Verifies symbolic links are skipped by default and traversed when requested.
     /// </summary>
     [Fact]
     public void FollowLinksControlsSymlinkTraversal()
@@ -162,13 +162,15 @@ public sealed class WalkTests
         string root = CreateTempDirectory();
         Directory.CreateDirectory(Path.Combine(root, "a", "b"));
         File.WriteAllText(Path.Combine(root, "a", "b", "foo"), string.Empty);
-        if (!TryCreateDirectorySymlink(Path.Combine(root, "a", "b"), Path.Combine(root, "z")))
+        File.WriteAllText(Path.Combine(root, "real"), string.Empty);
+        if (!TryCreateDirectorySymlink(Path.Combine(root, "a", "b"), Path.Combine(root, "z"))
+            || !TryCreateFileSymlink(Path.Combine(root, "real"), Path.Combine(root, "file-link")))
         {
             return;
         }
 
-        Assert.Equal(["a", "a/b", "a/b/foo", "z"], Collect(root, new WalkBuilder(root)));
-        Assert.Equal(["a", "a/b", "a/b/foo", "z", "z/foo"], Collect(root, new WalkBuilder(root).FollowLinks(true)));
+        Assert.Equal(["a", "a/b", "a/b/foo", "real"], Collect(root, new WalkBuilder(root)));
+        Assert.Equal(["a", "a/b", "a/b/foo", "file-link", "real", "z", "z/foo"], Collect(root, new WalkBuilder(root).FollowLinks(true)));
     }
 
     /// <summary>
@@ -189,7 +191,7 @@ public sealed class WalkTests
             return;
         }
 
-        Assert.Equal(["a", "a/b", "a/b/c"], Collect(root, new WalkBuilder(root)));
+        Assert.Equal(["a", "a/b"], Collect(root, new WalkBuilder(root)));
         Assert.Equal(["a", "a/b"], Collect(root, new WalkBuilder(root).FollowLinks(true)));
     }
 

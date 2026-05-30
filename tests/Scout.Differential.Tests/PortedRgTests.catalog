@@ -168,6 +168,7 @@ tests/regression.rs|r105_part2
 tests/regression.rs|r105_part1
 tests/regression.rs|r127
 tests/regression.rs|r128
+tests/regression.rs|r137
 tests/regression.rs|r156
 tests/regression.rs|r184
 tests/regression.rs|r199
@@ -175,6 +176,8 @@ tests/regression.rs|r206
 tests/regression.rs|r228
 tests/regression.rs|r229
 tests/regression.rs|r251
+tests/regression.rs|r256
+tests/regression.rs|r256_j1
 tests/regression.rs|r270
 tests/regression.rs|r279
 tests/regression.rs|r391
@@ -216,6 +219,7 @@ tests/regression.rs|r1311_multi_line_term_replace
 tests/regression.rs|r1319
 tests/regression.rs|r1334_invert_empty_patterns
 tests/regression.rs|r1380
+tests/regression.rs|r1389_bad_symlinks_no_biscuit
 tests/regression.rs|r1537
 tests/regression.rs|r1559
 tests/regression.rs|r1638

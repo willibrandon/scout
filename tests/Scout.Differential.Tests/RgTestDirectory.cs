@@ -79,6 +79,19 @@ internal sealed class RgTestDirectory : IDisposable
         Directory.CreateSymbolicLink(targetPath, sourcePath);
     }
 
+    public void LinkFile(string sourceRelativePath, string targetRelativePath)
+    {
+        string sourcePath = Path.GetFullPath(Path.Combine(RootPath, sourceRelativePath));
+        string targetPath = Path.GetFullPath(Path.Combine(RootPath, targetRelativePath));
+        string? targetDirectory = Path.GetDirectoryName(targetPath);
+        if (!string.IsNullOrEmpty(targetDirectory))
+        {
+            Directory.CreateDirectory(targetDirectory);
+        }
+
+        File.CreateSymbolicLink(targetPath, sourcePath);
+    }
+
     public void Dispose()
     {
         Directory.Delete(RootPath, recursive: true);
