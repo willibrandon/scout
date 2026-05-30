@@ -1,5 +1,6 @@
 tests/json.rs|r1412_look_behind_match_missing
 tests/regression.rs|r1401_look_ahead_only_matching_1
 tests/regression.rs|r1401_look_ahead_only_matching_2
+tests/regression.rs|r1412_look_behind_no_replacement
 tests/regression.rs|r1573
 tests/regression.rs|r3139_multiline_lookahead_files_with_matches

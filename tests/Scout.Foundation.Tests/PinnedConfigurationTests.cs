@@ -246,6 +246,7 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("ripgrep_pcre2_reported_version = \"PCRE2 10.45 is available (JIT is available)\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("compare_case r1401_lookahead_only_matching_1 exact -P -N -o '.*o(?!.*\\s)'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case json_lookbehind mask-elapsed -P -U --json '(?<=foo\\n)bar'", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case r1412_lookbehind_replacement exact -P -nU -rquux '(?<=foo\\n)bar'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case r1573_count exact -P --multiline --count '(?s)def (\\w+);(?=.*use \\w+)'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case r3139_multiline_files_with_matches exact -P --multiline --files-with-matches '(?s)Start(?=.*thing2)'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("<AllowUnsafeBlocks>true</AllowUnsafeBlocks>", directoryBuildProps, StringComparison.Ordinal);

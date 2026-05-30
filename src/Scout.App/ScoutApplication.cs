@@ -630,6 +630,8 @@ internal static class ScoutApplication
                 GetOutputColor(lowArgs),
                 lowArgs.SearchMode,
                 lowArgs.OnlyMatching,
+                lowArgs.Replacement,
+                patterns,
                 lowArgs.Multiline,
                 EffectiveLineNumber(lowArgs),
                 EffectiveColumn(lowArgs),
@@ -666,7 +668,7 @@ internal static class ScoutApplication
             !lowArgs.InvertMatch &&
             !(lowArgs.SearchMode == CliSearchMode.Json && lowArgs.OnlyMatching) &&
             !(lowArgs.Multiline && lowArgs.OnlyMatching) &&
-            lowArgs.Replacement is null &&
+            (lowArgs.Replacement is null || (lowArgs.SearchMode == CliSearchMode.Standard && !lowArgs.OnlyMatching)) &&
             lowArgs.MaxCount is null &&
             lowArgs.BeforeContext == 0 &&
             lowArgs.AfterContext == 0 &&
@@ -744,6 +746,8 @@ internal static class ScoutApplication
         OutputColor color,
         CliSearchMode searchMode,
         bool onlyMatching,
+        ReadOnlyMemory<byte>? replacement,
+        IReadOnlyList<byte[]> patterns,
         bool multiline,
         bool lineNumber,
         bool column,
@@ -754,7 +758,7 @@ internal static class ScoutApplication
     {
         if (multiline)
         {
-            return RunPcre2MultilineSearchMode(bytes, regex, output, separators, path, prefix, lineLimit, color, searchMode, lineNumber, column, byteOffset, trim, includeZero, nullPathTerminator);
+            return RunPcre2MultilineSearchMode(bytes, regex, output, separators, path, prefix, lineLimit, color, searchMode, replacement, patterns, lineNumber, column, byteOffset, trim, includeZero, nullPathTerminator);
         }
 
         if (searchMode == CliSearchMode.Count)
@@ -778,6 +782,11 @@ internal static class ScoutApplication
         if (searchMode == CliSearchMode.FilesWithoutMatch)
         {
             return WritePathIf(output, path, color, !HasPcre2Match(bytes, regex), nullPathTerminator, separators.LineTerminator);
+        }
+
+        if (replacement is ReadOnlyMemory<byte> replacementValue)
+        {
+            return SearchPcre2ReplacedLines(bytes, regex, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, patterns);
         }
 
         return SearchPcre2Lines(bytes, regex, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, onlyMatching);
@@ -884,6 +893,8 @@ internal static class ScoutApplication
         OutputLineLimit lineLimit,
         OutputColor color,
         CliSearchMode searchMode,
+        ReadOnlyMemory<byte>? replacement,
+        IReadOnlyList<byte[]> patterns,
         bool lineNumber,
         bool column,
         bool byteOffset,
@@ -909,6 +920,11 @@ internal static class ScoutApplication
         if (searchMode == CliSearchMode.FilesWithoutMatch)
         {
             return WritePathIf(output, path, color, !regex.TryFind(bytes, out _), nullPathTerminator, separators.LineTerminator);
+        }
+
+        if (replacement is ReadOnlyMemory<byte> replacementValue)
+        {
+            return SearchPcre2MultilineReplacedBytes(bytes, regex, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, patterns);
         }
 
         return SearchPcre2MultilineBytes(bytes, regex, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator);
@@ -956,6 +972,61 @@ internal static class ScoutApplication
             }
 
             offset = AdvanceAfterPcre2Match(match, bytes.Length);
+        }
+
+        return matched;
+    }
+
+    private static bool SearchPcre2MultilineReplacedBytes(
+        ReadOnlySpan<byte> bytes,
+        Pcre2Regex regex,
+        RawByteWriter output,
+        OutputSeparators separators,
+        OutputPath? prefix,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool trim,
+        bool nullPathTerminator,
+        ReadOnlyMemory<byte> replacement,
+        IReadOnlyList<byte[]> patterns)
+    {
+        bool matched = false;
+        int offset = 0;
+        int groupStart = -1;
+        int groupEnd = -1;
+        List<Pcre2Match> groupMatches = [];
+        while (offset <= bytes.Length && regex.TryFind(bytes, offset, out Pcre2Match match))
+        {
+            matched = true;
+            GetPcre2MultilineReplacementRange(bytes, match, out int rangeStart, out int rangeEnd);
+            if (groupStart >= 0 && rangeStart >= groupEnd)
+            {
+                WritePcre2MultilineReplacementRecord(bytes, groupStart, groupEnd, groupMatches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacement, patterns);
+                groupMatches.Clear();
+                groupStart = -1;
+                groupEnd = -1;
+            }
+
+            if (groupStart < 0)
+            {
+                groupStart = rangeStart;
+                groupEnd = rangeEnd;
+            }
+            else if (rangeEnd > groupEnd)
+            {
+                groupEnd = rangeEnd;
+            }
+
+            groupMatches.Add(match);
+            offset = AdvanceAfterPcre2Match(match, bytes.Length);
+        }
+
+        if (groupStart >= 0)
+        {
+            WritePcre2MultilineReplacementRecord(bytes, groupStart, groupEnd, groupMatches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacement, patterns);
         }
 
         return matched;
@@ -1015,6 +1086,105 @@ internal static class ScoutApplication
             currentLineNumber++;
         }
 
+        return matched;
+    }
+
+    private static void GetPcre2MultilineReplacementRange(ReadOnlySpan<byte> bytes, Pcre2Match match, out int start, out int end)
+    {
+        start = GetLineStart(bytes, match.Start);
+        int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match));
+        end = GetLineEnd(bytes, lastLineStart);
+    }
+
+    private static void WritePcre2MultilineReplacementRecord(
+        ReadOnlySpan<byte> bytes,
+        int recordStart,
+        int recordEnd,
+        List<Pcre2Match> matches,
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool trim,
+        bool nullPathTerminator,
+        ReadOnlyMemory<byte> replacement,
+        IReadOnlyList<byte[]> patterns)
+    {
+        List<int> starts = [];
+        List<int> lengths = [];
+        for (int index = 0; index < matches.Count; index++)
+        {
+            starts.Add(matches[index].Start - recordStart);
+            lengths.Add(matches[index].Length);
+        }
+
+        List<long> replacementColumns = [];
+        byte[] body = ReplacementFormatter.ReplaceLine(bytes[recordStart..recordEnd], starts, lengths, replacement.Span, patterns, false, replacementColumns);
+        int lineStart = GetLineStart(bytes, recordStart);
+        WriteMultilineReplacementBody(body, recordStart, GetLineNumber(bytes, lineStart), replacementColumns.Count > 0 ? replacementColumns[0] : 1, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator);
+    }
+
+    private static bool SearchPcre2ReplacedLines(
+        byte[] bytes,
+        Pcre2Regex regex,
+        RawByteWriter output,
+        OutputSeparators separators,
+        OutputPath? prefix,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool trim,
+        bool nullPathTerminator,
+        ReadOnlyMemory<byte> replacement,
+        IReadOnlyList<byte[]> patterns)
+    {
+        bool matched = false;
+        int lineStart = 0;
+        long currentLineNumber = 1;
+        var sink = new ReplacementLineSink(output, prefix, separators.FieldMatch, replacement, patterns, false, lineNumber, column, byteOffset, trim, nullPathTerminator, vimgrep: false, lineLimit, color: color, lineTerminator: separators.LineTerminator);
+        while (lineStart <= bytes.Length)
+        {
+            ReadOnlySpan<byte> remaining = bytes.AsSpan(lineStart);
+            int lineFeed = remaining.IndexOf((byte)'\n');
+            int lineEnd = lineFeed < 0 ? bytes.Length : lineStart + lineFeed;
+            int outputEnd = lineFeed < 0 ? lineEnd : lineEnd + 1;
+            ReadOnlySpan<byte> outputLine = bytes.AsSpan(lineStart, outputEnd - lineStart);
+            ReadOnlySpan<byte> matchLine = bytes.AsSpan(lineStart, lineEnd - lineStart);
+            if (matchLine.Length > 0 && matchLine[^1] == (byte)'\r')
+            {
+                matchLine = matchLine[..^1];
+            }
+
+            int startOffset = 0;
+            while (startOffset <= matchLine.Length && regex.TryFind(matchLine, startOffset, out Pcre2Match match))
+            {
+                matched = true;
+                sink.MatchedLine(
+                    currentLineNumber,
+                    lineStart,
+                    lineStart + match.Start,
+                    match.Start + 1L,
+                    outputLine,
+                    matchLine.Slice(match.Start, match.Length));
+                startOffset = match.Length == 0 ? match.Start + 1 : match.Start + match.Length;
+            }
+
+            if (lineFeed < 0)
+            {
+                break;
+            }
+
+            lineStart = outputEnd;
+            currentLineNumber++;
+        }
+
+        sink.Flush();
         return matched;
     }
 

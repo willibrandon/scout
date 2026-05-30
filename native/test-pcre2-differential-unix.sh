@@ -189,6 +189,7 @@ EOF
 compare_case basic_lookahead exact -P 'foo(?=bar)' pcre2-smoke.txt
 compare_case json_lookahead mask-elapsed -P --json 'foo(?=bar)' pcre2-smoke.txt
 compare_case json_lookbehind mask-elapsed -P -U --json '(?<=foo\n)bar' lookbehind
+compare_case r1412_lookbehind_replacement exact -P -nU -rquux '(?<=foo\n)bar' lookbehind
 compare_case r1401_lookahead_only_matching_1 exact -P -N -o '.*o(?!.*\s)' ip1.txt
 compare_case r1401_lookahead_only_matching_1_tabs exact -P -N -o '.*o(?!.*[ \t])' ip1.txt
 compare_case r1401_lookahead_only_matching_2 exact -P -N -o '.*o(?!.*\s)' ip2.txt
