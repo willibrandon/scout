@@ -100,19 +100,19 @@ if ($LASTEXITCODE -ne 0) {
     throw "link.exe failed for $OutputExe."
 }
 
-$VersionOutput = & $OutputExe -V
-if ($LASTEXITCODE -ne 0 -or $VersionOutput[0] -ne "ripgrep 15.1.0 (rev 4857d6fa67)") {
+$VersionOutput = @(& $OutputExe -V)
+if ($LASTEXITCODE -ne 0 -or $VersionOutput.Count -ne 1 -or $VersionOutput[0] -ne "ripgrep 15.1.0 (rev 4857d6fa67)") {
     throw "Unexpected scout -V output: $VersionOutput"
 }
 
-$Pcre2VersionOutput = & $OutputExe --pcre2-version
-if ($LASTEXITCODE -ne 0 -or $Pcre2VersionOutput[0] -ne "PCRE2 10.46 is available (JIT is available)") {
+$Pcre2VersionOutput = @(& $OutputExe --pcre2-version)
+if ($LASTEXITCODE -ne 0 -or $Pcre2VersionOutput.Count -ne 1 -or $Pcre2VersionOutput[0] -ne "PCRE2 10.46 is available (JIT is available)") {
     throw "Unexpected scout --pcre2-version output: $Pcre2VersionOutput"
 }
 
 $SmokePath = Join-Path $Bin "pcre2-smoke.txt"
 Set-Content -NoNewline -Encoding ascii -Path $SmokePath -Value "foobar`nfoo`nfoobarfoo`n"
-$SmokeOutput = & $OutputExe -P "foo(?=bar)" $SmokePath
+$SmokeOutput = @(& $OutputExe -P "foo(?=bar)" $SmokePath)
 if ($LASTEXITCODE -ne 0 -or ($SmokeOutput -join "`n") -ne "foobar`nfoobarfoo") {
     throw "Unexpected PCRE2 smoke output: $SmokeOutput"
 }
