@@ -373,6 +373,7 @@ public sealed class PinnedConfigurationTests
         string root = FindRepositoryRoot();
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
 
+        Assert.DoesNotContain("resolved@", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("name = \"opensubtitles-en\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("kind = \"file\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains(
@@ -380,7 +381,16 @@ public sealed class PinnedConfigurationTests
             prerequisiteLock,
             StringComparison.Ordinal);
         Assert.Contains("archive_path = \"artifacts/corpora/opensubtitles/en.txt.gz\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains(
+            "archive_sha256 = \"7c169ffa7742fd7f670c176ba8c290b74bcc650784e585e2ef60061376c8fff1\"",
+            prerequisiteLock,
+            StringComparison.Ordinal);
         Assert.Contains("path = \"artifacts/corpora/opensubtitles/en.txt\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains(
+            "sha256 = \"a84b1e0c66645c429ff356510dc872d5d9cca1c5a02a21d6eee3cff24d4781bb\"",
+            prerequisiteLock,
+            StringComparison.Ordinal);
+        Assert.Contains("bytes = \"9968530111\"", prerequisiteLock, StringComparison.Ordinal);
 
         Assert.Contains("name = \"linux-kernel\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("kind = \"tree\"", prerequisiteLock, StringComparison.Ordinal);

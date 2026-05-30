@@ -589,7 +589,7 @@ On x64 the link additionally needs `libRuntime.VxsortEnabled.a` (the GC's AVX2/A
 
 **This file exists in the repo at `tests/PREREQS.lock`.** It is not a sketch — the values below were measured on this machine and the authoritative copy is the file; this appendix summarizes it.
 
-**Literal-and-final today** (measured/known): the ripgrep commit and release-LTO reference `rg` binary hash; the .NET SDK/runtime that built the verified spikes (`10.0.102`/`10.0.2`); the macOS host (`macOS 26.3.1`, `arm64`, `Apple clang 17.0.0 (clang-1700.6.4.2)`, `cargo 1.91.1`); the PCRE2 binding/sys/C-library versions, tag, and upstream commit; the macOS decompression tool versions and binary hashes (`gzip` Apple gzip 475, `bzip2` 1.0.8, `xz` 5.8.2, `zstd` 1.5.7, `lz4` 1.10.0, `brotli` 1.2.0, `uncompress` Apple compress file_cmds-475 — all read from the host); the Linux `debian:bookworm-slim` index/amd64/arm64 digests plus pinned-snapshot decompressor package versions and binary hashes; the macOS `hyperfine` 1.20.0 Homebrew source checksum, bottle checksum, and binary hash; the linux-kernel benchmark source archive hash (`8779f9318fb896f64f7a876d7ff9c152925e82c17690281eb1ec6ce587275054`) and extracted-tree manifest hash (`c104036f61aa7eba26da621738424e2e35f2c12372858abc345c39bbd9ecd116`); and the **real spike-binary hashes**:
+**Literal-and-final today** (measured/known): the ripgrep commit and release-LTO reference `rg` binary hash; the .NET SDK/runtime that built the verified spikes (`10.0.102`/`10.0.2`); the macOS host (`macOS 26.3.1`, `arm64`, `Apple clang 17.0.0 (clang-1700.6.4.2)`, `cargo 1.91.1`); the PCRE2 binding/sys/C-library versions, tag, and upstream commit; the macOS decompression tool versions and binary hashes (`gzip` Apple gzip 475, `bzip2` 1.0.8, `xz` 5.8.2, `zstd` 1.5.7, `lz4` 1.10.0, `brotli` 1.2.0, `uncompress` Apple compress file_cmds-475 — all read from the host); the Linux `debian:bookworm-slim` index/amd64/arm64 digests plus pinned-snapshot decompressor package versions and binary hashes; the macOS `hyperfine` 1.20.0 Homebrew source checksum, bottle checksum, and binary hash; the OpenSubtitles archive hash (`7c169ffa7742fd7f670c176ba8c290b74bcc650784e585e2ef60061376c8fff1`) and decompressed `en.txt` hash (`a84b1e0c66645c429ff356510dc872d5d9cca1c5a02a21d6eee3cff24d4781bb`); the linux-kernel benchmark source archive hash (`8779f9318fb896f64f7a876d7ff9c152925e82c17690281eb1ec6ce587275054`) and extracted-tree manifest hash (`c104036f61aa7eba26da621738424e2e35f2c12372858abc345c39bbd9ecd116`); and the **real spike-binary hashes**:
 
 ```toml
 [[spike_artifact]]
@@ -605,9 +605,7 @@ sha256 = "010ff1889ab16bd5e314f0578e567b5895ee5c9b4e54c6b4e777c6ec5d14614a"  # L
 result = "PASS; needs libRuntime.VxsortEnabled.a"
 ```
 
-**Honestly `resolved@*` (cannot be literal yet, and saying otherwise would be a lie):** a SHA-256 exists only after an artifact is first fetched. These are **not invented**; each is fully *determined* by inputs pinned here and frozen on first run, then CI-verified forever:
-- OpenSubtitles `[[corpus]]` archive/content SHA-256 values = `resolved@fetch` for `https://object.pouta.csc.fi/OPUS-OpenSubtitles/v2016/mono/en.txt.gz`.
-- `eng/fetch-corpora.sh` fetches those inputs, writes the cached artifacts under `artifacts/corpora`, and prints the replacement lockfile blocks with literal hashes.
+**No remaining `resolved@*` values:** `tests/PREREQS.lock` now contains literal hashes for both external benchmark corpora. `eng/fetch-corpora.sh` fetches those inputs, writes the cached artifacts under `artifacts/corpora`, and prints the replacement lockfile blocks with literal hashes.
 
 This is the same discipline already applied to the SDK patch (§5.1), PCRE2 commit (§4.3), reference `rg`, regex/encoding corpora, and local macOS decompression tools: pin the determining **inputs** now, capture the resulting **hash** at inception, verify forever after.
 

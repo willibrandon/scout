@@ -89,44 +89,44 @@ display_path() {
 }
 
 download_file() {
-    url="$1"
-    path="$2"
-    label="$3"
+    download_url="$1"
+    download_path="$2"
+    download_label="$3"
 
-    if [ -f "$path" ]; then
-        printf 'Using cached %s: %s\n' "$label" "$path" >&2
+    if [ -f "$download_path" ]; then
+        printf 'Using cached %s: %s\n' "$download_label" "$download_path" >&2
         return
     fi
 
-    mkdir -p "$(dirname -- "$path")"
-    tmp="$path.tmp"
-    rm -f "$tmp"
-    printf 'Downloading %s from %s\n' "$label" "$url" >&2
-    curl -L --fail --retry 3 --output "$tmp" "$url"
-    mv "$tmp" "$path"
+    mkdir -p "$(dirname -- "$download_path")"
+    download_tmp="$download_path.tmp"
+    rm -f "$download_tmp"
+    printf 'Downloading %s from %s\n' "$download_label" "$download_url" >&2
+    curl -L --fail --retry 3 --output "$download_tmp" "$download_url"
+    mv "$download_tmp" "$download_path"
 }
 
 prepare_opensubtitles() {
-    archive="$OUT_DIR/opensubtitles/en.txt.gz"
-    path="$OUT_DIR/opensubtitles/en.txt"
+    opensub_archive="$OUT_DIR/opensubtitles/en.txt.gz"
+    opensub_path="$OUT_DIR/opensubtitles/en.txt"
 
-    download_file "$OPENSUBTITLES_URL" "$archive" "OpenSubtitles en.txt.gz"
+    download_file "$OPENSUBTITLES_URL" "$opensub_archive" "OpenSubtitles en.txt.gz"
 
-    if [ ! -f "$path" ]; then
-        tmp="$path.tmp"
-        rm -f "$tmp"
-        printf 'Decompressing OpenSubtitles corpus to %s\n' "$path" >&2
-        gzip -dc "$archive" > "$tmp"
-        mv "$tmp" "$path"
+    if [ ! -f "$opensub_path" ]; then
+        opensub_tmp="$opensub_path.tmp"
+        rm -f "$opensub_tmp"
+        printf 'Decompressing OpenSubtitles corpus to %s\n' "$opensub_path" >&2
+        gzip -dc "$opensub_archive" > "$opensub_tmp"
+        mv "$opensub_tmp" "$opensub_path"
     else
-        printf 'Using cached OpenSubtitles text: %s\n' "$path" >&2
+        printf 'Using cached OpenSubtitles text: %s\n' "$opensub_path" >&2
     fi
 
-    archive_path="$(display_path "$archive")"
-    corpus_path="$(display_path "$path")"
-    archive_sha256="$(sha256_file "$archive")"
-    corpus_sha256="$(sha256_file "$path")"
-    corpus_bytes="$(file_bytes "$path")"
+    archive_path="$(display_path "$opensub_archive")"
+    corpus_path="$(display_path "$opensub_path")"
+    archive_sha256="$(sha256_file "$opensub_archive")"
+    corpus_sha256="$(sha256_file "$opensub_path")"
+    corpus_bytes="$(file_bytes "$opensub_path")"
 
     cat <<EOF
 [[corpus]]
@@ -142,29 +142,29 @@ EOF
 }
 
 prepare_linux() {
-    archive="$OUT_DIR/linux/linux-$LINUX_COMMIT.tar.gz"
-    tree="$OUT_DIR/linux/linux-$LINUX_COMMIT"
+    linux_archive="$OUT_DIR/linux/linux-$LINUX_COMMIT.tar.gz"
+    linux_tree="$OUT_DIR/linux/linux-$LINUX_COMMIT"
 
-    download_file "$LINUX_ARCHIVE_URL" "$archive" "Linux kernel archive"
+    download_file "$LINUX_ARCHIVE_URL" "$linux_archive" "Linux kernel archive"
 
-    if [ ! -d "$tree" ]; then
-        mkdir -p "$(dirname -- "$tree")"
-        extract_dir="$(mktemp -d "$(dirname -- "$tree")/extract.XXXXXX")"
-        top_level="$(tar -tzf "$archive" | sed -n '1s#/.*##p')"
+    if [ ! -d "$linux_tree" ]; then
+        mkdir -p "$(dirname -- "$linux_tree")"
+        extract_dir="$(mktemp -d "$(dirname -- "$linux_tree")/extract.XXXXXX")"
+        top_level="$(tar -tzf "$linux_archive" | sed -n '1s#/.*##p')"
         [ -n "$top_level" ] || fail "Could not determine Linux archive root."
-        printf 'Extracting Linux corpus to %s\n' "$tree" >&2
-        tar -xzf "$archive" -C "$extract_dir"
+        printf 'Extracting Linux corpus to %s\n' "$linux_tree" >&2
+        tar -xzf "$linux_archive" -C "$extract_dir"
         [ -d "$extract_dir/$top_level" ] || fail "Missing extracted Linux root: $top_level"
-        mv "$extract_dir/$top_level" "$tree"
+        mv "$extract_dir/$top_level" "$linux_tree"
         rmdir "$extract_dir"
     else
-        printf 'Using cached Linux tree: %s\n' "$tree" >&2
+        printf 'Using cached Linux tree: %s\n' "$linux_tree" >&2
     fi
 
-    archive_path="$(display_path "$archive")"
-    tree_path="$(display_path "$tree")"
-    archive_sha256="$(sha256_file "$archive")"
-    tree_sha256="$(sha256_tree "$tree")"
+    archive_path="$(display_path "$linux_archive")"
+    tree_path="$(display_path "$linux_tree")"
+    archive_sha256="$(sha256_file "$linux_archive")"
+    tree_sha256="$(sha256_tree "$linux_tree")"
 
     cat <<EOF
 [[corpus]]

@@ -220,10 +220,10 @@ name = "opensubtitles-en"
 kind = "file"
 archive_url = "https://object.pouta.csc.fi/OPUS-OpenSubtitles/v2016/mono/en.txt.gz"
 archive_path = "artifacts/corpora/opensubtitles/en.txt.gz"
-archive_sha256 = "resolved@fetch"
+archive_sha256 = "7c169ffa7742fd7f670c176ba8c290b74bcc650784e585e2ef60061376c8fff1"
 path = "artifacts/corpora/opensubtitles/en.txt"
-sha256 = "resolved@fetch"
-bytes = "resolved@fetch"
+sha256 = "a84b1e0c66645c429ff356510dc872d5d9cca1c5a02a21d6eee3cff24d4781bb"
+bytes = "9968530111"
 
 [[corpus]]
 name = "linux-kernel"
