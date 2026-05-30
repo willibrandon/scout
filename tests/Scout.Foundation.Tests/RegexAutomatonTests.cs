@@ -53,6 +53,19 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies greedy repetition continues through multiline predicates before accepting.
+    /// </summary>
+    [Fact]
+    public void GreedyMultilineRepetitionSpansLines()
+    {
+        var automaton = RegexAutomaton.Compile(@"(?m)(?:^\d+$\n?)+"u8);
+
+        RegexMatch? match = automaton.Find("123\n456\n789"u8);
+
+        Assert.Equal(new RegexMatch(0, 11), match);
+    }
+
+    /// <summary>
     /// Verifies scoped and unscoped case-insensitive flags affect subsequent atoms.
     /// </summary>
     [Fact]

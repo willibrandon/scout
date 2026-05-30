@@ -46,6 +46,7 @@ public sealed class RegexCorpusTests
                 "8",
                 "9",
                 "10",
+                "11",
             ]),
             ("iter.toml",
             [

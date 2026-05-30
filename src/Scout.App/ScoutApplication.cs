@@ -4239,7 +4239,7 @@ internal static class ScoutApplication
 
             if (value == (byte)'\\')
             {
-                if (index + 1 < pattern.Length && pattern[index + 1] == (byte)'\n')
+                if (index + 1 < pattern.Length && pattern[index + 1] == (byte)'n')
                 {
                     return true;
                 }

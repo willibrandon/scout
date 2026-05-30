@@ -361,6 +361,7 @@ internal sealed class RegexSyntaxParseState
             (byte)'W' => new RegexAtomNode(RegexSyntaxKind.NotWordClass, ReadOnlyMemory<byte>.Empty, position),
             (byte)'s' => new RegexAtomNode(RegexSyntaxKind.WhitespaceClass, ReadOnlyMemory<byte>.Empty, position),
             (byte)'S' => new RegexAtomNode(RegexSyntaxKind.NotWhitespaceClass, ReadOnlyMemory<byte>.Empty, position),
+            (byte)'n' => new RegexAtomNode(RegexSyntaxKind.Literal, new[] { (byte)'\n' }, position),
             (byte)'t' => new RegexAtomNode(RegexSyntaxKind.Literal, new[] { (byte)'\t' }, position),
             (byte)'r' => new RegexAtomNode(RegexSyntaxKind.Literal, new[] { (byte)'\r' }, position),
             (byte)'f' => new RegexAtomNode(RegexSyntaxKind.Literal, new[] { (byte)'\f' }, position),

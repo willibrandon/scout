@@ -18,8 +18,10 @@ public sealed class DifferentialSearchTests
         {
             string first = Path.Combine(root, "first.txt");
             string second = Path.Combine(root, "second.txt");
+            string digits = Path.Combine(root, "digits.txt");
             File.WriteAllText(first, "needle\nmiss\nneedle again\n");
             File.WriteAllText(second, "alpha\nneedle second\n");
+            File.WriteAllText(digits, "123\n456\n789");
 
             DifferentialCase[] cases =
             [
@@ -33,6 +35,7 @@ public sealed class DifferentialSearchTests
                 DifferentialCase.Exact("--sort=path", "-H", "needle", root),
                 DifferentialCase.Exact("-ne", "needle", first),
                 DifferentialCase.Exact("-m1", "needle", first),
+                DifferentialCase.Exact("-n", "-U", @"(?m)(?:^\d+$\n?)+", digits),
                 DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "-l", "needle", first, second),
                 DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--stats", "needle", first),
                 DifferentialCase.Normalized(DifferentialComparisonMode.SortLinesAndMaskElapsed, "--json", "needle", root),
