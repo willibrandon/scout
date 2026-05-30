@@ -39,6 +39,11 @@ public sealed class PortedRgTests
                 DifferentialCase.ExactWithStandardInput(EncodingUtf8.GetBytes(Sherlock), "-n", "-U", @"of this world\p{Any}+?detective work")),
             new(
                 "tests/feature.rs",
+                "f7_stdin",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.ExactWithStandardInput(EncodingUtf8.GetBytes("Sherlock"), "--path-separator", "/", "-f-")),
+            new(
+                "tests/feature.rs",
                 "f948_exit_code_no_match",
                 dir => dir.CreateFile("sherlock", "Sherlock\nWatson\n"),
                 DifferentialCase.Exact("--path-separator", "/", "Moriarty", ".")),

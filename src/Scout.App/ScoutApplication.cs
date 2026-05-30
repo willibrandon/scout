@@ -280,6 +280,11 @@ internal static class ScoutApplication
         return argument.TryGetText(out string text) && string.Equals(text, expected, StringComparison.Ordinal);
     }
 
+    private static bool IsStandardInputArgument(OsString argument)
+    {
+        return argument.EqualsUnixBytes("-"u8) || TextEquals(argument, "-");
+    }
+
     private static int RunSpecial(CliSpecialMode specialMode, RawByteWriter output)
     {
         switch (specialMode)
@@ -343,6 +348,7 @@ internal static class ScoutApplication
 
         var patterns = new List<byte[]>();
         int firstPathIndex = 0;
+        bool patternsReadFromStandardInput = false;
         if (lowArgs.PatternSources.Count == 0)
         {
             if (positional.Count == 0)
@@ -361,6 +367,7 @@ internal static class ScoutApplication
                 CliPatternSource source = lowArgs.PatternSources[index];
                 if (source.IsFile)
                 {
+                    patternsReadFromStandardInput |= IsStandardInputArgument(source.Value);
                     if (!TryLoadPatternFile(source.Value, patterns, standardInput, diagnostics))
                     {
                         return ExitCode.Error;
@@ -400,7 +407,7 @@ internal static class ScoutApplication
         LogSearchConfiguration(logger, positional, firstPathIndex, lowArgs, patterns);
         if (lowArgs.SearchMode == CliSearchMode.Json)
         {
-            return RunJsonSearch(positional, firstPathIndex, lowArgs, patterns, asciiCaseInsensitive, searchFileTypes!, output, diagnostics, standardInput);
+            return RunJsonSearch(positional, firstPathIndex, patternsReadFromStandardInput, lowArgs, patterns, asciiCaseInsensitive, searchFileTypes!, output, diagnostics, standardInput);
         }
 
         OutputSeparators separators = GetOutputSeparators(lowArgs);
@@ -415,7 +422,8 @@ internal static class ScoutApplication
         bool stats = lowArgs.Stats && lowArgs.MaxCount != 0;
         long statsStarted = Stopwatch.GetTimestamp();
         SearchStats searchStats = default;
-        if (positional.Count == firstPathIndex)
+        bool useDefaultCurrentDirectory = positional.Count == firstPathIndex && patternsReadFromStandardInput;
+        if (positional.Count == firstPathIndex && !useDefaultCurrentDirectory)
         {
             matched = stats
                 ? SearchStandardInputWithStats(patterns, standardInput, output, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, false, lineNumber, column, lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.WithFilename, lowArgs.EncodingMode, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, lowArgs.StopOnNonmatch, heading, ref wroteHeadingOutput, ref searchStats)
@@ -430,6 +438,11 @@ internal static class ScoutApplication
         }
 
         var paths = new List<string>(positional.Count - firstPathIndex);
+        if (useDefaultCurrentDirectory)
+        {
+            paths.Add(".");
+        }
+
         for (int index = firstPathIndex; index < positional.Count; index++)
         {
             if (TryGetPathText(positional[index], diagnostics, out string path))
@@ -446,13 +459,14 @@ internal static class ScoutApplication
         bool autoMmapEligible = IsAutoMmapEligible(paths);
         for (int index = 0; index < paths.Count; index++)
         {
+            bool defaultRoot = useDefaultCurrentDirectory && index == 0;
             if (stats)
             {
-                SearchPathWithStats(paths[index], patterns, standardInput, prefixPaths, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, output, diagnostics, logger, asciiCaseInsensitive, heading, ref wroteHeadingOutput, ref matched, ref errored, ref searchStats);
+                SearchPathWithStats(paths[index], patterns, standardInput, defaultRoot, prefixPaths, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, output, diagnostics, logger, asciiCaseInsensitive, heading, ref wroteHeadingOutput, ref matched, ref errored, ref searchStats);
             }
             else
             {
-                SearchPath(paths[index], patterns, standardInput, prefixPaths, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, output, diagnostics, logger, asciiCaseInsensitive, heading, ref wroteHeadingOutput, ref matched, ref errored);
+                SearchPath(paths[index], patterns, standardInput, defaultRoot, prefixPaths, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, output, diagnostics, logger, asciiCaseInsensitive, heading, ref wroteHeadingOutput, ref matched, ref errored);
             }
         }
 
@@ -468,6 +482,7 @@ internal static class ScoutApplication
     private static int RunJsonSearch(
         IReadOnlyList<OsString> positional,
         int firstPathIndex,
+        bool patternsReadFromStandardInput,
         CliLowArgs lowArgs,
         IReadOnlyList<byte[]> pattern,
         bool asciiCaseInsensitive,
@@ -485,7 +500,8 @@ internal static class ScoutApplication
         var summary = new JsonSearchSummary();
         bool matched = false;
         bool errored = false;
-        if (positional.Count == firstPathIndex)
+        bool useDefaultCurrentDirectory = positional.Count == firstPathIndex && patternsReadFromStandardInput;
+        if (positional.Count == firstPathIndex && !useDefaultCurrentDirectory)
         {
             matched = SearchJsonStandardInput(pattern, standardInput, lowArgs, asciiCaseInsensitive, summary, output);
             summary.WriteSummary(output);
@@ -494,6 +510,11 @@ internal static class ScoutApplication
         }
 
         var paths = new List<string>(positional.Count - firstPathIndex);
+        if (useDefaultCurrentDirectory)
+        {
+            paths.Add(".");
+        }
+
         for (int index = firstPathIndex; index < positional.Count; index++)
         {
             if (TryGetPathText(positional[index], diagnostics, out string path))
@@ -509,7 +530,8 @@ internal static class ScoutApplication
         bool autoMmapEligible = IsAutoMmapEligible(paths);
         for (int index = 0; index < paths.Count; index++)
         {
-            SearchJsonPath(paths[index], pattern, standardInput, autoMmapEligible, lowArgs, fileTypes, asciiCaseInsensitive, summary, output, diagnostics, ref matched, ref errored);
+            bool defaultRoot = useDefaultCurrentDirectory && index == 0;
+            SearchJsonPath(paths[index], pattern, standardInput, defaultRoot, autoMmapEligible, lowArgs, fileTypes, asciiCaseInsensitive, summary, output, diagnostics, ref matched, ref errored);
         }
 
         summary.WriteSummary(output);
@@ -621,6 +643,7 @@ internal static class ScoutApplication
         string path,
         IReadOnlyList<byte[]> pattern,
         Stream standardInput,
+        bool defaultRoot,
         bool autoMmapEligible,
         CliLowArgs lowArgs,
         FileTypeMatcher fileTypes,
@@ -642,14 +665,14 @@ internal static class ScoutApplication
             int threadCount = GetSearchWalkThreadCount(lowArgs);
             if (threadCount > 1)
             {
-                SearchJsonDirectoryParallel(path, pattern, lowArgs, fileTypes, asciiCaseInsensitive, summary, output, diagnostics, threadCount, ref matched, ref errored);
+                SearchJsonDirectoryParallel(path, pattern, defaultRoot, lowArgs, fileTypes, asciiCaseInsensitive, summary, output, diagnostics, threadCount, ref matched, ref errored);
                 return;
             }
 
             string fullRoot = Path.GetFullPath(path);
             foreach (DirEntry entry in GetSortedFileEntries(path, lowArgs, fileTypes))
             {
-                string displayPath = GetDirectoryDisplayPath(path, fullRoot, entry.FullPath);
+                string displayPath = GetSearchDirectoryDisplayPath(path, fullRoot, entry.FullPath, defaultRoot);
                 SearchJsonFile(entry.FullPath, Utf8.GetBytes(displayPath), pattern, false, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, ref matched, ref errored);
             }
 
@@ -669,6 +692,7 @@ internal static class ScoutApplication
     private static void SearchJsonDirectoryParallel(
         string root,
         IReadOnlyList<byte[]> pattern,
+        bool defaultRoot,
         CliLowArgs lowArgs,
         FileTypeMatcher fileTypes,
         bool asciiCaseInsensitive,
@@ -709,7 +733,7 @@ internal static class ScoutApplication
                 var fileSummary = new JsonSearchSummary();
                 bool fileMatched = false;
                 bool fileErrored = false;
-                string displayPath = GetDirectoryDisplayPath(root, fullRoot, entry.FullPath);
+                string displayPath = GetSearchDirectoryDisplayPath(root, fullRoot, entry.FullPath, defaultRoot);
                 SearchJsonFile(entry.FullPath, Utf8.GetBytes(displayPath), pattern, false, lowArgs, asciiCaseInsensitive, fileSummary, writer, diagnostics, ref fileMatched, ref fileErrored);
                 writer.Flush();
                 if (fileMatched)
@@ -972,6 +996,7 @@ internal static class ScoutApplication
         string path,
         IReadOnlyList<byte[]> pattern,
         Stream standardInput,
+        bool defaultRoot,
         bool prefixPaths,
         bool autoMmapEligible,
         CliLowArgs lowArgs,
@@ -997,7 +1022,7 @@ internal static class ScoutApplication
 
         if (Directory.Exists(path))
         {
-            SearchDirectory(path, pattern, lowArgs, separators, lineLimit, color, fileTypes, output, diagnostics, logger, asciiCaseInsensitive, heading, ref wroteHeadingOutput, ref matched, ref errored);
+            SearchDirectory(path, pattern, defaultRoot, lowArgs, separators, lineLimit, color, fileTypes, output, diagnostics, logger, asciiCaseInsensitive, heading, ref wroteHeadingOutput, ref matched, ref errored);
             return;
         }
 
@@ -1059,6 +1084,7 @@ internal static class ScoutApplication
         string path,
         IReadOnlyList<byte[]> pattern,
         Stream standardInput,
+        bool defaultRoot,
         bool prefixPaths,
         bool autoMmapEligible,
         CliLowArgs lowArgs,
@@ -1085,7 +1111,7 @@ internal static class ScoutApplication
 
         if (Directory.Exists(path))
         {
-            SearchDirectoryWithStats(path, pattern, lowArgs, separators, lineLimit, color, fileTypes, output, diagnostics, logger, asciiCaseInsensitive, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
+            SearchDirectoryWithStats(path, pattern, defaultRoot, lowArgs, separators, lineLimit, color, fileTypes, output, diagnostics, logger, asciiCaseInsensitive, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
             return;
         }
 
@@ -1184,6 +1210,7 @@ internal static class ScoutApplication
     private static void SearchDirectory(
         string root,
         IReadOnlyList<byte[]> pattern,
+        bool defaultRoot,
         CliLowArgs lowArgs,
         OutputSeparators separators,
         OutputLineLimit lineLimit,
@@ -1201,14 +1228,14 @@ internal static class ScoutApplication
         int threadCount = GetSearchWalkThreadCount(lowArgs);
         if (threadCount > 1)
         {
-            SearchDirectoryParallel(root, pattern, lowArgs, separators, lineLimit, color, fileTypes, output, diagnostics, logger, asciiCaseInsensitive, heading, threadCount, ref wroteHeadingOutput, ref matched, ref errored);
+            SearchDirectoryParallel(root, pattern, defaultRoot, lowArgs, separators, lineLimit, color, fileTypes, output, diagnostics, logger, asciiCaseInsensitive, heading, threadCount, ref wroteHeadingOutput, ref matched, ref errored);
             return;
         }
 
         string fullRoot = Path.GetFullPath(root);
         foreach (DirEntry entry in GetSortedFileEntries(root, lowArgs, fileTypes))
         {
-            string displayPath = GetDirectoryDisplayPath(root, fullRoot, entry.FullPath);
+            string displayPath = GetSearchDirectoryDisplayPath(root, fullRoot, entry.FullPath, defaultRoot);
             byte[] displayPathBytes = GetPathBytes(displayPath, lowArgs.PathSeparator);
             OutputPath outputPath = CreateOutputPath(entry.FullPath, displayPathBytes, lowArgs, color);
             SearchFile(
@@ -1254,6 +1281,7 @@ internal static class ScoutApplication
     private static void SearchDirectoryParallel(
         string root,
         IReadOnlyList<byte[]> pattern,
+        bool defaultRoot,
         CliLowArgs lowArgs,
         OutputSeparators separators,
         OutputLineLimit lineLimit,
@@ -1310,7 +1338,7 @@ internal static class ScoutApplication
                 bool fileWroteHeading = false;
                 bool fileMatched = false;
                 bool fileErrored = false;
-                string displayPath = GetDirectoryDisplayPath(root, fullRoot, entry.FullPath);
+                string displayPath = GetSearchDirectoryDisplayPath(root, fullRoot, entry.FullPath, defaultRoot);
                 byte[] displayPathBytes = GetPathBytes(displayPath, lowArgs.PathSeparator);
                 OutputPath outputPath = CreateOutputPath(entry.FullPath, displayPathBytes, lowArgs, color);
                 SearchFile(
@@ -1384,6 +1412,7 @@ internal static class ScoutApplication
     private static void SearchDirectoryWithStats(
         string root,
         IReadOnlyList<byte[]> pattern,
+        bool defaultRoot,
         CliLowArgs lowArgs,
         OutputSeparators separators,
         OutputLineLimit lineLimit,
@@ -1402,14 +1431,14 @@ internal static class ScoutApplication
         int threadCount = GetSearchWalkThreadCount(lowArgs);
         if (threadCount > 1)
         {
-            SearchDirectoryParallelWithStats(root, pattern, lowArgs, separators, lineLimit, color, fileTypes, output, diagnostics, logger, asciiCaseInsensitive, heading, threadCount, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
+            SearchDirectoryParallelWithStats(root, pattern, defaultRoot, lowArgs, separators, lineLimit, color, fileTypes, output, diagnostics, logger, asciiCaseInsensitive, heading, threadCount, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
             return;
         }
 
         string fullRoot = Path.GetFullPath(root);
         foreach (DirEntry entry in GetSortedFileEntries(root, lowArgs, fileTypes))
         {
-            string displayPath = GetDirectoryDisplayPath(root, fullRoot, entry.FullPath);
+            string displayPath = GetSearchDirectoryDisplayPath(root, fullRoot, entry.FullPath, defaultRoot);
             byte[] displayPathBytes = GetPathBytes(displayPath, lowArgs.PathSeparator);
             OutputPath outputPath = CreateOutputPath(entry.FullPath, displayPathBytes, lowArgs, color);
             SearchFileWithStats(
@@ -1456,6 +1485,7 @@ internal static class ScoutApplication
     private static void SearchDirectoryParallelWithStats(
         string root,
         IReadOnlyList<byte[]> pattern,
+        bool defaultRoot,
         CliLowArgs lowArgs,
         OutputSeparators separators,
         OutputLineLimit lineLimit,
@@ -1516,7 +1546,7 @@ internal static class ScoutApplication
                 bool fileMatched = false;
                 bool fileErrored = false;
                 SearchStats fileStats = default;
-                string displayPath = GetDirectoryDisplayPath(root, fullRoot, entry.FullPath);
+                string displayPath = GetSearchDirectoryDisplayPath(root, fullRoot, entry.FullPath, defaultRoot);
                 byte[] displayPathBytes = GetPathBytes(displayPath, lowArgs.PathSeparator);
                 OutputPath outputPath = CreateOutputPath(entry.FullPath, displayPathBytes, lowArgs, color);
                 SearchFileWithStats(
@@ -4741,5 +4771,15 @@ internal static class ScoutApplication
         }
 
         return Path.Combine(root, relative);
+    }
+
+    private static string GetSearchDirectoryDisplayPath(string rootArgument, string fullRoot, string fullPath, bool defaultRoot)
+    {
+        if (defaultRoot)
+        {
+            return Path.GetRelativePath(fullRoot, fullPath);
+        }
+
+        return GetDirectoryDisplayPath(rootArgument, fullRoot, fullPath);
     }
 }
