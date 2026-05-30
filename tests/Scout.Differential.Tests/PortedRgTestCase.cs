@@ -4,12 +4,17 @@ namespace Scout;
 
 internal sealed class PortedRgTestCase
 {
-    public PortedRgTestCase(string sourceFile, string name, Action<RgTestDirectory> arrange, DifferentialCase command)
+    public PortedRgTestCase(string sourceFile, string name, Action<RgTestDirectory> arrange, params DifferentialCase[] commands)
     {
+        if (commands.Length == 0)
+        {
+            throw new ArgumentException("At least one command is required.", nameof(commands));
+        }
+
         SourceFile = sourceFile;
         Name = name;
         Arrange = arrange;
-        Command = command;
+        Commands = commands;
     }
 
     public string SourceFile { get; }
@@ -18,5 +23,5 @@ internal sealed class PortedRgTestCase
 
     public Action<RgTestDirectory> Arrange { get; }
 
-    public DifferentialCase Command { get; }
+    public DifferentialCase[] Commands { get; }
 }

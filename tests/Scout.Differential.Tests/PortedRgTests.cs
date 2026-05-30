@@ -1,9 +1,68 @@
+using System.IO;
+
 namespace Scout;
 
 internal static class PortedRgTests
 {
     private static readonly PortedRgTestCase[] Cases =
         [
+            new(
+                "tests/regression.rs",
+                "r16",
+                dir =>
+                {
+                    dir.CreateDirectory(".git");
+                    dir.CreateFile(".gitignore", "ghi/");
+                    dir.CreateDirectory("ghi");
+                    dir.CreateDirectory("def/ghi");
+                    dir.CreateFile("ghi/toplevel.txt", "xyz");
+                    dir.CreateFile("def/ghi/subdir.txt", "xyz");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "xyz", ".")),
+            new(
+                "tests/regression.rs",
+                "r25",
+                dir =>
+                {
+                    dir.CreateDirectory(".git");
+                    dir.CreateFile(".gitignore", "/llvm/");
+                    dir.CreateDirectory("src/llvm");
+                    dir.CreateFile("src/llvm/foo", "test");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "test", "."),
+                DifferentialCase.ExactInDirectory("src", "--path-separator", "/", "test", ".")),
+            new(
+                "tests/regression.rs",
+                "r30",
+                dir =>
+                {
+                    dir.CreateFile(".gitignore", "vendor/**\n!vendor/manifest");
+                    dir.CreateDirectory("vendor");
+                    dir.CreateFile("vendor/manifest", "test");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "test", ".")),
+            new(
+                "tests/regression.rs",
+                "r49",
+                dir =>
+                {
+                    dir.CreateFile(".gitignore", "foo/bar");
+                    dir.CreateDirectory("test/foo/bar");
+                    dir.CreateFile("test/foo/bar/baz", "test");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "xyz", ".")),
+            new(
+                "tests/regression.rs",
+                "r50",
+                dir =>
+                {
+                    dir.CreateFile(".gitignore", "XXX/YYY/");
+                    dir.CreateDirectory("abc/def/XXX/YYY");
+                    dir.CreateDirectory("ghi/XXX/YYY");
+                    dir.CreateFile("abc/def/XXX/YYY/bar", "test");
+                    dir.CreateFile("ghi/XXX/YYY/bar", "test");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "xyz", ".")),
             new(
                 "tests/regression.rs",
                 "r64",
@@ -15,9 +74,64 @@ internal static class PortedRgTests
                 DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "--path-separator", "/", "--files", "foo")),
             new(
                 "tests/regression.rs",
+                "r65",
+                dir =>
+                {
+                    dir.CreateDirectory(".git");
+                    dir.CreateFile(".gitignore", "a/");
+                    dir.CreateDirectory("a");
+                    dir.CreateFile("a/foo", "xyz");
+                    dir.CreateFile("a/bar", "xyz");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "xyz", ".")),
+            new(
+                "tests/regression.rs",
+                "r67",
+                dir =>
+                {
+                    dir.CreateDirectory(".git");
+                    dir.CreateFile(".gitignore", "/*\n!/dir");
+                    dir.CreateDirectory("dir");
+                    dir.CreateDirectory("foo");
+                    dir.CreateFile("foo/bar", "test");
+                    dir.CreateFile("dir/bar", "test");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "test", ".")),
+            new(
+                "tests/regression.rs",
+                "r87",
+                dir =>
+                {
+                    dir.CreateDirectory(".git");
+                    dir.CreateFile(".gitignore", "foo\n**no-vcs**");
+                    dir.CreateFile("foo", "test");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "test", ".")),
+            new(
+                "tests/regression.rs",
+                "r90",
+                dir =>
+                {
+                    dir.CreateDirectory(".git");
+                    dir.CreateFile(".gitignore", "!.foo");
+                    dir.CreateFile(".foo", "test");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "test", ".")),
+            new(
+                "tests/regression.rs",
                 "r93",
                 dir => dir.CreateFile("foo", "192.168.1.1"),
                 DifferentialCase.Exact("--path-separator", "/", @"(\d{1,3}\.){3}\d{1,3}", ".")),
+            new(
+                "tests/regression.rs",
+                "r99",
+                dir =>
+                {
+                    dir.CreateFile("foo1", "test");
+                    dir.CreateFile("foo2", "zzz");
+                    dir.CreateFile("bar", "test");
+                },
+                DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "--path-separator", "/", "-j1", "--heading", "test", ".")),
             new(
                 "tests/multiline.rs",
                 "overlap1",
@@ -679,9 +793,46 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "--vimgrep", "test", "foo")),
             new(
                 "tests/regression.rs",
+                "r127",
+                dir =>
+                {
+                    dir.CreateDirectory(".git");
+                    dir.CreateFile(".gitignore", "foo/sherlock\n");
+                    dir.CreateDirectory("foo");
+                    dir.CreateFile("foo/sherlock", Sherlock);
+                    dir.CreateFile("foo/watson", Sherlock);
+                },
+                DifferentialCase.Exact("--path-separator", "/", "Sherlock", ".")),
+            new(
+                "tests/regression.rs",
                 "r128",
                 dir => dir.CreateFile("foo", "\n\n\n\nx"),
                 DifferentialCase.Exact("--path-separator", "/", "-n", "x", ".")),
+            new(
+                "tests/regression.rs",
+                "r184",
+                dir =>
+                {
+                    dir.CreateFile(".gitignore", ".*");
+                    dir.CreateDirectory("foo/bar");
+                    dir.CreateFile("foo/bar/baz", "test");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "test", "."),
+                DifferentialCase.ExactInDirectory("foo/bar", "--path-separator", "/", "test", ".")),
+            new(
+                "tests/regression.rs",
+                "r199",
+                dir => dir.CreateFile("foo", "tEsT"),
+                DifferentialCase.Exact("--path-separator", "/", "--smart-case", @"\btest\b", ".")),
+            new(
+                "tests/regression.rs",
+                "r206",
+                dir =>
+                {
+                    dir.CreateDirectory("foo");
+                    dir.CreateFile("foo/bar.txt", "test");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "test", "-g", "*.txt", ".")),
             new(
                 "tests/feature.rs",
                 "f419_zero_as_shortcut_for_null",
@@ -823,7 +974,14 @@ internal static class PortedRgTests
         PortedRgTestCase testCase = Find(sourceFile, name);
         using var directory = RgTestDirectory.Create(testCase.SourceFile.Replace('/', '-') + "-" + testCase.Name);
         testCase.Arrange(directory);
-        DifferentialRunner.AssertMatchesPinned(testCase.Command, directory.RootPath);
+        for (int index = 0; index < testCase.Commands.Length; index++)
+        {
+            DifferentialCase command = testCase.Commands[index];
+            string workingDirectory = command.RelativeWorkingDirectory is null
+                ? directory.RootPath
+                : Path.Combine(directory.RootPath, command.RelativeWorkingDirectory);
+            DifferentialRunner.AssertMatchesPinned(command, workingDirectory);
+        }
     }
 
     internal static void AssertCatalog((string SourceFile, string Name)[] expected)
