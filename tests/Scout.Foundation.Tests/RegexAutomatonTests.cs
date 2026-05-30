@@ -62,6 +62,20 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies the meta engine selects the one-pass DFA for deterministic position-sensitive loops.
+    /// </summary>
+    [Fact]
+    public void MetaEngineSelectsOnePassDfaForDeterministicPositionSensitiveLoops()
+    {
+        RegexNfa nfa = CompileNfa("(?m)^a+$"u8);
+
+        var engine = RegexMetaEngine.Compile(nfa);
+
+        Assert.Equal(RegexEngineKind.OnePassDfa, engine.Kind);
+        Assert.Equal(new RegexMatch(3, 3), engine.Find("xx\naaa\n"u8, startAt: 0));
+    }
+
+    /// <summary>
     /// Verifies the meta engine keeps larger position-sensitive predicates on the PikeVM path.
     /// </summary>
     [Fact]
