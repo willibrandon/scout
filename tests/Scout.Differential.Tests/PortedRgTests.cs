@@ -63,6 +63,120 @@ public sealed class PortedRgTests
                 dir => dir.CreateFile("sherlock", Sherlock),
                 DifferentialCase.Exact("--path-separator", "/", "--no-filename", "Sherlock", "sherlock")),
             new(
+                "tests/misc.rs",
+                "single_file",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "Sherlock", "sherlock")),
+            new(
+                "tests/misc.rs",
+                "dir",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "line_numbers",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "Sherlock", "sherlock")),
+            new(
+                "tests/misc.rs",
+                "columns",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "--column", "Sherlock", "sherlock")),
+            new(
+                "tests/misc.rs",
+                "with_filename",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-H", "Sherlock", "sherlock")),
+            new(
+                "tests/misc.rs",
+                "inverted",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-v", "Sherlock", "sherlock")),
+            new(
+                "tests/misc.rs",
+                "inverted_line_numbers",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "-v", "Sherlock", "sherlock")),
+            new(
+                "tests/misc.rs",
+                "case_insensitive",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-i", "sherlock", "sherlock")),
+            new(
+                "tests/misc.rs",
+                "word",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-w", "as", "sherlock")),
+            new(
+                "tests/misc.rs",
+                "line",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-x", "Watson|and exhibited clearly, with a label attached.", "sherlock")),
+            new(
+                "tests/misc.rs",
+                "literal",
+                dir => dir.CreateFile("file", "blib\n()\nblab\n"),
+                DifferentialCase.Exact("--path-separator", "/", "-F", "()", "file")),
+            new(
+                "tests/misc.rs",
+                "quiet",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-q", "Sherlock", "sherlock")),
+            new(
+                "tests/misc.rs",
+                "replace",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-r", "FooBar", "Sherlock", "sherlock")),
+            new(
+                "tests/misc.rs",
+                "count",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "--count", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "count_matches",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "--count-matches", "the", ".")),
+            new(
+                "tests/misc.rs",
+                "files_with_matches",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "--files-with-matches", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "files_without_match",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.CreateFile("file.py", "foo");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--files-without-match", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "after_context",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-A", "1", "Sherlock", "sherlock")),
+            new(
+                "tests/misc.rs",
+                "after_context_line_numbers",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-A", "1", "-n", "Sherlock", "sherlock")),
+            new(
+                "tests/misc.rs",
+                "before_context",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-B", "1", "Sherlock", "sherlock")),
+            new(
+                "tests/misc.rs",
+                "before_context_line_numbers",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-B", "1", "-n", "Sherlock", "sherlock")),
+            new(
+                "tests/misc.rs",
+                "context",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-C", "1", "world|attached", "sherlock")),
+            new(
                 "tests/feature.rs",
                 "f89_files_with_matches",
                 dir => dir.CreateFile("sherlock", Sherlock),
