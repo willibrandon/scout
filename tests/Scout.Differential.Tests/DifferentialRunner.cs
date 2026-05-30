@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 
@@ -12,6 +13,7 @@ internal static class DifferentialRunner
     private const int PinnedRipgrepTimeoutMilliseconds = 10_000;
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    private static readonly Lazy<bool> PinnedRipgrepHashVerified = new(VerifyPinnedRipgrepHash);
     private static readonly object CurrentDirectoryLock = new();
 
     public static void AssertMatchesPinned(DifferentialCase testCase)
@@ -118,6 +120,8 @@ internal static class DifferentialRunner
 
     private static DifferentialRunResult RunPinnedRipgrep(string[] arguments, byte[]? standardInput, string? relativeConfigPath, string? workingDirectory)
     {
+        _ = PinnedRipgrepHashVerified.Value;
+
         ProcessStartInfo startInfo = new(PinnedRipgrepPath)
         {
             RedirectStandardError = true,
@@ -215,6 +219,52 @@ internal static class DifferentialRunner
         }
 
         return new DifferentialRunResult(process.ExitCode, output.ToArray(), error);
+    }
+
+    private static bool VerifyPinnedRipgrepHash()
+    {
+        Assert.True(File.Exists(PinnedRipgrepPath), "Missing pinned ripgrep binary: " + PinnedRipgrepPath);
+
+        string prerequisiteLock = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "tests", "PREREQS.lock"));
+        string expectedSha256 = ReadPrerequisiteValue(prerequisiteLock, "ripgrep_rg_sha256");
+        Assert.False(expectedSha256.StartsWith("resolved@", StringComparison.Ordinal), "ripgrep_rg_sha256 has not been frozen in tests/PREREQS.lock.");
+
+        byte[] hash = SHA256.HashData(File.ReadAllBytes(PinnedRipgrepPath));
+        Assert.Equal(expectedSha256, Convert.ToHexString(hash).ToLowerInvariant());
+        return true;
+    }
+
+    private static string ReadPrerequisiteValue(string text, string key)
+    {
+        string prefix = key + " = \"";
+        using var reader = new StringReader(text);
+        while (reader.ReadLine() is { } line)
+        {
+            if (!line.StartsWith(prefix, StringComparison.Ordinal) || !line.EndsWith('"'))
+            {
+                continue;
+            }
+
+            return line[prefix.Length..^1];
+        }
+
+        throw new InvalidOperationException("Could not find " + key + " in tests/PREREQS.lock.");
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        DirectoryInfo? directory = new(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "Scout.slnx")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException("Could not locate the Scout repository root.");
     }
 
     private static void AssertEqualBytes(string[] arguments, byte[] expected, byte[] actual)
