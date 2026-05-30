@@ -10,7 +10,7 @@ namespace Scout;
 /// </summary>
 public sealed class RegexCorpusDifferentialTests
 {
-    private const int ExpectedDifferentialCaseCount = 162;
+    private const int ExpectedDifferentialCaseCount = 191;
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
@@ -27,6 +27,7 @@ public sealed class RegexCorpusDifferentialTests
         ("no-unicode.toml", 15),
         ("regex-lite.toml", 5),
         ("regression.toml", 13),
+        ("set.toml", 29),
     ];
 
     private static readonly (string RelativePath, string Name)[] DifferentialCases =
@@ -193,6 +194,35 @@ public sealed class RegexCorpusDifferentialTests
         ("regex-lite.toml", "perl-class-word"),
         ("regex-lite.toml", "word-boundary"),
         ("regex-lite.toml", "case-insensitive-is-ascii-only"),
+        ("set.toml", "basic30"),
+        ("set.toml", "basic40"),
+        ("set.toml", "basic10-leftmost-first"),
+        ("set.toml", "basic60-leftmost-first"),
+        ("set.toml", "basic61-leftmost-first"),
+        ("set.toml", "basic71"),
+        ("set.toml", "basic80"),
+        ("set.toml", "basic81"),
+        ("set.toml", "basic82"),
+        ("set.toml", "basic91"),
+        ("set.toml", "basic110"),
+        ("set.toml", "basic111"),
+        ("set.toml", "basic120"),
+        ("set.toml", "basic121"),
+        ("set.toml", "basic122"),
+        ("set.toml", "basic130"),
+        ("set.toml", "empty10-leftmost-first"),
+        ("set.toml", "empty11-leftmost-first"),
+        ("set.toml", "empty20-leftmost-first"),
+        ("set.toml", "empty21-leftmost-first"),
+        ("set.toml", "empty30-leftmost-first"),
+        ("set.toml", "empty31-leftmost-first"),
+        ("set.toml", "empty40"),
+        ("set.toml", "nomatch10"),
+        ("set.toml", "nomatch20"),
+        ("set.toml", "nomatch40"),
+        ("set.toml", "caps-110"),
+        ("set.toml", "caps-120"),
+        ("set.toml", "caps-121"),
     ];
 
     /// <summary>
