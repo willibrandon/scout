@@ -30,4 +30,7 @@
   <Folder Name="/bench/">
     <Project Path="bench/Scout.Benchmarks/Scout.Benchmarks.csproj" />
   </Folder>
+  <Folder Name="/fuzz/">
+    <Project Path="fuzz/Scout.Fuzz/Scout.Fuzz.csproj" />
+  </Folder>
 </Solution>

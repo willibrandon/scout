@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SharpFuzz" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Scout.Globbing\Scout.Globbing.csproj" />
+    <ProjectReference Include="..\..\src\Scout.Regex\Scout.Regex.csproj" />
+    <ProjectReference Include="..\..\src\Scout.Searching\Scout.Searching.csproj" />
+  </ItemGroup>
+</Project>

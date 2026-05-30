@@ -12,6 +12,7 @@
                     Version="10.0.2"
                     Condition="'$(MSBuildProjectName)' != 'Scout.App' and '$(MSBuildProjectName)' != 'Scout.Entry'" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="SharpFuzz" Version="2.2.0" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
   </ItemGroup>

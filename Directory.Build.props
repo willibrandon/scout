@@ -35,6 +35,11 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Scout.Fuzz'">
+    <IsAotCompatible>false</IsAotCompatible>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
   <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Scout.App'">
     <AssemblyName>scout</AssemblyName>
     <OutputType>Library</OutputType>

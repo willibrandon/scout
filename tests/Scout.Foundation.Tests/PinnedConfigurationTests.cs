@@ -162,7 +162,26 @@ public sealed class PinnedConfigurationTests
         AssertPackageVersion(document, "Microsoft.DotNet.ILCompiler", "10.0.2");
         AssertPackageVersion(document, "Microsoft.CodeAnalysis.NetAnalyzers", "10.0.102");
         AssertPackageVersion(document, "BenchmarkDotNet", "0.15.8");
+        AssertPackageVersion(document, "SharpFuzz", "2.2.0");
         AssertPackageVersion(document, "xunit.v3", "3.2.2");
+    }
+
+    /// <summary>
+    /// Verifies the design-required fuzzing layer is wired into the solution.
+    /// </summary>
+    [Fact]
+    public void FuzzHarnessPinsDesignTargets()
+    {
+        string root = FindRepositoryRoot();
+        string solution = File.ReadAllText(Path.Combine(root, "Scout.slnx"));
+        string project = File.ReadAllText(Path.Combine(root, "fuzz", "Scout.Fuzz", "Scout.Fuzz.csproj"));
+        string runner = File.ReadAllText(Path.Combine(root, "fuzz", "Scout.Fuzz", "FuzzTargetRunner.cs"));
+
+        Assert.Contains("fuzz/Scout.Fuzz/Scout.Fuzz.csproj", solution, StringComparison.Ordinal);
+        Assert.Contains("<PackageReference Include=\"SharpFuzz\" />", project, StringComparison.Ordinal);
+        Assert.Contains("RegexParseFuzzTarget.Run", runner, StringComparison.Ordinal);
+        Assert.Contains("GlobCompileFuzzTarget.Run", runner, StringComparison.Ordinal);
+        Assert.Contains("SearchLoopFuzzTarget.Run", runner, StringComparison.Ordinal);
     }
 
     /// <summary>
