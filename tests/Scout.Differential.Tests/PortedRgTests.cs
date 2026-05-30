@@ -34,6 +34,21 @@ public sealed class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "-n", "-U", "abc\ndef", ".")),
             new(
                 "tests/multiline.rs",
+                "overlap2",
+                dir => dir.CreateFile("test", "xxx\nabc\ndefabc\ndefxxx\nxxx"),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "-U", "abc\ndef", "test")),
+            new(
+                "tests/multiline.rs",
+                "dot_no_newline",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "-U", "of this world.+detective work", "sherlock")),
+            new(
+                "tests/multiline.rs",
+                "dot_all",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "-U", "--multiline-dotall", "of this world.+detective work", "sherlock")),
+            new(
+                "tests/multiline.rs",
                 "stdin",
                 _ => { },
                 DifferentialCase.ExactWithStandardInput(EncodingUtf8.GetBytes(Sherlock), "-n", "-U", @"of this world\p{Any}+?detective work")),
@@ -42,6 +57,21 @@ public sealed class PortedRgTests
                 "f7_stdin",
                 dir => dir.CreateFile("sherlock", Sherlock),
                 DifferentialCase.ExactWithStandardInput(EncodingUtf8.GetBytes("Sherlock"), "--path-separator", "/", "-f-")),
+            new(
+                "tests/feature.rs",
+                "f20_no_filename",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "--no-filename", "Sherlock", "sherlock")),
+            new(
+                "tests/feature.rs",
+                "f34_only_matching",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-o", "Sherlock", "sherlock")),
+            new(
+                "tests/feature.rs",
+                "f34_only_matching_line_column",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-o", "--column", "-n", "Sherlock", "sherlock")),
             new(
                 "tests/feature.rs",
                 "f948_exit_code_no_match",
@@ -57,6 +87,11 @@ public sealed class PortedRgTests
                 "r105_part2",
                 dir => dir.CreateFile("foo", "zztest"),
                 DifferentialCase.Exact("--path-separator", "/", "--column", "test", ".")),
+            new(
+                "tests/regression.rs",
+                "r105_part1",
+                dir => dir.CreateFile("foo", "zztest"),
+                DifferentialCase.Exact("--path-separator", "/", "--vimgrep", "test", "foo")),
             new(
                 "tests/regression.rs",
                 "r128",
