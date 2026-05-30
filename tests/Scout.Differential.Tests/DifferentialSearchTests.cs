@@ -37,6 +37,7 @@ public sealed class DifferentialSearchTests
                 DifferentialCase.Exact("-m1", "needle", first),
                 DifferentialCase.Exact("-n", "-U", @"(?m)(?:^\d+$\n?)+", digits),
                 DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "-l", "needle", first, second),
+                DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "--heading", "-n", "needle", root),
                 DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--stats", "needle", first),
                 DifferentialCase.Normalized(DifferentialComparisonMode.SortLinesAndMaskElapsed, "--json", "needle", root),
             ];

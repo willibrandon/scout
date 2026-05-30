@@ -30,6 +30,54 @@ public sealed class DifferentialOutputNormalizerTests
     }
 
     /// <summary>
+    /// Verifies normalized stdout preserves arbitrary non-UTF-8 bytes.
+    /// </summary>
+    [Fact]
+    public void SortLinesPreservesNonUtf8Bytes()
+    {
+        byte[] input =
+        [
+            (byte)'b', (byte)'.', (byte)'t', (byte)'x', (byte)'t', (byte)':', 0xFF, (byte)'\n',
+            (byte)'a', (byte)'.', (byte)'t', (byte)'x', (byte)'t', (byte)':', 0xFE, (byte)'\n',
+        ];
+
+        byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(input, DifferentialComparisonMode.SortLines);
+        byte[] expected =
+        [
+            (byte)'a', (byte)'.', (byte)'t', (byte)'x', (byte)'t', (byte)':', 0xFE, (byte)'\n',
+            (byte)'b', (byte)'.', (byte)'t', (byte)'x', (byte)'t', (byte)':', 0xFF, (byte)'\n',
+        ];
+
+        Assert.Equal(expected, normalized);
+    }
+
+    /// <summary>
+    /// Verifies heading output is sorted by file block instead of individual payload lines.
+    /// </summary>
+    [Fact]
+    public void SortLinesSortsHeadingBlocks()
+    {
+        string input =
+            "b.txt\n" +
+            "2:second\n" +
+            "1:first\n" +
+            "\n" +
+            "a.txt\n" +
+            "1:first\n";
+
+        byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes(input), DifferentialComparisonMode.SortLines);
+
+        Assert.Equal(
+            "a.txt\n" +
+            "1:first\n" +
+            "\n" +
+            "b.txt\n" +
+            "2:second\n" +
+            "1:first\n",
+            Utf8.GetString(normalized));
+    }
+
+    /// <summary>
     /// Verifies JSON output is sorted by path while preserving each file's begin/match/end order.
     /// </summary>
     [Fact]

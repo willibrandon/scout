@@ -7,7 +7,7 @@ namespace Scout;
 
 internal static class DifferentialOutputNormalizer
 {
-    private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    private static readonly Encoding BytePreserving = Encoding.Latin1;
 
     public static byte[] NormalizeStdout(byte[] output, DifferentialComparisonMode comparisonMode)
     {
@@ -16,7 +16,7 @@ internal static class DifferentialOutputNormalizer
             return output;
         }
 
-        string text = Utf8.GetString(output);
+        string text = BytePreserving.GetString(output);
         if (comparisonMode is DifferentialComparisonMode.MaskElapsed or DifferentialComparisonMode.SortLinesAndMaskElapsed)
         {
             text = MaskElapsed(text);
@@ -27,7 +27,7 @@ internal static class DifferentialOutputNormalizer
             text = SortOutput(text);
         }
 
-        return Utf8.GetBytes(text);
+        return BytePreserving.GetBytes(text);
     }
 
     public static string NormalizeStderr(string error, DifferentialComparisonMode comparisonMode)
@@ -114,7 +114,103 @@ internal static class DifferentialOutputNormalizer
             return SortNullSeparatedRecords(text);
         }
 
+        if (TrySortHeadingBlocks(text, out string? sorted))
+        {
+            return sorted;
+        }
+
         return SortLines(text);
+    }
+
+    private static bool TrySortHeadingBlocks(string text, [NotNullWhen(true)] out string? sorted)
+    {
+        sorted = null;
+        string[] blocks = text.Split("\n\n", StringSplitOptions.None);
+        if (blocks.Length < 2)
+        {
+            return false;
+        }
+
+        bool hasTrailingSeparator = blocks[^1].Length == 0;
+        bool hasTrailingLineFeed = text.EndsWith('\n');
+        int blockCount = hasTrailingSeparator ? blocks.Length - 1 : blocks.Length;
+        if (blockCount < 2)
+        {
+            return false;
+        }
+
+        var sortableBlocks = new List<(string Key, int FirstIndex, string Text)>(blockCount);
+        for (int index = 0; index < blockCount; index++)
+        {
+            string block = TrimTrailingLineFeed(blocks[index]);
+            if (!TryGetHeadingBlockKey(block, out string? key))
+            {
+                return false;
+            }
+
+            sortableBlocks.Add((key, index, block));
+        }
+
+        sortableBlocks.Sort(static (left, right) =>
+        {
+            int comparison = StringComparer.Ordinal.Compare(left.Key, right.Key);
+            return comparison != 0 ? comparison : left.FirstIndex.CompareTo(right.FirstIndex);
+        });
+
+        var builder = new StringBuilder(text.Length);
+        for (int index = 0; index < sortableBlocks.Count; index++)
+        {
+            if (index > 0)
+            {
+                builder.Append("\n\n");
+            }
+
+            builder.Append(sortableBlocks[index].Text);
+        }
+
+        if (hasTrailingSeparator)
+        {
+            builder.Append("\n\n");
+        }
+        else if (hasTrailingLineFeed)
+        {
+            builder.Append('\n');
+        }
+
+        sorted = builder.ToString();
+        return true;
+    }
+
+    private static string TrimTrailingLineFeed(string block)
+    {
+        return block.EndsWith('\n') ? block[..^1] : block;
+    }
+
+    private static bool TryGetHeadingBlockKey(string block, [NotNullWhen(true)] out string? key)
+    {
+        key = null;
+        if (block.Length == 0)
+        {
+            return false;
+        }
+
+        int lineFeed = block.IndexOf('\n', StringComparison.Ordinal);
+        if (lineFeed <= 0 || lineFeed == block.Length - 1)
+        {
+            return false;
+        }
+
+        string firstLine = block[..lineFeed];
+        if (TryGetJsonPathKey(firstLine, out _) ||
+            firstLine.Length > 0 && firstLine[0] == '{' ||
+            firstLine.IndexOf('\0', StringComparison.Ordinal) > 0 ||
+            firstLine.IndexOf(':', StringComparison.Ordinal) > 0)
+        {
+            return false;
+        }
+
+        key = firstLine;
+        return true;
     }
 
     private static string SortNullSeparatedRecords(string text)
