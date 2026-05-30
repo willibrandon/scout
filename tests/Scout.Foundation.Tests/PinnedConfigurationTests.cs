@@ -75,6 +75,22 @@ public sealed class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies the pinned ripgrep binary hash matches the recorded differential oracle.
+    /// </summary>
+    [Fact]
+    public void PinnedRipgrepBinaryMatchesPrerequisiteHash()
+    {
+        Assert.True(File.Exists(PinnedRipgrepBinaryPath), "Missing pinned ripgrep binary: " + PinnedRipgrepBinaryPath);
+
+        string root = FindRepositoryRoot();
+        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        byte[] hash = SHA256.HashData(File.ReadAllBytes(PinnedRipgrepBinaryPath));
+        string actualSha256 = Convert.ToHexString(hash).ToLowerInvariant();
+
+        Assert.Contains("ripgrep_rg_sha256 = \"" + actualSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies the centrally pinned package versions named by the design.
     /// </summary>
     [Fact]

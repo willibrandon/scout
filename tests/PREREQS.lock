@@ -5,7 +5,7 @@ macos_host = "macOS 26.3.1 arm64"
 apple_clang = "17.0.0 (clang-1700.6.4.2)"
 cargo = "1.91.1"
 linux_snapshot = "2026-05-01"
-ripgrep_rg_sha256 = "resolved@build"
+ripgrep_rg_sha256 = "929843138cfd3882f6a155fbd62dc50884a70da2bb93c0d08967e88fd3d56013"
 
 [pcre2]
 binding = "pcre2"
