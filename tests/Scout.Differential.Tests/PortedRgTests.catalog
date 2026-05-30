@@ -21,7 +21,17 @@ tests/multiline.rs|context
 tests/json.rs|basic
 tests/json.rs|replacement
 tests/json.rs|quiet_stats
+tests/json.rs|notutf8_file
 tests/json.rs|crlf
+tests/json.rs|r1095_missing_crlf
+tests/json.rs|r1095_crlf_empty_match
+tests/feature.rs|f1_sjis
+tests/feature.rs|f1_utf16_auto
+tests/feature.rs|f1_utf16_explicit
+tests/feature.rs|f1_eucjp
+tests/feature.rs|f1_unknown_encoding
+tests/feature.rs|f1_replacement_encoding
+tests/feature.rs|f7
 tests/feature.rs|f7_stdin
 tests/feature.rs|f20_no_filename
 tests/misc.rs|single_file
@@ -85,6 +95,7 @@ tests/misc.rs|vimgrep_no_line_no_column
 tests/misc.rs|files
 tests/misc.rs|sort_files
 tests/feature.rs|f109_max_depth
+tests/feature.rs|f70_smart_case
 tests/feature.rs|f109_case_sensitive_part1
 tests/feature.rs|f109_case_sensitive_part2
 tests/feature.rs|f129_matches

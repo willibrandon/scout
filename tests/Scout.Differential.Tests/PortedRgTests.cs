@@ -189,9 +189,65 @@ internal static class PortedRgTests
                 DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--path-separator", "/", "--json", "--quiet", "--stats", "Sherlock Holmes", "sherlock")),
             new(
                 "tests/json.rs",
+                "notutf8_file",
+                dir => dir.CreateBytes("foo", [(byte)'q', (byte)'u', (byte)'u', (byte)'x', 0xFF, (byte)'b', (byte)'a', (byte)'z']),
+                DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--path-separator", "/", "--json", @"(?-u)\xFF")),
+            new(
+                "tests/json.rs",
                 "crlf",
                 dir => dir.CreateFile("sherlock", SherlockCrlf),
                 DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--path-separator", "/", "--json", "--crlf", @"Sherlock$", "sherlock")),
+            new(
+                "tests/json.rs",
+                "r1095_missing_crlf",
+                dir => dir.CreateFile("foo", "test\r\n"),
+                DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--path-separator", "/", "--json", "test"),
+                DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--path-separator", "/", "--json", "test", "--crlf")),
+            new(
+                "tests/json.rs",
+                "r1095_crlf_empty_match",
+                dir => dir.CreateFile("foo", "test\r\n\n"),
+                DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--path-separator", "/", "-U", "--json", "\n"),
+                DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--path-separator", "/", "-U", "--json", "\n", "--crlf")),
+            new(
+                "tests/feature.rs",
+                "f1_sjis",
+                dir => dir.CreateBytes("foo", [(byte)0x84, (byte)'Y', (byte)0x84, (byte)'u', (byte)0x84, (byte)0x82, (byte)0x84, (byte)'|', (byte)0x84, (byte)0x80, (byte)0x84, (byte)'{', (byte)' ', (byte)0x84, (byte)'V', (byte)0x84, (byte)0x80, (byte)0x84, (byte)'|', (byte)0x84, (byte)'}', (byte)0x84, (byte)0x83]),
+                DifferentialCase.Exact("--path-separator", "/", "-Esjis", CyrillicSherlockHolmes)),
+            new(
+                "tests/feature.rs",
+                "f1_utf16_auto",
+                CreateUtf16Sherlock,
+                DifferentialCase.Exact("--path-separator", "/", CyrillicSherlockHolmes)),
+            new(
+                "tests/feature.rs",
+                "f1_utf16_explicit",
+                CreateUtf16Sherlock,
+                DifferentialCase.Exact("--path-separator", "/", "-Eutf-16le", CyrillicSherlockHolmes)),
+            new(
+                "tests/feature.rs",
+                "f1_eucjp",
+                dir => dir.CreateBytes("foo", [(byte)0xA7, (byte)0xBA, (byte)0xA7, (byte)0xD6, (byte)0xA7, (byte)0xE2, (byte)0xA7, (byte)0xDD, (byte)0xA7, (byte)0xE0, (byte)0xA7, (byte)0xDC, (byte)' ', (byte)0xA7, (byte)0xB7, (byte)0xA7, (byte)0xE0, (byte)0xA7, (byte)0xDD, (byte)0xA7, (byte)0xDE, (byte)0xA7, (byte)0xE3]),
+                DifferentialCase.Exact("--path-separator", "/", "-Eeuc-jp", CyrillicSherlockHolmes)),
+            new(
+                "tests/feature.rs",
+                "f1_unknown_encoding",
+                _ => { },
+                DifferentialCase.Exact("--path-separator", "/", "-Efoobar")),
+            new(
+                "tests/feature.rs",
+                "f1_replacement_encoding",
+                _ => { },
+                DifferentialCase.Exact("--path-separator", "/", "-Ecsiso2022kr")),
+            new(
+                "tests/feature.rs",
+                "f7",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.CreateFile("pat", "Sherlock\nHolmes");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-fpat", "sherlock")),
             new(
                 "tests/feature.rs",
                 "f7_stdin",
@@ -607,6 +663,11 @@ internal static class PortedRgTests
                     dir.CreateFile("dir/d", "test");
                 },
                 DifferentialCase.Exact("--path-separator", "/", "--sort", "path", "test", ".")),
+            new(
+                "tests/feature.rs",
+                "f70_smart_case",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-S", "sherlock")),
             new(
                 "tests/feature.rs",
                 "f109_max_depth",
@@ -1568,7 +1629,13 @@ internal static class PortedRgTests
         dir.CreateBytes("hay", File.ReadAllBytes(UpstreamSherlockNulPath));
     }
 
+    private static void CreateUtf16Sherlock(RgTestDirectory dir)
+    {
+        dir.CreateBytes("foo", [(byte)0xFF, (byte)0xFE, (byte)'(', (byte)0x04, (byte)'5', (byte)0x04, (byte)'@', (byte)0x04, (byte)';', (byte)0x04, (byte)'>', (byte)0x04, (byte)':', (byte)0x04, (byte)' ', (byte)0x00, (byte)'%', (byte)0x04, (byte)'>', (byte)0x04, (byte)';', (byte)0x04, (byte)'<', (byte)0x04, (byte)'A', (byte)0x04]);
+    }
+
     private const string UpstreamSherlockNulPath = "/Users/brandon/src/ripgrep/tests/data/sherlock-nul.txt";
+    private const string CyrillicSherlockHolmes = "\u0428\u0435\u0440\u043B\u043E\u043A \u0425\u043E\u043B\u043C\u0441";
 
     private const string Sherlock =
         "For the Doctor Watsons of this world, as opposed to the Sherlock\n" +
