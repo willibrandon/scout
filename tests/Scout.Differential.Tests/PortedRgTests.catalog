@@ -103,6 +103,17 @@ tests/misc.rs|unrestricted3
 tests/misc.rs|vimgrep
 tests/misc.rs|vimgrep_no_line
 tests/misc.rs|vimgrep_no_line_no_column
+tests/misc.rs|preprocessing
+tests/misc.rs|preprocessing_glob
+tests/misc.rs|compressed_gzip
+tests/misc.rs|compressed_bzip2
+tests/misc.rs|compressed_xz
+tests/misc.rs|compressed_lz4
+tests/misc.rs|compressed_lzma
+tests/misc.rs|compressed_brotli
+tests/misc.rs|compressed_zstd
+tests/misc.rs|compressed_uncompress
+tests/misc.rs|compressed_failing_gzip
 tests/misc.rs|binary_convert
 tests/misc.rs|binary_convert_mmap
 tests/misc.rs|binary_quit

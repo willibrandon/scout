@@ -32,6 +32,11 @@ internal static class DifferentialOutputNormalizer
 
     public static string NormalizeStderr(string error, DifferentialComparisonMode comparisonMode)
     {
+        if (comparisonMode == DifferentialComparisonMode.NonEmptyStderr)
+        {
+            return string.IsNullOrEmpty(error) ? string.Empty : "<non-empty stderr>";
+        }
+
         if (comparisonMode is DifferentialComparisonMode.MaskElapsed or DifferentialComparisonMode.SortLinesAndMaskElapsed)
         {
             return MaskElapsed(error);

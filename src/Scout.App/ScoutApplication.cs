@@ -2314,9 +2314,7 @@ internal static class ScoutApplication
         Task<string> standardError = process.StandardError.ReadToEndAsync();
         if (pipeFileToStandardInput)
         {
-            using Stream input = File.OpenRead(path);
-            input.CopyTo(process.StandardInput.BaseStream);
-            process.StandardInput.Close();
+            CopyFileToProcessStandardInput(path, process);
         }
 
         process.WaitForExit();
@@ -2333,6 +2331,45 @@ internal static class ScoutApplication
         error = new ScoutError(message);
         bytes = [];
         return false;
+    }
+
+    private static void CopyFileToProcessStandardInput(string path, Process process)
+    {
+        using Stream input = File.OpenRead(path);
+        byte[] buffer = new byte[81920];
+        try
+        {
+            int read;
+            while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                try
+                {
+                    process.StandardInput.BaseStream.Write(buffer, 0, read);
+                }
+                catch (IOException)
+                {
+                    break;
+                }
+            }
+        }
+        finally
+        {
+            CloseProcessStandardInput(process);
+        }
+    }
+
+    private static void CloseProcessStandardInput(Process process)
+    {
+        try
+        {
+            process.StandardInput.Close();
+        }
+        catch (IOException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
     }
 
     private static async Task<byte[]> ReadAllBytesAsync(Stream stream)

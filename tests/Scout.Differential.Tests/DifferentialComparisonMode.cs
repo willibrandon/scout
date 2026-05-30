@@ -6,4 +6,5 @@ internal enum DifferentialComparisonMode
     SortLines,
     MaskElapsed,
     SortLinesAndMaskElapsed,
+    NonEmptyStderr,
 }

@@ -741,6 +741,65 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "--vimgrep", "-N", "--no-column", "Sherlock|Watson", ".")),
             new(
                 "tests/misc.rs",
+                "preprocessing",
+                dir => CreateUpstreamDataFile(dir, "sherlock.xz"),
+                DifferentialCase.Exact("--path-separator", "/", "--pre", "xzcat", "Sherlock", "sherlock.xz")),
+            new(
+                "tests/misc.rs",
+                "preprocessing_glob",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    CreateUpstreamDataFile(dir, "sherlock.xz");
+                },
+                DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "--path-separator", "/", "--pre", "xzcat", "--pre-glob", "*.xz", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "compressed_gzip",
+                dir => CreateUpstreamDataFile(dir, "sherlock.gz"),
+                DifferentialCase.Exact("--path-separator", "/", "-z", "Sherlock", "sherlock.gz")),
+            new(
+                "tests/misc.rs",
+                "compressed_bzip2",
+                dir => CreateUpstreamDataFile(dir, "sherlock.bz2"),
+                DifferentialCase.Exact("--path-separator", "/", "-z", "Sherlock", "sherlock.bz2")),
+            new(
+                "tests/misc.rs",
+                "compressed_xz",
+                dir => CreateUpstreamDataFile(dir, "sherlock.xz"),
+                DifferentialCase.Exact("--path-separator", "/", "-z", "Sherlock", "sherlock.xz")),
+            new(
+                "tests/misc.rs",
+                "compressed_lz4",
+                dir => CreateUpstreamDataFile(dir, "sherlock.lz4"),
+                DifferentialCase.Exact("--path-separator", "/", "-z", "Sherlock", "sherlock.lz4")),
+            new(
+                "tests/misc.rs",
+                "compressed_lzma",
+                dir => CreateUpstreamDataFile(dir, "sherlock.lzma"),
+                DifferentialCase.Exact("--path-separator", "/", "-z", "Sherlock", "sherlock.lzma")),
+            new(
+                "tests/misc.rs",
+                "compressed_brotli",
+                dir => CreateUpstreamDataFile(dir, "sherlock.br"),
+                DifferentialCase.Exact("--path-separator", "/", "-z", "Sherlock", "sherlock.br")),
+            new(
+                "tests/misc.rs",
+                "compressed_zstd",
+                dir => CreateUpstreamDataFile(dir, "sherlock.zst"),
+                DifferentialCase.Exact("--path-separator", "/", "-z", "Sherlock", "sherlock.zst")),
+            new(
+                "tests/misc.rs",
+                "compressed_uncompress",
+                dir => CreateUpstreamDataFile(dir, "sherlock.Z"),
+                DifferentialCase.Exact("--path-separator", "/", "-z", "Sherlock", "sherlock.Z")),
+            new(
+                "tests/misc.rs",
+                "compressed_failing_gzip",
+                dir => dir.CreateFile("sherlock.gz", Sherlock),
+                DifferentialCase.Normalized(DifferentialComparisonMode.NonEmptyStderr, "--path-separator", "/", "-z", "Sherlock", "sherlock.gz")),
+            new(
+                "tests/misc.rs",
                 "binary_convert",
                 dir => dir.CreateFile("file", "foo\0bar\nfoo\0baz\n"),
                 DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "foo", "file")),
@@ -2025,6 +2084,11 @@ internal static class PortedRgTests
         dir.CreateBytes("hay", File.ReadAllBytes(UpstreamSherlockNulPath));
     }
 
+    private static void CreateUpstreamDataFile(RgTestDirectory dir, string fileName)
+    {
+        dir.CreateBytes(fileName, File.ReadAllBytes(Path.Combine(UpstreamDataDirectory, fileName)));
+    }
+
     private static void CreateUtf16Sherlock(RgTestDirectory dir)
     {
         dir.CreateBytes("foo", [(byte)0xFF, (byte)0xFE, (byte)'(', (byte)0x04, (byte)'5', (byte)0x04, (byte)'@', (byte)0x04, (byte)';', (byte)0x04, (byte)'>', (byte)0x04, (byte)':', (byte)0x04, (byte)' ', (byte)0x00, (byte)'%', (byte)0x04, (byte)'>', (byte)0x04, (byte)';', (byte)0x04, (byte)'<', (byte)0x04, (byte)'A', (byte)0x04]);
@@ -2078,6 +2142,7 @@ internal static class PortedRgTests
         dir.CreateFile("ignored-dir/foo", "needle");
     }
 
+    private const string UpstreamDataDirectory = "/Users/brandon/src/ripgrep/tests/data";
     private const string UpstreamSherlockNulPath = "/Users/brandon/src/ripgrep/tests/data/sherlock-nul.txt";
     private const string CyrillicSherlockHolmes = "\u0428\u0435\u0440\u043B\u043E\u043A \u0425\u043E\u043B\u043C\u0441";
 

@@ -173,4 +173,14 @@ public sealed class DifferentialOutputNormalizerTests
             "0.000000 seconds total\n",
             Utf8.GetString(normalized));
     }
+
+    /// <summary>
+    /// Verifies stderr-only upstream assertions can require non-empty stderr without pinning tool-specific text.
+    /// </summary>
+    [Fact]
+    public void NonEmptyStderrMasksNonEmptyErrorText()
+    {
+        Assert.Equal("<non-empty stderr>", DifferentialOutputNormalizer.NormalizeStderr("gzip failed", DifferentialComparisonMode.NonEmptyStderr));
+        Assert.Equal(string.Empty, DifferentialOutputNormalizer.NormalizeStderr(string.Empty, DifferentialComparisonMode.NonEmptyStderr));
+    }
 }
