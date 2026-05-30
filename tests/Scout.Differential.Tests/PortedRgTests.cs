@@ -64,6 +64,35 @@ public sealed class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "--no-filename", "Sherlock", "sherlock")),
             new(
                 "tests/feature.rs",
+                "f89_files_with_matches",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "--null", "--files-with-matches", "Sherlock", ".")),
+            new(
+                "tests/feature.rs",
+                "f89_files_without_match",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.CreateFile("file.py", "foo");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--null", "--files-without-match", "Sherlock", ".")),
+            new(
+                "tests/feature.rs",
+                "f89_count",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "--null", "--count", "Sherlock", ".")),
+            new(
+                "tests/feature.rs",
+                "f89_files",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "--null", "--files", ".")),
+            new(
+                "tests/feature.rs",
+                "f89_match",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "--null", "-C1", "Sherlock", ".")),
+            new(
+                "tests/feature.rs",
                 "f34_only_matching",
                 dir => dir.CreateFile("sherlock", Sherlock),
                 DifferentialCase.Exact("--path-separator", "/", "-o", "Sherlock", "sherlock")),
