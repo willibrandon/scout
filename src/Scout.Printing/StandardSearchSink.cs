@@ -18,6 +18,8 @@ internal struct StandardSearchSink : ILineSink
     private readonly OutputLineLimit lineLimit;
     private readonly OutputColor color;
     private readonly ReadOnlyMemory<byte> lineTerminator;
+    private readonly long lineNumberOffset;
+    private readonly long byteOffsetOffset;
 
     public StandardSearchSink(
         RawByteWriter output,
@@ -31,7 +33,9 @@ internal struct StandardSearchSink : ILineSink
         bool nullPathTerminator,
         OutputLineLimit lineLimit,
         OutputColor color,
-        ReadOnlyMemory<byte> lineTerminator)
+        ReadOnlyMemory<byte> lineTerminator,
+        long lineNumberOffset = 0,
+        long byteOffsetOffset = 0)
     {
         ArgumentNullException.ThrowIfNull(output);
         this.output = output;
@@ -46,10 +50,17 @@ internal struct StandardSearchSink : ILineSink
         this.lineLimit = lineLimit;
         this.color = color;
         this.lineTerminator = lineTerminator;
+        this.lineNumberOffset = lineNumberOffset;
+        this.byteOffsetOffset = byteOffsetOffset;
     }
+
+    public ulong MatchedLines { get; private set; }
 
     public void MatchedLine(long lineNumber, long byteOffset, long matchColumn, ReadOnlySpan<byte> line)
     {
+        MatchedLines++;
+        lineNumber += lineNumberOffset;
+        byteOffset += byteOffsetOffset;
         ReadOnlySpan<byte> displayLine = trim ? TrimLeadingAsciiWhitespace(line) : line;
         bool linked = false;
         bool hasLineNumber = this.lineNumber;
@@ -109,6 +120,8 @@ internal struct StandardSearchSink : ILineSink
 
     public void ContextLine(long lineNumber, long byteOffset, long contextColumn, ReadOnlySpan<byte> line)
     {
+        lineNumber += lineNumberOffset;
+        byteOffset += byteOffsetOffset;
         ReadOnlySpan<byte> displayLine = trim ? TrimLeadingAsciiWhitespace(line) : line;
         bool linked = false;
         bool hasLineNumber = this.lineNumber;

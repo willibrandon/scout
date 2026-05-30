@@ -6491,6 +6491,28 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies explicit files larger than the managed array limit use the streaming reader path.
+    /// </summary>
+    [Fact]
+    public void LargeExplicitFileSearchStreamsLikeRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "large.txt");
+        using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read))
+        {
+            stream.Write("alpha\nneedle\n"u8);
+            stream.SetLength((long)int.MaxValue + 4096);
+        }
+
+        (int exitCode, byte[] output, string error) = RunScout("--no-config", "--mmap", "-a", "-m", "1", "-n", "needle", path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-config", "--mmap", "-a", "-m", "1", "-n", "needle", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies newly covered parser flags preserve literal-search parity when their behavior is neutral.
     /// </summary>
     [Fact]
