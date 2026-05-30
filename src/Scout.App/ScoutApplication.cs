@@ -2620,7 +2620,6 @@ internal static class ScoutApplication
     {
         matched = false;
         if (invertMatch ||
-            lineRegexp ||
             replacement is not null ||
             beforeContext > 0 ||
             afterContext > 0 ||
@@ -2631,7 +2630,7 @@ internal static class ScoutApplication
             return false;
         }
 
-        if (!TryFindMultilineMatch(searchSpan, patterns, asciiCaseInsensitive, wordRegexp, multilineDotall, startAt: 0, out RegexMatch firstMatch))
+        if (!TryFindMultilineMatch(searchSpan, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, startAt: 0, out RegexMatch firstMatch))
         {
             if (searchMode == CliSearchMode.FilesWithoutMatch)
             {
@@ -2666,7 +2665,7 @@ internal static class ScoutApplication
             return true;
         }
 
-        long count = CountMultilineMatches(searchSpan, patterns, asciiCaseInsensitive, wordRegexp, multilineDotall, maxCount);
+        long count = CountMultilineMatches(searchSpan, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
         if (searchMode == CliSearchMode.Count || searchMode == CliSearchMode.CountMatches)
         {
             matched = WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, separators.LineTerminator);
@@ -2676,7 +2675,7 @@ internal static class ScoutApplication
         matched = true;
         if (onlyMatching && !vimgrep)
         {
-            WriteMultilineOnlyMatches(outputSpan, patterns, output, prefix, separators, color, lineNumber, column, byteOffset, trim, nullPathTerminator, asciiCaseInsensitive, wordRegexp, multilineDotall, maxCount);
+            WriteMultilineOnlyMatches(outputSpan, patterns, output, prefix, separators, color, lineNumber, column, byteOffset, trim, nullPathTerminator, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
             return true;
         }
 
@@ -2684,23 +2683,23 @@ internal static class ScoutApplication
         {
             if (onlyMatching)
             {
-                WriteMultilineOnlyMatches(outputSpan, patterns, output, prefix, separators, color, lineNumber: true, column: true, byteOffset, trim, nullPathTerminator, asciiCaseInsensitive, wordRegexp, multilineDotall, maxCount);
+                WriteMultilineOnlyMatches(outputSpan, patterns, output, prefix, separators, color, lineNumber: true, column: true, byteOffset, trim, nullPathTerminator, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
                 return true;
             }
 
-            WriteMultilineVimgrepMatches(outputSpan, patterns, output, prefix, separators, lineLimit, color, trim, nullPathTerminator, asciiCaseInsensitive, wordRegexp, multilineDotall, maxCount);
+            WriteMultilineVimgrepMatches(outputSpan, patterns, output, prefix, separators, lineLimit, color, trim, nullPathTerminator, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
             return true;
         }
 
-        WriteMultilineMatchedLines(outputSpan, patterns, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, asciiCaseInsensitive, wordRegexp, multilineDotall, maxCount);
+        WriteMultilineMatchedLines(outputSpan, patterns, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
         return true;
     }
 
-    private static long CountMultilineMatches(ReadOnlySpan<byte> bytes, IReadOnlyList<byte[]> patterns, bool asciiCaseInsensitive, bool wordRegexp, bool multilineDotall, ulong? maxCount)
+    private static long CountMultilineMatches(ReadOnlySpan<byte> bytes, IReadOnlyList<byte[]> patterns, bool asciiCaseInsensitive, bool lineRegexp, bool wordRegexp, bool multilineDotall, ulong? maxCount)
     {
         long count = 0;
         int offset = 0;
-        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, wordRegexp, multilineDotall, offset, out RegexMatch match))
+        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, offset, out RegexMatch match))
         {
             count++;
             if (maxCount is ulong limit && (ulong)count >= limit)
@@ -2728,6 +2727,7 @@ internal static class ScoutApplication
         bool trim,
         bool nullPathTerminator,
         bool asciiCaseInsensitive,
+        bool lineRegexp,
         bool wordRegexp,
         bool multilineDotall,
         ulong? maxCount)
@@ -2736,7 +2736,7 @@ internal static class ScoutApplication
         int offset = 0;
         int lastWrittenLineStart = -1;
         ulong emitted = 0;
-        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, wordRegexp, multilineDotall, offset, out RegexMatch match))
+        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, offset, out RegexMatch match))
         {
             int firstLineStart = GetLineStart(bytes, match.Start);
             int lastLineStart = GetLineStart(bytes, GetInclusiveMatchEnd(match));
@@ -2776,6 +2776,7 @@ internal static class ScoutApplication
         bool trim,
         bool nullPathTerminator,
         bool asciiCaseInsensitive,
+        bool lineRegexp,
         bool wordRegexp,
         bool multilineDotall,
         ulong? maxCount)
@@ -2783,7 +2784,7 @@ internal static class ScoutApplication
         var sink = new StandardMatchSink(output, prefix, separators.FieldMatch, lineNumber, column, byteOffset, trim, nullPathTerminator: nullPathTerminator, color: color, lineTerminator: separators.LineTerminator);
         int offset = 0;
         ulong emitted = 0;
-        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, wordRegexp, multilineDotall, offset, out RegexMatch match))
+        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, offset, out RegexMatch match))
         {
             int firstLineStart = GetLineStart(bytes, match.Start);
             long firstLineNumber = GetLineNumber(bytes, firstLineStart);
@@ -2823,6 +2824,7 @@ internal static class ScoutApplication
         bool trim,
         bool nullPathTerminator,
         bool asciiCaseInsensitive,
+        bool lineRegexp,
         bool wordRegexp,
         bool multilineDotall,
         ulong? maxCount)
@@ -2830,7 +2832,7 @@ internal static class ScoutApplication
         var sink = new StandardSearchSink(output, prefix, separators.FieldMatch, separators.FieldContext, lineNumber: true, column: true, byteOffset: false, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
         int offset = 0;
         ulong emitted = 0;
-        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, wordRegexp, multilineDotall, offset, out RegexMatch match))
+        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, offset, out RegexMatch match))
         {
             int lineStart = GetLineStart(bytes, match.Start);
             int lineEnd = GetLineEnd(bytes, lineStart);
@@ -2847,26 +2849,38 @@ internal static class ScoutApplication
         }
     }
 
-    private static bool TryFindMultilineMatch(ReadOnlySpan<byte> bytes, IReadOnlyList<byte[]> patterns, bool asciiCaseInsensitive, bool wordRegexp, bool multilineDotall, int startAt, out RegexMatch match)
+    private static bool TryFindMultilineMatch(ReadOnlySpan<byte> bytes, IReadOnlyList<byte[]> patterns, bool asciiCaseInsensitive, bool lineRegexp, bool wordRegexp, bool multilineDotall, int startAt, out RegexMatch match)
     {
         match = default;
         bool found = false;
         for (int index = 0; index < patterns.Count; index++)
         {
-            RegexMatch? candidate = RegexAutomaton.Compile(patterns[index], asciiCaseInsensitive, multiLine: true, dotMatchesNewline: multilineDotall).Find(bytes, startAt);
-            if (!candidate.HasValue)
+            var automaton = RegexAutomaton.Compile(patterns[index], asciiCaseInsensitive, multiLine: true, dotMatchesNewline: multilineDotall);
+            int candidateStartAt = startAt;
+            RegexMatch? candidate = null;
+            while (candidateStartAt <= bytes.Length)
             {
-                continue;
+                RegexMatch? next = automaton.Find(bytes, candidateStartAt);
+                if (!next.HasValue)
+                {
+                    break;
+                }
+
+                int end = next.Value.Start + next.Value.Length;
+                if ((!lineRegexp || IsLineMatch(bytes, next.Value.Start, end)) &&
+                    (!wordRegexp || IsWordMatch(bytes, next.Value.Start, end)))
+                {
+                    candidate = next.Value;
+                    break;
+                }
+
+                candidateStartAt = MatchIterator.AdvanceAfter(new MatcherMatch(next.Value.Start, next.Value.Length), bytes.Length);
             }
 
-            if (wordRegexp && !IsWordMatch(bytes, candidate.Value.Start, candidate.Value.Start + candidate.Value.Length))
-            {
-                continue;
-            }
-
-            if (!found ||
+            if (candidate.HasValue &&
+                (!found ||
                 candidate.Value.Start < match.Start ||
-                (candidate.Value.Start == match.Start && candidate.Value.Length > match.Length))
+                (candidate.Value.Start == match.Start && candidate.Value.Length > match.Length)))
             {
                 match = candidate.Value;
                 found = true;
@@ -2874,6 +2888,18 @@ internal static class ScoutApplication
         }
 
         return found;
+    }
+
+    private static bool IsLineMatch(ReadOnlySpan<byte> bytes, int start, int end)
+    {
+        int firstLineStart = GetLineStart(bytes, start);
+        if (start != firstLineStart)
+        {
+            return false;
+        }
+
+        int lastLineStart = GetLineStart(bytes, end > start ? end - 1 : start);
+        return end == GetLineContentEnd(bytes, lastLineStart);
     }
 
     private static bool IsWordMatch(ReadOnlySpan<byte> bytes, int start, int end)
@@ -2915,6 +2941,14 @@ internal static class ScoutApplication
         int boundedStart = Math.Clamp(lineStart, 0, bytes.Length);
         int relativeEnd = bytes[boundedStart..].IndexOf((byte)'\n');
         return relativeEnd < 0 ? bytes.Length : boundedStart + relativeEnd + 1;
+    }
+
+    private static int GetLineContentEnd(ReadOnlySpan<byte> bytes, int lineStart)
+    {
+        int lineEnd = GetLineEnd(bytes, lineStart);
+        return lineEnd > lineStart && bytes[lineEnd - 1] == (byte)'\n'
+            ? lineEnd - 1
+            : lineEnd;
     }
 
     private static int GetNextLineStart(int lineEnd, int length)
@@ -3146,7 +3180,6 @@ internal static class ScoutApplication
     {
         matched = false;
         if (invertMatch ||
-            lineRegexp ||
             replacement is not null ||
             crlf ||
             nullData ||
@@ -3160,7 +3193,7 @@ internal static class ScoutApplication
         int offset = 0;
         ulong emitted = 0;
         var matches = new List<JsonMatchSpan>(capacity: 1);
-        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, wordRegexp, multilineDotall, offset, out RegexMatch match))
+        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, offset, out RegexMatch match))
         {
             matched = true;
             int firstLineStart = GetLineStart(bytes, match.Start);

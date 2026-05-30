@@ -981,7 +981,7 @@ public sealed class ScoutApplicationTests
     {
         string root = CreateTempDirectory();
         string path = Path.Combine(root, "input.txt");
-        File.WriteAllText(path, "xx foo\nbar yy\nxfoo\nbarz\n");
+        File.WriteAllText(path, "xfoo\nbarz\nxx foo\nbar yy\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "-w", "-U", "foo\nbar", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-w", "-U", "foo\nbar", path);
@@ -996,6 +996,44 @@ public sealed class ScoutApplicationTests
         Assert.Equal(pinnedInsensitiveExitCode, insensitiveExitCode);
         Assert.Equal(pinnedInsensitiveOutput, insensitiveOutput);
         Assert.Equal(pinnedInsensitiveError, insensitiveError);
+        Assert.Equal(pinnedJsonExitCode, jsonExitCode);
+        Assert.Equal(NormalizeJsonTimings(pinnedJsonOutput), NormalizeJsonTimings(jsonOutput));
+        Assert.Equal(pinnedJsonError, jsonError);
+    }
+
+    /// <summary>
+    /// Verifies multiline regex search honors line-regexp boundaries.
+    /// </summary>
+    [Fact]
+    public void MultilineLineRegexpMatchesPinnedRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "xxfoo\nbarzz\nfoo\nbar\nfoo\nbar baz\nFOO\nBAR\n");
+
+        (int exitCode, byte[] output, string error) = RunScout("-n", "-x", "-U", "foo\nbar", path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-x", "-U", "foo\nbar", path);
+        (int insensitiveExitCode, byte[] insensitiveOutput, string insensitiveError) = RunScout("-n", "-x", "-i", "-U", "FOO\nBAR", path);
+        (int pinnedInsensitiveExitCode, byte[] pinnedInsensitiveOutput, string pinnedInsensitiveError) = RunPinnedRipgrep("-n", "-x", "-i", "-U", "FOO\nBAR", path);
+        (int onlyExitCode, byte[] onlyOutput, string onlyError) = RunScout("-n", "--column", "-o", "-x", "-U", "foo\nbar", path);
+        (int pinnedOnlyExitCode, byte[] pinnedOnlyOutput, string pinnedOnlyError) = RunPinnedRipgrep("-n", "--column", "-o", "-x", "-U", "foo\nbar", path);
+        (int vimgrepExitCode, byte[] vimgrepOutput, string vimgrepError) = RunScout("--vimgrep", "-x", "-U", "foo\nbar", path);
+        (int pinnedVimgrepExitCode, byte[] pinnedVimgrepOutput, string pinnedVimgrepError) = RunPinnedRipgrep("--vimgrep", "-x", "-U", "foo\nbar", path);
+        (int jsonExitCode, byte[] jsonOutput, string jsonError) = RunScout("--json", "-x", "-U", "foo\nbar", path);
+        (int pinnedJsonExitCode, byte[] pinnedJsonOutput, string pinnedJsonError) = RunPinnedRipgrep("--json", "-x", "-U", "foo\nbar", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+        Assert.Equal(pinnedInsensitiveExitCode, insensitiveExitCode);
+        Assert.Equal(pinnedInsensitiveOutput, insensitiveOutput);
+        Assert.Equal(pinnedInsensitiveError, insensitiveError);
+        Assert.Equal(pinnedOnlyExitCode, onlyExitCode);
+        Assert.Equal(pinnedOnlyOutput, onlyOutput);
+        Assert.Equal(pinnedOnlyError, onlyError);
+        Assert.Equal(pinnedVimgrepExitCode, vimgrepExitCode);
+        Assert.Equal(pinnedVimgrepOutput, vimgrepOutput);
+        Assert.Equal(pinnedVimgrepError, vimgrepError);
         Assert.Equal(pinnedJsonExitCode, jsonExitCode);
         Assert.Equal(NormalizeJsonTimings(pinnedJsonOutput), NormalizeJsonTimings(jsonOutput));
         Assert.Equal(pinnedJsonError, jsonError);
