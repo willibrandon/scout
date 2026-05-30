@@ -130,12 +130,145 @@ internal static class DifferentialOutputNormalizer
             return SortNullSeparatedRecords(text);
         }
 
-        if (TrySortHeadingBlocks(text, out string? sorted))
+        string sortableText = text;
+        string footer = string.Empty;
+        if (TrySplitStatsFooter(text, out string? body, out string? statsFooter))
         {
-            return sorted;
+            sortableText = body;
+            footer = statsFooter;
         }
 
-        return SortLines(text);
+        if (TrySortJsonRecords(sortableText, out string? sorted))
+        {
+            return sorted + footer;
+        }
+
+        if (TrySortHeadingBlocks(sortableText, out sorted))
+        {
+            return sorted + footer;
+        }
+
+        if (TrySortContextSeparatedChunks(sortableText, out sorted))
+        {
+            return sorted + footer;
+        }
+
+        if (TrySortPathLineGroups(sortableText, out sorted))
+        {
+            return sorted + footer;
+        }
+
+        return SortLines(sortableText) + footer;
+    }
+
+    private static bool TrySplitStatsFooter(string text, [NotNullWhen(true)] out string? body, [NotNullWhen(true)] out string? footer)
+    {
+        body = null;
+        footer = null;
+        int separator = text.LastIndexOf("\n\n", StringComparison.Ordinal);
+        if (separator < 0 || separator + 2 >= text.Length)
+        {
+            return false;
+        }
+
+        string candidate = text[(separator + 2)..];
+        if (!LooksLikeStatsFooter(candidate))
+        {
+            return false;
+        }
+
+        body = text[..separator];
+        footer = text[separator..];
+        return true;
+    }
+
+    private static bool LooksLikeStatsFooter(string text)
+    {
+        string[] lines = text.Split('\n');
+        bool sawBytesSearched = false;
+        bool sawTotal = false;
+        for (int index = 0; index < lines.Length; index++)
+        {
+            string line = lines[index];
+            if (line.Length == 0 && index == lines.Length - 1)
+            {
+                continue;
+            }
+
+            if (!IsStatsLine(line))
+            {
+                return false;
+            }
+
+            sawBytesSearched |= line.EndsWith(" bytes searched", StringComparison.Ordinal);
+            sawTotal |= line.EndsWith(" seconds total", StringComparison.Ordinal);
+        }
+
+        return sawBytesSearched && sawTotal;
+    }
+
+    private static bool IsStatsLine(string line)
+    {
+        return line.EndsWith(" match", StringComparison.Ordinal) ||
+            line.EndsWith(" matches", StringComparison.Ordinal) ||
+            line.EndsWith(" matched line", StringComparison.Ordinal) ||
+            line.EndsWith(" matched lines", StringComparison.Ordinal) ||
+            line.EndsWith(" file contained matches", StringComparison.Ordinal) ||
+            line.EndsWith(" files contained matches", StringComparison.Ordinal) ||
+            line.EndsWith(" file searched", StringComparison.Ordinal) ||
+            line.EndsWith(" files searched", StringComparison.Ordinal) ||
+            line.EndsWith(" byte printed", StringComparison.Ordinal) ||
+            line.EndsWith(" bytes printed", StringComparison.Ordinal) ||
+            line.EndsWith(" byte searched", StringComparison.Ordinal) ||
+            line.EndsWith(" bytes searched", StringComparison.Ordinal) ||
+            line.EndsWith(" seconds spent searching", StringComparison.Ordinal) ||
+            line.EndsWith(" seconds total", StringComparison.Ordinal);
+    }
+
+    private static bool TrySortJsonRecords(string text, [NotNullWhen(true)] out string? sorted)
+    {
+        sorted = null;
+        string[] split = text.Split('\n');
+        bool hasTrailingLineFeed = split.Length > 0 && split[^1].Length == 0;
+        int lineCount = hasTrailingLineFeed ? split.Length - 1 : split.Length;
+        var groups = new List<(string Key, int FirstIndex, List<string> Lines)>(lineCount);
+        var footer = new List<string>();
+        bool sawPathRecord = false;
+        for (int index = 0; index < lineCount; index++)
+        {
+            string line = split[index];
+            if (line.Length == 0)
+            {
+                footer.Add(line);
+                continue;
+            }
+
+            if (line[0] != '{')
+            {
+                return false;
+            }
+
+            if (!TryGetJsonPathKey(line, out string? key))
+            {
+                footer.Add(line);
+                continue;
+            }
+
+            sawPathRecord = true;
+            AddLineToGroup(groups, key, index, line);
+        }
+
+        if (!sawPathRecord)
+        {
+            return false;
+        }
+
+        SortGroups(groups);
+        var lines = new List<string>(lineCount);
+        AddGroupsToLines(groups, lines);
+        lines.AddRange(footer);
+        sorted = JoinLines(lines, hasTrailingLineFeed);
+        return true;
     }
 
     private static bool TrySortHeadingBlocks(string text, [NotNullWhen(true)] out string? sorted)
@@ -239,6 +372,127 @@ internal static class DifferentialOutputNormalizer
         return hasTrailingNull ? sorted + '\0' : sorted;
     }
 
+    private static bool TrySortContextSeparatedChunks(string text, [NotNullWhen(true)] out string? sorted)
+    {
+        sorted = null;
+        string[] split = text.Split('\n');
+        bool hasTrailingLineFeed = split.Length > 0 && split[^1].Length == 0;
+        int lineCount = hasTrailingLineFeed ? split.Length - 1 : split.Length;
+        var chunks = new List<(string Key, int FirstIndex, List<string> Lines)>();
+        var currentLines = new List<string>();
+        string? currentKey = null;
+        int currentFirstIndex = -1;
+        bool sawSeparator = false;
+        bool endedWithSeparator = false;
+        for (int index = 0; index < lineCount; index++)
+        {
+            string line = split[index];
+            if (line == "--")
+            {
+                sawSeparator = true;
+                endedWithSeparator = true;
+                if (currentLines.Count == 0 || currentKey is null)
+                {
+                    return false;
+                }
+
+                chunks.Add((currentKey, currentFirstIndex, currentLines));
+                currentLines = [];
+                currentKey = null;
+                currentFirstIndex = -1;
+                continue;
+            }
+
+            if (!TryGetPathSortKey(line, allowContextSeparator: true, out string? key))
+            {
+                return false;
+            }
+
+            endedWithSeparator = false;
+            if (currentKey is null)
+            {
+                currentKey = key;
+                currentFirstIndex = index;
+            }
+            else if (!string.Equals(currentKey, key, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            currentLines.Add(line);
+        }
+
+        if (!sawSeparator)
+        {
+            return false;
+        }
+
+        if (currentLines.Count > 0)
+        {
+            chunks.Add((currentKey!, currentFirstIndex, currentLines));
+        }
+
+        if (chunks.Count < 2)
+        {
+            return false;
+        }
+
+        chunks.Sort(static (left, right) =>
+        {
+            int comparison = StringComparer.Ordinal.Compare(left.Key, right.Key);
+            return comparison != 0 ? comparison : left.FirstIndex.CompareTo(right.FirstIndex);
+        });
+
+        var lines = new List<string>(lineCount);
+        for (int index = 0; index < chunks.Count; index++)
+        {
+            if (index > 0)
+            {
+                lines.Add("--");
+            }
+
+            lines.AddRange(chunks[index].Lines);
+        }
+
+        if (endedWithSeparator)
+        {
+            lines.Add("--");
+        }
+
+        sorted = JoinLines(lines, hasTrailingLineFeed);
+        return true;
+    }
+
+    private static bool TrySortPathLineGroups(string text, [NotNullWhen(true)] out string? sorted)
+    {
+        sorted = null;
+        string[] split = text.Split('\n');
+        bool hasTrailingLineFeed = split.Length > 0 && split[^1].Length == 0;
+        int lineCount = hasTrailingLineFeed ? split.Length - 1 : split.Length;
+        var groups = new List<(string Key, int FirstIndex, List<string> Lines)>(lineCount);
+        for (int index = 0; index < lineCount; index++)
+        {
+            string line = split[index];
+            if (!TryGetPathSortKey(line, allowContextSeparator: false, out string? key))
+            {
+                return false;
+            }
+
+            AddLineToGroup(groups, key, index, line);
+        }
+
+        if (groups.Count < 2)
+        {
+            return false;
+        }
+
+        SortGroups(groups);
+        var lines = new List<string>(lineCount);
+        AddGroupsToLines(groups, lines);
+        sorted = JoinLines(lines, hasTrailingLineFeed);
+        return true;
+    }
+
     private static string SortLines(string text)
     {
         string[] split = text.Split('\n');
@@ -249,34 +503,54 @@ internal static class DifferentialOutputNormalizer
         {
             string line = split[index];
             string key = GetSortKey(line);
-            int groupIndex = FindGroup(groups, key);
-            if (groupIndex < 0)
-            {
-                groups.Add((key, index, [line]));
-            }
-            else
-            {
-                groups[groupIndex].Lines.Add(line);
-            }
+            AddLineToGroup(groups, key, index, line);
         }
 
-        groups.Sort(static (left, right) =>
-        {
-            int comparison = StringComparer.Ordinal.Compare(left.Key, right.Key);
-            return comparison != 0 ? comparison : left.FirstIndex.CompareTo(right.FirstIndex);
-        });
+        SortGroups(groups);
 
         var lines = new List<string>(lineCount);
-        for (int index = 0; index < groups.Count; index++)
-        {
-            lines.AddRange(groups[index].Lines);
-        }
+        AddGroupsToLines(groups, lines);
 
         if (groups.Count == 0)
         {
             return hasTrailingLineFeed ? "\n" : string.Empty;
         }
 
+        return JoinLines(lines, hasTrailingLineFeed);
+    }
+
+    private static void AddLineToGroup(List<(string Key, int FirstIndex, List<string> Lines)> groups, string key, int lineIndex, string line)
+    {
+        int groupIndex = FindGroup(groups, key);
+        if (groupIndex < 0)
+        {
+            groups.Add((key, lineIndex, [line]));
+        }
+        else
+        {
+            groups[groupIndex].Lines.Add(line);
+        }
+    }
+
+    private static void SortGroups(List<(string Key, int FirstIndex, List<string> Lines)> groups)
+    {
+        groups.Sort(static (left, right) =>
+        {
+            int comparison = StringComparer.Ordinal.Compare(left.Key, right.Key);
+            return comparison != 0 ? comparison : left.FirstIndex.CompareTo(right.FirstIndex);
+        });
+    }
+
+    private static void AddGroupsToLines(List<(string Key, int FirstIndex, List<string> Lines)> groups, List<string> lines)
+    {
+        for (int index = 0; index < groups.Count; index++)
+        {
+            lines.AddRange(groups[index].Lines);
+        }
+    }
+
+    private static string JoinLines(List<string> lines, bool hasTrailingLineFeed)
+    {
         string sorted = string.Join('\n', lines);
         return hasTrailingLineFeed ? sorted + "\n" : sorted;
     }
@@ -296,9 +570,9 @@ internal static class DifferentialOutputNormalizer
 
     private static string GetSortKey(string line)
     {
-        if (TryGetJsonPathKey(line, out string? jsonPath))
+        if (TryGetPathSortKey(line, allowContextSeparator: false, out string? path))
         {
-            return jsonPath;
+            return path;
         }
 
         if (line.Length > 0 && line[0] == '{')
@@ -306,14 +580,40 @@ internal static class DifferentialOutputNormalizer
             return "\uFFFF";
         }
 
+        return line;
+    }
+
+    private static bool TryGetPathSortKey(string line, bool allowContextSeparator, [NotNullWhen(true)] out string? path)
+    {
+        path = null;
+        if (TryGetJsonPathKey(line, out string? jsonPath))
+        {
+            path = jsonPath;
+            return true;
+        }
+
         int nullSeparator = line.IndexOf('\0', StringComparison.Ordinal);
         if (nullSeparator > 0)
         {
-            return line[..nullSeparator];
+            path = line[..nullSeparator];
+            return true;
         }
 
         int pathSeparator = line.IndexOf(':', StringComparison.Ordinal);
-        return pathSeparator > 0 ? line[..pathSeparator] : line;
+        if (pathSeparator > 0)
+        {
+            path = line[..pathSeparator];
+            return true;
+        }
+
+        int contextSeparator = allowContextSeparator ? line.IndexOf('-', StringComparison.Ordinal) : -1;
+        if (contextSeparator > 0)
+        {
+            path = line[..contextSeparator];
+            return true;
+        }
+
+        return false;
     }
 
     private static bool TryGetJsonPathKey(string line, [NotNullWhen(true)] out string? path)

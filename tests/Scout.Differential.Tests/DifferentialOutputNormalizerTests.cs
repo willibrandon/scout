@@ -78,6 +78,82 @@ public sealed class DifferentialOutputNormalizerTests
     }
 
     /// <summary>
+    /// Verifies context groups keep separator placement after path-order normalization.
+    /// </summary>
+    [Fact]
+    public void SortLinesSortsContextSeparatedChunks()
+    {
+        string input =
+            "b.txt-before\n" +
+            "b.txt:needle\n" +
+            "b.txt-after\n" +
+            "--\n" +
+            "a.txt-before\n" +
+            "a.txt:needle\n" +
+            "a.txt-after\n";
+
+        byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes(input), DifferentialComparisonMode.SortLines);
+
+        Assert.Equal(
+            "a.txt-before\n" +
+            "a.txt:needle\n" +
+            "a.txt-after\n" +
+            "--\n" +
+            "b.txt-before\n" +
+            "b.txt:needle\n" +
+            "b.txt-after\n",
+            Utf8.GetString(normalized));
+    }
+
+    /// <summary>
+    /// Verifies stats footers stay after the sorted path output and keep non-timing line order.
+    /// </summary>
+    [Fact]
+    public void SortLinesAndMaskElapsedKeepsStatsFooterAfterSortedContextChunks()
+    {
+        string input =
+            "b.txt-before\n" +
+            "b.txt:needle\n" +
+            "b.txt-after\n" +
+            "--\n" +
+            "a.txt-before\n" +
+            "a.txt:needle\n" +
+            "a.txt-after\n" +
+            "--\n" +
+            "\n" +
+            "2 matches\n" +
+            "2 matched lines\n" +
+            "2 files contained matches\n" +
+            "2 files searched\n" +
+            "120 bytes printed\n" +
+            "40 bytes searched\n" +
+            "0.123456 seconds spent searching\n" +
+            "0.234567 seconds total\n";
+
+        byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes(input), DifferentialComparisonMode.SortLinesAndMaskElapsed);
+
+        Assert.Equal(
+            "a.txt-before\n" +
+            "a.txt:needle\n" +
+            "a.txt-after\n" +
+            "--\n" +
+            "b.txt-before\n" +
+            "b.txt:needle\n" +
+            "b.txt-after\n" +
+            "--\n" +
+            "\n" +
+            "2 matches\n" +
+            "2 matched lines\n" +
+            "2 files contained matches\n" +
+            "2 files searched\n" +
+            "120 bytes printed\n" +
+            "40 bytes searched\n" +
+            "0.000000 seconds spent searching\n" +
+            "0.000000 seconds total\n",
+            Utf8.GetString(normalized));
+    }
+
+    /// <summary>
     /// Verifies JSON output is sorted by path while preserving each file's begin/match/end order.
     /// </summary>
     [Fact]
@@ -102,6 +178,48 @@ public sealed class DifferentialOutputNormalizerTests
             "{\"type\":\"match\",\"data\":{\"path\":{\"text\":\"b.txt\"},\"lines\":{\"text\":\"needle\\n\"}}}\n" +
             "{\"type\":\"end\",\"data\":{\"path\":{\"text\":\"b.txt\"},\"stats\":{\"elapsed\":{\"human\":\"0.000000s\",\"nanos\":0,\"secs\":0}}}}\n" +
             "{\"type\":\"summary\",\"data\":{\"elapsed_total\":{\"human\":\"0.000000s\",\"nanos\":0,\"secs\":0}}}\n",
+            Utf8.GetString(normalized));
+    }
+
+    /// <summary>
+    /// Verifies heading output is sorted while stats remain a footer.
+    /// </summary>
+    [Fact]
+    public void SortLinesAndMaskElapsedSortsHeadingBlocksBeforeStatsFooter()
+    {
+        string input =
+            "b.txt\n" +
+            "needle\n" +
+            "\n" +
+            "a.txt\n" +
+            "needle\n" +
+            "\n" +
+            "2 matches\n" +
+            "2 matched lines\n" +
+            "2 files contained matches\n" +
+            "2 files searched\n" +
+            "48 bytes printed\n" +
+            "12 bytes searched\n" +
+            "0.123456 seconds spent searching\n" +
+            "0.234567 seconds total\n";
+
+        byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes(input), DifferentialComparisonMode.SortLinesAndMaskElapsed);
+
+        Assert.Equal(
+            "a.txt\n" +
+            "needle\n" +
+            "\n" +
+            "b.txt\n" +
+            "needle\n" +
+            "\n" +
+            "2 matches\n" +
+            "2 matched lines\n" +
+            "2 files contained matches\n" +
+            "2 files searched\n" +
+            "48 bytes printed\n" +
+            "12 bytes searched\n" +
+            "0.000000 seconds spent searching\n" +
+            "0.000000 seconds total\n",
             Utf8.GetString(normalized));
     }
 
