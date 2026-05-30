@@ -313,14 +313,14 @@ internal static class ScoutApplication
                 return ExitCode.Success;
 
             case CliSpecialMode.VersionLong:
-                output.Write(VersionOutput.Long);
+                output.Write(VersionOutput.GetLong());
                 output.Flush();
                 return ExitCode.Success;
 
             case CliSpecialMode.Pcre2Version:
-                output.Write(Pcre2Library.UnavailableVersionOutput);
+                output.Write(Pcre2Library.GetVersionOutput());
                 output.Flush();
-                return ExitCode.NoMatch;
+                return Pcre2Library.IsAvailable ? ExitCode.Success : ExitCode.NoMatch;
 
             case CliSpecialMode.HelpShort:
                 output.Write(HelpOutput.Short);

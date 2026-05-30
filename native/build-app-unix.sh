@@ -52,7 +52,10 @@ fi
 "$BIN/scout" -V > "$BIN/version.out"
 printf 'ripgrep 15.1.0 (rev 4857d6fa67)\n' > "$BIN/version.expected"
 cmp "$BIN/version.expected" "$BIN/version.out"
+"$BIN/scout" --pcre2-version > "$BIN/pcre2-version.out"
+printf 'PCRE2 10.46 is available (JIT is available)\n' > "$BIN/pcre2-version.expected"
+cmp "$BIN/pcre2-version.expected" "$BIN/pcre2-version.out"
 for symbol in _pcre2_config_8 _pcre2_compile_8 _pcre2_match_8; do
     nm -g "$BIN/scout" | grep " $symbol$" >/dev/null
 done
-printf 'OK %s: Scout.App native export linked and -V matched upstream short version\n' "$RID"
+printf 'OK %s: Scout.App native export linked with PCRE2 and version checks passed\n' "$RID"
