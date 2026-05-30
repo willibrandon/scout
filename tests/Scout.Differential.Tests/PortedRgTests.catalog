@@ -135,6 +135,7 @@ tests/feature.rs|f34_only_matching
 tests/feature.rs|f34_only_matching_line_column
 tests/feature.rs|f948_exit_code_no_match
 tests/feature.rs|f948_exit_code_match
+tests/feature.rs|f948_exit_code_error
 tests/regression.rs|r105_part2
 tests/regression.rs|r105_part1
 tests/regression.rs|r127
@@ -217,6 +218,7 @@ tests/feature.rs|f411_search_stats
 tests/binary.rs|after_match1_implicit
 tests/binary.rs|after_match1_implicit_binary
 tests/binary.rs|after_match1_implicit_text
+tests/binary.rs|after_match1_stdin
 tests/binary.rs|after_match1_explicit
 tests/binary.rs|after_match1_explicit_text
 tests/binary.rs|after_match1_explicit_count
@@ -233,3 +235,4 @@ tests/binary.rs|before_match1_implicit_text
 tests/binary.rs|before_match2_implicit
 tests/binary.rs|before_match2_explicit
 tests/binary.rs|before_match2_implicit_text
+tests/binary.rs|matching_files_inconsistent_with_count

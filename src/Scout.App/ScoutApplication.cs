@@ -398,6 +398,11 @@ internal static class ScoutApplication
             EscapeFixedStringPatterns(patterns);
         }
 
+        if (!TryValidateRegexRepetitionExpressions(patterns, diagnostics))
+        {
+            return ExitCode.Error;
+        }
+
         if (!TryBuildFileTypeMatcher(lowArgs, out FileTypeMatcher? searchFileTypes, out ScoutError? searchError))
         {
             diagnostics.ErrorMessage(searchError!.WithContext("rg"));
@@ -4767,6 +4772,266 @@ internal static class ScoutApplication
             or (byte)'^'
             or (byte)'$'
             or (byte)'|';
+    }
+
+    private static bool TryValidateRegexRepetitionExpressions(List<byte[]> patterns, DiagnosticMessenger diagnostics)
+    {
+        for (int index = 0; index < patterns.Count; index++)
+        {
+            if (TryFindMissingRepetitionExpression(patterns[index], out int offset))
+            {
+                diagnostics.ErrorMessage(new ScoutError(BuildRegexParseError(
+                    patterns[index],
+                    offset,
+                    "repetition operator missing expression")).WithContext("rg"));
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryFindMissingRepetitionExpression(ReadOnlySpan<byte> pattern, out int offset)
+    {
+        bool expectingExpression = true;
+        for (int index = 0; index < pattern.Length; index++)
+        {
+            byte value = pattern[index];
+            if (expectingExpression && IsRegexRepetitionOperator(value))
+            {
+                offset = index;
+                return true;
+            }
+
+            if (value == (byte)'\\')
+            {
+                index = SkipRegexEscape(pattern, index);
+                expectingExpression = false;
+                continue;
+            }
+
+            if (value == (byte)'[')
+            {
+                index = SkipRegexCharacterClass(pattern, index);
+                expectingExpression = false;
+                continue;
+            }
+
+            if (value == (byte)'|')
+            {
+                expectingExpression = true;
+                continue;
+            }
+
+            if (value == (byte)')')
+            {
+                expectingExpression = false;
+                continue;
+            }
+
+            if (value == (byte)'(')
+            {
+                if (TryReadRegexGroupPrefix(pattern, index, out int contentStart))
+                {
+                    index = contentStart - 1;
+                    expectingExpression = true;
+                    continue;
+                }
+
+                expectingExpression = true;
+                continue;
+            }
+
+            if (!expectingExpression && IsRegexRepetitionOperator(value))
+            {
+                index = SkipRegexRepetition(pattern, index);
+                continue;
+            }
+
+            expectingExpression = false;
+        }
+
+        offset = -1;
+        return false;
+    }
+
+    private static bool IsRegexRepetitionOperator(byte value)
+    {
+        return value is (byte)'?' or (byte)'*' or (byte)'+' or (byte)'{';
+    }
+
+    private static int SkipRegexEscape(ReadOnlySpan<byte> pattern, int escapeIndex)
+    {
+        if (escapeIndex + 2 < pattern.Length &&
+            (pattern[escapeIndex + 1] == (byte)'x' || pattern[escapeIndex + 1] == (byte)'u') &&
+            pattern[escapeIndex + 2] == (byte)'{')
+        {
+            for (int index = escapeIndex + 3; index < pattern.Length; index++)
+            {
+                if (pattern[index] == (byte)'}')
+                {
+                    return index;
+                }
+            }
+        }
+
+        return Math.Min(escapeIndex + 1, pattern.Length - 1);
+    }
+
+    private static int SkipRegexCharacterClass(ReadOnlySpan<byte> pattern, int classStart)
+    {
+        for (int index = classStart + 1; index < pattern.Length; index++)
+        {
+            if (pattern[index] == (byte)'\\')
+            {
+                index++;
+                continue;
+            }
+
+            if (pattern[index] == (byte)']')
+            {
+                return index;
+            }
+        }
+
+        return pattern.Length - 1;
+    }
+
+    private static bool TryReadRegexGroupPrefix(
+        ReadOnlySpan<byte> pattern,
+        int groupStart,
+        out int contentStart)
+    {
+        contentStart = groupStart + 1;
+        if (groupStart + 1 >= pattern.Length || pattern[groupStart + 1] != (byte)'?')
+        {
+            return false;
+        }
+
+        if (groupStart + 2 < pattern.Length && pattern[groupStart + 2] == (byte)':')
+        {
+            contentStart = groupStart + 3;
+            return true;
+        }
+
+        if (TryReadRegexNamedCapturePrefix(pattern, groupStart + 2, out contentStart))
+        {
+            return true;
+        }
+
+        bool sawFlag = false;
+        for (int index = groupStart + 2; index < pattern.Length; index++)
+        {
+            byte value = pattern[index];
+            if (value == (byte)'-')
+            {
+                continue;
+            }
+
+            if (IsInlineRegexFlag(value))
+            {
+                sawFlag = true;
+                continue;
+            }
+
+            if (value == (byte)':')
+            {
+                contentStart = index + 1;
+                return sawFlag;
+            }
+
+            if (value == (byte)')')
+            {
+                contentStart = index + 1;
+                return sawFlag;
+            }
+
+            return false;
+        }
+
+        return false;
+    }
+
+    private static bool TryReadRegexNamedCapturePrefix(ReadOnlySpan<byte> pattern, int prefixStart, out int contentStart)
+    {
+        contentStart = prefixStart;
+        int nameStart;
+        if (prefixStart + 1 < pattern.Length && pattern[prefixStart] == (byte)'P' && pattern[prefixStart + 1] == (byte)'<')
+        {
+            nameStart = prefixStart + 2;
+        }
+        else if (prefixStart < pattern.Length && pattern[prefixStart] == (byte)'<')
+        {
+            nameStart = prefixStart + 1;
+        }
+        else
+        {
+            return false;
+        }
+
+        for (int index = nameStart; index < pattern.Length; index++)
+        {
+            if (pattern[index] == (byte)'>')
+            {
+                contentStart = index + 1;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static int SkipRegexRepetition(ReadOnlySpan<byte> pattern, int repetitionStart)
+    {
+        int next = repetitionStart + 1;
+        if (pattern[repetitionStart] == (byte)'{')
+        {
+            for (int index = repetitionStart + 1; index < pattern.Length; index++)
+            {
+                if (pattern[index] == (byte)'}')
+                {
+                    next = index + 1;
+                    break;
+                }
+            }
+        }
+
+        if (next < pattern.Length && pattern[next] == (byte)'?')
+        {
+            next++;
+        }
+
+        return next - 1;
+    }
+
+    private static string BuildRegexParseError(ReadOnlySpan<byte> pattern, int offset, string error)
+    {
+        string displayPattern = "(?:" + BuildRegexErrorPatternDisplay(pattern) + ")";
+        string caret = new string(' ', 4 + 3 + Math.Max(offset, 0)) + "^";
+        return "regex parse error:\n    " + displayPattern + "\n" + caret + "\nerror: " + error;
+    }
+
+    private static string BuildRegexErrorPatternDisplay(ReadOnlySpan<byte> pattern)
+    {
+        var builder = new StringBuilder(pattern.Length);
+        for (int index = 0; index < pattern.Length; index++)
+        {
+            byte value = pattern[index];
+            if (value == (byte)'\t')
+            {
+                builder.Append(@"\t");
+            }
+            else if (value == (byte)'\r')
+            {
+                builder.Append(@"\r");
+            }
+            else
+            {
+                builder.Append(value is >= 0x20 and <= 0x7e ? (char)value : '\uFFFD');
+            }
+        }
+
+        return builder.ToString();
     }
 
     private static bool TryLoadPatternFile(OsString argument, List<byte[]> patterns, Stream standardInput, DiagnosticMessenger diagnostics)

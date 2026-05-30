@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text;
 
 namespace Scout;
 
@@ -970,6 +971,11 @@ internal static class PortedRgTests
                 dir => dir.CreateFile("sherlock", "Sherlock\nWatson\n"),
                 DifferentialCase.Exact("--path-separator", "/", "Sherlock", ".")),
             new(
+                "tests/feature.rs",
+                "f948_exit_code_error",
+                dir => dir.CreateFile("sherlock", "Sherlock\nWatson\n"),
+                DifferentialCase.Exact("--path-separator", "/", "*", ".")),
+            new(
                 "tests/regression.rs",
                 "r105_part2",
                 dir => dir.CreateFile("foo", "zztest"),
@@ -1602,6 +1608,11 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "-n", "--text", "Project Gutenberg EBook", "-g", "hay")),
             new(
                 "tests/binary.rs",
+                "after_match1_stdin",
+                _ => { },
+                DifferentialCase.ExactWithStandardInput(File.ReadAllBytes(UpstreamSherlockNulPath), "--path-separator", "/", "--no-mmap", "-n", "Project Gutenberg EBook")),
+            new(
+                "tests/binary.rs",
                 "after_match1_explicit",
                 CreateSherlockNul,
                 DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "-n", "Project Gutenberg EBook", "hay")),
@@ -1680,6 +1691,14 @@ internal static class PortedRgTests
                 "before_match2_implicit_text",
                 CreateSherlockNul,
                 DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "-n", "--text", "a medical student", "-g", "hay")),
+            new(
+                "tests/binary.rs",
+                "matching_files_inconsistent_with_count",
+                CreateBinaryCountInconsistency,
+                DifferentialCase.Exact("--path-separator", "/", "--sort=path", "-l", "cat"),
+                DifferentialCase.Exact("--path-separator", "/", "--sort=path", "-c", "cat"),
+                DifferentialCase.Exact("--path-separator", "/", "--sort=path", "-c", "cat", "--binary"),
+                DifferentialCase.Exact("--path-separator", "/", "--sort=path", "-c", "cat", "--text")),
         ];
 
     internal static void Run(string sourceFile, string name)
@@ -1759,6 +1778,20 @@ internal static class PortedRgTests
     private static void CreateUtf16Sherlock(RgTestDirectory dir)
     {
         dir.CreateBytes("foo", [(byte)0xFF, (byte)0xFE, (byte)'(', (byte)0x04, (byte)'5', (byte)0x04, (byte)'@', (byte)0x04, (byte)';', (byte)0x04, (byte)'>', (byte)0x04, (byte)':', (byte)0x04, (byte)' ', (byte)0x00, (byte)'%', (byte)0x04, (byte)'>', (byte)0x04, (byte)';', (byte)0x04, (byte)'<', (byte)0x04, (byte)'A', (byte)0x04]);
+    }
+
+    private static void CreateBinaryCountInconsistency(RgTestDirectory dir)
+    {
+        var file1 = new StringBuilder();
+        file1.Append("cat here\n");
+        for (int index = 0; index < 150_000; index++)
+        {
+            file1.Append("padding line\n");
+        }
+
+        file1.Append('\0');
+        dir.CreateFile("file1.txt", file1.ToString());
+        dir.CreateFile("file2.txt", "cat here");
     }
 
     private const string UpstreamSherlockNulPath = "/Users/brandon/src/ripgrep/tests/data/sherlock-nul.txt";
