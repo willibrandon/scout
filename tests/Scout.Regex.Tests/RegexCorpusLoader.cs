@@ -15,11 +15,11 @@ internal static class RegexCorpusLoader
         string path = Path.Combine(CorpusRoot, relativePath);
         string text = File.ReadAllText(path);
         string block = FindBlock(text, name, path);
-        string pattern = ReadString(block, "regex", path, name);
+        IReadOnlyList<string> patterns = ReadPatterns(block, "regex", path, name);
         string haystack = ReadString(block, "haystack", path, name);
         RegexMatch[] expectedMatches = ReadExpectedMatches(block, path, name);
         int? matchLimit = ReadOptionalInt(block, "match-limit", path, name);
-        return new RegexCorpusCase(name, pattern, haystack, expectedMatches, matchLimit);
+        return new RegexCorpusCase(name, patterns, haystack, expectedMatches, matchLimit);
     }
 
     private static string FindBlock(string text, string name, string path)
@@ -48,6 +48,30 @@ internal static class RegexCorpusLoader
         if (value is not null)
         {
             return value;
+        }
+
+        throw new InvalidOperationException("Regex corpus case '" + name + "' in " + path + " is missing '" + key + "'.");
+    }
+
+    private static List<string> ReadPatterns(string block, string key, string path, string name)
+    {
+        string prefix = key + " = ";
+        using var reader = new StringReader(block);
+        while (reader.ReadLine() is string line)
+        {
+            line = line.Trim();
+            if (!line.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            string value = line[prefix.Length..].Trim();
+            if (value.Length > 0 && value[0] == '[')
+            {
+                return ParseTomlStringArray(ReadTomlArrayValue(value, reader));
+            }
+
+            return [ParseTomlString(value)];
         }
 
         throw new InvalidOperationException("Regex corpus case '" + name + "' in " + path + " is missing '" + key + "'.");
@@ -246,6 +270,11 @@ internal static class RegexCorpusLoader
             throw new InvalidOperationException("Invalid TOML string value.");
         }
 
+        if (value.StartsWith("'''", StringComparison.Ordinal) && value.EndsWith("'''", StringComparison.Ordinal))
+        {
+            return value[3..^3];
+        }
+
         if (value[0] == '\'' && value[^1] == '\'')
         {
             return value[1..^1];
@@ -286,5 +315,104 @@ internal static class RegexCorpusLoader
         }
 
         return builder.ToString();
+    }
+
+    private static List<string> ParseTomlStringArray(string value)
+    {
+        var items = new List<string>();
+        int index = SkipWhitespace(value, 0);
+        if (index >= value.Length || value[index] != '[')
+        {
+            throw new InvalidOperationException("Invalid TOML string array.");
+        }
+
+        index++;
+        while (true)
+        {
+            index = SkipWhitespace(value, index);
+            if (index >= value.Length)
+            {
+                throw new InvalidOperationException("Unclosed TOML string array.");
+            }
+
+            if (value[index] == ']')
+            {
+                return items;
+            }
+
+            items.Add(ParseTomlStringAt(value, ref index));
+            index = SkipWhitespace(value, index);
+            if (index < value.Length && value[index] == ',')
+            {
+                index++;
+                continue;
+            }
+
+            if (index < value.Length && value[index] == ']')
+            {
+                return items;
+            }
+
+            throw new InvalidOperationException("Invalid TOML string array.");
+        }
+    }
+
+    private static string ParseTomlStringAt(string value, ref int index)
+    {
+        int start = index;
+        if (StartsWithAt(value, index, "'''"))
+        {
+            int end = value.IndexOf("'''", index + 3, StringComparison.Ordinal);
+            if (end < 0)
+            {
+                throw new InvalidOperationException("Unclosed TOML literal string.");
+            }
+
+            index = end + 3;
+            return ParseTomlString(value[start..index]);
+        }
+
+        if (value[index] == '\'')
+        {
+            int end = value.IndexOf('\'', index + 1);
+            if (end < 0)
+            {
+                throw new InvalidOperationException("Unclosed TOML literal string.");
+            }
+
+            index = end + 1;
+            return ParseTomlString(value[start..index]);
+        }
+
+        if (value[index] != '"')
+        {
+            throw new InvalidOperationException("Unsupported TOML string array item.");
+        }
+
+        index++;
+        while (index < value.Length)
+        {
+            if (value[index] == '\\')
+            {
+                index += 2;
+                continue;
+            }
+
+            if (value[index] == '"')
+            {
+                index++;
+                return ParseTomlString(value[start..index]);
+            }
+
+            index++;
+        }
+
+        throw new InvalidOperationException("Unclosed TOML basic string.");
+    }
+
+    private static bool StartsWithAt(string value, int index, string prefix)
+    {
+        return index + prefix.Length <= value.Length &&
+            string.CompareOrdinal(value, index, prefix, 0, prefix.Length) == 0;
     }
 }

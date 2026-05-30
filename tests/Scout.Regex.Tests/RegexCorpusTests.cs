@@ -78,6 +78,61 @@ public sealed class RegexCorpusTests
                 "600",
                 "610",
             ]),
+            ("crazy.toml",
+            [
+                "nothing-empty",
+                "nothing-something",
+                "ranges",
+                "ranges-not",
+                "float1",
+                "float2",
+                "float3",
+                "float4",
+                "float5",
+                "email",
+                "email-not",
+                "email-big",
+                "date1",
+                "date2",
+                "date3",
+                "start-end-empty",
+                "start-end-empty-rev",
+                "start-end-empty-many-1",
+                "start-end-empty-many-2",
+                "start-end-empty-rep",
+                "start-end-empty-rep-rev",
+                "neg-class-letter",
+                "neg-class-letter-comma",
+                "neg-class-letter-space",
+                "neg-class-comma",
+                "neg-class-space",
+                "neg-class-space-comma",
+                "neg-class-comma-space",
+                "neg-class-ascii",
+                "lazy-many-many",
+                "lazy-many-optional",
+                "lazy-one-many-many",
+                "lazy-one-many-optional",
+                "lazy-range-min-many",
+                "lazy-range-many",
+                "greedy-many-many",
+                "greedy-many-optional",
+                "greedy-one-many-many",
+                "greedy-one-many-optional",
+                "greedy-range-min-many",
+                "greedy-range-many",
+                "empty1",
+                "empty2",
+                "empty3",
+                "empty4",
+                "empty5",
+                "empty6",
+                "empty7",
+                "empty8",
+                "empty9",
+                "empty10",
+                "empty11",
+            ]),
         ];
 
         for (int groupIndex = 0; groupIndex < groups.Length; groupIndex++)
@@ -86,8 +141,8 @@ public sealed class RegexCorpusTests
             for (int index = 0; index < names.Length; index++)
             {
                 RegexCorpusCase testCase = RegexCorpusLoader.Load(relativePath, names[index]);
-                var automaton = RegexAutomaton.Compile(Utf8.GetBytes(testCase.Pattern));
-                RegexMatch[] actual = FindAll(automaton, Utf8.GetBytes(testCase.Haystack), testCase.MatchLimit);
+                RegexAutomaton[] automata = CompileAll(testCase.Patterns);
+                RegexMatch[] actual = FindAll(automata, Utf8.GetBytes(testCase.Haystack), testCase.MatchLimit);
 
                 Assert.True(
                     MatchesEqual(testCase.ExpectedMatches, actual),
@@ -96,7 +151,18 @@ public sealed class RegexCorpusTests
         }
     }
 
-    private static RegexMatch[] FindAll(RegexAutomaton automaton, byte[] haystack, int? matchLimit)
+    private static RegexAutomaton[] CompileAll(IReadOnlyList<string> patterns)
+    {
+        var automata = new RegexAutomaton[patterns.Count];
+        for (int index = 0; index < patterns.Count; index++)
+        {
+            automata[index] = RegexAutomaton.Compile(Utf8.GetBytes(patterns[index]));
+        }
+
+        return automata;
+    }
+
+    private static RegexMatch[] FindAll(IReadOnlyList<RegexAutomaton> automata, byte[] haystack, int? matchLimit)
     {
         var matches = new List<RegexMatch>();
         int startAt = 0;
@@ -108,7 +174,7 @@ public sealed class RegexCorpusTests
                 break;
             }
 
-            RegexMatch? match = automaton.Find(haystack, startAt);
+            RegexMatch? match = Find(automata, haystack, startAt);
             if (!match.HasValue)
             {
                 break;
@@ -135,6 +201,30 @@ public sealed class RegexCorpusTests
         }
 
         return matches.ToArray();
+    }
+
+    private static RegexMatch? Find(IReadOnlyList<RegexAutomaton> automata, byte[] haystack, int startAt)
+    {
+        RegexMatch? best = null;
+        int bestPatternIndex = int.MaxValue;
+        for (int index = 0; index < automata.Count; index++)
+        {
+            RegexMatch? match = automata[index].Find(haystack, startAt);
+            if (!match.HasValue)
+            {
+                continue;
+            }
+
+            if (!best.HasValue ||
+                match.Value.Start < best.Value.Start ||
+                match.Value.Start == best.Value.Start && index < bestPatternIndex)
+            {
+                best = match.Value;
+                bestPatternIndex = index;
+            }
+        }
+
+        return best;
     }
 
     private static bool MatchesEqual(IReadOnlyList<RegexMatch> expected, RegexMatch[] actual)

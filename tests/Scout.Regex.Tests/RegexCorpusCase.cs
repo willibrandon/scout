@@ -4,10 +4,15 @@ namespace Scout;
 
 internal sealed class RegexCorpusCase
 {
-    public RegexCorpusCase(string name, string pattern, string haystack, IReadOnlyList<RegexMatch> expectedMatches, int? matchLimit)
+    public RegexCorpusCase(
+        string name,
+        IReadOnlyList<string> patterns,
+        string haystack,
+        IReadOnlyList<RegexMatch> expectedMatches,
+        int? matchLimit)
     {
         Name = name;
-        Pattern = pattern;
+        Patterns = patterns;
         Haystack = haystack;
         ExpectedMatches = expectedMatches;
         MatchLimit = matchLimit;
@@ -15,7 +20,7 @@ internal sealed class RegexCorpusCase
 
     public string Name { get; }
 
-    public string Pattern { get; }
+    public IReadOnlyList<string> Patterns { get; }
 
     public string Haystack { get; }
 
