@@ -171,6 +171,7 @@ public sealed class PinnedConfigurationTests
         string buildScript = File.ReadAllText(Path.Combine(root, "native", "pcre2", "build-unix.sh"));
         string appBuildScript = File.ReadAllText(Path.Combine(root, "native", "build-app-unix.sh"));
         string pcre2Library = File.ReadAllText(Path.Combine(root, "src", "Scout.Pcre2", "Pcre2Library.cs"));
+        string pcre2Regex = File.ReadAllText(Path.Combine(root, "src", "Scout.Pcre2", "Pcre2Regex.cs"));
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
         string headerPath = Path.Combine(sourceRoot, "include", "pcre2.h");
 
@@ -199,11 +200,17 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("\"$ROOT/native/pcre2/build-unix.sh\" \"$RID\"", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("artifacts/native/pcre2/$RID/lib/libpcre2-8.a", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-Wl,-force_load,\"$PCRE2_LIB\"", appBuildScript, StringComparison.Ordinal);
-        Assert.Contains("_pcre2_config_8 _pcre2_compile_8 _pcre2_match_8", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("_pcre2_config_8", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("_pcre2_compile_8", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("_pcre2_match_8", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("_pcre2_match_data_create_from_pattern_8", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("-P 'foo(?=bar)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("<AllowUnsafeBlocks>true</AllowUnsafeBlocks>", directoryBuildProps, StringComparison.Ordinal);
         Assert.Contains("<DirectPInvoke Include=\"__Internal\" />", directoryBuildProps, StringComparison.Ordinal);
         Assert.Contains("PCRE2 10.46 is available (JIT is available)", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("[LibraryImport(\"__Internal\", EntryPoint = \"pcre2_config_8\")]", pcre2Library, StringComparison.Ordinal);
+        Assert.Contains("[LibraryImport(\"__Internal\", EntryPoint = \"pcre2_compile_8\")]", pcre2Regex, StringComparison.Ordinal);
+        Assert.Contains("[LibraryImport(\"__Internal\", EntryPoint = \"pcre2_match_8\")]", pcre2Regex, StringComparison.Ordinal);
     }
 
     /// <summary>

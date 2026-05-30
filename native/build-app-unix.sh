@@ -55,7 +55,24 @@ cmp "$BIN/version.expected" "$BIN/version.out"
 "$BIN/scout" --pcre2-version > "$BIN/pcre2-version.out"
 printf 'PCRE2 10.46 is available (JIT is available)\n' > "$BIN/pcre2-version.expected"
 cmp "$BIN/pcre2-version.expected" "$BIN/pcre2-version.out"
-for symbol in _pcre2_config_8 _pcre2_compile_8 _pcre2_match_8; do
+cat > "$BIN/pcre2-smoke.txt" <<'EOF'
+foobar
+foo
+foobarfoo
+EOF
+"$BIN/scout" -P 'foo(?=bar)' "$BIN/pcre2-smoke.txt" > "$BIN/pcre2-smoke.out"
+printf 'foobar\nfoobarfoo\n' > "$BIN/pcre2-smoke.expected"
+cmp "$BIN/pcre2-smoke.expected" "$BIN/pcre2-smoke.out"
+for symbol in \
+    _pcre2_code_free_8 \
+    _pcre2_compile_8 \
+    _pcre2_config_8 \
+    _pcre2_get_error_message_8 \
+    _pcre2_get_ovector_pointer_8 \
+    _pcre2_jit_compile_8 \
+    _pcre2_match_8 \
+    _pcre2_match_data_create_from_pattern_8 \
+    _pcre2_match_data_free_8; do
     nm -g "$BIN/scout" | grep " $symbol$" >/dev/null
 done
-printf 'OK %s: Scout.App native export linked with PCRE2 and version checks passed\n' "$RID"
+printf 'OK %s: Scout.App native export linked with PCRE2 and smoke checks passed\n' "$RID"

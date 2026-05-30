@@ -405,8 +405,7 @@ internal static class ScoutApplication
 
         if (lowArgs.RegexEngine == CliRegexEngine.Pcre2)
         {
-            diagnostics.ErrorMessage(new ScoutError(Pcre2Library.UnavailableErrorMessage).WithContext("rg"));
-            return ExitCode.Error;
+            return RunPcre2Search(positional, firstPathIndex, lowArgs, patterns, output, diagnostics);
         }
 
         if (!lowArgs.Multiline && ContainsLineTerminator(patterns, lowArgs.NullData, lowArgs.FixedStrings))
@@ -563,6 +562,167 @@ internal static class ScoutApplication
 
         output.Flush();
         return GetSearchExitCode(matched, errored, lowArgs.Quiet);
+    }
+
+    private static int RunPcre2Search(
+        IReadOnlyList<OsString> positional,
+        int firstPathIndex,
+        CliLowArgs lowArgs,
+        IReadOnlyList<byte[]> patterns,
+        RawByteWriter output,
+        DiagnosticMessenger diagnostics)
+    {
+        if (!Pcre2Library.IsAvailable)
+        {
+            diagnostics.ErrorMessage(new ScoutError(Pcre2Library.UnavailableErrorMessage).WithContext("rg"));
+            return ExitCode.Error;
+        }
+
+        if (!CanRunSimplePcre2Search(positional, firstPathIndex, lowArgs))
+        {
+            diagnostics.ErrorMessage(new ScoutError("PCRE2 search currently supports standard single-file searches only").WithContext("rg"));
+            return ExitCode.Error;
+        }
+
+        if (!TryGetPathText(positional[firstPathIndex], diagnostics, out string path))
+        {
+            return ExitCode.Error;
+        }
+
+        if (!File.Exists(path))
+        {
+            diagnostics.ErrorMessage(MissingPathError(path, simple: true));
+            return ExitCode.Error;
+        }
+
+        OutputSeparators separators = GetOutputSeparators(lowArgs);
+        bool autoMmapEligible = IsAutoMmapEligible([path]);
+        if (!TryReadSearchFileBytes(path, lowArgs, autoMmapEligible, diagnostics, out byte[] bytes, out _))
+        {
+            return ExitCode.Error;
+        }
+
+        try
+        {
+            byte[] pattern = BuildPcre2Pattern(patterns);
+            using var regex = new Pcre2Regex(pattern, GetPcre2CompileOptions(lowArgs, patterns));
+            bool matched = SearchPcre2Lines(bytes, regex, output, separators);
+            output.Flush();
+            return matched ? ExitCode.Success : ExitCode.NoMatch;
+        }
+        catch (Pcre2Exception exception)
+        {
+            diagnostics.ErrorMessage(new ScoutError(exception.Message).WithContext("rg"));
+            return ExitCode.Error;
+        }
+    }
+
+    private static bool CanRunSimplePcre2Search(IReadOnlyList<OsString> positional, int firstPathIndex, CliLowArgs lowArgs)
+    {
+        return lowArgs.SearchMode == CliSearchMode.Standard &&
+            positional.Count == firstPathIndex + 1 &&
+            !lowArgs.Stats &&
+            !lowArgs.Quiet &&
+            !lowArgs.FixedStrings &&
+            !lowArgs.Multiline &&
+            !lowArgs.LineRegexp &&
+            !lowArgs.WordRegexp &&
+            !lowArgs.Vimgrep &&
+            !lowArgs.ByteOffset &&
+            !lowArgs.Column &&
+            !lowArgs.LineNumber &&
+            !lowArgs.InvertMatch &&
+            !lowArgs.OnlyMatching &&
+            lowArgs.Replacement is null &&
+            lowArgs.MaxCount is null &&
+            lowArgs.BeforeContext == 0 &&
+            lowArgs.AfterContext == 0 &&
+            !lowArgs.Passthru &&
+            lowArgs.WithFilename is not true;
+    }
+
+    private static Pcre2CompileOptions GetPcre2CompileOptions(CliLowArgs lowArgs, IReadOnlyList<byte[]> patterns)
+    {
+        Pcre2CompileOptions options = Pcre2CompileOptions.MultiLine;
+        if (IsAsciiCaseInsensitive(patterns, lowArgs.CaseMode))
+        {
+            options |= Pcre2CompileOptions.CaseInsensitive;
+        }
+
+        if (lowArgs.MultilineDotall)
+        {
+            options |= Pcre2CompileOptions.DotMatchesNewline;
+        }
+
+        if (lowArgs.Pcre2Unicode)
+        {
+            options |= Pcre2CompileOptions.Utf |
+                Pcre2CompileOptions.UnicodeProperties;
+        }
+
+        return options;
+    }
+
+    private static byte[] BuildPcre2Pattern(IReadOnlyList<byte[]> patterns)
+    {
+        if (patterns.Count == 1)
+        {
+            return patterns[0];
+        }
+
+        using MemoryStream buffer = new();
+        for (int index = 0; index < patterns.Count; index++)
+        {
+            if (index > 0)
+            {
+                buffer.WriteByte((byte)'|');
+            }
+
+            buffer.Write("(?:"u8);
+            byte[] pattern = patterns[index];
+            buffer.Write(pattern);
+            buffer.WriteByte((byte)')');
+        }
+
+        return buffer.ToArray();
+    }
+
+    private static bool SearchPcre2Lines(byte[] bytes, Pcre2Regex regex, RawByteWriter output, OutputSeparators separators)
+    {
+        bool matched = false;
+        int lineStart = 0;
+        while (lineStart <= bytes.Length)
+        {
+            ReadOnlySpan<byte> remaining = bytes.AsSpan(lineStart);
+            int lineFeed = remaining.IndexOf((byte)'\n');
+            int lineEnd = lineFeed < 0 ? bytes.Length : lineStart + lineFeed;
+            int outputEnd = lineFeed < 0 ? lineEnd : lineEnd + 1;
+            ReadOnlySpan<byte> line = bytes.AsSpan(lineStart, lineEnd - lineStart);
+            if (line.Length > 0 && line[^1] == (byte)'\r')
+            {
+                line = line[..^1];
+            }
+
+            if (regex.TryFind(line, out _))
+            {
+                output.Write(bytes.AsSpan(lineStart, outputEnd - lineStart));
+                if (lineFeed < 0)
+                {
+                    output.Write(separators.LineTerminator.Span);
+                }
+
+                matched = true;
+            }
+
+            if (lineFeed < 0)
+            {
+                break;
+            }
+
+            lineStart = outputEnd;
+        }
+
+        return matched;
     }
 
     private static int RunJsonSearch(
