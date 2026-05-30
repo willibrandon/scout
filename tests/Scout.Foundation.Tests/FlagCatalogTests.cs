@@ -51,6 +51,8 @@ public sealed class FlagCatalogTests
         Assert.Equal("--max-count", maxCount.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindShortValue('M', out FlagDescriptor maxColumns));
         Assert.Equal("--max-columns", maxColumns.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindShortValue('E', out FlagDescriptor encoding));
+        Assert.Equal("--encoding", encoding.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindShortValue('j', out FlagDescriptor threads));
         Assert.Equal("--threads", threads.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindShortValue('A', out FlagDescriptor afterContext));
@@ -149,6 +151,11 @@ public sealed class FlagCatalogTests
                 OsString.FromUnixBytes("-j4"u8),
                 OsString.FromUnixBytes("needle"u8),
             ]);
+        CliParseResult encodingValue = CliParser.Parse(
+            [
+                OsString.FromUnixBytes("-Eutf-16"u8),
+                OsString.FromUnixBytes("needle"u8),
+            ]);
         CliParseResult contextValues = CliParser.Parse(
             [
                 OsString.FromUnixBytes("-A=2"u8),
@@ -163,6 +170,9 @@ public sealed class FlagCatalogTests
         Assert.Equal(16UL, numericValues.LowArgs.MaxColumns);
         Assert.Equal(4UL, numericValues.LowArgs.Threads);
         Assert.Single(numericValues.LowArgs.Positional);
+        Assert.Equal(CliParseStatus.Ok, encodingValue.Status);
+        Assert.Equal(CliEncodingMode.Utf16, encodingValue.LowArgs!.EncodingMode);
+        Assert.Single(encodingValue.LowArgs.Positional);
         Assert.Equal(CliParseStatus.Ok, contextValues.Status);
         Assert.Equal(2UL, contextValues.LowArgs!.AfterContext);
         Assert.Equal(3UL, contextValues.LowArgs.BeforeContext);

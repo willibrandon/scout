@@ -1391,7 +1391,7 @@ public static class CliParser
     private static bool IsClusterValueFlag(char flag)
     {
         return GeneratedFlagCatalog.TryFindShortValue(flag, out _) ||
-            flag is 'E' or 'r' or 'e' or 'f' or 'g' or 't' or 'T';
+            flag is 'r' or 'e' or 'f' or 'g' or 't' or 'T';
     }
 
     private static string GetShortSwitchName(char flag)
@@ -1410,7 +1410,6 @@ public static class CliParser
         {
             'm' => "-m",
             'M' => "-M",
-            'E' => "-E",
             'j' => "-j",
             'r' => "-r",
             'e' => "-e",
@@ -1444,7 +1443,6 @@ public static class CliParser
         {
             'm' => ParseMaxCount(value, flagName, lowArgs, out error),
             'M' => ParseMaxColumns(value, flagName, lowArgs, out error),
-            'E' => ParseEncoding(value, flagName, lowArgs, out error),
             'j' => ParseThreads(value, flagName, lowArgs, out error),
             'r' => ParseReplacement(value, lowArgs, out error),
             'e' => ParsePattern(value, lowArgs, out error),
@@ -1476,7 +1474,6 @@ public static class CliParser
         {
             'm' => ParseMaxCount(value, flagName, lowArgs, out error),
             'M' => ParseMaxColumns(value, flagName, lowArgs, out error),
-            'E' => ParseEncoding(value, flagName, lowArgs, out error),
             'j' => ParseThreads(value, flagName, lowArgs, out error),
             'r' => ParseReplacement(value, lowArgs, out error),
             'e' => ParsePattern(value, lowArgs, out error),
@@ -1503,7 +1500,6 @@ public static class CliParser
         {
             'm' => ParseMaxCount(value, flagName, lowArgs, out error),
             'M' => ParseMaxColumns(value, flagName, lowArgs, out error),
-            'E' => ParseEncoding(value, flagName, lowArgs, out error),
             'j' => ParseThreads(value, flagName, lowArgs, out error),
             'r' => ParseReplacement(value, lowArgs, out error),
             'e' => ParsePattern(value, lowArgs, out error),
@@ -1576,26 +1572,6 @@ public static class CliParser
             }
 
             return ParseRegexEngine(value, lowArgs, out error);
-        }
-
-        if (argument.EqualsUnixBytes("-E"u8) || TextEquals(argument, "-E"))
-        {
-            if (!TryGetFollowingValue(arguments, ref index, "-E", out OsString value, out error))
-            {
-                return true;
-            }
-
-            return ParseEncoding(value, "-E", lowArgs, out error);
-        }
-
-        if (argument.EqualsUnixBytes("--encoding"u8) || TextEquals(argument, "--encoding"))
-        {
-            if (!TryGetFollowingValue(arguments, ref index, "--encoding", out OsString value, out error))
-            {
-                return true;
-            }
-
-            return ParseEncoding(value, "--encoding", lowArgs, out error);
         }
 
         if (argument.EqualsUnixBytes("-j"u8) || TextEquals(argument, "-j"))
@@ -2043,11 +2019,6 @@ public static class CliParser
             return ParseRegexEngine(engineValue, lowArgs, out error);
         }
 
-        if (TryGetInlineUnixValue(argument, "--encoding="u8, out ReadOnlySpan<byte> encodingValue))
-        {
-            return ParseEncoding(encodingValue, "--encoding", lowArgs, out error);
-        }
-
         if (TryGetInlineUnixValue(argument, "--threads="u8, out ReadOnlySpan<byte> threadsValue))
         {
             return ParseThreads(threadsValue, "--threads", lowArgs, out error);
@@ -2141,16 +2112,6 @@ public static class CliParser
             }
 
             return ParseMaxColumns(shortMaxColumnsValue, "-M", lowArgs, out error);
-        }
-
-        if (TryGetInlineUnixValue(argument, "-E"u8, out ReadOnlySpan<byte> shortEncodingValue))
-        {
-            if (!shortEncodingValue.IsEmpty && shortEncodingValue[0] == (byte)'=')
-            {
-                shortEncodingValue = shortEncodingValue[1..];
-            }
-
-            return ParseEncoding(shortEncodingValue, "-E", lowArgs, out error);
         }
 
         if (TryGetInlineUnixValue(argument, "-j"u8, out ReadOnlySpan<byte> shortThreadsValue))
@@ -2355,11 +2316,6 @@ public static class CliParser
                 return ParseRegexEngine(text["--engine=".Length..], lowArgs, out error);
             }
 
-            if (text.StartsWith("--encoding=", StringComparison.Ordinal))
-            {
-                return ParseEncoding(text["--encoding=".Length..], "--encoding", lowArgs, out error);
-            }
-
             if (text.StartsWith("--threads=", StringComparison.Ordinal))
             {
                 return ParseThreads(text["--threads=".Length..], "--threads", lowArgs, out error);
@@ -2445,12 +2401,6 @@ public static class CliParser
             {
                 string value = text[2] == '=' ? text[3..] : text[2..];
                 return ParseMaxColumns(value, "-M", lowArgs, out error);
-            }
-
-            if (text.Length > 2 && text.StartsWith("-E", StringComparison.Ordinal))
-            {
-                string value = text[2] == '=' ? text[3..] : text[2..];
-                return ParseEncoding(value, "-E", lowArgs, out error);
             }
 
             if (text.Length > 2 && text.StartsWith("-j", StringComparison.Ordinal))
@@ -2758,7 +2708,7 @@ public static class CliParser
         }
     }
 
-    private static bool ParseEncoding(OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
+    internal static bool ParseEncoding(OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
     {
         if (value.IsUnixBytes)
         {
