@@ -19,6 +19,8 @@ tests/misc.rs|dir
 tests/misc.rs|line_numbers
 tests/misc.rs|columns
 tests/misc.rs|with_filename
+tests/misc.rs|with_heading
+tests/misc.rs|with_heading_default
 tests/misc.rs|inverted
 tests/misc.rs|inverted_line_numbers
 tests/misc.rs|case_insensitive
@@ -31,6 +33,18 @@ tests/misc.rs|replace
 tests/misc.rs|replace_groups
 tests/misc.rs|replace_named_groups
 tests/misc.rs|replace_with_only_matching
+tests/misc.rs|file_types
+tests/misc.rs|file_types_all
+tests/misc.rs|file_types_negate
+tests/misc.rs|file_types_negate_all
+tests/misc.rs|file_type_clear
+tests/misc.rs|file_type_add
+tests/misc.rs|file_type_add_compose
+tests/misc.rs|glob
+tests/misc.rs|glob_negate
+tests/misc.rs|glob_case_insensitive
+tests/misc.rs|glob_case_sensitive
+tests/misc.rs|glob_always_case_insensitive
 tests/misc.rs|count
 tests/misc.rs|count_matches
 tests/misc.rs|count_matches_inverted

@@ -115,6 +115,20 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "-H", "Sherlock", "sherlock")),
             new(
                 "tests/misc.rs",
+                "with_heading",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "--with-filename", "--heading", "Sherlock", "sherlock")),
+            new(
+                "tests/misc.rs",
+                "with_heading_default",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.CreateFile("foo", "Sherlock Holmes lives on Baker Street.");
+                },
+                DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "--path-separator", "/", "-j1", "--heading", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
                 "inverted",
                 dir => dir.CreateFile("sherlock", Sherlock),
                 DifferentialCase.Exact("--path-separator", "/", "-v", "Sherlock", "sherlock")),
@@ -173,6 +187,122 @@ internal static class PortedRgTests
                 "replace_with_only_matching",
                 dir => dir.CreateFile("sherlock", Sherlock),
                 DifferentialCase.Exact("--path-separator", "/", "-o", "-r", "$1", @"of (\w+)", "sherlock")),
+            new(
+                "tests/misc.rs",
+                "file_types",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.CreateFile("file.py", "Sherlock");
+                    dir.CreateFile("file.rs", "Sherlock");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-t", "rust", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "file_types_all",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.CreateFile("file.py", "Sherlock");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-t", "all", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "file_types_negate",
+                dir =>
+                {
+                    dir.CreateFile("file.py", "Sherlock");
+                    dir.CreateFile("file.rs", "Sherlock");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-T", "rust", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "file_types_negate_all",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.CreateFile("file.py", "Sherlock");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-T", "all", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "file_type_clear",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.CreateFile("file.py", "Sherlock");
+                    dir.CreateFile("file.rs", "Sherlock");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--type-clear", "rust", "-t", "rust", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "file_type_add",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.CreateFile("file.py", "Sherlock");
+                    dir.CreateFile("file.rs", "Sherlock");
+                    dir.CreateFile("file.wat", "Sherlock");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--type-add", "wat:*.wat", "-t", "wat", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "file_type_add_compose",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.CreateFile("file.py", "Sherlock");
+                    dir.CreateFile("file.rs", "Sherlock");
+                    dir.CreateFile("file.wat", "Sherlock");
+                },
+                DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "--path-separator", "/", "--type-add", "wat:*.wat", "--type-add", "combo:include:wat,py", "-t", "combo", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "glob",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.CreateFile("file.py", "Sherlock");
+                    dir.CreateFile("file.rs", "Sherlock");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-g", "*.rs", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "glob_negate",
+                dir =>
+                {
+                    dir.CreateFile("file.py", "Sherlock");
+                    dir.CreateFile("file.rs", "Sherlock");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-g", "!*.rs", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "glob_case_insensitive",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.CreateFile("file.HTML", "Sherlock");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--iglob", "*.html", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "glob_case_sensitive",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.CreateFile("file1.HTML", "Sherlock");
+                    dir.CreateFile("file2.html", "Sherlock");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--glob", "*.html", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "glob_always_case_insensitive",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.CreateFile("file.HTML", "Sherlock");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--glob-case-insensitive", "--glob", "*.html", "Sherlock", ".")),
             new(
                 "tests/misc.rs",
                 "count",
