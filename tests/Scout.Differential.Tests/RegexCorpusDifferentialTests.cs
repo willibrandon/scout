@@ -10,7 +10,7 @@ namespace Scout;
 /// </summary>
 public sealed class RegexCorpusDifferentialTests
 {
-    private const int ExpectedDifferentialCaseCount = 117;
+    private const int ExpectedDifferentialCaseCount = 122;
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
@@ -22,6 +22,7 @@ public sealed class RegexCorpusDifferentialTests
         ("iter.toml", 19),
         ("misc.toml", 13),
         ("multiline.toml", 1),
+        ("regex-lite.toml", 5),
         ("regression.toml", 9),
     ];
 
@@ -144,6 +145,11 @@ public sealed class RegexCorpusDifferentialTests
         ("regression.toml", "word-boundary-alone-100"),
         ("regression.toml", "word-boundary-alone-200"),
         ("multiline.toml", "repeat8"),
+        ("regex-lite.toml", "perl-class-decimal"),
+        ("regex-lite.toml", "perl-class-space"),
+        ("regex-lite.toml", "perl-class-word"),
+        ("regex-lite.toml", "word-boundary"),
+        ("regex-lite.toml", "case-insensitive-is-ascii-only"),
     ];
 
     /// <summary>
@@ -166,7 +172,7 @@ public sealed class RegexCorpusDifferentialTests
 
             var differentialCase = DifferentialCase.Normalized(
                 DifferentialComparisonMode.MaskElapsed,
-                BuildArguments(corpusCase, path));
+                BuildArguments(corpusCase, relativePath, path));
             DifferentialRunner.AssertMatchesPinned(differentialCase);
         }
         finally
@@ -267,7 +273,7 @@ public sealed class RegexCorpusDifferentialTests
         Assert.NotEmpty(corpusCase.Patterns);
     }
 
-    private static string[] BuildArguments(RegexCorpusCase corpusCase, string path)
+    private static string[] BuildArguments(RegexCorpusCase corpusCase, string relativePath, string path)
     {
         var arguments = new List<string>
         {
@@ -275,6 +281,11 @@ public sealed class RegexCorpusDifferentialTests
             "--json",
             "-o",
         };
+        if (string.Equals(relativePath, "regex-lite.toml", StringComparison.Ordinal))
+        {
+            arguments.Add("--no-unicode");
+        }
+
         if (corpusCase.CaseInsensitive)
         {
             arguments.Add("-i");
