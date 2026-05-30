@@ -39,16 +39,27 @@ expect_contains() {
     return 1
 }
 
-if [ "$#" -ne 1 ]; then
-    printf 'usage: %s <rid>\n' "$0" >&2
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+    printf 'usage: %s <rid> [--with-differentials|--smoke-only]\n' "$0" >&2
     exit 2
 fi
 
 RID="$1"
+DIFFERENTIAL_MODE="${2:---with-differentials}"
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 OUT="$ROOT/artifacts/app/$RID"
 BIN="$ROOT/artifacts/bin/$RID"
 PCRE2_LIB="$ROOT/artifacts/native/pcre2/$RID/lib/libpcre2-8.a"
+
+case "$DIFFERENTIAL_MODE" in
+    --with-differentials|--smoke-only)
+        ;;
+    *)
+        printf 'Unknown differential mode %s.\n' "$DIFFERENTIAL_MODE" >&2
+        printf 'usage: %s <rid> [--with-differentials|--smoke-only]\n' "$0" >&2
+        exit 2
+        ;;
+esac
 
 case "$RID" in
     osx-arm64|osx-x64|linux-x64|linux-arm64)
@@ -187,8 +198,10 @@ expect_equal_file "PCRE2 multiline count" "$BIN/pcre2-multiline-count.expected" 
 "$BIN/scout" -P --multiline --count-matches '(?s)def (\w+);(?=.*use \w+)' "$BIN/pcre2-multiline-count.txt" > "$BIN/pcre2-multiline-count-matches.out"
 printf '2\n' > "$BIN/pcre2-multiline-count-matches.expected"
 expect_equal_file "PCRE2 multiline count-matches" "$BIN/pcre2-multiline-count-matches.expected" "$BIN/pcre2-multiline-count-matches.out"
-"$ROOT/native/test-pcre2-differential-unix.sh" "$RID" "$BIN/scout"
-"$ROOT/native/test-invalid-utf8-differential-unix.sh" "$RID" "$BIN/scout"
+if [ "$DIFFERENTIAL_MODE" = "--with-differentials" ]; then
+    "$ROOT/native/test-pcre2-differential-unix.sh" "$RID" "$BIN/scout"
+    "$ROOT/native/test-invalid-utf8-differential-unix.sh" "$RID" "$BIN/scout"
+fi
 for symbol in \
     _pcre2_code_free_8 \
     _pcre2_compile_8 \

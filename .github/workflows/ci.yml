@@ -18,6 +18,7 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
   DOTNET_NOLOGO: "1"
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   portable-build:
@@ -32,16 +33,16 @@ jobs:
           - rid: linux-arm64
             runner: ubuntu-24.04-arm
           - rid: osx-x64
-            runner: macos-13
+            runner: macos-15-intel
           - rid: osx-arm64
             runner: macos-15
           - rid: win-x64
-            runner: windows-2025
+            runner: windows-2025-vs2026
           - rid: win-arm64
             runner: windows-11-arm
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.102
       - name: Restore
@@ -73,16 +74,18 @@ jobs:
       - scout
       - osx-arm64
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.102
       - name: Restore
         run: dotnet restore Scout.slnx
-      - name: Test
-        run: dotnet test Scout.slnx --no-restore
       - name: Preflight
         run: eng/preflight.sh
+      - name: Test
+        run: dotnet test Scout.slnx --no-restore
+      - name: Native pinned differentials
+        run: native/build-app-unix.sh osx-arm64 --with-differentials
 
   native-unix:
     name: native Unix link (${{ matrix.rid }})
@@ -96,16 +99,16 @@ jobs:
           - rid: linux-arm64
             runner: ubuntu-24.04-arm
           - rid: osx-x64
-            runner: macos-13
+            runner: macos-15-intel
           - rid: osx-arm64
             runner: macos-15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.102
       - name: Link native executable
-        run: native/build-app-unix.sh ${{ matrix.rid }}
+        run: native/build-app-unix.sh ${{ matrix.rid }} --smoke-only
 
   native-windows:
     name: native Windows link (${{ matrix.rid }})
@@ -115,14 +118,14 @@ jobs:
       matrix:
         include:
           - rid: win-x64
-            runner: windows-2025
+            runner: windows-2025-vs2026
             vsarch: amd64
           - rid: win-arm64
             runner: windows-11-arm
             vsarch: arm64
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.102
       - name: Link native executable
@@ -144,11 +147,13 @@ jobs:
       - scout
       - osx-arm64
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.102
+      - name: Preflight
+        run: eng/preflight.sh
       - name: Link native executable
-        run: native/build-app-unix.sh osx-arm64
+        run: native/build-app-unix.sh osx-arm64 --with-differentials
       - name: Run hyperfine gates
         run: bench/run-hyperfine.sh --gate

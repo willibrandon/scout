@@ -58,6 +58,9 @@ public sealed class PinnedConfigurationTests
         Assert.True(File.Exists(workflowPath), "Missing CI workflow: " + workflowPath);
         string workflow = File.ReadAllText(workflowPath);
 
+        Assert.Contains("FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: \"true\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("uses: actions/checkout@v6", workflow, StringComparison.Ordinal);
+        Assert.Contains("uses: actions/setup-dotnet@v5", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet-version: 10.0.102", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet build Scout.slnx --no-restore", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet run --project fuzz/Scout.Fuzz/Scout.Fuzz.csproj --no-build -- regex-parse", workflow, StringComparison.Ordinal);
@@ -68,15 +71,20 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("eng/preflight.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("cancel-in-progress: true", workflow, StringComparison.Ordinal);
         Assert.Contains("if: github.event_name == 'workflow_dispatch'", workflow, StringComparison.Ordinal);
-        Assert.Contains("native/build-app-unix.sh ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("native/build-app-unix.sh ${{ matrix.rid }} --smoke-only", workflow, StringComparison.Ordinal);
+        Assert.Contains("native/build-app-unix.sh osx-arm64 --with-differentials", workflow, StringComparison.Ordinal);
         Assert.Contains("native/build-app-windows.ps1 ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
         Assert.Contains("vsarch: amd64", workflow, StringComparison.Ordinal);
         Assert.Contains("vsarch: arm64", workflow, StringComparison.Ordinal);
         Assert.Contains("runner: ubuntu-24.04", workflow, StringComparison.Ordinal);
         Assert.Contains("runner: ubuntu-24.04-arm", workflow, StringComparison.Ordinal);
-        Assert.Contains("runner: macos-13", workflow, StringComparison.Ordinal);
+        Assert.Contains("runner: macos-15-intel", workflow, StringComparison.Ordinal);
         Assert.Contains("runner: macos-15", workflow, StringComparison.Ordinal);
+        Assert.Contains("runner: windows-2025-vs2026", workflow, StringComparison.Ordinal);
         Assert.Contains("bench/run-hyperfine.sh --gate", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("actions/checkout@v4", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("actions/setup-dotnet@v4", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("macos-13", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("-p:PublishAot=true", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("continue-on-error: true", workflow, StringComparison.OrdinalIgnoreCase);
 
@@ -406,6 +414,9 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("-P --multiline --files-with-matches '(?s)Start(?=.*thing2)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --multiline --count '(?s)def (\\w+);(?=.*use \\w+)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --multiline --count-matches '(?s)def (\\w+);(?=.*use \\w+)'", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("DIFFERENTIAL_MODE=\"${2:---with-differentials}\"", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("--smoke-only", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("if [ \"$DIFFERENTIAL_MODE\" = \"--with-differentials\" ]; then", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("[ValidateSet(\"win-x64\", \"win-arm64\")]", windowsAppBuildScript, StringComparison.Ordinal);
         Assert.Contains("native\\pcre2\\build-windows.ps1", windowsAppBuildScript, StringComparison.Ordinal);
         Assert.Contains("scout_wmain.c", windowsAppBuildScript, StringComparison.Ordinal);
