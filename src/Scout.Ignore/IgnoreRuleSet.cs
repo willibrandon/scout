@@ -16,6 +16,50 @@ internal sealed class IgnoreRuleSet
 
     public void AddFile(string baseDirectory, string path, bool asciiCaseInsensitive)
     {
+        if (!TryAddFile(baseDirectory, path, asciiCaseInsensitive, out string? errorMessage))
+        {
+            throw new IOException(errorMessage);
+        }
+    }
+
+    public bool TryAddFile(string baseDirectory, string path, bool asciiCaseInsensitive, out string? errorMessage)
+    {
+        if (Directory.Exists(path))
+        {
+            errorMessage = $"{path}: line 1: Is a directory (os error 21)";
+            return false;
+        }
+
+        try
+        {
+            AddFileLines(baseDirectory, path, asciiCaseInsensitive);
+            errorMessage = null;
+            return true;
+        }
+        catch (FileNotFoundException)
+        {
+            errorMessage = $"{path}: No such file or directory (os error 2)";
+            return false;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            errorMessage = $"{path}: No such file or directory (os error 2)";
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            errorMessage = $"{path}: Permission denied (os error 13)";
+            return false;
+        }
+        catch (IOException exception)
+        {
+            errorMessage = $"{path}: {exception.Message}";
+            return false;
+        }
+    }
+
+    private void AddFileLines(string baseDirectory, string path, bool asciiCaseInsensitive)
+    {
         bool firstLine = true;
         foreach (string line in File.ReadLines(path))
         {

@@ -259,8 +259,24 @@ public sealed class WalkBuilder
     public WalkBuilder AddIgnoreFile(string path)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
-        explicitIgnoreRules.AddFile(Directory.GetCurrentDirectory(), path, ignoreCaseInsensitive);
+        if (!TryAddIgnoreFile(path, out string? errorMessage))
+        {
+            throw new IOException(errorMessage);
+        }
+
         return this;
+    }
+
+    /// <summary>
+    /// Tries to add an explicit ignore file whose rules have lower precedence than directory ignore files.
+    /// </summary>
+    /// <param name="path">The ignore file path.</param>
+    /// <param name="errorMessage">The ripgrep-style diagnostic message when the file could not be read.</param>
+    /// <returns><see langword="true" /> when the ignore file was read successfully.</returns>
+    public bool TryAddIgnoreFile(string path, out string? errorMessage)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+        return explicitIgnoreRules.TryAddFile(Directory.GetCurrentDirectory(), path, ignoreCaseInsensitive, out errorMessage);
     }
 
     /// <summary>

@@ -670,7 +670,7 @@ internal static class ScoutApplication
             }
 
             string fullRoot = Path.GetFullPath(path);
-            foreach (DirEntry entry in GetSortedFileEntries(path, lowArgs, fileTypes))
+            foreach (DirEntry entry in GetSortedFileEntries(path, lowArgs, fileTypes, diagnostics))
             {
                 string displayPath = GetSearchDirectoryDisplayPath(path, fullRoot, entry.FullPath, defaultRoot);
                 SearchJsonFile(entry.FullPath, Utf8.GetBytes(displayPath), pattern, false, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, ref matched, ref errored);
@@ -721,7 +721,7 @@ internal static class ScoutApplication
 
         try
         {
-            CreateWalkBuilder(root, lowArgs, fileTypes).Threads(threadCount).BuildParallel().Run(() => entry =>
+            CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() => entry =>
             {
                 if (!entry.IsFile)
                 {
@@ -869,11 +869,11 @@ internal static class ScoutApplication
         int threadCount = GetFilesWalkThreadCount(lowArgs);
         if (threadCount > 1)
         {
-            ListFilesDirectoryParallel(path, fullRoot, defaultRoot, lowArgs, fileTypes, output, ref emitted);
+            ListFilesDirectoryParallel(path, fullRoot, defaultRoot, lowArgs, fileTypes, output, diagnostics, ref emitted);
             return;
         }
 
-        ListFilesDirectorySerial(path, fullRoot, defaultRoot, lowArgs, fileTypes, output, ref emitted);
+        ListFilesDirectorySerial(path, fullRoot, defaultRoot, lowArgs, fileTypes, output, diagnostics, ref emitted);
     }
 
     private static void ListFilesDirectorySerial(
@@ -883,9 +883,10 @@ internal static class ScoutApplication
         CliLowArgs lowArgs,
         FileTypeMatcher fileTypes,
         RawByteWriter output,
+        DiagnosticMessenger diagnostics,
         ref bool emitted)
     {
-        foreach (DirEntry entry in GetSortedFileEntries(path, lowArgs, fileTypes))
+        foreach (DirEntry entry in GetSortedFileEntries(path, lowArgs, fileTypes, diagnostics))
         {
             string displayPath = defaultRoot
                 ? Path.GetRelativePath(fullRoot, entry.FullPath)
@@ -907,6 +908,7 @@ internal static class ScoutApplication
         CliLowArgs lowArgs,
         FileTypeMatcher fileTypes,
         RawByteWriter output,
+        DiagnosticMessenger diagnostics,
         ref bool emitted)
     {
         int threadCount = GetFilesWalkThreadCount(lowArgs);
@@ -926,7 +928,7 @@ internal static class ScoutApplication
 
         try
         {
-            CreateWalkBuilder(path, lowArgs, fileTypes).Threads(threadCount).BuildParallel().Run(() => entry =>
+            CreateWalkBuilder(path, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() => entry =>
             {
                 if (!entry.IsFile)
                 {
@@ -1233,7 +1235,7 @@ internal static class ScoutApplication
         }
 
         string fullRoot = Path.GetFullPath(root);
-        foreach (DirEntry entry in GetSortedFileEntries(root, lowArgs, fileTypes))
+        foreach (DirEntry entry in GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics))
         {
             string displayPath = GetSearchDirectoryDisplayPath(root, fullRoot, entry.FullPath, defaultRoot);
             byte[] displayPathBytes = GetPathBytes(displayPath, lowArgs.PathSeparator);
@@ -1326,7 +1328,7 @@ internal static class ScoutApplication
 
         try
         {
-            CreateWalkBuilder(root, lowArgs, fileTypes).Threads(threadCount).BuildParallel().Run(() => entry =>
+            CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() => entry =>
             {
                 if (!entry.IsFile)
                 {
@@ -1436,7 +1438,7 @@ internal static class ScoutApplication
         }
 
         string fullRoot = Path.GetFullPath(root);
-        foreach (DirEntry entry in GetSortedFileEntries(root, lowArgs, fileTypes))
+        foreach (DirEntry entry in GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics))
         {
             string displayPath = GetSearchDirectoryDisplayPath(root, fullRoot, entry.FullPath, defaultRoot);
             byte[] displayPathBytes = GetPathBytes(displayPath, lowArgs.PathSeparator);
@@ -1533,7 +1535,7 @@ internal static class ScoutApplication
 
         try
         {
-            CreateWalkBuilder(root, lowArgs, fileTypes).Threads(threadCount).BuildParallel().Run(() => entry =>
+            CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() => entry =>
             {
                 if (!entry.IsFile)
                 {
@@ -1653,7 +1655,7 @@ internal static class ScoutApplication
         return ExitCode.Success;
     }
 
-    private static WalkBuilder CreateWalkBuilder(string path, CliLowArgs lowArgs, FileTypeMatcher fileTypes)
+    private static WalkBuilder CreateWalkBuilder(string path, CliLowArgs lowArgs, FileTypeMatcher fileTypes, DiagnosticMessenger diagnostics)
     {
         WalkBuilder builder = new WalkBuilder(path)
             .Hidden(!lowArgs.IncludeHidden)
@@ -1674,7 +1676,10 @@ internal static class ScoutApplication
         {
             for (int index = 0; index < lowArgs.IgnoreFiles.Count; index++)
             {
-                builder.AddIgnoreFile(lowArgs.IgnoreFiles[index]);
+                if (!builder.TryAddIgnoreFile(lowArgs.IgnoreFiles[index], out string? errorMessage) && lowArgs.Messages)
+                {
+                    diagnostics.ErrorMessage(new ScoutError(errorMessage!).WithContext("rg"));
+                }
             }
         }
 
@@ -1686,20 +1691,20 @@ internal static class ScoutApplication
         return builder;
     }
 
-    private static List<DirEntry> GetSortedFileEntries(string root, CliLowArgs lowArgs, FileTypeMatcher fileTypes)
+    private static List<DirEntry> GetSortedFileEntries(string root, CliLowArgs lowArgs, FileTypeMatcher fileTypes, DiagnosticMessenger diagnostics)
     {
         int threadCount = GetDirectoryWalkThreadCount(lowArgs);
         List<DirEntry> entries = threadCount > 1
-            ? GetParallelFileEntries(root, lowArgs, fileTypes, threadCount)
-            : GetSerialFileEntries(root, lowArgs, fileTypes);
+            ? GetParallelFileEntries(root, lowArgs, fileTypes, diagnostics, threadCount)
+            : GetSerialFileEntries(root, lowArgs, fileTypes, diagnostics);
         SortFileEntries(entries, lowArgs.SortMode);
         return entries;
     }
 
-    private static List<DirEntry> GetSerialFileEntries(string root, CliLowArgs lowArgs, FileTypeMatcher fileTypes)
+    private static List<DirEntry> GetSerialFileEntries(string root, CliLowArgs lowArgs, FileTypeMatcher fileTypes, DiagnosticMessenger diagnostics)
     {
         List<DirEntry> entries = [];
-        foreach (DirEntry entry in CreateWalkBuilder(root, lowArgs, fileTypes).Build())
+        foreach (DirEntry entry in CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics).Build())
         {
             if (entry.IsFile)
             {
@@ -1710,11 +1715,11 @@ internal static class ScoutApplication
         return entries;
     }
 
-    private static List<DirEntry> GetParallelFileEntries(string root, CliLowArgs lowArgs, FileTypeMatcher fileTypes, int threadCount)
+    private static List<DirEntry> GetParallelFileEntries(string root, CliLowArgs lowArgs, FileTypeMatcher fileTypes, DiagnosticMessenger diagnostics, int threadCount)
     {
         List<DirEntry> entries = [];
         object entriesLock = new();
-        CreateWalkBuilder(root, lowArgs, fileTypes).Threads(threadCount).BuildParallel().Run(() => entry =>
+        CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() => entry =>
         {
             if (entry.IsFile)
             {

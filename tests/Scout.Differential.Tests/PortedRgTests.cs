@@ -834,6 +834,120 @@ internal static class PortedRgTests
                 },
                 DifferentialCase.Exact("--path-separator", "/", "test", "-g", "*.txt", ".")),
             new(
+                "tests/regression.rs",
+                "r228",
+                dir => dir.CreateDirectory("foo"),
+                DifferentialCase.Exact("--path-separator", "/", "--ignore-file", "foo", "test", ".")),
+            new(
+                "tests/regression.rs",
+                "r229",
+                dir => dir.CreateFile("foo", "economie"),
+                DifferentialCase.Exact("--path-separator", "/", "-S", "[E]conomie", ".")),
+            new(
+                "tests/regression.rs",
+                "r270",
+                dir => dir.CreateFile("foo", "-test"),
+                DifferentialCase.Exact("--path-separator", "/", "-e", "-test", ".")),
+            new(
+                "tests/regression.rs",
+                "r279",
+                dir => dir.CreateFile("foo", "test"),
+                DifferentialCase.Exact("--path-separator", "/", "-q", "test", ".")),
+            new(
+                "tests/regression.rs",
+                "r391",
+                dir =>
+                {
+                    dir.CreateDirectory(".git");
+                    dir.CreateFile("lock", string.Empty);
+                    dir.CreateFile("bar.py", string.Empty);
+                    dir.CreateFile(".git/packed-refs", string.Empty);
+                    dir.CreateFile(".git/description", string.Empty);
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--no-ignore", "--hidden", "--follow", "--files", "--glob", "!{.git,node_modules,plugged}/**", "--glob", "*.{js,json,php,md,styl,scss,sass,pug,html,config,py,cpp,c,go,hs}", ".")),
+            new(
+                "tests/regression.rs",
+                "r405",
+                dir =>
+                {
+                    dir.CreateDirectory("foo/bar");
+                    dir.CreateDirectory("bar/foo");
+                    dir.CreateFile("foo/bar/file1.txt", "test");
+                    dir.CreateFile("bar/foo/file2.txt", "test");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-g", "!/foo/**", "test", ".")),
+            new(
+                "tests/regression.rs",
+                "r451_only_matching_as_in_issue",
+                dir => dir.CreateFile("digits.txt", "1 2 3\n"),
+                DifferentialCase.Exact("--path-separator", "/", "--only-matching", @"[0-9]+", "digits.txt")),
+            new(
+                "tests/regression.rs",
+                "r451_only_matching",
+                dir => dir.CreateFile("digits.txt", "1 2 3\n123\n"),
+                DifferentialCase.Exact("--path-separator", "/", "--only-matching", "--column", @"[0-9]", "digits.txt")),
+            new(
+                "tests/regression.rs",
+                "r483_matching_no_stdout",
+                dir => dir.CreateFile("file.py", string.Empty),
+                DifferentialCase.Exact("--path-separator", "/", "--quiet", "--files", "--glob", "*.py", ".")),
+            new(
+                "tests/regression.rs",
+                "r483_non_matching_exit_code",
+                dir => dir.CreateFile("file.rs", string.Empty),
+                DifferentialCase.Exact("--path-separator", "/", "--quiet", "--files", "--glob", "*.py", ".")),
+            new(
+                "tests/regression.rs",
+                "r493",
+                dir => dir.CreateFile("input.txt", "peshwaship 're seminomata"),
+                DifferentialCase.Exact("--path-separator", "/", "-o", @"\b 're \b", "input.txt")),
+            new(
+                "tests/regression.rs",
+                "r506_word_not_parenthesized",
+                dir => dir.CreateFile("wb.txt", "min minimum amin\nmax maximum amax"),
+                DifferentialCase.Exact("--path-separator", "/", "-w", "-o", "min|max", "wb.txt")),
+            new(
+                "tests/regression.rs",
+                "r553_switch",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-i", "sherlock", "."),
+                DifferentialCase.Exact("--path-separator", "/", "-i", "-i", "sherlock", ".")),
+            new(
+                "tests/regression.rs",
+                "r553_flag",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-C", "1", @"world|attached", "sherlock"),
+                DifferentialCase.Exact("--path-separator", "/", "-C", "1", @"world|attached", "sherlock", "-C", "0")),
+            new(
+                "tests/regression.rs",
+                "r568_leading_hyphen_option_args",
+                dir => dir.CreateFile("file", "foo bar -baz\n"),
+                DifferentialCase.Exact("--path-separator", "/", "-e-baz", "-e", "-baz", "file"),
+                DifferentialCase.Exact("--path-separator", "/", "-rni", "bar", "file"),
+                DifferentialCase.Exact("--path-separator", "/", "-r", "-n", "-i", "bar", "file")),
+            new(
+                "tests/regression.rs",
+                "r693_context_in_contextless_mode",
+                dir =>
+                {
+                    dir.CreateFile("foo", "xyz\n");
+                    dir.CreateFile("bar", "xyz\n");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-C1", "-c", "--sort-files", "xyz", ".")),
+            new(
+                "tests/regression.rs",
+                "r807",
+                dir =>
+                {
+                    dir.CreateDirectory(".git");
+                    dir.CreateFile(".gitignore", ".a/b");
+                    dir.CreateDirectory(".a/b");
+                    dir.CreateDirectory(".a/c");
+                    dir.CreateFile(".a/b/file", "test");
+                    dir.CreateFile(".a/c/file", "test");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--hidden", "test", ".")),
+            new(
                 "tests/feature.rs",
                 "f419_zero_as_shortcut_for_null",
                 dir => dir.CreateFile("sherlock", "Sherlock\nSherlock\n"),
