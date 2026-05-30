@@ -205,6 +205,7 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("_pcre2_match_8", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("_pcre2_match_data_create_from_pattern_8", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P 'foo(?=bar)'", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("-P --json 'foo(?=bar)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P -o '.*o(?!.*\\s)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --count 'o(?=o)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --count-matches 'o(?=o)'", appBuildScript, StringComparison.Ordinal);
@@ -214,6 +215,7 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("-P --column 'bar'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P -H -n --column -b -o 'o(?=o)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --multiline '(?s)Start(?=.*thing2)'", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("-P --json --multiline '(?s)Start(?=.*thing2)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --multiline --files-with-matches '(?s)Start(?=.*thing2)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --multiline --count '(?s)def (\\w+);(?=.*use \\w+)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --multiline --count-matches '(?s)def (\\w+);(?=.*use \\w+)'", appBuildScript, StringComparison.Ordinal);

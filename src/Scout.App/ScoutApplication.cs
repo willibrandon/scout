@@ -606,13 +606,21 @@ internal static class ScoutApplication
         {
             byte[] pattern = BuildPcre2Pattern(patterns);
             using var regex = new Pcre2Regex(pattern, GetPcre2CompileOptions(lowArgs, patterns));
+            byte[] displayPath = GetPcre2DisplayPath(positional[firstPathIndex], path);
+            if (lowArgs.SearchMode == CliSearchMode.Json)
+            {
+                bool jsonMatched = RunPcre2JsonSearch(bytes, regex, output, displayPath, lowArgs);
+                output.Flush();
+                return jsonMatched ? ExitCode.Success : ExitCode.NoMatch;
+            }
+
             bool matched = RunPcre2SearchMode(
                 bytes,
                 regex,
                 output,
                 separators,
-                GetPcre2OutputPath(positional[firstPathIndex], path),
-                GetPcre2MatchPrefix(positional[firstPathIndex], path, lowArgs),
+                new OutputPath(displayPath, hyperlinkPath: null, hyperlinkFormat: null, host: string.Empty),
+                GetPcre2MatchPrefix(displayPath, lowArgs),
                 GetOutputLineLimit(lowArgs),
                 GetOutputColor(lowArgs),
                 lowArgs.SearchMode,
@@ -637,6 +645,7 @@ internal static class ScoutApplication
     private static bool CanRunSimplePcre2Search(IReadOnlyList<OsString> positional, int firstPathIndex, CliLowArgs lowArgs)
     {
         return (lowArgs.SearchMode is CliSearchMode.Standard
+                or CliSearchMode.Json
                 or CliSearchMode.Count
                 or CliSearchMode.CountMatches
                 or CliSearchMode.FilesWithMatches
@@ -645,10 +654,12 @@ internal static class ScoutApplication
             !lowArgs.Stats &&
             !lowArgs.Quiet &&
             !lowArgs.FixedStrings &&
+            !lowArgs.NullData &&
             !lowArgs.LineRegexp &&
             !lowArgs.WordRegexp &&
             !lowArgs.Vimgrep &&
             !lowArgs.InvertMatch &&
+            !(lowArgs.SearchMode == CliSearchMode.Json && lowArgs.OnlyMatching) &&
             !(lowArgs.Multiline && lowArgs.OnlyMatching) &&
             lowArgs.Replacement is null &&
             lowArgs.MaxCount is null &&
@@ -657,18 +668,17 @@ internal static class ScoutApplication
             !lowArgs.Passthru;
     }
 
-    private static OutputPath GetPcre2OutputPath(OsString argument, string path)
+    private static byte[] GetPcre2DisplayPath(OsString argument, string path)
     {
-        byte[] displayPath = argument.IsUnixBytes
+        return argument.IsUnixBytes
             ? argument.AsUnixBytes().ToArray()
             : Utf8.GetBytes(path);
-        return new OutputPath(displayPath, hyperlinkPath: null, hyperlinkFormat: null, host: string.Empty);
     }
 
-    private static OutputPath? GetPcre2MatchPrefix(OsString argument, string path, CliLowArgs lowArgs)
+    private static OutputPath? GetPcre2MatchPrefix(byte[] displayPath, CliLowArgs lowArgs)
     {
         return lowArgs.WithFilename is true
-            ? GetPcre2OutputPath(argument, path)
+            ? new OutputPath(displayPath, hyperlinkPath: null, hyperlinkFormat: null, host: string.Empty)
             : null;
     }
 
@@ -766,6 +776,97 @@ internal static class ScoutApplication
         }
 
         return SearchPcre2Lines(bytes, regex, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, onlyMatching);
+    }
+
+    private static bool RunPcre2JsonSearch(byte[] bytes, Pcre2Regex regex, RawByteWriter output, byte[] path, CliLowArgs lowArgs)
+    {
+        var summary = new JsonSearchSummary();
+        var writer = new JsonFileWriter(output, path, quiet: false, binaryOffset: GetPcre2JsonBinaryOffset(bytes, lowArgs.TextMode));
+        bool matched = lowArgs.Multiline
+            ? SearchPcre2JsonMultilineBytes(bytes, regex, writer)
+            : SearchPcre2JsonLines(bytes, regex, writer);
+        writer.Finish((ulong)bytes.Length, summary);
+        summary.WriteSummary(output);
+        return matched;
+    }
+
+    private static int GetPcre2JsonBinaryOffset(byte[] bytes, bool textMode)
+    {
+        return textMode ? -1 : bytes.AsSpan().IndexOf((byte)0);
+    }
+
+    private static bool SearchPcre2JsonLines(byte[] bytes, Pcre2Regex regex, JsonFileWriter writer)
+    {
+        bool matched = false;
+        int lineStart = 0;
+        long lineNumber = 1;
+        var matches = new List<JsonMatchSpan>();
+        while (lineStart <= bytes.Length)
+        {
+            ReadOnlySpan<byte> remaining = bytes.AsSpan(lineStart);
+            int lineFeed = remaining.IndexOf((byte)'\n');
+            int lineEnd = lineFeed < 0 ? bytes.Length : lineStart + lineFeed;
+            int outputEnd = lineFeed < 0 ? lineEnd : lineEnd + 1;
+            ReadOnlySpan<byte> outputLine = bytes.AsSpan(lineStart, outputEnd - lineStart);
+            ReadOnlySpan<byte> matchLine = bytes.AsSpan(lineStart, lineEnd - lineStart);
+            if (matchLine.Length > 0 && matchLine[^1] == (byte)'\r')
+            {
+                matchLine = matchLine[..^1];
+            }
+
+            matches.Clear();
+            CollectPcre2LineMatches(matchLine, regex, matches);
+            if (matches.Count > 0)
+            {
+                writer.WriteMatchLine(lineNumber, lineStart, outputLine, matches);
+                matched = true;
+            }
+
+            if (lineFeed < 0)
+            {
+                break;
+            }
+
+            lineStart = outputEnd;
+            lineNumber++;
+        }
+
+        return matched;
+    }
+
+    private static void CollectPcre2LineMatches(ReadOnlySpan<byte> line, Pcre2Regex regex, List<JsonMatchSpan> matches)
+    {
+        int startOffset = 0;
+        while (startOffset <= line.Length && regex.TryFind(line, startOffset, out Pcre2Match match))
+        {
+            matches.Add(new JsonMatchSpan(match.Start, match.Start + match.Length, replacement: null));
+            startOffset = match.Length == 0 ? match.Start + 1 : match.Start + match.Length;
+        }
+    }
+
+    private static bool SearchPcre2JsonMultilineBytes(byte[] bytes, Pcre2Regex regex, JsonFileWriter writer)
+    {
+        bool matched = false;
+        int offset = 0;
+        var matches = new List<JsonMatchSpan>(capacity: 1);
+        while (offset <= bytes.Length && regex.TryFind(bytes, offset, out Pcre2Match match))
+        {
+            matched = true;
+            int firstLineStart = GetLineStart(bytes, match.Start);
+            int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match));
+            int lineEnd = GetLineEnd(bytes, lastLineStart);
+            matches.Clear();
+            matches.Add(new JsonMatchSpan(match.Start - firstLineStart, match.Start - firstLineStart + match.Length, replacement: null));
+            writer.WriteMatchLine(
+                GetLineNumber(bytes, firstLineStart),
+                firstLineStart,
+                bytes.AsSpan(firstLineStart, lineEnd - firstLineStart),
+                matches,
+                (ulong)(1 + CountLineFeeds(bytes.AsSpan(firstLineStart, lastLineStart - firstLineStart))));
+            offset = AdvanceAfterPcre2Match(match, bytes.Length);
+        }
+
+        return matched;
     }
 
     private static bool RunPcre2MultilineSearchMode(

@@ -63,6 +63,10 @@ EOF
 "$BIN/scout" -P 'foo(?=bar)' "$BIN/pcre2-smoke.txt" > "$BIN/pcre2-smoke.out"
 printf 'foobar\nfoobarfoo\n' > "$BIN/pcre2-smoke.expected"
 cmp "$BIN/pcre2-smoke.expected" "$BIN/pcre2-smoke.out"
+"$BIN/scout" -P --json 'foo(?=bar)' "$BIN/pcre2-smoke.txt" > "$BIN/pcre2-json.out"
+grep '"type":"begin"' "$BIN/pcre2-json.out" >/dev/null
+grep '"match":{"text":"foo"}' "$BIN/pcre2-json.out" >/dev/null
+grep '"type":"summary"' "$BIN/pcre2-json.out" >/dev/null
 printf 'foo 42\nxoyz\ncat\tdog\n' > "$BIN/pcre2-only-matching.txt"
 "$BIN/scout" -P -o '.*o(?!.*\s)' "$BIN/pcre2-only-matching.txt" > "$BIN/pcre2-only-matching.out"
 printf 'xo\ncat\tdo\n' > "$BIN/pcre2-only-matching.expected"
@@ -96,6 +100,10 @@ EOF
 "$BIN/scout" -P --multiline '(?s)Start(?=.*thing2)' "$BIN/pcre2-multiline.txt" > "$BIN/pcre2-multiline.out"
 printf 'Start\n' > "$BIN/pcre2-multiline.expected"
 cmp "$BIN/pcre2-multiline.expected" "$BIN/pcre2-multiline.out"
+"$BIN/scout" -P --json --multiline '(?s)Start(?=.*thing2)' "$BIN/pcre2-multiline.txt" > "$BIN/pcre2-json-multiline.out"
+grep '"lines":{"text":"Start\\n"}' "$BIN/pcre2-json-multiline.out" >/dev/null
+grep '"match":{"text":"Start"}' "$BIN/pcre2-json-multiline.out" >/dev/null
+grep '"type":"summary"' "$BIN/pcre2-json-multiline.out" >/dev/null
 "$BIN/scout" -P --multiline --files-with-matches '(?s)Start(?=.*thing2)' "$BIN/pcre2-multiline.txt" > "$BIN/pcre2-multiline-files.out"
 printf '%s\n' "$BIN/pcre2-multiline.txt" > "$BIN/pcre2-multiline-files.expected"
 cmp "$BIN/pcre2-multiline-files.expected" "$BIN/pcre2-multiline-files.out"
