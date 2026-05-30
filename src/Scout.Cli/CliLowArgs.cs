@@ -561,11 +561,6 @@ public sealed class CliLowArgs
     public void SetSearchMode(CliSearchMode searchMode)
     {
         GenerateMode = null;
-        if (SearchMode == CliSearchMode.Files && searchMode != CliSearchMode.Files)
-        {
-            return;
-        }
-
         SearchMode = searchMode;
     }
 

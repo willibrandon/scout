@@ -250,4 +250,13 @@ public sealed class DifferentialCasePolicyTests
 
         Assert.Equal(DifferentialComparisonMode.SortLines, testCase.ComparisonMode);
     }
+
+    /// <summary>
+    /// Verifies file-list mode reset by JSON still requires elapsed masking.
+    /// </summary>
+    [Fact]
+    public void FilesResetByJsonModeRequiresElapsedMasking()
+    {
+        Assert.Throws<ArgumentException>(() => DifferentialCase.Exact("--files", "--json", "needle", "."));
+    }
 }

@@ -42,6 +42,8 @@ public sealed class DifferentialSearchTests
                 DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--stats", "needle", first),
                 DifferentialCase.Normalized(DifferentialComparisonMode.SortLinesAndMaskElapsed, "--stats", "-C1", "needle", root),
                 DifferentialCase.Normalized(DifferentialComparisonMode.SortLinesAndMaskElapsed, "--json", "needle", root),
+                DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "--json", "--files", root),
+                DifferentialCase.Normalized(DifferentialComparisonMode.SortLinesAndMaskElapsed, "--files", "--json", "needle", root),
             ];
 
             for (int index = 0; index < cases.Length; index++)

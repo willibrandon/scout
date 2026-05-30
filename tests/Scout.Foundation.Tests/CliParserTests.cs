@@ -1866,6 +1866,10 @@ public sealed class CliParserTests
             [OsString.FromUnixBytes("--files-without-match"u8), OsString.FromUnixBytes("-l"u8), OsString.FromUnixBytes("needle"u8)]);
         CliParseResult withoutMatch = CliParser.Parse(
             [OsString.FromUnixBytes("--files-with-matches"u8), OsString.FromUnixBytes("--files-without-match"u8), OsString.FromUnixBytes("needle"u8)]);
+        CliParseResult filesThenWithMatches = CliParser.Parse(
+            [OsString.FromUnixBytes("--files"u8), OsString.FromUnixBytes("-l"u8), OsString.FromUnixBytes("needle"u8)]);
+        CliParseResult withMatchesThenFiles = CliParser.Parse(
+            [OsString.FromUnixBytes("-l"u8), OsString.FromUnixBytes("--files"u8), OsString.FromUnixBytes("src"u8)]);
 
         Assert.Equal(CliParseStatus.Ok, withMatches.Status);
         Assert.Equal(CliSearchMode.FilesWithMatches, withMatches.LowArgs!.SearchMode);
@@ -1873,6 +1877,12 @@ public sealed class CliParserTests
         Assert.Equal(CliParseStatus.Ok, withoutMatch.Status);
         Assert.Equal(CliSearchMode.FilesWithoutMatch, withoutMatch.LowArgs!.SearchMode);
         Assert.Single(withoutMatch.LowArgs.Positional);
+        Assert.Equal(CliParseStatus.Ok, filesThenWithMatches.Status);
+        Assert.Equal(CliSearchMode.FilesWithMatches, filesThenWithMatches.LowArgs!.SearchMode);
+        Assert.Single(filesThenWithMatches.LowArgs.Positional);
+        Assert.Equal(CliParseStatus.Ok, withMatchesThenFiles.Status);
+        Assert.Equal(CliSearchMode.Files, withMatchesThenFiles.LowArgs!.SearchMode);
+        Assert.Single(withMatchesThenFiles.LowArgs.Positional);
     }
 
     /// <summary>
@@ -1903,7 +1913,7 @@ public sealed class CliParserTests
         Assert.Equal(CliParseStatus.Ok, jsonThenCount.Status);
         Assert.Equal(CliSearchMode.Count, jsonThenCount.LowArgs!.SearchMode);
         Assert.Equal(CliParseStatus.Ok, filesThenJson.Status);
-        Assert.Equal(CliSearchMode.Files, filesThenJson.LowArgs!.SearchMode);
+        Assert.Equal(CliSearchMode.Json, filesThenJson.LowArgs!.SearchMode);
         Assert.Equal(CliParseStatus.Ok, jsonThenFiles.Status);
         Assert.Equal(CliSearchMode.Files, jsonThenFiles.LowArgs!.SearchMode);
     }
