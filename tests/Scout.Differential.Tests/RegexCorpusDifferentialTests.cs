@@ -10,7 +10,7 @@ namespace Scout;
 /// </summary>
 public sealed class RegexCorpusDifferentialTests
 {
-    private const int ExpectedDifferentialCaseCount = 16;
+    private const int ExpectedDifferentialCaseCount = 46;
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
@@ -19,19 +19,49 @@ public sealed class RegexCorpusDifferentialTests
         ("misc.toml", "ascii-literal"),
         ("misc.toml", "ascii-literal-not"),
         ("misc.toml", "prefix-literal-match"),
+        ("misc.toml", "prefix-literal-match-ascii"),
+        ("misc.toml", "prefix-literal-no-match"),
+        ("misc.toml", "one-literal-edge"),
+        ("misc.toml", "terminates"),
+        ("misc.toml", "suffix-100"),
+        ("misc.toml", "suffix-200"),
+        ("misc.toml", "suffix-300"),
+        ("misc.toml", "suffix-400"),
+        ("misc.toml", "suffix-500"),
         ("misc.toml", "suffix-600"),
         ("flags.toml", "1"),
         ("flags.toml", "2"),
         ("flags.toml", "3"),
+        ("flags.toml", "4"),
+        ("flags.toml", "5"),
+        ("flags.toml", "6"),
         ("flags.toml", "9"),
         ("flags.toml", "10"),
+        ("flags.toml", "11"),
         ("crazy.toml", "ranges-not"),
         ("crazy.toml", "float1"),
         ("crazy.toml", "float3"),
         ("crazy.toml", "float4"),
+        ("crazy.toml", "float5"),
         ("crazy.toml", "date1"),
+        ("crazy.toml", "date2"),
+        ("crazy.toml", "date3"),
         ("crazy.toml", "neg-class-letter"),
+        ("crazy.toml", "neg-class-letter-comma"),
+        ("crazy.toml", "neg-class-letter-space"),
+        ("crazy.toml", "neg-class-comma"),
+        ("crazy.toml", "neg-class-space"),
+        ("crazy.toml", "neg-class-space-comma"),
+        ("crazy.toml", "neg-class-comma-space"),
+        ("crazy.toml", "neg-class-ascii"),
+        ("crazy.toml", "lazy-many-many"),
+        ("crazy.toml", "lazy-many-optional"),
+        ("crazy.toml", "lazy-one-many-many"),
+        ("crazy.toml", "lazy-one-many-optional"),
         ("crazy.toml", "greedy-many-many"),
+        ("crazy.toml", "greedy-many-optional"),
+        ("crazy.toml", "greedy-one-many-many"),
+        ("crazy.toml", "greedy-one-many-optional"),
     ];
 
     /// <summary>
@@ -99,6 +129,7 @@ public sealed class RegexCorpusDifferentialTests
     {
         var arguments = new List<string>
         {
+            "-U",
             "--json",
             "-o",
         };
