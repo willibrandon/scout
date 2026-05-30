@@ -185,6 +185,17 @@ internal sealed class DifferentialCase
 
     private static bool ProducesElapsedFields(string[] arguments)
     {
+        if (TryParse(arguments, out CliLowArgs? lowArgs))
+        {
+            CliLowArgs parsed = lowArgs!;
+            return parsed.SearchMode == CliSearchMode.Json || parsed.Stats;
+        }
+
+        return ProducesElapsedFieldsFromTokens(arguments);
+    }
+
+    private static bool ProducesElapsedFieldsFromTokens(string[] arguments)
+    {
         bool json = false;
         bool stats = false;
         for (int index = 0; index < arguments.Length; index++)
@@ -211,6 +222,11 @@ internal sealed class DifferentialCase
 
     private static bool UsesExplicitParallelism(string[] arguments)
     {
+        if (UsesSortedTraversal(arguments))
+        {
+            return false;
+        }
+
         for (int index = 0; index < arguments.Length; index++)
         {
             string argument = arguments[index];
@@ -232,6 +248,11 @@ internal sealed class DifferentialCase
         }
 
         return false;
+    }
+
+    private static bool UsesSortedTraversal(string[] arguments)
+    {
+        return TryParse(arguments, out CliLowArgs? lowArgs) && lowArgs!.SortMode is not null;
     }
 
     private static bool IsParallelThreadCount(string value)

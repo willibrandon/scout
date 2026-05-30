@@ -38,6 +38,17 @@ public sealed class DifferentialCasePolicyTests
     }
 
     /// <summary>
+    /// Verifies sorted stats comparisons may mask only elapsed fields because sorting forces serial output.
+    /// </summary>
+    [Fact]
+    public void MaskElapsedAllowsSortedExplicitParallelStatsOutput()
+    {
+        var testCase = DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "-j2", "--sort=path", "--stats", "needle", ".");
+
+        Assert.Equal(DifferentialComparisonMode.MaskElapsed, testCase.ComparisonMode);
+    }
+
+    /// <summary>
     /// Verifies explicitly parallel stats comparisons must sort path-ordered output and mask elapsed fields.
     /// </summary>
     [Fact]
@@ -84,6 +95,17 @@ public sealed class DifferentialCasePolicyTests
     public void ExactAllowsSortedDirectoryOutput()
     {
         var testCase = DifferentialCase.Exact("--sort=path", "needle", ".");
+
+        Assert.Equal(DifferentialComparisonMode.Exact, testCase.ComparisonMode);
+    }
+
+    /// <summary>
+    /// Verifies sorted traversal remains exact even when a parallel thread count is requested.
+    /// </summary>
+    [Fact]
+    public void ExactAllowsSortedExplicitParallelOutput()
+    {
+        var testCase = DifferentialCase.Exact("-j2", "--sort=path", "needle", ".");
 
         Assert.Equal(DifferentialComparisonMode.Exact, testCase.ComparisonMode);
     }
@@ -214,6 +236,17 @@ public sealed class DifferentialCasePolicyTests
     public void DisabledJsonAndStatsDoNotForceElapsedMasking()
     {
         var testCase = DifferentialCase.Exact("--json", "--no-json", "--stats", "--no-stats", "needle", ".");
+
+        Assert.Equal(DifferentialComparisonMode.SortLines, testCase.ComparisonMode);
+    }
+
+    /// <summary>
+    /// Verifies elapsed-field policy follows parsed mode precedence instead of raw token presence.
+    /// </summary>
+    [Fact]
+    public void JsonResetByFilesModeDoesNotForceElapsedMasking()
+    {
+        var testCase = DifferentialCase.Exact("--json", "--files", ".");
 
         Assert.Equal(DifferentialComparisonMode.SortLines, testCase.ComparisonMode);
     }
