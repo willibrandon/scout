@@ -11,6 +11,11 @@ internal static class DifferentialOutputNormalizer
 
     public static byte[] NormalizeStdout(byte[] output, DifferentialComparisonMode comparisonMode)
     {
+        if (comparisonMode == DifferentialComparisonMode.NonEmptyStdout)
+        {
+            return output.Length == 0 ? [] : BytePreserving.GetBytes("<non-empty stdout>");
+        }
+
         if (comparisonMode == DifferentialComparisonMode.Exact)
         {
             return output;

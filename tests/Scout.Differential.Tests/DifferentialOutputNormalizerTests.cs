@@ -175,6 +175,16 @@ public sealed class DifferentialOutputNormalizerTests
     }
 
     /// <summary>
+    /// Verifies stdout-only upstream assertions can require non-empty stdout without pinning terminal-specific bytes.
+    /// </summary>
+    [Fact]
+    public void NonEmptyStdoutMasksNonEmptyOutput()
+    {
+        Assert.Equal(Utf8.GetBytes("<non-empty stdout>"), DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes("colored"), DifferentialComparisonMode.NonEmptyStdout));
+        Assert.Equal([], DifferentialOutputNormalizer.NormalizeStdout([], DifferentialComparisonMode.NonEmptyStdout));
+    }
+
+    /// <summary>
     /// Verifies stderr-only upstream assertions can require non-empty stderr without pinning tool-specific text.
     /// </summary>
     [Fact]

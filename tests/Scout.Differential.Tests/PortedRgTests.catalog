@@ -226,6 +226,7 @@ tests/regression.rs|r1559
 tests/regression.rs|r1638
 tests/regression.rs|r1739_replacement_lineterm_match
 tests/regression.rs|f1757
+tests/regression.rs|r1765
 tests/regression.rs|r1866
 tests/regression.rs|r1868_context_passthru_override
 tests/regression.rs|r1878
@@ -235,8 +236,12 @@ tests/regression.rs|r2198
 tests/regression.rs|r2236
 tests/regression.rs|r2574
 tests/regression.rs|r2658_null_data_line_regexp
+tests/regression.rs|r2770_gitignore_error
+tests/regression.rs|r2944_incorrect_bytes_searched
+tests/regression.rs|r2990_trip_over_trailing_dot
 tests/regression.rs|r3067_gitignore_error
 tests/regression.rs|r3108_files_without_match_quiet_exit
+tests/regression.rs|r3173_hidden_whitelist_only_dot
 tests/feature.rs|f419_zero_as_shortcut_for_null
 tests/feature.rs|f740_passthru
 tests/feature.rs|f740_passthru_single
