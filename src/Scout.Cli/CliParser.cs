@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Scout.Flags;
 
 namespace Scout;
 
@@ -25,6 +26,16 @@ public static class CliParser
             if (special is not null)
             {
                 return special;
+            }
+
+            if (TryParseGeneratedSwitchFlag(argument, lowArgs, out ScoutError? generatedSwitchError))
+            {
+                if (generatedSwitchError is not null)
+                {
+                    return CliParseResult.Fail(generatedSwitchError);
+                }
+
+                continue;
             }
 
             if (TryParseShortFlagCluster(arguments, ref index, lowArgs, out CliParseResult? clusterResult))
@@ -96,6 +107,39 @@ public static class CliParser
         }
 
         return null;
+    }
+
+    private static bool TryParseGeneratedSwitchFlag(OsString argument, CliLowArgs lowArgs, out ScoutError? error)
+    {
+        error = null;
+        if (argument.IsUnixBytes)
+        {
+            return TryDecodeUtf8(argument.AsUnixBytes(), out string text) &&
+                TryParseGeneratedSwitchFlag(text, lowArgs, out error);
+        }
+
+        return argument.TryGetText(out string? value) &&
+            TryParseGeneratedSwitchFlag(value, lowArgs, out error);
+    }
+
+    private static bool TryParseGeneratedSwitchFlag(string argument, CliLowArgs lowArgs, out ScoutError? error)
+    {
+        error = null;
+        if (argument.Length == 2 && argument[0] == '-' && argument[1] != '-')
+        {
+            return GeneratedFlagCatalog.TryFindShortSwitch(argument[1], out FlagDescriptor descriptor) &&
+                descriptor.TryApplySwitch(lowArgs, out error);
+        }
+
+        if (argument.Length > 2 &&
+            argument[0] == '-' &&
+            argument[1] == '-' &&
+            GeneratedFlagCatalog.TryFindLongSwitch(argument, out FlagDescriptor longDescriptor))
+        {
+            return longDescriptor.TryApplySwitch(lowArgs, out error);
+        }
+
+        return false;
     }
 
     private static bool TryParseRepeatedUnrestricted(OsString argument, CliLowArgs lowArgs, out ScoutError? error)
@@ -970,6 +1014,11 @@ public static class CliParser
     private static bool TryParseClusterSwitch(char flag, CliLowArgs lowArgs, out ScoutError? error)
     {
         error = null;
+        if (GeneratedFlagCatalog.TryFindShortSwitch(flag, out FlagDescriptor descriptor))
+        {
+            return descriptor.TryApplySwitch(lowArgs, out error);
+        }
+
         switch (flag)
         {
             case 'c':
