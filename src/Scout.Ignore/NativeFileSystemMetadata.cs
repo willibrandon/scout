@@ -5,7 +5,7 @@ using System.Text;
 
 namespace Scout;
 
-internal static unsafe class NativeFileSystemMetadata
+internal static unsafe partial class NativeFileSystemMetadata
 {
     private const int StatBufferSize = 512;
     private const int ReadLinkBufferSize = 4096;
@@ -95,35 +95,26 @@ internal static unsafe class NativeFileSystemMetadata
     }
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    [DllImport(
+    [LibraryImport(
         "libc",
         EntryPoint = "stat",
-        ExactSpelling = true,
         SetLastError = true,
-        CharSet = CharSet.Ansi,
-        BestFitMapping = false,
-        ThrowOnUnmappableChar = true)]
-    private static extern int Stat(string path, byte* status);
+        StringMarshalling = StringMarshalling.Utf8)]
+    private static partial int Stat(string path, byte* status);
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    [DllImport(
+    [LibraryImport(
         "libc",
         EntryPoint = "lstat",
-        ExactSpelling = true,
         SetLastError = true,
-        CharSet = CharSet.Ansi,
-        BestFitMapping = false,
-        ThrowOnUnmappableChar = true)]
-    private static extern int LStat(string path, byte* status);
+        StringMarshalling = StringMarshalling.Utf8)]
+    private static partial int LStat(string path, byte* status);
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    [DllImport(
+    [LibraryImport(
         "libc",
         EntryPoint = "readlink",
-        ExactSpelling = true,
         SetLastError = true,
-        CharSet = CharSet.Ansi,
-        BestFitMapping = false,
-        ThrowOnUnmappableChar = true)]
-    private static extern nint ReadLink(string path, byte* buffer, nuint bufferLength);
+        StringMarshalling = StringMarshalling.Utf8)]
+    private static partial nint ReadLink(string path, byte* buffer, nuint bufferLength);
 }

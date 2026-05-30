@@ -9,7 +9,7 @@ namespace Scout;
 /// <summary>
 /// Opens Unix file paths from raw bytes without decoding them as UTF-8.
 /// </summary>
-public static unsafe class RawUnixFile
+public static unsafe partial class RawUnixFile
 {
     private const int OpenReadOnly = 0;
 
@@ -54,6 +54,6 @@ public static unsafe class RawUnixFile
     }
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    [DllImport("libc", EntryPoint = "open", SetLastError = true)]
-    private static extern int Open(byte* path, int flags);
+    [LibraryImport("libc", EntryPoint = "open", SetLastError = true)]
+    private static partial int Open(byte* path, int flags);
 }

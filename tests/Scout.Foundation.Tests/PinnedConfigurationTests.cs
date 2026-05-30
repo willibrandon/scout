@@ -162,6 +162,27 @@ public sealed class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies native interop uses source-generated marshalling.
+    /// </summary>
+    [Fact]
+    public void NativeInteropUsesLibraryImport()
+    {
+        string root = FindRepositoryRoot();
+        var violations = new List<string>();
+
+        foreach (string path in Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories))
+        {
+            string text = File.ReadAllText(path);
+            if (text.Contains("[DllImport", StringComparison.Ordinal))
+            {
+                violations.Add(Path.GetRelativePath(root, path));
+            }
+        }
+
+        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>
     /// Verifies the upstream lockfile has been vendored into Scout.
     /// </summary>
     [Fact]
@@ -229,6 +250,7 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("-P -o '.*o(?!.*\\s)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --count 'o(?=o)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --count-matches 'o(?=o)'", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("(cd \"$BIN/implicit-cwd\" && \"$BIN/scout\" needle", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --files-with-matches 'foo(?=bar)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --files-without-match 'nomatch(?=bar)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P -n 'foo(?=bar)'", appBuildScript, StringComparison.Ordinal);

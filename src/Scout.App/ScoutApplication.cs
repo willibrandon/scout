@@ -35,7 +35,7 @@ internal static class ScoutApplication
     internal static int Run(ReadOnlySpan<OsString> arguments, RawByteWriter output, RawByteWriter error)
     {
         using Stream standardInput = Console.OpenStandardInput();
-        return Run(arguments, output, error, standardInput, configPathOverride: null, useConfigPathOverride: false);
+        return Run(arguments, output, error, standardInput, StandardInputProbe.IsReadable(), configPathOverride: null, useConfigPathOverride: false);
     }
 
     internal static int Run(
@@ -45,7 +45,7 @@ internal static class ScoutApplication
         string? configPath)
     {
         using Stream standardInput = Console.OpenStandardInput();
-        return Run(arguments, output, error, standardInput, configPath, useConfigPathOverride: true);
+        return Run(arguments, output, error, standardInput, StandardInputProbe.IsReadable(), configPath, useConfigPathOverride: true);
     }
 
     internal static int Run(
@@ -54,7 +54,7 @@ internal static class ScoutApplication
         RawByteWriter error,
         Stream standardInput)
     {
-        return Run(arguments, output, error, standardInput, configPathOverride: null, useConfigPathOverride: false);
+        return Run(arguments, output, error, standardInput, standardInputIsReadable: true, configPathOverride: null, useConfigPathOverride: false);
     }
 
     internal static int Run(
@@ -64,7 +64,7 @@ internal static class ScoutApplication
         Stream standardInput,
         string? configPath)
     {
-        return Run(arguments, output, error, standardInput, configPath, useConfigPathOverride: true);
+        return Run(arguments, output, error, standardInput, standardInputIsReadable: true, configPath, useConfigPathOverride: true);
     }
 
     private static int Run(
@@ -72,6 +72,7 @@ internal static class ScoutApplication
         RawByteWriter output,
         RawByteWriter error,
         Stream standardInput,
+        bool standardInputIsReadable,
         string? configPathOverride,
         bool useConfigPathOverride)
     {
@@ -98,7 +99,7 @@ internal static class ScoutApplication
             return RunSpecial(parseResult.SpecialMode, output);
         }
 
-        return RunSearch(parseResult.LowArgs!, output, diagnostics, standardInput);
+        return RunSearch(parseResult.LowArgs!, output, diagnostics, standardInput, standardInputIsReadable);
     }
 
     private static OsString[]? BuildConfiguredArguments(
@@ -342,7 +343,12 @@ internal static class ScoutApplication
         }
     }
 
-    private static int RunSearch(CliLowArgs lowArgs, RawByteWriter output, DiagnosticMessenger diagnostics, Stream standardInput)
+    private static int RunSearch(
+        CliLowArgs lowArgs,
+        RawByteWriter output,
+        DiagnosticMessenger diagnostics,
+        Stream standardInput,
+        bool standardInputIsReadable)
     {
         DiagnosticLogger logger = new(diagnostics, lowArgs.LoggingMode);
         IReadOnlyList<OsString> positional = lowArgs.Positional;
@@ -464,7 +470,7 @@ internal static class ScoutApplication
         LogSearchConfiguration(logger, positional, firstPathIndex, lowArgs, patterns);
         if (lowArgs.SearchMode == CliSearchMode.Json)
         {
-            return RunJsonSearch(positional, firstPathIndex, patternsReadFromStandardInput, lowArgs, patterns, asciiCaseInsensitive, searchFileTypes!, output, diagnostics, standardInput);
+            return RunJsonSearch(positional, firstPathIndex, patternsReadFromStandardInput, lowArgs, patterns, asciiCaseInsensitive, searchFileTypes!, output, diagnostics, standardInput, standardInputIsReadable);
         }
 
         OutputSeparators separators = GetOutputSeparators(lowArgs);
@@ -479,7 +485,8 @@ internal static class ScoutApplication
         bool stats = lowArgs.Stats && lowArgs.MaxCount != 0;
         long statsStarted = Stopwatch.GetTimestamp();
         SearchStats searchStats = default;
-        bool useDefaultCurrentDirectory = positional.Count == firstPathIndex && patternsReadFromStandardInput;
+        bool useDefaultCurrentDirectory = positional.Count == firstPathIndex &&
+            (patternsReadFromStandardInput || !standardInputIsReadable);
         if (positional.Count == firstPathIndex && !useDefaultCurrentDirectory)
         {
             matched = stats
@@ -1476,7 +1483,8 @@ internal static class ScoutApplication
         FileTypeMatcher fileTypes,
         RawByteWriter output,
         DiagnosticMessenger diagnostics,
-        Stream standardInput)
+        Stream standardInput,
+        bool standardInputIsReadable)
     {
         if (lowArgs.MaxCount == 0)
         {
@@ -1487,7 +1495,8 @@ internal static class ScoutApplication
         var summary = new JsonSearchSummary();
         bool matched = false;
         bool errored = false;
-        bool useDefaultCurrentDirectory = positional.Count == firstPathIndex && patternsReadFromStandardInput;
+        bool useDefaultCurrentDirectory = positional.Count == firstPathIndex &&
+            (patternsReadFromStandardInput || !standardInputIsReadable);
         if (positional.Count == firstPathIndex && !useDefaultCurrentDirectory)
         {
             matched = SearchJsonStandardInput(pattern, standardInput, lowArgs, asciiCaseInsensitive, summary, output);
