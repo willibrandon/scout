@@ -164,6 +164,10 @@ public sealed class PinnedConfigurationTests
                 "regex-1.12.2-anchored",
                 "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/anchored.toml",
                 "7A1B5CD81DEED2099796A451BF764A3F9BD21F0D60C0FA46ACCD3A35666866F2"),
+            (
+                "regex-1.12.2-substring",
+                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/substring.toml",
+                "48122D9F3477ED81F95E3AD42C06E9BB25F849B66994601A75CEAE0693B81866"),
         ];
 
         string root = FindRepositoryRoot();

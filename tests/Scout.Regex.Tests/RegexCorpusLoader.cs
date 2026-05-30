@@ -189,15 +189,59 @@ internal static class RegexCorpusLoader
             }
 
             string value = ReadTomlArrayValue(line[prefix.Length..], reader);
-            if (!TryParseSpan(value, 1, out int start, out int end, out _))
+            if (TryParseBoundsArray(value, out int start, out int end) ||
+                TryParseBoundsObject(value, out start, out end))
             {
-                throw new InvalidOperationException("Regex corpus case '" + name + "' in " + path + " has an invalid '" + key + "'.");
+                return (start, end);
             }
 
-            return (start, end);
+            throw new InvalidOperationException("Regex corpus case '" + name + "' in " + path + " has an invalid '" + key + "'.");
         }
 
         return null;
+    }
+
+    private static bool TryParseBoundsArray(string value, out int start, out int end)
+    {
+        start = 0;
+        end = 0;
+        int index = SkipWhitespace(value, 0);
+        return index < value.Length &&
+            value[index] == '[' &&
+            TryParseSpan(value, index + 1, out start, out end, out _);
+    }
+
+    private static bool TryParseBoundsObject(string value, out int start, out int end)
+    {
+        start = 0;
+        end = 0;
+        int startKey = value.IndexOf("start", StringComparison.Ordinal);
+        int endKey = value.IndexOf("end", StringComparison.Ordinal);
+        if (startKey < 0 || endKey < 0)
+        {
+            return false;
+        }
+
+        if (!TryParseObjectInt(value, startKey + "start".Length, out start) ||
+            !TryParseObjectInt(value, endKey + "end".Length, out end))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryParseObjectInt(string value, int index, out int number)
+    {
+        number = 0;
+        index = SkipWhitespace(value, index);
+        if (index >= value.Length || value[index] != '=')
+        {
+            return false;
+        }
+
+        index = SkipWhitespace(value, index + 1);
+        return TryReadInt(value, index, out number, out _);
     }
 
     private static RegexMatch[] ReadExpectedMatches(string block, string path, string name)

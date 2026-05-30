@@ -299,6 +299,11 @@ public sealed class RegexCorpusTests
                 "no-match-at-start-reverse-anchored",
                 "no-match-at-start-reverse-anchored-bounds",
             ]),
+            ("substring.toml",
+            [
+                "ascii-word-start",
+                "ascii-word-end",
+            ]),
         ];
 
         for (int groupIndex = 0; groupIndex < groups.Length; groupIndex++)
