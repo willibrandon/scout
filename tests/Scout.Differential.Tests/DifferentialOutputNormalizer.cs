@@ -42,12 +42,18 @@ internal static class DifferentialOutputNormalizer
             return string.IsNullOrEmpty(error) ? string.Empty : "<non-empty stderr>";
         }
 
+        string normalized = error;
         if (comparisonMode is DifferentialComparisonMode.MaskElapsed or DifferentialComparisonMode.SortLinesAndMaskElapsed)
         {
-            return MaskElapsed(error);
+            normalized = MaskElapsed(normalized);
         }
 
-        return error;
+        if (comparisonMode is DifferentialComparisonMode.SortLines or DifferentialComparisonMode.SortLinesAndMaskElapsed)
+        {
+            normalized = SortOutput(normalized);
+        }
+
+        return normalized;
     }
 
     private static string MaskElapsed(string text)

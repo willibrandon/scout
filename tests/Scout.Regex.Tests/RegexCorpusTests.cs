@@ -8,13 +8,7 @@ namespace Scout;
 /// </summary>
 public sealed class RegexCorpusTests
 {
-    /// <summary>
-    /// Verifies supported subsets of <c>regex</c> 1.12.2's TOML corpus.
-    /// </summary>
-    [Fact]
-    public void CorpusCasesMatchExpectedSpans()
-    {
-        (string RelativePath, string[] Names)[] groups =
+    internal static readonly (string RelativePath, string[] Names)[] CorpusGroups =
         [
             ("misc.toml",
             [
@@ -338,20 +332,53 @@ public sealed class RegexCorpusTests
             ]),
         ];
 
-        for (int groupIndex = 0; groupIndex < groups.Length; groupIndex++)
+    /// <summary>
+    /// Verifies one supported <c>regex</c> 1.12.2 TOML corpus case.
+    /// </summary>
+    /// <param name="relativePath">The corpus TOML file.</param>
+    /// <param name="name">The corpus case name.</param>
+    [Theory]
+    [MemberData(nameof(CorpusCases))]
+    public void CorpusCaseMatchesExpectedSpans(string relativePath, string name)
+    {
+        RegexCorpusCase testCase = RegexCorpusLoader.Load(relativePath, name);
+        RegexAutomaton[] automata = CompileAll(testCase.Patterns, testCase.LineTerminator, testCase.CaseInsensitive);
+        RegexMatch[] actual = FindAll(automata, testCase.Haystack, testCase.MatchLimit, testCase.BoundsStart, testCase.BoundsEnd, testCase.Anchored);
+
+        Assert.True(
+            MatchesEqual(testCase.ExpectedMatches, actual),
+            relativePath + "::" + testCase.Name + " expected [" + FormatMatches(testCase.ExpectedMatches) + "] actual [" + FormatMatches(actual) + "]");
+    }
+
+    /// <summary>
+    /// Gets every supported regex corpus case as xUnit data.
+    /// </summary>
+    /// <returns>The corpus case parameters.</returns>
+    public static IEnumerable<object[]> CorpusCases()
+    {
+        for (int groupIndex = 0; groupIndex < CorpusGroups.Length; groupIndex++)
         {
-            (string relativePath, string[] names) = groups[groupIndex];
+            (string relativePath, string[] names) = CorpusGroups[groupIndex];
             for (int index = 0; index < names.Length; index++)
             {
-                RegexCorpusCase testCase = RegexCorpusLoader.Load(relativePath, names[index]);
-                RegexAutomaton[] automata = CompileAll(testCase.Patterns, testCase.LineTerminator, testCase.CaseInsensitive);
-                RegexMatch[] actual = FindAll(automata, testCase.Haystack, testCase.MatchLimit, testCase.BoundsStart, testCase.BoundsEnd, testCase.Anchored);
-
-                Assert.True(
-                    MatchesEqual(testCase.ExpectedMatches, actual),
-                    relativePath + "::" + testCase.Name + " expected [" + FormatMatches(testCase.ExpectedMatches) + "] actual [" + FormatMatches(actual) + "]");
+                yield return [relativePath, names[index]];
             }
         }
+    }
+
+    internal static string[] CorpusCaseKeys()
+    {
+        var keys = new List<string>();
+        for (int groupIndex = 0; groupIndex < CorpusGroups.Length; groupIndex++)
+        {
+            (string relativePath, string[] names) = CorpusGroups[groupIndex];
+            for (int index = 0; index < names.Length; index++)
+            {
+                keys.Add(relativePath + "|" + names[index]);
+            }
+        }
+
+        return keys.ToArray();
     }
 
     private static RegexAutomaton[] CompileAll(IReadOnlyList<byte[]> patterns, byte lineTerminator, bool caseInsensitive)

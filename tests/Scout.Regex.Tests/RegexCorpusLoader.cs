@@ -10,6 +10,42 @@ internal static class RegexCorpusLoader
 {
     private const string CorpusRoot = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata";
 
+    public static IReadOnlyList<string> EnumerateAllCaseKeys()
+    {
+        var files = new List<string>(Directory.EnumerateFiles(CorpusRoot, "*.toml"));
+        files.Sort(StringComparer.Ordinal);
+
+        var keys = new List<string>();
+        for (int index = 0; index < files.Count; index++)
+        {
+            string relativePath = Path.GetFileName(files[index]);
+            IReadOnlyList<string> names = EnumerateCaseNames(relativePath);
+            for (int nameIndex = 0; nameIndex < names.Count; nameIndex++)
+            {
+                keys.Add(relativePath + "|" + names[nameIndex]);
+            }
+        }
+
+        return keys;
+    }
+
+    public static IReadOnlyList<string> EnumerateCaseNames(string relativePath)
+    {
+        string path = Path.Combine(CorpusRoot, relativePath);
+        string text = File.ReadAllText(path);
+        string[] blocks = text.Split("[[test]]", StringSplitOptions.RemoveEmptyEntries);
+        var names = new List<string>();
+        for (int index = 0; index < blocks.Length; index++)
+        {
+            if (ReadOptionalString(blocks[index], "name") is string name)
+            {
+                names.Add(name);
+            }
+        }
+
+        return names;
+    }
+
     public static RegexCorpusCase Load(string relativePath, string name)
     {
         string path = Path.Combine(CorpusRoot, relativePath);

@@ -175,6 +175,24 @@ public sealed class DifferentialOutputNormalizerTests
     }
 
     /// <summary>
+    /// Verifies path-order-insensitive modes sort stderr diagnostics too.
+    /// </summary>
+    [Fact]
+    public void SortLinesSortsStderrDiagnostics()
+    {
+        string input =
+            "b.txt: Permission denied\n" +
+            "a.txt: Permission denied\n";
+
+        string normalized = DifferentialOutputNormalizer.NormalizeStderr(input, DifferentialComparisonMode.SortLines);
+
+        Assert.Equal(
+            "a.txt: Permission denied\n" +
+            "b.txt: Permission denied\n",
+            normalized);
+    }
+
+    /// <summary>
     /// Verifies stdout-only upstream assertions can require non-empty stdout without pinning terminal-specific bytes.
     /// </summary>
     [Fact]
