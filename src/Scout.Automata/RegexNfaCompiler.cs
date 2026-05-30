@@ -133,6 +133,7 @@ internal sealed class RegexNfaCompiler
             options.CaseInsensitive,
             options.MultiLine,
             options.DotMatchesNewline,
+            options.Crlf,
             next,
             alternative: -1));
         return state;
@@ -161,6 +162,7 @@ internal sealed class RegexNfaCompiler
             caseInsensitive: false,
             multiLine: false,
             dotMatchesNewline: false,
+            crlf: false,
             next,
             alternative);
     }

@@ -113,6 +113,22 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies CRLF mode treats carriage returns and line feeds as one line terminator family.
+    /// </summary>
+    [Fact]
+    public void AppliesCrlfMode()
+    {
+        Assert.Equal(new RegexMatch(0, 1), RegexAutomaton.Compile("."u8).Find("\r"u8));
+        Assert.Null(RegexAutomaton.Compile("(?R)."u8).Find("\r\n"u8));
+        Assert.Equal(new RegexMatch(0, 1), RegexAutomaton.Compile("(?Rs)."u8).Find("\r"u8));
+
+        Assert.Null(RegexAutomaton.Compile("(?m)^foo$"u8).Find("\r\nfoo\r\n"u8));
+        Assert.Equal(new RegexMatch(2, 3), RegexAutomaton.Compile("(?Rm)^foo$"u8).Find("\r\nfoo\r\n"u8));
+        Assert.Equal(new RegexMatch(2, 0), RegexAutomaton.Compile("(?Rm)^"u8).Find("\r\nx"u8, startAt: 1));
+        Assert.Equal(new RegexMatch(2, 0), RegexAutomaton.Compile("(?Rm)$"u8).Find("\r\n"u8, startAt: 1));
+    }
+
+    /// <summary>
     /// Verifies the regex-crate any-byte Unicode class matches across line terminators.
     /// </summary>
     [Fact]

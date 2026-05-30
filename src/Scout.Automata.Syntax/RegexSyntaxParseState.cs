@@ -662,7 +662,7 @@ internal sealed class RegexSyntaxParseState
 
     private static bool IsRegexFlagByte(byte value)
     {
-        return value is (byte)'i' or (byte)'m' or (byte)'s' or (byte)'U' or (byte)'u' or (byte)'x';
+        return value is (byte)'i' or (byte)'m' or (byte)'R' or (byte)'s' or (byte)'U' or (byte)'u' or (byte)'x';
     }
 
     private static bool IsAsciiDigitByte(byte value)

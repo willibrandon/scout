@@ -2,12 +2,13 @@ namespace Scout;
 
 internal readonly struct RegexCompileOptions
 {
-    public RegexCompileOptions(bool caseInsensitive, bool swapGreed, bool multiLine, bool dotMatchesNewline)
+    public RegexCompileOptions(bool caseInsensitive, bool swapGreed, bool multiLine, bool dotMatchesNewline, bool crlf = false)
     {
         CaseInsensitive = caseInsensitive;
         SwapGreed = swapGreed;
         MultiLine = multiLine;
         DotMatchesNewline = dotMatchesNewline;
+        Crlf = crlf;
     }
 
     public bool CaseInsensitive { get; }
@@ -18,23 +19,26 @@ internal readonly struct RegexCompileOptions
 
     public bool DotMatchesNewline { get; }
 
+    public bool Crlf { get; }
+
     public RegexCompileOptions Apply(string enabledFlags, string disabledFlags)
     {
         bool caseInsensitive = CaseInsensitive;
         bool swapGreed = SwapGreed;
         bool multiLine = MultiLine;
         bool dotMatchesNewline = DotMatchesNewline;
+        bool crlf = Crlf;
         for (int index = 0; index < enabledFlags.Length; index++)
         {
-            ApplyFlag(enabledFlags[index], enabled: true, ref caseInsensitive, ref swapGreed, ref multiLine, ref dotMatchesNewline);
+            ApplyFlag(enabledFlags[index], enabled: true, ref caseInsensitive, ref swapGreed, ref multiLine, ref dotMatchesNewline, ref crlf);
         }
 
         for (int index = 0; index < disabledFlags.Length; index++)
         {
-            ApplyFlag(disabledFlags[index], enabled: false, ref caseInsensitive, ref swapGreed, ref multiLine, ref dotMatchesNewline);
+            ApplyFlag(disabledFlags[index], enabled: false, ref caseInsensitive, ref swapGreed, ref multiLine, ref dotMatchesNewline, ref crlf);
         }
 
-        return new RegexCompileOptions(caseInsensitive, swapGreed, multiLine, dotMatchesNewline);
+        return new RegexCompileOptions(caseInsensitive, swapGreed, multiLine, dotMatchesNewline, crlf);
     }
 
     private static void ApplyFlag(
@@ -43,7 +47,8 @@ internal readonly struct RegexCompileOptions
         ref bool caseInsensitive,
         ref bool swapGreed,
         ref bool multiLine,
-        ref bool dotMatchesNewline)
+        ref bool dotMatchesNewline,
+        ref bool crlf)
     {
         switch (flag)
         {
@@ -58,6 +63,9 @@ internal readonly struct RegexCompileOptions
                 break;
             case 'U':
                 swapGreed = enabled;
+                break;
+            case 'R':
+                crlf = enabled;
                 break;
         }
     }

@@ -11,6 +11,7 @@ internal sealed class RegexNfaState
         bool caseInsensitive,
         bool multiLine,
         bool dotMatchesNewline,
+        bool crlf,
         int next,
         int alternative)
     {
@@ -20,6 +21,7 @@ internal sealed class RegexNfaState
         CaseInsensitive = caseInsensitive;
         MultiLine = multiLine;
         DotMatchesNewline = dotMatchesNewline;
+        Crlf = crlf;
         Next = next;
         Alternative = alternative;
     }
@@ -35,6 +37,8 @@ internal sealed class RegexNfaState
     public bool MultiLine { get; }
 
     public bool DotMatchesNewline { get; }
+
+    public bool Crlf { get; }
 
     public int Next { get; }
 

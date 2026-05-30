@@ -9,12 +9,13 @@ internal static class RegexByteClass
         RegexSyntaxKind kind,
         ReadOnlySpan<byte> expression,
         bool caseInsensitive,
-        bool dotMatchesNewline)
+        bool dotMatchesNewline,
+        bool crlf)
     {
         return kind switch
         {
             RegexSyntaxKind.Literal => expression.Length > 0 && ByteEquals(value, expression[0], caseInsensitive),
-            RegexSyntaxKind.Dot => dotMatchesNewline || value != (byte)'\n',
+            RegexSyntaxKind.Dot => dotMatchesNewline || value != (byte)'\n' && (!crlf || value != (byte)'\r'),
             RegexSyntaxKind.AnyClass => true,
             RegexSyntaxKind.CharacterClass => ClassMatches(value, expression, caseInsensitive),
             RegexSyntaxKind.DigitClass => IsAsciiDigitByte(value),
@@ -27,18 +28,62 @@ internal static class RegexByteClass
         };
     }
 
-    public static bool PredicateMatches(ReadOnlySpan<byte> haystack, int position, RegexSyntaxKind kind, bool multiLine)
+    public static bool PredicateMatches(ReadOnlySpan<byte> haystack, int position, RegexSyntaxKind kind, bool multiLine, bool crlf)
     {
         return kind switch
         {
-            RegexSyntaxKind.StartAnchor => position == 0 || multiLine && position > 0 && haystack[position - 1] == (byte)'\n',
-            RegexSyntaxKind.EndAnchor => position == haystack.Length || multiLine && position < haystack.Length && haystack[position] == (byte)'\n',
+            RegexSyntaxKind.StartAnchor => IsStartAnchorMatch(haystack, position, multiLine, crlf),
+            RegexSyntaxKind.EndAnchor => IsEndAnchorMatch(haystack, position, multiLine, crlf),
             RegexSyntaxKind.WordBoundary => IsRegexWordBoundary(haystack, position),
             RegexSyntaxKind.NotWordBoundary => !IsRegexWordBoundary(haystack, position),
             RegexSyntaxKind.WordStartBoundary => IsRegexWordStartBoundary(haystack, position),
             RegexSyntaxKind.WordEndBoundary => IsRegexWordEndBoundary(haystack, position),
             _ => false,
         };
+    }
+
+    private static bool IsStartAnchorMatch(ReadOnlySpan<byte> haystack, int position, bool multiLine, bool crlf)
+    {
+        if (position == 0)
+        {
+            return true;
+        }
+
+        if (!multiLine)
+        {
+            return false;
+        }
+
+        byte previous = haystack[position - 1];
+        if (previous == (byte)'\n')
+        {
+            return true;
+        }
+
+        return crlf &&
+            previous == (byte)'\r' &&
+            (position >= haystack.Length || haystack[position] != (byte)'\n');
+    }
+
+    private static bool IsEndAnchorMatch(ReadOnlySpan<byte> haystack, int position, bool multiLine, bool crlf)
+    {
+        if (position == haystack.Length)
+        {
+            return true;
+        }
+
+        if (!multiLine)
+        {
+            return false;
+        }
+
+        byte current = haystack[position];
+        if (current == (byte)'\n')
+        {
+            return !crlf || position == 0 || haystack[position - 1] != (byte)'\r';
+        }
+
+        return crlf && current == (byte)'\r';
     }
 
     private static bool ClassMatches(byte value, ReadOnlySpan<byte> expression, bool caseInsensitive)
