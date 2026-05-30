@@ -75,6 +75,47 @@ public sealed class CliParserTests
     }
 
     /// <summary>
+    /// Verifies combined short flags are parsed with ripgrep-compatible value consumption.
+    /// </summary>
+    [Fact]
+    public void ParsesCombinedShortFlags()
+    {
+        CliParseResult switches = CliParser.Parse(
+            [OsString.FromUnixBytes("-nHiv"u8), OsString.FromUnixBytes("needle"u8)]);
+        CliParseResult inlineValue = CliParser.Parse(
+            [OsString.FromUnixBytes("-nA2"u8), OsString.FromUnixBytes("needle"u8)]);
+        CliParseResult followingValue = CliParser.Parse(
+            [OsString.FromUnixBytes("-ne"u8), OsString.FromUnixBytes("needle"u8), OsString.FromUnixBytes("path.txt"u8)]);
+        CliParseResult unrestricted = CliParser.Parse(
+            [OsString.FromUnixBytes("-uuun"u8), OsString.FromUnixBytes("needle"u8)]);
+        CliParseResult invalidValue = CliParser.Parse(
+            [OsString.FromUnixBytes("-m1n"u8), OsString.FromUnixBytes("needle"u8)]);
+        CliParseResult unknown = CliParser.Parse(
+            [OsString.FromUnixBytes("-ny"u8), OsString.FromUnixBytes("needle"u8)]);
+
+        Assert.Equal(CliParseStatus.Ok, switches.Status);
+        Assert.True(switches.LowArgs!.LineNumber);
+        Assert.True(switches.LowArgs.WithFilename);
+        Assert.True(switches.LowArgs.InvertMatch);
+        Assert.Equal(CliCaseMode.Insensitive, switches.LowArgs.CaseMode);
+        Assert.Equal([OsString.FromUnixBytes("needle"u8)], switches.LowArgs.Positional);
+        Assert.Equal(CliParseStatus.Ok, inlineValue.Status);
+        Assert.True(inlineValue.LowArgs!.LineNumber);
+        Assert.Equal(2UL, inlineValue.LowArgs.AfterContext);
+        Assert.Equal(CliParseStatus.Ok, followingValue.Status);
+        Assert.True(followingValue.LowArgs!.LineNumber);
+        Assert.Equal([OsString.FromUnixBytes("needle"u8)], followingValue.LowArgs.Patterns);
+        Assert.Equal([OsString.FromUnixBytes("path.txt"u8)], followingValue.LowArgs.Positional);
+        Assert.Equal(CliParseStatus.Ok, unrestricted.Status);
+        Assert.Equal(3, unrestricted.LowArgs!.UnrestrictedCount);
+        Assert.True(unrestricted.LowArgs.LineNumber);
+        Assert.Equal(CliParseStatus.Error, invalidValue.Status);
+        Assert.Equal("error parsing flag -m: value is not a valid number: invalid digit found in string", invalidValue.Error!.FormatAlternate());
+        Assert.Equal(CliParseStatus.Error, unknown.Status);
+        Assert.Equal("unrecognized flag -y", unknown.Error!.FormatAlternate());
+    }
+
+    /// <summary>
     /// Verifies explicit pattern-file flags are parsed as ordered pattern sources.
     /// </summary>
     [Fact]

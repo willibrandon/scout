@@ -27,6 +27,16 @@ public static class CliParser
                 return special;
             }
 
+            if (TryParseShortFlagCluster(arguments, ref index, lowArgs, out CliParseResult? clusterResult))
+            {
+                if (clusterResult is not null)
+                {
+                    return clusterResult;
+                }
+
+                continue;
+            }
+
             if (TryParseValueFlag(arguments, ref index, lowArgs, out ScoutError? valueError))
             {
                 if (valueError is not null)
@@ -800,6 +810,443 @@ public static class CliParser
         }
 
         return false;
+    }
+
+    private static bool TryParseShortFlagCluster(
+        ReadOnlySpan<OsString> arguments,
+        ref int index,
+        CliLowArgs lowArgs,
+        out CliParseResult? result)
+    {
+        result = null;
+        OsString argument = arguments[index];
+        if (argument.IsUnixBytes)
+        {
+            ReadOnlySpan<byte> bytes = argument.AsUnixBytes();
+            if (!IsShortFlagCluster(bytes))
+            {
+                return false;
+            }
+
+            return ParseShortFlagCluster(arguments, ref index, bytes, lowArgs, out result);
+        }
+
+        if (!argument.TryGetText(out string text) || !IsShortFlagCluster(text))
+        {
+            return false;
+        }
+
+        return ParseShortFlagCluster(arguments, ref index, text, lowArgs, out result);
+    }
+
+    private static bool IsShortFlagCluster(ReadOnlySpan<byte> bytes)
+    {
+        return bytes.Length > 2 && bytes[0] == (byte)'-' && bytes[1] != (byte)'-';
+    }
+
+    private static bool IsShortFlagCluster(string text)
+    {
+        return text.Length > 2 && text[0] == '-' && text[1] != '-';
+    }
+
+    private static bool ParseShortFlagCluster(
+        ReadOnlySpan<OsString> arguments,
+        ref int argumentIndex,
+        ReadOnlySpan<byte> bytes,
+        CliLowArgs lowArgs,
+        out CliParseResult? result)
+    {
+        result = null;
+        for (int index = 1; index < bytes.Length; index++)
+        {
+            byte flag = bytes[index];
+            if (TryParseClusterSpecial(flag, out CliSpecialMode specialMode))
+            {
+                result = CliParseResult.Special(specialMode);
+                return true;
+            }
+
+            if (TryParseClusterSwitch(flag, lowArgs, out ScoutError? switchError))
+            {
+                if (switchError is not null)
+                {
+                    result = CliParseResult.Fail(switchError);
+                }
+
+                continue;
+            }
+
+            if (TryParseClusterValue(arguments, ref argumentIndex, bytes, index, lowArgs, out ScoutError? valueError))
+            {
+                if (valueError is not null)
+                {
+                    result = CliParseResult.Fail(valueError);
+                }
+
+                return true;
+            }
+
+            result = TryDecodeUtf8(bytes.Slice(index, 1), out string name)
+                ? CliParseResult.Fail(new ScoutError($"unrecognized flag -{name}"))
+                : CliParseResult.Fail(new ScoutError("invalid CLI arguments"));
+            return true;
+        }
+
+        return true;
+    }
+
+    private static bool ParseShortFlagCluster(
+        ReadOnlySpan<OsString> arguments,
+        ref int argumentIndex,
+        string text,
+        CliLowArgs lowArgs,
+        out CliParseResult? result)
+    {
+        result = null;
+        for (int index = 1; index < text.Length; index++)
+        {
+            char flag = text[index];
+            if (TryParseClusterSpecial(flag, out CliSpecialMode specialMode))
+            {
+                result = CliParseResult.Special(specialMode);
+                return true;
+            }
+
+            if (TryParseClusterSwitch(flag, lowArgs, out ScoutError? switchError))
+            {
+                if (switchError is not null)
+                {
+                    result = CliParseResult.Fail(switchError);
+                }
+
+                continue;
+            }
+
+            if (TryParseClusterValue(arguments, ref argumentIndex, text, index, lowArgs, out ScoutError? valueError))
+            {
+                if (valueError is not null)
+                {
+                    result = CliParseResult.Fail(valueError);
+                }
+
+                return true;
+            }
+
+            result = CliParseResult.Fail(new ScoutError($"unrecognized flag -{flag}"));
+            return true;
+        }
+
+        return true;
+    }
+
+    private static bool TryParseClusterSpecial(byte flag, out CliSpecialMode mode)
+    {
+        return TryParseClusterSpecial((char)flag, out mode);
+    }
+
+    private static bool TryParseClusterSpecial(char flag, out CliSpecialMode mode)
+    {
+        switch (flag)
+        {
+            case 'h':
+                mode = CliSpecialMode.HelpShort;
+                return true;
+
+            case 'V':
+                mode = CliSpecialMode.VersionShort;
+                return true;
+
+            default:
+                mode = default;
+                return false;
+        }
+    }
+
+    private static bool TryParseClusterSwitch(byte flag, CliLowArgs lowArgs, out ScoutError? error)
+    {
+        return TryParseClusterSwitch((char)flag, lowArgs, out error);
+    }
+
+    private static bool TryParseClusterSwitch(char flag, CliLowArgs lowArgs, out ScoutError? error)
+    {
+        error = null;
+        switch (flag)
+        {
+            case 'c':
+                lowArgs.SetSearchMode(CliSearchMode.Count);
+                return true;
+
+            case 'l':
+                lowArgs.SetSearchMode(CliSearchMode.FilesWithMatches);
+                return true;
+
+            case 'F':
+                lowArgs.SetFixedStrings(true);
+                return true;
+
+            case 'P':
+                lowArgs.SetRegexEngine(CliRegexEngine.Pcre2);
+                return true;
+
+            case 'a':
+                lowArgs.SetTextMode(true);
+                return true;
+
+            case 'u':
+                return ParseUnrestricted(count: 1, "-u", lowArgs, out error);
+
+            case 'q':
+                lowArgs.SetQuiet(true);
+                return true;
+
+            case 'U':
+                lowArgs.SetMultiline(true);
+                return true;
+
+            case 'z':
+                lowArgs.SetSearchZip(true);
+                return true;
+
+            case 'o':
+                lowArgs.SetOnlyMatching(true);
+                return true;
+
+            case 'p':
+                lowArgs.SetPretty();
+                return true;
+
+            case '0':
+                lowArgs.SetNullPathTerminator(true);
+                return true;
+
+            case 'v':
+                lowArgs.SetInvertMatch(true);
+                return true;
+
+            case 'x':
+                lowArgs.SetLineRegexp(true);
+                return true;
+
+            case 'w':
+                lowArgs.SetWordRegexp(true);
+                return true;
+
+            case 'H':
+                lowArgs.SetWithFilename(true);
+                return true;
+
+            case 'I':
+                lowArgs.SetWithFilename(false);
+                return true;
+
+            case 'i':
+                lowArgs.SetCaseMode(CliCaseMode.Insensitive);
+                return true;
+
+            case 's':
+                lowArgs.SetCaseMode(CliCaseMode.Sensitive);
+                return true;
+
+            case 'S':
+                lowArgs.SetCaseMode(CliCaseMode.Smart);
+                return true;
+
+            case 'n':
+                lowArgs.SetLineNumber(true);
+                return true;
+
+            case 'N':
+                lowArgs.SetLineNumber(false);
+                return true;
+
+            case 'b':
+                lowArgs.SetByteOffset(true);
+                return true;
+
+            case '.':
+                lowArgs.SetIncludeHidden(true);
+                return true;
+
+            case 'L':
+                lowArgs.SetFollowLinks(true);
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    private static bool TryParseClusterValue(
+        ReadOnlySpan<OsString> arguments,
+        ref int argumentIndex,
+        ReadOnlySpan<byte> bytes,
+        int flagIndex,
+        CliLowArgs lowArgs,
+        out ScoutError? error)
+    {
+        byte flag = bytes[flagIndex];
+        if (!IsClusterValueFlag(flag))
+        {
+            error = null;
+            return false;
+        }
+
+        string flagName = GetShortFlagName((char)flag);
+        ReadOnlySpan<byte> value = bytes[(flagIndex + 1)..];
+        if (!value.IsEmpty)
+        {
+            if (value[0] == (byte)'=')
+            {
+                value = value[1..];
+            }
+
+            return ParseClusterValue(flag, value, flagName, lowArgs, out error);
+        }
+
+        if (!TryGetFollowingValue(arguments, ref argumentIndex, flagName, out OsString followingValue, out error))
+        {
+            return true;
+        }
+
+        return ParseClusterValue(flag, followingValue, flagName, lowArgs, out error);
+    }
+
+    private static bool TryParseClusterValue(
+        ReadOnlySpan<OsString> arguments,
+        ref int argumentIndex,
+        string text,
+        int flagIndex,
+        CliLowArgs lowArgs,
+        out ScoutError? error)
+    {
+        char flag = text[flagIndex];
+        if (!IsClusterValueFlag(flag))
+        {
+            error = null;
+            return false;
+        }
+
+        string flagName = GetShortFlagName(flag);
+        string value = text[(flagIndex + 1)..];
+        if (value.Length > 0)
+        {
+            if (value[0] == '=')
+            {
+                value = value[1..];
+            }
+
+            return ParseClusterValue(flag, value, flagName, lowArgs, out error);
+        }
+
+        if (!TryGetFollowingValue(arguments, ref argumentIndex, flagName, out OsString followingValue, out error))
+        {
+            return true;
+        }
+
+        return ParseClusterValue(flag, followingValue, flagName, lowArgs, out error);
+    }
+
+    private static bool IsClusterValueFlag(byte flag)
+    {
+        return IsClusterValueFlag((char)flag);
+    }
+
+    private static bool IsClusterValueFlag(char flag)
+    {
+        return flag is 'm' or 'M' or 'E' or 'j' or 'r' or 'e' or 'f' or 'A' or 'B' or 'C' or 'd' or 'g' or 't' or 'T';
+    }
+
+    private static string GetShortFlagName(char flag)
+    {
+        return flag switch
+        {
+            'm' => "-m",
+            'M' => "-M",
+            'E' => "-E",
+            'j' => "-j",
+            'r' => "-r",
+            'e' => "-e",
+            'f' => "-f",
+            'A' => "-A",
+            'B' => "-B",
+            'C' => "-C",
+            'd' => "-d",
+            'g' => "-g",
+            't' => "-t",
+            'T' => "-T",
+            _ => throw new ArgumentOutOfRangeException(nameof(flag)),
+        };
+    }
+
+    private static bool ParseClusterValue(byte flag, ReadOnlySpan<byte> value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
+    {
+        return (char)flag switch
+        {
+            'm' => ParseMaxCount(value, flagName, lowArgs, out error),
+            'M' => ParseMaxColumns(value, flagName, lowArgs, out error),
+            'E' => ParseEncoding(value, flagName, lowArgs, out error),
+            'j' => ParseThreads(value, flagName, lowArgs, out error),
+            'r' => ParseReplacement(value, lowArgs, out error),
+            'e' => ParsePattern(value, lowArgs, out error),
+            'f' => ParsePatternFile(value, lowArgs, out error),
+            'A' => ParseAfterContext(value, flagName, lowArgs, out error),
+            'B' => ParseBeforeContext(value, flagName, lowArgs, out error),
+            'C' => ParseContext(value, flagName, lowArgs, out error),
+            'd' => ParseMaxDepth(value, flagName, lowArgs, out error),
+            'g' => ParseGlob(value, flagName, caseInsensitive: false, lowArgs, out error),
+            't' => ParseTypeChange(value, flagName, CliTypeChangeKind.Select, lowArgs, out error),
+            'T' => ParseTypeChange(value, flagName, CliTypeChangeKind.Negate, lowArgs, out error),
+            _ => throw new ArgumentOutOfRangeException(nameof(flag)),
+        };
+    }
+
+    private static bool ParseClusterValue(byte flag, OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
+    {
+        return ParseClusterValue((char)flag, value, flagName, lowArgs, out error);
+    }
+
+    private static bool ParseClusterValue(char flag, string value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
+    {
+        return flag switch
+        {
+            'm' => ParseMaxCount(value, flagName, lowArgs, out error),
+            'M' => ParseMaxColumns(value, flagName, lowArgs, out error),
+            'E' => ParseEncoding(value, flagName, lowArgs, out error),
+            'j' => ParseThreads(value, flagName, lowArgs, out error),
+            'r' => ParseReplacement(value, lowArgs, out error),
+            'e' => ParsePattern(value, lowArgs, out error),
+            'f' => ParsePatternFile(value, lowArgs, out error),
+            'A' => ParseAfterContext(value, flagName, lowArgs, out error),
+            'B' => ParseBeforeContext(value, flagName, lowArgs, out error),
+            'C' => ParseContext(value, flagName, lowArgs, out error),
+            'd' => ParseMaxDepth(value, flagName, lowArgs, out error),
+            'g' => ParseGlob(value, caseInsensitive: false, lowArgs, out error),
+            't' => ParseTypeChange(value, CliTypeChangeKind.Select, lowArgs, out error),
+            'T' => ParseTypeChange(value, CliTypeChangeKind.Negate, lowArgs, out error),
+            _ => throw new ArgumentOutOfRangeException(nameof(flag)),
+        };
+    }
+
+    private static bool ParseClusterValue(char flag, OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
+    {
+        return flag switch
+        {
+            'm' => ParseMaxCount(value, flagName, lowArgs, out error),
+            'M' => ParseMaxColumns(value, flagName, lowArgs, out error),
+            'E' => ParseEncoding(value, flagName, lowArgs, out error),
+            'j' => ParseThreads(value, flagName, lowArgs, out error),
+            'r' => ParseReplacement(value, lowArgs, out error),
+            'e' => ParsePattern(value, lowArgs, out error),
+            'f' => ParsePatternFile(value, lowArgs, out error),
+            'A' => ParseAfterContext(value, flagName, lowArgs, out error),
+            'B' => ParseBeforeContext(value, flagName, lowArgs, out error),
+            'C' => ParseContext(value, flagName, lowArgs, out error),
+            'd' => ParseMaxDepth(value, flagName, lowArgs, out error),
+            'g' => ParseGlob(value, flagName, caseInsensitive: false, lowArgs, out error),
+            't' => ParseTypeChange(value, flagName, CliTypeChangeKind.Select, lowArgs, out error),
+            'T' => ParseTypeChange(value, flagName, CliTypeChangeKind.Negate, lowArgs, out error),
+            _ => throw new ArgumentOutOfRangeException(nameof(flag)),
+        };
     }
 
     private static bool TryParseValueFlag(

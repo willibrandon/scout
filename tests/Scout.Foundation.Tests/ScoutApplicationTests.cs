@@ -208,6 +208,39 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies bundled short flags match pinned ripgrep behavior.
+    /// </summary>
+    [Fact]
+    public void CombinedShortFlagsMatchPinnedRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "needle\nmiss\nneedle again\n");
+
+        (int switchesExitCode, byte[] switchesOutput, string switchesError) = RunScout("-nH", "needle", path);
+        (int pinnedSwitchesExitCode, byte[] pinnedSwitchesOutput, string pinnedSwitchesError) = RunPinnedRipgrep("-nH", "needle", path);
+        (int valueExitCode, byte[] valueOutput, string valueError) = RunScout("-nA1", "needle", path);
+        (int pinnedValueExitCode, byte[] pinnedValueOutput, string pinnedValueError) = RunPinnedRipgrep("-nA1", "needle", path);
+        (int followingExitCode, byte[] followingOutput, string followingError) = RunScout("-ne", "needle", path);
+        (int pinnedFollowingExitCode, byte[] pinnedFollowingOutput, string pinnedFollowingError) = RunPinnedRipgrep("-ne", "needle", path);
+        (int invalidExitCode, byte[] invalidOutput, string invalidError) = RunScout("-m1n", "needle", path);
+        (int pinnedInvalidExitCode, byte[] pinnedInvalidOutput, string pinnedInvalidError) = RunPinnedRipgrep("-m1n", "needle", path);
+
+        Assert.Equal(pinnedSwitchesExitCode, switchesExitCode);
+        Assert.Equal(pinnedSwitchesOutput, switchesOutput);
+        Assert.Equal(pinnedSwitchesError, switchesError);
+        Assert.Equal(pinnedValueExitCode, valueExitCode);
+        Assert.Equal(pinnedValueOutput, valueOutput);
+        Assert.Equal(pinnedValueError, valueError);
+        Assert.Equal(pinnedFollowingExitCode, followingExitCode);
+        Assert.Equal(pinnedFollowingOutput, followingOutput);
+        Assert.Equal(pinnedFollowingError, followingError);
+        Assert.Equal(pinnedInvalidExitCode, invalidExitCode);
+        Assert.Equal(pinnedInvalidOutput, invalidOutput);
+        Assert.Equal(pinnedInvalidError, invalidError);
+    }
+
+    /// <summary>
     /// Verifies the no-line-number flag disables earlier line-number output.
     /// </summary>
     [Fact]
