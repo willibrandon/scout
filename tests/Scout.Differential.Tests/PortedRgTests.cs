@@ -40,9 +40,24 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "-n", "-U", "--multiline-dotall", "of this world.+detective work", "sherlock")),
             new(
                 "tests/multiline.rs",
+                "only_matching",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "-U", "--only-matching", @"Watson|Sherlock\p{Any}+?Holmes", "sherlock")),
+            new(
+                "tests/multiline.rs",
+                "vimgrep",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "-U", "--vimgrep", @"Watson|Sherlock\p{Any}+?Holmes", "sherlock")),
+            new(
+                "tests/multiline.rs",
                 "stdin",
                 _ => { },
                 DifferentialCase.ExactWithStandardInput(EncodingUtf8.GetBytes(Sherlock), "-n", "-U", @"of this world\p{Any}+?detective work")),
+            new(
+                "tests/multiline.rs",
+                "context",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "-U", "-C1", @"detective work\p{Any}+?result of luck", "sherlock")),
             new(
                 "tests/feature.rs",
                 "f7_stdin",

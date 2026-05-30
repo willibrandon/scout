@@ -2666,9 +2666,9 @@ internal static class ScoutApplication
         out bool matched)
     {
         matched = false;
+        bool contextOutputRequested = (beforeContext > 0 || afterContext > 0) && searchMode == CliSearchMode.Standard;
         if ((replacement is not null && !invertMatch) ||
-            beforeContext > 0 ||
-            afterContext > 0 ||
+            (contextOutputRequested && (onlyMatching || invertMatch)) ||
             passthru ||
             separators.Crlf ||
             separators.NullData)
@@ -2725,6 +2725,12 @@ internal static class ScoutApplication
         }
 
         matched = true;
+        if (contextOutputRequested)
+        {
+            WriteMultilineContextMatchedLines(outputSpan, patterns, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, beforeContext, afterContext, maxCount);
+            return true;
+        }
+
         if (onlyMatching && !vimgrep)
         {
             WriteMultilineOnlyMatches(outputSpan, patterns, output, prefix, separators, color, lineNumber, column, byteOffset, trim, nullPathTerminator, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
@@ -2830,6 +2836,62 @@ internal static class ScoutApplication
         }
 
         return count;
+    }
+
+    private static void WriteMultilineContextMatchedLines(
+        ReadOnlySpan<byte> bytes,
+        IReadOnlyList<byte[]> patterns,
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool trim,
+        bool nullPathTerminator,
+        bool asciiCaseInsensitive,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool multilineDotall,
+        ulong beforeContext,
+        ulong afterContext,
+        ulong? maxCount)
+    {
+        List<ContextLineInfo> lines = BuildMultilineContextLines(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall);
+        bool[] included = new bool[lines.Count];
+        IncludeContextLines(lines, included, beforeContext, afterContext, maxCount);
+        var sink = new StandardSearchSink(output, prefix, separators.FieldMatch, separators.FieldContext, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
+        int previousLineIndex = -1;
+        bool wrote = false;
+        for (int index = 0; index < lines.Count; index++)
+        {
+            if (!included[index])
+            {
+                continue;
+            }
+
+            if (wrote && index > previousLineIndex + 1 && separators.ContextEnabled)
+            {
+                output.Write(separators.Context.Span);
+                output.Write(separators.LineTerminator.Span);
+            }
+
+            ContextLineInfo line = lines[index];
+            ReadOnlySpan<byte> lineBytes = bytes.Slice(line.Start, line.Length);
+            if (line.SelectedMatch)
+            {
+                sink.MatchedLine(line.LineNumber, line.Start, line.MatchColumn, lineBytes);
+            }
+            else
+            {
+                sink.ContextLine(line.LineNumber, line.Start, line.ContextColumn, lineBytes);
+            }
+
+            previousLineIndex = index;
+            wrote = true;
+        }
     }
 
     private static void WriteMultilineMatchedLines(
@@ -3009,6 +3071,38 @@ internal static class ScoutApplication
         return found;
     }
 
+    private static List<ContextLineInfo> BuildMultilineContextLines(ReadOnlySpan<byte> bytes, IReadOnlyList<byte[]> patterns, bool asciiCaseInsensitive, bool lineRegexp, bool wordRegexp, bool multilineDotall)
+    {
+        var physicalLines = new List<ContextLineInfo>();
+        int lineStart = 0;
+        long lineNumber = 1;
+        while (lineStart < bytes.Length)
+        {
+            int lineLength = GetLineLength(bytes[lineStart..], nullData: false);
+            physicalLines.Add(new ContextLineInfo(lineStart, lineLength, lineNumber, selectedMatch: false, matchColumn: 0, originalMatch: false, contextColumn: 0));
+            lineStart += lineLength;
+            lineNumber++;
+        }
+
+        bool[] matchedLines = new bool[physicalLines.Count];
+        long[] matchColumns = new long[physicalLines.Count];
+        int offset = 0;
+        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, offset, out RegexMatch match))
+        {
+            MarkMultilineContextMatch(bytes, physicalLines, matchedLines, matchColumns, match);
+            offset = MatchIterator.AdvanceAfter(new MatcherMatch(match.Start, match.Length), bytes.Length);
+        }
+
+        var lines = new List<ContextLineInfo>(physicalLines.Count);
+        for (int index = 0; index < physicalLines.Count; index++)
+        {
+            ContextLineInfo line = physicalLines[index];
+            lines.Add(new ContextLineInfo(line.Start, line.Length, line.LineNumber, matchedLines[index], matchColumns[index], matchedLines[index], contextColumn: 0));
+        }
+
+        return lines;
+    }
+
     private static List<ContextLineInfo> BuildMultilineInvertedLines(ReadOnlySpan<byte> bytes, IReadOnlyList<byte[]> patterns, bool asciiCaseInsensitive, bool lineRegexp, bool wordRegexp, bool multilineDotall)
     {
         var physicalLines = new List<ContextLineInfo>();
@@ -3039,6 +3133,32 @@ internal static class ScoutApplication
         }
 
         return lines;
+    }
+
+    private static void MarkMultilineContextMatch(ReadOnlySpan<byte> bytes, List<ContextLineInfo> lines, bool[] matchedLines, long[] matchColumns, RegexMatch match)
+    {
+        int firstLineStart = GetLineStart(bytes, match.Start);
+        int lastLineStart = GetLineStart(bytes, GetInclusiveMatchEnd(match));
+        long matchColumn = match.Start - firstLineStart + 1L;
+        for (int index = 0; index < lines.Count; index++)
+        {
+            int lineStart = lines[index].Start;
+            if (lineStart < firstLineStart)
+            {
+                continue;
+            }
+
+            if (lineStart > lastLineStart)
+            {
+                break;
+            }
+
+            matchedLines[index] = true;
+            if (matchColumns[index] == 0)
+            {
+                matchColumns[index] = matchColumn;
+            }
+        }
     }
 
     private static void MarkMultilineMatchedLines(ReadOnlySpan<byte> bytes, List<ContextLineInfo> lines, bool[] matchedLines, RegexMatch match)

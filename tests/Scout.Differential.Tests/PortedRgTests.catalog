@@ -4,7 +4,10 @@ tests/multiline.rs|overlap1
 tests/multiline.rs|overlap2
 tests/multiline.rs|dot_no_newline
 tests/multiline.rs|dot_all
+tests/multiline.rs|only_matching
+tests/multiline.rs|vimgrep
 tests/multiline.rs|stdin
+tests/multiline.rs|context
 tests/feature.rs|f7_stdin
 tests/feature.rs|f20_no_filename
 tests/misc.rs|single_file
