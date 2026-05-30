@@ -10,13 +10,14 @@ namespace Scout;
 /// </summary>
 public sealed class RegexCorpusDifferentialTests
 {
-    private const int ExpectedDifferentialCaseCount = 141;
+    private const int ExpectedDifferentialCaseCount = 145;
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     private static readonly (string RelativePath, int Count)[] ExpectedDifferentialFileCounts =
     [
         ("crazy.toml", 47),
+        ("crlf.toml", 4),
         ("empty.toml", 19),
         ("flags.toml", 9),
         ("iter.toml", 19),
@@ -136,6 +137,10 @@ public sealed class RegexCorpusDifferentialTests
         ("crazy.toml", "empty9"),
         ("crazy.toml", "empty10"),
         ("crazy.toml", "empty11"),
+        ("crlf.toml", "basic"),
+        ("crlf.toml", "start-end-non-empty"),
+        ("crlf.toml", "start-end-empty"),
+        ("crlf.toml", "dot-no-crlf"),
         ("regression.toml", "negated-char-class-100"),
         ("regression.toml", "negated-char-class-200"),
         ("regression.toml", "ascii-word-underscore"),
