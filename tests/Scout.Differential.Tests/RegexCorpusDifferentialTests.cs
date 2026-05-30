@@ -14,6 +14,15 @@ public sealed class RegexCorpusDifferentialTests
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
+    private static readonly (string RelativePath, int Count)[] ExpectedDifferentialFileCounts =
+    [
+        ("crazy.toml", 24),
+        ("empty.toml", 18),
+        ("flags.toml", 9),
+        ("iter.toml", 19),
+        ("misc.toml", 13),
+    ];
+
     private static readonly (string RelativePath, string Name)[] DifferentialCases =
     [
         ("misc.toml", "ascii-literal"),
@@ -136,7 +145,20 @@ public sealed class RegexCorpusDifferentialTests
     [Fact]
     public void CatalogDocumentsCurrentDifferentialCoverage()
     {
-        Assert.Equal(ExpectedDifferentialCaseCount, DifferentialCases.Length);
+        string[] keys = CorpusCaseKeys();
+        var upstream = new SortedSet<string>(RegexCorpusLoader.EnumerateAllCaseKeys(), StringComparer.Ordinal);
+        var differential = new SortedSet<string>(keys, StringComparer.Ordinal);
+
+        Assert.Equal(ExpectedDifferentialCaseCount, keys.Length);
+        Assert.Equal(keys.Length, differential.Count);
+        Assert.Equal(ExpectedDifferentialFileCounts, CountByRelativePath(differential));
+        Assert.Empty(Difference(differential, upstream));
+
+        for (int index = 0; index < DifferentialCases.Length; index++)
+        {
+            (string relativePath, string name) = DifferentialCases[index];
+            AssertSearchCompatible(RegexCorpusLoader.Load(relativePath, name), relativePath);
+        }
     }
 
     /// <summary>
@@ -149,6 +171,53 @@ public sealed class RegexCorpusDifferentialTests
         {
             yield return [DifferentialCases[index].RelativePath, DifferentialCases[index].Name];
         }
+    }
+
+    private static string[] CorpusCaseKeys()
+    {
+        var keys = new List<string>();
+        for (int index = 0; index < DifferentialCases.Length; index++)
+        {
+            keys.Add(DifferentialCases[index].RelativePath + "|" + DifferentialCases[index].Name);
+        }
+
+        return keys.ToArray();
+    }
+
+    private static string[] Difference(SortedSet<string> left, SortedSet<string> right)
+    {
+        var difference = new List<string>();
+        foreach (string value in left)
+        {
+            if (!right.Contains(value))
+            {
+                difference.Add(value);
+            }
+        }
+
+        return difference.ToArray();
+    }
+
+    private static (string RelativePath, int Count)[] CountByRelativePath(IEnumerable<string> keys)
+    {
+        var counts = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        foreach (string key in keys)
+        {
+            int separator = key.IndexOf('|', StringComparison.Ordinal);
+            string relativePath = separator < 0 ? key : key[..separator];
+            counts.TryGetValue(relativePath, out int count);
+            counts[relativePath] = count + 1;
+        }
+
+        var result = new (string RelativePath, int Count)[counts.Count];
+        int index = 0;
+        foreach (KeyValuePair<string, int> pair in counts)
+        {
+            result[index] = (pair.Key, pair.Value);
+            index++;
+        }
+
+        return result;
     }
 
     private static void AssertSearchCompatible(RegexCorpusCase corpusCase, string relativePath)
