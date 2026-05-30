@@ -259,6 +259,7 @@ public sealed class PinnedConfigurationTests
             ("zstd", "1.5.7", "/opt/homebrew/bin/zstd", "AFF8169FB421BB925FB16C44A7E0143FA2C7A941DC45CCE76B15062A2CE54917"),
             ("lz4", "1.10.0", "/opt/homebrew/bin/lz4", "B7DCCDC84A76F0359C26C67393A6D50B4B073F8BF85078DCA7CCF877502B00E5"),
             ("brotli", "1.2.0", "/opt/homebrew/bin/brotli", "528B0B00C1B2F8323E6185DC40D10F0324D21F9CBCCA6D8B549F6B2E49520ECF"),
+            ("uncompress", "Apple compress file_cmds-475", "/usr/bin/uncompress", "C2E461B27668BD63C4CBD85649F7C4CEB63FC2447BF657D231E0D9FD4F42A055"),
         ];
 
         string root = FindRepositoryRoot();
@@ -274,6 +275,40 @@ public sealed class PinnedConfigurationTests
             Assert.True(File.Exists(path), "Missing macOS prerequisite tool: " + path);
             byte[] hash = SHA256.HashData(File.ReadAllBytes(path));
             Assert.Equal(expectedSha256, Convert.ToHexString(hash));
+        }
+    }
+
+    /// <summary>
+    /// Verifies every Linux decompression tool invoked by ripgrep's default table is represented in the prerequisite lock.
+    /// </summary>
+    [Fact]
+    public void LinuxDecompressionToolsCoverPinnedDefaultCommandTable()
+    {
+        (string Name, string Package, string Binary)[] tools =
+        [
+            ("gzip", "gzip", "gzip"),
+            ("bzip2", "bzip2", "bzip2"),
+            ("xz", "xz-utils", "xz"),
+            ("lz4", "lz4", "lz4"),
+            ("brotli", "brotli", "brotli"),
+            ("zstd", "zstd", "zstd"),
+            ("uncompress", "ncompress", "uncompress"),
+        ];
+
+        string root = FindRepositoryRoot();
+        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        for (int index = 0; index < tools.Length; index++)
+        {
+            (string name, string package, string binary) = tools[index];
+            string block = string.Join(
+                "\n",
+                "[[tool.linux]]",
+                "name = \"" + name + "\"",
+                "package = \"" + package + "\"",
+                "binary = \"" + binary + "\"",
+                "version = \"resolved@build\"",
+                "sha256 = \"resolved@build\"");
+            Assert.Contains(block, prerequisiteLock, StringComparison.Ordinal);
         }
     }
 

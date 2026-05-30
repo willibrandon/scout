@@ -67,6 +67,12 @@ path = "/opt/homebrew/bin/brotli"
 sha256 = "528b0b00c1b2f8323e6185dc40d10f0324d21f9cbcca6d8b549f6b2e49520ecf"
 
 [[tool.macos]]
+name = "uncompress"
+version = "Apple compress file_cmds-475"
+path = "/usr/bin/uncompress"
+sha256 = "c2e461b27668bd63c4cbd85649f7c4ceb63fc2447bf657d231e0d9fd4f42a055"
+
+[[tool.macos]]
 name = "hyperfine"
 version = "1.20.0"
 path = "/opt/homebrew/bin/hyperfine"
@@ -78,6 +84,50 @@ sha256 = "b7272e98214e951452bcbc81eaf0b8f0db391dce05b58ce8ab42985b632c5e94"
 
 [[tool.linux]]
 name = "gzip"
+package = "gzip"
+binary = "gzip"
+version = "resolved@build"
+sha256 = "resolved@build"
+
+[[tool.linux]]
+name = "bzip2"
+package = "bzip2"
+binary = "bzip2"
+version = "resolved@build"
+sha256 = "resolved@build"
+
+[[tool.linux]]
+name = "xz"
+package = "xz-utils"
+binary = "xz"
+version = "resolved@build"
+sha256 = "resolved@build"
+
+[[tool.linux]]
+name = "lz4"
+package = "lz4"
+binary = "lz4"
+version = "resolved@build"
+sha256 = "resolved@build"
+
+[[tool.linux]]
+name = "brotli"
+package = "brotli"
+binary = "brotli"
+version = "resolved@build"
+sha256 = "resolved@build"
+
+[[tool.linux]]
+name = "zstd"
+package = "zstd"
+binary = "zstd"
+version = "resolved@build"
+sha256 = "resolved@build"
+
+[[tool.linux]]
+name = "uncompress"
+package = "ncompress"
+binary = "uncompress"
 version = "resolved@build"
 sha256 = "resolved@build"
 

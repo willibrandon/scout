@@ -189,6 +189,7 @@ if [ "$(uname -s)" = "Darwin" ]; then
     check_macos_tool_hash "zstd"
     check_macos_tool_hash "lz4"
     check_macos_tool_hash "brotli"
+    check_macos_tool_hash "uncompress"
 
     HYPERFINE_PATH="$(read_lock_table_value "tool.macos" "hyperfine" "path")" || fail "Missing macOS hyperfine path in tests/PREREQS.lock."
     HYPERFINE_VERSION="$(read_lock_table_value "tool.macos" "hyperfine" "version")" || fail "Missing macOS hyperfine version in tests/PREREQS.lock."
