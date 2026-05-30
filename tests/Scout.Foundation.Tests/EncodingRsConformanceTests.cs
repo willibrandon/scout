@@ -107,6 +107,25 @@ public sealed class EncodingRsConformanceTests
         Assert.Equal(expected, actual);
     }
 
+    /// <summary>
+    /// Verifies streaming Scout transcoding matches upstream <c>encoding_rs</c> vectors across every byte boundary.
+    /// </summary>
+    /// <param name="encodingKind">The Scout encoding kind under test.</param>
+    /// <param name="inputFile">The upstream encoded input vector.</param>
+    /// <param name="expectedFile">The upstream UTF-8 reference vector.</param>
+    [Theory]
+    [MemberData(nameof(DecodeVectorCases))]
+    public void StreamingDecodeMatchesEncodingRsReferenceOutput(SearchEncodingKind encodingKind, string inputFile, string expectedFile)
+    {
+        byte[] input = File.ReadAllBytes(Path.Combine(EncodingRsTestDataRoot, inputFile));
+        byte[] expected = File.ReadAllBytes(Path.Combine(EncodingRsTestDataRoot, expectedFile));
+        using SegmentedReadStream stream = CreateOneByteReadStream(input);
+
+        byte[] actual = SearchEncodingReader.ReadToEnd(stream, encodingKind);
+
+        Assert.Equal(expected, actual);
+    }
+
     private static string FindRepositoryRoot()
     {
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
@@ -121,5 +140,16 @@ public sealed class EncodingRsConformanceTests
         }
 
         throw new InvalidOperationException("Could not locate the Scout repository root.");
+    }
+
+    private static SegmentedReadStream CreateOneByteReadStream(byte[] bytes)
+    {
+        byte[][] segments = new byte[bytes.Length][];
+        for (int index = 0; index < bytes.Length; index++)
+        {
+            segments[index] = [bytes[index]];
+        }
+
+        return new SegmentedReadStream(segments);
     }
 }
