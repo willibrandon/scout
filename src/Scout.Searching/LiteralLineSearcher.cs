@@ -801,7 +801,7 @@ public static class LiteralLineSearcher
                 : 0;
         }
 
-        ReadOnlySpan<byte> haystack = wordRegexp ? LineContent(line, crlf, nullData) : line;
+        ReadOnlySpan<byte> haystack = PatternContent(line, wordRegexp, crlf, nullData);
         return CountPatternMatchesAfterColumn(haystack, needles, column, asciiCaseInsensitive, wordRegexp);
     }
 
@@ -915,7 +915,7 @@ public static class LiteralLineSearcher
             return true;
         }
 
-        return SearchPatternMatches(wordRegexp ? LineContent(line, crlf, nullData) : line, lineStart, lineNumber, needles, ref sink, asciiCaseInsensitive, wordRegexp);
+        return SearchPatternMatches(PatternContent(line, wordRegexp, crlf, nullData), lineStart, lineNumber, needles, ref sink, asciiCaseInsensitive, wordRegexp);
     }
 
     private static bool SearchLineMatchLines<TSink>(
@@ -974,7 +974,7 @@ public static class LiteralLineSearcher
             return true;
         }
 
-        return SearchPatternMatchLines(wordRegexp ? LineContent(line, crlf, nullData) : line, line, lineStart, lineNumber, needles, ref sink, asciiCaseInsensitive, wordRegexp);
+        return SearchPatternMatchLines(PatternContent(line, wordRegexp, crlf, nullData), line, lineStart, lineNumber, needles, ref sink, asciiCaseInsensitive, wordRegexp);
     }
 
     private static bool SearchLiteralMatches<TSink>(
@@ -1277,7 +1277,7 @@ public static class LiteralLineSearcher
         out int matchStart)
     {
         bool matched = TryFindPatternMatch(
-            lineRegexp || !wordRegexp ? line : LineContent(line, crlf, nullData),
+            lineRegexp ? line : PatternContent(line, wordRegexp, crlf, nullData),
             needles,
             offset: 0,
             asciiCaseInsensitive,
@@ -1650,7 +1650,7 @@ public static class LiteralLineSearcher
         {
             ReadOnlySpan<byte> remaining = haystack[lineStart..];
             int lineLength = GetLineLength(remaining, nullData);
-            ReadOnlySpan<byte> line = wordRegexp ? LineContent(remaining[..lineLength], crlf, nullData) : remaining[..lineLength];
+            ReadOnlySpan<byte> line = PatternContent(remaining[..lineLength], wordRegexp, crlf, nullData);
             long lineMatches = CountPatternMatches(line, needles, asciiCaseInsensitive, wordRegexp);
             if (lineMatches > 0)
             {
@@ -3637,6 +3637,11 @@ public static class LiteralLineSearcher
         }
 
         return line;
+    }
+
+    private static ReadOnlySpan<byte> PatternContent(ReadOnlySpan<byte> line, bool wordRegexp, bool crlf, bool nullData)
+    {
+        return wordRegexp || crlf || nullData ? LineContent(line, crlf, nullData) : line;
     }
 
     private static int GetLineLength(ReadOnlySpan<byte> remaining, bool nullData)
