@@ -79,6 +79,15 @@ cmp "$BIN/pcre2-files-with-matches.expected" "$BIN/pcre2-files-with-matches.out"
 "$BIN/scout" -P --files-without-match 'nomatch(?=bar)' "$BIN/pcre2-smoke.txt" > "$BIN/pcre2-files-without-match.out"
 printf '%s\n' "$BIN/pcre2-smoke.txt" > "$BIN/pcre2-files-without-match.expected"
 cmp "$BIN/pcre2-files-without-match.expected" "$BIN/pcre2-files-without-match.out"
+"$BIN/scout" -P -n 'foo(?=bar)' "$BIN/pcre2-smoke.txt" > "$BIN/pcre2-line-number.out"
+printf '1:foobar\n3:foobarfoo\n' > "$BIN/pcre2-line-number.expected"
+cmp "$BIN/pcre2-line-number.expected" "$BIN/pcre2-line-number.out"
+"$BIN/scout" -P --column 'bar' "$BIN/pcre2-smoke.txt" > "$BIN/pcre2-column.out"
+printf '1:4:foobar\n3:4:foobarfoo\n' > "$BIN/pcre2-column.expected"
+cmp "$BIN/pcre2-column.expected" "$BIN/pcre2-column.out"
+"$BIN/scout" -P -H -n --column -b -o 'o(?=o)' "$BIN/pcre2-smoke.txt" > "$BIN/pcre2-fields-only-matching.out"
+printf '%s:1:2:1:o\n%s:2:2:8:o\n%s:3:2:12:o\n%s:3:8:18:o\n' "$BIN/pcre2-smoke.txt" "$BIN/pcre2-smoke.txt" "$BIN/pcre2-smoke.txt" "$BIN/pcre2-smoke.txt" > "$BIN/pcre2-fields-only-matching.expected"
+cmp "$BIN/pcre2-fields-only-matching.expected" "$BIN/pcre2-fields-only-matching.out"
 for symbol in \
     _pcre2_code_free_8 \
     _pcre2_compile_8 \
