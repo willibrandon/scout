@@ -10,12 +10,13 @@ namespace Scout;
 /// </summary>
 public sealed class RegexCorpusDifferentialTests
 {
-    private const int ExpectedDifferentialCaseCount = 145;
+    private const int ExpectedDifferentialCaseCount = 162;
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     private static readonly (string RelativePath, int Count)[] ExpectedDifferentialFileCounts =
     [
+        ("bytes.toml", 17),
         ("crazy.toml", 47),
         ("crlf.toml", 4),
         ("empty.toml", 19),
@@ -141,6 +142,23 @@ public sealed class RegexCorpusDifferentialTests
         ("crlf.toml", "start-end-non-empty"),
         ("crlf.toml", "start-end-empty"),
         ("crlf.toml", "dot-no-crlf"),
+        ("bytes.toml", "word-boundary-ascii"),
+        ("bytes.toml", "word-boundary-ascii-not"),
+        ("bytes.toml", "perl-word-ascii"),
+        ("bytes.toml", "perl-decimal-ascii"),
+        ("bytes.toml", "perl-whitespace-ascii"),
+        ("bytes.toml", "case-one-ascii"),
+        ("bytes.toml", "case-one-unicode"),
+        ("bytes.toml", "case-class-simple-ascii"),
+        ("bytes.toml", "case-class-ascii"),
+        ("bytes.toml", "dotstar-prefix-ascii"),
+        ("bytes.toml", "dotstar-prefix-unicode"),
+        ("bytes.toml", "invalid-utf8-anchor-100"),
+        ("bytes.toml", "invalid-utf8-anchor-300"),
+        ("bytes.toml", "negate-ascii"),
+        ("bytes.toml", "null-bytes"),
+        ("bytes.toml", "word-boundary-ascii-100"),
+        ("bytes.toml", "word-boundary-ascii-200"),
         ("regression.toml", "negated-char-class-100"),
         ("regression.toml", "negated-char-class-200"),
         ("regression.toml", "ascii-word-underscore"),
@@ -306,7 +324,8 @@ public sealed class RegexCorpusDifferentialTests
             "--json",
             "-o",
         };
-        if (string.Equals(relativePath, "regex-lite.toml", StringComparison.Ordinal) ||
+        if (string.Equals(relativePath, "bytes.toml", StringComparison.Ordinal) ||
+            string.Equals(relativePath, "regex-lite.toml", StringComparison.Ordinal) ||
             string.Equals(relativePath, "no-unicode.toml", StringComparison.Ordinal))
         {
             arguments.Add("--no-unicode");
