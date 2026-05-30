@@ -10,7 +10,7 @@ namespace Scout;
 /// </summary>
 public sealed class RegexCorpusDifferentialTests
 {
-    private const int ExpectedDifferentialCaseCount = 126;
+    private const int ExpectedDifferentialCaseCount = 141;
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
@@ -22,6 +22,7 @@ public sealed class RegexCorpusDifferentialTests
         ("iter.toml", 19),
         ("misc.toml", 13),
         ("multiline.toml", 1),
+        ("no-unicode.toml", 15),
         ("regex-lite.toml", 5),
         ("regression.toml", 13),
     ];
@@ -149,6 +150,21 @@ public sealed class RegexCorpusDifferentialTests
         ("regression.toml", "partial-anchor-alternate-end"),
         ("regression.toml", "lits-unambiguous-100"),
         ("multiline.toml", "repeat8"),
+        ("no-unicode.toml", "invalid-utf8-literal1"),
+        ("no-unicode.toml", "mixed"),
+        ("no-unicode.toml", "case1"),
+        ("no-unicode.toml", "case2"),
+        ("no-unicode.toml", "case4"),
+        ("no-unicode.toml", "negate2"),
+        ("no-unicode.toml", "dotstar-prefix1"),
+        ("no-unicode.toml", "dotstar-prefix2"),
+        ("no-unicode.toml", "null-bytes1"),
+        ("no-unicode.toml", "word-ascii"),
+        ("no-unicode.toml", "decimal-ascii"),
+        ("no-unicode.toml", "space-ascii"),
+        ("no-unicode.toml", "iter1-bytes"),
+        ("no-unicode.toml", "iter2-bytes"),
+        ("no-unicode.toml", "unanchored-invalid-utf8-match-100"),
         ("regex-lite.toml", "perl-class-decimal"),
         ("regex-lite.toml", "perl-class-space"),
         ("regex-lite.toml", "perl-class-word"),
@@ -285,7 +301,8 @@ public sealed class RegexCorpusDifferentialTests
             "--json",
             "-o",
         };
-        if (string.Equals(relativePath, "regex-lite.toml", StringComparison.Ordinal))
+        if (string.Equals(relativePath, "regex-lite.toml", StringComparison.Ordinal) ||
+            string.Equals(relativePath, "no-unicode.toml", StringComparison.Ordinal))
         {
             arguments.Add("--no-unicode");
         }
