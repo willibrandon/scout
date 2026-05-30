@@ -55,11 +55,14 @@ public sealed class RegexAutomaton
         byte lineTerminator = (byte)'\n')
     {
         RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
+        var options = new RegexCompileOptions(caseInsensitive, swapGreed: false, multiLine, dotMatchesNewline, crlf, lineTerminator);
         RegexNfa nfa = RegexNfaCompiler.Compile(
             tree.Root,
-            new RegexCompileOptions(caseInsensitive, swapGreed: false, multiLine, dotMatchesNewline, crlf, lineTerminator));
-        return new RegexAutomaton(RegexMetaEngine.Compile(nfa));
+            options);
+        return new RegexAutomaton(RegexMetaEngine.Compile(nfa, RegexPrefilter.Compile(tree.Root, options)));
     }
+
+    internal RegexPrefilterKind PrefilterKind => engine.PrefilterKind;
 
     /// <summary>
     /// Finds the first match in a haystack.

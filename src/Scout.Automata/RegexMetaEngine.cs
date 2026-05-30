@@ -17,6 +17,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexDenseDfa? denseDfa;
     private readonly RegexSparseDfa? sparseDfa;
     private readonly RegexLazyDfa? lazyDfa;
+    private readonly RegexPrefilter? prefilter;
 
     private RegexMetaEngine(
         RegexEngineKind kind,
@@ -25,7 +26,8 @@ internal sealed class RegexMetaEngine
         RegexOnePassDfa? onePassDfa,
         RegexDenseDfa? denseDfa,
         RegexSparseDfa? sparseDfa,
-        RegexLazyDfa? lazyDfa)
+        RegexLazyDfa? lazyDfa,
+        RegexPrefilter? prefilter)
     {
         Kind = kind;
         this.pikeVm = pikeVm;
@@ -34,11 +36,19 @@ internal sealed class RegexMetaEngine
         this.denseDfa = denseDfa;
         this.sparseDfa = sparseDfa;
         this.lazyDfa = lazyDfa;
+        this.prefilter = prefilter;
     }
 
     public RegexEngineKind Kind { get; }
 
+    public RegexPrefilterKind PrefilterKind => prefilter?.Kind ?? RegexPrefilterKind.None;
+
     public static RegexMetaEngine Compile(RegexNfa nfa)
+    {
+        return Compile(nfa, prefilter: null);
+    }
+
+    public static RegexMetaEngine Compile(RegexNfa nfa, RegexPrefilter? prefilter)
     {
         if (!RegexDfaOperations.CanCompile(nfa))
         {
@@ -51,7 +61,8 @@ internal sealed class RegexMetaEngine
                     onePassDfa: new RegexOnePassDfa(nfa),
                     denseDfa: null,
                     sparseDfa: null,
-                    lazyDfa: null);
+                    lazyDfa: null,
+                    prefilter);
             }
 
             if (nfa.States.Count <= BoundedBacktrackerNfaStateLimit && RegexBoundedBacktracker.CanCompile(nfa))
@@ -63,7 +74,8 @@ internal sealed class RegexMetaEngine
                     onePassDfa: null,
                     denseDfa: null,
                     sparseDfa: null,
-                    lazyDfa: null);
+                    lazyDfa: null,
+                    prefilter);
             }
 
             return new RegexMetaEngine(
@@ -73,7 +85,8 @@ internal sealed class RegexMetaEngine
                 onePassDfa: null,
                 denseDfa: null,
                 sparseDfa: null,
-                lazyDfa: null);
+                lazyDfa: null,
+                prefilter);
         }
 
         if (nfa.States.Count <= DenseDfaNfaStateLimit &&
@@ -86,7 +99,8 @@ internal sealed class RegexMetaEngine
                 onePassDfa: null,
                 denseDfa: denseDfa,
                 sparseDfa: null,
-                lazyDfa: null);
+                lazyDfa: null,
+                prefilter);
         }
 
         if (nfa.States.Count <= SparseDfaNfaStateLimit &&
@@ -99,7 +113,8 @@ internal sealed class RegexMetaEngine
                 onePassDfa: null,
                 denseDfa: null,
                 sparseDfa: sparseDfa,
-                lazyDfa: null);
+                lazyDfa: null,
+                prefilter);
         }
 
         return new RegexMetaEngine(
@@ -109,12 +124,28 @@ internal sealed class RegexMetaEngine
             onePassDfa: null,
             denseDfa: null,
             sparseDfa: null,
-            lazyDfa: new RegexLazyDfa(nfa));
+            lazyDfa: new RegexLazyDfa(nfa),
+            prefilter);
     }
 
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        if (prefilter is not null)
+        {
+            for (int start = prefilter.FindCandidate(haystack, startOffset);
+                 start >= 0;
+                 start = prefilter.FindCandidate(haystack, start + 1))
+            {
+                if (TryMatchAt(haystack, start, out int length))
+                {
+                    return new RegexMatch(start, length);
+                }
+            }
+
+            return null;
+        }
+
         for (int start = startOffset; start <= haystack.Length; start++)
         {
             if (TryMatchAt(haystack, start, out int length))

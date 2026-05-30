@@ -6,6 +6,31 @@ namespace Scout;
 public sealed class RegexAutomatonTests
 {
     /// <summary>
+    /// Verifies leading required literals use the Memmem regex prefilter.
+    /// </summary>
+    [Fact]
+    public void UsesMemmemPrefilterForLeadingRequiredLiteral()
+    {
+        var automaton = RegexAutomaton.Compile("needle[0-9]+"u8);
+
+        Assert.Equal(RegexPrefilterKind.Memmem, automaton.PrefilterKind);
+        Assert.Equal(new RegexMatch(2, 8), automaton.Find("xxneedle42 yy"u8));
+        Assert.Null(automaton.Find("xxhaystack42 yy"u8));
+    }
+
+    /// <summary>
+    /// Verifies nullable leading expressions do not use a literal prefilter.
+    /// </summary>
+    [Fact]
+    public void SkipsMemmemPrefilterForNullableLeadingExpressions()
+    {
+        var automaton = RegexAutomaton.Compile("a*"u8);
+
+        Assert.Equal(RegexPrefilterKind.None, automaton.PrefilterKind);
+        Assert.Equal(new RegexMatch(0, 0), automaton.Find("bbb"u8));
+    }
+
+    /// <summary>
     /// Verifies the meta engine selects the dense DFA for small position-independent NFAs.
     /// </summary>
     [Fact]
