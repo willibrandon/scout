@@ -197,6 +197,7 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("\"$ROOT/native/pcre2/build-unix.sh\" \"$RID\"", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("artifacts/native/pcre2/$RID/lib/libpcre2-8.a", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-Wl,-force_load,\"$PCRE2_LIB\"", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("_pcre2_config_8 _pcre2_compile_8 _pcre2_match_8", appBuildScript, StringComparison.Ordinal);
     }
 
     /// <summary>
