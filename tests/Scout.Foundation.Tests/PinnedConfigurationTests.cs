@@ -198,6 +198,29 @@ public sealed class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies third-party notices include the license texts required by the design.
+    /// </summary>
+    [Fact]
+    public void ThirdPartyNoticesReproduceRequiredLicenses()
+    {
+        string root = FindRepositoryRoot();
+        string notices = File.ReadAllText(Path.Combine(root, "docs", "THIRD-PARTY-NOTICES.md"));
+
+        Assert.DoesNotContain("release blocker", notices, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("| ripgrep |", notices, StringComparison.Ordinal);
+        Assert.Contains("| regex-syntax | 0.8.8 | MIT OR Apache-2.0 |", notices, StringComparison.Ordinal);
+        Assert.Contains("| encoding_rs | 0.8.35 | MIT OR Apache-2.0; WHATWG data under BSD-3-Clause |", notices, StringComparison.Ordinal);
+        Assert.Contains("| crossbeam-deque | 0.8.6 | MIT OR Apache-2.0 |", notices, StringComparison.Ordinal);
+        Assert.Contains("| PCRE2 C library | 10.46", notices, StringComparison.Ordinal);
+        Assert.Contains("Apache License\n                        Version 2.0, January 2004", notices, StringComparison.Ordinal);
+        Assert.Contains("This is free and unencumbered software released into the public domain.", notices, StringComparison.Ordinal);
+        Assert.Contains("Copyright (c) 2019 The Crossbeam Project Developers", notices, StringComparison.Ordinal);
+        Assert.Contains("Copyright © WHATWG (Apple, Google, Mozilla, Microsoft).", notices, StringComparison.Ordinal);
+        Assert.Contains("Original API code Copyright (c) 1997-2012 University of Cambridge", notices, StringComparison.Ordinal);
+        Assert.Contains("New API code Copyright (c) 2016-2024 University of Cambridge", notices, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies PCRE2 provenance is recorded and matches the vendored <c>pcre2-sys</c> header.
     /// </summary>
     [Fact]
