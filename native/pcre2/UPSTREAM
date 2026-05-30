@@ -6,6 +6,6 @@ c_library = "PCRE2"
 c_library_version = "10.46"
 c_library_date = "2025-08-27"
 c_library_tag = "pcre2-10.46"
-c_library_commit_sha = "resolved@vendor"
+c_library_commit_sha = "56c87ccac13b01c3c1ecdf71e4fc2fedccea50a2"
 code_unit_width = 8
 linking = "static per RID"

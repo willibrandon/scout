@@ -14,7 +14,7 @@ sys_crate = "pcre2-sys"
 sys_crate_version = "0.2.10"
 c_library_version = "10.46"
 c_library_date = "2025-08-27"
-commit_sha = "resolved@vendor"
+commit_sha = "56c87ccac13b01c3c1ecdf71e4fc2fedccea50a2"
 
 [[spike_artifact]]
 rid = "osx-arm64"

@@ -17,6 +17,8 @@ public sealed class PinnedConfigurationTests
     private const string PinnedRipgrepCommit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119";
     private const string ReferenceRipgrepRoot = "/Users/brandon/src/ripgrep";
     private const string PinnedRipgrepBinaryPath = "/Users/brandon/src/ripgrep/target/debug/rg";
+    private const string Pcre2SysRoot = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pcre2-sys-0.2.10";
+    private const string PinnedPcre2Commit = "56c87ccac13b01c3c1ecdf71e4fc2fedccea50a2";
 
     /// <summary>
     /// Verifies the SDK pin uses the exact .NET 10 SDK required by the design.
@@ -155,6 +157,32 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("version = \"0.4.13\"", cargoLock, StringComparison.Ordinal);
         Assert.Contains("name = \"regex-syntax\"", cargoLock, StringComparison.Ordinal);
         Assert.Contains("version = \"0.8.8\"", cargoLock, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Verifies PCRE2 provenance is recorded and matches the vendored <c>pcre2-sys</c> header.
+    /// </summary>
+    [Fact]
+    public void Pcre2UpstreamPinMatchesVendoredHeader()
+    {
+        string root = FindRepositoryRoot();
+        string upstream = File.ReadAllText(Path.Combine(root, "native", "pcre2", "UPSTREAM"));
+        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        string headerPath = Path.Combine(Pcre2SysRoot, "upstream", "include", "pcre2.h");
+
+        Assert.True(File.Exists(headerPath), "Missing vendored pcre2.h: " + headerPath);
+        string header = File.ReadAllText(headerPath);
+
+        Assert.Contains("binding = \"pcre2\"", upstream, StringComparison.Ordinal);
+        Assert.Contains("binding_version = \"0.2.11\"", upstream, StringComparison.Ordinal);
+        Assert.Contains("sys_crate = \"pcre2-sys\"", upstream, StringComparison.Ordinal);
+        Assert.Contains("sys_crate_version = \"0.2.10\"", upstream, StringComparison.Ordinal);
+        Assert.Contains("c_library_tag = \"pcre2-10.46\"", upstream, StringComparison.Ordinal);
+        Assert.Contains("c_library_commit_sha = \"" + PinnedPcre2Commit + "\"", upstream, StringComparison.Ordinal);
+        Assert.Contains("commit_sha = \"" + PinnedPcre2Commit + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("#define PCRE2_MAJOR           10", header, StringComparison.Ordinal);
+        Assert.Contains("#define PCRE2_MINOR           46", header, StringComparison.Ordinal);
+        Assert.Contains("#define PCRE2_DATE            2025-08-27", header, StringComparison.Ordinal);
     }
 
     /// <summary>
