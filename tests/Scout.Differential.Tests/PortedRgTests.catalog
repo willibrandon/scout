@@ -112,6 +112,8 @@ tests/misc.rs|binary_search_no_mmap
 tests/misc.rs|files
 tests/misc.rs|type_list
 tests/misc.rs|sort_files
+tests/misc.rs|sort_accessed
+tests/misc.rs|sortr_accessed
 tests/feature.rs|f109_max_depth
 tests/feature.rs|f45_relative_cwd
 tests/feature.rs|f45_precedence_with_others
@@ -231,6 +233,7 @@ tests/feature.rs|f1207_ignore_encoding
 tests/feature.rs|f1414_no_require_git
 tests/feature.rs|f1420_no_ignore_exclude
 tests/feature.rs|f1466_no_ignore_files
+tests/feature.rs|f2361_sort_nested_files
 tests/feature.rs|f1404_nothing_searched_warning
 tests/feature.rs|f1404_nothing_searched_ignored
 tests/feature.rs|f1842_field_context_separator

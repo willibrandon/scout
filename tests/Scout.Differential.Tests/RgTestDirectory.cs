@@ -19,9 +19,21 @@ internal sealed class RgTestDirectory : IDisposable
         return new RgTestDirectory(path);
     }
 
+    public RgTestDirectory Clone(string suffix)
+    {
+        string path = Path.Combine(Path.GetTempPath(), "scout-rgtest-" + suffix + "-" + Guid.NewGuid().ToString("N"));
+        CopyDirectory(RootPath, path);
+        return new RgTestDirectory(path);
+    }
+
     public void CreateFile(string relativePath, string contents)
     {
         CreateBytes(relativePath, EncodingUtf8.GetBytes(contents));
+    }
+
+    public void SetLastAccessTimeUtc(string relativePath, DateTime lastAccessTimeUtc)
+    {
+        File.SetLastAccessTimeUtc(Path.Combine(RootPath, relativePath), lastAccessTimeUtc);
     }
 
     public void CreateBytes(string relativePath, byte[] contents)
@@ -57,5 +69,37 @@ internal sealed class RgTestDirectory : IDisposable
     public void Dispose()
     {
         Directory.Delete(RootPath, recursive: true);
+    }
+
+    private static void CopyDirectory(string sourcePath, string destinationPath)
+    {
+        Directory.CreateDirectory(destinationPath);
+        CopyDirectoryTimes(sourcePath, destinationPath);
+        foreach (string directory in Directory.EnumerateDirectories(sourcePath))
+        {
+            string childDestination = Path.Combine(destinationPath, Path.GetFileName(directory));
+            CopyDirectory(directory, childDestination);
+        }
+
+        foreach (string file in Directory.EnumerateFiles(sourcePath))
+        {
+            string childDestination = Path.Combine(destinationPath, Path.GetFileName(file));
+            File.Copy(file, childDestination);
+            CopyFileTimes(file, childDestination);
+        }
+    }
+
+    private static void CopyDirectoryTimes(string sourcePath, string destinationPath)
+    {
+        Directory.SetCreationTimeUtc(destinationPath, Directory.GetCreationTimeUtc(sourcePath));
+        Directory.SetLastWriteTimeUtc(destinationPath, Directory.GetLastWriteTimeUtc(sourcePath));
+        Directory.SetLastAccessTimeUtc(destinationPath, Directory.GetLastAccessTimeUtc(sourcePath));
+    }
+
+    private static void CopyFileTimes(string sourcePath, string destinationPath)
+    {
+        File.SetCreationTimeUtc(destinationPath, File.GetCreationTimeUtc(sourcePath));
+        File.SetLastWriteTimeUtc(destinationPath, File.GetLastWriteTimeUtc(sourcePath));
+        File.SetLastAccessTimeUtc(destinationPath, File.GetLastAccessTimeUtc(sourcePath));
     }
 }

@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Text;
 
@@ -786,15 +787,18 @@ internal static class PortedRgTests
             new(
                 "tests/misc.rs",
                 "sort_files",
-                dir =>
-                {
-                    dir.CreateFile("a", "test");
-                    dir.CreateDirectory("dir");
-                    dir.CreateFile("dir/c", "test");
-                    dir.CreateFile("b", "test");
-                    dir.CreateFile("dir/d", "test");
-                },
+                CreateSortFixture,
                 DifferentialCase.Exact("--path-separator", "/", "--sort", "path", "test", ".")),
+            new(
+                "tests/misc.rs",
+                "sort_accessed",
+                CreateSortFixture,
+                DifferentialCase.Exact("--path-separator", "/", "--sort", "accessed", "test", ".")),
+            new(
+                "tests/misc.rs",
+                "sortr_accessed",
+                CreateSortFixture,
+                DifferentialCase.Exact("--path-separator", "/", "--sortr", "accessed", "test", ".")),
             new(
                 "tests/feature.rs",
                 "f45_relative_cwd",
@@ -1729,6 +1733,24 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "--sort", "path", "--files", "--ignore-file", ".myignore", "-u")),
             new(
                 "tests/feature.rs",
+                "f2361_sort_nested_files",
+                dir => dir.CreateDirectory("dir"),
+                DifferentialCase.ExactWithSetup(
+                    dir => CreateNestedSortFiles(dir, "1"),
+                    "--path-separator",
+                    "/",
+                    "--sort",
+                    "accessed",
+                    "--files"),
+                DifferentialCase.ExactWithSetup(
+                    dir => CreateNestedSortFiles(dir, "2"),
+                    "--path-separator",
+                    "/",
+                    "--sort",
+                    "accessed",
+                    "--files")),
+            new(
+                "tests/feature.rs",
                 "f1404_nothing_searched_warning",
                 CreateNothingSearchedFixture,
                 DifferentialCase.Exact("--path-separator", "/", "needle")),
@@ -1928,10 +1950,12 @@ internal static class PortedRgTests
         for (int index = 0; index < testCase.Commands.Length; index++)
         {
             DifferentialCase command = testCase.Commands[index];
-            string workingDirectory = command.RelativeWorkingDirectory is null
-                ? directory.RootPath
-                : Path.Combine(directory.RootPath, command.RelativeWorkingDirectory);
-            DifferentialRunner.AssertMatchesPinned(command, workingDirectory);
+            command.BeforeRun?.Invoke(directory);
+            using RgTestDirectory scoutDirectory = directory.Clone(testCase.Name + "-scout");
+            using RgTestDirectory pinnedDirectory = directory.Clone(testCase.Name + "-pinned");
+            string scoutWorkingDirectory = GetWorkingDirectory(scoutDirectory, command);
+            string pinnedWorkingDirectory = GetWorkingDirectory(pinnedDirectory, command);
+            DifferentialRunner.AssertMatchesPinned(command, scoutWorkingDirectory, pinnedWorkingDirectory);
         }
     }
 
@@ -1989,6 +2013,13 @@ internal static class PortedRgTests
             string.Equals(testCase.Name, name, StringComparison.Ordinal);
     }
 
+    private static string GetWorkingDirectory(RgTestDirectory directory, DifferentialCase command)
+    {
+        return command.RelativeWorkingDirectory is null
+            ? directory.RootPath
+            : Path.Combine(directory.RootPath, command.RelativeWorkingDirectory);
+    }
+
     private static void CreateSherlockNul(RgTestDirectory dir)
     {
         dir.CreateBytes("hay", File.ReadAllBytes(UpstreamSherlockNulPath));
@@ -2011,6 +2042,33 @@ internal static class PortedRgTests
         file1.Append('\0');
         dir.CreateFile("file1.txt", file1.ToString());
         dir.CreateFile("file2.txt", "cat here");
+    }
+
+    private static void CreateSortFixture(RgTestDirectory dir)
+    {
+        dir.CreateFile("a", "test");
+        dir.CreateDirectory("dir");
+        dir.CreateFile("dir/c", "test");
+        dir.CreateFile("b", "test");
+        dir.CreateFile("dir/d", "test");
+        SetAccessTimes(dir, "a", "dir/c", "b", "dir/d");
+    }
+
+    private static void CreateNestedSortFiles(RgTestDirectory dir, string contents)
+    {
+        dir.CreateFile("foo", contents);
+        dir.CreateDirectory("dir");
+        dir.CreateFile("dir/bar", contents);
+        SetAccessTimes(dir, "foo", "dir/bar");
+    }
+
+    private static void SetAccessTimes(RgTestDirectory dir, params string[] relativePaths)
+    {
+        DateTime baseTime = new(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        for (int index = 0; index < relativePaths.Length; index++)
+        {
+            dir.SetLastAccessTimeUtc(relativePaths[index], baseTime.AddSeconds(index));
+        }
     }
 
     private static void CreateNothingSearchedFixture(RgTestDirectory dir)

@@ -21,10 +21,15 @@ internal static class DifferentialRunner
 
     public static void AssertMatchesPinned(DifferentialCase testCase, string? workingDirectory)
     {
+        AssertMatchesPinned(testCase, workingDirectory, workingDirectory);
+    }
+
+    public static void AssertMatchesPinned(DifferentialCase testCase, string? scoutWorkingDirectory, string? pinnedWorkingDirectory)
+    {
         ArgumentNullException.ThrowIfNull(testCase);
 
-        DifferentialRunResult scout = RunScout(testCase.Arguments, testCase.StandardInput, testCase.RelativeConfigPath, workingDirectory);
-        DifferentialRunResult pinned = RunPinnedRipgrep(testCase.Arguments, testCase.StandardInput, testCase.RelativeConfigPath, workingDirectory);
+        DifferentialRunResult scout = RunScout(testCase.Arguments, testCase.StandardInput, testCase.RelativeConfigPath, scoutWorkingDirectory);
+        DifferentialRunResult pinned = RunPinnedRipgrep(testCase.Arguments, testCase.StandardInput, testCase.RelativeConfigPath, pinnedWorkingDirectory);
 
         if (pinned.ExitCode != scout.ExitCode)
         {
