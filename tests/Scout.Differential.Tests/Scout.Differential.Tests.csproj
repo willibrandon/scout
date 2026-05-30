@@ -18,6 +18,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <AdditionalFiles Include="PortedRgTests.catalog" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Scout.App\Scout.App.csproj" />
     <ProjectReference Include="..\..\src\Scout.Os\Scout.Os.csproj" />
   </ItemGroup>

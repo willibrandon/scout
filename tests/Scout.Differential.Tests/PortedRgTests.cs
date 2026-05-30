@@ -1,17 +1,8 @@
 namespace Scout;
 
-/// <summary>
-/// Ports upstream ripgrep <c>tests/*.rs</c> cases into the Scout differential harness.
-/// </summary>
-public sealed class PortedRgTests
+internal static class PortedRgTests
 {
-    /// <summary>
-    /// Verifies an initial set of ported upstream <c>rgtest!</c> cases against pinned ripgrep.
-    /// </summary>
-    [Fact]
-    public void PortedRgtestCasesMatchPinnedRipgrep()
-    {
-        PortedRgTestCase[] cases =
+    private static readonly PortedRgTestCase[] Cases =
         [
             new(
                 "tests/regression.rs",
@@ -252,13 +243,66 @@ public sealed class PortedRgTests
                 DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--path-separator", "/", "-j1", "--stats", "needle", ".")),
         ];
 
-        for (int index = 0; index < cases.Length; index++)
+    internal static void Run(string sourceFile, string name)
+    {
+        PortedRgTestCase testCase = Find(sourceFile, name);
+        using var directory = RgTestDirectory.Create(testCase.SourceFile.Replace('/', '-') + "-" + testCase.Name);
+        testCase.Arrange(directory);
+        DifferentialRunner.AssertMatchesPinned(testCase.Command, directory.RootPath);
+    }
+
+    internal static void AssertCatalog((string SourceFile, string Name)[] expected)
+    {
+        Assert.Equal(expected.Length, Cases.Length);
+        for (int index = 0; index < expected.Length; index++)
         {
-            PortedRgTestCase testCase = cases[index];
-            using var directory = RgTestDirectory.Create(testCase.SourceFile.Replace('/', '-') + "-" + testCase.Name);
-            testCase.Arrange(directory);
-            DifferentialRunner.AssertMatchesPinned(testCase.Command, directory.RootPath);
+            Assert.NotNull(TryFind(expected[index].SourceFile, expected[index].Name));
         }
+
+        for (int index = 0; index < Cases.Length; index++)
+        {
+            bool found = false;
+            for (int expectedIndex = 0; expectedIndex < expected.Length; expectedIndex++)
+            {
+                if (IsCase(Cases[index], expected[expectedIndex].SourceFile, expected[expectedIndex].Name))
+                {
+                    found = true;
+                    break;
+                }
+            }
+
+            Assert.True(found, Cases[index].SourceFile + "::" + Cases[index].Name + " is missing from the generated test catalog.");
+        }
+    }
+
+    private static PortedRgTestCase Find(string sourceFile, string name)
+    {
+        PortedRgTestCase? testCase = TryFind(sourceFile, name);
+        if (testCase is null)
+        {
+            Assert.Fail("Ported ripgrep test case was not found: " + sourceFile + "::" + name);
+        }
+
+        return testCase;
+    }
+
+    private static PortedRgTestCase? TryFind(string sourceFile, string name)
+    {
+        for (int index = 0; index < Cases.Length; index++)
+        {
+            if (IsCase(Cases[index], sourceFile, name))
+            {
+                return Cases[index];
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsCase(PortedRgTestCase testCase, string sourceFile, string name)
+    {
+        return string.Equals(testCase.SourceFile, sourceFile, StringComparison.Ordinal) &&
+            string.Equals(testCase.Name, name, StringComparison.Ordinal);
     }
 
     private const string Sherlock =
