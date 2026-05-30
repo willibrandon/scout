@@ -47,6 +47,42 @@ public sealed class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies CI encodes the cross-platform RID and release-gate commands required by the design.
+    /// </summary>
+    [Fact]
+    public void CiWorkflowPinsCrossPlatformGates()
+    {
+        string root = FindRepositoryRoot();
+        string workflowPath = Path.Combine(root, ".github", "workflows", "ci.yml");
+
+        Assert.True(File.Exists(workflowPath), "Missing CI workflow: " + workflowPath);
+        string workflow = File.ReadAllText(workflowPath);
+
+        Assert.Contains("dotnet-version: 10.0.102", workflow, StringComparison.Ordinal);
+        Assert.Contains("dotnet build Scout.slnx --no-restore", workflow, StringComparison.Ordinal);
+        Assert.Contains("dotnet test Scout.slnx --no-restore", workflow, StringComparison.Ordinal);
+        Assert.Contains("dotnet format Scout.slnx --no-restore --verify-no-changes", workflow, StringComparison.Ordinal);
+        Assert.Contains("eng/preflight.sh", workflow, StringComparison.Ordinal);
+        Assert.Contains("native/build-app-unix.sh ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("bench/run-hyperfine.sh --gate", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("continue-on-error: true", workflow, StringComparison.OrdinalIgnoreCase);
+
+        string[] requiredRids =
+        [
+            "linux-x64",
+            "linux-arm64",
+            "osx-x64",
+            "osx-arm64",
+            "win-x64",
+            "win-arm64",
+        ];
+        for (int index = 0; index < requiredRids.Length; index++)
+        {
+            Assert.Contains("rid: " + requiredRids[index], workflow, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
     /// Verifies the local ripgrep reference checkout is at the design pin.
     /// </summary>
     [Fact]
@@ -180,6 +216,28 @@ public sealed class PinnedConfigurationTests
         }
 
         Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>
+    /// Verifies native entry captures raw Unix bytes and Windows UTF-16 arguments at the OS boundary.
+    /// </summary>
+    [Fact]
+    public void NativeEntryCapturesPlatformArgumentsAtBoundary()
+    {
+        string root = FindRepositoryRoot();
+        string scoutEntry = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "ScoutEntry.cs"));
+        string nativeArgumentReader = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "NativeArgumentReader.cs"));
+        string unixEntry = File.ReadAllText(Path.Combine(root, "native", "entry", "scout_main.c"));
+
+        Assert.Contains("[UnmanagedCallersOnly(EntryPoint = \"scout_entry\")]", scoutEntry, StringComparison.Ordinal);
+        Assert.Contains("NativeArgumentReader.CaptureUnix(argc, argv)", scoutEntry, StringComparison.Ordinal);
+        Assert.Contains("NativeArgumentReader.CaptureWindowsCommandLine()", scoutEntry, StringComparison.Ordinal);
+        Assert.Contains("GetCommandLineW", nativeArgumentReader, StringComparison.Ordinal);
+        Assert.Contains("CommandLineToArgvW", nativeArgumentReader, StringComparison.Ordinal);
+        Assert.Contains("LocalFree", nativeArgumentReader, StringComparison.Ordinal);
+        Assert.Contains("OsString.FromUnixBytes", nativeArgumentReader, StringComparison.Ordinal);
+        Assert.Contains("OsString.FromWindowsString", nativeArgumentReader, StringComparison.Ordinal);
+        Assert.Contains("return scout_entry(argc, argv, envp);", unixEntry, StringComparison.Ordinal);
     }
 
     /// <summary>

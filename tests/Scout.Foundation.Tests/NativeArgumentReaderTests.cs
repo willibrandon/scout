@@ -33,4 +33,28 @@ public sealed unsafe class NativeArgumentReaderTests
             Assert.Equal([0xff, 0x80], arguments[2].AsUnixBytes().ToArray());
         }
     }
+
+    /// <summary>
+    /// Verifies Windows argv capture preserves UTF-16 argument text.
+    /// </summary>
+    [Fact]
+    public void CaptureWindowsWidePreservesArgumentText()
+    {
+        fixed (char* executablePointer = "scout\0")
+        fixed (char* flagPointer = "-V\0")
+        fixed (char* pathPointer = "C:\\tmp\\file.txt\0")
+        {
+            char** argv = stackalloc char*[3];
+            argv[0] = executablePointer;
+            argv[1] = flagPointer;
+            argv[2] = pathPointer;
+
+            OsString[] arguments = NativeArgumentReader.CaptureWindowsWide(3, argv);
+
+            Assert.Equal(3, arguments.Length);
+            Assert.Equal("scout", arguments[0].AsWindowsString());
+            Assert.Equal("-V", arguments[1].AsWindowsString());
+            Assert.Equal("C:\\tmp\\file.txt", arguments[2].AsWindowsString());
+        }
+    }
 }

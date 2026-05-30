@@ -8,7 +8,9 @@ internal static unsafe class ScoutEntry
     public static int Run(int argc, byte** argv, byte** envp)
     {
         _ = envp;
-        OsString[] arguments = NativeArgumentReader.CaptureUnix(argc, argv);
+        OsString[] arguments = OperatingSystem.IsWindows()
+            ? NativeArgumentReader.CaptureWindowsCommandLine()
+            : NativeArgumentReader.CaptureUnix(argc, argv);
         return ScoutApplication.Run(arguments, RawStandardStreams.OpenOutput(), RawStandardStreams.OpenError());
     }
 }
