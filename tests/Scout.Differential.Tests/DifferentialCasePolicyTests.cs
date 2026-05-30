@@ -67,6 +67,17 @@ public sealed class DifferentialCasePolicyTests
     }
 
     /// <summary>
+    /// Verifies file-list mode resolves to path-order normalization because it uses ripgrep's walker.
+    /// </summary>
+    [Fact]
+    public void ExactNormalizesDefaultFileListOutput()
+    {
+        var testCase = DifferentialCase.Exact("--files", ".");
+
+        Assert.Equal(DifferentialComparisonMode.SortLines, testCase.ComparisonMode);
+    }
+
+    /// <summary>
     /// Verifies sorted traversal remains exact because ripgrep serializes sorted walks.
     /// </summary>
     [Fact]
@@ -148,6 +159,17 @@ public sealed class DifferentialCasePolicyTests
     public void MaskElapsedNormalizesDefaultDirectoryStatsOutput()
     {
         var testCase = DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--stats", "needle", ".");
+
+        Assert.Equal(DifferentialComparisonMode.SortLinesAndMaskElapsed, testCase.ComparisonMode);
+    }
+
+    /// <summary>
+    /// Verifies default directory JSON comparisons sort path output and mask elapsed summary fields.
+    /// </summary>
+    [Fact]
+    public void MaskElapsedNormalizesDefaultDirectoryJsonOutput()
+    {
+        var testCase = DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--json", "needle", ".");
 
         Assert.Equal(DifferentialComparisonMode.SortLinesAndMaskElapsed, testCase.ComparisonMode);
     }

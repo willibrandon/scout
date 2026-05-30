@@ -10,13 +10,13 @@ namespace Scout;
 /// </summary>
 public sealed class RegexCorpusDifferentialTests
 {
-    private const int ExpectedDifferentialCaseCount = 83;
+    private const int ExpectedDifferentialCaseCount = 106;
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     private static readonly (string RelativePath, int Count)[] ExpectedDifferentialFileCounts =
     [
-        ("crazy.toml", 24),
+        ("crazy.toml", 47),
         ("empty.toml", 18),
         ("flags.toml", 9),
         ("iter.toml", 19),
@@ -84,14 +84,22 @@ public sealed class RegexCorpusDifferentialTests
         ("empty.toml", "520"),
         ("empty.toml", "600"),
         ("empty.toml", "610"),
+        ("crazy.toml", "ranges"),
         ("crazy.toml", "ranges-not"),
         ("crazy.toml", "float1"),
         ("crazy.toml", "float3"),
         ("crazy.toml", "float4"),
         ("crazy.toml", "float5"),
+        ("crazy.toml", "email"),
+        ("crazy.toml", "email-not"),
+        ("crazy.toml", "email-big"),
         ("crazy.toml", "date1"),
         ("crazy.toml", "date2"),
         ("crazy.toml", "date3"),
+        ("crazy.toml", "start-end-empty"),
+        ("crazy.toml", "start-end-empty-rev"),
+        ("crazy.toml", "start-end-empty-many-1"),
+        ("crazy.toml", "start-end-empty-many-2"),
         ("crazy.toml", "neg-class-letter"),
         ("crazy.toml", "neg-class-letter-comma"),
         ("crazy.toml", "neg-class-letter-space"),
@@ -104,10 +112,25 @@ public sealed class RegexCorpusDifferentialTests
         ("crazy.toml", "lazy-many-optional"),
         ("crazy.toml", "lazy-one-many-many"),
         ("crazy.toml", "lazy-one-many-optional"),
+        ("crazy.toml", "lazy-range-min-many"),
+        ("crazy.toml", "lazy-range-many"),
         ("crazy.toml", "greedy-many-many"),
         ("crazy.toml", "greedy-many-optional"),
         ("crazy.toml", "greedy-one-many-many"),
         ("crazy.toml", "greedy-one-many-optional"),
+        ("crazy.toml", "greedy-range-min-many"),
+        ("crazy.toml", "greedy-range-many"),
+        ("crazy.toml", "empty1"),
+        ("crazy.toml", "empty2"),
+        ("crazy.toml", "empty3"),
+        ("crazy.toml", "empty4"),
+        ("crazy.toml", "empty5"),
+        ("crazy.toml", "empty6"),
+        ("crazy.toml", "empty7"),
+        ("crazy.toml", "empty8"),
+        ("crazy.toml", "empty9"),
+        ("crazy.toml", "empty10"),
+        ("crazy.toml", "empty11"),
     ];
 
     /// <summary>
