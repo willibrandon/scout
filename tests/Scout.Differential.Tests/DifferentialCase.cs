@@ -118,6 +118,11 @@ internal sealed class DifferentialCase
 
     private static void ValidateComparisonPolicy(DifferentialComparisonMode comparisonMode, string[] arguments)
     {
+        if (UsesExplicitParallelism(arguments) && !NormalizesPathOrder(comparisonMode))
+        {
+            throw new ArgumentException("Explicitly parallel differential comparisons must use a path-order-normalizing comparison mode.", nameof(comparisonMode));
+        }
+
         if (!ProducesElapsedFields(arguments))
         {
             return;
@@ -137,6 +142,14 @@ internal sealed class DifferentialCase
     private static bool MasksElapsedFields(DifferentialComparisonMode comparisonMode)
     {
         return comparisonMode is DifferentialComparisonMode.MaskElapsed
+            or DifferentialComparisonMode.SortLinesAndMaskElapsed
+            or DifferentialComparisonMode.NonEmptyStdout
+            or DifferentialComparisonMode.NonEmptyStderr;
+    }
+
+    private static bool NormalizesPathOrder(DifferentialComparisonMode comparisonMode)
+    {
+        return comparisonMode is DifferentialComparisonMode.SortLines
             or DifferentialComparisonMode.SortLinesAndMaskElapsed
             or DifferentialComparisonMode.NonEmptyStdout
             or DifferentialComparisonMode.NonEmptyStderr;

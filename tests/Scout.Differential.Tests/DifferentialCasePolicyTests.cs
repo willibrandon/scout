@@ -46,6 +46,46 @@ public sealed class DifferentialCasePolicyTests
     }
 
     /// <summary>
+    /// Verifies exact comparisons cannot opt into ripgrep's parallel walker without also normalizing path order.
+    /// </summary>
+    [Fact]
+    public void ExactRejectsExplicitParallelOutput()
+    {
+        Assert.Throws<ArgumentException>(() => DifferentialCase.Exact("-j2", "needle", "."));
+    }
+
+    /// <summary>
+    /// Verifies elapsed-only normalization is not enough for explicitly parallel text output.
+    /// </summary>
+    [Fact]
+    public void MaskElapsedRejectsExplicitParallelTextOutput()
+    {
+        Assert.Throws<ArgumentException>(() => DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--threads=2", "needle", "."));
+    }
+
+    /// <summary>
+    /// Verifies sorted comparisons may opt into ripgrep's parallel walker.
+    /// </summary>
+    [Fact]
+    public void SortLinesAllowsExplicitParallelOutput()
+    {
+        var testCase = DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "--threads", "2", "needle", ".");
+
+        Assert.Equal(DifferentialComparisonMode.SortLines, testCase.ComparisonMode);
+    }
+
+    /// <summary>
+    /// Verifies forced serial search keeps exact comparisons available.
+    /// </summary>
+    [Fact]
+    public void ExactAllowsForcedSerialOutput()
+    {
+        var testCase = DifferentialCase.Exact("-j1", "needle", ".");
+
+        Assert.Equal(DifferentialComparisonMode.Exact, testCase.ComparisonMode);
+    }
+
+    /// <summary>
     /// Verifies explicitly parallel JSON and stats comparisons can opt into both required normalizers.
     /// </summary>
     [Fact]
