@@ -394,7 +394,15 @@ public sealed class PinnedConfigurationTests
             prerequisiteLock,
             StringComparison.Ordinal);
         Assert.Contains(
+            "archive_sha256 = \"8779f9318fb896f64f7a876d7ff9c152925e82c17690281eb1ec6ce587275054\"",
+            prerequisiteLock,
+            StringComparison.Ordinal);
+        Assert.Contains(
             "tree_path = \"artifacts/corpora/linux/linux-84e57d292203a45c96dbcb2e6be9dd80961d981a\"",
+            prerequisiteLock,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "tree_sha256 = \"c104036f61aa7eba26da621738424e2e35f2c12372858abc345c39bbd9ecd116\"",
             prerequisiteLock,
             StringComparison.Ordinal);
     }

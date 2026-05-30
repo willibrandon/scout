@@ -138,10 +138,16 @@ sha256_tree() {
     [ -d "$tree" ] || fail "Missing tree corpus: $tree"
     (
         cd "$tree"
-        find . -type f -print | sed 's#^\./##' | LC_ALL=C sort | while IFS= read -r relative_path; do
-            file_sha256="$(sha256_file "$relative_path")"
-            printf '%s  %s\n' "$file_sha256" "$relative_path"
-        done
+        if command -v shasum >/dev/null 2>&1; then
+            find . -type f -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256
+        elif command -v sha256sum >/dev/null 2>&1; then
+            find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum
+        else
+            find . -type f -print | sed 's#^\./##' | LC_ALL=C sort | while IFS= read -r relative_path; do
+                file_sha256="$(sha256_file "$relative_path")"
+                printf '%s  %s\n' "$file_sha256" "$relative_path"
+            done
+        fi | sed 's#  \./#  #'
     ) | sha256_stream
 }
 

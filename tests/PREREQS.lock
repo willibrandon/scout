@@ -231,9 +231,9 @@ kind = "tree"
 commit = "84e57d292203a45c96dbcb2e6be9dd80961d981a"
 archive_url = "https://codeload.github.com/BurntSushi/linux/tar.gz/84e57d292203a45c96dbcb2e6be9dd80961d981a"
 archive_path = "artifacts/corpora/linux/linux-84e57d292203a45c96dbcb2e6be9dd80961d981a.tar.gz"
-archive_sha256 = "resolved@fetch"
+archive_sha256 = "8779f9318fb896f64f7a876d7ff9c152925e82c17690281eb1ec6ce587275054"
 tree_path = "artifacts/corpora/linux/linux-84e57d292203a45c96dbcb2e6be9dd80961d981a"
-tree_sha256 = "resolved@fetch"
+tree_sha256 = "c104036f61aa7eba26da621738424e2e35f2c12372858abc345c39bbd9ecd116"
 
 [[corpus]]
 name = "regex-1.12.2-misc"
