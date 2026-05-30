@@ -83,6 +83,15 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies the regex-crate any-byte Unicode class matches across line terminators.
+    /// </summary>
+    [Fact]
+    public void MatchesAnyUnicodeClass()
+    {
+        Assert.Equal(new RegexMatch(0, 3), RegexAutomaton.Compile(@"a\p{Any}b"u8).Find("a\nb"u8));
+    }
+
+    /// <summary>
     /// Verifies root compile options match multiline search configuration and remain overridable by inline flags.
     /// </summary>
     [Fact]

@@ -346,6 +346,11 @@ internal sealed class RegexSyntaxParseState
             return escapedNode;
         }
 
+        if (escaped == (byte)'p' && TryParseUnicodeAnyClass(position, out RegexSyntaxNode anyClassNode))
+        {
+            return anyClassNode;
+        }
+
         return escaped switch
         {
             (byte)'b' => new RegexAtomNode(RegexSyntaxKind.WordBoundary, ReadOnlyMemory<byte>.Empty, position),
@@ -361,6 +366,19 @@ internal sealed class RegexSyntaxParseState
             (byte)'f' => new RegexAtomNode(RegexSyntaxKind.Literal, new[] { (byte)'\f' }, position),
             _ => new RegexAtomNode(RegexSyntaxKind.Literal, new[] { escaped }, position),
         };
+    }
+
+    private bool TryParseUnicodeAnyClass(int position, out RegexSyntaxNode node)
+    {
+        node = new RegexEmptyNode(position);
+        if (index + 5 > Pattern.Length || !Pattern.Slice(index, 5).SequenceEqual("{Any}"u8))
+        {
+            return false;
+        }
+
+        index += 5;
+        node = new RegexAtomNode(RegexSyntaxKind.AnyClass, ReadOnlyMemory<byte>.Empty, position);
+        return true;
     }
 
     private bool TryParseNamedWordBoundary(out RegexSyntaxKind boundaryKind)

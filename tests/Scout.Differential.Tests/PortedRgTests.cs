@@ -33,6 +33,11 @@ public sealed class PortedRgTests
                 dir => dir.CreateFile("test", "xxx\nabc\ndefxxxabc\ndefxxx\nxxx"),
                 DifferentialCase.Exact("--path-separator", "/", "-n", "-U", "abc\ndef", ".")),
             new(
+                "tests/multiline.rs",
+                "stdin",
+                _ => { },
+                DifferentialCase.ExactWithStandardInput(EncodingUtf8.GetBytes(Sherlock), "-n", "-U", @"of this world\p{Any}+?detective work")),
+            new(
                 "tests/feature.rs",
                 "f948_exit_code_no_match",
                 dir => dir.CreateFile("sherlock", "Sherlock\nWatson\n"),
@@ -72,4 +77,12 @@ public sealed class PortedRgTests
             DifferentialRunner.AssertMatchesPinned(testCase.Command, directory.RootPath);
         }
     }
+
+    private const string Sherlock =
+        "For the Doctor Watsons of this world, as opposed to the Sherlock\n" +
+        "Holmeses, success in the province of detective work must always\n" +
+        "be, to a very large extent, the result of luck. Sherlock Holmes\n" +
+        "can extract a clew from a wisp of straw or a flake of cigar ash;\n" +
+        "but Doctor Watson has to have it taken out for him and dusted,\n" +
+        "and exhibited clearly, with a label attached.\n";
 }

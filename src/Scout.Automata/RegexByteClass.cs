@@ -15,6 +15,7 @@ internal static class RegexByteClass
         {
             RegexSyntaxKind.Literal => expression.Length > 0 && ByteEquals(value, expression[0], caseInsensitive),
             RegexSyntaxKind.Dot => dotMatchesNewline || value != (byte)'\n',
+            RegexSyntaxKind.AnyClass => true,
             RegexSyntaxKind.CharacterClass => ClassMatches(value, expression, caseInsensitive),
             RegexSyntaxKind.DigitClass => IsAsciiDigitByte(value),
             RegexSyntaxKind.NotDigitClass => value != (byte)'\n' && !IsAsciiDigitByte(value),

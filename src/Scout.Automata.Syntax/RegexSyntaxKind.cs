@@ -21,6 +21,11 @@ public enum RegexSyntaxKind
     Dot,
 
     /// <summary>
+    /// Matches any byte.
+    /// </summary>
+    AnyClass,
+
+    /// <summary>
     /// Matches a bracketed character class.
     /// </summary>
     CharacterClass,

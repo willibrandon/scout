@@ -21,10 +21,14 @@ internal static class DifferentialRunner
     {
         ArgumentNullException.ThrowIfNull(testCase);
 
-        DifferentialRunResult scout = RunScout(testCase.Arguments, workingDirectory);
-        DifferentialRunResult pinned = RunPinnedRipgrep(testCase.Arguments, workingDirectory);
+        DifferentialRunResult scout = RunScout(testCase.Arguments, testCase.StandardInput, workingDirectory);
+        DifferentialRunResult pinned = RunPinnedRipgrep(testCase.Arguments, testCase.StandardInput, workingDirectory);
 
-        Assert.Equal(pinned.ExitCode, scout.ExitCode);
+        if (pinned.ExitCode != scout.ExitCode)
+        {
+            Assert.Fail(BuildFailureMessage(testCase.Arguments, pinned, scout));
+        }
+
         AssertEqualBytes(
             testCase.Arguments,
             DifferentialOutputNormalizer.NormalizeStdout(pinned.Output, testCase.ComparisonMode),
@@ -34,11 +38,11 @@ internal static class DifferentialRunner
             DifferentialOutputNormalizer.NormalizeStderr(scout.Error, testCase.ComparisonMode));
     }
 
-    private static DifferentialRunResult RunScout(string[] arguments, string? workingDirectory)
+    private static DifferentialRunResult RunScout(string[] arguments, byte[]? standardInput, string? workingDirectory)
     {
         if (workingDirectory is null)
         {
-            return RunScoutInCurrentDirectory(arguments);
+            return RunScoutInCurrentDirectory(arguments, standardInput);
         }
 
         lock (CurrentDirectoryLock)
@@ -47,7 +51,7 @@ internal static class DifferentialRunner
             try
             {
                 Directory.SetCurrentDirectory(workingDirectory);
-                return RunScoutInCurrentDirectory(arguments);
+                return RunScoutInCurrentDirectory(arguments, standardInput);
             }
             finally
             {
@@ -56,8 +60,9 @@ internal static class DifferentialRunner
         }
     }
 
-    private static DifferentialRunResult RunScoutInCurrentDirectory(string[] arguments)
+    private static DifferentialRunResult RunScoutInCurrentDirectory(string[] arguments, byte[]? standardInput)
     {
+        using MemoryStream input = new(standardInput ?? []);
         using MemoryStream output = new();
         using MemoryStream error = new();
         var outputWriter = new RawByteWriter(output);
@@ -69,17 +74,18 @@ internal static class DifferentialRunner
             osArguments[index + 1] = OsString.FromText(arguments[index]);
         }
 
-        int exitCode = ScoutApplication.Run(osArguments, outputWriter, errorWriter);
+        int exitCode = ScoutApplication.Run(osArguments, outputWriter, errorWriter, input);
         outputWriter.Flush();
         errorWriter.Flush();
         return new DifferentialRunResult(exitCode, output.ToArray(), Utf8.GetString(error.ToArray()));
     }
 
-    private static DifferentialRunResult RunPinnedRipgrep(string[] arguments, string? workingDirectory)
+    private static DifferentialRunResult RunPinnedRipgrep(string[] arguments, byte[]? standardInput, string? workingDirectory)
     {
         ProcessStartInfo startInfo = new(PinnedRipgrepPath)
         {
             RedirectStandardError = true,
+            RedirectStandardInput = standardInput is not null,
             RedirectStandardOutput = true,
             UseShellExecute = false,
         };
@@ -99,6 +105,12 @@ internal static class DifferentialRunner
             StartInfo = startInfo,
         };
         Assert.True(process.Start());
+        if (standardInput is not null)
+        {
+            process.StandardInput.BaseStream.Write(standardInput);
+            process.StandardInput.Close();
+        }
+
         using MemoryStream output = new();
         process.StandardOutput.BaseStream.CopyTo(output);
         string error = process.StandardError.ReadToEnd();
@@ -117,5 +129,17 @@ internal static class DifferentialRunner
         string joinedArguments = string.Join(" ", arguments);
         string message = "arguments: " + joinedArguments + "\nexpected:\n" + Utf8.GetString(expected) + "\nactual:\n" + Utf8.GetString(actual);
         Assert.Fail(message);
+    }
+
+    private static string BuildFailureMessage(string[] arguments, DifferentialRunResult expected, DifferentialRunResult actual)
+    {
+        string joinedArguments = string.Join(" ", arguments);
+        return "arguments: " + joinedArguments +
+            "\nexpected exit code: " + expected.ExitCode +
+            "\nactual exit code: " + actual.ExitCode +
+            "\nexpected stdout:\n" + Utf8.GetString(expected.Output) +
+            "\nactual stdout:\n" + Utf8.GetString(actual.Output) +
+            "\nexpected stderr:\n" + expected.Error +
+            "\nactual stderr:\n" + actual.Error;
     }
 }

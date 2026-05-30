@@ -21,7 +21,8 @@ internal static class ScoutApplication
 
     internal static int Run(ReadOnlySpan<OsString> arguments, RawByteWriter output, RawByteWriter error)
     {
-        return Run(arguments, output, error, configPathOverride: null, useConfigPathOverride: false);
+        using Stream standardInput = Console.OpenStandardInput();
+        return Run(arguments, output, error, standardInput, configPathOverride: null, useConfigPathOverride: false);
     }
 
     internal static int Run(
@@ -30,18 +31,30 @@ internal static class ScoutApplication
         RawByteWriter error,
         string? configPath)
     {
-        return Run(arguments, output, error, configPath, useConfigPathOverride: true);
+        using Stream standardInput = Console.OpenStandardInput();
+        return Run(arguments, output, error, standardInput, configPath, useConfigPathOverride: true);
+    }
+
+    internal static int Run(
+        ReadOnlySpan<OsString> arguments,
+        RawByteWriter output,
+        RawByteWriter error,
+        Stream standardInput)
+    {
+        return Run(arguments, output, error, standardInput, configPathOverride: null, useConfigPathOverride: false);
     }
 
     private static int Run(
         ReadOnlySpan<OsString> arguments,
         RawByteWriter output,
         RawByteWriter error,
+        Stream standardInput,
         string? configPathOverride,
         bool useConfigPathOverride)
     {
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(error);
+        ArgumentNullException.ThrowIfNull(standardInput);
 
         var diagnostics = new DiagnosticMessenger(error);
         DiagnosticLogger earlyLogger = new(diagnostics, DetectLoggingMode(arguments[1..]));
@@ -62,7 +75,7 @@ internal static class ScoutApplication
             return RunSpecial(parseResult.SpecialMode, output);
         }
 
-        return RunSearch(parseResult.LowArgs!, output, diagnostics);
+        return RunSearch(parseResult.LowArgs!, output, diagnostics, standardInput);
     }
 
     private static OsString[]? BuildConfiguredArguments(
@@ -301,7 +314,7 @@ internal static class ScoutApplication
         }
     }
 
-    private static int RunSearch(CliLowArgs lowArgs, RawByteWriter output, DiagnosticMessenger diagnostics)
+    private static int RunSearch(CliLowArgs lowArgs, RawByteWriter output, DiagnosticMessenger diagnostics, Stream standardInput)
     {
         DiagnosticLogger logger = new(diagnostics, lowArgs.LoggingMode);
         IReadOnlyList<OsString> positional = lowArgs.Positional;
@@ -348,7 +361,7 @@ internal static class ScoutApplication
                 CliPatternSource source = lowArgs.PatternSources[index];
                 if (source.IsFile)
                 {
-                    if (!TryLoadPatternFile(source.Value, patterns, diagnostics))
+                    if (!TryLoadPatternFile(source.Value, patterns, standardInput, diagnostics))
                     {
                         return ExitCode.Error;
                     }
@@ -387,7 +400,7 @@ internal static class ScoutApplication
         LogSearchConfiguration(logger, positional, firstPathIndex, lowArgs, patterns);
         if (lowArgs.SearchMode == CliSearchMode.Json)
         {
-            return RunJsonSearch(positional, firstPathIndex, lowArgs, patterns, asciiCaseInsensitive, searchFileTypes!, output, diagnostics);
+            return RunJsonSearch(positional, firstPathIndex, lowArgs, patterns, asciiCaseInsensitive, searchFileTypes!, output, diagnostics, standardInput);
         }
 
         OutputSeparators separators = GetOutputSeparators(lowArgs);
@@ -405,8 +418,8 @@ internal static class ScoutApplication
         if (positional.Count == firstPathIndex)
         {
             matched = stats
-                ? SearchStandardInputWithStats(patterns, output, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, false, lineNumber, column, lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.WithFilename, lowArgs.EncodingMode, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, lowArgs.StopOnNonmatch, heading, ref wroteHeadingOutput, ref searchStats)
-                : SearchStandardInput(patterns, output, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, false, lineNumber, column, lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.WithFilename, lowArgs.EncodingMode, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, lowArgs.StopOnNonmatch, heading, ref wroteHeadingOutput);
+                ? SearchStandardInputWithStats(patterns, standardInput, output, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, false, lineNumber, column, lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.WithFilename, lowArgs.EncodingMode, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, lowArgs.StopOnNonmatch, heading, ref wroteHeadingOutput, ref searchStats)
+                : SearchStandardInput(patterns, standardInput, output, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, false, lineNumber, column, lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.WithFilename, lowArgs.EncodingMode, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, lowArgs.StopOnNonmatch, heading, ref wroteHeadingOutput);
             if (stats)
             {
                 StatsTextWriter.Write(output, searchStats, Stopwatch.GetElapsedTime(statsStarted));
@@ -435,11 +448,11 @@ internal static class ScoutApplication
         {
             if (stats)
             {
-                SearchPathWithStats(paths[index], patterns, prefixPaths, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, output, diagnostics, logger, asciiCaseInsensitive, heading, ref wroteHeadingOutput, ref matched, ref errored, ref searchStats);
+                SearchPathWithStats(paths[index], patterns, standardInput, prefixPaths, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, output, diagnostics, logger, asciiCaseInsensitive, heading, ref wroteHeadingOutput, ref matched, ref errored, ref searchStats);
             }
             else
             {
-                SearchPath(paths[index], patterns, prefixPaths, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, output, diagnostics, logger, asciiCaseInsensitive, heading, ref wroteHeadingOutput, ref matched, ref errored);
+                SearchPath(paths[index], patterns, standardInput, prefixPaths, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, output, diagnostics, logger, asciiCaseInsensitive, heading, ref wroteHeadingOutput, ref matched, ref errored);
             }
         }
 
@@ -460,7 +473,8 @@ internal static class ScoutApplication
         bool asciiCaseInsensitive,
         FileTypeMatcher fileTypes,
         RawByteWriter output,
-        DiagnosticMessenger diagnostics)
+        DiagnosticMessenger diagnostics,
+        Stream standardInput)
     {
         if (lowArgs.MaxCount == 0)
         {
@@ -473,7 +487,7 @@ internal static class ScoutApplication
         bool errored = false;
         if (positional.Count == firstPathIndex)
         {
-            matched = SearchJsonStandardInput(pattern, lowArgs, asciiCaseInsensitive, summary, output);
+            matched = SearchJsonStandardInput(pattern, standardInput, lowArgs, asciiCaseInsensitive, summary, output);
             summary.WriteSummary(output);
             output.Flush();
             return matched ? ExitCode.Success : ExitCode.NoMatch;
@@ -495,7 +509,7 @@ internal static class ScoutApplication
         bool autoMmapEligible = IsAutoMmapEligible(paths);
         for (int index = 0; index < paths.Count; index++)
         {
-            SearchJsonPath(paths[index], pattern, autoMmapEligible, lowArgs, fileTypes, asciiCaseInsensitive, summary, output, diagnostics, ref matched, ref errored);
+            SearchJsonPath(paths[index], pattern, standardInput, autoMmapEligible, lowArgs, fileTypes, asciiCaseInsensitive, summary, output, diagnostics, ref matched, ref errored);
         }
 
         summary.WriteSummary(output);
@@ -593,19 +607,20 @@ internal static class ScoutApplication
 
     private static bool SearchJsonStandardInput(
         IReadOnlyList<byte[]> pattern,
+        Stream standardInput,
         CliLowArgs lowArgs,
         bool asciiCaseInsensitive,
         JsonSearchSummary summary,
         RawByteWriter output)
     {
-        using Stream input = Console.OpenStandardInput();
-        byte[] bytes = ReadSearchStream(input, lowArgs.EncodingMode);
+        byte[] bytes = ReadSearchStream(standardInput, lowArgs.EncodingMode);
         return SearchJsonBytes(bytes, pattern, output, StandardInputPath, summary, lowArgs.TextMode, lowArgs.Quiet, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.Crlf, lowArgs.NullData, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch);
     }
 
     private static void SearchJsonPath(
         string path,
         IReadOnlyList<byte[]> pattern,
+        Stream standardInput,
         bool autoMmapEligible,
         CliLowArgs lowArgs,
         FileTypeMatcher fileTypes,
@@ -618,7 +633,7 @@ internal static class ScoutApplication
     {
         if (path == "-")
         {
-            matched |= SearchJsonStandardInput(pattern, lowArgs, asciiCaseInsensitive, summary, output);
+            matched |= SearchJsonStandardInput(pattern, standardInput, lowArgs, asciiCaseInsensitive, summary, output);
             return;
         }
 
@@ -915,6 +930,7 @@ internal static class ScoutApplication
 
     private static bool SearchStandardInput(
         IReadOnlyList<byte[]> pattern,
+        Stream standardInput,
         RawByteWriter output,
         OutputSeparators separators,
         OutputLineLimit lineLimit,
@@ -948,14 +964,14 @@ internal static class ScoutApplication
         bool heading,
         ref bool wroteHeadingOutput)
     {
-        using Stream input = Console.OpenStandardInput();
-        byte[] bytes = ReadSearchStream(input, encodingMode);
+        byte[] bytes = ReadSearchStream(standardInput, encodingMode);
         return SearchBytesWithOptionalHeading(bytes, pattern, output, GetStandardInputPrefix(searchMode, autoPrefixPath, withFilename), separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, false, heading, ref wroteHeadingOutput);
     }
 
     private static void SearchPath(
         string path,
         IReadOnlyList<byte[]> pattern,
+        Stream standardInput,
         bool prefixPaths,
         bool autoMmapEligible,
         CliLowArgs lowArgs,
@@ -975,7 +991,7 @@ internal static class ScoutApplication
         if (path == "-")
         {
             OutputPath? prefix = GetStandardInputPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename);
-            matched |= SearchStandardInput(pattern, output, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, EffectiveLineNumber(lowArgs), EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.EncodingMode, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, lowArgs.StopOnNonmatch, heading, ref wroteHeadingOutput);
+            matched |= SearchStandardInput(pattern, standardInput, output, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, EffectiveLineNumber(lowArgs), EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.EncodingMode, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, lowArgs.StopOnNonmatch, heading, ref wroteHeadingOutput);
             return;
         }
 
@@ -1000,6 +1016,7 @@ internal static class ScoutApplication
 
     private static bool SearchStandardInputWithStats(
         IReadOnlyList<byte[]> pattern,
+        Stream standardInput,
         RawByteWriter output,
         OutputSeparators separators,
         OutputLineLimit lineLimit,
@@ -1034,14 +1051,14 @@ internal static class ScoutApplication
         ref bool wroteHeadingOutput,
         ref SearchStats stats)
     {
-        using Stream input = Console.OpenStandardInput();
-        byte[] bytes = ReadSearchStream(input, encodingMode);
+        byte[] bytes = ReadSearchStream(standardInput, encodingMode);
         return SearchBytesWithStats(bytes, pattern, output, GetStandardInputPrefix(searchMode, autoPrefixPath, withFilename), separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, false, heading, ref wroteHeadingOutput, ref stats);
     }
 
     private static void SearchPathWithStats(
         string path,
         IReadOnlyList<byte[]> pattern,
+        Stream standardInput,
         bool prefixPaths,
         bool autoMmapEligible,
         CliLowArgs lowArgs,
@@ -1062,7 +1079,7 @@ internal static class ScoutApplication
         if (path == "-")
         {
             OutputPath? prefix = GetStandardInputPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename);
-            matched |= SearchStandardInputWithStats(pattern, output, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, EffectiveLineNumber(lowArgs), EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.EncodingMode, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, lowArgs.StopOnNonmatch, heading, ref wroteHeadingOutput, ref stats);
+            matched |= SearchStandardInputWithStats(pattern, standardInput, output, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, EffectiveLineNumber(lowArgs), EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.EncodingMode, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, lowArgs.StopOnNonmatch, heading, ref wroteHeadingOutput, ref stats);
             return;
         }
 
@@ -1087,6 +1104,7 @@ internal static class ScoutApplication
 
     private static bool SearchStandardInput(
         IReadOnlyList<byte[]> pattern,
+        Stream standardInput,
         RawByteWriter output,
         OutputPath? prefix,
         OutputSeparators separators,
@@ -1119,13 +1137,13 @@ internal static class ScoutApplication
         bool heading,
         ref bool wroteHeadingOutput)
     {
-        using Stream input = Console.OpenStandardInput();
-        byte[] bytes = ReadSearchStream(input, encodingMode);
+        byte[] bytes = ReadSearchStream(standardInput, encodingMode);
         return SearchBytesWithOptionalHeading(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, false, heading, ref wroteHeadingOutput);
     }
 
     private static bool SearchStandardInputWithStats(
         IReadOnlyList<byte[]> pattern,
+        Stream standardInput,
         RawByteWriter output,
         OutputPath? prefix,
         OutputSeparators separators,
@@ -1159,8 +1177,7 @@ internal static class ScoutApplication
         ref bool wroteHeadingOutput,
         ref SearchStats stats)
     {
-        using Stream input = Console.OpenStandardInput();
-        byte[] bytes = ReadSearchStream(input, encodingMode);
+        byte[] bytes = ReadSearchStream(standardInput, encodingMode);
         return SearchBytesWithStats(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, false, heading, ref wroteHeadingOutput, ref stats);
     }
 
@@ -4123,14 +4140,14 @@ internal static class ScoutApplication
 
     private static bool ShouldUseMultilineRegex(IReadOnlyList<byte[]> patterns, bool multilineDotall)
     {
-        return multilineDotall || ContainsLineFeed(patterns) || ContainsInlineDotAllFlag(patterns);
+        return multilineDotall || ContainsLineFeed(patterns) || ContainsLineFeedMatchingSyntax(patterns);
     }
 
-    private static bool ContainsInlineDotAllFlag(IReadOnlyList<byte[]> patterns)
+    private static bool ContainsLineFeedMatchingSyntax(IReadOnlyList<byte[]> patterns)
     {
         for (int index = 0; index < patterns.Count; index++)
         {
-            if (SyntaxEnablesDotAll(RegexSyntaxParser.Parse(patterns[index]).Root))
+            if (SyntaxCanMatchLineFeed(RegexSyntaxParser.Parse(patterns[index]).Root))
             {
                 return true;
             }
@@ -4139,24 +4156,25 @@ internal static class ScoutApplication
         return false;
     }
 
-    private static bool SyntaxEnablesDotAll(RegexSyntaxNode node)
+    private static bool SyntaxCanMatchLineFeed(RegexSyntaxNode node)
     {
         return node switch
         {
             RegexInlineFlagsNode flags => flags.EnabledFlags.Contains('s', StringComparison.Ordinal),
-            RegexGroupNode group => group.EnabledFlags.Contains('s', StringComparison.Ordinal) || SyntaxEnablesDotAll(group.Child),
-            RegexSequenceNode sequence => AnySyntaxEnablesDotAll(sequence.Nodes),
-            RegexAlternationNode alternation => AnySyntaxEnablesDotAll(alternation.Alternatives),
-            RegexRepetitionNode repetition => SyntaxEnablesDotAll(repetition.Child),
+            RegexGroupNode group => group.EnabledFlags.Contains('s', StringComparison.Ordinal) || SyntaxCanMatchLineFeed(group.Child),
+            RegexSequenceNode sequence => AnySyntaxCanMatchLineFeed(sequence.Nodes),
+            RegexAlternationNode alternation => AnySyntaxCanMatchLineFeed(alternation.Alternatives),
+            RegexRepetitionNode repetition => SyntaxCanMatchLineFeed(repetition.Child),
+            RegexAtomNode atom => atom.Kind == RegexSyntaxKind.AnyClass,
             _ => false,
         };
     }
 
-    private static bool AnySyntaxEnablesDotAll(IReadOnlyList<RegexSyntaxNode> nodes)
+    private static bool AnySyntaxCanMatchLineFeed(IReadOnlyList<RegexSyntaxNode> nodes)
     {
         for (int index = 0; index < nodes.Count; index++)
         {
-            if (SyntaxEnablesDotAll(nodes[index]))
+            if (SyntaxCanMatchLineFeed(nodes[index]))
             {
                 return true;
             }
@@ -4407,7 +4425,7 @@ internal static class ScoutApplication
             or (byte)'|';
     }
 
-    private static bool TryLoadPatternFile(OsString argument, List<byte[]> patterns, DiagnosticMessenger diagnostics)
+    private static bool TryLoadPatternFile(OsString argument, List<byte[]> patterns, Stream standardInput, DiagnosticMessenger diagnostics)
     {
         if (!TryGetPathText(argument, diagnostics, out string path))
         {
@@ -4418,7 +4436,7 @@ internal static class ScoutApplication
         try
         {
             bytes = path == "-"
-                ? ReadAllBytes(Console.OpenStandardInput())
+                ? ReadAllBytes(standardInput)
                 : File.ReadAllBytes(path);
         }
         catch (FileNotFoundException)
@@ -4447,9 +4465,8 @@ internal static class ScoutApplication
 
     private static byte[] ReadAllBytes(Stream stream)
     {
-        using Stream input = stream;
         using MemoryStream buffer = new();
-        input.CopyTo(buffer);
+        stream.CopyTo(buffer);
         return buffer.ToArray();
     }
 
