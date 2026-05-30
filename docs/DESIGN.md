@@ -462,7 +462,7 @@ Flag tables, help/man text, and shell completions are generated deterministicall
 
 **Open for reviewer sign-off:** none. All previously open *design* items are decided above.
 
-**Inception-captured values (not design decisions; pinned-inputs in plan, literals captured at first build/fetch, verified in CI):** the SDK patch level (`global.json`), the PCRE2 upstream commit SHA (`native/pcre2/UPSTREAM`), and the CI base-image digest + Linux tool versions/SHA-256 + corpus SHA-256 (`tests/PREREQS.lock`, §8.5, Appendix B). The literal values that already exist (toolchain `10.0.102`/`10.0.2`, macOS host + tool versions, PCRE2 versions, and the two verified spike-binary SHA-256s) are committed now in `scout-seed/tests/PREREQS.lock`.
+**Inception-captured values (not design decisions; pinned-inputs in plan, literals captured at first build/fetch, verified in CI):** the SDK patch level (`global.json`), the PCRE2 upstream commit SHA (`native/pcre2/UPSTREAM`), the reference `rg` binary hash, macOS decompression tool hashes, regex/encoding corpus hashes, and the remaining CI base-image digest + Linux tool versions/SHA-256 + external corpus SHA-256 values (`tests/PREREQS.lock`, §8.5, Appendix B). The literal values that already exist are committed in `tests/PREREQS.lock`.
 
 **Implementation-risk gate (partly discharged — 2 of 6 RIDs proven):** the native-entry byte-boundary mechanism was **actually executed and PASSED on osx-arm64 (native) and osx-x64 (cross-compiled, run under Rosetta)** with .NET SDK 10.0.102; Appendix A holds both transcripts (`0xFF` argv byte round-tripped verbatim on each). The only per-arch link delta was the x64-only `libRuntime.VxsortEnabled.a`. Still **not** proven on `linux-x64`, `linux-arm64`, `win-x64`, `win-arm64` (they need their own OS/CI environments); reproducing them in CI is the remaining M0 gate before the byte-boundary claim is treated as fully proven cross-platform. *(Correction of record: an earlier version of this line wrongly stated this environment had no .NET SDK and the spike had not run — false. The SDK is installed and the spike ran and passed on both macOS architectures.)*
 
@@ -587,30 +587,28 @@ On x64 the link additionally needs `libRuntime.VxsortEnabled.a` (the GC's AVX2/A
 
 ## Appendix B — `tests/PREREQS.lock` (real file, literal values)
 
-**This file now exists in the repo at `scout-seed/tests/PREREQS.lock`** (it moves to `tests/PREREQS.lock` when the Scout repo is created). It is not a sketch — the values below were **measured on this machine on 2026-05-28**, including real SHA-256 hashes of the two verified spike binaries. The authoritative copy is the file; this appendix summarizes it.
+**This file exists in the repo at `tests/PREREQS.lock`.** It is not a sketch — the values below were measured on this machine and the authoritative copy is the file; this appendix summarizes it.
 
-**Literal-and-final today** (measured/known): the ripgrep commit; the .NET SDK/runtime that built the verified spikes (`10.0.102`/`10.0.2`); the macOS host (`macOS 26.3.1`, `arm64`, `Apple clang 17.0.0 (clang-1700.6.4.2)`, `cargo 1.91.1`); the PCRE2 binding/sys/C-library versions and tag; the macOS decompression tool versions (`gzip` Apple gzip 475, `bzip2` 1.0.8, `xz` 5.8.2, `zstd` 1.5.7, `lz4` 1.10.0, `brotli` 1.2.0 — all read from the host; **hyperfine confirmed *not* installed here**, so CI installs it pinned); and the **real spike-binary hashes**:
+**Literal-and-final today** (measured/known): the ripgrep commit and reference `rg` binary hash; the .NET SDK/runtime that built the verified spikes (`10.0.102`/`10.0.2`); the macOS host (`macOS 26.3.1`, `arm64`, `Apple clang 17.0.0 (clang-1700.6.4.2)`, `cargo 1.91.1`); the PCRE2 binding/sys/C-library versions, tag, and upstream commit; the macOS decompression tool versions and binary hashes (`gzip` Apple gzip 475, `bzip2` 1.0.8, `xz` 5.8.2, `zstd` 1.5.7, `lz4` 1.10.0, `brotli` 1.2.0 — all read from the host; **hyperfine confirmed *not* installed here**, so CI installs it pinned); and the **real spike-binary hashes**:
 
 ```toml
 [[spike_artifact]]
 rid    = "osx-arm64"
-bytes  = 2197400
-sha256 = "36e839689f3e375245ae3c842a17d2831eb1d2efda170149a9b6ffcc2636024c"  # LITERAL, verified
+bytes  = 2197496
+sha256 = "dbd73aa6e8ccfc723c1fd60855ae77830860f1bf27aa3a483cfa8a5d625c8515"  # LITERAL, verified
 result = "PASS (0xFF argv byte -> ff0a)"
 
 [[spike_artifact]]
 rid    = "osx-x64"
-bytes  = 2378912
-sha256 = "ae51680156093b8f783556dfdb82b393f805dc08b19eda0e1d18530744a2c2e9"  # LITERAL, verified (Rosetta)
+bytes  = 2379000
+sha256 = "010ff1889ab16bd5e314f0578e567b5895ee5c9b4e54c6b4e777c6ec5d14614a"  # LITERAL, verified (Rosetta)
 result = "PASS; needs libRuntime.VxsortEnabled.a"
 ```
 
 **Honestly `resolved@*` (cannot be literal yet, and saying otherwise would be a lie):** a SHA-256 exists only after an artifact is first built/pulled/fetched. These are **not invented**; each is fully *determined* by inputs pinned here and frozen on first run, then CI-verified forever:
-- `ripgrep_rg_sha256 = resolved@build` — hash of the reference `rg` once compiled from the pinned commit.
 - `[linux_container].base_image_digest` + every `[[tool.linux]]` `version`/`sha256` = `resolved@build` — fully determined by `(base image, snapshot date 2026-05-01, package)`; written back as exact values at first container build. (These genuinely require building the Linux image, which cannot be done on this macOS host.)
-- `[pcre2].commit_sha = resolved@vendor` — the exact PCRE2 upstream SHA, recorded when the source is vendored.
-- `[[corpus]].sha256 = resolved@fetch` — frozen on first download from the pinned URLs.
+- OpenSubtitles and linux-kernel `[[corpus]]` URL/SHA-256 values = `resolved@fetch` — frozen on first download from the pinned URLs.
 
-This is the same discipline already applied to the SDK patch (§5.1) and PCRE2 commit (§4.3): pin the determining **inputs** now, capture the resulting **hash** at inception, verify forever after. The difference from the prior draft is that the literal values that *can* exist today (toolchain, host, PCRE2 versions, and the two real spike hashes) are now actually in the committed file rather than described.
+This is the same discipline already applied to the SDK patch (§5.1), PCRE2 commit (§4.3), reference `rg`, regex/encoding corpora, and local macOS decompression tools: pin the determining **inputs** now, capture the resulting **hash** at inception, verify forever after.
 
 > Library names/extra link libraries (`Scout.Entry.a`/`.lib`, runtime archive set) are finalized against the pinned SDK's ILCompiler output during the M0 spike; the shape above is the contract.
