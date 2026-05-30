@@ -5,6 +5,9 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Numerics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -3589,7 +3592,23 @@ internal static class ScoutApplication
     private static ulong CountByte(ReadOnlySpan<byte> bytes, byte value)
     {
         ulong count = 0;
-        for (int index = 0; index < bytes.Length; index++)
+        int index = 0;
+        if (bytes.Length >= sizeof(ulong))
+        {
+            ulong repeated = UInt64WithRepeatedByte(value);
+            ref byte start = ref MemoryMarshal.GetReference(bytes);
+            int wordLength = bytes.Length - sizeof(ulong) + 1;
+            while (index < wordLength)
+            {
+                ulong word = Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref start, index));
+                ulong comparison = word ^ repeated;
+                ulong zeroBytes = (comparison - 0x0101010101010101UL) & ~comparison & 0x8080808080808080UL;
+                count += (ulong)BitOperations.PopCount(zeroBytes);
+                index += sizeof(ulong);
+            }
+        }
+
+        for (; index < bytes.Length; index++)
         {
             if (bytes[index] == value)
             {
@@ -3598,6 +3617,11 @@ internal static class ScoutApplication
         }
 
         return count;
+    }
+
+    private static ulong UInt64WithRepeatedByte(byte value)
+    {
+        return 0x0101010101010101UL * value;
     }
 
     private static void SearchFileWithStats(
