@@ -462,11 +462,11 @@ internal static class ScoutApplication
             bool defaultRoot = useDefaultCurrentDirectory && index == 0;
             if (stats)
             {
-                SearchPathWithStats(paths[index], patterns, standardInput, defaultRoot, prefixPaths, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, output, diagnostics, logger, asciiCaseInsensitive, heading, ref wroteHeadingOutput, ref matched, ref errored, ref searchStats);
+                SearchPathWithStats(paths[index], patterns, standardInput, defaultRoot, prefixPaths, paths.Count > 1, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, output, diagnostics, logger, asciiCaseInsensitive, heading, ref wroteHeadingOutput, ref matched, ref errored, ref searchStats);
             }
             else
             {
-                SearchPath(paths[index], patterns, standardInput, defaultRoot, prefixPaths, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, output, diagnostics, logger, asciiCaseInsensitive, heading, ref wroteHeadingOutput, ref matched, ref errored);
+                SearchPath(paths[index], patterns, standardInput, defaultRoot, prefixPaths, paths.Count > 1, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, output, diagnostics, logger, asciiCaseInsensitive, heading, ref wroteHeadingOutput, ref matched, ref errored);
             }
         }
 
@@ -531,7 +531,7 @@ internal static class ScoutApplication
         for (int index = 0; index < paths.Count; index++)
         {
             bool defaultRoot = useDefaultCurrentDirectory && index == 0;
-            SearchJsonPath(paths[index], pattern, standardInput, defaultRoot, autoMmapEligible, lowArgs, fileTypes, asciiCaseInsensitive, summary, output, diagnostics, ref matched, ref errored);
+            SearchJsonPath(paths[index], pattern, standardInput, defaultRoot, paths.Count > 1, autoMmapEligible, lowArgs, fileTypes, asciiCaseInsensitive, summary, output, diagnostics, ref matched, ref errored);
         }
 
         summary.WriteSummary(output);
@@ -644,6 +644,7 @@ internal static class ScoutApplication
         IReadOnlyList<byte[]> pattern,
         Stream standardInput,
         bool defaultRoot,
+        bool multiplePaths,
         bool autoMmapEligible,
         CliLowArgs lowArgs,
         FileTypeMatcher fileTypes,
@@ -685,7 +686,7 @@ internal static class ScoutApplication
             return;
         }
 
-        SearchErrorMessage(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path}: No such file or directory (os error 2)").WithContext($"rg: {path}"));
+        SearchErrorMessage(lowArgs, diagnostics, MissingPathError(path, multiplePaths));
         errored = true;
     }
 
@@ -860,7 +861,7 @@ internal static class ScoutApplication
 
         if (!Directory.Exists(path))
         {
-            SearchErrorMessage(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path}: No such file or directory (os error 2)").WithContext($"rg: {path}"));
+            SearchErrorMessage(lowArgs, diagnostics, MissingPathError(path));
             errored = true;
             return;
         }
@@ -1000,6 +1001,7 @@ internal static class ScoutApplication
         Stream standardInput,
         bool defaultRoot,
         bool prefixPaths,
+        bool multiplePaths,
         bool autoMmapEligible,
         CliLowArgs lowArgs,
         OutputSeparators separators,
@@ -1037,7 +1039,7 @@ internal static class ScoutApplication
             return;
         }
 
-        SearchErrorMessage(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path}: No such file or directory (os error 2)").WithContext($"rg: {path}"));
+        SearchErrorMessage(lowArgs, diagnostics, MissingPathError(path, multiplePaths));
         errored = true;
     }
 
@@ -1088,6 +1090,7 @@ internal static class ScoutApplication
         Stream standardInput,
         bool defaultRoot,
         bool prefixPaths,
+        bool multiplePaths,
         bool autoMmapEligible,
         CliLowArgs lowArgs,
         OutputSeparators separators,
@@ -1126,7 +1129,7 @@ internal static class ScoutApplication
             return;
         }
 
-        SearchErrorMessage(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path}: No such file or directory (os error 2)").WithContext($"rg: {path}"));
+        SearchErrorMessage(lowArgs, diagnostics, MissingPathError(path, multiplePaths));
         errored = true;
     }
 
@@ -2077,6 +2080,14 @@ internal static class ScoutApplication
         }
 
         diagnostics.MarkErrored();
+    }
+
+    private static ScoutError MissingPathError(string path, bool simple = false)
+    {
+        string message = simple
+            ? "No such file or directory (os error 2)"
+            : $"IO error for operation on {path}: No such file or directory (os error 2)";
+        return new ScoutError(message).WithContext($"rg: {path}");
     }
 
     private static bool ShouldQuitOnBinary(CliLowArgs lowArgs, bool implicitSearch)
