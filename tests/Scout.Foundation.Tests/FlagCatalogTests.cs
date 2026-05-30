@@ -55,6 +55,8 @@ public sealed class FlagCatalogTests
         Assert.Equal("--encoding", encoding.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindLongValue("--engine", out FlagDescriptor engine));
         Assert.Equal("--engine", engine.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--color", out FlagDescriptor color));
+        Assert.Equal("--color", color.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindShortValue('j', out FlagDescriptor threads));
         Assert.Equal("--threads", threads.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindShortValue('A', out FlagDescriptor afterContext));
@@ -163,6 +165,11 @@ public sealed class FlagCatalogTests
                 OsString.FromUnixBytes("--engine=auto"u8),
                 OsString.FromUnixBytes("needle"u8),
             ]);
+        CliParseResult colorValue = CliParser.Parse(
+            [
+                OsString.FromUnixBytes("--color=ansi"u8),
+                OsString.FromUnixBytes("needle"u8),
+            ]);
         CliParseResult contextValues = CliParser.Parse(
             [
                 OsString.FromUnixBytes("-A=2"u8),
@@ -183,6 +190,9 @@ public sealed class FlagCatalogTests
         Assert.Equal(CliParseStatus.Ok, regexEngine.Status);
         Assert.Equal(CliRegexEngine.Auto, regexEngine.LowArgs!.RegexEngine);
         Assert.Single(regexEngine.LowArgs.Positional);
+        Assert.Equal(CliParseStatus.Ok, colorValue.Status);
+        Assert.Equal(CliColorMode.Ansi, colorValue.LowArgs!.ColorMode);
+        Assert.Single(colorValue.LowArgs.Positional);
         Assert.Equal(CliParseStatus.Ok, contextValues.Status);
         Assert.Equal(2UL, contextValues.LowArgs!.AfterContext);
         Assert.Equal(3UL, contextValues.LowArgs.BeforeContext);

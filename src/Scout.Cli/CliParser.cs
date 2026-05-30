@@ -1584,16 +1584,6 @@ public static class CliParser
             return ParseThreads(value, "--threads", lowArgs, out error);
         }
 
-        if (argument.EqualsUnixBytes("--color"u8) || TextEquals(argument, "--color"))
-        {
-            if (!TryGetFollowingValue(arguments, ref index, "--color", out OsString value, out error))
-            {
-                return true;
-            }
-
-            return ParseColor(value, lowArgs, out error);
-        }
-
         if (argument.EqualsUnixBytes("--generate"u8) || TextEquals(argument, "--generate"))
         {
             if (!TryGetFollowingValue(arguments, ref index, "--generate", out OsString value, out error))
@@ -2009,11 +1999,6 @@ public static class CliParser
             return ParseThreads(threadsValue, "--threads", lowArgs, out error);
         }
 
-        if (TryGetInlineUnixValue(argument, "--color="u8, out ReadOnlySpan<byte> colorValue))
-        {
-            return ParseColor(colorValue, lowArgs, out error);
-        }
-
         if (TryGetInlineUnixValue(argument, "--generate="u8, out ReadOnlySpan<byte> generateValue))
         {
             return ParseGenerate(generateValue, lowArgs, out error);
@@ -2299,11 +2284,6 @@ public static class CliParser
             if (text.StartsWith("--threads=", StringComparison.Ordinal))
             {
                 return ParseThreads(text["--threads=".Length..], "--threads", lowArgs, out error);
-            }
-
-            if (text.StartsWith("--color=", StringComparison.Ordinal))
-            {
-                return ParseColor(text["--color=".Length..], lowArgs, out error);
             }
 
             if (text.StartsWith("--generate=", StringComparison.Ordinal))
@@ -2772,7 +2752,7 @@ public static class CliParser
         };
     }
 
-    private static bool ParseColor(OsString value, CliLowArgs lowArgs, out ScoutError? error)
+    internal static bool ParseColor(OsString value, CliLowArgs lowArgs, out ScoutError? error)
     {
         if (value.IsUnixBytes)
         {
