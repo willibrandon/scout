@@ -120,6 +120,7 @@ cmp "$BIN/pcre2-multiline-count.expected" "$BIN/pcre2-multiline-count.out"
 printf '2\n' > "$BIN/pcre2-multiline-count-matches.expected"
 cmp "$BIN/pcre2-multiline-count-matches.expected" "$BIN/pcre2-multiline-count-matches.out"
 "$ROOT/native/test-pcre2-differential-unix.sh" "$RID" "$BIN/scout"
+"$ROOT/native/test-invalid-utf8-differential-unix.sh" "$RID" "$BIN/scout"
 for symbol in \
     _pcre2_code_free_8 \
     _pcre2_compile_8 \

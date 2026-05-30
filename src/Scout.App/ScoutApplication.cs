@@ -494,15 +494,15 @@ internal static class ScoutApplication
             return matched ? ExitCode.Success : ExitCode.NoMatch;
         }
 
-        var paths = new List<string>(positional.Count - firstPathIndex);
+        var paths = new List<SearchPathArgument>(positional.Count - firstPathIndex);
         if (useDefaultCurrentDirectory)
         {
-            paths.Add(".");
+            paths.Add(CreateTextSearchPath("."));
         }
 
         for (int index = firstPathIndex; index < positional.Count; index++)
         {
-            if (TryGetPathText(positional[index], diagnostics, out string path))
+            if (TryGetSearchPathArgument(positional[index], lowArgs.PathSeparator, diagnostics, out SearchPathArgument path))
             {
                 paths.Add(path);
             }
@@ -606,7 +606,7 @@ internal static class ScoutApplication
         }
 
         OutputSeparators separators = GetOutputSeparators(lowArgs);
-        bool autoMmapEligible = IsAutoMmapEligible([path]);
+        bool autoMmapEligible = IsAutoMmapEligible([CreateTextSearchPath(path)]);
         if (!TryReadSearchFileBytes(path, lowArgs, autoMmapEligible, diagnostics, out byte[] bytes, out _))
         {
             return ExitCode.Error;
@@ -1496,15 +1496,15 @@ internal static class ScoutApplication
             return matched ? ExitCode.Success : ExitCode.NoMatch;
         }
 
-        var paths = new List<string>(positional.Count - firstPathIndex);
+        var paths = new List<SearchPathArgument>(positional.Count - firstPathIndex);
         if (useDefaultCurrentDirectory)
         {
-            paths.Add(".");
+            paths.Add(CreateTextSearchPath("."));
         }
 
         for (int index = firstPathIndex; index < positional.Count; index++)
         {
-            if (TryGetPathText(positional[index], diagnostics, out string path))
+            if (TryGetSearchPathArgument(positional[index], lowArgs.PathSeparator, diagnostics, out SearchPathArgument path))
             {
                 paths.Add(path);
             }
@@ -1627,7 +1627,7 @@ internal static class ScoutApplication
     }
 
     private static void SearchJsonPath(
-        string path,
+        SearchPathArgument pathArgument,
         IReadOnlyList<byte[]> pattern,
         Stream standardInput,
         bool defaultRoot,
@@ -1642,6 +1642,14 @@ internal static class ScoutApplication
         ref bool matched,
         ref bool errored)
     {
+        string? path = pathArgument.Text;
+        if (pathArgument.IsRawUnixPath)
+        {
+            SearchJsonRawUnixFile(pathArgument, pattern, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, ref matched, ref errored);
+            return;
+        }
+
+        path ??= pathArgument.DisplayText;
         if (path == "-")
         {
             matched |= SearchJsonStandardInput(pattern, standardInput, lowArgs, asciiCaseInsensitive, summary, output);
@@ -1669,7 +1677,7 @@ internal static class ScoutApplication
 
         if (File.Exists(path))
         {
-            SearchJsonFile(path, Utf8.GetBytes(path), pattern, autoMmapEligible, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, ref matched, ref errored);
+            SearchJsonFile(path, pathArgument.DisplayBytes, pattern, autoMmapEligible, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, ref matched, ref errored);
             return;
         }
 
@@ -1778,6 +1786,26 @@ internal static class ScoutApplication
         }
 
         matched |= SearchJsonBytes(bytes, pattern, output, displayPath, summary, lowArgs.TextMode, lowArgs.Quiet, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.Crlf, lowArgs.NullData, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch);
+    }
+
+    private static void SearchJsonRawUnixFile(
+        SearchPathArgument path,
+        IReadOnlyList<byte[]> pattern,
+        CliLowArgs lowArgs,
+        bool asciiCaseInsensitive,
+        JsonSearchSummary summary,
+        RawByteWriter output,
+        DiagnosticMessenger diagnostics,
+        ref bool matched,
+        ref bool errored)
+    {
+        if (!TryReadRawUnixSearchFileBytes(path, lowArgs, diagnostics, out byte[] bytes, out _))
+        {
+            errored = true;
+            return;
+        }
+
+        matched |= SearchJsonBytes(bytes, pattern, output, path.DisplayBytes, summary, lowArgs.TextMode, lowArgs.Quiet, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.Crlf, lowArgs.NullData, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch);
     }
 
     private static int RunFiles(
@@ -1983,7 +2011,7 @@ internal static class ScoutApplication
     }
 
     private static void SearchPath(
-        string path,
+        SearchPathArgument pathArgument,
         IReadOnlyList<byte[]> pattern,
         Stream standardInput,
         bool defaultRoot,
@@ -2004,6 +2032,16 @@ internal static class ScoutApplication
         ref bool matched,
         ref bool errored)
     {
+        string? path = pathArgument.Text;
+        if (pathArgument.IsRawUnixPath)
+        {
+            OutputPath outputPath = CreateRawUnixOutputPath(pathArgument);
+            OutputPath? prefix = GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
+            SearchRawUnixFile(pathArgument, pattern, lowArgs, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, EffectiveLineNumber(lowArgs), EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored);
+            return;
+        }
+
+        path ??= pathArgument.DisplayText;
         if (path == "-")
         {
             OutputPath? prefix = GetStandardInputPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename);
@@ -2019,8 +2057,7 @@ internal static class ScoutApplication
 
         if (File.Exists(path))
         {
-            byte[] pathBytes = GetPathBytes(path, lowArgs.PathSeparator);
-            OutputPath outputPath = CreateOutputPath(path, pathBytes, lowArgs, color);
+            OutputPath outputPath = CreateOutputPath(path, pathArgument.DisplayBytes, lowArgs, color);
             OutputPath? prefix = GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
             SearchFile(path, pattern, lowArgs, false, autoMmapEligible, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, EffectiveLineNumber(lowArgs), EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored);
             return;
@@ -2072,7 +2109,7 @@ internal static class ScoutApplication
     }
 
     private static void SearchPathWithStats(
-        string path,
+        SearchPathArgument pathArgument,
         IReadOnlyList<byte[]> pattern,
         Stream standardInput,
         bool defaultRoot,
@@ -2094,6 +2131,16 @@ internal static class ScoutApplication
         ref bool errored,
         ref SearchStats stats)
     {
+        string? path = pathArgument.Text;
+        if (pathArgument.IsRawUnixPath)
+        {
+            OutputPath outputPath = CreateRawUnixOutputPath(pathArgument);
+            OutputPath? prefix = GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
+            SearchRawUnixFileWithStats(pathArgument, pattern, lowArgs, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, EffectiveLineNumber(lowArgs), EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
+            return;
+        }
+
+        path ??= pathArgument.DisplayText;
         if (path == "-")
         {
             OutputPath? prefix = GetStandardInputPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename);
@@ -2109,8 +2156,7 @@ internal static class ScoutApplication
 
         if (File.Exists(path))
         {
-            byte[] pathBytes = GetPathBytes(path, lowArgs.PathSeparator);
-            OutputPath outputPath = CreateOutputPath(path, pathBytes, lowArgs, color);
+            OutputPath outputPath = CreateOutputPath(path, pathArgument.DisplayBytes, lowArgs, color);
             OutputPath? prefix = GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
             SearchFileWithStats(path, pattern, lowArgs, false, autoMmapEligible, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, EffectiveLineNumber(lowArgs), EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
             return;
@@ -3203,6 +3249,52 @@ internal static class ScoutApplication
         matched |= SearchBytesWithOptionalHeading(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, ShouldQuitOnBinary(lowArgs, implicitSearch), heading, ref wroteHeadingOutput);
     }
 
+    private static void SearchRawUnixFile(
+        SearchPathArgument path,
+        IReadOnlyList<byte[]> pattern,
+        CliLowArgs lowArgs,
+        RawByteWriter output,
+        DiagnosticMessenger diagnostics,
+        DiagnosticLogger logger,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        CliSearchMode searchMode,
+        bool vimgrep,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool asciiCaseInsensitive,
+        bool invertMatch,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool onlyMatching,
+        ReadOnlyMemory<byte>? replacement,
+        ulong? maxCount,
+        bool textMode,
+        bool quiet,
+        bool trim,
+        ulong beforeContext,
+        ulong afterContext,
+        bool passthru,
+        bool includeZero,
+        bool nullPathTerminator,
+        bool heading,
+        ref bool wroteHeadingOutput,
+        ref bool matched,
+        ref bool errored)
+    {
+        if (!TryReadRawUnixSearchFileBytes(path, lowArgs, diagnostics, out byte[] bytes, out SearchFileReadKind readKind))
+        {
+            errored = true;
+            return;
+        }
+
+        LogTraceSearchPath(logger, path.DisplayText, readKind);
+        matched |= SearchBytesWithOptionalHeading(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, quitOnBinary: false, heading, ref wroteHeadingOutput);
+    }
+
     private static bool TrySearchLargeFile(
         string path,
         IReadOnlyList<byte[]> pattern,
@@ -3892,6 +3984,53 @@ internal static class ScoutApplication
         matched |= SearchBytesWithStats(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, ShouldQuitOnBinary(lowArgs, implicitSearch), heading, ref wroteHeadingOutput, ref stats);
     }
 
+    private static void SearchRawUnixFileWithStats(
+        SearchPathArgument path,
+        IReadOnlyList<byte[]> pattern,
+        CliLowArgs lowArgs,
+        RawByteWriter output,
+        DiagnosticMessenger diagnostics,
+        DiagnosticLogger logger,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        CliSearchMode searchMode,
+        bool vimgrep,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool asciiCaseInsensitive,
+        bool invertMatch,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool onlyMatching,
+        ReadOnlyMemory<byte>? replacement,
+        ulong? maxCount,
+        bool textMode,
+        bool quiet,
+        bool trim,
+        ulong beforeContext,
+        ulong afterContext,
+        bool passthru,
+        bool includeZero,
+        bool nullPathTerminator,
+        bool heading,
+        ref bool wroteHeadingOutput,
+        ref bool matched,
+        ref bool errored,
+        ref SearchStats stats)
+    {
+        if (!TryReadRawUnixSearchFileBytes(path, lowArgs, diagnostics, out byte[] bytes, out SearchFileReadKind readKind))
+        {
+            errored = true;
+            return;
+        }
+
+        LogTraceSearchPath(logger, path.DisplayText, readKind);
+        matched |= SearchBytesWithStats(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, quitOnBinary: false, heading, ref wroteHeadingOutput, ref stats);
+    }
+
     private static void LogTraceSearchPath(DiagnosticLogger logger, string path, SearchFileReadKind readKind)
     {
         logger.Trace("rg::search", "crates/core/search.rs", 255, $"{path}: binary detection: BinaryDetection(Convert(0))");
@@ -3972,6 +4111,41 @@ internal static class ScoutApplication
         catch (UnauthorizedAccessException exception)
         {
             SearchErrorMessage(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path}: {exception.Message}").WithContext($"rg: {path}"));
+            bytes = [];
+            return false;
+        }
+    }
+
+    private static bool TryReadRawUnixSearchFileBytes(
+        SearchPathArgument path,
+        CliLowArgs lowArgs,
+        DiagnosticMessenger diagnostics,
+        out byte[] bytes,
+        out SearchFileReadKind readKind)
+    {
+        readKind = SearchFileReadKind.Buffered;
+        try
+        {
+            SearchFileReadResult result = SearchFileReader.ReadUnixPath(path.UnixBytes!, ToSearchEncodingKind(lowArgs.EncodingMode));
+            bytes = result.GetBytes();
+            readKind = result.Kind;
+            return true;
+        }
+        catch (IOException exception)
+        {
+            SearchErrorMessage(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path.DisplayText}: {exception.Message}").WithContext($"rg: {path.DisplayText}"));
+            bytes = [];
+            return false;
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            SearchErrorMessage(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path.DisplayText}: {exception.Message}").WithContext($"rg: {path.DisplayText}"));
+            bytes = [];
+            return false;
+        }
+        catch (ArgumentException exception)
+        {
+            SearchErrorMessage(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path.DisplayText}: {exception.Message}").WithContext($"rg: {path.DisplayText}"));
             bytes = [];
             return false;
         }
@@ -6480,6 +6654,11 @@ internal static class ScoutApplication
         return new OutputPath(displayPath, hyperlinkPath, hyperlinkFormat, host);
     }
 
+    private static OutputPath CreateRawUnixOutputPath(SearchPathArgument path)
+    {
+        return new OutputPath(path.DisplayBytes, hyperlinkPath: null, hyperlinkFormat: null, host: string.Empty);
+    }
+
     private static string GetHyperlinkHost(CliLowArgs lowArgs, string? hyperlinkFormat)
     {
         if (string.IsNullOrEmpty(hyperlinkFormat) || !hyperlinkFormat.Contains("{host}", StringComparison.Ordinal))
@@ -7702,9 +7881,22 @@ internal static class ScoutApplication
     private static byte[] GetPathBytes(string path, byte? pathSeparator)
     {
         byte[] bytes = Utf8.GetBytes(path);
+        ApplyPathSeparator(bytes, pathSeparator);
+        return bytes;
+    }
+
+    private static byte[] GetPathBytes(ReadOnlySpan<byte> path, byte? pathSeparator)
+    {
+        byte[] bytes = path.ToArray();
+        ApplyPathSeparator(bytes, pathSeparator);
+        return bytes;
+    }
+
+    private static void ApplyPathSeparator(byte[] bytes, byte? pathSeparator)
+    {
         if (pathSeparator is not byte separator)
         {
-            return bytes;
+            return;
         }
 
         for (int index = 0; index < bytes.Length; index++)
@@ -7714,8 +7906,6 @@ internal static class ScoutApplication
                 bytes[index] = separator;
             }
         }
-
-        return bytes;
     }
 
     private static bool IsAsciiCaseInsensitive(IReadOnlyList<byte[]> pattern, CliCaseMode caseMode)
@@ -7761,11 +7951,48 @@ internal static class ScoutApplication
         return false;
     }
 
-    private static bool ContainsDirectory(List<string> paths)
+    private static SearchPathArgument CreateTextSearchPath(string path)
+    {
+        return SearchPathArgument.FromText(path, GetPathBytes(path, pathSeparator: null));
+    }
+
+    private static bool TryGetSearchPathArgument(
+        OsString argument,
+        byte? pathSeparator,
+        DiagnosticMessenger diagnostics,
+        out SearchPathArgument path)
+    {
+        if (argument.TryGetText(out string text))
+        {
+            path = SearchPathArgument.FromText(text, GetPathBytes(text, pathSeparator));
+            return true;
+        }
+
+        if (argument.IsUnixBytes && !OperatingSystem.IsWindows())
+        {
+            ReadOnlySpan<byte> bytes = argument.AsUnixBytes();
+            if (bytes.IndexOf((byte)0) >= 0)
+            {
+                diagnostics.ErrorMessage(new ScoutError("invalid CLI arguments").WithContext("rg"));
+                path = default;
+                return false;
+            }
+
+            path = SearchPathArgument.FromUnixBytes(bytes, GetPathBytes(bytes, pathSeparator));
+            return true;
+        }
+
+        diagnostics.ErrorMessage(new ScoutError("invalid CLI arguments").WithContext("rg"));
+        path = default;
+        return false;
+    }
+
+    private static bool ContainsDirectory(List<SearchPathArgument> paths)
     {
         for (int index = 0; index < paths.Count; index++)
         {
-            if (paths[index] != "-" && Directory.Exists(paths[index]))
+            string? path = paths[index].Text;
+            if (path is not null && path != "-" && Directory.Exists(path))
             {
                 return true;
             }
@@ -7774,7 +8001,7 @@ internal static class ScoutApplication
         return false;
     }
 
-    private static bool IsAutoMmapEligible(List<string> paths)
+    private static bool IsAutoMmapEligible(List<SearchPathArgument> paths)
     {
         if (paths.Count == 0 || paths.Count > 10)
         {
@@ -7783,7 +8010,8 @@ internal static class ScoutApplication
 
         for (int index = 0; index < paths.Count; index++)
         {
-            if (!File.Exists(paths[index]))
+            string? path = paths[index].Text;
+            if (path is null || !File.Exists(path))
             {
                 return false;
             }

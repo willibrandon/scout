@@ -153,6 +153,37 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies invalid UTF-8 path arguments enter the Unix raw-path search path instead of being rejected at decode time.
+    /// </summary>
+    [Fact]
+    public void InvalidUtf8PathArgumentUsesRawUnixPath()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using MemoryStream output = new();
+        using MemoryStream error = new();
+        var outputWriter = new RawByteWriter(output);
+        var errorWriter = new RawByteWriter(error);
+        OsString[] arguments =
+        [
+            OsString.FromUnixBytes("scout"u8),
+            OsString.FromUnixBytes("needle"u8),
+            OsString.FromUnixBytes([(byte)'m', (byte)'i', (byte)'s', (byte)'s', 0xff]),
+        ];
+
+        int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
+        string stderr = Encoding.UTF8.GetString(error.ToArray());
+
+        Assert.Equal(2, exitCode);
+        Assert.Empty(output.ToArray());
+        Assert.Contains("IO error for operation on miss", stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain("invalid CLI arguments", stderr, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies a literal search prints matching lines from a single file without path prefixes.
     /// </summary>
     [Fact]

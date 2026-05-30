@@ -15,8 +15,7 @@ public sealed partial class PortedRgTestCoverageTests
     private static readonly string[] ExpectedUnportedRgTests =
     [
         "tests/feature.rs|f362_u64_to_narrow_usize_overflow", // 32-bit target only.
-        "tests/json.rs|notutf8", // Invalid UTF-8 filename case skipped by upstream on macOS/APFS.
-        "tests/regression.rs|r210", // Invalid UTF-8 filename case skipped on APFS.
+        "tests/json.rs|notutf8", // Recursive invalid UTF-8 filename case skipped by upstream on macOS/APFS.
     ];
 
     private static readonly string[] ExpectedCatalogSplitRgTests =
@@ -62,9 +61,11 @@ public sealed partial class PortedRgTestCoverageTests
     {
         string path = Path.Combine(FindRepositoryRoot(), "tests", "Scout.Differential.Tests", "PortedRgTests.catalog");
         string nativePcre2Path = Path.Combine(FindRepositoryRoot(), "tests", "Scout.Differential.Tests", "NativePcre2RgTests.catalog");
+        string nativeInvalidUtf8Path = Path.Combine(FindRepositoryRoot(), "tests", "Scout.Differential.Tests", "NativeInvalidUtf8RgTests.catalog");
         var tests = new SortedSet<string>(StringComparer.Ordinal);
         ReadCatalogFile(path, tests);
         ReadCatalogFile(nativePcre2Path, tests);
+        ReadCatalogFile(nativeInvalidUtf8Path, tests);
         return tests;
     }
 

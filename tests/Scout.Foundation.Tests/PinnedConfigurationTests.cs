@@ -189,6 +189,7 @@ public sealed class PinnedConfigurationTests
         string buildScript = File.ReadAllText(Path.Combine(root, "native", "pcre2", "build-unix.sh"));
         string appBuildScript = File.ReadAllText(Path.Combine(root, "native", "build-app-unix.sh"));
         string differentialScript = File.ReadAllText(Path.Combine(root, "native", "test-pcre2-differential-unix.sh"));
+        string invalidUtf8DifferentialScript = File.ReadAllText(Path.Combine(root, "native", "test-invalid-utf8-differential-unix.sh"));
         string pcre2Library = File.ReadAllText(Path.Combine(root, "src", "Scout.Pcre2", "Pcre2Library.cs"));
         string pcre2Regex = File.ReadAllText(Path.Combine(root, "src", "Scout.Pcre2", "Pcre2Regex.cs"));
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
@@ -250,6 +251,10 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("compare_case r1412_lookbehind_replacement exact -P -nU -rquux '(?<=foo\\n)bar'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case r1573_count exact -P --multiline --count '(?s)def (\\w+);(?=.*use \\w+)'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case r3139_multiline_files_with_matches exact -P --multiline --files-with-matches '(?s)Start(?=.*thing2)'", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("\"$ROOT/native/test-invalid-utf8-differential-unix.sh\" \"$RID\" \"$BIN/scout\"", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("r210_explicit_invalid_utf8_path", invalidUtf8DifferentialScript, StringComparison.Ordinal);
+        Assert.Contains("json_explicit_invalid_utf8_path", invalidUtf8DifferentialScript, StringComparison.Ordinal);
+        Assert.Contains("subprocess.run", invalidUtf8DifferentialScript, StringComparison.Ordinal);
         Assert.Contains("<AllowUnsafeBlocks>true</AllowUnsafeBlocks>", directoryBuildProps, StringComparison.Ordinal);
         Assert.Contains("<DirectPInvoke Include=\"__Internal\" />", directoryBuildProps, StringComparison.Ordinal);
         Assert.Contains("PCRE2 10.46 is available (JIT is available)", appBuildScript, StringComparison.Ordinal);

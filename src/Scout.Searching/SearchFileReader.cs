@@ -50,6 +50,19 @@ public static class SearchFileReader
         return new SearchFileReadResult(ReadBuffered(path, encodingKind), SearchFileReadKind.Buffered);
     }
 
+    /// <summary>
+    /// Reads a Unix search file whose path is available only as raw bytes.
+    /// </summary>
+    /// <param name="path">The raw Unix path bytes.</param>
+    /// <param name="encodingKind">The requested search-input encoding.</param>
+    /// <returns>The decoded bytes and the strategy used to read them.</returns>
+    public static SearchFileReadResult ReadUnixPath(ReadOnlySpan<byte> path, SearchEncodingKind encodingKind)
+    {
+        using SafeFileHandle handle = RawUnixFile.OpenRead(path);
+        using var stream = new FileStream(handle, FileAccess.Read, bufferSize: 4096, isAsync: false);
+        return new SearchFileReadResult(SearchEncodingReader.ReadToEnd(stream, encodingKind), SearchFileReadKind.Buffered);
+    }
+
     private static bool ShouldTryMemoryMap(SearchMmapMode mmapMode, bool allowMemoryMap)
     {
         if (OperatingSystem.IsMacOS())

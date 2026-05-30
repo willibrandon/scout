@@ -19,6 +19,8 @@
 
   <ItemGroup>
     <AdditionalFiles Include="PortedRgTests.catalog" />
+    <AdditionalFiles Include="NativeInvalidUtf8RgTests.catalog" />
+    <AdditionalFiles Include="NativePcre2RgTests.catalog" />
   </ItemGroup>
 
   <ItemGroup>

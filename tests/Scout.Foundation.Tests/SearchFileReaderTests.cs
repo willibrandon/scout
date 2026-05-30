@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text;
 
 namespace Scout;
 
@@ -96,6 +97,35 @@ public sealed class SearchFileReaderTests
 
             Assert.Equal(SearchFileReadKind.Buffered, result.Kind);
             Assert.Empty(result.GetBytes());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Verifies Unix raw-byte path reads bypass text path APIs.
+    /// </summary>
+    [Fact]
+    public void ReadUnixPathUsesRawBytePath()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        string root = CreateTempDirectory();
+        try
+        {
+            string path = Path.Combine(root, "input.txt");
+            File.WriteAllText(path, "needle\n");
+            byte[] pathBytes = Encoding.UTF8.GetBytes(path);
+
+            SearchFileReadResult result = SearchFileReader.ReadUnixPath(pathBytes, SearchEncodingKind.None);
+
+            Assert.Equal(SearchFileReadKind.Buffered, result.Kind);
+            Assert.Equal("needle\n"u8.ToArray(), result.GetBytes());
         }
         finally
         {
