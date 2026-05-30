@@ -67,6 +67,18 @@ printf 'foo 42\nxoyz\ncat\tdog\n' > "$BIN/pcre2-only-matching.txt"
 "$BIN/scout" -P -o '.*o(?!.*\s)' "$BIN/pcre2-only-matching.txt" > "$BIN/pcre2-only-matching.out"
 printf 'xo\ncat\tdo\n' > "$BIN/pcre2-only-matching.expected"
 cmp "$BIN/pcre2-only-matching.expected" "$BIN/pcre2-only-matching.out"
+"$BIN/scout" -P --count 'o(?=o)' "$BIN/pcre2-smoke.txt" > "$BIN/pcre2-count.out"
+printf '3\n' > "$BIN/pcre2-count.expected"
+cmp "$BIN/pcre2-count.expected" "$BIN/pcre2-count.out"
+"$BIN/scout" -P --count-matches 'o(?=o)' "$BIN/pcre2-smoke.txt" > "$BIN/pcre2-count-matches.out"
+printf '4\n' > "$BIN/pcre2-count-matches.expected"
+cmp "$BIN/pcre2-count-matches.expected" "$BIN/pcre2-count-matches.out"
+"$BIN/scout" -P --files-with-matches 'foo(?=bar)' "$BIN/pcre2-smoke.txt" > "$BIN/pcre2-files-with-matches.out"
+printf '%s\n' "$BIN/pcre2-smoke.txt" > "$BIN/pcre2-files-with-matches.expected"
+cmp "$BIN/pcre2-files-with-matches.expected" "$BIN/pcre2-files-with-matches.out"
+"$BIN/scout" -P --files-without-match 'nomatch(?=bar)' "$BIN/pcre2-smoke.txt" > "$BIN/pcre2-files-without-match.out"
+printf '%s\n' "$BIN/pcre2-smoke.txt" > "$BIN/pcre2-files-without-match.expected"
+cmp "$BIN/pcre2-files-without-match.expected" "$BIN/pcre2-files-without-match.out"
 for symbol in \
     _pcre2_code_free_8 \
     _pcre2_compile_8 \

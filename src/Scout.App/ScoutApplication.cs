@@ -606,7 +606,16 @@ internal static class ScoutApplication
         {
             byte[] pattern = BuildPcre2Pattern(patterns);
             using var regex = new Pcre2Regex(pattern, GetPcre2CompileOptions(lowArgs, patterns));
-            bool matched = SearchPcre2Lines(bytes, regex, output, separators, lowArgs.OnlyMatching);
+            bool matched = RunPcre2SearchMode(
+                bytes,
+                regex,
+                output,
+                separators,
+                GetPcre2OutputPath(positional[firstPathIndex], path),
+                lowArgs.SearchMode,
+                lowArgs.OnlyMatching,
+                lowArgs.IncludeZero,
+                lowArgs.NullPathTerminator);
             output.Flush();
             return matched ? ExitCode.Success : ExitCode.NoMatch;
         }
@@ -619,7 +628,11 @@ internal static class ScoutApplication
 
     private static bool CanRunSimplePcre2Search(IReadOnlyList<OsString> positional, int firstPathIndex, CliLowArgs lowArgs)
     {
-        return lowArgs.SearchMode == CliSearchMode.Standard &&
+        return (lowArgs.SearchMode is CliSearchMode.Standard
+                or CliSearchMode.Count
+                or CliSearchMode.CountMatches
+                or CliSearchMode.FilesWithMatches
+                or CliSearchMode.FilesWithoutMatch) &&
             positional.Count == firstPathIndex + 1 &&
             !lowArgs.Stats &&
             !lowArgs.Quiet &&
@@ -638,6 +651,14 @@ internal static class ScoutApplication
             lowArgs.AfterContext == 0 &&
             !lowArgs.Passthru &&
             lowArgs.WithFilename is not true;
+    }
+
+    private static OutputPath GetPcre2OutputPath(OsString argument, string path)
+    {
+        byte[] displayPath = argument.IsUnixBytes
+            ? argument.AsUnixBytes().ToArray()
+            : Utf8.GetBytes(path);
+        return new OutputPath(displayPath, hyperlinkPath: null, hyperlinkFormat: null, host: string.Empty);
     }
 
     private static Pcre2CompileOptions GetPcre2CompileOptions(CliLowArgs lowArgs, IReadOnlyList<byte[]> patterns)
@@ -686,6 +707,43 @@ internal static class ScoutApplication
         return buffer.ToArray();
     }
 
+    private static bool RunPcre2SearchMode(
+        byte[] bytes,
+        Pcre2Regex regex,
+        RawByteWriter output,
+        OutputSeparators separators,
+        OutputPath path,
+        CliSearchMode searchMode,
+        bool onlyMatching,
+        bool includeZero,
+        bool nullPathTerminator)
+    {
+        if (searchMode == CliSearchMode.Count)
+        {
+            long count = onlyMatching
+                ? CountPcre2Matches(bytes, regex)
+                : CountPcre2MatchingLines(bytes, regex);
+            return WriteCount(output, prefix: null, color: new OutputColor(false), count, includeZero, nullPathTerminator, separators.LineTerminator);
+        }
+
+        if (searchMode == CliSearchMode.CountMatches)
+        {
+            return WriteCount(output, prefix: null, color: new OutputColor(false), CountPcre2Matches(bytes, regex), includeZero, nullPathTerminator, separators.LineTerminator);
+        }
+
+        if (searchMode == CliSearchMode.FilesWithMatches)
+        {
+            return WritePathIf(output, path, new OutputColor(false), HasPcre2Match(bytes, regex), nullPathTerminator, separators.LineTerminator);
+        }
+
+        if (searchMode == CliSearchMode.FilesWithoutMatch)
+        {
+            return WritePathIf(output, path, new OutputColor(false), !HasPcre2Match(bytes, regex), nullPathTerminator, separators.LineTerminator);
+        }
+
+        return SearchPcre2Lines(bytes, regex, output, separators, onlyMatching);
+    }
+
     private static bool SearchPcre2Lines(byte[] bytes, Pcre2Regex regex, RawByteWriter output, OutputSeparators separators, bool onlyMatching)
     {
         bool matched = false;
@@ -729,6 +787,108 @@ internal static class ScoutApplication
         }
 
         return matched;
+    }
+
+    private static bool HasPcre2Match(byte[] bytes, Pcre2Regex regex)
+    {
+        int lineStart = 0;
+        while (lineStart <= bytes.Length)
+        {
+            ReadOnlySpan<byte> remaining = bytes.AsSpan(lineStart);
+            int lineFeed = remaining.IndexOf((byte)'\n');
+            int lineEnd = lineFeed < 0 ? bytes.Length : lineStart + lineFeed;
+            ReadOnlySpan<byte> line = bytes.AsSpan(lineStart, lineEnd - lineStart);
+            if (line.Length > 0 && line[^1] == (byte)'\r')
+            {
+                line = line[..^1];
+            }
+
+            if (regex.TryFind(line, out _))
+            {
+                return true;
+            }
+
+            if (lineFeed < 0)
+            {
+                break;
+            }
+
+            lineStart = lineEnd + 1;
+        }
+
+        return false;
+    }
+
+    private static long CountPcre2MatchingLines(byte[] bytes, Pcre2Regex regex)
+    {
+        long count = 0;
+        int lineStart = 0;
+        while (lineStart <= bytes.Length)
+        {
+            ReadOnlySpan<byte> remaining = bytes.AsSpan(lineStart);
+            int lineFeed = remaining.IndexOf((byte)'\n');
+            int lineEnd = lineFeed < 0 ? bytes.Length : lineStart + lineFeed;
+            ReadOnlySpan<byte> line = bytes.AsSpan(lineStart, lineEnd - lineStart);
+            if (line.Length > 0 && line[^1] == (byte)'\r')
+            {
+                line = line[..^1];
+            }
+
+            if (regex.TryFind(line, out _))
+            {
+                count++;
+            }
+
+            if (lineFeed < 0)
+            {
+                break;
+            }
+
+            lineStart = lineEnd + 1;
+        }
+
+        return count;
+    }
+
+    private static long CountPcre2Matches(byte[] bytes, Pcre2Regex regex)
+    {
+        long count = 0;
+        int lineStart = 0;
+        while (lineStart <= bytes.Length)
+        {
+            ReadOnlySpan<byte> remaining = bytes.AsSpan(lineStart);
+            int lineFeed = remaining.IndexOf((byte)'\n');
+            int lineEnd = lineFeed < 0 ? bytes.Length : lineStart + lineFeed;
+            ReadOnlySpan<byte> line = bytes.AsSpan(lineStart, lineEnd - lineStart);
+            if (line.Length > 0 && line[^1] == (byte)'\r')
+            {
+                line = line[..^1];
+            }
+
+            count += CountPcre2LineMatches(line, regex);
+
+            if (lineFeed < 0)
+            {
+                break;
+            }
+
+            lineStart = lineEnd + 1;
+        }
+
+        return count;
+    }
+
+    private static int CountPcre2LineMatches(ReadOnlySpan<byte> line, Pcre2Regex regex)
+    {
+        int count = 0;
+        int startOffset = 0;
+        while (startOffset <= line.Length && regex.TryFind(line, startOffset, out Pcre2Match match))
+        {
+            count++;
+            startOffset = match.Length == 0 ? match.Start + 1 : match.Start + match.Length;
+        }
+
+        return count;
     }
 
     private static void WritePcre2OnlyMatches(ReadOnlySpan<byte> line, Pcre2Regex regex, RawByteWriter output, OutputSeparators separators)
