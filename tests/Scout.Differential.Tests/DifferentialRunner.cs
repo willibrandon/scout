@@ -2,12 +2,14 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Threading;
 
 namespace Scout;
 
 internal static class DifferentialRunner
 {
     private const string PinnedRipgrepPath = "/Users/brandon/src/ripgrep/target/debug/rg";
+    private const int PinnedRipgrepTimeoutMilliseconds = 10_000;
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
     private static readonly object CurrentDirectoryLock = new();
@@ -112,9 +114,65 @@ internal static class DifferentialRunner
         }
 
         using MemoryStream output = new();
-        process.StandardOutput.BaseStream.CopyTo(output);
-        string error = process.StandardError.ReadToEnd();
-        process.WaitForExit();
+        string error = string.Empty;
+        Exception? outputException = null;
+        Exception? errorException = null;
+        var outputThread = new Thread(() =>
+        {
+            try
+            {
+                process.StandardOutput.BaseStream.CopyTo(output);
+            }
+            catch (IOException exception)
+            {
+                outputException = exception;
+            }
+            catch (ObjectDisposedException exception)
+            {
+                outputException = exception;
+            }
+        });
+        var errorThread = new Thread(() =>
+        {
+            try
+            {
+                error = process.StandardError.ReadToEnd();
+            }
+            catch (IOException exception)
+            {
+                errorException = exception;
+            }
+            catch (ObjectDisposedException exception)
+            {
+                errorException = exception;
+            }
+        });
+        outputThread.Start();
+        errorThread.Start();
+        bool timedOut = false;
+        if (!process.WaitForExit(PinnedRipgrepTimeoutMilliseconds))
+        {
+            timedOut = true;
+            process.Kill(entireProcessTree: true);
+            process.WaitForExit();
+        }
+
+        outputThread.Join();
+        errorThread.Join();
+        if (timedOut)
+        {
+            Assert.Fail("Pinned ripgrep timed out for arguments: " + string.Join(" ", arguments));
+        }
+
+        if (outputException is not null)
+        {
+            throw outputException;
+        }
+
+        if (errorException is not null)
+        {
+            throw errorException;
+        }
 
         return new DifferentialRunResult(process.ExitCode, output.ToArray(), error);
     }
