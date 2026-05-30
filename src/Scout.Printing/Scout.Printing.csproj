@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Scout.Os\Scout.Os.csproj" />
+    <ProjectReference Include="..\Scout.Searching\Scout.Searching.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

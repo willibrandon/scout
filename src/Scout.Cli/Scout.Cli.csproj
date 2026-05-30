@@ -6,6 +6,7 @@
     <ProjectReference Include="..\Scout.Encoding\Scout.Encoding.csproj" />
     <ProjectReference Include="..\Scout.Errors\Scout.Errors.csproj" />
     <ProjectReference Include="..\Scout.Os\Scout.Os.csproj" />
+    <ProjectReference Include="..\Scout.Printing\Scout.Printing.csproj" />
   </ItemGroup>
 
 </Project>
