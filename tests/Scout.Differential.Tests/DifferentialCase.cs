@@ -18,6 +18,8 @@ internal sealed class DifferentialCase
         Func<RgTestDirectory, string[]>? argumentFactory,
         params string[] arguments)
     {
+        ValidateComparisonPolicy(comparisonMode, arguments);
+
         this.arguments = arguments;
         this.argumentFactory = argumentFactory;
         BeforeRun = beforeRun;
@@ -109,6 +111,90 @@ internal sealed class DifferentialCase
     {
         ArgumentNullException.ThrowIfNull(directory);
 
-        return argumentFactory is null ? Arguments : argumentFactory(directory);
+        string[] resolvedArguments = argumentFactory is null ? Arguments : argumentFactory(directory);
+        ValidateComparisonPolicy(ComparisonMode, resolvedArguments);
+        return resolvedArguments;
+    }
+
+    private static void ValidateComparisonPolicy(DifferentialComparisonMode comparisonMode, string[] arguments)
+    {
+        if (!ProducesElapsedFields(arguments))
+        {
+            return;
+        }
+
+        if (!MasksElapsedFields(comparisonMode))
+        {
+            throw new ArgumentException("Differential cases that emit JSON or stats must use an elapsed-masking comparison mode.", nameof(comparisonMode));
+        }
+
+        if (UsesExplicitParallelism(arguments) && comparisonMode == DifferentialComparisonMode.MaskElapsed)
+        {
+            throw new ArgumentException("Explicitly parallel JSON or stats comparisons must also sort path-ordered output.", nameof(comparisonMode));
+        }
+    }
+
+    private static bool MasksElapsedFields(DifferentialComparisonMode comparisonMode)
+    {
+        return comparisonMode is DifferentialComparisonMode.MaskElapsed
+            or DifferentialComparisonMode.SortLinesAndMaskElapsed
+            or DifferentialComparisonMode.NonEmptyStdout
+            or DifferentialComparisonMode.NonEmptyStderr;
+    }
+
+    private static bool ProducesElapsedFields(string[] arguments)
+    {
+        bool json = false;
+        bool stats = false;
+        for (int index = 0; index < arguments.Length; index++)
+        {
+            switch (arguments[index])
+            {
+                case "--json":
+                    json = true;
+                    break;
+                case "--no-json":
+                    json = false;
+                    break;
+                case "--stats":
+                    stats = true;
+                    break;
+                case "--no-stats":
+                    stats = false;
+                    break;
+            }
+        }
+
+        return json || stats;
+    }
+
+    private static bool UsesExplicitParallelism(string[] arguments)
+    {
+        for (int index = 0; index < arguments.Length; index++)
+        {
+            string argument = arguments[index];
+            if (argument.StartsWith("-j", StringComparison.Ordinal) && argument.Length > 2)
+            {
+                return IsParallelThreadCount(argument[2..]);
+            }
+
+            if (argument == "-j" || argument == "--threads")
+            {
+                return index + 1 < arguments.Length && IsParallelThreadCount(arguments[index + 1]);
+            }
+
+            const string threadsPrefix = "--threads=";
+            if (argument.StartsWith(threadsPrefix, StringComparison.Ordinal))
+            {
+                return IsParallelThreadCount(argument[threadsPrefix.Length..]);
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsParallelThreadCount(string value)
+    {
+        return ulong.TryParse(value, out ulong threads) && threads != 1;
     }
 }
