@@ -57,6 +57,10 @@ public sealed class FlagCatalogTests
         Assert.Equal("--engine", engine.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindLongValue("--color", out FlagDescriptor color));
         Assert.Equal("--color", color.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--generate", out FlagDescriptor generate));
+        Assert.Equal("--generate", generate.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--colors", out FlagDescriptor colors));
+        Assert.Equal("--colors", colors.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindShortValue('j', out FlagDescriptor threads));
         Assert.Equal("--threads", threads.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindShortValue('A', out FlagDescriptor afterContext));
@@ -170,6 +174,15 @@ public sealed class FlagCatalogTests
                 OsString.FromUnixBytes("--color=ansi"u8),
                 OsString.FromUnixBytes("needle"u8),
             ]);
+        CliParseResult generateValue = CliParser.Parse(
+            [
+                OsString.FromUnixBytes("--generate=complete-fish"u8),
+            ]);
+        CliParseResult colorsValue = CliParser.Parse(
+            [
+                OsString.FromUnixBytes("--colors=path:none"u8),
+                OsString.FromUnixBytes("needle"u8),
+            ]);
         CliParseResult contextValues = CliParser.Parse(
             [
                 OsString.FromUnixBytes("-A=2"u8),
@@ -193,6 +206,12 @@ public sealed class FlagCatalogTests
         Assert.Equal(CliParseStatus.Ok, colorValue.Status);
         Assert.Equal(CliColorMode.Ansi, colorValue.LowArgs!.ColorMode);
         Assert.Single(colorValue.LowArgs.Positional);
+        Assert.Equal(CliParseStatus.Ok, generateValue.Status);
+        Assert.Equal(CliGenerateMode.CompleteFish, generateValue.LowArgs!.GenerateMode);
+        Assert.Empty(generateValue.LowArgs.Positional);
+        Assert.Equal(CliParseStatus.Ok, colorsValue.Status);
+        Assert.Equal(["path:none"], colorsValue.LowArgs!.ColorSpecs);
+        Assert.Single(colorsValue.LowArgs.Positional);
         Assert.Equal(CliParseStatus.Ok, contextValues.Status);
         Assert.Equal(2UL, contextValues.LowArgs!.AfterContext);
         Assert.Equal(3UL, contextValues.LowArgs.BeforeContext);

@@ -1584,26 +1584,6 @@ public static class CliParser
             return ParseThreads(value, "--threads", lowArgs, out error);
         }
 
-        if (argument.EqualsUnixBytes("--generate"u8) || TextEquals(argument, "--generate"))
-        {
-            if (!TryGetFollowingValue(arguments, ref index, "--generate", out OsString value, out error))
-            {
-                return true;
-            }
-
-            return ParseGenerate(value, lowArgs, out error);
-        }
-
-        if (argument.EqualsUnixBytes("--colors"u8) || TextEquals(argument, "--colors"))
-        {
-            if (!TryGetFollowingValue(arguments, ref index, "--colors", out OsString value, out error))
-            {
-                return true;
-            }
-
-            return ParseColorSpec(value, "--colors", lowArgs, out error);
-        }
-
         if (argument.EqualsUnixBytes("--dfa-size-limit"u8) || TextEquals(argument, "--dfa-size-limit"))
         {
             if (!TryGetFollowingValue(arguments, ref index, "--dfa-size-limit", out OsString value, out error))
@@ -1999,16 +1979,6 @@ public static class CliParser
             return ParseThreads(threadsValue, "--threads", lowArgs, out error);
         }
 
-        if (TryGetInlineUnixValue(argument, "--generate="u8, out ReadOnlySpan<byte> generateValue))
-        {
-            return ParseGenerate(generateValue, lowArgs, out error);
-        }
-
-        if (TryGetInlineUnixValue(argument, "--colors="u8, out ReadOnlySpan<byte> colorSpecValue))
-        {
-            return ParseColorSpec(colorSpecValue, "--colors", lowArgs, out error);
-        }
-
         if (TryGetInlineUnixValue(argument, "--dfa-size-limit="u8, out ReadOnlySpan<byte> dfaSizeLimitValue))
         {
             return ParseDfaSizeLimit(dfaSizeLimitValue, "--dfa-size-limit", lowArgs, out error);
@@ -2284,16 +2254,6 @@ public static class CliParser
             if (text.StartsWith("--threads=", StringComparison.Ordinal))
             {
                 return ParseThreads(text["--threads=".Length..], "--threads", lowArgs, out error);
-            }
-
-            if (text.StartsWith("--generate=", StringComparison.Ordinal))
-            {
-                return ParseGenerate(text["--generate=".Length..], lowArgs, out error);
-            }
-
-            if (text.StartsWith("--colors=", StringComparison.Ordinal))
-            {
-                return ParseColorSpec(text["--colors=".Length..], lowArgs, out error);
             }
 
             if (text.StartsWith("--dfa-size-limit=", StringComparison.Ordinal))
@@ -3143,20 +3103,9 @@ public static class CliParser
         return true;
     }
 
-    private static bool ParseGenerate(OsString value, CliLowArgs lowArgs, out ScoutError? error)
+    internal static bool ParseGenerate(OsString value, CliLowArgs lowArgs, out ScoutError? error)
     {
         if (value.TryGetText(out string text))
-        {
-            return ParseGenerate(text, lowArgs, out error);
-        }
-
-        error = new ScoutError("error parsing flag --generate: invalid UTF-8 in generate mode");
-        return true;
-    }
-
-    private static bool ParseGenerate(ReadOnlySpan<byte> value, CliLowArgs lowArgs, out ScoutError? error)
-    {
-        if (TryDecodeUtf8(value, out string text))
         {
             return ParseGenerate(text, lowArgs, out error);
         }
@@ -3200,20 +3149,9 @@ public static class CliParser
         }
     }
 
-    private static bool ParseColorSpec(OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
+    internal static bool ParseColorSpec(OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
     {
         if (value.TryGetText(out string text))
-        {
-            return ParseColorSpec(text, lowArgs, out error);
-        }
-
-        error = new ScoutError($"error parsing flag {flagName}: invalid UTF-8 in color specification");
-        return true;
-    }
-
-    private static bool ParseColorSpec(ReadOnlySpan<byte> value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
-    {
-        if (TryDecodeUtf8(value, out string text))
         {
             return ParseColorSpec(text, lowArgs, out error);
         }
