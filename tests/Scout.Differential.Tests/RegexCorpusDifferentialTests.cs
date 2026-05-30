@@ -11,6 +11,7 @@ namespace Scout;
 public sealed class RegexCorpusDifferentialTests
 {
     private const int ExpectedDifferentialCaseCount = 205;
+    private const int ExpectedSupportedOnlyCaseCount = 216;
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
@@ -29,6 +30,22 @@ public sealed class RegexCorpusDifferentialTests
         ("regex-lite.toml", 5),
         ("regression.toml", 13),
         ("set.toml", 29),
+    ];
+
+    private static readonly (string RelativePath, int Count)[] ExpectedSupportedOnlyFileCounts =
+    [
+        ("anchored.toml", 9),
+        ("bytes.toml", 2),
+        ("crazy.toml", 5),
+        ("crlf.toml", 11),
+        ("flags.toml", 2),
+        ("iter.toml", 3),
+        ("line-terminator.toml", 9),
+        ("misc.toml", 3),
+        ("multiline.toml", 126),
+        ("regression.toml", 43),
+        ("set.toml", 1),
+        ("substring.toml", 2),
     ];
 
     private static readonly (string RelativePath, string Name)[] DifferentialCases =
@@ -230,7 +247,7 @@ public sealed class RegexCorpusDifferentialTests
         ("set.toml", "empty21-leftmost-first"),
         ("set.toml", "empty30-leftmost-first"),
         ("set.toml", "empty31-leftmost-first"),
-        ("set.toml", "empty40"),
+        ("set.toml", "empty40-leftmost-first"),
         ("set.toml", "nomatch10"),
         ("set.toml", "nomatch20"),
         ("set.toml", "nomatch40"),
@@ -277,12 +294,17 @@ public sealed class RegexCorpusDifferentialTests
     {
         string[] keys = CorpusCaseKeys();
         var upstream = new SortedSet<string>(RegexCorpusLoader.EnumerateAllCaseKeys(), StringComparer.Ordinal);
+        SortedSet<string> supported = ReadSupportedCorpusCatalog();
         var differential = new SortedSet<string>(keys, StringComparer.Ordinal);
+        var supportedOnly = new SortedSet<string>(Difference(supported, differential), StringComparer.Ordinal);
 
         Assert.Equal(ExpectedDifferentialCaseCount, keys.Length);
         Assert.Equal(keys.Length, differential.Count);
         Assert.Equal(ExpectedDifferentialFileCounts, CountByRelativePath(differential));
+        Assert.Equal(ExpectedSupportedOnlyCaseCount, supportedOnly.Count);
+        Assert.Equal(ExpectedSupportedOnlyFileCounts, CountByRelativePath(supportedOnly));
         Assert.Empty(Difference(differential, upstream));
+        Assert.Empty(Difference(differential, supported));
 
         for (int index = 0; index < DifferentialCases.Length; index++)
         {
@@ -312,6 +334,84 @@ public sealed class RegexCorpusDifferentialTests
         }
 
         return keys.ToArray();
+    }
+
+    private static SortedSet<string> ReadSupportedCorpusCatalog()
+    {
+        string path = Path.Combine(FindRepositoryRoot(), "tests", "Scout.Regex.Tests", "RegexCorpusTests.cs");
+        var tests = new SortedSet<string>(StringComparer.Ordinal);
+        string? relativePath = null;
+        bool readingNames = false;
+        foreach (string line in File.ReadLines(path))
+        {
+            string trimmed = line.Trim();
+            if (!readingNames)
+            {
+                if (TryReadCorpusRelativePath(trimmed, out string? parsedRelativePath))
+                {
+                    relativePath = parsedRelativePath;
+                    continue;
+                }
+
+                if (relativePath is not null && string.Equals(trimmed, "[", StringComparison.Ordinal))
+                {
+                    readingNames = true;
+                }
+
+                continue;
+            }
+
+            if (string.Equals(trimmed, "]),", StringComparison.Ordinal))
+            {
+                relativePath = null;
+                readingNames = false;
+                continue;
+            }
+
+            if (relativePath is not null && TryReadQuotedValue(trimmed, out string? name))
+            {
+                tests.Add(relativePath + "|" + name);
+            }
+        }
+
+        return tests;
+    }
+
+    private static bool TryReadCorpusRelativePath(string line, out string? relativePath)
+    {
+        relativePath = null;
+        if (!line.StartsWith("(\"", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (!TryReadQuotedValue(line[1..], out string? parsedRelativePath) ||
+            parsedRelativePath is null ||
+            !parsedRelativePath.EndsWith(".toml", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        relativePath = parsedRelativePath;
+        return true;
+    }
+
+    private static bool TryReadQuotedValue(string line, out string? value)
+    {
+        value = null;
+        if (line.Length < 2 || line[0] != '"')
+        {
+            return false;
+        }
+
+        int end = line.IndexOf('"', 1);
+        if (end < 0)
+        {
+            return false;
+        }
+
+        value = line[1..end];
+        return true;
     }
 
     private static string[] Difference(SortedSet<string> left, SortedSet<string> right)
@@ -403,5 +503,21 @@ public sealed class RegexCorpusDifferentialTests
         string path = Path.Combine(Path.GetTempPath(), "scout-regex-corpus-diff-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        DirectoryInfo? directory = new(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "Scout.slnx")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException("Could not locate the Scout repository root.");
     }
 }
