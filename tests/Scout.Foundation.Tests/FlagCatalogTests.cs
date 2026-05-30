@@ -61,6 +61,10 @@ public sealed class FlagCatalogTests
         Assert.Equal("--generate", generate.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindLongValue("--colors", out FlagDescriptor colors));
         Assert.Equal("--colors", colors.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--dfa-size-limit", out FlagDescriptor dfaSizeLimit));
+        Assert.Equal("--dfa-size-limit", dfaSizeLimit.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--regex-size-limit", out FlagDescriptor regexSizeLimit));
+        Assert.Equal("--regex-size-limit", regexSizeLimit.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindShortValue('j', out FlagDescriptor threads));
         Assert.Equal("--threads", threads.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindShortValue('A', out FlagDescriptor afterContext));
@@ -183,6 +187,13 @@ public sealed class FlagCatalogTests
                 OsString.FromUnixBytes("--colors=path:none"u8),
                 OsString.FromUnixBytes("needle"u8),
             ]);
+        CliParseResult sizeLimits = CliParser.Parse(
+            [
+                OsString.FromUnixBytes("--dfa-size-limit=9G"u8),
+                OsString.FromUnixBytes("--regex-size-limit"u8),
+                OsString.FromUnixBytes("2M"u8),
+                OsString.FromUnixBytes("needle"u8),
+            ]);
         CliParseResult contextValues = CliParser.Parse(
             [
                 OsString.FromUnixBytes("-A=2"u8),
@@ -212,6 +223,10 @@ public sealed class FlagCatalogTests
         Assert.Equal(CliParseStatus.Ok, colorsValue.Status);
         Assert.Equal(["path:none"], colorsValue.LowArgs!.ColorSpecs);
         Assert.Single(colorsValue.LowArgs.Positional);
+        Assert.Equal(CliParseStatus.Ok, sizeLimits.Status);
+        Assert.Equal(9UL * 1024UL * 1024UL * 1024UL, sizeLimits.LowArgs!.DfaSizeLimit);
+        Assert.Equal(2UL * 1024UL * 1024UL, sizeLimits.LowArgs.RegexSizeLimit);
+        Assert.Single(sizeLimits.LowArgs.Positional);
         Assert.Equal(CliParseStatus.Ok, contextValues.Status);
         Assert.Equal(2UL, contextValues.LowArgs!.AfterContext);
         Assert.Equal(3UL, contextValues.LowArgs.BeforeContext);

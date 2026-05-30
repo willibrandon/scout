@@ -1584,26 +1584,6 @@ public static class CliParser
             return ParseThreads(value, "--threads", lowArgs, out error);
         }
 
-        if (argument.EqualsUnixBytes("--dfa-size-limit"u8) || TextEquals(argument, "--dfa-size-limit"))
-        {
-            if (!TryGetFollowingValue(arguments, ref index, "--dfa-size-limit", out OsString value, out error))
-            {
-                return true;
-            }
-
-            return ParseDfaSizeLimit(value, "--dfa-size-limit", lowArgs, out error);
-        }
-
-        if (argument.EqualsUnixBytes("--regex-size-limit"u8) || TextEquals(argument, "--regex-size-limit"))
-        {
-            if (!TryGetFollowingValue(arguments, ref index, "--regex-size-limit", out OsString value, out error))
-            {
-                return true;
-            }
-
-            return ParseRegexSizeLimit(value, "--regex-size-limit", lowArgs, out error);
-        }
-
         if (argument.EqualsUnixBytes("--hostname-bin"u8) || TextEquals(argument, "--hostname-bin"))
         {
             if (!TryGetFollowingValue(arguments, ref index, "--hostname-bin", out OsString value, out error))
@@ -1979,16 +1959,6 @@ public static class CliParser
             return ParseThreads(threadsValue, "--threads", lowArgs, out error);
         }
 
-        if (TryGetInlineUnixValue(argument, "--dfa-size-limit="u8, out ReadOnlySpan<byte> dfaSizeLimitValue))
-        {
-            return ParseDfaSizeLimit(dfaSizeLimitValue, "--dfa-size-limit", lowArgs, out error);
-        }
-
-        if (TryGetInlineUnixValue(argument, "--regex-size-limit="u8, out ReadOnlySpan<byte> regexSizeLimitValue))
-        {
-            return ParseRegexSizeLimit(regexSizeLimitValue, "--regex-size-limit", lowArgs, out error);
-        }
-
         if (TryGetInlineUnixValue(argument, "--hostname-bin="u8, out ReadOnlySpan<byte> hostnameBinValue))
         {
             return ParseHostnameBin(hostnameBinValue, "--hostname-bin", lowArgs, out error);
@@ -2254,16 +2224,6 @@ public static class CliParser
             if (text.StartsWith("--threads=", StringComparison.Ordinal))
             {
                 return ParseThreads(text["--threads=".Length..], "--threads", lowArgs, out error);
-            }
-
-            if (text.StartsWith("--dfa-size-limit=", StringComparison.Ordinal))
-            {
-                return ParseDfaSizeLimit(text["--dfa-size-limit=".Length..], "--dfa-size-limit", lowArgs, out error);
-            }
-
-            if (text.StartsWith("--regex-size-limit=", StringComparison.Ordinal))
-            {
-                return ParseRegexSizeLimit(text["--regex-size-limit=".Length..], "--regex-size-limit", lowArgs, out error);
             }
 
             if (text.StartsWith("--hostname-bin=", StringComparison.Ordinal))
@@ -3173,7 +3133,7 @@ public static class CliParser
         return true;
     }
 
-    private static bool ParseDfaSizeLimit(OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
+    internal static bool ParseDfaSizeLimit(OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
     {
         if (value.IsUnixBytes)
         {
@@ -3211,7 +3171,7 @@ public static class CliParser
         return true;
     }
 
-    private static bool ParseRegexSizeLimit(OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
+    internal static bool ParseRegexSizeLimit(OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
     {
         if (value.IsUnixBytes)
         {
