@@ -22,6 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Scout.Testing\Scout.Testing.csproj" />
     <ProjectReference Include="..\..\src\Scout.App\Scout.App.csproj" />
     <ProjectReference Include="..\..\src\Scout.Os\Scout.Os.csproj" />
   </ItemGroup>
