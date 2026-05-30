@@ -12,7 +12,7 @@ internal static class PortedRgTests
                     dir.CreateFile("dir/abc", string.Empty);
                     dir.CreateFile("foo/abc", string.Empty);
                 },
-                DifferentialCase.Exact("--path-separator", "/", "--files", "foo")),
+                DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "--path-separator", "/", "--files", "foo")),
             new(
                 "tests/regression.rs",
                 "r93",
@@ -181,7 +181,7 @@ internal static class PortedRgTests
                     dir.CreateFile("sherlock", Sherlock);
                     dir.CreateFile("file.py", "foo");
                 },
-                DifferentialCase.Exact("--path-separator", "/", "--files-without-match", "Sherlock", ".")),
+                DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "--path-separator", "/", "--files-without-match", "Sherlock", ".")),
             new(
                 "tests/misc.rs",
                 "after_context",
@@ -225,7 +225,7 @@ internal static class PortedRgTests
                     dir.CreateSize("foo", 40);
                     dir.CreateSize("bar", 60);
                 },
-                DifferentialCase.Exact("--path-separator", "/", "--max-filesize", "50", "--files", ".")),
+                DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "--path-separator", "/", "--max-filesize", "50", "--files", ".")),
             new(
                 "tests/misc.rs",
                 "max_filesize_parse_k_suffix",
@@ -234,7 +234,7 @@ internal static class PortedRgTests
                     dir.CreateSize("foo", 3048);
                     dir.CreateSize("bar", 4100);
                 },
-                DifferentialCase.Exact("--path-separator", "/", "--max-filesize", "4K", "--files", ".")),
+                DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "--path-separator", "/", "--max-filesize", "4K", "--files", ".")),
             new(
                 "tests/misc.rs",
                 "max_filesize_parse_m_suffix",
@@ -243,7 +243,7 @@ internal static class PortedRgTests
                     dir.CreateSize("foo", 1_000_000);
                     dir.CreateSize("bar", 1_400_000);
                 },
-                DifferentialCase.Exact("--path-separator", "/", "--max-filesize", "1M", "--files", ".")),
+                DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "--path-separator", "/", "--max-filesize", "1M", "--files", ".")),
             new(
                 "tests/misc.rs",
                 "ignore_hidden",
@@ -466,7 +466,7 @@ internal static class PortedRgTests
                     dir.CreateFile("sherlock", Sherlock);
                     dir.CreateFile("file.py", "foo");
                 },
-                DifferentialCase.Exact("--path-separator", "/", "--null", "--files-without-match", "Sherlock", ".")),
+                DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "--path-separator", "/", "--null", "--files-without-match", "Sherlock", ".")),
             new(
                 "tests/feature.rs",
                 "f89_count",
@@ -476,7 +476,7 @@ internal static class PortedRgTests
                 "tests/feature.rs",
                 "f89_files",
                 dir => dir.CreateFile("sherlock", Sherlock),
-                DifferentialCase.Exact("--path-separator", "/", "--null", "--files", ".")),
+                DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "--path-separator", "/", "--null", "--files", ".")),
             new(
                 "tests/feature.rs",
                 "f89_match",

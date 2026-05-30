@@ -76,6 +76,37 @@ public sealed class DifferentialOutputNormalizerTests
     }
 
     /// <summary>
+    /// Verifies NUL-terminated file lists are sorted as records instead of newline-delimited text.
+    /// </summary>
+    [Fact]
+    public void SortLinesSortsNullTerminatedFileLists()
+    {
+        string input = "b.txt\0a.txt\0";
+
+        byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes(input), DifferentialComparisonMode.SortLines);
+
+        Assert.Equal("a.txt\0b.txt\0", Utf8.GetString(normalized));
+    }
+
+    /// <summary>
+    /// Verifies NUL path terminators still sort payload lines by file path.
+    /// </summary>
+    [Fact]
+    public void SortLinesSortsNullTerminatedPathPayloadLines()
+    {
+        string input =
+            "b.txt\0" + "2\n" +
+            "a.txt\0" + "1\n";
+
+        byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes(input), DifferentialComparisonMode.SortLines);
+
+        Assert.Equal(
+            "a.txt\0" + "1\n" +
+            "b.txt\0" + "2\n",
+            Utf8.GetString(normalized));
+    }
+
+    /// <summary>
     /// Verifies stats timing lines are masked.
     /// </summary>
     [Fact]

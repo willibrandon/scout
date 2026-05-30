@@ -24,7 +24,7 @@ internal static class DifferentialOutputNormalizer
 
         if (comparisonMode is DifferentialComparisonMode.SortLines or DifferentialComparisonMode.SortLinesAndMaskElapsed)
         {
-            text = SortLines(text);
+            text = SortOutput(text);
         }
 
         return Utf8.GetBytes(text);
@@ -107,6 +107,26 @@ internal static class DifferentialOutputNormalizer
         return builder.ToString();
     }
 
+    private static string SortOutput(string text)
+    {
+        if (text.Contains('\0') && !text.Contains('\n'))
+        {
+            return SortNullSeparatedRecords(text);
+        }
+
+        return SortLines(text);
+    }
+
+    private static string SortNullSeparatedRecords(string text)
+    {
+        string[] split = text.Split('\0');
+        bool hasTrailingNull = split.Length > 0 && split[^1].Length == 0;
+        int recordCount = hasTrailingNull ? split.Length - 1 : split.Length;
+        Array.Sort(split, 0, recordCount, StringComparer.Ordinal);
+        string sorted = string.Join('\0', split, 0, recordCount);
+        return hasTrailingNull ? sorted + '\0' : sorted;
+    }
+
     private static string SortLines(string text)
     {
         string[] split = text.Split('\n');
@@ -172,6 +192,12 @@ internal static class DifferentialOutputNormalizer
         if (line.Length > 0 && line[0] == '{')
         {
             return "\uFFFF";
+        }
+
+        int nullSeparator = line.IndexOf('\0', StringComparison.Ordinal);
+        if (nullSeparator > 0)
+        {
+            return line[..nullSeparator];
         }
 
         int pathSeparator = line.IndexOf(':', StringComparison.Ordinal);
