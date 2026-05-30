@@ -16,7 +16,7 @@ public sealed class PinnedConfigurationTests
 {
     private const string PinnedRipgrepCommit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119";
     private const string ReferenceRipgrepRoot = "/Users/brandon/src/ripgrep";
-    private const string PinnedRipgrepBinaryPath = "/Users/brandon/src/ripgrep/target/debug/rg";
+    private const string PinnedRipgrepBinaryPath = "/Users/brandon/src/ripgrep/target/release-lto/rg";
     private const string PinnedPcre2Commit = "56c87ccac13b01c3c1ecdf71e4fc2fedccea50a2";
 
     /// <summary>
@@ -87,6 +87,8 @@ public sealed class PinnedConfigurationTests
         byte[] hash = SHA256.HashData(File.ReadAllBytes(PinnedRipgrepBinaryPath));
         string actualSha256 = Convert.ToHexString(hash).ToLowerInvariant();
 
+        Assert.Contains("ripgrep_rg_profile = \"release-lto\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("ripgrep_rg_path = \"" + PinnedRipgrepBinaryPath + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("ripgrep_rg_sha256 = \"" + actualSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
     }
 

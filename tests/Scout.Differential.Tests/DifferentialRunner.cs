@@ -9,7 +9,7 @@ namespace Scout;
 
 internal static class DifferentialRunner
 {
-    private const string PinnedRipgrepPath = "/Users/brandon/src/ripgrep/target/debug/rg";
+    private const string PinnedRipgrepPath = "/Users/brandon/src/ripgrep/target/release-lto/rg";
     private const int PinnedRipgrepTimeoutMilliseconds = 10_000;
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);

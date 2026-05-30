@@ -7533,7 +7533,7 @@ public sealed class ScoutApplicationTests
 
     private static (int ExitCode, byte[] Output, string Error) RunPinnedRipgrep(params string[] arguments)
     {
-        ProcessStartInfo startInfo = new("/Users/brandon/src/ripgrep/target/debug/rg")
+        ProcessStartInfo startInfo = new("/Users/brandon/src/ripgrep/target/release-lto/rg")
         {
             RedirectStandardError = true,
             RedirectStandardOutput = true,
@@ -7560,7 +7560,7 @@ public sealed class ScoutApplicationTests
 
     private static (int ExitCode, byte[] Output, string Error) RunPinnedRipgrepWithConfig(string configPath, params string[] arguments)
     {
-        ProcessStartInfo startInfo = new("/Users/brandon/src/ripgrep/target/debug/rg")
+        ProcessStartInfo startInfo = new("/Users/brandon/src/ripgrep/target/release-lto/rg")
         {
             RedirectStandardError = true,
             RedirectStandardOutput = true,
