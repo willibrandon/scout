@@ -59,6 +59,16 @@ public readonly struct FileIdentity : IEquatable<FileIdentity>
         return new FileIdentity(Normalize(fullPath));
     }
 
+    internal static FileIdentity FromRawUnixPath(ReadOnlySpan<byte> path, FileSystemMetadata metadata)
+    {
+        if (!metadata.IsEmpty)
+        {
+            return new FileIdentity(metadata, Convert.ToBase64String(path));
+        }
+
+        return new FileIdentity(Convert.ToBase64String(path));
+    }
+
     /// <inheritdoc />
     public bool Equals(FileIdentity other)
     {

@@ -12,6 +12,12 @@ internal static class PathUtil
             return false;
         }
 
+        if (entry.IsRawUnixPath)
+        {
+            ReadOnlySpan<byte> fileName = entry.UnixFileNameBytes;
+            return !fileName.IsEmpty && fileName[0] == (byte)'.';
+        }
+
         if (entry.FileName.StartsWith('.'))
         {
             return true;

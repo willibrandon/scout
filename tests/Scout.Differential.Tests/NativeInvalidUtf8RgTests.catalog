@@ -1,1 +1,2 @@
 tests/regression.rs|r210
+tests/json.rs|notutf8

@@ -15,7 +15,6 @@ public sealed partial class PortedRgTestCoverageTests
     private static readonly string[] ExpectedUnportedRgTests =
     [
         "tests/feature.rs|f362_u64_to_narrow_usize_overflow", // 32-bit target only.
-        "tests/json.rs|notutf8", // Recursive invalid UTF-8 filename case skipped by upstream on macOS/APFS.
     ];
 
     private static readonly string[] ExpectedCatalogSplitRgTests =

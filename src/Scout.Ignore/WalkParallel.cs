@@ -99,7 +99,7 @@ public sealed class WalkParallel
         ref int remaining,
         ref int quit)
     {
-        if (item.Path == "-")
+        if (item.Path.TextPath == "-")
         {
             if (visitor(DirEntry.Stdin()) == WalkState.Quit)
             {
@@ -146,7 +146,7 @@ public sealed class WalkParallel
             };
         }
 
-        string[] children = walk.EnumerateChildren(state.Entry);
+        WalkPath[] children = walk.EnumerateChildren(state.Entry);
         for (int index = children.Length - 1; index >= 0; index--)
         {
             if (Volatile.Read(ref quit) != 0)

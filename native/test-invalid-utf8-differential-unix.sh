@@ -171,5 +171,11 @@ json_name = b"json\xffpath"
 write_bytes(os.path.join(work, json_name), b"quux\xffbaz")
 compare("json_explicit_invalid_utf8_path", "mask-elapsed", scout, rg, work, out, [b"--json", b"(?-u)\\xFF", json_name])
 
+recursive = os.path.join(work, b"notutf8")
+os.mkdir(recursive)
+recursive_name = b"foo\xffbar"
+write_bytes(os.path.join(recursive, recursive_name), b"quux\xffbaz")
+compare("json_recursive_invalid_utf8_path", "mask-elapsed", scout, rg, recursive, out, [b"--json", b"(?-u)\\xFF"])
+
 print("OK invalid UTF-8 native differentials matched pinned rg")
 PY

@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 
 namespace Scout;
 
@@ -10,6 +11,7 @@ namespace Scout;
 /// </summary>
 public sealed class Walk : IEnumerable<DirEntry>
 {
+    private static readonly Encoding Utf8Strict = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
     private readonly string[] paths;
     private readonly int? minDepth;
     private readonly int? maxDepth;
@@ -77,7 +79,7 @@ public sealed class Walk : IEnumerable<DirEntry>
     {
         foreach (WalkWorkItem item in CreateInitialWorkItems())
         {
-            if (item.Path == "-")
+            if (item.Path.TextPath == "-")
             {
                 yield return DirEntry.Stdin();
                 continue;
@@ -103,7 +105,7 @@ public sealed class Walk : IEnumerable<DirEntry>
     }
 
     private IEnumerable<DirEntry> Enumerate(
-        string path,
+        WalkPath path,
         int depth,
         HashSet<FileIdentity> ancestors,
         IgnoreStack ignoreStack,
@@ -129,7 +131,7 @@ public sealed class Walk : IEnumerable<DirEntry>
         bool added = !entry.Identity.IsEmpty && ancestors.Add(entry.Identity);
         try
         {
-            foreach (string childPath in EnumerateChildren(entry))
+            foreach (WalkPath childPath in EnumerateChildren(entry))
             {
                 foreach (DirEntry childEntry in Enumerate(childPath, depth + 1, ancestors, state.ChildIgnoreStack, rootDevice, isRoot: false))
                 {
@@ -153,7 +155,7 @@ public sealed class Walk : IEnumerable<DirEntry>
             string path = paths[index];
             if (path == "-")
             {
-                yield return new WalkWorkItem(path, depth: 0, [], IgnoreStack.Empty, default, isRoot: true);
+                yield return new WalkWorkItem(WalkPath.FromText(path), depth: 0, [], IgnoreStack.Empty, default, isRoot: true);
                 continue;
             }
 
@@ -173,12 +175,12 @@ public sealed class Walk : IEnumerable<DirEntry>
                     customIgnoreFileNames)
                 : rootIgnoreStack;
             FileSystemDevice rootDevice = GetRootDevice(fullPath);
-            yield return new WalkWorkItem(fullPath, depth: 0, [], ignoreStack, rootDevice, isRoot: true);
+            yield return new WalkWorkItem(WalkPath.FromText(fullPath), depth: 0, [], ignoreStack, rootDevice, isRoot: true);
         }
     }
 
     internal bool TryEvaluateEntry(
-        string path,
+        WalkPath path,
         int depth,
         HashSet<FileIdentity> ancestors,
         IgnoreStack ignoreStack,
@@ -186,8 +188,33 @@ public sealed class Walk : IEnumerable<DirEntry>
         bool isRoot,
         out WalkEntryState state)
     {
-        DirEntry entry = CreateEntry(path, depth);
-        IgnoreStack childIgnoreStack = entry.IsDirectory
+        DirEntry entry;
+        try
+        {
+            entry = CreateEntry(path, depth);
+        }
+        catch (FileNotFoundException)
+        {
+            state = default;
+            return false;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            state = default;
+            return false;
+        }
+        catch (IOException)
+        {
+            state = default;
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            state = default;
+            return false;
+        }
+
+        IgnoreStack childIgnoreStack = entry.IsDirectory && !entry.IsRawUnixPath
             ? ignoreStack.AddDirectory(
                 entry.FullPath,
                 dotIgnore,
@@ -301,6 +328,11 @@ public sealed class Walk : IEnumerable<DirEntry>
 
     private static bool IsSameFileSystem(FileSystemDevice rootDevice, DirEntry entry)
     {
+        if (!entry.Identity.Device.IsEmpty)
+        {
+            return rootDevice.Equals(entry.Identity.Device);
+        }
+
         if (!NativeFileSystemMetadata.TryGetDevice(entry.FullPath, out FileSystemDevice device))
         {
             return true;
@@ -309,7 +341,14 @@ public sealed class Walk : IEnumerable<DirEntry>
         return rootDevice.Equals(device);
     }
 
-    private DirEntry CreateEntry(string path, int depth)
+    private DirEntry CreateEntry(WalkPath path, int depth)
+    {
+        return path.IsRawUnixPath
+            ? CreateRawUnixEntry(path, depth)
+            : CreateTextEntry(path.TextPath, depth);
+    }
+
+    private DirEntry CreateTextEntry(string path, int depth)
     {
         FileAttributes attributes = File.GetAttributes(path);
         bool isSymbolicLink = (attributes & FileAttributes.ReparsePoint) != 0;
@@ -352,22 +391,107 @@ public sealed class Walk : IEnumerable<DirEntry>
         return new DirEntry(path, depth, attributes, isDirectory, isSymbolicLink, isStdin: false, length, identity, resolvedFullPath);
     }
 
-    internal string[] EnumerateChildren(DirEntry entry)
+    private DirEntry CreateRawUnixEntry(WalkPath path, int depth)
+    {
+        if (!NativeFileSystemMetadata.TryGetRawUnixStatus(path.UnixPathBytes, followLinks, out NativeUnixFileStatus status))
+        {
+            throw new FileNotFoundException();
+        }
+
+        var identity = FileIdentity.FromRawUnixPath(path.UnixPathBytes, status.Metadata);
+        return new DirEntry(
+            path.TextPath,
+            depth,
+            status.Attributes,
+            status.IsDirectory,
+            status.IsSymbolicLink,
+            isStdin: false,
+            status.Length,
+            identity,
+            resolvedFullPath: null,
+            path.UnixPathBytes.ToArray(),
+            path.UnixFileNameBytes.ToArray());
+    }
+
+    internal WalkPath[] EnumerateChildren(DirEntry entry)
     {
         string[] children = Directory.GetFileSystemEntries(entry.ResolvedFullPath);
-        Sort(children);
-        if (entry.ResolvedFullPath == entry.FullPath)
-        {
-            return children;
-        }
-
-        string[] paths = new string[children.Length];
+        List<WalkPath>? paths = null;
         for (int index = 0; index < children.Length; index++)
         {
-            paths[index] = Path.Combine(entry.FullPath, Path.GetFileName(children[index]));
+            (paths ??= new List<WalkPath>(children.Length)).Add(WalkPath.FromText(children[index]));
         }
 
-        return paths;
+        AddRawInvalidUtf8Children(entry, ref paths);
+        if (paths is null)
+        {
+            return [];
+        }
+
+        Sort(paths);
+        if (entry.ResolvedFullPath == entry.FullPath)
+        {
+            return paths.ToArray();
+        }
+
+        for (int index = 0; index < paths.Count; index++)
+        {
+            WalkPath child = paths[index];
+            if (!child.IsRawUnixPath)
+            {
+                paths[index] = WalkPath.FromText(Path.Combine(entry.FullPath, Path.GetFileName(child.TextPath)));
+            }
+        }
+
+        return paths.ToArray();
+    }
+
+    private static void AddRawInvalidUtf8Children(DirEntry entry, ref List<WalkPath>? paths)
+    {
+        if (OperatingSystem.IsWindows() || (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()))
+        {
+            return;
+        }
+
+        byte[] parentPath = entry.IsRawUnixPath
+            ? entry.UnixPathBytes.ToArray()
+            : Encoding.UTF8.GetBytes(entry.ResolvedFullPath);
+        RawUnixDirectoryEntry[] rawEntries;
+        try
+        {
+            rawEntries = RawUnixDirectory.Enumerate(parentPath);
+        }
+        catch (IOException)
+        {
+            return;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return;
+        }
+
+        for (int index = 0; index < rawEntries.Length; index++)
+        {
+            if (IsValidUtf8(rawEntries[index].Name.Span))
+            {
+                continue;
+            }
+
+            (paths ??= new List<WalkPath>()).Add(WalkPath.FromRawUnix(rawEntries[index].FullPath.Span, rawEntries[index].Name.Span));
+        }
+    }
+
+    private static bool IsValidUtf8(ReadOnlySpan<byte> bytes)
+    {
+        try
+        {
+            _ = Utf8Strict.GetString(bytes);
+            return true;
+        }
+        catch (DecoderFallbackException)
+        {
+            return false;
+        }
     }
 
     private static bool TryCanEnumerateDirectory(string path)
@@ -418,31 +542,31 @@ public sealed class Walk : IEnumerable<DirEntry>
             : StringComparer.Ordinal.Compare(left.FullName, right.FullName);
     }
 
-    private void Sort(string[] children)
+    private void Sort(List<WalkPath> children)
     {
         if (sort == WalkSort.None)
         {
             return;
         }
 
-        Array.Sort(children, Compare);
+        children.Sort(Compare);
     }
 
-    private int Compare(string? left, string? right)
+    private int Compare(WalkPath left, WalkPath right)
     {
-        if (left is null)
-        {
-            return right is null ? 0 : -1;
-        }
-
-        if (right is null)
-        {
-            return 1;
-        }
-
         return sort == WalkSort.ByFileName
-            ? StringComparer.Ordinal.Compare(Path.GetFileName(left), Path.GetFileName(right))
-            : StringComparer.Ordinal.Compare(left, right);
+            ? CompareFileName(left, right)
+            : StringComparer.Ordinal.Compare(left.TextPath, right.TextPath);
+    }
+
+    private static int CompareFileName(WalkPath left, WalkPath right)
+    {
+        if (left.IsRawUnixPath && right.IsRawUnixPath)
+        {
+            return left.UnixFileNameBytes.SequenceCompareTo(right.UnixFileNameBytes);
+        }
+
+        return StringComparer.Ordinal.Compare(Path.GetFileName(left.TextPath), Path.GetFileName(right.TextPath));
     }
 
     private static FileSystemInfo CreateInfo(string path)

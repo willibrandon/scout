@@ -42,7 +42,9 @@ public sealed class FileTypeMatcher
             return IgnoreDecision.None;
         }
 
-        byte[] fileName = Encoding.UTF8.GetBytes(entry.FileName);
+        byte[] fileName = entry.IsRawUnixPath
+            ? entry.UnixFileNameBytes.ToArray()
+            : Encoding.UTF8.GetBytes(entry.FileName);
         FileTypePattern? matched = null;
         for (int index = 0; index < patterns.Length; index++)
         {

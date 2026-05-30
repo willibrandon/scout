@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text;
 
 namespace Scout;
 
@@ -8,6 +9,10 @@ namespace Scout;
 /// </summary>
 public sealed class DirEntry
 {
+    private static readonly Encoding Utf8Lossy = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    private readonly byte[]? unixPathBytes;
+    private readonly byte[]? unixFileNameBytes;
+
     internal DirEntry(
         string fullPath,
         int depth,
@@ -17,7 +22,9 @@ public sealed class DirEntry
         bool isStdin,
         long? length,
         FileIdentity identity,
-        string? resolvedFullPath = null)
+        string? resolvedFullPath = null,
+        byte[]? unixPathBytes = null,
+        byte[]? unixFileNameBytes = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(fullPath);
         ArgumentOutOfRangeException.ThrowIfNegative(depth);
@@ -31,6 +38,8 @@ public sealed class DirEntry
         IsStdin = isStdin;
         Length = length;
         Identity = identity;
+        this.unixPathBytes = unixPathBytes;
+        this.unixFileNameBytes = unixFileNameBytes;
     }
 
     /// <summary>
@@ -43,7 +52,17 @@ public sealed class DirEntry
     /// <summary>
     /// Gets the file name for this directory entry.
     /// </summary>
-    public string FileName => IsStdin ? "<stdin>" : Path.GetFileName(FullPath);
+    public string FileName => IsStdin
+        ? "<stdin>"
+        : unixFileNameBytes is not null
+            ? Utf8Lossy.GetString(unixFileNameBytes)
+            : Path.GetFileName(FullPath);
+
+    internal bool IsRawUnixPath => unixPathBytes is not null;
+
+    internal ReadOnlySpan<byte> UnixPathBytes => unixPathBytes.AsSpan();
+
+    internal ReadOnlySpan<byte> UnixFileNameBytes => unixFileNameBytes.AsSpan();
 
     /// <summary>
     /// Gets the entry depth relative to the walk root.

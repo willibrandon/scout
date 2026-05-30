@@ -5,7 +5,7 @@ namespace Scout;
 internal sealed class WalkWorkItem
 {
     public WalkWorkItem(
-        string path,
+        WalkPath path,
         int depth,
         HashSet<FileIdentity> ancestors,
         IgnoreStack ignoreStack,
@@ -20,7 +20,7 @@ internal sealed class WalkWorkItem
         IsRoot = isRoot;
     }
 
-    public string Path { get; }
+    public WalkPath Path { get; }
 
     public int Depth { get; }
 
