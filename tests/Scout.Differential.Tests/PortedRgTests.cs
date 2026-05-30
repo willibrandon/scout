@@ -218,6 +218,117 @@ internal static class PortedRgTests
                 dir => dir.CreateFile("sherlock", Sherlock),
                 DifferentialCase.Exact("--path-separator", "/", "-b", "-o", "Sherlock", ".")),
             new(
+                "tests/misc.rs",
+                "max_filesize_parse_no_suffix",
+                dir =>
+                {
+                    dir.CreateSize("foo", 40);
+                    dir.CreateSize("bar", 60);
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--max-filesize", "50", "--files", ".")),
+            new(
+                "tests/misc.rs",
+                "max_filesize_parse_k_suffix",
+                dir =>
+                {
+                    dir.CreateSize("foo", 3048);
+                    dir.CreateSize("bar", 4100);
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--max-filesize", "4K", "--files", ".")),
+            new(
+                "tests/misc.rs",
+                "max_filesize_parse_m_suffix",
+                dir =>
+                {
+                    dir.CreateSize("foo", 1_000_000);
+                    dir.CreateSize("bar", 1_400_000);
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--max-filesize", "1M", "--files", ".")),
+            new(
+                "tests/misc.rs",
+                "ignore_hidden",
+                dir => dir.CreateFile(".sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "no_ignore_hidden",
+                dir => dir.CreateFile(".sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "--hidden", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "ignore_git",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.CreateDirectory(".git");
+                    dir.CreateFile(".gitignore", "sherlock\n");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "ignore_generic",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.CreateFile(".ignore", "sherlock\n");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "ignore_ripgrep",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.CreateFile(".rgignore", "sherlock\n");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "no_ignore",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.CreateFile(".gitignore", "sherlock\n");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--no-ignore", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "vimgrep",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "--vimgrep", "Sherlock|Watson", ".")),
+            new(
+                "tests/misc.rs",
+                "vimgrep_no_line",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "--vimgrep", "-N", "Sherlock|Watson", ".")),
+            new(
+                "tests/misc.rs",
+                "vimgrep_no_line_no_column",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "--vimgrep", "-N", "--no-column", "Sherlock|Watson", ".")),
+            new(
+                "tests/misc.rs",
+                "files",
+                dir =>
+                {
+                    dir.CreateFile("file", string.Empty);
+                    dir.CreateDirectory("dir");
+                    dir.CreateFile("dir/file", string.Empty);
+                },
+                DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "--path-separator", "/", "--files", ".")),
+            new(
+                "tests/misc.rs",
+                "sort_files",
+                dir =>
+                {
+                    dir.CreateFile("a", "test");
+                    dir.CreateDirectory("dir");
+                    dir.CreateFile("dir/c", "test");
+                    dir.CreateFile("b", "test");
+                    dir.CreateFile("dir/d", "test");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--sort", "path", "test", ".")),
+            new(
                 "tests/feature.rs",
                 "f89_files_with_matches",
                 dir => dir.CreateFile("sherlock", Sherlock),

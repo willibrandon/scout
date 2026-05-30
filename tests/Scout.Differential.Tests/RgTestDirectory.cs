@@ -36,6 +36,19 @@ internal sealed class RgTestDirectory : IDisposable
         File.WriteAllBytes(path, contents);
     }
 
+    public void CreateSize(string relativePath, long size)
+    {
+        string path = Path.Combine(RootPath, relativePath);
+        string? directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        using FileStream stream = File.Create(path);
+        stream.SetLength(size);
+    }
+
     public void CreateDirectory(string relativePath)
     {
         Directory.CreateDirectory(Path.Combine(RootPath, relativePath));
