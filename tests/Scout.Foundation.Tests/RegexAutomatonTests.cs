@@ -48,17 +48,33 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
-    /// Verifies the meta engine keeps position-sensitive predicates on the PikeVM path.
+    /// Verifies the meta engine selects the bounded backtracker for small position-sensitive predicates.
     /// </summary>
     [Fact]
-    public void MetaEngineSelectsPikeVmForPositionSensitivePredicates()
+    public void MetaEngineSelectsBoundedBacktrackerForSmallPositionSensitivePredicates()
     {
         RegexNfa nfa = CompileNfa("(?m)^abc$"u8);
 
         var engine = RegexMetaEngine.Compile(nfa);
 
-        Assert.Equal(RegexEngineKind.PikeVm, engine.Kind);
+        Assert.Equal(RegexEngineKind.BoundedBacktracker, engine.Kind);
         Assert.Equal(new RegexMatch(4, 3), engine.Find("zzz\nabc\n"u8, startAt: 0));
+    }
+
+    /// <summary>
+    /// Verifies the meta engine keeps larger position-sensitive predicates on the PikeVM path.
+    /// </summary>
+    [Fact]
+    public void MetaEngineSelectsPikeVmForLargePositionSensitivePredicates()
+    {
+        RegexNfa nfa = CompileNfa("(?m)^abcdefghijklmnopqrstuvwxyz0123456789$"u8);
+
+        var engine = RegexMetaEngine.Compile(nfa);
+
+        Assert.Equal(RegexEngineKind.PikeVm, engine.Kind);
+        Assert.Equal(
+            new RegexMatch(3, 36),
+            engine.Find("xx\nabcdefghijklmnopqrstuvwxyz0123456789\n"u8, startAt: 0));
     }
 
     /// <summary>
