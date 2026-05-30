@@ -420,10 +420,14 @@ internal static class ScoutApplication
         {
             EscapeFixedStringPatterns(patterns);
         }
-
-        if (!TryValidateRegexRepetitionExpressions(patterns, diagnostics))
+        else
         {
-            return ExitCode.Error;
+            if (!TryValidateRegexRepetitionExpressions(patterns, diagnostics))
+            {
+                return ExitCode.Error;
+            }
+
+            WrapRegexPatterns(patterns);
         }
 
         if (!TryValidateRegexSizeLimit(patterns, lowArgs, diagnostics))
@@ -5024,9 +5028,83 @@ internal static class ScoutApplication
         }
     }
 
+    private static void WrapRegexPatterns(List<byte[]> patterns)
+    {
+        for (int index = 0; index < patterns.Count; index++)
+        {
+            if (ShouldWrapRegexPattern(patterns[index]))
+            {
+                patterns[index] = WrapNonCapturingGroup(patterns[index]);
+            }
+        }
+    }
+
+    private static bool ShouldWrapRegexPattern(ReadOnlySpan<byte> pattern)
+    {
+        int rawDepth = 0;
+        int wrappedDepth = 1;
+        bool rawUnderflow = false;
+        bool inClass = false;
+        for (int index = 0; index < pattern.Length; index++)
+        {
+            byte value = pattern[index];
+            if (inClass)
+            {
+                if (value == (byte)'\\' && index + 1 < pattern.Length)
+                {
+                    index++;
+                }
+                else if (value == (byte)']')
+                {
+                    inClass = false;
+                }
+
+                continue;
+            }
+
+            if (value == (byte)'\\')
+            {
+                index++;
+                continue;
+            }
+
+            if (value == (byte)'[')
+            {
+                inClass = true;
+                continue;
+            }
+
+            if (value == (byte)'(')
+            {
+                rawDepth++;
+                wrappedDepth++;
+                continue;
+            }
+
+            if (value != (byte)')')
+            {
+                continue;
+            }
+
+            rawDepth--;
+            if (rawDepth < 0)
+            {
+                rawUnderflow = true;
+            }
+
+            wrappedDepth--;
+            if (wrappedDepth < 0)
+            {
+                return false;
+            }
+        }
+
+        return rawUnderflow && wrappedDepth == 1;
+    }
+
     private static byte[] WrapNonCapturingGroup(byte[] pattern)
     {
-        byte[] wrapped = new byte[pattern.Length + 5];
+        byte[] wrapped = new byte[pattern.Length + 4];
         wrapped[0] = (byte)'(';
         wrapped[1] = (byte)'?';
         wrapped[2] = (byte)':';

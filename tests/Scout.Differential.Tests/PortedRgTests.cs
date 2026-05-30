@@ -1750,6 +1750,16 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "test")),
             new(
                 "tests/regression.rs",
+                "r2480",
+                dir => dir.CreateFile("file", "FooBar\n"),
+                DifferentialCase.Exact("--path-separator", "/", "-e", string.Empty, "file"),
+                DifferentialCase.Exact("--path-separator", "/", "-e", ")(", "file"),
+                DifferentialCase.Exact("--path-separator", "/", "--only-matching", "-e", "Foo", "-e", "Bar", "file"),
+                DifferentialCase.Exact("--path-separator", "/", "-e", "Fo(oB)a(r)", "--replace", "${0}_${1}_${2}${3}", "file"),
+                DifferentialCase.Exact("--path-separator", "/", "--only-matching", "-e", "(?i)foo", "-e", "bar", "file"),
+                DifferentialCase.Exact("--path-separator", "/", "--only-matching", "-e", "(?i)notfoo", "-e", "bar", "file")),
+            new(
+                "tests/regression.rs",
                 "r2574",
                 dir => dir.CreateFile("haystack", "some.domain.com\nsome.domain.com/x\n"),
                 DifferentialCase.Exact("--path-separator", "/", "--no-filename", "--no-unicode", "-w", "-o", @"(\w+\.)*domain\.(\w+)")),

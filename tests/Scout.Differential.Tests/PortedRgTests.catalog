@@ -235,6 +235,7 @@ tests/regression.rs|r1891
 tests/regression.rs|r2094
 tests/regression.rs|r2198
 tests/regression.rs|r2236
+tests/regression.rs|r2480
 tests/regression.rs|r2574
 tests/regression.rs|r2658_null_data_line_regexp
 tests/regression.rs|r2770_gitignore_error
