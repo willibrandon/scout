@@ -1767,6 +1767,26 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "--no-line-number", "--no-filename", "--multiline", "--max-count=1", "--passthru", "--replace=B", "b", "haystack")),
             new(
                 "tests/regression.rs",
+                "r2095",
+                dir => dir.CreateFile(
+                    "test",
+                    "#!/usr/bin/env bash\n\n" +
+                    "zero=one\n\n" +
+                    "a=one\n\n" +
+                    "if true; then\n" +
+                    "\ta=(\n" +
+                    "\t\ta\n" +
+                    "\t\tb\n" +
+                    "\t\tc\n" +
+                    "\t)\n" +
+                    "\ttrue\n" +
+                    "fi\n\n" +
+                    "a=two\n\n" +
+                    "b=one\n" +
+                    "});\n"),
+                DifferentialCase.Exact("--path-separator", "/", "--line-number", "--multiline", "--only-matching", "--replace", "${value}", @"^(?P<indent>\s*)a=(?P<value>(?ms:[(].*?[)])|.*?)$", "test")),
+            new(
+                "tests/regression.rs",
                 "r2198",
                 dir =>
                 {
@@ -1778,6 +1798,26 @@ internal static class PortedRgTests
                 },
                 DifferentialCase.Exact("--path-separator", "/", "--files", "--sort", "path"),
                 DifferentialCase.Exact("--path-separator", "/", "--files", "--sort", "path", "--no-ignore-dot")),
+            new(
+                "tests/regression.rs",
+                "r2208",
+                dir => dir.CreateFile(
+                    "test",
+                    "# Compile requirements.txt files from all found or specified requirements.in files (compile).\n" +
+                    "# Use -h to include hashes, -u dep1,dep2... to upgrade specific dependencies, and -U to upgrade all.\n" +
+                    "pipc () {  # [-h] [-U|-u <pkgspec>[,<pkgspec>...]] [<reqs-in>...] [-- <pip-compile-arg>...]\n" +
+                    "    emulate -L zsh\n" +
+                    "    unset REPLY\n" +
+                    "    if [[ $1 == --help ]] { zpy $0; return }\n" +
+                    "    [[ $ZPY_PROCS ]] || return\n\n" +
+                    "    local gen_hashes upgrade upgrade_csv\n" +
+                    "    while [[ $1 == -[hUu] ]] {\n" +
+                    "        if [[ $1 == -h ]] { gen_hashes=--generate-hashes; shift   }\n" +
+                    "        if [[ $1 == -U ]] { upgrade=1;                    shift   }\n" +
+                    "        if [[ $1 == -u ]] { upgrade=1; upgrade_csv=$2;    shift 2 }\n" +
+                    "    }\n" +
+                    "}\n"),
+                DifferentialCase.Exact("--path-separator", "/", "-N", "-U", "-r", "$usage", @"^(?P<predoc>\n?(# .*\n)*)(alias (?P<aname>pipc)=""[^""]+""|(?P<fname>pipc) \(\) \{)(  #(?P<usage> .+))?", "test")),
             new(
                 "tests/regression.rs",
                 "r2236",

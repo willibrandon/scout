@@ -238,7 +238,9 @@ tests/regression.rs|r1868_context_passthru_override
 tests/regression.rs|r1878
 tests/regression.rs|r1891
 tests/regression.rs|r2094
+tests/regression.rs|r2095
 tests/regression.rs|r2198
+tests/regression.rs|r2208
 tests/regression.rs|r2236
 tests/regression.rs|r2480
 tests/regression.rs|r2574

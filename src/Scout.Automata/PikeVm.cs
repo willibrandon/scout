@@ -47,6 +47,7 @@ internal sealed class PikeVm
                         state.AtomKind,
                         state.Value.Span,
                         state.CaseInsensitive,
+                        state.MultiLine,
                         state.DotMatchesNewline,
                         state.Crlf,
                         state.LineTerminator))
@@ -152,6 +153,7 @@ internal sealed class PikeVm
                     state.AtomKind,
                     state.Value.Span,
                     state.CaseInsensitive,
+                    state.MultiLine,
                     state.DotMatchesNewline,
                     state.Crlf,
                     state.LineTerminator))

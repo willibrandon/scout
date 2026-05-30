@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Scout;
 
@@ -243,7 +244,7 @@ internal static class ReplacementFormatter
                 continue;
             }
 
-            if (token == (byte)'(' && TryFindGroupEnd(pattern, patternIndex, out _, out _, out bool capturing, out _, out _, out _))
+            if (token == (byte)'(' && TryFindGroupEnd(pattern, patternIndex, out _, out _, out bool capturing, out _, out _, out _, out _))
             {
                 if (capturing)
                 {
@@ -333,8 +334,13 @@ internal static class ReplacementFormatter
             Array.Fill(captureLengths, -1, 1, captureLengths.Length - 1);
             captureNames.Clear();
             int captureIndex = 1;
-            if (TryMatchCaptureExpression(pattern, matched, captureOffset: 0, asciiCaseInsensitive, ignoreWhitespace: false, captureStarts, captureLengths, captureNames, ref captureIndex, out int end) &&
+            if (TryMatchCaptureExpression(pattern, matched, captureOffset: 0, asciiCaseInsensitive, ignoreWhitespace: false, dotMatchesNewline: false, captureStarts, captureLengths, captureNames, ref captureIndex, out int end) &&
                 end == matched.Length)
+            {
+                return;
+            }
+
+            if (TryCollectCapturesWithDotNet(pattern, matched, captureStarts, captureLengths, captureNames))
             {
                 return;
             }
@@ -345,12 +351,81 @@ internal static class ReplacementFormatter
         captureNames.Clear();
     }
 
+    private static bool TryCollectCapturesWithDotNet(
+        ReadOnlySpan<byte> pattern,
+        ReadOnlySpan<byte> matched,
+        int[] captureStarts,
+        int[] captureLengths,
+        Dictionary<string, int> captureNames)
+    {
+        string patternText = NormalizeDotNetCapturePattern(Encoding.Latin1.GetString(pattern));
+        string matchedText = Encoding.Latin1.GetString(matched);
+        Match match;
+        Regex regex;
+        try
+        {
+            regex = new Regex(patternText, RegexOptions.CultureInvariant);
+            match = regex.Match(matchedText);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+
+        if (!match.Success || match.Index != 0 || match.Length != matchedText.Length)
+        {
+            return false;
+        }
+
+        Array.Fill(captureStarts, -1);
+        Array.Fill(captureLengths, -1);
+        captureNames.Clear();
+        captureStarts[0] = 0;
+        captureLengths[0] = matched.Length;
+        int limit = Math.Min(captureStarts.Length, match.Groups.Count);
+        for (int index = 1; index < limit; index++)
+        {
+            Group group = match.Groups[index];
+            if (!group.Success)
+            {
+                continue;
+            }
+
+            captureStarts[index] = group.Index;
+            captureLengths[index] = group.Length;
+        }
+
+        string[] names = regex.GetGroupNames();
+        for (int index = 0; index < names.Length; index++)
+        {
+            string name = names[index];
+            if (int.TryParse(name, out _))
+            {
+                continue;
+            }
+
+            int groupNumber = regex.GroupNumberFromName(name);
+            if (groupNumber > 0 && groupNumber < captureStarts.Length && match.Groups[groupNumber].Success)
+            {
+                captureNames[name] = groupNumber;
+            }
+        }
+
+        return true;
+    }
+
+    private static string NormalizeDotNetCapturePattern(string pattern)
+    {
+        return pattern.Replace("(?P<", "(?<", StringComparison.Ordinal);
+    }
+
     private static bool TryMatchCaptureExpression(
         ReadOnlySpan<byte> pattern,
         ReadOnlySpan<byte> matched,
         int captureOffset,
         bool asciiCaseInsensitive,
         bool ignoreWhitespace,
+        bool dotMatchesNewline,
         int[] captureStarts,
         int[] captureLengths,
         Dictionary<string, int> captureNames,
@@ -370,8 +445,10 @@ internal static class ReplacementFormatter
                 alternativeStart,
                 alternativeCaseInsensitive,
                 alternativeIgnoreWhitespace,
+                dotMatchesNewline,
                 out bool nextCaseInsensitive,
-                out bool nextIgnoreWhitespace);
+                out bool nextIgnoreWhitespace,
+                out bool nextDotMatchesNewline);
             int alternativeCaptureIndex = baseCaptureIndex + capturesBeforeAlternative;
             int[] alternativeCaptureStarts = (int[])captureStarts.Clone();
             int[] alternativeCaptureLengths = (int[])captureLengths.Clone();
@@ -382,6 +459,7 @@ internal static class ReplacementFormatter
                     captureOffset,
                     alternativeCaseInsensitive,
                     alternativeIgnoreWhitespace,
+                    dotMatchesNewline,
                     alternativeCaptureStarts,
                     alternativeCaptureLengths,
                     alternativeCaptureNames,
@@ -409,6 +487,7 @@ internal static class ReplacementFormatter
             alternativeStart = alternativeEnd + 1;
             alternativeCaseInsensitive = nextCaseInsensitive;
             alternativeIgnoreWhitespace = nextIgnoreWhitespace;
+            dotMatchesNewline = nextDotMatchesNewline;
         }
 
         captureIndex = baseCaptureIndex;
@@ -422,6 +501,7 @@ internal static class ReplacementFormatter
         int captureOffset,
         bool asciiCaseInsensitive,
         bool ignoreWhitespace,
+        bool dotMatchesNewline,
         int[] captureStarts,
         int[] captureLengths,
         Dictionary<string, int> captureNames,
@@ -436,6 +516,7 @@ internal static class ReplacementFormatter
             matchedIndex: 0,
             asciiCaseInsensitive,
             ignoreWhitespace,
+            dotMatchesNewline,
             captureStarts,
             captureLengths,
             captureNames,
@@ -451,6 +532,7 @@ internal static class ReplacementFormatter
         int matchedIndex,
         bool asciiCaseInsensitive,
         bool ignoreWhitespace,
+        bool dotMatchesNewline,
         int[] captureStarts,
         int[] captureLengths,
         Dictionary<string, int> captureNames,
@@ -465,10 +547,11 @@ internal static class ReplacementFormatter
                 break;
             }
 
-            if (TryReadInlineCaptureFlag(pattern, patternIndex, out bool? caseOverride, out bool? ignoreWhitespaceOverride, out int nextPatternIndex))
+            if (TryReadInlineCaptureFlag(pattern, patternIndex, out bool? caseOverride, out bool? ignoreWhitespaceOverride, out bool? dotOverride, out int nextPatternIndex))
             {
                 asciiCaseInsensitive = caseOverride ?? asciiCaseInsensitive;
                 ignoreWhitespace = ignoreWhitespaceOverride ?? ignoreWhitespace;
+                dotMatchesNewline = dotOverride ?? dotMatchesNewline;
                 patternIndex = nextPatternIndex;
                 continue;
             }
@@ -481,6 +564,7 @@ internal static class ReplacementFormatter
                 matchedIndex,
                 asciiCaseInsensitive,
                 ignoreWhitespace,
+                dotMatchesNewline,
                 captureStarts,
                 captureLengths,
                 captureNames,
@@ -500,6 +584,7 @@ internal static class ReplacementFormatter
         int matchedIndex,
         bool asciiCaseInsensitive,
         bool ignoreWhitespace,
+        bool dotMatchesNewline,
         int[] captureStarts,
         int[] captureLengths,
         Dictionary<string, int> captureNames,
@@ -513,18 +598,36 @@ internal static class ReplacementFormatter
         }
 
         byte token = pattern[patternIndex];
-        if (token == (byte)'^' || token == (byte)'$')
+        if (token == (byte)'^')
         {
-            return TryMatchCaptureSequenceFrom(pattern, patternIndex + 1, matched, captureOffset, matchedIndex, asciiCaseInsensitive, ignoreWhitespace, captureStarts, captureLengths, captureNames, ref captureIndex, out end);
+            if (matchedIndex != 0 && matched[matchedIndex - 1] != (byte)'\n')
+            {
+                end = 0;
+                return false;
+            }
+
+            return TryMatchCaptureSequenceFrom(pattern, patternIndex + 1, matched, captureOffset, matchedIndex, asciiCaseInsensitive, ignoreWhitespace, dotMatchesNewline, captureStarts, captureLengths, captureNames, ref captureIndex, out end);
         }
 
-        if (token == (byte)'(' && TryFindGroupEnd(pattern, patternIndex, out int contentStart, out int groupEnd, out bool capturing, out string? captureName, out bool? groupCaseOverride, out bool? groupIgnoreWhitespaceOverride))
+        if (token == (byte)'$')
+        {
+            if (matchedIndex != matched.Length && matched[matchedIndex] != (byte)'\n')
+            {
+                end = 0;
+                return false;
+            }
+
+            return TryMatchCaptureSequenceFrom(pattern, patternIndex + 1, matched, captureOffset, matchedIndex, asciiCaseInsensitive, ignoreWhitespace, dotMatchesNewline, captureStarts, captureLengths, captureNames, ref captureIndex, out end);
+        }
+
+        if (token == (byte)'(' && TryFindGroupEnd(pattern, patternIndex, out int contentStart, out int groupEnd, out bool capturing, out string? captureName, out bool? groupCaseOverride, out bool? groupIgnoreWhitespaceOverride, out bool? groupDotOverride))
         {
             int assignedCapture = capturing ? captureIndex : -1;
             int groupContentCaptures = CountCapturingGroups(pattern[contentStart..groupEnd]);
             int afterGroupCaptureIndex = captureIndex + groupContentCaptures + (capturing ? 1 : 0);
             bool groupCaseInsensitive = groupCaseOverride ?? asciiCaseInsensitive;
             bool groupIgnoreWhitespace = groupIgnoreWhitespaceOverride ?? ignoreWhitespace;
+            bool groupDotMatchesNewline = groupDotOverride ?? dotMatchesNewline;
             int suffixPatternIndex = groupEnd + 1;
             SkipIgnoredCapturePatternBytes(pattern, ref suffixPatternIndex, ignoreWhitespace);
             int quantifierStartIndex = suffixPatternIndex;
@@ -541,8 +644,10 @@ internal static class ReplacementFormatter
                     matchedIndex,
                     groupCaseInsensitive,
                     groupIgnoreWhitespace,
+                    groupDotMatchesNewline,
                     asciiCaseInsensitive,
                     ignoreWhitespace,
+                    dotMatchesNewline,
                     assignedCapture,
                     captureName,
                     afterGroupCaptureIndex,
@@ -572,6 +677,7 @@ internal static class ReplacementFormatter
                         captureOffset + currentMatchedIndex,
                         groupCaseInsensitive,
                         groupIgnoreWhitespace,
+                        groupDotMatchesNewline,
                         currentStarts,
                         currentLengths,
                         currentNames,
@@ -607,6 +713,7 @@ internal static class ReplacementFormatter
                 captureOffset,
                 asciiCaseInsensitive,
                 ignoreWhitespace,
+                dotMatchesNewline,
                 captureStarts,
                 captureLengths,
                 captureNames,
@@ -668,7 +775,7 @@ internal static class ReplacementFormatter
         int count = 0;
         while (count < max &&
             matchedIndex < matched.Length &&
-            CaptureAtomMatches(matched[matchedIndex], atomKind, literal, expression, asciiCaseInsensitive))
+            CaptureAtomMatches(matched[matchedIndex], atomKind, literal, expression, asciiCaseInsensitive, dotMatchesNewline))
         {
             matchedIndex++;
             count++;
@@ -691,6 +798,7 @@ internal static class ReplacementFormatter
             atomLazy,
             asciiCaseInsensitive,
             ignoreWhitespace,
+            dotMatchesNewline,
             captureStarts,
             captureLengths,
             captureNames,
@@ -708,8 +816,10 @@ internal static class ReplacementFormatter
         int matchedIndex,
         bool groupCaseInsensitive,
         bool groupIgnoreWhitespace,
+        bool groupDotMatchesNewline,
         bool suffixCaseInsensitive,
         bool suffixIgnoreWhitespace,
+        bool suffixDotMatchesNewline,
         int assignedCapture,
         string? captureName,
         int nextCaptureIndex,
@@ -730,6 +840,7 @@ internal static class ReplacementFormatter
                 maxLength,
                 groupCaseInsensitive,
                 groupIgnoreWhitespace,
+                groupDotMatchesNewline,
                 assignedCapture,
                 captureName,
                 captureIndex,
@@ -755,6 +866,7 @@ internal static class ReplacementFormatter
                 preferredLength,
                 suffixCaseInsensitive,
                 suffixIgnoreWhitespace,
+                suffixDotMatchesNewline,
                 nextCaptureIndex,
                 preferredStarts,
                 preferredLengths,
@@ -780,6 +892,7 @@ internal static class ReplacementFormatter
                     candidateLength,
                     groupCaseInsensitive,
                     groupIgnoreWhitespace,
+                    groupDotMatchesNewline,
                     assignedCapture,
                     captureName,
                     captureIndex,
@@ -800,6 +913,7 @@ internal static class ReplacementFormatter
                     candidateLength,
                     suffixCaseInsensitive,
                     suffixIgnoreWhitespace,
+                    suffixDotMatchesNewline,
                     nextCaptureIndex,
                     candidateStarts,
                     candidateLengths,
@@ -826,6 +940,7 @@ internal static class ReplacementFormatter
                     candidateLength,
                     groupCaseInsensitive,
                     groupIgnoreWhitespace,
+                    groupDotMatchesNewline,
                     assignedCapture,
                     captureName,
                     captureIndex,
@@ -846,6 +961,7 @@ internal static class ReplacementFormatter
                     candidateLength,
                     suffixCaseInsensitive,
                     suffixIgnoreWhitespace,
+                    suffixDotMatchesNewline,
                     nextCaptureIndex,
                     candidateStarts,
                     candidateLengths,
@@ -874,6 +990,7 @@ internal static class ReplacementFormatter
         int candidateLength,
         bool groupCaseInsensitive,
         bool groupIgnoreWhitespace,
+        bool groupDotMatchesNewline,
         int assignedCapture,
         string? captureName,
         int captureIndex,
@@ -896,6 +1013,7 @@ internal static class ReplacementFormatter
                 captureOffset + matchedIndex,
                 groupCaseInsensitive,
                 groupIgnoreWhitespace,
+                groupDotMatchesNewline,
                 candidateStarts,
                 candidateLengths,
                 candidateNames,
@@ -929,6 +1047,7 @@ internal static class ReplacementFormatter
         int groupLength,
         bool suffixCaseInsensitive,
         bool suffixIgnoreWhitespace,
+        bool suffixDotMatchesNewline,
         int nextCaptureIndex,
         int[] stateStarts,
         int[] stateLengths,
@@ -948,6 +1067,7 @@ internal static class ReplacementFormatter
                 matchedIndex + groupLength,
                 suffixCaseInsensitive,
                 suffixIgnoreWhitespace,
+                suffixDotMatchesNewline,
                 stateStarts,
                 stateLengths,
                 stateNames,
@@ -969,6 +1089,7 @@ internal static class ReplacementFormatter
         int captureOffset,
         bool asciiCaseInsensitive,
         bool ignoreWhitespace,
+        bool dotMatchesNewline,
         int[] captureStarts,
         int[] captureLengths,
         Dictionary<string, int> captureNames,
@@ -1002,6 +1123,7 @@ internal static class ReplacementFormatter
                     stateMatchedIndex,
                     asciiCaseInsensitive,
                     ignoreWhitespace,
+                    dotMatchesNewline,
                     suffixStarts,
                     suffixLengths,
                     suffixNames,
@@ -1029,6 +1151,7 @@ internal static class ReplacementFormatter
         bool lazy,
         bool asciiCaseInsensitive,
         bool ignoreWhitespace,
+        bool dotMatchesNewline,
         int[] captureStarts,
         int[] captureLengths,
         Dictionary<string, int> captureNames,
@@ -1052,6 +1175,7 @@ internal static class ReplacementFormatter
                     matchedIndex + count,
                     asciiCaseInsensitive,
                     ignoreWhitespace,
+                    dotMatchesNewline,
                     suffixStarts,
                     suffixLengths,
                     suffixNames,
@@ -1090,13 +1214,16 @@ internal static class ReplacementFormatter
         int start,
         bool asciiCaseInsensitive,
         bool ignoreWhitespace,
+        bool dotMatchesNewline,
         out bool nextCaseInsensitive,
-        out bool nextIgnoreWhitespace)
+        out bool nextIgnoreWhitespace,
+        out bool nextDotMatchesNewline)
     {
         int classDepth = 0;
         int groupDepth = 0;
         nextCaseInsensitive = asciiCaseInsensitive;
         nextIgnoreWhitespace = ignoreWhitespace;
+        nextDotMatchesNewline = dotMatchesNewline;
         for (int index = start; index < pattern.Length; index++)
         {
             byte value = pattern[index];
@@ -1112,10 +1239,11 @@ internal static class ReplacementFormatter
                     continue;
                 }
 
-                if (TryReadInlineCaptureFlag(pattern, index, out bool? caseOverride, out bool? ignoreWhitespaceOverride, out int nextPatternIndex))
+                if (TryReadInlineCaptureFlag(pattern, index, out bool? caseOverride, out bool? ignoreWhitespaceOverride, out bool? dotOverride, out int nextPatternIndex))
                 {
                     nextCaseInsensitive = caseOverride ?? nextCaseInsensitive;
                     nextIgnoreWhitespace = ignoreWhitespaceOverride ?? nextIgnoreWhitespace;
+                    nextDotMatchesNewline = dotOverride ?? nextDotMatchesNewline;
                     index = nextPatternIndex - 1;
                     continue;
                 }
@@ -1193,55 +1321,80 @@ internal static class ReplacementFormatter
         int patternIndex,
         out bool? caseOverride,
         out bool? ignoreWhitespaceOverride,
+        out bool? dotOverride,
         out int nextPatternIndex)
     {
         caseOverride = null;
         ignoreWhitespaceOverride = null;
+        dotOverride = null;
         nextPatternIndex = patternIndex;
-        if (patternIndex + 4 <= pattern.Length &&
-            pattern[patternIndex] == (byte)'(' &&
-            pattern[patternIndex + 1] == (byte)'?' &&
-            pattern[patternIndex + 3] == (byte)')')
+        if (patternIndex + 3 > pattern.Length ||
+            pattern[patternIndex] != (byte)'(' ||
+            pattern[patternIndex + 1] != (byte)'?')
         {
-            switch (pattern[patternIndex + 2])
-            {
-                case (byte)'i':
-                    caseOverride = true;
-                    nextPatternIndex = patternIndex + 4;
-                    return true;
-                case (byte)'x':
-                    ignoreWhitespaceOverride = true;
-                    nextPatternIndex = patternIndex + 4;
-                    return true;
-                case (byte)'U':
-                    nextPatternIndex = patternIndex + 4;
-                    return true;
-            }
+            return false;
         }
 
-        if (patternIndex + 5 <= pattern.Length &&
-            pattern[patternIndex] == (byte)'(' &&
-            pattern[patternIndex + 1] == (byte)'?' &&
-            pattern[patternIndex + 2] == (byte)'-' &&
-            pattern[patternIndex + 4] == (byte)')')
+        bool disabling = false;
+        bool sawFlag = false;
+        int index = patternIndex + 2;
+        while (index < pattern.Length && pattern[index] != (byte)')')
         {
-            switch (pattern[patternIndex + 3])
+            byte value = pattern[index];
+            if (value == (byte)':')
             {
-                case (byte)'i':
-                    caseOverride = false;
-                    nextPatternIndex = patternIndex + 5;
-                    return true;
-                case (byte)'x':
-                    ignoreWhitespaceOverride = false;
-                    nextPatternIndex = patternIndex + 5;
-                    return true;
-                case (byte)'U':
-                    nextPatternIndex = patternIndex + 5;
-                    return true;
+                return false;
             }
+
+            if (value == (byte)'-')
+            {
+                if (disabling)
+                {
+                    return false;
+                }
+
+                disabling = true;
+                index++;
+                continue;
+            }
+
+            if (!ApplyCaptureFlag(value, disabling, ref caseOverride, ref ignoreWhitespaceOverride, ref dotOverride))
+            {
+                return false;
+            }
+
+            sawFlag = true;
+            index++;
         }
 
-        return false;
+        if (!sawFlag || index >= pattern.Length || pattern[index] != (byte)')')
+        {
+            return false;
+        }
+
+        nextPatternIndex = index + 1;
+        return true;
+    }
+
+    private static bool ApplyCaptureFlag(byte flag, bool disabling, ref bool? caseOverride, ref bool? ignoreWhitespaceOverride, ref bool? dotOverride)
+    {
+        switch (flag)
+        {
+            case (byte)'i':
+                caseOverride = !disabling;
+                return true;
+            case (byte)'x':
+                ignoreWhitespaceOverride = !disabling;
+                return true;
+            case (byte)'s':
+                dotOverride = !disabling;
+                return true;
+            case (byte)'m':
+            case (byte)'U':
+                return true;
+            default:
+                return false;
+        }
     }
 
     private static void ParseCaptureQuantifier(ReadOnlySpan<byte> pattern, ref int patternIndex, out int min, out int max, out bool lazy)
@@ -1354,18 +1507,19 @@ internal static class ReplacementFormatter
         int atomKind,
         byte literal,
         ReadOnlySpan<byte> expression,
-        bool asciiCaseInsensitive)
+        bool asciiCaseInsensitive,
+        bool dotMatchesNewline)
     {
         return atomKind switch
         {
             CaptureAtomClass => CaptureClassMatches(value, expression, asciiCaseInsensitive),
-            CaptureAtomDot => value != (byte)'\n',
+            CaptureAtomDot => dotMatchesNewline || value != (byte)'\n',
             CaptureAtomDigit => IsAsciiDigit(value),
             CaptureAtomNotDigit => value != (byte)'\n' && !IsAsciiDigit(value),
             CaptureAtomWord => IsAsciiWordByte(value),
             CaptureAtomNotWord => value != (byte)'\n' && !IsAsciiWordByte(value),
-            CaptureAtomWhitespace => value != (byte)'\n' && IsRegexWhitespaceByte(value),
-            CaptureAtomNotWhitespace => value != (byte)'\n' && !IsRegexWhitespaceByte(value),
+            CaptureAtomWhitespace => IsRegexWhitespaceByte(value),
+            CaptureAtomNotWhitespace => !IsRegexWhitespaceByte(value),
             _ => ByteEquals(value, literal, asciiCaseInsensitive),
         };
     }
@@ -1725,7 +1879,8 @@ internal static class ReplacementFormatter
         out bool capturing,
         out string? captureName,
         out bool? caseOverride,
-        out bool? ignoreWhitespaceOverride)
+        out bool? ignoreWhitespaceOverride,
+        out bool? dotOverride)
     {
         contentStart = groupStart + 1;
         groupEnd = -1;
@@ -1733,6 +1888,7 @@ internal static class ReplacementFormatter
         captureName = null;
         caseOverride = null;
         ignoreWhitespaceOverride = null;
+        dotOverride = null;
         if (contentStart < pattern.Length && pattern[contentStart] == (byte)'?')
         {
             capturing = false;
@@ -1740,38 +1896,14 @@ internal static class ReplacementFormatter
             {
                 contentStart += 2;
             }
-            else if (contentStart + 2 < pattern.Length && pattern[contentStart + 2] == (byte)':')
-            {
-                switch (pattern[contentStart + 1])
-                {
-                    case (byte)'i':
-                        caseOverride = true;
-                        break;
-                    case (byte)'x':
-                        ignoreWhitespaceOverride = true;
-                        break;
-                }
-
-                contentStart += 3;
-            }
-            else if (contentStart + 3 < pattern.Length && pattern[contentStart + 1] == (byte)'-' && pattern[contentStart + 3] == (byte)':')
-            {
-                switch (pattern[contentStart + 2])
-                {
-                    case (byte)'i':
-                        caseOverride = false;
-                        break;
-                    case (byte)'x':
-                        ignoreWhitespaceOverride = false;
-                        break;
-                }
-
-                contentStart += 4;
-            }
             else if (TryParseNamedGroupPrefix(pattern, contentStart, out int namedContentStart, out captureName))
             {
                 capturing = true;
                 contentStart = namedContentStart;
+            }
+            else if (TryParseScopedGroupFlags(pattern, contentStart, out int scopedContentStart, out caseOverride, out ignoreWhitespaceOverride, out dotOverride))
+            {
+                contentStart = scopedContentStart;
             }
             else
             {
@@ -1810,6 +1942,59 @@ internal static class ReplacementFormatter
                     return true;
                 }
             }
+        }
+
+        return false;
+    }
+
+    private static bool TryParseScopedGroupFlags(
+        ReadOnlySpan<byte> pattern,
+        int questionIndex,
+        out int contentStart,
+        out bool? caseOverride,
+        out bool? ignoreWhitespaceOverride,
+        out bool? dotOverride)
+    {
+        contentStart = 0;
+        caseOverride = null;
+        ignoreWhitespaceOverride = null;
+        dotOverride = null;
+        bool disabling = false;
+        bool sawFlag = false;
+        int index = questionIndex + 1;
+        while (index < pattern.Length)
+        {
+            byte value = pattern[index];
+            if (value == (byte)':')
+            {
+                if (!sawFlag)
+                {
+                    return false;
+                }
+
+                contentStart = index + 1;
+                return true;
+            }
+
+            if (value == (byte)'-')
+            {
+                if (disabling)
+                {
+                    return false;
+                }
+
+                disabling = true;
+                index++;
+                continue;
+            }
+
+            if (!ApplyCaptureFlag(value, disabling, ref caseOverride, ref ignoreWhitespaceOverride, ref dotOverride))
+            {
+                return false;
+            }
+
+            sawFlag = true;
+            index++;
         }
 
         return false;
@@ -1918,7 +2103,7 @@ internal static class ReplacementFormatter
 
     private static bool IsRegexWhitespaceByte(byte value)
     {
-        return value is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\f' or 0x0b;
+        return value is (byte)' ' or (byte)'\t' or (byte)'\n' or (byte)'\r' or (byte)'\f' or 0x0b;
     }
 
     private static bool IsCaptureIgnoredWhitespaceByte(byte value)

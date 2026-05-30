@@ -9,6 +9,7 @@ internal static class RegexByteClass
         RegexSyntaxKind kind,
         ReadOnlySpan<byte> expression,
         bool caseInsensitive,
+        bool multiLine,
         bool dotMatchesNewline,
         bool crlf,
         byte lineTerminator)
@@ -25,8 +26,8 @@ internal static class RegexByteClass
             RegexSyntaxKind.NotDigitClass => value != (byte)'\n' && !IsAsciiDigitByte(value),
             RegexSyntaxKind.WordClass => IsAsciiWordByte(value),
             RegexSyntaxKind.NotWordClass => value != (byte)'\n' && !IsAsciiWordByte(value),
-            RegexSyntaxKind.WhitespaceClass => value != (byte)'\n' && IsRegexWhitespaceByte(value),
-            RegexSyntaxKind.NotWhitespaceClass => value != (byte)'\n' && !IsRegexWhitespaceByte(value),
+            RegexSyntaxKind.WhitespaceClass => (multiLine || value != lineTerminator) && IsRegexWhitespaceByte(value),
+            RegexSyntaxKind.NotWhitespaceClass => (multiLine || value != lineTerminator) && !IsRegexWhitespaceByte(value),
             _ => false,
         };
     }
@@ -357,7 +358,7 @@ internal static class RegexByteClass
 
     private static bool IsRegexWhitespaceByte(byte value)
     {
-        return value is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\f' or 0x0b;
+        return value is (byte)' ' or (byte)'\t' or (byte)'\n' or (byte)'\r' or (byte)'\f' or 0x0b;
     }
 
     private static bool ByteEquals(byte left, byte right, bool caseInsensitive)

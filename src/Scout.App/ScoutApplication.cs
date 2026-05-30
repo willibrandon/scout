@@ -2788,8 +2788,7 @@ internal static class ScoutApplication
     {
         matched = false;
         bool contextOutputRequested = (beforeContext > 0 || afterContext > 0) && searchMode == CliSearchMode.Standard;
-        if ((replacement is not null && !invertMatch && onlyMatching) ||
-            (contextOutputRequested && (onlyMatching || invertMatch)) ||
+        if ((contextOutputRequested && (onlyMatching || invertMatch)) ||
             passthru ||
             separators.Crlf ||
             separators.NullData)
@@ -2854,6 +2853,12 @@ internal static class ScoutApplication
 
         if (replacement is ReadOnlyMemory<byte> replacementValue)
         {
+            if (onlyMatching)
+            {
+                WriteMultilineOnlyMatchingReplacements(outputSpan, patterns, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
+                return true;
+            }
+
             WriteMultilineReplacedLines(outputSpan, patterns, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
             return true;
         }
@@ -3091,27 +3096,33 @@ internal static class ScoutApplication
         bool multilineDotall,
         ulong? maxCount)
     {
-        var sink = new ReplacementLineSink(
-            output,
-            prefix,
-            separators.FieldMatch,
-            replacement,
-            patterns,
-            asciiCaseInsensitive,
-            lineNumber,
-            column,
-            byteOffset,
-            trim,
-            nullPathTerminator,
-            vimgrep: false,
-            lineLimit,
-            color: color,
-            lineTerminator: separators.LineTerminator);
         int offset = 0;
         ulong emitted = 0;
+        int groupStart = -1;
+        int groupEnd = -1;
+        List<RegexMatch> groupMatches = [];
         while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, offset, out RegexMatch match))
         {
-            sink.MatchedLine(1, 0, match.Start, match.Start + 1L, bytes, bytes.Slice(match.Start, match.Length));
+            GetMultilineReplacementRange(bytes, match, out int rangeStart, out int rangeEnd);
+            if (groupStart >= 0 && rangeStart >= groupEnd)
+            {
+                WriteMultilineReplacementRecord(bytes, groupStart, groupEnd, groupMatches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacement, patterns, asciiCaseInsensitive);
+                groupMatches.Clear();
+                groupStart = -1;
+                groupEnd = -1;
+            }
+
+            if (groupStart < 0)
+            {
+                groupStart = rangeStart;
+                groupEnd = rangeEnd;
+            }
+            else if (rangeEnd > groupEnd)
+            {
+                groupEnd = rangeEnd;
+            }
+
+            groupMatches.Add(match);
             emitted++;
             if (maxCount is ulong limit && emitted >= limit)
             {
@@ -3121,7 +3132,130 @@ internal static class ScoutApplication
             offset = MatchIterator.AdvanceAfter(new MatcherMatch(match.Start, match.Length), bytes.Length);
         }
 
-        sink.Flush();
+        if (groupStart >= 0)
+        {
+            WriteMultilineReplacementRecord(bytes, groupStart, groupEnd, groupMatches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacement, patterns, asciiCaseInsensitive);
+        }
+    }
+
+    private static void WriteMultilineOnlyMatchingReplacements(
+        ReadOnlySpan<byte> bytes,
+        IReadOnlyList<byte[]> patterns,
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool trim,
+        bool nullPathTerminator,
+        ReadOnlyMemory<byte> replacement,
+        bool asciiCaseInsensitive,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool multilineDotall,
+        ulong? maxCount)
+    {
+        int offset = 0;
+        ulong emitted = 0;
+        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, offset, out RegexMatch match))
+        {
+            byte[] body = ReplacementFormatter.Expand(replacement.Span, bytes.Slice(match.Start, match.Length), patterns, asciiCaseInsensitive);
+            int lineStart = GetLineStart(bytes, match.Start);
+            WriteMultilineReplacementBody(body, match.Start, GetLineNumber(bytes, lineStart), match.Start - lineStart + 1L, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator);
+            emitted++;
+            if (maxCount is ulong limit && emitted >= limit)
+            {
+                break;
+            }
+
+            offset = MatchIterator.AdvanceAfter(new MatcherMatch(match.Start, match.Length), bytes.Length);
+        }
+    }
+
+    private static void WriteMultilineReplacementRecord(
+        ReadOnlySpan<byte> bytes,
+        int recordStart,
+        int recordEnd,
+        List<RegexMatch> matches,
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool trim,
+        bool nullPathTerminator,
+        ReadOnlyMemory<byte> replacement,
+        IReadOnlyList<byte[]> patterns,
+        bool asciiCaseInsensitive)
+    {
+        List<int> starts = [];
+        List<int> lengths = [];
+        for (int index = 0; index < matches.Count; index++)
+        {
+            starts.Add(matches[index].Start - recordStart);
+            lengths.Add(matches[index].Length);
+        }
+
+        List<long> replacementColumns = [];
+        byte[] body = ReplacementFormatter.ReplaceLine(bytes[recordStart..recordEnd], starts, lengths, replacement.Span, patterns, asciiCaseInsensitive, replacementColumns);
+        int lineStart = GetLineStart(bytes, recordStart);
+        WriteMultilineReplacementBody(body, recordStart, GetLineNumber(bytes, lineStart), replacementColumns.Count > 0 ? replacementColumns[0] : 1, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator);
+    }
+
+    private static void WriteMultilineReplacementBody(
+        ReadOnlySpan<byte> body,
+        long byteOffsetStart,
+        long lineNumberStart,
+        long firstColumn,
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool trim,
+        bool nullPathTerminator)
+    {
+        var sink = new StandardSearchSink(output, prefix, separators.FieldMatch, separators.FieldContext, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
+        if (body.IsEmpty)
+        {
+            sink.MatchedLine(lineNumberStart, byteOffsetStart, firstColumn, []);
+            return;
+        }
+
+        int outputLineStart = 0;
+        long outputLineNumber = lineNumberStart;
+        long outputByteOffset = byteOffsetStart;
+        while (outputLineStart <= body.Length)
+        {
+            int outputLineEnd = GetLineEnd(body, outputLineStart);
+            long outputColumn = outputLineStart == 0 ? firstColumn : 1;
+            sink.MatchedLine(outputLineNumber, outputByteOffset, outputColumn, body[outputLineStart..outputLineEnd]);
+            if (outputLineEnd >= body.Length)
+            {
+                break;
+            }
+
+            outputByteOffset += outputLineEnd - outputLineStart;
+            outputLineNumber++;
+            outputLineStart = outputLineEnd;
+        }
+    }
+
+    private static void GetMultilineReplacementRange(ReadOnlySpan<byte> bytes, RegexMatch match, out int start, out int end)
+    {
+        start = GetLineStart(bytes, match.Start);
+        int endAnchor = match.Length == 0 ? match.Start : match.Start + match.Length;
+        int lastLineStart = GetLineStart(bytes, endAnchor);
+        end = GetLineEnd(bytes, lastLineStart);
     }
 
     private static void WriteMultilineOnlyMatches(
