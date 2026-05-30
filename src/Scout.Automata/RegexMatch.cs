@@ -1,0 +1,75 @@
+using System;
+
+namespace Scout;
+
+/// <summary>
+/// Describes a regex match over a byte span.
+/// </summary>
+public readonly struct RegexMatch : IEquatable<RegexMatch>
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RegexMatch" /> struct.
+    /// </summary>
+    /// <param name="start">The zero-based start offset.</param>
+    /// <param name="length">The match length in bytes.</param>
+    public RegexMatch(int start, int length)
+    {
+        Start = start;
+        Length = length;
+    }
+
+    /// <summary>
+    /// Gets the zero-based start offset.
+    /// </summary>
+    public int Start { get; }
+
+    /// <summary>
+    /// Gets the match length in bytes.
+    /// </summary>
+    public int Length { get; }
+
+    /// <summary>
+    /// Gets the exclusive end offset.
+    /// </summary>
+    public int End => Start + Length;
+
+    /// <summary>
+    /// Returns a value indicating whether two matches are equal.
+    /// </summary>
+    /// <param name="left">The left match.</param>
+    /// <param name="right">The right match.</param>
+    /// <returns><see langword="true" /> when both matches have the same start and length.</returns>
+    public static bool operator ==(RegexMatch left, RegexMatch right)
+    {
+        return left.Equals(right);
+    }
+
+    /// <summary>
+    /// Returns a value indicating whether two matches are not equal.
+    /// </summary>
+    /// <param name="left">The left match.</param>
+    /// <param name="right">The right match.</param>
+    /// <returns><see langword="true" /> when the matches differ.</returns>
+    public static bool operator !=(RegexMatch left, RegexMatch right)
+    {
+        return !left.Equals(right);
+    }
+
+    /// <inheritdoc />
+    public override bool Equals(object? obj)
+    {
+        return obj is RegexMatch match && Equals(match);
+    }
+
+    /// <inheritdoc />
+    public bool Equals(RegexMatch other)
+    {
+        return Start == other.Start && Length == other.Length;
+    }
+
+    /// <inheritdoc />
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(Start, Length);
+    }
+}

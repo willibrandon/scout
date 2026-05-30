@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Scout.Automata\Scout.Automata.csproj" />
+    <ProjectReference Include="..\Scout.Automata.Syntax\Scout.Automata.Syntax.csproj" />
+    <ProjectReference Include="..\Scout.Bytes\Scout.Bytes.csproj" />
+    <ProjectReference Include="..\Scout.Cli\Scout.Cli.csproj" />
+    <ProjectReference Include="..\Scout.Diagnostics\Scout.Diagnostics.csproj" />
+    <ProjectReference Include="..\Scout.Encoding\Scout.Encoding.csproj" />
+    <ProjectReference Include="..\Scout.Encoding.Io\Scout.Encoding.Io.csproj" />
+    <ProjectReference Include="..\Scout.Errors\Scout.Errors.csproj" />
+    <ProjectReference Include="..\Scout.Globbing\Scout.Globbing.csproj" />
+    <ProjectReference Include="..\Scout.Ignore\Scout.Ignore.csproj" />
+    <ProjectReference Include="..\Scout.Matching\Scout.Matching.csproj" />
+    <ProjectReference Include="..\Scout.Os\Scout.Os.csproj" />
+    <ProjectReference Include="..\Scout.Pcre2\Scout.Pcre2.csproj" />
+    <ProjectReference Include="..\Scout.Printing\Scout.Printing.csproj" />
+    <ProjectReference Include="..\Scout.Regex\Scout.Regex.csproj" />
+    <ProjectReference Include="..\Scout.Searching\Scout.Searching.csproj" />
+  </ItemGroup>
+
+</Project>

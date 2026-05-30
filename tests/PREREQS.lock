@@ -1,0 +1,74 @@
+ripgrep_commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"
+dotnet_sdk = "10.0.102"
+dotnet_runtime = "10.0.2"
+macos_host = "macOS 26.3.1 arm64"
+apple_clang = "17.0.0 (clang-1700.6.4.2)"
+cargo = "1.91.1"
+linux_snapshot = "2026-05-01"
+ripgrep_rg_sha256 = "resolved@build"
+
+[pcre2]
+binding = "pcre2"
+binding_version = "0.2.11"
+sys_crate = "pcre2-sys"
+sys_crate_version = "0.2.10"
+c_library_version = "10.46"
+c_library_date = "2025-08-27"
+commit_sha = "resolved@vendor"
+
+[[spike_artifact]]
+rid = "osx-arm64"
+bytes = 2197496
+sha256 = "dbd73aa6e8ccfc723c1fd60855ae77830860f1bf27aa3a483cfa8a5d625c8515"
+result = "PASS (0xFF argv byte -> ff0a)"
+
+[[spike_artifact]]
+rid = "osx-x64"
+bytes = 2379000
+sha256 = "010ff1889ab16bd5e314f0578e567b5895ee5c9b4e54c6b4e777c6ec5d14614a"
+result = "PASS; needs libRuntime.VxsortEnabled.a"
+
+[[tool.macos]]
+name = "gzip"
+version = "Apple 475"
+sha256 = "host-tool"
+
+[[tool.macos]]
+name = "bzip2"
+version = "1.0.8"
+sha256 = "host-tool"
+
+[[tool.macos]]
+name = "xz"
+version = "5.8.2"
+sha256 = "host-tool"
+
+[[tool.macos]]
+name = "zstd"
+version = "1.5.7"
+sha256 = "host-tool"
+
+[[tool.macos]]
+name = "lz4"
+version = "1.10.0"
+sha256 = "host-tool"
+
+[[tool.macos]]
+name = "brotli"
+version = "1.2.0"
+sha256 = "host-tool"
+
+[[tool.linux]]
+name = "gzip"
+version = "resolved@build"
+sha256 = "resolved@build"
+
+[[corpus]]
+name = "opensubtitles-en"
+url = "resolved@fetch"
+sha256 = "resolved@fetch"
+
+[[corpus]]
+name = "linux-kernel"
+url = "resolved@fetch"
+sha256 = "resolved@fetch"

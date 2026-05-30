@@ -1,0 +1,34 @@
+using System.Collections.Generic;
+
+namespace Scout;
+
+internal sealed class WalkWorkItem
+{
+    public WalkWorkItem(
+        string path,
+        int depth,
+        HashSet<FileIdentity> ancestors,
+        IgnoreStack ignoreStack,
+        FileSystemDevice rootDevice,
+        bool isRoot)
+    {
+        Path = path;
+        Depth = depth;
+        Ancestors = ancestors;
+        IgnoreStack = ignoreStack;
+        RootDevice = rootDevice;
+        IsRoot = isRoot;
+    }
+
+    public string Path { get; }
+
+    public int Depth { get; }
+
+    public HashSet<FileIdentity> Ancestors { get; }
+
+    public IgnoreStack IgnoreStack { get; }
+
+    public FileSystemDevice RootDevice { get; }
+
+    public bool IsRoot { get; }
+}

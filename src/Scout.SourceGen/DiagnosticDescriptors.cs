@@ -1,0 +1,30 @@
+using Microsoft.CodeAnalysis;
+
+namespace Scout;
+
+internal static class DiagnosticDescriptors
+{
+    internal static readonly DiagnosticDescriptor MoreThanOneType = new(
+        id: "SCOUT0001",
+        title: "Files must declare exactly one type",
+        messageFormat: "File '{0}' declares {1} types; Scout requires one type per file, including nested types",
+        category: "Scout.Structure",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    internal static readonly DiagnosticDescriptor TypeNameDoesNotMatchFileName = new(
+        id: "SCOUT0002",
+        title: "Type name must match file name",
+        messageFormat: "Type '{0}' must live in a file named '{0}.cs'",
+        category: "Scout.Structure",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    internal static readonly DiagnosticDescriptor NamespaceDoesNotMatchFolderStructure = new(
+        id: "SCOUT0003",
+        title: "Namespace must match folder structure",
+        messageFormat: "Namespace \"{0}\" does not match folder structure, expected \"{1}\"",
+        category: "Scout.Structure",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+}

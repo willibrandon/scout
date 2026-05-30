@@ -1,0 +1,30 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Scout.App/Scout.App.csproj" />
+    <Project Path="src/Scout.Automata.AhoCorasick/Scout.Automata.AhoCorasick.csproj" />
+    <Project Path="src/Scout.Automata.Memmem/Scout.Automata.Memmem.csproj" />
+    <Project Path="src/Scout.Automata.Syntax/Scout.Automata.Syntax.csproj" />
+    <Project Path="src/Scout.Automata/Scout.Automata.csproj" />
+    <Project Path="src/Scout.Bytes/Scout.Bytes.csproj" />
+    <Project Path="src/Scout.Cli/Scout.Cli.csproj" />
+    <Project Path="src/Scout.Diagnostics/Scout.Diagnostics.csproj" />
+    <Project Path="src/Scout.Encoding.Io/Scout.Encoding.Io.csproj" />
+    <Project Path="src/Scout.Encoding/Scout.Encoding.csproj" />
+    <Project Path="src/Scout.Errors/Scout.Errors.csproj" />
+    <Project Path="src/Scout.Globbing/Scout.Globbing.csproj" />
+    <Project Path="src/Scout.Ignore/Scout.Ignore.csproj" />
+    <Project Path="src/Scout.Matching/Scout.Matching.csproj" />
+    <Project Path="src/Scout.Os/Scout.Os.csproj" />
+    <Project Path="src/Scout.Pcre2/Scout.Pcre2.csproj" />
+    <Project Path="src/Scout.Printing/Scout.Printing.csproj" />
+    <Project Path="src/Scout.Regex/Scout.Regex.csproj" />
+    <Project Path="src/Scout.Searching/Scout.Searching.csproj" />
+    <Project Path="src/Scout.SourceGen/Scout.SourceGen.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Scout.Foundation.Tests/Scout.Foundation.Tests.csproj" />
+  </Folder>
+  <Folder Name="/bench/">
+    <Project Path="bench/Scout.Benchmarks/Scout.Benchmarks.csproj" />
+  </Folder>
+</Solution>

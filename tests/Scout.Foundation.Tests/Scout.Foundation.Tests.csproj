@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <IsAotCompatible>false</IsAotCompatible>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Scout.Bytes\Scout.Bytes.csproj" />
+    <ProjectReference Include="..\..\src\Scout.Automata.Syntax\Scout.Automata.Syntax.csproj" />
+    <ProjectReference Include="..\..\src\Scout.Automata\Scout.Automata.csproj" />
+    <ProjectReference Include="..\..\src\Scout.Matching\Scout.Matching.csproj" />
+    <ProjectReference Include="..\..\src\Scout.Regex\Scout.Regex.csproj" />
+    <ProjectReference Include="..\..\src\Scout.Automata.AhoCorasick\Scout.Automata.AhoCorasick.csproj" />
+    <ProjectReference Include="..\..\src\Scout.Automata.Memmem\Scout.Automata.Memmem.csproj" />
+    <ProjectReference Include="..\..\src\Scout.Encoding\Scout.Encoding.csproj" />
+    <ProjectReference Include="..\..\src\Scout.Encoding.Io\Scout.Encoding.Io.csproj" />
+    <ProjectReference Include="..\..\src\Scout.App\Scout.App.csproj" />
+    <ProjectReference Include="..\..\src\Scout.Os\Scout.Os.csproj" />
+    <ProjectReference Include="..\..\src\Scout.Errors\Scout.Errors.csproj" />
+    <ProjectReference Include="..\..\src\Scout.Diagnostics\Scout.Diagnostics.csproj" />
+    <ProjectReference Include="..\..\src\Scout.Cli\Scout.Cli.csproj" />
+    <ProjectReference Include="..\..\src\Scout.Globbing\Scout.Globbing.csproj" />
+    <ProjectReference Include="..\..\src\Scout.Ignore\Scout.Ignore.csproj" />
+    <ProjectReference Include="..\..\src\Scout.SourceGen\Scout.SourceGen.csproj" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

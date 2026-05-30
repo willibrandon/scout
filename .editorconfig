@@ -1,0 +1,33 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+
+[*.cs]
+csharp_style_namespace_declarations = file_scoped:error
+csharp_style_var_elsewhere = false:error
+csharp_style_var_for_built_in_types = false:error
+csharp_style_var_when_type_is_apparent = true:error
+dotnet_style_qualification_for_event = false:error
+dotnet_style_qualification_for_field = false:error
+dotnet_style_qualification_for_method = false:error
+dotnet_style_qualification_for_property = false:error
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:error
+dotnet_diagnostic.IDE0130.severity = error
+dotnet_diagnostic.SCOUT0001.severity = error
+dotnet_diagnostic.SCOUT0002.severity = error
+dotnet_diagnostic.SCOUT0003.severity = error
+
+[tests/**/*.cs]
+dotnet_code_quality.CA1515.output_kind = DynamicallyLinkedLibrary
+
+[bench/**/*.cs]
+dotnet_code_quality.CA1515.output_kind = DynamicallyLinkedLibrary
+
+[*.{csproj,props,targets,slnx}]
+indent_size = 2

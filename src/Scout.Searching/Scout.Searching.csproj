@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Scout.Automata.Memmem\Scout.Automata.Memmem.csproj" />
+    <ProjectReference Include="..\Scout.Bytes\Scout.Bytes.csproj" />
+    <ProjectReference Include="..\Scout.Encoding.Io\Scout.Encoding.Io.csproj" />
+    <ProjectReference Include="..\Scout.Matching\Scout.Matching.csproj" />
+    <ProjectReference Include="..\Scout.Os\Scout.Os.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+</Project>

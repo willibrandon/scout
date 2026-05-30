@@ -1,0 +1,47 @@
+<Project>
+  <ItemGroup Condition="'$(MSBuildProjectName)' != 'Scout.SourceGen' and Exists('$(MSBuildThisFileDirectory)src/Scout.SourceGen/Scout.SourceGen.csproj')">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)src/Scout.SourceGen/Scout.SourceGen.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ScoutSuppressionScanFile Include="$(MSBuildThisFileDirectory)**/*.cs"
+                              Exclude="$(MSBuildThisFileDirectory)**/bin/**" />
+    <ScoutSuppressionScanFile Include="$(MSBuildThisFileDirectory)**/*.props"
+                              Exclude="$(MSBuildThisFileDirectory)**/bin/**" />
+    <ScoutSuppressionScanFile Include="$(MSBuildThisFileDirectory)**/*.targets"
+                              Exclude="$(MSBuildThisFileDirectory)**/bin/**" />
+    <ScoutSuppressionScanFile Include="$(MSBuildThisFileDirectory)**/.editorconfig"
+                              Exclude="$(MSBuildThisFileDirectory)**/bin/**" />
+    <ScoutSuppressionScanFile Include="$(MSBuildThisFileDirectory)**/.globalconfig"
+                              Exclude="$(MSBuildThisFileDirectory)**/bin/**" />
+    <ScoutGlobalSuppressionsFile Include="$(MSBuildThisFileDirectory)**/GlobalSuppressions.cs"
+                                 Exclude="$(MSBuildThisFileDirectory)**/bin/**" />
+    <ScoutSkippedTestScanFile Include="$(MSBuildThisFileDirectory)tests/**/*.cs"
+                              Exclude="$(MSBuildThisFileDirectory)**/bin/**;$(MSBuildThisFileDirectory)**/obj/**" />
+  </ItemGroup>
+
+  <Target Name="ScoutValidateWarningPolicy" BeforeTargets="CoreCompile">
+    <Error Condition="'$(TreatWarningsAsErrors)' != 'true'"
+           Text="Scout requires TreatWarningsAsErrors=true in every project." />
+    <Error Condition="'$(NoWarn)' != '' and '$(NoWarn)' != '1701;1702'"
+           Text="Scout forbids project or package NoWarn values. Only the C# SDK baseline 1701;1702 is tolerated. Current value: $(NoWarn)" />
+    <Error Condition="'$(WarningsNotAsErrors)' != ''"
+           Text="Scout forbids evaluated WarningsNotAsErrors values. Current value: $(WarningsNotAsErrors)" />
+    <Error Condition="'@(ScoutGlobalSuppressionsFile)' != ''"
+           Text="Scout forbids GlobalSuppressions.cs files: @(ScoutGlobalSuppressionsFile)" />
+  </Target>
+
+  <Target Name="ScoutScanForSuppressionEscapeHatches" BeforeTargets="CoreCompile">
+    <Error Condition="$([System.Text.RegularExpressions.Regex]::IsMatch($([System.IO.File]::ReadAllText('%(ScoutSuppressionScanFile.FullPath)')), '(#pragma\s+warning\s+disable)|(\[\s*(Unconditional)?Suppress[M]essage\b)|(&lt;\s*No[W]arn\b)|(&lt;\s*Warnings[N]otAsErrors\b)|(&lt;\s*Disabled[W]arnings\b)|(#nullable\s+disable)|(dotnet_diagnostic\.[^\r\n]*severity\s*=\s*(none|silent))|(dotnet_diagnostic\.(SCOUT000[1-3]|IDE0130)\.severity\s*=\s*(?!error\b)[^\s#;]+)|(dotnet_analyzer_diagnostic\.category-Scout\.Structure\.severity\s*=\s*(?!error\b)[^\s#;]+)'))"
+           Text="Scout forbids warning/nullability suppression escape hatches in %(ScoutSuppressionScanFile.Identity)." />
+  </Target>
+
+  <Target Name="ScoutScanForSkippedTests" BeforeTargets="CoreCompile"
+          Condition="'@(ScoutSkippedTestScanFile)' != ''">
+    <Error Condition="$([System.Text.RegularExpressions.Regex]::IsMatch($([System.IO.File]::ReadAllText('%(ScoutSkippedTestScanFile.FullPath)')), '\[\s*(?:[A-Za-z_][A-Za-z0-9_]*\.)?(?:Fact|Theory)\s*\([^)\r\n]*\bSkip\s*='))"
+           Text="Scout forbids skipped tests in %(ScoutSkippedTestScanFile.Identity)." />
+  </Target>
+</Project>

@@ -1,0 +1,127 @@
+namespace Scout;
+
+/// <summary>
+/// Identifies a parsed regex syntax node.
+/// </summary>
+public enum RegexSyntaxKind
+{
+    /// <summary>
+    /// Matches the empty string.
+    /// </summary>
+    Empty,
+
+    /// <summary>
+    /// Matches one literal byte.
+    /// </summary>
+    Literal,
+
+    /// <summary>
+    /// Matches any non-line-terminator byte.
+    /// </summary>
+    Dot,
+
+    /// <summary>
+    /// Matches a bracketed character class.
+    /// </summary>
+    CharacterClass,
+
+    /// <summary>
+    /// Matches an ASCII decimal digit.
+    /// </summary>
+    DigitClass,
+
+    /// <summary>
+    /// Matches a byte that is not an ASCII decimal digit.
+    /// </summary>
+    NotDigitClass,
+
+    /// <summary>
+    /// Matches an ASCII word byte.
+    /// </summary>
+    WordClass,
+
+    /// <summary>
+    /// Matches a byte that is not an ASCII word byte.
+    /// </summary>
+    NotWordClass,
+
+    /// <summary>
+    /// Matches regex whitespace.
+    /// </summary>
+    WhitespaceClass,
+
+    /// <summary>
+    /// Matches a byte that is not regex whitespace.
+    /// </summary>
+    NotWhitespaceClass,
+
+    /// <summary>
+    /// Matches an ASCII alphabetic byte.
+    /// </summary>
+    LetterClass,
+
+    /// <summary>
+    /// Matches an ASCII alphabetic or decimal digit byte.
+    /// </summary>
+    AlphanumericClass,
+
+    /// <summary>
+    /// Matches the start anchor.
+    /// </summary>
+    StartAnchor,
+
+    /// <summary>
+    /// Matches the end anchor.
+    /// </summary>
+    EndAnchor,
+
+    /// <summary>
+    /// Matches a word boundary.
+    /// </summary>
+    WordBoundary,
+
+    /// <summary>
+    /// Matches a non-word-boundary assertion.
+    /// </summary>
+    NotWordBoundary,
+
+    /// <summary>
+    /// Matches a word-start boundary assertion.
+    /// </summary>
+    WordStartBoundary,
+
+    /// <summary>
+    /// Matches a word-end boundary assertion.
+    /// </summary>
+    WordEndBoundary,
+
+    /// <summary>
+    /// Concatenates child nodes.
+    /// </summary>
+    Sequence,
+
+    /// <summary>
+    /// Alternates between child nodes.
+    /// </summary>
+    Alternation,
+
+    /// <summary>
+    /// Captures a child expression.
+    /// </summary>
+    CapturingGroup,
+
+    /// <summary>
+    /// Groups a child expression without capturing it.
+    /// </summary>
+    NonCapturingGroup,
+
+    /// <summary>
+    /// Changes inline regex flags.
+    /// </summary>
+    InlineFlags,
+
+    /// <summary>
+    /// Repeats a child expression.
+    /// </summary>
+    Repetition,
+}

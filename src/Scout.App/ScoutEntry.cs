@@ -1,0 +1,14 @@
+using System.Runtime.InteropServices;
+
+namespace Scout;
+
+internal static unsafe class ScoutEntry
+{
+    [UnmanagedCallersOnly(EntryPoint = "scout_entry")]
+    public static int Run(int argc, byte** argv, byte** envp)
+    {
+        _ = envp;
+        OsString[] arguments = NativeArgumentReader.CaptureUnix(argc, argv);
+        return ScoutApplication.Run(arguments, RawStandardStreams.OpenOutput(), RawStandardStreams.OpenError());
+    }
+}

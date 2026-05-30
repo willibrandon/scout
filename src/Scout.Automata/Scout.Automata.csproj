@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Scout.Automata.AhoCorasick\Scout.Automata.AhoCorasick.csproj" />
+    <ProjectReference Include="..\Scout.Automata.Memmem\Scout.Automata.Memmem.csproj" />
+    <ProjectReference Include="..\Scout.Bytes\Scout.Bytes.csproj" />
+    <ProjectReference Include="..\Scout.Automata.Syntax\Scout.Automata.Syntax.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

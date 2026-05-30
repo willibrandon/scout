@@ -1,0 +1,11 @@
+binding = "pcre2"
+binding_version = "0.2.11"
+sys_crate = "pcre2-sys"
+sys_crate_version = "0.2.10"
+c_library = "PCRE2"
+c_library_version = "10.46"
+c_library_date = "2025-08-27"
+c_library_tag = "pcre2-10.46"
+c_library_commit_sha = "resolved@vendor"
+code_unit_width = 8
+linking = "static per RID"
