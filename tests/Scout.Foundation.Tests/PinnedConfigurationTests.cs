@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -13,6 +14,10 @@ namespace Scout;
 /// </summary>
 public sealed class PinnedConfigurationTests
 {
+    private const string PinnedRipgrepCommit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119";
+    private const string ReferenceRipgrepRoot = "/Users/brandon/src/ripgrep";
+    private const string PinnedRipgrepBinaryPath = "/Users/brandon/src/ripgrep/target/debug/rg";
+
     /// <summary>
     /// Verifies the SDK pin uses the exact .NET 10 SDK required by the design.
     /// </summary>
@@ -38,6 +43,34 @@ public sealed class PinnedConfigurationTests
 
         Assert.True(File.Exists(Path.Combine(root, "Scout.slnx")));
         Assert.False(File.Exists(Path.Combine(root, "Scout.sln")));
+    }
+
+    /// <summary>
+    /// Verifies the local ripgrep reference checkout is at the design pin.
+    /// </summary>
+    [Fact]
+    public void ReferenceRipgrepCheckoutMatchesPinnedCommit()
+    {
+        Assert.True(Directory.Exists(ReferenceRipgrepRoot), "Missing reference checkout: " + ReferenceRipgrepRoot);
+
+        (int exitCode, string output, string error) = RunProcess("git", ["-C", ReferenceRipgrepRoot, "rev-parse", "HEAD"]);
+
+        Assert.True(exitCode == 0, error);
+        Assert.Equal(PinnedRipgrepCommit, output.Trim());
+    }
+
+    /// <summary>
+    /// Verifies the pinned ripgrep binary exists and reports the pinned revision.
+    /// </summary>
+    [Fact]
+    public void PinnedRipgrepBinaryMatchesPinnedRevision()
+    {
+        Assert.True(File.Exists(PinnedRipgrepBinaryPath), "Missing pinned ripgrep binary: " + PinnedRipgrepBinaryPath);
+
+        (int exitCode, string output, string error) = RunProcess(PinnedRipgrepBinaryPath, ["--version"]);
+
+        Assert.True(exitCode == 0, error);
+        Assert.StartsWith("ripgrep 15.1.0 (rev 4857d6fa67)", output, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -252,6 +285,41 @@ public sealed class PinnedConfigurationTests
         }
 
         throw new InvalidOperationException($"Package '{packageId}' was not found.");
+    }
+
+    private static (int ExitCode, string Output, string Error) RunProcess(string fileName, IReadOnlyList<string> arguments)
+    {
+        ProcessStartInfo startInfo = new(fileName)
+        {
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+        };
+
+        for (int index = 0; index < arguments.Count; index++)
+        {
+            startInfo.ArgumentList.Add(arguments[index]);
+        }
+
+        using Process process = new()
+        {
+            StartInfo = startInfo,
+        };
+
+        if (!process.Start())
+        {
+            throw new InvalidOperationException("Failed to start " + fileName + ".");
+        }
+
+        string output = process.StandardOutput.ReadToEnd();
+        string error = process.StandardError.ReadToEnd();
+        if (!process.WaitForExit(10_000))
+        {
+            process.Kill(entireProcessTree: true);
+            throw new TimeoutException(fileName + " timed out.");
+        }
+
+        return (process.ExitCode, output, error);
     }
 
     private static Regex CreateForbiddenSuppressionPattern()
