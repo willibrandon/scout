@@ -589,7 +589,7 @@ On x64 the link additionally needs `libRuntime.VxsortEnabled.a` (the GC's AVX2/A
 
 **This file exists in the repo at `tests/PREREQS.lock`.** It is not a sketch — the values below were measured on this machine and the authoritative copy is the file; this appendix summarizes it.
 
-**Literal-and-final today** (measured/known): the ripgrep commit and reference `rg` binary hash; the .NET SDK/runtime that built the verified spikes (`10.0.102`/`10.0.2`); the macOS host (`macOS 26.3.1`, `arm64`, `Apple clang 17.0.0 (clang-1700.6.4.2)`, `cargo 1.91.1`); the PCRE2 binding/sys/C-library versions, tag, and upstream commit; the macOS decompression tool versions and binary hashes (`gzip` Apple gzip 475, `bzip2` 1.0.8, `xz` 5.8.2, `zstd` 1.5.7, `lz4` 1.10.0, `brotli` 1.2.0 — all read from the host; **hyperfine confirmed *not* installed here**, so CI installs it pinned); and the **real spike-binary hashes**:
+**Literal-and-final today** (measured/known): the ripgrep commit and reference `rg` binary hash; the .NET SDK/runtime that built the verified spikes (`10.0.102`/`10.0.2`); the macOS host (`macOS 26.3.1`, `arm64`, `Apple clang 17.0.0 (clang-1700.6.4.2)`, `cargo 1.91.1`); the PCRE2 binding/sys/C-library versions, tag, and upstream commit; the macOS decompression tool versions and binary hashes (`gzip` Apple gzip 475, `bzip2` 1.0.8, `xz` 5.8.2, `zstd` 1.5.7, `lz4` 1.10.0, `brotli` 1.2.0 — all read from the host); the macOS `hyperfine` 1.20.0 Homebrew source checksum, bottle checksum, and binary hash; and the **real spike-binary hashes**:
 
 ```toml
 [[spike_artifact]]

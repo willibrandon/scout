@@ -276,6 +276,42 @@ public sealed class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies the macOS benchmark tool in the prerequisite lock matches the local binary.
+    /// </summary>
+    [Fact]
+    public void MacosHyperfineToolMatchesPinnedHash()
+    {
+        const string name = "hyperfine";
+        const string version = "1.20.0";
+        const string path = "/opt/homebrew/bin/hyperfine";
+        const string expectedSha256 = "B7272E98214E951452BCBC81EAF0B8F0DB391DCE05B58CE8AB42985B632C5E94";
+        const string sourceUrl = "https://github.com/sharkdp/hyperfine/archive/refs/tags/v1.20.0.tar.gz";
+        const string sourceSha256 = "f90c3b096af568438be7da52336784635a962c9822f10f98e5ad11ae8c7f5c64";
+        const string bottleUrl = "https://ghcr.io/v2/homebrew/core/hyperfine/blobs/sha256:2a79829da44dc03e12ea4977b6bfa122cea8487e741c24a7fbcc7ce6a4788db3";
+        const string bottleSha256 = "2a79829da44dc03e12ea4977b6bfa122cea8487e741c24a7fbcc7ce6a4788db3";
+
+        string root = FindRepositoryRoot();
+        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+
+        Assert.Contains("name = \"" + name + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("version = \"" + version + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("path = \"" + path + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("source_url = \"" + sourceUrl + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("source_sha256 = \"" + sourceSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("bottle_url = \"" + bottleUrl + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("bottle_sha256 = \"" + bottleSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("sha256 = \"" + expectedSha256.ToLowerInvariant() + "\"", prerequisiteLock, StringComparison.Ordinal);
+
+        Assert.True(File.Exists(path), "Missing macOS prerequisite tool: " + path);
+        (int exitCode, string output, string error) = RunProcess(path, ["--version"]);
+        Assert.True(exitCode == 0, error);
+        Assert.Equal("hyperfine " + version, output.Trim());
+
+        byte[] hash = SHA256.HashData(File.ReadAllBytes(path));
+        Assert.Equal(expectedSha256, Convert.ToHexString(hash));
+    }
+
+    /// <summary>
     /// Verifies the regex conformance corpus files are pinned by hash.
     /// </summary>
     [Fact]
