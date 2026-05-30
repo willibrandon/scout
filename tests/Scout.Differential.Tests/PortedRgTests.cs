@@ -1573,6 +1573,98 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "-M43", "--max-columns-preview", "-rxxx", "exhibited|dusted|has to have it", ".")),
             new(
                 "tests/feature.rs",
+                "f1138_no_ignore_dot",
+                dir =>
+                {
+                    dir.CreateDirectory(".git");
+                    dir.CreateFile(".gitignore", "foo");
+                    dir.CreateFile(".ignore", "bar");
+                    dir.CreateFile(".fzf-ignore", "quux");
+                    dir.CreateFile("foo", string.Empty);
+                    dir.CreateFile("bar", string.Empty);
+                    dir.CreateFile("quux", string.Empty);
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--sort", "path", "--files"),
+                DifferentialCase.Exact("--path-separator", "/", "--sort", "path", "--files", "--no-ignore-dot"),
+                DifferentialCase.Exact("--path-separator", "/", "--sort", "path", "--files", "--no-ignore-dot", "--ignore-file", ".fzf-ignore")),
+            new(
+                "tests/feature.rs",
+                "f1207_auto_encoding",
+                dir => dir.CreateBytes("foo", [(byte)0xFF, (byte)0xFE, 0, (byte)'b']),
+                DifferentialCase.Exact("--path-separator", "/", "-a", @"\x00", "foo")),
+            new(
+                "tests/feature.rs",
+                "f1207_ignore_encoding",
+                dir => dir.CreateBytes("foo", [(byte)0xFF, (byte)0xFE, 0, (byte)'b']),
+                DifferentialCase.Exact("--path-separator", "/", "--encoding", "none", "-a", @"\x00", "foo")),
+            new(
+                "tests/feature.rs",
+                "f1414_no_require_git",
+                dir =>
+                {
+                    dir.CreateFile(".gitignore", "foo");
+                    dir.CreateFile("foo", string.Empty);
+                    dir.CreateFile("bar", string.Empty);
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--sort", "path", "--files"),
+                DifferentialCase.Exact("--path-separator", "/", "--sort", "path", "--files", "--no-require-git"),
+                DifferentialCase.Exact("--path-separator", "/", "--sort", "path", "--files", "--no-require-git", "--require-git")),
+            new(
+                "tests/feature.rs",
+                "f1420_no_ignore_exclude",
+                dir =>
+                {
+                    dir.CreateDirectory(".git/info");
+                    dir.CreateFile(".git/info/exclude", "foo");
+                    dir.CreateFile("bar", string.Empty);
+                    dir.CreateFile("foo", string.Empty);
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--sort", "path", "--files"),
+                DifferentialCase.Exact("--path-separator", "/", "--sort", "path", "--files", "--no-ignore-exclude")),
+            new(
+                "tests/feature.rs",
+                "f1466_no_ignore_files",
+                dir =>
+                {
+                    dir.CreateFile(".myignore", "bar");
+                    dir.CreateFile("bar", string.Empty);
+                    dir.CreateFile("foo", string.Empty);
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--sort", "path", "--files"),
+                DifferentialCase.Exact("--path-separator", "/", "--sort", "path", "--files", "--ignore-file", ".myignore"),
+                DifferentialCase.Exact("--path-separator", "/", "--sort", "path", "--files", "--ignore-file", ".myignore", "--no-ignore-files"),
+                DifferentialCase.Exact("--path-separator", "/", "--sort", "path", "--files", "--ignore-file", ".myignore", "--no-ignore-files", "--ignore-files"),
+                DifferentialCase.Exact("--path-separator", "/", "--sort", "path", "--files", "--ignore-file", ".myignore", "-u")),
+            new(
+                "tests/feature.rs",
+                "f1404_nothing_searched_warning",
+                CreateNothingSearchedFixture,
+                DifferentialCase.Exact("--path-separator", "/", "needle")),
+            new(
+                "tests/feature.rs",
+                "f1404_nothing_searched_ignored",
+                CreateNothingSearchedFixture,
+                DifferentialCase.Exact("--path-separator", "/", "--no-messages", "needle")),
+            new(
+                "tests/feature.rs",
+                "f1842_field_context_separator",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "-A1", "Doctor Watsons", "sherlock"),
+                DifferentialCase.Exact("--path-separator", "/", "--field-context-separator", "!", "-n", "-A1", "Doctor Watsons", "sherlock"),
+                DifferentialCase.Exact("--path-separator", "/", "--field-context-separator", "!!", "-n", "-A1", "Doctor Watsons", "sherlock"),
+                DifferentialCase.Exact("--path-separator", "/", "--field-context-separator", @"\x7F", "-n", "-A1", "Doctor Watsons", "sherlock"),
+                DifferentialCase.Exact("--path-separator", "/", "--field-context-separator", string.Empty, "-n", "-A1", "Doctor Watsons", "sherlock")),
+            new(
+                "tests/feature.rs",
+                "f1842_field_match_separator",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "Doctor Watsons", "sherlock"),
+                DifferentialCase.Exact("--path-separator", "/", "--field-match-separator", "!", "-n", "Doctor Watsons", "sherlock"),
+                DifferentialCase.Exact("--path-separator", "/", "--field-match-separator", "!!", "-n", "Doctor Watsons", "sherlock"),
+                DifferentialCase.Exact("--path-separator", "/", "--field-match-separator", @"\x7F", "-n", "Doctor Watsons", "sherlock"),
+                DifferentialCase.Exact("--path-separator", "/", "--field-match-separator", string.Empty, "-n", "Doctor Watsons", "sherlock")),
+            new(
+                "tests/feature.rs",
                 "f2288_context_partial_override",
                 dir => dir.CreateFile("test", "1\n2\n3\n4\n5\n6\n7\n8\n9\n"),
                 DifferentialCase.Exact("--path-separator", "/", "-C1", "-A2", "5", "test")),
@@ -1611,6 +1703,16 @@ internal static class PortedRgTests
                 "context_sep_empty",
                 dir => dir.CreateFile("test", "foo\nctx\nbar\nctx\nfoo\nctx"),
                 DifferentialCase.Exact("--path-separator", "/", "-A1", "--context-separator", string.Empty, "foo", "test")),
+            new(
+                "tests/feature.rs",
+                "no_unicode",
+                dir => dir.CreateFile("test", "\u03b4"),
+                DifferentialCase.Exact("--path-separator", "/", "-i", "--no-unicode", "\u0394", "test")),
+            new(
+                "tests/feature.rs",
+                "stop_on_nonmatch",
+                dir => dir.CreateFile("test", "line1\nline2\nline3\nline4\nline5"),
+                DifferentialCase.Exact("--path-separator", "/", "--stop-on-nonmatch", "[235]")),
             new(
                 "tests/feature.rs",
                 "f411_search_stats",
@@ -1817,6 +1919,13 @@ internal static class PortedRgTests
         file1.Append('\0');
         dir.CreateFile("file1.txt", file1.ToString());
         dir.CreateFile("file2.txt", "cat here");
+    }
+
+    private static void CreateNothingSearchedFixture(RgTestDirectory dir)
+    {
+        dir.CreateFile(".ignore", "ignored-dir/**");
+        dir.CreateDirectory("ignored-dir");
+        dir.CreateFile("ignored-dir/foo", "needle");
     }
 
     private const string UpstreamSherlockNulPath = "/Users/brandon/src/ripgrep/tests/data/sherlock-nul.txt";

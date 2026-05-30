@@ -211,6 +211,16 @@ tests/feature.rs|f917_trim_max_columns_multi_per_match
 tests/feature.rs|f993_null_data
 tests/feature.rs|f1078_max_columns_preview1
 tests/feature.rs|f1078_max_columns_preview2
+tests/feature.rs|f1138_no_ignore_dot
+tests/feature.rs|f1207_auto_encoding
+tests/feature.rs|f1207_ignore_encoding
+tests/feature.rs|f1414_no_require_git
+tests/feature.rs|f1420_no_ignore_exclude
+tests/feature.rs|f1466_no_ignore_files
+tests/feature.rs|f1404_nothing_searched_warning
+tests/feature.rs|f1404_nothing_searched_ignored
+tests/feature.rs|f1842_field_context_separator
+tests/feature.rs|f1842_field_match_separator
 tests/feature.rs|f2288_context_partial_override
 tests/feature.rs|f2288_context_partial_override_rev
 tests/feature.rs|no_context_sep
@@ -219,6 +229,8 @@ tests/feature.rs|no_context_sep_overridden
 tests/feature.rs|context_sep
 tests/feature.rs|context_sep_default
 tests/feature.rs|context_sep_empty
+tests/feature.rs|no_unicode
+tests/feature.rs|stop_on_nonmatch
 tests/feature.rs|f411_search_stats
 tests/binary.rs|after_match1_implicit
 tests/binary.rs|after_match1_implicit_binary

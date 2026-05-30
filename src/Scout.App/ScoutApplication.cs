@@ -410,6 +410,11 @@ internal static class ScoutApplication
         }
 
         bool asciiCaseInsensitive = IsAsciiCaseInsensitive(patterns, lowArgs.CaseMode);
+        if (!lowArgs.Unicode && asciiCaseInsensitive)
+        {
+            WrapNonAsciiPatterns(patterns);
+        }
+
         LogSearchConfiguration(logger, positional, firstPathIndex, lowArgs, patterns);
         if (lowArgs.SearchMode == CliSearchMode.Json)
         {
@@ -4754,6 +4759,41 @@ internal static class ScoutApplication
         }
 
         return escaped;
+    }
+
+    private static void WrapNonAsciiPatterns(List<byte[]> patterns)
+    {
+        for (int index = 0; index < patterns.Count; index++)
+        {
+            if (ContainsNonAscii(patterns[index]))
+            {
+                patterns[index] = WrapNonCapturingGroup(patterns[index]);
+            }
+        }
+    }
+
+    private static byte[] WrapNonCapturingGroup(byte[] pattern)
+    {
+        byte[] wrapped = new byte[pattern.Length + 5];
+        wrapped[0] = (byte)'(';
+        wrapped[1] = (byte)'?';
+        wrapped[2] = (byte)':';
+        pattern.CopyTo(wrapped.AsSpan(3));
+        wrapped[^1] = (byte)')';
+        return wrapped;
+    }
+
+    private static bool ContainsNonAscii(ReadOnlySpan<byte> bytes)
+    {
+        for (int index = 0; index < bytes.Length; index++)
+        {
+            if (bytes[index] >= 0x80)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsRegexMetaByte(byte value)
