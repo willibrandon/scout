@@ -254,6 +254,7 @@ tests/regression.rs|r3127_gitignore_allow_unclosed_class
 tests/regression.rs|r3127_glob_flag_not_allow_unclosed_class
 tests/regression.rs|r3173_hidden_whitelist_only_dot
 tests/regression.rs|r3179_global_gitignore_cwd
+tests/regression.rs|r3180_look_around_panic
 tests/feature.rs|f419_zero_as_shortcut_for_null
 tests/feature.rs|f740_passthru
 tests/feature.rs|f740_passthru_single

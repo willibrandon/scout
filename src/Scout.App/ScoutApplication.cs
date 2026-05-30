@@ -4809,7 +4809,11 @@ internal static class ScoutApplication
             RegexSequenceNode sequence => AnySyntaxCanMatchLineFeed(sequence.Nodes),
             RegexAlternationNode alternation => AnySyntaxCanMatchLineFeed(alternation.Alternatives),
             RegexRepetitionNode repetition => SyntaxCanMatchLineFeed(repetition.Child),
-            RegexAtomNode atom => atom.Kind == RegexSyntaxKind.AnyClass,
+            RegexAtomNode atom => atom.Kind is RegexSyntaxKind.AnyClass
+                or RegexSyntaxKind.CharacterClass
+                or RegexSyntaxKind.NotDigitClass
+                or RegexSyntaxKind.NotWordClass
+                or RegexSyntaxKind.WhitespaceClass,
             _ => false,
         };
     }

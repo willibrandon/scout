@@ -1957,6 +1957,11 @@ internal static class PortedRgTests
                         dir.PhysicalRootPath,
                     ])),
             new(
+                "tests/regression.rs",
+                "r3180_look_around_panic",
+                dir => dir.CreateFile("haystack", " b b b b b b b b\nc\n"),
+                DifferentialCase.Exact("--path-separator", "/", @"(^|[^a-z])((([a-z]+)?)\s)?b(\s([a-z]+)?)($|[^a-z])", "haystack", "-U", "-rx")),
+            new(
                 "tests/feature.rs",
                 "f419_zero_as_shortcut_for_null",
                 dir => dir.CreateFile("sherlock", "Sherlock\nSherlock\n"),

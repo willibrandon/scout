@@ -57,6 +57,34 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies adjacent optional groups retain ripgrep's leftmost-first greedy priority.
+    /// </summary>
+    [Fact]
+    public void HonorsAdjacentOptionalGroupPriority()
+    {
+        var automaton = RegexAutomaton.Compile(@"(^|[^a-z])((([a-z]+)?)\s)?b(\s([a-z]+)?)($|[^a-z])"u8, multiLine: true, dotMatchesNewline: false);
+        ReadOnlySpan<byte> haystack = " b b b b b b b b\nc\n"u8;
+
+        RegexMatch? first = automaton.Find(haystack);
+        Assert.True(first.HasValue);
+        Assert.Equal(0, first.Value.Start);
+        Assert.Equal(5, first.Value.Length);
+
+        RegexMatch? second = automaton.Find(haystack, MatchIterator.AdvanceAfter(new MatcherMatch(first!.Value.Start, first.Value.Length), haystack.Length));
+        Assert.True(second.HasValue);
+        Assert.Equal(6, second.Value.Start);
+        Assert.Equal(7, second.Value.Length);
+
+        RegexMatch? third = automaton.Find(haystack, MatchIterator.AdvanceAfter(new MatcherMatch(second!.Value.Start, second.Value.Length), haystack.Length));
+        Assert.True(third.HasValue);
+        Assert.Equal(14, third.Value.Start);
+        Assert.Equal(4, third.Value.Length);
+
+        RegexMatch? fourth = automaton.Find(haystack, MatchIterator.AdvanceAfter(new MatcherMatch(third!.Value.Start, third.Value.Length), haystack.Length));
+        Assert.Null(fourth);
+    }
+
+    /// <summary>
     /// Verifies repeated zero-width alternatives keep priority over later consuming branches.
     /// </summary>
     [Fact]
@@ -110,6 +138,21 @@ public sealed class RegexAutomatonTests
 
         Assert.Null(RegexAutomaton.Compile("^foo$"u8).Find("bar\nfoo\nbaz"u8));
         Assert.Equal(new RegexMatch(4, 3), RegexAutomaton.Compile("(?m)^foo$"u8).Find("bar\nfoo\nbaz"u8));
+    }
+
+    /// <summary>
+    /// Verifies Perl and bracket classes honor ripgrep's multiline line-terminator policy.
+    /// </summary>
+    [Fact]
+    public void ClassesHonorMultilineLineTerminatorPolicy()
+    {
+        Assert.Null(RegexAutomaton.Compile(@"\s"u8).Find("\n"u8));
+        Assert.Null(RegexAutomaton.Compile(@"[\s]"u8).Find("\n"u8));
+        Assert.Null(RegexAutomaton.Compile(@"\W"u8).Find("\n"u8));
+
+        Assert.Equal(new RegexMatch(0, 1), RegexAutomaton.Compile(@"\s"u8, multiLine: true, dotMatchesNewline: false).Find("\n"u8));
+        Assert.Equal(new RegexMatch(0, 1), RegexAutomaton.Compile(@"[\s]"u8, multiLine: true, dotMatchesNewline: false).Find("\n"u8));
+        Assert.Equal(new RegexMatch(0, 1), RegexAutomaton.Compile(@"\W"u8, multiLine: true, dotMatchesNewline: false).Find("\n"u8));
     }
 
     /// <summary>

@@ -21,13 +21,13 @@ internal static class RegexByteClass
                 ? value != (byte)'\n' && value != (byte)'\r'
                 : value != lineTerminator),
             RegexSyntaxKind.AnyClass => true,
-            RegexSyntaxKind.CharacterClass => ClassMatches(value, expression, caseInsensitive),
+            RegexSyntaxKind.CharacterClass => ClassMatches(value, expression, caseInsensitive, multiLine, crlf, lineTerminator),
             RegexSyntaxKind.DigitClass => IsAsciiDigitByte(value),
-            RegexSyntaxKind.NotDigitClass => value != (byte)'\n' && !IsAsciiDigitByte(value),
+            RegexSyntaxKind.NotDigitClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) && !IsAsciiDigitByte(value),
             RegexSyntaxKind.WordClass => IsAsciiWordByte(value),
-            RegexSyntaxKind.NotWordClass => value != (byte)'\n' && !IsAsciiWordByte(value),
-            RegexSyntaxKind.WhitespaceClass => (multiLine || value != lineTerminator) && IsRegexWhitespaceByte(value),
-            RegexSyntaxKind.NotWhitespaceClass => (multiLine || value != lineTerminator) && !IsRegexWhitespaceByte(value),
+            RegexSyntaxKind.NotWordClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) && !IsAsciiWordByte(value),
+            RegexSyntaxKind.WhitespaceClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) && IsRegexWhitespaceByte(value),
+            RegexSyntaxKind.NotWhitespaceClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) && !IsRegexWhitespaceByte(value),
             _ => false,
         };
     }
@@ -99,9 +99,9 @@ internal static class RegexByteClass
         return current == (byte)'\r';
     }
 
-    private static bool ClassMatches(byte value, ReadOnlySpan<byte> expression, bool caseInsensitive)
+    private static bool ClassMatches(byte value, ReadOnlySpan<byte> expression, bool caseInsensitive, bool multiLine, bool crlf, byte lineTerminator)
     {
-        if (value == (byte)'\n')
+        if (!multiLine && IsLineTerminator(value, crlf, lineTerminator))
         {
             return false;
         }
@@ -359,6 +359,13 @@ internal static class RegexByteClass
     private static bool IsRegexWhitespaceByte(byte value)
     {
         return value is (byte)' ' or (byte)'\t' or (byte)'\n' or (byte)'\r' or (byte)'\f' or 0x0b;
+    }
+
+    private static bool IsLineTerminator(byte value, bool crlf, byte lineTerminator)
+    {
+        return crlf
+            ? value is (byte)'\n' or (byte)'\r'
+            : value == lineTerminator;
     }
 
     private static bool ByteEquals(byte left, byte right, bool caseInsensitive)
