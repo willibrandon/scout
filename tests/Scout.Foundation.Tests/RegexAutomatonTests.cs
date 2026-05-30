@@ -6,17 +6,45 @@ namespace Scout;
 public sealed class RegexAutomatonTests
 {
     /// <summary>
-    /// Verifies the meta engine selects the lazy DFA for position-independent NFAs.
+    /// Verifies the meta engine selects the dense DFA for small position-independent NFAs.
     /// </summary>
     [Fact]
-    public void MetaEngineSelectsLazyDfaForPredicateFreePatterns()
+    public void MetaEngineSelectsDenseDfaForSmallPredicateFreePatterns()
     {
-        RegexNfa nfa = CompileNfa("a(?:b|c)*d"u8);
+        RegexNfa nfa = CompileNfa("needle"u8);
+
+        var engine = RegexMetaEngine.Compile(nfa);
+
+        Assert.Equal(RegexEngineKind.DenseDfa, engine.Kind);
+        Assert.Equal(new RegexMatch(2, 6), engine.Find("xxneedle yy"u8, startAt: 0));
+    }
+
+    /// <summary>
+    /// Verifies the meta engine selects the sparse DFA for medium position-independent NFAs.
+    /// </summary>
+    [Fact]
+    public void MetaEngineSelectsSparseDfaForMediumPredicateFreePatterns()
+    {
+        RegexNfa nfa = CompileNfa("abcdefghijk"u8);
+
+        var engine = RegexMetaEngine.Compile(nfa);
+
+        Assert.Equal(RegexEngineKind.SparseDfa, engine.Kind);
+        Assert.Equal(new RegexMatch(2, 11), engine.Find("xxabcdefghijk yy"u8, startAt: 0));
+    }
+
+    /// <summary>
+    /// Verifies the meta engine keeps the lazy DFA for large position-independent NFAs.
+    /// </summary>
+    [Fact]
+    public void MetaEngineSelectsLazyDfaForLargePredicateFreePatterns()
+    {
+        RegexNfa nfa = CompileNfa("abcdefghijklmnopqrstuvwxyz0123456789"u8);
 
         var engine = RegexMetaEngine.Compile(nfa);
 
         Assert.Equal(RegexEngineKind.LazyDfa, engine.Kind);
-        Assert.Equal(new RegexMatch(1, 5), engine.Find("zabccd"u8, startAt: 0));
+        Assert.Equal(new RegexMatch(2, 36), engine.Find("xxabcdefghijklmnopqrstuvwxyz0123456789"u8, startAt: 0));
     }
 
     /// <summary>
