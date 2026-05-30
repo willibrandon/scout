@@ -168,6 +168,62 @@ public sealed class PinnedConfigurationTests
                 "regex-1.12.2-substring",
                 "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/substring.toml",
                 "48122D9F3477ED81F95E3AD42C06E9BB25F849B66994601A75CEAE0693B81866"),
+            (
+                "regex-1.12.2-bytes",
+                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/bytes.toml",
+                "1D84179165FD25F3B94BD2BFBEB43FC8A162041F7BF98B717E0F85CEF7FB652B"),
+            (
+                "regex-1.12.2-crlf",
+                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/crlf.toml",
+                "D19CF22756434D145DD20946C00AF01C102A556A252070405C3C8294129D9ECE"),
+            (
+                "regex-1.12.2-earliest",
+                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/earliest.toml",
+                "D561E643623EE1889B5B049FDCF3C7CB71B0C746D7EB822DDBD09D0ACDA2620B"),
+            (
+                "regex-1.12.2-expensive",
+                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/expensive.toml",
+                "5CE2F60209C99CDD2CDCB9D3069D1D5CA13D5E08A85E913EFE57267B2F5F0E9D"),
+            (
+                "regex-1.12.2-leftmost-all",
+                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/leftmost-all.toml",
+                "903BFBEFF888B7664296F4D5AA367CE53D1DAFE249AB0A3359223AE94D596396"),
+            (
+                "regex-1.12.2-no-unicode",
+                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/no-unicode.toml",
+                "D209DA04506900FD5F69E48170CDDAAD0702355AC6176C3A75AB3FF96974457C"),
+            (
+                "regex-1.12.2-overlapping",
+                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/overlapping.toml",
+                "5D96497A7233566D40B05BA22047E483FA8662E45515A9BE86DA45CF6C28703A"),
+            (
+                "regex-1.12.2-regex-lite",
+                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/regex-lite.toml",
+                "FECCA7CC8C9CEA2E1F84F846A89FD9B3CA7011C83698211A2EEDA8924DEB900C"),
+            (
+                "regex-1.12.2-regression",
+                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/regression.toml",
+                "6006EF4FCFBFD7155CE5CE8B8427904F7261C5549396F20CB065C0294733686D"),
+            (
+                "regex-1.12.2-set",
+                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/set.toml",
+                "DFD265DC1AEE80026E881616840DF0236AE9ABF12467D7EC0E141A52C236128C"),
+            (
+                "regex-1.12.2-unicode",
+                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/unicode.toml",
+                "7E4B013039B0CDD85FA73F32D15D096182FE901643D4E40C0910087A736CD46D"),
+            (
+                "regex-1.12.2-utf8",
+                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/utf8.toml",
+                "2EABCE0582BCACB2073E08BBE7CA413F096D14D06E917B107949691E24F84B20"),
+            (
+                "regex-1.12.2-word-boundary-special",
+                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/word-boundary-special.toml",
+                "7D0EA2F796478D1CA2A6954430CB1CFBD04031A182F8611CB50A7C73E443CE33"),
+            (
+                "regex-1.12.2-word-boundary",
+                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/word-boundary.toml",
+                "51BC1C498AB825420340A2DD3E6623DE4054937BA6D5020FF8CD14B1C1E45271"),
         ];
 
         string root = FindRepositoryRoot();
