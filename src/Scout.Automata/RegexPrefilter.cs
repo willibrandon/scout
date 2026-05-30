@@ -6,30 +6,71 @@ namespace Scout;
 internal sealed class RegexPrefilter
 {
     private readonly MemmemFinder? memmem;
+    private readonly AhoCorasickAutomaton? ahoCorasick;
 
-    private RegexPrefilter(RegexPrefilterKind kind, MemmemFinder? memmem)
+    private RegexPrefilter(RegexPrefilterKind kind, MemmemFinder? memmem, AhoCorasickAutomaton? ahoCorasick)
     {
         Kind = kind;
         this.memmem = memmem;
+        this.ahoCorasick = ahoCorasick;
     }
 
     public RegexPrefilterKind Kind { get; }
 
     public static RegexPrefilter? Compile(RegexSyntaxNode root, RegexCompileOptions options)
     {
+        if (TryCreateAlternationPrefixPrefilter(root, options, out RegexPrefilter? prefilter))
+        {
+            return prefilter;
+        }
+
         var prefix = new List<byte>();
         if (!TryAppendRequiredPrefix(root, options, prefix, out _) || prefix.Count == 0)
         {
             return null;
         }
 
-        return new RegexPrefilter(RegexPrefilterKind.Memmem, new MemmemFinder(prefix.ToArray()));
+        return new RegexPrefilter(RegexPrefilterKind.Memmem, new MemmemFinder(prefix.ToArray()), ahoCorasick: null);
     }
 
     public int FindCandidate(ReadOnlySpan<byte> haystack, int startAt)
     {
-        int offset = memmem!.Find(haystack[startAt..]);
-        return offset < 0 ? -1 : startAt + offset;
+        if (memmem is not null)
+        {
+            int offset = memmem.Find(haystack[startAt..]);
+            return offset < 0 ? -1 : startAt + offset;
+        }
+
+        AhoCorasickMatch? match = ahoCorasick!.Find(haystack[startAt..]);
+        return match.HasValue ? startAt + match.Value.Start : -1;
+    }
+
+    private static bool TryCreateAlternationPrefixPrefilter(RegexSyntaxNode root, RegexCompileOptions options, out RegexPrefilter? prefilter)
+    {
+        prefilter = null;
+        root = UnwrapTransparentGroups(root);
+        if (root is not RegexAlternationNode alternation || alternation.Alternatives.Count < 2)
+        {
+            return false;
+        }
+
+        byte[][] prefixes = new byte[alternation.Alternatives.Count][];
+        for (int index = 0; index < alternation.Alternatives.Count; index++)
+        {
+            var prefix = new List<byte>();
+            if (!TryAppendRequiredPrefix(alternation.Alternatives[index], options, prefix, out _) || prefix.Count == 0)
+            {
+                return false;
+            }
+
+            prefixes[index] = prefix.ToArray();
+        }
+
+        prefilter = new RegexPrefilter(
+            RegexPrefilterKind.AhoCorasick,
+            memmem: null,
+            AhoCorasickAutomaton.Create(prefixes, AhoCorasickMatchKind.LeftmostFirst));
+        return true;
     }
 
     private static bool TryAppendRequiredPrefix(
@@ -123,5 +164,17 @@ internal sealed class RegexPrefilter
         }
 
         return TryAppendRequiredPrefix(node.Child, options, prefix, out _);
+    }
+
+    private static RegexSyntaxNode UnwrapTransparentGroups(RegexSyntaxNode node)
+    {
+        while (node is RegexGroupNode group &&
+            string.IsNullOrEmpty(group.EnabledFlags) &&
+            string.IsNullOrEmpty(group.DisabledFlags))
+        {
+            node = group.Child;
+        }
+
+        return node;
     }
 }

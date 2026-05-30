@@ -19,6 +19,20 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies top-level literal alternatives use the Aho-Corasick regex prefilter.
+    /// </summary>
+    [Fact]
+    public void UsesAhoCorasickPrefilterForTopLevelLiteralAlternatives()
+    {
+        var automaton = RegexAutomaton.Compile("foo[0-9]+|bar[a-z]+"u8);
+
+        Assert.Equal(RegexPrefilterKind.AhoCorasick, automaton.PrefilterKind);
+        Assert.Equal(new RegexMatch(3, 5), automaton.Find("xx barzz foo42"u8));
+        Assert.Equal(new RegexMatch(9, 5), automaton.Find("xx bazzz foo42"u8));
+        Assert.Null(automaton.Find("xx bazzz quux"u8));
+    }
+
+    /// <summary>
     /// Verifies nullable leading expressions do not use a literal prefilter.
     /// </summary>
     [Fact]

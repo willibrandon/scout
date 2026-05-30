@@ -4,4 +4,5 @@ internal enum RegexPrefilterKind
 {
     None,
     Memmem,
+    AhoCorasick,
 }
