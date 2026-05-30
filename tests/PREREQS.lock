@@ -87,3 +87,8 @@ sha256 = "9a7e001808195c84f2a7d3e18bc0a82c7386e60f03a616e99af00c3f7f2c3fd4"
 name = "regex-1.12.2-iter"
 path = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/iter.toml"
 sha256 = "6875460302974a5b3073a7304a865c45aba9653c54afea2c4d26e1ea248a81f7"
+
+[[corpus]]
+name = "regex-1.12.2-empty"
+path = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/empty.toml"
+sha256 = "738dbe92fbd8971385a1cf3affb0e956e5b692c858b9b48439d718f10801c08e"

@@ -56,6 +56,28 @@ public sealed class RegexCorpusTests
                 "empty2",
                 "empty3",
             ]),
+            ("empty.toml",
+            [
+                "100",
+                "110",
+                "120",
+                "130",
+                "200",
+                "210",
+                "220",
+                "230",
+                "240",
+                "300",
+                "310",
+                "320",
+                "330",
+                "400",
+                "500",
+                "510",
+                "520",
+                "600",
+                "610",
+            ]),
         ];
 
         for (int groupIndex = 0; groupIndex < groups.Length; groupIndex++)
@@ -78,6 +100,7 @@ public sealed class RegexCorpusTests
     {
         var matches = new List<RegexMatch>();
         int startAt = 0;
+        int suppressedEmptyStart = -1;
         while (startAt <= haystack.Length)
         {
             if (matchLimit is int limit && matches.Count >= limit)
@@ -91,14 +114,24 @@ public sealed class RegexCorpusTests
                 break;
             }
 
-            matches.Add(match.Value);
-            int nextStart = match.Value.Start + Math.Max(match.Value.Length, 1);
-            if (nextStart <= startAt)
+            if (match.Value.Length == 0 && match.Value.Start == suppressedEmptyStart)
             {
-                nextStart = startAt + 1;
+                startAt++;
+                suppressedEmptyStart = -1;
+                continue;
             }
 
-            startAt = nextStart;
+            matches.Add(match.Value);
+            if (match.Value.Length == 0)
+            {
+                startAt = match.Value.Start + 1;
+                suppressedEmptyStart = -1;
+            }
+            else
+            {
+                startAt = match.Value.Start + match.Value.Length;
+                suppressedEmptyStart = startAt;
+            }
         }
 
         return matches.ToArray();

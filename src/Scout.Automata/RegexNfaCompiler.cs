@@ -116,7 +116,7 @@ internal sealed class RegexNfaCompiler
         int split = states.Count;
         states.Add(CreateControlState(RegexNfaStateKind.Split, next: -1, alternative: -1));
         int childStart = CompileNode(child, split, options);
-        states[split] = lazy
+        states[split] = lazy || PrefersEmpty(child)
             ? CreateControlState(RegexNfaStateKind.Split, next, childStart)
             : CreateControlState(RegexNfaStateKind.Split, childStart, next);
         return split;
@@ -173,5 +173,37 @@ internal sealed class RegexNfaCompiler
             or RegexSyntaxKind.NotWordBoundary
             or RegexSyntaxKind.WordStartBoundary
             or RegexSyntaxKind.WordEndBoundary;
+    }
+
+    private static bool PrefersEmpty(RegexSyntaxNode node)
+    {
+        return node switch
+        {
+            { Kind: RegexSyntaxKind.Empty } => true,
+            RegexInlineFlagsNode => true,
+            RegexGroupNode group => PrefersEmpty(group.Child),
+            RegexAlternationNode alternation => alternation.Alternatives.Count > 0 && PrefersEmpty(alternation.Alternatives[0]),
+            RegexSequenceNode sequence => SequencePrefersEmpty(sequence),
+            RegexRepetitionNode repetition => repetition.Lazy || PrefersEmpty(repetition.Child),
+            _ => false,
+        };
+    }
+
+    private static bool SequencePrefersEmpty(RegexSequenceNode sequence)
+    {
+        if (sequence.Nodes.Count == 0)
+        {
+            return true;
+        }
+
+        for (int index = 0; index < sequence.Nodes.Count; index++)
+        {
+            if (!PrefersEmpty(sequence.Nodes[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

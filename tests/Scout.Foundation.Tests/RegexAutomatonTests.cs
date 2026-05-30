@@ -43,6 +43,8 @@ public sealed class RegexAutomatonTests
         RegexMatch? greedy = RegexAutomaton.Compile("a+"u8).Find("zaaa"u8);
         RegexMatch? lazy = RegexAutomaton.Compile("a+?"u8).Find("zaaa"u8);
         RegexMatch? ungreedy = RegexAutomaton.Compile("(?U)a+"u8).Find("zaaa"u8);
+        RegexMatch? emptyFirstStar = RegexAutomaton.Compile("(?:|a)*"u8).Find("aaa"u8);
+        RegexMatch? consumingFirstStar = RegexAutomaton.Compile("(?:a|)*"u8).Find("aaa"u8);
 
         Assert.True(greedy.HasValue);
         Assert.True(lazy.HasValue);
@@ -50,6 +52,8 @@ public sealed class RegexAutomatonTests
         Assert.Equal(new RegexMatch(1, 3), greedy.Value);
         Assert.Equal(new RegexMatch(1, 1), lazy.Value);
         Assert.Equal(new RegexMatch(1, 1), ungreedy.Value);
+        Assert.Equal(new RegexMatch(0, 0), emptyFirstStar);
+        Assert.Equal(new RegexMatch(0, 3), consumingFirstStar);
     }
 
     /// <summary>
