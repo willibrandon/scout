@@ -100,12 +100,34 @@ public sealed class DifferentialCasePolicyTests
     }
 
     /// <summary>
+    /// Verifies ripgrep's legacy sorted-files switch is treated as sorted traversal.
+    /// </summary>
+    [Fact]
+    public void ExactAllowsSortFilesDirectoryOutput()
+    {
+        var testCase = DifferentialCase.Exact("--sort-files", "needle", ".");
+
+        Assert.Equal(DifferentialComparisonMode.Exact, testCase.ComparisonMode);
+    }
+
+    /// <summary>
     /// Verifies sorted traversal remains exact even when a parallel thread count is requested.
     /// </summary>
     [Fact]
     public void ExactAllowsSortedExplicitParallelOutput()
     {
         var testCase = DifferentialCase.Exact("-j2", "--sort=path", "needle", ".");
+
+        Assert.Equal(DifferentialComparisonMode.Exact, testCase.ComparisonMode);
+    }
+
+    /// <summary>
+    /// Verifies sorted-files traversal remains exact even when a parallel thread count is requested.
+    /// </summary>
+    [Fact]
+    public void ExactAllowsSortFilesExplicitParallelOutput()
+    {
+        var testCase = DifferentialCase.Exact("-j2", "--sort-files", "needle", ".");
 
         Assert.Equal(DifferentialComparisonMode.Exact, testCase.ComparisonMode);
     }
@@ -183,6 +205,17 @@ public sealed class DifferentialCasePolicyTests
         var testCase = DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--stats", "needle", ".");
 
         Assert.Equal(DifferentialComparisonMode.SortLinesAndMaskElapsed, testCase.ComparisonMode);
+    }
+
+    /// <summary>
+    /// Verifies sorted-files stats output masks elapsed fields without sorting path output again.
+    /// </summary>
+    [Fact]
+    public void MaskElapsedAllowsSortFilesDirectoryStatsOutput()
+    {
+        var testCase = DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--sort-files", "--stats", "needle", ".");
+
+        Assert.Equal(DifferentialComparisonMode.MaskElapsed, testCase.ComparisonMode);
     }
 
     /// <summary>
