@@ -26,29 +26,38 @@ public sealed class DifferentialSearchTests
             File.WriteAllText(first, "needle\nmiss\nneedle again\n");
             File.WriteAllText(second, "alpha\nneedle second\n");
 
-            string[][] cases =
+            DifferentialCase[] cases =
             [
-                ["needle", first],
-                ["-nH", "needle", first],
-                ["-nA1", "needle", first],
-                ["-v", "needle", first],
-                ["-c", "needle", first],
-                ["--count-matches", "needle", first],
-                ["-o", "needle", first],
-                ["--sort=path", "-H", "needle", root],
-                ["-ne", "needle", first],
-                ["-m1", "needle", first],
+                DifferentialCase.Exact("needle", first),
+                DifferentialCase.Exact("-nH", "needle", first),
+                DifferentialCase.Exact("-nA1", "needle", first),
+                DifferentialCase.Exact("-v", "needle", first),
+                DifferentialCase.Exact("-c", "needle", first),
+                DifferentialCase.Exact("--count-matches", "needle", first),
+                DifferentialCase.Exact("-o", "needle", first),
+                DifferentialCase.Exact("--sort=path", "-H", "needle", root),
+                DifferentialCase.Exact("-ne", "needle", first),
+                DifferentialCase.Exact("-m1", "needle", first),
+                DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "-l", "needle", first, second),
+                DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--stats", "needle", first),
+                DifferentialCase.Normalized(DifferentialComparisonMode.SortLinesAndMaskElapsed, "--json", "needle", root),
             ];
 
             for (int index = 0; index < cases.Length; index++)
             {
-                string[] arguments = cases[index];
+                DifferentialCase testCase = cases[index];
+                string[] arguments = testCase.Arguments;
                 (int scoutExitCode, byte[] scoutOutput, string scoutError) = RunScout(arguments);
                 (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
 
                 Assert.Equal(pinnedExitCode, scoutExitCode);
-                AssertEqualBytes(arguments, pinnedOutput, scoutOutput);
-                Assert.Equal(pinnedError, scoutError);
+                AssertEqualBytes(
+                    arguments,
+                    DifferentialOutputNormalizer.NormalizeStdout(pinnedOutput, testCase.ComparisonMode),
+                    DifferentialOutputNormalizer.NormalizeStdout(scoutOutput, testCase.ComparisonMode));
+                Assert.Equal(
+                    DifferentialOutputNormalizer.NormalizeStderr(pinnedError, testCase.ComparisonMode),
+                    DifferentialOutputNormalizer.NormalizeStderr(scoutError, testCase.ComparisonMode));
             }
         }
         finally
