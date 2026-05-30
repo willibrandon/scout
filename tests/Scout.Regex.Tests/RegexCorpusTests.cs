@@ -396,6 +396,27 @@ public sealed class RegexCorpusTests
                 "partial-anchor-alternate-end",
                 "lits-unambiguous-100",
             ]),
+            ("set.toml",
+            [
+                "basic10-leftmost-first",
+                "basic60-leftmost-first",
+                "basic61-leftmost-first",
+                "basic71",
+                "empty10-leftmost-first",
+                "empty11-leftmost-first",
+                "empty20-leftmost-first",
+                "empty21-leftmost-first",
+                "empty30-leftmost-first",
+                "empty31-leftmost-first",
+                "empty40-leftmost-first",
+                "nomatch10",
+                "nomatch20",
+                "nomatch30",
+                "nomatch40",
+                "caps-110",
+                "caps-120",
+                "caps-121",
+            ]),
         ];
 
     /// <summary>
