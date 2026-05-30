@@ -28,6 +28,7 @@ internal static class DifferentialRunner
     {
         ArgumentNullException.ThrowIfNull(testCase);
 
+        DifferentialComparisonMode comparisonMode = testCase.GetComparisonMode(testCase.Arguments, scoutWorkingDirectory);
         DifferentialRunResult scout = RunScout(testCase.Arguments, testCase.StandardInput, testCase.RelativeConfigPath, scoutWorkingDirectory);
         DifferentialRunResult pinned = RunPinnedRipgrep(testCase.Arguments, testCase.StandardInput, testCase.RelativeConfigPath, pinnedWorkingDirectory);
 
@@ -38,11 +39,11 @@ internal static class DifferentialRunner
 
         AssertEqualBytes(
             testCase.Arguments,
-            DifferentialOutputNormalizer.NormalizeStdout(pinned.Output, testCase.ComparisonMode),
-            DifferentialOutputNormalizer.NormalizeStdout(scout.Output, testCase.ComparisonMode));
+            DifferentialOutputNormalizer.NormalizeStdout(pinned.Output, comparisonMode),
+            DifferentialOutputNormalizer.NormalizeStdout(scout.Output, comparisonMode));
         Assert.Equal(
-            DifferentialOutputNormalizer.NormalizeStderr(pinned.Error, testCase.ComparisonMode),
-            DifferentialOutputNormalizer.NormalizeStderr(scout.Error, testCase.ComparisonMode));
+            DifferentialOutputNormalizer.NormalizeStderr(pinned.Error, comparisonMode),
+            DifferentialOutputNormalizer.NormalizeStderr(scout.Error, comparisonMode));
     }
 
     public static void AssertMatchesPinned(DifferentialCase testCase, RgTestDirectory scoutDirectory, RgTestDirectory pinnedDirectory, string? scoutWorkingDirectory, string? pinnedWorkingDirectory)
@@ -53,6 +54,7 @@ internal static class DifferentialRunner
 
         string[] scoutArguments = testCase.GetArguments(scoutDirectory);
         string[] pinnedArguments = testCase.GetArguments(pinnedDirectory);
+        DifferentialComparisonMode comparisonMode = testCase.GetComparisonMode(scoutArguments, scoutWorkingDirectory);
         DifferentialRunResult scout = RunScout(scoutArguments, testCase.StandardInput, testCase.RelativeConfigPath, scoutWorkingDirectory);
         DifferentialRunResult pinned = RunPinnedRipgrep(pinnedArguments, testCase.StandardInput, testCase.RelativeConfigPath, pinnedWorkingDirectory);
 
@@ -63,11 +65,11 @@ internal static class DifferentialRunner
 
         AssertEqualBytes(
             scoutArguments,
-            DifferentialOutputNormalizer.NormalizeStdout(pinned.Output, testCase.ComparisonMode),
-            DifferentialOutputNormalizer.NormalizeStdout(scout.Output, testCase.ComparisonMode));
+            DifferentialOutputNormalizer.NormalizeStdout(pinned.Output, comparisonMode),
+            DifferentialOutputNormalizer.NormalizeStdout(scout.Output, comparisonMode));
         Assert.Equal(
-            DifferentialOutputNormalizer.NormalizeStderr(pinned.Error, testCase.ComparisonMode),
-            DifferentialOutputNormalizer.NormalizeStderr(scout.Error, testCase.ComparisonMode));
+            DifferentialOutputNormalizer.NormalizeStderr(pinned.Error, comparisonMode),
+            DifferentialOutputNormalizer.NormalizeStderr(scout.Error, comparisonMode));
     }
 
     private static DifferentialRunResult RunScout(string[] arguments, byte[]? standardInput, string? relativeConfigPath, string? workingDirectory)

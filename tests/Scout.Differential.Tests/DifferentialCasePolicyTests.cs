@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 
 namespace Scout;
 
@@ -55,12 +56,67 @@ public sealed class DifferentialCasePolicyTests
     }
 
     /// <summary>
+    /// Verifies default directory traversal resolves to path-order normalization because ripgrep's walker can emit files in different orders.
+    /// </summary>
+    [Fact]
+    public void ExactNormalizesDefaultDirectoryOutput()
+    {
+        var testCase = DifferentialCase.Exact("needle", ".");
+
+        Assert.Equal(DifferentialComparisonMode.SortLines, testCase.ComparisonMode);
+    }
+
+    /// <summary>
+    /// Verifies sorted traversal remains exact because ripgrep serializes sorted walks.
+    /// </summary>
+    [Fact]
+    public void ExactAllowsSortedDirectoryOutput()
+    {
+        var testCase = DifferentialCase.Exact("--sort=path", "needle", ".");
+
+        Assert.Equal(DifferentialComparisonMode.Exact, testCase.ComparisonMode);
+    }
+
+    /// <summary>
+    /// Verifies runtime directory paths also resolve to path-order normalization once the fixture exists.
+    /// </summary>
+    [Fact]
+    public void ExactNormalizesRuntimeDirectoryOutput()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "scout-diff-policy-" + Guid.NewGuid().ToString("N"));
+        string directory = Path.Combine(root, "haystack");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var testCase = DifferentialCase.Exact("needle", "haystack");
+
+            Assert.Equal(DifferentialComparisonMode.Exact, testCase.ComparisonMode);
+            Assert.Equal(DifferentialComparisonMode.SortLines, testCase.GetComparisonMode(testCase.Arguments, root));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
     /// Verifies elapsed-only normalization is not enough for explicitly parallel text output.
     /// </summary>
     [Fact]
     public void MaskElapsedRejectsExplicitParallelTextOutput()
     {
         Assert.Throws<ArgumentException>(() => DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--threads=2", "needle", "."));
+    }
+
+    /// <summary>
+    /// Verifies default directory stats comparisons mask elapsed fields and sort path output.
+    /// </summary>
+    [Fact]
+    public void MaskElapsedNormalizesDefaultDirectoryStatsOutput()
+    {
+        var testCase = DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--stats", "needle", ".");
+
+        Assert.Equal(DifferentialComparisonMode.SortLinesAndMaskElapsed, testCase.ComparisonMode);
     }
 
     /// <summary>
@@ -100,10 +156,10 @@ public sealed class DifferentialCasePolicyTests
     /// Verifies disabled JSON and stats flags do not force elapsed masking.
     /// </summary>
     [Fact]
-    public void DisabledJsonAndStatsAllowExactOutput()
+    public void DisabledJsonAndStatsDoNotForceElapsedMasking()
     {
         var testCase = DifferentialCase.Exact("--json", "--no-json", "--stats", "--no-stats", "needle", ".");
 
-        Assert.Equal(DifferentialComparisonMode.Exact, testCase.ComparisonMode);
+        Assert.Equal(DifferentialComparisonMode.SortLines, testCase.ComparisonMode);
     }
 }

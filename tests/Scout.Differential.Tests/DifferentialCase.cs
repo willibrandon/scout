@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 
 namespace Scout;
 
@@ -18,12 +19,14 @@ internal sealed class DifferentialCase
         Func<RgTestDirectory, string[]>? argumentFactory,
         params string[] arguments)
     {
-        ValidateComparisonPolicy(comparisonMode, arguments);
+        DifferentialComparisonMode resolvedComparisonMode = ResolveComparisonMode(comparisonMode, arguments, workingDirectory: null);
+        ValidateComparisonPolicy(resolvedComparisonMode, arguments);
 
         this.arguments = arguments;
         this.argumentFactory = argumentFactory;
+        requestedComparisonMode = comparisonMode;
         BeforeRun = beforeRun;
-        ComparisonMode = comparisonMode;
+        ComparisonMode = resolvedComparisonMode;
         RelativeWorkingDirectory = relativeWorkingDirectory;
         StandardInput = standardInput;
         RelativeConfigPath = relativeConfigPath;
@@ -31,6 +34,7 @@ internal sealed class DifferentialCase
 
     private readonly string[]? arguments;
     private readonly Func<RgTestDirectory, string[]>? argumentFactory;
+    private readonly DifferentialComparisonMode requestedComparisonMode;
 
     public string[] Arguments => arguments ?? throw new InvalidOperationException("This differential case uses directory-specific arguments.");
 
@@ -112,8 +116,32 @@ internal sealed class DifferentialCase
         ArgumentNullException.ThrowIfNull(directory);
 
         string[] resolvedArguments = argumentFactory is null ? Arguments : argumentFactory(directory);
-        ValidateComparisonPolicy(ComparisonMode, resolvedArguments);
+        ValidateComparisonPolicy(ResolveComparisonMode(requestedComparisonMode, resolvedArguments, GetWorkingDirectory(directory.RootPath)), resolvedArguments);
         return resolvedArguments;
+    }
+
+    public DifferentialComparisonMode GetComparisonMode(string[] resolvedArguments, string? workingDirectory)
+    {
+        ArgumentNullException.ThrowIfNull(resolvedArguments);
+
+        DifferentialComparisonMode comparisonMode = ResolveComparisonMode(requestedComparisonMode, resolvedArguments, workingDirectory);
+        ValidateComparisonPolicy(comparisonMode, resolvedArguments);
+        return comparisonMode;
+    }
+
+    private static DifferentialComparisonMode ResolveComparisonMode(DifferentialComparisonMode comparisonMode, string[] arguments, string? workingDirectory)
+    {
+        if (!UsesDefaultParallelTraversal(arguments, workingDirectory))
+        {
+            return comparisonMode;
+        }
+
+        return comparisonMode switch
+        {
+            DifferentialComparisonMode.Exact => DifferentialComparisonMode.SortLines,
+            DifferentialComparisonMode.MaskElapsed => DifferentialComparisonMode.SortLinesAndMaskElapsed,
+            _ => comparisonMode,
+        };
     }
 
     private static void ValidateComparisonPolicy(DifferentialComparisonMode comparisonMode, string[] arguments)
@@ -209,5 +237,86 @@ internal sealed class DifferentialCase
     private static bool IsParallelThreadCount(string value)
     {
         return ulong.TryParse(value, out ulong threads) && threads != 1;
+    }
+
+    private static bool UsesDefaultParallelTraversal(string[] arguments, string? workingDirectory)
+    {
+        if (!TryParse(arguments, out CliLowArgs? lowArgs))
+        {
+            return false;
+        }
+
+        CliLowArgs parsed = lowArgs!;
+        if (parsed.Threads is not null)
+        {
+            return false;
+        }
+
+        if (parsed.SortMode is not null)
+        {
+            return false;
+        }
+
+        if (parsed.SearchMode == CliSearchMode.Files)
+        {
+            return true;
+        }
+
+        int firstPathIndex = GetFirstPathIndex(parsed);
+        for (int index = firstPathIndex; index < parsed.Positional.Count; index++)
+        {
+            if (!parsed.Positional[index].TryGetText(out string path))
+            {
+                continue;
+            }
+
+            if (IsDirectoryPath(path, workingDirectory))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryParse(string[] arguments, out CliLowArgs? lowArgs)
+    {
+        var osArguments = new OsString[arguments.Length];
+        for (int index = 0; index < arguments.Length; index++)
+        {
+            osArguments[index] = OsString.FromText(arguments[index]);
+        }
+
+        CliParseResult result = CliParser.Parse(osArguments);
+        lowArgs = result.LowArgs;
+        return result.Status == CliParseStatus.Ok && lowArgs is not null;
+    }
+
+    private static int GetFirstPathIndex(CliLowArgs lowArgs)
+    {
+        if (lowArgs.SearchMode == CliSearchMode.Files || lowArgs.PatternSources.Count > 0)
+        {
+            return 0;
+        }
+
+        return lowArgs.Positional.Count == 0 ? 0 : 1;
+    }
+
+    private static bool IsDirectoryPath(string path, string? workingDirectory)
+    {
+        if (path == "." || path == "./")
+        {
+            return true;
+        }
+
+        string fullPath = workingDirectory is null || Path.IsPathFullyQualified(path)
+            ? path
+            : Path.Combine(workingDirectory, path);
+        return Directory.Exists(fullPath);
+    }
+
+    private string GetWorkingDirectory(string rootPath)
+    {
+        return RelativeWorkingDirectory is null ? rootPath : Path.Combine(rootPath, RelativeWorkingDirectory);
     }
 }
