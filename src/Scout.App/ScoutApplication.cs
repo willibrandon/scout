@@ -4855,6 +4855,9 @@ internal static class ScoutApplication
         int offset = 0;
         int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         ulong emitted = 0;
+        int groupStart = -1;
+        int groupEnd = -1;
+        int groupLastLineStart = -1;
         var matches = new List<JsonMatchSpan>(capacity: 1);
         while (TryFindNextMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, ref offset, ref suppressedEmptyStart, out RegexMatch match))
         {
@@ -4862,25 +4865,60 @@ internal static class ScoutApplication
             int firstLineStart = GetLineStart(bytes, match.Start);
             int lastLineStart = GetLineStart(bytes, GetInclusiveMatchEnd(match));
             int lineEnd = GetLineEnd(bytes, lastLineStart);
-            matches.Clear();
-            matches.Add(new JsonMatchSpan(match.Start - firstLineStart, match.Start - firstLineStart + match.Length, replacement: null));
-            writer.WriteMatchLine(
-                GetLineNumber(bytes, firstLineStart),
-                firstLineStart,
-                bytes[firstLineStart..lineEnd],
-                matches,
-                (ulong)(1 + CountLineFeeds(bytes[firstLineStart..lastLineStart])));
+            if (groupStart >= 0 && firstLineStart > groupEnd)
+            {
+                WriteJsonMultilineMatchGroup(bytes, writer, groupStart, groupEnd, groupLastLineStart, matches);
+                matches.Clear();
+                groupStart = -1;
+                groupEnd = -1;
+                groupLastLineStart = -1;
+            }
+
+            if (groupStart < 0)
+            {
+                groupStart = firstLineStart;
+            }
+
+            if (lineEnd > groupEnd)
+            {
+                groupEnd = lineEnd;
+                groupLastLineStart = lastLineStart;
+            }
+
+            matches.Add(new JsonMatchSpan(match.Start - groupStart, match.Start - groupStart + match.Length, replacement: null));
 
             emitted++;
             if (maxCount is ulong limit && emitted >= limit)
             {
+                WriteJsonMultilineMatchGroup(bytes, writer, groupStart, groupEnd, groupLastLineStart, matches);
                 return true;
             }
 
             offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
         }
 
+        if (groupStart >= 0)
+        {
+            WriteJsonMultilineMatchGroup(bytes, writer, groupStart, groupEnd, groupLastLineStart, matches);
+        }
+
         return true;
+    }
+
+    private static void WriteJsonMultilineMatchGroup(
+        ReadOnlySpan<byte> bytes,
+        JsonFileWriter writer,
+        int groupStart,
+        int groupEnd,
+        int groupLastLineStart,
+        IReadOnlyList<JsonMatchSpan> matches)
+    {
+        writer.WriteMatchLine(
+            GetLineNumber(bytes, groupStart),
+            groupStart,
+            bytes[groupStart..groupEnd],
+            matches,
+            (ulong)(1 + CountLineFeeds(bytes[groupStart..groupLastLineStart])));
     }
 
     private static bool WriteJsonMultilineInvertedMatches(
