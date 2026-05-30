@@ -287,6 +287,18 @@ public sealed class RegexCorpusTests
                 "word-boundary-at",
                 "not-word-boundary-at",
             ]),
+            ("anchored.toml",
+            [
+                "greedy",
+                "nongreedy",
+                "word-boundary-nounicode-01",
+                "no-match-at-start",
+                "no-match-at-start-bounds",
+                "no-match-at-start-reverse-inner",
+                "no-match-at-start-reverse-inner-bounds",
+                "no-match-at-start-reverse-anchored",
+                "no-match-at-start-reverse-anchored-bounds",
+            ]),
         ];
 
         for (int groupIndex = 0; groupIndex < groups.Length; groupIndex++)

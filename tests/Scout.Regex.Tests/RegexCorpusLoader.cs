@@ -253,38 +253,84 @@ internal static class RegexCorpusLoader
     private static RegexMatch[] ParseMatchSpans(string value)
     {
         var matches = new List<RegexMatch>();
-        int index = 0;
+        int index = SkipWhitespace(value, 0);
+        if (index >= value.Length || value[index] != '[')
+        {
+            throw new InvalidOperationException("Invalid regex corpus matches array.");
+        }
+
+        index++;
         while (index < value.Length)
         {
-            int open = value.IndexOf('[', index);
-            if (open < 0)
+            index = SkipWhitespaceAndCommas(value, index);
+            if (index >= value.Length || value[index] == ']')
             {
                 break;
             }
 
-            int itemStart = open + 1;
-            while (itemStart < value.Length && char.IsWhiteSpace(value[itemStart]))
+            if (value[index] != '[')
             {
-                itemStart++;
-            }
-
-            if (itemStart >= value.Length || !char.IsDigit(value[itemStart]))
-            {
-                index = open + 1;
+                index++;
                 continue;
             }
 
-            if (!TryParseSpan(value, itemStart, out int start, out int end, out int nextIndex))
+            int itemContent = SkipWhitespace(value, index + 1);
+            if (itemContent < value.Length && char.IsDigit(value[itemContent]))
             {
-                index = open + 1;
-                continue;
+                if (TryParseSpan(value, itemContent, out int start, out int end, out _))
+                {
+                    matches.Add(new RegexMatch(start, end - start));
+                }
+            }
+            else if (itemContent < value.Length && value[itemContent] == '[')
+            {
+                int captureStart = SkipWhitespace(value, itemContent + 1);
+                if (TryParseSpan(value, captureStart, out int start, out int end, out _))
+                {
+                    matches.Add(new RegexMatch(start, end - start));
+                }
             }
 
-            matches.Add(new RegexMatch(start, end - start));
-            index = nextIndex;
+            index = SkipBracketedValue(value, index);
         }
 
         return matches.ToArray();
+    }
+
+    private static int SkipWhitespaceAndCommas(string value, int startIndex)
+    {
+        int index = startIndex;
+        while (index < value.Length && (char.IsWhiteSpace(value[index]) || value[index] == ','))
+        {
+            index++;
+        }
+
+        return index;
+    }
+
+    private static int SkipBracketedValue(string value, int startIndex)
+    {
+        int depth = 0;
+        int index = startIndex;
+        while (index < value.Length)
+        {
+            if (value[index] == '[')
+            {
+                depth++;
+            }
+            else if (value[index] == ']')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    return index + 1;
+                }
+            }
+
+            index++;
+        }
+
+        return value.Length;
     }
 
     private static bool TryParseSpan(string value, int startIndex, out int start, out int end, out int nextIndex)
