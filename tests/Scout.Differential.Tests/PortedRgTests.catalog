@@ -97,6 +97,8 @@ tests/misc.rs|ignore_git_parent_stop
 tests/misc.rs|ignore_git_parent_stop_file
 tests/misc.rs|ignore_ripgrep_parent_no_stop
 tests/misc.rs|no_parent_ignore_git
+tests/misc.rs|symlink_nofollow
+tests/misc.rs|symlink_follow
 tests/misc.rs|unrestricted1
 tests/misc.rs|unrestricted2
 tests/misc.rs|unrestricted3

@@ -703,6 +703,30 @@ internal static class PortedRgTests
                 DifferentialCase.ExactInDirectory("foo", "--path-separator", "/", "--no-ignore-parent", "Sherlock")),
             new(
                 "tests/misc.rs",
+                "symlink_nofollow",
+                dir =>
+                {
+                    dir.CreateDirectory("foo");
+                    dir.CreateDirectory("foo/bar");
+                    dir.LinkDirectory("foo/baz", "foo/bar/baz");
+                    dir.CreateDirectory("foo/baz");
+                    dir.CreateFile("foo/baz/sherlock", Sherlock);
+                },
+                DifferentialCase.ExactInDirectory("foo/bar", "--path-separator", "/", "Sherlock")),
+            new(
+                "tests/misc.rs",
+                "symlink_follow",
+                dir =>
+                {
+                    dir.CreateDirectory("foo");
+                    dir.CreateDirectory("foo/bar");
+                    dir.CreateDirectory("foo/baz");
+                    dir.CreateFile("foo/baz/sherlock", Sherlock);
+                    dir.LinkDirectory("foo/baz", "foo/bar/baz");
+                },
+                DifferentialCase.ExactInDirectory("foo/bar", "--path-separator", "/", "-L", "Sherlock")),
+            new(
+                "tests/misc.rs",
                 "unrestricted1",
                 dir =>
                 {
