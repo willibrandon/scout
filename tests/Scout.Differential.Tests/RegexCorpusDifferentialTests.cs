@@ -10,17 +10,18 @@ namespace Scout;
 /// </summary>
 public sealed class RegexCorpusDifferentialTests
 {
-    private const int ExpectedDifferentialCaseCount = 106;
+    private const int ExpectedDifferentialCaseCount = 116;
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     private static readonly (string RelativePath, int Count)[] ExpectedDifferentialFileCounts =
     [
         ("crazy.toml", 47),
-        ("empty.toml", 18),
+        ("empty.toml", 19),
         ("flags.toml", 9),
         ("iter.toml", 19),
         ("misc.toml", 13),
+        ("regression.toml", 9),
     ];
 
     private static readonly (string RelativePath, string Name)[] DifferentialCases =
@@ -67,6 +68,7 @@ public sealed class RegexCorpusDifferentialTests
         ("iter.toml", "start1"),
         ("iter.toml", "start2"),
         ("empty.toml", "100"),
+        ("empty.toml", "110"),
         ("empty.toml", "120"),
         ("empty.toml", "130"),
         ("empty.toml", "200"),
@@ -131,6 +133,15 @@ public sealed class RegexCorpusDifferentialTests
         ("crazy.toml", "empty9"),
         ("crazy.toml", "empty10"),
         ("crazy.toml", "empty11"),
+        ("regression.toml", "negated-char-class-100"),
+        ("regression.toml", "negated-char-class-200"),
+        ("regression.toml", "ascii-word-underscore"),
+        ("regression.toml", "alt-in-alt-100"),
+        ("regression.toml", "alt-in-alt-200"),
+        ("regression.toml", "leftmost-first-prefix"),
+        ("regression.toml", "many-alternates"),
+        ("regression.toml", "word-boundary-alone-100"),
+        ("regression.toml", "word-boundary-alone-200"),
     ];
 
     /// <summary>
