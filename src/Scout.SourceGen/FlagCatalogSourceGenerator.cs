@@ -52,7 +52,7 @@ public sealed class FlagCatalogSourceGenerator : IIncrementalGenerator
             }
 
             string? containingNamespace = interfaceSymbol.ContainingNamespace?.ToDisplayString();
-            if (string.Equals(containingNamespace, "Scout.Flags", StringComparison.Ordinal))
+            if (string.Equals(containingNamespace, "Scout", StringComparison.Ordinal))
             {
                 return true;
             }
@@ -94,14 +94,14 @@ public sealed class FlagCatalogSourceGenerator : IIncrementalGenerator
         var builder = new StringBuilder();
         builder.Append("using System;\n");
         builder.Append('\n');
-        builder.Append("namespace Scout.Flags;\n");
+        builder.Append("namespace Scout;\n");
         builder.Append('\n');
         builder.Append("/// <summary>\n");
         builder.Append("/// Provides the deterministic generated command-line flag catalog.\n");
         builder.Append("/// </summary>\n");
         builder.Append("internal static class GeneratedFlagCatalog\n");
         builder.Append("{\n");
-        builder.Append("    private static readonly global::Scout.Flags.FlagDescriptor[] descriptors =\n");
+        builder.Append("    private static readonly global::Scout.FlagDescriptor[] descriptors =\n");
         builder.Append("    [\n");
         for (int index = 0; index < entries.Length; index++)
         {
@@ -115,16 +115,16 @@ public sealed class FlagCatalogSourceGenerator : IIncrementalGenerator
         builder.Append("    /// <summary>\n");
         builder.Append("    /// Gets every generated flag descriptor in deterministic order.\n");
         builder.Append("    /// </summary>\n");
-        builder.Append("    internal static ReadOnlySpan<global::Scout.Flags.FlagDescriptor> Descriptors => descriptors;\n");
+        builder.Append("    internal static ReadOnlySpan<global::Scout.FlagDescriptor> Descriptors => descriptors;\n");
         builder.Append('\n');
         builder.Append("    /// <summary>\n");
         builder.Append("    /// Finds a generated no-value switch by long spelling.\n");
         builder.Append("    /// </summary>\n");
-        builder.Append("    internal static bool TryFindLongSwitch(string name, out global::Scout.Flags.FlagDescriptor descriptor)\n");
+        builder.Append("    internal static bool TryFindLongSwitch(string name, out global::Scout.FlagDescriptor descriptor)\n");
         builder.Append("    {\n");
         builder.Append("        for (int index = 0; index < descriptors.Length; index++)\n");
         builder.Append("        {\n");
-        builder.Append("            if (descriptors[index].Kind == global::Scout.Flags.FlagKind.Switch && descriptors[index].MatchesLongName(name))\n");
+        builder.Append("            if (descriptors[index].Kind == global::Scout.FlagKind.Switch && descriptors[index].MatchesLongName(name))\n");
         builder.Append("            {\n");
         builder.Append("                descriptor = descriptors[index];\n");
         builder.Append("                return true;\n");
@@ -138,11 +138,11 @@ public sealed class FlagCatalogSourceGenerator : IIncrementalGenerator
         builder.Append("    /// <summary>\n");
         builder.Append("    /// Finds a generated no-value switch by short spelling.\n");
         builder.Append("    /// </summary>\n");
-        builder.Append("    internal static bool TryFindShortSwitch(char name, out global::Scout.Flags.FlagDescriptor descriptor)\n");
+        builder.Append("    internal static bool TryFindShortSwitch(char name, out global::Scout.FlagDescriptor descriptor)\n");
         builder.Append("    {\n");
         builder.Append("        for (int index = 0; index < descriptors.Length; index++)\n");
         builder.Append("        {\n");
-        builder.Append("            if (descriptors[index].Kind == global::Scout.Flags.FlagKind.Switch && descriptors[index].ShortName == name)\n");
+        builder.Append("            if (descriptors[index].Kind == global::Scout.FlagKind.Switch && descriptors[index].ShortName == name)\n");
         builder.Append("            {\n");
         builder.Append("                descriptor = descriptors[index];\n");
         builder.Append("                return true;\n");
