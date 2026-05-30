@@ -1684,6 +1684,12 @@ internal static class PortedRgTests
                 DifferentialCase.Normalized(DifferentialComparisonMode.NonEmptyStdout, "--path-separator", "/", "x?", "--crlf", "--color", "always")),
             new(
                 "tests/regression.rs",
+                "r1838_nul_error_with_binary_detection",
+                dir => dir.CreateFile("test", "foo\n"),
+                DifferentialCase.Exact("--path-separator", "/", @"foo\x00?"),
+                DifferentialCase.Exact("--path-separator", "/", "-a", @"foo\x00?")),
+            new(
+                "tests/regression.rs",
                 "r1866",
                 dir => dir.CreateFile("test", "foobar\nfoobar\nfoo quux"),
                 DifferentialCase.Exact("--path-separator", "/", "--multiline", "--vimgrep", @"foobar\nfoobar\nfoo|quux", "test")),

@@ -227,6 +227,7 @@ tests/regression.rs|r1638
 tests/regression.rs|r1739_replacement_lineterm_match
 tests/regression.rs|f1757
 tests/regression.rs|r1765
+tests/regression.rs|r1838_nul_error_with_binary_detection
 tests/regression.rs|r1866
 tests/regression.rs|r1868_context_passthru_override
 tests/regression.rs|r1878

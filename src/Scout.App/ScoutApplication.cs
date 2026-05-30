@@ -404,9 +404,15 @@ internal static class ScoutApplication
             return ExitCode.Error;
         }
 
-        if (!lowArgs.Multiline && ContainsLineFeed(patterns))
+        if (!lowArgs.Multiline && ContainsLineTerminator(patterns, lowArgs.NullData, lowArgs.FixedStrings))
         {
-            diagnostics.ErrorMessage(new ScoutError("the literal \"\\n\" is not allowed in a regex\n\nConsider enabling multiline mode with the --multiline flag (or -U for short).\nWhen multiline mode is enabled, new line characters can be matched.").WithContext("rg"));
+            diagnostics.ErrorMessage(new ScoutError(BuildLineTerminatorPatternError(lowArgs.NullData)).WithContext("rg"));
+            return ExitCode.Error;
+        }
+
+        if (!lowArgs.TextMode && !lowArgs.NullData && !lowArgs.FixedStrings && ContainsRegexNulLiteral(patterns))
+        {
+            diagnostics.ErrorMessage(new ScoutError("pattern contains \"\\0\" but it is impossible to match\n\nConsider enabling text mode with the --text flag (or -a for short). Otherwise,\nbinary detection is enabled and matching a NUL byte is impossible.").WithContext("rg"));
             return ExitCode.Error;
         }
 
@@ -4568,6 +4574,51 @@ internal static class ScoutApplication
         return false;
     }
 
+    private static bool ContainsLineTerminator(List<byte[]> patterns, bool nullData, bool fixedStrings)
+    {
+        byte terminator = nullData ? (byte)0 : (byte)'\n';
+        for (int index = 0; index < patterns.Count; index++)
+        {
+            if (fixedStrings)
+            {
+                if (patterns[index].AsSpan().Contains(terminator))
+                {
+                    return true;
+                }
+
+                continue;
+            }
+
+            if (nullData ? ContainsRegexNulLiteral(patterns[index]) : ContainsLiteralLineFeed(patterns[index]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsRegexNulLiteral(List<byte[]> patterns)
+    {
+        for (int index = 0; index < patterns.Count; index++)
+        {
+            if (ContainsRegexNulLiteral(patterns[index]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string BuildLineTerminatorPatternError(bool nullData)
+    {
+        string literal = nullData ? "\\0" : "\\n";
+        return "the literal \"" + literal + "\" is not allowed in a regex\n\n" +
+            "Consider enabling multiline mode with the --multiline flag (or -U for short).\n" +
+            "When multiline mode is enabled, new line characters can be matched.";
+    }
+
     private static bool ShouldUseMultilineRegex(IReadOnlyList<byte[]> patterns, bool multilineDotall)
     {
         return multilineDotall || ContainsLineFeed(patterns) || ContainsLineFeedMatchingSyntax(patterns);
@@ -4718,6 +4769,131 @@ internal static class ScoutApplication
             }
         }
 
+        return false;
+    }
+
+    private static bool ContainsRegexNulLiteral(ReadOnlySpan<byte> pattern)
+    {
+        for (int index = 0; index < pattern.Length; index++)
+        {
+            byte value = pattern[index];
+            if (value == 0)
+            {
+                return true;
+            }
+
+            if (value != (byte)'\\' || index + 1 >= pattern.Length)
+            {
+                continue;
+            }
+
+            byte escaped = pattern[index + 1];
+            if (escaped == (byte)'x')
+            {
+                if (index + 3 < pattern.Length && TryReadHexByte(pattern[index + 2], pattern[index + 3], out byte byteValue))
+                {
+                    if (byteValue == 0)
+                    {
+                        return true;
+                    }
+
+                    index += 3;
+                    continue;
+                }
+
+                if (TryReadBracedHexScalar(pattern, index + 2, out int scalarValue, out int endIndex))
+                {
+                    if (scalarValue == 0)
+                    {
+                        return true;
+                    }
+
+                    index = endIndex;
+                    continue;
+                }
+            }
+            else if (escaped == (byte)'u' && TryReadBracedHexScalar(pattern, index + 2, out int scalarValue, out int endIndex))
+            {
+                if (scalarValue == 0)
+                {
+                    return true;
+                }
+
+                index = endIndex;
+                continue;
+            }
+
+            index++;
+        }
+
+        return false;
+    }
+
+    private static bool TryReadHexByte(byte high, byte low, out byte value)
+    {
+        value = 0;
+        if (!TryGetHexDigit(high, out int highValue) || !TryGetHexDigit(low, out int lowValue))
+        {
+            return false;
+        }
+
+        value = (byte)((highValue << 4) | lowValue);
+        return true;
+    }
+
+    private static bool TryReadBracedHexScalar(ReadOnlySpan<byte> pattern, int openBraceIndex, out int value, out int endIndex)
+    {
+        value = 0;
+        endIndex = openBraceIndex;
+        if (openBraceIndex >= pattern.Length || pattern[openBraceIndex] != (byte)'{')
+        {
+            return false;
+        }
+
+        int index = openBraceIndex + 1;
+        int digits = 0;
+        while (index < pattern.Length && pattern[index] != (byte)'}')
+        {
+            if (!TryGetHexDigit(pattern[index], out int digit))
+            {
+                return false;
+            }
+
+            value = (value * 16) + digit;
+            digits++;
+            index++;
+        }
+
+        if (digits == 0 || index >= pattern.Length || pattern[index] != (byte)'}')
+        {
+            return false;
+        }
+
+        endIndex = index;
+        return true;
+    }
+
+    private static bool TryGetHexDigit(byte value, out int digit)
+    {
+        if (value is >= (byte)'0' and <= (byte)'9')
+        {
+            digit = value - (byte)'0';
+            return true;
+        }
+
+        if (value is >= (byte)'a' and <= (byte)'f')
+        {
+            digit = value - (byte)'a' + 10;
+            return true;
+        }
+
+        if (value is >= (byte)'A' and <= (byte)'F')
+        {
+            digit = value - (byte)'A' + 10;
+            return true;
+        }
+
+        digit = 0;
         return false;
     }
 
