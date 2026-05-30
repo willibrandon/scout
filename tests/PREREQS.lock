@@ -30,33 +30,39 @@ result = "PASS; needs libRuntime.VxsortEnabled.a"
 
 [[tool.macos]]
 name = "gzip"
-version = "Apple 475"
-sha256 = "host-tool"
+version = "Apple gzip 475"
+path = "/usr/bin/gzip"
+sha256 = "a1983798ab66b3431190813540cb0ec691dcb8ee28de36744b88fd8b91cd9fcd"
 
 [[tool.macos]]
 name = "bzip2"
 version = "1.0.8"
-sha256 = "host-tool"
+path = "/usr/bin/bzip2"
+sha256 = "8da4d460440e876d81875d814f3a0eead38ba0fb94fef81a9be87560a897dee1"
 
 [[tool.macos]]
 name = "xz"
 version = "5.8.2"
-sha256 = "host-tool"
+path = "/opt/homebrew/bin/xz"
+sha256 = "b7926ea19abf39913ee064329261d03ec66271cf5ee4759e5a1a928a3e165540"
 
 [[tool.macos]]
 name = "zstd"
 version = "1.5.7"
-sha256 = "host-tool"
+path = "/opt/homebrew/bin/zstd"
+sha256 = "aff8169fb421bb925fb16c44a7e0143fa2c7a941dc45cce76b15062a2ce54917"
 
 [[tool.macos]]
 name = "lz4"
 version = "1.10.0"
-sha256 = "host-tool"
+path = "/opt/homebrew/bin/lz4"
+sha256 = "b7dccdc84a76f0359c26c67393a6d50b4b073f8bf85078dca7ccf877502b00e5"
 
 [[tool.macos]]
 name = "brotli"
 version = "1.2.0"
-sha256 = "host-tool"
+path = "/opt/homebrew/bin/brotli"
+sha256 = "528b0b00c1b2f8323e6185dc40d10f0324d21f9cbcca6d8b549f6b2e49520ecf"
 
 [[tool.linux]]
 name = "gzip"

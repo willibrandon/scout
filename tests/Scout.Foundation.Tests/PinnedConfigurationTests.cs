@@ -244,6 +244,38 @@ public sealed class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies the macOS decompression tools in the prerequisite lock match the local binaries.
+    /// </summary>
+    [Fact]
+    public void MacosDecompressionToolsMatchPinnedHashes()
+    {
+        (string Name, string Version, string Path, string Sha256)[] tools =
+        [
+            ("gzip", "Apple gzip 475", "/usr/bin/gzip", "A1983798AB66B3431190813540CB0EC691DCB8EE28DE36744B88FD8B91CD9FCD"),
+            ("bzip2", "1.0.8", "/usr/bin/bzip2", "8DA4D460440E876D81875D814F3A0EEAD38BA0FB94FEF81A9BE87560A897DEE1"),
+            ("xz", "5.8.2", "/opt/homebrew/bin/xz", "B7926EA19ABF39913EE064329261D03EC66271CF5EE4759E5A1A928A3E165540"),
+            ("zstd", "1.5.7", "/opt/homebrew/bin/zstd", "AFF8169FB421BB925FB16C44A7E0143FA2C7A941DC45CCE76B15062A2CE54917"),
+            ("lz4", "1.10.0", "/opt/homebrew/bin/lz4", "B7DCCDC84A76F0359C26C67393A6D50B4B073F8BF85078DCA7CCF877502B00E5"),
+            ("brotli", "1.2.0", "/opt/homebrew/bin/brotli", "528B0B00C1B2F8323E6185DC40D10F0324D21F9CBCCA6D8B549F6B2E49520ECF"),
+        ];
+
+        string root = FindRepositoryRoot();
+        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        for (int index = 0; index < tools.Length; index++)
+        {
+            (string name, string version, string path, string expectedSha256) = tools[index];
+            Assert.Contains("name = \"" + name + "\"", prerequisiteLock, StringComparison.Ordinal);
+            Assert.Contains("version = \"" + version + "\"", prerequisiteLock, StringComparison.Ordinal);
+            Assert.Contains("path = \"" + path + "\"", prerequisiteLock, StringComparison.Ordinal);
+            Assert.Contains("sha256 = \"" + expectedSha256.ToLowerInvariant() + "\"", prerequisiteLock, StringComparison.Ordinal);
+
+            Assert.True(File.Exists(path), "Missing macOS prerequisite tool: " + path);
+            byte[] hash = SHA256.HashData(File.ReadAllBytes(path));
+            Assert.Equal(expectedSha256, Convert.ToHexString(hash));
+        }
+    }
+
+    /// <summary>
     /// Verifies the regex conformance corpus files are pinned by hash.
     /// </summary>
     [Fact]

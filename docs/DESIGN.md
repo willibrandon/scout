@@ -589,7 +589,7 @@ On x64 the link additionally needs `libRuntime.VxsortEnabled.a` (the GC's AVX2/A
 
 **This file now exists in the repo at `scout-seed/tests/PREREQS.lock`** (it moves to `tests/PREREQS.lock` when the Scout repo is created). It is not a sketch — the values below were **measured on this machine on 2026-05-28**, including real SHA-256 hashes of the two verified spike binaries. The authoritative copy is the file; this appendix summarizes it.
 
-**Literal-and-final today** (measured/known): the ripgrep commit; the .NET SDK/runtime that built the verified spikes (`10.0.102`/`10.0.2`); the macOS host (`macOS 26.3.1`, `arm64`, `Apple clang 17.0.0 (clang-1700.6.4.2)`, `cargo 1.91.1`); the PCRE2 binding/sys/C-library versions and tag; the macOS decompression tool versions (`gzip` Apple 475, `bzip2` 1.0.8, `xz` 5.8.2, `zstd` 1.5.7, `lz4` 1.10.0, `brotli` 1.2.0 — all read from the host; **hyperfine confirmed *not* installed here**, so CI installs it pinned); and the **real spike-binary hashes**:
+**Literal-and-final today** (measured/known): the ripgrep commit; the .NET SDK/runtime that built the verified spikes (`10.0.102`/`10.0.2`); the macOS host (`macOS 26.3.1`, `arm64`, `Apple clang 17.0.0 (clang-1700.6.4.2)`, `cargo 1.91.1`); the PCRE2 binding/sys/C-library versions and tag; the macOS decompression tool versions (`gzip` Apple gzip 475, `bzip2` 1.0.8, `xz` 5.8.2, `zstd` 1.5.7, `lz4` 1.10.0, `brotli` 1.2.0 — all read from the host; **hyperfine confirmed *not* installed here**, so CI installs it pinned); and the **real spike-binary hashes**:
 
 ```toml
 [[spike_artifact]]
