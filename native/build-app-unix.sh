@@ -88,6 +88,29 @@ cmp "$BIN/pcre2-column.expected" "$BIN/pcre2-column.out"
 "$BIN/scout" -P -H -n --column -b -o 'o(?=o)' "$BIN/pcre2-smoke.txt" > "$BIN/pcre2-fields-only-matching.out"
 printf '%s:1:2:1:o\n%s:2:2:8:o\n%s:3:2:12:o\n%s:3:8:18:o\n' "$BIN/pcre2-smoke.txt" "$BIN/pcre2-smoke.txt" "$BIN/pcre2-smoke.txt" "$BIN/pcre2-smoke.txt" > "$BIN/pcre2-fields-only-matching.expected"
 cmp "$BIN/pcre2-fields-only-matching.expected" "$BIN/pcre2-fields-only-matching.out"
+cat > "$BIN/pcre2-multiline.txt" <<'EOF'
+Start
+middle
+thing2
+EOF
+"$BIN/scout" -P --multiline '(?s)Start(?=.*thing2)' "$BIN/pcre2-multiline.txt" > "$BIN/pcre2-multiline.out"
+printf 'Start\n' > "$BIN/pcre2-multiline.expected"
+cmp "$BIN/pcre2-multiline.expected" "$BIN/pcre2-multiline.out"
+"$BIN/scout" -P --multiline --files-with-matches '(?s)Start(?=.*thing2)' "$BIN/pcre2-multiline.txt" > "$BIN/pcre2-multiline-files.out"
+printf '%s\n' "$BIN/pcre2-multiline.txt" > "$BIN/pcre2-multiline-files.expected"
+cmp "$BIN/pcre2-multiline-files.expected" "$BIN/pcre2-multiline-files.out"
+cat > "$BIN/pcre2-multiline-count.txt" <<'EOF'
+def A;
+def B;
+use A;
+use B;
+EOF
+"$BIN/scout" -P --multiline --count '(?s)def (\w+);(?=.*use \w+)' "$BIN/pcre2-multiline-count.txt" > "$BIN/pcre2-multiline-count.out"
+printf '2\n' > "$BIN/pcre2-multiline-count.expected"
+cmp "$BIN/pcre2-multiline-count.expected" "$BIN/pcre2-multiline-count.out"
+"$BIN/scout" -P --multiline --count-matches '(?s)def (\w+);(?=.*use \w+)' "$BIN/pcre2-multiline-count.txt" > "$BIN/pcre2-multiline-count-matches.out"
+printf '2\n' > "$BIN/pcre2-multiline-count-matches.expected"
+cmp "$BIN/pcre2-multiline-count-matches.expected" "$BIN/pcre2-multiline-count-matches.out"
 for symbol in \
     _pcre2_code_free_8 \
     _pcre2_compile_8 \

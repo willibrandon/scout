@@ -213,6 +213,10 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("-P -n 'foo(?=bar)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --column 'bar'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P -H -n --column -b -o 'o(?=o)'", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("-P --multiline '(?s)Start(?=.*thing2)'", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("-P --multiline --files-with-matches '(?s)Start(?=.*thing2)'", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("-P --multiline --count '(?s)def (\\w+);(?=.*use \\w+)'", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("-P --multiline --count-matches '(?s)def (\\w+);(?=.*use \\w+)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("<AllowUnsafeBlocks>true</AllowUnsafeBlocks>", directoryBuildProps, StringComparison.Ordinal);
         Assert.Contains("<DirectPInvoke Include=\"__Internal\" />", directoryBuildProps, StringComparison.Ordinal);
         Assert.Contains("PCRE2 10.46 is available (JIT is available)", appBuildScript, StringComparison.Ordinal);

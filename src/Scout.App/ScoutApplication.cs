@@ -617,6 +617,7 @@ internal static class ScoutApplication
                 GetOutputColor(lowArgs),
                 lowArgs.SearchMode,
                 lowArgs.OnlyMatching,
+                lowArgs.Multiline,
                 EffectiveLineNumber(lowArgs),
                 EffectiveColumn(lowArgs),
                 lowArgs.ByteOffset,
@@ -644,11 +645,11 @@ internal static class ScoutApplication
             !lowArgs.Stats &&
             !lowArgs.Quiet &&
             !lowArgs.FixedStrings &&
-            !lowArgs.Multiline &&
             !lowArgs.LineRegexp &&
             !lowArgs.WordRegexp &&
             !lowArgs.Vimgrep &&
             !lowArgs.InvertMatch &&
+            !(lowArgs.Multiline && lowArgs.OnlyMatching) &&
             lowArgs.Replacement is null &&
             lowArgs.MaxCount is null &&
             lowArgs.BeforeContext == 0 &&
@@ -728,6 +729,7 @@ internal static class ScoutApplication
         OutputColor color,
         CliSearchMode searchMode,
         bool onlyMatching,
+        bool multiline,
         bool lineNumber,
         bool column,
         bool byteOffset,
@@ -735,6 +737,11 @@ internal static class ScoutApplication
         bool includeZero,
         bool nullPathTerminator)
     {
+        if (multiline)
+        {
+            return RunPcre2MultilineSearchMode(bytes, regex, output, separators, path, prefix, lineLimit, color, searchMode, lineNumber, column, byteOffset, trim, includeZero, nullPathTerminator);
+        }
+
         if (searchMode == CliSearchMode.Count)
         {
             long count = onlyMatching
@@ -759,6 +766,93 @@ internal static class ScoutApplication
         }
 
         return SearchPcre2Lines(bytes, regex, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, onlyMatching);
+    }
+
+    private static bool RunPcre2MultilineSearchMode(
+        byte[] bytes,
+        Pcre2Regex regex,
+        RawByteWriter output,
+        OutputSeparators separators,
+        OutputPath path,
+        OutputPath? prefix,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        CliSearchMode searchMode,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool trim,
+        bool includeZero,
+        bool nullPathTerminator)
+    {
+        if (searchMode == CliSearchMode.Count)
+        {
+            return WriteCount(output, prefix, color, CountPcre2MultilineMatchingLines(bytes, regex), includeZero, nullPathTerminator, separators.LineTerminator);
+        }
+
+        if (searchMode == CliSearchMode.CountMatches)
+        {
+            return WriteCount(output, prefix, color, CountPcre2MultilineMatches(bytes, regex), includeZero, nullPathTerminator, separators.LineTerminator);
+        }
+
+        if (searchMode == CliSearchMode.FilesWithMatches)
+        {
+            return WritePathIf(output, path, color, regex.TryFind(bytes, out _), nullPathTerminator, separators.LineTerminator);
+        }
+
+        if (searchMode == CliSearchMode.FilesWithoutMatch)
+        {
+            return WritePathIf(output, path, color, !regex.TryFind(bytes, out _), nullPathTerminator, separators.LineTerminator);
+        }
+
+        return SearchPcre2MultilineBytes(bytes, regex, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator);
+    }
+
+    private static bool SearchPcre2MultilineBytes(
+        byte[] bytes,
+        Pcre2Regex regex,
+        RawByteWriter output,
+        OutputSeparators separators,
+        OutputPath? prefix,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool trim,
+        bool nullPathTerminator)
+    {
+        var sink = new StandardSearchSink(output, prefix, separators.FieldMatch, separators.FieldContext, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
+        bool matched = false;
+        int offset = 0;
+        int lastWrittenLineStart = -1;
+        while (offset <= bytes.Length && regex.TryFind(bytes, offset, out Pcre2Match match))
+        {
+            matched = true;
+            int firstLineStart = GetLineStart(bytes, match.Start);
+            int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match));
+            long firstLineNumber = GetLineNumber(bytes, firstLineStart);
+            long matchColumn = match.Start - firstLineStart + 1L;
+            for (int lineStart = firstLineStart; lineStart <= lastLineStart;)
+            {
+                int lineEnd = GetLineEnd(bytes, lineStart);
+                if (lineStart > lastWrittenLineStart)
+                {
+                    sink.MatchedLine(
+                        firstLineNumber + CountLineFeeds(bytes.AsSpan(firstLineStart, lineStart - firstLineStart)),
+                        lineStart,
+                        matchColumn,
+                        bytes.AsSpan(lineStart, lineEnd - lineStart));
+                    lastWrittenLineStart = lineStart;
+                }
+
+                lineStart = GetNextLineStart(lineEnd, bytes.Length);
+            }
+
+            offset = AdvanceAfterPcre2Match(match, bytes.Length);
+        }
+
+        return matched;
     }
 
     private static bool SearchPcre2Lines(
@@ -970,6 +1064,57 @@ internal static class ScoutApplication
         }
 
         return count;
+    }
+
+    private static long CountPcre2MultilineMatchingLines(byte[] bytes, Pcre2Regex regex)
+    {
+        long count = 0;
+        int offset = 0;
+        int lastCountedLineStart = -1;
+        while (offset <= bytes.Length && regex.TryFind(bytes, offset, out Pcre2Match match))
+        {
+            int firstLineStart = GetLineStart(bytes, match.Start);
+            int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match));
+            for (int lineStart = firstLineStart; lineStart <= lastLineStart;)
+            {
+                int lineEnd = GetLineEnd(bytes, lineStart);
+                if (lineStart > lastCountedLineStart)
+                {
+                    count++;
+                    lastCountedLineStart = lineStart;
+                }
+
+                lineStart = GetNextLineStart(lineEnd, bytes.Length);
+            }
+
+            offset = AdvanceAfterPcre2Match(match, bytes.Length);
+        }
+
+        return count;
+    }
+
+    private static long CountPcre2MultilineMatches(byte[] bytes, Pcre2Regex regex)
+    {
+        long count = 0;
+        int offset = 0;
+        while (offset <= bytes.Length && regex.TryFind(bytes, offset, out Pcre2Match match))
+        {
+            count++;
+            offset = AdvanceAfterPcre2Match(match, bytes.Length);
+        }
+
+        return count;
+    }
+
+    private static int GetInclusivePcre2MatchEnd(Pcre2Match match)
+    {
+        return match.Length == 0 ? match.Start : match.Start + match.Length - 1;
+    }
+
+    private static int AdvanceAfterPcre2Match(Pcre2Match match, int length)
+    {
+        int next = match.Length == 0 ? match.Start + 1 : match.Start + match.Length;
+        return Math.Min(next, length + 1);
     }
 
     private static void WritePcre2OnlyMatches(
