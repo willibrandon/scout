@@ -138,6 +138,13 @@ tests/regression.rs|r553_flag
 tests/regression.rs|r568_leading_hyphen_option_args
 tests/regression.rs|r693_context_in_contextless_mode
 tests/regression.rs|r807
+tests/regression.rs|r2711
+tests/regression.rs|r829_original
+tests/regression.rs|r829_2731
+tests/regression.rs|r829_2747
+tests/regression.rs|r829_2778
+tests/regression.rs|r829_2836
+tests/regression.rs|r829_2933
 tests/regression.rs|r900
 tests/regression.rs|r1064
 tests/regression.rs|r1130

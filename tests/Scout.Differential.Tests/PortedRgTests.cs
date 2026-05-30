@@ -974,6 +974,95 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "--hidden", "test", ".")),
             new(
                 "tests/regression.rs",
+                "r2711",
+                dir =>
+                {
+                    dir.CreateDirectory("a/b");
+                    dir.CreateFile("a/.ignore", ".foo");
+                    dir.CreateFile("a/b/.foo", string.Empty);
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--hidden", "--files"),
+                DifferentialCase.Exact("--path-separator", "/", "--hidden", "--files", "./"),
+                DifferentialCase.Exact("--path-separator", "/", "--hidden", "--files", "a"),
+                DifferentialCase.Exact("--path-separator", "/", "--hidden", "--files", "a/b"),
+                DifferentialCase.Exact("--path-separator", "/", "--hidden", "--files", "./a"),
+                DifferentialCase.ExactInDirectory("a", "--path-separator", "/", "--hidden", "--files"),
+                DifferentialCase.ExactInDirectory("a/b", "--path-separator", "/", "--hidden", "--files")),
+            new(
+                "tests/regression.rs",
+                "r829_original",
+                dir =>
+                {
+                    dir.CreateDirectory("a/b");
+                    dir.CreateFile(".ignore", "/a/b");
+                    dir.CreateFile("a/b/test.txt", "Sample text");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "Sample", "."),
+                DifferentialCase.Exact("--path-separator", "/", "Sample", "a"),
+                DifferentialCase.ExactInDirectory("a", "--path-separator", "/", "Sample", ".")),
+            new(
+                "tests/regression.rs",
+                "r829_2731",
+                dir =>
+                {
+                    dir.CreateDirectory("some_dir/build");
+                    dir.CreateFile("some_dir/build/foo", "string");
+                    dir.CreateFile(".ignore", "build/\n!/some_dir/build/");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-l", "string", "."),
+                DifferentialCase.Exact("--path-separator", "/", "-l", "string", "some_dir"),
+                DifferentialCase.Exact("--path-separator", "/", "-l", "string", "./some_dir"),
+                DifferentialCase.Exact("--path-separator", "/", "-l", "string", "some_dir/build"),
+                DifferentialCase.Exact("--path-separator", "/", "-l", "string", "./some_dir/build")),
+            new(
+                "tests/regression.rs",
+                "r829_2747",
+                dir =>
+                {
+                    dir.CreateDirectory("a/c/b");
+                    dir.CreateDirectory("a/src/f/b");
+                    dir.CreateFile("a/c/b/foo", string.Empty);
+                    dir.CreateFile("a/src/f/b/foo", string.Empty);
+                    dir.CreateFile(".ignore", "/a/*/b");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--files"),
+                DifferentialCase.Exact("--path-separator", "/", "--files", "a/src"),
+                DifferentialCase.ExactInDirectory("a/src", "--path-separator", "/", "--files")),
+            new(
+                "tests/regression.rs",
+                "r829_2778",
+                dir =>
+                {
+                    dir.CreateDirectory("parent/subdir");
+                    dir.CreateFile(".ignore", "/parent/*.txt");
+                    dir.CreateFile("parent/ignore-me.txt", string.Empty);
+                    dir.CreateFile("parent/subdir/dont-ignore-me.txt", string.Empty);
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--files"),
+                DifferentialCase.ExactInDirectory("parent", "--path-separator", "/", "--files")),
+            new(
+                "tests/regression.rs",
+                "r829_2836",
+                dir =>
+                {
+                    dir.CreateDirectory("testdir/sub/sub2");
+                    dir.CreateFile(".ignore", "/testdir/sub/sub2/\n");
+                    dir.CreateFile("testdir/sub/sub2/foo", string.Empty);
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--files"),
+                DifferentialCase.ExactInDirectory("testdir", "--path-separator", "/", "--files")),
+            new(
+                "tests/regression.rs",
+                "r829_2933",
+                dir =>
+                {
+                    dir.CreateDirectory("testdir/sub/sub2");
+                    dir.CreateFile(".ignore", "/testdir/sub/sub2/");
+                    dir.CreateFile("testdir/sub/sub2/testfile", "needle");
+                },
+                DifferentialCase.ExactInDirectory("testdir", "--path-separator", "/", "--files-with-matches", "needle", ".")),
+            new(
+                "tests/regression.rs",
                 "r900",
                 dir =>
                 {
