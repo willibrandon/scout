@@ -554,6 +554,16 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "-b", "-o", "Sherlock", ".")),
             new(
                 "tests/misc.rs",
+                "max_filesize_parse_error_length",
+                _ => { },
+                DifferentialCase.Exact("--path-separator", "/", "--max-filesize", "44444444444444444444")),
+            new(
+                "tests/misc.rs",
+                "max_filesize_parse_error_suffix",
+                _ => { },
+                DifferentialCase.Exact("--path-separator", "/", "--max-filesize", "45k")),
+            new(
+                "tests/misc.rs",
                 "max_filesize_parse_no_suffix",
                 dir =>
                 {
@@ -579,6 +589,11 @@ internal static class PortedRgTests
                     dir.CreateSize("bar", 1_400_000);
                 },
                 DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "--path-separator", "/", "--max-filesize", "1M", "--files", ".")),
+            new(
+                "tests/misc.rs",
+                "max_filesize_suffix_overflow",
+                dir => dir.CreateSize("foo", 1_000_000),
+                DifferentialCase.Exact("--path-separator", "/", "--max-filesize", "34359738368G", "--files")),
             new(
                 "tests/misc.rs",
                 "ignore_hidden",
@@ -628,6 +643,64 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "--no-ignore", "Sherlock", ".")),
             new(
                 "tests/misc.rs",
+                "ignore_git_parent",
+                dir =>
+                {
+                    dir.CreateDirectory(".git");
+                    dir.CreateFile(".gitignore", "sherlock\n");
+                    dir.CreateDirectory("foo");
+                    dir.CreateFile("foo/sherlock", Sherlock);
+                },
+                DifferentialCase.ExactInDirectory("foo", "--path-separator", "/", "Sherlock")),
+            new(
+                "tests/misc.rs",
+                "ignore_git_parent_stop",
+                dir =>
+                {
+                    dir.CreateFile(".gitignore", "sherlock\n");
+                    dir.CreateDirectory("foo/.git");
+                    dir.CreateDirectory("foo/bar");
+                    dir.CreateFile("foo/bar/sherlock", Sherlock);
+                },
+                DifferentialCase.ExactInDirectory("foo/bar", "--path-separator", "/", "Sherlock")),
+            new(
+                "tests/misc.rs",
+                "ignore_git_parent_stop_file",
+                dir =>
+                {
+                    dir.CreateFile(".gitignore", "sherlock\n");
+                    dir.CreateDirectory("foo");
+                    dir.CreateFile("foo/.git", string.Empty);
+                    dir.CreateDirectory("foo/bar");
+                    dir.CreateFile("foo/bar/sherlock", Sherlock);
+                },
+                DifferentialCase.ExactInDirectory("foo/bar", "--path-separator", "/", "Sherlock")),
+            new(
+                "tests/misc.rs",
+                "ignore_ripgrep_parent_no_stop",
+                dir =>
+                {
+                    dir.CreateFile(".rgignore", "sherlock\n");
+                    dir.CreateDirectory("foo/.git");
+                    dir.CreateDirectory("foo/bar");
+                    dir.CreateFile("foo/bar/sherlock", Sherlock);
+                },
+                DifferentialCase.ExactInDirectory("foo/bar", "--path-separator", "/", "Sherlock")),
+            new(
+                "tests/misc.rs",
+                "no_parent_ignore_git",
+                dir =>
+                {
+                    dir.CreateDirectory(".git");
+                    dir.CreateFile(".gitignore", "sherlock\n");
+                    dir.CreateDirectory("foo");
+                    dir.CreateFile("foo/.gitignore", "watson\n");
+                    dir.CreateFile("foo/sherlock", Sherlock);
+                    dir.CreateFile("foo/watson", Sherlock);
+                },
+                DifferentialCase.ExactInDirectory("foo", "--path-separator", "/", "--no-ignore-parent", "Sherlock")),
+            new(
+                "tests/misc.rs",
                 "vimgrep",
                 dir => dir.CreateFile("sherlock", Sherlock),
                 DifferentialCase.Exact("--path-separator", "/", "--vimgrep", "Sherlock|Watson", ".")),
@@ -663,6 +736,60 @@ internal static class PortedRgTests
                     dir.CreateFile("dir/d", "test");
                 },
                 DifferentialCase.Exact("--path-separator", "/", "--sort", "path", "test", ".")),
+            new(
+                "tests/feature.rs",
+                "f45_relative_cwd",
+                dir =>
+                {
+                    dir.CreateFile(".not-an-ignore", "foo\n/bar");
+                    dir.CreateDirectory("bar");
+                    dir.CreateDirectory("baz/bar");
+                    dir.CreateDirectory("baz/baz/bar");
+                    dir.CreateFile("bar/test", "test");
+                    dir.CreateFile("baz/bar/test", "test");
+                    dir.CreateFile("baz/baz/bar/test", "test");
+                    dir.CreateFile("baz/foo", "test");
+                    dir.CreateFile("baz/test", "test");
+                    dir.CreateFile("foo", "test");
+                    dir.CreateFile("test", "test");
+                },
+                DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "--path-separator", "/", "-l", "test"),
+                DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "--path-separator", "/", "-l", "test", "--ignore-file", ".not-an-ignore"),
+                DifferentialCase.NormalizedInDirectory(DifferentialComparisonMode.SortLines, "baz", "--path-separator", "/", "--ignore-file", "../.not-an-ignore", "-l", "test")),
+            new(
+                "tests/feature.rs",
+                "f45_precedence_with_others",
+                dir =>
+                {
+                    dir.CreateFile(".not-an-ignore", "*.log");
+                    dir.CreateFile(".ignore", "!imp.log");
+                    dir.CreateFile("imp.log", "test");
+                    dir.CreateFile("wat.log", "test");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--ignore-file", ".not-an-ignore", "test")),
+            new(
+                "tests/feature.rs",
+                "f45_precedence_internal",
+                dir =>
+                {
+                    dir.CreateFile(".not-an-ignore1", "*.log");
+                    dir.CreateFile(".not-an-ignore2", "!imp.log");
+                    dir.CreateFile("imp.log", "test");
+                    dir.CreateFile("wat.log", "test");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--ignore-file", ".not-an-ignore1", "--ignore-file", ".not-an-ignore2", "test")),
+            new(
+                "tests/feature.rs",
+                "f68_no_ignore_vcs",
+                dir =>
+                {
+                    dir.CreateDirectory(".git");
+                    dir.CreateFile(".gitignore", "foo");
+                    dir.CreateFile(".ignore", "bar");
+                    dir.CreateFile("foo", "test");
+                    dir.CreateFile("bar", "test");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--no-ignore-vcs", "test")),
             new(
                 "tests/feature.rs",
                 "f70_smart_case",
