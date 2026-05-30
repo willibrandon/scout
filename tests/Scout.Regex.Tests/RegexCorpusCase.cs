@@ -13,7 +13,8 @@ internal sealed class RegexCorpusCase
         byte lineTerminator,
         int boundsStart,
         int boundsEnd,
-        bool anchored)
+        bool anchored,
+        bool caseInsensitive)
     {
         Name = name;
         Patterns = patterns;
@@ -24,6 +25,7 @@ internal sealed class RegexCorpusCase
         BoundsStart = boundsStart;
         BoundsEnd = boundsEnd;
         Anchored = anchored;
+        CaseInsensitive = caseInsensitive;
     }
 
     public string Name { get; }
@@ -43,4 +45,6 @@ internal sealed class RegexCorpusCase
     public int BoundsEnd { get; }
 
     public bool Anchored { get; }
+
+    public bool CaseInsensitive { get; }
 }

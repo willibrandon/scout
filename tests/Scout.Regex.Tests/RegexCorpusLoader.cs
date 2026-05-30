@@ -23,7 +23,8 @@ internal static class RegexCorpusLoader
         byte lineTerminator = ReadOptionalByte(block, "line-terminator", path, name, unescape) ?? (byte)'\n';
         (int boundsStart, int boundsEnd) = ReadOptionalBounds(block, "bounds", path, name) ?? (0, haystack.Length);
         bool anchored = ReadOptionalBool(block, "anchored", path, name) ?? false;
-        return new RegexCorpusCase(name, patterns, haystack, expectedMatches, matchLimit, lineTerminator, boundsStart, boundsEnd, anchored);
+        bool caseInsensitive = ReadOptionalBool(block, "case-insensitive", path, name) ?? false;
+        return new RegexCorpusCase(name, patterns, haystack, expectedMatches, matchLimit, lineTerminator, boundsStart, boundsEnd, anchored, caseInsensitive);
     }
 
     private static string FindBlock(string text, string name, string path)
@@ -473,17 +474,50 @@ internal static class RegexCorpusLoader
                 throw new InvalidOperationException("Invalid TOML escape sequence.");
             }
 
-            builder.Append(value[index] switch
+            switch (value[index])
             {
-                'b' => '\b',
-                't' => '\t',
-                'n' => '\n',
-                'f' => '\f',
-                'r' => '\r',
-                '"' => '"',
-                '\\' => '\\',
-                _ => throw new InvalidOperationException("Unsupported TOML escape sequence."),
-            });
+                case 'b':
+                    builder.Append('\b');
+                    break;
+                case 't':
+                    builder.Append('\t');
+                    break;
+                case 'n':
+                    builder.Append('\n');
+                    break;
+                case 'f':
+                    builder.Append('\f');
+                    break;
+                case 'r':
+                    builder.Append('\r');
+                    break;
+                case '"':
+                    builder.Append('"');
+                    break;
+                case '\\':
+                    builder.Append('\\');
+                    break;
+                case 'u':
+                    if (!TryReadHexScalar(value, index + 1, 4, out int shortScalar))
+                    {
+                        throw new InvalidOperationException("Invalid TOML Unicode escape sequence.");
+                    }
+
+                    builder.Append(char.ConvertFromUtf32(shortScalar));
+                    index += 4;
+                    break;
+                case 'U':
+                    if (!TryReadHexScalar(value, index + 1, 8, out int longScalar))
+                    {
+                        throw new InvalidOperationException("Invalid TOML Unicode escape sequence.");
+                    }
+
+                    builder.Append(char.ConvertFromUtf32(longScalar));
+                    index += 8;
+                    break;
+                default:
+                    throw new InvalidOperationException("Unsupported TOML escape sequence.");
+            }
         }
 
         return builder.ToString();
@@ -675,6 +709,27 @@ internal static class RegexCorpusLoader
 
         value = (byte)((highValue << 4) | lowValue);
         return true;
+    }
+
+    private static bool TryReadHexScalar(string value, int start, int length, out int scalar)
+    {
+        scalar = 0;
+        if (start + length > value.Length)
+        {
+            return false;
+        }
+
+        for (int index = start; index < start + length; index++)
+        {
+            if (value[index] > 0x7F || !TryGetHexValue((byte)value[index], out int digit))
+            {
+                return false;
+            }
+
+            scalar = (scalar << 4) | digit;
+        }
+
+        return scalar <= 0x10FFFF && (scalar < 0xD800 || scalar > 0xDFFF);
     }
 
     private static bool TryGetHexValue(byte value, out int digit)

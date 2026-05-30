@@ -290,6 +290,18 @@ public sealed class RegexCorpusTests
                 "word-boundary-at",
                 "not-word-boundary-at",
             ]),
+            ("bytes.toml",
+            [
+                "word-boundary-ascii",
+                "word-boundary-ascii-not",
+                "perl-word-ascii",
+                "perl-decimal-ascii",
+                "perl-whitespace-ascii",
+                "case-one-ascii",
+                "case-class-simple-ascii",
+                "negate-ascii",
+                "null-bytes",
+            ]),
             ("anchored.toml",
             [
                 "greedy",
@@ -332,7 +344,7 @@ public sealed class RegexCorpusTests
             for (int index = 0; index < names.Length; index++)
             {
                 RegexCorpusCase testCase = RegexCorpusLoader.Load(relativePath, names[index]);
-                RegexAutomaton[] automata = CompileAll(testCase.Patterns, testCase.LineTerminator);
+                RegexAutomaton[] automata = CompileAll(testCase.Patterns, testCase.LineTerminator, testCase.CaseInsensitive);
                 RegexMatch[] actual = FindAll(automata, testCase.Haystack, testCase.MatchLimit, testCase.BoundsStart, testCase.BoundsEnd, testCase.Anchored);
 
                 Assert.True(
@@ -342,12 +354,12 @@ public sealed class RegexCorpusTests
         }
     }
 
-    private static RegexAutomaton[] CompileAll(IReadOnlyList<byte[]> patterns, byte lineTerminator)
+    private static RegexAutomaton[] CompileAll(IReadOnlyList<byte[]> patterns, byte lineTerminator, bool caseInsensitive)
     {
         var automata = new RegexAutomaton[patterns.Count];
         for (int index = 0; index < patterns.Count; index++)
         {
-            automata[index] = RegexAutomaton.Compile(patterns[index], caseInsensitive: false, multiLine: false, dotMatchesNewline: false, crlf: false, lineTerminator);
+            automata[index] = RegexAutomaton.Compile(patterns[index], caseInsensitive, multiLine: false, dotMatchesNewline: false, crlf: false, lineTerminator);
         }
 
         return automata;
