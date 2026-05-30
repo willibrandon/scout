@@ -6,12 +6,18 @@ namespace Scout;
 internal sealed class RegexPrefilter
 {
     private readonly MemmemFinder? memmem;
+    private readonly RegexTeddyPrefilter? teddy;
     private readonly AhoCorasickAutomaton? ahoCorasick;
 
-    private RegexPrefilter(RegexPrefilterKind kind, MemmemFinder? memmem, AhoCorasickAutomaton? ahoCorasick)
+    private RegexPrefilter(
+        RegexPrefilterKind kind,
+        MemmemFinder? memmem,
+        RegexTeddyPrefilter? teddy,
+        AhoCorasickAutomaton? ahoCorasick)
     {
         Kind = kind;
         this.memmem = memmem;
+        this.teddy = teddy;
         this.ahoCorasick = ahoCorasick;
     }
 
@@ -30,7 +36,11 @@ internal sealed class RegexPrefilter
             return null;
         }
 
-        return new RegexPrefilter(RegexPrefilterKind.Memmem, new MemmemFinder(prefix.ToArray()), ahoCorasick: null);
+        return new RegexPrefilter(
+            RegexPrefilterKind.Memmem,
+            new MemmemFinder(prefix.ToArray()),
+            teddy: null,
+            ahoCorasick: null);
     }
 
     public int FindCandidate(ReadOnlySpan<byte> haystack, int startAt)
@@ -39,6 +49,11 @@ internal sealed class RegexPrefilter
         {
             int offset = memmem.Find(haystack[startAt..]);
             return offset < 0 ? -1 : startAt + offset;
+        }
+
+        if (teddy is not null)
+        {
+            return teddy.FindCandidate(haystack, startAt);
         }
 
         AhoCorasickMatch? match = ahoCorasick!.Find(haystack[startAt..]);
@@ -66,10 +81,21 @@ internal sealed class RegexPrefilter
             prefixes[index] = prefix.ToArray();
         }
 
+        if (RegexTeddyPrefilter.TryCreate(prefixes, out RegexTeddyPrefilter? teddy))
+        {
+            prefilter = new RegexPrefilter(
+                RegexPrefilterKind.Teddy,
+                memmem: null,
+                teddy,
+                ahoCorasick: null);
+            return true;
+        }
+
         prefilter = new RegexPrefilter(
             RegexPrefilterKind.AhoCorasick,
             memmem: null,
-            AhoCorasickAutomaton.Create(prefixes, AhoCorasickMatchKind.LeftmostFirst));
+            teddy: null,
+            ahoCorasick: AhoCorasickAutomaton.Create(prefixes, AhoCorasickMatchKind.LeftmostFirst));
         return true;
     }
 

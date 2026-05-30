@@ -33,6 +33,20 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies small literal alternative sets use the Teddy regex prefilter.
+    /// </summary>
+    [Fact]
+    public void UsesTeddyPrefilterForSmallLiteralAlternativeSets()
+    {
+        var automaton = RegexAutomaton.Compile("cat[0-9]+|dog[a-z]+|emu[A-Z]+"u8);
+
+        Assert.Equal(RegexPrefilterKind.Teddy, automaton.PrefilterKind);
+        Assert.Equal(new RegexMatch(9, 5), automaton.Find("xx dog12 emuZZ"u8));
+        Assert.Equal(new RegexMatch(3, 5), automaton.Find("xx cat42 emuZZ"u8));
+        Assert.Null(automaton.Find("xx cow42 elkZZ"u8));
+    }
+
+    /// <summary>
     /// Verifies nullable leading expressions do not use a literal prefilter.
     /// </summary>
     [Fact]
