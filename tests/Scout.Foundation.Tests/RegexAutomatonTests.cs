@@ -6,6 +6,34 @@ namespace Scout;
 public sealed class RegexAutomatonTests
 {
     /// <summary>
+    /// Verifies the meta engine selects the lazy DFA for position-independent NFAs.
+    /// </summary>
+    [Fact]
+    public void MetaEngineSelectsLazyDfaForPredicateFreePatterns()
+    {
+        RegexNfa nfa = CompileNfa("a(?:b|c)*d"u8);
+
+        var engine = RegexMetaEngine.Compile(nfa);
+
+        Assert.Equal(RegexEngineKind.LazyDfa, engine.Kind);
+        Assert.Equal(new RegexMatch(1, 5), engine.Find("zabccd"u8, startAt: 0));
+    }
+
+    /// <summary>
+    /// Verifies the meta engine keeps position-sensitive predicates on the PikeVM path.
+    /// </summary>
+    [Fact]
+    public void MetaEngineSelectsPikeVmForPositionSensitivePredicates()
+    {
+        RegexNfa nfa = CompileNfa("(?m)^abc$"u8);
+
+        var engine = RegexMetaEngine.Compile(nfa);
+
+        Assert.Equal(RegexEngineKind.PikeVm, engine.Kind);
+        Assert.Equal(new RegexMatch(4, 3), engine.Find("zzz\nabc\n"u8, startAt: 0));
+    }
+
+    /// <summary>
     /// Verifies literal matching returns the leftmost start and byte length.
     /// </summary>
     [Fact]
@@ -249,5 +277,13 @@ public sealed class RegexAutomatonTests
         Assert.Equal(new RegexMatch(0, 3), automaton.Find("foo"u8));
         Assert.Null(automaton.Find("xfoo"u8));
         Assert.Null(automaton.Find("foox"u8));
+    }
+
+    private static RegexNfa CompileNfa(ReadOnlySpan<byte> pattern)
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
+        return RegexNfaCompiler.Compile(
+            tree.Root,
+            new RegexCompileOptions(caseInsensitive: false, swapGreed: false, multiLine: false, dotMatchesNewline: false));
     }
 }

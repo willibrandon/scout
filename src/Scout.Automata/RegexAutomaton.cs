@@ -7,15 +7,15 @@ namespace Scout;
 /// </summary>
 public sealed class RegexAutomaton
 {
-    private readonly RegexNfa nfa;
+    private readonly RegexMetaEngine engine;
 
-    private RegexAutomaton(RegexNfa nfa)
+    private RegexAutomaton(RegexMetaEngine engine)
     {
-        this.nfa = nfa;
+        this.engine = engine;
     }
 
     /// <summary>
-    /// Compiles a regex pattern into a Thompson NFA-backed automaton.
+    /// Compiles a regex pattern into a meta-selected automaton.
     /// </summary>
     /// <param name="pattern">The regex pattern bytes.</param>
     /// <returns>The compiled automaton.</returns>
@@ -25,7 +25,7 @@ public sealed class RegexAutomaton
     }
 
     /// <summary>
-    /// Compiles a regex pattern into a Thompson NFA-backed automaton with root regex options.
+    /// Compiles a regex pattern into a meta-selected automaton with root regex options.
     /// </summary>
     /// <param name="pattern">The regex pattern bytes.</param>
     /// <param name="multiLine">Whether <c>^</c> and <c>$</c> match adjacent to line feeds.</param>
@@ -37,7 +37,7 @@ public sealed class RegexAutomaton
     }
 
     /// <summary>
-    /// Compiles a regex pattern into a Thompson NFA-backed automaton with root regex options.
+    /// Compiles a regex pattern into a meta-selected automaton with root regex options.
     /// </summary>
     /// <param name="pattern">The regex pattern bytes.</param>
     /// <param name="caseInsensitive">Whether literal and class atoms match ASCII case-insensitively.</param>
@@ -55,9 +55,10 @@ public sealed class RegexAutomaton
         byte lineTerminator = (byte)'\n')
     {
         RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
-        return new RegexAutomaton(RegexNfaCompiler.Compile(
+        RegexNfa nfa = RegexNfaCompiler.Compile(
             tree.Root,
-            new RegexCompileOptions(caseInsensitive, swapGreed: false, multiLine, dotMatchesNewline, crlf, lineTerminator)));
+            new RegexCompileOptions(caseInsensitive, swapGreed: false, multiLine, dotMatchesNewline, crlf, lineTerminator));
+        return new RegexAutomaton(RegexMetaEngine.Compile(nfa));
     }
 
     /// <summary>
@@ -78,16 +79,7 @@ public sealed class RegexAutomaton
     /// <returns>The first match, or <see langword="null" /> when no match exists.</returns>
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
-        var vm = new PikeVm(nfa);
-        for (int start = Math.Clamp(startAt, 0, haystack.Length); start <= haystack.Length; start++)
-        {
-            if (vm.TryMatchAt(haystack, start, out int length))
-            {
-                return new RegexMatch(start, length);
-            }
-        }
-
-        return null;
+        return engine.Find(haystack, startAt);
     }
 
     /// <summary>
