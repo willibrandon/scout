@@ -1524,66 +1524,6 @@ public static class CliParser
         OsString argument = arguments[index];
         error = null;
 
-        if (argument.EqualsUnixBytes("-m"u8) || TextEquals(argument, "-m"))
-        {
-            if (!TryGetFollowingValue(arguments, ref index, "-m", out OsString value, out error))
-            {
-                return true;
-            }
-
-            return ParseMaxCount(value, "-m", lowArgs, out error);
-        }
-
-        if (argument.EqualsUnixBytes("--max-count"u8) || TextEquals(argument, "--max-count"))
-        {
-            if (!TryGetFollowingValue(arguments, ref index, "--max-count", out OsString value, out error))
-            {
-                return true;
-            }
-
-            return ParseMaxCount(value, "--max-count", lowArgs, out error);
-        }
-
-        if (argument.EqualsUnixBytes("-M"u8) || TextEquals(argument, "-M"))
-        {
-            if (!TryGetFollowingValue(arguments, ref index, "-M", out OsString value, out error))
-            {
-                return true;
-            }
-
-            return ParseMaxColumns(value, "-M", lowArgs, out error);
-        }
-
-        if (argument.EqualsUnixBytes("--max-columns"u8) || TextEquals(argument, "--max-columns"))
-        {
-            if (!TryGetFollowingValue(arguments, ref index, "--max-columns", out OsString value, out error))
-            {
-                return true;
-            }
-
-            return ParseMaxColumns(value, "--max-columns", lowArgs, out error);
-        }
-
-        if (argument.EqualsUnixBytes("-j"u8) || TextEquals(argument, "-j"))
-        {
-            if (!TryGetFollowingValue(arguments, ref index, "-j", out OsString value, out error))
-            {
-                return true;
-            }
-
-            return ParseThreads(value, "-j", lowArgs, out error);
-        }
-
-        if (argument.EqualsUnixBytes("--threads"u8) || TextEquals(argument, "--threads"))
-        {
-            if (!TryGetFollowingValue(arguments, ref index, "--threads", out OsString value, out error))
-            {
-                return true;
-            }
-
-            return ParseThreads(value, "--threads", lowArgs, out error);
-        }
-
         if (argument.EqualsUnixBytes("--hostname-bin"u8) || TextEquals(argument, "--hostname-bin"))
         {
             if (!TryGetFollowingValue(arguments, ref index, "--hostname-bin", out OsString value, out error))
@@ -1702,96 +1642,6 @@ public static class CliParser
             }
 
             return ParsePathSeparator(value, lowArgs, out error);
-        }
-
-        if (argument.EqualsUnixBytes("-A"u8) || TextEquals(argument, "-A"))
-        {
-            if (!TryGetFollowingValue(arguments, ref index, "-A", out OsString value, out error))
-            {
-                return true;
-            }
-
-            return ParseAfterContext(value, "-A", lowArgs, out error);
-        }
-
-        if (argument.EqualsUnixBytes("--after-context"u8) || TextEquals(argument, "--after-context"))
-        {
-            if (!TryGetFollowingValue(arguments, ref index, "--after-context", out OsString value, out error))
-            {
-                return true;
-            }
-
-            return ParseAfterContext(value, "--after-context", lowArgs, out error);
-        }
-
-        if (argument.EqualsUnixBytes("-B"u8) || TextEquals(argument, "-B"))
-        {
-            if (!TryGetFollowingValue(arguments, ref index, "-B", out OsString value, out error))
-            {
-                return true;
-            }
-
-            return ParseBeforeContext(value, "-B", lowArgs, out error);
-        }
-
-        if (argument.EqualsUnixBytes("--before-context"u8) || TextEquals(argument, "--before-context"))
-        {
-            if (!TryGetFollowingValue(arguments, ref index, "--before-context", out OsString value, out error))
-            {
-                return true;
-            }
-
-            return ParseBeforeContext(value, "--before-context", lowArgs, out error);
-        }
-
-        if (argument.EqualsUnixBytes("-C"u8) || TextEquals(argument, "-C"))
-        {
-            if (!TryGetFollowingValue(arguments, ref index, "-C", out OsString value, out error))
-            {
-                return true;
-            }
-
-            return ParseContext(value, "-C", lowArgs, out error);
-        }
-
-        if (argument.EqualsUnixBytes("--context"u8) || TextEquals(argument, "--context"))
-        {
-            if (!TryGetFollowingValue(arguments, ref index, "--context", out OsString value, out error))
-            {
-                return true;
-            }
-
-            return ParseContext(value, "--context", lowArgs, out error);
-        }
-
-        if (argument.EqualsUnixBytes("-d"u8) || TextEquals(argument, "-d"))
-        {
-            if (!TryGetFollowingValue(arguments, ref index, "-d", out OsString value, out error))
-            {
-                return true;
-            }
-
-            return ParseMaxDepth(value, "-d", lowArgs, out error);
-        }
-
-        if (argument.EqualsUnixBytes("--max-depth"u8) || TextEquals(argument, "--max-depth"))
-        {
-            if (!TryGetFollowingValue(arguments, ref index, "--max-depth", out OsString value, out error))
-            {
-                return true;
-            }
-
-            return ParseMaxDepth(value, "--max-depth", lowArgs, out error);
-        }
-
-        if (argument.EqualsUnixBytes("--maxdepth"u8) || TextEquals(argument, "--maxdepth"))
-        {
-            if (!TryGetFollowingValue(arguments, ref index, "--maxdepth", out OsString value, out error))
-            {
-                return true;
-            }
-
-            return ParseMaxDepth(value, "--maxdepth", lowArgs, out error);
         }
 
         if (argument.EqualsUnixBytes("--max-filesize"u8) || TextEquals(argument, "--max-filesize"))
@@ -1944,21 +1794,6 @@ public static class CliParser
             return ParseTypeChange(value, "--type-clear", CliTypeChangeKind.Clear, lowArgs, out error);
         }
 
-        if (TryGetInlineUnixValue(argument, "--max-count="u8, out ReadOnlySpan<byte> longValue))
-        {
-            return ParseMaxCount(longValue, "--max-count", lowArgs, out error);
-        }
-
-        if (TryGetInlineUnixValue(argument, "--max-columns="u8, out ReadOnlySpan<byte> maxColumnsValue))
-        {
-            return ParseMaxColumns(maxColumnsValue, "--max-columns", lowArgs, out error);
-        }
-
-        if (TryGetInlineUnixValue(argument, "--threads="u8, out ReadOnlySpan<byte> threadsValue))
-        {
-            return ParseThreads(threadsValue, "--threads", lowArgs, out error);
-        }
-
         if (TryGetInlineUnixValue(argument, "--hostname-bin="u8, out ReadOnlySpan<byte> hostnameBinValue))
         {
             return ParseHostnameBin(hostnameBinValue, "--hostname-bin", lowArgs, out error);
@@ -2004,36 +1839,6 @@ public static class CliParser
             return ParsePathSeparator(pathSeparator, lowArgs, out error);
         }
 
-        if (TryGetInlineUnixValue(argument, "-m"u8, out ReadOnlySpan<byte> shortValue))
-        {
-            if (!shortValue.IsEmpty && shortValue[0] == (byte)'=')
-            {
-                shortValue = shortValue[1..];
-            }
-
-            return ParseMaxCount(shortValue, "-m", lowArgs, out error);
-        }
-
-        if (TryGetInlineUnixValue(argument, "-M"u8, out ReadOnlySpan<byte> shortMaxColumnsValue))
-        {
-            if (!shortMaxColumnsValue.IsEmpty && shortMaxColumnsValue[0] == (byte)'=')
-            {
-                shortMaxColumnsValue = shortMaxColumnsValue[1..];
-            }
-
-            return ParseMaxColumns(shortMaxColumnsValue, "-M", lowArgs, out error);
-        }
-
-        if (TryGetInlineUnixValue(argument, "-j"u8, out ReadOnlySpan<byte> shortThreadsValue))
-        {
-            if (!shortThreadsValue.IsEmpty && shortThreadsValue[0] == (byte)'=')
-            {
-                shortThreadsValue = shortThreadsValue[1..];
-            }
-
-            return ParseThreads(shortThreadsValue, "-j", lowArgs, out error);
-        }
-
         if (TryGetInlineUnixValue(argument, "-r"u8, out ReadOnlySpan<byte> shortReplacementValue))
         {
             if (!shortReplacementValue.IsEmpty && shortReplacementValue[0] == (byte)'=')
@@ -2064,74 +1869,9 @@ public static class CliParser
             return ParsePatternFile(shortPatternFileValue, lowArgs, out error);
         }
 
-        if (TryGetInlineUnixValue(argument, "--after-context="u8, out ReadOnlySpan<byte> afterContextValue))
-        {
-            return ParseAfterContext(afterContextValue, "--after-context", lowArgs, out error);
-        }
-
-        if (TryGetInlineUnixValue(argument, "-A"u8, out ReadOnlySpan<byte> shortAfterContextValue))
-        {
-            if (!shortAfterContextValue.IsEmpty && shortAfterContextValue[0] == (byte)'=')
-            {
-                shortAfterContextValue = shortAfterContextValue[1..];
-            }
-
-            return ParseAfterContext(shortAfterContextValue, "-A", lowArgs, out error);
-        }
-
-        if (TryGetInlineUnixValue(argument, "--before-context="u8, out ReadOnlySpan<byte> beforeContextValue))
-        {
-            return ParseBeforeContext(beforeContextValue, "--before-context", lowArgs, out error);
-        }
-
-        if (TryGetInlineUnixValue(argument, "-B"u8, out ReadOnlySpan<byte> shortBeforeContextValue))
-        {
-            if (!shortBeforeContextValue.IsEmpty && shortBeforeContextValue[0] == (byte)'=')
-            {
-                shortBeforeContextValue = shortBeforeContextValue[1..];
-            }
-
-            return ParseBeforeContext(shortBeforeContextValue, "-B", lowArgs, out error);
-        }
-
-        if (TryGetInlineUnixValue(argument, "--context="u8, out ReadOnlySpan<byte> contextValue))
-        {
-            return ParseContext(contextValue, "--context", lowArgs, out error);
-        }
-
-        if (TryGetInlineUnixValue(argument, "-C"u8, out ReadOnlySpan<byte> shortContextValue))
-        {
-            if (!shortContextValue.IsEmpty && shortContextValue[0] == (byte)'=')
-            {
-                shortContextValue = shortContextValue[1..];
-            }
-
-            return ParseContext(shortContextValue, "-C", lowArgs, out error);
-        }
-
-        if (TryGetInlineUnixValue(argument, "--max-depth="u8, out ReadOnlySpan<byte> maxDepthValue))
-        {
-            return ParseMaxDepth(maxDepthValue, "--max-depth", lowArgs, out error);
-        }
-
-        if (TryGetInlineUnixValue(argument, "--maxdepth="u8, out ReadOnlySpan<byte> maxDepthAliasValue))
-        {
-            return ParseMaxDepth(maxDepthAliasValue, "--maxdepth", lowArgs, out error);
-        }
-
         if (TryGetInlineUnixValue(argument, "--max-filesize="u8, out ReadOnlySpan<byte> maxFileSizeValue))
         {
             return ParseMaxFileSize(maxFileSizeValue, "--max-filesize", lowArgs, out error);
-        }
-
-        if (TryGetInlineUnixValue(argument, "-d"u8, out ReadOnlySpan<byte> shortDepthValue))
-        {
-            if (!shortDepthValue.IsEmpty && shortDepthValue[0] == (byte)'=')
-            {
-                shortDepthValue = shortDepthValue[1..];
-            }
-
-            return ParseMaxDepth(shortDepthValue, "-d", lowArgs, out error);
         }
 
         if (TryGetInlineUnixValue(argument, "--glob="u8, out ReadOnlySpan<byte> longGlobValue))
@@ -2211,21 +1951,6 @@ public static class CliParser
 
         if (argument.TryGetText(out string text))
         {
-            if (text.StartsWith("--max-count=", StringComparison.Ordinal))
-            {
-                return ParseMaxCount(text["--max-count=".Length..], "--max-count", lowArgs, out error);
-            }
-
-            if (text.StartsWith("--max-columns=", StringComparison.Ordinal))
-            {
-                return ParseMaxColumns(text["--max-columns=".Length..], "--max-columns", lowArgs, out error);
-            }
-
-            if (text.StartsWith("--threads=", StringComparison.Ordinal))
-            {
-                return ParseThreads(text["--threads=".Length..], "--threads", lowArgs, out error);
-            }
-
             if (text.StartsWith("--hostname-bin=", StringComparison.Ordinal))
             {
                 return ParseHostnameBin(text["--hostname-bin=".Length..], lowArgs, out error);
@@ -2271,24 +1996,6 @@ public static class CliParser
                 return ParsePathSeparator(text["--path-separator=".Length..], lowArgs, out error);
             }
 
-            if (text.Length > 2 && text.StartsWith("-m", StringComparison.Ordinal))
-            {
-                string value = text[2] == '=' ? text[3..] : text[2..];
-                return ParseMaxCount(value, "-m", lowArgs, out error);
-            }
-
-            if (text.Length > 2 && text.StartsWith("-M", StringComparison.Ordinal))
-            {
-                string value = text[2] == '=' ? text[3..] : text[2..];
-                return ParseMaxColumns(value, "-M", lowArgs, out error);
-            }
-
-            if (text.Length > 2 && text.StartsWith("-j", StringComparison.Ordinal))
-            {
-                string value = text[2] == '=' ? text[3..] : text[2..];
-                return ParseThreads(value, "-j", lowArgs, out error);
-            }
-
             if (text.Length > 2 && text.StartsWith("-r", StringComparison.Ordinal))
             {
                 string value = text[2] == '=' ? text[3..] : text[2..];
@@ -2307,58 +2014,9 @@ public static class CliParser
                 return ParsePatternFile(value, lowArgs, out error);
             }
 
-            if (text.StartsWith("--after-context=", StringComparison.Ordinal))
-            {
-                return ParseAfterContext(text["--after-context=".Length..], "--after-context", lowArgs, out error);
-            }
-
-            if (text.Length > 2 && text.StartsWith("-A", StringComparison.Ordinal))
-            {
-                string value = text[2] == '=' ? text[3..] : text[2..];
-                return ParseAfterContext(value, "-A", lowArgs, out error);
-            }
-
-            if (text.StartsWith("--before-context=", StringComparison.Ordinal))
-            {
-                return ParseBeforeContext(text["--before-context=".Length..], "--before-context", lowArgs, out error);
-            }
-
-            if (text.Length > 2 && text.StartsWith("-B", StringComparison.Ordinal))
-            {
-                string value = text[2] == '=' ? text[3..] : text[2..];
-                return ParseBeforeContext(value, "-B", lowArgs, out error);
-            }
-
-            if (text.StartsWith("--context=", StringComparison.Ordinal))
-            {
-                return ParseContext(text["--context=".Length..], "--context", lowArgs, out error);
-            }
-
-            if (text.Length > 2 && text.StartsWith("-C", StringComparison.Ordinal))
-            {
-                string value = text[2] == '=' ? text[3..] : text[2..];
-                return ParseContext(value, "-C", lowArgs, out error);
-            }
-
-            if (text.StartsWith("--max-depth=", StringComparison.Ordinal))
-            {
-                return ParseMaxDepth(text["--max-depth=".Length..], "--max-depth", lowArgs, out error);
-            }
-
-            if (text.StartsWith("--maxdepth=", StringComparison.Ordinal))
-            {
-                return ParseMaxDepth(text["--maxdepth=".Length..], "--maxdepth", lowArgs, out error);
-            }
-
             if (text.StartsWith("--max-filesize=", StringComparison.Ordinal))
             {
                 return ParseMaxFileSize(text["--max-filesize=".Length..], "--max-filesize", lowArgs, out error);
-            }
-
-            if (text.Length > 2 && text.StartsWith("-d", StringComparison.Ordinal))
-            {
-                string value = text[2] == '=' ? text[3..] : text[2..];
-                return ParseMaxDepth(value, "-d", lowArgs, out error);
             }
 
             if (text.StartsWith("--glob=", StringComparison.Ordinal))
