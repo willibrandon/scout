@@ -10,12 +10,15 @@ internal static class RegexByteClass
         ReadOnlySpan<byte> expression,
         bool caseInsensitive,
         bool dotMatchesNewline,
-        bool crlf)
+        bool crlf,
+        byte lineTerminator)
     {
         return kind switch
         {
             RegexSyntaxKind.Literal => expression.Length > 0 && ByteEquals(value, expression[0], caseInsensitive),
-            RegexSyntaxKind.Dot => dotMatchesNewline || value != (byte)'\n' && (!crlf || value != (byte)'\r'),
+            RegexSyntaxKind.Dot => dotMatchesNewline || (crlf
+                ? value != (byte)'\n' && value != (byte)'\r'
+                : value != lineTerminator),
             RegexSyntaxKind.AnyClass => true,
             RegexSyntaxKind.CharacterClass => ClassMatches(value, expression, caseInsensitive),
             RegexSyntaxKind.DigitClass => IsAsciiDigitByte(value),
@@ -28,12 +31,12 @@ internal static class RegexByteClass
         };
     }
 
-    public static bool PredicateMatches(ReadOnlySpan<byte> haystack, int position, RegexSyntaxKind kind, bool multiLine, bool crlf)
+    public static bool PredicateMatches(ReadOnlySpan<byte> haystack, int position, RegexSyntaxKind kind, bool multiLine, bool crlf, byte lineTerminator)
     {
         return kind switch
         {
-            RegexSyntaxKind.StartAnchor => IsStartAnchorMatch(haystack, position, multiLine, crlf),
-            RegexSyntaxKind.EndAnchor => IsEndAnchorMatch(haystack, position, multiLine, crlf),
+            RegexSyntaxKind.StartAnchor => IsStartAnchorMatch(haystack, position, multiLine, crlf, lineTerminator),
+            RegexSyntaxKind.EndAnchor => IsEndAnchorMatch(haystack, position, multiLine, crlf, lineTerminator),
             RegexSyntaxKind.WordBoundary => IsRegexWordBoundary(haystack, position),
             RegexSyntaxKind.NotWordBoundary => !IsRegexWordBoundary(haystack, position),
             RegexSyntaxKind.WordStartBoundary => IsRegexWordStartBoundary(haystack, position),
@@ -42,7 +45,7 @@ internal static class RegexByteClass
         };
     }
 
-    private static bool IsStartAnchorMatch(ReadOnlySpan<byte> haystack, int position, bool multiLine, bool crlf)
+    private static bool IsStartAnchorMatch(ReadOnlySpan<byte> haystack, int position, bool multiLine, bool crlf, byte lineTerminator)
     {
         if (position == 0)
         {
@@ -55,17 +58,21 @@ internal static class RegexByteClass
         }
 
         byte previous = haystack[position - 1];
+        if (!crlf)
+        {
+            return previous == lineTerminator;
+        }
+
         if (previous == (byte)'\n')
         {
             return true;
         }
 
-        return crlf &&
-            previous == (byte)'\r' &&
+        return previous == (byte)'\r' &&
             (position >= haystack.Length || haystack[position] != (byte)'\n');
     }
 
-    private static bool IsEndAnchorMatch(ReadOnlySpan<byte> haystack, int position, bool multiLine, bool crlf)
+    private static bool IsEndAnchorMatch(ReadOnlySpan<byte> haystack, int position, bool multiLine, bool crlf, byte lineTerminator)
     {
         if (position == haystack.Length)
         {
@@ -78,12 +85,17 @@ internal static class RegexByteClass
         }
 
         byte current = haystack[position];
-        if (current == (byte)'\n')
+        if (!crlf)
         {
-            return !crlf || position == 0 || haystack[position - 1] != (byte)'\r';
+            return current == lineTerminator;
         }
 
-        return crlf && current == (byte)'\r';
+        if (current == (byte)'\n')
+        {
+            return position == 0 || haystack[position - 1] != (byte)'\r';
+        }
+
+        return current == (byte)'\r';
     }
 
     private static bool ClassMatches(byte value, ReadOnlySpan<byte> expression, bool caseInsensitive)

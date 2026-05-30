@@ -2,13 +2,20 @@ namespace Scout;
 
 internal readonly struct RegexCompileOptions
 {
-    public RegexCompileOptions(bool caseInsensitive, bool swapGreed, bool multiLine, bool dotMatchesNewline, bool crlf = false)
+    public RegexCompileOptions(
+        bool caseInsensitive,
+        bool swapGreed,
+        bool multiLine,
+        bool dotMatchesNewline,
+        bool crlf = false,
+        byte lineTerminator = (byte)'\n')
     {
         CaseInsensitive = caseInsensitive;
         SwapGreed = swapGreed;
         MultiLine = multiLine;
         DotMatchesNewline = dotMatchesNewline;
         Crlf = crlf;
+        LineTerminator = lineTerminator;
     }
 
     public bool CaseInsensitive { get; }
@@ -20,6 +27,8 @@ internal readonly struct RegexCompileOptions
     public bool DotMatchesNewline { get; }
 
     public bool Crlf { get; }
+
+    public byte LineTerminator { get; }
 
     public RegexCompileOptions Apply(string enabledFlags, string disabledFlags)
     {
@@ -38,7 +47,7 @@ internal readonly struct RegexCompileOptions
             ApplyFlag(disabledFlags[index], enabled: false, ref caseInsensitive, ref swapGreed, ref multiLine, ref dotMatchesNewline, ref crlf);
         }
 
-        return new RegexCompileOptions(caseInsensitive, swapGreed, multiLine, dotMatchesNewline, crlf);
+        return new RegexCompileOptions(caseInsensitive, swapGreed, multiLine, dotMatchesNewline, crlf, LineTerminator);
     }
 
     private static void ApplyFlag(

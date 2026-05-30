@@ -8,8 +8,6 @@ namespace Scout;
 /// </summary>
 public sealed class RegexCorpusTests
 {
-    private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-
     /// <summary>
     /// Verifies supported subsets of <c>regex</c> 1.12.2's TOML corpus.
     /// </summary>
@@ -276,6 +274,19 @@ public sealed class RegexCorpusTests
                 "match-line-200-crlf",
                 "match-line-200-crlf-cr",
             ]),
+            ("line-terminator.toml",
+            [
+                "nul",
+                "dot-changes-with-line-terminator",
+                "not-line-feed",
+                "non-ascii",
+                "carriage",
+                "word-byte",
+                "non-word-byte",
+                "word-boundary",
+                "word-boundary-at",
+                "not-word-boundary-at",
+            ]),
         ];
 
         for (int groupIndex = 0; groupIndex < groups.Length; groupIndex++)
@@ -284,8 +295,8 @@ public sealed class RegexCorpusTests
             for (int index = 0; index < names.Length; index++)
             {
                 RegexCorpusCase testCase = RegexCorpusLoader.Load(relativePath, names[index]);
-                RegexAutomaton[] automata = CompileAll(testCase.Patterns);
-                RegexMatch[] actual = FindAll(automata, Utf8.GetBytes(testCase.Haystack), testCase.MatchLimit);
+                RegexAutomaton[] automata = CompileAll(testCase.Patterns, testCase.LineTerminator);
+                RegexMatch[] actual = FindAll(automata, testCase.Haystack, testCase.MatchLimit, testCase.BoundsStart, testCase.BoundsEnd, testCase.Anchored);
 
                 Assert.True(
                     MatchesEqual(testCase.ExpectedMatches, actual),
@@ -294,30 +305,36 @@ public sealed class RegexCorpusTests
         }
     }
 
-    private static RegexAutomaton[] CompileAll(IReadOnlyList<string> patterns)
+    private static RegexAutomaton[] CompileAll(IReadOnlyList<byte[]> patterns, byte lineTerminator)
     {
         var automata = new RegexAutomaton[patterns.Count];
         for (int index = 0; index < patterns.Count; index++)
         {
-            automata[index] = RegexAutomaton.Compile(Utf8.GetBytes(patterns[index]));
+            automata[index] = RegexAutomaton.Compile(patterns[index], caseInsensitive: false, multiLine: false, dotMatchesNewline: false, crlf: false, lineTerminator);
         }
 
         return automata;
     }
 
-    private static RegexMatch[] FindAll(IReadOnlyList<RegexAutomaton> automata, byte[] haystack, int? matchLimit)
+    private static RegexMatch[] FindAll(
+        IReadOnlyList<RegexAutomaton> automata,
+        byte[] haystack,
+        int? matchLimit,
+        int boundsStart,
+        int boundsEnd,
+        bool anchored)
     {
         var matches = new List<RegexMatch>();
-        int startAt = 0;
+        int startAt = boundsStart;
         int suppressedEmptyStart = -1;
-        while (startAt <= haystack.Length)
+        while (startAt <= boundsEnd)
         {
             if (matchLimit is int limit && matches.Count >= limit)
             {
                 break;
             }
 
-            RegexMatch? match = Find(automata, haystack, startAt);
+            RegexMatch? match = Find(automata, haystack, startAt, boundsEnd, anchored);
             if (!match.HasValue)
             {
                 break;
@@ -346,7 +363,7 @@ public sealed class RegexCorpusTests
         return matches.ToArray();
     }
 
-    private static RegexMatch? Find(IReadOnlyList<RegexAutomaton> automata, byte[] haystack, int startAt)
+    private static RegexMatch? Find(IReadOnlyList<RegexAutomaton> automata, byte[] haystack, int startAt, int boundsEnd, bool anchored)
     {
         RegexMatch? best = null;
         int bestPatternIndex = int.MaxValue;
@@ -354,6 +371,13 @@ public sealed class RegexCorpusTests
         {
             RegexMatch? match = automata[index].Find(haystack, startAt);
             if (!match.HasValue)
+            {
+                continue;
+            }
+
+            if ((anchored && match.Value.Start != startAt) ||
+                match.Value.Start > boundsEnd ||
+                match.Value.Start + match.Value.Length > boundsEnd)
             {
                 continue;
             }

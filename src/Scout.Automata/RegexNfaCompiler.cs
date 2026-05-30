@@ -134,6 +134,7 @@ internal sealed class RegexNfaCompiler
             options.MultiLine,
             options.DotMatchesNewline,
             options.Crlf,
+            options.LineTerminator,
             next,
             alternative: -1));
         return state;
@@ -163,6 +164,7 @@ internal sealed class RegexNfaCompiler
             multiLine: false,
             dotMatchesNewline: false,
             crlf: false,
+            lineTerminator: (byte)'\n',
             next,
             alternative);
     }

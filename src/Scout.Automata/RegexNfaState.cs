@@ -12,6 +12,7 @@ internal sealed class RegexNfaState
         bool multiLine,
         bool dotMatchesNewline,
         bool crlf,
+        byte lineTerminator,
         int next,
         int alternative)
     {
@@ -22,6 +23,7 @@ internal sealed class RegexNfaState
         MultiLine = multiLine;
         DotMatchesNewline = dotMatchesNewline;
         Crlf = crlf;
+        LineTerminator = lineTerminator;
         Next = next;
         Alternative = alternative;
     }
@@ -39,6 +41,8 @@ internal sealed class RegexNfaState
     public bool DotMatchesNewline { get; }
 
     public bool Crlf { get; }
+
+    public byte LineTerminator { get; }
 
     public int Next { get; }
 

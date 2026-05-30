@@ -44,13 +44,20 @@ public sealed class RegexAutomaton
     /// <param name="multiLine">Whether <c>^</c> and <c>$</c> match adjacent to line feeds.</param>
     /// <param name="dotMatchesNewline">Whether <c>.</c> matches line feeds.</param>
     /// <param name="crlf">Whether CRLF mode treats carriage returns and line feeds as line terminators.</param>
+    /// <param name="lineTerminator">The line terminator byte used when CRLF mode is disabled.</param>
     /// <returns>The compiled automaton.</returns>
-    public static RegexAutomaton Compile(ReadOnlySpan<byte> pattern, bool caseInsensitive, bool multiLine, bool dotMatchesNewline, bool crlf = false)
+    public static RegexAutomaton Compile(
+        ReadOnlySpan<byte> pattern,
+        bool caseInsensitive,
+        bool multiLine,
+        bool dotMatchesNewline,
+        bool crlf = false,
+        byte lineTerminator = (byte)'\n')
     {
         RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
         return new RegexAutomaton(RegexNfaCompiler.Compile(
             tree.Root,
-            new RegexCompileOptions(caseInsensitive, swapGreed: false, multiLine, dotMatchesNewline, crlf)));
+            new RegexCompileOptions(caseInsensitive, swapGreed: false, multiLine, dotMatchesNewline, crlf, lineTerminator)));
     }
 
     /// <summary>

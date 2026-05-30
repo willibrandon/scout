@@ -102,3 +102,8 @@ sha256 = "a146e2d2e23f1a57168979d9b1fc193c2ba38dca66294b61140d6d2a2958ec86"
 name = "regex-1.12.2-multiline"
 path = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/multiline.toml"
 sha256 = "eb07cf5427e6ddbcf61f4cc64c2d74ff41b5ef75ef857959651b20196f3cd157"
+
+[[corpus]]
+name = "regex-1.12.2-line-terminator"
+path = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/line-terminator.toml"
+sha256 = "02148068137b69d95587966917bdf0697bf7eb41ad6d47387f2eb30f67d04fd9"

@@ -129,6 +129,19 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies custom line terminators affect dot and multiline anchors.
+    /// </summary>
+    [Fact]
+    public void AppliesCustomLineTerminator()
+    {
+        var anchored = RegexAutomaton.Compile("(?m)^[a-z]+$"u8, caseInsensitive: false, multiLine: false, dotMatchesNewline: false, crlf: false, lineTerminator: 0);
+        var dot = RegexAutomaton.Compile("."u8, caseInsensitive: false, multiLine: false, dotMatchesNewline: false, crlf: false, lineTerminator: 0);
+
+        Assert.Equal(new RegexMatch(1, 3), anchored.Find("\0abc\0"u8));
+        Assert.Equal(new RegexMatch(1, 1), dot.Find("\0\n"u8));
+    }
+
+    /// <summary>
     /// Verifies the regex-crate any-byte Unicode class matches across line terminators.
     /// </summary>
     [Fact]

@@ -6,25 +6,41 @@ internal sealed class RegexCorpusCase
 {
     public RegexCorpusCase(
         string name,
-        IReadOnlyList<string> patterns,
-        string haystack,
+        IReadOnlyList<byte[]> patterns,
+        byte[] haystack,
         IReadOnlyList<RegexMatch> expectedMatches,
-        int? matchLimit)
+        int? matchLimit,
+        byte lineTerminator,
+        int boundsStart,
+        int boundsEnd,
+        bool anchored)
     {
         Name = name;
         Patterns = patterns;
         Haystack = haystack;
         ExpectedMatches = expectedMatches;
         MatchLimit = matchLimit;
+        LineTerminator = lineTerminator;
+        BoundsStart = boundsStart;
+        BoundsEnd = boundsEnd;
+        Anchored = anchored;
     }
 
     public string Name { get; }
 
-    public IReadOnlyList<string> Patterns { get; }
+    public IReadOnlyList<byte[]> Patterns { get; }
 
-    public string Haystack { get; }
+    public byte[] Haystack { get; }
 
     public IReadOnlyList<RegexMatch> ExpectedMatches { get; }
 
     public int? MatchLimit { get; }
+
+    public byte LineTerminator { get; }
+
+    public int BoundsStart { get; }
+
+    public int BoundsEnd { get; }
+
+    public bool Anchored { get; }
 }

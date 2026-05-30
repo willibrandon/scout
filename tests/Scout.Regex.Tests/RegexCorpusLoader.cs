@@ -15,11 +15,15 @@ internal static class RegexCorpusLoader
         string path = Path.Combine(CorpusRoot, relativePath);
         string text = File.ReadAllText(path);
         string block = FindBlock(text, name, path);
-        IReadOnlyList<string> patterns = ReadPatterns(block, "regex", path, name);
-        string haystack = ReadString(block, "haystack", path, name);
+        bool unescape = ReadOptionalBool(block, "unescape", path, name) ?? false;
+        IReadOnlyList<byte[]> patterns = ReadPatterns(block, "regex", path, name);
+        byte[] haystack = ReadBytes(block, "haystack", path, name, unescape);
         RegexMatch[] expectedMatches = ReadExpectedMatches(block, path, name);
         int? matchLimit = ReadOptionalInt(block, "match-limit", path, name);
-        return new RegexCorpusCase(name, patterns, haystack, expectedMatches, matchLimit);
+        byte lineTerminator = ReadOptionalByte(block, "line-terminator", path, name, unescape) ?? (byte)'\n';
+        (int boundsStart, int boundsEnd) = ReadOptionalBounds(block, "bounds", path, name) ?? (0, haystack.Length);
+        bool anchored = ReadOptionalBool(block, "anchored", path, name) ?? false;
+        return new RegexCorpusCase(name, patterns, haystack, expectedMatches, matchLimit, lineTerminator, boundsStart, boundsEnd, anchored);
     }
 
     private static string FindBlock(string text, string name, string path)
@@ -53,7 +57,13 @@ internal static class RegexCorpusLoader
         throw new InvalidOperationException("Regex corpus case '" + name + "' in " + path + " is missing '" + key + "'.");
     }
 
-    private static List<string> ReadPatterns(string block, string key, string path, string name)
+    private static byte[] ReadBytes(string block, string key, string path, string name, bool unescape)
+    {
+        string value = ReadString(block, key, path, name);
+        return EncodeCorpusBytes(value, unescape);
+    }
+
+    private static List<byte[]> ReadPatterns(string block, string key, string path, string name)
     {
         string prefix = key + " = ";
         using var reader = new StringReader(block);
@@ -68,10 +78,17 @@ internal static class RegexCorpusLoader
             string value = line[prefix.Length..].Trim();
             if (value.Length > 0 && value[0] == '[')
             {
-                return ParseTomlStringArray(ReadTomlArrayValue(value, reader));
+                List<string> items = ParseTomlStringArray(ReadTomlArrayValue(value, reader));
+                var patterns = new List<byte[]>(items.Count);
+                for (int index = 0; index < items.Count; index++)
+                {
+                    patterns.Add(Encoding.UTF8.GetBytes(items[index]));
+                }
+
+                return patterns;
             }
 
-            return [ParseTomlString(value)];
+            return [Encoding.UTF8.GetBytes(ParseTomlString(value))];
         }
 
         throw new InvalidOperationException("Regex corpus case '" + name + "' in " + path + " is missing '" + key + "'.");
@@ -113,6 +130,71 @@ internal static class RegexCorpusLoader
             }
 
             throw new InvalidOperationException("Regex corpus case '" + name + "' in " + path + " has an invalid '" + key + "'.");
+        }
+
+        return null;
+    }
+
+    private static bool? ReadOptionalBool(string block, string key, string path, string name)
+    {
+        string prefix = key + " = ";
+        using var reader = new StringReader(block);
+        while (reader.ReadLine() is string line)
+        {
+            line = line.Trim();
+            if (!line.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            string value = line[prefix.Length..].Trim();
+            return value switch
+            {
+                "true" => true,
+                "false" => false,
+                _ => throw new InvalidOperationException("Regex corpus case '" + name + "' in " + path + " has an invalid '" + key + "'."),
+            };
+        }
+
+        return null;
+    }
+
+    private static byte? ReadOptionalByte(string block, string key, string path, string name, bool unescape)
+    {
+        string? value = ReadOptionalString(block, key);
+        if (value is null)
+        {
+            return null;
+        }
+
+        byte[] bytes = EncodeCorpusBytes(value, unescape);
+        if (bytes.Length != 1)
+        {
+            throw new InvalidOperationException("Regex corpus case '" + name + "' in " + path + " has an invalid '" + key + "'.");
+        }
+
+        return bytes[0];
+    }
+
+    private static (int Start, int End)? ReadOptionalBounds(string block, string key, string path, string name)
+    {
+        string prefix = key + " = ";
+        using var reader = new StringReader(block);
+        while (reader.ReadLine() is string line)
+        {
+            line = line.Trim();
+            if (!line.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            string value = ReadTomlArrayValue(line[prefix.Length..], reader);
+            if (!TryParseSpan(value, 1, out int start, out int end, out _))
+            {
+                throw new InvalidOperationException("Regex corpus case '" + name + "' in " + path + " has an invalid '" + key + "'.");
+            }
+
+            return (start, end);
         }
 
         return null;
@@ -317,6 +399,83 @@ internal static class RegexCorpusLoader
         return builder.ToString();
     }
 
+    private static byte[] EncodeCorpusBytes(string value, bool unescape)
+    {
+        if (!unescape)
+        {
+            return Encoding.UTF8.GetBytes(value);
+        }
+
+        var bytes = new List<byte>(value.Length);
+        for (int index = 0; index < value.Length; index++)
+        {
+            char character = value[index];
+            if (character != '\\')
+            {
+                if (character > byte.MaxValue)
+                {
+                    byte[] encoded = Encoding.UTF8.GetBytes(character.ToString());
+                    bytes.AddRange(encoded);
+                }
+                else
+                {
+                    bytes.Add((byte)character);
+                }
+
+                continue;
+            }
+
+            index++;
+            if (index >= value.Length)
+            {
+                throw new InvalidOperationException("Invalid regex corpus escape sequence.");
+            }
+
+            AppendEscapedByte(value, ref index, bytes);
+        }
+
+        return bytes.ToArray();
+    }
+
+    private static void AppendEscapedByte(string value, ref int index, List<byte> bytes)
+    {
+        char escaped = value[index];
+        switch (escaped)
+        {
+            case '0':
+                bytes.Add(0);
+                break;
+            case 'n':
+                bytes.Add((byte)'\n');
+                break;
+            case 'r':
+                bytes.Add((byte)'\r');
+                break;
+            case 't':
+                bytes.Add((byte)'\t');
+                break;
+            case '\\':
+                bytes.Add((byte)'\\');
+                break;
+            case '\'':
+                bytes.Add((byte)'\'');
+                break;
+            case 'x':
+                if (index + 2 >= value.Length ||
+                    !TryReadHexByte((byte)value[index + 1], (byte)value[index + 2], out byte literal))
+                {
+                    throw new InvalidOperationException("Invalid regex corpus hexadecimal escape.");
+                }
+
+                bytes.Add(literal);
+                index += 2;
+                break;
+            default:
+                bytes.Add((byte)escaped);
+                break;
+        }
+    }
+
     private static List<string> ParseTomlStringArray(string value)
     {
         var items = new List<string>();
@@ -414,5 +573,41 @@ internal static class RegexCorpusLoader
     {
         return index + prefix.Length <= value.Length &&
             string.CompareOrdinal(value, index, prefix, 0, prefix.Length) == 0;
+    }
+
+    private static bool TryReadHexByte(byte high, byte low, out byte value)
+    {
+        value = 0;
+        if (!TryGetHexValue(high, out int highValue) || !TryGetHexValue(low, out int lowValue))
+        {
+            return false;
+        }
+
+        value = (byte)((highValue << 4) | lowValue);
+        return true;
+    }
+
+    private static bool TryGetHexValue(byte value, out int digit)
+    {
+        if (value is >= (byte)'0' and <= (byte)'9')
+        {
+            digit = value - (byte)'0';
+            return true;
+        }
+
+        if (value is >= (byte)'A' and <= (byte)'F')
+        {
+            digit = value - (byte)'A' + 10;
+            return true;
+        }
+
+        if (value is >= (byte)'a' and <= (byte)'f')
+        {
+            digit = value - (byte)'a' + 10;
+            return true;
+        }
+
+        digit = 0;
+        return false;
     }
 }
