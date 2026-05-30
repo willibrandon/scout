@@ -25,6 +25,7 @@
     <ProjectReference Include="..\..\src\Scout.Automata\Scout.Automata.csproj" />
     <ProjectReference Include="..\..\src\Scout.Matching\Scout.Matching.csproj" />
     <ProjectReference Include="..\..\src\Scout.Regex\Scout.Regex.csproj" />
+    <ProjectReference Include="..\..\src\Scout.Pcre2\Scout.Pcre2.csproj" />
     <ProjectReference Include="..\..\src\Scout.Automata.AhoCorasick\Scout.Automata.AhoCorasick.csproj" />
     <ProjectReference Include="..\..\src\Scout.Automata.Memmem\Scout.Automata.Memmem.csproj" />
     <ProjectReference Include="..\..\src\Scout.Encoding\Scout.Encoding.csproj" />

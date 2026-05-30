@@ -318,7 +318,7 @@ internal static class ScoutApplication
                 return ExitCode.Success;
 
             case CliSpecialMode.Pcre2Version:
-                output.Write(VersionOutput.Pcre2Unavailable);
+                output.Write(Pcre2Library.UnavailableVersionOutput);
                 output.Flush();
                 return ExitCode.NoMatch;
 
@@ -405,7 +405,7 @@ internal static class ScoutApplication
 
         if (lowArgs.RegexEngine == CliRegexEngine.Pcre2)
         {
-            diagnostics.ErrorMessage(new ScoutError("PCRE2 is not available in this build of ripgrep").WithContext("rg"));
+            diagnostics.ErrorMessage(new ScoutError(Pcre2Library.UnavailableErrorMessage).WithContext("rg"));
             return ExitCode.Error;
         }
 
