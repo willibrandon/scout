@@ -127,7 +127,7 @@ public static class CliParser
         if (argument.Length == 2 && argument[0] == '-' && argument[1] != '-')
         {
             return GeneratedFlagCatalog.TryFindShortSwitch(argument[1], out FlagDescriptor descriptor) &&
-                descriptor.TryApplySwitch(lowArgs, out error);
+                descriptor.TryApplySwitch(lowArgs, argument, out error);
         }
 
         if (argument.Length > 2 &&
@@ -135,7 +135,7 @@ public static class CliParser
             argument[1] == '-' &&
             GeneratedFlagCatalog.TryFindLongSwitch(argument, out FlagDescriptor longDescriptor))
         {
-            return longDescriptor.TryApplySwitch(lowArgs, out error);
+            return longDescriptor.TryApplySwitch(lowArgs, argument, out error);
         }
 
         return false;
@@ -1015,7 +1015,7 @@ public static class CliParser
         error = null;
         if (GeneratedFlagCatalog.TryFindShortSwitch(flag, out FlagDescriptor descriptor))
         {
-            return descriptor.TryApplySwitch(lowArgs, out error);
+            return descriptor.TryApplySwitch(lowArgs, GetShortSwitchName(flag), out error);
         }
 
         switch (flag)
@@ -1202,6 +1202,16 @@ public static class CliParser
     private static bool IsClusterValueFlag(char flag)
     {
         return flag is 'm' or 'M' or 'E' or 'j' or 'r' or 'e' or 'f' or 'A' or 'B' or 'C' or 'd' or 'g' or 't' or 'T';
+    }
+
+    private static string GetShortSwitchName(char flag)
+    {
+        return flag switch
+        {
+            '0' => "-0",
+            '.' => "-.",
+            _ => new string(['-', flag]),
+        };
     }
 
     private static string GetShortFlagName(char flag)

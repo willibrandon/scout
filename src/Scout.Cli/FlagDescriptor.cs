@@ -7,7 +7,7 @@ namespace Scout;
 /// </summary>
 internal sealed class FlagDescriptor
 {
-    private readonly Func<CliLowArgs, ScoutError?>? applySwitch;
+    private readonly Func<CliLowArgs, string, ScoutError?>? applySwitch;
 
     private FlagDescriptor(
         string longName,
@@ -17,7 +17,7 @@ internal sealed class FlagDescriptor
         FlagKind kind,
         FlagCategory category,
         string doc,
-        Func<CliLowArgs, ScoutError?>? applySwitch)
+        Func<CliLowArgs, string, ScoutError?>? applySwitch)
     {
         LongName = longName;
         ShortName = shortName;
@@ -89,6 +89,34 @@ internal sealed class FlagDescriptor
         ArgumentNullException.ThrowIfNull(doc);
         ArgumentNullException.ThrowIfNull(applySwitch);
 
+        return new FlagDescriptor(longName, shortName, negatedName, aliases, FlagKind.Switch, category, doc, (lowArgs, _) => applySwitch(lowArgs));
+    }
+
+    /// <summary>
+    /// Creates a no-value switch flag descriptor whose parser action needs the matched spelling.
+    /// </summary>
+    /// <param name="longName">The canonical long flag name, including <c>--</c>.</param>
+    /// <param name="shortName">The short flag name without <c>-</c>, or <see langword="null" />.</param>
+    /// <param name="negatedName">The negated long flag name, or <see langword="null" />.</param>
+    /// <param name="aliases">Alternate long flag spellings.</param>
+    /// <param name="category">The help and completion category.</param>
+    /// <param name="doc">The short documentation text.</param>
+    /// <param name="applySwitch">The parser action for this switch.</param>
+    /// <returns>The descriptor.</returns>
+    public static FlagDescriptor SwitchWithName(
+        string longName,
+        char? shortName,
+        string? negatedName,
+        string[] aliases,
+        FlagCategory category,
+        string doc,
+        Func<CliLowArgs, string, ScoutError?> applySwitch)
+    {
+        ArgumentNullException.ThrowIfNull(longName);
+        ArgumentNullException.ThrowIfNull(aliases);
+        ArgumentNullException.ThrowIfNull(doc);
+        ArgumentNullException.ThrowIfNull(applySwitch);
+
         return new FlagDescriptor(longName, shortName, negatedName, aliases, FlagKind.Switch, category, doc, applySwitch);
     }
 
@@ -119,9 +147,10 @@ internal sealed class FlagDescriptor
     /// Applies this switch flag to the low-level argument state.
     /// </summary>
     /// <param name="lowArgs">The low-level argument state.</param>
+    /// <param name="matchedName">The spelling that matched this switch.</param>
     /// <param name="error">The parsing error, if any.</param>
     /// <returns><see langword="true" /> when the switch action ran.</returns>
-    public bool TryApplySwitch(CliLowArgs lowArgs, out ScoutError? error)
+    public bool TryApplySwitch(CliLowArgs lowArgs, string matchedName, out ScoutError? error)
     {
         if (Kind != FlagKind.Switch || applySwitch is null)
         {
@@ -129,7 +158,7 @@ internal sealed class FlagDescriptor
             return false;
         }
 
-        error = applySwitch(lowArgs);
+        error = applySwitch(lowArgs, matchedName);
         return true;
     }
 }

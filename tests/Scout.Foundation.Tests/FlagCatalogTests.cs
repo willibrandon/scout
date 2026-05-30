@@ -33,6 +33,12 @@ public sealed class FlagCatalogTests
         Assert.Equal("--no-mmap", noMmap.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindLongSwitch("--multiline-dotall", out FlagDescriptor multilineDotall));
         Assert.Equal("--multiline-dotall", multilineDotall.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongSwitch("--ignore-vcs", out FlagDescriptor ignoreVcs));
+        Assert.Equal("--ignore-vcs", ignoreVcs.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongSwitch("--passthrough", out FlagDescriptor passthrough));
+        Assert.Equal("--passthru", passthrough.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindShortSwitch('u', out FlagDescriptor unrestricted));
+        Assert.Equal("--unrestricted", unrestricted.LongName);
     }
 
     /// <summary>
@@ -66,6 +72,14 @@ public sealed class FlagCatalogTests
         CliParseResult countCluster = CliParser.Parse([OsString.FromUnixBytes("-cU"u8)]);
         CliParseResult outputCluster = CliParser.Parse([OsString.FromUnixBytes("-nHiv"u8), OsString.FromUnixBytes("needle"u8)]);
         CliParseResult jsonReset = CliParser.Parse([OsString.FromUnixBytes("--json"u8), OsString.FromUnixBytes("--no-json"u8)]);
+        CliParseResult ignoreToggles = CliParser.Parse(
+            [
+                OsString.FromUnixBytes("--no-ignore"u8),
+                OsString.FromUnixBytes("--ignore-vcs"u8),
+                OsString.FromUnixBytes("--no-ignore-exclude"u8),
+                OsString.FromUnixBytes("--ignore-messages"u8),
+                OsString.FromUnixBytes("--no-ignore-messages"u8),
+            ]);
         CliParseResult ioToggles = CliParser.Parse(
             [
                 OsString.FromUnixBytes("--line-buffered"u8),
@@ -88,10 +102,37 @@ public sealed class FlagCatalogTests
         Assert.True(outputCluster.LowArgs.InvertMatch);
         Assert.Equal(CliParseStatus.Ok, jsonReset.Status);
         Assert.Equal(CliSearchMode.Standard, jsonReset.LowArgs!.SearchMode);
+        Assert.Equal(CliParseStatus.Ok, ignoreToggles.Status);
+        Assert.False(ignoreToggles.LowArgs!.RespectIgnoreFiles);
+        Assert.True(ignoreToggles.LowArgs.RespectGitIgnoreFiles);
+        Assert.False(ignoreToggles.LowArgs.RespectGitExcludeFiles);
+        Assert.False(ignoreToggles.LowArgs.IgnoreMessages);
         Assert.Equal(CliParseStatus.Ok, ioToggles.Status);
         Assert.Equal(CliBufferMode.Auto, ioToggles.LowArgs!.BufferMode);
         Assert.Equal(CliMmapMode.Never, ioToggles.LowArgs.MmapMode);
         Assert.True(ioToggles.LowArgs.Crlf);
         Assert.True(ioToggles.LowArgs.NullData);
+    }
+
+    /// <summary>
+    /// Verifies spelling-sensitive generated switch diagnostics match ripgrep wording.
+    /// </summary>
+    [Fact]
+    public void ParserUsesMatchedGeneratedSwitchNameInDiagnostics()
+    {
+        CliParseResult shortError = CliParser.Parse(
+            [OsString.FromUnixBytes("-uuuu"u8)]);
+        CliParseResult longError = CliParser.Parse(
+            [
+                OsString.FromUnixBytes("--unrestricted"u8),
+                OsString.FromUnixBytes("--unrestricted"u8),
+                OsString.FromUnixBytes("--unrestricted"u8),
+                OsString.FromUnixBytes("--unrestricted"u8),
+            ]);
+
+        Assert.Equal(CliParseStatus.Error, shortError.Status);
+        Assert.Equal("error parsing flag -u: flag can only be repeated up to 3 times", shortError.Error!.FormatAlternate());
+        Assert.Equal(CliParseStatus.Error, longError.Status);
+        Assert.Equal("error parsing flag --unrestricted: flag can only be repeated up to 3 times", longError.Error!.FormatAlternate());
     }
 }
