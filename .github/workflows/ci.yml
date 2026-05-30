@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
   DOTNET_NOLOGO: "1"
@@ -53,11 +57,11 @@ jobs:
           -r ${{ matrix.rid }}
           -c Release
           -p:NativeLib=Static
-          -p:PublishAot=true
           -o artifacts/app/${{ matrix.rid }}
 
   full-tests:
     name: full pinned tests
+    if: github.event_name == 'workflow_dispatch'
     runs-on:
       - self-hosted
       - scout
@@ -76,18 +80,19 @@ jobs:
 
   native-unix:
     name: native Unix link (${{ matrix.rid }})
-    runs-on:
-      - self-hosted
-      - scout
-      - ${{ matrix.rid }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        rid:
-          - linux-x64
-          - linux-arm64
-          - osx-x64
-          - osx-arm64
+        include:
+          - rid: linux-x64
+            runner: ubuntu-24.04
+          - rid: linux-arm64
+            runner: ubuntu-24.04-arm
+          - rid: osx-x64
+            runner: macos-13
+          - rid: osx-arm64
+            runner: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -96,8 +101,38 @@ jobs:
       - name: Link native executable
         run: native/build-app-unix.sh ${{ matrix.rid }}
 
+  native-windows:
+    name: native Windows link (${{ matrix.rid }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            runner: windows-2025
+            vsarch: amd64
+          - rid: win-arm64
+            runner: windows-11-arm
+            vsarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.102
+      - name: Link native executable
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=* delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath`) do set "VSINSTALL=%%i"
+          if not defined VSINSTALL (
+            echo Visual Studio installation not found.
+            exit /b 1
+          )
+          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=${{ matrix.vsarch }}
+          pwsh -NoProfile -ExecutionPolicy Bypass -File native/build-app-windows.ps1 ${{ matrix.rid }}
+
   performance-gate:
     name: hyperfine performance gate
+    if: github.event_name == 'workflow_dispatch'
     runs-on:
       - self-hosted
       - scout

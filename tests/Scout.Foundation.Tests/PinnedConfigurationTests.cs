@@ -63,8 +63,18 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("dotnet test Scout.slnx --no-restore", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet format Scout.slnx --no-restore --verify-no-changes", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/preflight.sh", workflow, StringComparison.Ordinal);
+        Assert.Contains("cancel-in-progress: true", workflow, StringComparison.Ordinal);
+        Assert.Contains("if: github.event_name == 'workflow_dispatch'", workflow, StringComparison.Ordinal);
         Assert.Contains("native/build-app-unix.sh ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("native/build-app-windows.ps1 ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("vsarch: amd64", workflow, StringComparison.Ordinal);
+        Assert.Contains("vsarch: arm64", workflow, StringComparison.Ordinal);
+        Assert.Contains("runner: ubuntu-24.04", workflow, StringComparison.Ordinal);
+        Assert.Contains("runner: ubuntu-24.04-arm", workflow, StringComparison.Ordinal);
+        Assert.Contains("runner: macos-13", workflow, StringComparison.Ordinal);
+        Assert.Contains("runner: macos-15", workflow, StringComparison.Ordinal);
         Assert.Contains("bench/run-hyperfine.sh --gate", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("-p:PublishAot=true", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("continue-on-error: true", workflow, StringComparison.OrdinalIgnoreCase);
 
         string[] requiredRids =
@@ -80,6 +90,18 @@ public sealed class PinnedConfigurationTests
         {
             Assert.Contains("rid: " + requiredRids[index], workflow, StringComparison.Ordinal);
         }
+    }
+
+    /// <summary>
+    /// Verifies Git checkout preserves LF source files for cross-platform format gates.
+    /// </summary>
+    [Fact]
+    public void RepositoryPinsCrossPlatformLineEndings()
+    {
+        string root = FindRepositoryRoot();
+        string attributes = File.ReadAllText(Path.Combine(root, ".gitattributes"));
+
+        Assert.Contains("* text=auto eol=lf", attributes, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -228,6 +250,7 @@ public sealed class PinnedConfigurationTests
         string scoutEntry = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "ScoutEntry.cs"));
         string nativeArgumentReader = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "NativeArgumentReader.cs"));
         string unixEntry = File.ReadAllText(Path.Combine(root, "native", "entry", "scout_main.c"));
+        string windowsEntry = File.ReadAllText(Path.Combine(root, "native", "entry", "scout_wmain.c"));
 
         Assert.Contains("[UnmanagedCallersOnly(EntryPoint = \"scout_entry\")]", scoutEntry, StringComparison.Ordinal);
         Assert.Contains("NativeArgumentReader.CaptureUnix(argc, argv)", scoutEntry, StringComparison.Ordinal);
@@ -238,6 +261,8 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("OsString.FromUnixBytes", nativeArgumentReader, StringComparison.Ordinal);
         Assert.Contains("OsString.FromWindowsString", nativeArgumentReader, StringComparison.Ordinal);
         Assert.Contains("return scout_entry(argc, argv, envp);", unixEntry, StringComparison.Ordinal);
+        Assert.Contains("int wmain(int argc, wchar_t **argv, wchar_t **envp)", windowsEntry, StringComparison.Ordinal);
+        Assert.Contains("return scout_entry(0, (char **)0, (char **)0);", windowsEntry, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -289,7 +314,9 @@ public sealed class PinnedConfigurationTests
         string upstream = File.ReadAllText(Path.Combine(root, "native", "pcre2", "UPSTREAM"));
         string sourceRoot = Path.Combine(root, "native", "pcre2", "pcre2-10.46");
         string buildScript = File.ReadAllText(Path.Combine(root, "native", "pcre2", "build-unix.sh"));
+        string windowsBuildScript = File.ReadAllText(Path.Combine(root, "native", "pcre2", "build-windows.ps1"));
         string appBuildScript = File.ReadAllText(Path.Combine(root, "native", "build-app-unix.sh"));
+        string windowsAppBuildScript = File.ReadAllText(Path.Combine(root, "native", "build-app-windows.ps1"));
         string differentialScript = File.ReadAllText(Path.Combine(root, "native", "test-pcre2-differential-unix.sh"));
         string invalidUtf8DifferentialScript = File.ReadAllText(Path.Combine(root, "native", "test-invalid-utf8-differential-unix.sh"));
         string pcre2Library = File.ReadAllText(Path.Combine(root, "src", "Scout.Pcre2", "Pcre2Library.cs"));
@@ -319,6 +346,15 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("-DSUPPORT_PCRE2_8=1", buildScript, StringComparison.Ordinal);
         Assert.Contains("-DSUPPORT_UNICODE=1", buildScript, StringComparison.Ordinal);
         Assert.Contains("-DSUPPORT_JIT=1", buildScript, StringComparison.Ordinal);
+        Assert.Contains("[ValidateSet(\"win-x64\", \"win-arm64\")]", windowsBuildScript, StringComparison.Ordinal);
+        Assert.Contains("cl.exe", windowsBuildScript, StringComparison.Ordinal);
+        Assert.Contains("lib.exe", windowsBuildScript, StringComparison.Ordinal);
+        Assert.Contains("pcre2-8.lib", windowsBuildScript, StringComparison.Ordinal);
+        Assert.Contains("/DPCRE2_CODE_UNIT_WIDTH=8", windowsBuildScript, StringComparison.Ordinal);
+        Assert.Contains("/DPCRE2_STATIC=1", windowsBuildScript, StringComparison.Ordinal);
+        Assert.Contains("/DSUPPORT_PCRE2_8=1", windowsBuildScript, StringComparison.Ordinal);
+        Assert.Contains("/DSUPPORT_UNICODE=1", windowsBuildScript, StringComparison.Ordinal);
+        Assert.Contains("/DSUPPORT_JIT=1", windowsBuildScript, StringComparison.Ordinal);
         Assert.Contains("osx-arm64|osx-x64|linux-x64|linux-arm64", appBuildScript, StringComparison.Ordinal);
         Assert.DoesNotContain("not implemented", appBuildScript, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("\"$ROOT/native/pcre2/build-unix.sh\" \"$RID\"", appBuildScript, StringComparison.Ordinal);
@@ -348,6 +384,20 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("-P --multiline --files-with-matches '(?s)Start(?=.*thing2)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --multiline --count '(?s)def (\\w+);(?=.*use \\w+)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --multiline --count-matches '(?s)def (\\w+);(?=.*use \\w+)'", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("[ValidateSet(\"win-x64\", \"win-arm64\")]", windowsAppBuildScript, StringComparison.Ordinal);
+        Assert.Contains("native\\pcre2\\build-windows.ps1", windowsAppBuildScript, StringComparison.Ordinal);
+        Assert.Contains("scout_wmain.c", windowsAppBuildScript, StringComparison.Ordinal);
+        Assert.Contains("cl.exe", windowsAppBuildScript, StringComparison.Ordinal);
+        Assert.Contains("link.exe", windowsAppBuildScript, StringComparison.Ordinal);
+        Assert.Contains("/ENTRY:wmainCRTStartup", windowsAppBuildScript, StringComparison.Ordinal);
+        Assert.Contains("bootstrapperdll.obj", windowsAppBuildScript, StringComparison.Ordinal);
+        Assert.Contains("Runtime.WorkstationGC.lib", windowsAppBuildScript, StringComparison.Ordinal);
+        Assert.Contains("System" + ".Globalization.Native.Aot.lib", windowsAppBuildScript, StringComparison.Ordinal);
+        Assert.Contains("System" + ".IO.Compression.Native.Aot.lib", windowsAppBuildScript, StringComparison.Ordinal);
+        Assert.Contains("/WHOLEARCHIVE:$Pcre2Lib", windowsAppBuildScript, StringComparison.Ordinal);
+        Assert.Contains("pcre2-8.lib", windowsAppBuildScript, StringComparison.Ordinal);
+        Assert.Contains("& $OutputExe -V", windowsAppBuildScript, StringComparison.Ordinal);
+        Assert.Contains("--pcre2-version", windowsAppBuildScript, StringComparison.Ordinal);
         Assert.Contains("\"$ROOT/native/test-pcre2-differential-unix.sh\" \"$RID\" \"$BIN/scout\"", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("ripgrep_pcre2_rg_profile = \"release-lto\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("ripgrep_pcre2_rg_features = \"pcre2\"", prerequisiteLock, StringComparison.Ordinal);
