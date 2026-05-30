@@ -102,6 +102,12 @@ public sealed class RegexSyntaxParserTests
     [InlineData("[[:alpha:]")]
     [InlineData("(?P<1bad>a)")]
     [InlineData(@"\u{100}")]
+    [InlineData("*")]
+    [InlineData("+")]
+    [InlineData("?")]
+    [InlineData("(*)")]
+    [InlineData("(?)")]
+    [InlineData("(?:?)")]
     public void ReportsSyntaxErrors(string pattern)
     {
         FormatException exception = Assert.Throws<FormatException>(() => RegexSyntaxParser.Parse(Encoding.ASCII.GetBytes(pattern)));

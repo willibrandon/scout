@@ -60,7 +60,8 @@ internal static class RegexCorpusLoader
         (int boundsStart, int boundsEnd) = ReadOptionalBounds(block, "bounds", path, name) ?? (0, haystack.Length);
         bool anchored = ReadOptionalBool(block, "anchored", path, name) ?? false;
         bool caseInsensitive = ReadOptionalBool(block, "case-insensitive", path, name) ?? false;
-        return new RegexCorpusCase(name, patterns, haystack, expectedMatches, matchLimit, lineTerminator, boundsStart, boundsEnd, anchored, caseInsensitive);
+        bool compiles = ReadOptionalBool(block, "compiles", path, name) ?? true;
+        return new RegexCorpusCase(name, patterns, haystack, expectedMatches, matchLimit, lineTerminator, boundsStart, boundsEnd, anchored, caseInsensitive, compiles);
     }
 
     private static string FindBlock(string text, string name, string path)

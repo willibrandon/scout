@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -376,6 +377,10 @@ public sealed class RegexCorpusTests
             ]),
             ("regression.toml",
             [
+                "invalid-regex-no-crash-100",
+                "invalid-regex-no-crash-200",
+                "invalid-regex-no-crash-300",
+                "invalid-regex-no-crash-400",
                 "unsorted-binary-search-100",
                 "unsorted-binary-search-200",
                 "negated-char-class-100",
@@ -403,6 +408,12 @@ public sealed class RegexCorpusTests
     public void CorpusCaseMatchesExpectedSpans(string relativePath, string name)
     {
         RegexCorpusCase testCase = RegexCorpusLoader.Load(relativePath, name);
+        if (!testCase.Compiles)
+        {
+            AssertCompileFails(testCase.Patterns, testCase.LineTerminator, testCase.CaseInsensitive);
+            return;
+        }
+
         RegexAutomaton[] automata = CompileAll(testCase.Patterns, testCase.LineTerminator, testCase.CaseInsensitive);
         RegexMatch[] actual = FindAll(automata, testCase.Haystack, testCase.MatchLimit, testCase.BoundsStart, testCase.BoundsEnd, testCase.Anchored);
 
@@ -451,6 +462,14 @@ public sealed class RegexCorpusTests
         }
 
         return automata;
+    }
+
+    private static void AssertCompileFails(IReadOnlyList<byte[]> patterns, byte lineTerminator, bool caseInsensitive)
+    {
+        for (int index = 0; index < patterns.Count; index++)
+        {
+            Assert.Throws<FormatException>(() => RegexAutomaton.Compile(patterns[index], caseInsensitive, multiLine: false, dotMatchesNewline: false, crlf: false, lineTerminator));
+        }
     }
 
     private static RegexMatch[] FindAll(

@@ -101,6 +101,11 @@ internal sealed class RegexSyntaxParseState
     {
         int position = index;
         byte token = Pattern[index++];
+        if (token is (byte)'?' or (byte)'*' or (byte)'+')
+        {
+            Throw("repetition operator missing expression");
+        }
+
         return token switch
         {
             (byte)'(' => ParseGroup(position),
@@ -255,6 +260,11 @@ internal sealed class RegexSyntaxParseState
 
             if (token == (byte)':')
             {
+                if (enabled.Count == 0 && disabled.Count == 0)
+                {
+                    Throw("missing inline flags");
+                }
+
                 index++;
                 enabledFlags = Encoding.ASCII.GetString([.. enabled]);
                 disabledFlags = Encoding.ASCII.GetString([.. disabled]);
@@ -264,6 +274,11 @@ internal sealed class RegexSyntaxParseState
 
             if (token == (byte)')')
             {
+                if (enabled.Count == 0 && disabled.Count == 0)
+                {
+                    Throw("missing inline flags");
+                }
+
                 index++;
                 enabledFlags = Encoding.ASCII.GetString([.. enabled]);
                 disabledFlags = Encoding.ASCII.GetString([.. disabled]);
