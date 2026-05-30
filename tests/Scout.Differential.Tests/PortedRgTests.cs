@@ -524,6 +524,130 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "-0", "-c", "Sherlock", "sherlock")),
             new(
                 "tests/feature.rs",
+                "f740_passthru_single",
+                dir =>
+                {
+                    dir.CreateFile("file", "\nfoo\nbar\nfoobar\n\nbaz\n");
+                    dir.CreateFile("patterns", "foo\nbar\n");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-n", "--passthru", "foo", "file")),
+            new(
+                "tests/feature.rs",
+                "f740_passthru_multiple_e",
+                dir =>
+                {
+                    dir.CreateFile("file", "\nfoo\nbar\nfoobar\n\nbaz\n");
+                    dir.CreateFile("patterns", "foo\nbar\n");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-n", "--passthru", "-e", "foo", "-e", "bar", "file")),
+            new(
+                "tests/feature.rs",
+                "f740_passthru_file_patterns",
+                dir =>
+                {
+                    dir.CreateFile("file", "\nfoo\nbar\nfoobar\n\nbaz\n");
+                    dir.CreateFile("patterns", "foo\nbar\n");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-n", "--passthru", "-f", "patterns", "file")),
+            new(
+                "tests/feature.rs",
+                "f740_passthru_count_override",
+                dir =>
+                {
+                    dir.CreateFile("file", "\nfoo\nbar\nfoobar\n\nbaz\n");
+                    dir.CreateFile("patterns", "foo\nbar\n");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-n", "--passthru", "-c", "foo", "file")),
+            new(
+                "tests/feature.rs",
+                "f740_passthru_only_matching",
+                dir =>
+                {
+                    dir.CreateFile("file", "\nfoo\nbar\nfoobar\n\nbaz\n");
+                    dir.CreateFile("patterns", "foo\nbar\n");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-n", "--passthru", "-o", "foo", "file")),
+            new(
+                "tests/feature.rs",
+                "f740_passthru_replace",
+                dir =>
+                {
+                    dir.CreateFile("file", "\nfoo\nbar\nfoobar\n\nbaz\n");
+                    dir.CreateFile("patterns", "foo\nbar\n");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-n", "--passthru", "-r", "wat", "foo", "file")),
+            new(
+                "tests/feature.rs",
+                "f917_trim",
+                dir => dir.CreateFile("sherlock", TrimmedSherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "-B1", "-A2", "--trim", "Holmeses", "sherlock")),
+            new(
+                "tests/feature.rs",
+                "f917_trim_match",
+                dir => dir.CreateFile("sherlock", TrimmedSherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "-B1", "-A2", "--trim", @"\s+Holmeses", "sherlock")),
+            new(
+                "tests/feature.rs",
+                "f917_trim_max_columns_normal",
+                dir => dir.CreateFile("haystack", "     0123456789abcdefghijklmnopqrstuvwxyz"),
+                DifferentialCase.Exact("--path-separator", "/", "--trim", "--max-columns-preview", "-M8", "--no-filename", "abc", ".")),
+            new(
+                "tests/feature.rs",
+                "f993_null_data",
+                dir => dir.CreateBytes("test", "foo\0bar\0\0\0baz\0"u8.ToArray()),
+                DifferentialCase.Exact("--path-separator", "/", "--null-data", @".+", "test")),
+            new(
+                "tests/feature.rs",
+                "f1078_max_columns_preview1",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-M46", "--max-columns-preview", "exhibited|dusted|has to have it", ".")),
+            new(
+                "tests/feature.rs",
+                "f1078_max_columns_preview2",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-M43", "--max-columns-preview", "-rxxx", "exhibited|dusted|has to have it", ".")),
+            new(
+                "tests/feature.rs",
+                "f2288_context_partial_override",
+                dir => dir.CreateFile("test", "1\n2\n3\n4\n5\n6\n7\n8\n9\n"),
+                DifferentialCase.Exact("--path-separator", "/", "-C1", "-A2", "5", "test")),
+            new(
+                "tests/feature.rs",
+                "f2288_context_partial_override_rev",
+                dir => dir.CreateFile("test", "1\n2\n3\n4\n5\n6\n7\n8\n9\n"),
+                DifferentialCase.Exact("--path-separator", "/", "-A2", "-C1", "5", "test")),
+            new(
+                "tests/feature.rs",
+                "no_context_sep",
+                dir => dir.CreateFile("test", "foo\nctx\nbar\nctx\nfoo\nctx"),
+                DifferentialCase.Exact("--path-separator", "/", "-A1", "--no-context-separator", "foo", "test")),
+            new(
+                "tests/feature.rs",
+                "no_context_sep_overrides",
+                dir => dir.CreateFile("test", "foo\nctx\nbar\nctx\nfoo\nctx"),
+                DifferentialCase.Exact("--path-separator", "/", "-A1", "--context-separator", "AAA", "--no-context-separator", "foo", "test")),
+            new(
+                "tests/feature.rs",
+                "no_context_sep_overridden",
+                dir => dir.CreateFile("test", "foo\nctx\nbar\nctx\nfoo\nctx"),
+                DifferentialCase.Exact("--path-separator", "/", "-A1", "--no-context-separator", "--context-separator", "AAA", "foo", "test")),
+            new(
+                "tests/feature.rs",
+                "context_sep",
+                dir => dir.CreateFile("test", "foo\nctx\nbar\nctx\nfoo\nctx"),
+                DifferentialCase.Exact("--path-separator", "/", "-A1", "--context-separator", "AAA", "foo", "test")),
+            new(
+                "tests/feature.rs",
+                "context_sep_default",
+                dir => dir.CreateFile("test", "foo\nctx\nbar\nctx\nfoo\nctx"),
+                DifferentialCase.Exact("--path-separator", "/", "-A1", "foo", "test")),
+            new(
+                "tests/feature.rs",
+                "context_sep_empty",
+                dir => dir.CreateFile("test", "foo\nctx\nbar\nctx\nfoo\nctx"),
+                DifferentialCase.Exact("--path-separator", "/", "-A1", "--context-separator", string.Empty, "foo", "test")),
+            new(
+                "tests/feature.rs",
                 "f411_search_stats",
                 dir => dir.CreateFile("sherlock", "needle\nmiss\nneedle\n"),
                 DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--path-separator", "/", "-j1", "--stats", "needle", ".")),
@@ -606,4 +730,13 @@ internal static class PortedRgTests
         "can extract a clew from a wisp of straw or a flake of cigar ash;\r\n" +
         "but Doctor Watson has to have it taken out for him and dusted,\r\n" +
         "and exhibited clearly, with a label attached.\r\n";
+
+    private const string TrimmedSherlock =
+        "zzz\n" +
+        "    For the Doctor Watsons of this world, as opposed to the Sherlock\n" +
+        "  Holmeses, success in the province of detective work must always\n" +
+        "\tbe, to a very large extent, the result of luck. Sherlock Holmes\n" +
+        "     can extract a clew from a wisp of straw or a flake of cigar ash;\n" +
+        "but Doctor Watson has to have it taken out for him and dusted,\n" +
+        " and exhibited clearly, with a label attached.\n";
 }
