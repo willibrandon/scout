@@ -202,16 +202,26 @@ if [ "$DIFFERENTIAL_MODE" = "--with-differentials" ]; then
     "$ROOT/native/test-pcre2-differential-unix.sh" "$RID" "$BIN/scout"
     "$ROOT/native/test-invalid-utf8-differential-unix.sh" "$RID" "$BIN/scout"
 fi
+PCRE2_SYMBOL_PREFIX=
+case "$RID" in
+    osx-*)
+        PCRE2_SYMBOL_PREFIX=_
+        ;;
+esac
 for symbol in \
-    _pcre2_code_free_8 \
-    _pcre2_compile_8 \
-    _pcre2_config_8 \
-    _pcre2_get_error_message_8 \
-    _pcre2_get_ovector_pointer_8 \
-    _pcre2_jit_compile_8 \
-    _pcre2_match_8 \
-    _pcre2_match_data_create_from_pattern_8 \
-    _pcre2_match_data_free_8; do
-    nm -g "$BIN/scout" | grep " $symbol$" >/dev/null
+    pcre2_code_free_8 \
+    pcre2_compile_8 \
+    pcre2_config_8 \
+    pcre2_get_error_message_8 \
+    pcre2_get_ovector_pointer_8 \
+    pcre2_jit_compile_8 \
+    pcre2_match_8 \
+    pcre2_match_data_create_from_pattern_8 \
+    pcre2_match_data_free_8; do
+    exported_symbol="$PCRE2_SYMBOL_PREFIX$symbol"
+    if ! nm -g "$BIN/scout" | grep " $exported_symbol$" >/dev/null; then
+        printf 'Missing native PCRE2 symbol %s in %s.\n' "$exported_symbol" "$BIN/scout" >&2
+        exit 1
+    fi
 done
 printf 'OK %s: Scout.App native export linked with PCRE2 and smoke checks passed\n' "$RID"

@@ -394,10 +394,11 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("-Wl,--start-group", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("libSystem.Security.Cryptography.Native.OpenSsl.a", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-lstdc++ -lz -lpthread -ldl -lm -lrt", appBuildScript, StringComparison.Ordinal);
-        Assert.Contains("_pcre2_config_8", appBuildScript, StringComparison.Ordinal);
-        Assert.Contains("_pcre2_compile_8", appBuildScript, StringComparison.Ordinal);
-        Assert.Contains("_pcre2_match_8", appBuildScript, StringComparison.Ordinal);
-        Assert.Contains("_pcre2_match_data_create_from_pattern_8", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("PCRE2_SYMBOL_PREFIX=_", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("pcre2_config_8", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("pcre2_compile_8", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("pcre2_match_8", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("pcre2_match_data_create_from_pattern_8", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P 'foo(?=bar)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --json 'foo(?=bar)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P -o '.*o(?!.*\\s)'", appBuildScript, StringComparison.Ordinal);
