@@ -115,10 +115,13 @@ tests/feature.rs|f129_context
 tests/feature.rs|f129_replace
 tests/feature.rs|f159_max_count
 tests/feature.rs|f159_max_count_zero
+tests/feature.rs|f196_persistent_config
 tests/feature.rs|f243_column_line
 tests/feature.rs|f263_sort_files
 tests/feature.rs|f263_sort_files_reverse
 tests/feature.rs|f275_pathsep
+tests/feature.rs|f362_dfa_size_limit
+tests/feature.rs|f362_exceeds_regex_size_limit
 tests/feature.rs|f411_single_threaded_search_stats
 tests/feature.rs|f411_parallel_search_stats
 tests/feature.rs|f411_single_threaded_quiet_search_stats
@@ -194,6 +197,7 @@ tests/regression.rs|r1638
 tests/regression.rs|r1739_replacement_lineterm_match
 tests/regression.rs|f1757
 tests/feature.rs|f419_zero_as_shortcut_for_null
+tests/feature.rs|f740_passthru
 tests/feature.rs|f740_passthru_single
 tests/feature.rs|f740_passthru_multiple_e
 tests/feature.rs|f740_passthru_file_patterns

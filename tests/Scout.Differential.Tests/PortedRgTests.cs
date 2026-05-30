@@ -844,6 +844,16 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "-m0", "test", ".")),
             new(
                 "tests/feature.rs",
+                "f196_persistent_config",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.CreateFile(".ripgreprc", "--ignore-case");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "sherlock", "sherlock"),
+                DifferentialCase.ExactWithConfig(".ripgreprc", "--path-separator", "/", "sherlock", "sherlock")),
+            new(
+                "tests/feature.rs",
                 "f243_column_line",
                 dir => dir.CreateFile("foo", "test"),
                 DifferentialCase.Exact("--path-separator", "/", "--column", "test", ".")),
@@ -878,6 +888,16 @@ internal static class PortedRgTests
                     dir.CreateFile("foo/bar", "test");
                 },
                 DifferentialCase.Exact("--path-separator", "Z", "test", ".")),
+            new(
+                "tests/feature.rs",
+                "f362_dfa_size_limit",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "--dfa-size-limit", "10", @"For\s", "sherlock")),
+            new(
+                "tests/feature.rs",
+                "f362_exceeds_regex_size_limit",
+                _ => { },
+                DifferentialCase.Exact("--path-separator", "/", "--regex-size-limit", "10K", @"[0-9]\w+")),
             new(
                 "tests/feature.rs",
                 "f411_single_threaded_search_stats",
@@ -1462,6 +1482,20 @@ internal static class PortedRgTests
                 "f419_zero_as_shortcut_for_null",
                 dir => dir.CreateFile("sherlock", "Sherlock\nSherlock\n"),
                 DifferentialCase.Exact("--path-separator", "/", "-0", "-c", "Sherlock", "sherlock")),
+            new(
+                "tests/feature.rs",
+                "f740_passthru",
+                dir =>
+                {
+                    dir.CreateFile("file", "\nfoo\nbar\nfoobar\n\nbaz\n");
+                    dir.CreateFile("patterns", "foo\nbar\n");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-n", "--passthru", "foo", "file"),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "--passthru", "-e", "foo", "-e", "bar", "file"),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "--passthru", "-f", "patterns", "file"),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "--passthru", "-c", "foo", "file"),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "--passthru", "-o", "foo", "file"),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "--passthru", "-r", "wat", "foo", "file")),
             new(
                 "tests/feature.rs",
                 "f740_passthru_single",

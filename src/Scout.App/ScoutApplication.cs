@@ -19,6 +19,13 @@ internal static class ScoutApplication
     private static readonly byte[] CrlfLineTerminator = [(byte)'\r', (byte)'\n'];
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
     private const int BinaryDetectionInitialBufferLength = 65_536;
+    private const ulong RegexCompiledBaseSize = 64;
+    private const ulong RegexCompiledByteSize = 16;
+    private const ulong RegexCompiledUnicodeDigitClassSize = 2_048;
+    private const ulong RegexCompiledUnicodeNegatedDigitClassSize = 16_384;
+    private const ulong RegexCompiledUnicodeWordClassSize = 16_384;
+    private const ulong RegexCompiledUnicodeWhitespaceClassSize = 512;
+    private const ulong RegexCompiledUnicodeNegatedWhitespaceClassSize = 2_048;
 
     internal static int Run(ReadOnlySpan<OsString> arguments, RawByteWriter output, RawByteWriter error)
     {
@@ -43,6 +50,16 @@ internal static class ScoutApplication
         Stream standardInput)
     {
         return Run(arguments, output, error, standardInput, configPathOverride: null, useConfigPathOverride: false);
+    }
+
+    internal static int Run(
+        ReadOnlySpan<OsString> arguments,
+        RawByteWriter output,
+        RawByteWriter error,
+        Stream standardInput,
+        string? configPath)
+    {
+        return Run(arguments, output, error, standardInput, configPath, useConfigPathOverride: true);
     }
 
     private static int Run(
@@ -399,6 +416,11 @@ internal static class ScoutApplication
         }
 
         if (!TryValidateRegexRepetitionExpressions(patterns, diagnostics))
+        {
+            return ExitCode.Error;
+        }
+
+        if (!TryValidateRegexSizeLimit(patterns, lowArgs, diagnostics))
         {
             return ExitCode.Error;
         }
@@ -4829,6 +4851,75 @@ internal static class ScoutApplication
         }
 
         return true;
+    }
+
+    private static bool TryValidateRegexSizeLimit(List<byte[]> patterns, CliLowArgs lowArgs, DiagnosticMessenger diagnostics)
+    {
+        if (lowArgs.RegexSizeLimit is not ulong limit)
+        {
+            return true;
+        }
+
+        ulong compiledSize = 0;
+        for (int index = 0; index < patterns.Count; index++)
+        {
+            compiledSize = SaturatingAdd(compiledSize, EstimateCompiledRegexSize(patterns[index], lowArgs.Unicode));
+            if (compiledSize > limit)
+            {
+                diagnostics.ErrorMessage(new ScoutError($"compiled regex exceeds size limit of {limit}").WithContext("rg"));
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static ulong EstimateCompiledRegexSize(ReadOnlySpan<byte> pattern, bool unicode)
+    {
+        ulong size = SaturatingAdd(RegexCompiledBaseSize, SaturatingMultiply((ulong)pattern.Length, RegexCompiledByteSize));
+        for (int index = 0; index < pattern.Length; index++)
+        {
+            if (pattern[index] == (byte)'\\' && index + 1 < pattern.Length)
+            {
+                size = SaturatingAdd(size, GetEscapedClassCompiledSize(pattern[index + 1], unicode));
+                index++;
+            }
+        }
+
+        return size;
+    }
+
+    private static ulong GetEscapedClassCompiledSize(byte escaped, bool unicode)
+    {
+        if (!unicode)
+        {
+            return 0;
+        }
+
+        return escaped switch
+        {
+            (byte)'d' => RegexCompiledUnicodeDigitClassSize,
+            (byte)'D' => RegexCompiledUnicodeNegatedDigitClassSize,
+            (byte)'w' or (byte)'W' => RegexCompiledUnicodeWordClassSize,
+            (byte)'s' => RegexCompiledUnicodeWhitespaceClassSize,
+            (byte)'S' => RegexCompiledUnicodeNegatedWhitespaceClassSize,
+            _ => 0,
+        };
+    }
+
+    private static ulong SaturatingAdd(ulong left, ulong right)
+    {
+        return ulong.MaxValue - left < right ? ulong.MaxValue : left + right;
+    }
+
+    private static ulong SaturatingMultiply(ulong left, ulong right)
+    {
+        if (left == 0 || right == 0)
+        {
+            return 0;
+        }
+
+        return left > ulong.MaxValue / right ? ulong.MaxValue : left * right;
     }
 
     private static bool TryFindMissingRepetitionExpression(ReadOnlySpan<byte> pattern, out int offset)

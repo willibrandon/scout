@@ -5,16 +5,22 @@ namespace Scout;
 internal sealed class DifferentialCase
 {
     public DifferentialCase(DifferentialComparisonMode comparisonMode, params string[] arguments)
-        : this(comparisonMode, null, null, arguments)
+        : this(comparisonMode, null, null, null, arguments)
     {
     }
 
-    private DifferentialCase(DifferentialComparisonMode comparisonMode, string? relativeWorkingDirectory, byte[]? standardInput, params string[] arguments)
+    private DifferentialCase(
+        DifferentialComparisonMode comparisonMode,
+        string? relativeWorkingDirectory,
+        byte[]? standardInput,
+        string? relativeConfigPath,
+        params string[] arguments)
     {
         Arguments = arguments;
         ComparisonMode = comparisonMode;
         RelativeWorkingDirectory = relativeWorkingDirectory;
         StandardInput = standardInput;
+        RelativeConfigPath = relativeConfigPath;
     }
 
     public string[] Arguments { get; }
@@ -22,6 +28,8 @@ internal sealed class DifferentialCase
     public DifferentialComparisonMode ComparisonMode { get; }
 
     public byte[]? StandardInput { get; }
+
+    public string? RelativeConfigPath { get; }
 
     public string? RelativeWorkingDirectory { get; }
 
@@ -34,14 +42,21 @@ internal sealed class DifferentialCase
     {
         ArgumentException.ThrowIfNullOrEmpty(relativeWorkingDirectory);
 
-        return new DifferentialCase(DifferentialComparisonMode.Exact, relativeWorkingDirectory, null, arguments);
+        return new DifferentialCase(DifferentialComparisonMode.Exact, relativeWorkingDirectory, null, null, arguments);
     }
 
     public static DifferentialCase ExactWithStandardInput(byte[] standardInput, params string[] arguments)
     {
         ArgumentNullException.ThrowIfNull(standardInput);
 
-        return new DifferentialCase(DifferentialComparisonMode.Exact, null, standardInput, arguments);
+        return new DifferentialCase(DifferentialComparisonMode.Exact, null, standardInput, null, arguments);
+    }
+
+    public static DifferentialCase ExactWithConfig(string relativeConfigPath, params string[] arguments)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(relativeConfigPath);
+
+        return new DifferentialCase(DifferentialComparisonMode.Exact, null, null, relativeConfigPath, arguments);
     }
 
     public static DifferentialCase Normalized(DifferentialComparisonMode comparisonMode, params string[] arguments)
@@ -56,6 +71,6 @@ internal sealed class DifferentialCase
             throw new ArgumentException("Use Exact for exact differential cases.", nameof(comparisonMode));
         }
 
-        return new DifferentialCase(comparisonMode, relativeWorkingDirectory, null, arguments);
+        return new DifferentialCase(comparisonMode, relativeWorkingDirectory, null, null, arguments);
     }
 }

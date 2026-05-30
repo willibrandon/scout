@@ -23,8 +23,8 @@ internal static class DifferentialRunner
     {
         ArgumentNullException.ThrowIfNull(testCase);
 
-        DifferentialRunResult scout = RunScout(testCase.Arguments, testCase.StandardInput, workingDirectory);
-        DifferentialRunResult pinned = RunPinnedRipgrep(testCase.Arguments, testCase.StandardInput, workingDirectory);
+        DifferentialRunResult scout = RunScout(testCase.Arguments, testCase.StandardInput, testCase.RelativeConfigPath, workingDirectory);
+        DifferentialRunResult pinned = RunPinnedRipgrep(testCase.Arguments, testCase.StandardInput, testCase.RelativeConfigPath, workingDirectory);
 
         if (pinned.ExitCode != scout.ExitCode)
         {
@@ -40,11 +40,11 @@ internal static class DifferentialRunner
             DifferentialOutputNormalizer.NormalizeStderr(scout.Error, testCase.ComparisonMode));
     }
 
-    private static DifferentialRunResult RunScout(string[] arguments, byte[]? standardInput, string? workingDirectory)
+    private static DifferentialRunResult RunScout(string[] arguments, byte[]? standardInput, string? relativeConfigPath, string? workingDirectory)
     {
         if (workingDirectory is null)
         {
-            return RunScoutInCurrentDirectory(arguments, standardInput);
+            return RunScoutInCurrentDirectory(arguments, standardInput, relativeConfigPath);
         }
 
         lock (CurrentDirectoryLock)
@@ -53,7 +53,7 @@ internal static class DifferentialRunner
             try
             {
                 Directory.SetCurrentDirectory(workingDirectory);
-                return RunScoutInCurrentDirectory(arguments, standardInput);
+                return RunScoutInCurrentDirectory(arguments, standardInput, relativeConfigPath);
             }
             finally
             {
@@ -62,7 +62,7 @@ internal static class DifferentialRunner
         }
     }
 
-    private static DifferentialRunResult RunScoutInCurrentDirectory(string[] arguments, byte[]? standardInput)
+    private static DifferentialRunResult RunScoutInCurrentDirectory(string[] arguments, byte[]? standardInput, string? relativeConfigPath)
     {
         using MemoryStream input = new(standardInput ?? []);
         using MemoryStream output = new();
@@ -76,13 +76,15 @@ internal static class DifferentialRunner
             osArguments[index + 1] = OsString.FromText(arguments[index]);
         }
 
-        int exitCode = ScoutApplication.Run(osArguments, outputWriter, errorWriter, input);
+        int exitCode = relativeConfigPath is null
+            ? ScoutApplication.Run(osArguments, outputWriter, errorWriter, input)
+            : ScoutApplication.Run(osArguments, outputWriter, errorWriter, input, relativeConfigPath);
         outputWriter.Flush();
         errorWriter.Flush();
         return new DifferentialRunResult(exitCode, output.ToArray(), Utf8.GetString(error.ToArray()));
     }
 
-    private static DifferentialRunResult RunPinnedRipgrep(string[] arguments, byte[]? standardInput, string? workingDirectory)
+    private static DifferentialRunResult RunPinnedRipgrep(string[] arguments, byte[]? standardInput, string? relativeConfigPath, string? workingDirectory)
     {
         ProcessStartInfo startInfo = new(PinnedRipgrepPath)
         {
@@ -97,6 +99,11 @@ internal static class DifferentialRunner
         }
 
         startInfo.Environment.Remove("RIPGREP_CONFIG_PATH");
+        if (relativeConfigPath is not null)
+        {
+            startInfo.Environment["RIPGREP_CONFIG_PATH"] = relativeConfigPath;
+        }
+
         for (int index = 0; index < arguments.Length; index++)
         {
             startInfo.ArgumentList.Add(arguments[index]);
