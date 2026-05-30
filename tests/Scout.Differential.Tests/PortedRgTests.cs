@@ -100,6 +100,11 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "-w", "as", "sherlock")),
             new(
                 "tests/misc.rs",
+                "word_period",
+                dir => dir.CreateFile("haystack", "..."),
+                DifferentialCase.Exact("--path-separator", "/", "-ow", ".", "haystack")),
+            new(
+                "tests/misc.rs",
                 "line",
                 dir => dir.CreateFile("sherlock", Sherlock),
                 DifferentialCase.Exact("--path-separator", "/", "-x", "Watson|and exhibited clearly, with a label attached.", "sherlock")),
@@ -120,6 +125,21 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "-r", "FooBar", "Sherlock", "sherlock")),
             new(
                 "tests/misc.rs",
+                "replace_groups",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-r", "$2, $1", "([A-Z][a-z]+) ([A-Z][a-z]+)", "sherlock")),
+            new(
+                "tests/misc.rs",
+                "replace_named_groups",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-r", "$last, $first", "(?P<first>[A-Z][a-z]+) (?P<last>[A-Z][a-z]+)", "sherlock")),
+            new(
+                "tests/misc.rs",
+                "replace_with_only_matching",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-o", "-r", "$1", @"of (\w+)", "sherlock")),
+            new(
+                "tests/misc.rs",
                 "count",
                 dir => dir.CreateFile("sherlock", Sherlock),
                 DifferentialCase.Exact("--path-separator", "/", "--count", "Sherlock", ".")),
@@ -128,6 +148,26 @@ internal static class PortedRgTests
                 "count_matches",
                 dir => dir.CreateFile("sherlock", Sherlock),
                 DifferentialCase.Exact("--path-separator", "/", "--count-matches", "the", ".")),
+            new(
+                "tests/misc.rs",
+                "count_matches_inverted",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "--count-matches", "--invert-match", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "count_matches_via_only",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "--count", "--only-matching", "the", ".")),
+            new(
+                "tests/misc.rs",
+                "include_zero",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "--count", "--include-zero", "nada", ".")),
+            new(
+                "tests/misc.rs",
+                "include_zero_override",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "--count", "--include-zero", "--no-include-zero", "nada", ".")),
             new(
                 "tests/misc.rs",
                 "files_with_matches",
@@ -167,6 +207,16 @@ internal static class PortedRgTests
                 "context",
                 dir => dir.CreateFile("sherlock", Sherlock),
                 DifferentialCase.Exact("--path-separator", "/", "-C", "1", "world|attached", "sherlock")),
+            new(
+                "tests/misc.rs",
+                "context_line_numbers",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-C", "1", "-n", "world|attached", "sherlock")),
+            new(
+                "tests/misc.rs",
+                "byte_offset_only_matching",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-b", "-o", "Sherlock", ".")),
             new(
                 "tests/feature.rs",
                 "f89_files_with_matches",
