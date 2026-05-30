@@ -39,6 +39,26 @@ public sealed class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "Moriarty", ".")),
             new(
                 "tests/feature.rs",
+                "f948_exit_code_match",
+                dir => dir.CreateFile("sherlock", "Sherlock\nWatson\n"),
+                DifferentialCase.Exact("--path-separator", "/", "Sherlock", ".")),
+            new(
+                "tests/regression.rs",
+                "r105_part2",
+                dir => dir.CreateFile("foo", "zztest"),
+                DifferentialCase.Exact("--path-separator", "/", "--column", "test", ".")),
+            new(
+                "tests/regression.rs",
+                "r128",
+                dir => dir.CreateFile("foo", "\n\n\n\nx"),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "x", ".")),
+            new(
+                "tests/feature.rs",
+                "f419_zero_as_shortcut_for_null",
+                dir => dir.CreateFile("sherlock", "Sherlock\nSherlock\n"),
+                DifferentialCase.Exact("--path-separator", "/", "-0", "-c", "Sherlock", "sherlock")),
+            new(
+                "tests/feature.rs",
                 "f411_search_stats",
                 dir => dir.CreateFile("sherlock", "needle\nmiss\nneedle\n"),
                 DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--path-separator", "/", "-j1", "--stats", "needle", ".")),
