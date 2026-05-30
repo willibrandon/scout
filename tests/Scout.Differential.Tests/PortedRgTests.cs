@@ -2250,11 +2250,6 @@ internal static class PortedRgTests
                 dir => dir.CreateFile("test", "line1\nline2\nline3\nline4\nline5"),
                 DifferentialCase.Exact("--path-separator", "/", "--stop-on-nonmatch", "[235]")),
             new(
-                "tests/feature.rs",
-                "f411_search_stats",
-                dir => dir.CreateFile("sherlock", "needle\nmiss\nneedle\n"),
-                DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--path-separator", "/", "-j1", "--stats", "needle", ".")),
-            new(
                 "tests/binary.rs",
                 "mmap_match_implicit",
                 CreateSherlockNul,

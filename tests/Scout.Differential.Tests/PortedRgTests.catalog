@@ -295,7 +295,6 @@ tests/feature.rs|context_sep_default
 tests/feature.rs|context_sep_empty
 tests/feature.rs|no_unicode
 tests/feature.rs|stop_on_nonmatch
-tests/feature.rs|f411_search_stats
 tests/binary.rs|mmap_match_implicit
 tests/binary.rs|mmap_match_explicit
 tests/binary.rs|mmap_match_near_nul

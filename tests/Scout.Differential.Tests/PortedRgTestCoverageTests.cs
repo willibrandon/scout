@@ -26,6 +26,16 @@ public sealed partial class PortedRgTestCoverageTests
         "tests/regression.rs|r3139_multiline_lookahead_files_with_matches", // PCRE2 lookahead only.
     ];
 
+    private static readonly string[] ExpectedCatalogSplitRgTests =
+    [
+        "tests/feature.rs|f740_passthru_count_override", // Split from upstream f740_passthru.
+        "tests/feature.rs|f740_passthru_file_patterns", // Split from upstream f740_passthru.
+        "tests/feature.rs|f740_passthru_multiple_e", // Split from upstream f740_passthru.
+        "tests/feature.rs|f740_passthru_only_matching", // Split from upstream f740_passthru.
+        "tests/feature.rs|f740_passthru_replace", // Split from upstream f740_passthru.
+        "tests/feature.rs|f740_passthru_single", // Split from upstream f740_passthru.
+    ];
+
     /// <summary>
     /// Verifies every upstream rgtest is either ported or explicitly documented as blocked.
     /// </summary>
@@ -36,6 +46,7 @@ public sealed partial class PortedRgTestCoverageTests
         SortedSet<string> catalog = ReadCatalog();
 
         Assert.Equal(ExpectedUnportedRgTests, Difference(upstream, catalog));
+        Assert.Equal(ExpectedCatalogSplitRgTests, Difference(catalog, upstream));
     }
 
     private static SortedSet<string> ReadUpstreamRgTests()
