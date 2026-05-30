@@ -202,7 +202,12 @@ tests/feature.rs|f740_passthru_only_matching
 tests/feature.rs|f740_passthru_replace
 tests/feature.rs|f917_trim
 tests/feature.rs|f917_trim_match
+tests/feature.rs|f917_trim_multi_standard
 tests/feature.rs|f917_trim_max_columns_normal
+tests/feature.rs|f917_trim_max_columns_matches
+tests/feature.rs|f917_trim_max_columns_multi_standard
+tests/feature.rs|f917_trim_max_columns_multi_only_matching
+tests/feature.rs|f917_trim_max_columns_multi_per_match
 tests/feature.rs|f993_null_data
 tests/feature.rs|f1078_max_columns_preview1
 tests/feature.rs|f1078_max_columns_preview2

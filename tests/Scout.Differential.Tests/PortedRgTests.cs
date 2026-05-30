@@ -1528,9 +1528,34 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "-n", "-B1", "-A2", "--trim", @"\s+Holmeses", "sherlock")),
             new(
                 "tests/feature.rs",
+                "f917_trim_multi_standard",
+                dir => dir.CreateFile("haystack", TrimmedLongHaystack),
+                DifferentialCase.Exact("--path-separator", "/", "--multiline", "--trim", "-r$0", "--no-filename", @"a\n?bc")),
+            new(
+                "tests/feature.rs",
                 "f917_trim_max_columns_normal",
                 dir => dir.CreateFile("haystack", "     0123456789abcdefghijklmnopqrstuvwxyz"),
                 DifferentialCase.Exact("--path-separator", "/", "--trim", "--max-columns-preview", "-M8", "--no-filename", "abc", ".")),
+            new(
+                "tests/feature.rs",
+                "f917_trim_max_columns_matches",
+                dir => dir.CreateFile("haystack", TrimmedLongHaystack),
+                DifferentialCase.Exact("--path-separator", "/", "--trim", "--max-columns-preview", "-M8", "--color=always", "--colors=path:none", "--no-filename", "abc", ".")),
+            new(
+                "tests/feature.rs",
+                "f917_trim_max_columns_multi_standard",
+                dir => dir.CreateFile("haystack", TrimmedLongHaystack),
+                DifferentialCase.Exact("--path-separator", "/", "--multiline", "--trim", "--max-columns-preview", "-M8", "--color=always", "--colors=path:none", "--no-filename", @"a\n?bc")),
+            new(
+                "tests/feature.rs",
+                "f917_trim_max_columns_multi_only_matching",
+                dir => dir.CreateFile("haystack", TrimmedLongHaystack),
+                DifferentialCase.Exact("--path-separator", "/", "--multiline", "--trim", "--max-columns-preview", "-M8", "--only-matching", "--no-filename", @".*a\n?bc.*")),
+            new(
+                "tests/feature.rs",
+                "f917_trim_max_columns_multi_per_match",
+                dir => dir.CreateFile("haystack", TrimmedLongHaystack),
+                DifferentialCase.Exact("--path-separator", "/", "--multiline", "--trim", "--max-columns-preview", "-M8", "--vimgrep", "--no-filename", @".*a\n?bc.*")),
             new(
                 "tests/feature.rs",
                 "f993_null_data",
@@ -1821,4 +1846,6 @@ internal static class PortedRgTests
         "     can extract a clew from a wisp of straw or a flake of cigar ash;\n" +
         "but Doctor Watson has to have it taken out for him and dusted,\n" +
         " and exhibited clearly, with a label attached.\n";
+
+    private const string TrimmedLongHaystack = "     0123456789abcdefghijklmnopqrstuvwxyz";
 }
