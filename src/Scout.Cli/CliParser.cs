@@ -1564,16 +1564,6 @@ public static class CliParser
             return ParseMaxColumns(value, "--max-columns", lowArgs, out error);
         }
 
-        if (argument.EqualsUnixBytes("--engine"u8) || TextEquals(argument, "--engine"))
-        {
-            if (!TryGetFollowingValue(arguments, ref index, "--engine", out OsString value, out error))
-            {
-                return true;
-            }
-
-            return ParseRegexEngine(value, lowArgs, out error);
-        }
-
         if (argument.EqualsUnixBytes("-j"u8) || TextEquals(argument, "-j"))
         {
             if (!TryGetFollowingValue(arguments, ref index, "-j", out OsString value, out error))
@@ -2014,11 +2004,6 @@ public static class CliParser
             return ParseMaxColumns(maxColumnsValue, "--max-columns", lowArgs, out error);
         }
 
-        if (TryGetInlineUnixValue(argument, "--engine="u8, out ReadOnlySpan<byte> engineValue))
-        {
-            return ParseRegexEngine(engineValue, lowArgs, out error);
-        }
-
         if (TryGetInlineUnixValue(argument, "--threads="u8, out ReadOnlySpan<byte> threadsValue))
         {
             return ParseThreads(threadsValue, "--threads", lowArgs, out error);
@@ -2309,11 +2294,6 @@ public static class CliParser
             if (text.StartsWith("--max-columns=", StringComparison.Ordinal))
             {
                 return ParseMaxColumns(text["--max-columns=".Length..], "--max-columns", lowArgs, out error);
-            }
-
-            if (text.StartsWith("--engine=", StringComparison.Ordinal))
-            {
-                return ParseRegexEngine(text["--engine=".Length..], lowArgs, out error);
             }
 
             if (text.StartsWith("--threads=", StringComparison.Ordinal))
@@ -2661,20 +2641,9 @@ public static class CliParser
         return true;
     }
 
-    private static bool ParseRegexEngine(OsString value, CliLowArgs lowArgs, out ScoutError? error)
+    internal static bool ParseRegexEngine(OsString value, CliLowArgs lowArgs, out ScoutError? error)
     {
         if (value.TryGetText(out string text))
-        {
-            return ParseRegexEngine(text, lowArgs, out error);
-        }
-
-        error = new ScoutError("error parsing flag --engine: invalid UTF-8 in regex engine");
-        return true;
-    }
-
-    private static bool ParseRegexEngine(ReadOnlySpan<byte> value, CliLowArgs lowArgs, out ScoutError? error)
-    {
-        if (TryDecodeUtf8(value, out string text))
         {
             return ParseRegexEngine(text, lowArgs, out error);
         }
