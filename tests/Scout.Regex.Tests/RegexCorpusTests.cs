@@ -20,8 +20,11 @@ public sealed class RegexCorpusTests
             [
                 "ascii-literal",
                 "ascii-literal-not",
+                "ascii-literal-anchored",
+                "ascii-literal-anchored-not",
                 "anchor-start-end-line",
                 "prefix-literal-match",
+                "prefix-literal-match-ascii",
                 "prefix-literal-no-match",
                 "one-literal-edge",
                 "terminates",
@@ -303,6 +306,23 @@ public sealed class RegexCorpusTests
             [
                 "ascii-word-start",
                 "ascii-word-end",
+            ]),
+            ("regression.toml",
+            [
+                "unsorted-binary-search-100",
+                "unsorted-binary-search-200",
+                "negated-char-class-100",
+                "negated-char-class-200",
+                "ascii-word-underscore",
+                "alt-in-alt-100",
+                "leftmost-first-prefix",
+                "many-alternates",
+                "word-boundary-alone-100",
+                "word-boundary-alone-200",
+                "partial-anchor",
+                "partial-anchor-alternate-begin",
+                "partial-anchor-alternate-end",
+                "lits-unambiguous-100",
             ]),
         ];
 
