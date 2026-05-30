@@ -199,6 +199,24 @@ RG_REV="$(printf '%s' "$EXPECTED_RIPGREP" | cut -c 1-10)"
 RG_VERSION="$( ( "$RG_PATH" --version || true ) | sed -n '1p' )"
 expect_equal "reference rg version" "ripgrep 15.1.0 (rev $RG_REV)" "$RG_VERSION"
 
+RG_PCRE2_PROFILE="$(read_lock_value "ripgrep_pcre2_rg_profile")" || fail "Missing ripgrep_pcre2_rg_profile in tests/PREREQS.lock."
+expect_equal "PCRE2 reference rg build profile" "release-lto" "$RG_PCRE2_PROFILE"
+
+RG_PCRE2_FEATURES="$(read_lock_value "ripgrep_pcre2_rg_features")" || fail "Missing ripgrep_pcre2_rg_features in tests/PREREQS.lock."
+expect_equal "PCRE2 reference rg features" "pcre2" "$RG_PCRE2_FEATURES"
+
+RG_PCRE2_PATH="$(read_lock_value "ripgrep_pcre2_rg_path")" || fail "Missing ripgrep_pcre2_rg_path in tests/PREREQS.lock."
+RG_PCRE2_SHA256="$(read_lock_value "ripgrep_pcre2_rg_sha256")" || fail "Missing ripgrep_pcre2_rg_sha256 in tests/PREREQS.lock."
+check_file_hash "PCRE2 reference rg" "$RG_PCRE2_PATH" "$RG_PCRE2_SHA256"
+
+RG_PCRE2_VERSION="$( ( "$RG_PCRE2_PATH" --version || true ) | sed -n '1p' )"
+expect_equal "PCRE2 reference rg version" "ripgrep 15.1.0 (rev $RG_REV)" "$RG_PCRE2_VERSION"
+RG_PCRE2_FEATURE_LINE="$( ( "$RG_PCRE2_PATH" --version || true ) | sed -n '3p' )"
+expect_equal "PCRE2 reference rg feature line" "features:+pcre2" "$RG_PCRE2_FEATURE_LINE"
+EXPECTED_PCRE2_VERSION="$(read_lock_value "ripgrep_pcre2_reported_version")" || fail "Missing ripgrep_pcre2_reported_version in tests/PREREQS.lock."
+ACTUAL_PCRE2_VERSION="$( ( "$RG_PCRE2_PATH" --pcre2-version || true ) | sed -n '1p' )"
+expect_equal "PCRE2 reference rg PCRE2 version" "$EXPECTED_PCRE2_VERSION" "$ACTUAL_PCRE2_VERSION"
+
 if [ "$(uname -s)" = "Darwin" ]; then
     check_macos_tool_hash "gzip"
     check_macos_tool_hash "bzip2"

@@ -188,6 +188,7 @@ public sealed class PinnedConfigurationTests
         string sourceRoot = Path.Combine(root, "native", "pcre2", "pcre2-10.46");
         string buildScript = File.ReadAllText(Path.Combine(root, "native", "pcre2", "build-unix.sh"));
         string appBuildScript = File.ReadAllText(Path.Combine(root, "native", "build-app-unix.sh"));
+        string differentialScript = File.ReadAllText(Path.Combine(root, "native", "test-pcre2-differential-unix.sh"));
         string pcre2Library = File.ReadAllText(Path.Combine(root, "src", "Scout.Pcre2", "Pcre2Library.cs"));
         string pcre2Regex = File.ReadAllText(Path.Combine(root, "src", "Scout.Pcre2", "Pcre2Regex.cs"));
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
@@ -237,6 +238,16 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("-P --multiline --files-with-matches '(?s)Start(?=.*thing2)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --multiline --count '(?s)def (\\w+);(?=.*use \\w+)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --multiline --count-matches '(?s)def (\\w+);(?=.*use \\w+)'", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("\"$ROOT/native/test-pcre2-differential-unix.sh\" \"$RID\" \"$BIN/scout\"", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("ripgrep_pcre2_rg_profile = \"release-lto\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("ripgrep_pcre2_rg_features = \"pcre2\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("ripgrep_pcre2_rg_path = \"/Users/brandon/src/ripgrep/target/pcre2/release-lto/rg\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("ripgrep_pcre2_rg_sha256 = \"49d486acea41e80f9a17834944677cf70bdbaeff12dc186c6d8630770d81bbe9\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("ripgrep_pcre2_reported_version = \"PCRE2 10.45 is available (JIT is available)\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("compare_case r1401_lookahead_only_matching_1 exact -P -N -o '.*o(?!.*\\s)'", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case json_lookbehind mask-elapsed -P -U --json '(?<=foo\\n)bar'", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case r1573_count exact -P --multiline --count '(?s)def (\\w+);(?=.*use \\w+)'", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case r3139_multiline_files_with_matches exact -P --multiline --files-with-matches '(?s)Start(?=.*thing2)'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("<AllowUnsafeBlocks>true</AllowUnsafeBlocks>", directoryBuildProps, StringComparison.Ordinal);
         Assert.Contains("<DirectPInvoke Include=\"__Internal\" />", directoryBuildProps, StringComparison.Ordinal);
         Assert.Contains("PCRE2 10.46 is available (JIT is available)", appBuildScript, StringComparison.Ordinal);
