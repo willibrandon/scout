@@ -84,24 +84,24 @@ public sealed class DifferentialOutputNormalizerTests
     public void SortLinesSortsContextSeparatedChunks()
     {
         string input =
-            "b.txt-before\n" +
-            "b.txt:needle\n" +
-            "b.txt-after\n" +
+            "/tmp/scout-diff-fixture/b.txt-before\n" +
+            "/tmp/scout-diff-fixture/b.txt:needle\n" +
+            "/tmp/scout-diff-fixture/b.txt-after\n" +
             "--\n" +
-            "a.txt-before\n" +
-            "a.txt:needle\n" +
-            "a.txt-after\n";
+            "/tmp/scout-diff-fixture/a.txt-before\n" +
+            "/tmp/scout-diff-fixture/a.txt:needle\n" +
+            "/tmp/scout-diff-fixture/a.txt-after\n";
 
         byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes(input), DifferentialComparisonMode.SortLines);
 
         Assert.Equal(
-            "a.txt-before\n" +
-            "a.txt:needle\n" +
-            "a.txt-after\n" +
+            "/tmp/scout-diff-fixture/a.txt-before\n" +
+            "/tmp/scout-diff-fixture/a.txt:needle\n" +
+            "/tmp/scout-diff-fixture/a.txt-after\n" +
             "--\n" +
-            "b.txt-before\n" +
-            "b.txt:needle\n" +
-            "b.txt-after\n",
+            "/tmp/scout-diff-fixture/b.txt-before\n" +
+            "/tmp/scout-diff-fixture/b.txt:needle\n" +
+            "/tmp/scout-diff-fixture/b.txt-after\n",
             Utf8.GetString(normalized));
     }
 
@@ -112,13 +112,13 @@ public sealed class DifferentialOutputNormalizerTests
     public void SortLinesAndMaskElapsedKeepsStatsFooterAfterSortedContextChunks()
     {
         string input =
-            "b.txt-before\n" +
-            "b.txt:needle\n" +
-            "b.txt-after\n" +
+            "/tmp/scout-diff-fixture/b.txt-before\n" +
+            "/tmp/scout-diff-fixture/b.txt:needle\n" +
+            "/tmp/scout-diff-fixture/b.txt-after\n" +
             "--\n" +
-            "a.txt-before\n" +
-            "a.txt:needle\n" +
-            "a.txt-after\n" +
+            "/tmp/scout-diff-fixture/a.txt-before\n" +
+            "/tmp/scout-diff-fixture/a.txt:needle\n" +
+            "/tmp/scout-diff-fixture/a.txt-after\n" +
             "--\n" +
             "\n" +
             "2 matches\n" +
@@ -133,13 +133,13 @@ public sealed class DifferentialOutputNormalizerTests
         byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes(input), DifferentialComparisonMode.SortLinesAndMaskElapsed);
 
         Assert.Equal(
-            "a.txt-before\n" +
-            "a.txt:needle\n" +
-            "a.txt-after\n" +
+            "/tmp/scout-diff-fixture/a.txt-before\n" +
+            "/tmp/scout-diff-fixture/a.txt:needle\n" +
+            "/tmp/scout-diff-fixture/a.txt-after\n" +
             "--\n" +
-            "b.txt-before\n" +
-            "b.txt:needle\n" +
-            "b.txt-after\n" +
+            "/tmp/scout-diff-fixture/b.txt-before\n" +
+            "/tmp/scout-diff-fixture/b.txt:needle\n" +
+            "/tmp/scout-diff-fixture/b.txt-after\n" +
             "--\n" +
             "\n" +
             "2 matches\n" +

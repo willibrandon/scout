@@ -2754,6 +2754,26 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies non-heading directory context output separates file groups.
+    /// </summary>
+    [Fact]
+    public void DirectoryContextSeparatesFileGroups()
+    {
+        string root = CreateTempDirectory();
+        string first = Path.Combine(root, "a.txt");
+        string second = Path.Combine(root, "b.txt");
+        File.WriteAllText(first, "one\nneedle\ntwo\n");
+        File.WriteAllText(second, "three\nneedle\nfour\n");
+
+        (int exitCode, byte[] output, string error) = RunScout("--sort=path", "--no-heading", "-H", "-C1", "needle", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--sort=path", "--no-heading", "-H", "-C1", "needle", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies custom match field separators apply to standard match prefixes.
     /// </summary>
     [Fact]

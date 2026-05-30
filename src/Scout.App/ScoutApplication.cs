@@ -505,9 +505,41 @@ internal static class ScoutApplication
 
         bool prefixPaths = lowArgs.Vimgrep || paths.Count > 1 || ContainsDirectory(paths);
         bool autoMmapEligible = IsAutoMmapEligible(paths);
+        bool interPathContextSeparator = ShouldWriteInterFileContextSeparator(lowArgs, heading, separators);
+        bool wroteContextBody = false;
         for (int index = 0; index < paths.Count; index++)
         {
             bool defaultRoot = useDefaultCurrentDirectory && index == 0;
+            if (interPathContextSeparator)
+            {
+                using MemoryStream buffer = new();
+                var writer = new RawByteWriter(buffer);
+                bool pathMatched = false;
+                bool pathErrored = false;
+                if (stats)
+                {
+                    SearchStats pathStats = default;
+                    SearchPathWithStats(paths[index], patterns, standardInput, defaultRoot, prefixPaths, paths.Count > 1, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, writer, diagnostics, logger, asciiCaseInsensitive, heading, ref wroteHeadingOutput, ref pathMatched, ref pathErrored, ref pathStats);
+                    searchStats.Add(pathStats);
+                }
+                else
+                {
+                    SearchPath(paths[index], patterns, standardInput, defaultRoot, prefixPaths, paths.Count > 1, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, writer, diagnostics, logger, asciiCaseInsensitive, heading, ref wroteHeadingOutput, ref pathMatched, ref pathErrored);
+                }
+
+                writer.Flush();
+                byte[] body = buffer.ToArray();
+                if (body.Length > 0)
+                {
+                    WriteInterFileContextSeparatorIfNeeded(output, separators, ref wroteContextBody);
+                    output.Write(body);
+                }
+
+                matched |= pathMatched;
+                errored |= pathErrored;
+                continue;
+            }
+
             if (stats)
             {
                 SearchPathWithStats(paths[index], patterns, standardInput, defaultRoot, prefixPaths, paths.Count > 1, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, output, diagnostics, logger, asciiCaseInsensitive, heading, ref wroteHeadingOutput, ref matched, ref errored, ref searchStats);
@@ -520,6 +552,12 @@ internal static class ScoutApplication
 
         if (stats)
         {
+            if (interPathContextSeparator && wroteContextBody)
+            {
+                output.Write(separators.Context.Span);
+                output.Write(separators.LineTerminator.Span);
+            }
+
             StatsTextWriter.Write(output, searchStats, Stopwatch.GetElapsedTime(statsStarted));
         }
 
@@ -1286,11 +1324,69 @@ internal static class ScoutApplication
         }
 
         string fullRoot = Path.GetFullPath(root);
+        bool interFileContextSeparator = ShouldWriteInterFileContextSeparator(lowArgs, heading, separators);
+        bool wroteContextBody = false;
         foreach (DirEntry entry in GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics))
         {
             string displayPath = GetSearchDirectoryDisplayPath(root, fullRoot, entry.FullPath, defaultRoot);
             byte[] displayPathBytes = GetPathBytes(displayPath, lowArgs.PathSeparator);
             OutputPath outputPath = CreateOutputPath(entry.FullPath, displayPathBytes, lowArgs, color);
+            if (interFileContextSeparator)
+            {
+                using MemoryStream buffer = new();
+                var writer = new RawByteWriter(buffer);
+                bool fileMatched = false;
+                bool fileErrored = false;
+                SearchFile(
+                    entry.FullPath,
+                    pattern,
+                    lowArgs,
+                    true,
+                    false,
+                    writer,
+                    diagnostics,
+                    logger,
+                    GetFileSearchPrefix(lowArgs.SearchMode, true, lowArgs.WithFilename, outputPath),
+                    separators,
+                    lineLimit,
+                    color,
+                    lowArgs.SearchMode,
+                    lowArgs.Vimgrep,
+                    EffectiveLineNumber(lowArgs),
+                    EffectiveColumn(lowArgs),
+                    lowArgs.ByteOffset,
+                    asciiCaseInsensitive,
+                    lowArgs.InvertMatch,
+                    lowArgs.LineRegexp,
+                    lowArgs.WordRegexp,
+                    lowArgs.OnlyMatching,
+                    lowArgs.Replacement,
+                    lowArgs.MaxCount,
+                    lowArgs.TextMode,
+                    lowArgs.Quiet,
+                    lowArgs.Trim,
+                    lowArgs.BeforeContext,
+                    lowArgs.AfterContext,
+                    lowArgs.Passthru,
+                    lowArgs.IncludeZero,
+                    lowArgs.NullPathTerminator,
+                    heading,
+                    ref wroteHeadingOutput,
+                    ref fileMatched,
+                    ref fileErrored);
+                writer.Flush();
+                byte[] body = buffer.ToArray();
+                if (body.Length > 0)
+                {
+                    WriteInterFileContextSeparatorIfNeeded(output, separators, ref wroteContextBody);
+                    output.Write(body);
+                }
+
+                matched |= fileMatched;
+                errored |= fileErrored;
+                continue;
+            }
+
             SearchFile(
                 entry.FullPath,
                 pattern,
@@ -1355,6 +1451,8 @@ internal static class ScoutApplication
         int matchedFlag = 0;
         int erroredFlag = 0;
         bool printedHeading = wroteHeadingOutput;
+        bool interFileContextSeparator = ShouldWriteInterFileContextSeparator(lowArgs, heading, separators);
+        bool printedContextBody = false;
         var printTask = Task.Run(() =>
         {
             foreach (byte[] body in outputs.GetConsumingEnumerable())
@@ -1367,6 +1465,11 @@ internal static class ScoutApplication
                 if (heading && printedHeading)
                 {
                     output.Write("\n"u8);
+                }
+
+                if (interFileContextSeparator)
+                {
+                    WriteInterFileContextSeparatorIfNeeded(output, separators, ref printedContextBody);
                 }
 
                 output.Write(body);
@@ -1489,11 +1592,70 @@ internal static class ScoutApplication
         }
 
         string fullRoot = Path.GetFullPath(root);
+        bool interFileContextSeparator = ShouldWriteInterFileContextSeparator(lowArgs, heading, separators);
+        bool wroteContextBody = false;
         foreach (DirEntry entry in GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics))
         {
             string displayPath = GetSearchDirectoryDisplayPath(root, fullRoot, entry.FullPath, defaultRoot);
             byte[] displayPathBytes = GetPathBytes(displayPath, lowArgs.PathSeparator);
             OutputPath outputPath = CreateOutputPath(entry.FullPath, displayPathBytes, lowArgs, color);
+            if (interFileContextSeparator)
+            {
+                using MemoryStream buffer = new();
+                var writer = new RawByteWriter(buffer);
+                bool fileMatched = false;
+                bool fileErrored = false;
+                SearchFileWithStats(
+                    entry.FullPath,
+                    pattern,
+                    lowArgs,
+                    true,
+                    false,
+                    writer,
+                    diagnostics,
+                    logger,
+                    GetFileSearchPrefix(lowArgs.SearchMode, true, lowArgs.WithFilename, outputPath),
+                    separators,
+                    lineLimit,
+                    color,
+                    lowArgs.SearchMode,
+                    lowArgs.Vimgrep,
+                    EffectiveLineNumber(lowArgs),
+                    EffectiveColumn(lowArgs),
+                    lowArgs.ByteOffset,
+                    asciiCaseInsensitive,
+                    lowArgs.InvertMatch,
+                    lowArgs.LineRegexp,
+                    lowArgs.WordRegexp,
+                    lowArgs.OnlyMatching,
+                    lowArgs.Replacement,
+                    lowArgs.MaxCount,
+                    lowArgs.TextMode,
+                    lowArgs.Quiet,
+                    lowArgs.Trim,
+                    lowArgs.BeforeContext,
+                    lowArgs.AfterContext,
+                    lowArgs.Passthru,
+                    lowArgs.IncludeZero,
+                    lowArgs.NullPathTerminator,
+                    heading,
+                    ref wroteHeadingOutput,
+                    ref fileMatched,
+                    ref fileErrored,
+                    ref stats);
+                writer.Flush();
+                byte[] body = buffer.ToArray();
+                if (body.Length > 0)
+                {
+                    WriteInterFileContextSeparatorIfNeeded(output, separators, ref wroteContextBody);
+                    output.Write(body);
+                }
+
+                matched |= fileMatched;
+                errored |= fileErrored;
+                continue;
+            }
+
             SearchFileWithStats(
                 entry.FullPath,
                 pattern,
@@ -1562,6 +1724,8 @@ internal static class ScoutApplication
         int matchedFlag = 0;
         int erroredFlag = 0;
         bool printedHeading = wroteHeadingOutput;
+        bool interFileContextSeparator = ShouldWriteInterFileContextSeparator(lowArgs, heading, separators);
+        bool printedContextBody = false;
         var printTask = Task.Run(() =>
         {
             foreach (byte[] body in outputs.GetConsumingEnumerable())
@@ -1574,6 +1738,11 @@ internal static class ScoutApplication
                 if (heading && printedHeading)
                 {
                     output.Write("\n"u8);
+                }
+
+                if (interFileContextSeparator)
+                {
+                    WriteInterFileContextSeparatorIfNeeded(output, separators, ref printedContextBody);
                 }
 
                 output.Write(body);
@@ -1675,6 +1844,26 @@ internal static class ScoutApplication
         stats.Add(aggregateStats);
         matched |= Volatile.Read(ref matchedFlag) != 0;
         errored |= Volatile.Read(ref erroredFlag) != 0;
+    }
+
+    private static bool ShouldWriteInterFileContextSeparator(CliLowArgs lowArgs, bool heading, OutputSeparators separators)
+    {
+        return !heading &&
+            separators.ContextEnabled &&
+            lowArgs.SearchMode == CliSearchMode.Standard &&
+            !lowArgs.Passthru &&
+            (lowArgs.BeforeContext > 0 || lowArgs.AfterContext > 0);
+    }
+
+    private static void WriteInterFileContextSeparatorIfNeeded(RawByteWriter output, OutputSeparators separators, ref bool wroteContextBody)
+    {
+        if (wroteContextBody)
+        {
+            output.Write(separators.Context.Span);
+            output.Write(separators.LineTerminator.Span);
+        }
+
+        wroteContextBody = true;
     }
 
     private static int RunTypeList(CliLowArgs lowArgs, RawByteWriter output, DiagnosticMessenger diagnostics)

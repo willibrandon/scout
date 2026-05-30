@@ -380,7 +380,6 @@ internal static class DifferentialOutputNormalizer
         int lineCount = hasTrailingLineFeed ? split.Length - 1 : split.Length;
         var chunks = new List<(string Key, int FirstIndex, List<string> Lines)>();
         var currentLines = new List<string>();
-        string? currentKey = null;
         int currentFirstIndex = -1;
         bool sawSeparator = false;
         bool endedWithSeparator = false;
@@ -391,32 +390,20 @@ internal static class DifferentialOutputNormalizer
             {
                 sawSeparator = true;
                 endedWithSeparator = true;
-                if (currentLines.Count == 0 || currentKey is null)
+                if (!TryAddContextChunk(chunks, currentLines, currentFirstIndex))
                 {
                     return false;
                 }
 
-                chunks.Add((currentKey, currentFirstIndex, currentLines));
                 currentLines = [];
-                currentKey = null;
                 currentFirstIndex = -1;
                 continue;
             }
 
-            if (!TryGetPathSortKey(line, allowContextSeparator: true, out string? key))
-            {
-                return false;
-            }
-
             endedWithSeparator = false;
-            if (currentKey is null)
+            if (currentLines.Count == 0)
             {
-                currentKey = key;
                 currentFirstIndex = index;
-            }
-            else if (!string.Equals(currentKey, key, StringComparison.Ordinal))
-            {
-                return false;
             }
 
             currentLines.Add(line);
@@ -429,7 +416,10 @@ internal static class DifferentialOutputNormalizer
 
         if (currentLines.Count > 0)
         {
-            chunks.Add((currentKey!, currentFirstIndex, currentLines));
+            if (!TryAddContextChunk(chunks, currentLines, currentFirstIndex))
+            {
+                return false;
+            }
         }
 
         if (chunks.Count < 2)
@@ -460,6 +450,47 @@ internal static class DifferentialOutputNormalizer
         }
 
         sorted = JoinLines(lines, hasTrailingLineFeed);
+        return true;
+    }
+
+    private static bool TryAddContextChunk(List<(string Key, int FirstIndex, List<string> Lines)> chunks, List<string> lines, int firstIndex)
+    {
+        if (lines.Count == 0)
+        {
+            return false;
+        }
+
+        string? key = null;
+        string? fallbackKey = null;
+        for (int index = 0; index < lines.Count; index++)
+        {
+            if (TryGetPathSortKey(lines[index], allowContextSeparator: false, out string? strictKey))
+            {
+                if (key is not null && !string.Equals(key, strictKey, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+
+                key = strictKey;
+                continue;
+            }
+
+            if (TryGetPathSortKey(lines[index], allowContextSeparator: true, out string? contextKey))
+            {
+                fallbackKey ??= contextKey;
+                continue;
+            }
+
+            return false;
+        }
+
+        key ??= fallbackKey;
+        if (key is null)
+        {
+            return false;
+        }
+
+        chunks.Add((key, firstIndex, lines));
         return true;
     }
 
