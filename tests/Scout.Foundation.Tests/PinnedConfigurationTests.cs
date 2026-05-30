@@ -205,6 +205,7 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("_pcre2_match_8", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("_pcre2_match_data_create_from_pattern_8", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P 'foo(?=bar)'", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("-P -o '.*o(?!.*\\s)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("<AllowUnsafeBlocks>true</AllowUnsafeBlocks>", directoryBuildProps, StringComparison.Ordinal);
         Assert.Contains("<DirectPInvoke Include=\"__Internal\" />", directoryBuildProps, StringComparison.Ordinal);
         Assert.Contains("PCRE2 10.46 is available (JIT is available)", appBuildScript, StringComparison.Ordinal);

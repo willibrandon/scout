@@ -606,7 +606,7 @@ internal static class ScoutApplication
         {
             byte[] pattern = BuildPcre2Pattern(patterns);
             using var regex = new Pcre2Regex(pattern, GetPcre2CompileOptions(lowArgs, patterns));
-            bool matched = SearchPcre2Lines(bytes, regex, output, separators);
+            bool matched = SearchPcre2Lines(bytes, regex, output, separators, lowArgs.OnlyMatching);
             output.Flush();
             return matched ? ExitCode.Success : ExitCode.NoMatch;
         }
@@ -632,7 +632,6 @@ internal static class ScoutApplication
             !lowArgs.Column &&
             !lowArgs.LineNumber &&
             !lowArgs.InvertMatch &&
-            !lowArgs.OnlyMatching &&
             lowArgs.Replacement is null &&
             lowArgs.MaxCount is null &&
             lowArgs.BeforeContext == 0 &&
@@ -687,7 +686,7 @@ internal static class ScoutApplication
         return buffer.ToArray();
     }
 
-    private static bool SearchPcre2Lines(byte[] bytes, Pcre2Regex regex, RawByteWriter output, OutputSeparators separators)
+    private static bool SearchPcre2Lines(byte[] bytes, Pcre2Regex regex, RawByteWriter output, OutputSeparators separators, bool onlyMatching)
     {
         bool matched = false;
         int lineStart = 0;
@@ -705,10 +704,17 @@ internal static class ScoutApplication
 
             if (regex.TryFind(line, out _))
             {
-                output.Write(bytes.AsSpan(lineStart, outputEnd - lineStart));
-                if (lineFeed < 0)
+                if (onlyMatching)
                 {
-                    output.Write(separators.LineTerminator.Span);
+                    WritePcre2OnlyMatches(line, regex, output, separators);
+                }
+                else
+                {
+                    output.Write(bytes.AsSpan(lineStart, outputEnd - lineStart));
+                    if (lineFeed < 0)
+                    {
+                        output.Write(separators.LineTerminator.Span);
+                    }
                 }
 
                 matched = true;
@@ -723,6 +729,17 @@ internal static class ScoutApplication
         }
 
         return matched;
+    }
+
+    private static void WritePcre2OnlyMatches(ReadOnlySpan<byte> line, Pcre2Regex regex, RawByteWriter output, OutputSeparators separators)
+    {
+        int startOffset = 0;
+        while (startOffset <= line.Length && regex.TryFind(line, startOffset, out Pcre2Match match))
+        {
+            output.Write(line.Slice(match.Start, match.Length));
+            output.Write(separators.LineTerminator.Span);
+            startOffset = match.Length == 0 ? match.Start + 1 : match.Start + match.Length;
+        }
     }
 
     private static int RunJsonSearch(

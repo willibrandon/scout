@@ -87,7 +87,24 @@ public sealed unsafe partial class Pcre2Regex : IDisposable
     /// <returns><see langword="true" /> when a match was found.</returns>
     public bool TryFind(ReadOnlySpan<byte> subject, out Pcre2Match match)
     {
+        return TryFind(subject, startOffset: 0, out match);
+    }
+
+    /// <summary>
+    /// Finds the first match in the subject at or after the given start offset.
+    /// </summary>
+    /// <param name="subject">The subject bytes.</param>
+    /// <param name="startOffset">The zero-based subject offset where matching starts.</param>
+    /// <param name="match">The first match span.</param>
+    /// <returns><see langword="true" /> when a match was found.</returns>
+    public bool TryFind(ReadOnlySpan<byte> subject, int startOffset, out Pcre2Match match)
+    {
         ThrowIfDisposed();
+        if (startOffset < 0 || startOffset > subject.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startOffset));
+        }
+
         int result;
         if (subject.Length == 0)
         {
@@ -96,7 +113,7 @@ public sealed unsafe partial class Pcre2Regex : IDisposable
                 code,
                 &empty,
                 0,
-                0,
+                (nuint)startOffset,
                 options: 0,
                 matchData,
                 IntPtr.Zero);
@@ -109,7 +126,7 @@ public sealed unsafe partial class Pcre2Regex : IDisposable
                     code,
                     subjectPointer,
                     (nuint)subject.Length,
-                    0,
+                    (nuint)startOffset,
                     options: 0,
                     matchData,
                     IntPtr.Zero);

@@ -63,6 +63,10 @@ EOF
 "$BIN/scout" -P 'foo(?=bar)' "$BIN/pcre2-smoke.txt" > "$BIN/pcre2-smoke.out"
 printf 'foobar\nfoobarfoo\n' > "$BIN/pcre2-smoke.expected"
 cmp "$BIN/pcre2-smoke.expected" "$BIN/pcre2-smoke.out"
+printf 'foo 42\nxoyz\ncat\tdog\n' > "$BIN/pcre2-only-matching.txt"
+"$BIN/scout" -P -o '.*o(?!.*\s)' "$BIN/pcre2-only-matching.txt" > "$BIN/pcre2-only-matching.out"
+printf 'xo\ncat\tdo\n' > "$BIN/pcre2-only-matching.expected"
+cmp "$BIN/pcre2-only-matching.expected" "$BIN/pcre2-only-matching.out"
 for symbol in \
     _pcre2_code_free_8 \
     _pcre2_compile_8 \
