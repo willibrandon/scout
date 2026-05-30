@@ -187,3 +187,73 @@ sha256 = "7d0ea2f796478d1ca2a6954430cb1cfbd04031a182f8611cb50a7c73e443ce33"
 name = "regex-1.12.2-word-boundary"
 path = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/word-boundary.toml"
 sha256 = "51bc1c498ab825420340a2dd3e6623de4054937ba6d5020ff8cd14b1c1e45271"
+
+[[corpus]]
+name = "encoding-rs-0.8.35-big5-in"
+path = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs-0.8.35/src/test_data/big5_in.txt"
+sha256 = "a5ae290786610c7facdbb1d06be6815e8bb81d68dfa7380edc7ddb6b8c7e412e"
+
+[[corpus]]
+name = "encoding-rs-0.8.35-euc-kr-in"
+path = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs-0.8.35/src/test_data/euc_kr_in.txt"
+sha256 = "21534ec87e82d785d128f980902d13fab6d9dea15c69a991f409d9b0afd1c852"
+
+[[corpus]]
+name = "encoding-rs-0.8.35-gb18030-in"
+path = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs-0.8.35/src/test_data/gb18030_in.txt"
+sha256 = "0dd1fbf0360930daafdce7e6761852005a8f92f7910180df19a070b6c3c59dee"
+
+[[corpus]]
+name = "encoding-rs-0.8.35-iso-2022-jp-in"
+path = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs-0.8.35/src/test_data/iso_2022_jp_in.txt"
+sha256 = "98fb823530a30a76eb0ba7ab6ac796959e8869c1ec143f018a1964581ae813aa"
+
+[[corpus]]
+name = "encoding-rs-0.8.35-jis0208-in"
+path = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs-0.8.35/src/test_data/jis0208_in.txt"
+sha256 = "3c1a7aaada00d6fff41e60bd7589d7ae94afaf562759b116958b1d84711d17b6"
+
+[[corpus]]
+name = "encoding-rs-0.8.35-jis0212-in"
+path = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs-0.8.35/src/test_data/jis0212_in.txt"
+sha256 = "9eda766002646a27310457c661832429beff9089d2703355812c4cac30d800b5"
+
+[[corpus]]
+name = "encoding-rs-0.8.35-shift-jis-in"
+path = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs-0.8.35/src/test_data/shift_jis_in.txt"
+sha256 = "e65df746be90359e70422868522a7aa3e8ed20e0d4c0cf9995d9de248bf93388"
+
+[[corpus]]
+name = "encoding-rs-0.8.35-big5-in-ref"
+path = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs-0.8.35/src/test_data/big5_in_ref.txt"
+sha256 = "52733d9970fb8987f014fa0eac2792250123cf583b363beb2ce7b3c55e3dc555"
+
+[[corpus]]
+name = "encoding-rs-0.8.35-euc-kr-in-ref"
+path = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs-0.8.35/src/test_data/euc_kr_in_ref.txt"
+sha256 = "b3009e6a94967df1f1135c66f005610bebad6666d634aec72d2ad77c3211bda3"
+
+[[corpus]]
+name = "encoding-rs-0.8.35-gb18030-in-ref"
+path = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs-0.8.35/src/test_data/gb18030_in_ref.txt"
+sha256 = "f3eaea1115857054cf30f8ba18219e72377f2a4afd848ccf223770d75aa4251d"
+
+[[corpus]]
+name = "encoding-rs-0.8.35-iso-2022-jp-in-ref"
+path = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs-0.8.35/src/test_data/iso_2022_jp_in_ref.txt"
+sha256 = "df82166d2e01bb446211d7e46f33b47d93ac1bafeae2ed880ee93c4096d11210"
+
+[[corpus]]
+name = "encoding-rs-0.8.35-jis0208-in-ref"
+path = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs-0.8.35/src/test_data/jis0208_in_ref.txt"
+sha256 = "df82166d2e01bb446211d7e46f33b47d93ac1bafeae2ed880ee93c4096d11210"
+
+[[corpus]]
+name = "encoding-rs-0.8.35-jis0212-in-ref"
+path = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs-0.8.35/src/test_data/jis0212_in_ref.txt"
+sha256 = "fcf74c58d2cbe9b3f3db4fa9eff26e09f5e9644097c78614c03177e938988d03"
+
+[[corpus]]
+name = "encoding-rs-0.8.35-shift-jis-in-ref"
+path = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs-0.8.35/src/test_data/shift_jis_in_ref.txt"
+sha256 = "13b15aed64e9e7cb35e6a740b67413f0c285fda944f4814d45a7619ea338fb5e"
