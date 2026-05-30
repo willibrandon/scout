@@ -353,6 +353,11 @@ internal static class ScoutApplication
             return RunTypeList(lowArgs, output, diagnostics);
         }
 
+        if (!TryValidateOverrideGlobs(lowArgs, diagnostics))
+        {
+            return ExitCode.Error;
+        }
+
         if (lowArgs.SearchMode == CliSearchMode.Files)
         {
             if (!TryBuildFileTypeMatcher(lowArgs, out FileTypeMatcher? fileTypes, out ScoutError? error))
@@ -1974,6 +1979,26 @@ internal static class ScoutApplication
         }
 
         return builder.Build();
+    }
+
+    private static bool TryValidateOverrideGlobs(CliLowArgs lowArgs, DiagnosticMessenger diagnostics)
+    {
+        var builder = new OverrideBuilder(Directory.GetCurrentDirectory());
+        for (int index = 0; index < lowArgs.GlobPatterns.Count; index++)
+        {
+            CliGlobPattern pattern = lowArgs.GlobPatterns[index];
+            try
+            {
+                builder.Add(pattern.Value, pattern.CaseInsensitive || lowArgs.GlobCaseInsensitive);
+            }
+            catch (GlobParseException exception)
+            {
+                diagnostics.ErrorMessage(new ScoutError($"error parsing glob '{pattern.Value}': {exception.Message}").WithContext("rg"));
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static OutputSeparators GetOutputSeparators(CliLowArgs lowArgs)

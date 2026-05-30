@@ -168,6 +168,7 @@ tests/regression.rs|r105_part2
 tests/regression.rs|r105_part1
 tests/regression.rs|r127
 tests/regression.rs|r128
+tests/regression.rs|r131
 tests/regression.rs|r137
 tests/regression.rs|r156
 tests/regression.rs|r184
@@ -224,6 +225,7 @@ tests/regression.rs|r1334_invert_empty_patterns
 tests/regression.rs|r1334_crazy_literals
 tests/regression.rs|r1380
 tests/regression.rs|r1389_bad_symlinks_no_biscuit
+tests/regression.rs|r1446_respect_excludes_in_worktree
 tests/regression.rs|r1537
 tests/regression.rs|r1559
 tests/regression.rs|r1638
@@ -246,6 +248,8 @@ tests/regression.rs|r2944_incorrect_bytes_searched
 tests/regression.rs|r2990_trip_over_trailing_dot
 tests/regression.rs|r3067_gitignore_error
 tests/regression.rs|r3108_files_without_match_quiet_exit
+tests/regression.rs|r3127_gitignore_allow_unclosed_class
+tests/regression.rs|r3127_glob_flag_not_allow_unclosed_class
 tests/regression.rs|r3173_hidden_whitelist_only_dot
 tests/feature.rs|f419_zero_as_shortcut_for_null
 tests/feature.rs|f740_passthru

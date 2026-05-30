@@ -118,7 +118,7 @@ internal sealed class IgnoreStack
 
         if (gitExclude)
         {
-            AddFileRules(directory, Path.Combine(".git", "info", "exclude"), gitExcludeRuleSet, ignoreCaseInsensitive);
+            AddGitExcludeRules(directory, gitExcludeRuleSet, ignoreCaseInsensitive);
         }
 
         var dotRuleSet = new IgnoreRuleSet();
@@ -246,5 +246,104 @@ internal sealed class IgnoreStack
         }
 
         ruleSet.AddFile(directory, path, ignoreCaseInsensitive);
+    }
+
+    private static void AddGitExcludeRules(string directory, IgnoreRuleSet ruleSet, bool ignoreCaseInsensitive)
+    {
+        string? path = ResolveGitExcludePath(directory);
+        if (path is not null && File.Exists(path))
+        {
+            ruleSet.AddFile(directory, path, ignoreCaseInsensitive);
+        }
+    }
+
+    private static string? ResolveGitExcludePath(string directory)
+    {
+        string dotGit = Path.Combine(directory, ".git");
+        if (Directory.Exists(dotGit))
+        {
+            return Path.Combine(dotGit, "info", "exclude");
+        }
+
+        if (!File.Exists(dotGit))
+        {
+            return null;
+        }
+
+        string? gitDir = TryReadGitDirFile(directory, dotGit);
+        if (gitDir is null)
+        {
+            return null;
+        }
+
+        string commonDir = ResolveCommonGitDirectory(gitDir);
+        return Path.Combine(commonDir, "info", "exclude");
+    }
+
+    private static string? TryReadGitDirFile(string directory, string dotGit)
+    {
+        string? line;
+        try
+        {
+            using StreamReader reader = File.OpenText(dotGit);
+            line = reader.ReadLine();
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+
+        const string prefix = "gitdir:";
+        if (line is null || !line.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        string path = line[prefix.Length..].Trim();
+        if (Path.IsPathRooted(path))
+        {
+            return Path.GetFullPath(path);
+        }
+
+        string relativeToGitFile = Path.GetFullPath(Path.Combine(directory, path));
+        if (Directory.Exists(relativeToGitFile) || File.Exists(relativeToGitFile))
+        {
+            return relativeToGitFile;
+        }
+
+        return Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), path));
+    }
+
+    private static string ResolveCommonGitDirectory(string gitDir)
+    {
+        string commonDirPath = Path.Combine(gitDir, "commondir");
+        string? line;
+        try
+        {
+            using StreamReader reader = File.OpenText(commonDirPath);
+            line = reader.ReadLine();
+        }
+        catch (IOException)
+        {
+            return gitDir;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return gitDir;
+        }
+
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            return gitDir;
+        }
+
+        string path = line.Trim();
+        return Path.IsPathRooted(path)
+            ? Path.GetFullPath(path)
+            : Path.GetFullPath(Path.Combine(gitDir, path));
     }
 }

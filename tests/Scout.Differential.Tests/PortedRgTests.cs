@@ -1169,6 +1169,16 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "-n", "x", ".")),
             new(
                 "tests/regression.rs",
+                "r131",
+                dir =>
+                {
+                    dir.CreateDirectory(".git");
+                    dir.CreateFile(".gitignore", "Top\u00D1apa");
+                    dir.CreateFile("Top\u00D1apa", "test");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "test", ".")),
+            new(
+                "tests/regression.rs",
                 "r137",
                 dir =>
                 {
@@ -1649,6 +1659,21 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "test", "--no-ignore", "--sort", "path", "mylink")),
             new(
                 "tests/regression.rs",
+                "r1446_respect_excludes_in_worktree",
+                dir =>
+                {
+                    dir.CreateDirectory("repo/.git/info");
+                    dir.CreateFile("repo/.git/info/exclude", "ignored");
+                    dir.CreateDirectory("repo/.git/worktrees/repotree");
+                    dir.CreateFile("repo/.git/worktrees/repotree/commondir", "../..");
+                    dir.CreateDirectory("repotree");
+                    dir.CreateFile("repotree/.git", "gitdir: repo/.git/worktrees/repotree");
+                    dir.CreateFile("repotree/ignored", string.Empty);
+                    dir.CreateFile("repotree/not-ignored", string.Empty);
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--sort", "path", "--files", "repotree")),
+            new(
+                "tests/regression.rs",
                 "r1537",
                 dir => dir.CreateFile("foo", "abc;de,fg"),
                 DifferentialCase.Exact("--path-separator", "/", ";(.*,){1}", ".")),
@@ -1836,6 +1861,26 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "-q", "abc", "non-match"),
                 DifferentialCase.Exact("--path-separator", "/", "-q", "abc", "yes-match"),
                 DifferentialCase.Exact("--path-separator", "/", "--files-with-matches", "-q", "abc", "non-match")),
+            new(
+                "tests/regression.rs",
+                "r3127_gitignore_allow_unclosed_class",
+                dir =>
+                {
+                    dir.CreateDirectory(".git");
+                    dir.CreateFile(".gitignore", "[abc");
+                    dir.CreateFile("[abc", string.Empty);
+                    dir.CreateFile("test", string.Empty);
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--files")),
+            new(
+                "tests/regression.rs",
+                "r3127_glob_flag_not_allow_unclosed_class",
+                dir =>
+                {
+                    dir.CreateFile("[abc", string.Empty);
+                    dir.CreateFile("test", string.Empty);
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--files", "-g", "[abc")),
             new(
                 "tests/regression.rs",
                 "r3173_hidden_whitelist_only_dot",
