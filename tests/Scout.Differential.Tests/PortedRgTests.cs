@@ -1292,6 +1292,16 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "-g", "!/foo/**", "test", ".")),
             new(
                 "tests/regression.rs",
+                "r428_color_context_path",
+                dir => dir.CreateFile("sherlock", "foo\nbar"),
+                DifferentialCase.Exact("--path-separator", "/", "-A1", "-H", "--no-heading", "-N", "--colors=match:none", "--color=always", "--hyperlink-format=", "foo")),
+            new(
+                "tests/regression.rs",
+                "r428_unrecognized_style",
+                dir => dir.CreateFile("file.txt", "Sherlock"),
+                DifferentialCase.Exact("--path-separator", "/", "--colors=match:style:", "Sherlock")),
+            new(
+                "tests/regression.rs",
                 "r451_only_matching_as_in_issue",
                 dir => dir.CreateFile("digits.txt", "1 2 3\n"),
                 DifferentialCase.Exact("--path-separator", "/", "--only-matching", @"[0-9]+", "digits.txt")),
@@ -1339,6 +1349,11 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "-e-baz", "-e", "-baz", "file"),
                 DifferentialCase.Exact("--path-separator", "/", "-rni", "bar", "file"),
                 DifferentialCase.Exact("--path-separator", "/", "-r", "-n", "-i", "bar", "file")),
+            new(
+                "tests/regression.rs",
+                "r599",
+                dir => dir.CreateFile("input.txt", "\n\ntest\n"),
+                DifferentialCase.Exact("--path-separator", "/", "--color", "ansi", "--colors", "path:none", "--colors", "line:none", "--colors", "match:fg:red", "--colors", "match:style:nobold", "--line-number", @"^$", "input.txt")),
             new(
                 "tests/regression.rs",
                 "r693_context_in_contextless_mode",
@@ -2129,6 +2144,46 @@ internal static class PortedRgTests
                 "f411_search_stats",
                 dir => dir.CreateFile("sherlock", "needle\nmiss\nneedle\n"),
                 DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--path-separator", "/", "-j1", "--stats", "needle", ".")),
+            new(
+                "tests/binary.rs",
+                "mmap_match_implicit",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--mmap", "-n", "Project Gutenberg EBook", "-g", "hay")),
+            new(
+                "tests/binary.rs",
+                "mmap_match_explicit",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--mmap", "-n", "Project Gutenberg EBook", "hay")),
+            new(
+                "tests/binary.rs",
+                "mmap_match_near_nul",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--mmap", "-n", "abcdef", "hay")),
+            new(
+                "tests/binary.rs",
+                "mmap_match_count",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--mmap", "-c", "Project Gutenberg EBook|Heaven", "hay")),
+            new(
+                "tests/binary.rs",
+                "mmap_match_multiple",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--mmap", "-n", "Project Gutenberg EBook|Heaven", "hay")),
+            new(
+                "tests/binary.rs",
+                "mmap_binary_flag",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--mmap", "-n", "--binary", "Heaven", "-g", "hay")),
+            new(
+                "tests/binary.rs",
+                "mmap_text_flag",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--mmap", "-n", "--text", "Heaven", "-g", "hay")),
+            new(
+                "tests/binary.rs",
+                "mmap_after_nul_match",
+                CreateSherlockNul,
+                DifferentialCase.Exact("--path-separator", "/", "--mmap", "-n", "medical student", "hay")),
             new(
                 "tests/binary.rs",
                 "after_match1_implicit",
