@@ -8,6 +8,10 @@ tests/multiline.rs|only_matching
 tests/multiline.rs|vimgrep
 tests/multiline.rs|stdin
 tests/multiline.rs|context
+tests/json.rs|basic
+tests/json.rs|replacement
+tests/json.rs|quiet_stats
+tests/json.rs|crlf
 tests/feature.rs|f7_stdin
 tests/feature.rs|f20_no_filename
 tests/misc.rs|single_file

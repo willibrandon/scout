@@ -59,6 +59,26 @@ internal static class PortedRgTests
                 dir => dir.CreateFile("sherlock", Sherlock),
                 DifferentialCase.Exact("--path-separator", "/", "-n", "-U", "-C1", @"detective work\p{Any}+?result of luck", "sherlock")),
             new(
+                "tests/json.rs",
+                "basic",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--path-separator", "/", "--json", "-B1", "Sherlock Holmes", "sherlock")),
+            new(
+                "tests/json.rs",
+                "replacement",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--path-separator", "/", "--json", "-B1", "Sherlock Holmes", "-r", "John Watson", "sherlock")),
+            new(
+                "tests/json.rs",
+                "quiet_stats",
+                dir => dir.CreateFile("sherlock", Sherlock),
+                DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--path-separator", "/", "--json", "--quiet", "--stats", "Sherlock Holmes", "sherlock")),
+            new(
+                "tests/json.rs",
+                "crlf",
+                dir => dir.CreateFile("sherlock", SherlockCrlf),
+                DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--path-separator", "/", "--json", "--crlf", @"Sherlock$", "sherlock")),
+            new(
                 "tests/feature.rs",
                 "f7_stdin",
                 dir => dir.CreateFile("sherlock", Sherlock),
