@@ -72,3 +72,8 @@ sha256 = "resolved@fetch"
 name = "linux-kernel"
 url = "resolved@fetch"
 sha256 = "resolved@fetch"
+
+[[corpus]]
+name = "regex-1.12.2-misc"
+path = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/misc.toml"
+sha256 = "32c9591655c6fb118dfefcb4de49a04820a63cb960533dfc2538cdaabf4f4047"

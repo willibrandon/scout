@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -121,6 +122,24 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("version = \"0.4.13\"", cargoLock, StringComparison.Ordinal);
         Assert.Contains("name = \"regex-syntax\"", cargoLock, StringComparison.Ordinal);
         Assert.Contains("version = \"0.8.8\"", cargoLock, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Verifies the initial regex conformance corpus file is pinned by hash.
+    /// </summary>
+    [Fact]
+    public void RegexCorpusFileMatchesPinnedHash()
+    {
+        const string expectedSha256 = "32C9591655C6FB118DFEFCB4DE49A04820A63CB960533DFC2538CDAABF4F4047";
+        const string corpusPath = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/misc.toml";
+
+        string root = FindRepositoryRoot();
+        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        Assert.Contains("name = \"regex-1.12.2-misc\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("sha256 = \"" + expectedSha256.ToLowerInvariant() + "\"", prerequisiteLock, StringComparison.Ordinal);
+
+        byte[] hash = SHA256.HashData(File.ReadAllBytes(corpusPath));
+        Assert.Equal(expectedSha256, Convert.ToHexString(hash));
     }
 
     private static void AssertPackageVersion(XDocument document, string packageId, string expectedVersion)
