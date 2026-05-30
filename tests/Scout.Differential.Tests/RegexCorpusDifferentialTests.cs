@@ -10,7 +10,7 @@ namespace Scout;
 /// </summary>
 public sealed class RegexCorpusDifferentialTests
 {
-    private const int ExpectedDifferentialCaseCount = 122;
+    private const int ExpectedDifferentialCaseCount = 126;
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
@@ -23,7 +23,7 @@ public sealed class RegexCorpusDifferentialTests
         ("misc.toml", 13),
         ("multiline.toml", 1),
         ("regex-lite.toml", 5),
-        ("regression.toml", 9),
+        ("regression.toml", 13),
     ];
 
     private static readonly (string RelativePath, string Name)[] DifferentialCases =
@@ -144,6 +144,10 @@ public sealed class RegexCorpusDifferentialTests
         ("regression.toml", "many-alternates"),
         ("regression.toml", "word-boundary-alone-100"),
         ("regression.toml", "word-boundary-alone-200"),
+        ("regression.toml", "partial-anchor"),
+        ("regression.toml", "partial-anchor-alternate-begin"),
+        ("regression.toml", "partial-anchor-alternate-end"),
+        ("regression.toml", "lits-unambiguous-100"),
         ("multiline.toml", "repeat8"),
         ("regex-lite.toml", "perl-class-decimal"),
         ("regex-lite.toml", "perl-class-space"),
