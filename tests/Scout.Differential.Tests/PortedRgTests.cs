@@ -702,6 +702,29 @@ internal static class PortedRgTests
                 DifferentialCase.ExactInDirectory("foo", "--path-separator", "/", "--no-ignore-parent", "Sherlock")),
             new(
                 "tests/misc.rs",
+                "unrestricted1",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.CreateFile(".gitignore", "sherlock\n");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-u", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "unrestricted2",
+                dir => dir.CreateFile(".sherlock", Sherlock),
+                DifferentialCase.Exact("--path-separator", "/", "-uu", "Sherlock", ".")),
+            new(
+                "tests/misc.rs",
+                "unrestricted3",
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.CreateFile("hay", "foo\0bar\nfoo\0baz\n");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-uuu", "foo", ".")),
+            new(
+                "tests/misc.rs",
                 "vimgrep",
                 dir => dir.CreateFile("sherlock", Sherlock),
                 DifferentialCase.Exact("--path-separator", "/", "--vimgrep", "Sherlock|Watson", ".")),
@@ -717,6 +740,36 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "--vimgrep", "-N", "--no-column", "Sherlock|Watson", ".")),
             new(
                 "tests/misc.rs",
+                "binary_convert",
+                dir => dir.CreateFile("file", "foo\0bar\nfoo\0baz\n"),
+                DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "foo", "file")),
+            new(
+                "tests/misc.rs",
+                "binary_convert_mmap",
+                dir => dir.CreateFile("file", "foo\0bar\nfoo\0baz\n"),
+                DifferentialCase.Exact("--path-separator", "/", "--mmap", "foo", "file")),
+            new(
+                "tests/misc.rs",
+                "binary_quit",
+                dir => dir.CreateFile("file", "foo\0bar\nfoo\0baz\n"),
+                DifferentialCase.Exact("--path-separator", "/", "--no-mmap", "foo", "-gfile")),
+            new(
+                "tests/misc.rs",
+                "binary_quit_mmap",
+                dir => dir.CreateFile("file", "foo\0bar\nfoo\0baz\n"),
+                DifferentialCase.Exact("--path-separator", "/", "--mmap", "foo", "-gfile")),
+            new(
+                "tests/misc.rs",
+                "binary_search_mmap",
+                dir => dir.CreateFile("file", "foo\0bar\nfoo\0baz\n"),
+                DifferentialCase.Exact("--path-separator", "/", "-a", "--mmap", "foo", "file")),
+            new(
+                "tests/misc.rs",
+                "binary_search_no_mmap",
+                dir => dir.CreateFile("file", "foo\0bar\nfoo\0baz\n"),
+                DifferentialCase.Exact("--path-separator", "/", "-a", "--no-mmap", "foo", "file")),
+            new(
+                "tests/misc.rs",
                 "files",
                 dir =>
                 {
@@ -725,6 +778,11 @@ internal static class PortedRgTests
                     dir.CreateFile("dir/file", string.Empty);
                 },
                 DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "--path-separator", "/", "--files", ".")),
+            new(
+                "tests/misc.rs",
+                "type_list",
+                _ => { },
+                DifferentialCase.Exact("--path-separator", "/", "--type-list")),
             new(
                 "tests/misc.rs",
                 "sort_files",
