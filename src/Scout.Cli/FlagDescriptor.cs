@@ -8,6 +8,7 @@ namespace Scout;
 internal sealed class FlagDescriptor
 {
     private readonly Func<CliLowArgs, string, ScoutError?>? applySwitch;
+    private readonly Func<CliLowArgs, OsString, string, ScoutError?>? applyValue;
 
     private FlagDescriptor(
         string longName,
@@ -17,7 +18,8 @@ internal sealed class FlagDescriptor
         FlagKind kind,
         FlagCategory category,
         string doc,
-        Func<CliLowArgs, string, ScoutError?>? applySwitch)
+        Func<CliLowArgs, string, ScoutError?>? applySwitch,
+        Func<CliLowArgs, OsString, string, ScoutError?>? applyValue)
     {
         LongName = longName;
         ShortName = shortName;
@@ -27,6 +29,7 @@ internal sealed class FlagDescriptor
         Category = category;
         Doc = doc;
         this.applySwitch = applySwitch;
+        this.applyValue = applyValue;
     }
 
     /// <summary>
@@ -89,7 +92,7 @@ internal sealed class FlagDescriptor
         ArgumentNullException.ThrowIfNull(doc);
         ArgumentNullException.ThrowIfNull(applySwitch);
 
-        return new FlagDescriptor(longName, shortName, negatedName, aliases, FlagKind.Switch, category, doc, (lowArgs, _) => applySwitch(lowArgs));
+        return new FlagDescriptor(longName, shortName, negatedName, aliases, FlagKind.Switch, category, doc, (lowArgs, _) => applySwitch(lowArgs), applyValue: null);
     }
 
     /// <summary>
@@ -117,7 +120,33 @@ internal sealed class FlagDescriptor
         ArgumentNullException.ThrowIfNull(doc);
         ArgumentNullException.ThrowIfNull(applySwitch);
 
-        return new FlagDescriptor(longName, shortName, negatedName, aliases, FlagKind.Switch, category, doc, applySwitch);
+        return new FlagDescriptor(longName, shortName, negatedName, aliases, FlagKind.Switch, category, doc, applySwitch, applyValue: null);
+    }
+
+    /// <summary>
+    /// Creates a required-value flag descriptor.
+    /// </summary>
+    /// <param name="longName">The canonical long flag name, including <c>--</c>.</param>
+    /// <param name="shortName">The short flag name without <c>-</c>, or <see langword="null" />.</param>
+    /// <param name="aliases">Alternate long flag spellings.</param>
+    /// <param name="category">The help and completion category.</param>
+    /// <param name="doc">The short documentation text.</param>
+    /// <param name="applyValue">The parser action for this value flag.</param>
+    /// <returns>The descriptor.</returns>
+    public static FlagDescriptor Value(
+        string longName,
+        char? shortName,
+        string[] aliases,
+        FlagCategory category,
+        string doc,
+        Func<CliLowArgs, OsString, string, ScoutError?> applyValue)
+    {
+        ArgumentNullException.ThrowIfNull(longName);
+        ArgumentNullException.ThrowIfNull(aliases);
+        ArgumentNullException.ThrowIfNull(doc);
+        ArgumentNullException.ThrowIfNull(applyValue);
+
+        return new FlagDescriptor(longName, shortName, negatedName: null, aliases, FlagKind.Value, category, doc, applySwitch: null, applyValue);
     }
 
     /// <summary>
@@ -159,6 +188,26 @@ internal sealed class FlagDescriptor
         }
 
         error = applySwitch(lowArgs, matchedName);
+        return true;
+    }
+
+    /// <summary>
+    /// Applies this required-value flag to the low-level argument state.
+    /// </summary>
+    /// <param name="lowArgs">The low-level argument state.</param>
+    /// <param name="value">The parsed flag value.</param>
+    /// <param name="matchedName">The spelling that matched this value flag.</param>
+    /// <param name="error">The parsing error, if any.</param>
+    /// <returns><see langword="true" /> when the value action ran.</returns>
+    public bool TryApplyValue(CliLowArgs lowArgs, OsString value, string matchedName, out ScoutError? error)
+    {
+        if (Kind != FlagKind.Value || applyValue is null)
+        {
+            error = null;
+            return false;
+        }
+
+        error = applyValue(lowArgs, value, matchedName);
         return true;
     }
 }

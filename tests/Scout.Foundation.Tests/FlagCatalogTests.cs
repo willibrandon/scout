@@ -42,6 +42,28 @@ public sealed class FlagCatalogTests
     }
 
     /// <summary>
+    /// Verifies the generated catalog contains migrated required-value definitions.
+    /// </summary>
+    [Fact]
+    public void CatalogContainsMigratedValueDefinitions()
+    {
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--max-count", out FlagDescriptor maxCount));
+        Assert.Equal("--max-count", maxCount.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindShortValue('M', out FlagDescriptor maxColumns));
+        Assert.Equal("--max-columns", maxColumns.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindShortValue('j', out FlagDescriptor threads));
+        Assert.Equal("--threads", threads.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindShortValue('A', out FlagDescriptor afterContext));
+        Assert.Equal("--after-context", afterContext.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindShortValue('B', out FlagDescriptor beforeContext));
+        Assert.Equal("--before-context", beforeContext.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindShortValue('C', out FlagDescriptor context));
+        Assert.Equal("--context", context.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--maxdepth", out FlagDescriptor maxDepth));
+        Assert.Equal("--max-depth", maxDepth.LongName);
+    }
+
+    /// <summary>
     /// Verifies generated flag descriptors do not define duplicate canonical spellings.
     /// </summary>
     [Fact]
@@ -112,6 +134,40 @@ public sealed class FlagCatalogTests
         Assert.Equal(CliMmapMode.Never, ioToggles.LowArgs.MmapMode);
         Assert.True(ioToggles.LowArgs.Crlf);
         Assert.True(ioToggles.LowArgs.NullData);
+    }
+
+    /// <summary>
+    /// Verifies parser value behavior is routed through generated flag definitions.
+    /// </summary>
+    [Fact]
+    public void ParserUsesGeneratedValueDefinitions()
+    {
+        CliParseResult numericValues = CliParser.Parse(
+            [
+                OsString.FromUnixBytes("--max-count=10"u8),
+                OsString.FromUnixBytes("-M=16"u8),
+                OsString.FromUnixBytes("-j4"u8),
+                OsString.FromUnixBytes("needle"u8),
+            ]);
+        CliParseResult contextValues = CliParser.Parse(
+            [
+                OsString.FromUnixBytes("-A=2"u8),
+                OsString.FromUnixBytes("-B3"u8),
+                OsString.FromUnixBytes("--context=4"u8),
+                OsString.FromUnixBytes("--maxdepth=5"u8),
+                OsString.FromUnixBytes("needle"u8),
+            ]);
+
+        Assert.Equal(CliParseStatus.Ok, numericValues.Status);
+        Assert.Equal(10UL, numericValues.LowArgs!.MaxCount);
+        Assert.Equal(16UL, numericValues.LowArgs.MaxColumns);
+        Assert.Equal(4UL, numericValues.LowArgs.Threads);
+        Assert.Single(numericValues.LowArgs.Positional);
+        Assert.Equal(CliParseStatus.Ok, contextValues.Status);
+        Assert.Equal(2UL, contextValues.LowArgs!.AfterContext);
+        Assert.Equal(3UL, contextValues.LowArgs.BeforeContext);
+        Assert.Equal(5UL, contextValues.LowArgs.MaxDepth);
+        Assert.Single(contextValues.LowArgs.Positional);
     }
 
     /// <summary>

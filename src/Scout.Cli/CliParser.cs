@@ -47,6 +47,16 @@ public static class CliParser
                 continue;
             }
 
+            if (TryParseGeneratedValueFlag(arguments, ref index, lowArgs, out ScoutError? generatedValueError))
+            {
+                if (generatedValueError is not null)
+                {
+                    return CliParseResult.Fail(generatedValueError);
+                }
+
+                continue;
+            }
+
             if (TryParseValueFlag(arguments, ref index, lowArgs, out ScoutError? valueError))
             {
                 if (valueError is not null)
@@ -138,6 +148,185 @@ public static class CliParser
             return longDescriptor.TryApplySwitch(lowArgs, argument, out error);
         }
 
+        return false;
+    }
+
+    private static bool TryParseGeneratedValueFlag(
+        ReadOnlySpan<OsString> arguments,
+        ref int index,
+        CliLowArgs lowArgs,
+        out ScoutError? error)
+    {
+        OsString argument = arguments[index];
+        if (TryGetGeneratedInlineValue(argument, out FlagDescriptor inlineDescriptor, out string inlineName, out OsString inlineValue))
+        {
+            return inlineDescriptor.TryApplyValue(lowArgs, inlineValue, inlineName, out error);
+        }
+
+        if (TryGetGeneratedValueName(argument, out FlagDescriptor descriptor, out string name))
+        {
+            if (!TryGetFollowingValue(arguments, ref index, name, out OsString value, out error))
+            {
+                return true;
+            }
+
+            return descriptor.TryApplyValue(lowArgs, value, name, out error);
+        }
+
+        error = null;
+        return false;
+    }
+
+    private static bool TryGetGeneratedValueName(OsString argument, out FlagDescriptor descriptor, out string name)
+    {
+        if (argument.IsUnixBytes)
+        {
+            ReadOnlySpan<byte> bytes = argument.AsUnixBytes();
+            if (bytes.Length == 2 &&
+                bytes[0] == (byte)'-' &&
+                bytes[1] != (byte)'-' &&
+                GeneratedFlagCatalog.TryFindShortValue((char)bytes[1], out descriptor))
+            {
+                name = GetShortValueName((char)bytes[1]);
+                return true;
+            }
+
+            if (bytes.Length > 2 &&
+                bytes[0] == (byte)'-' &&
+                bytes[1] == (byte)'-' &&
+                TryDecodeUtf8(bytes, out string longName) &&
+                GeneratedFlagCatalog.TryFindLongValue(longName, out descriptor))
+            {
+                name = longName;
+                return true;
+            }
+
+            descriptor = null!;
+            name = string.Empty;
+            return false;
+        }
+
+        if (!argument.TryGetText(out string text))
+        {
+            descriptor = null!;
+            name = string.Empty;
+            return false;
+        }
+
+        if (text.Length == 2 &&
+            text[0] == '-' &&
+            text[1] != '-' &&
+            GeneratedFlagCatalog.TryFindShortValue(text[1], out descriptor))
+        {
+            name = GetShortValueName(text[1]);
+            return true;
+        }
+
+        if (text.Length > 2 &&
+            text[0] == '-' &&
+            text[1] == '-' &&
+            GeneratedFlagCatalog.TryFindLongValue(text, out descriptor))
+        {
+            name = text;
+            return true;
+        }
+
+        descriptor = null!;
+        name = string.Empty;
+        return false;
+    }
+
+    private static bool TryGetGeneratedInlineValue(OsString argument, out FlagDescriptor descriptor, out string name, out OsString value)
+    {
+        if (argument.IsUnixBytes)
+        {
+            return TryGetGeneratedInlineUnixValue(argument.AsUnixBytes(), out descriptor, out name, out value);
+        }
+
+        if (argument.TryGetText(out string text))
+        {
+            return TryGetGeneratedInlineTextValue(text, out descriptor, out name, out value);
+        }
+
+        descriptor = null!;
+        name = string.Empty;
+        value = OsString.Empty;
+        return false;
+    }
+
+    private static bool TryGetGeneratedInlineUnixValue(ReadOnlySpan<byte> bytes, out FlagDescriptor descriptor, out string name, out OsString value)
+    {
+        if (bytes.Length > 3 && bytes[0] == (byte)'-' && bytes[1] == (byte)'-')
+        {
+            int equalsIndex = bytes.IndexOf((byte)'=');
+            if (equalsIndex > 2 &&
+                TryDecodeUtf8(bytes[..equalsIndex], out string longName) &&
+                GeneratedFlagCatalog.TryFindLongValue(longName, out descriptor))
+            {
+                name = longName;
+                value = OsString.FromUnixBytes(bytes[(equalsIndex + 1)..]);
+                return true;
+            }
+        }
+
+        if (bytes.Length > 2 &&
+            bytes[0] == (byte)'-' &&
+            bytes[1] != (byte)'-' &&
+            GeneratedFlagCatalog.TryFindShortValue((char)bytes[1], out descriptor))
+        {
+            ReadOnlySpan<byte> inlineValue = bytes[2..];
+            if (!inlineValue.IsEmpty && inlineValue[0] == (byte)'=')
+            {
+                inlineValue = inlineValue[1..];
+            }
+
+            name = GetShortValueName((char)bytes[1]);
+            value = OsString.FromUnixBytes(inlineValue);
+            return true;
+        }
+
+        descriptor = null!;
+        name = string.Empty;
+        value = OsString.Empty;
+        return false;
+    }
+
+    private static bool TryGetGeneratedInlineTextValue(string text, out FlagDescriptor descriptor, out string name, out OsString value)
+    {
+        if (text.Length > 3 && text[0] == '-' && text[1] == '-')
+        {
+            int equalsIndex = text.IndexOf('=');
+            if (equalsIndex > 2)
+            {
+                string longName = text[..equalsIndex];
+                if (GeneratedFlagCatalog.TryFindLongValue(longName, out descriptor))
+                {
+                    name = longName;
+                    value = OsString.FromText(text[(equalsIndex + 1)..]);
+                    return true;
+                }
+            }
+        }
+
+        if (text.Length > 2 &&
+            text[0] == '-' &&
+            text[1] != '-' &&
+            GeneratedFlagCatalog.TryFindShortValue(text[1], out descriptor))
+        {
+            string inlineValue = text[2..];
+            if (inlineValue.Length > 0 && inlineValue[0] == '=')
+            {
+                inlineValue = inlineValue[1..];
+            }
+
+            name = GetShortValueName(text[1]);
+            value = OsString.FromText(inlineValue);
+            return true;
+        }
+
+        descriptor = null!;
+        name = string.Empty;
+        value = OsString.Empty;
         return false;
     }
 
@@ -1139,7 +1328,7 @@ public static class CliParser
             return false;
         }
 
-        string flagName = GetShortFlagName((char)flag);
+        string flagName = GetShortValueName((char)flag);
         ReadOnlySpan<byte> value = bytes[(flagIndex + 1)..];
         if (!value.IsEmpty)
         {
@@ -1174,7 +1363,7 @@ public static class CliParser
             return false;
         }
 
-        string flagName = GetShortFlagName(flag);
+        string flagName = GetShortValueName(flag);
         string value = text[(flagIndex + 1)..];
         if (value.Length > 0)
         {
@@ -1201,7 +1390,8 @@ public static class CliParser
 
     private static bool IsClusterValueFlag(char flag)
     {
-        return flag is 'm' or 'M' or 'E' or 'j' or 'r' or 'e' or 'f' or 'A' or 'B' or 'C' or 'd' or 'g' or 't' or 'T';
+        return GeneratedFlagCatalog.TryFindShortValue(flag, out _) ||
+            flag is 'E' or 'r' or 'e' or 'f' or 'g' or 't' or 'T';
     }
 
     private static string GetShortSwitchName(char flag)
@@ -1236,8 +1426,20 @@ public static class CliParser
         };
     }
 
+    private static string GetShortValueName(char flag)
+    {
+        return GeneratedFlagCatalog.TryFindShortValue(flag, out _)
+            ? new string(['-', flag])
+            : GetShortFlagName(flag);
+    }
+
     private static bool ParseClusterValue(byte flag, ReadOnlySpan<byte> value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
     {
+        if (GeneratedFlagCatalog.TryFindShortValue((char)flag, out FlagDescriptor descriptor))
+        {
+            return descriptor.TryApplyValue(lowArgs, OsString.FromUnixBytes(value), flagName, out error);
+        }
+
         return (char)flag switch
         {
             'm' => ParseMaxCount(value, flagName, lowArgs, out error),
@@ -1265,6 +1467,11 @@ public static class CliParser
 
     private static bool ParseClusterValue(char flag, string value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
     {
+        if (GeneratedFlagCatalog.TryFindShortValue(flag, out FlagDescriptor descriptor))
+        {
+            return descriptor.TryApplyValue(lowArgs, OsString.FromText(value), flagName, out error);
+        }
+
         return flag switch
         {
             'm' => ParseMaxCount(value, flagName, lowArgs, out error),
@@ -1287,6 +1494,11 @@ public static class CliParser
 
     private static bool ParseClusterValue(char flag, OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
     {
+        if (GeneratedFlagCatalog.TryFindShortValue(flag, out FlagDescriptor descriptor))
+        {
+            return descriptor.TryApplyValue(lowArgs, value, flagName, out error);
+        }
+
         return flag switch
         {
             'm' => ParseMaxCount(value, flagName, lowArgs, out error),
@@ -2430,7 +2642,7 @@ public static class CliParser
         return false;
     }
 
-    private static bool ParseMaxCount(OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
+    internal static bool ParseMaxCount(OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
     {
         if (value.IsUnixBytes)
         {
@@ -2453,7 +2665,7 @@ public static class CliParser
         return true;
     }
 
-    private static bool ParseMaxColumns(OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
+    internal static bool ParseMaxColumns(OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
     {
         if (value.IsUnixBytes)
         {
@@ -2476,7 +2688,7 @@ public static class CliParser
         return true;
     }
 
-    private static bool ParseThreads(OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
+    internal static bool ParseThreads(OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
     {
         if (value.IsUnixBytes)
         {
@@ -2745,7 +2957,7 @@ public static class CliParser
         return true;
     }
 
-    private static bool ParseAfterContext(OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
+    internal static bool ParseAfterContext(OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
     {
         if (!TryParseContext(value, flagName, out ulong count, out error))
         {
@@ -2778,7 +2990,7 @@ public static class CliParser
         return true;
     }
 
-    private static bool ParseBeforeContext(OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
+    internal static bool ParseBeforeContext(OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
     {
         if (!TryParseContext(value, flagName, out ulong count, out error))
         {
@@ -2811,7 +3023,7 @@ public static class CliParser
         return true;
     }
 
-    private static bool ParseContext(OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
+    internal static bool ParseContext(OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
     {
         if (!TryParseContext(value, flagName, out ulong count, out error))
         {
@@ -2878,7 +3090,7 @@ public static class CliParser
         return true;
     }
 
-    private static bool ParseMaxDepth(OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
+    internal static bool ParseMaxDepth(OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
     {
         if (value.IsUnixBytes)
         {
