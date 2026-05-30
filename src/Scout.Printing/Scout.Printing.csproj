@@ -1,9 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\Scout.Bytes\Scout.Bytes.csproj" />
-    <ProjectReference Include="..\Scout.Diagnostics\Scout.Diagnostics.csproj" />
-    <ProjectReference Include="..\Scout.Errors\Scout.Errors.csproj" />
+    <ProjectReference Include="..\Scout.Os\Scout.Os.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
