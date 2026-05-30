@@ -17,7 +17,6 @@ public sealed class PinnedConfigurationTests
     private const string PinnedRipgrepCommit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119";
     private const string ReferenceRipgrepRoot = "/Users/brandon/src/ripgrep";
     private const string PinnedRipgrepBinaryPath = "/Users/brandon/src/ripgrep/target/debug/rg";
-    private const string Pcre2SysRoot = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pcre2-sys-0.2.10";
     private const string PinnedPcre2Commit = "56c87ccac13b01c3c1ecdf71e4fc2fedccea50a2";
 
     /// <summary>
@@ -167,10 +166,15 @@ public sealed class PinnedConfigurationTests
     {
         string root = FindRepositoryRoot();
         string upstream = File.ReadAllText(Path.Combine(root, "native", "pcre2", "UPSTREAM"));
+        string sourceRoot = Path.Combine(root, "native", "pcre2", "pcre2-10.46");
+        string buildScript = File.ReadAllText(Path.Combine(root, "native", "pcre2", "build-unix.sh"));
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
-        string headerPath = Path.Combine(Pcre2SysRoot, "upstream", "include", "pcre2.h");
+        string headerPath = Path.Combine(sourceRoot, "include", "pcre2.h");
 
         Assert.True(File.Exists(headerPath), "Missing vendored pcre2.h: " + headerPath);
+        Assert.True(File.Exists(Path.Combine(sourceRoot, "src", "pcre2_compile.c")));
+        Assert.True(File.Exists(Path.Combine(sourceRoot, "src", "pcre2_match.c")));
+        Assert.True(File.Exists(Path.Combine(sourceRoot, "src", "pcre2_jit_compile.c")));
         string header = File.ReadAllText(headerPath);
 
         Assert.Contains("binding = \"pcre2\"", upstream, StringComparison.Ordinal);
@@ -183,6 +187,12 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("#define PCRE2_MAJOR           10", header, StringComparison.Ordinal);
         Assert.Contains("#define PCRE2_MINOR           46", header, StringComparison.Ordinal);
         Assert.Contains("#define PCRE2_DATE            2025-08-27", header, StringComparison.Ordinal);
+        Assert.Contains("pcre2-10.46", buildScript, StringComparison.Ordinal);
+        Assert.Contains("-DPCRE2_CODE_UNIT_WIDTH=8", buildScript, StringComparison.Ordinal);
+        Assert.Contains("-DPCRE2_STATIC=1", buildScript, StringComparison.Ordinal);
+        Assert.Contains("-DSUPPORT_PCRE2_8=1", buildScript, StringComparison.Ordinal);
+        Assert.Contains("-DSUPPORT_UNICODE=1", buildScript, StringComparison.Ordinal);
+        Assert.Contains("-DSUPPORT_JIT=1", buildScript, StringComparison.Ordinal);
     }
 
     /// <summary>
