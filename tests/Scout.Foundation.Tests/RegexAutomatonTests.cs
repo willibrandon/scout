@@ -57,6 +57,19 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies repeated zero-width alternatives keep priority over later consuming branches.
+    /// </summary>
+    [Fact]
+    public void RepetitionPreservesZeroWidthAlternativePriority()
+    {
+        var automaton = RegexAutomaton.Compile(@"(?m)(?:^|a)+"u8);
+
+        RegexMatch? match = automaton.Find("a\naaa\n"u8);
+
+        Assert.Equal(new RegexMatch(0, 0), match);
+    }
+
+    /// <summary>
     /// Verifies greedy repetition continues through multiline predicates before accepting.
     /// </summary>
     [Fact]

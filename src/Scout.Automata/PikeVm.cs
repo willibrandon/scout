@@ -17,7 +17,7 @@ internal sealed class PikeVm
     public bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int length)
     {
         current.Clear();
-        AddThread(nfa.StartState, haystack, start, current, new bool[nfa.States.Count]);
+        AddThread(nfa.StartState, haystack, start, current, new bool[nfa.States.Count], new bool[nfa.States.Count]);
         int deferredAcceptLength = -1;
         for (int position = start; position <= haystack.Length; position++)
         {
@@ -49,7 +49,7 @@ internal sealed class PikeVm
                         state.CaseInsensitive,
                         state.DotMatchesNewline))
                 {
-                    AddThread(state.Next, haystack, position + 1, next, new bool[nfa.States.Count]);
+                    AddThread(state.Next, haystack, position + 1, next, new bool[nfa.States.Count], new bool[nfa.States.Count]);
                 }
             }
 
@@ -66,10 +66,22 @@ internal sealed class PikeVm
         return false;
     }
 
-    private void AddThread(int stateIndex, ReadOnlySpan<byte> haystack, int position, List<int> threads, bool[] visited)
+    private void AddThread(
+        int stateIndex,
+        ReadOnlySpan<byte> haystack,
+        int position,
+        List<int> threads,
+        bool[] visited,
+        bool[] closedSplits)
     {
-        if (stateIndex < 0 || visited[stateIndex])
+        if (stateIndex < 0)
         {
+            return;
+        }
+
+        if (visited[stateIndex])
+        {
+            AddClosedSplitExit(stateIndex, haystack, position, threads, visited, closedSplits);
             return;
         }
 
@@ -78,18 +90,46 @@ internal sealed class PikeVm
         switch (state.Kind)
         {
             case RegexNfaStateKind.Split:
-                AddThread(state.Next, haystack, position, threads, visited);
-                AddThread(state.Alternative, haystack, position, threads, visited);
+            case RegexNfaStateKind.GreedyLoopSplit:
+            case RegexNfaStateKind.LazyLoopSplit:
+                AddThread(state.Next, haystack, position, threads, visited, closedSplits);
+                AddThread(state.Alternative, haystack, position, threads, visited, closedSplits);
                 break;
             case RegexNfaStateKind.Predicate:
                 if (RegexByteClass.PredicateMatches(haystack, position, state.AtomKind, state.MultiLine))
                 {
-                    AddThread(state.Next, haystack, position, threads, visited);
+                    AddThread(state.Next, haystack, position, threads, visited, closedSplits);
                 }
 
                 break;
             default:
                 threads.Add(stateIndex);
+                break;
+        }
+    }
+
+    private void AddClosedSplitExit(
+        int stateIndex,
+        ReadOnlySpan<byte> haystack,
+        int position,
+        List<int> threads,
+        bool[] visited,
+        bool[] closedSplits)
+    {
+        RegexNfaState state = nfa.States[stateIndex];
+        if (closedSplits[stateIndex])
+        {
+            return;
+        }
+
+        closedSplits[stateIndex] = true;
+        switch (state.Kind)
+        {
+            case RegexNfaStateKind.GreedyLoopSplit:
+                AddThread(state.Alternative, haystack, position, threads, visited, closedSplits);
+                break;
+            case RegexNfaStateKind.LazyLoopSplit:
+                AddThread(state.Next, haystack, position, threads, visited, closedSplits);
                 break;
         }
     }
