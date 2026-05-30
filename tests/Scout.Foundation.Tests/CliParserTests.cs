@@ -623,6 +623,12 @@ public sealed class CliParserTests
             [OsString.FromUnixBytes("--auto-hybrid-regex"u8), OsString.FromUnixBytes("--no-auto-hybrid-regex"u8), OsString.FromUnixBytes("needle"u8)]);
         CliParseResult pcre2Unicode = CliParser.Parse(
             [OsString.FromUnixBytes("--no-pcre2-unicode"u8), OsString.FromUnixBytes("--pcre2-unicode"u8), OsString.FromUnixBytes("needle"u8)]);
+        CliParseResult pcre2ThenHybrid = CliParser.Parse(
+            [OsString.FromUnixBytes("-P"u8), OsString.FromUnixBytes("--auto-hybrid-regex"u8), OsString.FromUnixBytes("needle"u8)]);
+        CliParseResult hybridThenPcre2 = CliParser.Parse(
+            [OsString.FromUnixBytes("--auto-hybrid-regex"u8), OsString.FromUnixBytes("-P"u8), OsString.FromUnixBytes("needle"u8)]);
+        CliParseResult pcre2ThenNoHybrid = CliParser.Parse(
+            [OsString.FromUnixBytes("--engine=pcre2"u8), OsString.FromUnixBytes("--no-auto-hybrid-regex"u8), OsString.FromUnixBytes("needle"u8)]);
 
         Assert.Equal(CliParseStatus.Ok, pcre2.Status);
         Assert.Equal(CliRegexEngine.Pcre2, pcre2.LowArgs!.RegexEngine);
@@ -632,10 +638,17 @@ public sealed class CliParserTests
         Assert.Single(defaultEngine.LowArgs.Positional);
         Assert.Equal(CliParseStatus.Ok, hybrid.Status);
         Assert.False(hybrid.LowArgs!.AutoHybridRegex);
+        Assert.Equal(CliRegexEngine.Default, hybrid.LowArgs.RegexEngine);
         Assert.Single(hybrid.LowArgs.Positional);
         Assert.Equal(CliParseStatus.Ok, pcre2Unicode.Status);
         Assert.True(pcre2Unicode.LowArgs!.Pcre2Unicode);
         Assert.Single(pcre2Unicode.LowArgs.Positional);
+        Assert.Equal(CliParseStatus.Ok, pcre2ThenHybrid.Status);
+        Assert.Equal(CliRegexEngine.Auto, pcre2ThenHybrid.LowArgs!.RegexEngine);
+        Assert.Equal(CliParseStatus.Ok, hybridThenPcre2.Status);
+        Assert.Equal(CliRegexEngine.Pcre2, hybridThenPcre2.LowArgs!.RegexEngine);
+        Assert.Equal(CliParseStatus.Ok, pcre2ThenNoHybrid.Status);
+        Assert.Equal(CliRegexEngine.Default, pcre2ThenNoHybrid.LowArgs!.RegexEngine);
     }
 
     /// <summary>

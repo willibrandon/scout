@@ -14,7 +14,6 @@ public sealed partial class PortedRgTestCoverageTests
 
     private static readonly string[] ExpectedUnportedRgTests =
     [
-        "tests/feature.rs|f1155_auto_hybrid_regex", // PCRE2/hybrid-engine only.
         "tests/feature.rs|f362_u64_to_narrow_usize_overflow", // 32-bit target only.
         "tests/json.rs|notutf8", // Invalid UTF-8 filename case skipped by upstream on macOS/APFS.
         "tests/regression.rs|r210", // Invalid UTF-8 filename case skipped on APFS.

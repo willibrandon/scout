@@ -1,3 +1,4 @@
+tests/feature.rs|f1155_auto_hybrid_regex
 tests/json.rs|r1412_look_behind_match_missing
 tests/regression.rs|r1401_look_ahead_only_matching_1
 tests/regression.rs|r1401_look_ahead_only_matching_2

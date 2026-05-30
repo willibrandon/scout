@@ -413,6 +413,11 @@ internal static class ScoutApplication
             return RunPcre2Search(positional, firstPathIndex, lowArgs, patterns, output, diagnostics);
         }
 
+        if (ShouldAutoUsePcre2(lowArgs, patterns))
+        {
+            return RunPcre2Search(positional, firstPathIndex, lowArgs, patterns, output, diagnostics);
+        }
+
         if (!lowArgs.Multiline && ContainsLineTerminator(patterns, lowArgs.NullData, lowArgs.FixedStrings))
         {
             diagnostics.ErrorMessage(new ScoutError(BuildLineTerminatorPatternError(lowArgs.NullData)).WithContext("rg"));
@@ -673,6 +678,50 @@ internal static class ScoutApplication
             lowArgs.BeforeContext == 0 &&
             lowArgs.AfterContext == 0 &&
             !lowArgs.Passthru;
+    }
+
+    private static bool ShouldAutoUsePcre2(CliLowArgs lowArgs, IReadOnlyList<byte[]> patterns)
+    {
+        return lowArgs.RegexEngine == CliRegexEngine.Auto &&
+            Pcre2Library.IsAvailable &&
+            !lowArgs.FixedStrings &&
+            DefaultRegexCompileFails(lowArgs, patterns);
+    }
+
+    private static bool DefaultRegexCompileFails(CliLowArgs lowArgs, IReadOnlyList<byte[]> patterns)
+    {
+        var defaultPatterns = new List<byte[]>(patterns.Count);
+        for (int index = 0; index < patterns.Count; index++)
+        {
+            defaultPatterns.Add((byte[])patterns[index].Clone());
+        }
+
+        WrapRegexPatterns(defaultPatterns);
+        bool asciiCaseInsensitive = IsAsciiCaseInsensitive(defaultPatterns, lowArgs.CaseMode);
+        if (!lowArgs.Unicode && asciiCaseInsensitive)
+        {
+            WrapNonAsciiPatterns(defaultPatterns);
+        }
+
+        try
+        {
+            for (int index = 0; index < defaultPatterns.Count; index++)
+            {
+                _ = RegexAutomaton.Compile(
+                    defaultPatterns[index],
+                    asciiCaseInsensitive,
+                    lowArgs.Multiline,
+                    lowArgs.MultilineDotall,
+                    lowArgs.Crlf,
+                    lowArgs.NullData ? (byte)'\0' : (byte)'\n');
+            }
+
+            return false;
+        }
+        catch (FormatException)
+        {
+            return true;
+        }
     }
 
     private static byte[] GetPcre2DisplayPath(OsString argument, string path)

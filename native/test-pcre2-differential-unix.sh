@@ -167,6 +167,7 @@ mkdir -p "$WORK"
 
 printf 'foobar\nfoo\nfoobarfoo\n' > "$WORK/pcre2-smoke.txt"
 printf 'foo\nbar\n' > "$WORK/lookbehind"
+printf 'For the Doctor Watsons of this world, as opposed to the Sherlock\n' > "$WORK/sherlock"
 printf 'foo 42\nxoyz\ncat\tdog\n' > "$WORK/ip1.txt"
 printf 'foo 42\nxoyz\ncat\tdog\nfoo' > "$WORK/ip2.txt"
 cat > "$WORK/counts" <<'EOF'
@@ -187,6 +188,7 @@ Start
 EOF
 
 compare_case basic_lookahead exact -P 'foo(?=bar)' pcre2-smoke.txt
+compare_case f1155_auto_hybrid_regex exact --no-pcre2 --auto-hybrid-regex '(?<=the )Sherlock' sherlock
 compare_case json_lookahead mask-elapsed -P --json 'foo(?=bar)' pcre2-smoke.txt
 compare_case json_lookbehind mask-elapsed -P -U --json '(?<=foo\n)bar' lookbehind
 compare_case r1412_lookbehind_replacement exact -P -nU -rquux '(?<=foo\n)bar' lookbehind

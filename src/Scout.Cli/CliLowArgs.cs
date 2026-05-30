@@ -1034,6 +1034,7 @@ public sealed class CliLowArgs
     public void SetAutoHybridRegex(bool yes)
     {
         AutoHybridRegex = yes;
+        RegexEngine = yes ? CliRegexEngine.Auto : CliRegexEngine.Default;
     }
 
     /// <summary>
