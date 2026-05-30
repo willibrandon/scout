@@ -10,7 +10,7 @@ namespace Scout;
 /// </summary>
 public sealed class RegexCorpusDifferentialTests
 {
-    private const int ExpectedDifferentialCaseCount = 191;
+    private const int ExpectedDifferentialCaseCount = 192;
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
@@ -22,6 +22,7 @@ public sealed class RegexCorpusDifferentialTests
         ("empty.toml", 19),
         ("flags.toml", 9),
         ("iter.toml", 19),
+        ("line-terminator.toml", 1),
         ("misc.toml", 13),
         ("multiline.toml", 1),
         ("no-unicode.toml", 15),
@@ -223,6 +224,7 @@ public sealed class RegexCorpusDifferentialTests
         ("set.toml", "caps-110"),
         ("set.toml", "caps-120"),
         ("set.toml", "caps-121"),
+        ("line-terminator.toml", "nul"),
     ];
 
     /// <summary>
@@ -342,7 +344,9 @@ public sealed class RegexCorpusDifferentialTests
         Assert.Null(corpusCase.MatchLimit);
         Assert.Equal(0, corpusCase.BoundsStart);
         Assert.Equal(corpusCase.Haystack.Length, corpusCase.BoundsEnd);
-        Assert.Equal((byte)'\n', corpusCase.LineTerminator);
+        Assert.True(
+            corpusCase.LineTerminator is (byte)'\n' or 0,
+            relativePath + "::" + corpusCase.Name + " uses an unsupported line terminator.");
         Assert.NotEmpty(corpusCase.Patterns);
     }
 
@@ -364,6 +368,11 @@ public sealed class RegexCorpusDifferentialTests
         if (corpusCase.CaseInsensitive)
         {
             arguments.Add("-i");
+        }
+
+        if (corpusCase.LineTerminator == 0)
+        {
+            arguments.Add("--null-data");
         }
 
         for (int index = 0; index < corpusCase.Patterns.Count; index++)
