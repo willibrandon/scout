@@ -16,6 +16,18 @@ ripgrep_pcre2_reported_version = "PCRE2 10.45 is available (JIT is available)"
 
 [[ripgrep_oracle]]
 rid = "osx-arm64"
+environment = "github-actions"
+profile = "release-lto"
+path = "/Users/brandon/src/ripgrep/target/release-lto/rg"
+sha256 = "8031e740e8644d22ea062589cde5f05acf4f9ccbf6f0a63778271ceb50444c89"
+pcre2_profile = "release-lto"
+pcre2_features = "pcre2"
+pcre2_path = "/Users/brandon/src/ripgrep/target/pcre2/release-lto/rg"
+pcre2_sha256 = "49d486acea41e80f9a17834944677cf70bdbaeff12dc186c6d8630770d81bbe9"
+
+[[ripgrep_oracle]]
+rid = "osx-arm64"
+environment = "local"
 profile = "release-lto"
 path = "/Users/brandon/src/ripgrep/target/release-lto/rg"
 sha256 = "44e33a21be51a0d6dce82a7c7610ee835f565a74499d34190ad4dcf4d709239e"

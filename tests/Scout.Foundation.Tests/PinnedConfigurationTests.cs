@@ -219,6 +219,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("eng/setup-ripgrep-oracle.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("SCOUT_RIPGREP_REFERENCE", script, StringComparison.Ordinal);
         Assert.Contains("host_rid()", script, StringComparison.Ordinal);
+        Assert.Contains("oracle_environment()", script, StringComparison.Ordinal);
         Assert.Contains("read_lock_rid_table_value()", script, StringComparison.Ordinal);
         Assert.Contains("derive_reference_from_oracle_path()", script, StringComparison.Ordinal);
         Assert.Contains("ripgrep_commit", script, StringComparison.Ordinal);
@@ -265,6 +266,8 @@ public sealed partial class PinnedConfigurationTests
 
         Assert.Contains("[[ripgrep_oracle]]", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("rid = \"" + PinnedRipgrepOracle.HostRid + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("environment = \"" + PinnedRipgrepOracle.HostOracleEnvironment + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("environment = \"github-actions\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("path = \"" + defaultExecutablePath + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("sha256 = \"" + expectedSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("ripgrep_rg_profile = \"release-lto\"", prerequisiteLock, StringComparison.Ordinal);

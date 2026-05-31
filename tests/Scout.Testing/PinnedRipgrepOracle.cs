@@ -14,10 +14,13 @@ internal static class PinnedRipgrepOracle
 
     private static readonly Lazy<string> VerifiedExecutablePath = new(ResolveAndVerifyDefaultExecutablePath);
     private static readonly Lazy<string> HostRuntimeIdentifier = new(ComputeHostRuntimeIdentifier);
+    private static readonly Lazy<string> HostOracleEnvironmentValue = new(ComputeHostOracleEnvironment);
 
     internal static string ExecutablePath => VerifiedExecutablePath.Value;
 
     internal static string HostRid => HostRuntimeIdentifier.Value;
+
+    internal static string HostOracleEnvironment => HostOracleEnvironmentValue.Value;
 
     internal static string DefaultExecutablePath => ResolveOraclePath(ReadHostOracleValue("path", "ripgrep_rg_path"));
 
@@ -81,7 +84,12 @@ internal static class PinnedRipgrepOracle
     internal static string ReadHostOracleValue(string tableKey, string rootKey)
     {
         string prerequisiteLock = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "tests", "PREREQS.lock"));
-        if (TryReadHostOracleValue(prerequisiteLock, tableKey, out string value))
+        if (TryReadHostOracleValue(prerequisiteLock, tableKey, HostOracleEnvironment, out string value))
+        {
+            return value;
+        }
+
+        if (TryReadHostOracleValue(prerequisiteLock, tableKey, null, out value))
         {
             return value;
         }
@@ -132,6 +140,13 @@ internal static class PinnedRipgrepOracle
         throw new PlatformNotSupportedException("Unsupported OS for pinned ripgrep oracle: " + RuntimeInformation.OSDescription);
     }
 
+    private static string ComputeHostOracleEnvironment()
+    {
+        return string.Equals(Environment.GetEnvironmentVariable("GITHUB_ACTIONS"), "true", StringComparison.OrdinalIgnoreCase)
+            ? "github-actions"
+            : "local";
+    }
+
     private static string ReadPrerequisiteValue(string text, string key)
     {
         string prefix = key + " = \"";
@@ -149,11 +164,12 @@ internal static class PinnedRipgrepOracle
         throw new InvalidOperationException("Could not find " + key + " in tests/PREREQS.lock.");
     }
 
-    private static bool TryReadHostOracleValue(string text, string key, out string value)
+    private static bool TryReadHostOracleValue(string text, string key, string? environment, out string value)
     {
         using var reader = new StringReader(text);
         bool inOracle = false;
         bool matchedRid = false;
+        bool matchedEnvironment = environment is null;
         while (reader.ReadLine() is { } line)
         {
             string trimmed = line.Trim();
@@ -161,6 +177,7 @@ internal static class PinnedRipgrepOracle
             {
                 inOracle = true;
                 matchedRid = false;
+                matchedEnvironment = environment is null;
                 continue;
             }
 
@@ -168,6 +185,7 @@ internal static class PinnedRipgrepOracle
             {
                 inOracle = false;
                 matchedRid = false;
+                matchedEnvironment = environment is null;
             }
 
             if (!inOracle)
@@ -181,7 +199,13 @@ internal static class PinnedRipgrepOracle
                 continue;
             }
 
-            if (matchedRid && TryReadAssignment(trimmed, key, out value))
+            if (TryReadAssignment(trimmed, "environment", out string tableEnvironment))
+            {
+                matchedEnvironment = environment is not null && string.Equals(tableEnvironment, environment, StringComparison.Ordinal);
+                continue;
+            }
+
+            if (matchedRid && matchedEnvironment && TryReadAssignment(trimmed, key, out value))
             {
                 return true;
             }

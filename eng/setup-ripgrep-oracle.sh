@@ -60,22 +60,36 @@ host_rid() {
     esac
 }
 
+oracle_environment() {
+    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+        printf 'github-actions\n'
+    else
+        printf 'local\n'
+    fi
+}
+
 read_lock_rid_table_value() {
-    awk -v header="[[${1}]]" -v rid="$2" -v key="$3" "$strip_toml_value"'
+    awk -v header="[[${1}]]" -v rid="$2" -v environment="$3" -v key="$4" "$strip_toml_value"'
         $0 == header {
             in_table = 1
             matched = 0
+            matched_environment = environment == ""
             next
         }
         in_table && $0 ~ /^\[/ {
             in_table = 0
             matched = 0
+            matched_environment = environment == ""
         }
         in_table && $0 ~ /^[[:space:]]*rid[[:space:]]*=/ {
             matched = value_of($0) == rid
             next
         }
-        in_table && matched && $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
+        in_table && $0 ~ /^[[:space:]]*environment[[:space:]]*=/ {
+            matched_environment = environment != "" && value_of($0) == environment
+            next
+        }
+        in_table && matched && matched_environment && $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
             print value_of($0)
             found = 1
             exit 0
@@ -95,7 +109,12 @@ lock_has_table() {
 read_oracle_value() {
     table_key="$1"
     root_key="$2"
-    if value="$(read_lock_rid_table_value "ripgrep_oracle" "$HOST_RID" "$table_key")"; then
+    if value="$(read_lock_rid_table_value "ripgrep_oracle" "$HOST_RID" "$HOST_ORACLE_ENVIRONMENT" "$table_key")"; then
+        printf '%s\n' "$value"
+        return 0
+    fi
+
+    if value="$(read_lock_rid_table_value "ripgrep_oracle" "$HOST_RID" "" "$table_key")"; then
         printf '%s\n' "$value"
         return 0
     fi
@@ -224,6 +243,7 @@ verify_binary_hash() {
 EXPECTED_RIPGREP="$(read_lock_value "ripgrep_commit")" || fail "Missing ripgrep_commit in tests/PREREQS.lock."
 RUST_TOOLCHAIN="$(read_lock_value "cargo")" || fail "Missing cargo in tests/PREREQS.lock."
 HOST_RID="$(host_rid)"
+HOST_ORACLE_ENVIRONMENT="$(oracle_environment)"
 RG_PROFILE="$(read_oracle_value "profile" "ripgrep_rg_profile")" || fail "Missing ripgrep_oracle.profile for $HOST_RID in tests/PREREQS.lock."
 RG_PATH="$(resolve_repo_path "$(read_oracle_value "path" "ripgrep_rg_path")")" || fail "Missing ripgrep_oracle.path for $HOST_RID in tests/PREREQS.lock."
 RG_SHA256="$(read_oracle_value "sha256" "ripgrep_rg_sha256")" || fail "Missing ripgrep_oracle.sha256 for $HOST_RID in tests/PREREQS.lock."
