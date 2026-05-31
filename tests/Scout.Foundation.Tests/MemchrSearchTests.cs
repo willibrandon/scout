@@ -35,7 +35,10 @@ public sealed class MemchrSearchTests
 
         Assert.Equal(64, MemchrSearch.Find(haystack, 0x20));
         Assert.Equal(149, MemchrSearch.Find(haystack, 0x30));
+        Assert.Equal(149, MemchrSearch.FindReverse(haystack, 0x30));
+        Assert.Equal(64, MemchrSearch.FindReverse(haystack, 0x20));
         Assert.Equal(-1, MemchrSearch.Find(haystack, 0x40));
+        Assert.Equal(-1, MemchrSearch.FindReverse(haystack, 0x40));
     }
 
     /// <summary>
@@ -82,7 +85,10 @@ public sealed class MemchrSearchTests
 
         Assert.Equal(65, MemchrSearch.Find2(haystack, 0x20, 0x30));
         Assert.Equal(149, MemchrSearch.Find2(haystack, 0x30, 0x40));
+        Assert.Equal(149, MemchrSearch.Find2Reverse(haystack, 0x20, 0x30));
+        Assert.Equal(65, MemchrSearch.Find2Reverse(haystack, 0x20, 0x40));
         Assert.Equal(-1, MemchrSearch.Find2(haystack, 0x40, 0x50));
+        Assert.Equal(-1, MemchrSearch.Find2Reverse(haystack, 0x40, 0x50));
     }
 
     /// <summary>
@@ -129,7 +135,10 @@ public sealed class MemchrSearchTests
 
         Assert.Equal(66, MemchrSearch.Find3(haystack, 0x20, 0x30, 0x40));
         Assert.Equal(149, MemchrSearch.Find3(haystack, 0x30, 0x40, 0x50));
+        Assert.Equal(149, MemchrSearch.Find3Reverse(haystack, 0x20, 0x30, 0x40));
+        Assert.Equal(66, MemchrSearch.Find3Reverse(haystack, 0x20, 0x40, 0x50));
         Assert.Equal(-1, MemchrSearch.Find3(haystack, 0x40, 0x50, 0x60));
+        Assert.Equal(-1, MemchrSearch.Find3Reverse(haystack, 0x40, 0x50, 0x60));
     }
 
     /// <summary>

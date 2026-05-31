@@ -1385,6 +1385,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("FindScalar", memchrSearch, StringComparison.Ordinal);
         Assert.Contains("Find2Vector512", memchrSearch, StringComparison.Ordinal);
         Assert.Contains("Find3Vector512", memchrSearch, StringComparison.Ordinal);
+        Assert.Contains("FindReverseVector512", memchrSearch, StringComparison.Ordinal);
+        Assert.Contains("Find2ReverseVector512", memchrSearch, StringComparison.Ordinal);
+        Assert.Contains("Find3ReverseVector512", memchrSearch, StringComparison.Ordinal);
         Assert.Contains("ExtractMostSignificantBits", memchrSearch, StringComparison.Ordinal);
         Assert.Contains("AVX-512", upstream, StringComparison.Ordinal);
     }
