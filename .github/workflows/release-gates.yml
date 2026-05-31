@@ -24,74 +24,13 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
-  runner-readiness:
-    name: self-hosted runner ready
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - name: Check scout/osx-arm64 runner
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_GATES_RUNNER_TOKEN }}
-          REQUIRED_LABELS: self-hosted scout osx-arm64
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [ -z "${GH_TOKEN:-}" ]; then
-            printf '%s\n' "::error::Missing RELEASE_GATES_RUNNER_TOKEN secret."
-            printf '%s\n' "Create a fine-grained token for this repository with Administration: read so Release Gates can verify self-hosted runner availability before queueing work."
-            exit 1
-          fi
-
-          repo="${GITHUB_REPOSITORY:?}"
-          required_labels=($REQUIRED_LABELS)
-          found=0
-          online=0
-
-          while IFS=$'\t' read -r name status labels; do
-            [ -n "$name" ] || continue
-
-            has_all=1
-            for label in "${required_labels[@]}"; do
-              case ",$labels," in
-                *",$label,"*) ;;
-                *) has_all=0 ;;
-              esac
-            done
-
-            if [ "$has_all" -eq 1 ]; then
-              found=1
-              printf 'Matched runner %s status=%s labels=%s\n' "$name" "$status" "$labels"
-              if [ "$status" = "online" ]; then
-                online=1
-              fi
-            fi
-          done < <(gh api --paginate "repos/$repo/actions/runners?per_page=100" --jq '.runners[] | [.name, .status, (.labels | map(.name) | join(","))] | @tsv')
-
-          if [ "$found" -eq 0 ]; then
-            printf '%s\n' "::error::No repository self-hosted runner has all required labels: $REQUIRED_LABELS"
-            printf '%s\n' "Register a runner for $repo with labels: $REQUIRED_LABELS"
-            exit 1
-          fi
-
-          if [ "$online" -eq 0 ]; then
-            printf '%s\n' "::error::A matching self-hosted runner exists, but none are online."
-            exit 1
-          fi
-
   full-tests:
     name: full pinned tests
-    needs: runner-readiness
-    runs-on:
-      - self-hosted
-      - scout
-      - osx-arm64
+    runs-on: macos-15
     timeout-minutes: 360
     steps:
       - uses: actions/checkout@v6
         with:
-          clean: false
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-dotnet@v5
         with:
@@ -109,20 +48,19 @@ jobs:
 
   performance-gate:
     name: hyperfine performance gate
-    needs: runner-readiness
-    runs-on:
-      - self-hosted
-      - scout
-      - osx-arm64
+    runs-on: macos-15
     timeout-minutes: 360
     steps:
       - uses: actions/checkout@v6
         with:
-          clean: false
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.102
+      - name: Install hyperfine
+        run: |
+          brew install hyperfine
+          hyperfine --version
       - name: Fetch pinned corpora
         run: eng/fetch-corpora.sh --all
       - name: Preflight

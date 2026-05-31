@@ -503,6 +503,7 @@ public sealed class RegexAutomatonTests
         Assert.Equal(new RegexMatch(0, 4), RegexAutomaton.Compile("."u8).Find(poop));
         Assert.Equal(new RegexMatch(0, 4), RegexAutomaton.Compile("[^a]"u8).Find(poop));
         Assert.Equal(new RegexMatch(4, 0), RegexAutomaton.Compile(""u8).Find(poop, startAt: 1));
+        Assert.Equal(new RegexMatch(4, 0), RegexAutomaton.Compile(@"(?:(?-u:\B)|(?su:.))+"u8).Find(poop, startAt: 1));
         Assert.Null(RegexAutomaton.Compile(@"\B"u8).Find(delta, startAt: 1));
     }
 

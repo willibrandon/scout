@@ -179,7 +179,7 @@ internal sealed class RegexNfaCompiler
 
     private bool RequiresUtf8SearchBoundary(bool rootUtf8)
     {
-        if (!rootUtf8 || sawUtf8Disabled)
+        if (!rootUtf8)
         {
             return false;
         }
@@ -187,14 +187,18 @@ internal sealed class RegexNfaCompiler
         for (int index = 0; index < states.Count; index++)
         {
             RegexNfaState state = states[index];
-            if (state.Kind is (RegexNfaStateKind.Atom or RegexNfaStateKind.Predicate) &&
-                !state.Utf8)
+            if (state.Kind is not (RegexNfaStateKind.Atom or RegexNfaStateKind.Predicate))
             {
-                return false;
+                continue;
+            }
+
+            if (state.Utf8)
+            {
+                return true;
             }
         }
 
-        return true;
+        return !sawUtf8Disabled;
     }
 
     private static bool IsPredicate(RegexSyntaxKind kind)

@@ -564,18 +564,21 @@ internal sealed class RegexSyntaxParseState
         byte token = Pattern[index];
         if (token == (byte)'?')
         {
+            ThrowIfInlineFlagsRepeat(child);
             minimum = 0;
             maximum = 1;
             index++;
         }
         else if (token == (byte)'*')
         {
+            ThrowIfInlineFlagsRepeat(child);
             minimum = 0;
             maximum = null;
             index++;
         }
         else if (token == (byte)'+')
         {
+            ThrowIfInlineFlagsRepeat(child);
             minimum = 1;
             maximum = null;
             index++;
@@ -586,6 +589,8 @@ internal sealed class RegexSyntaxParseState
             {
                 return false;
             }
+
+            ThrowIfInlineFlagsRepeat(child);
         }
         else
         {
@@ -601,6 +606,14 @@ internal sealed class RegexSyntaxParseState
 
         repetition = new RegexRepetitionNode(child, minimum, maximum, lazy, position);
         return true;
+    }
+
+    private void ThrowIfInlineFlagsRepeat(RegexSyntaxNode child)
+    {
+        if (child.Kind == RegexSyntaxKind.InlineFlags)
+        {
+            Throw("repetition operator missing expression");
+        }
     }
 
     private void SkipExtendedPatternWhitespace()

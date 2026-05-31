@@ -111,8 +111,11 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("runner: macos-15", workflow, StringComparison.Ordinal);
         Assert.Contains("runner: windows-2025-vs2026", workflow, StringComparison.Ordinal);
         Assert.Contains("bench/run-hyperfine.sh --gate", workflow, StringComparison.Ordinal);
-        Assert.Contains("clean: false", releaseGateWorkflow, StringComparison.Ordinal);
-        Assert.Contains("self-hosted", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("runs-on: macos-15", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("brew install hyperfine", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("clean: false", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("self-hosted", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("RELEASE_GATES_RUNNER_TOKEN", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("self-hosted", ciWorkflow, StringComparison.Ordinal);
         Assert.Contains("libicu72", workflow, StringComparison.Ordinal);
         Assert.Contains("zlib1g-dev", workflow, StringComparison.Ordinal);
