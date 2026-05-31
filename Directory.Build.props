@@ -60,6 +60,10 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Scout.Cli'">
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
   <ItemGroup Condition="'$(MSBuildProjectName)' == 'Scout.App'">
     <DirectPInvoke Include="__Internal" />
   </ItemGroup>

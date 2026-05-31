@@ -20,5 +20,5 @@ commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"
 ```
 
 The implementation owns Unix raw byte paths, directory iteration, raw standard
-streams, stdin probing, Windows UTF-16 boundaries, and direct `LibraryImport`
-declarations for the exact OS APIs Scout uses.
+streams, Windows UTF-16 boundaries, and direct `LibraryImport` declarations for
+the exact OS APIs Scout uses.
