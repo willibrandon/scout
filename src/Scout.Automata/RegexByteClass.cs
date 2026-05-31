@@ -1,6 +1,5 @@
 using System;
 using System.Buffers;
-using System.Globalization;
 using System.Text;
 
 namespace Scout;
@@ -799,7 +798,7 @@ internal static class RegexByteClass
 
         return value.IsAscii
             ? IsAsciiDigitByte((byte)value.Value)
-            : Rune.GetUnicodeCategory(value) == UnicodeCategory.DecimalDigitNumber;
+            : RegexUnicodeTables.IsDecimalNumber(value);
     }
 
     private static bool IsRegexWordRune(Rune value, bool unicodeClasses)
@@ -814,14 +813,7 @@ internal static class RegexByteClass
             return IsAsciiWordByte((byte)value.Value);
         }
 
-        UnicodeCategory category = Rune.GetUnicodeCategory(value);
-        return IsRegexAlphabeticCategory(category)
-            || category is UnicodeCategory.NonSpacingMark
-                or UnicodeCategory.SpacingCombiningMark
-                or UnicodeCategory.EnclosingMark
-                or UnicodeCategory.DecimalDigitNumber
-                or UnicodeCategory.ConnectorPunctuation
-            || value.Value is 0x200C or 0x200D;
+        return RegexUnicodeTables.IsPerlWord(value);
     }
 
     private static bool IsRegexWhitespaceRune(Rune value, bool unicodeClasses)
@@ -833,7 +825,7 @@ internal static class RegexByteClass
 
         return value.IsAscii
             ? IsRegexWhitespaceByte((byte)value.Value)
-            : Rune.IsWhiteSpace(value);
+            : RegexUnicodeTables.IsPerlSpace(value);
     }
 
     private static bool IsRegexAlphabeticRune(Rune value, bool unicodeClasses)
@@ -843,17 +835,7 @@ internal static class RegexByteClass
             return value.IsAscii && IsAsciiAlphaByte((byte)value.Value);
         }
 
-        return IsRegexAlphabeticCategory(Rune.GetUnicodeCategory(value));
-    }
-
-    private static bool IsRegexAlphabeticCategory(UnicodeCategory category)
-    {
-        return category is UnicodeCategory.UppercaseLetter
-            or UnicodeCategory.LowercaseLetter
-            or UnicodeCategory.TitlecaseLetter
-            or UnicodeCategory.ModifierLetter
-            or UnicodeCategory.OtherLetter
-            or UnicodeCategory.LetterNumber;
+        return RegexUnicodeTables.IsAlphabetic(value);
     }
 
     private static bool TryFoldUnicodeScalarToAscii(Rune value, out byte folded)

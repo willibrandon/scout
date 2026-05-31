@@ -360,6 +360,17 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies POSIX alpha classes use regex-syntax's pinned Alphabetic table, not runtime Unicode categories.
+    /// </summary>
+    [Fact]
+    public void PosixAlphaUsesPinnedUnicodeAlphabeticTable()
+    {
+        Assert.Equal(new RegexMatch(0, 2), RegexAutomaton.Compile(@"[[:alpha:]]"u8).Find("\u0345"u8));
+        Assert.Equal(new RegexMatch(0, 2), RegexAutomaton.Compile(@"[[:alnum:]]"u8).Find("\u0345"u8));
+        Assert.Null(RegexAutomaton.Compile(@"[[:alpha:]]"u8, caseInsensitive: false, multiLine: false, dotMatchesNewline: false, unicodeClasses: false).Find("\u0345"u8));
+    }
+
+    /// <summary>
     /// Verifies UTF-8 word boundaries inspect adjacent Unicode scalars.
     /// </summary>
     [Fact]

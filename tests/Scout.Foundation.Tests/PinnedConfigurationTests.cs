@@ -833,6 +833,8 @@ public sealed partial class PinnedConfigurationTests
         string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
         string verifier = File.ReadAllText(Path.Combine(root, "eng", "verify-unicode-data.sh"));
         string ucdReadme = File.ReadAllText(Path.Combine(root, "upstream", "ucd", "README.md"));
+        string regexByteClass = File.ReadAllText(Path.Combine(root, "src", "Scout.Automata", "RegexByteClass.cs"));
+        string regexUnicodeTables = File.ReadAllText(Path.Combine(root, "src", "Scout.Automata", "RegexUnicodeTables.cs"));
         string ucdArchive = Path.Combine(root, "upstream", "ucd", "UCD-16.0.0.zip");
         string tablesRoot = Path.Combine(root, "upstream", "regex-syntax-0.8.8", "unicode_tables");
         string[] expectedTables =
@@ -860,6 +862,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("sha256 = \"c86dd81f2b14a43b0cc064aa5f89aa7241386801e35c59c7984e579832634eb2\"", ucdReadme, StringComparison.Ordinal);
         Assert.Contains("EXPECTED_SHA256=\"c86dd81f2b14a43b0cc064aa5f89aa7241386801e35c59c7984e579832634eb2\"", verifier, StringComparison.Ordinal);
         Assert.Contains("unzip -l \"$ARCHIVE\"", verifier, StringComparison.Ordinal);
+        Assert.Contains("eng/generate-regex-unicode-tables.py", verifier, StringComparison.Ordinal);
+        Assert.Contains("cmp \"$generated\" \"$ROOT/src/Scout.Automata/RegexUnicodeTables.cs\"", verifier, StringComparison.Ordinal);
         Assert.Contains("require_archive_entry \"UnicodeData.txt\"", verifier, StringComparison.Ordinal);
         Assert.Contains("require_archive_entry \"CaseFolding.txt\"", verifier, StringComparison.Ordinal);
         Assert.Contains("require_archive_entry \"PropertyAliases.txt\"", verifier, StringComparison.Ordinal);
@@ -868,6 +872,17 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("require_archive_entry \"ScriptExtensions.txt\"", verifier, StringComparison.Ordinal);
         Assert.True(File.Exists(Path.Combine(tablesRoot, "LICENSE-UNICODE")), "Missing vendored Unicode license.");
         Assert.True(File.Exists(Path.Combine(tablesRoot, "mod.rs")), "Missing regex-syntax unicode_tables module file.");
+        Assert.Contains("Unicode version: " + unicodeVersion + ".", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static readonly UnicodeScalarRange[] DecimalNumber", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static readonly UnicodeScalarRange[] PerlWord", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static readonly UnicodeScalarRange[] PerlSpace", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static readonly UnicodeScalarRange[] Alphabetic", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("RegexUnicodeTables.IsDecimalNumber", regexByteClass, StringComparison.Ordinal);
+        Assert.Contains("RegexUnicodeTables.IsPerlWord", regexByteClass, StringComparison.Ordinal);
+        Assert.Contains("RegexUnicodeTables.IsPerlSpace", regexByteClass, StringComparison.Ordinal);
+        Assert.Contains("RegexUnicodeTables.IsAlphabetic", regexByteClass, StringComparison.Ordinal);
+        Assert.DoesNotContain("Rune.GetUnicodeCategory", regexByteClass, StringComparison.Ordinal);
+        Assert.DoesNotContain("Rune.IsWhiteSpace", regexByteClass, StringComparison.Ordinal);
         string[] actualTables = Directory.GetFiles(tablesRoot, "*.rs")
             .Select(Path.GetFileName)
             .Where(name => !string.Equals(name, "mod.rs", StringComparison.Ordinal))
