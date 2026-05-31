@@ -53,6 +53,23 @@ public sealed class RegexSyntaxParserTests
     }
 
     /// <summary>
+    /// Verifies special half word-boundary assertions are parsed as zero-width atoms.
+    /// </summary>
+    [Fact]
+    public void ParsesHalfWordBoundaries()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(@"\b{start-half}foo\b{end-half}"u8);
+
+        RegexSequenceNode root = Assert.IsType<RegexSequenceNode>(tree.Root);
+        Assert.Equal(5, root.Nodes.Count);
+        Assert.Equal(RegexSyntaxKind.WordStartHalfBoundary, root.Nodes[0].Kind);
+        Assert.Equal(RegexSyntaxKind.Literal, root.Nodes[1].Kind);
+        Assert.Equal(RegexSyntaxKind.Literal, root.Nodes[2].Kind);
+        Assert.Equal(RegexSyntaxKind.Literal, root.Nodes[3].Kind);
+        Assert.Equal(RegexSyntaxKind.WordEndHalfBoundary, root.Nodes[4].Kind);
+    }
+
+    /// <summary>
     /// Verifies scoped and unscoped inline flags and byte escapes are parsed.
     /// </summary>
     [Fact]

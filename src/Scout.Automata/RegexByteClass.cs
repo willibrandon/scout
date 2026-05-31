@@ -94,6 +94,8 @@ internal static class RegexByteClass
             RegexSyntaxKind.NotWordBoundary => !IsRegexWordBoundary(haystack, position),
             RegexSyntaxKind.WordStartBoundary => IsRegexWordStartBoundary(haystack, position),
             RegexSyntaxKind.WordEndBoundary => IsRegexWordEndBoundary(haystack, position),
+            RegexSyntaxKind.WordStartHalfBoundary => IsRegexWordStartHalfBoundary(haystack, position),
+            RegexSyntaxKind.WordEndHalfBoundary => IsRegexWordEndHalfBoundary(haystack, position),
             _ => false,
         };
     }
@@ -229,7 +231,9 @@ internal static class RegexByteClass
         return kind is RegexSyntaxKind.WordBoundary
             or RegexSyntaxKind.NotWordBoundary
             or RegexSyntaxKind.WordStartBoundary
-            or RegexSyntaxKind.WordEndBoundary;
+            or RegexSyntaxKind.WordEndBoundary
+            or RegexSyntaxKind.WordStartHalfBoundary
+            or RegexSyntaxKind.WordEndHalfBoundary;
     }
 
     private static bool IsStartAnchorMatch(ReadOnlySpan<byte> haystack, int position, bool multiLine, bool crlf, byte lineTerminator)
@@ -521,6 +525,18 @@ internal static class RegexByteClass
         bool leftIsWord = position > 0 && IsAsciiWordByte(haystack[position - 1]);
         bool rightIsWord = position < haystack.Length && IsAsciiWordByte(haystack[position]);
         return leftIsWord && !rightIsWord;
+    }
+
+    private static bool IsRegexWordStartHalfBoundary(ReadOnlySpan<byte> haystack, int position)
+    {
+        bool leftIsWord = position > 0 && IsAsciiWordByte(haystack[position - 1]);
+        return !leftIsWord;
+    }
+
+    private static bool IsRegexWordEndHalfBoundary(ReadOnlySpan<byte> haystack, int position)
+    {
+        bool rightIsWord = position < haystack.Length && IsAsciiWordByte(haystack[position]);
+        return !rightIsWord;
     }
 
     private static bool IsAsciiAlphaByte(byte value)

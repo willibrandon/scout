@@ -202,7 +202,9 @@ internal sealed class RegexNfaCompiler
             or RegexSyntaxKind.WordBoundary
             or RegexSyntaxKind.NotWordBoundary
             or RegexSyntaxKind.WordStartBoundary
-            or RegexSyntaxKind.WordEndBoundary;
+            or RegexSyntaxKind.WordEndBoundary
+            or RegexSyntaxKind.WordStartHalfBoundary
+            or RegexSyntaxKind.WordEndHalfBoundary;
     }
 
 }

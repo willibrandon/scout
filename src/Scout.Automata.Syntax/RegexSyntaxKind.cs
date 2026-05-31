@@ -101,6 +101,16 @@ public enum RegexSyntaxKind
     WordEndBoundary,
 
     /// <summary>
+    /// Matches the non-word left half of a word-start boundary assertion.
+    /// </summary>
+    WordStartHalfBoundary,
+
+    /// <summary>
+    /// Matches the non-word right half of a word-end boundary assertion.
+    /// </summary>
+    WordEndHalfBoundary,
+
+    /// <summary>
     /// Concatenates child nodes.
     /// </summary>
     Sequence,

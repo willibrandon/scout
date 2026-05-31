@@ -399,6 +399,20 @@ internal sealed class RegexSyntaxParseState
 
     private bool TryParseNamedWordBoundary(out RegexSyntaxKind boundaryKind)
     {
+        if (index + 12 <= Pattern.Length && Pattern.Slice(index, 12).SequenceEqual("{start-half}"u8))
+        {
+            index += 12;
+            boundaryKind = RegexSyntaxKind.WordStartHalfBoundary;
+            return true;
+        }
+
+        if (index + 10 <= Pattern.Length && Pattern.Slice(index, 10).SequenceEqual("{end-half}"u8))
+        {
+            index += 10;
+            boundaryKind = RegexSyntaxKind.WordEndHalfBoundary;
+            return true;
+        }
+
         if (index + 7 <= Pattern.Length && Pattern.Slice(index, 7).SequenceEqual("{start}"u8))
         {
             index += 7;

@@ -804,6 +804,10 @@ public sealed class ScoutApplicationTests
         (int pinnedStartExitCode, byte[] pinnedStartOutput, string pinnedStartError) = RunPinnedRipgrep("-n", @"\b{start}foo", path);
         (int endExitCode, byte[] endOutput, string endError) = RunScout("-n", @"foo\b{end}", path);
         (int pinnedEndExitCode, byte[] pinnedEndOutput, string pinnedEndError) = RunPinnedRipgrep("-n", @"foo\b{end}", path);
+        (int startHalfExitCode, byte[] startHalfOutput, string startHalfError) = RunScout("-n", @"\b{start-half}foo", path);
+        (int pinnedStartHalfExitCode, byte[] pinnedStartHalfOutput, string pinnedStartHalfError) = RunPinnedRipgrep("-n", @"\b{start-half}foo", path);
+        (int endHalfExitCode, byte[] endHalfOutput, string endHalfError) = RunScout("-n", @"foo\b{end-half}", path);
+        (int pinnedEndHalfExitCode, byte[] pinnedEndHalfOutput, string pinnedEndHalfError) = RunPinnedRipgrep("-n", @"foo\b{end-half}", path);
 
         Assert.Equal(pinnedWordExitCode, wordExitCode);
         Assert.Equal(pinnedWordOutput, wordOutput);
@@ -820,6 +824,12 @@ public sealed class ScoutApplicationTests
         Assert.Equal(pinnedEndExitCode, endExitCode);
         Assert.Equal(pinnedEndOutput, endOutput);
         Assert.Equal(pinnedEndError, endError);
+        Assert.Equal(pinnedStartHalfExitCode, startHalfExitCode);
+        Assert.Equal(pinnedStartHalfOutput, startHalfOutput);
+        Assert.Equal(pinnedStartHalfError, startHalfError);
+        Assert.Equal(pinnedEndHalfExitCode, endHalfExitCode);
+        Assert.Equal(pinnedEndHalfOutput, endHalfOutput);
+        Assert.Equal(pinnedEndHalfError, endHalfError);
     }
 
     /// <summary>

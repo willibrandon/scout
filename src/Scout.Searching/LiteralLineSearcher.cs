@@ -27,29 +27,31 @@ public static class LiteralLineSearcher
     private const int RegexAtomNotWordBoundary = 13;
     private const int RegexAtomWordStartBoundary = 14;
     private const int RegexAtomWordEndBoundary = 15;
-    private const int RegexAtomEnableCaseInsensitive = 16;
-    private const int RegexAtomDisableCaseInsensitive = 17;
-    private const int RegexAtomCaseInsensitiveGroup = 18;
-    private const int RegexAtomCaseSensitiveGroup = 19;
-    private const int RegexAtomEnableIgnoreWhitespace = 20;
-    private const int RegexAtomDisableIgnoreWhitespace = 21;
-    private const int RegexAtomIgnoreWhitespaceGroup = 22;
-    private const int RegexAtomSignificantWhitespaceGroup = 23;
-    private const int RegexAtomEnableSwapGreed = 24;
-    private const int RegexAtomDisableSwapGreed = 25;
-    private const int RegexAtomSwapGreedGroup = 26;
-    private const int RegexAtomStandardGreedGroup = 27;
-    private const int RegexClassAlnum = 28;
-    private const int RegexClassAlpha = 29;
-    private const int RegexClassAscii = 30;
-    private const int RegexClassBlank = 31;
-    private const int RegexClassControl = 32;
-    private const int RegexClassGraph = 33;
-    private const int RegexClassLower = 34;
-    private const int RegexClassPrint = 35;
-    private const int RegexClassPunct = 36;
-    private const int RegexClassUpper = 37;
-    private const int RegexClassHexDigit = 38;
+    private const int RegexAtomWordStartHalfBoundary = 16;
+    private const int RegexAtomWordEndHalfBoundary = 17;
+    private const int RegexAtomEnableCaseInsensitive = 18;
+    private const int RegexAtomDisableCaseInsensitive = 19;
+    private const int RegexAtomCaseInsensitiveGroup = 20;
+    private const int RegexAtomCaseSensitiveGroup = 21;
+    private const int RegexAtomEnableIgnoreWhitespace = 22;
+    private const int RegexAtomDisableIgnoreWhitespace = 23;
+    private const int RegexAtomIgnoreWhitespaceGroup = 24;
+    private const int RegexAtomSignificantWhitespaceGroup = 25;
+    private const int RegexAtomEnableSwapGreed = 26;
+    private const int RegexAtomDisableSwapGreed = 27;
+    private const int RegexAtomSwapGreedGroup = 28;
+    private const int RegexAtomStandardGreedGroup = 29;
+    private const int RegexClassAlnum = 30;
+    private const int RegexClassAlpha = 31;
+    private const int RegexClassAscii = 32;
+    private const int RegexClassBlank = 33;
+    private const int RegexClassControl = 34;
+    private const int RegexClassGraph = 35;
+    private const int RegexClassLower = 36;
+    private const int RegexClassPrint = 37;
+    private const int RegexClassPunct = 38;
+    private const int RegexClassUpper = 39;
+    private const int RegexClassHexDigit = 40;
 
     /// <summary>
     /// Searches <paramref name="haystack" /> for lines containing <paramref name="needle" />.
@@ -3037,6 +3039,22 @@ public static class LiteralLineSearcher
             return false;
         }
 
+        if (index + 12 <= pattern.Length &&
+            pattern.Slice(index, 12).SequenceEqual("{start-half}"u8))
+        {
+            atomKind = RegexAtomWordStartHalfBoundary;
+            nextPatternIndex = index + 12;
+            return true;
+        }
+
+        if (index + 10 <= pattern.Length &&
+            pattern.Slice(index, 10).SequenceEqual("{end-half}"u8))
+        {
+            atomKind = RegexAtomWordEndHalfBoundary;
+            nextPatternIndex = index + 10;
+            return true;
+        }
+
         if (index + 7 <= pattern.Length &&
             pattern.Slice(index, 7).SequenceEqual("{start}"u8))
         {
@@ -3091,7 +3109,9 @@ public static class LiteralLineSearcher
             or RegexAtomWordBoundary
             or RegexAtomNotWordBoundary
             or RegexAtomWordStartBoundary
-            or RegexAtomWordEndBoundary;
+            or RegexAtomWordEndBoundary
+            or RegexAtomWordStartHalfBoundary
+            or RegexAtomWordEndHalfBoundary;
     }
 
     private static bool RegexAssertionMatches(ReadOnlySpan<byte> haystack, int haystackIndex, int atomKind)
@@ -3104,6 +3124,8 @@ public static class LiteralLineSearcher
             RegexAtomNotWordBoundary => !IsRegexWordBoundary(haystack, haystackIndex),
             RegexAtomWordStartBoundary => IsRegexWordStartBoundary(haystack, haystackIndex),
             RegexAtomWordEndBoundary => IsRegexWordEndBoundary(haystack, haystackIndex),
+            RegexAtomWordStartHalfBoundary => IsRegexWordStartHalfBoundary(haystack, haystackIndex),
+            RegexAtomWordEndHalfBoundary => IsRegexWordEndHalfBoundary(haystack, haystackIndex),
             _ => false,
         };
     }
@@ -3138,6 +3160,18 @@ public static class LiteralLineSearcher
         bool leftIsWord = haystackIndex > 0 && IsAsciiWordByte(haystack[haystackIndex - 1]);
         bool rightIsWord = haystackIndex < haystack.Length && IsAsciiWordByte(haystack[haystackIndex]);
         return leftIsWord && !rightIsWord;
+    }
+
+    private static bool IsRegexWordStartHalfBoundary(ReadOnlySpan<byte> haystack, int haystackIndex)
+    {
+        bool leftIsWord = haystackIndex > 0 && IsAsciiWordByte(haystack[haystackIndex - 1]);
+        return !leftIsWord;
+    }
+
+    private static bool IsRegexWordEndHalfBoundary(ReadOnlySpan<byte> haystack, int haystackIndex)
+    {
+        bool rightIsWord = haystackIndex < haystack.Length && IsAsciiWordByte(haystack[haystackIndex]);
+        return !rightIsWord;
     }
 
     private static bool IsRegexQuantifier(byte value)
