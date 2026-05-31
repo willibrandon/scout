@@ -26,8 +26,18 @@ public sealed class FlagCatalogTests
         Assert.Equal("--multiline", multiline.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindShortSwitch('n', out FlagDescriptor lineNumber));
         Assert.Equal("--line-number", lineNumber.LongName);
+        Assert.Equal("--no-line-number", lineNumber.NegatedName);
+        Assert.Equal('N', lineNumber.NegatedShortName);
+        Assert.True(GeneratedFlagCatalog.TryFindShortSwitch('N', out FlagDescriptor noLineNumber));
+        Assert.Equal("--line-number", noLineNumber.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindShortSwitch('.', out FlagDescriptor hidden));
         Assert.Equal("--hidden", hidden.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindShortSwitch('H', out FlagDescriptor withFilename));
+        Assert.Equal("--with-filename", withFilename.LongName);
+        Assert.Equal("--no-filename", withFilename.NegatedName);
+        Assert.Equal('I', withFilename.NegatedShortName);
+        Assert.True(GeneratedFlagCatalog.TryFindShortSwitch('I', out FlagDescriptor noFilename));
+        Assert.Equal("--with-filename", noFilename.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindLongSwitch("--no-follow", out FlagDescriptor noFollow));
         Assert.Equal("--follow", noFollow.LongName);
         Assert.Equal("--no-follow", noFollow.NegatedName);
@@ -183,9 +193,19 @@ public sealed class FlagCatalogTests
         {
             FlagDescriptor descriptor = descriptors[index];
             Assert.True(longNames.Add(descriptor.LongName), "Duplicate long flag: " + descriptor.LongName);
+            if (descriptor.NegatedName is string negatedName)
+            {
+                Assert.True(longNames.Add(negatedName), "Duplicate long flag: " + negatedName);
+            }
+
             if (descriptor.ShortName is char shortName)
             {
                 Assert.True(shortNames.Add(shortName), "Duplicate short flag: " + shortName);
+            }
+
+            if (descriptor.NegatedShortName is char negatedShortName)
+            {
+                Assert.True(shortNames.Add(negatedShortName), "Duplicate short flag: " + negatedShortName);
             }
         }
     }
@@ -232,6 +252,16 @@ public sealed class FlagCatalogTests
                 Assert.Contains(shortOption, zshCompletion, StringComparison.Ordinal);
                 Assert.Contains("-s " + shortName, fishCompletion, StringComparison.Ordinal);
                 Assert.Contains("::new('" + shortOption + "'", powerShellCompletion, StringComparison.Ordinal);
+            }
+
+            if (descriptor.NegatedShortName is char negatedShortName)
+            {
+                string negatedShortOption = "-" + negatedShortName;
+                AssertManContainsOption(manPage, negatedShortOption);
+                Assert.Contains(negatedShortOption, bashCompletion, StringComparison.Ordinal);
+                Assert.Contains(negatedShortOption, zshCompletion, StringComparison.Ordinal);
+                Assert.Contains("-s " + negatedShortName, fishCompletion, StringComparison.Ordinal);
+                Assert.Contains("::new('" + negatedShortOption + "'", powerShellCompletion, StringComparison.Ordinal);
             }
         }
     }

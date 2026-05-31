@@ -14,6 +14,7 @@ internal sealed class FlagDescriptor
     private FlagDescriptor(
         string longName,
         char? shortName,
+        char? negatedShortName,
         string? negatedName,
         string[] aliases,
         FlagKind kind,
@@ -25,6 +26,7 @@ internal sealed class FlagDescriptor
     {
         LongName = longName;
         ShortName = shortName;
+        NegatedShortName = negatedShortName;
         NegatedName = negatedName;
         Aliases = aliases;
         Kind = kind;
@@ -44,6 +46,11 @@ internal sealed class FlagDescriptor
     /// Gets the canonical short flag name without the leading <c>-</c>, if one exists.
     /// </summary>
     public char? ShortName { get; }
+
+    /// <summary>
+    /// Gets the canonical negated short flag name without the leading <c>-</c>, if one exists.
+    /// </summary>
+    public char? NegatedShortName { get; }
 
     /// <summary>
     /// Gets the canonical negated long flag name, if one exists.
@@ -95,7 +102,7 @@ internal sealed class FlagDescriptor
         ArgumentNullException.ThrowIfNull(doc);
         ArgumentNullException.ThrowIfNull(applySwitch);
 
-        return new FlagDescriptor(longName, shortName, negatedName, aliases, FlagKind.Switch, category, doc, (lowArgs, _) => applySwitch(lowArgs), applyValue: null, selectSpecialMode: null);
+        return new FlagDescriptor(longName, shortName, null, negatedName, aliases, FlagKind.Switch, category, doc, (lowArgs, _) => applySwitch(lowArgs), applyValue: null, selectSpecialMode: null);
     }
 
     /// <summary>
@@ -108,6 +115,7 @@ internal sealed class FlagDescriptor
     /// <param name="category">The help and completion category.</param>
     /// <param name="doc">The short documentation text.</param>
     /// <param name="applySwitch">The parser action for this switch.</param>
+    /// <param name="negatedShortName">The negated short flag name without <c>-</c>, or <see langword="null" />.</param>
     /// <returns>The descriptor.</returns>
     public static FlagDescriptor SwitchWithName(
         string longName,
@@ -116,14 +124,15 @@ internal sealed class FlagDescriptor
         string[] aliases,
         FlagCategory category,
         string doc,
-        Func<CliLowArgs, string, ScoutError?> applySwitch)
+        Func<CliLowArgs, string, ScoutError?> applySwitch,
+        char? negatedShortName = null)
     {
         ArgumentNullException.ThrowIfNull(longName);
         ArgumentNullException.ThrowIfNull(aliases);
         ArgumentNullException.ThrowIfNull(doc);
         ArgumentNullException.ThrowIfNull(applySwitch);
 
-        return new FlagDescriptor(longName, shortName, negatedName, aliases, FlagKind.Switch, category, doc, applySwitch, applyValue: null, selectSpecialMode: null);
+        return new FlagDescriptor(longName, shortName, negatedShortName, negatedName, aliases, FlagKind.Switch, category, doc, applySwitch, applyValue: null, selectSpecialMode: null);
     }
 
     /// <summary>
@@ -149,7 +158,7 @@ internal sealed class FlagDescriptor
         ArgumentNullException.ThrowIfNull(doc);
         ArgumentNullException.ThrowIfNull(applyValue);
 
-        return new FlagDescriptor(longName, shortName, negatedName: null, aliases, FlagKind.Value, category, doc, applySwitch: null, applyValue, selectSpecialMode: null);
+        return new FlagDescriptor(longName, shortName, null, null, aliases, FlagKind.Value, category, doc, applySwitch: null, applyValue, selectSpecialMode: null);
     }
 
     /// <summary>
@@ -175,7 +184,7 @@ internal sealed class FlagDescriptor
         ArgumentNullException.ThrowIfNull(doc);
         ArgumentNullException.ThrowIfNull(selectSpecialMode);
 
-        return new FlagDescriptor(longName, shortName, negatedName: null, aliases, FlagKind.Special, category, doc, applySwitch: null, applyValue: null, selectSpecialMode);
+        return new FlagDescriptor(longName, shortName, null, null, aliases, FlagKind.Special, category, doc, applySwitch: null, applyValue: null, selectSpecialMode);
     }
 
     /// <summary>
@@ -209,6 +218,16 @@ internal sealed class FlagDescriptor
     public bool MatchesNegatedName(string name)
     {
         return NegatedName is not null && string.Equals(NegatedName, name, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Determines whether the descriptor recognizes the given negated short spelling.
+    /// </summary>
+    /// <param name="name">The short flag spelling.</param>
+    /// <returns><see langword="true" /> when the name matches this descriptor's negated short spelling.</returns>
+    public bool MatchesNegatedShortName(char name)
+    {
+        return NegatedShortName == name;
     }
 
     /// <summary>
