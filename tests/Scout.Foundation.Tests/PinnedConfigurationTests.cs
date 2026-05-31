@@ -870,6 +870,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("pcre2_match_data_create_from_pattern_8", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P 'foo(?=bar)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --json 'foo(?=bar)'", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("-P --json -o 'foo(?=bar)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P -o '.*o(?!.*\\s)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --count 'o(?=o)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --count-matches 'o(?=o)'", appBuildScript, StringComparison.Ordinal);
@@ -921,6 +922,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("compare_stdin_case explicit_stdin_lookahead exact \"$WORK/pcre2-smoke.txt\" -P 'foo(?=bar)' -", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_stdin_case implicit_stdin_lookahead exact \"$WORK/pcre2-smoke.txt\" -P 'foo(?=bar)'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("mask-elapsed-sort-lines", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case json_lookahead_only_matching mask-elapsed -P --json -o 'foo(?=bar)' pcre2-smoke.txt", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case json_multi_file mask-elapsed-sort-lines -P --json 'foo(?=bar)' pcre2-smoke.txt pcre2-smoke-2.txt", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case json_quiet mask-elapsed -P --json -q 'foo(?=bar)' pcre2-smoke.txt", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case r1401_lookahead_only_matching_1 exact -P -N -o '.*o(?!.*\\s)'", differentialScript, StringComparison.Ordinal);

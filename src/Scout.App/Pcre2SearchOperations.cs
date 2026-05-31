@@ -137,7 +137,6 @@ internal static class Pcre2SearchOperations
             !lowArgs.NullData &&
             !lowArgs.Vimgrep &&
             !(lowArgs.Multiline && lowArgs.InvertMatch) &&
-            !(lowArgs.SearchMode == CliSearchMode.Json && lowArgs.OnlyMatching && !lowArgs.InvertMatch) &&
             !(lowArgs.Multiline && lowArgs.OnlyMatching) &&
             (lowArgs.Replacement is null || (lowArgs.SearchMode == CliSearchMode.Standard && !lowArgs.OnlyMatching)) &&
             lowArgs.BeforeContext == 0 &&

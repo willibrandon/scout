@@ -27,6 +27,7 @@ public sealed class Pcre2SearchOperationsTests
         Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--invert-match", "--count-matches", "needle", "haystack.txt")));
         Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--invert-match", "--json", "--only-matching", "needle", "haystack.txt")));
         Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--invert-match", "--replace", "x", "needle", "haystack.txt")));
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--json", "--only-matching", "needle", "haystack.txt")));
     }
 
     /// <summary>
@@ -38,7 +39,6 @@ public sealed class Pcre2SearchOperationsTests
         Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--max-count", "2", "--stats", "needle")));
         Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--max-count", "2", "--context", "1", "needle")));
         Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--max-count", "2", "--passthru", "needle")));
-        Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--max-count", "2", "--json", "--only-matching", "needle")));
         Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--invert-match", "needle")));
     }
 

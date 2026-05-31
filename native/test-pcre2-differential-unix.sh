@@ -290,6 +290,7 @@ compare_stdin_case explicit_stdin_lookahead exact "$WORK/pcre2-smoke.txt" -P 'fo
 compare_stdin_case implicit_stdin_lookahead exact "$WORK/pcre2-smoke.txt" -P 'foo(?=bar)'
 compare_case f1155_auto_hybrid_regex exact --no-pcre2 --auto-hybrid-regex '(?<=the )Sherlock' sherlock
 compare_case json_lookahead mask-elapsed -P --json 'foo(?=bar)' pcre2-smoke.txt
+compare_case json_lookahead_only_matching mask-elapsed -P --json -o 'foo(?=bar)' pcre2-smoke.txt
 compare_case json_multi_file mask-elapsed-sort-lines -P --json 'foo(?=bar)' pcre2-smoke.txt pcre2-smoke-2.txt
 compare_case json_quiet mask-elapsed -P --json -q 'foo(?=bar)' pcre2-smoke.txt
 compare_case json_lookbehind mask-elapsed -P -U --json '(?<=foo\n)bar' lookbehind
