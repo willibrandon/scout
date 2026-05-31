@@ -14,5 +14,8 @@ literals, wildcards, recursive wildcards, character classes, brace
 alternatives, escaping, separator-aware matching, builder-style construction,
 ordered match collection, matches-into reuse, and prepared candidate path
 support, including required-extension and component-suffix candidate filtering.
-Later milestone work extends this project with the complete upstream strategy
-matrix and the ported upstream test suite.
+Covered tests include the upstream match/non-match matrix cases for recursive
+wildcards, brace alternatives, case-insensitive matching, backslash escaping,
+and literal-separator character classes. Later milestone work extends this
+project with the complete upstream token/regex extraction matrix and the
+remaining ported upstream tests.

@@ -560,7 +560,7 @@ public sealed class Glob
                 int classEnd = FindClassEnd(currentPattern, patternIndex);
                 if (classEnd > patternIndex)
                 {
-                    if (pathIndex >= path.Length || IsBlockedSeparator(path[pathIndex]))
+                    if (pathIndex >= path.Length)
                     {
                         return false;
                     }
@@ -802,6 +802,16 @@ public sealed class Glob
                 continue;
             }
 
+            if (!atEnd && value == (byte)'[')
+            {
+                int classEnd = FindClassEnd(currentPattern, index);
+                if (classEnd > index)
+                {
+                    index = classEnd;
+                    continue;
+                }
+            }
+
             if (!atEnd && value == (byte)'{')
             {
                 depth++;
@@ -850,6 +860,16 @@ public sealed class Glob
             {
                 index++;
                 continue;
+            }
+
+            if (!atEnd && value == (byte)'[')
+            {
+                int classEnd = FindClassEnd(currentPattern, index);
+                if (classEnd > index)
+                {
+                    index = classEnd;
+                    continue;
+                }
             }
 
             if (!atEnd && value == (byte)'{')
@@ -1059,6 +1079,16 @@ public sealed class Glob
             {
                 index++;
                 continue;
+            }
+
+            if (currentPattern[index] == (byte)'[')
+            {
+                int classEnd = FindClassEnd(currentPattern, index);
+                if (classEnd > index)
+                {
+                    index = classEnd;
+                    continue;
+                }
             }
 
             if (currentPattern[index] == (byte)'{')

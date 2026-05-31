@@ -1,5 +1,6 @@
 
 using System;
+using System.Text;
 
 namespace Scout;
 
@@ -252,6 +253,89 @@ public sealed class GlobTests
         Assert.False(glob.IsMatch("src\\App\\Program.cs"u8));
     }
 
+    /// <summary>
+    /// Verifies representative upstream globset match cases.
+    /// </summary>
+    /// <param name="pattern">The upstream glob pattern.</param>
+    /// <param name="path">The candidate path.</param>
+    /// <param name="option">The upstream builder option set.</param>
+    [Theory]
+    [InlineData("a*b*c", "a___b___c", "default")]
+    [InlineData("abc*abc*abc", "abcabcabcabcabcabcabc", "default")]
+    [InlineData("some/**/needle.txt", "some/needle.txt", "default")]
+    [InlineData("some/**/needle.txt", "some/one/two/needle.txt", "default")]
+    [InlineData("some/**/**/needle.txt", "some/other/needle.txt", "default")]
+    [InlineData("**", ".asdf", "default")]
+    [InlineData("**", "/x/.asdf", "default")]
+    [InlineData("**/test", "test", "default")]
+    [InlineData("/**/test", "/test", "default")]
+    [InlineData("**/.*", "abc/.abc", "default")]
+    [InlineData(".*/**", ".abc/abc", "default")]
+    [InlineData("test/**", "test/", "default")]
+    [InlineData("test/**", "test/one/two", "default")]
+    [InlineData("some/*/needle.txt", "some/one/needle.txt", "default")]
+    [InlineData("*some/path/to/hello.txt", "a/bigger/some/path/to/hello.txt", "default")]
+    [InlineData("_[[]_[]]_[?]_[*]_!_", "_[_]_?_*_!_", "default")]
+    [InlineData("{**/src/**,foo}", "abc/src/bar", "default")]
+    [InlineData("{[}],foo}", "}", "default")]
+    [InlineData("{a,b{c,d}}", "bd", "default")]
+    [InlineData("foo{,.txt}", "foo", "empty-alternates")]
+    [InlineData("aBcDeFg", "ABCDEFG", "case-insensitive")]
+    [InlineData("abc/def", "abc/def", "literal-separator")]
+    [InlineData("abc[/]def", "abc/def", "literal-separator")]
+    [InlineData("\\[", "[", "backslash-escapes")]
+    [InlineData("\\?", "?", "backslash-escapes")]
+    [InlineData("\\*", "*", "backslash-escapes")]
+    [InlineData("\\[a-z]", "\\a", "no-backslash-escapes")]
+    [InlineData("\\?", "\\a", "no-backslash-escapes")]
+    [InlineData("\\*", "\\\\", "no-backslash-escapes")]
+    public void UpstreamMatchMatrixMatches(string pattern, string path, string option)
+    {
+        var glob = Glob.Parse(Bytes(pattern), GetOptions(option));
+        var set = GlobSet.Create([glob]);
+
+        Assert.True(glob.IsMatch(Bytes(path)));
+        Assert.True(set.IsMatch(Bytes(path)));
+    }
+
+    /// <summary>
+    /// Verifies representative upstream globset non-match cases.
+    /// </summary>
+    /// <param name="pattern">The upstream glob pattern.</param>
+    /// <param name="path">The candidate path.</param>
+    /// <param name="option">The upstream builder option set.</param>
+    [Theory]
+    [InlineData("a*b*c", "abcd", "default")]
+    [InlineData("abc*abc*abc", "abcabcabcabcabcabcabca", "default")]
+    [InlineData("some/**/needle.txt", "some/other/notthis.txt", "default")]
+    [InlineData("/**/test", "test", "default")]
+    [InlineData("/**/test", "/one/notthis", "default")]
+    [InlineData("**/.*", "ab.c", "default")]
+    [InlineData("**/.*", "abc/ab.c", "default")]
+    [InlineData(".*/**", ".abc", "default")]
+    [InlineData("foo/**", "foo", "default")]
+    [InlineData("*hello.txt", "hello.txt-and-then-some", "default")]
+    [InlineData("*some/path/to/hello.txt", "some/other/path/to/hello.txt", "default")]
+    [InlineData("a", "foo/a", "default")]
+    [InlineData("./foo", "foo", "default")]
+    [InlineData("**/foo", "foofoo", "default")]
+    [InlineData("**/foo/bar", "foofoo/bar", "default")]
+    [InlineData("/*.c", "mozilla-sha1/sha1.c", "default")]
+    [InlineData("*.c", "mozilla-sha1/sha1.c", "literal-separator")]
+    [InlineData("**/m4/ltoptions.m4", "csharp/src/packages/repositories.config", "literal-separator")]
+    [InlineData("some/*/needle.txt", "some/one/two/needle.txt", "literal-separator")]
+    [InlineData("abc?def", "abc/def", "literal-separator")]
+    [InlineData("abc*def", "abc/def", "literal-separator")]
+    [InlineData("foo{,.txt}", "foo", "default")]
+    public void UpstreamNonMatchMatrixDoesNotMatch(string pattern, string path, string option)
+    {
+        var glob = Glob.Parse(Bytes(pattern), GetOptions(option));
+        var set = GlobSet.Create([glob]);
+
+        Assert.False(glob.IsMatch(Bytes(path)));
+        Assert.False(set.IsMatch(Bytes(path)));
+    }
+
     private static void AssertParseError(
         byte[] pattern,
         GlobParseErrorKind expectedKind,
@@ -264,5 +348,24 @@ public sealed class GlobTests
         Assert.Equal(pattern, exception.GlobPattern.ToArray());
         Assert.Equal(expectedRangeStart, exception.RangeStart);
         Assert.Equal(expectedRangeEnd, exception.RangeEnd);
+    }
+
+    private static GlobOptions GetOptions(string option)
+    {
+        return option switch
+        {
+            "default" => GlobOptions.Unix,
+            "literal-separator" => GlobOptions.UnixLiteralSeparator,
+            "case-insensitive" => new GlobOptions(asciiCaseInsensitive: true),
+            "backslash-escapes" => new GlobOptions(backslashEscapes: true),
+            "no-backslash-escapes" => new GlobOptions(backslashEscapes: false),
+            "empty-alternates" => new GlobOptions(backslashEscapes: true, emptyAlternates: true),
+            _ => throw new ArgumentOutOfRangeException(nameof(option), option, "Unknown glob option."),
+        };
+    }
+
+    private static byte[] Bytes(string text)
+    {
+        return Encoding.UTF8.GetBytes(text);
     }
 }
