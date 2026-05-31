@@ -62,8 +62,9 @@ public static class CliDecompressionMatcher
     {
         if (TryGetDefaultCommand(path, out command) &&
             command is not null &&
-            CommandExists(command.Program))
+            TryResolveBinary(command.Program, out string resolvedProgram))
         {
+            command = command.WithProgram(resolvedProgram);
             return true;
         }
 
@@ -78,22 +79,41 @@ public static class CliDecompressionMatcher
             path.EndsWith(glob[1..], StringComparison.Ordinal);
     }
 
-    private static bool CommandExists(string program)
+    internal static bool TryResolveBinary(string program, out string resolvedProgram)
     {
-        if (Path.IsPathRooted(program) ||
-            program.Contains(Path.DirectorySeparatorChar, StringComparison.Ordinal) ||
-            program.Contains(Path.AltDirectorySeparatorChar, StringComparison.Ordinal))
+        return TryResolveBinary(
+            program,
+            ProcessEnvironment.GetVariable("PATH"),
+            OperatingSystem.IsWindows(),
+            Path.PathSeparator,
+            File.Exists,
+            out resolvedProgram);
+    }
+
+    internal static bool TryResolveBinary(
+        string program,
+        string? pathVariable,
+        bool isWindows,
+        char pathSeparator,
+        Func<string, bool> fileExists,
+        out string resolvedProgram)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(program);
+        ArgumentNullException.ThrowIfNull(fileExists);
+
+        if (!isWindows || Path.IsPathRooted(program))
         {
-            return File.Exists(program);
+            resolvedProgram = program;
+            return true;
         }
 
-        string? pathVariable = ProcessEnvironment.GetVariable("PATH");
         if (string.IsNullOrEmpty(pathVariable))
         {
+            resolvedProgram = string.Empty;
             return false;
         }
 
-        string[] paths = pathVariable.Split(Path.PathSeparator);
+        string[] paths = pathVariable.Split(pathSeparator);
         for (int index = 0; index < paths.Length; index++)
         {
             if (paths[index].Length == 0)
@@ -102,12 +122,33 @@ public static class CliDecompressionMatcher
             }
 
             string candidate = Path.Combine(paths[index], program);
-            if (File.Exists(candidate))
+            if (fileExists(candidate))
             {
+                resolvedProgram = candidate;
+                return true;
+            }
+
+            if (Path.HasExtension(candidate))
+            {
+                continue;
+            }
+
+            string comCandidate = Path.ChangeExtension(candidate, ".com");
+            if (fileExists(comCandidate))
+            {
+                resolvedProgram = comCandidate;
+                return true;
+            }
+
+            string exeCandidate = Path.ChangeExtension(candidate, ".exe");
+            if (fileExists(exeCandidate))
+            {
+                resolvedProgram = exeCandidate;
                 return true;
             }
         }
 
+        resolvedProgram = string.Empty;
         return false;
     }
 }

@@ -57,4 +57,9 @@ public sealed class CliDecompressionCommand
         commandArguments[^1] = path;
         return commandArguments;
     }
+
+    internal CliDecompressionCommand WithProgram(string program)
+    {
+        return new CliDecompressionCommand(Glob, program, arguments);
+    }
 }

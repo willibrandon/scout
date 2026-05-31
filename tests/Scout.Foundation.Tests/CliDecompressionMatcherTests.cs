@@ -84,4 +84,76 @@ public sealed class CliDecompressionMatcherTests
         Assert.Equal(["-d", "-c", "input.test"], command.CreateArguments("input.test"));
         Assert.Equal(["-d", "-c"], command.Arguments);
     }
+
+    /// <summary>
+    /// Verifies non-Windows decompression binary resolution follows ripgrep's no-op behavior.
+    /// </summary>
+    [Fact]
+    public void TryResolveBinaryDoesNotSearchPathOnNonWindows()
+    {
+        bool resolved = CliDecompressionMatcher.TryResolveBinary(
+            "gzip",
+            pathVariable: null,
+            isWindows: false,
+            pathSeparator: ':',
+            _ => false,
+            out string program);
+
+        Assert.True(resolved);
+        Assert.Equal("gzip", program);
+    }
+
+    /// <summary>
+    /// Verifies Windows decompression binary resolution finds bare and suffixed executables in <c>PATH</c>.
+    /// </summary>
+    [Fact]
+    public void TryResolveBinarySearchesWindowsPathWithExecutableSuffixes()
+    {
+        bool resolvedCom = CliDecompressionMatcher.TryResolveBinary(
+            "gzip",
+            "/missing;/tools",
+            isWindows: true,
+            pathSeparator: ';',
+            path => path == Path.Combine("/tools", "gzip.com"),
+            out string comProgram);
+        bool resolvedExe = CliDecompressionMatcher.TryResolveBinary(
+            "xz",
+            "/tools",
+            isWindows: true,
+            pathSeparator: ';',
+            path => path == Path.Combine("/tools", "xz.exe"),
+            out string exeProgram);
+        bool resolvedExact = CliDecompressionMatcher.TryResolveBinary(
+            "brotli.exe",
+            "/tools",
+            isWindows: true,
+            pathSeparator: ';',
+            path => path == Path.Combine("/tools", "brotli.exe"),
+            out string exactProgram);
+
+        Assert.True(resolvedCom);
+        Assert.Equal(Path.Combine("/tools", "gzip.com"), comProgram);
+        Assert.True(resolvedExe);
+        Assert.Equal(Path.Combine("/tools", "xz.exe"), exeProgram);
+        Assert.True(resolvedExact);
+        Assert.Equal(Path.Combine("/tools", "brotli.exe"), exactProgram);
+    }
+
+    /// <summary>
+    /// Verifies Windows decompression binary resolution reports unresolved commands instead of falling back to the current directory.
+    /// </summary>
+    [Fact]
+    public void TryResolveBinaryRejectsMissingWindowsPathExecutables()
+    {
+        bool resolved = CliDecompressionMatcher.TryResolveBinary(
+            "gzip",
+            "/missing",
+            isWindows: true,
+            pathSeparator: ';',
+            _ => false,
+            out string program);
+
+        Assert.False(resolved);
+        Assert.Empty(program);
+    }
 }
