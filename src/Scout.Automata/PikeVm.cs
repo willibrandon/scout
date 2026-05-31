@@ -24,6 +24,62 @@ internal sealed class PikeVm
         return TryMatchAt(haystack, start, earliest: true, out length);
     }
 
+    public bool TryMatchLongestAt(ReadOnlySpan<byte> haystack, int start, out int length)
+    {
+        current.Clear();
+        AddThread(nfa.StartState, haystack, start, current, new bool[nfa.States.Count], new bool[nfa.States.Count]);
+        int longestAcceptLength = -1;
+        while (current.Count > 0)
+        {
+            int position = MinPosition(current);
+            if (IndexOfAccept(current, position) >= 0)
+            {
+                longestAcceptLength = Math.Max(longestAcceptLength, position - start);
+            }
+
+            next.Clear();
+            for (int index = 0; index < current.Count; index++)
+            {
+                (int stateIndex, int threadPosition) = current[index];
+                if (threadPosition != position)
+                {
+                    next.Add(current[index]);
+                    continue;
+                }
+
+                RegexNfaState state = nfa.States[stateIndex];
+                if (state.Kind == RegexNfaStateKind.Atom &&
+                    RegexByteClass.TryGetAtomMatchLength(
+                        haystack,
+                        position,
+                        state.AtomKind,
+                        state.Value.Span,
+                        state.CaseInsensitive,
+                        state.MultiLine,
+                        state.DotMatchesNewline,
+                        state.Crlf,
+                        state.LineTerminator,
+                        state.Utf8,
+                        state.UnicodeClasses,
+                        out int consume))
+                {
+                    AddThread(state.Next, haystack, position + consume, next, new bool[nfa.States.Count], new bool[nfa.States.Count]);
+                }
+            }
+
+            (current, next) = (next, current);
+        }
+
+        if (longestAcceptLength >= 0)
+        {
+            length = longestAcceptLength;
+            return true;
+        }
+
+        length = 0;
+        return false;
+    }
+
     private bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, bool earliest, out int length)
     {
         current.Clear();

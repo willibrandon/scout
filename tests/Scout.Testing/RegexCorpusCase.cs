@@ -16,6 +16,7 @@ internal sealed class RegexCorpusCase
         bool anchored,
         bool earliest,
         bool overlapping,
+        bool matchKindAll,
         bool caseInsensitive,
         bool utf8,
         bool unicodeClasses,
@@ -32,6 +33,7 @@ internal sealed class RegexCorpusCase
         Anchored = anchored;
         Earliest = earliest;
         Overlapping = overlapping;
+        MatchKindAll = matchKindAll;
         CaseInsensitive = caseInsensitive;
         Utf8 = utf8;
         UnicodeClasses = unicodeClasses;
@@ -59,6 +61,8 @@ internal sealed class RegexCorpusCase
     public bool Earliest { get; }
 
     public bool Overlapping { get; }
+
+    public bool MatchKindAll { get; }
 
     public bool CaseInsensitive { get; }
 

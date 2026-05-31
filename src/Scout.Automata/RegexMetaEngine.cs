@@ -217,6 +217,20 @@ internal sealed class RegexMetaEngine
         return null;
     }
 
+    internal RegexMatch? FindAllKindAt(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        if (utf8 && !RegexByteClass.IsUtf8Boundary(haystack, startOffset))
+        {
+            return null;
+        }
+
+        var allPikeVm = new PikeVm(nfa);
+        return allPikeVm.TryMatchLongestAt(haystack, startOffset, out int length)
+            ? new RegexMatch(startOffset, length)
+            : null;
+    }
+
     private bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int length)
     {
         if (utf8 && !RegexByteClass.IsUtf8Boundary(haystack, start))

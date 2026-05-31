@@ -62,12 +62,14 @@ internal static class RegexCorpusLoader
         string? searchKind = ReadOptionalString(block, "search-kind");
         bool earliest = string.Equals(searchKind, "earliest", StringComparison.Ordinal);
         bool overlapping = string.Equals(searchKind, "overlapping", StringComparison.Ordinal);
+        string? matchKind = ReadOptionalString(block, "match-kind");
+        bool matchKindAll = string.Equals(matchKind, "all", StringComparison.Ordinal);
         bool caseInsensitive = ReadOptionalBool(block, "case-insensitive", path, name) ?? false;
         bool utf8 = ReadOptionalBool(block, "utf8", path, name) ?? true;
         bool unicode = ReadOptionalBool(block, "unicode", path, name) ?? true;
         bool unicodeClasses = unicode && !string.Equals(relativePath, "regex-lite.toml", StringComparison.Ordinal);
         bool compiles = ReadOptionalBool(block, "compiles", path, name) ?? true;
-        return new RegexCorpusCase(name, patterns, haystack, expectedMatches, matchLimit, lineTerminator, boundsStart, boundsEnd, anchored, earliest, overlapping, caseInsensitive, utf8, unicodeClasses, compiles);
+        return new RegexCorpusCase(name, patterns, haystack, expectedMatches, matchLimit, lineTerminator, boundsStart, boundsEnd, anchored, earliest, overlapping, matchKindAll, caseInsensitive, utf8, unicodeClasses, compiles);
     }
 
     private static string FindBlock(string text, string name, string path)

@@ -225,6 +225,21 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies all-match-kind search keeps the longest accepting span from a fixed start.
+    /// </summary>
+    [Fact]
+    public void HonorsAllMatchKindAtStart()
+    {
+        RegexMatch? alternate = RegexAutomaton.Compile("foo|foobar"u8).FindAllKindAt("foobar"u8, startAt: 0);
+        RegexMatch? nongreedy = RegexAutomaton.Compile("(abc)+?"u8).FindAllKindAt("abcabcabc"u8, startAt: 0);
+        RegexMatch? dot = RegexAutomaton.Compile("(?s:.)"u8).FindAllKindAt("foobar"u8, startAt: 5);
+
+        Assert.Equal(new RegexMatch(0, 6), alternate);
+        Assert.Equal(new RegexMatch(0, 9), nongreedy);
+        Assert.Equal(new RegexMatch(5, 1), dot);
+    }
+
+    /// <summary>
     /// Verifies adjacent optional groups retain ripgrep's leftmost-first greedy priority.
     /// </summary>
     [Fact]

@@ -102,6 +102,11 @@ public sealed class RegexAutomaton
         return engine.FindEarliest(haystack, startAt);
     }
 
+    internal RegexMatch? FindAllKindAt(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        return engine.FindAllKindAt(haystack, startAt);
+    }
+
     /// <summary>
     /// Returns a value indicating whether the regex matches a haystack.
     /// </summary>

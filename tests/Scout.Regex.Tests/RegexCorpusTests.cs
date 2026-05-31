@@ -349,7 +349,9 @@ public sealed class RegexCorpusTests
             ("anchored.toml",
             [
                 "greedy",
+                "greedy-earliest",
                 "nongreedy",
+                "nongreedy-all",
                 "word-boundary-unicode-01",
                 "word-boundary-nounicode-01",
                 "no-match-at-start",
@@ -365,6 +367,12 @@ public sealed class RegexCorpusTests
                 "unicode-word-end",
                 "ascii-word-start",
                 "ascii-word-end",
+            ]),
+            ("leftmost-all.toml",
+            [
+                "alt",
+                "multi",
+                "dotall",
             ]),
             ("crlf.toml",
             [
@@ -817,7 +825,8 @@ public sealed class RegexCorpusTests
             testCase.BoundsEnd,
             testCase.Anchored,
             testCase.Earliest,
-            testCase.Overlapping);
+            testCase.Overlapping,
+            testCase.MatchKindAll && !testCase.Overlapping);
 
         Assert.True(
             MatchesEqual(testCase.ExpectedMatches, actual),
@@ -882,7 +891,8 @@ public sealed class RegexCorpusTests
         int boundsEnd,
         bool anchored,
         bool earliest,
-        bool overlapping)
+        bool overlapping,
+        bool matchKindAll)
     {
         var matches = new List<RegexMatch>();
         int startAt = boundsStart;
@@ -894,7 +904,7 @@ public sealed class RegexCorpusTests
                 break;
             }
 
-            RegexMatch? match = Find(automata, haystack, startAt, boundsEnd, anchored, earliest);
+            RegexMatch? match = Find(automata, haystack, startAt, boundsEnd, anchored, earliest, matchKindAll);
             if (!match.HasValue)
             {
                 break;
@@ -928,7 +938,14 @@ public sealed class RegexCorpusTests
         return matches.ToArray();
     }
 
-    private static RegexMatch? Find(IReadOnlyList<RegexAutomaton> automata, byte[] haystack, int startAt, int boundsEnd, bool anchored, bool earliest)
+    private static RegexMatch? Find(IReadOnlyList<RegexAutomaton> automata, byte[] haystack, int startAt, int boundsEnd, bool anchored, bool earliest, bool matchKindAll)
+    {
+        return matchKindAll
+            ? FindAllKind(automata, haystack, startAt, boundsEnd, anchored)
+            : FindLeftmostFirst(automata, haystack, startAt, boundsEnd, anchored, earliest);
+    }
+
+    private static RegexMatch? FindLeftmostFirst(IReadOnlyList<RegexAutomaton> automata, byte[] haystack, int startAt, int boundsEnd, bool anchored, bool earliest)
     {
         RegexMatch? best = null;
         int bestPatternIndex = int.MaxValue;
@@ -955,6 +972,37 @@ public sealed class RegexCorpusTests
             {
                 best = match.Value;
                 bestPatternIndex = index;
+            }
+        }
+
+        return best;
+    }
+
+    private static RegexMatch? FindAllKind(IReadOnlyList<RegexAutomaton> automata, byte[] haystack, int startAt, int boundsEnd, bool anchored)
+    {
+        RegexMatch? best = null;
+        int bestPatternIndex = int.MaxValue;
+        int lastStart = anchored ? startAt : boundsEnd;
+        for (int start = startAt; start <= lastStart; start++)
+        {
+            for (int index = 0; index < automata.Count; index++)
+            {
+                RegexMatch? match = automata[index].FindAllKindAt(haystack, start);
+                if (!match.HasValue ||
+                    match.Value.Start > boundsEnd ||
+                    match.Value.Start + match.Value.Length > boundsEnd)
+                {
+                    continue;
+                }
+
+                if (!best.HasValue ||
+                    match.Value.Start + match.Value.Length > best.Value.Start + best.Value.Length ||
+                    match.Value.Start + match.Value.Length == best.Value.Start + best.Value.Length && match.Value.Start < best.Value.Start ||
+                    match.Value.Equals(best.Value) && index < bestPatternIndex)
+                {
+                    best = match.Value;
+                    bestPatternIndex = index;
+                }
             }
         }
 
