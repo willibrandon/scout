@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace Scout;
 
@@ -334,13 +333,7 @@ internal static class ReplacementFormatter
             Array.Fill(captureLengths, -1, 1, captureLengths.Length - 1);
             captureNames.Clear();
             int captureIndex = 1;
-            if (TryMatchCaptureExpression(pattern, matched, captureOffset: 0, asciiCaseInsensitive, ignoreWhitespace: false, dotMatchesNewline: false, captureStarts, captureLengths, captureNames, ref captureIndex, out int end) &&
-                end == matched.Length)
-            {
-                return;
-            }
-
-            if (TryCollectCapturesWithDotNet(pattern, matched, captureStarts, captureLengths, captureNames))
+            if (TryMatchCaptureExpression(pattern, matched, captureOffset: 0, asciiCaseInsensitive, ignoreWhitespace: false, dotMatchesNewline: false, captureStarts, captureLengths, captureNames, ref captureIndex, out _, requireFullLength: true))
             {
                 return;
             }
@@ -349,74 +342,6 @@ internal static class ReplacementFormatter
         Array.Fill(captureStarts, -1, 1, captureStarts.Length - 1);
         Array.Fill(captureLengths, -1, 1, captureLengths.Length - 1);
         captureNames.Clear();
-    }
-
-    private static bool TryCollectCapturesWithDotNet(
-        ReadOnlySpan<byte> pattern,
-        ReadOnlySpan<byte> matched,
-        int[] captureStarts,
-        int[] captureLengths,
-        Dictionary<string, int> captureNames)
-    {
-        string patternText = NormalizeDotNetCapturePattern(Encoding.Latin1.GetString(pattern));
-        string matchedText = Encoding.Latin1.GetString(matched);
-        Match match;
-        Regex regex;
-        try
-        {
-            regex = new Regex(patternText, RegexOptions.CultureInvariant);
-            match = regex.Match(matchedText);
-        }
-        catch (ArgumentException)
-        {
-            return false;
-        }
-
-        if (!match.Success || match.Index != 0 || match.Length != matchedText.Length)
-        {
-            return false;
-        }
-
-        Array.Fill(captureStarts, -1);
-        Array.Fill(captureLengths, -1);
-        captureNames.Clear();
-        captureStarts[0] = 0;
-        captureLengths[0] = matched.Length;
-        int limit = Math.Min(captureStarts.Length, match.Groups.Count);
-        for (int index = 1; index < limit; index++)
-        {
-            Group group = match.Groups[index];
-            if (!group.Success)
-            {
-                continue;
-            }
-
-            captureStarts[index] = group.Index;
-            captureLengths[index] = group.Length;
-        }
-
-        string[] names = regex.GetGroupNames();
-        for (int index = 0; index < names.Length; index++)
-        {
-            string name = names[index];
-            if (int.TryParse(name, out _))
-            {
-                continue;
-            }
-
-            int groupNumber = regex.GroupNumberFromName(name);
-            if (groupNumber > 0 && groupNumber < captureStarts.Length && match.Groups[groupNumber].Success)
-            {
-                captureNames[name] = groupNumber;
-            }
-        }
-
-        return true;
-    }
-
-    private static string NormalizeDotNetCapturePattern(string pattern)
-    {
-        return pattern.Replace("(?P<", "(?<", StringComparison.Ordinal);
     }
 
     private static bool TryMatchCaptureExpression(
@@ -430,7 +355,8 @@ internal static class ReplacementFormatter
         int[] captureLengths,
         Dictionary<string, int> captureNames,
         ref int captureIndex,
-        out int end)
+        out int end,
+        bool requireFullLength = false)
     {
         int baseCaptureIndex = captureIndex;
         int totalCaptures = CountCapturingGroups(pattern);
@@ -464,7 +390,8 @@ internal static class ReplacementFormatter
                     alternativeCaptureLengths,
                     alternativeCaptureNames,
                     ref alternativeCaptureIndex,
-                    out end))
+                    out end,
+                    requireFullLength))
             {
                 Array.Copy(alternativeCaptureStarts, captureStarts, captureStarts.Length);
                 Array.Copy(alternativeCaptureLengths, captureLengths, captureLengths.Length);
@@ -506,7 +433,8 @@ internal static class ReplacementFormatter
         int[] captureLengths,
         Dictionary<string, int> captureNames,
         ref int captureIndex,
-        out int end)
+        out int end,
+        bool requireFullLength = false)
     {
         return TryMatchCaptureSequenceFrom(
             pattern,
@@ -521,7 +449,8 @@ internal static class ReplacementFormatter
             captureLengths,
             captureNames,
             ref captureIndex,
-            out end);
+            out end,
+            requireFullLength);
     }
 
     private static bool TryMatchCaptureSequenceFrom(
@@ -537,13 +466,20 @@ internal static class ReplacementFormatter
         int[] captureLengths,
         Dictionary<string, int> captureNames,
         ref int captureIndex,
-        out int end)
+        out int end,
+        bool requireFullLength)
     {
         while (true)
         {
             SkipIgnoredCapturePatternBytes(pattern, ref patternIndex, ignoreWhitespace);
             if (patternIndex >= pattern.Length)
             {
+                if (requireFullLength && matchedIndex != matched.Length)
+                {
+                    end = 0;
+                    return false;
+                }
+
                 break;
             }
 
@@ -569,7 +505,8 @@ internal static class ReplacementFormatter
                 captureLengths,
                 captureNames,
                 ref captureIndex,
-                out end);
+                out end,
+                requireFullLength);
         }
 
         end = matchedIndex;
@@ -589,7 +526,8 @@ internal static class ReplacementFormatter
         int[] captureLengths,
         Dictionary<string, int> captureNames,
         ref int captureIndex,
-        out int end)
+        out int end,
+        bool requireFullLength)
     {
         if (patternIndex >= pattern.Length)
         {
@@ -606,7 +544,7 @@ internal static class ReplacementFormatter
                 return false;
             }
 
-            return TryMatchCaptureSequenceFrom(pattern, patternIndex + 1, matched, captureOffset, matchedIndex, asciiCaseInsensitive, ignoreWhitespace, dotMatchesNewline, captureStarts, captureLengths, captureNames, ref captureIndex, out end);
+            return TryMatchCaptureSequenceFrom(pattern, patternIndex + 1, matched, captureOffset, matchedIndex, asciiCaseInsensitive, ignoreWhitespace, dotMatchesNewline, captureStarts, captureLengths, captureNames, ref captureIndex, out end, requireFullLength);
         }
 
         if (token == (byte)'$')
@@ -617,7 +555,7 @@ internal static class ReplacementFormatter
                 return false;
             }
 
-            return TryMatchCaptureSequenceFrom(pattern, patternIndex + 1, matched, captureOffset, matchedIndex, asciiCaseInsensitive, ignoreWhitespace, dotMatchesNewline, captureStarts, captureLengths, captureNames, ref captureIndex, out end);
+            return TryMatchCaptureSequenceFrom(pattern, patternIndex + 1, matched, captureOffset, matchedIndex, asciiCaseInsensitive, ignoreWhitespace, dotMatchesNewline, captureStarts, captureLengths, captureNames, ref captureIndex, out end, requireFullLength);
         }
 
         if (token == (byte)'(' && TryFindGroupEnd(pattern, patternIndex, out int contentStart, out int groupEnd, out bool capturing, out string? captureName, out bool? groupCaseOverride, out bool? groupIgnoreWhitespaceOverride, out bool? groupDotOverride))
@@ -655,7 +593,8 @@ internal static class ReplacementFormatter
                     captureLengths,
                     captureNames,
                     ref captureIndex,
-                    out end);
+                    out end,
+                    requireFullLength);
             }
 
             var states = new List<(int MatchedIndex, int[] Starts, int[] Lengths, Dictionary<string, int> Names)>
@@ -722,7 +661,8 @@ internal static class ReplacementFormatter
                 groupLazy,
                 afterGroupCaptureIndex,
                 ref captureIndex,
-                out end);
+                out end,
+                requireFullLength);
         }
 
         byte literal = 0;
@@ -755,6 +695,7 @@ internal static class ReplacementFormatter
             };
             literal = escaped switch
             {
+                (byte)'n' => (byte)'\n',
                 (byte)'t' => (byte)'\t',
                 (byte)'r' => (byte)'\r',
                 (byte)'f' => (byte)'\f',
@@ -803,7 +744,8 @@ internal static class ReplacementFormatter
             captureLengths,
             captureNames,
             ref captureIndex,
-            out end);
+            out end,
+            requireFullLength);
     }
 
     private static bool TryMatchSingleCaptureGroupThen(
@@ -827,7 +769,8 @@ internal static class ReplacementFormatter
         int[] captureLengths,
         Dictionary<string, int> captureNames,
         ref int captureIndex,
-        out int end)
+        out int end,
+        bool requireFullLength)
     {
         int maxLength = matched.Length - matchedIndex;
         if (!TryBuildSingleGroupState(
@@ -875,7 +818,8 @@ internal static class ReplacementFormatter
                 captureLengths,
                 captureNames,
                 ref captureIndex,
-                out end))
+                out end,
+                requireFullLength))
         {
             return true;
         }
@@ -922,7 +866,8 @@ internal static class ReplacementFormatter
                     captureLengths,
                     captureNames,
                     ref captureIndex,
-                    out end))
+                    out end,
+                    requireFullLength))
             {
                 return true;
             }
@@ -970,7 +915,8 @@ internal static class ReplacementFormatter
                     captureLengths,
                     captureNames,
                     ref captureIndex,
-                    out end))
+                    out end,
+                    requireFullLength))
             {
                 return true;
             }
@@ -1018,7 +964,8 @@ internal static class ReplacementFormatter
                 candidateLengths,
                 candidateNames,
                 ref innerCapture,
-                out groupLength) ||
+                out groupLength,
+                requireFullLength) ||
             (requireFullLength && groupLength != candidateLength))
         {
             return false;
@@ -1056,7 +1003,8 @@ internal static class ReplacementFormatter
         int[] captureLengths,
         Dictionary<string, int> captureNames,
         ref int captureIndex,
-        out int end)
+        out int end,
+        bool requireFullLength)
     {
         int suffixCaptureIndex = nextCaptureIndex;
         if (TryMatchCaptureSequenceFrom(
@@ -1072,7 +1020,8 @@ internal static class ReplacementFormatter
                 stateLengths,
                 stateNames,
                 ref suffixCaptureIndex,
-                out end))
+                out end,
+                requireFullLength))
         {
             CopyCaptureState(stateStarts, stateLengths, stateNames, captureStarts, captureLengths, captureNames);
             captureIndex = suffixCaptureIndex;
@@ -1098,7 +1047,8 @@ internal static class ReplacementFormatter
         bool lazy,
         int nextCaptureIndex,
         ref int captureIndex,
-        out int end)
+        out int end,
+        bool requireFullLength)
     {
         int start = lazy ? min : states.Count - 1;
         int stop = lazy ? states.Count : min - 1;
@@ -1128,7 +1078,8 @@ internal static class ReplacementFormatter
                     suffixLengths,
                     suffixNames,
                     ref suffixCaptureIndex,
-                    out end))
+                    out end,
+                    requireFullLength))
             {
                 CopyCaptureState(suffixStarts, suffixLengths, suffixNames, captureStarts, captureLengths, captureNames);
                 captureIndex = suffixCaptureIndex;
@@ -1156,7 +1107,8 @@ internal static class ReplacementFormatter
         int[] captureLengths,
         Dictionary<string, int> captureNames,
         ref int captureIndex,
-        out int end)
+        out int end,
+        bool requireFullLength)
     {
         int start = lazy ? min : maxCount;
         int stop = lazy ? maxCount + 1 : min - 1;
@@ -1180,7 +1132,8 @@ internal static class ReplacementFormatter
                     suffixLengths,
                     suffixNames,
                     ref suffixCaptureIndex,
-                    out end))
+                    out end,
+                    requireFullLength))
             {
                 CopyCaptureState(suffixStarts, suffixLengths, suffixNames, captureStarts, captureLengths, captureNames);
                 captureIndex = suffixCaptureIndex;
@@ -1631,6 +1584,10 @@ internal static class ReplacementFormatter
                 case (byte)'S':
                     tokenKind = CaptureAtomWhitespace;
                     tokenNegated = true;
+                    index += 2;
+                    return true;
+                case (byte)'n':
+                    literal = (byte)'\n';
                     index += 2;
                     return true;
                 case (byte)'t':

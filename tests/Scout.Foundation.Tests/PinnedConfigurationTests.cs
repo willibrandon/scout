@@ -300,6 +300,34 @@ public sealed class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies runtime regex behavior does not fall back to the UTF-16 BCL regex engine.
+    /// </summary>
+    [Fact]
+    public void RuntimeRegexBehaviorDoesNotUseBclRegex()
+    {
+        string root = FindRepositoryRoot();
+        var violations = new List<string>();
+
+        foreach (string path in Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories))
+        {
+            string relativePath = Path.GetRelativePath(root, path);
+            if (ContainsPathSegment(relativePath, "bin") || ContainsPathSegment(relativePath, "obj"))
+            {
+                continue;
+            }
+
+            string text = File.ReadAllText(path);
+            if (text.Contains("System.Text.RegularExpressions", StringComparison.Ordinal) ||
+                text.Contains("[GeneratedRegex", StringComparison.Ordinal))
+            {
+                violations.Add(relativePath);
+            }
+        }
+
+        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>
     /// Verifies runtime code routes environment variable reads through the byte-preserving OS layer.
     /// </summary>
     [Fact]
