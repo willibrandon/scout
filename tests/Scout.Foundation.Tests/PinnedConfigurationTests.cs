@@ -62,6 +62,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("LINUX_SNAPSHOT_URL: \"http://snapshot.debian.org/archive/debian/20260501T000000Z\"", workflow, StringComparison.Ordinal);
         Assert.Contains("image: docker.io/library/debian:bookworm-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb", workflow, StringComparison.Ordinal);
         Assert.Contains("Pinned snapshot apt prerequisites", workflow, StringComparison.Ordinal);
+        Assert.Contains("rm -f /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list", workflow, StringComparison.Ordinal);
         Assert.Contains("printf 'deb %s bookworm main\\n' \"$LINUX_SNAPSHOT_URL\" > /etc/apt/sources.list", workflow, StringComparison.Ordinal);
         Assert.Contains("Acquire::Check-Valid-Until false", workflow, StringComparison.Ordinal);
         Assert.Contains("apt-get install -y --no-install-recommends", workflow, StringComparison.Ordinal);

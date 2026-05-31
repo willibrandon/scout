@@ -640,7 +640,7 @@ internal static class Pcre2SearchOperations
         long lineNumber = 1;
         ulong matchedLines = 0;
         var matches = new List<JsonMatchSpan>();
-        while (lineStart <= bytes.Length)
+        while (lineStart < bytes.Length)
         {
             ReadOnlySpan<byte> remaining = bytes.AsSpan(lineStart);
             int lineFeed = remaining.IndexOf((byte)'\n');
@@ -920,7 +920,7 @@ internal static class Pcre2SearchOperations
         int lineStart = 0;
         long currentLineNumber = 1;
         ulong matchedLines = 0;
-        while (lineStart <= bytes.Length)
+        while (lineStart < bytes.Length)
         {
             ReadOnlySpan<byte> remaining = bytes.AsSpan(lineStart);
             int lineFeed = remaining.IndexOf((byte)'\n');
@@ -1052,7 +1052,7 @@ internal static class Pcre2SearchOperations
         bool hasSelectedMatch = false;
         int lineStart = 0;
         long lineNumber = 1;
-        while (lineStart <= bytes.Length)
+        while (lineStart < bytes.Length)
         {
             GetPcre2LineSlices(bytes, lineStart, out ReadOnlySpan<byte> outputLine, out ReadOnlySpan<byte> matchLine, out int nextLineStart, out bool isLastLine);
             bool originalMatch = TryFindPcre2LineMatch(matchLine, regex, lineRegexp, wordRegexp, out Pcre2Match firstMatch);
@@ -1273,7 +1273,7 @@ internal static class Pcre2SearchOperations
         long currentLineNumber = 1;
         ulong matchedLines = 0;
         var sink = new ReplacementLineSink(output, prefix, separators.FieldMatch, replacement, patterns, false, lineNumber, column, byteOffset, trim, nullPathTerminator, vimgrep: false, lineLimit, color: color, lineTerminator: separators.LineTerminator);
-        while (lineStart <= bytes.Length)
+        while (lineStart < bytes.Length)
         {
             ReadOnlySpan<byte> remaining = bytes.AsSpan(lineStart);
             int lineFeed = remaining.IndexOf((byte)'\n');
@@ -1399,7 +1399,7 @@ internal static class Pcre2SearchOperations
     private static bool HasPcre2Match(byte[] bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp, bool invertMatch)
     {
         int lineStart = 0;
-        while (lineStart <= bytes.Length)
+        while (lineStart < bytes.Length)
         {
             ReadOnlySpan<byte> remaining = bytes.AsSpan(lineStart);
             int lineFeed = remaining.IndexOf((byte)'\n');
@@ -1431,7 +1431,7 @@ internal static class Pcre2SearchOperations
     {
         long count = 0;
         int lineStart = 0;
-        while (lineStart <= bytes.Length)
+        while (lineStart < bytes.Length)
         {
             ReadOnlySpan<byte> remaining = bytes.AsSpan(lineStart);
             int lineFeed = remaining.IndexOf((byte)'\n');
@@ -1468,7 +1468,7 @@ internal static class Pcre2SearchOperations
         long count = 0;
         int lineStart = 0;
         ulong matchedLines = 0;
-        while (lineStart <= bytes.Length)
+        while (lineStart < bytes.Length)
         {
             ReadOnlySpan<byte> remaining = bytes.AsSpan(lineStart);
             int lineFeed = remaining.IndexOf((byte)'\n');
