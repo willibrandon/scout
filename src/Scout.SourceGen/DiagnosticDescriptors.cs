@@ -27,4 +27,12 @@ internal static class DiagnosticDescriptors
         category: "Scout.Structure",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
+
+    internal static readonly DiagnosticDescriptor TestWaiverIsForbidden = new(
+        id: "SCOUT0004",
+        title: "Tests must not be skipped, ignored, explicit, or quarantined",
+        messageFormat: "Test waiver '{0}' is forbidden by Scout's no-skip policy",
+        category: "Scout.Structure",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
 }

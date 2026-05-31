@@ -969,11 +969,11 @@ public sealed class WalkTests
             {
                 Directory.Delete(root, recursive: true);
             }
-
-            return;
         }
-
-        Assert.Throws<PlatformNotSupportedException>(() => RawUnixDirectory.Create("unused"u8));
+        else
+        {
+            Assert.Throws<PlatformNotSupportedException>(() => RawUnixDirectory.Create("unused"u8));
+        }
     }
 
     private static byte[] JoinRawUnixPath(ReadOnlySpan<byte> parent, ReadOnlySpan<byte> name)

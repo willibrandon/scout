@@ -337,6 +337,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("check_true \"$relative_project\" \"TreatWarningsAsErrors\"", script, StringComparison.Ordinal);
         Assert.Contains("check_true \"$relative_project\" \"MSBuildTreatWarningsAsErrors\"", script, StringComparison.Ordinal);
         Assert.Contains("dotnet_analyzer_diagnostic\\.category-Scout\\.Structure\\.severity", script, StringComparison.Ordinal);
+        Assert.Contains("dotnet_diagnostic\\.SCOUT0004\\.severity", script, StringComparison.Ordinal);
         Assert.Contains("none|silent", script, StringComparison.Ordinal);
 
         string responseFile = File.ReadAllText(Path.Combine(root, "Directory.Build.rsp"));
@@ -368,6 +369,29 @@ public sealed partial class PinnedConfigurationTests
         }
 
         Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>
+    /// Verifies the build fails on every test waiver form forbidden by the design.
+    /// </summary>
+    [Fact]
+    public void SourceAnalyzerRejectsSkippedIgnoredExplicitAndQuarantinedTests()
+    {
+        string root = FindRepositoryRoot();
+        string analyzer = File.ReadAllText(Path.Combine(root, "src", "Scout.SourceGen", "NoSkippedTestsAnalyzer.cs"));
+        string descriptors = File.ReadAllText(Path.Combine(root, "src", "Scout.SourceGen", "DiagnosticDescriptors.cs"));
+        string editorConfig = File.ReadAllText(Path.Combine(root, ".editorconfig"));
+
+        Assert.Contains("NoSkippedTestsAnalyzer", analyzer, StringComparison.Ordinal);
+        Assert.Contains("TestWaiverIsForbidden", descriptors, StringComparison.Ordinal);
+        Assert.Contains("SCOUT0004", descriptors, StringComparison.Ordinal);
+        Assert.Contains("dotnet_diagnostic." + "SCOUT0004.severity = " + "error", editorConfig, StringComparison.Ordinal);
+        Assert.Contains("Fact", analyzer, StringComparison.Ordinal);
+        Assert.Contains("Theory", analyzer, StringComparison.Ordinal);
+        Assert.Contains("Trait", analyzer, StringComparison.Ordinal);
+        Assert.Contains("TryCreateDirectorySymlink", analyzer, StringComparison.Ordinal);
+        Assert.Contains("TryCreateFileSymlink", analyzer, StringComparison.Ordinal);
+        Assert.Contains("OperatingSystem.", analyzer, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -2018,7 +2042,7 @@ public sealed partial class PinnedConfigurationTests
             @"<\s*Disabled" + "Warnings" + @"\b",
             Regex.Escape("#nullable " + "disable"),
             @"dotnet_diagnostic\.[^\r\n]*severity\s*=\s*(none|silent)\b",
-            @"dotnet_diagnostic\.(SCOUT000[1-3]|IDE0130)\.severity\s*=\s*(?!error\b)[^\s#;]+",
+            @"dotnet_diagnostic\.(SCOUT000[1-4]|IDE0130)\.severity\s*=\s*(?!error\b)[^\s#;]+",
             @"dotnet_analyzer_diagnostic\.category-Scout\.Structure\.severity\s*=\s*(?!error\b)[^\s#;]+",
         ];
 
