@@ -647,6 +647,7 @@ public sealed partial class PinnedConfigurationTests
         string spikeUnixEntry = File.ReadAllText(Path.Combine(root, "spike", "native", "scout_main.c"));
         string spikeWindowsEntry = File.ReadAllText(Path.Combine(root, "spike", "native", "scout_wmain.c"));
         string spikeWindowsBuildScript = File.ReadAllText(Path.Combine(root, "spike", "build-windows.ps1"));
+        string design = File.ReadAllText(Path.Combine(root, "docs", "DESIGN.md"));
 
         Assert.Contains("[UnmanagedCallersOnly(EntryPoint = \"scout_entry\")]", scoutEntry, StringComparison.Ordinal);
         Assert.Contains("NativeArgumentReader.CaptureUnix(argc, argv)", scoutEntry, StringComparison.Ordinal);
@@ -685,6 +686,11 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("$StartInfo.ArgumentList.Add($Argument)", spikeWindowsBuildScript, StringComparison.Ordinal);
         Assert.Contains("Assert-EqualBytes $Expected $Actual", spikeWindowsBuildScript, StringComparison.Ordinal);
         Assert.Contains("OK ${Rid}: UTF-16 argv round-trip", spikeWindowsBuildScript, StringComparison.Ordinal);
+        Assert.Contains("Unix RIDs include a deliberately non-UTF-8 `argv` byte round-trip; Windows RIDs include a non-ASCII UTF-16 command-line round-trip", design, StringComparison.Ordinal);
+        Assert.Contains("raw non-UTF-8 Unix `argv` bytes; non-ASCII Windows UTF-16 command line", design, StringComparison.Ordinal);
+        Assert.Contains("Reproducing on the remaining four RIDs", design, StringComparison.Ordinal);
+        Assert.DoesNotContain("Reproducing on the remaining five RIDs", design, StringComparison.Ordinal);
+        Assert.DoesNotContain("raw non-UTF-8 `argv`/`envp` byte round-trip, built and run on all six RIDs", design, StringComparison.Ordinal);
     }
 
     /// <summary>
