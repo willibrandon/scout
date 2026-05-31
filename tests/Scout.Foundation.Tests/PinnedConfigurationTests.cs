@@ -61,6 +61,15 @@ public sealed partial class PinnedConfigurationTests
         string releaseGateWorkflow = File.ReadAllText(releaseGateWorkflowPath);
         string benchmarkReadme = File.ReadAllText(Path.Combine(root, "bench", "README.md"));
         string workflow = ciWorkflow + "\n" + releaseGateWorkflow;
+        string[] githubHostedRunnerLabels =
+        [
+            "ubuntu-24.04",
+            "ubuntu-24.04-arm",
+            "macos-15-intel",
+            "macos-15",
+            "windows-2025-vs2026",
+            "windows-11-arm",
+        ];
 
         Assert.Contains("push:", ciWorkflow, StringComparison.Ordinal);
         Assert.Contains("pull_request:", ciWorkflow, StringComparison.Ordinal);
@@ -115,10 +124,16 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("runner: macos-15-intel", workflow, StringComparison.Ordinal);
         Assert.Contains("runner: macos-15", workflow, StringComparison.Ordinal);
         Assert.Contains("runner: windows-2025-vs2026", workflow, StringComparison.Ordinal);
+        Assert.Contains("runner: windows-11-arm", workflow, StringComparison.Ordinal);
         Assert.Contains("bench/run-hyperfine.sh --gate", workflow, StringComparison.Ordinal);
         Assert.Contains("runs-on: macos-15", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("brew install hyperfine", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("GitHub-hosted", benchmarkReadme, StringComparison.Ordinal);
+        for (int index = 0; index < githubHostedRunnerLabels.Length; index++)
+        {
+            Assert.Contains(githubHostedRunnerLabels[index], benchmarkReadme, StringComparison.Ordinal);
+        }
+
         Assert.Contains("exact successful commit SHA", benchmarkReadme, StringComparison.Ordinal);
         Assert.Contains("pinned release-LTO `rg` oracle", benchmarkReadme, StringComparison.Ordinal);
         Assert.Contains("stale CI", benchmarkReadme, StringComparison.Ordinal);
@@ -138,6 +153,13 @@ public sealed partial class PinnedConfigurationTests
         Assert.DoesNotContain("-p:PublishAot=true", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("continue-on-error: true", workflow, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("if: github.event_name == 'workflow_dispatch'", workflow, StringComparison.Ordinal);
+
+        foreach (string runnerLabel in EnumerateWorkflowRunnerLabels(workflow))
+        {
+            Assert.True(
+                Array.Exists(githubHostedRunnerLabels, label => string.Equals(label, runnerLabel, StringComparison.Ordinal)),
+                "Workflow runner label must be GitHub-hosted and pinned by CiWorkflowPinsCrossPlatformGates: " + runnerLabel);
+        }
 
         string[] requiredRids =
         [
@@ -2110,6 +2132,30 @@ public sealed partial class PinnedConfigurationTests
 
     [GeneratedRegex(@"if\s*\([^{;]*OperatingSystem\.[^{;]*\)\s*\{\s*return;\s*\}", RegexOptions.CultureInvariant)]
     private static partial Regex PlatformGuardReturnPattern();
+
+    [GeneratedRegex(@"^\s*(?:runs-on|runner):\s*(?<label>[^\r\n#]+?)\s*(?:#.*)?$", RegexOptions.CultureInvariant)]
+    private static partial Regex WorkflowRunnerLabelPattern();
+
+    private static IEnumerable<string> EnumerateWorkflowRunnerLabels(string workflow)
+    {
+        using var reader = new StringReader(workflow);
+        while (reader.ReadLine() is { } line)
+        {
+            Match match = WorkflowRunnerLabelPattern().Match(line);
+            if (!match.Success)
+            {
+                continue;
+            }
+
+            string label = match.Groups["label"].Value.Trim().Trim('"', '\'');
+            if (label.StartsWith("${{", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            yield return label;
+        }
+    }
 
     private static string ReadMarkdownSection(string markdown, string heading)
     {
