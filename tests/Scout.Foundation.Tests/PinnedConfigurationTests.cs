@@ -1125,6 +1125,15 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("compare_case passthru exact -P -n --passthru 'foo(?=bar)' pcre2-context", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case context_only_matching exact -P -n -o -C1 'foo(?=bar)' pcre2-context", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case context_replacement exact -P -n -r X -C1 'foo(?=bar)' pcre2-context", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case vimgrep_lookahead exact -P --vimgrep 'foo(?=bar)' pcre2-smoke.txt", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case vimgrep_only_matching exact -P --vimgrep -o 'foo(?=bar)|foo' pcre2-smoke.txt", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case vimgrep_replacement exact -P --vimgrep -r X 'foo(?=bar)' pcre2-smoke.txt", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case vimgrep_context exact -P --vimgrep -C1 'foo(?=bar)' pcre2-context", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case vimgrep_context_replacement exact -P --vimgrep -r X -C1 'foo(?=bar)' pcre2-context", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case vimgrep_invert exact -P --vimgrep -v 'foo(?=bar)' pcre2-context", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case vimgrep_count exact -P --vimgrep --count 'foo(?=bar)' pcre2-smoke.txt", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_stdin_case vimgrep_implicit_stdin exact \"$WORK/pcre2-smoke.txt\" -P --vimgrep 'foo(?=bar)'", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_stdin_case vimgrep_count_stdin exact \"$WORK/pcre2-smoke.txt\" -P --vimgrep --count 'foo(?=bar)'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_stdin_case explicit_stdin_lookahead exact \"$WORK/pcre2-smoke.txt\" -P 'foo(?=bar)' -", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_stdin_case implicit_stdin_lookahead exact \"$WORK/pcre2-smoke.txt\" -P 'foo(?=bar)'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("mask-elapsed-sort-lines", differentialScript, StringComparison.Ordinal);

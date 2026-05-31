@@ -27,4 +27,6 @@ match-data block so native match state is never shared across worker threads.
 PCRE2 search statistics are aggregated through the shared `SearchStats` output
 format and covered by native differentials against the pinned `rg -P` binary.
 JSON output covers line-oriented PCRE2 context and passthru searches, including
-native differential coverage for look-around patterns.
+native differential coverage for look-around patterns. Line-oriented vimgrep
+output, including context and replacement records, is also covered by pinned
+native differentials.

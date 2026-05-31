@@ -73,7 +73,7 @@ internal static class Pcre2SearchOperations
                 using var regex = new Pcre2Regex(pattern, GetPcre2CompileOptions(lowArgs, patterns));
                 JsonSearchSummary? jsonSummary = lowArgs.SearchMode == CliSearchMode.Json ? new JsonSearchSummary() : null;
                 OutputPath stdinPath = new(StandardInputPath, hyperlinkPath: null, hyperlinkFormat: null, host: string.Empty);
-                OutputPath? prefix = SearchOutputFormatting.GetStandardInputPrefix(lowArgs.SearchMode, autoPrefixPath: false, lowArgs.WithFilename);
+                OutputPath? prefix = SearchOutputFormatting.GetStandardInputPrefix(lowArgs.SearchMode, lowArgs.Vimgrep, lowArgs.WithFilename);
                 matched = stats
                     ? RunPcre2SearchModeWithStats(stdinBytes, regex, output, separators, stdinPath, prefix, lineLimit, color, lowArgs, patterns, jsonSummary, heading, ref wroteHeadingOutput, ref searchStats)
                     : RunPcre2SearchModeWithOptionalHeading(stdinBytes, regex, output, separators, stdinPath, prefix, lineLimit, color, lowArgs, patterns, jsonSummary, heading, ref wroteHeadingOutput);
@@ -110,7 +110,7 @@ internal static class Pcre2SearchOperations
             }
         }
 
-        bool prefixPaths = paths.Count > 1 || SearchPathArgument.ContainsDirectory(paths);
+        bool prefixPaths = lowArgs.Vimgrep || paths.Count > 1 || SearchPathArgument.ContainsDirectory(paths);
         bool autoMmapEligible = SearchPathArgument.IsAutoMmapEligible(paths);
         try
         {
@@ -149,6 +149,9 @@ internal static class Pcre2SearchOperations
         bool contextRequested = lowArgs.BeforeContext != 0 ||
             lowArgs.AfterContext != 0 ||
             lowArgs.Passthru;
+        bool unsupportedVimgrep = lowArgs.Vimgrep &&
+            lowArgs.SearchMode == CliSearchMode.Standard &&
+            lowArgs.Multiline;
         return (lowArgs.SearchMode is CliSearchMode.Standard
                 or CliSearchMode.Json
                 or CliSearchMode.Count
@@ -157,7 +160,7 @@ internal static class Pcre2SearchOperations
                 or CliSearchMode.FilesWithoutMatch) &&
             !lowArgs.FixedStrings &&
             !lowArgs.NullData &&
-            !lowArgs.Vimgrep &&
+            !unsupportedVimgrep &&
             !(lowArgs.Multiline && lowArgs.InvertMatch) &&
             !(lowArgs.Multiline && lowArgs.OnlyMatching) &&
             !(contextRequested && ((lowArgs.SearchMode != CliSearchMode.Standard && lowArgs.SearchMode != CliSearchMode.Json) || lowArgs.Multiline)) &&
@@ -533,6 +536,7 @@ internal static class Pcre2SearchOperations
                 lineLimit,
                 color,
                 lowArgs.SearchMode,
+                lowArgs.Vimgrep,
                 lowArgs.OnlyMatching,
                 lowArgs.Replacement,
                 patterns,
@@ -565,6 +569,7 @@ internal static class Pcre2SearchOperations
             lineLimit,
             color,
             lowArgs.SearchMode,
+            lowArgs.Vimgrep,
             lowArgs.OnlyMatching,
             lowArgs.Replacement,
             patterns,
@@ -896,6 +901,7 @@ internal static class Pcre2SearchOperations
         OutputLineLimit lineLimit,
         OutputColor color,
         CliSearchMode searchMode,
+        bool vimgrep,
         bool onlyMatching,
         ReadOnlyMemory<byte>? replacement,
         IReadOnlyList<byte[]> patterns,
@@ -945,12 +951,17 @@ internal static class Pcre2SearchOperations
 
         if (beforeContext > 0 || afterContext > 0 || passthru)
         {
-            return SearchPcre2ContextLines(bytes, regex, output, separators, prefix, lineLimit, color, lineRegexp, wordRegexp, invertMatch, lineNumber, column, byteOffset, trim, nullPathTerminator, onlyMatching, replacement, patterns, beforeContext, afterContext, passthru, stopOnNonmatch, maxCount);
+            return SearchPcre2ContextLines(bytes, regex, output, separators, prefix, lineLimit, color, lineRegexp, wordRegexp, invertMatch, lineNumber, column, byteOffset, trim, nullPathTerminator, vimgrep, onlyMatching, replacement, patterns, beforeContext, afterContext, passthru, stopOnNonmatch, maxCount);
         }
 
         if (replacement is ReadOnlyMemory<byte> replacementValue && !invertMatch)
         {
-            return SearchPcre2ReplacedLines(bytes, regex, output, separators, prefix, lineLimit, color, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, patterns, maxCount);
+            return SearchPcre2ReplacedLines(bytes, regex, output, separators, prefix, lineLimit, color, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, nullPathTerminator, vimgrep, replacementValue, patterns, maxCount);
+        }
+
+        if (vimgrep && !invertMatch)
+        {
+            return SearchPcre2VimgrepLines(bytes, regex, output, separators, prefix, lineLimit, color, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, nullPathTerminator, onlyMatching, maxCount);
         }
 
         return SearchPcre2Lines(bytes, regex, output, separators, prefix, lineLimit, color, lineRegexp, wordRegexp, invertMatch, lineNumber, column, byteOffset, trim, nullPathTerminator, onlyMatching, maxCount);
@@ -1368,6 +1379,240 @@ internal static class Pcre2SearchOperations
         return matched;
     }
 
+    private static bool SearchPcre2VimgrepLines(
+        byte[] bytes,
+        Pcre2Regex regex,
+        RawByteWriter output,
+        OutputSeparators separators,
+        OutputPath? prefix,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool trim,
+        bool nullPathTerminator,
+        bool onlyMatching,
+        ulong? maxCount)
+    {
+        bool matched = false;
+        int lineStart = 0;
+        long currentLineNumber = 1;
+        ulong matchedLines = 0;
+        while (lineStart < bytes.Length)
+        {
+            if (maxCount is ulong limit && matchedLines >= limit)
+            {
+                break;
+            }
+
+            GetPcre2LineSlices(bytes, lineStart, out ReadOnlySpan<byte> outputLine, out ReadOnlySpan<byte> matchLine, out int nextLineStart, out bool isLastLine);
+            if (WritePcre2VimgrepMatchesForLine(outputLine, matchLine, regex, output, separators, prefix, lineLimit, color, currentLineNumber, lineStart, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, nullPathTerminator, onlyMatching))
+            {
+                matched = true;
+                matchedLines++;
+            }
+
+            if (isLastLine)
+            {
+                break;
+            }
+
+            lineStart = nextLineStart;
+            currentLineNumber++;
+        }
+
+        return matched;
+    }
+
+    private static bool WritePcre2VimgrepMatchesForLine(
+        ReadOnlySpan<byte> outputLine,
+        ReadOnlySpan<byte> matchLine,
+        Pcre2Regex regex,
+        RawByteWriter output,
+        OutputSeparators separators,
+        OutputPath? prefix,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        long lineNumber,
+        int lineStart,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool printLineNumber,
+        bool printColumn,
+        bool printByteOffset,
+        bool trim,
+        bool nullPathTerminator,
+        bool onlyMatching)
+    {
+        bool matched = false;
+        int startOffset = 0;
+        while (startOffset <= matchLine.Length && regex.TryFind(matchLine, startOffset, out Pcre2Match match))
+        {
+            if (Pcre2MatchSatisfies(matchLine, match, lineRegexp, wordRegexp))
+            {
+                matched = true;
+                WritePcre2VimgrepMatch(outputLine, matchLine, regex, output, separators.FieldMatch, prefix, lineLimit, color, lineNumber, lineStart, match, lineRegexp, wordRegexp, printLineNumber, printColumn, printByteOffset, trim, nullPathTerminator, onlyMatching, separators.LineTerminator);
+            }
+
+            startOffset = AdvanceAfterPcre2Match(match, matchLine.Length);
+        }
+
+        return matched;
+    }
+
+    private static void WritePcre2VimgrepMatch(
+        ReadOnlySpan<byte> outputLine,
+        ReadOnlySpan<byte> matchLine,
+        Pcre2Regex regex,
+        RawByteWriter output,
+        ReadOnlyMemory<byte> fieldSeparator,
+        OutputPath? prefix,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        long lineNumber,
+        int lineStart,
+        Pcre2Match match,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool printLineNumber,
+        bool printColumn,
+        bool printByteOffset,
+        bool trim,
+        bool nullPathTerminator,
+        bool onlyMatching,
+        ReadOnlyMemory<byte> lineTerminator)
+    {
+        ReadOnlySpan<byte> body = onlyMatching ? matchLine.Slice(match.Start, match.Length) : outputLine;
+        int trimOffset = trim ? GetPcre2TrimOffset(body) : 0;
+        ReadOnlySpan<byte> displayBody = body[trimOffset..];
+        long matchColumn = match.Start + 1L;
+        long matchByteOffset = lineStart + match.Start;
+        bool linked = false;
+        bool hasLineNumber = printLineNumber;
+        bool hasColumn = printColumn && matchColumn > 0;
+        bool hasByteOffset = printByteOffset;
+
+        if (prefix is not null)
+        {
+            linked = prefix.BeginHyperlink(output, lineNumber, matchColumn);
+            color.WritePath(output, prefix.Display);
+            if (!hasLineNumber && !hasColumn && !hasByteOffset)
+            {
+                OutputPath.EndHyperlink(output, ref linked);
+            }
+
+            output.Write(nullPathTerminator ? NullByte : fieldSeparator.Span);
+        }
+
+        if (hasLineNumber)
+        {
+            color.WriteLineNumber(output, lineNumber);
+            if (!hasColumn && !hasByteOffset)
+            {
+                OutputPath.EndHyperlink(output, ref linked);
+            }
+
+            output.Write(fieldSeparator.Span);
+        }
+
+        if (hasColumn)
+        {
+            color.WriteNumberField(output, matchColumn);
+            if (!hasByteOffset)
+            {
+                OutputPath.EndHyperlink(output, ref linked);
+            }
+
+            output.Write(fieldSeparator.Span);
+        }
+
+        if (hasByteOffset)
+        {
+            color.WriteNumberField(output, matchByteOffset);
+            OutputPath.EndHyperlink(output, ref linked);
+            output.Write(fieldSeparator.Span);
+        }
+
+        WritePcre2VimgrepBody(displayBody, matchLine, regex, output, lineLimit, color, lineRegexp, wordRegexp, onlyMatching, match.Start - trimOffset, match.Length, lineTerminator);
+    }
+
+    private static void WritePcre2VimgrepBody(
+        ReadOnlySpan<byte> displayBody,
+        ReadOnlySpan<byte> matchLine,
+        Pcre2Regex regex,
+        RawByteWriter output,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool onlyMatching,
+        int matchStart,
+        int matchLength,
+        ReadOnlyMemory<byte> lineTerminator)
+    {
+        if (!onlyMatching && lineLimit.IsExceeded(displayBody))
+        {
+            if (lineLimit.Preview)
+            {
+                ulong columns = lineLimit.MaxColumns.GetValueOrDefault();
+                long remainingMatches = CountPcre2LineMatchesAfterColumn(matchLine, regex, columns, lineRegexp, wordRegexp);
+                WritePcre2VimgrepHighlightedBody(displayBody[..lineLimit.GetPreviewLength(displayBody)], output, color, matchStart, matchLength);
+                output.Write(" [... "u8);
+                OutputColor.WriteNumber(output, remainingMatches);
+                output.Write(" more match"u8);
+                if (remainingMatches != 1)
+                {
+                    output.Write("es"u8);
+                }
+
+                output.Write("]"u8);
+            }
+            else
+            {
+                output.Write("[Omitted long line with "u8);
+                OutputColor.WriteNumber(output, CountPcre2LineMatches(matchLine, regex, lineRegexp, wordRegexp));
+                output.Write(" matches]"u8);
+            }
+
+            output.Write(lineTerminator.Span);
+            return;
+        }
+
+        if (onlyMatching)
+        {
+            color.WriteMatch(output, displayBody);
+        }
+        else
+        {
+            WritePcre2VimgrepHighlightedBody(displayBody, output, color, matchStart, matchLength);
+        }
+
+        if (!HasPcre2InputTerminator(displayBody, lineTerminator))
+        {
+            output.Write(lineTerminator.Span);
+        }
+    }
+
+    private static void WritePcre2VimgrepHighlightedBody(
+        ReadOnlySpan<byte> displayBody,
+        RawByteWriter output,
+        OutputColor color,
+        int matchStart,
+        int matchLength)
+    {
+        if (!color.Enabled || matchStart < 0 || matchStart >= displayBody.Length)
+        {
+            output.Write(displayBody);
+            return;
+        }
+
+        int length = Math.Min(matchLength, displayBody.Length - matchStart);
+        ColoredLineWriter.Write(output, displayBody, [matchStart], [length], color);
+    }
+
     private static bool SearchPcre2ContextLines(
         byte[] bytes,
         Pcre2Regex regex,
@@ -1384,6 +1629,7 @@ internal static class Pcre2SearchOperations
         bool byteOffset,
         bool trim,
         bool nullPathTerminator,
+        bool vimgrep,
         bool onlyMatching,
         ReadOnlyMemory<byte>? replacement,
         IReadOnlyList<byte[]> patterns,
@@ -1434,7 +1680,7 @@ internal static class Pcre2SearchOperations
                 output.Write(separators.LineTerminator.Span);
             }
 
-            WritePcre2ContextOutputLine(bytes, line, selectedMatch, regex, output, separators, prefix, lineLimit, color, lineRegexp, wordRegexp, invertMatch, lineNumber, column, byteOffset, trim, nullPathTerminator, onlyMatching, replacement, patterns, ref lineSink);
+            WritePcre2ContextOutputLine(bytes, line, selectedMatch, regex, output, separators, prefix, lineLimit, color, lineRegexp, wordRegexp, invertMatch, lineNumber, column, byteOffset, trim, nullPathTerminator, vimgrep, onlyMatching, replacement, patterns, ref lineSink);
             previousLineIndex = index;
             wrote = true;
         }
@@ -1498,6 +1744,7 @@ internal static class Pcre2SearchOperations
         bool byteOffset,
         bool trim,
         bool nullPathTerminator,
+        bool vimgrep,
         bool onlyMatching,
         ReadOnlyMemory<byte>? replacement,
         IReadOnlyList<byte[]> patterns,
@@ -1507,15 +1754,21 @@ internal static class Pcre2SearchOperations
         ReadOnlySpan<byte> matchLine = GetPcre2MatchLine(outputLine);
         if (selectedMatch)
         {
-            if (onlyMatching && !invertMatch)
+            if (replacement is ReadOnlyMemory<byte> replacementValue && !invertMatch)
             {
-                WritePcre2OnlyMatches(matchLine, regex, output, separators.FieldMatch, prefix, color, line.LineNumber, line.Start, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, nullPathTerminator, separators.LineTerminator);
+                WritePcre2ReplacedContextLine(outputLine, matchLine, regex, output, separators, prefix, lineLimit, color, line.LineNumber, line.Start, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, nullPathTerminator, vimgrep, replacementValue, patterns);
                 return;
             }
 
-            if (replacement is ReadOnlyMemory<byte> replacementValue && !invertMatch)
+            if (vimgrep && !invertMatch)
             {
-                WritePcre2ReplacedContextLine(outputLine, matchLine, regex, output, separators, prefix, lineLimit, color, line.LineNumber, line.Start, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, patterns);
+                WritePcre2VimgrepMatchesForLine(outputLine, matchLine, regex, output, separators, prefix, lineLimit, color, line.LineNumber, line.Start, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, nullPathTerminator, onlyMatching);
+                return;
+            }
+
+            if (onlyMatching && !invertMatch)
+            {
+                WritePcre2OnlyMatches(matchLine, regex, output, separators.FieldMatch, prefix, color, line.LineNumber, line.Start, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, nullPathTerminator, separators.LineTerminator);
                 return;
             }
 
@@ -1554,10 +1807,11 @@ internal static class Pcre2SearchOperations
         bool printByteOffset,
         bool trim,
         bool nullPathTerminator,
+        bool vimgrep,
         ReadOnlyMemory<byte> replacement,
         IReadOnlyList<byte[]> patterns)
     {
-        var sink = new ReplacementLineSink(output, prefix, separators.FieldMatch, replacement, patterns, false, printLineNumber, printColumn, printByteOffset, trim, nullPathTerminator, vimgrep: false, lineLimit, color: color, lineTerminator: separators.LineTerminator);
+        var sink = new ReplacementLineSink(output, prefix, separators.FieldMatch, replacement, patterns, false, printLineNumber, printColumn, printByteOffset, trim, nullPathTerminator, vimgrep, lineLimit, color: color, lineTerminator: separators.LineTerminator);
         int startOffset = 0;
         while (startOffset <= matchLine.Length && regex.TryFind(matchLine, startOffset, out Pcre2Match match))
         {
@@ -1666,6 +1920,7 @@ internal static class Pcre2SearchOperations
         bool byteOffset,
         bool trim,
         bool nullPathTerminator,
+        bool vimgrep,
         ReadOnlyMemory<byte> replacement,
         IReadOnlyList<byte[]> patterns,
         ulong? maxCount)
@@ -1674,7 +1929,7 @@ internal static class Pcre2SearchOperations
         int lineStart = 0;
         long currentLineNumber = 1;
         ulong matchedLines = 0;
-        var sink = new ReplacementLineSink(output, prefix, separators.FieldMatch, replacement, patterns, false, lineNumber, column, byteOffset, trim, nullPathTerminator, vimgrep: false, lineLimit, color: color, lineTerminator: separators.LineTerminator);
+        var sink = new ReplacementLineSink(output, prefix, separators.FieldMatch, replacement, patterns, false, lineNumber, column, byteOffset, trim, nullPathTerminator, vimgrep, lineLimit, color: color, lineTerminator: separators.LineTerminator);
         while (lineStart < bytes.Length)
         {
             ReadOnlySpan<byte> remaining = bytes.AsSpan(lineStart);
@@ -1922,6 +2177,23 @@ internal static class Pcre2SearchOperations
         return count;
     }
 
+    private static long CountPcre2LineMatchesAfterColumn(ReadOnlySpan<byte> line, Pcre2Regex regex, ulong column, bool lineRegexp, bool wordRegexp)
+    {
+        long count = 0;
+        int startOffset = 0;
+        while (startOffset <= line.Length && regex.TryFind(line, startOffset, out Pcre2Match match))
+        {
+            if ((ulong)match.Start >= column && Pcre2MatchSatisfies(line, match, lineRegexp, wordRegexp))
+            {
+                count++;
+            }
+
+            startOffset = AdvanceAfterPcre2Match(match, line.Length);
+        }
+
+        return count;
+    }
+
     private static long CountPcre2MultilineMatchingLines(byte[] bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp, ulong? maxCount)
     {
         long count = 0;
@@ -2053,6 +2325,35 @@ internal static class Pcre2SearchOperations
 
             startOffset = AdvanceAfterPcre2Match(match, line.Length);
         }
+    }
+
+    private static bool HasPcre2InputTerminator(ReadOnlySpan<byte> bytes, ReadOnlyMemory<byte> lineTerminator)
+    {
+        return !bytes.IsEmpty &&
+            (IsPcre2NullLineTerminator(lineTerminator)
+                ? bytes[^1] == 0
+                : bytes[^1] == (byte)'\n');
+    }
+
+    private static bool IsPcre2NullLineTerminator(ReadOnlyMemory<byte> lineTerminator)
+    {
+        return lineTerminator.Length == 1 && lineTerminator.Span[0] == 0;
+    }
+
+    private static int GetPcre2TrimOffset(ReadOnlySpan<byte> bytes)
+    {
+        int index = 0;
+        while (index < bytes.Length && IsPcre2AsciiWhitespace(bytes[index]))
+        {
+            index++;
+        }
+
+        return index;
+    }
+
+    private static bool IsPcre2AsciiWhitespace(byte value)
+    {
+        return value is (byte)' ' or (byte)'\t' or (byte)'\n' or (byte)'\v' or (byte)'\f' or (byte)'\r';
     }
 
 
