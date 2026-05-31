@@ -68,6 +68,8 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("dotnet run --project fuzz/Scout.Fuzz/Scout.Fuzz.csproj --no-build -- search-loop", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet test Scout.slnx --no-restore", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet format Scout.slnx --no-restore --verify-no-changes", workflow, StringComparison.Ordinal);
+        Assert.Contains("MSBuild warning gates", workflow, StringComparison.Ordinal);
+        Assert.Contains("eng/check-msbuild-warning-gates.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/preflight.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("cancel-in-progress: true", workflow, StringComparison.Ordinal);
         Assert.Contains("if: github.event_name == 'workflow_dispatch'", workflow, StringComparison.Ordinal);
@@ -223,6 +225,33 @@ public sealed class PinnedConfigurationTests
         }
 
         Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>
+    /// Verifies CI evaluates warning gates after MSBuild imports are applied.
+    /// </summary>
+    [Fact]
+    public void MsBuildWarningGateEvaluatesImportedProperties()
+    {
+        string root = FindRepositoryRoot();
+        string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
+        string script = File.ReadAllText(Path.Combine(root, "eng", "check-msbuild-warning-gates.sh"));
+
+        Assert.Contains("artifacts/preflight/msbuild-warning-gates", preflight, StringComparison.Ordinal);
+        Assert.Contains("-getProperty:NoWarn", script, StringComparison.Ordinal);
+        Assert.Contains("-getProperty:WarningsNotAsErrors", script, StringComparison.Ordinal);
+        Assert.Contains("-getProperty:TreatWarningsAsErrors", script, StringComparison.Ordinal);
+        Assert.Contains("-getProperty:MSBuildTreatWarningsAsErrors", script, StringComparison.Ordinal);
+        Assert.Contains("-getProperty:AnalysisLevel", script, StringComparison.Ordinal);
+        Assert.Contains("-getProperty:AnalysisMode", script, StringComparison.Ordinal);
+        Assert.Contains("-getProperty:EnforceCodeStyleInBuild", script, StringComparison.Ordinal);
+        Assert.Contains("-getItem:EditorConfigFiles", script, StringComparison.Ordinal);
+        Assert.Contains("check_empty_or_sdk_default_nowarn", script, StringComparison.Ordinal);
+        Assert.Contains("check_empty \"$relative_project\" \"WarningsNotAsErrors\"", script, StringComparison.Ordinal);
+        Assert.Contains("check_true \"$relative_project\" \"TreatWarningsAsErrors\"", script, StringComparison.Ordinal);
+        Assert.Contains("check_true \"$relative_project\" \"MSBuildTreatWarningsAsErrors\"", script, StringComparison.Ordinal);
+        Assert.Contains("dotnet_analyzer_diagnostic\\.category-Scout\\.Structure\\.severity", script, StringComparison.Ordinal);
+        Assert.Contains("none|silent", script, StringComparison.Ordinal);
     }
 
     /// <summary>
