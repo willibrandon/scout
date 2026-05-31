@@ -275,4 +275,4 @@ jobs:
       - name: Dispatch Release Gates
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run release-gates.yml --ref main -f checkout_ref="${{ github.sha }}"
+        run: gh workflow run release-gates.yml --repo "${{ github.repository }}" --ref main -f checkout_ref="${{ github.sha }}"
