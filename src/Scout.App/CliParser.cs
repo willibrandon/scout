@@ -2116,7 +2116,7 @@ public static class CliParser
 
     private static bool ParseSeparator(ReadOnlySpan<byte> value, string flagName, SeparatorKind kind, CliLowArgs lowArgs, out ScoutError? error)
     {
-        byte[] separator = UnescapeSeparator(value);
+        byte[] separator = CliByteEscape.Unescape(value);
         SetSeparator(lowArgs, kind, separator);
         error = null;
         return true;
@@ -2124,7 +2124,7 @@ public static class CliParser
 
     private static bool ParseSeparator(string value, SeparatorKind kind, CliLowArgs lowArgs, out ScoutError? error)
     {
-        byte[] separator = UnescapeSeparator(Utf8.GetBytes(value));
+        byte[] separator = CliByteEscape.Unescape(value);
         SetSeparator(lowArgs, kind, separator);
         error = null;
         return true;
@@ -2142,13 +2142,13 @@ public static class CliParser
 
     private static bool ParsePathSeparator(ReadOnlySpan<byte> value, CliLowArgs lowArgs, out ScoutError? error)
     {
-        byte[] separator = UnescapeSeparator(value);
+        byte[] separator = CliByteEscape.Unescape(value);
         return SetPathSeparator(separator, Utf8.GetString(value), lowArgs, out error);
     }
 
     private static bool ParsePathSeparator(string value, CliLowArgs lowArgs, out ScoutError? error)
     {
-        byte[] separator = UnescapeSeparator(Utf8.GetBytes(value));
+        byte[] separator = CliByteEscape.Unescape(value);
         return SetPathSeparator(separator, value, lowArgs, out error);
     }
 
@@ -2190,107 +2190,6 @@ public static class CliParser
                 lowArgs.SetContextSeparator(separator);
                 break;
         }
-    }
-
-    private static byte[] UnescapeSeparator(ReadOnlySpan<byte> value)
-    {
-        var bytes = new List<byte>(value.Length);
-        for (int index = 0; index < value.Length; index++)
-        {
-            byte current = value[index];
-            if (current != (byte)'\\' || index + 1 >= value.Length)
-            {
-                bytes.Add(current);
-                continue;
-            }
-
-            byte escaped = value[index + 1];
-            if (escaped == (byte)'x' && index + 3 < value.Length && TryGetHex(value[index + 2], out byte high) && TryGetHex(value[index + 3], out byte low))
-            {
-                bytes.Add((byte)((high << 4) | low));
-                index += 3;
-                continue;
-            }
-
-            if (TryGetEscapedByte(escaped, out byte unescaped))
-            {
-                bytes.Add(unescaped);
-                index++;
-                continue;
-            }
-
-            bytes.Add(current);
-            bytes.Add(escaped);
-            index++;
-        }
-
-        return bytes.ToArray();
-    }
-
-    private static bool TryGetEscapedByte(byte escaped, out byte value)
-    {
-        switch (escaped)
-        {
-            case (byte)'0':
-                value = 0;
-                return true;
-
-            case (byte)'a':
-                value = 0x07;
-                return true;
-
-            case (byte)'b':
-                value = 0x08;
-                return true;
-
-            case (byte)'f':
-                value = 0x0c;
-                return true;
-
-            case (byte)'n':
-                value = (byte)'\n';
-                return true;
-
-            case (byte)'r':
-                value = (byte)'\r';
-                return true;
-
-            case (byte)'t':
-                value = (byte)'\t';
-                return true;
-
-            case (byte)'v':
-                value = 0x0b;
-                return true;
-
-            default:
-                value = 0;
-                return false;
-        }
-    }
-
-    private static bool TryGetHex(byte value, out byte hex)
-    {
-        if (value is >= (byte)'0' and <= (byte)'9')
-        {
-            hex = (byte)(value - (byte)'0');
-            return true;
-        }
-
-        if (value is >= (byte)'a' and <= (byte)'f')
-        {
-            hex = (byte)(value - (byte)'a' + 10);
-            return true;
-        }
-
-        if (value is >= (byte)'A' and <= (byte)'F')
-        {
-            hex = (byte)(value - (byte)'A' + 10);
-            return true;
-        }
-
-        hex = 0;
-        return false;
     }
 
     private static bool ParseGlob(OsString value, string flagName, bool caseInsensitive, CliLowArgs lowArgs, out ScoutError? error)

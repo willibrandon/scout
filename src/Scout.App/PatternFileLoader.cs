@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
-using System.Text;
 
 namespace Scout;
 
@@ -105,7 +103,7 @@ internal static class PatternFileLoader
             return true;
         }
 
-        string escaped = EscapeLine(line);
+        string escaped = CliByteEscape.Escape(line);
         diagnostics.ErrorMessage(new ScoutError(
             $"{path}:{lineNumber}: found invalid UTF-8 in pattern at byte offset {invalidOffset}: {escaped} (disable Unicode mode and use hex escape sequences to match arbitrary bytes in a pattern, e.g., '(?-u)\\xFF')").WithContext("rg"));
         return false;
@@ -192,27 +190,4 @@ internal static class PatternFileLoader
         return value is >= 0x80 and <= 0xBF;
     }
 
-    private static string EscapeLine(ReadOnlySpan<byte> line)
-    {
-        var builder = new StringBuilder();
-        for (int index = 0; index < line.Length; index++)
-        {
-            byte value = line[index];
-            if (value is >= 0x20 and <= 0x7E && value != (byte)'\\')
-            {
-                builder.Append((char)value);
-            }
-            else if (value == (byte)'\\')
-            {
-                builder.Append(@"\\");
-            }
-            else
-            {
-                builder.Append(@"\x");
-                builder.Append(value.ToString("X2", CultureInfo.InvariantCulture));
-            }
-        }
-
-        return builder.ToString();
-    }
 }
