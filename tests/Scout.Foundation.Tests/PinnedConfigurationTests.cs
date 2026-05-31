@@ -956,6 +956,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("<AllowUnsafeBlocks>true</AllowUnsafeBlocks>", directoryBuildProps, StringComparison.Ordinal);
         Assert.Contains("<DirectPInvoke Include=\"__Internal\" />", directoryBuildProps, StringComparison.Ordinal);
         Assert.Contains("PCRE2 10.46 is available (JIT is available)", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("ConfigVersion = 11", pcre2Library, StringComparison.Ordinal);
+        Assert.Contains("Pcre2Config(ConfigVersion", pcre2Library, StringComparison.Ordinal);
+        Assert.DoesNotContain("PCRE2 10.46 is available", pcre2Library, StringComparison.Ordinal);
         Assert.Contains("[LibraryImport(\"__Internal\", EntryPoint = \"pcre2_config_8\")]", pcre2Library, StringComparison.Ordinal);
         Assert.Contains("[LibraryImport(\"__Internal\", EntryPoint = \"pcre2_compile_8\")]", pcre2Regex, StringComparison.Ordinal);
         Assert.Contains("[LibraryImport(\"__Internal\", EntryPoint = \"pcre2_match_8\")]", pcre2Regex, StringComparison.Ordinal);

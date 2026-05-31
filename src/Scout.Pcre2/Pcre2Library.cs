@@ -10,6 +10,8 @@ namespace Scout;
 public static unsafe partial class Pcre2Library
 {
     private const uint ConfigJit = 1;
+    private const uint ConfigVersion = 11;
+    private const int MaxVersionLength = 64;
     private const string UnavailableVersionText = "PCRE2 is not available in this build of ripgrep.\n";
 
     /// <summary>
@@ -59,7 +61,45 @@ public static unsafe partial class Pcre2Library
             }
 
             string jit = IsJitAvailable ? "available" : "unavailable";
-            return "PCRE2 10.46 is available (JIT is " + jit + ")\n";
+            string version = TryGetVersionNumber(out string runtimeVersion)
+                ? runtimeVersion
+                : "unknown";
+            return "PCRE2 " + version + " is available (JIT is " + jit + ")\n";
+        }
+    }
+
+    private static bool TryGetVersionNumber(out string version)
+    {
+        version = string.Empty;
+        try
+        {
+            Span<byte> buffer = stackalloc byte[MaxVersionLength];
+            fixed (byte* bufferPointer = buffer)
+            {
+                int length = Pcre2Config(ConfigVersion, bufferPointer);
+                if (length <= 1 || length > MaxVersionLength)
+                {
+                    return false;
+                }
+
+                ReadOnlySpan<byte> text = buffer[..(length - 1)];
+                int space = text.IndexOf((byte)' ');
+                if (space > 0)
+                {
+                    text = text[..space];
+                }
+
+                version = Encoding.ASCII.GetString(text);
+                return version.Length > 0;
+            }
+        }
+        catch (DllNotFoundException)
+        {
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
         }
     }
 
