@@ -1,0 +1,84 @@
+#!/usr/bin/env sh
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+LOCK="$ROOT/tests/PREREQS.lock"
+ARTIFACTS="$ROOT/src/Scout.App/GeneratedArtifacts"
+
+fail() {
+    printf '%s\n' "$1" >&2
+    exit 1
+}
+
+strip_toml_value='
+function value_of(line) {
+    value = line
+    sub(/^[^=]*=[[:space:]]*/, "", value)
+    sub(/^"/, "", value)
+    sub(/"$/, "", value)
+    return value
+}
+'
+
+read_lock_value() {
+    awk -v key="$1" "$strip_toml_value"'
+        $0 ~ /^\[/ {
+            exit 1
+        }
+        $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
+            print value_of($0)
+            found = 1
+            exit 0
+        }
+        END {
+            if (!found) {
+                exit 1
+            }
+        }
+    ' "$LOCK"
+}
+
+RG_PATH="${1:-}"
+if [ -z "$RG_PATH" ]; then
+    RG_PATH="$(read_lock_value "ripgrep_rg_path")" || fail "Missing ripgrep_rg_path in tests/PREREQS.lock."
+fi
+
+[ -f "$RG_PATH" ] || fail "Missing pinned rg: $RG_PATH"
+[ -x "$RG_PATH" ] || fail "Pinned rg is not executable: $RG_PATH"
+
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/scout-generated-artifacts.XXXXXX")"
+trap 'rm -rf "$TMP"' EXIT INT HUP TERM
+
+decode_artifact() {
+    tr -d '[:space:]' < "$1" | base64 -d | gzip -dc
+}
+
+compare_artifact() {
+    name="$1"
+    artifact="$2"
+    shift 2
+
+    expected="$TMP/$name.expected"
+    actual="$TMP/$name.actual"
+
+    "$RG_PATH" "$@" > "$expected"
+    decode_artifact "$ARTIFACTS/$artifact" > "$actual"
+
+    if ! cmp -s "$expected" "$actual"; then
+        printf 'Generated artifact drift for %s.\n' "$name" >&2
+        diff -u "$expected" "$actual" | sed -n '1,120p' >&2
+        exit 1
+    fi
+
+    printf 'OK %s\n' "$name"
+}
+
+compare_artifact help_short help-short.base64 -h
+compare_artifact help_long help-long.base64 --help
+compare_artifact generate_man man.base64 --generate man
+compare_artifact generate_complete_bash complete-bash.base64 --generate complete-bash
+compare_artifact generate_complete_zsh complete-zsh.base64 --generate complete-zsh
+compare_artifact generate_complete_fish complete-fish.base64 --generate complete-fish
+compare_artifact generate_complete_powershell complete-powershell.base64 --generate complete-powershell
+
+printf 'Scout generated artifacts match pinned rg.\n'

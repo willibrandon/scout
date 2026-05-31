@@ -726,11 +726,17 @@ public sealed partial class PinnedConfigurationTests
         string root = FindRepositoryRoot();
         string helpOutput = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "HelpOutput.cs"));
         string generateOutput = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "GenerateOutput.cs"));
+        string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
+        string verifier = File.ReadAllText(Path.Combine(root, "eng", "verify-generated-artifacts.sh"));
         string projectPath = Path.Combine(root, "src", "Scout.App", "Scout.App.csproj");
         var project = XDocument.Load(projectPath);
 
         Assert.DoesNotContain("private const string", helpOutput, StringComparison.Ordinal);
         Assert.DoesNotContain("private const string", generateOutput, StringComparison.Ordinal);
+        Assert.Contains("\"$ROOT/eng/verify-generated-artifacts.sh\" \"$RG_PATH\"", preflight, StringComparison.Ordinal);
+        Assert.Contains("base64 -d | gzip -dc", verifier, StringComparison.Ordinal);
+        Assert.Contains("cmp -s", verifier, StringComparison.Ordinal);
+        Assert.Contains("diff -u", verifier, StringComparison.Ordinal);
         Assert.Contains(
             project.Descendants("CompilerVisibleItemMetadata"),
             element =>
@@ -758,6 +764,14 @@ public sealed partial class PinnedConfigurationTests
             .ToDictionary(entry => entry.Include, entry => entry.ClassName, StringComparer.Ordinal);
 
         Assert.Equal(expectedArtifacts, actualArtifacts);
+
+        Assert.Contains("compare_artifact help_short help-short.base64 -h", verifier, StringComparison.Ordinal);
+        Assert.Contains("compare_artifact help_long help-long.base64 --help", verifier, StringComparison.Ordinal);
+        Assert.Contains("compare_artifact generate_man man.base64 --generate man", verifier, StringComparison.Ordinal);
+        Assert.Contains("compare_artifact generate_complete_bash complete-bash.base64 --generate complete-bash", verifier, StringComparison.Ordinal);
+        Assert.Contains("compare_artifact generate_complete_zsh complete-zsh.base64 --generate complete-zsh", verifier, StringComparison.Ordinal);
+        Assert.Contains("compare_artifact generate_complete_fish complete-fish.base64 --generate complete-fish", verifier, StringComparison.Ordinal);
+        Assert.Contains("compare_artifact generate_complete_powershell complete-powershell.base64 --generate complete-powershell", verifier, StringComparison.Ordinal);
     }
 
     /// <summary>
