@@ -10,8 +10,8 @@ namespace Scout;
 /// </summary>
 public sealed class RegexCorpusDifferentialTests
 {
-    private const int ExpectedDifferentialCaseCount = 219;
-    private const int ExpectedSupportedOnlyCaseCount = 272;
+    private const int ExpectedDifferentialCaseCount = 260;
+    private const int ExpectedSupportedOnlyCaseCount = 231;
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
@@ -30,6 +30,7 @@ public sealed class RegexCorpusDifferentialTests
         ("regex-lite.toml", 5),
         ("regression.toml", 13),
         ("set.toml", 29),
+        ("word-boundary-special.toml", 41),
     ];
 
     private static readonly (string RelativePath, int Count)[] ExpectedSupportedOnlyFileCounts =
@@ -48,7 +49,7 @@ public sealed class RegexCorpusDifferentialTests
         ("regression.toml", 43),
         ("set.toml", 1),
         ("substring.toml", 4),
-        ("word-boundary-special.toml", 48),
+        ("word-boundary-special.toml", 7),
     ];
 
     private static readonly (string RelativePath, string Name)[] DifferentialCases =
@@ -271,6 +272,47 @@ public sealed class RegexCorpusDifferentialTests
         ("set.toml", "caps-110"),
         ("set.toml", "caps-120"),
         ("set.toml", "caps-121"),
+        ("word-boundary-special.toml", "word-end-ascii-010"),
+        ("word-boundary-special.toml", "word-end-ascii-020"),
+        ("word-boundary-special.toml", "word-end-ascii-030"),
+        ("word-boundary-special.toml", "word-end-ascii-040"),
+        ("word-boundary-special.toml", "word-end-ascii-050"),
+        ("word-boundary-special.toml", "word-end-ascii-060"),
+        ("word-boundary-special.toml", "word-end-ascii-070"),
+        ("word-boundary-special.toml", "word-end-ascii-080"),
+        ("word-boundary-special.toml", "word-end-ascii-090"),
+        ("word-boundary-special.toml", "word-end-ascii-110"),
+        ("word-boundary-special.toml", "word-end-half-ascii-010"),
+        ("word-boundary-special.toml", "word-end-half-ascii-020"),
+        ("word-boundary-special.toml", "word-end-half-ascii-030"),
+        ("word-boundary-special.toml", "word-end-half-ascii-040"),
+        ("word-boundary-special.toml", "word-end-half-ascii-050"),
+        ("word-boundary-special.toml", "word-end-half-ascii-060"),
+        ("word-boundary-special.toml", "word-end-half-ascii-070"),
+        ("word-boundary-special.toml", "word-end-half-ascii-080"),
+        ("word-boundary-special.toml", "word-end-half-ascii-090"),
+        ("word-boundary-special.toml", "word-end-half-ascii-110"),
+        ("word-boundary-special.toml", "word-start-ascii-010"),
+        ("word-boundary-special.toml", "word-start-ascii-020"),
+        ("word-boundary-special.toml", "word-start-ascii-030"),
+        ("word-boundary-special.toml", "word-start-ascii-040"),
+        ("word-boundary-special.toml", "word-start-ascii-050"),
+        ("word-boundary-special.toml", "word-start-ascii-060"),
+        ("word-boundary-special.toml", "word-start-ascii-070"),
+        ("word-boundary-special.toml", "word-start-ascii-080"),
+        ("word-boundary-special.toml", "word-start-ascii-090"),
+        ("word-boundary-special.toml", "word-start-ascii-110"),
+        ("word-boundary-special.toml", "word-start-half-ascii-010"),
+        ("word-boundary-special.toml", "word-start-half-ascii-020"),
+        ("word-boundary-special.toml", "word-start-half-ascii-030"),
+        ("word-boundary-special.toml", "word-start-half-ascii-040"),
+        ("word-boundary-special.toml", "word-start-half-ascii-050"),
+        ("word-boundary-special.toml", "word-start-half-ascii-060"),
+        ("word-boundary-special.toml", "word-start-half-ascii-060-noutf8"),
+        ("word-boundary-special.toml", "word-start-half-ascii-070"),
+        ("word-boundary-special.toml", "word-start-half-ascii-080"),
+        ("word-boundary-special.toml", "word-start-half-ascii-090"),
+        ("word-boundary-special.toml", "word-start-half-ascii-110"),
         ("line-terminator.toml", "nul"),
     ];
 
