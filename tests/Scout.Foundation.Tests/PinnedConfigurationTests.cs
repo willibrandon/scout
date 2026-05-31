@@ -378,6 +378,33 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies CLI utilities own external decompression and preprocessor process spawning.
+    /// </summary>
+    [Fact]
+    public void CliUtilitiesOwnExternalSearchCommandSpawning()
+    {
+        string root = FindRepositoryRoot();
+        string appReaderPath = Path.Combine(root, "src", "Scout.App", "SearchFileContentReader.cs");
+        string cliRunnerPath = Path.Combine(root, "src", "Scout.Cli", "CliSearchCommandRunner.cs");
+
+        Assert.True(File.Exists(cliRunnerPath), "Missing CLI command runner: " + cliRunnerPath);
+
+        string appReader = File.ReadAllText(appReaderPath);
+        string cliRunner = File.ReadAllText(cliRunnerPath);
+        string cliUpstream = File.ReadAllText(Path.Combine(root, "src", "Scout.Cli", "UPSTREAM.md"));
+
+        Assert.Contains("CliSearchCommandRunner.TryRun", appReader, StringComparison.Ordinal);
+        Assert.DoesNotContain("new Process", appReader, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProcessStartInfo", appReader, StringComparison.Ordinal);
+        Assert.DoesNotContain("System.Diagnostics", appReader, StringComparison.Ordinal);
+        Assert.Contains("new Process()", cliRunner, StringComparison.Ordinal);
+        Assert.Contains("RedirectStandardOutput = true", cliRunner, StringComparison.Ordinal);
+        Assert.Contains("RedirectStandardError = true", cliRunner, StringComparison.Ordinal);
+        Assert.Contains("RedirectStandardInput = pipeFileToStandardInput", cliRunner, StringComparison.Ordinal);
+        Assert.Contains("decompression/preprocessor command matching and process spawning", cliUpstream, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies runtime regex behavior does not fall back to the UTF-16 BCL regex engine.
     /// </summary>
     [Fact]
