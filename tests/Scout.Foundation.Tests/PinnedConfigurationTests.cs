@@ -337,6 +337,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("check_true \"$relative_project\" \"TreatWarningsAsErrors\"", script, StringComparison.Ordinal);
         Assert.Contains("check_true \"$relative_project\" \"MSBuildTreatWarningsAsErrors\"", script, StringComparison.Ordinal);
         Assert.Contains("dotnet_analyzer_diagnostic\\.category-Scout\\.Structure\\.severity", script, StringComparison.Ordinal);
+        Assert.Contains("SCOUT[0-9]+", script, StringComparison.Ordinal);
         Assert.Contains("dotnet_diagnostic\\.SCOUT0004\\.severity", script, StringComparison.Ordinal);
         Assert.Contains("none|silent", script, StringComparison.Ordinal);
 
@@ -2044,7 +2045,7 @@ public sealed partial class PinnedConfigurationTests
             @"<\s*Disabled" + "Warnings" + @"\b",
             Regex.Escape("#nullable " + "disable"),
             @"dotnet_diagnostic\.[^\r\n]*severity\s*=\s*(none|silent)\b",
-            @"dotnet_diagnostic\.(SCOUT000[1-4]|IDE0130)\.severity\s*=\s*(?!error\b)[^\s#;]+",
+            @"dotnet_diagnostic\.(SCOUT[0-9]+|IDE0130)\.severity\s*=\s*(?!error\b)[^\s#;]+",
             @"dotnet_analyzer_diagnostic\.category-Scout\.Structure\.severity\s*=\s*(?!error\b)[^\s#;]+",
         ];
 

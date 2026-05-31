@@ -176,7 +176,7 @@ scan_repository_suppression_files() {
                 fail "$relative: analyzer severity config contains none/silent."
             fi
 
-            if grep -E 'dotnet_diagnostic\.(SCOUT000[1-4]|IDE0130)\.severity[[:space:]]*=[[:space:]]*([^e[:space:]#;]|e[^r[:space:]#;]|er[^r[:space:]#;]|err[^o[:space:]#;]|erro[^r[:space:]#;]|error[^[:space:]#;])' "$file" >/dev/null; then
+            if grep -E 'dotnet_diagnostic\.(SCOUT[0-9]+|IDE0130)\.severity[[:space:]]*=[[:space:]]*([^e[:space:]#;]|e[^r[:space:]#;]|er[^r[:space:]#;]|err[^o[:space:]#;]|erro[^r[:space:]#;]|error[^[:space:]#;])' "$file" >/dev/null; then
                 fail "$relative: Scout structural analyzers and IDE0130 must stay pinned to error."
             fi
 
