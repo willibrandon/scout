@@ -154,11 +154,6 @@ public sealed class WalkTests
     [Fact]
     public void FollowLinksControlsSymlinkTraversal()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
         string root = CreateTempDirectory();
         Directory.CreateDirectory(Path.Combine(root, "a", "b"));
         File.WriteAllText(Path.Combine(root, "a", "b", "foo"), string.Empty);
@@ -176,11 +171,6 @@ public sealed class WalkTests
     [Fact]
     public void FollowLinksSkipsSymlinkLoops()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
         string root = CreateTempDirectory();
         Directory.CreateDirectory(Path.Combine(root, "a", "b"));
         Assert.True(TryCreateDirectorySymlink(Path.Combine(root, "a"), Path.Combine(root, "a", "b", "c")), "Required directory symlink could not be created.");
@@ -195,11 +185,6 @@ public sealed class WalkTests
     [Fact]
     public void FileIdentityFollowsSymlinkTarget()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
         string root = CreateTempDirectory();
         string target = Path.Combine(root, "target");
         string link = Path.Combine(root, "link");
@@ -231,33 +216,32 @@ public sealed class WalkTests
     {
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
         {
-            return;
+            Assert.True(OperatingSystem.IsWindows());
         }
-
-        string root = CreateTempDirectory();
-        string external = OperatingSystem.IsLinux() ? "/sys" : "/dev";
-        if (!Directory.Exists(external)
-            || !NativeFileSystemMetadata.TryGetDevice(root, out FileSystemDevice rootDevice)
-            || !NativeFileSystemMetadata.TryGetDevice(external, out FileSystemDevice externalDevice)
-            || rootDevice.Equals(externalDevice))
+        else
         {
-            return;
+            string root = CreateTempDirectory();
+            string external = OperatingSystem.IsLinux() ? "/sys" : "/dev";
+            Assert.True(Directory.Exists(external), "Required cross-device fixture does not exist: " + external);
+            Assert.True(NativeFileSystemMetadata.TryGetDevice(root, out FileSystemDevice rootDevice), "Could not read root device.");
+            Assert.True(NativeFileSystemMetadata.TryGetDevice(external, out FileSystemDevice externalDevice), "Could not read external device.");
+            Assert.NotEqual(rootDevice, externalDevice);
+
+            Directory.CreateDirectory(Path.Combine(root, "same_file"));
+            Assert.True(TryCreateDirectorySymlink(external, Path.Combine(root, "same_file", "alink")), "Required cross-device directory symlink could not be created.");
+
+            List<string> baseline = Collect(
+                root,
+                new WalkBuilder(root).Hidden(false).FollowLinks(true).MaxDepth(3));
+            Assert.Contains(baseline, static path => path.StartsWith("same_file/alink/", StringComparison.Ordinal));
+
+            List<string> paths = Collect(
+                root,
+                new WalkBuilder(root).Hidden(false).FollowLinks(true).SameFileSystem(true).MaxDepth(3));
+
+            Assert.Contains("same_file/alink", paths);
+            Assert.DoesNotContain(paths, static path => path.StartsWith("same_file/alink/", StringComparison.Ordinal));
         }
-
-        Directory.CreateDirectory(Path.Combine(root, "same_file"));
-        Assert.True(TryCreateDirectorySymlink(external, Path.Combine(root, "same_file", "alink")), "Required cross-device directory symlink could not be created.");
-
-        List<string> baseline = Collect(
-            root,
-            new WalkBuilder(root).Hidden(false).FollowLinks(true).MaxDepth(3));
-        Assert.Contains(baseline, static path => path.StartsWith("same_file/alink/", StringComparison.Ordinal));
-
-        List<string> paths = Collect(
-            root,
-            new WalkBuilder(root).Hidden(false).FollowLinks(true).SameFileSystem(true).MaxDepth(3));
-
-        Assert.Contains("same_file/alink", paths);
-        Assert.DoesNotContain(paths, static path => path.StartsWith("same_file/alink/", StringComparison.Ordinal));
     }
 
     /// <summary>

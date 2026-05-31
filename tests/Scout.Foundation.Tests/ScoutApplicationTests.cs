@@ -201,11 +201,6 @@ public sealed class ScoutApplicationTests
     [Fact]
     public void InvalidUtf8PathArgumentUsesRawUnixPath()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
         using MemoryStream output = new();
         using MemoryStream error = new();
         var outputWriter = new RawByteWriter(output);
@@ -222,8 +217,15 @@ public sealed class ScoutApplicationTests
 
         Assert.Equal(2, exitCode);
         Assert.Empty(output.ToArray());
-        Assert.Contains("IO error for operation on miss", stderr, StringComparison.Ordinal);
-        Assert.DoesNotContain("invalid CLI arguments", stderr, StringComparison.Ordinal);
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Equal("rg: invalid CLI arguments\n", stderr);
+        }
+        else
+        {
+            Assert.Contains("IO error for operation on miss", stderr, StringComparison.Ordinal);
+            Assert.DoesNotContain("invalid CLI arguments", stderr, StringComparison.Ordinal);
+        }
     }
 
     /// <summary>
@@ -5102,11 +5104,6 @@ public sealed class ScoutApplicationTests
     [Fact]
     public void LiteralSearchFollowTraversesDirectorySymlinks()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
         string root = CreateTempDirectory();
         string target = CreateTempDirectory();
         File.WriteAllText(Path.Combine(target, "linked.txt"), "needle linked\n");

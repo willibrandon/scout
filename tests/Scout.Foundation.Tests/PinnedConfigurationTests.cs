@@ -1698,6 +1698,7 @@ public sealed partial class PinnedConfigurationTests
             ("runtime test skip", RuntimeTestSkipPattern()),
             ("skip exception", SkipExceptionPattern()),
             ("fixture capability return", FixtureCapabilityReturnPattern()),
+            ("platform guard return", PlatformGuardReturnPattern()),
         ];
     }
 
@@ -1721,6 +1722,9 @@ public sealed partial class PinnedConfigurationTests
 
     [GeneratedRegex(@"if\s*\([^{;]*(?:TryCreateDirectorySymlink|TryCreateFileSymlink)[^{;]*\)\s*\{\s*return;\s*\}", RegexOptions.CultureInvariant)]
     private static partial Regex FixtureCapabilityReturnPattern();
+
+    [GeneratedRegex(@"if\s*\([^{;]*OperatingSystem\.[^{;]*\)\s*\{\s*return;\s*\}", RegexOptions.CultureInvariant)]
+    private static partial Regex PlatformGuardReturnPattern();
 
     private static string ReadMarkdownSection(string markdown, string heading)
     {
