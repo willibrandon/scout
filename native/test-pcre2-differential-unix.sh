@@ -296,8 +296,16 @@ barxx
 foo
 last
 EOF
+cat > "$WORK/pcre2-fixed" <<'EOF'
+foo(?=bar)
+foobar
+foo\nbar
+EOF
 
 compare_case basic_lookahead exact -P 'foo(?=bar)' pcre2-smoke.txt
+compare_case fixed_literal exact -P -F -n 'foo(?=bar)' pcre2-fixed
+compare_case fixed_literal_json mask-elapsed -P -F --json 'foo(?=bar)' pcre2-fixed
+compare_case fixed_literal_multiline exact -P -F --multiline -n 'foo\nbar' pcre2-fixed
 compare_case basic_lookahead_multi_file sort-lines -P -n 'foo(?=bar)' pcre2-smoke.txt pcre2-smoke-2.txt
 compare_case recursive_lookahead sort-lines -P -n 'foo(?=bar)' pcre2-dir
 compare_case recursive_lookahead_threads sort-lines -P --threads 4 -n 'foo(?=bar)' pcre2-dir

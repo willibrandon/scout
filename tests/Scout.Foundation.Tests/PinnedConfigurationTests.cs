@@ -1116,6 +1116,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("ripgrep_pcre2_reported_version = \"PCRE2 10.45 is available (JIT is available)\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("compare_case f1155_auto_hybrid_regex exact --no-pcre2 --auto-hybrid-regex '(?<=the )Sherlock'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("run_tool_stdin()", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case fixed_literal exact -P -F -n 'foo(?=bar)' pcre2-fixed", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case fixed_literal_json mask-elapsed -P -F --json 'foo(?=bar)' pcre2-fixed", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case fixed_literal_multiline exact -P -F --multiline -n 'foo\\nbar' pcre2-fixed", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case basic_lookahead_multi_file sort-lines -P -n 'foo(?=bar)'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case recursive_lookahead sort-lines -P -n 'foo(?=bar)' pcre2-dir", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case recursive_lookahead_threads sort-lines -P --threads 4 -n 'foo(?=bar)' pcre2-dir", differentialScript, StringComparison.Ordinal);

@@ -53,6 +53,7 @@ internal static class Pcre2SearchOperations
         OutputSeparators separators = GetOutputSeparators(lowArgs);
         OutputLineLimit lineLimit = GetOutputLineLimit(lowArgs);
         OutputColor color = GetOutputColor(lowArgs);
+        List<byte[]> pcre2Patterns = PreparePcre2Patterns(patterns, lowArgs.FixedStrings);
         bool heading = ShouldUseHeading(lowArgs);
         bool wroteHeadingOutput = false;
         bool matched = false;
@@ -69,14 +70,14 @@ internal static class Pcre2SearchOperations
             try
             {
                 byte[] stdinBytes = SearchFileContentReader.ReadSearchStream(standardInput, lowArgs.EncodingMode);
-                byte[] pattern = BuildPcre2Pattern(patterns);
-                using var regex = new Pcre2Regex(pattern, GetPcre2CompileOptions(lowArgs, patterns));
+                byte[] pattern = BuildPcre2Pattern(pcre2Patterns);
+                using var regex = new Pcre2Regex(pattern, GetPcre2CompileOptions(lowArgs, pcre2Patterns));
                 JsonSearchSummary? jsonSummary = lowArgs.SearchMode == CliSearchMode.Json ? new JsonSearchSummary() : null;
                 OutputPath stdinPath = new(StandardInputPath, hyperlinkPath: null, hyperlinkFormat: null, host: string.Empty);
                 OutputPath? prefix = SearchOutputFormatting.GetStandardInputPrefix(lowArgs.SearchMode, lowArgs.Vimgrep, lowArgs.WithFilename);
                 matched = stats
-                    ? RunPcre2SearchModeWithStats(stdinBytes, regex, output, separators, stdinPath, prefix, lineLimit, color, lowArgs, patterns, jsonSummary, heading, ref wroteHeadingOutput, ref searchStats)
-                    : RunPcre2SearchModeWithOptionalHeading(stdinBytes, regex, output, separators, stdinPath, prefix, lineLimit, color, lowArgs, patterns, jsonSummary, heading, ref wroteHeadingOutput);
+                    ? RunPcre2SearchModeWithStats(stdinBytes, regex, output, separators, stdinPath, prefix, lineLimit, color, lowArgs, pcre2Patterns, jsonSummary, heading, ref wroteHeadingOutput, ref searchStats)
+                    : RunPcre2SearchModeWithOptionalHeading(stdinBytes, regex, output, separators, stdinPath, prefix, lineLimit, color, lowArgs, pcre2Patterns, jsonSummary, heading, ref wroteHeadingOutput);
                 jsonSummary?.WriteSummary(output);
                 if (stats)
                 {
@@ -114,14 +115,14 @@ internal static class Pcre2SearchOperations
         bool autoMmapEligible = SearchPathArgument.IsAutoMmapEligible(paths);
         try
         {
-            byte[] pattern = BuildPcre2Pattern(patterns);
-            Pcre2CompileOptions compileOptions = GetPcre2CompileOptions(lowArgs, patterns);
+            byte[] pattern = BuildPcre2Pattern(pcre2Patterns);
+            Pcre2CompileOptions compileOptions = GetPcre2CompileOptions(lowArgs, pcre2Patterns);
             using var regex = new Pcre2Regex(pattern, compileOptions);
             JsonSearchSummary? jsonSummary = lowArgs.SearchMode == CliSearchMode.Json ? new JsonSearchSummary() : null;
             for (int index = 0; index < paths.Count; index++)
             {
                 bool defaultRoot = useDefaultCurrentDirectory && index == 0;
-                SearchPcre2Path(paths[index], standardInput, defaultRoot, prefixPaths, autoMmapEligible, lowArgs, regex, pattern, compileOptions, patterns, jsonSummary, separators, lineLimit, color, fileTypes!, stats, ref searchStats, output, diagnostics, heading, ref wroteHeadingOutput, ref matched, ref errored);
+                SearchPcre2Path(paths[index], standardInput, defaultRoot, prefixPaths, autoMmapEligible, lowArgs, regex, pattern, compileOptions, pcre2Patterns, jsonSummary, separators, lineLimit, color, fileTypes!, stats, ref searchStats, output, diagnostics, heading, ref wroteHeadingOutput, ref matched, ref errored);
                 if (matched && lowArgs.Quiet)
                 {
                     break;
@@ -158,7 +159,6 @@ internal static class Pcre2SearchOperations
                 or CliSearchMode.CountMatches
                 or CliSearchMode.FilesWithMatches
                 or CliSearchMode.FilesWithoutMatch) &&
-            !lowArgs.FixedStrings &&
             !lowArgs.NullData &&
             !unsupportedContextSearchMode &&
             (lowArgs.Replacement is null ||
@@ -878,7 +878,23 @@ internal static class Pcre2SearchOperations
         return options;
     }
 
-    private static byte[] BuildPcre2Pattern(IReadOnlyList<byte[]> patterns)
+    private static List<byte[]> PreparePcre2Patterns(IReadOnlyList<byte[]> patterns, bool fixedStrings)
+    {
+        var prepared = new List<byte[]>(patterns.Count);
+        for (int index = 0; index < patterns.Count; index++)
+        {
+            prepared.Add((byte[])patterns[index].Clone());
+        }
+
+        if (fixedStrings)
+        {
+            PatternPreparation.EscapeFixedStringPatterns(prepared);
+        }
+
+        return prepared;
+    }
+
+    private static byte[] BuildPcre2Pattern(List<byte[]> patterns)
     {
         if (patterns.Count == 1)
         {
