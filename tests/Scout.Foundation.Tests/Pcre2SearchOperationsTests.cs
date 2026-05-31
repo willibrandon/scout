@@ -50,6 +50,13 @@ public sealed class Pcre2SearchOperationsTests
         Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--json", "--replace", "x", "needle", "haystack.txt")));
         Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--json", "--replace", "x", "--context", "1", "needle", "haystack.txt")));
         Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--json", "--only-matching", "--replace", "x", "needle", "haystack.txt")));
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--only-matching", "--replace", "x", "needle", "haystack.txt")));
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--count", "--replace", "x", "needle", "haystack.txt")));
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--count-matches", "--replace", "x", "needle", "haystack.txt")));
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--files-with-matches", "--replace", "x", "needle", "haystack.txt")));
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--files-without-match", "--replace", "x", "needle", "haystack.txt")));
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--count", "--context", "1", "needle", "haystack.txt")));
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--files-with-matches", "--passthru", "needle", "haystack.txt")));
     }
 
     /// <summary>
@@ -110,16 +117,6 @@ public sealed class Pcre2SearchOperationsTests
         Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--stats", "needle", "haystack.txt")));
         Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--max-count", "2", "--stats", "needle", "haystack.txt")));
         Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--json", "--stats", "needle", "haystack.txt")));
-    }
-
-    /// <summary>
-    /// Verifies unsupported PCRE2 option combinations stay rejected.
-    /// </summary>
-    [Fact]
-    public void RejectsUnsupportedOptionCombinations()
-    {
-        Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--count", "--replace", "x", "needle")));
-        Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--count-matches", "--replace", "x", "needle")));
     }
 
     private static CliLowArgs ParseLowArgs(params string[] arguments)
