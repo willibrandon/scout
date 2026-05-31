@@ -79,6 +79,11 @@ jobs:
         run: eng/check-msbuild-warning-gates.sh
       - name: Build
         run: dotnet build Scout.slnx --no-restore
+      - name: Portable tests
+        run: |
+          dotnet test tests/Scout.Regex.Tests/Scout.Regex.Tests.csproj --no-restore
+          dotnet test tests/Scout.Foundation.Tests/Scout.Foundation.Tests.csproj --no-restore --filter "FullyQualifiedName!~ScoutApplicationTests&FullyQualifiedName!~ScoutApplicationRuntimeTests&FullyQualifiedName!~PinnedConfigurationTests"
+          dotnet test tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore --filter "FullyQualifiedName~DifferentialCasePolicyTests|FullyQualifiedName~DifferentialOutputNormalizerTests"
       - name: Fuzz smoke
         shell: bash
         run: |
@@ -123,6 +128,11 @@ jobs:
         run: eng/check-msbuild-warning-gates.sh
       - name: Build
         run: dotnet build Scout.slnx --no-restore
+      - name: Portable tests
+        run: |
+          dotnet test tests/Scout.Regex.Tests/Scout.Regex.Tests.csproj --no-restore
+          dotnet test tests/Scout.Foundation.Tests/Scout.Foundation.Tests.csproj --no-restore --filter "FullyQualifiedName!~ScoutApplicationTests&FullyQualifiedName!~ScoutApplicationRuntimeTests&FullyQualifiedName!~PinnedConfigurationTests"
+          dotnet test tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore --filter "FullyQualifiedName~DifferentialCasePolicyTests|FullyQualifiedName~DifferentialOutputNormalizerTests"
       - name: Fuzz smoke
         shell: pwsh
         run: |

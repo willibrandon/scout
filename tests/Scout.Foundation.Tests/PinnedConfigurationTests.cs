@@ -75,6 +75,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("uses: actions/setup-dotnet@v5", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet-version: 10.0.102", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet build Scout.slnx --no-restore", workflow, StringComparison.Ordinal);
+        Assert.Contains("Portable tests", workflow, StringComparison.Ordinal);
+        Assert.Contains("dotnet test tests/Scout.Regex.Tests/Scout.Regex.Tests.csproj --no-restore", workflow, StringComparison.Ordinal);
+        Assert.Contains("dotnet test tests/Scout.Foundation.Tests/Scout.Foundation.Tests.csproj --no-restore --filter \"FullyQualifiedName!~ScoutApplicationTests&FullyQualifiedName!~ScoutApplicationRuntimeTests&FullyQualifiedName!~PinnedConfigurationTests\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("dotnet test tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore --filter \"FullyQualifiedName~DifferentialCasePolicyTests|FullyQualifiedName~DifferentialOutputNormalizerTests\"", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet run --project fuzz/Scout.Fuzz/Scout.Fuzz.csproj --no-build -- regex-parse", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet run --project fuzz/Scout.Fuzz/Scout.Fuzz.csproj --no-build -- glob-compile", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet run --project fuzz/Scout.Fuzz/Scout.Fuzz.csproj --no-build -- search-loop", workflow, StringComparison.Ordinal);
