@@ -26,8 +26,8 @@ as the default engine; parallel PCRE2 workers each own a compiled regex and
 match-data block so native match state is never shared across worker threads.
 PCRE2 search statistics are aggregated through the shared `SearchStats` output
 format and covered by native differentials against the pinned `rg -P` binary.
-JSON output covers line-oriented and multiline PCRE2 context, passthru, and
-inverted searches, including native differential coverage for look-around
-patterns. Standard and vimgrep output, including context, passthru, replacement,
-multiline, and multiline inverted records, is also covered by pinned native
-differentials.
+JSON output covers line-oriented and multiline PCRE2 context, passthru,
+replacement, and inverted searches, including native differential coverage for
+look-around patterns. Standard and vimgrep output, including context, passthru,
+replacement, multiline, and multiline inverted records, is also covered by
+pinned native differentials.

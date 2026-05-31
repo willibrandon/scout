@@ -161,7 +161,9 @@ internal static class Pcre2SearchOperations
             !lowArgs.FixedStrings &&
             !lowArgs.NullData &&
             !unsupportedContextSearchMode &&
-            (lowArgs.Replacement is null || (lowArgs.SearchMode == CliSearchMode.Standard && (!lowArgs.OnlyMatching || lowArgs.Multiline)));
+            (lowArgs.Replacement is null ||
+                lowArgs.SearchMode == CliSearchMode.Json ||
+                (lowArgs.SearchMode == CliSearchMode.Standard && (!lowArgs.OnlyMatching || lowArgs.Multiline)));
     }
 
     private static void SearchPcre2Path(
@@ -513,7 +515,7 @@ internal static class Pcre2SearchOperations
     {
         if (lowArgs.SearchMode == CliSearchMode.Json)
         {
-            return RunPcre2JsonSearch(bytes, regex, output, path.Display, lowArgs, jsonSummary!);
+            return RunPcre2JsonSearch(bytes, regex, output, path.Display, lowArgs, patterns, jsonSummary!);
         }
 
         if (lowArgs.Quiet)
@@ -976,12 +978,12 @@ internal static class Pcre2SearchOperations
         return SearchPcre2Lines(bytes, regex, output, separators, prefix, lineLimit, color, lineRegexp, wordRegexp, invertMatch, lineNumber, column, byteOffset, trim, nullPathTerminator, onlyMatching, maxCount);
     }
 
-    private static bool RunPcre2JsonSearch(byte[] bytes, Pcre2Regex regex, RawByteWriter output, byte[] path, CliLowArgs lowArgs, JsonSearchSummary summary)
+    private static bool RunPcre2JsonSearch(byte[] bytes, Pcre2Regex regex, RawByteWriter output, byte[] path, CliLowArgs lowArgs, IReadOnlyList<byte[]> patterns, JsonSearchSummary summary)
     {
         var writer = new JsonFileWriter(output, path, lowArgs.Quiet, binaryOffset: GetPcre2JsonBinaryOffset(bytes, lowArgs.TextMode));
         bool matched = lowArgs.Multiline
-            ? SearchPcre2JsonMultilineBytes(bytes, regex, writer, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.InvertMatch, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch)
-            : SearchPcre2JsonLines(bytes, regex, writer, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.InvertMatch, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch);
+            ? SearchPcre2JsonMultilineBytes(bytes, regex, writer, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.InvertMatch, lowArgs.Replacement, patterns, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch)
+            : SearchPcre2JsonLines(bytes, regex, writer, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.InvertMatch, lowArgs.Replacement, patterns, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch);
         writer.Finish((ulong)bytes.Length, summary);
         return matched;
     }
@@ -998,6 +1000,8 @@ internal static class Pcre2SearchOperations
         bool lineRegexp,
         bool wordRegexp,
         bool invertMatch,
+        ReadOnlyMemory<byte>? replacement,
+        IReadOnlyList<byte[]> patterns,
         ulong? maxCount,
         ulong beforeContext,
         ulong afterContext,
@@ -1006,7 +1010,7 @@ internal static class Pcre2SearchOperations
     {
         if (beforeContext == 0 && afterContext == 0 && !passthru)
         {
-            return SearchPcre2JsonMatchingLines(bytes, regex, writer, lineRegexp, wordRegexp, invertMatch, maxCount);
+            return SearchPcre2JsonMatchingLines(bytes, regex, writer, lineRegexp, wordRegexp, invertMatch, replacement, patterns, maxCount);
         }
 
         List<ContextLineInfo> lines = BuildPcre2ContextLines(bytes, regex, lineRegexp, wordRegexp, invertMatch, stopOnNonmatch);
@@ -1035,7 +1039,7 @@ internal static class Pcre2SearchOperations
                 matches.Clear();
                 if (!invertMatch)
                 {
-                    CollectPcre2LineMatches(matchLine, regex, matches, lineRegexp, wordRegexp);
+                    CollectPcre2LineMatches(matchLine, regex, matches, lineRegexp, wordRegexp, replacement, patterns);
                 }
 
                 writer.WriteMatchLine(line.LineNumber, line.Start, outputLine, matches);
@@ -1045,7 +1049,7 @@ internal static class Pcre2SearchOperations
                 matches.Clear();
                 if (invertMatch && line.OriginalMatch)
                 {
-                    CollectPcre2LineMatches(matchLine, regex, matches, lineRegexp, wordRegexp);
+                    CollectPcre2LineMatches(matchLine, regex, matches, lineRegexp, wordRegexp, replacement, patterns);
                 }
 
                 writer.WriteContextLine(line.LineNumber, line.Start, outputLine, matches);
@@ -1055,7 +1059,7 @@ internal static class Pcre2SearchOperations
         return matched;
     }
 
-    private static bool SearchPcre2JsonMatchingLines(byte[] bytes, Pcre2Regex regex, JsonFileWriter writer, bool lineRegexp, bool wordRegexp, bool invertMatch, ulong? maxCount)
+    private static bool SearchPcre2JsonMatchingLines(byte[] bytes, Pcre2Regex regex, JsonFileWriter writer, bool lineRegexp, bool wordRegexp, bool invertMatch, ReadOnlyMemory<byte>? replacement, IReadOnlyList<byte[]> patterns, ulong? maxCount)
     {
         bool matched = false;
         int lineStart = 0;
@@ -1076,7 +1080,7 @@ internal static class Pcre2SearchOperations
             }
 
             matches.Clear();
-            CollectPcre2LineMatches(matchLine, regex, matches, lineRegexp, wordRegexp);
+            CollectPcre2LineMatches(matchLine, regex, matches, lineRegexp, wordRegexp, replacement, patterns);
             bool selected = invertMatch ? matches.Count == 0 : matches.Count > 0;
             if (selected)
             {
@@ -1106,14 +1110,17 @@ internal static class Pcre2SearchOperations
         return matched;
     }
 
-    private static void CollectPcre2LineMatches(ReadOnlySpan<byte> line, Pcre2Regex regex, List<JsonMatchSpan> matches, bool lineRegexp, bool wordRegexp)
+    private static void CollectPcre2LineMatches(ReadOnlySpan<byte> line, Pcre2Regex regex, List<JsonMatchSpan> matches, bool lineRegexp, bool wordRegexp, ReadOnlyMemory<byte>? replacement, IReadOnlyList<byte[]> patterns)
     {
         int startOffset = 0;
         while (startOffset <= line.Length && regex.TryFind(line, startOffset, out Pcre2Match match))
         {
             if (Pcre2MatchSatisfies(line, match, lineRegexp, wordRegexp))
             {
-                matches.Add(new JsonMatchSpan(match.Start, match.Start + match.Length, replacement: null));
+                byte[]? expandedReplacement = replacement is ReadOnlyMemory<byte> replacementValue
+                    ? ReplacementFormatter.Expand(replacementValue.Span, line.Slice(match.Start, match.Length), patterns, asciiCaseInsensitive: false)
+                    : null;
+                matches.Add(new JsonMatchSpan(match.Start, match.Start + match.Length, expandedReplacement));
             }
 
             startOffset = match.Length == 0 ? match.Start + 1 : match.Start + match.Length;
@@ -1127,6 +1134,8 @@ internal static class Pcre2SearchOperations
         bool lineRegexp,
         bool wordRegexp,
         bool invertMatch,
+        ReadOnlyMemory<byte>? replacement,
+        IReadOnlyList<byte[]> patterns,
         ulong? maxCount,
         ulong beforeContext,
         ulong afterContext,
@@ -1142,7 +1151,7 @@ internal static class Pcre2SearchOperations
 
         if (beforeContext > 0 || afterContext > 0 || passthru)
         {
-            return SearchPcre2JsonMultilineContextBytes(bytes, regex, writer, lineRegexp, wordRegexp, maxCount, beforeContext, afterContext, passthru, stopOnNonmatch);
+            return SearchPcre2JsonMultilineContextBytes(bytes, regex, writer, lineRegexp, wordRegexp, replacement, patterns, maxCount, beforeContext, afterContext, passthru, stopOnNonmatch);
         }
 
         bool matched = false;
@@ -1156,7 +1165,10 @@ internal static class Pcre2SearchOperations
             int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match));
             int lineEnd = GetLineEnd(bytes, lastLineStart);
             matches.Clear();
-            matches.Add(new JsonMatchSpan(match.Start - firstLineStart, match.Start - firstLineStart + match.Length, replacement: null));
+            byte[]? expandedReplacement = replacement is ReadOnlyMemory<byte> replacementValue
+                ? ReplacementFormatter.Expand(replacementValue.Span, bytes.AsSpan(match.Start, match.Length), patterns, asciiCaseInsensitive: false)
+                : null;
+            matches.Add(new JsonMatchSpan(match.Start - firstLineStart, match.Start - firstLineStart + match.Length, expandedReplacement));
             writer.WriteMatchLine(
                 GetLineNumber(bytes, firstLineStart),
                 firstLineStart,
@@ -1211,6 +1223,8 @@ internal static class Pcre2SearchOperations
         JsonFileWriter writer,
         bool lineRegexp,
         bool wordRegexp,
+        ReadOnlyMemory<byte>? replacement,
+        IReadOnlyList<byte[]> patterns,
         ulong? maxCount,
         ulong beforeContext,
         ulong afterContext,
@@ -1235,7 +1249,7 @@ internal static class Pcre2SearchOperations
             ContextLineInfo line = lines[index];
             if (line.SelectedMatch && Pcre2MultilineLineHasRenderedMatch(bytes, line, pcre2Matches, renderedMatchLimit))
             {
-                if (TryWritePcre2JsonMultilineMatchGroupStartingAtLine(bytes, lines, index, pcre2Matches, renderedMatchLimit, writer, out int consumedLineIndex))
+                if (TryWritePcre2JsonMultilineMatchGroupStartingAtLine(bytes, lines, index, pcre2Matches, renderedMatchLimit, replacement, patterns, writer, out int consumedLineIndex))
                 {
                     index = Math.Max(index, consumedLineIndex);
                 }
@@ -1307,6 +1321,8 @@ internal static class Pcre2SearchOperations
         int lineIndex,
         List<Pcre2Match> pcre2Matches,
         ulong? renderedMatchLimit,
+        ReadOnlyMemory<byte>? replacement,
+        IReadOnlyList<byte[]> patterns,
         JsonFileWriter writer,
         out int consumedLineIndex)
     {
@@ -1347,7 +1363,10 @@ internal static class Pcre2SearchOperations
                 groupLastLineStart = lastLineStart;
             }
 
-            matches.Add(new JsonMatchSpan(match.Start - groupStart, match.Start - groupStart + match.Length, replacement: null));
+            byte[]? expandedReplacement = replacement is ReadOnlyMemory<byte> replacementValue
+                ? ReplacementFormatter.Expand(replacementValue.Span, bytes.Slice(match.Start, match.Length), patterns, asciiCaseInsensitive: false)
+                : null;
+            matches.Add(new JsonMatchSpan(match.Start - groupStart, match.Start - groupStart + match.Length, expandedReplacement));
         }
 
         if (groupStart < 0)

@@ -324,9 +324,14 @@ compare_case json_lookahead_only_matching mask-elapsed -P --json -o 'foo(?=bar)'
 compare_case json_multi_file mask-elapsed-sort-lines -P --json 'foo(?=bar)' pcre2-smoke.txt pcre2-smoke-2.txt
 compare_case json_quiet mask-elapsed -P --json -q 'foo(?=bar)' pcre2-smoke.txt
 compare_case json_stats_lookahead mask-elapsed -P --json --stats 'foo(?=bar)' pcre2-smoke.txt
+compare_case json_replacement mask-elapsed -P --json -r X 'foo(?=bar)' pcre2-smoke.txt
+compare_case json_only_matching_replacement mask-elapsed -P --json -o -r X 'foo(?=bar)' pcre2-smoke.txt
 compare_case json_context_lookahead mask-elapsed -P --json -C1 'foo(?=bar)' pcre2-context
+compare_case json_context_replacement mask-elapsed -P --json -r X -C1 'foo(?=bar)' pcre2-context
 compare_case json_passthru_lookahead mask-elapsed -P --json --passthru 'foo(?=bar)' pcre2-context
+compare_case json_multiline_replacement mask-elapsed -P --json --multiline -r X '(?s)foo\nbar' pcre2-multiline-vimgrep
 compare_case json_multiline_context mask-elapsed -P --json --multiline -C1 '(?s)foo\nbar' pcre2-multiline-vimgrep
+compare_case json_multiline_context_replacement mask-elapsed -P --json --multiline -r X -C1 '(?s)foo\nbar|foo' pcre2-multiline-vimgrep
 compare_case json_multiline_passthru_max_count mask-elapsed -P --json --multiline --passthru -m1 '(?s)foo\nbar|foo' pcre2-multiline-vimgrep
 compare_case json_multiline_invert_context mask-elapsed -P --json --multiline -v -C1 '(?s)foo\nbar' pcre2-multiline-vimgrep
 compare_case stats_lookahead mask-elapsed -P --stats 'foo(?=bar)' pcre2-smoke.txt
