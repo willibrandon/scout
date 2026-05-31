@@ -91,6 +91,11 @@ public sealed class RegexCorpusTests
                 "600",
                 "610",
             ]),
+            ("expensive.toml",
+            [
+                "regression-many-repeat-no-stack-overflow",
+                "backtrack-blow-visited-capacity",
+            ]),
             ("crazy.toml",
             [
                 "nothing-empty",

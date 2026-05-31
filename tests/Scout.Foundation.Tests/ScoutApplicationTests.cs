@@ -797,6 +797,29 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies Unicode property escapes use the automaton path even for ASCII haystacks.
+    /// </summary>
+    [Fact]
+    public void DefaultRegexUnicodePropertyEscapesMatchPinnedRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "abcdefghijklmnopqrstuvwxyabcdefghijklmnopqrstuvwxy\nabc123\n");
+
+        (int propertyExitCode, byte[] propertyOutput, string propertyError) = RunScout("-o", @"\pL{50}", path);
+        (int pinnedPropertyExitCode, byte[] pinnedPropertyOutput, string pinnedPropertyError) = RunPinnedRipgrep("-o", @"\pL{50}", path);
+        (int classExitCode, byte[] classOutput, string classError) = RunScout("-o", @"[\pL]+", path);
+        (int pinnedClassExitCode, byte[] pinnedClassOutput, string pinnedClassError) = RunPinnedRipgrep("-o", @"[\pL]+", path);
+
+        Assert.Equal(pinnedPropertyExitCode, propertyExitCode);
+        Assert.Equal(pinnedPropertyOutput, propertyOutput);
+        Assert.Equal(pinnedPropertyError, propertyError);
+        Assert.Equal(pinnedClassExitCode, classExitCode);
+        Assert.Equal(pinnedClassOutput, classOutput);
+        Assert.Equal(pinnedClassError, classError);
+    }
+
+    /// <summary>
     /// Verifies default regex mode supports ASCII hex and scalar escapes.
     /// </summary>
     [Fact]

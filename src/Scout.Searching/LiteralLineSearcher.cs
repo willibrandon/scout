@@ -2051,9 +2051,19 @@ public static class LiteralLineSearcher
         {
             if (pattern[index] == (byte)'\\' &&
                 index + 1 < pattern.Length &&
-                pattern[index + 1] is (byte)'A' or (byte)'z')
+                pattern[index + 1] is (byte)'A' or (byte)'z' or (byte)'p' or (byte)'P')
             {
                 return true;
+            }
+
+            if (pattern[index] == (byte)'[' && TryFindClassEnd(pattern, index, out int classEnd))
+            {
+                if (ClassContainsUnicodePropertyEscape(pattern[(index + 1)..classEnd]))
+                {
+                    return true;
+                }
+
+                index = classEnd;
             }
 
             if (pattern[index] == (byte)'(' &&
@@ -2064,6 +2074,24 @@ public static class LiteralLineSearcher
                     IsUnicodeModeFlagGroup(pattern, index + 2)))
             {
                 return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ClassContainsUnicodePropertyEscape(ReadOnlySpan<byte> expression)
+    {
+        for (int index = 0; index + 1 < expression.Length; index++)
+        {
+            if (expression[index] == (byte)'\\')
+            {
+                if (expression[index + 1] is (byte)'p' or (byte)'P')
+                {
+                    return true;
+                }
+
+                index++;
             }
         }
 
