@@ -289,6 +289,13 @@ Start
       thing2 
 
 EOF
+cat > "$WORK/pcre2-multiline-vimgrep" <<'EOF'
+one
+xxfoo
+barxx
+foo
+last
+EOF
 
 compare_case basic_lookahead exact -P 'foo(?=bar)' pcre2-smoke.txt
 compare_case basic_lookahead_multi_file sort-lines -P -n 'foo(?=bar)' pcre2-smoke.txt pcre2-smoke-2.txt
@@ -328,7 +335,14 @@ compare_case r1401_lookahead_only_matching_1_tabs exact -P -N -o '.*o(?!.*[ \t])
 compare_case r1401_lookahead_only_matching_2 exact -P -N -o '.*o(?!.*\s)' ip2.txt
 compare_case r1573_count exact -P --multiline --count '(?s)def (\w+);(?=.*use \w+)' counts
 compare_case r1573_count_matches exact -P --multiline --count-matches '(?s)def (\w+);(?=.*use \w+)' counts
+compare_case multiline_count_only_matching exact -P --multiline -o --count 'foo' pcre2-smoke.txt
 compare_case r3139_multiline_lookahead exact -P --multiline '(?s)Start(?=.*thing2)' multiline-lookahead
 compare_case r3139_multiline_files_with_matches exact -P --multiline --files-with-matches '(?s)Start(?=.*thing2)' multiline-lookahead
+compare_case multiline_only_matching exact -P --multiline -o '(?s)foo\nbar' pcre2-multiline-vimgrep
+compare_case multiline_only_matching_replacement exact -P --multiline -o -r X '(?s)foo\nbar' pcre2-multiline-vimgrep
+compare_case vimgrep_multiline exact -P --vimgrep --multiline '(?s)foo\nbar' pcre2-multiline-vimgrep
+compare_case vimgrep_multiline_byte_offset exact -P --vimgrep -b --multiline '(?s)foo\nbar' pcre2-multiline-vimgrep
+compare_case vimgrep_multiline_only_matching exact -P --vimgrep --multiline -o '(?s)foo\nbar' pcre2-multiline-vimgrep
+compare_case vimgrep_multiline_replacement exact -P --vimgrep --multiline -r X '(?s)foo\nbar' pcre2-multiline-vimgrep
 
 printf 'OK %s: PCRE2 native differentials matched pinned rg\n' "$RID"
