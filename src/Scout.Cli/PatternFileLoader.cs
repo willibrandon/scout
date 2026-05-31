@@ -8,7 +8,7 @@ internal static class PatternFileLoader
 {
     public static bool TryLoad(OsString argument, List<byte[]> patterns, Stream standardInput, DiagnosticMessenger diagnostics)
     {
-        if (!SearchPathArgument.TryGetText(argument, diagnostics, out string path))
+        if (!TryGetText(argument, diagnostics, out string path))
         {
             return false;
         }
@@ -190,4 +190,14 @@ internal static class PatternFileLoader
         return value is >= 0x80 and <= 0xBF;
     }
 
+    private static bool TryGetText(OsString argument, DiagnosticMessenger diagnostics, out string path)
+    {
+        if (argument.TryGetText(out path))
+        {
+            return true;
+        }
+
+        diagnostics.ErrorMessage(new ScoutError("invalid CLI arguments").WithContext("rg"));
+        return false;
+    }
 }
