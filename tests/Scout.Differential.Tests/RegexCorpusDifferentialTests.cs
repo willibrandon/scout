@@ -10,21 +10,21 @@ namespace Scout;
 /// </summary>
 public sealed class RegexCorpusDifferentialTests
 {
-    private const int ExpectedDifferentialCaseCount = 265;
-    private const int ExpectedSupportedOnlyCaseCount = 226;
+    private const int ExpectedDifferentialCaseCount = 278;
+    private const int ExpectedSupportedOnlyCaseCount = 213;
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     private static readonly (string RelativePath, int Count)[] ExpectedDifferentialFileCounts =
     [
         ("bytes.toml", 25),
-        ("crazy.toml", 47),
-        ("crlf.toml", 4),
+        ("crazy.toml", 49),
+        ("crlf.toml", 14),
         ("empty.toml", 19),
         ("flags.toml", 9),
         ("iter.toml", 19),
         ("line-terminator.toml", 1),
-        ("misc.toml", 13),
+        ("misc.toml", 14),
         ("multiline.toml", 14),
         ("no-unicode.toml", 22),
         ("regex-lite.toml", 9),
@@ -37,12 +37,12 @@ public sealed class RegexCorpusDifferentialTests
     [
         ("anchored.toml", 10),
         ("bytes.toml", 1),
-        ("crazy.toml", 5),
-        ("crlf.toml", 11),
+        ("crazy.toml", 3),
+        ("crlf.toml", 1),
         ("flags.toml", 2),
         ("iter.toml", 3),
         ("line-terminator.toml", 9),
-        ("misc.toml", 3),
+        ("misc.toml", 2),
         ("multiline.toml", 126),
         ("no-unicode.toml", 1),
         ("regression.toml", 43),
@@ -66,6 +66,7 @@ public sealed class RegexCorpusDifferentialTests
         ("misc.toml", "suffix-400"),
         ("misc.toml", "suffix-500"),
         ("misc.toml", "suffix-600"),
+        ("misc.toml", "anchor-start-end-line"),
         ("flags.toml", "1"),
         ("flags.toml", "2"),
         ("flags.toml", "3"),
@@ -160,10 +161,22 @@ public sealed class RegexCorpusDifferentialTests
         ("crazy.toml", "empty9"),
         ("crazy.toml", "empty10"),
         ("crazy.toml", "empty11"),
+        ("crazy.toml", "start-end-empty-rep"),
+        ("crazy.toml", "start-end-empty-rep-rev"),
         ("crlf.toml", "basic"),
         ("crlf.toml", "start-end-non-empty"),
         ("crlf.toml", "start-end-empty"),
         ("crlf.toml", "dot-no-crlf"),
+        ("crlf.toml", "end-no-split"),
+        ("crlf.toml", "end-no-split-adjacent"),
+        ("crlf.toml", "end-no-split-adjacent-cr"),
+        ("crlf.toml", "end-no-split-adjacent-lf"),
+        ("crlf.toml", "onepass-wrong-crlf-with-capture"),
+        ("crlf.toml", "start-end-before-after"),
+        ("crlf.toml", "start-no-split"),
+        ("crlf.toml", "start-no-split-adjacent"),
+        ("crlf.toml", "start-no-split-adjacent-cr"),
+        ("crlf.toml", "start-no-split-adjacent-lf"),
         ("bytes.toml", "word-boundary-ascii"),
         ("bytes.toml", "word-boundary-unicode"),
         ("bytes.toml", "word-boundary-ascii-not"),

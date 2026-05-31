@@ -6248,7 +6248,7 @@ internal static class ScoutApplication
         int binaryOffset = textMode || nullData ? -1 : bytes.AsSpan().IndexOf((byte)0);
         byte[] searchBytes = GetBinaryConvertedSearchBytes(bytes, textMode, nullData);
         var writer = new JsonFileWriter(output, path, quiet, binaryOffset);
-        bool matched = multiline && ShouldUseMultilineRegex(pattern, multilineDotall) && TrySearchJsonMultilineBytes(searchBytes, pattern, writer, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multilineDotall, crlf, nullData, replacement, maxCount, beforeContext, afterContext, passthru, out bool multilineMatched)
+        bool matched = multiline && ShouldUseJsonMultilineRegex(pattern, multilineDotall) && TrySearchJsonMultilineBytes(searchBytes, pattern, writer, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multilineDotall, crlf, nullData, replacement, maxCount, beforeContext, afterContext, passthru, out bool multilineMatched)
             ? multilineMatched
             : SearchJsonLines(searchBytes, pattern, writer, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, crlf, nullData, replacement, maxCount, beforeContext, afterContext, passthru, stopOnNonmatch);
         writer.Finish((ulong)bytes.Length, summary);
@@ -6284,6 +6284,11 @@ internal static class ScoutApplication
             return false;
         }
 
+        if (bytes.IsEmpty)
+        {
+            return true;
+        }
+
         if (invertMatch)
         {
             matched = WriteJsonMultilineInvertedMatches(bytes, patterns, writer, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
@@ -6299,9 +6304,14 @@ internal static class ScoutApplication
         var matches = new List<JsonMatchSpan>(capacity: 1);
         while (TryFindNextMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, ref offset, ref suppressedEmptyStart, out RegexMatch match))
         {
+            if (match.Length == 0 && match.Start == bytes.Length)
+            {
+                break;
+            }
+
             matched = true;
             int firstLineStart = GetLineStart(bytes, match.Start);
-            int lastLineStart = GetLineStart(bytes, GetInclusiveMatchEnd(match));
+            int lastLineStart = GetJsonMultilineMatchLastLineStart(bytes, match);
             int lineEnd = GetLineEnd(bytes, lastLineStart);
             if (groupStart >= 0 && firstLineStart > groupEnd)
             {
@@ -6341,6 +6351,30 @@ internal static class ScoutApplication
         }
 
         return true;
+    }
+
+    private static int GetJsonMultilineMatchLastLineStart(ReadOnlySpan<byte> bytes, RegexMatch match)
+    {
+        int lastLineStart = GetLineStart(bytes, GetInclusiveMatchEnd(match));
+        if (match.Length != 0 || match.Start >= bytes.Length)
+        {
+            return lastLineStart;
+        }
+
+        int lineEnd = GetLineEnd(bytes, lastLineStart);
+        if (!IsJsonLineTerminatorStart(bytes, match.Start))
+        {
+            return lastLineStart;
+        }
+
+        int nextLineStart = GetNextLineStart(lineEnd, bytes.Length);
+        return nextLineStart < bytes.Length ? nextLineStart : lastLineStart;
+    }
+
+    private static bool IsJsonLineTerminatorStart(ReadOnlySpan<byte> bytes, int offset)
+    {
+        return bytes[offset] == (byte)'\n' ||
+            bytes[offset] == (byte)'\r' && offset + 1 < bytes.Length && bytes[offset + 1] == (byte)'\n';
     }
 
     private static void WriteJsonMultilineMatchGroup(
@@ -7189,11 +7223,29 @@ internal static class ScoutApplication
         return multilineDotall || ContainsLineFeed(patterns) || ContainsLineFeedMatchingSyntax(patterns);
     }
 
+    private static bool ShouldUseJsonMultilineRegex(IReadOnlyList<byte[]> patterns, bool multilineDotall)
+    {
+        return ShouldUseMultilineRegex(patterns, multilineDotall) || ContainsAnchorMatchingSyntax(patterns);
+    }
+
     private static bool ContainsLineFeedMatchingSyntax(IReadOnlyList<byte[]> patterns)
     {
         for (int index = 0; index < patterns.Count; index++)
         {
             if (SyntaxCanMatchLineFeed(RegexSyntaxParser.Parse(patterns[index]).Root))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsAnchorMatchingSyntax(IReadOnlyList<byte[]> patterns)
+    {
+        for (int index = 0; index < patterns.Count; index++)
+        {
+            if (SyntaxCanMatchAnchorLineBoundary(RegexSyntaxParser.Parse(patterns[index]).Root))
             {
                 return true;
             }
@@ -7220,11 +7272,37 @@ internal static class ScoutApplication
         };
     }
 
+    private static bool SyntaxCanMatchAnchorLineBoundary(RegexSyntaxNode node)
+    {
+        return node switch
+        {
+            RegexGroupNode group => SyntaxCanMatchAnchorLineBoundary(group.Child),
+            RegexSequenceNode sequence => AnySyntaxCanMatchAnchorLineBoundary(sequence.Nodes),
+            RegexAlternationNode alternation => AnySyntaxCanMatchAnchorLineBoundary(alternation.Alternatives),
+            RegexRepetitionNode repetition => SyntaxCanMatchAnchorLineBoundary(repetition.Child),
+            RegexAtomNode atom => atom.Kind is RegexSyntaxKind.StartAnchor or RegexSyntaxKind.EndAnchor,
+            _ => false,
+        };
+    }
+
     private static bool AnySyntaxCanMatchLineFeed(IReadOnlyList<RegexSyntaxNode> nodes)
     {
         for (int index = 0; index < nodes.Count; index++)
         {
             if (SyntaxCanMatchLineFeed(nodes[index]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool AnySyntaxCanMatchAnchorLineBoundary(IReadOnlyList<RegexSyntaxNode> nodes)
+    {
+        for (int index = 0; index < nodes.Count; index++)
+        {
+            if (SyntaxCanMatchAnchorLineBoundary(nodes[index]))
             {
                 return true;
             }
