@@ -1,3 +1,4 @@
 * text=auto eol=lf
 
 native/pcre2/pcre2-10.46/** -whitespace
+upstream/ripgrep-4857d6fa/tests/** -whitespace

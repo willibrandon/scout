@@ -6,6 +6,9 @@ namespace Scout;
 
 internal static class PortedRgTests
 {
+    private static readonly string UpstreamDataDirectory = Path.Combine(FindRepositoryRoot(), "upstream", "ripgrep-4857d6fa", "tests", "data");
+    private static readonly string UpstreamSherlockNulPath = Path.Combine(UpstreamDataDirectory, "sherlock-nul.txt");
+
     private static readonly PortedRgTestCase[] Cases =
         [
             new(
@@ -2564,8 +2567,6 @@ internal static class PortedRgTests
         dir.CreateFile("ignored-dir/foo", "needle");
     }
 
-    private const string UpstreamDataDirectory = "/Users/brandon/src/ripgrep/tests/data";
-    private const string UpstreamSherlockNulPath = "/Users/brandon/src/ripgrep/tests/data/sherlock-nul.txt";
     private const string CyrillicSherlockHolmes = "\u0428\u0435\u0440\u043B\u043E\u043A \u0425\u043E\u043B\u043C\u0441";
 
     private const string Sherlock =
@@ -2594,4 +2595,20 @@ internal static class PortedRgTests
         " and exhibited clearly, with a label attached.\n";
 
     private const string TrimmedLongHaystack = "     0123456789abcdefghijklmnopqrstuvwxyz";
+
+    private static string FindRepositoryRoot()
+    {
+        DirectoryInfo? directory = new(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "Scout.slnx")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException("Could not locate the Scout repository root.");
+    }
 }

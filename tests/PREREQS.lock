@@ -243,6 +243,101 @@ tree_path = "artifacts/corpora/linux/linux-84e57d292203a45c96dbcb2e6be9dd80961d9
 tree_sha256 = "c104036f61aa7eba26da621738424e2e35f2c12372858abc345c39bbd9ecd116"
 
 [[corpus]]
+name = "ripgrep-4857d6fa-tests-binary-rs"
+path = "upstream/ripgrep-4857d6fa/tests/binary.rs"
+sha256 = "683714aaf5bb499c344c0280ab7fc09907a90b51e836dd26859de99e8fc454e9"
+
+[[corpus]]
+name = "ripgrep-4857d6fa-tests-feature-rs"
+path = "upstream/ripgrep-4857d6fa/tests/feature.rs"
+sha256 = "fbc6455c5d2cb73580cde4b390c0a43315107598200a6ca6023c3bfc155d8706"
+
+[[corpus]]
+name = "ripgrep-4857d6fa-tests-hay-rs"
+path = "upstream/ripgrep-4857d6fa/tests/hay.rs"
+sha256 = "ee8d21ddd6f053f2f5427847e2a7bdc80913570cc410ced9508465ff66549684"
+
+[[corpus]]
+name = "ripgrep-4857d6fa-tests-json-rs"
+path = "upstream/ripgrep-4857d6fa/tests/json.rs"
+sha256 = "9dd91b0dadc9be38d4ac37551af4b7bca6f80da8fe9723009f87b11c750efaaa"
+
+[[corpus]]
+name = "ripgrep-4857d6fa-tests-macros-rs"
+path = "upstream/ripgrep-4857d6fa/tests/macros.rs"
+sha256 = "27d0ee206b162f26f718e526a2f303ad587db76703648ba06c1ee3cb2877d3ee"
+
+[[corpus]]
+name = "ripgrep-4857d6fa-tests-misc-rs"
+path = "upstream/ripgrep-4857d6fa/tests/misc.rs"
+sha256 = "b44867c413b4bd6d22ea5c3a3842167534e152a8b9982122d3aa682488256faa"
+
+[[corpus]]
+name = "ripgrep-4857d6fa-tests-multiline-rs"
+path = "upstream/ripgrep-4857d6fa/tests/multiline.rs"
+sha256 = "2c1b987f0fe60905e9cfe4edc19738f7693b12f79661d4b66252f4295e03d03d"
+
+[[corpus]]
+name = "ripgrep-4857d6fa-tests-regression-rs"
+path = "upstream/ripgrep-4857d6fa/tests/regression.rs"
+sha256 = "22d1778677e2668e5351d6d8e4d48424db11d3a699ea270be06e9bd7b7a07ec3"
+
+[[corpus]]
+name = "ripgrep-4857d6fa-tests-tests-rs"
+path = "upstream/ripgrep-4857d6fa/tests/tests.rs"
+sha256 = "b262a442a4b986f38ef6ddcf3c059a934d770fa07a9a9296545be15aa67cb18f"
+
+[[corpus]]
+name = "ripgrep-4857d6fa-tests-util-rs"
+path = "upstream/ripgrep-4857d6fa/tests/util.rs"
+sha256 = "2049d1250d408a08fcf968bc8659d90b36f98b7d4bf14aa51fd5dcbfbba74c79"
+
+[[corpus]]
+name = "ripgrep-4857d6fa-tests-data-sherlock-nul-txt"
+path = "upstream/ripgrep-4857d6fa/tests/data/sherlock-nul.txt"
+sha256 = "bb7dbf2cee6e40774bed465384bb2512307b0f63a31013c6812131096d083466"
+
+[[corpus]]
+name = "ripgrep-4857d6fa-tests-data-sherlock-Z"
+path = "upstream/ripgrep-4857d6fa/tests/data/sherlock.Z"
+sha256 = "420a3bb385f9299029c53883eb5569a982177408521ac5056746969324f25d75"
+
+[[corpus]]
+name = "ripgrep-4857d6fa-tests-data-sherlock-br"
+path = "upstream/ripgrep-4857d6fa/tests/data/sherlock.br"
+sha256 = "4496548fc4bd17b1afc6611878a7983bfbe903e08e7908a789965d7d548892dd"
+
+[[corpus]]
+name = "ripgrep-4857d6fa-tests-data-sherlock-bz2"
+path = "upstream/ripgrep-4857d6fa/tests/data/sherlock.bz2"
+sha256 = "a5f16df074eb1e5f8183e7e8ed34fda72f66741f88624cda38142c32f88d4cb4"
+
+[[corpus]]
+name = "ripgrep-4857d6fa-tests-data-sherlock-gz"
+path = "upstream/ripgrep-4857d6fa/tests/data/sherlock.gz"
+sha256 = "e2c66fa7c65d183f497ab5023cbb341de5c1f98f587e93e2345702ce362b7fb2"
+
+[[corpus]]
+name = "ripgrep-4857d6fa-tests-data-sherlock-lz4"
+path = "upstream/ripgrep-4857d6fa/tests/data/sherlock.lz4"
+sha256 = "f93423e576e99c1d5b895c7a0c99a233f2e3428f7cd630e84741c1c5f60836a6"
+
+[[corpus]]
+name = "ripgrep-4857d6fa-tests-data-sherlock-lzma"
+path = "upstream/ripgrep-4857d6fa/tests/data/sherlock.lzma"
+sha256 = "7d7e6fd9429c64f5e7e0a9bbc80e3333200e49d66ef026e58ad4d0fcb5762ea4"
+
+[[corpus]]
+name = "ripgrep-4857d6fa-tests-data-sherlock-xz"
+path = "upstream/ripgrep-4857d6fa/tests/data/sherlock.xz"
+sha256 = "cb3706759fe692dcae67ead3241e5406e83409b9e855bf5d383f2332f21871a3"
+
+[[corpus]]
+name = "ripgrep-4857d6fa-tests-data-sherlock-zst"
+path = "upstream/ripgrep-4857d6fa/tests/data/sherlock.zst"
+sha256 = "e98e9a7c720ddd9037420cd6f93e2f49b861e1f3e43d76833eafa3e4eed0ecbb"
+
+[[corpus]]
 name = "regex-1.12.2-misc"
 path = "upstream/regex-1.12.2/testdata/misc.toml"
 sha256 = "32c9591655c6fb118dfefcb4de49a04820a63cb960533dfc2538cdaabf4f4047"

@@ -10,7 +10,7 @@ namespace Scout;
 /// </summary>
 public sealed partial class PortedRgTestCoverageTests
 {
-    private const string UpstreamTestsRoot = "/Users/brandon/src/ripgrep/tests";
+    private static readonly string UpstreamTestsRoot = Path.Combine(FindRepositoryRoot(), "upstream", "ripgrep-4857d6fa", "tests");
 
     private static readonly string[] ExpectedUnportedRgTests = [];
 

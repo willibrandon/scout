@@ -1805,6 +1805,7 @@ public sealed partial class PinnedConfigurationTests
         [
             Path.Combine(root, "upstream", "regex-1.12.2", "testdata"),
             Path.Combine(root, "upstream", "encoding_rs-0.8.35", "src"),
+            Path.Combine(root, "upstream", "ripgrep-4857d6fa", "tests"),
         ];
 
         foreach (string corpusRoot in corpusRoots)
@@ -1818,6 +1819,28 @@ public sealed partial class PinnedConfigurationTests
                 Assert.Contains("sha256 = \"" + expectedSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
             }
         }
+    }
+
+    /// <summary>
+    /// Verifies the ported ripgrep integration tests use vendored upstream fixtures.
+    /// </summary>
+    [Fact]
+    public void PortedRipgrepTestCorpusIsVendored()
+    {
+        string root = FindRepositoryRoot();
+        string coverageTest = File.ReadAllText(Path.Combine(root, "tests", "Scout.Differential.Tests", "PortedRgTestCoverageTests.cs"));
+        string portedTests = File.ReadAllText(Path.Combine(root, "tests", "Scout.Differential.Tests", "PortedRgTests.cs"));
+        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        string attributes = File.ReadAllText(Path.Combine(root, ".gitattributes"));
+        string testsRoot = Path.Combine(root, "upstream", "ripgrep-4857d6fa", "tests");
+
+        Assert.DoesNotContain("/Users/brandon/src/ripgrep/tests", coverageTest, StringComparison.Ordinal);
+        Assert.DoesNotContain("/Users/brandon/src/ripgrep/tests", portedTests, StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(testsRoot, "regression.rs")));
+        Assert.True(File.Exists(Path.Combine(testsRoot, "data", "sherlock-nul.txt")));
+        Assert.Contains("upstream/ripgrep-4857d6fa/tests/** -whitespace", attributes, StringComparison.Ordinal);
+        Assert.Contains("path = \"upstream/ripgrep-4857d6fa/tests/regression.rs\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("path = \"upstream/ripgrep-4857d6fa/tests/data/sherlock-nul.txt\"", prerequisiteLock, StringComparison.Ordinal);
     }
 
     private static void AssertPackageVersion(XDocument document, string packageId, string expectedVersion)
