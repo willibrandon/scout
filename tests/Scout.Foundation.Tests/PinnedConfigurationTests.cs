@@ -1158,6 +1158,13 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("compare_case vimgrep_multiline_byte_offset exact -P --vimgrep -b --multiline '(?s)foo\\nbar' pcre2-multiline-vimgrep", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case vimgrep_multiline_only_matching exact -P --vimgrep --multiline -o '(?s)foo\\nbar' pcre2-multiline-vimgrep", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case vimgrep_multiline_replacement exact -P --vimgrep --multiline -r X '(?s)foo\\nbar' pcre2-multiline-vimgrep", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case multiline_invert exact -P --multiline -n -v '(?s)foo\\nbar' pcre2-multiline-vimgrep", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case multiline_invert_count exact -P --multiline -v --count '(?s)foo\\nbar' pcre2-multiline-vimgrep", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case multiline_invert_count_matches exact -P --multiline -v --count-matches '(?s)foo\\nbar' pcre2-multiline-vimgrep", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case multiline_invert_files_with_matches exact -P --multiline -v --files-with-matches '(?s)foo\\nbar' pcre2-multiline-vimgrep", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case multiline_invert_files_without_match exact -P --multiline -v --files-without-match '(?s)foo\\nbar' pcre2-multiline-vimgrep", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case multiline_invert_vimgrep exact -P --vimgrep --multiline -v '(?s)foo\\nbar' pcre2-multiline-vimgrep", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case multiline_invert_quiet exact -P --multiline -q -v '(?s)foo\\nbar' pcre2-multiline-vimgrep", differentialScript, StringComparison.Ordinal);
         Assert.Contains("\"$ROOT/native/test-invalid-utf8-differential-unix.sh\" \"$RID\" \"$BIN/scout\"", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("r210_explicit_invalid_utf8_path", invalidUtf8DifferentialScript, StringComparison.Ordinal);
         Assert.Contains("json_explicit_invalid_utf8_path", invalidUtf8DifferentialScript, StringComparison.Ordinal);

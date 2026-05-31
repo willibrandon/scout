@@ -28,5 +28,5 @@ PCRE2 search statistics are aggregated through the shared `SearchStats` output
 format and covered by native differentials against the pinned `rg -P` binary.
 JSON output covers line-oriented PCRE2 context and passthru searches, including
 native differential coverage for look-around patterns. Line-oriented vimgrep
-output, including context, replacement, and multiline records, is also covered
-by pinned native differentials.
+output, including context, replacement, multiline, and multiline inverted
+records, is also covered by pinned native differentials.

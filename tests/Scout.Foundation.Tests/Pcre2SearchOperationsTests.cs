@@ -62,6 +62,8 @@ public sealed class Pcre2SearchOperationsTests
         Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--vimgrep", "--multiline", "--only-matching", "needle", "haystack.txt")));
         Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--vimgrep", "--multiline", "--replace", "x", "needle", "haystack.txt")));
         Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--only-matching", "--count", "needle", "haystack.txt")));
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--invert-match", "needle", "haystack.txt")));
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--vimgrep", "--multiline", "--invert-match", "needle", "haystack.txt")));
     }
 
     /// <summary>
@@ -83,7 +85,7 @@ public sealed class Pcre2SearchOperationsTests
     {
         Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--context", "1", "needle")));
         Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--passthru", "needle")));
-        Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--invert-match", "needle")));
+        Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--invert-match", "--context", "1", "needle")));
         Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--vimgrep", "--context", "1", "needle")));
     }
 
