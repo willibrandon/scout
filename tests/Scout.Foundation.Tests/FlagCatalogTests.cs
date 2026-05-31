@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Text;
 
 namespace Scout;
 
@@ -180,6 +182,68 @@ public sealed class FlagCatalogTests
                 Assert.True(shortNames.Add(shortName), "Duplicate short flag: " + shortName);
             }
         }
+    }
+
+    /// <summary>
+    /// Verifies generated help and completion artifacts list every generated flag.
+    /// </summary>
+    [Fact]
+    public void GeneratedArtifactsListEveryCatalogFlag()
+    {
+        string longHelp = Encoding.UTF8.GetString(HelpOutput.Long);
+        string manPage = Encoding.UTF8.GetString(GenerateOutput.Get(CliGenerateMode.Man));
+        string bashCompletion = Encoding.UTF8.GetString(GenerateOutput.Get(CliGenerateMode.CompleteBash));
+        string zshCompletion = Encoding.UTF8.GetString(GenerateOutput.Get(CliGenerateMode.CompleteZsh));
+        string fishCompletion = Encoding.UTF8.GetString(GenerateOutput.Get(CliGenerateMode.CompleteFish));
+        string powerShellCompletion = Encoding.UTF8.GetString(GenerateOutput.Get(CliGenerateMode.CompletePowerShell));
+        ReadOnlySpan<FlagDescriptor> descriptors = GeneratedFlagCatalog.Descriptors;
+
+        for (int index = 0; index < descriptors.Length; index++)
+        {
+            FlagDescriptor descriptor = descriptors[index];
+            Assert.Contains(descriptor.LongName, longHelp, StringComparison.Ordinal);
+            AssertManContainsOption(manPage, descriptor.LongName);
+            Assert.Contains(descriptor.LongName, bashCompletion, StringComparison.Ordinal);
+            Assert.Contains(descriptor.LongName, zshCompletion, StringComparison.Ordinal);
+            Assert.Contains("-l " + descriptor.LongName[2..], fishCompletion, StringComparison.Ordinal);
+            Assert.Contains("::new('" + descriptor.LongName + "'", powerShellCompletion, StringComparison.Ordinal);
+
+            if (descriptor.ShortName is char shortName)
+            {
+                string shortOption = "-" + shortName;
+                AssertManContainsOption(manPage, shortOption);
+                Assert.Contains(shortOption, bashCompletion, StringComparison.Ordinal);
+                Assert.Contains(shortOption, zshCompletion, StringComparison.Ordinal);
+                Assert.Contains("-s " + shortName, fishCompletion, StringComparison.Ordinal);
+                Assert.Contains("::new('" + shortOption + "'", powerShellCompletion, StringComparison.Ordinal);
+            }
+        }
+    }
+
+    private static void AssertManContainsOption(string manPage, string option)
+    {
+        string fullyEscaped = option.Replace("-", "\\-", StringComparison.Ordinal);
+        string leadingEscaped = EscapeLeadingManOptionHyphens(option);
+        Assert.True(
+            manPage.Contains(fullyEscaped, StringComparison.Ordinal) ||
+            manPage.Contains(leadingEscaped, StringComparison.Ordinal) ||
+            manPage.Contains(option, StringComparison.Ordinal),
+            "Man page does not contain option " + option);
+    }
+
+    private static string EscapeLeadingManOptionHyphens(string option)
+    {
+        if (option.StartsWith("--", StringComparison.Ordinal))
+        {
+            return "\\-\\-" + option[2..];
+        }
+
+        if (option.StartsWith('-'))
+        {
+            return "\\-" + option[1..];
+        }
+
+        return option;
     }
 
     /// <summary>
