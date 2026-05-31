@@ -1347,6 +1347,28 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies the hyperfine benchsuite covers every release-gate workload class.
+    /// </summary>
+    [Fact]
+    public void HyperfineBenchSuiteCoversReleaseGateWorkloads()
+    {
+        string root = FindRepositoryRoot();
+        string script = File.ReadAllText(Path.Combine(root, "bench", "run-hyperfine.sh"));
+        string readme = File.ReadAllText(Path.Combine(root, "bench", "README.md"));
+
+        Assert.Contains("subtitles_en_literal", script, StringComparison.Ordinal);
+        Assert.Contains("subtitles_en_regex", script, StringComparison.Ordinal);
+        Assert.Contains("linux_recursive_literal", script, StringComparison.Ordinal);
+        Assert.Contains("linux_many_small_parallel", script, StringComparison.Ordinal);
+        Assert.Contains("cold_version", script, StringComparison.Ordinal);
+        Assert.Contains("cold_tiny_search", script, StringComparison.Ordinal);
+        Assert.Contains("peak RSS <= 1.50x", script, StringComparison.Ordinal);
+        Assert.Contains("check_ratio_gate", script, StringComparison.Ordinal);
+        Assert.Contains("make_cold_tiny_corpus", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("resolved@fetch", readme, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies the regex conformance corpus files are pinned by hash.
     /// </summary>
     [Fact]

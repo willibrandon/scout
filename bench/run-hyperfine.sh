@@ -267,6 +267,13 @@ make_smoke_corpus() {
     done
 }
 
+make_cold_tiny_corpus() {
+    tiny_file="$OUT_DIR/cold-tiny.txt"
+    if [ ! -f "$tiny_file" ]; then
+        printf '%s\n' 'needle' > "$tiny_file"
+    fi
+}
+
 hyperfine_json_mean() {
     json="$1"
     index="$2"
@@ -383,6 +390,7 @@ list_workloads() {
         'linux_recursive_literal      Linux tree recursive walk, gate <= 1.25x' \
         'linux_many_small_parallel    Linux tree many-small-files search, gate <= 1.30x' \
         'cold_version                 cold start, gate <= 1.00x' \
+        'cold_tiny_search             cold tiny search, gate <= 1.00x' \
         'all --gate workloads also enforce peak RSS <= 1.50x'
 }
 
@@ -448,8 +456,10 @@ Q_RG="$(shell_quote "$RG_BIN")"
 
 if [ "$MODE" = "smoke" ]; then
     make_smoke_corpus
+    make_cold_tiny_corpus
     Q_SINGLE="$(shell_quote "$OUT_DIR/smoke-corpus/large-single.txt")"
     Q_TREE="$(shell_quote "$OUT_DIR/smoke-corpus/many-small")"
+    Q_TINY="$(shell_quote "$OUT_DIR/cold-tiny.txt")"
 
     run_pair \
         "smoke_large_literal" \
@@ -466,9 +476,15 @@ if [ "$MODE" = "smoke" ]; then
         "1.00" \
         "$Q_RG --no-config --version" \
         "$Q_SCOUT --no-config --version"
+    run_pair \
+        "smoke_cold_tiny_search" \
+        "1.00" \
+        "$Q_RG --no-config 'needle' $Q_TINY" \
+        "$Q_SCOUT --no-config 'needle' $Q_TINY"
     exit 0
 fi
 
+make_cold_tiny_corpus
 OPENSUBTITLES_EN="${SCOUT_BENCH_OPENSUBTITLES_EN:-}"
 LINUX_TREE="${SCOUT_BENCH_LINUX_TREE:-}"
 OPENSUBTITLES_EN="$(require_gate_corpus_file "opensubtitles-en" "$OPENSUBTITLES_EN")"
@@ -476,6 +492,7 @@ LINUX_TREE="$(require_gate_corpus_tree "linux-kernel" "$LINUX_TREE")"
 
 Q_OPEN="$(shell_quote "$OPENSUBTITLES_EN")"
 Q_LINUX="$(shell_quote "$LINUX_TREE")"
+Q_TINY="$(shell_quote "$OUT_DIR/cold-tiny.txt")"
 
 run_pair \
     "subtitles_en_literal" \
@@ -502,3 +519,8 @@ run_pair \
     "1.00" \
     "$Q_RG --no-config --version" \
     "$Q_SCOUT --no-config --version"
+run_pair \
+    "cold_tiny_search" \
+    "1.00" \
+    "$Q_RG --no-config 'needle' $Q_TINY" \
+    "$Q_SCOUT --no-config 'needle' $Q_TINY"
