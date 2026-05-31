@@ -1618,6 +1618,12 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("peak RSS <= 1.50x", script, StringComparison.Ordinal);
         Assert.Contains("check_ratio_gate", script, StringComparison.Ordinal);
         Assert.Contains("make_cold_tiny_corpus", script, StringComparison.Ordinal);
+        Assert.Contains("resolve_hyperfine()", script, StringComparison.Ordinal);
+        Assert.Contains("if [ \"$MODE\" = \"gate\" ]; then", script, StringComparison.Ordinal);
+        Assert.Contains("Missing pinned hyperfine path in tests/PREREQS.lock.", script, StringComparison.Ordinal);
+        Assert.Contains("check_file_hash \"hyperfine\" \"$pinned_path\" \"$pinned_sha256\"", script, StringComparison.Ordinal);
+        Assert.Contains("check_tool_version \"hyperfine\" \"$pinned_path\" \"hyperfine $pinned_version\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("read_lock_table_value \"tool.macos\" \"hyperfine\" \"path\")\" || HYPERFINE=\"$(command -v hyperfine", script, StringComparison.Ordinal);
         Assert.DoesNotContain("resolved@fetch", readme, StringComparison.Ordinal);
     }
 

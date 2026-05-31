@@ -221,6 +221,43 @@ check_tree_hash() {
     [ "$actual" = "$expected" ] || fail "$label tree hash mismatch: expected $expected, got $actual"
 }
 
+check_tool_version() {
+    label="$1"
+    path="$2"
+    expected="$3"
+    actual="$("$path" --version | sed -n '1p')"
+    [ "$actual" = "$expected" ] || fail "$label version mismatch: expected $expected, got $actual"
+}
+
+resolve_hyperfine() {
+    pinned_path="$(read_lock_table_value "tool.macos" "hyperfine" "path")" || pinned_path=""
+    pinned_sha256="$(read_lock_table_value "tool.macos" "hyperfine" "sha256")" || pinned_sha256=""
+    pinned_version="$(read_lock_table_value "tool.macos" "hyperfine" "version")" || pinned_version=""
+
+    if [ "$MODE" = "gate" ]; then
+        [ -n "$pinned_path" ] || fail "Missing pinned hyperfine path in tests/PREREQS.lock."
+        [ -n "$pinned_sha256" ] || fail "Missing pinned hyperfine hash in tests/PREREQS.lock."
+        [ -n "$pinned_version" ] || fail "Missing pinned hyperfine version in tests/PREREQS.lock."
+        check_file_hash "hyperfine" "$pinned_path" "$pinned_sha256"
+        check_tool_version "hyperfine" "$pinned_path" "hyperfine $pinned_version"
+        printf '%s\n' "$pinned_path"
+        return
+    fi
+
+    if [ -n "$pinned_path" ] && [ -x "$pinned_path" ]; then
+        if [ -n "$pinned_sha256" ]; then
+            check_file_hash "hyperfine" "$pinned_path" "$pinned_sha256"
+        fi
+        if [ -n "$pinned_version" ]; then
+            check_tool_version "hyperfine" "$pinned_path" "hyperfine $pinned_version"
+        fi
+        printf '%s\n' "$pinned_path"
+        return
+    fi
+
+    command -v hyperfine || true
+}
+
 require_gate_corpus_file() {
     name="$1"
     path_value="$2"
@@ -443,7 +480,7 @@ DEFAULT_SCOUT_BIN="$ROOT/artifacts/bin/$RID/scout"
 SCOUT_BIN="${SCOUT_BIN:-$DEFAULT_SCOUT_BIN}"
 RG_BIN="$(read_lock_value "ripgrep_rg_path")" || fail "Missing ripgrep_rg_path in tests/PREREQS.lock."
 RG_SHA256="$(read_lock_value "ripgrep_rg_sha256")" || fail "Missing ripgrep_rg_sha256 in tests/PREREQS.lock."
-HYPERFINE="$(read_lock_table_value "tool.macos" "hyperfine" "path")" || HYPERFINE="$(command -v hyperfine || true)"
+HYPERFINE="$(resolve_hyperfine)"
 
 [ -x "$SCOUT_BIN" ] || fail "Missing executable Native AOT scout binary: $SCOUT_BIN"
 [ -x "$RG_BIN" ] || fail "Missing executable reference rg binary: $RG_BIN"
