@@ -309,6 +309,37 @@ public sealed class CliParserTests
     }
 
     /// <summary>
+    /// Verifies size limit parser diagnostics match ripgrep wording.
+    /// </summary>
+    [Fact]
+    public void ReportsSizeLimitParseErrors()
+    {
+        byte[] invalidDfaValue = [.. "--dfa-size-limit="u8, 0xFF];
+        byte[] invalidRegexValue = [.. "--regex-size-limit="u8, 0xFF];
+        CliParseResult dfaInvalidSuffix = CliParser.Parse(
+            [OsString.FromUnixBytes("--dfa-size-limit=1k"u8), OsString.FromUnixBytes("needle"u8)]);
+        CliParseResult regexInvalidSuffix = CliParser.Parse(
+            [OsString.FromUnixBytes("--regex-size-limit=1T"u8), OsString.FromUnixBytes("needle"u8)]);
+        CliParseResult dfaInvalidUtf8 = CliParser.Parse(
+            [OsString.FromUnixBytes(invalidDfaValue), OsString.FromUnixBytes("needle"u8)]);
+        CliParseResult regexInvalidUtf8 = CliParser.Parse(
+            [OsString.FromUnixBytes(invalidRegexValue), OsString.FromUnixBytes("needle"u8)]);
+
+        Assert.Equal(CliParseStatus.Error, dfaInvalidSuffix.Status);
+        Assert.Equal(
+            "error parsing flag --dfa-size-limit: invalid size: invalid format for size '1k', which should be a non-empty sequence of digits followed by an optional 'K', 'M' or 'G' suffix",
+            dfaInvalidSuffix.Error!.FormatAlternate());
+        Assert.Equal(CliParseStatus.Error, regexInvalidSuffix.Status);
+        Assert.Equal(
+            "error parsing flag --regex-size-limit: invalid size: invalid format for size '1T', which should be a non-empty sequence of digits followed by an optional 'K', 'M' or 'G' suffix",
+            regexInvalidSuffix.Error!.FormatAlternate());
+        Assert.Equal(CliParseStatus.Error, dfaInvalidUtf8.Status);
+        Assert.Equal("error parsing flag --dfa-size-limit: value is not valid UTF-8", dfaInvalidUtf8.Error!.FormatAlternate());
+        Assert.Equal(CliParseStatus.Error, regexInvalidUtf8.Status);
+        Assert.Equal("error parsing flag --regex-size-limit: value is not valid UTF-8", regexInvalidUtf8.Error!.FormatAlternate());
+    }
+
+    /// <summary>
     /// Verifies invalid <c>--colors</c> values report ripgrep-compatible parser diagnostics.
     /// </summary>
     /// <param name="spec">The invalid color specification.</param>
@@ -1546,6 +1577,11 @@ public sealed class CliParserTests
         CliParseResult invalid = CliParser.Parse([OsString.FromUnixBytes("--max-filesize=1k"u8), OsString.FromUnixBytes("needle"u8)]);
         CliParseResult overflow = CliParser.Parse(
             [OsString.FromUnixBytes("--max-filesize=18446744073709551616"u8), OsString.FromUnixBytes("needle"u8)]);
+        CliParseResult suffixOverflow = CliParser.Parse(
+            [OsString.FromUnixBytes("--max-filesize=9999999999999999G"u8), OsString.FromUnixBytes("needle"u8)]);
+        byte[] invalidUtf8Value = [.. "--max-filesize="u8, 0xFF];
+        CliParseResult invalidUtf8 = CliParser.Parse(
+            [OsString.FromUnixBytes(invalidUtf8Value), OsString.FromUnixBytes("needle"u8)]);
 
         Assert.Equal(CliParseStatus.Error, missing.Status);
         Assert.Equal("missing value for flag --max-filesize: missing argument for option '--max-filesize'", missing.Error!.FormatAlternate());
@@ -1557,6 +1593,12 @@ public sealed class CliParserTests
         Assert.Equal(
             "error parsing flag --max-filesize: invalid size: invalid integer found in size '18446744073709551616': number too large to fit in target type",
             overflow.Error!.FormatAlternate());
+        Assert.Equal(CliParseStatus.Error, suffixOverflow.Status);
+        Assert.Equal(
+            "error parsing flag --max-filesize: invalid size: size too big in '9999999999999999G'",
+            suffixOverflow.Error!.FormatAlternate());
+        Assert.Equal(CliParseStatus.Error, invalidUtf8.Status);
+        Assert.Equal("error parsing flag --max-filesize: value is not valid UTF-8", invalidUtf8.Error!.FormatAlternate());
     }
 
     /// <summary>

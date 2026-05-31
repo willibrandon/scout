@@ -1788,10 +1788,8 @@ public static class CliParser
 
     private static bool ParseMaxFileSize(ReadOnlySpan<byte> value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
     {
-        string original = Utf8.GetString(value);
-        if (!TryParseSize(value, original, out ulong bytes, out string parseError))
+        if (!TryParseHumanSize(value, flagName, out ulong bytes, out error))
         {
-            error = new ScoutError($"error parsing flag {flagName}: {parseError}");
             return true;
         }
 
@@ -1802,10 +1800,8 @@ public static class CliParser
 
     private static bool ParseMaxFileSize(string value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
     {
-        byte[] bytes = Utf8.GetBytes(value);
-        if (!TryParseSize(bytes, value, out ulong size, out string parseError))
+        if (!TryParseHumanSize(value, flagName, out ulong size, out error))
         {
-            error = new ScoutError($"error parsing flag {flagName}: {parseError}");
             return true;
         }
 
@@ -1976,10 +1972,8 @@ public static class CliParser
 
     private static bool ParseDfaSizeLimit(ReadOnlySpan<byte> value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
     {
-        string original = Utf8.GetString(value);
-        if (!TryParseSize(value, original, out ulong bytes, out string parseError))
+        if (!TryParseHumanSize(value, flagName, out ulong bytes, out error))
         {
-            error = new ScoutError($"error parsing flag {flagName}: {parseError}");
             return true;
         }
 
@@ -1990,10 +1984,8 @@ public static class CliParser
 
     private static bool ParseDfaSizeLimit(string value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
     {
-        byte[] bytes = Utf8.GetBytes(value);
-        if (!TryParseSize(bytes, value, out ulong size, out string parseError))
+        if (!TryParseHumanSize(value, flagName, out ulong size, out error))
         {
-            error = new ScoutError($"error parsing flag {flagName}: {parseError}");
             return true;
         }
 
@@ -2014,10 +2006,8 @@ public static class CliParser
 
     private static bool ParseRegexSizeLimit(ReadOnlySpan<byte> value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
     {
-        string original = Utf8.GetString(value);
-        if (!TryParseSize(value, original, out ulong bytes, out string parseError))
+        if (!TryParseHumanSize(value, flagName, out ulong bytes, out error))
         {
-            error = new ScoutError($"error parsing flag {flagName}: {parseError}");
             return true;
         }
 
@@ -2028,10 +2018,8 @@ public static class CliParser
 
     private static bool ParseRegexSizeLimit(string value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
     {
-        byte[] bytes = Utf8.GetBytes(value);
-        if (!TryParseSize(bytes, value, out ulong size, out string parseError))
+        if (!TryParseHumanSize(value, flagName, out ulong size, out error))
         {
-            error = new ScoutError($"error parsing flag {flagName}: {parseError}");
             return true;
         }
 
@@ -2394,78 +2382,28 @@ public static class CliParser
         return true;
     }
 
-    private static bool TryParseSize(ReadOnlySpan<byte> value, string original, out ulong size, out string parseError)
+    private static bool TryParseHumanSize(ReadOnlySpan<byte> value, string flagName, out ulong size, out ScoutError? error)
     {
-        if (value.IsEmpty)
-        {
-            return InvalidSizeFormat(original, out size, out parseError);
-        }
-
-        ulong multiplier = 1;
-        int digitLength = value.Length;
-        byte last = value[^1];
-        if (last == (byte)'K')
-        {
-            multiplier = 1024;
-            digitLength--;
-        }
-        else if (last == (byte)'M')
-        {
-            multiplier = 1024 * 1024;
-            digitLength--;
-        }
-        else if (last == (byte)'G')
-        {
-            multiplier = 1024UL * 1024UL * 1024UL;
-            digitLength--;
-        }
-        else if (last is < (byte)'0' or > (byte)'9')
-        {
-            return InvalidSizeFormat(original, out size, out parseError);
-        }
-
-        if (digitLength == 0)
-        {
-            return InvalidSizeFormat(original, out size, out parseError);
-        }
-
-        ulong parsed = 0;
-        for (int index = 0; index < digitLength; index++)
-        {
-            byte digit = value[index];
-            if (digit is < (byte)'0' or > (byte)'9')
-            {
-                return InvalidSizeFormat(original, out size, out parseError);
-            }
-
-            ulong numericDigit = (ulong)(digit - (byte)'0');
-            if (parsed > (ulong.MaxValue - numericDigit) / 10)
-            {
-                size = 0;
-                parseError = $"invalid size: invalid integer found in size '{original}': number too large to fit in target type";
-                return false;
-            }
-
-            parsed = (parsed * 10) + numericDigit;
-        }
-
-        if (parsed > ulong.MaxValue / multiplier)
+        if (!TryDecodeUtf8(value, out string text))
         {
             size = 0;
-            parseError = $"invalid size: size too big in '{original}'";
+            error = new ScoutError($"error parsing flag {flagName}: value is not valid UTF-8");
             return false;
         }
 
-        size = parsed * multiplier;
-        parseError = string.Empty;
-        return true;
+        return TryParseHumanSize(text, flagName, out size, out error);
     }
 
-    private static bool InvalidSizeFormat(string original, out ulong size, out string parseError)
+    private static bool TryParseHumanSize(string value, string flagName, out ulong size, out ScoutError? error)
     {
-        size = 0;
-        parseError = $"invalid size: invalid format for size '{original}', which should be a non-empty sequence of digits followed by an optional 'K', 'M' or 'G' suffix";
-        return false;
+        if (!CliHumanSizeParser.TryParse(value, out size, out string parseError))
+        {
+            error = new ScoutError($"error parsing flag {flagName}: invalid size: {parseError}");
+            return false;
+        }
+
+        error = null;
+        return true;
     }
 
     private static bool TryParseUnsigned(ReadOnlySpan<byte> value, out ulong count, out string parseError)
