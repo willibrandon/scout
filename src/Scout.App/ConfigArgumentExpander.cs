@@ -108,16 +108,7 @@ internal static class ConfigArgumentExpander
 
     private static bool IsSpecialArgument(OsString argument)
     {
-        return argument.EqualsUnixBytes("-h"u8) ||
-            TextEquals(argument, "-h") ||
-            argument.EqualsUnixBytes("--help"u8) ||
-            TextEquals(argument, "--help") ||
-            argument.EqualsUnixBytes("-V"u8) ||
-            TextEquals(argument, "-V") ||
-            argument.EqualsUnixBytes("--version"u8) ||
-            TextEquals(argument, "--version") ||
-            argument.EqualsUnixBytes("--pcre2-version"u8) ||
-            TextEquals(argument, "--pcre2-version");
+        return CliParser.TryParseSpecialMode(argument, out _);
     }
 
     private static List<OsString> ReadConfigArguments(string configPath, DiagnosticMessenger diagnostics)

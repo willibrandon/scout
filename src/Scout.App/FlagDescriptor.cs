@@ -9,6 +9,7 @@ internal sealed class FlagDescriptor
 {
     private readonly Func<CliLowArgs, string, ScoutError?>? applySwitch;
     private readonly Func<CliLowArgs, OsString, string, ScoutError?>? applyValue;
+    private readonly Func<string, CliSpecialMode>? selectSpecialMode;
 
     private FlagDescriptor(
         string longName,
@@ -19,7 +20,8 @@ internal sealed class FlagDescriptor
         FlagCategory category,
         string doc,
         Func<CliLowArgs, string, ScoutError?>? applySwitch,
-        Func<CliLowArgs, OsString, string, ScoutError?>? applyValue)
+        Func<CliLowArgs, OsString, string, ScoutError?>? applyValue,
+        Func<string, CliSpecialMode>? selectSpecialMode)
     {
         LongName = longName;
         ShortName = shortName;
@@ -30,6 +32,7 @@ internal sealed class FlagDescriptor
         Doc = doc;
         this.applySwitch = applySwitch;
         this.applyValue = applyValue;
+        this.selectSpecialMode = selectSpecialMode;
     }
 
     /// <summary>
@@ -92,7 +95,7 @@ internal sealed class FlagDescriptor
         ArgumentNullException.ThrowIfNull(doc);
         ArgumentNullException.ThrowIfNull(applySwitch);
 
-        return new FlagDescriptor(longName, shortName, negatedName, aliases, FlagKind.Switch, category, doc, (lowArgs, _) => applySwitch(lowArgs), applyValue: null);
+        return new FlagDescriptor(longName, shortName, negatedName, aliases, FlagKind.Switch, category, doc, (lowArgs, _) => applySwitch(lowArgs), applyValue: null, selectSpecialMode: null);
     }
 
     /// <summary>
@@ -120,7 +123,7 @@ internal sealed class FlagDescriptor
         ArgumentNullException.ThrowIfNull(doc);
         ArgumentNullException.ThrowIfNull(applySwitch);
 
-        return new FlagDescriptor(longName, shortName, negatedName, aliases, FlagKind.Switch, category, doc, applySwitch, applyValue: null);
+        return new FlagDescriptor(longName, shortName, negatedName, aliases, FlagKind.Switch, category, doc, applySwitch, applyValue: null, selectSpecialMode: null);
     }
 
     /// <summary>
@@ -146,7 +149,33 @@ internal sealed class FlagDescriptor
         ArgumentNullException.ThrowIfNull(doc);
         ArgumentNullException.ThrowIfNull(applyValue);
 
-        return new FlagDescriptor(longName, shortName, negatedName: null, aliases, FlagKind.Value, category, doc, applySwitch: null, applyValue);
+        return new FlagDescriptor(longName, shortName, negatedName: null, aliases, FlagKind.Value, category, doc, applySwitch: null, applyValue, selectSpecialMode: null);
+    }
+
+    /// <summary>
+    /// Creates a special-mode flag descriptor.
+    /// </summary>
+    /// <param name="longName">The canonical long flag name, including <c>--</c>.</param>
+    /// <param name="shortName">The short flag name without <c>-</c>, or <see langword="null" />.</param>
+    /// <param name="aliases">Alternate long flag spellings.</param>
+    /// <param name="category">The help and completion category.</param>
+    /// <param name="doc">The short documentation text.</param>
+    /// <param name="selectSpecialMode">Selects the special mode for the matched spelling.</param>
+    /// <returns>The descriptor.</returns>
+    public static FlagDescriptor Special(
+        string longName,
+        char? shortName,
+        string[] aliases,
+        FlagCategory category,
+        string doc,
+        Func<string, CliSpecialMode> selectSpecialMode)
+    {
+        ArgumentNullException.ThrowIfNull(longName);
+        ArgumentNullException.ThrowIfNull(aliases);
+        ArgumentNullException.ThrowIfNull(doc);
+        ArgumentNullException.ThrowIfNull(selectSpecialMode);
+
+        return new FlagDescriptor(longName, shortName, negatedName: null, aliases, FlagKind.Special, category, doc, applySwitch: null, applyValue: null, selectSpecialMode);
     }
 
     /// <summary>
@@ -208,6 +237,24 @@ internal sealed class FlagDescriptor
         }
 
         error = applyValue(lowArgs, value, matchedName);
+        return true;
+    }
+
+    /// <summary>
+    /// Selects the special mode for this flag.
+    /// </summary>
+    /// <param name="matchedName">The spelling that matched this special flag.</param>
+    /// <param name="mode">The selected special mode.</param>
+    /// <returns><see langword="true" /> when this descriptor represents a special mode.</returns>
+    public bool TryGetSpecialMode(string matchedName, out CliSpecialMode mode)
+    {
+        if (Kind != FlagKind.Special || selectSpecialMode is null)
+        {
+            mode = default;
+            return false;
+        }
+
+        mode = selectSpecialMode(matchedName);
         return true;
     }
 }

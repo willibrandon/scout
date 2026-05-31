@@ -132,6 +132,36 @@ public sealed class FlagCatalogTests
     }
 
     /// <summary>
+    /// Verifies the generated catalog contains migrated special-mode definitions.
+    /// </summary>
+    [Fact]
+    public void CatalogContainsMigratedSpecialDefinitions()
+    {
+        Assert.True(GeneratedFlagCatalog.TryFindLongSpecial("--help", out FlagDescriptor help));
+        Assert.Equal("--help", help.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindShortSpecial('h', out FlagDescriptor shortHelp));
+        Assert.Equal("--help", shortHelp.LongName);
+        Assert.True(help.TryGetSpecialMode("--help", out CliSpecialMode helpLong));
+        Assert.Equal(CliSpecialMode.HelpLong, helpLong);
+        Assert.True(shortHelp.TryGetSpecialMode("-h", out CliSpecialMode helpShort));
+        Assert.Equal(CliSpecialMode.HelpShort, helpShort);
+
+        Assert.True(GeneratedFlagCatalog.TryFindLongSpecial("--version", out FlagDescriptor version));
+        Assert.Equal("--version", version.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindShortSpecial('V', out FlagDescriptor shortVersion));
+        Assert.Equal("--version", shortVersion.LongName);
+        Assert.True(version.TryGetSpecialMode("--version", out CliSpecialMode versionLong));
+        Assert.Equal(CliSpecialMode.VersionLong, versionLong);
+        Assert.True(shortVersion.TryGetSpecialMode("-V", out CliSpecialMode versionShort));
+        Assert.Equal(CliSpecialMode.VersionShort, versionShort);
+
+        Assert.True(GeneratedFlagCatalog.TryFindLongSpecial("--pcre2-version", out FlagDescriptor pcre2Version));
+        Assert.Equal("--pcre2-version", pcre2Version.LongName);
+        Assert.True(pcre2Version.TryGetSpecialMode("--pcre2-version", out CliSpecialMode pcre2Mode));
+        Assert.Equal(CliSpecialMode.Pcre2Version, pcre2Mode);
+    }
+
+    /// <summary>
     /// Verifies generated flag descriptors do not define duplicate canonical spellings.
     /// </summary>
     [Fact]
@@ -334,6 +364,33 @@ public sealed class FlagCatalogTests
         Assert.Equal(["*.txt"], remainingValues.LowArgs.PreprocessorGlobs);
         Assert.Equal("hostname", remainingValues.LowArgs.HostnameBin);
         Assert.Equal(string.Empty, remainingValues.LowArgs.HyperlinkFormat);
+    }
+
+    /// <summary>
+    /// Verifies parser special-mode behavior is routed through generated flag definitions.
+    /// </summary>
+    [Fact]
+    public void ParserUsesGeneratedSpecialDefinitions()
+    {
+        CliParseResult helpShort = CliParser.Parse([OsString.FromUnixBytes("-h"u8)]);
+        CliParseResult helpLong = CliParser.Parse([OsString.FromUnixBytes("--help"u8)]);
+        CliParseResult versionShort = CliParser.Parse([OsString.FromUnixBytes("-V"u8)]);
+        CliParseResult versionLong = CliParser.Parse([OsString.FromUnixBytes("--version"u8)]);
+        CliParseResult pcre2Version = CliParser.Parse([OsString.FromUnixBytes("--pcre2-version"u8)]);
+        CliParseResult clusteredHelp = CliParser.Parse([OsString.FromUnixBytes("-nh"u8)]);
+
+        Assert.Equal(CliParseStatus.Special, helpShort.Status);
+        Assert.Equal(CliSpecialMode.HelpShort, helpShort.SpecialMode);
+        Assert.Equal(CliParseStatus.Special, helpLong.Status);
+        Assert.Equal(CliSpecialMode.HelpLong, helpLong.SpecialMode);
+        Assert.Equal(CliParseStatus.Special, versionShort.Status);
+        Assert.Equal(CliSpecialMode.VersionShort, versionShort.SpecialMode);
+        Assert.Equal(CliParseStatus.Special, versionLong.Status);
+        Assert.Equal(CliSpecialMode.VersionLong, versionLong.SpecialMode);
+        Assert.Equal(CliParseStatus.Special, pcre2Version.Status);
+        Assert.Equal(CliSpecialMode.Pcre2Version, pcre2Version.SpecialMode);
+        Assert.Equal(CliParseStatus.Special, clusteredHelp.Status);
+        Assert.Equal(CliSpecialMode.HelpShort, clusteredHelp.SpecialMode);
     }
 
     /// <summary>

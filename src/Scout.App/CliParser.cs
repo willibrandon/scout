@@ -21,10 +21,9 @@ public static class CliParser
         for (int index = 0; index < arguments.Length; index++)
         {
             OsString argument = arguments[index];
-            CliParseResult? special = TryParseSpecial(argument);
-            if (special is not null)
+            if (TryParseSpecialMode(argument, out CliSpecialMode specialMode))
             {
-                return special;
+                return CliParseResult.Special(specialMode);
             }
 
             if (TryParseGeneratedSwitchFlag(argument, lowArgs, out ScoutError? generatedSwitchError))
@@ -68,34 +67,52 @@ public static class CliParser
         return CliParseResult.Ok(lowArgs);
     }
 
-    private static CliParseResult? TryParseSpecial(OsString argument)
+    internal static bool TryParseSpecialMode(OsString argument, out CliSpecialMode mode)
     {
-        if (argument.EqualsUnixBytes("-h"u8) || TextEquals(argument, "-h"))
+        if (argument.IsUnixBytes)
         {
-            return CliParseResult.Special(CliSpecialMode.HelpShort);
+            if (TryDecodeUtf8(argument.AsUnixBytes(), out string text))
+            {
+                return TryParseSpecialMode(text, out mode);
+            }
+
+            mode = default;
+            return false;
         }
 
-        if (argument.EqualsUnixBytes("--help"u8) || TextEquals(argument, "--help"))
+        if (argument.TryGetText(out string? value))
         {
-            return CliParseResult.Special(CliSpecialMode.HelpLong);
+            return TryParseSpecialMode(value, out mode);
         }
 
-        if (argument.EqualsUnixBytes("-V"u8) || TextEquals(argument, "-V"))
+        mode = default;
+        return false;
+    }
+
+    private static bool TryParseSpecialMode(string argument, out CliSpecialMode mode)
+    {
+        if (argument.Length == 2 &&
+            argument[0] == '-' &&
+            argument[1] != '-' &&
+            GeneratedFlagCatalog.TryFindShortSpecial(argument[1], out FlagDescriptor shortDescriptor) &&
+            shortDescriptor.TryGetSpecialMode(argument, out CliSpecialMode shortMode))
         {
-            return CliParseResult.Special(CliSpecialMode.VersionShort);
+            mode = shortMode;
+            return true;
         }
 
-        if (argument.EqualsUnixBytes("--version"u8) || TextEquals(argument, "--version"))
+        if (argument.Length > 2 &&
+            argument[0] == '-' &&
+            argument[1] == '-' &&
+            GeneratedFlagCatalog.TryFindLongSpecial(argument, out FlagDescriptor longDescriptor) &&
+            longDescriptor.TryGetSpecialMode(argument, out CliSpecialMode longMode))
         {
-            return CliParseResult.Special(CliSpecialMode.VersionLong);
+            mode = longMode;
+            return true;
         }
 
-        if (argument.EqualsUnixBytes("--pcre2-version"u8) || TextEquals(argument, "--pcre2-version"))
-        {
-            return CliParseResult.Special(CliSpecialMode.Pcre2Version);
-        }
-
-        return null;
+        mode = default;
+        return false;
     }
 
     private static bool TryParseGeneratedSwitchFlag(OsString argument, CliLowArgs lowArgs, out ScoutError? error)
@@ -444,20 +461,15 @@ public static class CliParser
 
     private static bool TryParseClusterSpecial(char flag, out CliSpecialMode mode)
     {
-        switch (flag)
+        string matchedName = new(['-', flag]);
+        if (GeneratedFlagCatalog.TryFindShortSpecial(flag, out FlagDescriptor descriptor) &&
+            descriptor.TryGetSpecialMode(matchedName, out mode))
         {
-            case 'h':
-                mode = CliSpecialMode.HelpShort;
-                return true;
-
-            case 'V':
-                mode = CliSpecialMode.VersionShort;
-                return true;
-
-            default:
-                mode = default;
-                return false;
+            return true;
         }
+
+        mode = default;
+        return false;
     }
 
     private static bool TryParseClusterSwitch(byte flag, CliLowArgs lowArgs, out ScoutError? error)
@@ -1830,11 +1842,6 @@ public static class CliParser
 
         error = new ScoutError("unreachable parser state");
         return false;
-    }
-
-    private static bool TextEquals(OsString argument, string expected)
-    {
-        return argument.TryGetText(out string text) && string.Equals(text, expected, StringComparison.Ordinal);
     }
 
     private static bool TryDecodeUtf8(ReadOnlySpan<byte> bytes, out string text)
