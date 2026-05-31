@@ -1179,8 +1179,14 @@ public sealed partial class PinnedConfigurationTests
         string pcre2SearchOperations = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "Pcre2SearchOperations.cs"));
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
         string headerPath = Path.Combine(sourceRoot, "include", "pcre2.h");
+        string pinnedPcre2RipgrepBinaryPath = PinnedPcre2RipgrepOracle.ExecutablePath;
+        string defaultPcre2RipgrepPath = PinnedPcre2RipgrepOracle.DefaultExecutablePath;
+        string expectedPcre2RipgrepSha256 = PinnedPcre2RipgrepOracle.ExpectedSha256;
+        string expectedPcre2ReportedVersion = PinnedPcre2RipgrepOracle.ReportedVersion;
 
         Assert.True(File.Exists(headerPath), "Missing vendored pcre2.h: " + headerPath);
+        Assert.True(File.Exists(pinnedPcre2RipgrepBinaryPath), "Missing pinned PCRE2 ripgrep binary: " + pinnedPcre2RipgrepBinaryPath);
+        PinnedPcre2RipgrepOracle.VerifyHash();
         Assert.True(File.Exists(Path.Combine(sourceRoot, "src", "pcre2_compile.c")));
         Assert.True(File.Exists(Path.Combine(sourceRoot, "src", "pcre2_match.c")));
         Assert.True(File.Exists(Path.Combine(sourceRoot, "src", "pcre2_jit_compile.c")));
@@ -1272,9 +1278,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("\"$ROOT/native/test-pcre2-differential-unix.sh\" \"$RID\" \"$BIN/scout\"", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("ripgrep_pcre2_rg_profile = \"release-lto\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("ripgrep_pcre2_rg_features = \"pcre2\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("ripgrep_pcre2_rg_path = \"/Users/brandon/src/ripgrep/target/pcre2/release-lto/rg\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("ripgrep_pcre2_rg_sha256 = \"49d486acea41e80f9a17834944677cf70bdbaeff12dc186c6d8630770d81bbe9\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("ripgrep_pcre2_reported_version = \"PCRE2 10.45 is available (JIT is available)\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("ripgrep_pcre2_rg_path = \"" + defaultPcre2RipgrepPath + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("ripgrep_pcre2_rg_sha256 = \"" + expectedPcre2RipgrepSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("ripgrep_pcre2_reported_version = \"" + expectedPcre2ReportedVersion + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("compare_case f1155_auto_hybrid_regex exact --no-pcre2 --auto-hybrid-regex '(?<=the )Sherlock'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("run_tool_stdin()", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case fixed_literal exact -P -F -n 'foo(?=bar)' pcre2-fixed", differentialScript, StringComparison.Ordinal);
