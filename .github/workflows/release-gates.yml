@@ -1,0 +1,66 @@
+name: Release Gates
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  full-tests:
+    name: full pinned tests
+    runs-on:
+      - self-hosted
+      - scout
+      - osx-arm64
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.102
+      - name: Restore
+        run: dotnet restore Scout.slnx
+      - name: Fetch pinned corpora
+        run: eng/fetch-corpora.sh --all
+      - name: Preflight
+        run: eng/preflight.sh
+      - name: Test
+        run: dotnet test Scout.slnx --no-restore
+      - name: Native pinned differentials
+        run: native/build-app-unix.sh osx-arm64 --with-differentials
+
+  performance-gate:
+    name: hyperfine performance gate
+    runs-on:
+      - self-hosted
+      - scout
+      - osx-arm64
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.102
+      - name: Fetch pinned corpora
+        run: eng/fetch-corpora.sh --all
+      - name: Preflight
+        run: eng/preflight.sh
+      - name: Link native executable
+        run: native/build-app-unix.sh osx-arm64 --with-differentials
+      - name: Run hyperfine gates
+        run: bench/run-hyperfine.sh --gate

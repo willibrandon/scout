@@ -150,26 +150,6 @@ jobs:
           -p:NativeLib=Static
           -o artifacts/app/${{ matrix.rid }}
 
-  full-tests:
-    name: full pinned tests
-    runs-on:
-      - self-hosted
-      - scout
-      - osx-arm64
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: 10.0.102
-      - name: Restore
-        run: dotnet restore Scout.slnx
-      - name: Preflight
-        run: eng/preflight.sh
-      - name: Test
-        run: dotnet test Scout.slnx --no-restore
-      - name: Native pinned differentials
-        run: native/build-app-unix.sh osx-arm64 --with-differentials
-
   native-linux:
     name: native Unix link (${{ matrix.rid }})
     runs-on: ${{ matrix.runner }}
@@ -277,21 +257,3 @@ jobs:
           call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=${{ matrix.vsarch }}
           pwsh -NoProfile -ExecutionPolicy Bypass -File spike/build-windows.ps1 ${{ matrix.rid }}
           pwsh -NoProfile -ExecutionPolicy Bypass -File native/build-app-windows.ps1 ${{ matrix.rid }}
-
-  performance-gate:
-    name: hyperfine performance gate
-    runs-on:
-      - self-hosted
-      - scout
-      - osx-arm64
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: 10.0.102
-      - name: Preflight
-        run: eng/preflight.sh
-      - name: Link native executable
-        run: native/build-app-unix.sh osx-arm64 --with-differentials
-      - name: Run hyperfine gates
-        run: bench/run-hyperfine.sh --gate

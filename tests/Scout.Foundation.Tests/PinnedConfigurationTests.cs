@@ -53,13 +53,18 @@ public sealed partial class PinnedConfigurationTests
     {
         string root = FindRepositoryRoot();
         string workflowPath = Path.Combine(root, ".github", "workflows", "ci.yml");
+        string releaseGateWorkflowPath = Path.Combine(root, ".github", "workflows", "release-gates.yml");
 
         Assert.True(File.Exists(workflowPath), "Missing CI workflow: " + workflowPath);
-        string workflow = File.ReadAllText(workflowPath);
+        Assert.True(File.Exists(releaseGateWorkflowPath), "Missing release gate workflow: " + releaseGateWorkflowPath);
+        string ciWorkflow = File.ReadAllText(workflowPath);
+        string releaseGateWorkflow = File.ReadAllText(releaseGateWorkflowPath);
+        string workflow = ciWorkflow + "\n" + releaseGateWorkflow;
 
-        Assert.Contains("push:", workflow, StringComparison.Ordinal);
-        Assert.Contains("pull_request:", workflow, StringComparison.Ordinal);
-        Assert.Contains("workflow_dispatch:", workflow, StringComparison.Ordinal);
+        Assert.Contains("push:", ciWorkflow, StringComparison.Ordinal);
+        Assert.Contains("pull_request:", ciWorkflow, StringComparison.Ordinal);
+        Assert.Contains("workflow_dispatch:", ciWorkflow, StringComparison.Ordinal);
+        Assert.Contains("workflow_dispatch:", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: \"true\"", workflow, StringComparison.Ordinal);
         Assert.Contains("LINUX_LIBC_VERSION: \"2.36-9+deb12u13\"", workflow, StringComparison.Ordinal);
         Assert.Contains("LINUX_SNAPSHOT_URL: \"http://snapshot.debian.org/archive/debian/20260501T000000Z\"", workflow, StringComparison.Ordinal);
@@ -89,6 +94,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("eng/verify-linux-prereqs.sh ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/preflight.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("cancel-in-progress: true", workflow, StringComparison.Ordinal);
+        Assert.Contains("cancel-in-progress: false", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("spike/build-unix.sh ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
         Assert.Contains("spike/build-windows.ps1 ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
         Assert.Contains("native/build-app-unix.sh ${{ matrix.rid }} --smoke-only", workflow, StringComparison.Ordinal);
@@ -102,6 +108,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("runner: macos-15", workflow, StringComparison.Ordinal);
         Assert.Contains("runner: windows-2025-vs2026", workflow, StringComparison.Ordinal);
         Assert.Contains("bench/run-hyperfine.sh --gate", workflow, StringComparison.Ordinal);
+        Assert.Contains("clean: false", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("self-hosted", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("self-hosted", ciWorkflow, StringComparison.Ordinal);
         Assert.Contains("libicu72", workflow, StringComparison.Ordinal);
         Assert.Contains("zlib1g-dev", workflow, StringComparison.Ordinal);
         Assert.Contains("ncompress", workflow, StringComparison.Ordinal);

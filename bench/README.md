@@ -19,6 +19,12 @@ SCOUT_BIN=artifacts/bin/osx-arm64/scout \
 bench/run-hyperfine.sh --gate
 ```
 
+GitHub's default `CI` workflow runs only hosted cross-platform build, test,
+format, fuzz, and native link checks. The full pinned test pass and hyperfine
+performance gate live in the `Release Gates` workflow because they require the
+self-hosted `scout/osx-arm64` runner with the pinned local ripgrep checkout,
+macOS tool hashes, and benchmark corpora.
+
 `eng/fetch-corpora.sh` prints replacement `[[corpus]]` blocks for
 `tests/PREREQS.lock` after it downloads OpenSubtitles and the pinned Linux
 archive, hashes the decompressed `en.txt`, and hashes the extracted Linux tree
