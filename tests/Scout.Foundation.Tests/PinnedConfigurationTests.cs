@@ -1383,6 +1383,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("Sse2.IsSupported", memchrSearch, StringComparison.Ordinal);
         Assert.Contains("AdvSimd.IsSupported", memchrSearch, StringComparison.Ordinal);
         Assert.Contains("FindScalar", memchrSearch, StringComparison.Ordinal);
+        Assert.Contains("Find2Vector512", memchrSearch, StringComparison.Ordinal);
+        Assert.Contains("Find3Vector512", memchrSearch, StringComparison.Ordinal);
         Assert.Contains("ExtractMostSignificantBits", memchrSearch, StringComparison.Ordinal);
         Assert.Contains("AVX-512", upstream, StringComparison.Ordinal);
     }

@@ -128,7 +128,37 @@ public static class MemchrSearch
     /// <returns>The zero-based index, or <c>-1</c> when neither byte is present.</returns>
     public static int Find2(ReadOnlySpan<byte> haystack, byte first, byte second)
     {
-        return haystack.IndexOfAny(first, second);
+        if (first == second)
+        {
+            return Find(haystack, first);
+        }
+
+        if (haystack.IsEmpty)
+        {
+            return -1;
+        }
+
+        if (Avx512BW.IsSupported && haystack.Length >= Vector512<byte>.Count)
+        {
+            return Find2Vector512(haystack, first, second);
+        }
+
+        if (Avx2.IsSupported && haystack.Length >= Vector256<byte>.Count)
+        {
+            return Find2Vector256(haystack, first, second);
+        }
+
+        if (Sse2.IsSupported && haystack.Length >= Vector128<byte>.Count)
+        {
+            return Find2Sse2(haystack, first, second);
+        }
+
+        if (AdvSimd.IsSupported && haystack.Length >= Vector128<byte>.Count)
+        {
+            return Find2AdvSimd(haystack, first, second);
+        }
+
+        return Find2Scalar(haystack, first, second, start: 0);
     }
 
     /// <summary>
@@ -224,7 +254,42 @@ public static class MemchrSearch
     /// <returns>The zero-based index, or <c>-1</c> when none of the bytes are present.</returns>
     public static int Find3(ReadOnlySpan<byte> haystack, byte first, byte second, byte third)
     {
-        return haystack.IndexOfAny(first, second, third);
+        if (first == second)
+        {
+            return Find2(haystack, first, third);
+        }
+
+        if (first == third || second == third)
+        {
+            return Find2(haystack, first, second);
+        }
+
+        if (haystack.IsEmpty)
+        {
+            return -1;
+        }
+
+        if (Avx512BW.IsSupported && haystack.Length >= Vector512<byte>.Count)
+        {
+            return Find3Vector512(haystack, first, second, third);
+        }
+
+        if (Avx2.IsSupported && haystack.Length >= Vector256<byte>.Count)
+        {
+            return Find3Vector256(haystack, first, second, third);
+        }
+
+        if (Sse2.IsSupported && haystack.Length >= Vector128<byte>.Count)
+        {
+            return Find3Sse2(haystack, first, second, third);
+        }
+
+        if (AdvSimd.IsSupported && haystack.Length >= Vector128<byte>.Count)
+        {
+            return Find3AdvSimd(haystack, first, second, third);
+        }
+
+        return Find3Scalar(haystack, first, second, third, start: 0);
     }
 
     /// <summary>
@@ -336,6 +401,56 @@ public static class MemchrSearch
         return FindScalar(haystack, needle, offset);
     }
 
+    private static int Find2Vector512(ReadOnlySpan<byte> haystack, byte first, byte second)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        var firstVector = Vector512.Create(first);
+        var secondVector = Vector512.Create(second);
+        int offset = 0;
+        int vectorEnd = haystack.Length - Vector512<byte>.Count;
+        while (offset <= vectorEnd)
+        {
+            var block = Vector512.LoadUnsafe(ref reference, (nuint)offset);
+            ulong mask =
+                Avx512BW.CompareEqual(block, firstVector).ExtractMostSignificantBits() |
+                Avx512BW.CompareEqual(block, secondVector).ExtractMostSignificantBits();
+            if (mask != 0)
+            {
+                return offset + BitOperations.TrailingZeroCount(mask);
+            }
+
+            offset += Vector512<byte>.Count;
+        }
+
+        return Find2Scalar(haystack, first, second, offset);
+    }
+
+    private static int Find3Vector512(ReadOnlySpan<byte> haystack, byte first, byte second, byte third)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        var firstVector = Vector512.Create(first);
+        var secondVector = Vector512.Create(second);
+        var thirdVector = Vector512.Create(third);
+        int offset = 0;
+        int vectorEnd = haystack.Length - Vector512<byte>.Count;
+        while (offset <= vectorEnd)
+        {
+            var block = Vector512.LoadUnsafe(ref reference, (nuint)offset);
+            ulong mask =
+                Avx512BW.CompareEqual(block, firstVector).ExtractMostSignificantBits() |
+                Avx512BW.CompareEqual(block, secondVector).ExtractMostSignificantBits() |
+                Avx512BW.CompareEqual(block, thirdVector).ExtractMostSignificantBits();
+            if (mask != 0)
+            {
+                return offset + BitOperations.TrailingZeroCount(mask);
+            }
+
+            offset += Vector512<byte>.Count;
+        }
+
+        return Find3Scalar(haystack, first, second, third, offset);
+    }
+
     private static int FindVector256(ReadOnlySpan<byte> haystack, byte needle)
     {
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
@@ -355,6 +470,56 @@ public static class MemchrSearch
         }
 
         return FindScalar(haystack, needle, offset);
+    }
+
+    private static int Find2Vector256(ReadOnlySpan<byte> haystack, byte first, byte second)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        var firstVector = Vector256.Create(first);
+        var secondVector = Vector256.Create(second);
+        int offset = 0;
+        int vectorEnd = haystack.Length - Vector256<byte>.Count;
+        while (offset <= vectorEnd)
+        {
+            var block = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            uint mask =
+                Avx2.CompareEqual(block, firstVector).ExtractMostSignificantBits() |
+                Avx2.CompareEqual(block, secondVector).ExtractMostSignificantBits();
+            if (mask != 0)
+            {
+                return offset + BitOperations.TrailingZeroCount(mask);
+            }
+
+            offset += Vector256<byte>.Count;
+        }
+
+        return Find2Scalar(haystack, first, second, offset);
+    }
+
+    private static int Find3Vector256(ReadOnlySpan<byte> haystack, byte first, byte second, byte third)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        var firstVector = Vector256.Create(first);
+        var secondVector = Vector256.Create(second);
+        var thirdVector = Vector256.Create(third);
+        int offset = 0;
+        int vectorEnd = haystack.Length - Vector256<byte>.Count;
+        while (offset <= vectorEnd)
+        {
+            var block = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            uint mask =
+                Avx2.CompareEqual(block, firstVector).ExtractMostSignificantBits() |
+                Avx2.CompareEqual(block, secondVector).ExtractMostSignificantBits() |
+                Avx2.CompareEqual(block, thirdVector).ExtractMostSignificantBits();
+            if (mask != 0)
+            {
+                return offset + BitOperations.TrailingZeroCount(mask);
+            }
+
+            offset += Vector256<byte>.Count;
+        }
+
+        return Find3Scalar(haystack, first, second, third, offset);
     }
 
     private static int FindSse2(ReadOnlySpan<byte> haystack, byte needle)
@@ -378,6 +543,56 @@ public static class MemchrSearch
         return FindScalar(haystack, needle, offset);
     }
 
+    private static int Find2Sse2(ReadOnlySpan<byte> haystack, byte first, byte second)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        var firstVector = Vector128.Create(first);
+        var secondVector = Vector128.Create(second);
+        int offset = 0;
+        int vectorEnd = haystack.Length - Vector128<byte>.Count;
+        while (offset <= vectorEnd)
+        {
+            var block = Vector128.LoadUnsafe(ref reference, (nuint)offset);
+            uint mask =
+                Sse2.CompareEqual(block, firstVector).ExtractMostSignificantBits() |
+                Sse2.CompareEqual(block, secondVector).ExtractMostSignificantBits();
+            if (mask != 0)
+            {
+                return offset + BitOperations.TrailingZeroCount(mask);
+            }
+
+            offset += Vector128<byte>.Count;
+        }
+
+        return Find2Scalar(haystack, first, second, offset);
+    }
+
+    private static int Find3Sse2(ReadOnlySpan<byte> haystack, byte first, byte second, byte third)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        var firstVector = Vector128.Create(first);
+        var secondVector = Vector128.Create(second);
+        var thirdVector = Vector128.Create(third);
+        int offset = 0;
+        int vectorEnd = haystack.Length - Vector128<byte>.Count;
+        while (offset <= vectorEnd)
+        {
+            var block = Vector128.LoadUnsafe(ref reference, (nuint)offset);
+            uint mask =
+                Sse2.CompareEqual(block, firstVector).ExtractMostSignificantBits() |
+                Sse2.CompareEqual(block, secondVector).ExtractMostSignificantBits() |
+                Sse2.CompareEqual(block, thirdVector).ExtractMostSignificantBits();
+            if (mask != 0)
+            {
+                return offset + BitOperations.TrailingZeroCount(mask);
+            }
+
+            offset += Vector128<byte>.Count;
+        }
+
+        return Find3Scalar(haystack, first, second, third, offset);
+    }
+
     private static int FindAdvSimd(ReadOnlySpan<byte> haystack, byte needle)
     {
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
@@ -399,11 +614,89 @@ public static class MemchrSearch
         return FindScalar(haystack, needle, offset);
     }
 
+    private static int Find2AdvSimd(ReadOnlySpan<byte> haystack, byte first, byte second)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        var firstVector = Vector128.Create(first);
+        var secondVector = Vector128.Create(second);
+        int offset = 0;
+        int vectorEnd = haystack.Length - Vector128<byte>.Count;
+        while (offset <= vectorEnd)
+        {
+            var block = Vector128.LoadUnsafe(ref reference, (nuint)offset);
+            uint mask =
+                AdvSimd.CompareEqual(block, firstVector).ExtractMostSignificantBits() |
+                AdvSimd.CompareEqual(block, secondVector).ExtractMostSignificantBits();
+            if (mask != 0)
+            {
+                return offset + BitOperations.TrailingZeroCount(mask);
+            }
+
+            offset += Vector128<byte>.Count;
+        }
+
+        return Find2Scalar(haystack, first, second, offset);
+    }
+
+    private static int Find3AdvSimd(ReadOnlySpan<byte> haystack, byte first, byte second, byte third)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        var firstVector = Vector128.Create(first);
+        var secondVector = Vector128.Create(second);
+        var thirdVector = Vector128.Create(third);
+        int offset = 0;
+        int vectorEnd = haystack.Length - Vector128<byte>.Count;
+        while (offset <= vectorEnd)
+        {
+            var block = Vector128.LoadUnsafe(ref reference, (nuint)offset);
+            uint mask =
+                AdvSimd.CompareEqual(block, firstVector).ExtractMostSignificantBits() |
+                AdvSimd.CompareEqual(block, secondVector).ExtractMostSignificantBits() |
+                AdvSimd.CompareEqual(block, thirdVector).ExtractMostSignificantBits();
+            if (mask != 0)
+            {
+                return offset + BitOperations.TrailingZeroCount(mask);
+            }
+
+            offset += Vector128<byte>.Count;
+        }
+
+        return Find3Scalar(haystack, first, second, third, offset);
+    }
+
     private static int FindScalar(ReadOnlySpan<byte> haystack, byte needle, int start)
     {
         for (int index = start; index < haystack.Length; index++)
         {
             if (haystack[index] == needle)
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private static int Find2Scalar(ReadOnlySpan<byte> haystack, byte first, byte second, int start)
+    {
+        for (int index = start; index < haystack.Length; index++)
+        {
+            byte candidate = haystack[index];
+            if (candidate == first || candidate == second)
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private static int Find3Scalar(ReadOnlySpan<byte> haystack, byte first, byte second, byte third, int start)
+    {
+        for (int index = start; index < haystack.Length; index++)
+        {
+            byte candidate = haystack[index];
+            if (candidate == first || candidate == second || candidate == third)
             {
                 return index;
             }

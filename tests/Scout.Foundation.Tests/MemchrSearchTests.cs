@@ -63,9 +63,26 @@ public sealed class MemchrSearchTests
         ReadOnlySpan<byte> haystack = [0x10, 0x20, 0x30, 0x40, 0x20];
 
         Assert.Equal(1, MemchrSearch.Find2(haystack, 0x20, 0x40));
+        Assert.Equal(1, MemchrSearch.Find2(haystack, 0x20, 0x20));
         Assert.Equal(4, MemchrSearch.Find2Reverse(haystack, 0x20, 0x40));
         Assert.Equal(-1, MemchrSearch.Find2(haystack, 0x55, 0x66));
         Assert.Equal(-1, MemchrSearch.Find2Reverse(haystack, 0x55, 0x66));
+    }
+
+    /// <summary>
+    /// Verifies two-byte search handles vector-sized haystacks and scalar tails.
+    /// </summary>
+    [Fact]
+    public void Find2LocatesEitherByteAcrossVectorBoundaries()
+    {
+        byte[] haystack = new byte[150];
+        Array.Fill(haystack, (byte)0x10);
+        haystack[65] = 0x20;
+        haystack[149] = 0x30;
+
+        Assert.Equal(65, MemchrSearch.Find2(haystack, 0x20, 0x30));
+        Assert.Equal(149, MemchrSearch.Find2(haystack, 0x30, 0x40));
+        Assert.Equal(-1, MemchrSearch.Find2(haystack, 0x40, 0x50));
     }
 
     /// <summary>
@@ -93,9 +110,26 @@ public sealed class MemchrSearchTests
         ReadOnlySpan<byte> haystack = [0x10, 0x20, 0x30, 0x40, 0x20];
 
         Assert.Equal(1, MemchrSearch.Find3(haystack, 0x55, 0x20, 0x40));
+        Assert.Equal(1, MemchrSearch.Find3(haystack, 0x55, 0x20, 0x20));
         Assert.Equal(4, MemchrSearch.Find3Reverse(haystack, 0x55, 0x20, 0x40));
         Assert.Equal(-1, MemchrSearch.Find3(haystack, 0x55, 0x66, 0x77));
         Assert.Equal(-1, MemchrSearch.Find3Reverse(haystack, 0x55, 0x66, 0x77));
+    }
+
+    /// <summary>
+    /// Verifies three-byte search handles vector-sized haystacks and scalar tails.
+    /// </summary>
+    [Fact]
+    public void Find3LocatesAnyByteAcrossVectorBoundaries()
+    {
+        byte[] haystack = new byte[150];
+        Array.Fill(haystack, (byte)0x10);
+        haystack[66] = 0x20;
+        haystack[149] = 0x30;
+
+        Assert.Equal(66, MemchrSearch.Find3(haystack, 0x20, 0x30, 0x40));
+        Assert.Equal(149, MemchrSearch.Find3(haystack, 0x30, 0x40, 0x50));
+        Assert.Equal(-1, MemchrSearch.Find3(haystack, 0x40, 0x50, 0x60));
     }
 
     /// <summary>
