@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Threading;
 
 namespace Scout;
@@ -193,6 +194,41 @@ public sealed class WalkTests
 
         Assert.Equal(FileIdentity.FromPath(target), FileIdentity.FromPath(link));
         Assert.NotEqual(FileIdentity.FromPath(target), FileIdentity.FromPath(link, followLinks: false));
+    }
+
+    /// <summary>
+    /// Verifies raw Unix traversal stays byte-based after discovering an invalid UTF-8 directory.
+    /// </summary>
+    [Fact]
+    public void WalkRecursesIntoRawUnixInvalidUtf8Directories()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            AssertRawUnixInvalidUtf8DirectoryFixtureUnavailable();
+        }
+        else
+        {
+            string root = CreateTempDirectory();
+            byte[] rootBytes = Encoding.UTF8.GetBytes(root);
+            byte[] invalidDirectoryName = [(byte)'d', 0xff, (byte)'i', (byte)'r'];
+            byte[] invalidDirectoryPath = JoinRawUnixPath(rootBytes, invalidDirectoryName);
+            byte[] childPath = JoinRawUnixPath(invalidDirectoryPath, "needle.txt"u8);
+
+            RawUnixDirectory.Create(invalidDirectoryPath);
+            RawUnixFile.WriteAllBytes(childPath, "needle\n"u8);
+
+            var rawPaths = new List<byte[]>();
+            foreach (DirEntry entry in new WalkBuilder(root).Hidden(false).Build())
+            {
+                if (entry.IsRawUnixPath)
+                {
+                    rawPaths.Add(entry.UnixPathBytes.ToArray());
+                }
+            }
+
+            Assert.Contains(rawPaths, path => path.AsSpan().SequenceEqual(invalidDirectoryPath));
+            Assert.Contains(rawPaths, path => path.AsSpan().SequenceEqual(childPath));
+        }
     }
 
     /// <summary>
@@ -914,6 +950,39 @@ public sealed class WalkTests
     {
         using FileStream stream = File.Create(path);
         stream.SetLength(size);
+    }
+
+    private static void AssertRawUnixInvalidUtf8DirectoryFixtureUnavailable()
+    {
+        if (OperatingSystem.IsMacOS())
+        {
+            string root = CreateTempDirectory();
+            try
+            {
+                byte[] rootBytes = Encoding.UTF8.GetBytes(root);
+                byte[] invalidDirectoryName = [(byte)'d', 0xff, (byte)'i', (byte)'r'];
+                byte[] invalidDirectoryPath = JoinRawUnixPath(rootBytes, invalidDirectoryName);
+
+                Assert.Throws<IOException>(() => RawUnixDirectory.Create(invalidDirectoryPath));
+            }
+            finally
+            {
+                Directory.Delete(root, recursive: true);
+            }
+
+            return;
+        }
+
+        Assert.Throws<PlatformNotSupportedException>(() => RawUnixDirectory.Create("unused"u8));
+    }
+
+    private static byte[] JoinRawUnixPath(ReadOnlySpan<byte> parent, ReadOnlySpan<byte> name)
+    {
+        byte[] path = new byte[parent.Length + 1 + name.Length];
+        parent.CopyTo(path);
+        path[parent.Length] = (byte)'/';
+        name.CopyTo(path.AsSpan(parent.Length + 1));
+        return path;
     }
 
     private static bool TryCreateDirectorySymlink(string target, string link)

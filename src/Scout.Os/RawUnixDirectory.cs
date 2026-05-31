@@ -14,6 +14,34 @@ public static unsafe partial class RawUnixDirectory
     private const int LinuxDirentNameOffset = 19;
     private const int MacOSDirentNameOffset = 21;
     private const int DirentRecordLengthOffset = 16;
+    private const uint DirectoryMode = 0x1FF;
+
+    /// <summary>
+    /// Creates a Unix directory from raw path bytes.
+    /// </summary>
+    /// <param name="path">The non-NUL-terminated raw directory path bytes.</param>
+    /// <exception cref="ArgumentException">The path is empty or contains a NUL byte.</exception>
+    /// <exception cref="IOException">The directory cannot be created.</exception>
+    /// <exception cref="PlatformNotSupportedException">The current platform is Windows.</exception>
+    public static void Create(ReadOnlySpan<byte> path)
+    {
+        if (OperatingSystem.IsWindows() || (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()))
+        {
+            throw new PlatformNotSupportedException("Raw Unix directory creation is only available on Linux and macOS.");
+        }
+
+        ValidatePath(path);
+        byte[] terminatedPath = new byte[path.Length + 1];
+        path.CopyTo(terminatedPath);
+        fixed (byte* pathPointer = terminatedPath)
+        {
+            if (MkDir(pathPointer, DirectoryMode) != 0)
+            {
+                int error = Marshal.GetLastPInvokeError();
+                throw new IOException(new Win32Exception(error).Message);
+            }
+        }
+    }
 
     /// <summary>
     /// Enumerates a raw Unix directory path.
@@ -30,16 +58,7 @@ public static unsafe partial class RawUnixDirectory
             throw new PlatformNotSupportedException("Raw Unix directory enumeration is only available on Linux and macOS.");
         }
 
-        if (path.IsEmpty)
-        {
-            throw new ArgumentException("Path cannot be empty.", nameof(path));
-        }
-
-        if (path.Contains((byte)0))
-        {
-            throw new ArgumentException("Unix paths cannot contain a NUL byte.", nameof(path));
-        }
-
+        ValidatePath(path);
         byte[] terminatedPath = new byte[path.Length + 1];
         path.CopyTo(terminatedPath);
         fixed (byte* pathPointer = terminatedPath)
@@ -59,6 +78,19 @@ public static unsafe partial class RawUnixDirectory
             {
                 _ = CloseDir(directory);
             }
+        }
+    }
+
+    private static void ValidatePath(ReadOnlySpan<byte> path)
+    {
+        if (path.IsEmpty)
+        {
+            throw new ArgumentException("Path cannot be empty.", nameof(path));
+        }
+
+        if (path.Contains((byte)0))
+        {
+            throw new ArgumentException("Unix paths cannot contain a NUL byte.", nameof(path));
         }
     }
 
@@ -122,6 +154,10 @@ public static unsafe partial class RawUnixDirectory
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [LibraryImport("libc", EntryPoint = "opendir", SetLastError = true)]
     private static partial nint OpenDir(byte* path);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [LibraryImport("libc", EntryPoint = "mkdir", SetLastError = true)]
+    private static partial int MkDir(byte* path, uint mode);
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [LibraryImport("libc", EntryPoint = "readdir", SetLastError = true)]

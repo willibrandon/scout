@@ -415,6 +415,11 @@ public sealed class Walk : IEnumerable<DirEntry>
 
     internal WalkPath[] EnumerateChildren(DirEntry entry)
     {
+        if (entry.IsRawUnixPath)
+        {
+            return EnumerateRawUnixChildren(entry);
+        }
+
         string[] children = Directory.GetFileSystemEntries(entry.ResolvedFullPath);
         List<WalkPath>? paths = null;
         for (int index = 0; index < children.Length; index++)
@@ -443,6 +448,24 @@ public sealed class Walk : IEnumerable<DirEntry>
             }
         }
 
+        return paths.ToArray();
+    }
+
+    private WalkPath[] EnumerateRawUnixChildren(DirEntry entry)
+    {
+        RawUnixDirectoryEntry[] rawEntries = RawUnixDirectory.Enumerate(entry.UnixPathBytes);
+        if (rawEntries.Length == 0)
+        {
+            return [];
+        }
+
+        var paths = new List<WalkPath>(rawEntries.Length);
+        for (int index = 0; index < rawEntries.Length; index++)
+        {
+            paths.Add(WalkPath.FromRawUnix(rawEntries[index].FullPath.Span, rawEntries[index].Name.Span));
+        }
+
+        Sort(paths);
         return paths.ToArray();
     }
 
