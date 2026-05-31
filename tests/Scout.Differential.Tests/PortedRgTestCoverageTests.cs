@@ -12,10 +12,7 @@ public sealed partial class PortedRgTestCoverageTests
 {
     private const string UpstreamTestsRoot = "/Users/brandon/src/ripgrep/tests";
 
-    private static readonly string[] ExpectedUnportedRgTests =
-    [
-        "tests/feature.rs|f362_u64_to_narrow_usize_overflow", // 32-bit target only.
-    ];
+    private static readonly string[] ExpectedUnportedRgTests = [];
 
     private static readonly string[] ExpectedCatalogSplitRgTests =
     [

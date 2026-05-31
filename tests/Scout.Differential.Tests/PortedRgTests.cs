@@ -1064,6 +1064,11 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "--regex-size-limit", "10K", @"[0-9]\w+")),
             new(
                 "tests/feature.rs",
+                "f362_u64_to_narrow_usize_overflow",
+                dir => dir.CreateFile("foo", string.Empty),
+                DifferentialCase.Exact("--path-separator", "/", "--dfa-size-limit", "34359738368M", "--files", ".")),
+            new(
+                "tests/feature.rs",
                 "f411_single_threaded_search_stats",
                 dir => dir.CreateFile("sherlock", Sherlock),
                 DifferentialCase.Normalized(DifferentialComparisonMode.MaskElapsed, "--path-separator", "/", "-j1", "--stats", "Sherlock", ".")),
