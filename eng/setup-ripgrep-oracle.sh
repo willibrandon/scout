@@ -3,7 +3,7 @@ set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 LOCK="$ROOT/tests/PREREQS.lock"
-REFERENCE="/Users/brandon/src/ripgrep"
+REFERENCE="${SCOUT_RIPGREP_REFERENCE:-/Users/brandon/src/ripgrep}"
 
 fail() {
     printf '%s\n' "$1" >&2
@@ -36,6 +36,97 @@ read_lock_value() {
             }
         }
     ' "$LOCK"
+}
+
+host_rid() {
+    os="$(uname -s)"
+    arch="$(uname -m)"
+    case "$os:$arch" in
+        Darwin:arm64)
+            printf 'osx-arm64\n'
+            ;;
+        Darwin:x86_64)
+            printf 'osx-x64\n'
+            ;;
+        Linux:x86_64)
+            printf 'linux-x64\n'
+            ;;
+        Linux:aarch64|Linux:arm64)
+            printf 'linux-arm64\n'
+            ;;
+        *)
+            fail "Unsupported host for pinned ripgrep oracle: $os $arch"
+            ;;
+    esac
+}
+
+read_lock_rid_table_value() {
+    awk -v header="[[${1}]]" -v rid="$2" -v key="$3" "$strip_toml_value"'
+        $0 == header {
+            in_table = 1
+            matched = 0
+            next
+        }
+        in_table && $0 ~ /^\[/ {
+            in_table = 0
+            matched = 0
+        }
+        in_table && $0 ~ /^[[:space:]]*rid[[:space:]]*=/ {
+            matched = value_of($0) == rid
+            next
+        }
+        in_table && matched && $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
+            print value_of($0)
+            found = 1
+            exit 0
+        }
+        END {
+            if (!found) {
+                exit 1
+            }
+        }
+    ' "$LOCK"
+}
+
+lock_has_table() {
+    grep -qx "\[\[$1\]\]" "$LOCK"
+}
+
+read_oracle_value() {
+    table_key="$1"
+    root_key="$2"
+    if value="$(read_lock_rid_table_value "ripgrep_oracle" "$HOST_RID" "$table_key")"; then
+        printf '%s\n' "$value"
+        return 0
+    fi
+
+    if lock_has_table "ripgrep_oracle"; then
+        return 1
+    fi
+
+    read_lock_value "$root_key"
+}
+
+resolve_repo_path() {
+    case "$1" in
+        /*)
+            printf '%s\n' "$1"
+            ;;
+        *)
+            printf '%s/%s\n' "$ROOT" "$1"
+            ;;
+    esac
+}
+
+derive_reference_from_oracle_path() {
+    case "$1" in
+        */target/*/rg)
+            printf '%s\n' "${1%%/target/*/rg}"
+            ;;
+        *)
+            printf '%s\n' "$REFERENCE"
+            ;;
+    esac
 }
 
 sha256_file() {
@@ -132,13 +223,15 @@ verify_binary_hash() {
 
 EXPECTED_RIPGREP="$(read_lock_value "ripgrep_commit")" || fail "Missing ripgrep_commit in tests/PREREQS.lock."
 RUST_TOOLCHAIN="$(read_lock_value "cargo")" || fail "Missing cargo in tests/PREREQS.lock."
-RG_PROFILE="$(read_lock_value "ripgrep_rg_profile")" || fail "Missing ripgrep_rg_profile in tests/PREREQS.lock."
-RG_PATH="$(read_lock_value "ripgrep_rg_path")" || fail "Missing ripgrep_rg_path in tests/PREREQS.lock."
-RG_SHA256="$(read_lock_value "ripgrep_rg_sha256")" || fail "Missing ripgrep_rg_sha256 in tests/PREREQS.lock."
-RG_PCRE2_PROFILE="$(read_lock_value "ripgrep_pcre2_rg_profile")" || fail "Missing ripgrep_pcre2_rg_profile in tests/PREREQS.lock."
-RG_PCRE2_FEATURES="$(read_lock_value "ripgrep_pcre2_rg_features")" || fail "Missing ripgrep_pcre2_rg_features in tests/PREREQS.lock."
-RG_PCRE2_PATH="$(read_lock_value "ripgrep_pcre2_rg_path")" || fail "Missing ripgrep_pcre2_rg_path in tests/PREREQS.lock."
-RG_PCRE2_SHA256="$(read_lock_value "ripgrep_pcre2_rg_sha256")" || fail "Missing ripgrep_pcre2_rg_sha256 in tests/PREREQS.lock."
+HOST_RID="$(host_rid)"
+RG_PROFILE="$(read_oracle_value "profile" "ripgrep_rg_profile")" || fail "Missing ripgrep_oracle.profile for $HOST_RID in tests/PREREQS.lock."
+RG_PATH="$(resolve_repo_path "$(read_oracle_value "path" "ripgrep_rg_path")")" || fail "Missing ripgrep_oracle.path for $HOST_RID in tests/PREREQS.lock."
+RG_SHA256="$(read_oracle_value "sha256" "ripgrep_rg_sha256")" || fail "Missing ripgrep_oracle.sha256 for $HOST_RID in tests/PREREQS.lock."
+RG_PCRE2_PROFILE="$(read_oracle_value "pcre2_profile" "ripgrep_pcre2_rg_profile")" || fail "Missing ripgrep_oracle.pcre2_profile for $HOST_RID in tests/PREREQS.lock."
+RG_PCRE2_FEATURES="$(read_oracle_value "pcre2_features" "ripgrep_pcre2_rg_features")" || fail "Missing ripgrep_oracle.pcre2_features for $HOST_RID in tests/PREREQS.lock."
+RG_PCRE2_PATH="$(resolve_repo_path "$(read_oracle_value "pcre2_path" "ripgrep_pcre2_rg_path")")" || fail "Missing ripgrep_oracle.pcre2_path for $HOST_RID in tests/PREREQS.lock."
+RG_PCRE2_SHA256="$(read_oracle_value "pcre2_sha256" "ripgrep_pcre2_rg_sha256")" || fail "Missing ripgrep_oracle.pcre2_sha256 for $HOST_RID in tests/PREREQS.lock."
+REFERENCE="$(derive_reference_from_oracle_path "$RG_PATH")"
 
 ensure_rustup
 rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal

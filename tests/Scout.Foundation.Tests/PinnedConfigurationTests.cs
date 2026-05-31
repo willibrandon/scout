@@ -217,10 +217,14 @@ public sealed partial class PinnedConfigurationTests
 
         Assert.Contains("Build pinned ripgrep oracle", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/setup-ripgrep-oracle.sh", workflow, StringComparison.Ordinal);
-        Assert.Contains("REFERENCE=\"/Users/brandon/src/ripgrep\"", script, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_RIPGREP_REFERENCE", script, StringComparison.Ordinal);
+        Assert.Contains("host_rid()", script, StringComparison.Ordinal);
+        Assert.Contains("read_lock_rid_table_value()", script, StringComparison.Ordinal);
+        Assert.Contains("derive_reference_from_oracle_path()", script, StringComparison.Ordinal);
         Assert.Contains("ripgrep_commit", script, StringComparison.Ordinal);
         Assert.Contains("ripgrep_rg_sha256", script, StringComparison.Ordinal);
         Assert.Contains("ripgrep_pcre2_rg_sha256", script, StringComparison.Ordinal);
+        Assert.Contains("ripgrep_oracle", script, StringComparison.Ordinal);
         Assert.Contains("rustup toolchain install \"$RUST_TOOLCHAIN\" --profile minimal", script, StringComparison.Ordinal);
         Assert.Contains("cargo \"+$RUST_TOOLCHAIN\" build --profile \"$RG_PROFILE\" --bin rg", script, StringComparison.Ordinal);
         Assert.Contains("CARGO_TARGET_DIR=\"$REFERENCE/target/pcre2\"", script, StringComparison.Ordinal);
@@ -259,6 +263,10 @@ public sealed partial class PinnedConfigurationTests
         string defaultExecutablePath = PinnedRipgrepOracle.DefaultExecutablePath;
         string expectedSha256 = PinnedRipgrepOracle.ExpectedSha256;
 
+        Assert.Contains("[[ripgrep_oracle]]", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("rid = \"" + PinnedRipgrepOracle.HostRid + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("path = \"" + defaultExecutablePath + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("sha256 = \"" + expectedSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("ripgrep_rg_profile = \"release-lto\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("ripgrep_rg_path = \"" + defaultExecutablePath + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("ripgrep_rg_sha256 = \"" + expectedSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
@@ -1343,6 +1351,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("sys_crate_version = \"0.2.10\"", upstream, StringComparison.Ordinal);
         Assert.Contains("c_library_tag = \"pcre2-10.46\"", upstream, StringComparison.Ordinal);
         Assert.Contains("c_library_commit_sha = \"" + PinnedPcre2Commit + "\"", upstream, StringComparison.Ordinal);
+        Assert.Contains("pcre2_path = \"" + defaultPcre2RipgrepPath + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("pcre2_sha256 = \"" + expectedPcre2RipgrepSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("commit_sha = \"" + PinnedPcre2Commit + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("#define PCRE2_MAJOR           10", header, StringComparison.Ordinal);
         Assert.Contains("#define PCRE2_MINOR           46", header, StringComparison.Ordinal);
