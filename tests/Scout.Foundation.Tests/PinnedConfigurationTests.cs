@@ -304,6 +304,45 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies generated flag definitions live in a dedicated definitions folder.
+    /// </summary>
+    [Fact]
+    public void GeneratedFlagDefinitionsUseDedicatedFolder()
+    {
+        string root = FindRepositoryRoot();
+        string cliRoot = Path.Combine(root, "src", "Scout.Cli");
+        string definitionsRoot = Path.Combine(cliRoot, "Flags", "Definitions");
+        var violations = new List<string>();
+
+        foreach (string path in Directory.EnumerateFiles(cliRoot, "*Flag.cs", SearchOption.TopDirectoryOnly))
+        {
+            if (!string.Equals(Path.GetFileName(path), "IFlag.cs", StringComparison.Ordinal))
+            {
+                violations.Add(Path.GetRelativePath(root, path) + " is not under Flags/Definitions.");
+            }
+        }
+
+        string[] definitionFiles = Directory.GetFiles(definitionsRoot, "*Flag.cs", SearchOption.TopDirectoryOnly);
+        Assert.Equal(GeneratedFlagCatalog.Descriptors.Length, definitionFiles.Length);
+
+        foreach (string path in definitionFiles)
+        {
+            string text = File.ReadAllText(path);
+            if (!text.Contains("namespace Scout.Flags.Definitions;", StringComparison.Ordinal))
+            {
+                violations.Add(Path.GetRelativePath(root, path) + " does not use the flag-definition namespace.");
+            }
+
+            if (!text.Contains(" : IFlag<", StringComparison.Ordinal))
+            {
+                violations.Add(Path.GetRelativePath(root, path) + " does not implement IFlag<TSelf>.");
+            }
+        }
+
+        Assert.Empty(violations);
+    }
+
+    /// <summary>
     /// Verifies native interop uses source-generated marshalling.
     /// </summary>
     [Fact]
