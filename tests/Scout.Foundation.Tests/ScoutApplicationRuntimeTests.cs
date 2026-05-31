@@ -1568,12 +1568,7 @@ public sealed class ScoutApplicationRuntimeTests
 
     private static (int ExitCode, byte[] Output, string Error) RunPinnedRipgrep(params string[] arguments)
     {
-        ProcessStartInfo startInfo = new("/Users/brandon/src/ripgrep/target/release-lto/rg")
-        {
-            RedirectStandardError = true,
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-        };
+        ProcessStartInfo startInfo = PinnedRipgrepOracle.CreateStartInfo();
         startInfo.Environment.Remove("RIPGREP_CONFIG_PATH");
         for (int index = 0; index < arguments.Length; index++)
         {
@@ -1595,12 +1590,7 @@ public sealed class ScoutApplicationRuntimeTests
 
     private static (int ExitCode, byte[] Output, string Error) RunPinnedRipgrepWithConfig(string configPath, params string[] arguments)
     {
-        ProcessStartInfo startInfo = new("/Users/brandon/src/ripgrep/target/release-lto/rg")
-        {
-            RedirectStandardError = true,
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-        };
+        ProcessStartInfo startInfo = PinnedRipgrepOracle.CreateStartInfo();
         startInfo.Environment["RIPGREP_CONFIG_PATH"] = configPath;
         for (int index = 0; index < arguments.Length; index++)
         {

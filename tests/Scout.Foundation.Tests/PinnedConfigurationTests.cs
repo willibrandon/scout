@@ -16,7 +16,6 @@ public sealed partial class PinnedConfigurationTests
 {
     private const string PinnedRipgrepCommit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119";
     private const string ReferenceRipgrepRoot = "/Users/brandon/src/ripgrep";
-    private const string PinnedRipgrepBinaryPath = "/Users/brandon/src/ripgrep/target/release-lto/rg";
     private const string PinnedPcre2Commit = "56c87ccac13b01c3c1ecdf71e4fc2fedccea50a2";
 
     /// <summary>
@@ -156,9 +155,10 @@ public sealed partial class PinnedConfigurationTests
     [Fact]
     public void PinnedRipgrepBinaryMatchesPinnedRevision()
     {
-        Assert.True(File.Exists(PinnedRipgrepBinaryPath), "Missing pinned ripgrep binary: " + PinnedRipgrepBinaryPath);
+        string pinnedRipgrepBinaryPath = PinnedRipgrepOracle.ExecutablePath;
+        Assert.True(File.Exists(pinnedRipgrepBinaryPath), "Missing pinned ripgrep binary: " + pinnedRipgrepBinaryPath);
 
-        (int exitCode, string output, string error) = RunProcess(PinnedRipgrepBinaryPath, ["--version"]);
+        (int exitCode, string output, string error) = RunProcess(pinnedRipgrepBinaryPath, ["--version"]);
 
         Assert.True(exitCode == 0, error);
         Assert.StartsWith("ripgrep 15.1.0 (rev 4857d6fa67)", output, StringComparison.Ordinal);
@@ -170,16 +170,18 @@ public sealed partial class PinnedConfigurationTests
     [Fact]
     public void PinnedRipgrepBinaryMatchesPrerequisiteHash()
     {
-        Assert.True(File.Exists(PinnedRipgrepBinaryPath), "Missing pinned ripgrep binary: " + PinnedRipgrepBinaryPath);
+        string pinnedRipgrepBinaryPath = PinnedRipgrepOracle.ExecutablePath;
+        Assert.True(File.Exists(pinnedRipgrepBinaryPath), "Missing pinned ripgrep binary: " + pinnedRipgrepBinaryPath);
+        PinnedRipgrepOracle.VerifyHash();
 
         string root = FindRepositoryRoot();
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
-        byte[] hash = SHA256.HashData(File.ReadAllBytes(PinnedRipgrepBinaryPath));
-        string actualSha256 = Convert.ToHexString(hash).ToLowerInvariant();
+        string defaultExecutablePath = PinnedRipgrepOracle.DefaultExecutablePath;
+        string expectedSha256 = PinnedRipgrepOracle.ExpectedSha256;
 
         Assert.Contains("ripgrep_rg_profile = \"release-lto\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("ripgrep_rg_path = \"" + PinnedRipgrepBinaryPath + "\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("ripgrep_rg_sha256 = \"" + actualSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("ripgrep_rg_path = \"" + defaultExecutablePath + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("ripgrep_rg_sha256 = \"" + expectedSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
     }
 
     /// <summary>

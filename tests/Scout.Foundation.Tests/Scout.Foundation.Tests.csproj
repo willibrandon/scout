@@ -38,6 +38,7 @@
     <ProjectReference Include="..\..\src\Scout.Globbing\Scout.Globbing.csproj" />
     <ProjectReference Include="..\..\src\Scout.Ignore\Scout.Ignore.csproj" />
     <ProjectReference Include="..\..\src\Scout.SourceGen\Scout.SourceGen.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\Scout.Testing\Scout.Testing.csproj" />
   </ItemGroup>
 
 </Project>
