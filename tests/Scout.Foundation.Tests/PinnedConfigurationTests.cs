@@ -369,12 +369,21 @@ public sealed partial class PinnedConfigurationTests
         string root = FindRepositoryRoot();
         var violations = new List<string>();
 
-        foreach (string path in Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories))
+        foreach (string sourceRoot in new[] { Path.Combine(root, "src"), Path.Combine(root, "spike") })
         {
-            string text = File.ReadAllText(path);
-            if (text.Contains("[DllImport", StringComparison.Ordinal))
+            foreach (string path in Directory.EnumerateFiles(sourceRoot, "*.cs", SearchOption.AllDirectories))
             {
-                violations.Add(Path.GetRelativePath(root, path));
+                string relativePath = Path.GetRelativePath(root, path);
+                if (ContainsPathSegment(relativePath, "bin") || ContainsPathSegment(relativePath, "obj"))
+                {
+                    continue;
+                }
+
+                string text = File.ReadAllText(path);
+                if (text.Contains("[DllImport", StringComparison.Ordinal))
+                {
+                    violations.Add(relativePath);
+                }
             }
         }
 
@@ -630,6 +639,10 @@ public sealed partial class PinnedConfigurationTests
         string nativeArgumentReader = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "NativeArgumentReader.cs"));
         string unixEntry = File.ReadAllText(Path.Combine(root, "native", "entry", "scout_main.c"));
         string windowsEntry = File.ReadAllText(Path.Combine(root, "native", "entry", "scout_wmain.c"));
+        string spikeProject = File.ReadAllText(Path.Combine(root, "spike", "Scout.Entry", "Scout.Entry.csproj"));
+        string spikeEntry = File.ReadAllText(Path.Combine(root, "spike", "Scout.Entry", "ScoutEntry.cs"));
+        string spikeBuildScript = File.ReadAllText(Path.Combine(root, "spike", "build-unix.sh"));
+        string spikeUnixEntry = File.ReadAllText(Path.Combine(root, "spike", "native", "scout_main.c"));
 
         Assert.Contains("[UnmanagedCallersOnly(EntryPoint = \"scout_entry\")]", scoutEntry, StringComparison.Ordinal);
         Assert.Contains("NativeArgumentReader.CaptureUnix(argc, argv)", scoutEntry, StringComparison.Ordinal);
@@ -643,6 +656,18 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("return scout_entry(argc, argv, envp);", unixEntry, StringComparison.Ordinal);
         Assert.Contains("int wmain(int argc, wchar_t **argv, wchar_t **envp)", windowsEntry, StringComparison.Ordinal);
         Assert.Contains("return scout_entry(0, (char **)0, (char **)0);", windowsEntry, StringComparison.Ordinal);
+        Assert.Contains("<RootNamespace>Scout.Entry</RootNamespace>", spikeProject, StringComparison.Ordinal);
+        Assert.Contains("[LibraryImport(\"libc\", EntryPoint = \"write\")]", spikeEntry, StringComparison.Ordinal);
+        Assert.DoesNotContain("[DllImport", spikeEntry, StringComparison.Ordinal);
+        Assert.Contains("osx-arm64|osx-x64|linux-x64|linux-arm64", spikeBuildScript, StringComparison.Ordinal);
+        Assert.Contains("libSystem.Security.Cryptography.Native.OpenSsl.a", spikeBuildScript, StringComparison.Ordinal);
+        Assert.Contains("-lstdc++ -lz -lpthread -ldl -lm -lrt", spikeBuildScript, StringComparison.Ordinal);
+        Assert.Contains("libRuntime.VxsortEnabled.a", spikeBuildScript, StringComparison.Ordinal);
+        Assert.Contains("printf '\\377\\n' > \"$OUT/expected\"", spikeBuildScript, StringComparison.Ordinal);
+        Assert.Contains("\"$OUT/scout-spike\" \"$(printf '\\377')\" > \"$OUT/got\"", spikeBuildScript, StringComparison.Ordinal);
+        Assert.Contains("cmp \"$OUT/expected\" \"$OUT/got\"", spikeBuildScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("not implemented", spikeBuildScript, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("return scout_entry(argc, argv, envp);", spikeUnixEntry, StringComparison.Ordinal);
     }
 
     /// <summary>

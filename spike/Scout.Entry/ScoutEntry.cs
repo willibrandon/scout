@@ -1,15 +1,15 @@
 using System.Runtime.InteropServices;
 
-namespace Scout;
+namespace Scout.Entry;
 
 /// <summary>
 /// Native entry point exported to the C driver for raw argv byte round-trips.
 /// </summary>
-internal static unsafe class ScoutEntry
+internal static unsafe partial class ScoutEntry
 {
     [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
-    [DllImport("libc", EntryPoint = "write", ExactSpelling = true)]
-    private static extern nint Write(int fd, byte* buffer, nuint count);
+    [LibraryImport("libc", EntryPoint = "write")]
+    private static partial nint Write(int fd, byte* buffer, nuint count);
 
     /// <summary>
     /// Echoes each raw argument byte string to file descriptor 1.
