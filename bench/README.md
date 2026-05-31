@@ -23,10 +23,11 @@ GitHub's default `CI` workflow runs hosted cross-platform build, test, format,
 fuzz, and native link checks. After `CI` succeeds on `main`, the `Release Gates`
 workflow starts automatically; it can also be started manually from Actions. The
 full pinned test pass and hyperfine performance gate run on GitHub-hosted
-`macos-15` runners. The workflow installs hyperfine with Homebrew, fetches the
-pinned corpora into `artifacts/corpora`, and verifies every frozen hash from
-`tests/PREREQS.lock` before measuring. It does not require any personal machine,
-privately managed runner, or repository secret.
+`macos-15` runners. The workflow builds the pinned release-LTO `rg` oracle from
+source, installs hyperfine with Homebrew, fetches the pinned corpora into
+`artifacts/corpora`, and verifies every frozen hash from `tests/PREREQS.lock`
+before measuring. It does not require any personal machine, privately managed
+runner, or repository secret.
 
 `eng/fetch-corpora.sh` prints replacement `[[corpus]]` blocks for
 `tests/PREREQS.lock` after it downloads OpenSubtitles and the pinned Linux

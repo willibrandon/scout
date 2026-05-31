@@ -99,6 +99,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("eng/preflight.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("cancel-in-progress: true", workflow, StringComparison.Ordinal);
         Assert.Contains("github.event.workflow_run.head_sha || github.sha", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("Build pinned ripgrep oracle", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("eng/setup-ripgrep-oracle.sh", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("spike/build-unix.sh ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
         Assert.Contains("spike/build-windows.ps1 ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
         Assert.Contains("native/build-app-unix.sh ${{ matrix.rid }} --smoke-only", workflow, StringComparison.Ordinal);
@@ -115,6 +117,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("runs-on: macos-15", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("brew install hyperfine", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("GitHub-hosted", benchmarkReadme, StringComparison.Ordinal);
+        Assert.Contains("builds the pinned release-LTO `rg` oracle from", benchmarkReadme, StringComparison.Ordinal);
         Assert.Contains("It does not require any personal machine", benchmarkReadme, StringComparison.Ordinal);
         Assert.DoesNotContain("clean: false", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("self-hosted", releaseGateWorkflow, StringComparison.Ordinal);
@@ -171,6 +174,30 @@ public sealed partial class PinnedConfigurationTests
 
         Assert.True(exitCode == 0, error);
         Assert.Equal(PinnedRipgrepCommit, output.Trim());
+    }
+
+    /// <summary>
+    /// Verifies hosted release gates provision the pinned ripgrep oracle before any parity checks run.
+    /// </summary>
+    [Fact]
+    public void HostedReleaseGatesProvisionPinnedRipgrepOracle()
+    {
+        string root = FindRepositoryRoot();
+        string workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "release-gates.yml"));
+        string script = File.ReadAllText(Path.Combine(root, "eng", "setup-ripgrep-oracle.sh"));
+
+        Assert.Contains("Build pinned ripgrep oracle", workflow, StringComparison.Ordinal);
+        Assert.Contains("eng/setup-ripgrep-oracle.sh", workflow, StringComparison.Ordinal);
+        Assert.Contains("REFERENCE=\"/Users/brandon/src/ripgrep\"", script, StringComparison.Ordinal);
+        Assert.Contains("ripgrep_commit", script, StringComparison.Ordinal);
+        Assert.Contains("ripgrep_rg_sha256", script, StringComparison.Ordinal);
+        Assert.Contains("ripgrep_pcre2_rg_sha256", script, StringComparison.Ordinal);
+        Assert.Contains("rustup toolchain install \"$RUST_TOOLCHAIN\" --profile minimal", script, StringComparison.Ordinal);
+        Assert.Contains("cargo \"+$RUST_TOOLCHAIN\" build --profile \"$RG_PROFILE\" --bin rg", script, StringComparison.Ordinal);
+        Assert.Contains("CARGO_TARGET_DIR=\"$REFERENCE/target/pcre2\"", script, StringComparison.Ordinal);
+        Assert.Contains("PCRE2_SYS_STATIC=1", script, StringComparison.Ordinal);
+        Assert.Contains("verify_binary_hash \"reference rg\"", script, StringComparison.Ordinal);
+        Assert.Contains("verify_binary_hash \"PCRE2 reference rg\"", script, StringComparison.Ordinal);
     }
 
     /// <summary>

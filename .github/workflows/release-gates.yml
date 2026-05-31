@@ -35,6 +35,8 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.102
+      - name: Build pinned ripgrep oracle
+        run: eng/setup-ripgrep-oracle.sh
       - name: Restore
         run: dotnet restore Scout.slnx
       - name: Fetch pinned corpora
@@ -57,6 +59,8 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.102
+      - name: Build pinned ripgrep oracle
+        run: eng/setup-ripgrep-oracle.sh
       - name: Install hyperfine
         run: |
           brew install hyperfine
