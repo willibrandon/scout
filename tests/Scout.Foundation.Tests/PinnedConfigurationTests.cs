@@ -310,11 +310,11 @@ public sealed partial class PinnedConfigurationTests
     public void GeneratedFlagDefinitionsUseDedicatedFolder()
     {
         string root = FindRepositoryRoot();
-        string cliRoot = Path.Combine(root, "src", "Scout.Cli");
-        string definitionsRoot = Path.Combine(cliRoot, "Flags", "Definitions");
+        string appRoot = Path.Combine(root, "src", "Scout.App");
+        string definitionsRoot = Path.Combine(appRoot, "Flags", "Definitions");
         var violations = new List<string>();
 
-        foreach (string path in Directory.EnumerateFiles(cliRoot, "*Flag.cs", SearchOption.TopDirectoryOnly))
+        foreach (string path in Directory.EnumerateFiles(appRoot, "*Flag.cs", SearchOption.TopDirectoryOnly))
         {
             if (!string.Equals(Path.GetFileName(path), "IFlag.cs", StringComparison.Ordinal))
             {
