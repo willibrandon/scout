@@ -35,7 +35,7 @@ public sealed class NoSkippedTestsAnalyzer : DiagnosticAnalyzer
 
     private static void AnalyzeAttribute(SyntaxNodeAnalysisContext context)
     {
-        if (!IsTestSourcePath(context.Node.SyntaxTree.FilePath))
+        if (!IsTestSource(context))
         {
             return;
         }
@@ -66,7 +66,7 @@ public sealed class NoSkippedTestsAnalyzer : DiagnosticAnalyzer
 
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
     {
-        if (!IsTestSourcePath(context.Node.SyntaxTree.FilePath))
+        if (!IsTestSource(context))
         {
             return;
         }
@@ -82,7 +82,7 @@ public sealed class NoSkippedTestsAnalyzer : DiagnosticAnalyzer
 
     private static void AnalyzeObjectCreation(SyntaxNodeAnalysisContext context)
     {
-        if (!IsTestSourcePath(context.Node.SyntaxTree.FilePath))
+        if (!IsTestSource(context))
         {
             return;
         }
@@ -97,7 +97,7 @@ public sealed class NoSkippedTestsAnalyzer : DiagnosticAnalyzer
 
     private static void AnalyzeReturn(SyntaxNodeAnalysisContext context)
     {
-        if (!IsTestSourcePath(context.Node.SyntaxTree.FilePath))
+        if (!IsTestSource(context))
         {
             return;
         }
@@ -228,6 +228,19 @@ public sealed class NoSkippedTestsAnalyzer : DiagnosticAnalyzer
             AliasQualifiedNameSyntax aliasQualified => aliasQualified.Name.Identifier.ValueText,
             _ => type.ToString(),
         };
+    }
+
+    private static bool IsTestSource(SyntaxNodeAnalysisContext context)
+    {
+        return IsTestProject(context) || IsTestSourcePath(context.Node.SyntaxTree.FilePath);
+    }
+
+    private static bool IsTestProject(SyntaxNodeAnalysisContext context)
+    {
+        return context.Options.AnalyzerConfigOptionsProvider.GlobalOptions.TryGetValue(
+            "build_property.IsTestProject",
+            out string? isTestProject) &&
+            string.Equals(isTestProject, "true", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsTestSourcePath(string filePath)

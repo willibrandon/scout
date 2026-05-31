@@ -384,6 +384,7 @@ public sealed partial class PinnedConfigurationTests
 
         Assert.Contains("NoSkippedTestsAnalyzer", analyzer, StringComparison.Ordinal);
         Assert.Contains("GeneratedCodeAnalysisFlags.Analyze | GeneratedCodeAnalysisFlags.ReportDiagnostics", analyzer, StringComparison.Ordinal);
+        Assert.Contains("build_property.IsTestProject", analyzer, StringComparison.Ordinal);
         Assert.Contains("TestWaiverIsForbidden", descriptors, StringComparison.Ordinal);
         Assert.Contains("SCOUT0004", descriptors, StringComparison.Ordinal);
         Assert.Contains("dotnet_diagnostic." + "SCOUT0004.severity = " + "error", editorConfig, StringComparison.Ordinal);

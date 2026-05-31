@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
@@ -46,6 +47,30 @@ public sealed class NoSkippedTestsAnalyzerTests
             namespace Scout;
 
             public sealed class SampleTests
+            {
+                [Fact({{skip}} = "reason")]
+                public void Waived()
+                {
+                }
+            }
+            """).ConfigureAwait(true);
+
+        AssertForbiddenWaiver(diagnostics, "Fact." + skip);
+    }
+
+    /// <summary>
+    /// Verifies generated test sources are rejected even when their hint path is outside the tests folder.
+    /// </summary>
+    [Fact]
+    public async Task ReportsGeneratedXunitSkipAttributesInTestProjects()
+    {
+        string skip = "Sk" + "ip";
+        ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAtPathAsync(
+            "PortedRgGeneratedCase.g.cs",
+            $$"""
+            namespace Scout;
+
+            public sealed class PortedRgGeneratedCase
             {
                 [Fact({{skip}} = "reason")]
                 public void Waived()
@@ -232,15 +257,27 @@ public sealed class NoSkippedTestsAnalyzerTests
     private static async Task<ImmutableArray<Diagnostic>> AnalyzeSourceAsync(string source)
     {
         string filePath = Path.Combine(Path.GetTempPath(), "ScoutAnalyzerTests", "tests", "Scout.Foundation.Tests", "SampleTests.cs");
+        return await AnalyzeSourceAtPathAsync(filePath, source).ConfigureAwait(false);
+    }
+
+    private static async Task<ImmutableArray<Diagnostic>> AnalyzeSourceAtPathAsync(string filePath, string source)
+    {
         SyntaxTree tree = CSharpSyntaxTree.ParseText(source, path: filePath);
         var compilation = CSharpCompilation.Create(
             "NoSkippedTestsAnalyzerTests",
             [tree],
             [MetadataReference.CreateFromFile(typeof(object).Assembly.Location)],
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        var options = new AnalyzerOptions(
+            ImmutableArray<AdditionalText>.Empty,
+            new DictionaryAnalyzerConfigOptionsProvider(
+                new Dictionary<string, string>
+                {
+                    ["build_property.IsTestProject"] = "true",
+                }));
 
         return await compilation
-            .WithAnalyzers(ImmutableArray.Create<DiagnosticAnalyzer>(new NoSkippedTestsAnalyzer()))
+            .WithAnalyzers(ImmutableArray.Create<DiagnosticAnalyzer>(new NoSkippedTestsAnalyzer()), options)
             .GetAnalyzerDiagnosticsAsync()
             .ConfigureAwait(false);
     }
