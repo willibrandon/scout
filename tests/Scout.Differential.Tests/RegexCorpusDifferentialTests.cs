@@ -10,7 +10,7 @@ namespace Scout;
 /// </summary>
 public sealed class RegexCorpusDifferentialTests
 {
-    private const int ExpectedDifferentialCaseCount = 492;
+    private const int ExpectedDifferentialCaseCount = 505;
     private const int ExpectedSupportedOnlyCaseCount = 47;
 
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
@@ -30,7 +30,7 @@ public sealed class RegexCorpusDifferentialTests
         ("regex-lite.toml", 9),
         ("regression.toml", 51),
         ("set.toml", 29),
-        ("unicode.toml", 47),
+        ("unicode.toml", 60),
         ("word-boundary-special.toml", 41),
     ];
 
@@ -424,12 +424,25 @@ public sealed class RegexCorpusDifferentialTests
         ("regex-lite.toml", "empty-no-split-codepoint"),
         ("regex-lite.toml", "negated-class-always-matches-codepoint"),
         ("regex-lite.toml", "word-boundary-negated"),
+        ("unicode.toml", "class1"),
+        ("unicode.toml", "class2"),
+        ("unicode.toml", "class3"),
         ("unicode.toml", "class4"),
         ("unicode.toml", "class5"),
         ("unicode.toml", "class6"),
         ("unicode.toml", "class7"),
+        ("unicode.toml", "class8"),
         ("unicode.toml", "class9"),
         ("unicode.toml", "class10"),
+        ("unicode.toml", "perl1"),
+        ("unicode.toml", "perl2"),
+        ("unicode.toml", "perl3"),
+        ("unicode.toml", "perl4"),
+        ("unicode.toml", "perl5"),
+        ("unicode.toml", "perl6"),
+        ("unicode.toml", "perl7"),
+        ("unicode.toml", "perl8"),
+        ("unicode.toml", "perl9"),
         ("unicode.toml", "class-gencat1"),
         ("unicode.toml", "class-gencat2"),
         ("unicode.toml", "class-gencat3"),

@@ -192,10 +192,10 @@ internal static class RegexByteClass
             RegexSyntaxKind.NotWordClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) && !IsRegexWordRune(value, unicodeClasses),
             RegexSyntaxKind.WhitespaceClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) && IsRegexWhitespaceRune(value, unicodeClasses),
             RegexSyntaxKind.NotWhitespaceClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) && !IsRegexWhitespaceRune(value, unicodeClasses),
-            RegexSyntaxKind.UnicodePropertyClass => unicodeClasses && IsUnicodePropertyRune(value, expression),
+            RegexSyntaxKind.UnicodePropertyClass => unicodeClasses && IsUnicodePropertyRune(value, expression, caseInsensitive),
             RegexSyntaxKind.NotUnicodePropertyClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) &&
                 unicodeClasses &&
-                !IsUnicodePropertyRune(value, expression),
+                !IsUnicodePropertyRune(value, expression, caseInsensitive),
             _ => false,
         };
     }
@@ -782,8 +782,8 @@ internal static class RegexByteClass
             RegexSyntaxKind.LetterClass => IsRegexAlphabeticRune(value, unicodeClasses),
             RegexSyntaxKind.AlphanumericClass => IsRegexAlphabeticRune(value, unicodeClasses) || IsRegexDigitRune(value, unicodeClasses),
             RegexSyntaxKind.AnyClass => true,
-            RegexSyntaxKind.UnicodePropertyClass => unicodeClasses && IsUnicodePropertyRune(value, (RegexUnicodePropertyKind)literal),
-            RegexSyntaxKind.NotUnicodePropertyClass => unicodeClasses && !IsUnicodePropertyRune(value, (RegexUnicodePropertyKind)literal),
+            RegexSyntaxKind.UnicodePropertyClass => unicodeClasses && IsUnicodePropertyRune(value, (RegexUnicodePropertyKind)literal, caseInsensitive),
+            RegexSyntaxKind.NotUnicodePropertyClass => unicodeClasses && !IsUnicodePropertyRune(value, (RegexUnicodePropertyKind)literal, caseInsensitive),
             _ => RuneEqualsLiteral(value, literal, caseInsensitive, unicodeClasses),
         };
         return tokenNegated ? !matched : matched;
@@ -945,13 +945,22 @@ internal static class RegexByteClass
         return RegexUnicodeTables.IsAlphabetic(value);
     }
 
-    private static bool IsUnicodePropertyRune(Rune value, ReadOnlySpan<byte> expression)
+    private static bool IsUnicodePropertyRune(Rune value, ReadOnlySpan<byte> expression, bool caseInsensitive)
     {
-        return expression.Length == 1 && IsUnicodePropertyRune(value, (RegexUnicodePropertyKind)expression[0]);
+        return expression.Length == 1 && IsUnicodePropertyRune(value, (RegexUnicodePropertyKind)expression[0], caseInsensitive);
     }
 
-    private static bool IsUnicodePropertyRune(Rune value, RegexUnicodePropertyKind kind)
+    private static bool IsUnicodePropertyRune(Rune value, RegexUnicodePropertyKind kind, bool caseInsensitive)
     {
+        if (caseInsensitive &&
+            kind is RegexUnicodePropertyKind.CasedLetter
+                or RegexUnicodePropertyKind.LowercaseLetter
+                or RegexUnicodePropertyKind.TitlecaseLetter
+                or RegexUnicodePropertyKind.UppercaseLetter)
+        {
+            return RegexUnicodeTables.IsGeneralCategory(RegexUnicodePropertyKind.CasedLetter, value);
+        }
+
         return RegexUnicodeTables.IsGeneralCategory(kind, value) ||
             RegexUnicodeTables.IsBooleanProperty(kind, value);
     }
