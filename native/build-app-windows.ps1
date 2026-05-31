@@ -13,6 +13,9 @@ $Bin = Join-Path $Root "artifacts\bin\$Rid"
 $Pcre2Lib = Join-Path $Root "artifacts\native\pcre2\$Rid\lib\pcre2-8.lib"
 $Runtime = Join-Path $env:USERPROFILE ".nuget\packages\microsoft.netcore.app.runtime.nativeaot.$Rid\10.0.2\runtimes\$Rid\native"
 
+Push-Location $Root
+try {
+
 function Require-Tool {
     param([string] $Name)
 
@@ -130,3 +133,7 @@ if ($LASTEXITCODE -ne 0 -or ($MultiOutput -join "`n") -ne ($ExpectedMultiOutput 
 }
 
 Write-Host "OK ${Rid}: Scout.App native Windows export linked with PCRE2 and smoke checks passed"
+}
+finally {
+    Pop-Location
+}

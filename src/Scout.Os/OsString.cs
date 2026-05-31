@@ -209,5 +209,5 @@ public readonly struct OsString : IEquatable<OsString>
         return !left.Equals(right);
     }
 
-    private static readonly Encoding Utf8Strict = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+    private static readonly UTF8Encoding Utf8Strict = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 }

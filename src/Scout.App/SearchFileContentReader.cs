@@ -260,7 +260,7 @@ internal static class SearchFileContentReader
 
     private static void CopyFileToProcessStandardInput(string path, Process process)
     {
-        using Stream input = File.OpenRead(path);
+        using FileStream input = File.OpenRead(path);
         byte[] buffer = new byte[81920];
         try
         {

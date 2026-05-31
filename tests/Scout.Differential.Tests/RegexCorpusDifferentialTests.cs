@@ -13,7 +13,7 @@ public sealed class RegexCorpusDifferentialTests
     private const int ExpectedDifferentialCaseCount = 445;
     private const int ExpectedSupportedOnlyCaseCount = 47;
 
-    private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
     private static readonly (string RelativePath, int Count)[] ExpectedDifferentialFileCounts =
     [

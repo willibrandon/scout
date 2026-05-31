@@ -6,7 +6,7 @@ namespace Scout;
 
 internal sealed class OutputPath
 {
-    private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
     private static readonly byte[] OpenHyperlink = "\u001b]8;;"u8.ToArray();
     private static readonly byte[] CloseHyperlink = "\u001b]8;;\u001b\\"u8.ToArray();
     private static readonly byte[] EndControl = "\u001b\\"u8.ToArray();

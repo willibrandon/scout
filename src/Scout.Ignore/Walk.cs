@@ -11,7 +11,7 @@ namespace Scout;
 /// </summary>
 public sealed class Walk : IEnumerable<DirEntry>
 {
-    private static readonly Encoding Utf8Strict = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+    private static readonly UTF8Encoding Utf8Strict = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
     private readonly string[] paths;
     private readonly int? minDepth;
     private readonly int? maxDepth;

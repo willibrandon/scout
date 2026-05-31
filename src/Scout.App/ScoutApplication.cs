@@ -20,7 +20,7 @@ internal static class ScoutApplication
     private static readonly byte[] NullByte = [0];
     private static readonly byte[] LineFeed = [(byte)'\n'];
     private static readonly byte[] CrlfLineTerminator = [(byte)'\r', (byte)'\n'];
-    private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
     private const int BinaryDetectionInitialBufferLength = 65_536;
     private const int StreamingFileBufferLength = 16_777_216;
     private const long StreamingFileThreshold = int.MaxValue;

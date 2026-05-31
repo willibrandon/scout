@@ -7,7 +7,7 @@ namespace Scout;
 
 internal static class ConfigArgumentExpander
 {
-    private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
     public static OsString[]? BuildConfiguredArguments(
         ReadOnlySpan<OsString> arguments,

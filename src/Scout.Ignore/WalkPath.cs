@@ -5,7 +5,7 @@ namespace Scout;
 
 internal readonly struct WalkPath
 {
-    private static readonly Encoding Utf8Lossy = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    private static readonly UTF8Encoding Utf8Lossy = new(encoderShouldEmitUTF8Identifier: false);
     private readonly byte[]? unixPathBytes;
     private readonly byte[]? unixFileNameBytes;
 

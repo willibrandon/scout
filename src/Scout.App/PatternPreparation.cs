@@ -7,7 +7,7 @@ namespace Scout;
 
 internal static class PatternPreparation
 {
-    private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
     private const ulong RegexCompiledBaseSize = 64;
     private const ulong RegexCompiledByteSize = 16;
     private const ulong RegexCompiledUnicodeDigitClassSize = 2_048;

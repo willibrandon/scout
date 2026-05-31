@@ -51,6 +51,8 @@ OUT="$ROOT/artifacts/app/$RID"
 BIN="$ROOT/artifacts/bin/$RID"
 PCRE2_LIB="$ROOT/artifacts/native/pcre2/$RID/lib/libpcre2-8.a"
 
+cd "$ROOT"
+
 case "$DIFFERENTIAL_MODE" in
     --with-differentials|--smoke-only)
         ;;

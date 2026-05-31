@@ -7,7 +7,7 @@ namespace Scout;
 
 internal readonly struct SearchPathArgument
 {
-    private static readonly Encoding Utf8Lossy = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    private static readonly UTF8Encoding Utf8Lossy = new(encoderShouldEmitUTF8Identifier: false);
 
     private SearchPathArgument(string? text, byte[]? unixBytes, byte[] displayBytes)
     {

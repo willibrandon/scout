@@ -12,7 +12,7 @@ internal static class DifferentialRunner
     private const string PinnedRipgrepPath = "/Users/brandon/src/ripgrep/target/release-lto/rg";
     private const int PinnedRipgrepTimeoutMilliseconds = 10_000;
 
-    private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
     private static readonly Lazy<bool> PinnedRipgrepHashVerified = new(VerifyPinnedRipgrepHash);
     private static readonly object CurrentDirectoryLock = new();
 

@@ -4,6 +4,8 @@ set -eu
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 OUT="${1:-$ROOT/artifacts/msbuild-warning-gates}"
 
+cd "$ROOT"
+
 fail() {
     printf '%s\n' "$1" >&2
     exit 1
@@ -79,15 +81,15 @@ write_property() {
     printf '%s=%s\n' "$label" "$value" >> "$output"
 }
 
-check_empty_or_sdk_default_nowarn() {
-    project="$1"
-    no_warn="$2"
+check_raw_nowarn() {
+    raw_project="$1"
+    raw_no_warn_value="$2"
 
-    case "$no_warn" in
+    case "$raw_no_warn_value" in
         ""|"1701;1702")
             ;;
         *)
-            fail "$project has evaluated NoWarn='$no_warn'."
+            fail "$raw_project has raw evaluated NoWarn='$raw_no_warn_value'; only the C# SDK baseline 1701;1702 may appear before repo policy is applied."
             ;;
     esac
 }
@@ -181,8 +183,14 @@ find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" -name '*.csproj' -type
     safe_name="$(printf '%s' "$relative_project" | tr '/\\:' '___')"
     output="$OUT/$safe_name.properties"
     evaluation_output="$OUT/$safe_name.evaluation.json"
+    raw_evaluation_output="$OUT/$safe_name.raw-evaluation.json"
     editor_config_list="$OUT/$safe_name.editorconfig-files"
     : > "$output"
+
+    dotnet msbuild -noAutoResponse "$project" -nologo \
+        -getProperty:NoWarn \
+        -getProperty:TreatWarningsAsErrors \
+        > "$raw_evaluation_output"
 
     dotnet msbuild "$project" -nologo \
         -getProperty:NoWarn \
@@ -195,6 +203,7 @@ find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" -name '*.csproj' -type
         -getItem:EditorConfigFiles \
         > "$evaluation_output"
 
+    raw_no_warn="$(json_property "NoWarn" "$raw_evaluation_output")"
     no_warn="$(json_property "NoWarn" "$evaluation_output")"
     warnings_not_as_errors="$(json_property "WarningsNotAsErrors" "$evaluation_output")"
     treat_warnings_as_errors="$(json_property "TreatWarningsAsErrors" "$evaluation_output")"
@@ -204,6 +213,7 @@ find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" -name '*.csproj' -type
     enforce_code_style="$(json_property "EnforceCodeStyleInBuild" "$evaluation_output")"
 
     write_property "Project" "$relative_project" "$output"
+    write_property "RawNoWarn" "$raw_no_warn" "$output"
     write_property "NoWarn" "$no_warn" "$output"
     write_property "WarningsNotAsErrors" "$warnings_not_as_errors" "$output"
     write_property "TreatWarningsAsErrors" "$treat_warnings_as_errors" "$output"
@@ -213,7 +223,8 @@ find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" -name '*.csproj' -type
     write_property "EnforceCodeStyleInBuild" "$enforce_code_style" "$output"
 
     check_evaluated_editor_config_files "$relative_project" "$evaluation_output" "$output" "$editor_config_list"
-    check_empty_or_sdk_default_nowarn "$relative_project" "$no_warn"
+    check_raw_nowarn "$relative_project" "$raw_no_warn"
+    check_empty "$relative_project" "NoWarn" "$no_warn"
     check_empty "$relative_project" "WarningsNotAsErrors" "$warnings_not_as_errors"
     check_true "$relative_project" "TreatWarningsAsErrors" "$treat_warnings_as_errors"
     check_true "$relative_project" "MSBuildTreatWarningsAsErrors" "$msbuild_treat_warnings_as_errors"

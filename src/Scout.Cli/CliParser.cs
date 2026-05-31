@@ -2700,9 +2700,9 @@ public static class CliParser
         }
     }
 
-    private static readonly Encoding Utf8 =
-        new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    private static readonly UTF8Encoding Utf8 =
+        new(encoderShouldEmitUTF8Identifier: false);
 
-    private static readonly Encoding Utf8Strict =
-        new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+    private static readonly UTF8Encoding Utf8Strict =
+        new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 }

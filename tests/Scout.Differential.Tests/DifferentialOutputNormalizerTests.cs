@@ -7,7 +7,7 @@ namespace Scout;
 /// </summary>
 public sealed class DifferentialOutputNormalizerTests
 {
-    private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
     /// <summary>
     /// Verifies nondeterministic multi-file text output is sorted by file while preserving per-file order.

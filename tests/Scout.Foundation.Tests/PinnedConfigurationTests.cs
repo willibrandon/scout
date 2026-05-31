@@ -249,12 +249,18 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("json_item_full_paths", script, StringComparison.Ordinal);
         Assert.Contains("scan_editor_config_file", script, StringComparison.Ordinal);
         Assert.Contains("check_evaluated_editor_config_files", script, StringComparison.Ordinal);
-        Assert.Contains("check_empty_or_sdk_default_nowarn", script, StringComparison.Ordinal);
+        Assert.Contains("-noAutoResponse", script, StringComparison.Ordinal);
+        Assert.Contains("check_raw_nowarn", script, StringComparison.Ordinal);
+        Assert.Contains("write_property \"RawNoWarn\"", script, StringComparison.Ordinal);
+        Assert.Contains("check_empty \"$relative_project\" \"NoWarn\"", script, StringComparison.Ordinal);
         Assert.Contains("check_empty \"$relative_project\" \"WarningsNotAsErrors\"", script, StringComparison.Ordinal);
         Assert.Contains("check_true \"$relative_project\" \"TreatWarningsAsErrors\"", script, StringComparison.Ordinal);
         Assert.Contains("check_true \"$relative_project\" \"MSBuildTreatWarningsAsErrors\"", script, StringComparison.Ordinal);
         Assert.Contains("dotnet_analyzer_diagnostic\\.category-Scout\\.Structure\\.severity", script, StringComparison.Ordinal);
         Assert.Contains("none|silent", script, StringComparison.Ordinal);
+
+        string responseFile = File.ReadAllText(Path.Combine(root, "Directory.Build.rsp"));
+        Assert.Contains("-p:NoWarn=", responseFile, StringComparison.Ordinal);
     }
 
     /// <summary>

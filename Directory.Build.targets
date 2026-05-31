@@ -26,8 +26,8 @@
   <Target Name="ScoutValidateWarningPolicy" BeforeTargets="CoreCompile">
     <Error Condition="'$(TreatWarningsAsErrors)' != 'true'"
            Text="Scout requires TreatWarningsAsErrors=true in every project." />
-    <Error Condition="'$(NoWarn)' != '' and '$(NoWarn)' != '1701;1702'"
-           Text="Scout forbids project or package NoWarn values. Only the C# SDK baseline 1701;1702 is tolerated. Current value: $(NoWarn)" />
+    <Error Condition="'$(NoWarn)' != ''"
+           Text="Scout forbids evaluated NoWarn values. Current value: $(NoWarn)" />
     <Error Condition="'$(WarningsNotAsErrors)' != ''"
            Text="Scout forbids evaluated WarningsNotAsErrors values. Current value: $(WarningsNotAsErrors)" />
     <Error Condition="'@(ScoutGlobalSuppressionsFile)' != ''"

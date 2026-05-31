@@ -9,7 +9,7 @@ namespace Scout;
 /// </summary>
 public static unsafe class ProcessEnvironment
 {
-    private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+    private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
     private static byte[][]? activeUnixEnvironment;
 
     /// <summary>
