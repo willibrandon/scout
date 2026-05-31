@@ -6303,13 +6303,14 @@ internal static class ScoutApplication
         var matches = new List<JsonMatchSpan>(capacity: 1);
         while (TryFindNextMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, ref offset, ref suppressedEmptyStart, out RegexMatch match))
         {
-            if (match.Length == 0 && match.Start == bytes.Length)
+            bool omitSubmatch = match.Length == 0 && match.Start == bytes.Length;
+            int firstLineStart = GetJsonMultilineLineStart(bytes, match.Start, nullData);
+            if (omitSubmatch && firstLineStart >= bytes.Length)
             {
                 break;
             }
 
             matched = true;
-            int firstLineStart = GetJsonMultilineLineStart(bytes, match.Start, nullData);
             int lastLineStart = GetJsonMultilineMatchLastLineStart(bytes, match, nullData);
             int lineEnd = GetJsonMultilineLineEnd(bytes, lastLineStart, nullData);
             if (groupStart >= 0 && firstLineStart > groupEnd)
@@ -6332,7 +6333,10 @@ internal static class ScoutApplication
                 groupLastLineStart = lastLineStart;
             }
 
-            matches.Add(new JsonMatchSpan(match.Start - groupStart, match.Start - groupStart + match.Length, replacement: null));
+            if (!omitSubmatch)
+            {
+                matches.Add(new JsonMatchSpan(match.Start - groupStart, match.Start - groupStart + match.Length, replacement: null));
+            }
 
             emitted++;
             if (maxCount is ulong limit && emitted >= limit)

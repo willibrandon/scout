@@ -10,14 +10,14 @@ namespace Scout;
 /// </summary>
 public sealed class RegexCorpusDifferentialTests
 {
-    private const int ExpectedDifferentialCaseCount = 443;
-    private const int ExpectedSupportedOnlyCaseCount = 48;
+    private const int ExpectedDifferentialCaseCount = 445;
+    private const int ExpectedSupportedOnlyCaseCount = 46;
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     private static readonly (string RelativePath, int Count)[] ExpectedDifferentialFileCounts =
     [
-        ("bytes.toml", 25),
+        ("bytes.toml", 26),
         ("crazy.toml", 49),
         ("crlf.toml", 14),
         ("empty.toml", 19),
@@ -28,7 +28,7 @@ public sealed class RegexCorpusDifferentialTests
         ("multiline.toml", 140),
         ("no-unicode.toml", 22),
         ("regex-lite.toml", 9),
-        ("regression.toml", 50),
+        ("regression.toml", 51),
         ("set.toml", 29),
         ("word-boundary-special.toml", 41),
     ];
@@ -36,7 +36,6 @@ public sealed class RegexCorpusDifferentialTests
     private static readonly (string RelativePath, int Count)[] ExpectedSupportedOnlyFileCounts =
     [
         ("anchored.toml", 10),
-        ("bytes.toml", 1),
         ("crazy.toml", 3),
         ("crlf.toml", 1),
         ("flags.toml", 2),
@@ -44,7 +43,7 @@ public sealed class RegexCorpusDifferentialTests
         ("line-terminator.toml", 7),
         ("misc.toml", 2),
         ("no-unicode.toml", 1),
-        ("regression.toml", 6),
+        ("regression.toml", 5),
         ("set.toml", 1),
         ("substring.toml", 4),
         ("word-boundary-special.toml", 7),
@@ -194,6 +193,7 @@ public sealed class RegexCorpusDifferentialTests
         ("bytes.toml", "dotstar-prefix-ascii"),
         ("bytes.toml", "dotstar-prefix-unicode"),
         ("bytes.toml", "invalid-utf8-anchor-100"),
+        ("bytes.toml", "invalid-utf8-anchor-200"),
         ("bytes.toml", "invalid-utf8-anchor-300"),
         ("bytes.toml", "negate-ascii"),
         ("bytes.toml", "negate-unicode"),
@@ -220,6 +220,7 @@ public sealed class RegexCorpusDifferentialTests
         ("regression.toml", "word-boundary-ascii-capture"),
         ("regression.toml", "lits-unambiguous-200"),
         ("regression.toml", "negated-full-byte-range"),
+        ("regression.toml", "end-not-word-boundary"),
         ("regression.toml", "strange-anchor-non-complete-prefix"),
         ("regression.toml", "strange-anchor-non-complete-suffix"),
         ("regression.toml", "captures-after-dfa-premature-end-100"),

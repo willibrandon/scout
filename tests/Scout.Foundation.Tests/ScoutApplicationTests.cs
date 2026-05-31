@@ -4261,6 +4261,24 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies JSON multiline EOF empty matches select the final line without emitting a submatch.
+    /// </summary>
+    [Fact]
+    public void JsonMultilineEofEmptyMatchMatchesRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "tail");
+
+        (int exitCode, byte[] output, string error) = RunScout("--json", "-o", "-U", "$", path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--json", "-o", "-U", "$", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(NormalizeJsonTimings(pinnedOutput), NormalizeJsonTimings(output));
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies max-count limits matching lines in standard output.
     /// </summary>
     [Fact]
