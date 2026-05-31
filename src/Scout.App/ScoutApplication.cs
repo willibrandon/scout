@@ -7489,6 +7489,17 @@ internal static class ScoutApplication
                 return true;
             }
 
+            if (value == (byte)'[' && TryFindRegexClassEnd(pattern, index, out int classEnd))
+            {
+                if (RegexClassMatchesOnlyNul(pattern[(index + 1)..classEnd]))
+                {
+                    return true;
+                }
+
+                index = classEnd;
+                continue;
+            }
+
             if (value != (byte)'\\' || index + 1 >= pattern.Length)
             {
                 continue;
@@ -7534,6 +7545,145 @@ internal static class ScoutApplication
         }
 
         return false;
+    }
+
+    private static bool TryFindRegexClassEnd(ReadOnlySpan<byte> pattern, int classStart, out int classEnd)
+    {
+        classEnd = -1;
+        for (int index = classStart + 1; index < pattern.Length; index++)
+        {
+            if (pattern[index] == (byte)'\\' && index + 1 < pattern.Length)
+            {
+                index++;
+                continue;
+            }
+
+            if (pattern[index] == (byte)']')
+            {
+                classEnd = index;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool RegexClassMatchesOnlyNul(ReadOnlySpan<byte> expression)
+    {
+        Span<bool> positive = stackalloc bool[256];
+        int index = 0;
+        bool negated = !expression.IsEmpty && expression[0] == (byte)'^';
+        if (negated)
+        {
+            index++;
+        }
+
+        while (index < expression.Length)
+        {
+            if (!TryReadRegexClassByteToken(expression, ref index, out byte start))
+            {
+                return false;
+            }
+
+            if (index + 1 < expression.Length && expression[index] == (byte)'-')
+            {
+                int rangeEndIndex = index + 1;
+                if (TryReadRegexClassByteToken(expression, ref rangeEndIndex, out byte end))
+                {
+                    AddRegexClassByteRange(positive, start, end);
+                    index = rangeEndIndex;
+                    continue;
+                }
+            }
+
+            positive[start] = true;
+        }
+
+        bool matchesNul = negated ? !positive[0] : positive[0];
+        if (!matchesNul)
+        {
+            return false;
+        }
+
+        for (int byteValue = 1; byteValue < positive.Length; byteValue++)
+        {
+            bool matches = negated ? !positive[byteValue] : positive[byteValue];
+            if (matches)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryReadRegexClassByteToken(ReadOnlySpan<byte> expression, ref int index, out byte value)
+    {
+        value = 0;
+        if (index >= expression.Length)
+        {
+            return false;
+        }
+
+        byte token = expression[index];
+        index++;
+        if (token != (byte)'\\' || index >= expression.Length)
+        {
+            value = token;
+            return true;
+        }
+
+        byte escaped = expression[index];
+        index++;
+        if (escaped == (byte)'x')
+        {
+            if (index + 1 < expression.Length && TryReadHexByte(expression[index], expression[index + 1], out value))
+            {
+                index += 2;
+                return true;
+            }
+
+            if (TryReadBracedHexScalar(expression, index, out int scalarValue, out int endIndex) && scalarValue <= byte.MaxValue)
+            {
+                value = (byte)scalarValue;
+                index = endIndex + 1;
+                return true;
+            }
+
+            return false;
+        }
+
+        if (escaped == (byte)'u' &&
+            TryReadBracedHexScalar(expression, index, out int unicodeScalarValue, out int unicodeEndIndex) &&
+            unicodeScalarValue <= byte.MaxValue)
+        {
+            value = (byte)unicodeScalarValue;
+            index = unicodeEndIndex + 1;
+            return true;
+        }
+
+        value = escaped switch
+        {
+            (byte)'0' => (byte)0,
+            (byte)'a' => 0x07,
+            (byte)'f' => 0x0C,
+            (byte)'n' => (byte)'\n',
+            (byte)'r' => (byte)'\r',
+            (byte)'t' => (byte)'\t',
+            (byte)'v' => 0x0B,
+            _ => escaped,
+        };
+        return true;
+    }
+
+    private static void AddRegexClassByteRange(Span<bool> matches, byte start, byte end)
+    {
+        byte lower = Math.Min(start, end);
+        byte upper = Math.Max(start, end);
+        for (int byteValue = lower; byteValue <= upper; byteValue++)
+        {
+            matches[byteValue] = true;
+        }
     }
 
     private static bool TryReadHexByte(byte high, byte low, out byte value)
