@@ -24,7 +24,7 @@ env:
 jobs:
   full-tests:
     name: full pinned tests
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 360
     steps:
       - uses: actions/checkout@v6
@@ -48,7 +48,7 @@ jobs:
 
   performance-gate:
     name: hyperfine performance gate
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 360
     steps:
       - uses: actions/checkout@v6

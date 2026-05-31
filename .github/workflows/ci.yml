@@ -109,9 +109,9 @@ jobs:
       matrix:
         include:
           - rid: osx-x64
-            runner: macos-15-intel
+            runner: macos-26-intel
           - rid: osx-arm64
-            runner: macos-15
+            runner: macos-26
           - rid: win-x64
             runner: windows-2025-vs2026
           - rid: win-arm64
@@ -215,9 +215,9 @@ jobs:
       matrix:
         include:
           - rid: osx-x64
-            runner: macos-15-intel
+            runner: macos-26-intel
           - rid: osx-arm64
-            runner: macos-15
+            runner: macos-26
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v5

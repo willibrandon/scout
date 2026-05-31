@@ -65,8 +65,8 @@ public sealed partial class PinnedConfigurationTests
         [
             "ubuntu-24.04",
             "ubuntu-24.04-arm",
-            "macos-15-intel",
-            "macos-15",
+            "macos-26-intel",
+            "macos-26",
             "windows-2025-vs2026",
             "windows-11-arm",
         ];
@@ -121,12 +121,12 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("vsarch: arm64", workflow, StringComparison.Ordinal);
         Assert.Contains("runner: ubuntu-24.04", workflow, StringComparison.Ordinal);
         Assert.Contains("runner: ubuntu-24.04-arm", workflow, StringComparison.Ordinal);
-        Assert.Contains("runner: macos-15-intel", workflow, StringComparison.Ordinal);
-        Assert.Contains("runner: macos-15", workflow, StringComparison.Ordinal);
+        Assert.Contains("runner: macos-26-intel", workflow, StringComparison.Ordinal);
+        Assert.Contains("runner: macos-26", workflow, StringComparison.Ordinal);
         Assert.Contains("runner: windows-2025-vs2026", workflow, StringComparison.Ordinal);
         Assert.Contains("runner: windows-11-arm", workflow, StringComparison.Ordinal);
         Assert.Contains("bench/run-hyperfine.sh --gate", workflow, StringComparison.Ordinal);
-        Assert.Contains("runs-on: macos-15", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("runs-on: macos-26", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("Install pinned hyperfine", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("eng/setup-hyperfine.sh", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("GitHub-hosted", benchmarkReadme, StringComparison.Ordinal);
@@ -151,6 +151,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.DoesNotContain("actions/checkout@v4", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("actions/setup-dotnet@v4", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("macos-13", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("macos-15", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("brew install hyperfine", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("-p:PublishAot=true", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("continue-on-error: true", workflow, StringComparison.OrdinalIgnoreCase);
