@@ -1,6 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <CompilerVisibleItemMetadata Include="AdditionalFiles" MetadataName="ScoutGeneratedArtifactClass" />
+    <AdditionalFiles Include="GeneratedArtifacts\man.base64" ScoutGeneratedArtifactClass="GeneratedManPageArtifact" />
+    <AdditionalFiles Include="GeneratedArtifacts\complete-bash.base64" ScoutGeneratedArtifactClass="GeneratedCompleteBashArtifact" />
+    <AdditionalFiles Include="GeneratedArtifacts\complete-zsh.base64" ScoutGeneratedArtifactClass="GeneratedCompleteZshArtifact" />
+    <AdditionalFiles Include="GeneratedArtifacts\complete-fish.base64" ScoutGeneratedArtifactClass="GeneratedCompleteFishArtifact" />
+    <AdditionalFiles Include="GeneratedArtifacts\complete-powershell.base64" ScoutGeneratedArtifactClass="GeneratedCompletePowerShellArtifact" />
+    <AdditionalFiles Include="GeneratedArtifacts\help-short.base64" ScoutGeneratedArtifactClass="GeneratedShortHelpArtifact" />
+    <AdditionalFiles Include="GeneratedArtifacts\help-long.base64" ScoutGeneratedArtifactClass="GeneratedLongHelpArtifact" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Scout.Automata\Scout.Automata.csproj" />
     <ProjectReference Include="..\Scout.Automata.Syntax\Scout.Automata.Syntax.csproj" />
     <ProjectReference Include="..\Scout.Bytes\Scout.Bytes.csproj" />

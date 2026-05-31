@@ -470,6 +470,49 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies generated help, man, and completion payloads are build-time source generator inputs.
+    /// </summary>
+    [Fact]
+    public void GeneratedArtifactsAreSourceGenerated()
+    {
+        string root = FindRepositoryRoot();
+        string helpOutput = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "HelpOutput.cs"));
+        string generateOutput = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "GenerateOutput.cs"));
+        string projectPath = Path.Combine(root, "src", "Scout.App", "Scout.App.csproj");
+        var project = XDocument.Load(projectPath);
+
+        Assert.DoesNotContain("private const string", helpOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain("private const string", generateOutput, StringComparison.Ordinal);
+        Assert.Contains(
+            project.Descendants("CompilerVisibleItemMetadata"),
+            element =>
+                string.Equals((string?)element.Attribute("Include"), "AdditionalFiles", StringComparison.Ordinal) &&
+                string.Equals((string?)element.Attribute("MetadataName"), "ScoutGeneratedArtifactClass", StringComparison.Ordinal));
+
+        var expectedArtifacts = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["GeneratedArtifacts/man.base64"] = "GeneratedManPageArtifact",
+            ["GeneratedArtifacts/complete-bash.base64"] = "GeneratedCompleteBashArtifact",
+            ["GeneratedArtifacts/complete-zsh.base64"] = "GeneratedCompleteZshArtifact",
+            ["GeneratedArtifacts/complete-fish.base64"] = "GeneratedCompleteFishArtifact",
+            ["GeneratedArtifacts/complete-powershell.base64"] = "GeneratedCompletePowerShellArtifact",
+            ["GeneratedArtifacts/help-short.base64"] = "GeneratedShortHelpArtifact",
+            ["GeneratedArtifacts/help-long.base64"] = "GeneratedLongHelpArtifact",
+        };
+
+        var actualArtifacts = project.Descendants("AdditionalFiles")
+            .Select(element => new
+            {
+                Include = ((string?)element.Attribute("Include") ?? string.Empty).Replace('\\', '/'),
+                ClassName = (string?)element.Attribute("ScoutGeneratedArtifactClass") ?? string.Empty,
+            })
+            .Where(entry => entry.Include.StartsWith("GeneratedArtifacts/", StringComparison.Ordinal))
+            .ToDictionary(entry => entry.Include, entry => entry.ClassName, StringComparer.Ordinal);
+
+        Assert.Equal(expectedArtifacts, actualArtifacts);
+    }
+
+    /// <summary>
     /// Verifies the upstream lockfile has been vendored into Scout.
     /// </summary>
     [Fact]

@@ -108,6 +108,16 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies generated help payload classes feed the help dispatcher.
+    /// </summary>
+    [Fact]
+    public void HelpOutputsUseSourceGeneratedArtifacts()
+    {
+        AssertGeneratedArtifact(HelpOutput.Short.ToArray(), GeneratedShortHelpArtifact.CompressedBase64);
+        AssertGeneratedArtifact(HelpOutput.Long.ToArray(), GeneratedLongHelpArtifact.CompressedBase64);
+    }
+
+    /// <summary>
     /// Verifies parser errors are rendered with ripgrep's top-level prefix.
     /// </summary>
     [Fact]
@@ -6029,6 +6039,19 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies generated artifact payload classes feed the <c>--generate</c> dispatcher.
+    /// </summary>
+    [Fact]
+    public void GenerateOutputsUseSourceGeneratedArtifacts()
+    {
+        AssertGeneratedArtifact(CliGenerateMode.Man, GeneratedManPageArtifact.CompressedBase64);
+        AssertGeneratedArtifact(CliGenerateMode.CompleteBash, GeneratedCompleteBashArtifact.CompressedBase64);
+        AssertGeneratedArtifact(CliGenerateMode.CompleteZsh, GeneratedCompleteZshArtifact.CompressedBase64);
+        AssertGeneratedArtifact(CliGenerateMode.CompleteFish, GeneratedCompleteFishArtifact.CompressedBase64);
+        AssertGeneratedArtifact(CliGenerateMode.CompletePowerShell, GeneratedCompletePowerShellArtifact.CompressedBase64);
+    }
+
+    /// <summary>
     /// Verifies config files can select <c>--generate</c> like ripgrep.
     /// </summary>
     [Fact]
@@ -6105,6 +6128,27 @@ public sealed class ScoutApplicationTests
         Assert.Equal(pinnedExitCode, inlineExitCode);
         Assert.Equal(pinnedOutput, inlineOutput);
         Assert.Equal(pinnedError, inlineError);
+    }
+
+    private static void AssertGeneratedArtifact(CliGenerateMode mode, string compressedBase64)
+    {
+        AssertGeneratedArtifact(GenerateOutput.Get(mode).ToArray(), compressedBase64);
+    }
+
+    private static void AssertGeneratedArtifact(byte[] expectedOutput, string compressedBase64)
+    {
+        Assert.False(string.IsNullOrWhiteSpace(compressedBase64));
+        Assert.Equal(expectedOutput, InflateGeneratedArtifact(compressedBase64));
+    }
+
+    private static byte[] InflateGeneratedArtifact(string compressedBase64)
+    {
+        byte[] compressed = Convert.FromBase64String(compressedBase64);
+        using var compressedStream = new MemoryStream(compressed, writable: false);
+        using var gzip = new GZipStream(compressedStream, CompressionMode.Decompress);
+        using var output = new MemoryStream();
+        gzip.CopyTo(output);
+        return output.ToArray();
     }
 
     /// <summary>
