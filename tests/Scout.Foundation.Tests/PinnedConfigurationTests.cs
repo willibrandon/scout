@@ -59,13 +59,16 @@ public sealed partial class PinnedConfigurationTests
         string workflow = File.ReadAllText(workflowPath);
 
         Assert.Contains("FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: \"true\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("LINUX_LIBC_VERSION: \"2.36-9+deb12u13\"", workflow, StringComparison.Ordinal);
         Assert.Contains("LINUX_SNAPSHOT_URL: \"http://snapshot.debian.org/archive/debian/20260501T000000Z\"", workflow, StringComparison.Ordinal);
         Assert.Contains("image: docker.io/library/debian:bookworm-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb", workflow, StringComparison.Ordinal);
         Assert.Contains("Pinned snapshot apt prerequisites", workflow, StringComparison.Ordinal);
         Assert.Contains("rm -f /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list", workflow, StringComparison.Ordinal);
         Assert.Contains("printf 'deb %s bookworm main\\n' \"$LINUX_SNAPSHOT_URL\" > /etc/apt/sources.list", workflow, StringComparison.Ordinal);
         Assert.Contains("Acquire::Check-Valid-Until false", workflow, StringComparison.Ordinal);
-        Assert.Contains("apt-get install -y --no-install-recommends", workflow, StringComparison.Ordinal);
+        Assert.Contains("apt-get install -y --no-install-recommends --allow-downgrades", workflow, StringComparison.Ordinal);
+        Assert.Contains("libc6=\"$LINUX_LIBC_VERSION\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("libc-bin=\"$LINUX_LIBC_VERSION\"", workflow, StringComparison.Ordinal);
         Assert.Contains("uses: actions/checkout@v6", workflow, StringComparison.Ordinal);
         Assert.Contains("uses: actions/setup-dotnet@v5", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet-version: 10.0.102", workflow, StringComparison.Ordinal);
@@ -77,6 +80,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("dotnet format Scout.slnx --no-restore --verify-no-changes", workflow, StringComparison.Ordinal);
         Assert.Contains("MSBuild warning gates", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/check-msbuild-warning-gates.sh", workflow, StringComparison.Ordinal);
+        Assert.Contains("eng/verify-linux-prereqs.sh ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/preflight.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("cancel-in-progress: true", workflow, StringComparison.Ordinal);
         Assert.Contains("if: github.event_name == 'workflow_dispatch'", workflow, StringComparison.Ordinal);
@@ -1030,6 +1034,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("amd64_digest = \"sha256:b29f74a267526ae6ea104eed6c46133b0ca70ce812525df8cd5817698f0a624a\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("arm64_digest = \"sha256:f1433d3ee18e12f45682b29d91b6356e54e40d6b47f5f8ac81e80f35cca8cfe7\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("snapshot_url = \"http://snapshot.debian.org/archive/debian/20260501T000000Z\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("libc6_version = \"2.36-9+deb12u13\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("libc_bin_version = \"2.36-9+deb12u13\"", prerequisiteLock, StringComparison.Ordinal);
 
         for (int index = 0; index < tools.Length; index++)
         {
@@ -1046,6 +1052,28 @@ public sealed partial class PinnedConfigurationTests
                 "sha256 = \"" + sha256 + "\"");
             Assert.Contains(block, prerequisiteLock, StringComparison.Ordinal);
         }
+    }
+
+    /// <summary>
+    /// Verifies hosted Linux CI checks installed prerequisite tools against the lockfile.
+    /// </summary>
+    [Fact]
+    public void LinuxPrerequisiteVerificationChecksInstalledToolHashes()
+    {
+        string root = FindRepositoryRoot();
+        string verifyScript = File.ReadAllText(Path.Combine(root, "eng", "verify-linux-prereqs.sh"));
+        string resolveScript = File.ReadAllText(Path.Combine(root, "eng", "resolve-linux-prereqs.sh"));
+
+        Assert.Contains("[[tool.linux]]", verifyScript, StringComparison.Ordinal);
+        Assert.Contains("dpkg-query -W -f='${Version}' \"$package\"", verifyScript, StringComparison.Ordinal);
+        Assert.Contains("sha256_file \"$path\"", verifyScript, StringComparison.Ordinal);
+        Assert.Contains("command -v \"$binary\"", verifyScript, StringComparison.Ordinal);
+        Assert.Contains("LINUX_SNAPSHOT_URL", verifyScript, StringComparison.Ordinal);
+        Assert.Contains("LINUX_LIBC_VERSION", verifyScript, StringComparison.Ordinal);
+        Assert.Contains("dpkg-query -W -f='${Version}' libc6", verifyScript, StringComparison.Ordinal);
+        Assert.Contains("Unpinned Debian source remains", verifyScript, StringComparison.Ordinal);
+        Assert.Contains("--allow-downgrades libc6='\"$LIBC_VERSION\"' libc-bin='\"$LIBC_VERSION\"'", resolveScript, StringComparison.Ordinal);
+        Assert.Contains("rm -f /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list", resolveScript, StringComparison.Ordinal);
     }
 
     /// <summary>

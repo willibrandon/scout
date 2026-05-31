@@ -4,6 +4,7 @@ set -eu
 SNAPSHOT_URL="http://snapshot.debian.org/archive/debian/20260501T000000Z"
 AMD64_DIGEST="sha256:b29f74a267526ae6ea104eed6c46133b0ca70ce812525df8cd5817698f0a624a"
 ARM64_DIGEST="sha256:f1433d3ee18e12f45682b29d91b6356e54e40d6b47f5f8ac81e80f35cca8cfe7"
+LIBC_VERSION="2.36-9+deb12u13"
 
 run_for_rid() {
     rid="$1"
@@ -12,11 +13,13 @@ run_for_rid() {
 
     docker run --rm --platform "$platform" --env "SCOUT_RID=$rid" "docker.io/library/debian:bookworm-slim@$digest" sh -ceu '
 export DEBIAN_FRONTEND=noninteractive
+rm -f /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list
 cat >/etc/apt/sources.list <<EOF
 deb '"$SNAPSHOT_URL"' bookworm main
 EOF
 printf "Acquire::Check-Valid-Until false;\nAcquire::Retries 3;\n" >/etc/apt/apt.conf.d/99snapshot
 apt-get update >/dev/null
+apt-get install -y --no-install-recommends --allow-downgrades libc6='"$LIBC_VERSION"' libc-bin='"$LIBC_VERSION"' >/dev/null
 apt-get install -y --no-install-recommends gzip bzip2 xz-utils lz4 brotli zstd ncompress ca-certificates >/dev/null
 for spec in gzip:gzip bzip2:bzip2 xz:xz-utils lz4:lz4 brotli:brotli zstd:zstd uncompress:ncompress; do
     name=${spec%%:*}
@@ -43,6 +46,8 @@ index_digest = "sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f
 amd64_digest = "$AMD64_DIGEST"
 arm64_digest = "$ARM64_DIGEST"
 snapshot_url = "$SNAPSHOT_URL"
+libc6_version = "$LIBC_VERSION"
+libc_bin_version = "$LIBC_VERSION"
 
 EOF
 
