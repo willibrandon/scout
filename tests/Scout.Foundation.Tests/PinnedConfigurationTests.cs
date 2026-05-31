@@ -487,6 +487,35 @@ public sealed class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies lockfile entries without shipped Scout behavior are explicitly dispositioned.
+    /// </summary>
+    [Fact]
+    public void UpstreamSyncDocumentsNoSurfaceLockfileEntries()
+    {
+        string root = FindRepositoryRoot();
+        string policy = File.ReadAllText(Path.Combine(root, "docs", "UPSTREAM-SYNC.md"));
+        string[] requiredFragments =
+        [
+            "## Lockfile Entries With No Scout Port",
+            "| `arbitrary`, `derive_arbitrary` | `1.4.2` |",
+            "| `cc`, `find-msvc-tools`, `jobserver`, `pkg-config`, `shlex` | `1.2.41`, `0.1.4`, `0.1.34`, `0.3.32`, `1.3.0` |",
+            "| `cfg-if` | `1.0.4` |",
+            "| `crossbeam-channel`, `crossbeam-epoch`, `crossbeam-utils` | `0.5.15`, `0.9.18`, `0.8.21` |",
+            "| `getrandom`, `r-efi`, `wasip2`, `wit-bindgen` | `0.3.4`, `5.3.0`, `1.0.1+wasi-0.2.4`, `0.46.0` |",
+            "| `glob` | `0.3.3` |",
+            "| `proc-macro2`, `quote`, `syn`, `unicode-ident` | `1.0.101`, `1.0.41`, `2.0.107`, `1.0.20` |",
+            "| `serde`, `serde_core`, `serde_derive` | `1.0.228` |",
+            "| `tikv-jemallocator`, `tikv-jemalloc-sys` | `0.6.1`, `0.6.1+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7` |",
+            "| `windows-link` | `0.2.1` |",
+        ];
+
+        for (int index = 0; index < requiredFragments.Length; index++)
+        {
+            Assert.Contains(requiredFragments[index], policy, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
     /// Verifies third-party notices include the license texts required by the design.
     /// </summary>
     [Fact]
