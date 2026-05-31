@@ -8,6 +8,12 @@ name = "ripgrep"
 version = "15.1.0"
 commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"
 path = "crates/core"
+
+name = "grep"
+version = "0.4.1"
+commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"
+path = "crates/grep"
+disposition = "workspace facade folded into Scout project references"
 ```
 
 It also ports the argument-lexing and help-wrapping behavior used by the

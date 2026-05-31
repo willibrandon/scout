@@ -850,6 +850,9 @@ public sealed partial class PinnedConfigurationTests
                 "name = \"ripgrep\"",
                 "version = \"15.1.0\"",
                 "commit = \"" + PinnedRipgrepCommit + "\"",
+                "name = \"grep\"",
+                "version = \"0.4.1\"",
+                "disposition = \"workspace facade folded into Scout project references\"",
                 "name = \"lexopt\"",
                 "version = \"0.3.1\"",
                 "name = \"textwrap\"",
@@ -941,6 +944,15 @@ public sealed partial class PinnedConfigurationTests
                 "name = \"ignore\"",
                 "version = \"0.4.25\"",
                 "commit = \"" + PinnedRipgrepCommit + "\"",
+                "name = \"walkdir\"",
+                "version = \"2.5.0\"",
+                "checksum = \"29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b\"",
+                "name = \"same-file\"",
+                "version = \"1.0.6\"",
+                "checksum = \"93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502\"",
+                "name = \"crossbeam-deque\"",
+                "version = \"0.8.6\"",
+                "checksum = \"9dd111b7b7f7d55b72c0a6ae361660ee5853c9af73f70c3c2ef6858b950e2e51\"",
             ]),
             ("src/Scout.Matching/UPSTREAM.md",
             [
@@ -1010,6 +1022,39 @@ public sealed partial class PinnedConfigurationTests
                 Assert.Contains(fragments[fragmentIndex], text, StringComparison.Ordinal);
             }
         }
+    }
+
+    /// <summary>
+    /// Verifies every Cargo.lock package has an explicit Scout disposition.
+    /// </summary>
+    [Fact]
+    public void CargoLockPackagesHaveExplicitDisposition()
+    {
+        string root = FindRepositoryRoot();
+        string cargoLock = File.ReadAllText(Path.Combine(root, "upstream", "Cargo.lock"));
+        string provenance = File.ReadAllText(Path.Combine(root, "docs", "UPSTREAM-SYNC.md"));
+        foreach (string path in Directory.EnumerateFiles(Path.Combine(root, "src"), "UPSTREAM.md", SearchOption.AllDirectories))
+        {
+            provenance += "\n" + File.ReadAllText(path);
+        }
+
+        var missing = new List<string>();
+        foreach (Match match in CargoLockPackagePattern().Matches(cargoLock))
+        {
+            string name = match.Groups["name"].Value;
+            string version = match.Groups["version"].Value;
+            bool hasName = provenance.Contains("name = \"" + name + "\"", StringComparison.Ordinal) ||
+                provenance.Contains("`" + name + "`", StringComparison.Ordinal);
+            bool hasVersion = provenance.Contains("version = \"" + version + "\"", StringComparison.Ordinal) ||
+                provenance.Contains("`" + version + "`", StringComparison.Ordinal);
+
+            if (!hasName || !hasVersion)
+            {
+                missing.Add(name + " " + version);
+            }
+        }
+
+        Assert.Empty(missing);
     }
 
     /// <summary>
@@ -1784,6 +1829,9 @@ public sealed partial class PinnedConfigurationTests
 
     [GeneratedRegex(@"\bthrow\s+new\s+(?:[A-Za-z_][A-Za-z0-9_]*\.)?SkipException\s*\(", RegexOptions.CultureInvariant)]
     private static partial Regex SkipExceptionPattern();
+
+    [GeneratedRegex(@"\[\[package\]\]\s+name = ""(?<name>[^""]+)""\s+version = ""(?<version>[^""]+)""", RegexOptions.CultureInvariant)]
+    private static partial Regex CargoLockPackagePattern();
 
     [GeneratedRegex(@"if\s*\([^{;]*(?:TryCreateDirectorySymlink|TryCreateFileSymlink)[^{;]*\)\s*\{\s*return;\s*\}", RegexOptions.CultureInvariant)]
     private static partial Regex FixtureCapabilityReturnPattern();
