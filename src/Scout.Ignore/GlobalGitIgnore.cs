@@ -33,7 +33,7 @@ internal static class GlobalGitIgnore
         ArgumentNullException.ThrowIfNull(readAllText);
 
         string? home = GetHomeDirectory(getEnvironmentVariable);
-        string? homeConfig = home is null ? null : Path.Combine(home, ".gitconfig");
+        string? homeConfig = home is null ? null : CombinePath(home, ".gitconfig");
         string? fromHomeConfig = ResolveExcludesFile(homeConfig, home, fileExists, readAllText);
         if (fromHomeConfig is not null)
         {
@@ -41,14 +41,14 @@ internal static class GlobalGitIgnore
         }
 
         string? xdgConfigHome = GetXdgConfigHome(getEnvironmentVariable, home);
-        string? xdgConfig = xdgConfigHome is null ? null : Path.Combine(xdgConfigHome, "git", "config");
+        string? xdgConfig = xdgConfigHome is null ? null : CombinePath(xdgConfigHome, "git", "config");
         string? fromXdgConfig = ResolveExcludesFile(xdgConfig, home, fileExists, readAllText);
         if (fromXdgConfig is not null)
         {
             return fromXdgConfig;
         }
 
-        return xdgConfigHome is null ? null : Path.Combine(xdgConfigHome, "git", "ignore");
+        return xdgConfigHome is null ? null : CombinePath(xdgConfigHome, "git", "ignore");
     }
 
     internal static string? ParseExcludesFile(string text, string? homeDirectory)
@@ -132,7 +132,21 @@ internal static class GlobalGitIgnore
             return xdgConfigHome;
         }
 
-        return homeDirectory is null ? null : Path.Combine(homeDirectory, ".config");
+        return homeDirectory is null ? null : CombinePath(homeDirectory, ".config");
+    }
+
+    private static string CombinePath(string root, params string[] segments)
+    {
+        char separator = root.Contains('/') && !root.Contains('\\')
+            ? '/'
+            : Path.DirectorySeparatorChar;
+        string path = root.TrimEnd('/', '\\');
+        for (int index = 0; index < segments.Length; index++)
+        {
+            path += separator + segments[index];
+        }
+
+        return path;
     }
 
     private static string ExpandTilde(string path, string? homeDirectory)
