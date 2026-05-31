@@ -1932,10 +1932,16 @@ public static class LiteralLineSearcher
             return true;
         }
 
-        if (ContainsNonCapturingGroup(pattern))
+        if (ContainsNonCapturingGroup(pattern) || RequiresAutomatonRegex(haystack, pattern, asciiCaseInsensitive))
         {
             var automaton = RegexAutomaton.Compile(pattern, asciiCaseInsensitive, multiLine: false, dotMatchesNewline: false);
-            RegexMatch? match = automaton.Find(haystack, offset);
+            ReadOnlySpan<byte> automatonHaystack = TrimAutomatonLineTerminator(haystack);
+            if (offset > automatonHaystack.Length)
+            {
+                return false;
+            }
+
+            RegexMatch? match = automaton.Find(automatonHaystack, offset);
             if (match.HasValue)
             {
                 matchStart = match.Value.Start;
@@ -1957,6 +1963,86 @@ public static class LiteralLineSearcher
         }
 
         return false;
+    }
+
+    private static ReadOnlySpan<byte> TrimAutomatonLineTerminator(ReadOnlySpan<byte> haystack)
+    {
+        if (!haystack.IsEmpty &&
+            (haystack[^1] == (byte)'\n' || haystack[^1] == 0))
+        {
+            return haystack[..^1];
+        }
+
+        return haystack;
+    }
+
+    private static bool RequiresAutomatonRegex(ReadOnlySpan<byte> haystack, ReadOnlySpan<byte> pattern, bool asciiCaseInsensitive)
+    {
+        if (!ContainsNonAscii(haystack))
+        {
+            return false;
+        }
+
+        for (int index = 0; index < pattern.Length; index++)
+        {
+            byte value = pattern[index];
+            if (value == (byte)'\\' && index + 1 < pattern.Length)
+            {
+                if (IsUnicodeSensitiveEscape(pattern[index + 1]))
+                {
+                    return true;
+                }
+
+                index++;
+                continue;
+            }
+
+            if (value == (byte)'[' && TryFindClassEnd(pattern, index, out int classEnd))
+            {
+                if (asciiCaseInsensitive ||
+                    (index + 1 < classEnd && pattern[index + 1] == (byte)'^') ||
+                    ClassContainsUnicodeSensitiveEscape(pattern[(index + 1)..classEnd]))
+                {
+                    return true;
+                }
+
+                index = classEnd;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ClassContainsUnicodeSensitiveEscape(ReadOnlySpan<byte> expression)
+    {
+        for (int index = 0; index + 1 < expression.Length; index++)
+        {
+            if (expression[index] == (byte)'\\')
+            {
+                if (IsUnicodeSensitiveEscape(expression[index + 1]))
+                {
+                    return true;
+                }
+
+                index++;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsUnicodeSensitiveEscape(byte value)
+    {
+        return value is (byte)'b'
+            or (byte)'B'
+            or (byte)'d'
+            or (byte)'D'
+            or (byte)'s'
+            or (byte)'S'
+            or (byte)'w'
+            or (byte)'W'
+            or (byte)'p'
+            or (byte)'P';
     }
 
     private static bool ContainsNonCapturingGroup(ReadOnlySpan<byte> pattern)

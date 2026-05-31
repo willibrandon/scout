@@ -10,14 +10,14 @@ namespace Scout;
 /// </summary>
 public sealed class RegexCorpusDifferentialTests
 {
-    private const int ExpectedDifferentialCaseCount = 205;
-    private const int ExpectedSupportedOnlyCaseCount = 278;
+    private const int ExpectedDifferentialCaseCount = 219;
+    private const int ExpectedSupportedOnlyCaseCount = 272;
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     private static readonly (string RelativePath, int Count)[] ExpectedDifferentialFileCounts =
     [
-        ("bytes.toml", 17),
+        ("bytes.toml", 24),
         ("crazy.toml", 47),
         ("crlf.toml", 4),
         ("empty.toml", 19),
@@ -26,7 +26,7 @@ public sealed class RegexCorpusDifferentialTests
         ("line-terminator.toml", 1),
         ("misc.toml", 13),
         ("multiline.toml", 14),
-        ("no-unicode.toml", 15),
+        ("no-unicode.toml", 22),
         ("regex-lite.toml", 5),
         ("regression.toml", 13),
         ("set.toml", 29),
@@ -43,7 +43,7 @@ public sealed class RegexCorpusDifferentialTests
         ("line-terminator.toml", 9),
         ("misc.toml", 3),
         ("multiline.toml", 126),
-        ("no-unicode.toml", 7),
+        ("no-unicode.toml", 1),
         ("regex-lite.toml", 4),
         ("regression.toml", 43),
         ("set.toml", 1),
@@ -165,19 +165,26 @@ public sealed class RegexCorpusDifferentialTests
         ("crlf.toml", "start-end-empty"),
         ("crlf.toml", "dot-no-crlf"),
         ("bytes.toml", "word-boundary-ascii"),
+        ("bytes.toml", "word-boundary-unicode"),
         ("bytes.toml", "word-boundary-ascii-not"),
+        ("bytes.toml", "word-boundary-unicode-not"),
         ("bytes.toml", "perl-word-ascii"),
+        ("bytes.toml", "perl-word-unicode"),
         ("bytes.toml", "perl-decimal-ascii"),
+        ("bytes.toml", "perl-decimal-unicode"),
         ("bytes.toml", "perl-whitespace-ascii"),
+        ("bytes.toml", "perl-whitespace-unicode"),
         ("bytes.toml", "case-one-ascii"),
         ("bytes.toml", "case-one-unicode"),
         ("bytes.toml", "case-class-simple-ascii"),
         ("bytes.toml", "case-class-ascii"),
+        ("bytes.toml", "case-class-unicode"),
         ("bytes.toml", "dotstar-prefix-ascii"),
         ("bytes.toml", "dotstar-prefix-unicode"),
         ("bytes.toml", "invalid-utf8-anchor-100"),
         ("bytes.toml", "invalid-utf8-anchor-300"),
         ("bytes.toml", "negate-ascii"),
+        ("bytes.toml", "negate-unicode"),
         ("bytes.toml", "null-bytes"),
         ("bytes.toml", "word-boundary-ascii-100"),
         ("bytes.toml", "word-boundary-ascii-200"),
@@ -212,17 +219,24 @@ public sealed class RegexCorpusDifferentialTests
         ("no-unicode.toml", "mixed"),
         ("no-unicode.toml", "case1"),
         ("no-unicode.toml", "case2"),
+        ("no-unicode.toml", "case3"),
+        ("no-unicode.toml", "negate1"),
         ("no-unicode.toml", "case4"),
         ("no-unicode.toml", "negate2"),
         ("no-unicode.toml", "dotstar-prefix1"),
         ("no-unicode.toml", "dotstar-prefix2"),
         ("no-unicode.toml", "null-bytes1"),
         ("no-unicode.toml", "word-ascii"),
+        ("no-unicode.toml", "word-unicode"),
         ("no-unicode.toml", "decimal-ascii"),
+        ("no-unicode.toml", "decimal-unicode"),
         ("no-unicode.toml", "space-ascii"),
+        ("no-unicode.toml", "space-unicode"),
         ("no-unicode.toml", "iter1-bytes"),
+        ("no-unicode.toml", "iter1-utf8"),
         ("no-unicode.toml", "iter2-bytes"),
         ("no-unicode.toml", "unanchored-invalid-utf8-match-100"),
+        ("no-unicode.toml", "unanchored-invalid-utf8-nomatch"),
         ("regex-lite.toml", "perl-class-decimal"),
         ("regex-lite.toml", "perl-class-space"),
         ("regex-lite.toml", "perl-class-word"),
@@ -474,9 +488,7 @@ public sealed class RegexCorpusDifferentialTests
             "--json",
             "-o",
         };
-        if (string.Equals(relativePath, "bytes.toml", StringComparison.Ordinal) ||
-            string.Equals(relativePath, "regex-lite.toml", StringComparison.Ordinal) ||
-            string.Equals(relativePath, "no-unicode.toml", StringComparison.Ordinal))
+        if (!corpusCase.UnicodeClasses)
         {
             arguments.Add("--no-unicode");
         }

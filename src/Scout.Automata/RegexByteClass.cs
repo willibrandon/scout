@@ -55,7 +55,7 @@ internal static class RegexByteClass
             return false;
         }
 
-        bool requiresUtf8ScalarMatch = utf8 && RequiresUtf8ScalarMatch(kind, expression, caseInsensitive, unicodeClasses);
+        bool requiresUtf8ScalarMatch = RequiresUtf8ScalarMatch(kind, expression, utf8, caseInsensitive, unicodeClasses);
         if (requiresUtf8ScalarMatch)
         {
             if (!IsUtf8Boundary(haystack, position) ||
@@ -105,12 +105,12 @@ internal static class RegexByteClass
         bool utf8,
         bool unicodeClasses)
     {
-        if (utf8 && IsBoundaryPredicate(kind) && !IsUtf8Boundary(haystack, position))
+        bool useUnicodeWord = unicodeClasses;
+        if ((utf8 || useUnicodeWord) && IsBoundaryPredicate(kind) && !IsUtf8Boundary(haystack, position))
         {
             return false;
         }
 
-        bool useUnicodeWord = utf8 && unicodeClasses;
         return kind switch
         {
             RegexSyntaxKind.StartAnchor => IsStartAnchorMatch(haystack, position, multiLine, crlf, lineTerminator),
@@ -146,20 +146,21 @@ internal static class RegexByteClass
         return true;
     }
 
-    public static bool RequiresUtf8ScalarMatch(RegexSyntaxKind kind, ReadOnlySpan<byte> expression, bool caseInsensitive, bool unicodeClasses)
+    public static bool RequiresUtf8ScalarMatch(RegexSyntaxKind kind, ReadOnlySpan<byte> expression, bool utf8, bool caseInsensitive, bool unicodeClasses)
     {
+        bool codepointMode = utf8 || unicodeClasses;
         return kind switch
         {
             RegexSyntaxKind.Dot
                 or RegexSyntaxKind.AnyClass
                 or RegexSyntaxKind.NotDigitClass
                 or RegexSyntaxKind.NotWordClass
-                or RegexSyntaxKind.NotWhitespaceClass => true,
+                or RegexSyntaxKind.NotWhitespaceClass => codepointMode,
             RegexSyntaxKind.DigitClass
                 or RegexSyntaxKind.WordClass
                 or RegexSyntaxKind.WhitespaceClass => unicodeClasses,
             RegexSyntaxKind.Literal => unicodeClasses && caseInsensitive,
-            RegexSyntaxKind.CharacterClass => IsNegatedClass(expression) ||
+            RegexSyntaxKind.CharacterClass => codepointMode && IsNegatedClass(expression) ||
                 unicodeClasses && (ContainsScalarClassToken(expression) || caseInsensitive && ContainsLiteralClassToken(expression)),
             _ => false,
         };
