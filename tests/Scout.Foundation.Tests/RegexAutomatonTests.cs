@@ -360,6 +360,17 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies bracket classes can contain regex-syntax Unicode property tokens.
+    /// </summary>
+    [Fact]
+    public void UnicodePropertyTokensInBracketClassesUsePinnedTables()
+    {
+        Assert.Equal(new RegexMatch(0, 2), RegexAutomaton.Compile(@"[\PN]+"u8).Find("abⅠ"u8));
+        Assert.Equal(new RegexMatch(2, 3), RegexAutomaton.Compile(@"[^\PN]+"u8).Find("abⅠ"u8));
+        Assert.Equal(new RegexMatch(0, 3), RegexAutomaton.Compile(@"[\p{Emoji}]+"u8).Find("\u23E9x"u8));
+    }
+
+    /// <summary>
     /// Verifies Unicode binary property classes use pinned regex-syntax tables.
     /// </summary>
     [Fact]

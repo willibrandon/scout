@@ -845,6 +845,7 @@ public sealed partial class PinnedConfigurationTests
         string regexByteClass = File.ReadAllText(Path.Combine(root, "src", "Scout.Automata", "RegexByteClass.cs"));
         string regexSyntaxParseState = File.ReadAllText(Path.Combine(root, "src", "Scout.Automata.Syntax", "RegexSyntaxParseState.cs"));
         string regexUnicodePropertyKind = File.ReadAllText(Path.Combine(root, "src", "Scout.Automata.Syntax", "RegexUnicodePropertyKind.cs"));
+        string regexUnicodePropertyNames = File.ReadAllText(Path.Combine(root, "src", "Scout.Automata.Syntax", "RegexUnicodePropertyNames.cs"));
         string regexUnicodeTables = File.ReadAllText(Path.Combine(root, "src", "Scout.Automata", "RegexUnicodeTables.cs"));
         string ucdArchive = Path.Combine(root, "upstream", "ucd", "UCD-16.0.0.zip");
         string tablesRoot = Path.Combine(root, "upstream", "regex-syntax-0.8.8", "unicode_tables");
@@ -901,6 +902,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("RegexUnicodeTables.IsGeneralCategory", regexByteClass, StringComparison.Ordinal);
         Assert.Contains("RegexUnicodeTables.IsBooleanProperty", regexByteClass, StringComparison.Ordinal);
         Assert.Contains("TryParseUnicodePropertyClass", regexSyntaxParseState, StringComparison.Ordinal);
+        Assert.Contains("public static bool TryGetKind", regexUnicodePropertyNames, StringComparison.Ordinal);
+        Assert.Contains("public static bool NameEquals", regexUnicodePropertyNames, StringComparison.Ordinal);
+        Assert.Contains("RegexUnicodePropertyNames.TryGetKind", regexSyntaxParseState, StringComparison.Ordinal);
+        Assert.Contains("RegexUnicodePropertyNames.TryGetKind", regexByteClass, StringComparison.Ordinal);
         Assert.DoesNotContain("TryParseUnicodeAnyClass", regexSyntaxParseState, StringComparison.Ordinal);
         Assert.Contains("UppercaseLetter", regexUnicodePropertyKind, StringComparison.Ordinal);
         Assert.Contains("ExtendedPictographic", regexUnicodePropertyKind, StringComparison.Ordinal);

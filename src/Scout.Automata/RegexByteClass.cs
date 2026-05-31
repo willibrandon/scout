@@ -311,7 +311,10 @@ internal static class RegexByteClass
                 or RegexSyntaxKind.WordClass
                 or RegexSyntaxKind.WhitespaceClass
                 or RegexSyntaxKind.LetterClass
-                or RegexSyntaxKind.AlphanumericClass)
+                or RegexSyntaxKind.AlphanumericClass
+                or RegexSyntaxKind.AnyClass
+                or RegexSyntaxKind.UnicodePropertyClass
+                or RegexSyntaxKind.NotUnicodePropertyClass)
             {
                 return true;
             }
@@ -549,6 +552,40 @@ internal static class RegexByteClass
                     tokenNegated = true;
                     index += 2;
                     return true;
+                case (byte)'p':
+                    if (TryReadUnicodePropertyClassToken(
+                        expression,
+                        index + 2,
+                        negated: false,
+                        out tokenKind,
+                        out literal,
+                        out tokenNegated,
+                        out int propertyNextIndex))
+                    {
+                        index = propertyNextIndex;
+                        return true;
+                    }
+
+                    literal = escaped;
+                    index += 2;
+                    return true;
+                case (byte)'P':
+                    if (TryReadUnicodePropertyClassToken(
+                        expression,
+                        index + 2,
+                        negated: true,
+                        out tokenKind,
+                        out literal,
+                        out tokenNegated,
+                        out int negatedPropertyNextIndex))
+                    {
+                        index = negatedPropertyNextIndex;
+                        return true;
+                    }
+
+                    literal = escaped;
+                    index += 2;
+                    return true;
                 case (byte)'t':
                     literal = (byte)'\t';
                     index += 2;
@@ -570,6 +607,65 @@ internal static class RegexByteClass
 
         literal = expression[index];
         index++;
+        return true;
+    }
+
+    private static bool TryReadUnicodePropertyClassToken(
+        ReadOnlySpan<byte> expression,
+        int index,
+        bool negated,
+        out RegexSyntaxKind tokenKind,
+        out byte literal,
+        out bool tokenNegated,
+        out int nextIndex)
+    {
+        tokenKind = RegexSyntaxKind.Literal;
+        literal = 0;
+        tokenNegated = false;
+        nextIndex = index;
+        if (index >= expression.Length)
+        {
+            return false;
+        }
+
+        ReadOnlySpan<byte> name;
+        if (expression[index] == (byte)'{')
+        {
+            int nameStart = index + 1;
+            int nameEnd = nameStart;
+            while (nameEnd < expression.Length && expression[nameEnd] != (byte)'}')
+            {
+                nameEnd++;
+            }
+
+            if (nameEnd >= expression.Length || nameEnd == nameStart)
+            {
+                return false;
+            }
+
+            name = expression[nameStart..nameEnd];
+            nextIndex = nameEnd + 1;
+        }
+        else
+        {
+            name = expression.Slice(index, 1);
+            nextIndex = index + 1;
+        }
+
+        if (RegexUnicodePropertyNames.NameEquals(name, "any"))
+        {
+            tokenKind = RegexSyntaxKind.AnyClass;
+            tokenNegated = negated;
+            return true;
+        }
+
+        if (!RegexUnicodePropertyNames.TryGetKind(name, out RegexUnicodePropertyKind propertyKind))
+        {
+            return false;
+        }
+
+        tokenKind = negated ? RegexSyntaxKind.NotUnicodePropertyClass : RegexSyntaxKind.UnicodePropertyClass;
+        literal = (byte)propertyKind;
         return true;
     }
 
@@ -663,6 +759,8 @@ internal static class RegexByteClass
             RegexSyntaxKind.WhitespaceClass => IsRegexWhitespaceByte(value),
             RegexSyntaxKind.LetterClass => IsAsciiAlphaByte(value),
             RegexSyntaxKind.AlphanumericClass => IsAsciiAlphaByte(value) || IsAsciiDigitByte(value),
+            RegexSyntaxKind.AnyClass => true,
+            RegexSyntaxKind.UnicodePropertyClass or RegexSyntaxKind.NotUnicodePropertyClass => false,
             _ => ByteEquals(value, literal, caseInsensitive),
         };
         return tokenNegated ? !matched : matched;
@@ -683,6 +781,9 @@ internal static class RegexByteClass
             RegexSyntaxKind.WhitespaceClass => IsRegexWhitespaceRune(value, unicodeClasses),
             RegexSyntaxKind.LetterClass => IsRegexAlphabeticRune(value, unicodeClasses),
             RegexSyntaxKind.AlphanumericClass => IsRegexAlphabeticRune(value, unicodeClasses) || IsRegexDigitRune(value, unicodeClasses),
+            RegexSyntaxKind.AnyClass => true,
+            RegexSyntaxKind.UnicodePropertyClass => unicodeClasses && IsUnicodePropertyRune(value, (RegexUnicodePropertyKind)literal),
+            RegexSyntaxKind.NotUnicodePropertyClass => unicodeClasses && !IsUnicodePropertyRune(value, (RegexUnicodePropertyKind)literal),
             _ => RuneEqualsLiteral(value, literal, caseInsensitive, unicodeClasses),
         };
         return tokenNegated ? !matched : matched;
@@ -846,9 +947,13 @@ internal static class RegexByteClass
 
     private static bool IsUnicodePropertyRune(Rune value, ReadOnlySpan<byte> expression)
     {
-        return expression.Length == 1 &&
-            (RegexUnicodeTables.IsGeneralCategory((RegexUnicodePropertyKind)expression[0], value) ||
-                RegexUnicodeTables.IsBooleanProperty((RegexUnicodePropertyKind)expression[0], value));
+        return expression.Length == 1 && IsUnicodePropertyRune(value, (RegexUnicodePropertyKind)expression[0]);
+    }
+
+    private static bool IsUnicodePropertyRune(Rune value, RegexUnicodePropertyKind kind)
+    {
+        return RegexUnicodeTables.IsGeneralCategory(kind, value) ||
+            RegexUnicodeTables.IsBooleanProperty(kind, value);
     }
 
     private static bool TryFoldUnicodeScalarToAscii(Rune value, out byte folded)

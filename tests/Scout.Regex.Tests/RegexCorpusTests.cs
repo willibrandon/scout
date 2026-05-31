@@ -383,6 +383,9 @@ public sealed class RegexCorpusTests
             ]),
             ("unicode.toml",
             [
+                "class4",
+                "class5",
+                "class6",
                 "class7",
                 "class9",
                 "class10",
