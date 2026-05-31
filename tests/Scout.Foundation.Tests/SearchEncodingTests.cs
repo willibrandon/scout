@@ -1,3 +1,7 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+
 namespace Scout;
 
 /// <summary>
@@ -5,6 +9,8 @@ namespace Scout;
 /// </summary>
 public sealed class SearchEncodingTests
 {
+    private const string EncodingRsLabelTestsPath = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs-0.8.35/src/test_labels_names.rs";
+
     /// <summary>
     /// Verifies implemented WHATWG labels resolve to the expected search encoding kinds.
     /// </summary>
@@ -261,6 +267,35 @@ public sealed class SearchEncodingTests
     }
 
     /// <summary>
+    /// Verifies Scout label resolution tracks <c>encoding_rs::Encoding::for_label_no_replacement</c>.
+    /// </summary>
+    [Fact]
+    public void TryGetKindMatchesEncodingRsForLabelNoReplacementCatalog()
+    {
+        string upstream = File.ReadAllText(EncodingRsLabelTestsPath);
+        List<(string Label, string EncodingName)> cases = ReadEncodingRsLabelCases(upstream);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        Assert.Equal(228, cases.Count);
+        for (int index = 0; index < cases.Count; index++)
+        {
+            (string label, string upstreamEncodingName) = cases[index];
+
+            Assert.True(seen.Add(label), "Duplicate encoding_rs label: " + label);
+            bool resolved = SearchEncodingLabel.TryGetKind(label, out SearchEncodingKind encodingKind);
+            if (string.Equals(upstreamEncodingName, "REPLACEMENT", StringComparison.Ordinal))
+            {
+                Assert.False(resolved, "Replacement-only label should be rejected: " + label);
+                Assert.Equal(default, encodingKind);
+                continue;
+            }
+
+            Assert.True(resolved, "Missing encoding_rs label: " + label);
+            Assert.Equal(ToSearchEncodingKind(label, upstreamEncodingName), encodingKind);
+        }
+    }
+
+    /// <summary>
     /// Verifies raw mode preserves the caller's byte array instance.
     /// </summary>
     [Fact]
@@ -271,6 +306,97 @@ public sealed class SearchEncodingTests
         byte[] decoded = SearchEncoding.Decode(bytes, SearchEncodingKind.None);
 
         Assert.Same(bytes, decoded);
+    }
+
+    private static List<(string Label, string EncodingName)> ReadEncodingRsLabelCases(string text)
+    {
+        const string LabelToken = "Encoding::for_label(b\"";
+        const string SomeToken = "Some(";
+
+        var cases = new List<(string Label, string EncodingName)>();
+        int searchIndex = 0;
+        while (true)
+        {
+            int labelStart = text.IndexOf(LabelToken, searchIndex, StringComparison.Ordinal);
+            if (labelStart < 0)
+            {
+                return cases;
+            }
+
+            int labelValueStart = labelStart + LabelToken.Length;
+            int labelValueEnd = text.IndexOf("\")", labelValueStart, StringComparison.Ordinal);
+            if (labelValueEnd < 0)
+            {
+                throw new InvalidOperationException("Malformed encoding_rs label assertion.");
+            }
+
+            int someStart = text.IndexOf(SomeToken, labelValueEnd, StringComparison.Ordinal);
+            if (someStart < 0)
+            {
+                throw new InvalidOperationException("Malformed encoding_rs label assertion.");
+            }
+
+            int encodingNameStart = someStart + SomeToken.Length;
+            int encodingNameEnd = text.IndexOf(')', encodingNameStart);
+            if (encodingNameEnd < 0)
+            {
+                throw new InvalidOperationException("Malformed encoding_rs label assertion.");
+            }
+
+            string label = text[labelValueStart..labelValueEnd];
+            string encodingName = text[encodingNameStart..encodingNameEnd].Trim();
+            cases.Add((label, encodingName));
+            searchIndex = encodingNameEnd + 1;
+        }
+    }
+
+    private static SearchEncodingKind ToSearchEncodingKind(string label, string upstreamEncodingName)
+    {
+        return upstreamEncodingName switch
+        {
+            "BIG5" => SearchEncodingKind.Big5,
+            "EUC_JP" => SearchEncodingKind.EucJp,
+            "EUC_KR" => SearchEncodingKind.EucKr,
+            "GB18030" => SearchEncodingKind.Gb18030,
+            "GBK" => SearchEncodingKind.Gbk,
+            "IBM866" => SearchEncodingKind.Ibm866,
+            "ISO_2022_JP" => SearchEncodingKind.Iso2022Jp,
+            "ISO_8859_2" => SearchEncodingKind.Iso88592,
+            "ISO_8859_3" => SearchEncodingKind.Iso88593,
+            "ISO_8859_4" => SearchEncodingKind.Iso88594,
+            "ISO_8859_5" => SearchEncodingKind.Iso88595,
+            "ISO_8859_6" => SearchEncodingKind.Iso88596,
+            "ISO_8859_7" => SearchEncodingKind.Iso88597,
+            "ISO_8859_8" => SearchEncodingKind.Iso88598,
+            "ISO_8859_8_I" => SearchEncodingKind.Iso88598I,
+            "ISO_8859_10" => SearchEncodingKind.Iso885910,
+            "ISO_8859_13" => SearchEncodingKind.Iso885913,
+            "ISO_8859_14" => SearchEncodingKind.Iso885914,
+            "ISO_8859_15" => SearchEncodingKind.Iso885915,
+            "ISO_8859_16" => SearchEncodingKind.Iso885916,
+            "KOI8_R" => SearchEncodingKind.Koi8R,
+            "KOI8_U" => SearchEncodingKind.Koi8U,
+            "MACINTOSH" => SearchEncodingKind.Macintosh,
+            "SHIFT_JIS" => SearchEncodingKind.ShiftJis,
+            "UTF_16BE" => SearchEncodingKind.Utf16Be,
+            "UTF_16LE" => string.Equals(label, "utf-16", StringComparison.Ordinal)
+                ? SearchEncodingKind.Utf16
+                : SearchEncodingKind.Utf16Le,
+            "UTF_8" => SearchEncodingKind.Utf8,
+            "WINDOWS_874" => SearchEncodingKind.Windows874,
+            "WINDOWS_1250" => SearchEncodingKind.Windows1250,
+            "WINDOWS_1251" => SearchEncodingKind.Windows1251,
+            "WINDOWS_1252" => SearchEncodingKind.Windows1252,
+            "WINDOWS_1253" => SearchEncodingKind.Windows1253,
+            "WINDOWS_1254" => SearchEncodingKind.Windows1254,
+            "WINDOWS_1255" => SearchEncodingKind.Windows1255,
+            "WINDOWS_1256" => SearchEncodingKind.Windows1256,
+            "WINDOWS_1257" => SearchEncodingKind.Windows1257,
+            "WINDOWS_1258" => SearchEncodingKind.Windows1258,
+            "X_MAC_CYRILLIC" => SearchEncodingKind.XMacCyrillic,
+            "X_USER_DEFINED" => SearchEncodingKind.XUserDefined,
+            _ => throw new InvalidOperationException("Unhandled encoding_rs encoding name: " + upstreamEncodingName),
+        };
     }
 
     /// <summary>

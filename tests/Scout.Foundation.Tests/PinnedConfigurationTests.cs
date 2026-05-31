@@ -406,6 +406,44 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies <c>-E</c> decoding stays on Scout's <c>encoding_rs</c> port instead of BCL code pages.
+    /// </summary>
+    [Fact]
+    public void SearchEncodingDoesNotUseSystemTextEncoding()
+    {
+        string root = FindRepositoryRoot();
+        var violations = new List<string>();
+        string[] encodingProjects =
+        [
+            Path.Combine(root, "src", "Scout.Encoding"),
+            Path.Combine(root, "src", "Scout.Encoding.Io"),
+        ];
+
+        foreach (string projectPath in encodingProjects)
+        {
+            foreach (string path in Directory.EnumerateFiles(projectPath, "*.cs", SearchOption.AllDirectories))
+            {
+                string relativePath = Path.GetRelativePath(root, path);
+                if (ContainsPathSegment(relativePath, "bin") || ContainsPathSegment(relativePath, "obj"))
+                {
+                    continue;
+                }
+
+                string text = File.ReadAllText(path);
+                if (text.Contains("System.Text.Encoding", StringComparison.Ordinal) ||
+                    text.Contains("Encoding.GetEncoding", StringComparison.Ordinal) ||
+                    text.Contains("CodePagesEncodingProvider", StringComparison.Ordinal) ||
+                    text.Contains("Encoding.RegisterProvider", StringComparison.Ordinal))
+                {
+                    violations.Add(relativePath);
+                }
+            }
+        }
+
+        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>
     /// Verifies runtime code routes environment variable reads through the byte-preserving OS layer.
     /// </summary>
     [Fact]
