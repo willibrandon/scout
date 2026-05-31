@@ -142,7 +142,6 @@ jobs:
 
   full-tests:
     name: full pinned tests
-    if: github.event_name == 'workflow_dispatch'
     runs-on:
       - self-hosted
       - scout
@@ -271,7 +270,6 @@ jobs:
 
   performance-gate:
     name: hyperfine performance gate
-    if: github.event_name == 'workflow_dispatch'
     runs-on:
       - self-hosted
       - scout

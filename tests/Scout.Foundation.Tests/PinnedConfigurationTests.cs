@@ -58,6 +58,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.True(File.Exists(workflowPath), "Missing CI workflow: " + workflowPath);
         string workflow = File.ReadAllText(workflowPath);
 
+        Assert.Contains("push:", workflow, StringComparison.Ordinal);
+        Assert.Contains("pull_request:", workflow, StringComparison.Ordinal);
+        Assert.Contains("workflow_dispatch:", workflow, StringComparison.Ordinal);
         Assert.Contains("FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: \"true\"", workflow, StringComparison.Ordinal);
         Assert.Contains("LINUX_LIBC_VERSION: \"2.36-9+deb12u13\"", workflow, StringComparison.Ordinal);
         Assert.Contains("LINUX_SNAPSHOT_URL: \"http://snapshot.debian.org/archive/debian/20260501T000000Z\"", workflow, StringComparison.Ordinal);
@@ -83,7 +86,6 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("eng/verify-linux-prereqs.sh ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/preflight.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("cancel-in-progress: true", workflow, StringComparison.Ordinal);
-        Assert.Contains("if: github.event_name == 'workflow_dispatch'", workflow, StringComparison.Ordinal);
         Assert.Contains("spike/build-unix.sh ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
         Assert.Contains("spike/build-windows.ps1 ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
         Assert.Contains("native/build-app-unix.sh ${{ matrix.rid }} --smoke-only", workflow, StringComparison.Ordinal);
@@ -105,6 +107,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.DoesNotContain("macos-13", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("-p:PublishAot=true", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("continue-on-error: true", workflow, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("if: github.event_name == 'workflow_dispatch'", workflow, StringComparison.Ordinal);
 
         string[] requiredRids =
         [
