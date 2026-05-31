@@ -16,6 +16,16 @@ internal sealed class PikeVm
 
     public bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int length)
     {
+        return TryMatchAt(haystack, start, earliest: false, out length);
+    }
+
+    public bool TryMatchEarliestAt(ReadOnlySpan<byte> haystack, int start, out int length)
+    {
+        return TryMatchAt(haystack, start, earliest: true, out length);
+    }
+
+    private bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, bool earliest, out int length)
+    {
         current.Clear();
         AddThread(nfa.StartState, haystack, start, current, new bool[nfa.States.Count], new bool[nfa.States.Count]);
         int deferredAcceptLength = -1;
@@ -26,7 +36,7 @@ internal sealed class PikeVm
             if (acceptIndex >= 0)
             {
                 deferredAcceptLength = position - start;
-                if (!HasEarlierConsumer(current, acceptIndex, haystack, position))
+                if (earliest || !HasEarlierConsumer(current, acceptIndex, haystack, position))
                 {
                     length = deferredAcceptLength;
                     return true;

@@ -210,6 +210,21 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies earliest search returns the first accepting span instead of leftmost-first greedy priority.
+    /// </summary>
+    [Fact]
+    public void HonorsEarliestSearchKind()
+    {
+        RegexMatch? greedy = RegexAutomaton.Compile("a+"u8).FindEarliest("zaaa"u8, startAt: 0);
+        RegexMatch? alternate = RegexAutomaton.Compile("abc|a"u8).FindEarliest("abc"u8, startAt: 0);
+        RegexMatch? endAnchored = RegexAutomaton.Compile("(abc|a)$"u8).FindEarliest("abc"u8, startAt: 0);
+
+        Assert.Equal(new RegexMatch(1, 1), greedy);
+        Assert.Equal(new RegexMatch(0, 1), alternate);
+        Assert.Equal(new RegexMatch(0, 3), endAnchored);
+    }
+
+    /// <summary>
     /// Verifies adjacent optional groups retain ripgrep's leftmost-first greedy priority.
     /// </summary>
     [Fact]

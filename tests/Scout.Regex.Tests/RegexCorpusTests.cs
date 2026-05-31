@@ -91,6 +91,16 @@ public sealed class RegexCorpusTests
                 "600",
                 "610",
             ]),
+            ("earliest.toml",
+            [
+                "no-greedy-100",
+                "no-greedy-200",
+                "is-ungreedy",
+                "look-start-test",
+                "look-end-test",
+                "no-leftmost-first-100",
+                "no-leftmost-first-200",
+            ]),
             ("expensive.toml",
             [
                 "regression-many-repeat-no-stack-overflow",
@@ -806,6 +816,7 @@ public sealed class RegexCorpusTests
             testCase.BoundsStart,
             testCase.BoundsEnd,
             testCase.Anchored,
+            testCase.Earliest,
             testCase.Overlapping);
 
         Assert.True(
@@ -870,6 +881,7 @@ public sealed class RegexCorpusTests
         int boundsStart,
         int boundsEnd,
         bool anchored,
+        bool earliest,
         bool overlapping)
     {
         var matches = new List<RegexMatch>();
@@ -882,7 +894,7 @@ public sealed class RegexCorpusTests
                 break;
             }
 
-            RegexMatch? match = Find(automata, haystack, startAt, boundsEnd, anchored);
+            RegexMatch? match = Find(automata, haystack, startAt, boundsEnd, anchored, earliest);
             if (!match.HasValue)
             {
                 break;
@@ -916,13 +928,15 @@ public sealed class RegexCorpusTests
         return matches.ToArray();
     }
 
-    private static RegexMatch? Find(IReadOnlyList<RegexAutomaton> automata, byte[] haystack, int startAt, int boundsEnd, bool anchored)
+    private static RegexMatch? Find(IReadOnlyList<RegexAutomaton> automata, byte[] haystack, int startAt, int boundsEnd, bool anchored, bool earliest)
     {
         RegexMatch? best = null;
         int bestPatternIndex = int.MaxValue;
         for (int index = 0; index < automata.Count; index++)
         {
-            RegexMatch? match = automata[index].Find(haystack, startAt);
+            RegexMatch? match = earliest
+                ? automata[index].FindEarliest(haystack, startAt)
+                : automata[index].Find(haystack, startAt);
             if (!match.HasValue)
             {
                 continue;

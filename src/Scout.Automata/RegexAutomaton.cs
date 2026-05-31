@@ -92,6 +92,17 @@ public sealed class RegexAutomaton
     }
 
     /// <summary>
+    /// Finds the earliest-ending match in a haystack at or after a byte offset.
+    /// </summary>
+    /// <param name="haystack">The haystack bytes.</param>
+    /// <param name="startAt">The first byte offset to consider.</param>
+    /// <returns>The earliest match, or <see langword="null" /> when no match exists.</returns>
+    public RegexMatch? FindEarliest(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        return engine.FindEarliest(haystack, startAt);
+    }
+
+    /// <summary>
     /// Returns a value indicating whether the regex matches a haystack.
     /// </summary>
     /// <param name="haystack">The haystack bytes.</param>

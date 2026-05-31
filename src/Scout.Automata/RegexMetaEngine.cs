@@ -19,10 +19,12 @@ internal sealed class RegexMetaEngine
     private readonly RegexSparseDfa? sparseDfa;
     private readonly RegexLazyDfa? lazyDfa;
     private readonly RegexPrefilter? prefilter;
+    private readonly RegexNfa nfa;
     private readonly bool utf8;
 
     private RegexMetaEngine(
         RegexEngineKind kind,
+        RegexNfa nfa,
         PikeVm? pikeVm,
         RegexBoundedBacktracker? boundedBacktracker,
         RegexOnePassDfa? onePassDfa,
@@ -33,6 +35,7 @@ internal sealed class RegexMetaEngine
         bool utf8)
     {
         Kind = kind;
+        this.nfa = nfa;
         this.pikeVm = pikeVm;
         this.boundedBacktracker = boundedBacktracker;
         this.onePassDfa = onePassDfa;
@@ -65,6 +68,7 @@ internal sealed class RegexMetaEngine
             {
                 return new RegexMetaEngine(
                     RegexEngineKind.OnePassDfa,
+                    nfa,
                     pikeVm: null,
                     boundedBacktracker: null,
                     onePassDfa: new RegexOnePassDfa(nfa),
@@ -79,6 +83,7 @@ internal sealed class RegexMetaEngine
             {
                 return new RegexMetaEngine(
                     RegexEngineKind.BoundedBacktracker,
+                    nfa,
                     pikeVm: null,
                     boundedBacktracker: new RegexBoundedBacktracker(nfa),
                     onePassDfa: null,
@@ -91,6 +96,7 @@ internal sealed class RegexMetaEngine
 
             return new RegexMetaEngine(
                 RegexEngineKind.PikeVm,
+                nfa,
                 new PikeVm(nfa),
                 boundedBacktracker: null,
                 onePassDfa: null,
@@ -107,6 +113,7 @@ internal sealed class RegexMetaEngine
         {
             return new RegexMetaEngine(
                 RegexEngineKind.DenseDfa,
+                nfa,
                 pikeVm: null,
                 boundedBacktracker: null,
                 onePassDfa: null,
@@ -122,6 +129,7 @@ internal sealed class RegexMetaEngine
         {
             return new RegexMetaEngine(
                 RegexEngineKind.SparseDfa,
+                nfa,
                 pikeVm: null,
                 boundedBacktracker: null,
                 onePassDfa: null,
@@ -136,6 +144,7 @@ internal sealed class RegexMetaEngine
         {
             return new RegexMetaEngine(
                 RegexEngineKind.PikeVm,
+                nfa,
                 new PikeVm(nfa),
                 boundedBacktracker: null,
                 onePassDfa: null,
@@ -148,6 +157,7 @@ internal sealed class RegexMetaEngine
 
         return new RegexMetaEngine(
             RegexEngineKind.LazyDfa,
+            nfa,
             pikeVm: null,
             boundedBacktracker: null,
             onePassDfa: null,
@@ -179,6 +189,26 @@ internal sealed class RegexMetaEngine
         for (int start = startOffset; start <= haystack.Length; start++)
         {
             if (TryMatchAt(haystack, start, out int length))
+            {
+                return new RegexMatch(start, length);
+            }
+        }
+
+        return null;
+    }
+
+    public RegexMatch? FindEarliest(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        var earliestPikeVm = new PikeVm(nfa);
+        for (int start = startOffset; start <= haystack.Length; start++)
+        {
+            if (utf8 && !RegexByteClass.IsUtf8Boundary(haystack, start))
+            {
+                continue;
+            }
+
+            if (earliestPikeVm.TryMatchEarliestAt(haystack, start, out int length))
             {
                 return new RegexMatch(start, length);
             }
