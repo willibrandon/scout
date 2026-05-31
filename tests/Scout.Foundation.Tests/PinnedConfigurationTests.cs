@@ -66,7 +66,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("pull_request:", ciWorkflow, StringComparison.Ordinal);
         Assert.Contains("workflow_dispatch:", ciWorkflow, StringComparison.Ordinal);
         Assert.Contains("workflow_dispatch:", releaseGateWorkflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("workflow_run:", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("workflow_run", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("actions: write", ciWorkflow, StringComparison.Ordinal);
         Assert.Contains("release gates dispatch", ciWorkflow, StringComparison.Ordinal);
         Assert.Contains("gh workflow run release-gates.yml --ref main -f checkout_ref=\"${{ github.sha }}\"", ciWorkflow, StringComparison.Ordinal);
