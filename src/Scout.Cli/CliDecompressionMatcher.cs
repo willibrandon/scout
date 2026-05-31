@@ -87,7 +87,7 @@ public static class CliDecompressionMatcher
             return File.Exists(program);
         }
 
-        string? pathVariable = Environment.GetEnvironmentVariable("PATH");
+        string? pathVariable = ProcessEnvironment.GetVariable("PATH");
         if (string.IsNullOrEmpty(pathVariable))
         {
             return false;

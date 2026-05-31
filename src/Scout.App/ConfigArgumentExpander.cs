@@ -30,7 +30,7 @@ internal static class ConfigArgumentExpander
 
         string? configPath = useConfigPathOverride
             ? configPathOverride
-            : Environment.GetEnvironmentVariable("RIPGREP_CONFIG_PATH");
+            : ProcessEnvironment.GetVariable("RIPGREP_CONFIG_PATH");
         if (string.IsNullOrEmpty(configPath))
         {
             logger.Debug("rg::flags::config", "crates/core/flags/config.rs", 19, "RIPGREP_CONFIG_PATH environment variable is not set, therefore not reading any config file");

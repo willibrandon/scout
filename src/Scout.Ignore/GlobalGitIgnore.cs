@@ -20,7 +20,7 @@ internal static class GlobalGitIgnore
 
     internal static string? ResolveFilePath()
     {
-        return ResolveFilePath(Environment.GetEnvironmentVariable, File.Exists, File.ReadAllText);
+        return ResolveFilePath(ProcessEnvironment.GetVariable, File.Exists, File.ReadAllText);
     }
 
     internal static string? ResolveFilePath(

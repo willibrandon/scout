@@ -300,6 +300,35 @@ public sealed class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies runtime code routes environment variable reads through the byte-preserving OS layer.
+    /// </summary>
+    [Fact]
+    public void RuntimeEnvironmentReadsUseProcessEnvironment()
+    {
+        string root = FindRepositoryRoot();
+        var violations = new List<string>();
+
+        foreach (string path in Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories))
+        {
+            string relativePath = Path.GetRelativePath(root, path);
+            if (ContainsPathSegment(relativePath, "bin") ||
+                ContainsPathSegment(relativePath, "obj") ||
+                string.Equals(relativePath, Path.Combine("src", "Scout.Os", "ProcessEnvironment.cs"), StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            string text = File.ReadAllText(path);
+            if (text.Contains("Environment.GetEnvironmentVariable", StringComparison.Ordinal))
+            {
+                violations.Add(relativePath);
+            }
+        }
+
+        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>
     /// Verifies native entry captures raw Unix bytes and Windows UTF-16 arguments at the OS boundary.
     /// </summary>
     [Fact]
@@ -314,6 +343,7 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("[UnmanagedCallersOnly(EntryPoint = \"scout_entry\")]", scoutEntry, StringComparison.Ordinal);
         Assert.Contains("NativeArgumentReader.CaptureUnix(argc, argv)", scoutEntry, StringComparison.Ordinal);
         Assert.Contains("NativeArgumentReader.CaptureWindowsCommandLine()", scoutEntry, StringComparison.Ordinal);
+        Assert.Contains("ProcessEnvironment.UseUnixEnvironment(envp)", scoutEntry, StringComparison.Ordinal);
         Assert.Contains("GetCommandLineW", nativeArgumentReader, StringComparison.Ordinal);
         Assert.Contains("CommandLineToArgvW", nativeArgumentReader, StringComparison.Ordinal);
         Assert.Contains("LocalFree", nativeArgumentReader, StringComparison.Ordinal);

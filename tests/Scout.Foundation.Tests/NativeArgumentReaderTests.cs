@@ -57,4 +57,32 @@ public sealed unsafe class NativeArgumentReaderTests
             Assert.Equal("C:\\tmp\\file.txt", arguments[2].AsWindowsString());
         }
     }
+
+    /// <summary>
+    /// Verifies Unix environment capture preserves raw entries and resolves UTF-8 values without lossy fallback.
+    /// </summary>
+    [Fact]
+    public void CaptureUnixEnvironmentPreservesRawEntries()
+    {
+        byte[] config = [.. "RIPGREP_CONFIG_PATH=/tmp/rg.conf"u8, 0x00];
+        byte[] invalid = [.. "SCOUT_INVALID="u8, 0xFF, 0x00];
+
+        fixed (byte* configPointer = config)
+        fixed (byte* invalidPointer = invalid)
+        {
+            byte** envp = stackalloc byte*[3];
+            envp[0] = configPointer;
+            envp[1] = invalidPointer;
+            envp[2] = null;
+
+            byte[][] environment = ProcessEnvironment.CaptureUnix(envp);
+
+            Assert.Equal(2, environment.Length);
+            Assert.Equal("RIPGREP_CONFIG_PATH=/tmp/rg.conf"u8.ToArray(), environment[0]);
+            Assert.Equal([.. "SCOUT_INVALID="u8, 0xFF], environment[1]);
+            Assert.Equal("/tmp/rg.conf", ProcessEnvironment.GetVariable(environment, "RIPGREP_CONFIG_PATH"));
+            Assert.Null(ProcessEnvironment.GetVariable(environment, "SCOUT_INVALID"));
+            Assert.Null(ProcessEnvironment.GetVariable(environment, "MISSING"));
+        }
+    }
 }
