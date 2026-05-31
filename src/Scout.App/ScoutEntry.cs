@@ -15,6 +15,12 @@ internal static unsafe class ScoutEntry
         OsString[] arguments = OperatingSystem.IsWindows()
             ? NativeArgumentReader.CaptureWindowsCommandLine()
             : NativeArgumentReader.CaptureUnix(argc, argv);
-        return ScoutApplication.Run(arguments, RawStandardStreams.OpenOutput(), RawStandardStreams.OpenError());
+        bool standardOutputIsTerminal = StandardOutputProbe.IsTerminal();
+        if (standardOutputIsTerminal)
+        {
+            StandardOutputProbe.TryEnableVirtualTerminalProcessing();
+        }
+
+        return ScoutApplication.Run(arguments, RawStandardStreams.OpenOutput(), RawStandardStreams.OpenError(), standardOutputIsTerminal);
     }
 }

@@ -9,7 +9,17 @@ internal static class ScoutApplication
     internal static int Run(ReadOnlySpan<OsString> arguments, RawByteWriter output, RawByteWriter error)
     {
         using Stream standardInput = Console.OpenStandardInput();
-        return Run(arguments, output, error, standardInput, StandardInputProbe.IsReadable(), configPathOverride: null, useConfigPathOverride: false);
+        return Run(arguments, output, error, standardInput, StandardInputProbe.IsReadable(), standardOutputIsTerminal: false, configPathOverride: null, useConfigPathOverride: false);
+    }
+
+    internal static int Run(
+        ReadOnlySpan<OsString> arguments,
+        RawByteWriter output,
+        RawByteWriter error,
+        bool standardOutputIsTerminal)
+    {
+        using Stream standardInput = Console.OpenStandardInput();
+        return Run(arguments, output, error, standardInput, StandardInputProbe.IsReadable(), standardOutputIsTerminal, configPathOverride: null, useConfigPathOverride: false);
     }
 
     internal static int Run(
@@ -19,7 +29,7 @@ internal static class ScoutApplication
         string? configPath)
     {
         using Stream standardInput = Console.OpenStandardInput();
-        return Run(arguments, output, error, standardInput, StandardInputProbe.IsReadable(), configPath, useConfigPathOverride: true);
+        return Run(arguments, output, error, standardInput, StandardInputProbe.IsReadable(), standardOutputIsTerminal: false, configPath, useConfigPathOverride: true);
     }
 
     internal static int Run(
@@ -28,7 +38,17 @@ internal static class ScoutApplication
         RawByteWriter error,
         Stream standardInput)
     {
-        return Run(arguments, output, error, standardInput, standardInputIsReadable: true, configPathOverride: null, useConfigPathOverride: false);
+        return Run(arguments, output, error, standardInput, standardInputIsReadable: true, standardOutputIsTerminal: false, configPathOverride: null, useConfigPathOverride: false);
+    }
+
+    internal static int Run(
+        ReadOnlySpan<OsString> arguments,
+        RawByteWriter output,
+        RawByteWriter error,
+        Stream standardInput,
+        bool standardOutputIsTerminal)
+    {
+        return Run(arguments, output, error, standardInput, standardInputIsReadable: true, standardOutputIsTerminal, configPathOverride: null, useConfigPathOverride: false);
     }
 
     internal static int Run(
@@ -38,7 +58,7 @@ internal static class ScoutApplication
         Stream standardInput,
         string? configPath)
     {
-        return Run(arguments, output, error, standardInput, standardInputIsReadable: true, configPath, useConfigPathOverride: true);
+        return Run(arguments, output, error, standardInput, standardInputIsReadable: true, standardOutputIsTerminal: false, configPath, useConfigPathOverride: true);
     }
 
     private static int Run(
@@ -47,6 +67,7 @@ internal static class ScoutApplication
         RawByteWriter error,
         Stream standardInput,
         bool standardInputIsReadable,
+        bool standardOutputIsTerminal,
         string? configPathOverride,
         bool useConfigPathOverride)
     {
@@ -73,7 +94,7 @@ internal static class ScoutApplication
             return RunSpecial(parseResult.SpecialMode, output);
         }
 
-        return RunSearch(parseResult.LowArgs!, output, diagnostics, standardInput, standardInputIsReadable);
+        return RunSearch(parseResult.LowArgs!, output, diagnostics, standardInput, standardInputIsReadable, standardOutputIsTerminal);
     }
 
     private static bool TextEquals(OsString argument, string expected)
@@ -125,8 +146,10 @@ internal static class ScoutApplication
         RawByteWriter output,
         DiagnosticMessenger diagnostics,
         Stream standardInput,
-        bool standardInputIsReadable)
+        bool standardInputIsReadable,
+        bool standardOutputIsTerminal)
     {
+        lowArgs.SetColorMode(TerminalColor.Resolve(lowArgs.ColorMode, standardOutputIsTerminal));
         DiagnosticLogger logger = new(diagnostics, lowArgs.LoggingMode);
         IReadOnlyList<OsString> positional = lowArgs.Positional;
         if (lowArgs.GenerateMode is CliGenerateMode generateMode)
