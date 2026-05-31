@@ -14,5 +14,7 @@ The implementation establishes the byte-preserving public surface used by later
 regex, glob, and searcher ports, including single-result, materialized, and
 span-enumerator forward/reverse searches for one, two, and three bytes plus substring searches.
 Substring search also includes span enumerators and reusable forward and reverse finder types for
-fixed needles. SIMD-specialized implementations are added behind this API as
-the automata/search milestones advance.
+fixed needles. Single-byte forward search has explicit `System.Runtime.Intrinsics`
+paths for AVX-512, AVX2, SSE2, and AdvSimd/NEON, all `IsSupported`-gated with a
+scalar fallback. The remaining byte-search forms keep the same byte-preserving
+API and scalar/span fallback behavior.

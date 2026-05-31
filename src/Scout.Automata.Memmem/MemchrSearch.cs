@@ -1,5 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.Arm;
+using System.Runtime.Intrinsics.X86;
 
 namespace Scout;
 
@@ -17,7 +22,32 @@ public static class MemchrSearch
     /// <returns>The zero-based index, or <c>-1</c> when the byte is absent.</returns>
     public static int Find(ReadOnlySpan<byte> haystack, byte needle)
     {
-        return haystack.IndexOf(needle);
+        if (haystack.IsEmpty)
+        {
+            return -1;
+        }
+
+        if (Avx512BW.IsSupported && haystack.Length >= Vector512<byte>.Count)
+        {
+            return FindVector512(haystack, needle);
+        }
+
+        if (Avx2.IsSupported && haystack.Length >= Vector256<byte>.Count)
+        {
+            return FindVector256(haystack, needle);
+        }
+
+        if (Sse2.IsSupported && haystack.Length >= Vector128<byte>.Count)
+        {
+            return FindSse2(haystack, needle);
+        }
+
+        if (AdvSimd.IsSupported && haystack.Length >= Vector128<byte>.Count)
+        {
+            return FindAdvSimd(haystack, needle);
+        }
+
+        return FindScalar(haystack, needle, start: 0);
     }
 
     /// <summary>
@@ -283,5 +313,102 @@ public static class MemchrSearch
     public static Memchr3Enumerator Enumerate3Reverse(ReadOnlySpan<byte> haystack, byte first, byte second, byte third)
     {
         return new Memchr3Enumerator(haystack, first, second, third, reverse: true);
+    }
+
+    private static int FindVector512(ReadOnlySpan<byte> haystack, byte needle)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        var needleVector = Vector512.Create(needle);
+        int offset = 0;
+        int vectorEnd = haystack.Length - Vector512<byte>.Count;
+        while (offset <= vectorEnd)
+        {
+            var block = Vector512.LoadUnsafe(ref reference, (nuint)offset);
+            ulong mask = Avx512BW.CompareEqual(block, needleVector).ExtractMostSignificantBits();
+            if (mask != 0)
+            {
+                return offset + BitOperations.TrailingZeroCount(mask);
+            }
+
+            offset += Vector512<byte>.Count;
+        }
+
+        return FindScalar(haystack, needle, offset);
+    }
+
+    private static int FindVector256(ReadOnlySpan<byte> haystack, byte needle)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        var needleVector = Vector256.Create(needle);
+        int offset = 0;
+        int vectorEnd = haystack.Length - Vector256<byte>.Count;
+        while (offset <= vectorEnd)
+        {
+            var block = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            uint mask = Avx2.CompareEqual(block, needleVector).ExtractMostSignificantBits();
+            if (mask != 0)
+            {
+                return offset + BitOperations.TrailingZeroCount(mask);
+            }
+
+            offset += Vector256<byte>.Count;
+        }
+
+        return FindScalar(haystack, needle, offset);
+    }
+
+    private static int FindSse2(ReadOnlySpan<byte> haystack, byte needle)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        var needleVector = Vector128.Create(needle);
+        int offset = 0;
+        int vectorEnd = haystack.Length - Vector128<byte>.Count;
+        while (offset <= vectorEnd)
+        {
+            var block = Vector128.LoadUnsafe(ref reference, (nuint)offset);
+            uint mask = Sse2.CompareEqual(block, needleVector).ExtractMostSignificantBits();
+            if (mask != 0)
+            {
+                return offset + BitOperations.TrailingZeroCount(mask);
+            }
+
+            offset += Vector128<byte>.Count;
+        }
+
+        return FindScalar(haystack, needle, offset);
+    }
+
+    private static int FindAdvSimd(ReadOnlySpan<byte> haystack, byte needle)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        var needleVector = Vector128.Create(needle);
+        int offset = 0;
+        int vectorEnd = haystack.Length - Vector128<byte>.Count;
+        while (offset <= vectorEnd)
+        {
+            var block = Vector128.LoadUnsafe(ref reference, (nuint)offset);
+            uint mask = AdvSimd.CompareEqual(block, needleVector).ExtractMostSignificantBits();
+            if (mask != 0)
+            {
+                return offset + BitOperations.TrailingZeroCount(mask);
+            }
+
+            offset += Vector128<byte>.Count;
+        }
+
+        return FindScalar(haystack, needle, offset);
+    }
+
+    private static int FindScalar(ReadOnlySpan<byte> haystack, byte needle, int start)
+    {
+        for (int index = start; index < haystack.Length; index++)
+        {
+            if (haystack[index] == needle)
+            {
+                return index;
+            }
+        }
+
+        return -1;
     }
 }

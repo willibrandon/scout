@@ -23,6 +23,22 @@ public sealed class MemchrSearchTests
     }
 
     /// <summary>
+    /// Verifies single-byte search handles vector-sized haystacks and scalar tails.
+    /// </summary>
+    [Fact]
+    public void FindLocatesSingleByteAcrossVectorBoundaries()
+    {
+        byte[] haystack = new byte[150];
+        Array.Fill(haystack, (byte)0x10);
+        haystack[64] = 0x20;
+        haystack[149] = 0x30;
+
+        Assert.Equal(64, MemchrSearch.Find(haystack, 0x20));
+        Assert.Equal(149, MemchrSearch.Find(haystack, 0x30));
+        Assert.Equal(-1, MemchrSearch.Find(haystack, 0x40));
+    }
+
+    /// <summary>
     /// Verifies single-byte iterator-style searches report every match.
     /// </summary>
     [Fact]

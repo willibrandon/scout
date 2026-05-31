@@ -1369,6 +1369,25 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies the memchr port has explicit SIMD-gated search paths required by the design.
+    /// </summary>
+    [Fact]
+    public void MemchrSearchIncludesRequiredSimdGates()
+    {
+        string root = FindRepositoryRoot();
+        string memchrSearch = File.ReadAllText(Path.Combine(root, "src", "Scout.Automata.Memmem", "MemchrSearch.cs"));
+        string upstream = File.ReadAllText(Path.Combine(root, "src", "Scout.Automata.Memmem", "UPSTREAM.md"));
+
+        Assert.Contains("Avx512BW.IsSupported", memchrSearch, StringComparison.Ordinal);
+        Assert.Contains("Avx2.IsSupported", memchrSearch, StringComparison.Ordinal);
+        Assert.Contains("Sse2.IsSupported", memchrSearch, StringComparison.Ordinal);
+        Assert.Contains("AdvSimd.IsSupported", memchrSearch, StringComparison.Ordinal);
+        Assert.Contains("FindScalar", memchrSearch, StringComparison.Ordinal);
+        Assert.Contains("ExtractMostSignificantBits", memchrSearch, StringComparison.Ordinal);
+        Assert.Contains("AVX-512", upstream, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies the regex conformance corpus files are pinned by hash.
     /// </summary>
     [Fact]
