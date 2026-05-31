@@ -59,10 +59,24 @@ public static unsafe class ProcessEnvironment
     /// <returns>The variable value, or <see langword="null" /> when absent or not valid UTF-8 on Unix.</returns>
     public static string? GetVariable(string name)
     {
+        return GetVariableOsString(name) is { } value && value.TryGetText(out string text)
+            ? text
+            : null;
+    }
+
+    /// <summary>
+    /// Gets an environment variable from the active process environment without losing Unix bytes.
+    /// </summary>
+    /// <param name="name">The variable name.</param>
+    /// <returns>The variable value, or <see langword="null" /> when absent.</returns>
+    public static OsString? GetVariableOsString(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+
         byte[][]? unixEnvironment = activeUnixEnvironment;
         return unixEnvironment is null
-            ? Environment.GetEnvironmentVariable(name)
-            : GetVariable(unixEnvironment, name);
+            ? GetCurrentProcessVariable(name)
+            : GetVariableOsString(unixEnvironment, name);
     }
 
     /// <summary>
@@ -72,6 +86,19 @@ public static unsafe class ProcessEnvironment
     /// <param name="name">The variable name.</param>
     /// <returns>The variable value, or <see langword="null" /> when absent or not valid UTF-8.</returns>
     public static string? GetVariable(IReadOnlyList<byte[]> unixEnvironment, string name)
+    {
+        return GetVariableOsString(unixEnvironment, name) is { } value && value.TryGetText(out string text)
+            ? text
+            : null;
+    }
+
+    /// <summary>
+    /// Gets an environment variable from captured Unix environment entries without decoding the value.
+    /// </summary>
+    /// <param name="unixEnvironment">The captured Unix environment entries.</param>
+    /// <param name="name">The variable name.</param>
+    /// <returns>The variable value, or <see langword="null" /> when absent.</returns>
+    public static OsString? GetVariableOsString(IReadOnlyList<byte[]> unixEnvironment, string name)
     {
         ArgumentNullException.ThrowIfNull(unixEnvironment);
         ArgumentNullException.ThrowIfNull(name);
@@ -92,17 +119,16 @@ public static unsafe class ProcessEnvironment
                 continue;
             }
 
-            try
-            {
-                return Utf8.GetString(entry[(nameBytes.Length + 1)..]);
-            }
-            catch (DecoderFallbackException)
-            {
-                return null;
-            }
+            return OsString.FromUnixBytes(entry[(nameBytes.Length + 1)..]);
         }
 
         return null;
+    }
+
+    private static OsString? GetCurrentProcessVariable(string name)
+    {
+        string? value = Environment.GetEnvironmentVariable(name);
+        return value is null ? null : OsString.FromText(value);
     }
 
     private static int MeasureNullTerminated(byte* pointer)

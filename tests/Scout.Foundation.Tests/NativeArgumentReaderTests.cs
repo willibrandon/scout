@@ -81,8 +81,11 @@ public sealed unsafe class NativeArgumentReaderTests
             Assert.Equal("RIPGREP_CONFIG_PATH=/tmp/rg.conf"u8.ToArray(), environment[0]);
             Assert.Equal([.. "SCOUT_INVALID="u8, 0xFF], environment[1]);
             Assert.Equal("/tmp/rg.conf", ProcessEnvironment.GetVariable(environment, "RIPGREP_CONFIG_PATH"));
+            Assert.Equal("/tmp/rg.conf"u8.ToArray(), ProcessEnvironment.GetVariableOsString(environment, "RIPGREP_CONFIG_PATH")!.Value.AsUnixBytes().ToArray());
             Assert.Null(ProcessEnvironment.GetVariable(environment, "SCOUT_INVALID"));
+            Assert.Equal([0xFF], ProcessEnvironment.GetVariableOsString(environment, "SCOUT_INVALID")!.Value.AsUnixBytes().ToArray());
             Assert.Null(ProcessEnvironment.GetVariable(environment, "MISSING"));
+            Assert.Null(ProcessEnvironment.GetVariableOsString(environment, "MISSING"));
         }
     }
 }

@@ -6066,6 +6066,41 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies raw Unix RIPGREP_CONFIG_PATH bytes are not discarded when they are not valid UTF-8.
+    /// </summary>
+    [Fact]
+    public unsafe void RawUnixConfigPathEnvironmentPreservesInvalidBytes()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "needle\n");
+
+        byte[] rootBytes = Encoding.UTF8.GetBytes(root);
+        byte[] configPath = [.. rootBytes, (byte)'/', .. "rg-"u8, 0xFF, .. ".conf"u8];
+        byte[] configEntry = [.. "RIPGREP_CONFIG_PATH="u8, .. configPath, 0x00];
+        try
+        {
+            fixed (byte* configEntryPointer = configEntry)
+            {
+                byte** envp = stackalloc byte*[2];
+                envp[0] = configEntryPointer;
+                envp[1] = null;
+                ProcessEnvironment.UseUnixEnvironment(envp);
+            }
+
+            (int exitCode, byte[] output, string error) = RunScoutFromEnvironment("needle", path);
+
+            Assert.Equal(0, exitCode);
+            Assert.Equal("needle\n"u8.ToArray(), output);
+            Assert.Contains("failed to read the file specified in RIPGREP_CONFIG_PATH", error, StringComparison.Ordinal);
+        }
+        finally
+        {
+            ProcessEnvironment.UseCurrentProcessEnvironment();
+        }
+    }
+
+    /// <summary>
     /// Verifies <c>--no-config</c> disables config loading.
     /// </summary>
     [Fact]
@@ -6225,6 +6260,23 @@ public sealed class ScoutApplicationTests
         }
 
         int exitCode = ScoutApplication.Run(osArguments, outputWriter, errorWriter, configPath: null);
+        return (exitCode, output.ToArray(), Utf8(error.ToArray()));
+    }
+
+    private static (int ExitCode, byte[] Output, string Error) RunScoutFromEnvironment(params string[] arguments)
+    {
+        using MemoryStream output = new();
+        using MemoryStream error = new();
+        var outputWriter = new RawByteWriter(output);
+        var errorWriter = new RawByteWriter(error);
+        var osArguments = new OsString[arguments.Length + 1];
+        osArguments[0] = OsString.FromUnixBytes("scout"u8);
+        for (int index = 0; index < arguments.Length; index++)
+        {
+            osArguments[index + 1] = OsString.FromText(arguments[index]);
+        }
+
+        int exitCode = ScoutApplication.Run(osArguments, outputWriter, errorWriter);
         return (exitCode, output.ToArray(), Utf8(error.ToArray()));
     }
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using Microsoft.Win32.SafeHandles;
 
 namespace Scout;
 
@@ -28,17 +29,17 @@ internal static class ConfigArgumentExpander
             return null;
         }
 
-        string? configPath = useConfigPathOverride
-            ? configPathOverride
-            : ProcessEnvironment.GetVariable("RIPGREP_CONFIG_PATH");
-        if (string.IsNullOrEmpty(configPath))
+        OsString? configPath = useConfigPathOverride
+            ? configPathOverride is null ? null : OsString.FromText(configPathOverride)
+            : ProcessEnvironment.GetVariableOsString("RIPGREP_CONFIG_PATH");
+        if (configPath is null || IsNullOrEmpty(configPath.Value))
         {
             logger.Debug("rg::flags::config", "crates/core/flags/config.rs", 19, "RIPGREP_CONFIG_PATH environment variable is not set, therefore not reading any config file");
             logger.Debug("rg::flags::parse", "crates/core/flags/parse.rs", 97, "no extra arguments found from configuration file");
             return null;
         }
 
-        List<OsString> configArguments = ReadConfigArguments(configPath, diagnostics);
+        List<OsString> configArguments = ReadConfigArguments(configPath.Value, diagnostics);
         if (configArguments.Count == 0)
         {
             logger.Debug("rg::flags::parse", "crates/core/flags/parse.rs", 97, "no extra arguments found from configuration file");
@@ -111,23 +112,30 @@ internal static class ConfigArgumentExpander
         return CliParser.TryParseSpecialMode(argument, out _);
     }
 
-    private static List<OsString> ReadConfigArguments(string configPath, DiagnosticMessenger diagnostics)
+    private static List<OsString> ReadConfigArguments(OsString configPath, DiagnosticMessenger diagnostics)
     {
+        string displayPath = DisplayPath(configPath);
         byte[] bytes;
         try
         {
-            bytes = File.ReadAllBytes(configPath);
+            bytes = ReadConfigBytes(configPath);
         }
         catch (FileNotFoundException)
         {
             diagnostics.ErrorMessage(new ScoutError(
-                $"failed to read the file specified in RIPGREP_CONFIG_PATH: {configPath}: No such file or directory (os error 2)").WithContext("rg"));
+                $"failed to read the file specified in RIPGREP_CONFIG_PATH: {displayPath}: No such file or directory (os error 2)").WithContext("rg"));
             return [];
         }
         catch (DirectoryNotFoundException)
         {
             diagnostics.ErrorMessage(new ScoutError(
-                $"failed to read the file specified in RIPGREP_CONFIG_PATH: {configPath}: No such file or directory (os error 2)").WithContext("rg"));
+                $"failed to read the file specified in RIPGREP_CONFIG_PATH: {displayPath}: No such file or directory (os error 2)").WithContext("rg"));
+            return [];
+        }
+        catch (IOException exception) when (IsNoSuchFileOrDirectory(exception))
+        {
+            diagnostics.ErrorMessage(new ScoutError(
+                $"failed to read the file specified in RIPGREP_CONFIG_PATH: {displayPath}: No such file or directory (os error 2)").WithContext("rg"));
             return [];
         }
         catch (UnauthorizedAccessException exception)
@@ -173,6 +181,42 @@ internal static class ConfigArgumentExpander
         }
 
         return configArguments;
+    }
+
+    private static bool IsNullOrEmpty(OsString value)
+    {
+        return value.IsUnixBytes
+            ? value.AsUnixBytes().IsEmpty
+            : value.AsWindowsString().Length == 0;
+    }
+
+    private static byte[] ReadConfigBytes(OsString configPath)
+    {
+        if (configPath.IsUnixBytes && !OperatingSystem.IsWindows())
+        {
+            using SafeFileHandle handle = RawUnixFile.OpenRead(configPath.AsUnixBytes());
+            using FileStream stream = new(handle, FileAccess.Read);
+            using MemoryStream output = new();
+            stream.CopyTo(output);
+            return output.ToArray();
+        }
+
+        string path = configPath.IsWindowsText
+            ? configPath.AsWindowsString()
+            : Utf8.GetString(configPath.AsUnixBytes());
+        return File.ReadAllBytes(path);
+    }
+
+    private static string DisplayPath(OsString configPath)
+    {
+        return configPath.TryGetText(out string text)
+            ? text
+            : Utf8.GetString(configPath.AsUnixBytes());
+    }
+
+    private static bool IsNoSuchFileOrDirectory(IOException exception)
+    {
+        return exception.Message.Contains("No such file or directory", StringComparison.Ordinal);
     }
 
     private static ReadOnlySpan<byte> TrimAsciiWhitespace(ReadOnlySpan<byte> bytes)
