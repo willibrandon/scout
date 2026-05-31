@@ -240,6 +240,19 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies overlapping search reports every accepting span from a fixed start.
+    /// </summary>
+    [Fact]
+    public void FindsOverlappingMatchesAtStart()
+    {
+        IReadOnlyList<RegexMatch> matches = RegexAutomaton.Compile("a+"u8).FindOverlappingAt("aaa"u8, startAt: 0);
+        IReadOnlyList<RegexMatch> emptyMatches = RegexAutomaton.Compile("a*"u8).FindOverlappingAt("aaa"u8, startAt: 2);
+
+        Assert.Equal([new RegexMatch(0, 1), new RegexMatch(0, 2), new RegexMatch(0, 3)], matches);
+        Assert.Equal([new RegexMatch(2, 0), new RegexMatch(2, 1)], emptyMatches);
+    }
+
+    /// <summary>
     /// Verifies adjacent optional groups retain ripgrep's leftmost-first greedy priority.
     /// </summary>
     [Fact]

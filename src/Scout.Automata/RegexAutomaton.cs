@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Scout;
 
@@ -105,6 +106,11 @@ public sealed class RegexAutomaton
     internal RegexMatch? FindAllKindAt(ReadOnlySpan<byte> haystack, int startAt)
     {
         return engine.FindAllKindAt(haystack, startAt);
+    }
+
+    internal IReadOnlyList<RegexMatch> FindOverlappingAt(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        return engine.FindOverlappingAt(haystack, startAt);
     }
 
     /// <summary>

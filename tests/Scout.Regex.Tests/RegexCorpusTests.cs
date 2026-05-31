@@ -374,6 +374,32 @@ public sealed class RegexCorpusTests
                 "multi",
                 "dotall",
             ]),
+            ("overlapping.toml",
+            [
+                "ungreedy-dotstar-matches-everything-100",
+                "greedy-dotstar-matches-everything-100",
+                "repetition-plus-leftmost-first-100",
+                "repetition-plus-leftmost-first-110",
+                "repetition-plus-all-100",
+                "repetition-plus-all-110",
+                "repetition-plus-leftmost-first-200",
+                "repetition-plus-all-200",
+                "repetition-star-leftmost-first-100",
+                "repetition-star-all-100",
+                "repetition-star-leftmost-first-200",
+                "repetition-star-all-200",
+                "start-end-rep-leftmost-first",
+                "start-end-rep-all",
+                "alt-leftmost-first-100",
+                "alt-all-100",
+                "empty-000",
+                "empty-alt-000",
+                "empty-alt-010",
+                "iter1-bytes",
+                "iter1-utf8",
+                "iter1-incomplete-utf8",
+                "scratch",
+            ]),
             ("crlf.toml",
             [
                 "basic",
@@ -826,7 +852,7 @@ public sealed class RegexCorpusTests
             testCase.Anchored,
             testCase.Earliest,
             testCase.Overlapping,
-            testCase.MatchKindAll && !testCase.Overlapping);
+            testCase.MatchKindAll);
 
         Assert.True(
             MatchesEqual(testCase.ExpectedMatches, actual),
@@ -894,6 +920,11 @@ public sealed class RegexCorpusTests
         bool overlapping,
         bool matchKindAll)
     {
+        if (overlapping)
+        {
+            return FindOverlapping(automata, haystack, matchLimit, boundsStart, boundsEnd, anchored, earliest, matchKindAll);
+        }
+
         var matches = new List<RegexMatch>();
         int startAt = boundsStart;
         int suppressedEmptyStart = -1;
@@ -936,6 +967,67 @@ public sealed class RegexCorpusTests
         }
 
         return matches.ToArray();
+    }
+
+    private static RegexMatch[] FindOverlapping(
+        IReadOnlyList<RegexAutomaton> automata,
+        byte[] haystack,
+        int? matchLimit,
+        int boundsStart,
+        int boundsEnd,
+        bool anchored,
+        bool earliest,
+        bool matchKindAll)
+    {
+        if (earliest)
+        {
+            return [];
+        }
+
+        RegexMatch? envelope = matchKindAll
+            ? null
+            : FindLeftmostFirst(automata, haystack, boundsStart, boundsEnd, anchored, earliest: false);
+        if (!matchKindAll && !envelope.HasValue)
+        {
+            return [];
+        }
+
+        int firstStart = matchKindAll ? boundsStart : envelope!.Value.Start;
+        int lastStart = anchored ? firstStart : matchKindAll ? boundsEnd : envelope!.Value.End;
+        int lastEnd = matchKindAll ? boundsEnd : envelope!.Value.End;
+        var candidates = new List<OverlappingCandidate>();
+        for (int start = firstStart; start <= lastStart; start++)
+        {
+            for (int patternIndex = 0; patternIndex < automata.Count; patternIndex++)
+            {
+                IReadOnlyList<RegexMatch> matches = automata[patternIndex].FindOverlappingAt(haystack, start);
+                for (int matchIndex = 0; matchIndex < matches.Count; matchIndex++)
+                {
+                    RegexMatch match = matches[matchIndex];
+                    if (match.Start < boundsStart || match.End > lastEnd)
+                    {
+                        continue;
+                    }
+
+                    if (!matchKindAll && ContainsSpan(candidates, match))
+                    {
+                        continue;
+                    }
+
+                    candidates.Add(new OverlappingCandidate(match, patternIndex));
+                }
+            }
+        }
+
+        candidates.Sort(CompareOverlappingCandidates);
+        int count = matchLimit is int limit ? Math.Min(limit, candidates.Count) : candidates.Count;
+        var result = new RegexMatch[count];
+        for (int index = 0; index < count; index++)
+        {
+            result[index] = candidates[index].Match;
+        }
+
+        return result;
     }
 
     private static RegexMatch? Find(IReadOnlyList<RegexAutomaton> automata, byte[] haystack, int startAt, int boundsEnd, bool anchored, bool earliest, bool matchKindAll)
@@ -1007,6 +1099,36 @@ public sealed class RegexCorpusTests
         }
 
         return best;
+    }
+
+    private static bool ContainsSpan(List<OverlappingCandidate> candidates, RegexMatch match)
+    {
+        for (int index = 0; index < candidates.Count; index++)
+        {
+            if (candidates[index].Match.Equals(match))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static int CompareOverlappingCandidates(OverlappingCandidate left, OverlappingCandidate right)
+    {
+        int end = left.Match.End.CompareTo(right.Match.End);
+        if (end != 0)
+        {
+            return end;
+        }
+
+        int start = right.Match.Start.CompareTo(left.Match.Start);
+        if (start != 0)
+        {
+            return start;
+        }
+
+        return left.PatternIndex.CompareTo(right.PatternIndex);
     }
 
     private static bool MatchesEqual(IReadOnlyList<RegexMatch> expected, RegexMatch[] actual)

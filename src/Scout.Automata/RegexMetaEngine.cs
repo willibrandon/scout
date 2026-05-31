@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Scout;
 
@@ -229,6 +230,26 @@ internal sealed class RegexMetaEngine
         return allPikeVm.TryMatchLongestAt(haystack, startOffset, out int length)
             ? new RegexMatch(startOffset, length)
             : null;
+    }
+
+    internal IReadOnlyList<RegexMatch> FindOverlappingAt(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        if (utf8 && !RegexByteClass.IsUtf8Boundary(haystack, startOffset))
+        {
+            return [];
+        }
+
+        var lengths = new List<int>();
+        var overlappingPikeVm = new PikeVm(nfa);
+        overlappingPikeVm.AddMatchLengthsAt(haystack, startOffset, lengths);
+        var matches = new RegexMatch[lengths.Count];
+        for (int index = 0; index < lengths.Count; index++)
+        {
+            matches[index] = new RegexMatch(startOffset, lengths[index]);
+        }
+
+        return matches;
     }
 
     private bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int length)

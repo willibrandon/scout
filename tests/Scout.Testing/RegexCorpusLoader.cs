@@ -168,7 +168,7 @@ internal static class RegexCorpusLoader
                 continue;
             }
 
-            return ParseTomlString(line[prefix.Length..]);
+            return ParseTomlString(TrimTomlStringValue(line[prefix.Length..]));
         }
 
         return null;
@@ -582,6 +582,38 @@ internal static class RegexCorpusLoader
         }
 
         return builder.ToString();
+    }
+
+    private static string TrimTomlStringValue(string value)
+    {
+        value = value.Trim();
+        if (value.StartsWith("'''", StringComparison.Ordinal))
+        {
+            int end = value.IndexOf("'''", 3, StringComparison.Ordinal);
+            return end >= 0 ? value[..(end + 3)] : value;
+        }
+
+        if (value.Length == 0 || value[0] != '\'' && value[0] != '"')
+        {
+            return value;
+        }
+
+        char quote = value[0];
+        for (int index = 1; index < value.Length; index++)
+        {
+            if (quote == '"' && value[index] == '\\')
+            {
+                index++;
+                continue;
+            }
+
+            if (value[index] == quote)
+            {
+                return value[..(index + 1)];
+            }
+        }
+
+        return value;
     }
 
     private static byte[] EncodeCorpusBytes(string value, bool unescape)

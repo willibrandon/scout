@@ -80,6 +80,56 @@ internal sealed class PikeVm
         return false;
     }
 
+    public void AddMatchLengthsAt(ReadOnlySpan<byte> haystack, int start, List<int> lengths)
+    {
+        current.Clear();
+        AddThread(nfa.StartState, haystack, start, current, new bool[nfa.States.Count], new bool[nfa.States.Count]);
+        while (current.Count > 0)
+        {
+            int position = MinPosition(current);
+            if (IndexOfAccept(current, position) >= 0)
+            {
+                int length = position - start;
+                if (!lengths.Contains(length))
+                {
+                    lengths.Add(length);
+                }
+            }
+
+            next.Clear();
+            for (int index = 0; index < current.Count; index++)
+            {
+                (int stateIndex, int threadPosition) = current[index];
+                if (threadPosition != position)
+                {
+                    next.Add(current[index]);
+                    continue;
+                }
+
+                RegexNfaState state = nfa.States[stateIndex];
+                if (state.Kind == RegexNfaStateKind.Atom &&
+                    RegexByteClass.TryGetAtomMatchLength(
+                        haystack,
+                        position,
+                        state.AtomKind,
+                        state.Value.Span,
+                        state.CaseInsensitive,
+                        state.MultiLine,
+                        state.DotMatchesNewline,
+                        state.Crlf,
+                        state.LineTerminator,
+                        state.Utf8,
+                        state.UnicodeClasses,
+                        out int consume))
+                {
+                    AddThread(state.Next, haystack, position + consume, next, new bool[nfa.States.Count], new bool[nfa.States.Count]);
+                }
+            }
+
+            (current, next) = (next, current);
+        }
+    }
+
     private bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, bool earliest, out int length)
     {
         current.Clear();
