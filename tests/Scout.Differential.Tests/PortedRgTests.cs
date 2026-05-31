@@ -172,8 +172,27 @@ internal static class PortedRgTests
             new(
                 "tests/multiline.rs",
                 "context",
-                dir => dir.CreateFile("sherlock", Sherlock),
-                DifferentialCase.Exact("--path-separator", "/", "-n", "-U", "-C1", @"detective work\p{Any}+?result of luck", "sherlock")),
+                dir =>
+                {
+                    dir.CreateFile("sherlock", Sherlock);
+                    dir.CreateFile("context", "one\nxxfoo\nbarxx\nfoo\nlast\n");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "-n", "-U", "-C1", @"detective work\p{Any}+?result of luck", "sherlock"),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "-U", "-C1", @"foo\nbar", "context"),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "-U", "-B1", "-A2", @"foo\nbar", "context"),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "-U", "--passthru", @"foo\nbar", "context"),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "-U", "--passthru", "-m1", @"foo\nbar|foo", "context"),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "-U", "-C1", "-m1", @"foo\nbar|foo", "context"),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "-U", "-o", "-C1", @"foo\nbar", "context"),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "-U", "-o", "-r", "X", "-C1", @"foo\nbar", "context"),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "-U", "-r", "X", "-C1", @"foo\nbar", "context"),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "-U", "-r", "X", "-C1", "-m1", @"foo\nbar|foo", "context"),
+                DifferentialCase.Exact("--path-separator", "/", "-U", "--vimgrep", "-C1", @"foo\nbar", "context"),
+                DifferentialCase.Exact("--path-separator", "/", "-U", "--vimgrep", "-o", "-C1", @"foo\nbar", "context"),
+                DifferentialCase.Exact("--path-separator", "/", "-U", "--vimgrep", "-r", "X", "-C1", @"foo\nbar", "context"),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "-U", "-v", "-C1", @"foo\nbar", "context"),
+                DifferentialCase.Exact("--path-separator", "/", "-n", "-U", "-v", "--passthru", @"foo\nbar", "context"),
+                DifferentialCase.Exact("--path-separator", "/", "-U", "--vimgrep", "-v", "-C1", @"foo\nbar", "context")),
             new(
                 "tests/json.rs",
                 "basic",
