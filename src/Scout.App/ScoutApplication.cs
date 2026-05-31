@@ -6248,7 +6248,7 @@ internal static class ScoutApplication
         int binaryOffset = textMode || nullData ? -1 : bytes.AsSpan().IndexOf((byte)0);
         byte[] searchBytes = GetBinaryConvertedSearchBytes(bytes, textMode, nullData);
         var writer = new JsonFileWriter(output, path, quiet, binaryOffset);
-        bool matched = multiline && ShouldUseJsonMultilineRegex(pattern, multilineDotall) && TrySearchJsonMultilineBytes(searchBytes, pattern, writer, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multilineDotall, crlf, nullData, replacement, maxCount, beforeContext, afterContext, passthru, out bool multilineMatched)
+        bool matched = multiline && (nullData || ShouldUseJsonMultilineRegex(pattern, multilineDotall)) && TrySearchJsonMultilineBytes(searchBytes, pattern, writer, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multilineDotall, crlf, nullData, replacement, maxCount, beforeContext, afterContext, passthru, out bool multilineMatched)
             ? multilineMatched
             : SearchJsonLines(searchBytes, pattern, writer, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, crlf, nullData, replacement, maxCount, beforeContext, afterContext, passthru, stopOnNonmatch);
         writer.Finish((ulong)bytes.Length, summary);
@@ -6276,7 +6276,6 @@ internal static class ScoutApplication
         matched = false;
         if ((replacement is not null && !invertMatch) ||
             crlf ||
-            nullData ||
             beforeContext > 0 ||
             afterContext > 0 ||
             passthru)
@@ -6310,12 +6309,12 @@ internal static class ScoutApplication
             }
 
             matched = true;
-            int firstLineStart = GetLineStart(bytes, match.Start);
-            int lastLineStart = GetJsonMultilineMatchLastLineStart(bytes, match);
-            int lineEnd = GetLineEnd(bytes, lastLineStart);
+            int firstLineStart = GetJsonMultilineLineStart(bytes, match.Start, nullData);
+            int lastLineStart = GetJsonMultilineMatchLastLineStart(bytes, match, nullData);
+            int lineEnd = GetJsonMultilineLineEnd(bytes, lastLineStart, nullData);
             if (groupStart >= 0 && firstLineStart > groupEnd)
             {
-                WriteJsonMultilineMatchGroup(bytes, writer, groupStart, groupEnd, groupLastLineStart, matches);
+                WriteJsonMultilineMatchGroup(bytes, writer, groupStart, groupEnd, groupLastLineStart, matches, nullData);
                 matches.Clear();
                 groupStart = -1;
                 groupEnd = -1;
@@ -6338,7 +6337,7 @@ internal static class ScoutApplication
             emitted++;
             if (maxCount is ulong limit && emitted >= limit)
             {
-                WriteJsonMultilineMatchGroup(bytes, writer, groupStart, groupEnd, groupLastLineStart, matches);
+                WriteJsonMultilineMatchGroup(bytes, writer, groupStart, groupEnd, groupLastLineStart, matches, nullData);
                 return true;
             }
 
@@ -6347,22 +6346,22 @@ internal static class ScoutApplication
 
         if (groupStart >= 0)
         {
-            WriteJsonMultilineMatchGroup(bytes, writer, groupStart, groupEnd, groupLastLineStart, matches);
+            WriteJsonMultilineMatchGroup(bytes, writer, groupStart, groupEnd, groupLastLineStart, matches, nullData);
         }
 
         return true;
     }
 
-    private static int GetJsonMultilineMatchLastLineStart(ReadOnlySpan<byte> bytes, RegexMatch match)
+    private static int GetJsonMultilineMatchLastLineStart(ReadOnlySpan<byte> bytes, RegexMatch match, bool nullData)
     {
-        int lastLineStart = GetLineStart(bytes, GetInclusiveMatchEnd(match));
+        int lastLineStart = GetJsonMultilineLineStart(bytes, GetInclusiveMatchEnd(match), nullData);
         if (match.Length != 0 || match.Start >= bytes.Length)
         {
             return lastLineStart;
         }
 
-        int lineEnd = GetLineEnd(bytes, lastLineStart);
-        if (!IsJsonLineTerminatorStart(bytes, match.Start))
+        int lineEnd = GetJsonMultilineLineEnd(bytes, lastLineStart, nullData);
+        if (!IsJsonLineTerminatorStart(bytes, match.Start, nullData))
         {
             return lastLineStart;
         }
@@ -6371,10 +6370,46 @@ internal static class ScoutApplication
         return nextLineStart < bytes.Length ? nextLineStart : lastLineStart;
     }
 
-    private static bool IsJsonLineTerminatorStart(ReadOnlySpan<byte> bytes, int offset)
+    private static int GetJsonMultilineLineStart(ReadOnlySpan<byte> bytes, int offset, bool nullData)
     {
+        return nullData ? GetTerminatedLineStart(bytes, offset, terminator: 0) : GetLineStart(bytes, offset);
+    }
+
+    private static int GetJsonMultilineLineEnd(ReadOnlySpan<byte> bytes, int lineStart, bool nullData)
+    {
+        return nullData ? GetTerminatedLineEnd(bytes, lineStart, terminator: 0) : GetLineEnd(bytes, lineStart);
+    }
+
+    private static bool IsJsonLineTerminatorStart(ReadOnlySpan<byte> bytes, int offset, bool nullData)
+    {
+        if (nullData)
+        {
+            return bytes[offset] == 0;
+        }
+
         return bytes[offset] == (byte)'\n' ||
             bytes[offset] == (byte)'\r' && offset + 1 < bytes.Length && bytes[offset + 1] == (byte)'\n';
+    }
+
+    private static int GetTerminatedLineStart(ReadOnlySpan<byte> bytes, int offset, byte terminator)
+    {
+        int boundedOffset = Math.Clamp(offset, 0, bytes.Length);
+        for (int index = boundedOffset - 1; index >= 0; index--)
+        {
+            if (bytes[index] == terminator)
+            {
+                return index + 1;
+            }
+        }
+
+        return 0;
+    }
+
+    private static int GetTerminatedLineEnd(ReadOnlySpan<byte> bytes, int lineStart, byte terminator)
+    {
+        int boundedStart = Math.Clamp(lineStart, 0, bytes.Length);
+        int relativeEnd = bytes[boundedStart..].IndexOf(terminator);
+        return relativeEnd < 0 ? bytes.Length : boundedStart + relativeEnd + 1;
     }
 
     private static void WriteJsonMultilineMatchGroup(
@@ -6383,14 +6418,39 @@ internal static class ScoutApplication
         int groupStart,
         int groupEnd,
         int groupLastLineStart,
-        IReadOnlyList<JsonMatchSpan> matches)
+        IReadOnlyList<JsonMatchSpan> matches,
+        bool nullData)
     {
         writer.WriteMatchLine(
-            GetLineNumber(bytes, groupStart),
+            GetJsonMultilineLineNumber(bytes, groupStart, nullData),
             groupStart,
             bytes[groupStart..groupEnd],
             matches,
-            (ulong)(1 + CountLineFeeds(bytes[groupStart..groupLastLineStart])));
+            (ulong)(1 + CountJsonMultilineLineTerminators(bytes[groupStart..groupLastLineStart], nullData)));
+    }
+
+    private static long GetJsonMultilineLineNumber(ReadOnlySpan<byte> bytes, int lineStart, bool nullData)
+    {
+        return nullData ? 1 + CountBytes(bytes[..Math.Clamp(lineStart, 0, bytes.Length)], 0) : GetLineNumber(bytes, lineStart);
+    }
+
+    private static long CountJsonMultilineLineTerminators(ReadOnlySpan<byte> bytes, bool nullData)
+    {
+        return nullData ? CountBytes(bytes, 0) : CountLineFeeds(bytes);
+    }
+
+    private static long CountBytes(ReadOnlySpan<byte> bytes, byte value)
+    {
+        long count = 0;
+        for (int index = 0; index < bytes.Length; index++)
+        {
+            if (bytes[index] == value)
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     private static bool WriteJsonMultilineInvertedMatches(
