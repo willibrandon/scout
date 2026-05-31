@@ -18,8 +18,8 @@ version = "0.1.11"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 ```
 
-The implementation owns the one-type-per-file flag definitions, short/long flag
-lexing surface, CLI byte escape/unescape helpers, human-size parsing, terminal
-color decisions, output buffering, pattern-file loading diagnostics,
-stdin/stdout/stderr probing, and Windows console helper behavior replaced by
-direct `LibraryImport` declarations.
+The implementation owns CLI byte escape/unescape helpers, human-size parsing,
+terminal color decisions, output buffering, pattern-file loading diagnostics,
+decompression/preprocessor command matching and process spawning, stdin/stdout
+probing, and Windows console helper behavior replaced by direct `LibraryImport`
+declarations.
