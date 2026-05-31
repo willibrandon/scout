@@ -50,6 +50,7 @@ public sealed class CliSearchCommandRunnerTests
         Assert.False(ran);
         Assert.Empty(bytes);
         Assert.NotNull(error);
-        Assert.StartsWith($"preprocessor command could not start: '{program}': ", error!.Message, StringComparison.Ordinal);
+        string escapedProgram = program.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
+        Assert.StartsWith($"preprocessor command could not start: '\"{escapedProgram}\"': ", error!.Message, StringComparison.Ordinal);
     }
 }

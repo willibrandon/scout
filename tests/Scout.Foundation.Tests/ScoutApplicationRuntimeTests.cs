@@ -697,6 +697,25 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
+    /// Verifies <c>--pre</c> failure diagnostics include ripgrep's rendered command and stderr block.
+    /// </summary>
+    [Fact]
+    public void PreprocessorFailureDiagnosticMatchesPinnedRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        string script = CreatePreprocessorScript(root, "cat >/dev/null\nprintf 'prefail\\n' >&2\nexit 7\n");
+        File.WriteAllText(path, "needle\n");
+
+        (int exitCode, byte[] output, string error) = RunScout("--pre", script, "needle", path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--pre", script, "needle", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies <c>--pre-glob</c> limits which paths run through the preprocessor.
     /// </summary>
     [Fact]
@@ -1385,8 +1404,13 @@ public sealed class ScoutApplicationRuntimeTests
 
     private static string CreatePreprocessorScript(string root)
     {
+        return CreatePreprocessorScript(root, "cat >/dev/null\nprintf 'needle from preprocessor\n'\n");
+    }
+
+    private static string CreatePreprocessorScript(string root, string body)
+    {
         string path = Path.Combine(root, "preprocessor.sh");
-        File.WriteAllText(path, "#!/bin/sh\ncat >/dev/null\nprintf 'needle from preprocessor\n'\n");
+        File.WriteAllText(path, "#!/bin/sh\n" + body);
 
         ProcessStartInfo startInfo = new("chmod")
         {
