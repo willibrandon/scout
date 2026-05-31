@@ -246,6 +246,9 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("-getProperty:AnalysisMode", script, StringComparison.Ordinal);
         Assert.Contains("-getProperty:EnforceCodeStyleInBuild", script, StringComparison.Ordinal);
         Assert.Contains("-getItem:EditorConfigFiles", script, StringComparison.Ordinal);
+        Assert.Contains("json_item_full_paths", script, StringComparison.Ordinal);
+        Assert.Contains("scan_editor_config_file", script, StringComparison.Ordinal);
+        Assert.Contains("check_evaluated_editor_config_files", script, StringComparison.Ordinal);
         Assert.Contains("check_empty_or_sdk_default_nowarn", script, StringComparison.Ordinal);
         Assert.Contains("check_empty \"$relative_project\" \"WarningsNotAsErrors\"", script, StringComparison.Ordinal);
         Assert.Contains("check_true \"$relative_project\" \"TreatWarningsAsErrors\"", script, StringComparison.Ordinal);

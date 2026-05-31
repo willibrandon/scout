@@ -41,6 +41,37 @@ json_property() {
     ' "$file"
 }
 
+json_item_full_paths() {
+    file="$1"
+    awk '
+        $1 == "\"FullPath\":" {
+            value = $0
+            sub(/^[[:space:]]*"FullPath":[[:space:]]*"/, "", value)
+            sub(/",?[[:space:]]*$/, "", value)
+            print value
+        }
+    ' "$file"
+}
+
+normalize_json_path() {
+    path="$1"
+    unescaped="$(printf '%s' "$path" | sed 's/\\\\/\\/g')"
+    if [ -f "$unescaped" ]; then
+        printf '%s\n' "$unescaped"
+        return
+    fi
+
+    if command -v cygpath >/dev/null 2>&1; then
+        converted="$(cygpath -u "$unescaped" 2>/dev/null || true)"
+        if [ -n "$converted" ]; then
+            printf '%s\n' "$converted"
+            return
+        fi
+    fi
+
+    printf '%s\n' "$unescaped"
+}
+
 write_property() {
     label="$1"
     value="$2"
@@ -91,6 +122,34 @@ require_config_severity() {
     fi
 }
 
+scan_editor_config_file() {
+    project="$1"
+    config="$2"
+
+    if grep -E 'dotnet_(analyzer_diagnostic|diagnostic)\.[^\r\n]*severity[[:space:]]*=[[:space:]]*(none|silent)($|[[:space:]#;])' "$config" >/dev/null; then
+        fail "$project imports analyzer config with none/silent severity: $(relative_path "$config")."
+    fi
+}
+
+check_evaluated_editor_config_files() {
+    project="$1"
+    evaluation_output="$2"
+    output="$3"
+    config_list="$4"
+
+    json_item_full_paths "$evaluation_output" > "$config_list"
+    while IFS= read -r raw_config; do
+        [ -n "$raw_config" ] || continue
+        config="$(normalize_json_path "$raw_config")"
+        write_property "EditorConfigFile" "$(relative_path "$config")" "$output"
+        if [ ! -f "$config" ]; then
+            fail "$project imports missing analyzer config '$raw_config'."
+        fi
+
+        scan_editor_config_file "$project" "$config"
+    done < "$config_list"
+}
+
 check_analyzer_severity_config() {
     output="$OUT/analyzer-severities.txt"
     : > "$output"
@@ -122,6 +181,7 @@ find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" -name '*.csproj' -type
     safe_name="$(printf '%s' "$relative_project" | tr '/\\:' '___')"
     output="$OUT/$safe_name.properties"
     evaluation_output="$OUT/$safe_name.evaluation.json"
+    editor_config_list="$OUT/$safe_name.editorconfig-files"
     : > "$output"
 
     dotnet msbuild "$project" -nologo \
@@ -152,6 +212,7 @@ find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" -name '*.csproj' -type
     write_property "AnalysisMode" "$analysis_mode" "$output"
     write_property "EnforceCodeStyleInBuild" "$enforce_code_style" "$output"
 
+    check_evaluated_editor_config_files "$relative_project" "$evaluation_output" "$output" "$editor_config_list"
     check_empty_or_sdk_default_nowarn "$relative_project" "$no_warn"
     check_empty "$relative_project" "WarningsNotAsErrors" "$warnings_not_as_errors"
     check_true "$relative_project" "TreatWarningsAsErrors" "$treat_warnings_as_errors"
