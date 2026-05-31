@@ -327,6 +327,30 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies project provenance files do not carry deferred-scope language.
+    /// </summary>
+    [Fact]
+    public void ProjectProvenanceFilesContainNoDeferralLanguage()
+    {
+        string root = FindRepositoryRoot();
+        Regex forbiddenPattern = CreateForbiddenProjectProvenanceDeferralPattern();
+        var violations = new List<string>();
+
+        foreach (string path in EnumerateProjectProvenanceFiles(root))
+        {
+            string text = File.ReadAllText(path);
+            Match match = forbiddenPattern.Match(text);
+            if (match.Success)
+            {
+                string relativePath = Path.GetRelativePath(root, path);
+                violations.Add($"{relativePath}: forbidden deferral language '{match.Value}'.");
+            }
+        }
+
+        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>
     /// Verifies generated flag definitions live in a dedicated definitions folder.
     /// </summary>
     [Fact]
@@ -1819,6 +1843,23 @@ public sealed partial class PinnedConfigurationTests
         return new Regex(string.Join("|", patterns), RegexOptions.CultureInvariant);
     }
 
+    private static Regex CreateForbiddenProjectProvenanceDeferralPattern()
+    {
+        string[] patterns =
+        [
+            Regex.Escape("Later " + "milestone"),
+            Regex.Escape("Remaining " + "surface"),
+            Regex.Escape("future " + "work"),
+            Regex.Escape("not " + "implemented"),
+            Regex.Escape("out-" + "of-" + "scope"),
+            Regex.Escape("deferred"),
+            Regex.Escape("stubbed"),
+            Regex.Escape("scaffold"),
+        ];
+
+        return new Regex(string.Join("|", patterns), RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+    }
+
     private static (string Label, Regex Pattern)[] CreateForbiddenTestWaiverPatterns()
     {
         return
@@ -1932,6 +1973,19 @@ public sealed partial class PinnedConfigurationTests
         return string.Equals(extension, ".cs", StringComparison.Ordinal) ||
             string.Equals(extension, ".props", StringComparison.Ordinal) ||
             string.Equals(extension, ".targets", StringComparison.Ordinal);
+    }
+
+    private static IEnumerable<string> EnumerateProjectProvenanceFiles(string root)
+    {
+        string sourceRoot = Path.Combine(root, "src");
+        foreach (string path in Directory.EnumerateFiles(sourceRoot, "UPSTREAM.md", SearchOption.AllDirectories))
+        {
+            string relativePath = Path.GetRelativePath(root, path);
+            if (!ContainsPathSegment(relativePath, "bin") && !ContainsPathSegment(relativePath, "obj"))
+            {
+                yield return path;
+            }
+        }
     }
 
     private static IEnumerable<string> EnumerateTestSourceFiles(string root)

@@ -18,6 +18,7 @@ Covered tests include the upstream match/non-match matrix cases for recursive
 wildcards, brace alternatives, case-insensitive matching, backslash escaping,
 literal-separator character classes, upstream literal, extension-only, and
 required-extension extraction cases, plus Scout's prefix/suffix candidate
-filters for recursive and wildcard patterns. Later milestone work extends this
-project with the complete upstream token/regex extraction matrix and the
-remaining ported upstream tests.
+filters for recursive and wildcard patterns. This file records source
+provenance and covered surfaces only. Scope is not parked here; any uncovered
+upstream case must be represented by an implementation change, a conformance
+test, or a zero-entry release ledger in `docs/PARITY.md`.
