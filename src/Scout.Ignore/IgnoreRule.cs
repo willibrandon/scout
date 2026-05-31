@@ -35,6 +35,8 @@ internal sealed class IgnoreRule
                 allowUnclosedClass: true));
     }
 
+    internal string BaseDirectory => baseDirectory;
+
     public static bool TryParse(string baseDirectory, string line, bool asciiCaseInsensitive, out IgnoreRule? rule)
     {
         ArgumentException.ThrowIfNullOrEmpty(baseDirectory);
@@ -119,7 +121,7 @@ internal sealed class IgnoreRule
     private string? GetRelativePath(string fullPath)
     {
         string relative = Path.GetRelativePath(baseDirectory, fullPath);
-        if (relative == "." || relative.StartsWith("..", StringComparison.Ordinal))
+        if (relative == "." || PathUtil.IsRelativePathOutsideBase(relative))
         {
             return null;
         }

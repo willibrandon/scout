@@ -200,6 +200,35 @@ public sealed class GitignoreTests
     }
 
     /// <summary>
+    /// Verifies path-or-parent matching rejects absolute paths outside the matcher root like upstream.
+    /// </summary>
+    [Fact]
+    public void MatchPathOrAnyParentsRejectsPathsOutsideRoot()
+    {
+        string workspace = CreateTempDirectory();
+        string root = Path.Combine(workspace, "ROOT");
+        string outside = Path.Combine(workspace, "outside", "some_file");
+        IgnoreRuleSet rules = LoadRulesForText(root, "some_file\n");
+
+        ArgumentException exception = Assert.Throws<ArgumentException>(
+            () => rules.MatchPathOrAnyParents(CreateAbsoluteEntry(outside, isDirectory: false)));
+        Assert.Contains("path is expected to be under the root", exception.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Verifies parent-like path names under the matcher root are still ordinary relative paths.
+    /// </summary>
+    [Fact]
+    public void MatchPathOrAnyParentsAllowsDotDotPrefixedNamesUnderRoot()
+    {
+        string root = CreateTempDirectory();
+        IgnoreRuleSet rules = LoadRulesForText(root, "/..foo\n/sub/..bar\n");
+
+        AssertIgnored(rules, root, "..foo");
+        AssertIgnored(rules, root, "sub/..bar");
+    }
+
+    /// <summary>
     /// Verifies upstream path-or-parent matching cases for files in the matcher root.
     /// </summary>
     [Fact]
@@ -385,6 +414,11 @@ public sealed class GitignoreTests
     private static DirEntry CreateEntry(string root, string relativePath, bool isDirectory)
     {
         string fullPath = Path.Combine(root, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        return CreateAbsoluteEntry(fullPath, isDirectory);
+    }
+
+    private static DirEntry CreateAbsoluteEntry(string fullPath, bool isDirectory)
+    {
         return new DirEntry(
             fullPath,
             depth: 0,

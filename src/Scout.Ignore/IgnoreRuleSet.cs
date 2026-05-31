@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 
@@ -6,11 +7,13 @@ namespace Scout;
 internal sealed class IgnoreRuleSet
 {
     private readonly List<IgnoreRule> rules = [];
+    private string? baseDirectory;
 
     public bool IsEmpty => rules.Count == 0;
 
     public void Add(IgnoreRule rule)
     {
+        baseDirectory ??= rule.BaseDirectory;
         rules.Add(rule);
     }
 
@@ -90,6 +93,11 @@ internal sealed class IgnoreRuleSet
 
     public IgnoreDecision MatchPathOrAnyParents(DirEntry entry)
     {
+        if (baseDirectory is not null && !PathUtil.IsPathUnderBase(baseDirectory, entry.FullPath))
+        {
+            throw new ArgumentException("path is expected to be under the root", nameof(entry));
+        }
+
         IgnoreDecision decision = Match(entry);
         if (decision != IgnoreDecision.None)
         {
