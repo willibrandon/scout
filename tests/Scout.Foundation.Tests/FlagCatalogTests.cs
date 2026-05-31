@@ -71,6 +71,10 @@ public sealed class FlagCatalogTests
         Assert.Equal("--max-columns", maxColumns.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindShortValue('E', out FlagDescriptor encoding));
         Assert.Equal("--encoding", encoding.LongName);
+        Assert.Equal("--no-encoding", encoding.NegatedName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongSwitch("--no-encoding", out FlagDescriptor noEncoding));
+        Assert.Equal("--encoding", noEncoding.LongName);
+        Assert.Equal(FlagKind.Value, noEncoding.Kind);
         Assert.True(GeneratedFlagCatalog.TryFindLongValue("--engine", out FlagDescriptor engine));
         Assert.Equal("--engine", engine.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindLongValue("--color", out FlagDescriptor color));
@@ -133,6 +137,10 @@ public sealed class FlagCatalogTests
         Assert.Equal("--ignore-file", ignoreFile.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindLongValue("--pre", out FlagDescriptor pre));
         Assert.Equal("--pre", pre.LongName);
+        Assert.Equal("--no-pre", pre.NegatedName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongSwitch("--no-pre", out FlagDescriptor noPre));
+        Assert.Equal("--pre", noPre.LongName);
+        Assert.Equal(FlagKind.Value, noPre.Kind);
         Assert.True(GeneratedFlagCatalog.TryFindLongValue("--pre-glob", out FlagDescriptor preGlob));
         Assert.Equal("--pre-glob", preGlob.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindLongValue("--hostname-bin", out FlagDescriptor hostnameBin));
@@ -145,6 +153,10 @@ public sealed class FlagCatalogTests
         Assert.Equal("--field-context-separator", fieldContextSeparator.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindLongValue("--context-separator", out FlagDescriptor contextSeparator));
         Assert.Equal("--context-separator", contextSeparator.LongName);
+        Assert.Equal("--no-context-separator", contextSeparator.NegatedName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongSwitch("--no-context-separator", out FlagDescriptor noContextSeparator));
+        Assert.Equal("--context-separator", noContextSeparator.LongName);
+        Assert.Equal(FlagKind.Value, noContextSeparator.Kind);
         Assert.True(GeneratedFlagCatalog.TryFindLongValue("--path-separator", out FlagDescriptor pathSeparator));
         Assert.Equal("--path-separator", pathSeparator.LongName);
     }

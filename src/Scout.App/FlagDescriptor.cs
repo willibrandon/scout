@@ -78,6 +78,11 @@ internal sealed class FlagDescriptor
     public string Doc { get; }
 
     /// <summary>
+    /// Gets whether this descriptor can be applied as a no-value switch.
+    /// </summary>
+    public bool CanApplySwitch => applySwitch is not null;
+
+    /// <summary>
     /// Creates a no-value switch flag descriptor.
     /// </summary>
     /// <param name="longName">The canonical long flag name, including <c>--</c>.</param>
@@ -162,6 +167,40 @@ internal sealed class FlagDescriptor
     }
 
     /// <summary>
+    /// Creates a required-value flag descriptor with a no-value negated switch spelling.
+    /// </summary>
+    /// <param name="longName">The canonical long flag name, including <c>--</c>.</param>
+    /// <param name="shortName">The short flag name without <c>-</c>, or <see langword="null" />.</param>
+    /// <param name="negatedName">The negated long flag name.</param>
+    /// <param name="aliases">Alternate long flag spellings.</param>
+    /// <param name="category">The help and completion category.</param>
+    /// <param name="doc">The short documentation text.</param>
+    /// <param name="applyValue">The parser action for this value flag.</param>
+    /// <param name="applyNegatedSwitch">The parser action for the negated switch spelling.</param>
+    /// <param name="negatedShortName">The negated short flag name without <c>-</c>, or <see langword="null" />.</param>
+    /// <returns>The descriptor.</returns>
+    public static FlagDescriptor ValueWithNegatedSwitch(
+        string longName,
+        char? shortName,
+        string negatedName,
+        string[] aliases,
+        FlagCategory category,
+        string doc,
+        Func<CliLowArgs, OsString, string, ScoutError?> applyValue,
+        Func<CliLowArgs, ScoutError?> applyNegatedSwitch,
+        char? negatedShortName = null)
+    {
+        ArgumentNullException.ThrowIfNull(longName);
+        ArgumentNullException.ThrowIfNull(negatedName);
+        ArgumentNullException.ThrowIfNull(aliases);
+        ArgumentNullException.ThrowIfNull(doc);
+        ArgumentNullException.ThrowIfNull(applyValue);
+        ArgumentNullException.ThrowIfNull(applyNegatedSwitch);
+
+        return new FlagDescriptor(longName, shortName, negatedShortName, negatedName, aliases, FlagKind.Value, category, doc, (lowArgs, _) => applyNegatedSwitch(lowArgs), applyValue, selectSpecialMode: null);
+    }
+
+    /// <summary>
     /// Creates a special-mode flag descriptor.
     /// </summary>
     /// <param name="longName">The canonical long flag name, including <c>--</c>.</param>
@@ -239,7 +278,7 @@ internal sealed class FlagDescriptor
     /// <returns><see langword="true" /> when the switch action ran.</returns>
     public bool TryApplySwitch(CliLowArgs lowArgs, string matchedName, out ScoutError? error)
     {
-        if (Kind != FlagKind.Switch || applySwitch is null)
+        if (applySwitch is null)
         {
             error = null;
             return false;

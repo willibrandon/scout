@@ -460,6 +460,10 @@ public sealed class CliParserTests
             [OsString.FromUnixBytes("--pre"u8), OsString.FromUnixBytes("cat"u8), OsString.FromUnixBytes("needle"u8)]);
         CliParseResult emptyPre = CliParser.Parse(
             [OsString.FromUnixBytes("--pre=cat"u8), OsString.FromUnixBytes("--pre="u8), OsString.FromUnixBytes("needle"u8)]);
+        CliParseResult noPre = CliParser.Parse(
+            [OsString.FromUnixBytes("--pre=cat"u8), OsString.FromUnixBytes("--no-pre"u8), OsString.FromUnixBytes("needle"u8)]);
+        CliParseResult preAfterNoPre = CliParser.Parse(
+            [OsString.FromUnixBytes("--no-pre"u8), OsString.FromUnixBytes("--pre=cat"u8), OsString.FromUnixBytes("needle"u8)]);
         CliParseResult zipOverridesPre = CliParser.Parse(
             [OsString.FromUnixBytes("--pre=cat"u8), OsString.FromUnixBytes("-z"u8), OsString.FromUnixBytes("needle"u8)]);
         CliParseResult preOverridesZip = CliParser.Parse(
@@ -477,6 +481,10 @@ public sealed class CliParserTests
         Assert.False(pre.LowArgs.SearchZip);
         Assert.Equal(CliParseStatus.Ok, emptyPre.Status);
         Assert.Null(emptyPre.LowArgs!.Preprocessor);
+        Assert.Equal(CliParseStatus.Ok, noPre.Status);
+        Assert.Null(noPre.LowArgs!.Preprocessor);
+        Assert.Equal(CliParseStatus.Ok, preAfterNoPre.Status);
+        Assert.Equal("cat", preAfterNoPre.LowArgs!.Preprocessor);
         Assert.Equal(CliParseStatus.Ok, zipOverridesPre.Status);
         Assert.True(zipOverridesPre.LowArgs!.SearchZip);
         Assert.Null(zipOverridesPre.LowArgs.Preprocessor);

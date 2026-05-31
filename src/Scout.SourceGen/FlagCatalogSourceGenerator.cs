@@ -169,7 +169,7 @@ public sealed class FlagCatalogSourceGenerator : IIncrementalGenerator
         builder.Append('\n');
         builder.Append("        for (int index = 0; index < descriptors.Length; index++)\n");
         builder.Append("        {\n");
-        builder.Append("            if (descriptors[index].Kind == global::Scout.FlagKind.Switch && descriptors[index].MatchesNegatedName(name))\n");
+        builder.Append("            if (descriptors[index].CanApplySwitch && descriptors[index].MatchesNegatedName(name))\n");
         builder.Append("            {\n");
         builder.Append("                descriptor = descriptors[index];\n");
         builder.Append("                return true;\n");
@@ -196,7 +196,7 @@ public sealed class FlagCatalogSourceGenerator : IIncrementalGenerator
         builder.Append('\n');
         builder.Append("        for (int index = 0; index < descriptors.Length; index++)\n");
         builder.Append("        {\n");
-        builder.Append("            if (descriptors[index].Kind == global::Scout.FlagKind.Switch && descriptors[index].MatchesNegatedShortName(name))\n");
+        builder.Append("            if (descriptors[index].CanApplySwitch && descriptors[index].MatchesNegatedShortName(name))\n");
         builder.Append("            {\n");
         builder.Append("                descriptor = descriptors[index];\n");
         builder.Append("                return true;\n");
