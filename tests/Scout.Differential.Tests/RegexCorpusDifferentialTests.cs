@@ -11,7 +11,7 @@ namespace Scout;
 public sealed class RegexCorpusDifferentialTests
 {
     private const int ExpectedDifferentialCaseCount = 631;
-    private const int ExpectedSupportedOnlyCaseCount = 48;
+    private const int ExpectedSupportedOnlyCaseCount = 76;
 
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
@@ -48,6 +48,7 @@ public sealed class RegexCorpusDifferentialTests
         ("regression.toml", 6),
         ("set.toml", 1),
         ("substring.toml", 4),
+        ("utf8.toml", 28),
         ("word-boundary-special.toml", 7),
         ("word-boundary.toml", 1),
     ];

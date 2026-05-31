@@ -744,6 +744,37 @@ public sealed class RegexCorpusTests
                 "unicode8",
                 "alt-with-assertion-repetition",
             ]),
+            ("utf8.toml",
+            [
+                "empty-utf8yes",
+                "empty-utf8yes-overlapping",
+                "empty-utf8no",
+                "empty-utf8no-overlapping",
+                "empty-utf8yes-bounds",
+                "empty-utf8yes-bounds-overlapping",
+                "empty-utf8no-bounds",
+                "empty-utf8no-bounds-overlapping",
+                "empty-utf8yes-anchored",
+                "empty-utf8yes-anchored-overlapping",
+                "empty-utf8no-anchored",
+                "empty-utf8no-anchored-overlapping",
+                "empty-utf8yes-anchored-bounds",
+                "empty-utf8yes-anchored-bounds-overlapping",
+                "empty-utf8no-anchored-bounds",
+                "empty-utf8no-anchored-bounds-overlapping",
+                "empty-utf8yes-startbound",
+                "empty-utf8yes-startbound-overlapping",
+                "empty-utf8no-startbound",
+                "empty-utf8no-startbound-overlapping",
+                "empty-utf8yes-anchored-startbound",
+                "empty-utf8yes-anchored-startbound-overlapping",
+                "empty-utf8no-anchored-startbound",
+                "empty-utf8no-anchored-startbound-overlapping",
+                "empty-utf8yes-anchored-endbound",
+                "empty-utf8yes-anchored-endbound-overlapping",
+                "empty-utf8no-anchored-endbound",
+                "empty-utf8no-anchored-endbound-overlapping",
+            ]),
         ];
 
     /// <summary>
@@ -763,7 +794,14 @@ public sealed class RegexCorpusTests
         }
 
         RegexAutomaton[] automata = CompileAll(testCase.Patterns, testCase.LineTerminator, testCase.CaseInsensitive, testCase.Utf8, testCase.UnicodeClasses);
-        RegexMatch[] actual = FindAll(automata, testCase.Haystack, testCase.MatchLimit, testCase.BoundsStart, testCase.BoundsEnd, testCase.Anchored);
+        RegexMatch[] actual = FindAll(
+            automata,
+            testCase.Haystack,
+            testCase.MatchLimit,
+            testCase.BoundsStart,
+            testCase.BoundsEnd,
+            testCase.Anchored,
+            testCase.Overlapping);
 
         Assert.True(
             MatchesEqual(testCase.ExpectedMatches, actual),
@@ -826,7 +864,8 @@ public sealed class RegexCorpusTests
         int? matchLimit,
         int boundsStart,
         int boundsEnd,
-        bool anchored)
+        bool anchored,
+        bool overlapping)
     {
         var matches = new List<RegexMatch>();
         int startAt = boundsStart;
@@ -852,6 +891,11 @@ public sealed class RegexCorpusTests
             }
 
             matches.Add(match.Value);
+            if (anchored && overlapping)
+            {
+                break;
+            }
+
             if (match.Value.Length == 0)
             {
                 startAt = match.Value.Start + 1;

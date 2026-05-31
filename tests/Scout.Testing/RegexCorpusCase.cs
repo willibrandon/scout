@@ -14,6 +14,7 @@ internal sealed class RegexCorpusCase
         int boundsStart,
         int boundsEnd,
         bool anchored,
+        bool overlapping,
         bool caseInsensitive,
         bool utf8,
         bool unicodeClasses,
@@ -28,6 +29,7 @@ internal sealed class RegexCorpusCase
         BoundsStart = boundsStart;
         BoundsEnd = boundsEnd;
         Anchored = anchored;
+        Overlapping = overlapping;
         CaseInsensitive = caseInsensitive;
         Utf8 = utf8;
         UnicodeClasses = unicodeClasses;
@@ -51,6 +53,8 @@ internal sealed class RegexCorpusCase
     public int BoundsEnd { get; }
 
     public bool Anchored { get; }
+
+    public bool Overlapping { get; }
 
     public bool CaseInsensitive { get; }
 
