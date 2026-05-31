@@ -171,6 +171,25 @@ expect_equal_file "PCRE2 files-without-match" "$BIN/pcre2-files-without-match.ex
 "$BIN/scout" -P -n 'foo(?=bar)' "$BIN/pcre2-smoke.txt" > "$BIN/pcre2-line-number.out"
 printf '1:foobar\n3:foobarfoo\n' > "$BIN/pcre2-line-number.expected"
 expect_equal_file "PCRE2 line-number" "$BIN/pcre2-line-number.expected" "$BIN/pcre2-line-number.out"
+cat > "$BIN/pcre2-context.txt" <<'EOF'
+one
+foobar
+middle
+foo
+last
+EOF
+"$BIN/scout" -P -n -C1 'foo(?=bar)' "$BIN/pcre2-context.txt" > "$BIN/pcre2-context.out"
+printf '1-one\n2:foobar\n3-middle\n' > "$BIN/pcre2-context.expected"
+expect_equal_file "PCRE2 context" "$BIN/pcre2-context.expected" "$BIN/pcre2-context.out"
+"$BIN/scout" -P -n --passthru 'foo(?=bar)' "$BIN/pcre2-context.txt" > "$BIN/pcre2-passthru.out"
+printf '1-one\n2:foobar\n3-middle\n4-foo\n5-last\n' > "$BIN/pcre2-passthru.expected"
+expect_equal_file "PCRE2 passthru" "$BIN/pcre2-passthru.expected" "$BIN/pcre2-passthru.out"
+"$BIN/scout" -P -n -o -C1 'foo(?=bar)' "$BIN/pcre2-context.txt" > "$BIN/pcre2-context-only-matching.out"
+printf '1-one\n2:foo\n3-middle\n' > "$BIN/pcre2-context-only-matching.expected"
+expect_equal_file "PCRE2 context only-matching" "$BIN/pcre2-context-only-matching.expected" "$BIN/pcre2-context-only-matching.out"
+"$BIN/scout" -P -n -r X -C1 'foo(?=bar)' "$BIN/pcre2-context.txt" > "$BIN/pcre2-context-replacement.out"
+printf '1-one\n2:Xbar\n3-middle\n' > "$BIN/pcre2-context-replacement.expected"
+expect_equal_file "PCRE2 context replacement" "$BIN/pcre2-context-replacement.expected" "$BIN/pcre2-context-replacement.out"
 printf 'barfoo\nfoobar\n' > "$BIN/pcre2-smoke-2.txt"
 "$BIN/scout" -P -n 'foo(?=bar)' "$BIN/pcre2-smoke.txt" "$BIN/pcre2-smoke-2.txt" > "$BIN/pcre2-multi-file.out"
 printf '%s:1:foobar\n%s:3:foobarfoo\n%s:2:foobar\n' "$BIN/pcre2-smoke.txt" "$BIN/pcre2-smoke.txt" "$BIN/pcre2-smoke-2.txt" > "$BIN/pcre2-multi-file.expected"

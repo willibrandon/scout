@@ -878,8 +878,13 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("-P --files-with-matches 'foo(?=bar)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --files-without-match 'nomatch(?=bar)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P -n 'foo(?=bar)'", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("-P -n -C1 'foo(?=bar)'", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("-P -n --passthru 'foo(?=bar)'", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("-P -n -o -C1 'foo(?=bar)'", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("-P -n -r X -C1 'foo(?=bar)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("pcre2-smoke-2.txt", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("PCRE2 multi-file prefixes", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("PCRE2 context replacement", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("PCRE2 explicit stdin", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --column 'bar'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P -H -n --column -b -o 'o(?=o)'", appBuildScript, StringComparison.Ordinal);
@@ -919,6 +924,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("compare_case recursive_lookahead sort-lines -P -n 'foo(?=bar)' pcre2-dir", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case line_regexp exact -P -x 'foo(?=bar)bar' pcre2-smoke.txt", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case word_regexp exact -P -w 'foo(?=-)' pcre2-word.txt", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case context exact -P -n -C1 'foo(?=bar)' pcre2-context", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case passthru exact -P -n --passthru 'foo(?=bar)' pcre2-context", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case context_only_matching exact -P -n -o -C1 'foo(?=bar)' pcre2-context", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case context_replacement exact -P -n -r X -C1 'foo(?=bar)' pcre2-context", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_stdin_case explicit_stdin_lookahead exact \"$WORK/pcre2-smoke.txt\" -P 'foo(?=bar)' -", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_stdin_case implicit_stdin_lookahead exact \"$WORK/pcre2-smoke.txt\" -P 'foo(?=bar)'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("mask-elapsed-sort-lines", differentialScript, StringComparison.Ordinal);

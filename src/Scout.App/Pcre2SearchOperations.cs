@@ -126,6 +126,9 @@ internal static class Pcre2SearchOperations
 
     internal static bool CanRun(CliLowArgs lowArgs)
     {
+        bool contextRequested = lowArgs.BeforeContext != 0 ||
+            lowArgs.AfterContext != 0 ||
+            lowArgs.Passthru;
         return (lowArgs.SearchMode is CliSearchMode.Standard
                 or CliSearchMode.Json
                 or CliSearchMode.Count
@@ -138,10 +141,8 @@ internal static class Pcre2SearchOperations
             !lowArgs.Vimgrep &&
             !(lowArgs.Multiline && lowArgs.InvertMatch) &&
             !(lowArgs.Multiline && lowArgs.OnlyMatching) &&
-            (lowArgs.Replacement is null || (lowArgs.SearchMode == CliSearchMode.Standard && !lowArgs.OnlyMatching)) &&
-            lowArgs.BeforeContext == 0 &&
-            lowArgs.AfterContext == 0 &&
-            !lowArgs.Passthru;
+            !(contextRequested && (lowArgs.SearchMode != CliSearchMode.Standard || lowArgs.Multiline)) &&
+            (lowArgs.Replacement is null || (lowArgs.SearchMode == CliSearchMode.Standard && !lowArgs.OnlyMatching));
     }
 
     private static void SearchPcre2Path(
@@ -371,6 +372,10 @@ internal static class Pcre2SearchOperations
                 lowArgs.Trim,
                 lowArgs.IncludeZero,
                 lowArgs.NullPathTerminator,
+                lowArgs.BeforeContext,
+                lowArgs.AfterContext,
+                lowArgs.Passthru,
+                lowArgs.StopOnNonmatch,
                 lowArgs.MaxCount);
         }
 
@@ -399,6 +404,10 @@ internal static class Pcre2SearchOperations
             lowArgs.Trim,
             lowArgs.IncludeZero,
             lowArgs.NullPathTerminator,
+            lowArgs.BeforeContext,
+            lowArgs.AfterContext,
+            lowArgs.Passthru,
+            lowArgs.StopOnNonmatch,
             lowArgs.MaxCount);
         bufferedWriter.Flush();
         byte[] body = bufferedOutput.ToArray();
@@ -562,6 +571,10 @@ internal static class Pcre2SearchOperations
         bool trim,
         bool includeZero,
         bool nullPathTerminator,
+        ulong beforeContext,
+        ulong afterContext,
+        bool passthru,
+        bool stopOnNonmatch,
         ulong? maxCount)
     {
         if (multiline)
@@ -590,6 +603,11 @@ internal static class Pcre2SearchOperations
         if (searchMode == CliSearchMode.FilesWithoutMatch)
         {
             return SearchOutputFormatting.WritePathIf(output, path, color, !HasPcre2Match(bytes, regex, lineRegexp, wordRegexp, invertMatch), nullPathTerminator, separators.LineTerminator);
+        }
+
+        if (beforeContext > 0 || afterContext > 0 || passthru)
+        {
+            return SearchPcre2ContextLines(bytes, regex, output, separators, prefix, lineLimit, color, lineRegexp, wordRegexp, invertMatch, lineNumber, column, byteOffset, trim, nullPathTerminator, onlyMatching, replacement, patterns, beforeContext, afterContext, passthru, stopOnNonmatch, maxCount);
         }
 
         if (replacement is ReadOnlyMemory<byte> replacementValue && !invertMatch)
@@ -921,7 +939,7 @@ internal static class Pcre2SearchOperations
             {
                 if (onlyMatching && !invertMatch)
                 {
-                    WritePcre2OnlyMatches(matchLine, regex, output, separators, prefix, color, currentLineNumber, lineStart, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, nullPathTerminator);
+                    WritePcre2OnlyMatches(matchLine, regex, output, separators.FieldMatch, prefix, color, currentLineNumber, lineStart, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, nullPathTerminator, separators.LineTerminator);
                 }
                 else
                 {
@@ -946,6 +964,250 @@ internal static class Pcre2SearchOperations
         }
 
         return matched;
+    }
+
+    private static bool SearchPcre2ContextLines(
+        byte[] bytes,
+        Pcre2Regex regex,
+        RawByteWriter output,
+        OutputSeparators separators,
+        OutputPath? prefix,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool invertMatch,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool trim,
+        bool nullPathTerminator,
+        bool onlyMatching,
+        ReadOnlyMemory<byte>? replacement,
+        IReadOnlyList<byte[]> patterns,
+        ulong beforeContext,
+        ulong afterContext,
+        bool passthru,
+        bool stopOnNonmatch,
+        ulong? maxCount)
+    {
+        List<ContextLineInfo> lines = BuildPcre2ContextLines(bytes, regex, lineRegexp, wordRegexp, invertMatch, stopOnNonmatch);
+        if (lines.Count == 0)
+        {
+            return false;
+        }
+
+        bool[] included = new bool[lines.Count];
+        bool matched = passthru
+            ? ContextSearchOperations.IncludePassthruLines(lines, included)
+            : ContextSearchOperations.IncludeContextLines(lines, included, beforeContext, afterContext, maxCount);
+        var lineSink = new StandardSearchSink(output, prefix, separators.FieldMatch, separators.FieldContext, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
+        int previousLineIndex = -1;
+        ulong passthruPrimaryMatches = 0;
+        bool wrote = false;
+        for (int index = 0; index < lines.Count; index++)
+        {
+            if (!included[index])
+            {
+                continue;
+            }
+
+            ContextLineInfo line = lines[index];
+            bool selectedMatch = line.SelectedMatch;
+            if (passthru && selectedMatch && maxCount is ulong limit)
+            {
+                if (passthruPrimaryMatches >= limit)
+                {
+                    selectedMatch = false;
+                }
+                else
+                {
+                    passthruPrimaryMatches++;
+                }
+            }
+
+            if (!passthru && wrote && index > previousLineIndex + 1 && separators.ContextEnabled)
+            {
+                output.Write(separators.Context.Span);
+                output.Write(separators.LineTerminator.Span);
+            }
+
+            WritePcre2ContextOutputLine(bytes, line, selectedMatch, regex, output, separators, prefix, lineLimit, color, lineRegexp, wordRegexp, invertMatch, lineNumber, column, byteOffset, trim, nullPathTerminator, onlyMatching, replacement, patterns, ref lineSink);
+            previousLineIndex = index;
+            wrote = true;
+        }
+
+        return matched;
+    }
+
+    private static List<ContextLineInfo> BuildPcre2ContextLines(
+        byte[] bytes,
+        Pcre2Regex regex,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool invertMatch,
+        bool stopOnNonmatch)
+    {
+        var lines = new List<ContextLineInfo>();
+        bool hasSelectedMatch = false;
+        int lineStart = 0;
+        long lineNumber = 1;
+        while (lineStart <= bytes.Length)
+        {
+            GetPcre2LineSlices(bytes, lineStart, out ReadOnlySpan<byte> outputLine, out ReadOnlySpan<byte> matchLine, out int nextLineStart, out bool isLastLine);
+            bool originalMatch = TryFindPcre2LineMatch(matchLine, regex, lineRegexp, wordRegexp, out Pcre2Match firstMatch);
+            bool selectedMatch = invertMatch ? !originalMatch : originalMatch;
+            long originalColumn = originalMatch ? firstMatch.Start + 1L : 0;
+            long matchColumn = selectedMatch && !invertMatch ? originalColumn : 0;
+            lines.Add(new ContextLineInfo(lineStart, outputLine.Length, lineNumber, selectedMatch, matchColumn, originalMatch, originalColumn));
+            if (stopOnNonmatch && hasSelectedMatch && !selectedMatch)
+            {
+                break;
+            }
+
+            hasSelectedMatch |= selectedMatch;
+            if (isLastLine)
+            {
+                break;
+            }
+
+            lineStart = nextLineStart;
+            lineNumber++;
+        }
+
+        return lines;
+    }
+
+    private static void WritePcre2ContextOutputLine(
+        byte[] bytes,
+        ContextLineInfo line,
+        bool selectedMatch,
+        Pcre2Regex regex,
+        RawByteWriter output,
+        OutputSeparators separators,
+        OutputPath? prefix,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool invertMatch,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool trim,
+        bool nullPathTerminator,
+        bool onlyMatching,
+        ReadOnlyMemory<byte>? replacement,
+        IReadOnlyList<byte[]> patterns,
+        ref StandardSearchSink lineSink)
+    {
+        ReadOnlySpan<byte> outputLine = bytes.AsSpan(line.Start, line.Length);
+        ReadOnlySpan<byte> matchLine = GetPcre2MatchLine(outputLine);
+        if (selectedMatch)
+        {
+            if (onlyMatching && !invertMatch)
+            {
+                WritePcre2OnlyMatches(matchLine, regex, output, separators.FieldMatch, prefix, color, line.LineNumber, line.Start, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, nullPathTerminator, separators.LineTerminator);
+                return;
+            }
+
+            if (replacement is ReadOnlyMemory<byte> replacementValue && !invertMatch)
+            {
+                WritePcre2ReplacedContextLine(outputLine, matchLine, regex, output, separators, prefix, lineLimit, color, line.LineNumber, line.Start, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, patterns);
+                return;
+            }
+
+            if (TryFindPcre2LineMatch(matchLine, regex, lineRegexp, wordRegexp, out Pcre2Match firstMatch) || invertMatch)
+            {
+                WritePcre2MatchedLine(outputLine, matchLine, regex, output, separators, prefix, lineLimit, color, line.LineNumber, line.Start, firstMatch, lineRegexp, wordRegexp, invertMatch, lineNumber, column, byteOffset, trim, nullPathTerminator);
+            }
+
+            return;
+        }
+
+        if (onlyMatching && invertMatch && line.OriginalMatch)
+        {
+            WritePcre2OnlyMatches(matchLine, regex, output, separators.FieldContext, prefix, color, line.LineNumber, line.Start, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, nullPathTerminator, separators.LineTerminator);
+            return;
+        }
+
+        lineSink.ContextLine(line.LineNumber, line.Start, line.ContextColumn, outputLine);
+    }
+
+    private static void WritePcre2ReplacedContextLine(
+        ReadOnlySpan<byte> outputLine,
+        ReadOnlySpan<byte> matchLine,
+        Pcre2Regex regex,
+        RawByteWriter output,
+        OutputSeparators separators,
+        OutputPath? prefix,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        long lineNumber,
+        int lineStart,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool printLineNumber,
+        bool printColumn,
+        bool printByteOffset,
+        bool trim,
+        bool nullPathTerminator,
+        ReadOnlyMemory<byte> replacement,
+        IReadOnlyList<byte[]> patterns)
+    {
+        var sink = new ReplacementLineSink(output, prefix, separators.FieldMatch, replacement, patterns, false, printLineNumber, printColumn, printByteOffset, trim, nullPathTerminator, vimgrep: false, lineLimit, color: color, lineTerminator: separators.LineTerminator);
+        int startOffset = 0;
+        while (startOffset <= matchLine.Length && regex.TryFind(matchLine, startOffset, out Pcre2Match match))
+        {
+            if (Pcre2MatchSatisfies(matchLine, match, lineRegexp, wordRegexp))
+            {
+                sink.MatchedLine(
+                    lineNumber,
+                    lineStart,
+                    lineStart + match.Start,
+                    match.Start + 1L,
+                    outputLine,
+                    matchLine.Slice(match.Start, match.Length));
+            }
+
+            startOffset = AdvanceAfterPcre2Match(match, matchLine.Length);
+        }
+
+        sink.Flush();
+    }
+
+    private static void GetPcre2LineSlices(
+        byte[] bytes,
+        int lineStart,
+        out ReadOnlySpan<byte> outputLine,
+        out ReadOnlySpan<byte> matchLine,
+        out int nextLineStart,
+        out bool isLastLine)
+    {
+        ReadOnlySpan<byte> remaining = bytes.AsSpan(lineStart);
+        int lineFeed = remaining.IndexOf((byte)'\n');
+        int lineEnd = lineFeed < 0 ? bytes.Length : lineStart + lineFeed;
+        int outputEnd = lineFeed < 0 ? lineEnd : lineEnd + 1;
+        outputLine = bytes.AsSpan(lineStart, outputEnd - lineStart);
+        matchLine = GetPcre2MatchLine(outputLine);
+        nextLineStart = outputEnd;
+        isLastLine = lineFeed < 0;
+    }
+
+    private static ReadOnlySpan<byte> GetPcre2MatchLine(ReadOnlySpan<byte> outputLine)
+    {
+        ReadOnlySpan<byte> matchLine = outputLine;
+        if (!matchLine.IsEmpty && matchLine[^1] == (byte)'\n')
+        {
+            matchLine = matchLine[..^1];
+        }
+
+        if (!matchLine.IsEmpty && matchLine[^1] == (byte)'\r')
+        {
+            matchLine = matchLine[..^1];
+        }
+
+        return matchLine;
     }
 
     private static void GetPcre2MultilineReplacementRange(ReadOnlySpan<byte> bytes, Pcre2Match match, out int start, out int end)
@@ -1364,7 +1626,7 @@ internal static class Pcre2SearchOperations
         ReadOnlySpan<byte> line,
         Pcre2Regex regex,
         RawByteWriter output,
-        OutputSeparators separators,
+        ReadOnlyMemory<byte> fieldSeparator,
         OutputPath? prefix,
         OutputColor color,
         long lineNumber,
@@ -1375,9 +1637,10 @@ internal static class Pcre2SearchOperations
         bool printColumn,
         bool printByteOffset,
         bool trim,
-        bool nullPathTerminator)
+        bool nullPathTerminator,
+        ReadOnlyMemory<byte> lineTerminator)
     {
-        var sink = new StandardMatchSink(output, prefix, separators.FieldMatch, printLineNumber, printColumn, printByteOffset, trim, nullPathTerminator: nullPathTerminator, color: color, lineTerminator: separators.LineTerminator);
+        var sink = new StandardMatchSink(output, prefix, fieldSeparator, printLineNumber, printColumn, printByteOffset, trim, nullPathTerminator: nullPathTerminator, color: color, lineTerminator: lineTerminator);
         int startOffset = 0;
         while (startOffset <= line.Length && regex.TryFind(line, startOffset, out Pcre2Match match))
         {
@@ -1386,7 +1649,7 @@ internal static class Pcre2SearchOperations
                 sink.Matched(lineNumber, lineStart + match.Start, match.Start + 1L, line.Slice(match.Start, match.Length));
             }
 
-            startOffset = match.Length == 0 ? match.Start + 1 : match.Start + match.Length;
+            startOffset = AdvanceAfterPcre2Match(match, line.Length);
         }
     }
 

@@ -257,6 +257,13 @@ mkdir -p "$WORK"
 printf 'foobar\nfoo\nfoobarfoo\n' > "$WORK/pcre2-smoke.txt"
 printf 'barfoo\nfoobar\n' > "$WORK/pcre2-smoke-2.txt"
 printf 'foo-bar\nfoobar\n' > "$WORK/pcre2-word.txt"
+cat > "$WORK/pcre2-context" <<'EOF'
+one
+foobar
+middle
+foo
+last
+EOF
 printf 'foo\nbar\n' > "$WORK/lookbehind"
 printf 'For the Doctor Watsons of this world, as opposed to the Sherlock\n' > "$WORK/sherlock"
 printf 'foo 42\nxoyz\ncat\tdog\n' > "$WORK/ip1.txt"
@@ -286,6 +293,10 @@ compare_case basic_lookahead_multi_file sort-lines -P -n 'foo(?=bar)' pcre2-smok
 compare_case recursive_lookahead sort-lines -P -n 'foo(?=bar)' pcre2-dir
 compare_case line_regexp exact -P -x 'foo(?=bar)bar' pcre2-smoke.txt
 compare_case word_regexp exact -P -w 'foo(?=-)' pcre2-word.txt
+compare_case context exact -P -n -C1 'foo(?=bar)' pcre2-context
+compare_case passthru exact -P -n --passthru 'foo(?=bar)' pcre2-context
+compare_case context_only_matching exact -P -n -o -C1 'foo(?=bar)' pcre2-context
+compare_case context_replacement exact -P -n -r X -C1 'foo(?=bar)' pcre2-context
 compare_stdin_case explicit_stdin_lookahead exact "$WORK/pcre2-smoke.txt" -P 'foo(?=bar)' -
 compare_stdin_case implicit_stdin_lookahead exact "$WORK/pcre2-smoke.txt" -P 'foo(?=bar)'
 compare_case f1155_auto_hybrid_regex exact --no-pcre2 --auto-hybrid-regex '(?<=the )Sherlock' sherlock

@@ -31,14 +31,27 @@ public sealed class Pcre2SearchOperationsTests
     }
 
     /// <summary>
+    /// Verifies line-oriented context output can use the native PCRE2 search path.
+    /// </summary>
+    [Fact]
+    public void AllowsLineOrientedContextOutput()
+    {
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--context", "1", "needle", "haystack.txt")));
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--passthru", "needle", "haystack.txt")));
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--only-matching", "--context", "1", "needle", "haystack.txt")));
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--replace", "x", "--context", "1", "needle", "haystack.txt")));
+    }
+
+    /// <summary>
     /// Verifies max-count does not hide unsupported PCRE2 option combinations.
     /// </summary>
     [Fact]
     public void RejectsUnsupportedOptionCombinationsWithMaxCount()
     {
         Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--max-count", "2", "--stats", "needle")));
-        Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--max-count", "2", "--context", "1", "needle")));
-        Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--max-count", "2", "--passthru", "needle")));
+        Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--json", "--context", "1", "needle")));
+        Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--context", "1", "needle")));
+        Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--passthru", "needle")));
         Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--invert-match", "needle")));
     }
 
