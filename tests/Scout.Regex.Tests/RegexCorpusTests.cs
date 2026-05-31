@@ -605,33 +605,55 @@ public sealed class RegexCorpusTests
             ]),
             ("set.toml",
             [
+                "basic10",
+                "basic20",
                 "basic30",
                 "basic40",
+                "basic50",
+                "basic60",
                 "basic10-leftmost-first",
                 "basic60-leftmost-first",
+                "basic61",
                 "basic61-leftmost-first",
+                "basic70",
                 "basic71",
                 "basic80",
                 "basic81",
                 "basic82",
+                "basic90",
                 "basic91",
+                "basic100",
+                "basic101",
+                "basic102",
                 "basic110",
                 "basic111",
                 "basic120",
                 "basic121",
                 "basic122",
                 "basic130",
+                "empty10",
                 "empty10-leftmost-first",
+                "empty11",
                 "empty11-leftmost-first",
+                "empty20",
                 "empty20-leftmost-first",
+                "empty21",
                 "empty21-leftmost-first",
+                "empty22",
+                "empty23",
+                "empty30",
                 "empty30-leftmost-first",
+                "empty31",
                 "empty31-leftmost-first",
+                "empty40",
                 "empty40-leftmost-first",
                 "nomatch10",
                 "nomatch20",
                 "nomatch30",
                 "nomatch40",
+                "caps-010",
+                "caps-020",
+                "caps-030",
                 "caps-110",
                 "caps-120",
                 "caps-121",
@@ -1019,7 +1041,7 @@ public sealed class RegexCorpusTests
             }
         }
 
-        candidates.Sort(CompareOverlappingCandidates);
+        SortOverlappingCandidates(candidates, matchKindAll && automata.Count > 1);
         int count = matchLimit is int limit ? Math.Min(limit, candidates.Count) : candidates.Count;
         var result = new RegexMatch[count];
         for (int index = 0; index < count; index++)
@@ -1114,6 +1136,17 @@ public sealed class RegexCorpusTests
         return false;
     }
 
+    private static void SortOverlappingCandidates(List<OverlappingCandidate> candidates, bool regexSetAll)
+    {
+        if (regexSetAll)
+        {
+            candidates.Sort((left, right) => CompareRegexSetAllOverlappingCandidates(candidates, left, right));
+            return;
+        }
+
+        candidates.Sort(CompareOverlappingCandidates);
+    }
+
     private static int CompareOverlappingCandidates(OverlappingCandidate left, OverlappingCandidate right)
     {
         int end = left.Match.End.CompareTo(right.Match.End);
@@ -1129,6 +1162,46 @@ public sealed class RegexCorpusTests
         }
 
         return left.PatternIndex.CompareTo(right.PatternIndex);
+    }
+
+    private static int CompareRegexSetAllOverlappingCandidates(List<OverlappingCandidate> candidates, OverlappingCandidate left, OverlappingCandidate right)
+    {
+        int end = left.Match.End.CompareTo(right.Match.End);
+        if (end != 0)
+        {
+            return end;
+        }
+
+        int leftPatternStart = MinStartForPatternAtEnd(candidates, left.PatternIndex, left.Match.End);
+        int rightPatternStart = MinStartForPatternAtEnd(candidates, right.PatternIndex, right.Match.End);
+        int patternStart = leftPatternStart.CompareTo(rightPatternStart);
+        if (patternStart != 0)
+        {
+            return patternStart;
+        }
+
+        int pattern = left.PatternIndex.CompareTo(right.PatternIndex);
+        if (pattern != 0)
+        {
+            return pattern;
+        }
+
+        return right.Match.Start.CompareTo(left.Match.Start);
+    }
+
+    private static int MinStartForPatternAtEnd(List<OverlappingCandidate> candidates, int patternIndex, int end)
+    {
+        int start = int.MaxValue;
+        for (int index = 0; index < candidates.Count; index++)
+        {
+            OverlappingCandidate candidate = candidates[index];
+            if (candidate.PatternIndex == patternIndex && candidate.Match.End == end)
+            {
+                start = Math.Min(start, candidate.Match.Start);
+            }
+        }
+
+        return start;
     }
 
     private static bool MatchesEqual(IReadOnlyList<RegexMatch> expected, RegexMatch[] actual)
