@@ -24,7 +24,7 @@ internal sealed class RegexOnePassDfa
         {
             RegexNfaState state = nfa.States[index];
             RegexNfaStateKind kind = state.Kind;
-            if (state.Utf8 && RegexByteClass.RequiresUtf8ScalarMatch(state.AtomKind, state.Value.Span))
+            if (state.Utf8 && RegexByteClass.RequiresUtf8ScalarMatch(state.AtomKind, state.Value.Span, state.UnicodeClasses))
             {
                 return false;
             }
@@ -104,6 +104,7 @@ internal sealed class RegexOnePassDfa
                     state.Crlf,
                     state.LineTerminator,
                     state.Utf8,
+                    state.UnicodeClasses,
                     out int consume))
             {
                 continue;
@@ -157,7 +158,7 @@ internal sealed class RegexOnePassDfa
                 AddThread(state.Alternative, haystack, position, threads, visited, closedSplits);
                 break;
             case RegexNfaStateKind.Predicate:
-                if (RegexByteClass.PredicateMatches(haystack, position, state.AtomKind, state.MultiLine, state.Crlf, state.LineTerminator, state.Utf8))
+                if (RegexByteClass.PredicateMatches(haystack, position, state.AtomKind, state.MultiLine, state.Crlf, state.LineTerminator, state.Utf8, state.UnicodeClasses))
                 {
                     AddThread(state.Next, haystack, position, threads, visited, closedSplits);
                 }
@@ -217,6 +218,7 @@ internal sealed class RegexOnePassDfa
                     state.Crlf,
                     state.LineTerminator,
                     state.Utf8,
+                    state.UnicodeClasses,
                     out _))
             {
                 return true;

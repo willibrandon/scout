@@ -1,4 +1,7 @@
 using System;
+using System.Buffers;
+using System.Globalization;
+using System.Text;
 
 namespace Scout;
 
@@ -43,32 +46,52 @@ internal static class RegexByteClass
         bool crlf,
         byte lineTerminator,
         bool utf8,
+        bool unicodeClasses,
         out int length)
     {
         length = 0;
-        bool requiresUtf8ScalarMatch = utf8 && RequiresUtf8ScalarMatch(kind, expression);
-        if (position >= haystack.Length ||
-            requiresUtf8ScalarMatch && !IsUtf8Boundary(haystack, position) ||
-            !AtomMatches(
-                haystack[position],
-                kind,
-                expression,
-                caseInsensitive,
-                multiLine,
-                dotMatchesNewline,
-                crlf,
-                lineTerminator))
+        if (position >= haystack.Length)
+        {
+            return false;
+        }
+
+        bool requiresUtf8ScalarMatch = utf8 && RequiresUtf8ScalarMatch(kind, expression, unicodeClasses);
+        if (requiresUtf8ScalarMatch)
+        {
+            if (!IsUtf8Boundary(haystack, position) ||
+                !TryDecodeUtf8Scalar(haystack, position, out Rune rune, out length) ||
+                !AtomMatches(
+                    rune,
+                    kind,
+                    expression,
+                    caseInsensitive,
+                    multiLine,
+                    dotMatchesNewline,
+                    crlf,
+                    lineTerminator,
+                    unicodeClasses))
+            {
+                length = 0;
+                return false;
+            }
+
+            return true;
+        }
+
+        if (!AtomMatches(
+            haystack[position],
+            kind,
+            expression,
+            caseInsensitive,
+            multiLine,
+            dotMatchesNewline,
+            crlf,
+            lineTerminator))
         {
             return false;
         }
 
         length = 1;
-        if (requiresUtf8ScalarMatch &&
-            TryGetUtf8ScalarLength(haystack, position, out int scalarLength))
-        {
-            length = scalarLength;
-        }
-
         return true;
     }
 
@@ -79,23 +102,25 @@ internal static class RegexByteClass
         bool multiLine,
         bool crlf,
         byte lineTerminator,
-        bool utf8)
+        bool utf8,
+        bool unicodeClasses)
     {
         if (utf8 && IsBoundaryPredicate(kind) && !IsUtf8Boundary(haystack, position))
         {
             return false;
         }
 
+        bool useUnicodeWord = utf8 && unicodeClasses;
         return kind switch
         {
             RegexSyntaxKind.StartAnchor => IsStartAnchorMatch(haystack, position, multiLine, crlf, lineTerminator),
             RegexSyntaxKind.EndAnchor => IsEndAnchorMatch(haystack, position, multiLine, crlf, lineTerminator),
-            RegexSyntaxKind.WordBoundary => IsRegexWordBoundary(haystack, position),
-            RegexSyntaxKind.NotWordBoundary => !IsRegexWordBoundary(haystack, position),
-            RegexSyntaxKind.WordStartBoundary => IsRegexWordStartBoundary(haystack, position),
-            RegexSyntaxKind.WordEndBoundary => IsRegexWordEndBoundary(haystack, position),
-            RegexSyntaxKind.WordStartHalfBoundary => IsRegexWordStartHalfBoundary(haystack, position),
-            RegexSyntaxKind.WordEndHalfBoundary => IsRegexWordEndHalfBoundary(haystack, position),
+            RegexSyntaxKind.WordBoundary => IsRegexWordBoundary(haystack, position, useUnicodeWord),
+            RegexSyntaxKind.NotWordBoundary => !IsRegexWordBoundary(haystack, position, useUnicodeWord),
+            RegexSyntaxKind.WordStartBoundary => IsRegexWordStartBoundary(haystack, position, useUnicodeWord),
+            RegexSyntaxKind.WordEndBoundary => IsRegexWordEndBoundary(haystack, position, useUnicodeWord),
+            RegexSyntaxKind.WordStartHalfBoundary => IsRegexWordStartHalfBoundary(haystack, position, useUnicodeWord),
+            RegexSyntaxKind.WordEndHalfBoundary => IsRegexWordEndHalfBoundary(haystack, position, useUnicodeWord),
             _ => false,
         };
     }
@@ -121,7 +146,7 @@ internal static class RegexByteClass
         return true;
     }
 
-    public static bool RequiresUtf8ScalarMatch(RegexSyntaxKind kind, ReadOnlySpan<byte> expression)
+    public static bool RequiresUtf8ScalarMatch(RegexSyntaxKind kind, ReadOnlySpan<byte> expression, bool unicodeClasses)
     {
         return kind switch
         {
@@ -130,9 +155,45 @@ internal static class RegexByteClass
                 or RegexSyntaxKind.NotDigitClass
                 or RegexSyntaxKind.NotWordClass
                 or RegexSyntaxKind.NotWhitespaceClass => true,
-            RegexSyntaxKind.CharacterClass => IsNegatedClass(expression),
+            RegexSyntaxKind.DigitClass
+                or RegexSyntaxKind.WordClass
+                or RegexSyntaxKind.WhitespaceClass => unicodeClasses,
+            RegexSyntaxKind.CharacterClass => IsNegatedClass(expression) || unicodeClasses && ContainsScalarClassToken(expression),
             _ => false,
         };
+    }
+
+    private static bool AtomMatches(
+        Rune value,
+        RegexSyntaxKind kind,
+        ReadOnlySpan<byte> expression,
+        bool caseInsensitive,
+        bool multiLine,
+        bool dotMatchesNewline,
+        bool crlf,
+        byte lineTerminator,
+        bool unicodeClasses)
+    {
+        return kind switch
+        {
+            RegexSyntaxKind.Literal => value.IsAscii && expression.Length > 0 && ByteEquals((byte)value.Value, expression[0], caseInsensitive),
+            RegexSyntaxKind.Dot => dotMatchesNewline || !IsLineTerminator(value, crlf, lineTerminator),
+            RegexSyntaxKind.AnyClass => true,
+            RegexSyntaxKind.CharacterClass => ClassMatches(value, expression, caseInsensitive, multiLine, crlf, lineTerminator, unicodeClasses),
+            RegexSyntaxKind.DigitClass => IsRegexDigitRune(value, unicodeClasses),
+            RegexSyntaxKind.NotDigitClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) && !IsRegexDigitRune(value, unicodeClasses),
+            RegexSyntaxKind.WordClass => IsRegexWordRune(value, unicodeClasses),
+            RegexSyntaxKind.NotWordClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) && !IsRegexWordRune(value, unicodeClasses),
+            RegexSyntaxKind.WhitespaceClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) && IsRegexWhitespaceRune(value, unicodeClasses),
+            RegexSyntaxKind.NotWhitespaceClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) && !IsRegexWhitespaceRune(value, unicodeClasses),
+            _ => false,
+        };
+    }
+
+    private static bool TryDecodeUtf8Scalar(ReadOnlySpan<byte> bytes, int position, out Rune rune, out int length)
+    {
+        OperationStatus status = Rune.DecodeFromUtf8(bytes[position..], out rune, out length);
+        return status == OperationStatus.Done;
     }
 
     private static bool TryGetUtf8ScalarLength(ReadOnlySpan<byte> bytes, int position, out int length)
@@ -224,6 +285,29 @@ internal static class RegexByteClass
     private static bool IsNegatedClass(ReadOnlySpan<byte> expression)
     {
         return !expression.IsEmpty && expression[0] == (byte)'^';
+    }
+
+    private static bool ContainsScalarClassToken(ReadOnlySpan<byte> expression)
+    {
+        int index = IsNegatedClass(expression) ? 1 : 0;
+        while (index < expression.Length)
+        {
+            if (!TryReadClassToken(expression, ref index, out RegexSyntaxKind tokenKind, out _, out _))
+            {
+                return false;
+            }
+
+            if (tokenKind is RegexSyntaxKind.DigitClass
+                or RegexSyntaxKind.WordClass
+                or RegexSyntaxKind.WhitespaceClass
+                or RegexSyntaxKind.LetterClass
+                or RegexSyntaxKind.AlphanumericClass)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsBoundaryPredicate(RegexSyntaxKind kind)
@@ -329,6 +413,62 @@ internal static class RegexByteClass
             }
 
             matched |= ClassTokenMatches(value, tokenKind, literal, tokenNegated, caseInsensitive);
+        }
+
+        return negated ? !matched : matched;
+    }
+
+    private static bool ClassMatches(
+        Rune value,
+        ReadOnlySpan<byte> expression,
+        bool caseInsensitive,
+        bool multiLine,
+        bool crlf,
+        byte lineTerminator,
+        bool unicodeClasses)
+    {
+        if (!multiLine && IsLineTerminator(value, crlf, lineTerminator))
+        {
+            return false;
+        }
+
+        bool negated = !expression.IsEmpty && expression[0] == (byte)'^';
+        int index = negated ? 1 : 0;
+        bool matched = false;
+        while (index < expression.Length)
+        {
+            if (!TryReadClassToken(expression, ref index, out RegexSyntaxKind tokenKind, out byte literal, out bool tokenNegated))
+            {
+                break;
+            }
+
+            if (!tokenNegated &&
+                tokenKind == RegexSyntaxKind.Literal &&
+                index + 1 < expression.Length &&
+                expression[index] == (byte)'-')
+            {
+                int rangeEndIndex = index + 1;
+                if (!TryReadClassToken(expression, ref rangeEndIndex, out RegexSyntaxKind rangeEndKind, out byte rangeEndLiteral, out bool rangeEndNegated) ||
+                    rangeEndNegated ||
+                    rangeEndKind != RegexSyntaxKind.Literal)
+                {
+                    matched |= ClassTokenMatches(value, tokenKind, literal, tokenNegated, caseInsensitive, unicodeClasses);
+                    continue;
+                }
+
+                index = rangeEndIndex;
+                if (value.IsAscii)
+                {
+                    byte foldedValue = FoldMaybe((byte)value.Value, caseInsensitive);
+                    byte foldedStart = FoldMaybe(literal, caseInsensitive);
+                    byte foldedEnd = FoldMaybe(rangeEndLiteral, caseInsensitive);
+                    matched |= foldedStart <= foldedValue && foldedValue <= foldedEnd;
+                }
+
+                continue;
+            }
+
+            matched |= ClassTokenMatches(value, tokenKind, literal, tokenNegated, caseInsensitive, unicodeClasses);
         }
 
         return negated ? !matched : matched;
@@ -506,37 +646,164 @@ internal static class RegexByteClass
         return tokenNegated ? !matched : matched;
     }
 
-    private static bool IsRegexWordBoundary(ReadOnlySpan<byte> haystack, int position)
+    private static bool ClassTokenMatches(
+        Rune value,
+        RegexSyntaxKind tokenKind,
+        byte literal,
+        bool tokenNegated,
+        bool caseInsensitive,
+        bool unicodeClasses)
     {
-        bool leftIsWord = position > 0 && IsAsciiWordByte(haystack[position - 1]);
-        bool rightIsWord = position < haystack.Length && IsAsciiWordByte(haystack[position]);
+        bool matched = tokenKind switch
+        {
+            RegexSyntaxKind.DigitClass => IsRegexDigitRune(value, unicodeClasses),
+            RegexSyntaxKind.WordClass => IsRegexWordRune(value, unicodeClasses),
+            RegexSyntaxKind.WhitespaceClass => IsRegexWhitespaceRune(value, unicodeClasses),
+            RegexSyntaxKind.LetterClass => IsRegexAlphabeticRune(value, unicodeClasses),
+            RegexSyntaxKind.AlphanumericClass => IsRegexAlphabeticRune(value, unicodeClasses) || IsRegexDigitRune(value, unicodeClasses),
+            _ => value.IsAscii && ByteEquals((byte)value.Value, literal, caseInsensitive),
+        };
+        return tokenNegated ? !matched : matched;
+    }
+
+    private static bool IsRegexWordBoundary(ReadOnlySpan<byte> haystack, int position, bool unicodeWord)
+    {
+        bool leftIsWord = IsRegexWordBefore(haystack, position, unicodeWord);
+        bool rightIsWord = IsRegexWordAt(haystack, position, unicodeWord);
         return leftIsWord != rightIsWord;
     }
 
-    private static bool IsRegexWordStartBoundary(ReadOnlySpan<byte> haystack, int position)
+    private static bool IsRegexWordStartBoundary(ReadOnlySpan<byte> haystack, int position, bool unicodeWord)
     {
-        bool leftIsWord = position > 0 && IsAsciiWordByte(haystack[position - 1]);
-        bool rightIsWord = position < haystack.Length && IsAsciiWordByte(haystack[position]);
+        bool leftIsWord = IsRegexWordBefore(haystack, position, unicodeWord);
+        bool rightIsWord = IsRegexWordAt(haystack, position, unicodeWord);
         return !leftIsWord && rightIsWord;
     }
 
-    private static bool IsRegexWordEndBoundary(ReadOnlySpan<byte> haystack, int position)
+    private static bool IsRegexWordEndBoundary(ReadOnlySpan<byte> haystack, int position, bool unicodeWord)
     {
-        bool leftIsWord = position > 0 && IsAsciiWordByte(haystack[position - 1]);
-        bool rightIsWord = position < haystack.Length && IsAsciiWordByte(haystack[position]);
+        bool leftIsWord = IsRegexWordBefore(haystack, position, unicodeWord);
+        bool rightIsWord = IsRegexWordAt(haystack, position, unicodeWord);
         return leftIsWord && !rightIsWord;
     }
 
-    private static bool IsRegexWordStartHalfBoundary(ReadOnlySpan<byte> haystack, int position)
+    private static bool IsRegexWordStartHalfBoundary(ReadOnlySpan<byte> haystack, int position, bool unicodeWord)
     {
-        bool leftIsWord = position > 0 && IsAsciiWordByte(haystack[position - 1]);
+        bool leftIsWord = IsRegexWordBefore(haystack, position, unicodeWord);
         return !leftIsWord;
     }
 
-    private static bool IsRegexWordEndHalfBoundary(ReadOnlySpan<byte> haystack, int position)
+    private static bool IsRegexWordEndHalfBoundary(ReadOnlySpan<byte> haystack, int position, bool unicodeWord)
     {
-        bool rightIsWord = position < haystack.Length && IsAsciiWordByte(haystack[position]);
+        bool rightIsWord = IsRegexWordAt(haystack, position, unicodeWord);
         return !rightIsWord;
+    }
+
+    private static bool IsRegexWordBefore(ReadOnlySpan<byte> haystack, int position, bool unicodeWord)
+    {
+        if (position <= 0)
+        {
+            return false;
+        }
+
+        if (!unicodeWord)
+        {
+            return IsAsciiWordByte(haystack[position - 1]);
+        }
+
+        int firstCandidate = Math.Max(0, position - 4);
+        for (int index = firstCandidate; index < position; index++)
+        {
+            if (TryDecodeUtf8Scalar(haystack, index, out Rune rune, out int length) &&
+                index + length == position)
+            {
+                return IsRegexWordRune(rune, unicodeClasses: true);
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsRegexWordAt(ReadOnlySpan<byte> haystack, int position, bool unicodeWord)
+    {
+        if (position >= haystack.Length)
+        {
+            return false;
+        }
+
+        if (!unicodeWord)
+        {
+            return IsAsciiWordByte(haystack[position]);
+        }
+
+        return TryDecodeUtf8Scalar(haystack, position, out Rune rune, out _) &&
+            IsRegexWordRune(rune, unicodeClasses: true);
+    }
+
+    private static bool IsRegexDigitRune(Rune value, bool unicodeClasses)
+    {
+        if (!unicodeClasses)
+        {
+            return value.IsAscii && IsAsciiDigitByte((byte)value.Value);
+        }
+
+        return value.IsAscii
+            ? IsAsciiDigitByte((byte)value.Value)
+            : Rune.GetUnicodeCategory(value) == UnicodeCategory.DecimalDigitNumber;
+    }
+
+    private static bool IsRegexWordRune(Rune value, bool unicodeClasses)
+    {
+        if (!unicodeClasses)
+        {
+            return value.IsAscii && IsAsciiWordByte((byte)value.Value);
+        }
+
+        if (value.IsAscii)
+        {
+            return IsAsciiWordByte((byte)value.Value);
+        }
+
+        UnicodeCategory category = Rune.GetUnicodeCategory(value);
+        return IsRegexAlphabeticCategory(category)
+            || category is UnicodeCategory.NonSpacingMark
+                or UnicodeCategory.SpacingCombiningMark
+                or UnicodeCategory.EnclosingMark
+                or UnicodeCategory.DecimalDigitNumber
+                or UnicodeCategory.ConnectorPunctuation
+            || value.Value is 0x200C or 0x200D;
+    }
+
+    private static bool IsRegexWhitespaceRune(Rune value, bool unicodeClasses)
+    {
+        if (!unicodeClasses)
+        {
+            return value.IsAscii && IsRegexWhitespaceByte((byte)value.Value);
+        }
+
+        return value.IsAscii
+            ? IsRegexWhitespaceByte((byte)value.Value)
+            : Rune.IsWhiteSpace(value);
+    }
+
+    private static bool IsRegexAlphabeticRune(Rune value, bool unicodeClasses)
+    {
+        if (!unicodeClasses)
+        {
+            return value.IsAscii && IsAsciiAlphaByte((byte)value.Value);
+        }
+
+        return IsRegexAlphabeticCategory(Rune.GetUnicodeCategory(value));
+    }
+
+    private static bool IsRegexAlphabeticCategory(UnicodeCategory category)
+    {
+        return category is UnicodeCategory.UppercaseLetter
+            or UnicodeCategory.LowercaseLetter
+            or UnicodeCategory.TitlecaseLetter
+            or UnicodeCategory.ModifierLetter
+            or UnicodeCategory.OtherLetter
+            or UnicodeCategory.LetterNumber;
     }
 
     private static bool IsAsciiAlphaByte(byte value)
@@ -568,6 +835,11 @@ internal static class RegexByteClass
         return crlf
             ? value is (byte)'\n' or (byte)'\r'
             : value == lineTerminator;
+    }
+
+    private static bool IsLineTerminator(Rune value, bool crlf, byte lineTerminator)
+    {
+        return value.IsAscii && IsLineTerminator((byte)value.Value, crlf, lineTerminator);
     }
 
     private static bool ByteEquals(byte left, byte right, bool caseInsensitive)

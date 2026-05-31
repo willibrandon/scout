@@ -9,7 +9,8 @@ internal readonly struct RegexCompileOptions
         bool dotMatchesNewline,
         bool crlf = false,
         byte lineTerminator = (byte)'\n',
-        bool utf8 = true)
+        bool utf8 = true,
+        bool unicodeClasses = true)
     {
         CaseInsensitive = caseInsensitive;
         SwapGreed = swapGreed;
@@ -18,6 +19,7 @@ internal readonly struct RegexCompileOptions
         Crlf = crlf;
         LineTerminator = lineTerminator;
         Utf8 = utf8;
+        UnicodeClasses = unicodeClasses;
     }
 
     public bool CaseInsensitive { get; }
@@ -34,6 +36,8 @@ internal readonly struct RegexCompileOptions
 
     public bool Utf8 { get; }
 
+    public bool UnicodeClasses { get; }
+
     public RegexCompileOptions Apply(string enabledFlags, string disabledFlags)
     {
         bool caseInsensitive = CaseInsensitive;
@@ -42,17 +46,18 @@ internal readonly struct RegexCompileOptions
         bool dotMatchesNewline = DotMatchesNewline;
         bool crlf = Crlf;
         bool utf8 = Utf8;
+        bool unicodeClasses = UnicodeClasses;
         for (int index = 0; index < enabledFlags.Length; index++)
         {
-            ApplyFlag(enabledFlags[index], enabled: true, ref caseInsensitive, ref swapGreed, ref multiLine, ref dotMatchesNewline, ref crlf, ref utf8);
+            ApplyFlag(enabledFlags[index], enabled: true, ref caseInsensitive, ref swapGreed, ref multiLine, ref dotMatchesNewline, ref crlf, ref utf8, ref unicodeClasses);
         }
 
         for (int index = 0; index < disabledFlags.Length; index++)
         {
-            ApplyFlag(disabledFlags[index], enabled: false, ref caseInsensitive, ref swapGreed, ref multiLine, ref dotMatchesNewline, ref crlf, ref utf8);
+            ApplyFlag(disabledFlags[index], enabled: false, ref caseInsensitive, ref swapGreed, ref multiLine, ref dotMatchesNewline, ref crlf, ref utf8, ref unicodeClasses);
         }
 
-        return new RegexCompileOptions(caseInsensitive, swapGreed, multiLine, dotMatchesNewline, crlf, LineTerminator, utf8);
+        return new RegexCompileOptions(caseInsensitive, swapGreed, multiLine, dotMatchesNewline, crlf, LineTerminator, utf8, unicodeClasses);
     }
 
     private static void ApplyFlag(
@@ -63,7 +68,8 @@ internal readonly struct RegexCompileOptions
         ref bool multiLine,
         ref bool dotMatchesNewline,
         ref bool crlf,
-        ref bool utf8)
+        ref bool utf8,
+        ref bool unicodeClasses)
     {
         switch (flag)
         {
@@ -84,6 +90,7 @@ internal readonly struct RegexCompileOptions
                 break;
             case 'u':
                 utf8 = enabled;
+                unicodeClasses = enabled;
                 break;
         }
     }

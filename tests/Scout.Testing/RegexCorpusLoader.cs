@@ -61,8 +61,10 @@ internal static class RegexCorpusLoader
         bool anchored = ReadOptionalBool(block, "anchored", path, name) ?? false;
         bool caseInsensitive = ReadOptionalBool(block, "case-insensitive", path, name) ?? false;
         bool utf8 = ReadOptionalBool(block, "utf8", path, name) ?? true;
+        bool unicode = ReadOptionalBool(block, "unicode", path, name) ?? true;
+        bool unicodeClasses = unicode && !string.Equals(relativePath, "regex-lite.toml", StringComparison.Ordinal);
         bool compiles = ReadOptionalBool(block, "compiles", path, name) ?? true;
-        return new RegexCorpusCase(name, patterns, haystack, expectedMatches, matchLimit, lineTerminator, boundsStart, boundsEnd, anchored, caseInsensitive, utf8, compiles);
+        return new RegexCorpusCase(name, patterns, haystack, expectedMatches, matchLimit, lineTerminator, boundsStart, boundsEnd, anchored, caseInsensitive, utf8, unicodeClasses, compiles);
     }
 
     private static string FindBlock(string text, string name, string path)

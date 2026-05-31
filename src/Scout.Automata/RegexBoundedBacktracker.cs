@@ -95,6 +95,7 @@ internal sealed class RegexBoundedBacktracker
                             state.Crlf,
                             state.LineTerminator,
                             state.Utf8,
+                            state.UnicodeClasses,
                             out int consume) &&
                         TryMatchState(state.Next, start, position + consume, haystack, visiting, out end);
                 case RegexNfaStateKind.Predicate:
@@ -105,7 +106,8 @@ internal sealed class RegexBoundedBacktracker
                             state.MultiLine,
                             state.Crlf,
                             state.LineTerminator,
-                            state.Utf8) &&
+                            state.Utf8,
+                            state.UnicodeClasses) &&
                         TryMatchState(state.Next, start, position, haystack, visiting, out end);
                 case RegexNfaStateKind.Split:
                 case RegexNfaStateKind.GreedyLoopSplit:

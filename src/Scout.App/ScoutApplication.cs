@@ -1054,7 +1054,8 @@ internal static class ScoutApplication
                     lowArgs.Crlf,
                     lowArgs.NullData ? (byte)'\0' : (byte)'\n',
                     lowArgs.Unicode,
-                    lowArgs.DfaSizeLimit);
+                    unicodeClasses: lowArgs.Unicode,
+                    dfaSizeLimit: lowArgs.DfaSizeLimit);
             }
 
             return false;

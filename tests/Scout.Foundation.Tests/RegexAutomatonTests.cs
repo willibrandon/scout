@@ -347,6 +347,32 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies UTF-8 word classes consume Unicode word scalars.
+    /// </summary>
+    [Fact]
+    public void Utf8WordClassMatchesUnicodeScalars()
+    {
+        Assert.Equal(new RegexMatch(0, 6), RegexAutomaton.Compile(@"\b\w+\b"u8).Find("βββ☃"u8));
+        Assert.Equal(new RegexMatch(0, 2), RegexAutomaton.Compile(@"[\w]+"u8).Find("β☃"u8));
+        Assert.Null(RegexAutomaton.Compile(@"\w"u8, caseInsensitive: false, multiLine: false, dotMatchesNewline: false, unicodeClasses: false).Find("β"u8));
+        Assert.Null(RegexAutomaton.Compile(@"\w"u8, caseInsensitive: false, multiLine: false, dotMatchesNewline: false, utf8: false).Find("β"u8));
+    }
+
+    /// <summary>
+    /// Verifies UTF-8 word boundaries inspect adjacent Unicode scalars.
+    /// </summary>
+    [Fact]
+    public void Utf8WordBoundariesInspectUnicodeScalars()
+    {
+        var automaton = RegexAutomaton.Compile(@"\b[0-9]+\b"u8);
+
+        Assert.Null(automaton.Find("β123"u8, startAt: 2));
+        Assert.Null(automaton.Find("123β"u8));
+        Assert.Equal(new RegexMatch(2, 3), RegexAutomaton.Compile(@"\b[0-9]+\b"u8, caseInsensitive: false, multiLine: false, dotMatchesNewline: false, unicodeClasses: false).Find("β123"u8, startAt: 2));
+        Assert.Equal(new RegexMatch(2, 3), RegexAutomaton.Compile(@"(?-u:\b[0-9]+\b)"u8).Find("β123"u8, startAt: 2));
+    }
+
+    /// <summary>
     /// Verifies UTF-8 mode does not report matches inside a valid code point.
     /// </summary>
     [Fact]
@@ -358,7 +384,7 @@ public sealed class RegexAutomatonTests
         Assert.Equal(new RegexMatch(0, 4), RegexAutomaton.Compile("."u8).Find(poop));
         Assert.Equal(new RegexMatch(0, 4), RegexAutomaton.Compile("[^a]"u8).Find(poop));
         Assert.Equal(new RegexMatch(4, 0), RegexAutomaton.Compile(""u8).Find(poop, startAt: 1));
-        Assert.Equal(new RegexMatch(2, 0), RegexAutomaton.Compile(@"\B"u8).Find(delta, startAt: 1));
+        Assert.Null(RegexAutomaton.Compile(@"\B"u8).Find(delta, startAt: 1));
     }
 
     /// <summary>

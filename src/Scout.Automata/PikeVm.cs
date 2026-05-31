@@ -56,6 +56,7 @@ internal sealed class PikeVm
                         state.Crlf,
                         state.LineTerminator,
                         state.Utf8,
+                        state.UnicodeClasses,
                         out int consume))
                 {
                     AddThread(state.Next, haystack, position + consume, next, new bool[nfa.States.Count], new bool[nfa.States.Count]);
@@ -105,7 +106,7 @@ internal sealed class PikeVm
                 AddThread(state.Alternative, haystack, position, threads, visited, closedSplits);
                 break;
             case RegexNfaStateKind.Predicate:
-                if (RegexByteClass.PredicateMatches(haystack, position, state.AtomKind, state.MultiLine, state.Crlf, state.LineTerminator, state.Utf8))
+                if (RegexByteClass.PredicateMatches(haystack, position, state.AtomKind, state.MultiLine, state.Crlf, state.LineTerminator, state.Utf8, state.UnicodeClasses))
                 {
                     AddThread(state.Next, haystack, position, threads, visited, closedSplits);
                 }
@@ -170,6 +171,7 @@ internal sealed class PikeVm
                     state.Crlf,
                     state.LineTerminator,
                     state.Utf8,
+                    state.UnicodeClasses,
                     out _))
             {
                 return true;

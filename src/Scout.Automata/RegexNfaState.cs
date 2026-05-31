@@ -14,6 +14,7 @@ internal sealed class RegexNfaState
         bool crlf,
         byte lineTerminator,
         bool utf8,
+        bool unicodeClasses,
         int next,
         int alternative)
     {
@@ -26,6 +27,7 @@ internal sealed class RegexNfaState
         Crlf = crlf;
         LineTerminator = lineTerminator;
         Utf8 = utf8;
+        UnicodeClasses = unicodeClasses;
         Next = next;
         Alternative = alternative;
     }
@@ -47,6 +49,8 @@ internal sealed class RegexNfaState
     public byte LineTerminator { get; }
 
     public bool Utf8 { get; }
+
+    public bool UnicodeClasses { get; }
 
     public int Next { get; }
 

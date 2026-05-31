@@ -140,6 +140,7 @@ internal sealed class RegexNfaCompiler
             options.Crlf,
             options.LineTerminator,
             options.Utf8,
+            options.UnicodeClasses,
             next,
             alternative: -1));
         return state;
@@ -171,6 +172,7 @@ internal sealed class RegexNfaCompiler
             crlf: false,
             lineTerminator: (byte)'\n',
             utf8: false,
+            unicodeClasses: false,
             next,
             alternative);
     }

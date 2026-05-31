@@ -16,6 +16,7 @@ internal sealed class RegexCorpusCase
         bool anchored,
         bool caseInsensitive,
         bool utf8,
+        bool unicodeClasses,
         bool compiles)
     {
         Name = name;
@@ -29,6 +30,7 @@ internal sealed class RegexCorpusCase
         Anchored = anchored;
         CaseInsensitive = caseInsensitive;
         Utf8 = utf8;
+        UnicodeClasses = unicodeClasses;
         Compiles = compiles;
     }
 
@@ -53,6 +55,8 @@ internal sealed class RegexCorpusCase
     public bool CaseInsensitive { get; }
 
     public bool Utf8 { get; }
+
+    public bool UnicodeClasses { get; }
 
     public bool Compiles { get; }
 }
