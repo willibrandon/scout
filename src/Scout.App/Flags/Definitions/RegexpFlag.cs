@@ -10,9 +10,9 @@ internal readonly struct RegexpFlag : IFlag<RegexpFlag>
         aliases: [],
         FlagCategory.Matching,
         "Add a search pattern.",
-        static (lowArgs, value, _) =>
+        static (lowArgs, value, flagName) =>
         {
-            CliParser.ParsePattern(value, lowArgs, out ScoutError? error);
+            CliParser.ParsePattern(value, flagName, lowArgs, out ScoutError? error);
             return error;
         });
 }

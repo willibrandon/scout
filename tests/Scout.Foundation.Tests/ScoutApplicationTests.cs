@@ -196,6 +196,55 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies invalid UTF-8 implicit pattern arguments match ripgrep's diagnostic.
+    /// </summary>
+    [Fact]
+    public void InvalidUtf8ImplicitPatternWritesRipgrepDiagnosticError()
+    {
+        using MemoryStream output = new();
+        using MemoryStream error = new();
+        var outputWriter = new RawByteWriter(output);
+        var errorWriter = new RawByteWriter(error);
+        OsString[] arguments =
+        [
+            OsString.FromUnixBytes("scout"u8),
+            OsString.FromUnixBytes([(byte)'(', (byte)'?', (byte)'-', (byte)'u', (byte)')', 0xff]),
+            OsString.FromUnixBytes("-"u8),
+        ];
+
+        int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
+
+        Assert.Equal(2, exitCode);
+        Assert.Empty(output.ToArray());
+        Assert.Equal("rg: pattern given is not valid UTF-8\n"u8.ToArray(), error.ToArray());
+    }
+
+    /// <summary>
+    /// Verifies invalid UTF-8 explicit pattern arguments match ripgrep's diagnostic.
+    /// </summary>
+    [Fact]
+    public void InvalidUtf8ExplicitPatternWritesRipgrepDiagnosticError()
+    {
+        using MemoryStream output = new();
+        using MemoryStream error = new();
+        var outputWriter = new RawByteWriter(output);
+        var errorWriter = new RawByteWriter(error);
+        OsString[] arguments =
+        [
+            OsString.FromUnixBytes("scout"u8),
+            OsString.FromUnixBytes("-e"u8),
+            OsString.FromUnixBytes([(byte)'(', (byte)'?', (byte)'-', (byte)'u', (byte)')', 0xff]),
+            OsString.FromUnixBytes("-"u8),
+        ];
+
+        int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
+
+        Assert.Equal(2, exitCode);
+        Assert.Empty(output.ToArray());
+        Assert.Equal("rg: error parsing flag -e: value is not valid UTF-8\n"u8.ToArray(), error.ToArray());
+    }
+
+    /// <summary>
     /// Verifies invalid UTF-8 path arguments enter the Unix raw-path search path instead of being rejected at decode time.
     /// </summary>
     [Fact]

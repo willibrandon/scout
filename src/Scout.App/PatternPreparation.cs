@@ -16,11 +16,16 @@ internal static class PatternPreparation
     private const ulong RegexCompiledUnicodeWhitespaceClassSize = 512;
     private const ulong RegexCompiledUnicodeNegatedWhitespaceClassSize = 2_048;
 
-    public static byte[] GetPatternBytes(OsString pattern)
+    public static bool TryGetPatternBytes(OsString pattern, out byte[] bytes)
     {
-        return pattern.IsUnixBytes
-            ? pattern.AsUnixBytes().ToArray()
-            : Utf8.GetBytes(pattern.AsWindowsString());
+        if (!pattern.TryGetText(out string text))
+        {
+            bytes = [];
+            return false;
+        }
+
+        bytes = Utf8.GetBytes(text);
+        return true;
     }
 
     private static bool ContainsLineFeed(IReadOnlyList<byte[]> patterns)

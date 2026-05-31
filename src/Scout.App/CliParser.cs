@@ -891,8 +891,14 @@ public static class CliParser
         return true;
     }
 
-    internal static bool ParsePattern(OsString value, CliLowArgs lowArgs, out ScoutError? error)
+    internal static bool ParsePattern(OsString value, string flagName, CliLowArgs lowArgs, out ScoutError? error)
     {
+        if (!value.TryGetText(out _))
+        {
+            error = new ScoutError($"error parsing flag {flagName}: value is not valid UTF-8");
+            return true;
+        }
+
         lowArgs.AddPattern(value);
         error = null;
         return true;

@@ -84,19 +84,29 @@ mkdir -p "$WORK"
 
 python3 - "$SCOUT" "$RG" "$WORK" "$OUT" <<'PY'
 import os
+import errno
 import re
 import subprocess
 import sys
 
 
-def write_bytes(path, contents):
+def try_write_bytes(path, contents):
     try:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o666)
     except OSError as error:
+        if error.errno == errno.EILSEQ:
+            return False
+
         raise SystemExit(f"invalid UTF-8 path differential fixture creation failed: {error}") from error
 
     with os.fdopen(fd, "wb") as handle:
         handle.write(contents)
+    return True
+
+
+def write_bytes(path, contents):
+    if not try_write_bytes(path, contents):
+        raise SystemExit("invalid UTF-8 path differential fixture creation failed: filesystem rejected invalid byte sequences")
 
 
 def normalize_elapsed(output):
@@ -113,20 +123,24 @@ def normalize_elapsed(output):
     return output
 
 
-def run(tool, work, args):
-    return subprocess.run(
-        [tool, *args],
-        cwd=work,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=False,
-    )
+def run(tool, work, args, input_bytes=None):
+    options = {
+        "cwd": work,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "check": False,
+    }
+    if input_bytes is None:
+        options["stdin"] = subprocess.DEVNULL
+    else:
+        options["input"] = input_bytes
+
+    return subprocess.run([tool, *args], **options)
 
 
-def compare(name, mode, scout, rg, work, out, args):
-    scout_result = run(scout, work, args)
-    rg_result = run(rg, work, args)
+def compare(name, mode, scout, rg, work, out, args, input_bytes=None):
+    scout_result = run(scout, work, args, input_bytes)
+    rg_result = run(rg, work, args, input_bytes)
 
     for label, payload in (
         ("scout.stdout", scout_result.stdout),
@@ -163,18 +177,22 @@ work = os.fsencode(sys.argv[3])
 out = sys.argv[4]
 
 bad_name = b"foo\xffbar"
-write_bytes(os.path.join(work, bad_name), b"test")
-compare("r210_explicit_invalid_utf8_path", "exact", scout, rg, work, out, [b"-H", b"test", bad_name])
+if try_write_bytes(os.path.join(work, bad_name), b"test"):
+    compare("r210_explicit_invalid_utf8_path", "exact", scout, rg, work, out, [b"-H", b"test", bad_name])
 
-json_name = b"json\xffpath"
-write_bytes(os.path.join(work, json_name), b"quux\xffbaz")
-compare("json_explicit_invalid_utf8_path", "mask-elapsed", scout, rg, work, out, [b"--json", b"(?-u)\\xFF", json_name])
+    json_name = b"json\xffpath"
+    write_bytes(os.path.join(work, json_name), b"quux\xffbaz")
+    compare("json_explicit_invalid_utf8_path", "mask-elapsed", scout, rg, work, out, [b"--json", b"(?-u)\\xFF", json_name])
 
-recursive = os.path.join(work, b"notutf8")
-os.mkdir(recursive)
-recursive_name = b"foo\xffbar"
-write_bytes(os.path.join(recursive, recursive_name), b"quux\xffbaz")
-compare("json_recursive_invalid_utf8_path", "mask-elapsed", scout, rg, recursive, out, [b"--json", b"(?-u)\\xFF"])
+    recursive = os.path.join(work, b"notutf8")
+    os.mkdir(recursive)
+    recursive_name = b"foo\xffbar"
+    write_bytes(os.path.join(recursive, recursive_name), b"quux\xffbaz")
+    compare("json_recursive_invalid_utf8_path", "mask-elapsed", scout, rg, recursive, out, [b"--json", b"(?-u)\\xFF"])
 
-print("OK invalid UTF-8 native differentials matched pinned rg")
+    print("OK invalid UTF-8 path native differentials matched pinned rg")
+else:
+    compare("invalid_utf8_pattern_argv", "exact", scout, rg, work, out, [b"(?-u)\xff", b"-"], b"a\xffb\n")
+    compare("invalid_utf8_regexp_argv", "exact", scout, rg, work, out, [b"-e", b"(?-u)\xff", b"-"], b"a\xffb\n")
+    print("OK invalid UTF-8 argv native differentials matched pinned rg")
 PY

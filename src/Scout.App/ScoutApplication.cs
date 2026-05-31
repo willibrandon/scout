@@ -107,6 +107,18 @@ internal static class ScoutApplication
         return argument.EqualsUnixBytes("-"u8) || TextEquals(argument, "-");
     }
 
+    private static bool TryAddInlinePattern(OsString pattern, List<byte[]> patterns, DiagnosticMessenger diagnostics)
+    {
+        if (!PatternPreparation.TryGetPatternBytes(pattern, out byte[] bytes))
+        {
+            diagnostics.ErrorMessage(new ScoutError("pattern given is not valid UTF-8").WithContext("rg"));
+            return false;
+        }
+
+        patterns.Add(bytes);
+        return true;
+    }
+
     private static int RunSpecial(CliSpecialMode specialMode, RawByteWriter output)
     {
         switch (specialMode)
@@ -192,7 +204,11 @@ internal static class ScoutApplication
                 return ExitCode.Error;
             }
 
-            patterns.Add(PatternPreparation.GetPatternBytes(positional[0]));
+            if (!TryAddInlinePattern(positional[0], patterns, diagnostics))
+            {
+                return ExitCode.Error;
+            }
+
             firstPathIndex = 1;
         }
         else
@@ -210,7 +226,10 @@ internal static class ScoutApplication
                 }
                 else
                 {
-                    patterns.Add(PatternPreparation.GetPatternBytes(source.Value));
+                    if (!TryAddInlinePattern(source.Value, patterns, diagnostics))
+                    {
+                        return ExitCode.Error;
+                    }
                 }
             }
         }

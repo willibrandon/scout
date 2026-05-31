@@ -1437,6 +1437,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("r210_explicit_invalid_utf8_path", invalidUtf8DifferentialScript, StringComparison.Ordinal);
         Assert.Contains("json_explicit_invalid_utf8_path", invalidUtf8DifferentialScript, StringComparison.Ordinal);
         Assert.Contains("json_recursive_invalid_utf8_path", invalidUtf8DifferentialScript, StringComparison.Ordinal);
+        Assert.Contains("invalid_utf8_pattern_argv", invalidUtf8DifferentialScript, StringComparison.Ordinal);
+        Assert.Contains("invalid_utf8_regexp_argv", invalidUtf8DifferentialScript, StringComparison.Ordinal);
+        Assert.Contains("errno.EILSEQ", invalidUtf8DifferentialScript, StringComparison.Ordinal);
         Assert.Contains("subprocess.run", invalidUtf8DifferentialScript, StringComparison.Ordinal);
         Assert.DoesNotContain("SKIP invalid UTF-8", invalidUtf8DifferentialScript, StringComparison.Ordinal);
         Assert.DoesNotContain("sys.exit(0)", invalidUtf8DifferentialScript, StringComparison.Ordinal);

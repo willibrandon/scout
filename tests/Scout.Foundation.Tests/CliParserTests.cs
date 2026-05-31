@@ -169,11 +169,19 @@ public sealed class CliParserTests
     {
         CliParseResult shortMissing = CliParser.Parse([OsString.FromUnixBytes("-e"u8)]);
         CliParseResult longMissing = CliParser.Parse([OsString.FromUnixBytes("--regexp"u8)]);
+        CliParseResult shortInvalidUtf8 = CliParser.Parse(
+            [OsString.FromUnixBytes("-e"u8), OsString.FromUnixBytes([(byte)'(', (byte)'?', (byte)'-', (byte)'u', (byte)')', 0xff])]);
+        CliParseResult longInvalidUtf8 = CliParser.Parse(
+            [OsString.FromUnixBytes("--regexp"u8), OsString.FromUnixBytes([(byte)'(', (byte)'?', (byte)'-', (byte)'u', (byte)')', 0xff])]);
 
         Assert.Equal(CliParseStatus.Error, shortMissing.Status);
         Assert.Equal("missing value for flag -e: missing argument for option '-e'", shortMissing.Error!.FormatAlternate());
         Assert.Equal(CliParseStatus.Error, longMissing.Status);
         Assert.Equal("missing value for flag --regexp: missing argument for option '--regexp'", longMissing.Error!.FormatAlternate());
+        Assert.Equal(CliParseStatus.Error, shortInvalidUtf8.Status);
+        Assert.Equal("error parsing flag -e: value is not valid UTF-8", shortInvalidUtf8.Error!.FormatAlternate());
+        Assert.Equal(CliParseStatus.Error, longInvalidUtf8.Status);
+        Assert.Equal("error parsing flag --regexp: value is not valid UTF-8", longInvalidUtf8.Error!.FormatAlternate());
     }
 
     /// <summary>
