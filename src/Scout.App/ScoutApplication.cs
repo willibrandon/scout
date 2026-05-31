@@ -149,6 +149,7 @@ internal static class ScoutApplication
         bool standardInputIsReadable,
         bool standardOutputIsTerminal)
     {
+        output.SetBufferMode(OutputBuffering.Resolve(lowArgs.BufferMode, standardOutputIsTerminal));
         lowArgs.SetColorMode(TerminalColor.Resolve(lowArgs.ColorMode, standardOutputIsTerminal));
         DiagnosticLogger logger = new(diagnostics, lowArgs.LoggingMode);
         IReadOnlyList<OsString> positional = lowArgs.Positional;
