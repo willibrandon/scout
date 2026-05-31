@@ -75,6 +75,60 @@ public sealed class FlagCatalogTests
         Assert.Equal("--context", context.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindLongValue("--maxdepth", out FlagDescriptor maxDepth));
         Assert.Equal("--max-depth", maxDepth.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--regexp", out FlagDescriptor regexp));
+        Assert.Equal("--regexp", regexp.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindShortValue('e', out FlagDescriptor shortRegexp));
+        Assert.Equal("--regexp", shortRegexp.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--replace", out FlagDescriptor replace));
+        Assert.Equal("--replace", replace.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindShortValue('r', out FlagDescriptor shortReplace));
+        Assert.Equal("--replace", shortReplace.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--file", out FlagDescriptor file));
+        Assert.Equal("--file", file.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindShortValue('f', out FlagDescriptor shortFile));
+        Assert.Equal("--file", shortFile.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--glob", out FlagDescriptor glob));
+        Assert.Equal("--glob", glob.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindShortValue('g', out FlagDescriptor shortGlob));
+        Assert.Equal("--glob", shortGlob.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--iglob", out FlagDescriptor iglob));
+        Assert.Equal("--iglob", iglob.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--type", out FlagDescriptor type));
+        Assert.Equal("--type", type.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindShortValue('t', out FlagDescriptor shortType));
+        Assert.Equal("--type", shortType.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--type-not", out FlagDescriptor typeNot));
+        Assert.Equal("--type-not", typeNot.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindShortValue('T', out FlagDescriptor shortTypeNot));
+        Assert.Equal("--type-not", shortTypeNot.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--type-add", out FlagDescriptor typeAdd));
+        Assert.Equal("--type-add", typeAdd.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--type-clear", out FlagDescriptor typeClear));
+        Assert.Equal("--type-clear", typeClear.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--max-filesize", out FlagDescriptor maxFileSize));
+        Assert.Equal("--max-filesize", maxFileSize.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--sort", out FlagDescriptor sort));
+        Assert.Equal("--sort", sort.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--sortr", out FlagDescriptor sortReverse));
+        Assert.Equal("--sortr", sortReverse.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--ignore-file", out FlagDescriptor ignoreFile));
+        Assert.Equal("--ignore-file", ignoreFile.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--pre", out FlagDescriptor pre));
+        Assert.Equal("--pre", pre.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--pre-glob", out FlagDescriptor preGlob));
+        Assert.Equal("--pre-glob", preGlob.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--hostname-bin", out FlagDescriptor hostnameBin));
+        Assert.Equal("--hostname-bin", hostnameBin.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--hyperlink-format", out FlagDescriptor hyperlinkFormat));
+        Assert.Equal("--hyperlink-format", hyperlinkFormat.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--field-match-separator", out FlagDescriptor fieldMatchSeparator));
+        Assert.Equal("--field-match-separator", fieldMatchSeparator.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--field-context-separator", out FlagDescriptor fieldContextSeparator));
+        Assert.Equal("--field-context-separator", fieldContextSeparator.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--context-separator", out FlagDescriptor contextSeparator));
+        Assert.Equal("--context-separator", contextSeparator.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongValue("--path-separator", out FlagDescriptor pathSeparator));
+        Assert.Equal("--path-separator", pathSeparator.LongName);
     }
 
     /// <summary>
@@ -232,6 +286,54 @@ public sealed class FlagCatalogTests
         Assert.Equal(3UL, contextValues.LowArgs.BeforeContext);
         Assert.Equal(5UL, contextValues.LowArgs.MaxDepth);
         Assert.Single(contextValues.LowArgs.Positional);
+
+        CliParseResult remainingValues = CliParser.Parse(
+            [
+                OsString.FromUnixBytes("-efoo"u8),
+                OsString.FromUnixBytes("-rbar"u8),
+                OsString.FromUnixBytes("-g*.cs"u8),
+                OsString.FromUnixBytes("--iglob=*.md"u8),
+                OsString.FromUnixBytes("--sort=path"u8),
+                OsString.FromUnixBytes("--sortr"u8),
+                OsString.FromUnixBytes("modified"u8),
+                OsString.FromUnixBytes("-trust"u8),
+                OsString.FromUnixBytes("-Tgo"u8),
+                OsString.FromUnixBytes("--type-add"u8),
+                OsString.FromUnixBytes("proto:*.proto"u8),
+                OsString.FromUnixBytes("--type-clear=py"u8),
+                OsString.FromUnixBytes("--max-filesize=1M"u8),
+                OsString.FromUnixBytes("--field-match-separator=:"u8),
+                OsString.FromUnixBytes("--field-context-separator=|"u8),
+                OsString.FromUnixBytes("--context-separator=---"u8),
+                OsString.FromUnixBytes("--path-separator=/"u8),
+                OsString.FromUnixBytes("--ignore-file=.ignore-extra"u8),
+                OsString.FromUnixBytes("--pre=cat"u8),
+                OsString.FromUnixBytes("--pre-glob=*.txt"u8),
+                OsString.FromUnixBytes("--hostname-bin=hostname"u8),
+                OsString.FromUnixBytes("--hyperlink-format=none"u8),
+            ]);
+
+        Assert.Equal(CliParseStatus.Ok, remainingValues.Status);
+        Assert.Single(remainingValues.LowArgs!.Patterns);
+        Assert.Equal("bar"u8.ToArray(), remainingValues.LowArgs.Replacement!.Value.ToArray());
+        Assert.Equal(2, remainingValues.LowArgs.GlobPatterns.Count);
+        Assert.NotNull(remainingValues.LowArgs.SortMode);
+        Assert.Equal(CliSortKind.LastModified, remainingValues.LowArgs.SortMode.Value.Kind);
+        Assert.True(remainingValues.LowArgs.SortMode.Value.Reverse);
+        Assert.Contains(remainingValues.LowArgs.TypeChanges, static change => change.Kind == CliTypeChangeKind.Select && change.Value == "rust");
+        Assert.Contains(remainingValues.LowArgs.TypeChanges, static change => change.Kind == CliTypeChangeKind.Negate && change.Value == "go");
+        Assert.Contains(remainingValues.LowArgs.TypeChanges, static change => change.Kind == CliTypeChangeKind.Add && change.Value == "proto:*.proto");
+        Assert.Contains(remainingValues.LowArgs.TypeChanges, static change => change.Kind == CliTypeChangeKind.Clear && change.Value == "py");
+        Assert.Equal(1024UL * 1024UL, remainingValues.LowArgs.MaxFileSize);
+        Assert.Equal(":"u8.ToArray(), remainingValues.LowArgs.FieldMatchSeparator.ToArray());
+        Assert.Equal("|"u8.ToArray(), remainingValues.LowArgs.FieldContextSeparator.ToArray());
+        Assert.Equal("---"u8.ToArray(), remainingValues.LowArgs.ContextSeparator.ToArray());
+        Assert.Equal((byte)'/', remainingValues.LowArgs.PathSeparator);
+        Assert.Equal([".ignore-extra"], remainingValues.LowArgs.IgnoreFiles);
+        Assert.Equal("cat", remainingValues.LowArgs.Preprocessor);
+        Assert.Equal(["*.txt"], remainingValues.LowArgs.PreprocessorGlobs);
+        Assert.Equal("hostname", remainingValues.LowArgs.HostnameBin);
+        Assert.Equal(string.Empty, remainingValues.LowArgs.HyperlinkFormat);
     }
 
     /// <summary>
