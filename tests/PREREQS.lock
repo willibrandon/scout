@@ -23,7 +23,7 @@ sha256 = "8031e740e8644d22ea062589cde5f05acf4f9ccbf6f0a63778271ceb50444c89"
 pcre2_profile = "release-lto"
 pcre2_features = "pcre2"
 pcre2_path = "/Users/brandon/src/ripgrep/target/pcre2/release-lto/rg"
-pcre2_sha256 = "49d486acea41e80f9a17834944677cf70bdbaeff12dc186c6d8630770d81bbe9"
+pcre2_sha256 = "a37218035cc505051f0b67f76832dd7ed5980dc9003b3c054059d83a9e05596f"
 
 [[ripgrep_oracle]]
 rid = "osx-arm64"
