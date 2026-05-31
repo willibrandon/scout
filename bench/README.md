@@ -26,8 +26,9 @@ full pinned test pass and hyperfine performance gate run on GitHub-hosted
 `macos-15` runners. The workflow builds the pinned release-LTO `rg` oracle from
 source, installs hyperfine with Homebrew, fetches the pinned corpora into
 `artifacts/corpora`, and verifies every frozen hash from `tests/PREREQS.lock`
-before measuring. It does not require any personal machine, privately managed
-runner, or repository secret.
+before measuring. Cancelled, failed, or stale CI completions do not queue release
+work. It does not require any personal machine, privately managed runner, or
+repository secret.
 
 `eng/fetch-corpora.sh` prints replacement `[[corpus]]` blocks for
 `tests/PREREQS.lock` after it downloads OpenSubtitles and the pinned Linux

@@ -99,6 +99,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("eng/preflight.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("cancel-in-progress: true", workflow, StringComparison.Ordinal);
         Assert.Contains("github.event.workflow_run.head_sha || github.sha", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("github.event.workflow_run.conclusion == 'success'", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("github.event.workflow_run.head_sha == github.sha", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("Build pinned ripgrep oracle", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("eng/setup-ripgrep-oracle.sh", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("spike/build-unix.sh ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
@@ -118,6 +120,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("brew install hyperfine", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("GitHub-hosted", benchmarkReadme, StringComparison.Ordinal);
         Assert.Contains("builds the pinned release-LTO `rg` oracle from", benchmarkReadme, StringComparison.Ordinal);
+        Assert.Contains("Cancelled, failed, or stale CI completions do not queue release", benchmarkReadme, StringComparison.Ordinal);
         Assert.Contains("It does not require any personal machine", benchmarkReadme, StringComparison.Ordinal);
         Assert.DoesNotContain("clean: false", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("self-hosted", releaseGateWorkflow, StringComparison.Ordinal);

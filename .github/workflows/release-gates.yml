@@ -25,6 +25,7 @@ env:
 
 jobs:
   full-tests:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_sha == github.sha) }}
     name: full pinned tests
     runs-on: macos-15
     timeout-minutes: 360
@@ -49,6 +50,7 @@ jobs:
         run: native/build-app-unix.sh osx-arm64 --with-differentials
 
   performance-gate:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_sha == github.sha) }}
     name: hyperfine performance gate
     runs-on: macos-15
     timeout-minutes: 360
