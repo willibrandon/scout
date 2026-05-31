@@ -8,7 +8,7 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Scout;
 
 /// <summary>
-/// Enforces Scout's no-skip policy for checked-in test sources.
+/// Enforces Scout's no-skip policy for hand-written and generated test sources.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class NoSkippedTestsAnalyzer : DiagnosticAnalyzer
@@ -25,7 +25,7 @@ public sealed class NoSkippedTestsAnalyzer : DiagnosticAnalyzer
             throw new ArgumentNullException(nameof(context));
         }
 
-        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
+        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.Analyze | GeneratedCodeAnalysisFlags.ReportDiagnostics);
         context.EnableConcurrentExecution();
         context.RegisterSyntaxNodeAction(AnalyzeAttribute, SyntaxKind.Attribute);
         context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
