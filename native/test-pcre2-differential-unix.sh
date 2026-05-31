@@ -302,6 +302,7 @@ foobar
 foo\nbar
 EOF
 printf 'one\0needle\0two\nneedle\0' > "$WORK/pcre2-null"
+printf 'zero\0foo\0bar\0tail\nfoo\0bar\0' > "$WORK/pcre2-null-multiline"
 
 compare_case basic_lookahead exact -P 'foo(?=bar)' pcre2-smoke.txt
 compare_case fixed_literal exact -P -F -n 'foo(?=bar)' pcre2-fixed
@@ -312,6 +313,11 @@ compare_case null_data_only_matching exact -P --null-data -o 'needle' pcre2-null
 compare_case null_data_count exact -P --null-data --count 'needle' pcre2-null
 compare_case null_data_json mask-elapsed -P --null-data --json 'needle' pcre2-null
 compare_case null_data_context exact -P --null-data -n -C1 'needle' pcre2-null
+compare_case null_data_multiline exact -P --null-data --multiline -n '(?s)foo.*bar' pcre2-null-multiline
+compare_case null_data_multiline_only_matching exact -P --null-data --multiline -o '(?s)foo.*bar' pcre2-null-multiline
+compare_case null_data_multiline_count exact -P --null-data --multiline --count '(?s)foo.*bar' pcre2-null-multiline
+compare_case null_data_multiline_json mask-elapsed -P --null-data --json --multiline '(?s)foo.*bar' pcre2-null-multiline
+compare_case null_data_multiline_context exact -P --null-data --multiline -n -C1 '(?s)foo.*bar' pcre2-null-multiline
 compare_case basic_lookahead_multi_file sort-lines -P -n 'foo(?=bar)' pcre2-smoke.txt pcre2-smoke-2.txt
 compare_case recursive_lookahead sort-lines -P -n 'foo(?=bar)' pcre2-dir
 compare_case recursive_lookahead_threads sort-lines -P --threads 4 -n 'foo(?=bar)' pcre2-dir

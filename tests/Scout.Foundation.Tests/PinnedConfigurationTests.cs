@@ -1124,6 +1124,11 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("compare_case null_data_count exact -P --null-data --count 'needle' pcre2-null", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case null_data_json mask-elapsed -P --null-data --json 'needle' pcre2-null", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case null_data_context exact -P --null-data -n -C1 'needle' pcre2-null", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case null_data_multiline exact -P --null-data --multiline -n '(?s)foo.*bar' pcre2-null-multiline", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case null_data_multiline_only_matching exact -P --null-data --multiline -o '(?s)foo.*bar' pcre2-null-multiline", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case null_data_multiline_count exact -P --null-data --multiline --count '(?s)foo.*bar' pcre2-null-multiline", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case null_data_multiline_json mask-elapsed -P --null-data --json --multiline '(?s)foo.*bar' pcre2-null-multiline", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case null_data_multiline_context exact -P --null-data --multiline -n -C1 '(?s)foo.*bar' pcre2-null-multiline", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case basic_lookahead_multi_file sort-lines -P -n 'foo(?=bar)'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case recursive_lookahead sort-lines -P -n 'foo(?=bar)' pcre2-dir", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case recursive_lookahead_threads sort-lines -P --threads 4 -n 'foo(?=bar)' pcre2-dir", differentialScript, StringComparison.Ordinal);
@@ -1480,7 +1485,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("CountVector512", byteCounter, StringComparison.Ordinal);
         Assert.Contains("BitOperations.PopCount", byteCounter, StringComparison.Ordinal);
         Assert.Contains("ByteCounter.Count(bytes, (byte)'\\n')", multiline, StringComparison.Ordinal);
-        Assert.Contains("ByteCounter.Count(bytes, (byte)'\\n')", pcre2, StringComparison.Ordinal);
+        Assert.Contains("CountLineTerminators", pcre2, StringComparison.Ordinal);
+        Assert.Contains("ByteCounter.Count(bytes, GetPcre2LineTerminatorByte(lineTerminator))", pcre2, StringComparison.Ordinal);
         Assert.Contains("ByteCounter.Count(bytes", json, StringComparison.Ordinal);
         Assert.Contains("SIMD byte", upstream, StringComparison.Ordinal);
         Assert.Contains("counting", upstream, StringComparison.Ordinal);

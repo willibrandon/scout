@@ -159,7 +159,6 @@ internal static class Pcre2SearchOperations
                 or CliSearchMode.CountMatches
                 or CliSearchMode.FilesWithMatches
                 or CliSearchMode.FilesWithoutMatch) &&
-            (!lowArgs.NullData || !lowArgs.Multiline) &&
             !unsupportedContextSearchMode &&
             (lowArgs.Replacement is null ||
                 lowArgs.SearchMode == CliSearchMode.Json ||
@@ -674,7 +673,7 @@ internal static class Pcre2SearchOperations
         bool statsInvertMatch = searchMode == CliSearchMode.FilesWithoutMatch ? false : invertMatch;
         if (multiline && !statsInvertMatch)
         {
-            CollectPcre2MultilineStats(bytes, regex, lineRegexp, wordRegexp, maxCount, ref stats, ref bytesSearched);
+            CollectPcre2MultilineStats(bytes, regex, lineRegexp, wordRegexp, maxCount, lineTerminator, ref stats, ref bytesSearched);
         }
         else
         {
@@ -747,20 +746,21 @@ internal static class Pcre2SearchOperations
         bool lineRegexp,
         bool wordRegexp,
         ulong? maxCount,
+        ReadOnlyMemory<byte> lineTerminator,
         ref SearchStats stats,
         ref ulong bytesSearched)
     {
         int offset = 0;
         ulong countedLines = 0;
         var lineStarts = new HashSet<int>();
-        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, ref offset, out Pcre2Match match))
+        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, lineTerminator, ref offset, out Pcre2Match match))
         {
             stats.AddMatches(1);
-            int firstLineStart = GetLineStart(bytes, match.Start);
-            int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match));
+            int firstLineStart = GetLineStart(bytes, match.Start, lineTerminator);
+            int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match), lineTerminator);
             for (int lineStart = firstLineStart; lineStart <= lastLineStart;)
             {
-                int lineEnd = GetLineEnd(bytes, lineStart);
+                int lineEnd = GetLineEnd(bytes, lineStart, lineTerminator);
                 if (lineStarts.Add(lineStart))
                 {
                     stats.AddMatchedLine();
@@ -781,8 +781,8 @@ internal static class Pcre2SearchOperations
     {
         bool hasMatch = multiline
             ? invertMatch
-                ? HasPcre2MultilineInvertedMatch(bytes, regex, lineRegexp, wordRegexp, maxCount)
-                : HasPcre2MultilineMatch(bytes, regex, lineRegexp, wordRegexp)
+                ? HasPcre2MultilineInvertedMatch(bytes, regex, lineRegexp, wordRegexp, maxCount, lineTerminator)
+                : HasPcre2MultilineMatch(bytes, regex, lineRegexp, wordRegexp, lineTerminator)
             : HasPcre2Match(bytes, regex, lineRegexp, wordRegexp, invertMatch, lineTerminator);
         if (searchMode == CliSearchMode.FilesWithoutMatch)
         {
@@ -793,8 +793,8 @@ internal static class Pcre2SearchOperations
         {
             long count = multiline
                 ? invertMatch
-                    ? CountPcre2MultilineInvertedLines(bytes, regex, lineRegexp, wordRegexp, maxCount)
-                    : CountPcre2MultilineMatches(bytes, regex, lineRegexp, wordRegexp, maxCount)
+                    ? CountPcre2MultilineInvertedLines(bytes, regex, lineRegexp, wordRegexp, maxCount, lineTerminator)
+                    : CountPcre2MultilineMatches(bytes, regex, lineRegexp, wordRegexp, maxCount, lineTerminator)
                 : CountPcre2Matches(bytes, regex, lineRegexp, wordRegexp, invertMatch, maxCount, lineTerminator);
             return count > 0;
         }
@@ -803,8 +803,8 @@ internal static class Pcre2SearchOperations
         {
             long count = multiline
                 ? invertMatch
-                    ? CountPcre2MultilineInvertedLines(bytes, regex, lineRegexp, wordRegexp, maxCount)
-                    : CountPcre2MultilineMatchingLines(bytes, regex, lineRegexp, wordRegexp, maxCount)
+                    ? CountPcre2MultilineInvertedLines(bytes, regex, lineRegexp, wordRegexp, maxCount, lineTerminator)
+                    : CountPcre2MultilineMatches(bytes, regex, lineRegexp, wordRegexp, maxCount, lineTerminator)
                 : CountPcre2MatchingLines(bytes, regex, lineRegexp, wordRegexp, invertMatch, maxCount, lineTerminator);
             return count > 0;
         }
@@ -1000,9 +1000,10 @@ internal static class Pcre2SearchOperations
     private static bool RunPcre2JsonSearch(byte[] bytes, Pcre2Regex regex, RawByteWriter output, byte[] path, CliLowArgs lowArgs, IReadOnlyList<byte[]> patterns, JsonSearchSummary summary)
     {
         var writer = new JsonFileWriter(output, path, lowArgs.Quiet, binaryOffset: GetPcre2JsonBinaryOffset(bytes, lowArgs.TextMode, lowArgs.NullData));
+        ReadOnlyMemory<byte> lineTerminator = lowArgs.NullData ? NullByte : LineFeed;
         bool matched = lowArgs.Multiline
-            ? SearchPcre2JsonMultilineBytes(bytes, regex, writer, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.InvertMatch, lowArgs.Replacement, patterns, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch)
-            : SearchPcre2JsonLines(bytes, regex, writer, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.InvertMatch, lowArgs.Replacement, patterns, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch, lowArgs.NullData ? NullByte : LineFeed);
+            ? SearchPcre2JsonMultilineBytes(bytes, regex, writer, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.InvertMatch, lowArgs.Replacement, patterns, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch, lineTerminator)
+            : SearchPcre2JsonLines(bytes, regex, writer, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.InvertMatch, lowArgs.Replacement, patterns, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch, lineTerminator);
         writer.Finish((ulong)bytes.Length, summary);
         return matched;
     }
@@ -1151,41 +1152,42 @@ internal static class Pcre2SearchOperations
         ulong beforeContext,
         ulong afterContext,
         bool passthru,
-        bool stopOnNonmatch)
+        bool stopOnNonmatch,
+        ReadOnlyMemory<byte> lineTerminator)
     {
         if (invertMatch)
         {
             return beforeContext > 0 || afterContext > 0 || passthru
-                ? SearchPcre2JsonMultilineInvertedContextBytes(bytes, regex, writer, lineRegexp, wordRegexp, maxCount, beforeContext, afterContext, passthru)
-                : SearchPcre2JsonMultilineInvertedBytes(bytes, regex, writer, lineRegexp, wordRegexp, maxCount);
+                ? SearchPcre2JsonMultilineInvertedContextBytes(bytes, regex, writer, lineRegexp, wordRegexp, maxCount, beforeContext, afterContext, passthru, lineTerminator)
+                : SearchPcre2JsonMultilineInvertedBytes(bytes, regex, writer, lineRegexp, wordRegexp, maxCount, lineTerminator);
         }
 
         if (beforeContext > 0 || afterContext > 0 || passthru)
         {
-            return SearchPcre2JsonMultilineContextBytes(bytes, regex, writer, lineRegexp, wordRegexp, replacement, patterns, maxCount, beforeContext, afterContext, passthru, stopOnNonmatch);
+            return SearchPcre2JsonMultilineContextBytes(bytes, regex, writer, lineRegexp, wordRegexp, replacement, patterns, maxCount, beforeContext, afterContext, passthru, stopOnNonmatch, lineTerminator);
         }
 
         bool matched = false;
         int offset = 0;
         ulong emitted = 0;
         var matches = new List<JsonMatchSpan>(capacity: 1);
-        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, ref offset, out Pcre2Match match))
+        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, lineTerminator, ref offset, out Pcre2Match match))
         {
             matched = true;
-            int firstLineStart = GetLineStart(bytes, match.Start);
-            int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match));
-            int lineEnd = GetLineEnd(bytes, lastLineStart);
+            int firstLineStart = GetLineStart(bytes, match.Start, lineTerminator);
+            int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match), lineTerminator);
+            int lineEnd = GetLineEnd(bytes, lastLineStart, lineTerminator);
             matches.Clear();
             byte[]? expandedReplacement = replacement is ReadOnlyMemory<byte> replacementValue
                 ? ReplacementFormatter.Expand(replacementValue.Span, bytes.AsSpan(match.Start, match.Length), patterns, asciiCaseInsensitive: false)
                 : null;
             matches.Add(new JsonMatchSpan(match.Start - firstLineStart, match.Start - firstLineStart + match.Length, expandedReplacement));
             writer.WriteMatchLine(
-                GetLineNumber(bytes, firstLineStart),
+                GetLineNumber(bytes, firstLineStart, lineTerminator),
                 firstLineStart,
                 bytes.AsSpan(firstLineStart, lineEnd - firstLineStart),
                 matches,
-                (ulong)(1 + CountLineFeeds(bytes.AsSpan(firstLineStart, lastLineStart - firstLineStart))));
+                (ulong)(1 + CountLineTerminators(bytes.AsSpan(firstLineStart, lastLineStart - firstLineStart), lineTerminator)));
             emitted++;
             if (maxCount is ulong limit && emitted >= limit)
             {
@@ -1202,9 +1204,10 @@ internal static class Pcre2SearchOperations
         JsonFileWriter writer,
         bool lineRegexp,
         bool wordRegexp,
-        ulong? maxCount)
+        ulong? maxCount,
+        ReadOnlyMemory<byte> lineTerminator)
     {
-        List<ContextLineInfo> lines = BuildPcre2MultilineInvertedLines(bytes, regex, lineRegexp, wordRegexp);
+        List<ContextLineInfo> lines = BuildPcre2MultilineInvertedLines(bytes, regex, lineRegexp, wordRegexp, lineTerminator);
         var matches = new List<JsonMatchSpan>(capacity: 0);
         ulong emitted = 0;
         bool matched = false;
@@ -1240,14 +1243,15 @@ internal static class Pcre2SearchOperations
         ulong beforeContext,
         ulong afterContext,
         bool passthru,
-        bool stopOnNonmatch)
+        bool stopOnNonmatch,
+        ReadOnlyMemory<byte> lineTerminator)
     {
-        List<Pcre2Match> pcre2Matches = CollectPcre2MultilineMatches(bytes, regex, lineRegexp, wordRegexp);
-        List<ContextLineInfo> lines = BuildPcre2MultilineContextLines(bytes, pcre2Matches, stopOnNonmatch);
+        List<Pcre2Match> pcre2Matches = CollectPcre2MultilineMatches(bytes, regex, lineRegexp, wordRegexp, lineTerminator);
+        List<ContextLineInfo> lines = BuildPcre2MultilineContextLines(bytes, pcre2Matches, stopOnNonmatch, lineTerminator);
         bool[] included = new bool[lines.Count];
         bool matched = passthru
             ? ContextSearchOperations.IncludePassthruLines(lines, included)
-            : IncludePcre2MultilineContextLines(bytes, lines, pcre2Matches, included, beforeContext, afterContext, maxCount);
+            : IncludePcre2MultilineContextLines(bytes, lines, pcre2Matches, included, beforeContext, afterContext, maxCount, lineTerminator);
         ulong? renderedMatchLimit = passthru ? maxCount : null;
         var contextMatches = new List<JsonMatchSpan>(capacity: 0);
         for (int index = 0; index < lines.Count; index++)
@@ -1258,9 +1262,9 @@ internal static class Pcre2SearchOperations
             }
 
             ContextLineInfo line = lines[index];
-            if (line.SelectedMatch && Pcre2MultilineLineHasRenderedMatch(bytes, line, pcre2Matches, renderedMatchLimit))
+            if (line.SelectedMatch && Pcre2MultilineLineHasRenderedMatch(bytes, line, pcre2Matches, renderedMatchLimit, lineTerminator))
             {
-                if (TryWritePcre2JsonMultilineMatchGroupStartingAtLine(bytes, lines, index, pcre2Matches, renderedMatchLimit, replacement, patterns, writer, out int consumedLineIndex))
+                if (TryWritePcre2JsonMultilineMatchGroupStartingAtLine(bytes, lines, index, pcre2Matches, renderedMatchLimit, replacement, patterns, writer, lineTerminator, out int consumedLineIndex))
                 {
                     index = Math.Max(index, consumedLineIndex);
                 }
@@ -1283,9 +1287,10 @@ internal static class Pcre2SearchOperations
         ulong? maxCount,
         ulong beforeContext,
         ulong afterContext,
-        bool passthru)
+        bool passthru,
+        ReadOnlyMemory<byte> lineTerminator)
     {
-        List<ContextLineInfo> lines = BuildPcre2MultilineInvertedLines(bytes, regex, lineRegexp, wordRegexp);
+        List<ContextLineInfo> lines = BuildPcre2MultilineInvertedLines(bytes, regex, lineRegexp, wordRegexp, lineTerminator);
         bool[] included = new bool[lines.Count];
         bool matched = passthru
             ? ContextSearchOperations.IncludePassthruLines(lines, included)
@@ -1335,6 +1340,7 @@ internal static class Pcre2SearchOperations
         ReadOnlyMemory<byte>? replacement,
         IReadOnlyList<byte[]> patterns,
         JsonFileWriter writer,
+        ReadOnlyMemory<byte> lineTerminator,
         out int consumedLineIndex)
     {
         ContextLineInfo line = lines[lineIndex];
@@ -1351,7 +1357,7 @@ internal static class Pcre2SearchOperations
             }
 
             Pcre2Match match = pcre2Matches[index];
-            int firstLineStart = GetLineStart(bytes, match.Start);
+            int firstLineStart = GetLineStart(bytes, match.Start, lineTerminator);
             if (groupStart < 0)
             {
                 if (firstLineStart != line.Start)
@@ -1366,8 +1372,8 @@ internal static class Pcre2SearchOperations
                 break;
             }
 
-            int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match));
-            int lineEnd = GetLineEnd(bytes, lastLineStart);
+            int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match), lineTerminator);
+            int lineEnd = GetLineEnd(bytes, lastLineStart, lineTerminator);
             if (lineEnd > groupEnd)
             {
                 groupEnd = lineEnd;
@@ -1386,11 +1392,11 @@ internal static class Pcre2SearchOperations
         }
 
         writer.WriteMatchLine(
-            GetLineNumber(bytes, groupStart),
+            GetLineNumber(bytes, groupStart, lineTerminator),
             groupStart,
             bytes[groupStart..groupEnd],
             matches,
-            (ulong)(1 + CountLineFeeds(bytes[groupStart..groupLastLineStart])));
+            (ulong)(1 + CountLineTerminators(bytes[groupStart..groupLastLineStart], lineTerminator)));
         consumedLineIndex = Math.Max(consumedLineIndex, GetPcre2MultilineLineIndex(lines, groupLastLineStart));
         return true;
     }
@@ -1427,34 +1433,32 @@ internal static class Pcre2SearchOperations
         if (searchMode == CliSearchMode.Count)
         {
             long count = invertMatch
-                ? CountPcre2MultilineInvertedLines(bytes, regex, lineRegexp, wordRegexp, maxCount)
-                : onlyMatching
-                ? CountPcre2MultilineMatches(bytes, regex, lineRegexp, wordRegexp, maxCount)
-                : CountPcre2MultilineMatchingLines(bytes, regex, lineRegexp, wordRegexp, maxCount);
+                ? CountPcre2MultilineInvertedLines(bytes, regex, lineRegexp, wordRegexp, maxCount, separators.LineTerminator)
+                : CountPcre2MultilineMatches(bytes, regex, lineRegexp, wordRegexp, maxCount, separators.LineTerminator);
             return SearchOutputFormatting.WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.CountMatches)
         {
             long count = invertMatch
-                ? CountPcre2MultilineInvertedLines(bytes, regex, lineRegexp, wordRegexp, maxCount)
-                : CountPcre2MultilineMatches(bytes, regex, lineRegexp, wordRegexp, maxCount);
+                ? CountPcre2MultilineInvertedLines(bytes, regex, lineRegexp, wordRegexp, maxCount, separators.LineTerminator)
+                : CountPcre2MultilineMatches(bytes, regex, lineRegexp, wordRegexp, maxCount, separators.LineTerminator);
             return SearchOutputFormatting.WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.FilesWithMatches)
         {
             bool hasMatch = invertMatch
-                ? HasPcre2MultilineInvertedMatch(bytes, regex, lineRegexp, wordRegexp, maxCount)
-                : HasPcre2MultilineMatch(bytes, regex, lineRegexp, wordRegexp);
+                ? HasPcre2MultilineInvertedMatch(bytes, regex, lineRegexp, wordRegexp, maxCount, separators.LineTerminator)
+                : HasPcre2MultilineMatch(bytes, regex, lineRegexp, wordRegexp, separators.LineTerminator);
             return SearchOutputFormatting.WritePathIf(output, path, color, hasMatch, nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.FilesWithoutMatch)
         {
             bool hasMatch = invertMatch
-                ? HasPcre2MultilineInvertedMatch(bytes, regex, lineRegexp, wordRegexp, maxCount)
-                : HasPcre2MultilineMatch(bytes, regex, lineRegexp, wordRegexp);
+                ? HasPcre2MultilineInvertedMatch(bytes, regex, lineRegexp, wordRegexp, maxCount, separators.LineTerminator)
+                : HasPcre2MultilineMatch(bytes, regex, lineRegexp, wordRegexp, separators.LineTerminator);
             return SearchOutputFormatting.WritePathIf(output, path, color, !hasMatch, nullPathTerminator, separators.LineTerminator);
         }
 
@@ -1510,7 +1514,7 @@ internal static class Pcre2SearchOperations
         bool includeZero,
         bool nullPathTerminator)
     {
-        List<ContextLineInfo> lines = BuildPcre2MultilineInvertedLines(bytes, regex, lineRegexp, wordRegexp);
+        List<ContextLineInfo> lines = BuildPcre2MultilineInvertedLines(bytes, regex, lineRegexp, wordRegexp, separators.LineTerminator);
         long count = CountSelectedPcre2MultilineLines(lines, maxCount);
         bool hasSelectedMatch = count > 0;
 
@@ -1581,8 +1585,8 @@ internal static class Pcre2SearchOperations
             return SearchPcre2MultilineInvertedContextBytes(bytes, regex, output, separators, prefix, lineLimit, color, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, nullPathTerminator, beforeContext, afterContext, passthru, maxCount);
         }
 
-        List<Pcre2Match> matches = CollectPcre2MultilineMatches(bytes, regex, lineRegexp, wordRegexp);
-        List<ContextLineInfo> lines = BuildPcre2MultilineContextLines(bytes, matches, stopOnNonmatch);
+        List<Pcre2Match> matches = CollectPcre2MultilineMatches(bytes, regex, lineRegexp, wordRegexp, separators.LineTerminator);
+        List<ContextLineInfo> lines = BuildPcre2MultilineContextLines(bytes, matches, stopOnNonmatch, separators.LineTerminator);
         if (lines.Count == 0)
         {
             return false;
@@ -1591,7 +1595,7 @@ internal static class Pcre2SearchOperations
         bool[] included = new bool[lines.Count];
         bool matched = passthru
             ? ContextSearchOperations.IncludePassthruLines(lines, included)
-            : IncludePcre2MultilineContextLines(bytes, lines, matches, included, beforeContext, afterContext, maxCount);
+            : IncludePcre2MultilineContextLines(bytes, lines, matches, included, beforeContext, afterContext, maxCount, separators.LineTerminator);
         var lineSink = new StandardSearchSink(output, prefix, separators.FieldMatch, separators.FieldContext, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
         int previousLineIndex = -1;
         bool wrote = false;
@@ -1631,6 +1635,7 @@ internal static class Pcre2SearchOperations
                 onlyMatching,
                 replacement,
                 patterns,
+                separators.LineTerminator,
                 ref lineSink,
                 out int consumedLineIndex);
             previousLineIndex = Math.Max(previousLineIndex, consumedLineIndex);
@@ -1665,7 +1670,7 @@ internal static class Pcre2SearchOperations
         bool passthru,
         ulong? maxCount)
     {
-        List<ContextLineInfo> lines = BuildPcre2MultilineInvertedLines(bytes, regex, lineRegexp, wordRegexp);
+        List<ContextLineInfo> lines = BuildPcre2MultilineInvertedLines(bytes, regex, lineRegexp, wordRegexp, separators.LineTerminator);
         if (lines.Count == 0)
         {
             return false;
@@ -1745,13 +1750,14 @@ internal static class Pcre2SearchOperations
         bool onlyMatching,
         ReadOnlyMemory<byte>? replacement,
         IReadOnlyList<byte[]> patterns,
+        ReadOnlyMemory<byte> lineTerminator,
         ref StandardSearchSink lineSink,
         out int consumedLineIndex)
     {
         ContextLineInfo line = lines[lineIndex];
         consumedLineIndex = lineIndex;
         bool selectedMatch = line.SelectedMatch &&
-            Pcre2MultilineLineHasRenderedMatch(bytes, line, matches, renderedMatchLimit);
+            Pcre2MultilineLineHasRenderedMatch(bytes, line, matches, renderedMatchLimit, lineTerminator);
         ReadOnlySpan<byte> outputLine = bytes.AsSpan(line.Start, line.Length);
         if (!selectedMatch)
         {
@@ -1763,20 +1769,20 @@ internal static class Pcre2SearchOperations
         {
             if (onlyMatching)
             {
-                return WritePcre2MultilineOnlyMatchingReplacementsForContextLine(bytes, lines, lineIndex, matches, renderedMatchLimit, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, patterns, out consumedLineIndex);
+                return WritePcre2MultilineOnlyMatchingReplacementsForContextLine(bytes, lines, lineIndex, matches, renderedMatchLimit, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, patterns, lineTerminator, out consumedLineIndex);
             }
 
-            return TryWritePcre2MultilineContextReplacementRecord(bytes, lines, lineIndex, matches, renderedMatchLimit, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, patterns, out consumedLineIndex);
+            return TryWritePcre2MultilineContextReplacementRecord(bytes, lines, lineIndex, matches, renderedMatchLimit, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, patterns, lineTerminator, out consumedLineIndex);
         }
 
         if (onlyMatching)
         {
-            return WritePcre2MultilineOnlyMatchesForContextLine(bytes, line, matches, renderedMatchLimit, output, separators, prefix, color, lineNumber, column, byteOffset, trim, nullPathTerminator);
+            return WritePcre2MultilineOnlyMatchesForContextLine(bytes, line, matches, renderedMatchLimit, output, separators, prefix, color, lineNumber, column, byteOffset, trim, nullPathTerminator, lineTerminator);
         }
 
         if (vimgrep)
         {
-            return WritePcre2MultilineVimgrepMatchesForContextLine(bytes, lines, lineIndex, matches, renderedMatchLimit, output, separators, prefix, lineLimit, color, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, nullPathTerminator, out consumedLineIndex);
+            return WritePcre2MultilineVimgrepMatchesForContextLine(bytes, lines, lineIndex, matches, renderedMatchLimit, output, separators, prefix, lineLimit, color, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, nullPathTerminator, lineTerminator, out consumedLineIndex);
         }
 
         lineSink.MatchedLine(line.LineNumber, line.Start, line.MatchColumn, outputLine);
@@ -1805,20 +1811,20 @@ internal static class Pcre2SearchOperations
         int offset = 0;
         int lastWrittenLineStart = -1;
         ulong emitted = 0;
-        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, ref offset, out Pcre2Match match))
+        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, separators.LineTerminator, ref offset, out Pcre2Match match))
         {
             matched = true;
-            int firstLineStart = GetLineStart(bytes, match.Start);
-            int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match));
-            long firstLineNumber = GetLineNumber(bytes, firstLineStart);
+            int firstLineStart = GetLineStart(bytes, match.Start, separators.LineTerminator);
+            int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match), separators.LineTerminator);
+            long firstLineNumber = GetLineNumber(bytes, firstLineStart, separators.LineTerminator);
             long matchColumn = match.Start - firstLineStart + 1L;
             for (int lineStart = firstLineStart; lineStart <= lastLineStart;)
             {
-                int lineEnd = GetLineEnd(bytes, lineStart);
+                int lineEnd = GetLineEnd(bytes, lineStart, separators.LineTerminator);
                 if (lineStart > lastWrittenLineStart)
                 {
                     sink.MatchedLine(
-                        firstLineNumber + CountLineFeeds(bytes.AsSpan(firstLineStart, lineStart - firstLineStart)),
+                        firstLineNumber + CountLineTerminators(bytes.AsSpan(firstLineStart, lineStart - firstLineStart), separators.LineTerminator),
                         lineStart,
                         matchColumn,
                         bytes.AsSpan(lineStart, lineEnd - lineStart));
@@ -1863,13 +1869,13 @@ internal static class Pcre2SearchOperations
         int groupStart = -1;
         int groupEnd = -1;
         List<Pcre2Match> groupMatches = [];
-        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, ref offset, out Pcre2Match match))
+        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, separators.LineTerminator, ref offset, out Pcre2Match match))
         {
             matched = true;
-            GetPcre2MultilineReplacementRange(bytes, match, out int rangeStart, out int rangeEnd);
+            GetPcre2MultilineReplacementRange(bytes, match, separators.LineTerminator, out int rangeStart, out int rangeEnd);
             if (groupStart >= 0 && rangeStart >= groupEnd)
             {
-                WritePcre2MultilineReplacementRecord(bytes, groupStart, groupEnd, groupMatches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacement, patterns);
+                WritePcre2MultilineReplacementRecord(bytes, groupStart, groupEnd, groupMatches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacement, patterns, separators.LineTerminator);
                 groupMatches.Clear();
                 groupStart = -1;
                 groupEnd = -1;
@@ -1895,7 +1901,7 @@ internal static class Pcre2SearchOperations
 
         if (groupStart >= 0)
         {
-            WritePcre2MultilineReplacementRecord(bytes, groupStart, groupEnd, groupMatches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacement, patterns);
+            WritePcre2MultilineReplacementRecord(bytes, groupStart, groupEnd, groupMatches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacement, patterns, separators.LineTerminator);
         }
 
         return matched;
@@ -1923,12 +1929,12 @@ internal static class Pcre2SearchOperations
         bool matched = false;
         int offset = 0;
         ulong emitted = 0;
-        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, ref offset, out Pcre2Match match))
+        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, separators.LineTerminator, ref offset, out Pcre2Match match))
         {
             matched = true;
             byte[] body = ReplacementFormatter.Expand(replacement.Span, bytes.Slice(match.Start, match.Length), patterns, asciiCaseInsensitive: false);
-            int lineStart = GetLineStart(bytes, match.Start);
-            WriteMultilineReplacementBody(body, match.Start, GetLineNumber(bytes, lineStart), match.Start - lineStart + 1L, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator);
+            int lineStart = GetLineStart(bytes, match.Start, separators.LineTerminator);
+            WriteMultilineReplacementBody(body, match.Start, GetLineNumber(bytes, lineStart, separators.LineTerminator), match.Start - lineStart + 1L, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator);
             emitted++;
             if (maxCount is ulong limit && emitted >= limit)
             {
@@ -1959,16 +1965,16 @@ internal static class Pcre2SearchOperations
         bool matched = false;
         int offset = 0;
         ulong emitted = 0;
-        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, ref offset, out Pcre2Match match))
+        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, separators.LineTerminator, ref offset, out Pcre2Match match))
         {
             matched = true;
-            int firstLineStart = GetLineStart(bytes, match.Start);
-            long firstLineNumber = GetLineNumber(bytes, firstLineStart);
+            int firstLineStart = GetLineStart(bytes, match.Start, separators.LineTerminator);
+            long firstLineNumber = GetLineNumber(bytes, firstLineStart, separators.LineTerminator);
             long matchColumn = match.Start - firstLineStart + 1L;
             int matchEnd = match.Start + match.Length;
             if (IsPcre2EofEmptyMatch(bytes, match))
             {
-                int lineEnd = GetLineEnd(bytes, firstLineStart);
+                int lineEnd = GetLineEnd(bytes, firstLineStart, separators.LineTerminator);
                 sink.Matched(firstLineNumber, firstLineStart, 1, bytes[firstLineStart..lineEnd]);
             }
             else if (match.Length == 0)
@@ -1979,12 +1985,12 @@ internal static class Pcre2SearchOperations
             {
                 for (int lineStart = firstLineStart; lineStart < matchEnd;)
                 {
-                    int lineEnd = GetLineEnd(bytes, lineStart);
+                    int lineEnd = GetLineEnd(bytes, lineStart, separators.LineTerminator);
                     int segmentStart = Math.Max(lineStart, match.Start);
                     int segmentEnd = Math.Min(lineEnd, matchEnd);
                     if (segmentStart < segmentEnd)
                     {
-                        sink.Matched(firstLineNumber + CountLineFeeds(bytes[firstLineStart..lineStart]), match.Start, matchColumn, bytes[segmentStart..segmentEnd]);
+                        sink.Matched(firstLineNumber + CountLineTerminators(bytes[firstLineStart..lineStart], separators.LineTerminator), match.Start, matchColumn, bytes[segmentStart..segmentEnd]);
                     }
 
                     lineStart = GetNextLineStart(lineEnd, bytes.Length);
@@ -2022,12 +2028,12 @@ internal static class Pcre2SearchOperations
         bool matched = false;
         int offset = 0;
         ulong emitted = 0;
-        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, ref offset, out Pcre2Match match))
+        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, separators.LineTerminator, ref offset, out Pcre2Match match))
         {
             matched = true;
-            int lineStart = GetLineStart(bytes, match.Start);
-            int lineEnd = GetLineEnd(bytes, lineStart);
-            sink.MatchedLine(GetLineNumber(bytes, lineStart), lineStart, match.Start - lineStart + 1L, bytes[lineStart..lineEnd]);
+            int lineStart = GetLineStart(bytes, match.Start, separators.LineTerminator);
+            int lineEnd = GetLineEnd(bytes, lineStart, separators.LineTerminator);
+            sink.MatchedLine(GetLineNumber(bytes, lineStart, separators.LineTerminator), lineStart, match.Start - lineStart + 1L, bytes[lineStart..lineEnd]);
             emitted++;
             if (maxCount is ulong limit && emitted >= limit)
             {
@@ -2594,11 +2600,11 @@ internal static class Pcre2SearchOperations
         return IsPcre2NullLineTerminator(lineTerminator) ? (byte)0 : (byte)'\n';
     }
 
-    private static void GetPcre2MultilineReplacementRange(ReadOnlySpan<byte> bytes, Pcre2Match match, out int start, out int end)
+    private static void GetPcre2MultilineReplacementRange(ReadOnlySpan<byte> bytes, Pcre2Match match, ReadOnlyMemory<byte> lineTerminator, out int start, out int end)
     {
-        start = GetLineStart(bytes, match.Start);
-        int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match));
-        end = GetLineEnd(bytes, lastLineStart);
+        start = GetLineStart(bytes, match.Start, lineTerminator);
+        int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match), lineTerminator);
+        end = GetLineEnd(bytes, lastLineStart, lineTerminator);
     }
 
     private static void WritePcre2MultilineReplacementRecord(
@@ -2617,7 +2623,8 @@ internal static class Pcre2SearchOperations
         bool trim,
         bool nullPathTerminator,
         ReadOnlyMemory<byte> replacement,
-        IReadOnlyList<byte[]> patterns)
+        IReadOnlyList<byte[]> patterns,
+        ReadOnlyMemory<byte> lineTerminator)
     {
         List<int> starts = [];
         List<int> lengths = [];
@@ -2629,8 +2636,8 @@ internal static class Pcre2SearchOperations
 
         List<long> replacementColumns = [];
         byte[] body = ReplacementFormatter.ReplaceLine(bytes[recordStart..recordEnd], starts, lengths, replacement.Span, patterns, false, replacementColumns);
-        int lineStart = GetLineStart(bytes, recordStart);
-        WriteMultilineReplacementBody(body, recordStart, GetLineNumber(bytes, lineStart), replacementColumns.Count > 0 ? replacementColumns[0] : 1, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator);
+        int lineStart = GetLineStart(bytes, recordStart, lineTerminator);
+        WriteMultilineReplacementBody(body, recordStart, GetLineNumber(bytes, lineStart, lineTerminator), replacementColumns.Count > 0 ? replacementColumns[0] : 1, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator);
     }
 
     private static bool SearchPcre2ReplacedLines(
@@ -2892,11 +2899,11 @@ internal static class Pcre2SearchOperations
         return count;
     }
 
-    private static List<Pcre2Match> CollectPcre2MultilineMatches(byte[] bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp)
+    private static List<Pcre2Match> CollectPcre2MultilineMatches(byte[] bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp, ReadOnlyMemory<byte> lineTerminator)
     {
         List<Pcre2Match> matches = [];
         int offset = 0;
-        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, ref offset, out Pcre2Match match))
+        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, lineTerminator, ref offset, out Pcre2Match match))
         {
             matches.Add(match);
         }
@@ -2911,7 +2918,8 @@ internal static class Pcre2SearchOperations
         bool[] included,
         ulong beforeContext,
         ulong afterContext,
-        ulong? maxCount)
+        ulong? maxCount,
+        ReadOnlyMemory<byte> lineTerminator)
     {
         bool matched = false;
         ulong primaryMatches = 0;
@@ -2922,8 +2930,8 @@ internal static class Pcre2SearchOperations
                 break;
             }
 
-            int firstLineStart = GetLineStart(bytes, matches[index].Start);
-            int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(matches[index]));
+            int firstLineStart = GetLineStart(bytes, matches[index].Start, lineTerminator);
+            int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(matches[index]), lineTerminator);
             int firstLineIndex = GetPcre2MultilineLineIndex(lines, firstLineStart);
             int lastLineIndex = GetPcre2MultilineLineIndex(lines, lastLineStart);
             if (firstLineIndex < 0 || lastLineIndex < 0)
@@ -2954,14 +2962,14 @@ internal static class Pcre2SearchOperations
         }
     }
 
-    private static List<ContextLineInfo> BuildPcre2MultilineContextLines(byte[] bytes, List<Pcre2Match> matches, bool stopOnNonmatch)
+    private static List<ContextLineInfo> BuildPcre2MultilineContextLines(byte[] bytes, List<Pcre2Match> matches, bool stopOnNonmatch, ReadOnlyMemory<byte> lineTerminator)
     {
         var physicalLines = new List<ContextLineInfo>();
         int lineStart = 0;
         long lineNumber = 1;
         while (lineStart < bytes.Length)
         {
-            int lineLength = ContextSearchOperations.GetLineLength(bytes.AsSpan(lineStart), nullData: false);
+            int lineLength = ContextSearchOperations.GetLineLength(bytes.AsSpan(lineStart), IsPcre2NullLineTerminator(lineTerminator));
             physicalLines.Add(new ContextLineInfo(lineStart, lineLength, lineNumber, selectedMatch: false, matchColumn: 0, originalMatch: false, contextColumn: 0));
             lineStart += lineLength;
             lineNumber++;
@@ -2971,7 +2979,7 @@ internal static class Pcre2SearchOperations
         long[] matchColumns = new long[physicalLines.Count];
         for (int index = 0; index < matches.Count; index++)
         {
-            MarkPcre2MultilineContextMatch(bytes, physicalLines, matchedLines, matchColumns, matches[index]);
+            MarkPcre2MultilineContextMatch(bytes, physicalLines, matchedLines, matchColumns, matches[index], lineTerminator);
         }
 
         var lines = new List<ContextLineInfo>(physicalLines.Count);
@@ -2992,10 +3000,10 @@ internal static class Pcre2SearchOperations
         return lines;
     }
 
-    private static void MarkPcre2MultilineContextMatch(ReadOnlySpan<byte> bytes, List<ContextLineInfo> lines, bool[] matchedLines, long[] matchColumns, Pcre2Match match)
+    private static void MarkPcre2MultilineContextMatch(ReadOnlySpan<byte> bytes, List<ContextLineInfo> lines, bool[] matchedLines, long[] matchColumns, Pcre2Match match, ReadOnlyMemory<byte> lineTerminator)
     {
-        int firstLineStart = GetLineStart(bytes, match.Start);
-        int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match));
+        int firstLineStart = GetLineStart(bytes, match.Start, lineTerminator);
+        int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match), lineTerminator);
         long matchColumn = match.Start - firstLineStart + 1L;
         for (int index = 0; index < lines.Count; index++)
         {
@@ -3031,7 +3039,7 @@ internal static class Pcre2SearchOperations
         return -1;
     }
 
-    private static bool Pcre2MultilineLineHasRenderedMatch(ReadOnlySpan<byte> bytes, ContextLineInfo line, List<Pcre2Match> matches, ulong? renderedMatchLimit)
+    private static bool Pcre2MultilineLineHasRenderedMatch(ReadOnlySpan<byte> bytes, ContextLineInfo line, List<Pcre2Match> matches, ulong? renderedMatchLimit, ReadOnlyMemory<byte> lineTerminator)
     {
         for (int index = 0; index < matches.Count; index++)
         {
@@ -3040,7 +3048,7 @@ internal static class Pcre2SearchOperations
                 break;
             }
 
-            if (Pcre2MultilineMatchTouchesLine(bytes, matches[index], line))
+            if (Pcre2MultilineMatchTouchesLine(bytes, matches[index], line, lineTerminator))
             {
                 return true;
             }
@@ -3049,10 +3057,10 @@ internal static class Pcre2SearchOperations
         return false;
     }
 
-    private static bool Pcre2MultilineMatchTouchesLine(ReadOnlySpan<byte> bytes, Pcre2Match match, ContextLineInfo line)
+    private static bool Pcre2MultilineMatchTouchesLine(ReadOnlySpan<byte> bytes, Pcre2Match match, ContextLineInfo line, ReadOnlyMemory<byte> lineTerminator)
     {
-        int firstLineStart = GetLineStart(bytes, match.Start);
-        int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match));
+        int firstLineStart = GetLineStart(bytes, match.Start, lineTerminator);
+        int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match), lineTerminator);
         return line.Start >= firstLineStart && line.Start <= lastLineStart;
     }
 
@@ -3074,7 +3082,8 @@ internal static class Pcre2SearchOperations
         bool column,
         bool byteOffset,
         bool trim,
-        bool nullPathTerminator)
+        bool nullPathTerminator,
+        ReadOnlyMemory<byte> lineTerminator)
     {
         var sink = new StandardMatchSink(output, prefix, separators.FieldMatch, lineNumber, column, byteOffset, trim, nullPathTerminator: nullPathTerminator, color: color, lineTerminator: separators.LineTerminator);
         bool wrote = false;
@@ -3087,13 +3096,13 @@ internal static class Pcre2SearchOperations
             }
 
             Pcre2Match match = matches[index];
-            if (!Pcre2MultilineMatchTouchesLine(bytes, match, line))
+            if (!Pcre2MultilineMatchTouchesLine(bytes, match, line, lineTerminator))
             {
                 continue;
             }
 
-            int firstLineStart = GetLineStart(bytes, match.Start);
-            long firstLineNumber = GetLineNumber(bytes, firstLineStart);
+            int firstLineStart = GetLineStart(bytes, match.Start, lineTerminator);
+            long firstLineNumber = GetLineNumber(bytes, firstLineStart, lineTerminator);
             long matchColumn = match.Start - firstLineStart + 1L;
             int matchEnd = match.Start + match.Length;
             if (IsPcre2EofEmptyMatch(bytes, match))
@@ -3113,7 +3122,7 @@ internal static class Pcre2SearchOperations
                 if (segmentStart < segmentEnd)
                 {
                     sink.Matched(
-                        firstLineNumber + CountLineFeeds(bytes[firstLineStart..line.Start]),
+                        firstLineNumber + CountLineTerminators(bytes[firstLineStart..line.Start], lineTerminator),
                         match.Start,
                         matchColumn,
                         bytes[segmentStart..segmentEnd]);
@@ -3143,6 +3152,7 @@ internal static class Pcre2SearchOperations
         bool nullPathTerminator,
         ReadOnlyMemory<byte> replacement,
         IReadOnlyList<byte[]> patterns,
+        ReadOnlyMemory<byte> lineTerminator,
         out int consumedLineIndex)
     {
         ContextLineInfo line = lines[lineIndex];
@@ -3156,15 +3166,15 @@ internal static class Pcre2SearchOperations
             }
 
             Pcre2Match match = matches[index];
-            if (GetLineStart(bytes, match.Start) != line.Start)
+            if (GetLineStart(bytes, match.Start, lineTerminator) != line.Start)
             {
                 continue;
             }
 
             byte[] body = ReplacementFormatter.Expand(replacement.Span, bytes.Slice(match.Start, match.Length), patterns, asciiCaseInsensitive: false);
-            int lineStart = GetLineStart(bytes, match.Start);
-            WriteMultilineReplacementBody(body, match.Start, GetLineNumber(bytes, lineStart), match.Start - lineStart + 1L, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator);
-            int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match));
+            int lineStart = GetLineStart(bytes, match.Start, lineTerminator);
+            WriteMultilineReplacementBody(body, match.Start, GetLineNumber(bytes, lineStart, lineTerminator), match.Start - lineStart + 1L, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator);
+            int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match), lineTerminator);
             consumedLineIndex = Math.Max(consumedLineIndex, GetPcre2MultilineLineIndex(lines, lastLineStart));
             wrote = true;
         }
@@ -3190,6 +3200,7 @@ internal static class Pcre2SearchOperations
         bool nullPathTerminator,
         ReadOnlyMemory<byte> replacement,
         IReadOnlyList<byte[]> patterns,
+        ReadOnlyMemory<byte> lineTerminator,
         out int consumedLineIndex)
     {
         ContextLineInfo line = lines[lineIndex];
@@ -3205,7 +3216,7 @@ internal static class Pcre2SearchOperations
             }
 
             Pcre2Match match = matches[index];
-            GetPcre2MultilineReplacementRange(bytes, match, out int rangeStart, out int rangeEnd);
+            GetPcre2MultilineReplacementRange(bytes, match, lineTerminator, out int rangeStart, out int rangeEnd);
             if (groupStart < 0)
             {
                 if (rangeStart != line.Start)
@@ -3237,8 +3248,8 @@ internal static class Pcre2SearchOperations
             return false;
         }
 
-        WritePcre2MultilineReplacementRecord(bytes, groupStart, groupEnd, groupMatches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacement, patterns);
-        int lastLineStart = GetLineStart(bytes, groupEnd > groupStart ? groupEnd - 1 : groupEnd);
+        WritePcre2MultilineReplacementRecord(bytes, groupStart, groupEnd, groupMatches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacement, patterns, lineTerminator);
+        int lastLineStart = GetLineStart(bytes, groupEnd > groupStart ? groupEnd - 1 : groupEnd, lineTerminator);
         consumedLineIndex = Math.Max(consumedLineIndex, GetPcre2MultilineLineIndex(lines, lastLineStart));
         return true;
     }
@@ -3261,6 +3272,7 @@ internal static class Pcre2SearchOperations
         bool byteOffset,
         bool trim,
         bool nullPathTerminator,
+        ReadOnlyMemory<byte> lineTerminator,
         out int consumedLineIndex)
     {
         ContextLineInfo line = lines[lineIndex];
@@ -3275,14 +3287,14 @@ internal static class Pcre2SearchOperations
             }
 
             Pcre2Match match = matches[index];
-            if (GetLineStart(bytes, match.Start) != line.Start)
+            if (GetLineStart(bytes, match.Start, lineTerminator) != line.Start)
             {
                 continue;
             }
 
-            int lineEnd = GetLineEnd(bytes, line.Start);
+            int lineEnd = GetLineEnd(bytes, line.Start, lineTerminator);
             sink.MatchedLine(line.LineNumber, line.Start, match.Start - line.Start + 1L, bytes[line.Start..lineEnd]);
-            int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match));
+            int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match), lineTerminator);
             consumedLineIndex = Math.Max(consumedLineIndex, GetPcre2MultilineLineIndex(lines, lastLineStart));
             wrote = true;
         }
@@ -3290,41 +3302,11 @@ internal static class Pcre2SearchOperations
         return wrote;
     }
 
-    private static long CountPcre2MultilineMatchingLines(byte[] bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp, ulong? maxCount)
+    private static long CountPcre2MultilineMatches(byte[] bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp, ulong? maxCount, ReadOnlyMemory<byte> lineTerminator)
     {
         long count = 0;
         int offset = 0;
-        int lastCountedLineStart = -1;
-        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, ref offset, out Pcre2Match match))
-        {
-            int firstLineStart = GetLineStart(bytes, match.Start);
-            int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match));
-            for (int lineStart = firstLineStart; lineStart <= lastLineStart;)
-            {
-                int lineEnd = GetLineEnd(bytes, lineStart);
-                if (lineStart > lastCountedLineStart)
-                {
-                    count++;
-                    lastCountedLineStart = lineStart;
-                    if (maxCount is ulong limit && (ulong)count >= limit)
-                    {
-                        return count;
-                    }
-                }
-
-                lineStart = GetNextLineStart(lineEnd, bytes.Length);
-            }
-
-        }
-
-        return count;
-    }
-
-    private static long CountPcre2MultilineMatches(byte[] bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp, ulong? maxCount)
-    {
-        long count = 0;
-        int offset = 0;
-        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, ref offset, out _))
+        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, lineTerminator, ref offset, out _))
         {
             count++;
             if (maxCount is ulong limit && (ulong)count >= limit)
@@ -3336,30 +3318,30 @@ internal static class Pcre2SearchOperations
         return count;
     }
 
-    private static bool HasPcre2MultilineMatch(byte[] bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp)
+    private static bool HasPcre2MultilineMatch(byte[] bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp, ReadOnlyMemory<byte> lineTerminator)
     {
         int offset = 0;
-        return TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, ref offset, out _);
+        return TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, lineTerminator, ref offset, out _);
     }
 
-    private static bool HasPcre2MultilineInvertedMatch(byte[] bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp, ulong? maxCount)
+    private static bool HasPcre2MultilineInvertedMatch(byte[] bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp, ulong? maxCount, ReadOnlyMemory<byte> lineTerminator)
     {
-        return CountPcre2MultilineInvertedLines(bytes, regex, lineRegexp, wordRegexp, maxCount) > 0;
+        return CountPcre2MultilineInvertedLines(bytes, regex, lineRegexp, wordRegexp, maxCount, lineTerminator) > 0;
     }
 
-    private static long CountPcre2MultilineInvertedLines(byte[] bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp, ulong? maxCount)
+    private static long CountPcre2MultilineInvertedLines(byte[] bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp, ulong? maxCount, ReadOnlyMemory<byte> lineTerminator)
     {
-        return CountSelectedPcre2MultilineLines(BuildPcre2MultilineInvertedLines(bytes, regex, lineRegexp, wordRegexp), maxCount);
+        return CountSelectedPcre2MultilineLines(BuildPcre2MultilineInvertedLines(bytes, regex, lineRegexp, wordRegexp, lineTerminator), maxCount);
     }
 
-    private static List<ContextLineInfo> BuildPcre2MultilineInvertedLines(byte[] bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp)
+    private static List<ContextLineInfo> BuildPcre2MultilineInvertedLines(byte[] bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp, ReadOnlyMemory<byte> lineTerminator)
     {
         var physicalLines = new List<ContextLineInfo>();
         int lineStart = 0;
         long lineNumber = 1;
         while (lineStart < bytes.Length)
         {
-            int lineLength = ContextSearchOperations.GetLineLength(bytes.AsSpan(lineStart), nullData: false);
+            int lineLength = ContextSearchOperations.GetLineLength(bytes.AsSpan(lineStart), IsPcre2NullLineTerminator(lineTerminator));
             physicalLines.Add(new ContextLineInfo(lineStart, lineLength, lineNumber, selectedMatch: false, matchColumn: 0, originalMatch: false, contextColumn: 0));
             lineStart += lineLength;
             lineNumber++;
@@ -3367,9 +3349,9 @@ internal static class Pcre2SearchOperations
 
         bool[] matchedLines = new bool[physicalLines.Count];
         int offset = 0;
-        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, ref offset, out Pcre2Match match))
+        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, lineTerminator, ref offset, out Pcre2Match match))
         {
-            MarkPcre2MultilineMatchedLines(bytes, physicalLines, matchedLines, match);
+            MarkPcre2MultilineMatchedLines(bytes, physicalLines, matchedLines, match, lineTerminator);
         }
 
         var lines = new List<ContextLineInfo>(physicalLines.Count);
@@ -3383,10 +3365,10 @@ internal static class Pcre2SearchOperations
         return lines;
     }
 
-    private static void MarkPcre2MultilineMatchedLines(ReadOnlySpan<byte> bytes, List<ContextLineInfo> lines, bool[] matchedLines, Pcre2Match match)
+    private static void MarkPcre2MultilineMatchedLines(ReadOnlySpan<byte> bytes, List<ContextLineInfo> lines, bool[] matchedLines, Pcre2Match match, ReadOnlyMemory<byte> lineTerminator)
     {
-        int firstLineStart = GetLineStart(bytes, match.Start);
-        int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match));
+        int firstLineStart = GetLineStart(bytes, match.Start, lineTerminator);
+        int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match), lineTerminator);
         for (int index = 0; index < lines.Count; index++)
         {
             int lineStart = lines[index].Start;
@@ -3441,12 +3423,12 @@ internal static class Pcre2SearchOperations
         return false;
     }
 
-    private static bool TryFindNextPcre2Match(ReadOnlySpan<byte> bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp, ref int offset, out Pcre2Match match)
+    private static bool TryFindNextPcre2Match(ReadOnlySpan<byte> bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp, ReadOnlyMemory<byte> lineTerminator, ref int offset, out Pcre2Match match)
     {
         while (offset <= bytes.Length && regex.TryFind(bytes, offset, out match))
         {
             offset = AdvanceAfterPcre2Match(match, bytes.Length);
-            if (Pcre2MatchSatisfies(bytes, match, lineRegexp, wordRegexp))
+            if (Pcre2MatchSatisfies(bytes, match, lineRegexp, wordRegexp, lineTerminator))
             {
                 return true;
             }
@@ -3458,8 +3440,13 @@ internal static class Pcre2SearchOperations
 
     private static bool Pcre2MatchSatisfies(ReadOnlySpan<byte> bytes, Pcre2Match match, bool lineRegexp, bool wordRegexp)
     {
+        return Pcre2MatchSatisfies(bytes, match, lineRegexp, wordRegexp, LineFeed);
+    }
+
+    private static bool Pcre2MatchSatisfies(ReadOnlySpan<byte> bytes, Pcre2Match match, bool lineRegexp, bool wordRegexp, ReadOnlyMemory<byte> lineTerminator)
+    {
         int end = match.Start + match.Length;
-        return (!lineRegexp || IsLineMatch(bytes, match.Start, end)) &&
+        return (!lineRegexp || IsLineMatch(bytes, match.Start, end, lineTerminator)) &&
             (!wordRegexp || IsWordMatch(bytes, match.Start, end));
     }
 
@@ -3615,7 +3602,7 @@ internal static class Pcre2SearchOperations
         long outputByteOffset = byteOffsetStart;
         while (outputLineStart <= body.Length)
         {
-            int outputLineEnd = GetLineEnd(body, outputLineStart);
+            int outputLineEnd = GetLineEnd(body, outputLineStart, separators.LineTerminator);
             long outputColumn = outputLineStart == 0 ? firstColumn : 1;
             sink.MatchedLine(outputLineNumber, outputByteOffset, outputColumn, body[outputLineStart..outputLineEnd]);
             if (outputLineEnd >= body.Length)
@@ -3629,16 +3616,16 @@ internal static class Pcre2SearchOperations
         }
     }
 
-    private static bool IsLineMatch(ReadOnlySpan<byte> bytes, int start, int end)
+    private static bool IsLineMatch(ReadOnlySpan<byte> bytes, int start, int end, ReadOnlyMemory<byte> lineTerminator)
     {
-        int firstLineStart = GetLineStart(bytes, start);
+        int firstLineStart = GetLineStart(bytes, start, lineTerminator);
         if (start != firstLineStart)
         {
             return false;
         }
 
-        int lastLineStart = GetLineStart(bytes, end > start ? end - 1 : start);
-        return end == GetLineContentEnd(bytes, lastLineStart);
+        int lastLineStart = GetLineStart(bytes, end > start ? end - 1 : start, lineTerminator);
+        return end == GetLineContentEnd(bytes, lastLineStart, lineTerminator);
     }
 
     private static bool IsWordMatch(ReadOnlySpan<byte> bytes, int start, int end)
@@ -3656,12 +3643,13 @@ internal static class Pcre2SearchOperations
                 or >= (byte)'a' and <= (byte)'z');
     }
 
-    private static int GetLineStart(ReadOnlySpan<byte> bytes, int offset)
+    private static int GetLineStart(ReadOnlySpan<byte> bytes, int offset, ReadOnlyMemory<byte> lineTerminator)
     {
         int boundedOffset = Math.Clamp(offset, 0, bytes.Length);
+        byte terminator = GetPcre2LineTerminatorByte(lineTerminator);
         for (int index = boundedOffset - 1; index >= 0; index--)
         {
-            if (bytes[index] == (byte)'\n')
+            if (bytes[index] == terminator)
             {
                 return index + 1;
             }
@@ -3670,17 +3658,17 @@ internal static class Pcre2SearchOperations
         return 0;
     }
 
-    private static int GetLineEnd(ReadOnlySpan<byte> bytes, int lineStart)
+    private static int GetLineEnd(ReadOnlySpan<byte> bytes, int lineStart, ReadOnlyMemory<byte> lineTerminator)
     {
         int boundedStart = Math.Clamp(lineStart, 0, bytes.Length);
-        int relativeEnd = bytes[boundedStart..].IndexOf((byte)'\n');
+        int relativeEnd = bytes[boundedStart..].IndexOf(GetPcre2LineTerminatorByte(lineTerminator));
         return relativeEnd < 0 ? bytes.Length : boundedStart + relativeEnd + 1;
     }
 
-    private static int GetLineContentEnd(ReadOnlySpan<byte> bytes, int lineStart)
+    private static int GetLineContentEnd(ReadOnlySpan<byte> bytes, int lineStart, ReadOnlyMemory<byte> lineTerminator)
     {
-        int lineEnd = GetLineEnd(bytes, lineStart);
-        return lineEnd > lineStart && bytes[lineEnd - 1] == (byte)'\n'
+        int lineEnd = GetLineEnd(bytes, lineStart, lineTerminator);
+        return lineEnd > lineStart && bytes[lineEnd - 1] == GetPcre2LineTerminatorByte(lineTerminator)
             ? lineEnd - 1
             : lineEnd;
     }
@@ -3690,13 +3678,13 @@ internal static class Pcre2SearchOperations
         return lineEnd < length ? lineEnd : length + 1;
     }
 
-    private static long GetLineNumber(ReadOnlySpan<byte> bytes, int lineStart)
+    private static long GetLineNumber(ReadOnlySpan<byte> bytes, int lineStart, ReadOnlyMemory<byte> lineTerminator)
     {
-        return 1 + CountLineFeeds(bytes[..Math.Clamp(lineStart, 0, bytes.Length)]);
+        return 1 + CountLineTerminators(bytes[..Math.Clamp(lineStart, 0, bytes.Length)], lineTerminator);
     }
 
-    private static long CountLineFeeds(ReadOnlySpan<byte> bytes)
+    private static long CountLineTerminators(ReadOnlySpan<byte> bytes, ReadOnlyMemory<byte> lineTerminator)
     {
-        return ByteCounter.Count(bytes, (byte)'\n');
+        return ByteCounter.Count(bytes, GetPcre2LineTerminatorByte(lineTerminator));
     }
 }
