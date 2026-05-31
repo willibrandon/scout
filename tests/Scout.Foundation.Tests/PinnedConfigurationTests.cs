@@ -344,6 +344,7 @@ public sealed partial class PinnedConfigurationTests
 
         string[] definitionFiles = Directory.GetFiles(definitionsRoot, "*Flag.cs", SearchOption.TopDirectoryOnly);
         Assert.Equal(GeneratedFlagCatalog.Descriptors.Length, definitionFiles.Length);
+        Assert.Equal(104, definitionFiles.Length);
 
         foreach (string path in definitionFiles)
         {
@@ -1266,6 +1267,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("json_explicit_invalid_utf8_path", invalidUtf8DifferentialScript, StringComparison.Ordinal);
         Assert.Contains("json_recursive_invalid_utf8_path", invalidUtf8DifferentialScript, StringComparison.Ordinal);
         Assert.Contains("subprocess.run", invalidUtf8DifferentialScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("SKIP invalid UTF-8", invalidUtf8DifferentialScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("sys.exit(0)", invalidUtf8DifferentialScript, StringComparison.Ordinal);
         Assert.Contains("<AllowUnsafeBlocks>true</AllowUnsafeBlocks>", directoryBuildProps, StringComparison.Ordinal);
         Assert.Contains("<DirectPInvoke Include=\"__Internal\" />", directoryBuildProps, StringComparison.Ordinal);
         Assert.Contains("PCRE2 10.46 is available (JIT is available)", appBuildScript, StringComparison.Ordinal);

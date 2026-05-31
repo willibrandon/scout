@@ -2,18 +2,18 @@ using Scout;
 
 namespace Scout.Flags.Definitions;
 
-internal readonly struct WithFilenameFlag : IFlag<WithFilenameFlag>
+internal readonly struct WithFilenameNoFlag : IFlag<WithFilenameNoFlag>
 {
     public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(
-        "--with-filename",
-        'H',
+        "--no-filename",
+        'I',
         negatedName: null,
         aliases: [],
         FlagCategory.Output,
-        "Print filename prefixes in matching output.",
+        "Never print filename prefixes in matching output.",
         static lowArgs =>
         {
-            lowArgs.SetWithFilename(true);
+            lowArgs.SetWithFilename(false);
             return null;
         });
 }

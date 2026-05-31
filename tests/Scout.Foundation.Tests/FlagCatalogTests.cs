@@ -26,18 +26,18 @@ public sealed class FlagCatalogTests
         Assert.Equal("--multiline", multiline.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindShortSwitch('n', out FlagDescriptor lineNumber));
         Assert.Equal("--line-number", lineNumber.LongName);
-        Assert.Equal("--no-line-number", lineNumber.NegatedName);
-        Assert.Equal('N', lineNumber.NegatedShortName);
+        Assert.Null(lineNumber.NegatedName);
+        Assert.Null(lineNumber.NegatedShortName);
         Assert.True(GeneratedFlagCatalog.TryFindShortSwitch('N', out FlagDescriptor noLineNumber));
-        Assert.Equal("--line-number", noLineNumber.LongName);
+        Assert.Equal("--no-line-number", noLineNumber.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindShortSwitch('.', out FlagDescriptor hidden));
         Assert.Equal("--hidden", hidden.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindShortSwitch('H', out FlagDescriptor withFilename));
         Assert.Equal("--with-filename", withFilename.LongName);
-        Assert.Equal("--no-filename", withFilename.NegatedName);
-        Assert.Equal('I', withFilename.NegatedShortName);
+        Assert.Null(withFilename.NegatedName);
+        Assert.Null(withFilename.NegatedShortName);
         Assert.True(GeneratedFlagCatalog.TryFindShortSwitch('I', out FlagDescriptor noFilename));
-        Assert.Equal("--with-filename", noFilename.LongName);
+        Assert.Equal("--no-filename", noFilename.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindLongSwitch("--no-follow", out FlagDescriptor noFollow));
         Assert.Equal("--follow", noFollow.LongName);
         Assert.Equal("--no-follow", noFollow.NegatedName);
@@ -189,6 +189,19 @@ public sealed class FlagCatalogTests
         Assert.Equal("--pcre2-version", pcre2Version.LongName);
         Assert.True(pcre2Version.TryGetSpecialMode("--pcre2-version", out CliSpecialMode pcre2Mode));
         Assert.Equal(CliSpecialMode.Pcre2Version, pcre2Mode);
+    }
+
+    /// <summary>
+    /// Verifies the generated catalog keeps the pinned upstream logical flag count.
+    /// </summary>
+    [Fact]
+    public void CatalogMatchesPinnedUpstreamFlagCount()
+    {
+        Assert.Equal(104, GeneratedFlagCatalog.Descriptors.Length);
+        Assert.True(GeneratedFlagCatalog.TryFindLongSwitch("--no-line-number", out FlagDescriptor lineNumberNo));
+        Assert.Equal('N', lineNumberNo.ShortName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongSwitch("--no-filename", out FlagDescriptor withFilenameNo));
+        Assert.Equal('I', withFilenameNo.ShortName);
     }
 
     /// <summary>

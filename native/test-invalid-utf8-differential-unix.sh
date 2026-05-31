@@ -93,8 +93,7 @@ def write_bytes(path, contents):
     try:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o666)
     except OSError as error:
-        print(f"SKIP invalid UTF-8 path differentials: filesystem rejected test file: {error}")
-        sys.exit(0)
+        raise SystemExit(f"invalid UTF-8 path differential fixture creation failed: {error}") from error
 
     with os.fdopen(fd, "wb") as handle:
         handle.write(contents)

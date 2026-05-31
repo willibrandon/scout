@@ -2,18 +2,18 @@ using Scout;
 
 namespace Scout.Flags.Definitions;
 
-internal readonly struct WithFilenameFlag : IFlag<WithFilenameFlag>
+internal readonly struct LineNumberNoFlag : IFlag<LineNumberNoFlag>
 {
     public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(
-        "--with-filename",
-        'H',
+        "--no-line-number",
+        'N',
         negatedName: null,
         aliases: [],
         FlagCategory.Output,
-        "Print filename prefixes in matching output.",
+        "Suppress line numbers.",
         static lowArgs =>
         {
-            lowArgs.SetWithFilename(true);
+            lowArgs.SetLineNumber(false);
             return null;
         });
 }

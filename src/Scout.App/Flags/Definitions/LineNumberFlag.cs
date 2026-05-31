@@ -4,17 +4,16 @@ namespace Scout.Flags.Definitions;
 
 internal readonly struct LineNumberFlag : IFlag<LineNumberFlag>
 {
-    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.SwitchWithName(
+    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(
         "--line-number",
         'n',
-        "--no-line-number",
+        negatedName: null,
         aliases: [],
         FlagCategory.Output,
         "Print line numbers with matching lines.",
-        static (lowArgs, matchedName) =>
+        static lowArgs =>
         {
-            lowArgs.SetLineNumber(matchedName != "--no-line-number" && matchedName != "-N");
+            lowArgs.SetLineNumber(true);
             return null;
-        },
-        negatedShortName: 'N');
+        });
 }
