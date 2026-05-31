@@ -368,6 +368,8 @@ internal sealed class RegexSyntaxParseState
 
         return escaped switch
         {
+            (byte)'A' => new RegexAtomNode(RegexSyntaxKind.AbsoluteStartAnchor, ReadOnlyMemory<byte>.Empty, position),
+            (byte)'z' => new RegexAtomNode(RegexSyntaxKind.AbsoluteEndAnchor, ReadOnlyMemory<byte>.Empty, position),
             (byte)'b' => new RegexAtomNode(RegexSyntaxKind.WordBoundary, ReadOnlyMemory<byte>.Empty, position),
             (byte)'B' => new RegexAtomNode(RegexSyntaxKind.NotWordBoundary, ReadOnlyMemory<byte>.Empty, position),
             (byte)'d' => new RegexAtomNode(RegexSyntaxKind.DigitClass, ReadOnlyMemory<byte>.Empty, position),

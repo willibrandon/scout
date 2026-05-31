@@ -941,6 +941,31 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies multiline absolute EOF anchors use whole-haystack only-matching semantics.
+    /// </summary>
+    [Fact]
+    public void MultilineAbsoluteEndOnlyMatchingMatchesRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string unterminated = Path.Combine(root, "unterminated.txt");
+        string terminated = Path.Combine(root, "terminated.txt");
+        File.WriteAllText(unterminated, "tail");
+        File.WriteAllText(terminated, "tail\n");
+
+        (int unterminatedExitCode, byte[] unterminatedOutput, string unterminatedError) = RunScout("-o", "-U", @"\z", unterminated);
+        (int pinnedUnterminatedExitCode, byte[] pinnedUnterminatedOutput, string pinnedUnterminatedError) = RunPinnedRipgrep("-o", "-U", @"\z", unterminated);
+        (int terminatedExitCode, byte[] terminatedOutput, string terminatedError) = RunScout("-o", "-U", @"\z", terminated);
+        (int pinnedTerminatedExitCode, byte[] pinnedTerminatedOutput, string pinnedTerminatedError) = RunPinnedRipgrep("-o", "-U", @"\z", terminated);
+
+        Assert.Equal(pinnedUnterminatedExitCode, unterminatedExitCode);
+        Assert.Equal(pinnedUnterminatedOutput, unterminatedOutput);
+        Assert.Equal(pinnedUnterminatedError, unterminatedError);
+        Assert.Equal(pinnedTerminatedExitCode, terminatedExitCode);
+        Assert.Equal(pinnedTerminatedOutput, terminatedOutput);
+        Assert.Equal(pinnedTerminatedError, terminatedError);
+    }
+
+    /// <summary>
     /// Verifies multiline mode uses multiline regex anchors inside whole-buffer searches.
     /// </summary>
     [Fact]
@@ -4270,8 +4295,8 @@ public sealed class ScoutApplicationTests
         string path = Path.Combine(root, "input.txt");
         File.WriteAllText(path, "tail");
 
-        (int exitCode, byte[] output, string error) = RunScout("--json", "-o", "-U", "$", path);
-        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--json", "-o", "-U", "$", path);
+        (int exitCode, byte[] output, string error) = RunScout("--json", "-o", "-U", @"\z", path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--json", "-o", "-U", @"\z", path);
 
         Assert.Equal(pinnedExitCode, exitCode);
         Assert.Equal(NormalizeJsonTimings(pinnedOutput), NormalizeJsonTimings(output));

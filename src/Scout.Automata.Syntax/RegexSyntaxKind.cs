@@ -81,6 +81,16 @@ public enum RegexSyntaxKind
     EndAnchor,
 
     /// <summary>
+    /// Matches the absolute start anchor.
+    /// </summary>
+    AbsoluteStartAnchor,
+
+    /// <summary>
+    /// Matches the absolute end anchor.
+    /// </summary>
+    AbsoluteEndAnchor,
+
+    /// <summary>
     /// Matches a word boundary.
     /// </summary>
     WordBoundary,

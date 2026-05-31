@@ -460,6 +460,7 @@ public sealed class RegexCorpusTests
                 "captures-wrong-order",
                 "missed-match",
                 "regex-to-glob",
+                "i969",
                 "reverse-inner-plus-shorter-than-expected",
                 "reverse-inner-short",
                 "prefilter-with-aho-corasick-standard-semantics",

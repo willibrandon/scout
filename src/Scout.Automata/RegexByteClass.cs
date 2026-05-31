@@ -115,6 +115,8 @@ internal static class RegexByteClass
         {
             RegexSyntaxKind.StartAnchor => IsStartAnchorMatch(haystack, position, multiLine, crlf, lineTerminator),
             RegexSyntaxKind.EndAnchor => IsEndAnchorMatch(haystack, position, multiLine, crlf, lineTerminator),
+            RegexSyntaxKind.AbsoluteStartAnchor => position == 0,
+            RegexSyntaxKind.AbsoluteEndAnchor => position == haystack.Length,
             RegexSyntaxKind.WordBoundary => IsRegexWordBoundary(haystack, position, useUnicodeWord),
             RegexSyntaxKind.NotWordBoundary => !IsRegexWordBoundary(haystack, position, useUnicodeWord),
             RegexSyntaxKind.WordStartBoundary => IsRegexWordStartBoundary(haystack, position, useUnicodeWord),

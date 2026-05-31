@@ -5106,7 +5106,8 @@ internal static class ScoutApplication
             return true;
         }
 
-        if (!TryFindMultilineMatch(searchSpan, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, startAt: 0, out RegexMatch firstMatch))
+        if (!TryFindMultilineMatch(searchSpan, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, startAt: 0, out RegexMatch firstMatch) ||
+            IsTrailingEmptyLineMatch(searchSpan, firstMatch))
         {
             if (searchMode == CliSearchMode.FilesWithoutMatch)
             {
@@ -5288,6 +5289,12 @@ internal static class ScoutApplication
     {
         while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, offset, out match))
         {
+            if (IsTrailingEmptyLineMatch(bytes, match))
+            {
+                offset = bytes.Length + 1;
+                break;
+            }
+
             var matcherMatch = new MatcherMatch(match.Start, match.Length);
             if (!MatchIterator.IsSuppressedEmpty(matcherMatch, suppressedEmptyStart))
             {
@@ -5300,6 +5307,21 @@ internal static class ScoutApplication
 
         match = default;
         return false;
+    }
+
+    private static bool IsTrailingEmptyLineMatch(ReadOnlySpan<byte> bytes, RegexMatch match)
+    {
+        return match.Length == 0 &&
+            match.Start == bytes.Length &&
+            (bytes.IsEmpty || bytes[^1] == (byte)'\n');
+    }
+
+    private static bool IsEofEmptyMatch(ReadOnlySpan<byte> bytes, RegexMatch match)
+    {
+        return match.Length == 0 &&
+            match.Start == bytes.Length &&
+            !bytes.IsEmpty &&
+            bytes[^1] != (byte)'\n';
     }
 
     private static int AdvanceAfterReportedMultilineMatch(RegexMatch match, int haystackLength, ref int suppressedEmptyStart)
@@ -5626,7 +5648,12 @@ internal static class ScoutApplication
             long firstLineNumber = GetLineNumber(bytes, firstLineStart);
             long matchColumn = match.Start - firstLineStart + 1L;
             int matchEnd = match.Start + match.Length;
-            if (match.Length == 0)
+            if (IsEofEmptyMatch(bytes, match))
+            {
+                int lineEnd = GetLineEnd(bytes, firstLineStart);
+                sink.Matched(firstLineNumber, firstLineStart, 1, bytes[firstLineStart..lineEnd]);
+            }
+            else if (match.Length == 0)
             {
                 sink.Matched(firstLineNumber, match.Start, matchColumn, []);
             }
@@ -7284,7 +7311,7 @@ internal static class ScoutApplication
 
     private static bool ShouldUseMultilineRegex(IReadOnlyList<byte[]> patterns, bool multilineDotall)
     {
-        return multilineDotall || ContainsLineFeed(patterns) || ContainsLineFeedMatchingSyntax(patterns);
+        return multilineDotall || ContainsLineFeed(patterns) || ContainsLineFeedMatchingSyntax(patterns) || ContainsWholeHaystackAnchorSyntax(patterns);
     }
 
     private static bool ShouldUseJsonMultilineRegex(IReadOnlyList<byte[]> patterns, bool multilineDotall)
@@ -7310,6 +7337,19 @@ internal static class ScoutApplication
         for (int index = 0; index < patterns.Count; index++)
         {
             if (SyntaxCanMatchAnchorLineBoundary(RegexSyntaxParser.Parse(patterns[index]).Root))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsWholeHaystackAnchorSyntax(IReadOnlyList<byte[]> patterns)
+    {
+        for (int index = 0; index < patterns.Count; index++)
+        {
+            if (SyntaxRequiresWholeHaystack(RegexSyntaxParser.Parse(patterns[index]).Root))
             {
                 return true;
             }
@@ -7349,6 +7389,19 @@ internal static class ScoutApplication
         };
     }
 
+    private static bool SyntaxRequiresWholeHaystack(RegexSyntaxNode node)
+    {
+        return node switch
+        {
+            RegexGroupNode group => SyntaxRequiresWholeHaystack(group.Child),
+            RegexSequenceNode sequence => AnySyntaxRequiresWholeHaystack(sequence.Nodes),
+            RegexAlternationNode alternation => AnySyntaxRequiresWholeHaystack(alternation.Alternatives),
+            RegexRepetitionNode repetition => SyntaxRequiresWholeHaystack(repetition.Child),
+            RegexAtomNode atom => atom.Kind is RegexSyntaxKind.AbsoluteStartAnchor or RegexSyntaxKind.AbsoluteEndAnchor,
+            _ => false,
+        };
+    }
+
     private static bool AnySyntaxCanMatchLineFeed(IReadOnlyList<RegexSyntaxNode> nodes)
     {
         for (int index = 0; index < nodes.Count; index++)
@@ -7367,6 +7420,19 @@ internal static class ScoutApplication
         for (int index = 0; index < nodes.Count; index++)
         {
             if (SyntaxCanMatchAnchorLineBoundary(nodes[index]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool AnySyntaxRequiresWholeHaystack(IReadOnlyList<RegexSyntaxNode> nodes)
+    {
+        for (int index = 0; index < nodes.Count; index++)
+        {
+            if (SyntaxRequiresWholeHaystack(nodes[index]))
             {
                 return true;
             }

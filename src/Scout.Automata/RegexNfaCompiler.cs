@@ -201,6 +201,8 @@ internal sealed class RegexNfaCompiler
     {
         return kind is RegexSyntaxKind.StartAnchor
             or RegexSyntaxKind.EndAnchor
+            or RegexSyntaxKind.AbsoluteStartAnchor
+            or RegexSyntaxKind.AbsoluteEndAnchor
             or RegexSyntaxKind.WordBoundary
             or RegexSyntaxKind.NotWordBoundary
             or RegexSyntaxKind.WordStartBoundary

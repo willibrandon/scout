@@ -2047,9 +2047,17 @@ public static class LiteralLineSearcher
 
     private static bool ContainsAutomatonOnlyRegexSyntax(ReadOnlySpan<byte> pattern)
     {
-        for (int index = 0; index + 2 < pattern.Length; index++)
+        for (int index = 0; index < pattern.Length; index++)
         {
+            if (pattern[index] == (byte)'\\' &&
+                index + 1 < pattern.Length &&
+                pattern[index + 1] is (byte)'A' or (byte)'z')
+            {
+                return true;
+            }
+
             if (pattern[index] == (byte)'(' &&
+                index + 2 < pattern.Length &&
                 pattern[index + 1] == (byte)'?' &&
                 (pattern[index + 2] == (byte)':' ||
                     IsScopedInlineFlagGroup(pattern, index + 2) ||

@@ -486,6 +486,21 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies absolute anchors ignore multiline line boundaries.
+    /// </summary>
+    [Fact]
+    public void MatchesAbsoluteAnchors()
+    {
+        var start = RegexAutomaton.Compile("\\Abar"u8, multiLine: true, dotMatchesNewline: false);
+        var end = RegexAutomaton.Compile("bar\\z"u8, multiLine: true, dotMatchesNewline: false);
+
+        Assert.Equal(new RegexMatch(0, 3), start.Find("bar\nfoo"u8));
+        Assert.Null(start.Find("foo\nbar"u8));
+        Assert.Equal(new RegexMatch(4, 3), end.Find("foo\nbar"u8));
+        Assert.Null(end.Find("foo\nbar\n"u8));
+    }
+
+    /// <summary>
     /// Verifies a zero DFA cache limit preserves match semantics through fallback.
     /// </summary>
     [Fact]
