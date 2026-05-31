@@ -23,7 +23,12 @@ GitHub's default `CI` workflow runs only hosted cross-platform build, test,
 format, fuzz, and native link checks. The full pinned test pass and hyperfine
 performance gate live in the `Release Gates` workflow because they require the
 self-hosted `scout/osx-arm64` runner with the pinned local ripgrep checkout,
-macOS tool hashes, and benchmark corpora.
+macOS tool hashes, and benchmark corpora. The workflow first checks for an
+online repository runner with the `self-hosted`, `scout`, and `osx-arm64`
+labels so missing runner setup fails immediately instead of leaving the gates
+queued. That readiness check needs a `RELEASE_GATES_RUNNER_TOKEN` secret with
+repository `Administration: read` permission because GitHub requires admin read
+access to list repository self-hosted runners.
 
 `eng/fetch-corpora.sh` prints replacement `[[corpus]]` blocks for
 `tests/PREREQS.lock` after it downloads OpenSubtitles and the pinned Linux
