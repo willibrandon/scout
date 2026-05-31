@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Security.Cryptography;
 
 namespace Scout;
 
@@ -9,7 +10,7 @@ namespace Scout;
 /// </summary>
 public sealed class SearchEncodingTests
 {
-    private const string EncodingRsLabelTestsPath = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs-0.8.35/src/test_labels_names.rs";
+    private static readonly string EncodingRsLabelTestsPath = Path.Combine(FindRepositoryRoot(), "upstream", "encoding_rs-0.8.35", "src", "test_labels_names.rs");
 
     /// <summary>
     /// Verifies implemented WHATWG labels resolve to the expected search encoding kinds.
@@ -273,6 +274,12 @@ public sealed class SearchEncodingTests
     public void TryGetKindMatchesEncodingRsForLabelNoReplacementCatalog()
     {
         string upstream = File.ReadAllText(EncodingRsLabelTestsPath);
+        string prerequisiteLock = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "tests", "PREREQS.lock"));
+        Assert.Contains("name = \"encoding-rs-0.8.35-labels\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("path = \"upstream/encoding_rs-0.8.35/src/test_labels_names.rs\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("sha256 = \"23a2e11b02b3b8d15fb5613a625e3edb2c61e70e3c581abfd638719a4088200d\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Equal("23A2E11B02B3B8D15FB5613A625E3EDB2C61E70E3C581ABFD638719A4088200D", Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(EncodingRsLabelTestsPath))));
+
         List<(string Label, string EncodingName)> cases = ReadEncodingRsLabelCases(upstream);
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
@@ -348,6 +355,22 @@ public sealed class SearchEncodingTests
             cases.Add((label, encodingName));
             searchIndex = encodingNameEnd + 1;
         }
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        DirectoryInfo? directory = new(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "Scout.slnx")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException("Could not locate the Scout repository root.");
     }
 
     private static SearchEncodingKind ToSearchEncodingKind(string label, string upstreamEncodingName)

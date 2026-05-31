@@ -10,7 +10,7 @@ namespace Scout;
 /// </summary>
 public sealed class EncodingRsConformanceTests
 {
-    private const string EncodingRsTestDataRoot = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/encoding_rs-0.8.35/src/test_data";
+    private static readonly string EncodingRsTestDataRoot = Path.Combine(FindRepositoryRoot(), "upstream", "encoding_rs-0.8.35", "src", "test_data");
 
     /// <summary>
     /// Gets the upstream decode-vector cases Scout currently supports.
@@ -81,7 +81,9 @@ public sealed class EncodingRsConformanceTests
         for (int index = 0; index < vectors.Length; index++)
         {
             (string name, string fileName, string expectedSha256) = vectors[index];
+            string relativePath = Path.Combine("upstream", "encoding_rs-0.8.35", "src", "test_data", fileName).Replace('\\', '/');
             Assert.Contains("name = \"" + name + "\"", prerequisiteLock, StringComparison.Ordinal);
+            Assert.Contains("path = \"" + relativePath + "\"", prerequisiteLock, StringComparison.Ordinal);
             Assert.Contains("sha256 = \"" + expectedSha256.ToLowerInvariant() + "\"", prerequisiteLock, StringComparison.Ordinal);
 
             byte[] hash = SHA256.HashData(File.ReadAllBytes(Path.Combine(EncodingRsTestDataRoot, fileName)));

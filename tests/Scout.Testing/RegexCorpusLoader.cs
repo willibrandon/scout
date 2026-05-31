@@ -8,7 +8,7 @@ namespace Scout;
 
 internal static class RegexCorpusLoader
 {
-    private const string CorpusRoot = "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata";
+    private static readonly string CorpusRoot = Path.Combine(FindRepositoryRoot(), "upstream", "regex-1.12.2", "testdata");
 
     public static IReadOnlyList<string> EnumerateAllCaseKeys()
     {
@@ -85,6 +85,22 @@ internal static class RegexCorpusLoader
     private static bool ContainsName(string block, string name)
     {
         return string.Equals(ReadOptionalString(block, "name"), name, StringComparison.Ordinal);
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        DirectoryInfo? directory = new(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "Scout.slnx")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException("Could not locate the Scout repository root.");
     }
 
     private static string ReadString(string block, string key, string path, string name)

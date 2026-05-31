@@ -1666,99 +1666,99 @@ public sealed partial class PinnedConfigurationTests
     [Fact]
     public void RegexCorpusFilesMatchPinnedHashes()
     {
-        (string Name, string Path, string Sha256)[] corpora =
+        (string Name, string RelativePath, string Sha256)[] corpora =
         [
             (
                 "regex-1.12.2-misc",
-                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/misc.toml",
+                "upstream/regex-1.12.2/testdata/misc.toml",
                 "32C9591655C6FB118DFEFCB4DE49A04820A63CB960533DFC2538CDAABF4F4047"),
             (
                 "regex-1.12.2-flags",
-                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/flags.toml",
+                "upstream/regex-1.12.2/testdata/flags.toml",
                 "9A7E001808195C84F2A7D3E18BC0A82C7386E60F03A616E99AF00C3F7F2C3FD4"),
             (
                 "regex-1.12.2-iter",
-                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/iter.toml",
+                "upstream/regex-1.12.2/testdata/iter.toml",
                 "6875460302974A5B3073A7304A865C45ABA9653C54AFEA2C4D26E1EA248A81F7"),
             (
                 "regex-1.12.2-empty",
-                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/empty.toml",
+                "upstream/regex-1.12.2/testdata/empty.toml",
                 "738DBE92FBD8971385A1CF3AFFB0E956E5B692C858B9B48439D718F10801C08E"),
             (
                 "regex-1.12.2-crazy",
-                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/crazy.toml",
+                "upstream/regex-1.12.2/testdata/crazy.toml",
                 "A146E2D2E23F1A57168979D9B1FC193C2BA38DCA66294B61140D6D2A2958EC86"),
             (
                 "regex-1.12.2-multiline",
-                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/multiline.toml",
+                "upstream/regex-1.12.2/testdata/multiline.toml",
                 "EB07CF5427E6DDBCF61F4CC64C2D74FF41B5EF75EF857959651B20196F3CD157"),
             (
                 "regex-1.12.2-line-terminator",
-                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/line-terminator.toml",
+                "upstream/regex-1.12.2/testdata/line-terminator.toml",
                 "02148068137B69D95587966917BDF0697BF7EB41AD6D47387F2EB30F67D04FD9"),
             (
                 "regex-1.12.2-anchored",
-                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/anchored.toml",
+                "upstream/regex-1.12.2/testdata/anchored.toml",
                 "7A1B5CD81DEED2099796A451BF764A3F9BD21F0D60C0FA46ACCD3A35666866F2"),
             (
                 "regex-1.12.2-substring",
-                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/substring.toml",
+                "upstream/regex-1.12.2/testdata/substring.toml",
                 "48122D9F3477ED81F95E3AD42C06E9BB25F849B66994601A75CEAE0693B81866"),
             (
                 "regex-1.12.2-bytes",
-                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/bytes.toml",
+                "upstream/regex-1.12.2/testdata/bytes.toml",
                 "1D84179165FD25F3B94BD2BFBEB43FC8A162041F7BF98B717E0F85CEF7FB652B"),
             (
                 "regex-1.12.2-crlf",
-                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/crlf.toml",
+                "upstream/regex-1.12.2/testdata/crlf.toml",
                 "D19CF22756434D145DD20946C00AF01C102A556A252070405C3C8294129D9ECE"),
             (
                 "regex-1.12.2-earliest",
-                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/earliest.toml",
+                "upstream/regex-1.12.2/testdata/earliest.toml",
                 "D561E643623EE1889B5B049FDCF3C7CB71B0C746D7EB822DDBD09D0ACDA2620B"),
             (
                 "regex-1.12.2-expensive",
-                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/expensive.toml",
+                "upstream/regex-1.12.2/testdata/expensive.toml",
                 "5CE2F60209C99CDD2CDCB9D3069D1D5CA13D5E08A85E913EFE57267B2F5F0E9D"),
             (
                 "regex-1.12.2-leftmost-all",
-                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/leftmost-all.toml",
+                "upstream/regex-1.12.2/testdata/leftmost-all.toml",
                 "903BFBEFF888B7664296F4D5AA367CE53D1DAFE249AB0A3359223AE94D596396"),
             (
                 "regex-1.12.2-no-unicode",
-                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/no-unicode.toml",
+                "upstream/regex-1.12.2/testdata/no-unicode.toml",
                 "D209DA04506900FD5F69E48170CDDAAD0702355AC6176C3A75AB3FF96974457C"),
             (
                 "regex-1.12.2-overlapping",
-                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/overlapping.toml",
+                "upstream/regex-1.12.2/testdata/overlapping.toml",
                 "5D96497A7233566D40B05BA22047E483FA8662E45515A9BE86DA45CF6C28703A"),
             (
                 "regex-1.12.2-regex-lite",
-                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/regex-lite.toml",
+                "upstream/regex-1.12.2/testdata/regex-lite.toml",
                 "FECCA7CC8C9CEA2E1F84F846A89FD9B3CA7011C83698211A2EEDA8924DEB900C"),
             (
                 "regex-1.12.2-regression",
-                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/regression.toml",
+                "upstream/regex-1.12.2/testdata/regression.toml",
                 "6006EF4FCFBFD7155CE5CE8B8427904F7261C5549396F20CB065C0294733686D"),
             (
                 "regex-1.12.2-set",
-                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/set.toml",
+                "upstream/regex-1.12.2/testdata/set.toml",
                 "DFD265DC1AEE80026E881616840DF0236AE9ABF12467D7EC0E141A52C236128C"),
             (
                 "regex-1.12.2-unicode",
-                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/unicode.toml",
+                "upstream/regex-1.12.2/testdata/unicode.toml",
                 "7E4B013039B0CDD85FA73F32D15D096182FE901643D4E40C0910087A736CD46D"),
             (
                 "regex-1.12.2-utf8",
-                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/utf8.toml",
+                "upstream/regex-1.12.2/testdata/utf8.toml",
                 "2EABCE0582BCACB2073E08BBE7CA413F096D14D06E917B107949691E24F84B20"),
             (
                 "regex-1.12.2-word-boundary-special",
-                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/word-boundary-special.toml",
+                "upstream/regex-1.12.2/testdata/word-boundary-special.toml",
                 "7D0EA2F796478D1CA2A6954430CB1CFBD04031A182F8611CB50A7C73E443CE33"),
             (
                 "regex-1.12.2-word-boundary",
-                "/Users/brandon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/regex-1.12.2/testdata/word-boundary.toml",
+                "upstream/regex-1.12.2/testdata/word-boundary.toml",
                 "51BC1C498AB825420340A2DD3E6623DE4054937BA6D5020FF8CD14B1C1E45271"),
         ];
 
@@ -1766,12 +1766,57 @@ public sealed partial class PinnedConfigurationTests
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
         for (int index = 0; index < corpora.Length; index++)
         {
-            (string name, string path, string expectedSha256) = corpora[index];
+            (string name, string relativePath, string expectedSha256) = corpora[index];
             Assert.Contains("name = \"" + name + "\"", prerequisiteLock, StringComparison.Ordinal);
+            Assert.Contains("path = \"" + relativePath + "\"", prerequisiteLock, StringComparison.Ordinal);
             Assert.Contains("sha256 = \"" + expectedSha256.ToLowerInvariant() + "\"", prerequisiteLock, StringComparison.Ordinal);
 
+            string path = Path.Combine(root, relativePath);
             byte[] hash = SHA256.HashData(File.ReadAllBytes(path));
             Assert.Equal(expectedSha256, Convert.ToHexString(hash));
+        }
+    }
+
+    /// <summary>
+    /// Verifies vendored conformance corpus pins do not depend on developer-local Cargo cache paths.
+    /// </summary>
+    [Fact]
+    public void PrerequisiteLockUsesRepoRelativeConformanceCorpusPaths()
+    {
+        string root = FindRepositoryRoot();
+        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+
+        Assert.DoesNotContain("/.cargo/registry/", prerequisiteLock, StringComparison.Ordinal);
+        Assert.DoesNotContain("\\.cargo\\registry\\", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("path = \"upstream/regex-1.12.2/testdata/misc.toml\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("path = \"upstream/encoding_rs-0.8.35/src/test_data/big5_in.txt\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("path = \"upstream/encoding_rs-0.8.35/src/test_labels_names.rs\"", prerequisiteLock, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Verifies every vendored upstream conformance corpus file is pinned in the prerequisite lock.
+    /// </summary>
+    [Fact]
+    public void VendoredConformanceCorpusFilesMatchPrerequisiteLock()
+    {
+        string root = FindRepositoryRoot();
+        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        string[] corpusRoots =
+        [
+            Path.Combine(root, "upstream", "regex-1.12.2", "testdata"),
+            Path.Combine(root, "upstream", "encoding_rs-0.8.35", "src"),
+        ];
+
+        foreach (string corpusRoot in corpusRoots)
+        {
+            foreach (string path in Directory.EnumerateFiles(corpusRoot, "*", SearchOption.AllDirectories))
+            {
+                string relativePath = Path.GetRelativePath(root, path).Replace('\\', '/');
+                string expectedSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant();
+
+                Assert.Contains("path = \"" + relativePath + "\"", prerequisiteLock, StringComparison.Ordinal);
+                Assert.Contains("sha256 = \"" + expectedSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
+            }
         }
     }
 
