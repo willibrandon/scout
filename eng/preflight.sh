@@ -202,6 +202,7 @@ RG_VERSION="$( ( "$RG_PATH" --version || true ) | sed -n '1p' )"
 expect_equal "reference rg version" "ripgrep 15.1.0 (rev $RG_REV)" "$RG_VERSION"
 
 "$ROOT/eng/verify-generated-artifacts.sh" "$RG_PATH"
+"$ROOT/eng/verify-unicode-data.sh"
 
 RG_PCRE2_PROFILE="$(read_lock_value "ripgrep_pcre2_rg_profile")" || fail "Missing ripgrep_pcre2_rg_profile in tests/PREREQS.lock."
 expect_equal "PCRE2 reference rg build profile" "release-lto" "$RG_PCRE2_PROFILE"

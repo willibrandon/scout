@@ -797,6 +797,10 @@ public sealed partial class PinnedConfigurationTests
     {
         string root = FindRepositoryRoot();
         string unicodeVersion = File.ReadAllText(Path.Combine(root, "upstream", "UNICODE-VERSION")).Trim();
+        string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
+        string verifier = File.ReadAllText(Path.Combine(root, "eng", "verify-unicode-data.sh"));
+        string ucdReadme = File.ReadAllText(Path.Combine(root, "upstream", "ucd", "README.md"));
+        string ucdArchive = Path.Combine(root, "upstream", "ucd", "UCD-16.0.0.zip");
         string tablesRoot = Path.Combine(root, "upstream", "regex-syntax-0.8.8", "unicode_tables");
         string[] expectedTables =
         [
@@ -817,6 +821,18 @@ public sealed partial class PinnedConfigurationTests
         ];
 
         Assert.Equal("16.0.0", unicodeVersion);
+        Assert.True(File.Exists(ucdArchive), "Missing vendored UCD archive.");
+        Assert.Contains("\"$ROOT/eng/verify-unicode-data.sh\"", preflight, StringComparison.Ordinal);
+        Assert.Contains("source_url = \"https://www.unicode.org/Public/16.0.0/ucd/UCD.zip\"", ucdReadme, StringComparison.Ordinal);
+        Assert.Contains("sha256 = \"c86dd81f2b14a43b0cc064aa5f89aa7241386801e35c59c7984e579832634eb2\"", ucdReadme, StringComparison.Ordinal);
+        Assert.Contains("EXPECTED_SHA256=\"c86dd81f2b14a43b0cc064aa5f89aa7241386801e35c59c7984e579832634eb2\"", verifier, StringComparison.Ordinal);
+        Assert.Contains("unzip -l \"$ARCHIVE\"", verifier, StringComparison.Ordinal);
+        Assert.Contains("require_archive_entry \"UnicodeData.txt\"", verifier, StringComparison.Ordinal);
+        Assert.Contains("require_archive_entry \"CaseFolding.txt\"", verifier, StringComparison.Ordinal);
+        Assert.Contains("require_archive_entry \"PropertyAliases.txt\"", verifier, StringComparison.Ordinal);
+        Assert.Contains("require_archive_entry \"PropertyValueAliases.txt\"", verifier, StringComparison.Ordinal);
+        Assert.Contains("require_archive_entry \"Scripts.txt\"", verifier, StringComparison.Ordinal);
+        Assert.Contains("require_archive_entry \"ScriptExtensions.txt\"", verifier, StringComparison.Ordinal);
         Assert.True(File.Exists(Path.Combine(tablesRoot, "LICENSE-UNICODE")), "Missing vendored Unicode license.");
         Assert.True(File.Exists(Path.Combine(tablesRoot, "mod.rs")), "Missing regex-syntax unicode_tables module file.");
         string[] actualTables = Directory.GetFiles(tablesRoot, "*.rs")
