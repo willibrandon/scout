@@ -1963,10 +1963,39 @@ public static class LiteralLineSearcher
         {
             if (pattern[index] == (byte)'(' &&
                 pattern[index + 1] == (byte)'?' &&
-                pattern[index + 2] == (byte)':')
+                (pattern[index + 2] == (byte)':' || IsScopedInlineFlagGroup(pattern, index + 2)))
             {
                 return true;
             }
+        }
+
+        return false;
+    }
+
+    private static bool IsScopedInlineFlagGroup(ReadOnlySpan<byte> pattern, int index)
+    {
+        bool sawFlag = false;
+        while (index < pattern.Length)
+        {
+            byte value = pattern[index];
+            if (value == (byte)':')
+            {
+                return sawFlag;
+            }
+
+            if (value == (byte)'-')
+            {
+                index++;
+                continue;
+            }
+
+            if (!IsRegexFlagByte(value))
+            {
+                return false;
+            }
+
+            sawFlag = true;
+            index++;
         }
 
         return false;
@@ -2901,6 +2930,11 @@ public static class LiteralLineSearcher
     private static bool IsRegexIgnoredWhitespaceByte(byte value)
     {
         return value is (byte)' ' or (byte)'\t' or (byte)'\n' or (byte)'\r' or (byte)'\f';
+    }
+
+    private static bool IsRegexFlagByte(byte value)
+    {
+        return value is (byte)'i' or (byte)'m' or (byte)'R' or (byte)'s' or (byte)'U' or (byte)'u' or (byte)'x';
     }
 
     private static bool TryParseInlineCaseFlag(

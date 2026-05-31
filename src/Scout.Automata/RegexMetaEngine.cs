@@ -18,6 +18,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexSparseDfa? sparseDfa;
     private readonly RegexLazyDfa? lazyDfa;
     private readonly RegexPrefilter? prefilter;
+    private readonly bool utf8;
 
     private RegexMetaEngine(
         RegexEngineKind kind,
@@ -27,7 +28,8 @@ internal sealed class RegexMetaEngine
         RegexDenseDfa? denseDfa,
         RegexSparseDfa? sparseDfa,
         RegexLazyDfa? lazyDfa,
-        RegexPrefilter? prefilter)
+        RegexPrefilter? prefilter,
+        bool utf8)
     {
         Kind = kind;
         this.pikeVm = pikeVm;
@@ -37,6 +39,7 @@ internal sealed class RegexMetaEngine
         this.sparseDfa = sparseDfa;
         this.lazyDfa = lazyDfa;
         this.prefilter = prefilter;
+        this.utf8 = utf8;
     }
 
     public RegexEngineKind Kind { get; }
@@ -62,7 +65,8 @@ internal sealed class RegexMetaEngine
                     denseDfa: null,
                     sparseDfa: null,
                     lazyDfa: null,
-                    prefilter);
+                    prefilter,
+                    nfa.Utf8);
             }
 
             if (nfa.States.Count <= BoundedBacktrackerNfaStateLimit && RegexBoundedBacktracker.CanCompile(nfa))
@@ -75,7 +79,8 @@ internal sealed class RegexMetaEngine
                     denseDfa: null,
                     sparseDfa: null,
                     lazyDfa: null,
-                    prefilter);
+                    prefilter,
+                    nfa.Utf8);
             }
 
             return new RegexMetaEngine(
@@ -86,7 +91,8 @@ internal sealed class RegexMetaEngine
                 denseDfa: null,
                 sparseDfa: null,
                 lazyDfa: null,
-                prefilter);
+                prefilter,
+                nfa.Utf8);
         }
 
         if (nfa.States.Count <= DenseDfaNfaStateLimit &&
@@ -100,7 +106,8 @@ internal sealed class RegexMetaEngine
                 denseDfa: denseDfa,
                 sparseDfa: null,
                 lazyDfa: null,
-                prefilter);
+                prefilter,
+                nfa.Utf8);
         }
 
         if (nfa.States.Count <= SparseDfaNfaStateLimit &&
@@ -114,7 +121,8 @@ internal sealed class RegexMetaEngine
                 denseDfa: null,
                 sparseDfa: sparseDfa,
                 lazyDfa: null,
-                prefilter);
+                prefilter,
+                nfa.Utf8);
         }
 
         return new RegexMetaEngine(
@@ -125,7 +133,8 @@ internal sealed class RegexMetaEngine
             denseDfa: null,
             sparseDfa: null,
             lazyDfa: new RegexLazyDfa(nfa),
-            prefilter);
+            prefilter,
+            nfa.Utf8);
     }
 
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
@@ -159,6 +168,12 @@ internal sealed class RegexMetaEngine
 
     private bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int length)
     {
+        if (utf8 && !RegexByteClass.IsUtf8Boundary(haystack, start))
+        {
+            length = 0;
+            return false;
+        }
+
         if (lazyDfa is not null)
         {
             return lazyDfa.TryMatchAt(haystack, start, out length);

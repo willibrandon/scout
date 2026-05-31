@@ -9,7 +9,9 @@ internal static class RegexDfaOperations
     {
         for (int index = 0; index < nfa.States.Count; index++)
         {
-            if (nfa.States[index].Kind == RegexNfaStateKind.Predicate)
+            RegexNfaState state = nfa.States[index];
+            if (state.Kind == RegexNfaStateKind.Predicate ||
+                state.Utf8 && RegexByteClass.RequiresUtf8ScalarMatch(state.AtomKind, state.Value.Span))
             {
                 return false;
             }
@@ -60,15 +62,18 @@ internal static class RegexDfaOperations
         {
             RegexNfaState state = nfa.States[threads[index]];
             if (state.Kind == RegexNfaStateKind.Atom &&
-                RegexByteClass.AtomMatches(
-                    haystack[position],
+                RegexByteClass.TryGetAtomMatchLength(
+                    haystack,
+                    position,
                     state.AtomKind,
                     state.Value.Span,
                     state.CaseInsensitive,
                     state.MultiLine,
                     state.DotMatchesNewline,
                     state.Crlf,
-                    state.LineTerminator))
+                    state.LineTerminator,
+                    state.Utf8,
+                    out _))
             {
                 return true;
             }

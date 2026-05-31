@@ -15,6 +15,7 @@ internal sealed class RegexCorpusCase
         int boundsEnd,
         bool anchored,
         bool caseInsensitive,
+        bool utf8,
         bool compiles)
     {
         Name = name;
@@ -27,6 +28,7 @@ internal sealed class RegexCorpusCase
         BoundsEnd = boundsEnd;
         Anchored = anchored;
         CaseInsensitive = caseInsensitive;
+        Utf8 = utf8;
         Compiles = compiles;
     }
 
@@ -49,6 +51,8 @@ internal sealed class RegexCorpusCase
     public bool Anchored { get; }
 
     public bool CaseInsensitive { get; }
+
+    public bool Utf8 { get; }
 
     public bool Compiles { get; }
 }

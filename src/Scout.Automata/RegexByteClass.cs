@@ -32,8 +32,60 @@ internal static class RegexByteClass
         };
     }
 
-    public static bool PredicateMatches(ReadOnlySpan<byte> haystack, int position, RegexSyntaxKind kind, bool multiLine, bool crlf, byte lineTerminator)
+    public static bool TryGetAtomMatchLength(
+        ReadOnlySpan<byte> haystack,
+        int position,
+        RegexSyntaxKind kind,
+        ReadOnlySpan<byte> expression,
+        bool caseInsensitive,
+        bool multiLine,
+        bool dotMatchesNewline,
+        bool crlf,
+        byte lineTerminator,
+        bool utf8,
+        out int length)
     {
+        length = 0;
+        bool requiresUtf8ScalarMatch = utf8 && RequiresUtf8ScalarMatch(kind, expression);
+        if (position >= haystack.Length ||
+            requiresUtf8ScalarMatch && !IsUtf8Boundary(haystack, position) ||
+            !AtomMatches(
+                haystack[position],
+                kind,
+                expression,
+                caseInsensitive,
+                multiLine,
+                dotMatchesNewline,
+                crlf,
+                lineTerminator))
+        {
+            return false;
+        }
+
+        length = 1;
+        if (requiresUtf8ScalarMatch &&
+            TryGetUtf8ScalarLength(haystack, position, out int scalarLength))
+        {
+            length = scalarLength;
+        }
+
+        return true;
+    }
+
+    public static bool PredicateMatches(
+        ReadOnlySpan<byte> haystack,
+        int position,
+        RegexSyntaxKind kind,
+        bool multiLine,
+        bool crlf,
+        byte lineTerminator,
+        bool utf8)
+    {
+        if (utf8 && IsBoundaryPredicate(kind) && !IsUtf8Boundary(haystack, position))
+        {
+            return false;
+        }
+
         return kind switch
         {
             RegexSyntaxKind.StartAnchor => IsStartAnchorMatch(haystack, position, multiLine, crlf, lineTerminator),
@@ -44,6 +96,140 @@ internal static class RegexByteClass
             RegexSyntaxKind.WordEndBoundary => IsRegexWordEndBoundary(haystack, position),
             _ => false,
         };
+    }
+
+    public static bool IsUtf8Boundary(ReadOnlySpan<byte> bytes, int position)
+    {
+        if (position <= 0 || position >= bytes.Length)
+        {
+            return true;
+        }
+
+        int firstCandidate = Math.Max(0, position - 3);
+        for (int index = firstCandidate; index < position; index++)
+        {
+            if (TryGetUtf8ScalarLength(bytes, index, out int length) &&
+                length > 1 &&
+                position < index + length)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public static bool RequiresUtf8ScalarMatch(RegexSyntaxKind kind, ReadOnlySpan<byte> expression)
+    {
+        return kind switch
+        {
+            RegexSyntaxKind.Dot
+                or RegexSyntaxKind.AnyClass
+                or RegexSyntaxKind.NotDigitClass
+                or RegexSyntaxKind.NotWordClass
+                or RegexSyntaxKind.NotWhitespaceClass => true,
+            RegexSyntaxKind.CharacterClass => IsNegatedClass(expression),
+            _ => false,
+        };
+    }
+
+    private static bool TryGetUtf8ScalarLength(ReadOnlySpan<byte> bytes, int position, out int length)
+    {
+        length = 0;
+        if (position >= bytes.Length)
+        {
+            return false;
+        }
+
+        byte first = bytes[position];
+        if (first <= 0x7F)
+        {
+            length = 1;
+            return true;
+        }
+
+        if (first is >= 0xC2 and <= 0xDF)
+        {
+            return TryRequireUtf8Continuations(bytes, position, 2, out length);
+        }
+
+        if (first == 0xE0)
+        {
+            return position + 1 < bytes.Length &&
+                bytes[position + 1] is >= 0xA0 and <= 0xBF &&
+                TryRequireUtf8Continuations(bytes, position, 3, out length);
+        }
+
+        if (first is >= 0xE1 and <= 0xEC or >= 0xEE and <= 0xEF)
+        {
+            return TryRequireUtf8Continuations(bytes, position, 3, out length);
+        }
+
+        if (first == 0xED)
+        {
+            return position + 1 < bytes.Length &&
+                bytes[position + 1] is >= 0x80 and <= 0x9F &&
+                TryRequireUtf8Continuations(bytes, position, 3, out length);
+        }
+
+        if (first == 0xF0)
+        {
+            return position + 1 < bytes.Length &&
+                bytes[position + 1] is >= 0x90 and <= 0xBF &&
+                TryRequireUtf8Continuations(bytes, position, 4, out length);
+        }
+
+        if (first is >= 0xF1 and <= 0xF3)
+        {
+            return TryRequireUtf8Continuations(bytes, position, 4, out length);
+        }
+
+        if (first == 0xF4)
+        {
+            return position + 1 < bytes.Length &&
+                bytes[position + 1] is >= 0x80 and <= 0x8F &&
+                TryRequireUtf8Continuations(bytes, position, 4, out length);
+        }
+
+        return false;
+    }
+
+    private static bool TryRequireUtf8Continuations(ReadOnlySpan<byte> bytes, int position, int requiredLength, out int length)
+    {
+        length = 0;
+        if (position + requiredLength > bytes.Length)
+        {
+            return false;
+        }
+
+        for (int index = position + 1; index < position + requiredLength; index++)
+        {
+            if (!IsUtf8Continuation(bytes[index]))
+            {
+                return false;
+            }
+        }
+
+        length = requiredLength;
+        return true;
+    }
+
+    private static bool IsUtf8Continuation(byte value)
+    {
+        return value is >= 0x80 and <= 0xBF;
+    }
+
+    private static bool IsNegatedClass(ReadOnlySpan<byte> expression)
+    {
+        return !expression.IsEmpty && expression[0] == (byte)'^';
+    }
+
+    private static bool IsBoundaryPredicate(RegexSyntaxKind kind)
+    {
+        return kind is RegexSyntaxKind.WordBoundary
+            or RegexSyntaxKind.NotWordBoundary
+            or RegexSyntaxKind.WordStartBoundary
+            or RegexSyntaxKind.WordEndBoundary;
     }
 
     private static bool IsStartAnchorMatch(ReadOnlySpan<byte> haystack, int position, bool multiLine, bool crlf, byte lineTerminator)

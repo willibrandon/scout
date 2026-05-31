@@ -6,8 +6,8 @@ namespace Scout;
 internal sealed class PikeVm
 {
     private readonly RegexNfa nfa;
-    private List<int> current = [];
-    private List<int> next = [];
+    private List<(int State, int Position)> current = [];
+    private List<(int State, int Position)> next = [];
 
     public PikeVm(RegexNfa nfa)
     {
@@ -19,9 +19,10 @@ internal sealed class PikeVm
         current.Clear();
         AddThread(nfa.StartState, haystack, start, current, new bool[nfa.States.Count], new bool[nfa.States.Count]);
         int deferredAcceptLength = -1;
-        for (int position = start; position <= haystack.Length; position++)
+        while (current.Count > 0)
         {
-            int acceptIndex = current.IndexOf(0);
+            int position = MinPosition(current);
+            int acceptIndex = IndexOfAccept(current, position);
             if (acceptIndex >= 0)
             {
                 deferredAcceptLength = position - start;
@@ -32,27 +33,32 @@ internal sealed class PikeVm
                 }
             }
 
-            if (position == haystack.Length)
-            {
-                break;
-            }
-
             next.Clear();
             for (int index = 0; index < current.Count; index++)
             {
-                RegexNfaState state = nfa.States[current[index]];
+                (int stateIndex, int threadPosition) = current[index];
+                if (threadPosition != position)
+                {
+                    next.Add(current[index]);
+                    continue;
+                }
+
+                RegexNfaState state = nfa.States[stateIndex];
                 if (state.Kind == RegexNfaStateKind.Atom &&
-                    RegexByteClass.AtomMatches(
-                        haystack[position],
+                    RegexByteClass.TryGetAtomMatchLength(
+                        haystack,
+                        position,
                         state.AtomKind,
                         state.Value.Span,
                         state.CaseInsensitive,
                         state.MultiLine,
                         state.DotMatchesNewline,
                         state.Crlf,
-                        state.LineTerminator))
+                        state.LineTerminator,
+                        state.Utf8,
+                        out int consume))
                 {
-                    AddThread(state.Next, haystack, position + 1, next, new bool[nfa.States.Count], new bool[nfa.States.Count]);
+                    AddThread(state.Next, haystack, position + consume, next, new bool[nfa.States.Count], new bool[nfa.States.Count]);
                 }
             }
 
@@ -73,7 +79,7 @@ internal sealed class PikeVm
         int stateIndex,
         ReadOnlySpan<byte> haystack,
         int position,
-        List<int> threads,
+        List<(int State, int Position)> threads,
         bool[] visited,
         bool[] closedSplits)
     {
@@ -99,14 +105,14 @@ internal sealed class PikeVm
                 AddThread(state.Alternative, haystack, position, threads, visited, closedSplits);
                 break;
             case RegexNfaStateKind.Predicate:
-                if (RegexByteClass.PredicateMatches(haystack, position, state.AtomKind, state.MultiLine, state.Crlf, state.LineTerminator))
+                if (RegexByteClass.PredicateMatches(haystack, position, state.AtomKind, state.MultiLine, state.Crlf, state.LineTerminator, state.Utf8))
                 {
                     AddThread(state.Next, haystack, position, threads, visited, closedSplits);
                 }
 
                 break;
             default:
-                threads.Add(stateIndex);
+                threads.Add((stateIndex, position));
                 break;
         }
     }
@@ -115,7 +121,7 @@ internal sealed class PikeVm
         int stateIndex,
         ReadOnlySpan<byte> haystack,
         int position,
-        List<int> threads,
+        List<(int State, int Position)> threads,
         bool[] visited,
         bool[] closedSplits)
     {
@@ -137,7 +143,7 @@ internal sealed class PikeVm
         }
     }
 
-    private bool HasEarlierConsumer(List<int> threads, int acceptIndex, ReadOnlySpan<byte> haystack, int position)
+    private bool HasEarlierConsumer(List<(int State, int Position)> threads, int acceptIndex, ReadOnlySpan<byte> haystack, int position)
     {
         if (position >= haystack.Length)
         {
@@ -146,22 +152,55 @@ internal sealed class PikeVm
 
         for (int index = 0; index < acceptIndex; index++)
         {
-            RegexNfaState state = nfa.States[threads[index]];
+            if (threads[index].Position != position)
+            {
+                continue;
+            }
+
+            RegexNfaState state = nfa.States[threads[index].State];
             if (state.Kind == RegexNfaStateKind.Atom &&
-                RegexByteClass.AtomMatches(
-                    haystack[position],
+                RegexByteClass.TryGetAtomMatchLength(
+                    haystack,
+                    position,
                     state.AtomKind,
                     state.Value.Span,
                     state.CaseInsensitive,
                     state.MultiLine,
                     state.DotMatchesNewline,
                     state.Crlf,
-                    state.LineTerminator))
+                    state.LineTerminator,
+                    state.Utf8,
+                    out _))
             {
                 return true;
             }
         }
 
         return false;
+    }
+
+    private int IndexOfAccept(List<(int State, int Position)> threads, int position)
+    {
+        for (int index = 0; index < threads.Count; index++)
+        {
+            (int stateIndex, int threadPosition) = threads[index];
+            if (threadPosition == position && nfa.States[stateIndex].Kind == RegexNfaStateKind.Accept)
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private static int MinPosition(List<(int State, int Position)> threads)
+    {
+        int position = threads[0].Position;
+        for (int index = 1; index < threads.Count; index++)
+        {
+            position = Math.Min(position, threads[index].Position);
+        }
+
+        return position;
     }
 }

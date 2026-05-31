@@ -333,6 +333,34 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies UTF-8 mode does not report matches inside a valid code point.
+    /// </summary>
+    [Fact]
+    public void Utf8ModeDoesNotSplitCodepoints()
+    {
+        byte[] poop = [0xF0, 0x9F, 0x92, 0xA9];
+        byte[] delta = [0xCE, 0xB4];
+
+        Assert.Equal(new RegexMatch(0, 4), RegexAutomaton.Compile("."u8).Find(poop));
+        Assert.Equal(new RegexMatch(0, 4), RegexAutomaton.Compile("[^a]"u8).Find(poop));
+        Assert.Equal(new RegexMatch(4, 0), RegexAutomaton.Compile(""u8).Find(poop, startAt: 1));
+        Assert.Equal(new RegexMatch(2, 0), RegexAutomaton.Compile(@"\B"u8).Find(delta, startAt: 1));
+    }
+
+    /// <summary>
+    /// Verifies byte mode preserves byte-by-byte matching.
+    /// </summary>
+    [Fact]
+    public void ByteModeCanSplitCodepoints()
+    {
+        byte[] poop = [0xF0, 0x9F, 0x92, 0xA9];
+
+        Assert.Equal(new RegexMatch(0, 1), RegexAutomaton.Compile("."u8, caseInsensitive: false, multiLine: false, dotMatchesNewline: false, utf8: false).Find(poop));
+        Assert.Equal(new RegexMatch(1, 0), RegexAutomaton.Compile(""u8, caseInsensitive: false, multiLine: false, dotMatchesNewline: false, utf8: false).Find(poop, startAt: 1));
+        Assert.Equal(new RegexMatch(1, 1), RegexAutomaton.Compile("(?-u:.)"u8).Find(poop, startAt: 1));
+    }
+
+    /// <summary>
     /// Verifies root compile options match multiline search configuration and remain overridable by inline flags.
     /// </summary>
     [Fact]

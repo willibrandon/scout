@@ -365,6 +365,10 @@ public sealed class RegexCorpusTests
                 "perl-class-space",
                 "perl-class-word",
                 "word-boundary",
+                "word-boundary-negated",
+                "empty-no-split-codepoint",
+                "dot-always-matches-codepoint",
+                "negated-class-always-matches-codepoint",
                 "case-insensitive-is-ascii-only",
             ]),
             ("no-unicode.toml",
@@ -491,11 +495,11 @@ public sealed class RegexCorpusTests
         RegexCorpusCase testCase = RegexCorpusLoader.Load(relativePath, name);
         if (!testCase.Compiles)
         {
-            AssertCompileFails(testCase.Patterns, testCase.LineTerminator, testCase.CaseInsensitive);
+            AssertCompileFails(testCase.Patterns, testCase.LineTerminator, testCase.CaseInsensitive, testCase.Utf8);
             return;
         }
 
-        RegexAutomaton[] automata = CompileAll(testCase.Patterns, testCase.LineTerminator, testCase.CaseInsensitive);
+        RegexAutomaton[] automata = CompileAll(testCase.Patterns, testCase.LineTerminator, testCase.CaseInsensitive, testCase.Utf8);
         RegexMatch[] actual = FindAll(automata, testCase.Haystack, testCase.MatchLimit, testCase.BoundsStart, testCase.BoundsEnd, testCase.Anchored);
 
         Assert.True(
@@ -534,22 +538,22 @@ public sealed class RegexCorpusTests
         return keys.ToArray();
     }
 
-    private static RegexAutomaton[] CompileAll(IReadOnlyList<byte[]> patterns, byte lineTerminator, bool caseInsensitive)
+    private static RegexAutomaton[] CompileAll(IReadOnlyList<byte[]> patterns, byte lineTerminator, bool caseInsensitive, bool utf8)
     {
         var automata = new RegexAutomaton[patterns.Count];
         for (int index = 0; index < patterns.Count; index++)
         {
-            automata[index] = RegexAutomaton.Compile(patterns[index], caseInsensitive, multiLine: false, dotMatchesNewline: false, crlf: false, lineTerminator);
+            automata[index] = RegexAutomaton.Compile(patterns[index], caseInsensitive, multiLine: false, dotMatchesNewline: false, crlf: false, lineTerminator, utf8);
         }
 
         return automata;
     }
 
-    private static void AssertCompileFails(IReadOnlyList<byte[]> patterns, byte lineTerminator, bool caseInsensitive)
+    private static void AssertCompileFails(IReadOnlyList<byte[]> patterns, byte lineTerminator, bool caseInsensitive, bool utf8)
     {
         for (int index = 0; index < patterns.Count; index++)
         {
-            Assert.Throws<FormatException>(() => RegexAutomaton.Compile(patterns[index], caseInsensitive, multiLine: false, dotMatchesNewline: false, crlf: false, lineTerminator));
+            Assert.Throws<FormatException>(() => RegexAutomaton.Compile(patterns[index], caseInsensitive, multiLine: false, dotMatchesNewline: false, crlf: false, lineTerminator, utf8));
         }
     }
 

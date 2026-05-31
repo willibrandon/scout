@@ -45,6 +45,7 @@ public sealed class RegexAutomaton
     /// <param name="dotMatchesNewline">Whether <c>.</c> matches line feeds.</param>
     /// <param name="crlf">Whether CRLF mode treats carriage returns and line feeds as line terminators.</param>
     /// <param name="lineTerminator">The line terminator byte used when CRLF mode is disabled.</param>
+    /// <param name="utf8">Whether empty and scalar-consuming matches must respect UTF-8 code point boundaries.</param>
     /// <returns>The compiled automaton.</returns>
     public static RegexAutomaton Compile(
         ReadOnlySpan<byte> pattern,
@@ -52,10 +53,11 @@ public sealed class RegexAutomaton
         bool multiLine,
         bool dotMatchesNewline,
         bool crlf = false,
-        byte lineTerminator = (byte)'\n')
+        byte lineTerminator = (byte)'\n',
+        bool utf8 = true)
     {
         RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
-        var options = new RegexCompileOptions(caseInsensitive, swapGreed: false, multiLine, dotMatchesNewline, crlf, lineTerminator);
+        var options = new RegexCompileOptions(caseInsensitive, swapGreed: false, multiLine, dotMatchesNewline, crlf, lineTerminator, utf8);
         RegexNfa nfa = RegexNfaCompiler.Compile(
             tree.Root,
             options);

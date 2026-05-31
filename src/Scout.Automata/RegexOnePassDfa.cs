@@ -22,7 +22,13 @@ internal sealed class RegexOnePassDfa
         bool sawBranch = false;
         for (int index = 0; index < nfa.States.Count; index++)
         {
-            RegexNfaStateKind kind = nfa.States[index].Kind;
+            RegexNfaState state = nfa.States[index];
+            RegexNfaStateKind kind = state.Kind;
+            if (state.Utf8 && RegexByteClass.RequiresUtf8ScalarMatch(state.AtomKind, state.Value.Span))
+            {
+                return false;
+            }
+
             sawPredicate |= kind == RegexNfaStateKind.Predicate;
             sawBranch |= kind is RegexNfaStateKind.Split
                 or RegexNfaStateKind.GreedyLoopSplit
@@ -87,15 +93,18 @@ internal sealed class RegexOnePassDfa
         {
             RegexNfaState state = nfa.States[current[index]];
             if (state.Kind != RegexNfaStateKind.Atom ||
-                !RegexByteClass.AtomMatches(
-                    haystack[position],
+                !RegexByteClass.TryGetAtomMatchLength(
+                    haystack,
+                    position,
                     state.AtomKind,
                     state.Value.Span,
                     state.CaseInsensitive,
                     state.MultiLine,
                     state.DotMatchesNewline,
                     state.Crlf,
-                    state.LineTerminator))
+                    state.LineTerminator,
+                    state.Utf8,
+                    out int consume))
             {
                 continue;
             }
@@ -109,7 +118,7 @@ internal sealed class RegexOnePassDfa
             AddThread(
                 state.Next,
                 haystack,
-                position + 1,
+                position + consume,
                 destination,
                 new bool[nfa.States.Count],
                 new bool[nfa.States.Count]);
@@ -148,7 +157,7 @@ internal sealed class RegexOnePassDfa
                 AddThread(state.Alternative, haystack, position, threads, visited, closedSplits);
                 break;
             case RegexNfaStateKind.Predicate:
-                if (RegexByteClass.PredicateMatches(haystack, position, state.AtomKind, state.MultiLine, state.Crlf, state.LineTerminator))
+                if (RegexByteClass.PredicateMatches(haystack, position, state.AtomKind, state.MultiLine, state.Crlf, state.LineTerminator, state.Utf8))
                 {
                     AddThread(state.Next, haystack, position, threads, visited, closedSplits);
                 }
@@ -197,15 +206,18 @@ internal sealed class RegexOnePassDfa
         {
             RegexNfaState state = nfa.States[threads[index]];
             if (state.Kind == RegexNfaStateKind.Atom &&
-                RegexByteClass.AtomMatches(
-                    haystack[position],
+                RegexByteClass.TryGetAtomMatchLength(
+                    haystack,
+                    position,
                     state.AtomKind,
                     state.Value.Span,
                     state.CaseInsensitive,
                     state.MultiLine,
                     state.DotMatchesNewline,
                     state.Crlf,
-                    state.LineTerminator))
+                    state.LineTerminator,
+                    state.Utf8,
+                    out _))
             {
                 return true;
             }

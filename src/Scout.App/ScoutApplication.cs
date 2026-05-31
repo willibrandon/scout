@@ -467,6 +467,11 @@ internal static class ScoutApplication
             WrapNonAsciiPatterns(patterns);
         }
 
+        if (!lowArgs.FixedStrings && !lowArgs.Unicode)
+        {
+            WrapNoUnicodePatterns(patterns);
+        }
+
         LogSearchConfiguration(logger, positional, firstPathIndex, lowArgs, patterns);
         if (lowArgs.SearchMode == CliSearchMode.Json)
         {
@@ -720,7 +725,8 @@ internal static class ScoutApplication
                     lowArgs.Multiline,
                     lowArgs.MultilineDotall,
                     lowArgs.Crlf,
-                    lowArgs.NullData ? (byte)'\0' : (byte)'\n');
+                    lowArgs.NullData ? (byte)'\0' : (byte)'\n',
+                    lowArgs.Unicode);
             }
 
             return false;
@@ -7196,6 +7202,14 @@ internal static class ScoutApplication
         }
     }
 
+    private static void WrapNoUnicodePatterns(List<byte[]> patterns)
+    {
+        for (int index = 0; index < patterns.Count; index++)
+        {
+            patterns[index] = WrapNoUnicodeGroup(patterns[index]);
+        }
+    }
+
     private static void WrapRegexPatterns(List<byte[]> patterns)
     {
         for (int index = 0; index < patterns.Count; index++)
@@ -7277,6 +7291,19 @@ internal static class ScoutApplication
         wrapped[1] = (byte)'?';
         wrapped[2] = (byte)':';
         pattern.CopyTo(wrapped.AsSpan(3));
+        wrapped[^1] = (byte)')';
+        return wrapped;
+    }
+
+    private static byte[] WrapNoUnicodeGroup(byte[] pattern)
+    {
+        byte[] wrapped = new byte[pattern.Length + 6];
+        wrapped[0] = (byte)'(';
+        wrapped[1] = (byte)'?';
+        wrapped[2] = (byte)'-';
+        wrapped[3] = (byte)'u';
+        wrapped[4] = (byte)':';
+        pattern.CopyTo(wrapped.AsSpan(5));
         wrapped[^1] = (byte)')';
         return wrapped;
     }

@@ -6,6 +6,7 @@ namespace Scout;
 internal sealed class RegexNfaCompiler
 {
     private readonly List<RegexNfaState> states = [];
+    private bool sawUtf8Disabled;
 
     public static RegexNfa Compile(RegexSyntaxNode root)
     {
@@ -19,7 +20,7 @@ internal sealed class RegexNfaCompiler
         var compiler = new RegexNfaCompiler();
         int accept = compiler.AddAccept();
         int start = compiler.CompileNode(root, accept, options);
-        return new RegexNfa(compiler.states, start);
+        return new RegexNfa(compiler.states, start, compiler.RequiresUtf8SearchBoundary(options.Utf8));
     }
 
     private int CompileNode(RegexSyntaxNode node, int next, RegexCompileOptions options)
@@ -46,7 +47,9 @@ internal sealed class RegexNfaCompiler
             RegexSyntaxNode child = node.Nodes[index];
             if (child is RegexInlineFlagsNode flags)
             {
-                currentOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
+                RegexCompileOptions nextOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
+                sawUtf8Disabled |= currentOptions.Utf8 && !nextOptions.Utf8;
+                currentOptions = nextOptions;
                 continue;
             }
 
@@ -78,6 +81,7 @@ internal sealed class RegexNfaCompiler
     private int CompileGroup(RegexGroupNode node, int next, RegexCompileOptions options)
     {
         RegexCompileOptions groupOptions = options.Apply(node.EnabledFlags, node.DisabledFlags);
+        sawUtf8Disabled |= options.Utf8 && !groupOptions.Utf8;
         return CompileNode(node.Child, next, groupOptions);
     }
 
@@ -135,6 +139,7 @@ internal sealed class RegexNfaCompiler
             options.DotMatchesNewline,
             options.Crlf,
             options.LineTerminator,
+            options.Utf8,
             next,
             alternative: -1));
         return state;
@@ -165,8 +170,29 @@ internal sealed class RegexNfaCompiler
             dotMatchesNewline: false,
             crlf: false,
             lineTerminator: (byte)'\n',
+            utf8: false,
             next,
             alternative);
+    }
+
+    private bool RequiresUtf8SearchBoundary(bool rootUtf8)
+    {
+        if (!rootUtf8 || sawUtf8Disabled)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < states.Count; index++)
+        {
+            RegexNfaState state = states[index];
+            if (state.Kind is (RegexNfaStateKind.Atom or RegexNfaStateKind.Predicate) &&
+                !state.Utf8)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool IsPredicate(RegexSyntaxKind kind)

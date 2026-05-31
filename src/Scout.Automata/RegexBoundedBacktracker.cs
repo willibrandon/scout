@@ -84,17 +84,19 @@ internal sealed class RegexBoundedBacktracker
                     end = position;
                     return true;
                 case RegexNfaStateKind.Atom:
-                    return position < haystack.Length &&
-                        RegexByteClass.AtomMatches(
-                            haystack[position],
+                    return RegexByteClass.TryGetAtomMatchLength(
+                            haystack,
+                            position,
                             state.AtomKind,
                             state.Value.Span,
                             state.CaseInsensitive,
                             state.MultiLine,
                             state.DotMatchesNewline,
                             state.Crlf,
-                            state.LineTerminator) &&
-                        TryMatchState(state.Next, start, position + 1, haystack, visiting, out end);
+                            state.LineTerminator,
+                            state.Utf8,
+                            out int consume) &&
+                        TryMatchState(state.Next, start, position + consume, haystack, visiting, out end);
                 case RegexNfaStateKind.Predicate:
                     return RegexByteClass.PredicateMatches(
                             haystack,
@@ -102,7 +104,8 @@ internal sealed class RegexBoundedBacktracker
                             state.AtomKind,
                             state.MultiLine,
                             state.Crlf,
-                            state.LineTerminator) &&
+                            state.LineTerminator,
+                            state.Utf8) &&
                         TryMatchState(state.Next, start, position, haystack, visiting, out end);
                 case RegexNfaStateKind.Split:
                 case RegexNfaStateKind.GreedyLoopSplit:

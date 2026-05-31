@@ -13,6 +13,7 @@ internal sealed class RegexNfaState
         bool dotMatchesNewline,
         bool crlf,
         byte lineTerminator,
+        bool utf8,
         int next,
         int alternative)
     {
@@ -24,6 +25,7 @@ internal sealed class RegexNfaState
         DotMatchesNewline = dotMatchesNewline;
         Crlf = crlf;
         LineTerminator = lineTerminator;
+        Utf8 = utf8;
         Next = next;
         Alternative = alternative;
     }
@@ -43,6 +45,8 @@ internal sealed class RegexNfaState
     public bool Crlf { get; }
 
     public byte LineTerminator { get; }
+
+    public bool Utf8 { get; }
 
     public int Next { get; }
 
