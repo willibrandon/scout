@@ -4,16 +4,24 @@ namespace Scout.Flags.Definitions;
 
 internal readonly struct JsonFlag : IFlag<JsonFlag>
 {
-    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(
+    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.SwitchWithName(
         "--json",
         shortName: null,
         "--no-json",
         aliases: [],
         FlagCategory.Output,
         "Emit JSON Lines output.",
-        static lowArgs =>
+        static (lowArgs, matchedName) =>
         {
-            lowArgs.SetSearchMode(CliSearchMode.Json);
+            if (matchedName == "--no-json")
+            {
+                lowArgs.ClearJsonMode();
+            }
+            else
+            {
+                lowArgs.SetSearchMode(CliSearchMode.Json);
+            }
+
             return null;
         });
 }

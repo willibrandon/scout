@@ -4,16 +4,16 @@ namespace Scout.Flags.Definitions;
 
 internal readonly struct ColumnFlag : IFlag<ColumnFlag>
 {
-    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(
+    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.SwitchWithName(
         "--column",
         shortName: null,
         "--no-column",
         aliases: [],
         FlagCategory.Output,
         "Print column numbers with matching lines.",
-        static lowArgs =>
+        static (lowArgs, matchedName) =>
         {
-            lowArgs.SetColumn(true);
+            lowArgs.SetColumn(matchedName != "--no-column");
             return null;
         });
 }

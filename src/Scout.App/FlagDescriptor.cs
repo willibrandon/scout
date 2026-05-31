@@ -202,6 +202,16 @@ internal sealed class FlagDescriptor
     }
 
     /// <summary>
+    /// Determines whether the descriptor recognizes the given negated long spelling.
+    /// </summary>
+    /// <param name="name">The long flag spelling.</param>
+    /// <returns><see langword="true" /> when the name matches this descriptor's negated spelling.</returns>
+    public bool MatchesNegatedName(string name)
+    {
+        return NegatedName is not null && string.Equals(NegatedName, name, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Applies this switch flag to the low-level argument state.
     /// </summary>
     /// <param name="lowArgs">The low-level argument state.</param>

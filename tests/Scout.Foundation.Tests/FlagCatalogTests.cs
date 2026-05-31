@@ -18,7 +18,8 @@ public sealed class FlagCatalogTests
         Assert.True(GeneratedFlagCatalog.TryFindLongSwitch("--files", out FlagDescriptor files));
         Assert.Equal("--files", files.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindLongSwitch("--no-json", out FlagDescriptor noJson));
-        Assert.Equal("--no-json", noJson.LongName);
+        Assert.Equal("--json", noJson.LongName);
+        Assert.Equal("--no-json", noJson.NegatedName);
         Assert.True(GeneratedFlagCatalog.TryFindShortSwitch('c', out FlagDescriptor count));
         Assert.Equal("--count", count.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindShortSwitch('U', out FlagDescriptor multiline));
@@ -207,6 +208,16 @@ public sealed class FlagCatalogTests
             Assert.Contains(descriptor.LongName, zshCompletion, StringComparison.Ordinal);
             Assert.Contains("-l " + descriptor.LongName[2..], fishCompletion, StringComparison.Ordinal);
             Assert.Contains("::new('" + descriptor.LongName + "'", powerShellCompletion, StringComparison.Ordinal);
+
+            if (descriptor.NegatedName is string negatedName)
+            {
+                Assert.Contains(negatedName, longHelp, StringComparison.Ordinal);
+                AssertManContainsOption(manPage, negatedName);
+                Assert.Contains(negatedName, bashCompletion, StringComparison.Ordinal);
+                Assert.Contains(negatedName, zshCompletion, StringComparison.Ordinal);
+                Assert.Contains("-l " + negatedName[2..], fishCompletion, StringComparison.Ordinal);
+                Assert.Contains("::new('" + negatedName + "'", powerShellCompletion, StringComparison.Ordinal);
+            }
 
             if (descriptor.ShortName is char shortName)
             {

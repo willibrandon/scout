@@ -4,16 +4,16 @@ namespace Scout.Flags.Definitions;
 
 internal readonly struct TrimFlag : IFlag<TrimFlag>
 {
-    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(
+    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.SwitchWithName(
         "--trim",
         shortName: null,
         "--no-trim",
         aliases: [],
         FlagCategory.Output,
         "Trim leading ASCII whitespace from printed lines.",
-        static lowArgs =>
+        static (lowArgs, matchedName) =>
         {
-            lowArgs.SetTrim(true);
+            lowArgs.SetTrim(matchedName != "--no-trim");
             return null;
         });
 }
