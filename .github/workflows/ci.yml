@@ -213,6 +213,8 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.102
+      - name: Link native entry spike
+        run: spike/build-unix.sh ${{ matrix.rid }}
       - name: Link native executable
         run: native/build-app-unix.sh ${{ matrix.rid }} --smoke-only
 
@@ -232,6 +234,8 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.102
+      - name: Link native entry spike
+        run: spike/build-unix.sh ${{ matrix.rid }}
       - name: Link native executable
         run: native/build-app-unix.sh ${{ matrix.rid }} --smoke-only
 
@@ -262,6 +266,7 @@ jobs:
             exit /b 1
           )
           call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=${{ matrix.vsarch }}
+          pwsh -NoProfile -ExecutionPolicy Bypass -File spike/build-windows.ps1 ${{ matrix.rid }}
           pwsh -NoProfile -ExecutionPolicy Bypass -File native/build-app-windows.ps1 ${{ matrix.rid }}
 
   performance-gate:

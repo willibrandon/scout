@@ -84,6 +84,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("eng/preflight.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("cancel-in-progress: true", workflow, StringComparison.Ordinal);
         Assert.Contains("if: github.event_name == 'workflow_dispatch'", workflow, StringComparison.Ordinal);
+        Assert.Contains("spike/build-unix.sh ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("spike/build-windows.ps1 ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
         Assert.Contains("native/build-app-unix.sh ${{ matrix.rid }} --smoke-only", workflow, StringComparison.Ordinal);
         Assert.Contains("native/build-app-unix.sh osx-arm64 --with-differentials", workflow, StringComparison.Ordinal);
         Assert.Contains("native/build-app-windows.ps1 ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
@@ -643,6 +645,8 @@ public sealed partial class PinnedConfigurationTests
         string spikeEntry = File.ReadAllText(Path.Combine(root, "spike", "Scout.Entry", "ScoutEntry.cs"));
         string spikeBuildScript = File.ReadAllText(Path.Combine(root, "spike", "build-unix.sh"));
         string spikeUnixEntry = File.ReadAllText(Path.Combine(root, "spike", "native", "scout_main.c"));
+        string spikeWindowsEntry = File.ReadAllText(Path.Combine(root, "spike", "native", "scout_wmain.c"));
+        string spikeWindowsBuildScript = File.ReadAllText(Path.Combine(root, "spike", "build-windows.ps1"));
 
         Assert.Contains("[UnmanagedCallersOnly(EntryPoint = \"scout_entry\")]", scoutEntry, StringComparison.Ordinal);
         Assert.Contains("NativeArgumentReader.CaptureUnix(argc, argv)", scoutEntry, StringComparison.Ordinal);
@@ -658,6 +662,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("return scout_entry(0, (char **)0, (char **)0);", windowsEntry, StringComparison.Ordinal);
         Assert.Contains("<RootNamespace>Scout.Entry</RootNamespace>", spikeProject, StringComparison.Ordinal);
         Assert.Contains("[LibraryImport(\"libc\", EntryPoint = \"write\")]", spikeEntry, StringComparison.Ordinal);
+        Assert.Contains("[LibraryImport(\"kernel32.dll\", EntryPoint = \"GetCommandLineW\")]", spikeEntry, StringComparison.Ordinal);
+        Assert.Contains("[LibraryImport(\"shell32.dll\", EntryPoint = \"CommandLineToArgvW\", SetLastError = true)]", spikeEntry, StringComparison.Ordinal);
+        Assert.Contains("[LibraryImport(\"kernel32.dll\", EntryPoint = \"WriteFile\", SetLastError = true)]", spikeEntry, StringComparison.Ordinal);
         Assert.DoesNotContain("[DllImport", spikeEntry, StringComparison.Ordinal);
         Assert.Contains("osx-arm64|osx-x64|linux-x64|linux-arm64", spikeBuildScript, StringComparison.Ordinal);
         Assert.Contains("libSystem.Security.Cryptography.Native.OpenSsl.a", spikeBuildScript, StringComparison.Ordinal);
@@ -668,6 +675,16 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("cmp \"$OUT/expected\" \"$OUT/got\"", spikeBuildScript, StringComparison.Ordinal);
         Assert.DoesNotContain("not implemented", spikeBuildScript, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("return scout_entry(argc, argv, envp);", spikeUnixEntry, StringComparison.Ordinal);
+        Assert.Contains("int wmain(int argc, wchar_t **argv, wchar_t **envp)", spikeWindowsEntry, StringComparison.Ordinal);
+        Assert.Contains("return scout_entry(0, (char **)0, (char **)0);", spikeWindowsEntry, StringComparison.Ordinal);
+        Assert.Contains("[ValidateSet(\"win-x64\", \"win-arm64\")]", spikeWindowsBuildScript, StringComparison.Ordinal);
+        Assert.Contains("Scout.Entry.lib", spikeWindowsBuildScript, StringComparison.Ordinal);
+        Assert.Contains("/ENTRY:wmainCRTStartup", spikeWindowsBuildScript, StringComparison.Ordinal);
+        Assert.Contains("Runtime.VxsortEnabled.lib", spikeWindowsBuildScript, StringComparison.Ordinal);
+        Assert.Contains("[System.Text.Encoding]::Unicode.GetBytes(\"$Argument`n\")", spikeWindowsBuildScript, StringComparison.Ordinal);
+        Assert.Contains("$StartInfo.ArgumentList.Add($Argument)", spikeWindowsBuildScript, StringComparison.Ordinal);
+        Assert.Contains("Assert-EqualBytes $Expected $Actual", spikeWindowsBuildScript, StringComparison.Ordinal);
+        Assert.Contains("OK ${Rid}: UTF-16 argv round-trip", spikeWindowsBuildScript, StringComparison.Ordinal);
     }
 
     /// <summary>

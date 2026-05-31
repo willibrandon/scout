@@ -470,7 +470,7 @@ Flag tables, help/man text, and shell completions are generated deterministicall
 
 ## Appendix A — Native entry proof-of-build spike (turnkey)
 
-Drop-in sources for the M0 spike (§4.1.1). It builds `Scout.App` as a Native AOT **static library** exporting `scout_entry`, links a C `main` driver, and echoes each `argv` byte verbatim to fd 1 — proving raw, non-UTF-8 argument capture without the lossy managed `string[]` path. Builds on all six RIDs; the non-UTF-8 round-trip assertion runs on the four Unix RIDs, while `win-x64`/`win-arm64` validate the `wmain`/`GetCommandLineW` variant (same `scout_entry` ABI, UTF-16).
+Drop-in sources for the M0 spike (§4.1.1). It builds `spike/Scout.Entry` as a Native AOT **static library** exporting `scout_entry`, links a platform C entry driver, and echoes each argument exactly as captured at the OS boundary — raw `argv` bytes on Unix and UTF-16 command-line code units on Windows. Builds on all six RIDs; the non-UTF-8 round-trip assertion runs on the four Unix RIDs, while `win-x64`/`win-arm64` validate the `wmain`/`GetCommandLineW` variant (same exported `scout_entry` ABI, Windows command line captured from UTF-16).
 
 **`spike/Scout.Entry/Scout.Entry.csproj`**
 ```xml
@@ -478,6 +478,7 @@ Drop-in sources for the M0 spike (§4.1.1). It builds `Scout.App` as a Native AO
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>14.0</LangVersion>
+    <RootNamespace>Scout.Entry</RootNamespace>
     <OutputType>Library</OutputType>
     <NativeLib>Static</NativeLib>
     <PublishAot>true</PublishAot>
@@ -489,38 +490,141 @@ Drop-in sources for the M0 spike (§4.1.1). It builds `Scout.App` as a Native AO
 </Project>
 ```
 
-**`spike/Scout.Entry/ScoutEntry.cs`** (one type per file; XML-doc'd)
+**`spike/Scout.Entry/ScoutEntry.cs`** (one type per file; XML-doc'd; Unix raw bytes, Windows UTF-16 command line)
 ```csharp
 using System.Runtime.InteropServices;
 
 namespace Scout.Entry;
 
-/// <summary>Native entry point exported to the C driver. Echoes each raw
-/// <c>argv</c> byte string to file descriptor 1 without any decoding.</summary>
-internal static unsafe class ScoutEntry
+/// <summary>
+/// Native entry point exported to the C driver for platform argument round-trips.
+/// </summary>
+internal static unsafe partial class ScoutEntry
 {
+    [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
     [LibraryImport("libc", EntryPoint = "write")]
-    private static partial nint Write(int fd, byte* buf, nuint count);
+    private static partial nint WriteUnix(int fd, byte* buffer, nuint count);
 
-    /// <summary>Process entry invoked by the C driver after runtime init.</summary>
+    /// <summary>
+    /// Echoes each argument exactly as captured at the platform boundary.
+    /// </summary>
     /// <param name="argc">Argument count from the C runtime.</param>
-    /// <param name="argv">Raw, NUL-terminated argument byte pointers.</param>
+    /// <param name="argv">Raw, NUL-terminated Unix argument byte pointers.</param>
     /// <param name="envp">Raw, NUL-terminated environment byte pointers.</param>
-    /// <returns>Process exit code.</returns>
+    /// <returns>The process exit code.</returns>
     [UnmanagedCallersOnly(EntryPoint = "scout_entry")]
     public static int Run(int argc, byte** argv, byte** envp)
     {
-        for (int i = 1; i < argc; i++) // skip argv[0] (program path) for a clean round-trip assertion
+        _ = envp;
+
+        if (OperatingSystem.IsWindows())
         {
-            byte* p = argv[i];
-            nuint len = 0;
-            while (p[len] != 0) len++;
-            _ = Write(1, p, len);
-            byte nl = (byte)'\n';
-            _ = Write(1, &nl, 1);
+            return RunWindows();
         }
+
+        for (int index = 1; index < argc; index++)
+        {
+            byte* pointer = argv[index];
+            nuint length = 0;
+            while (pointer[length] != 0)
+            {
+                length++;
+            }
+
+            _ = WriteUnix(1, pointer, length);
+            byte newline = (byte)'\n';
+            _ = WriteUnix(1, &newline, 1);
+        }
+
         return 0;
     }
+
+    private static int RunWindows()
+    {
+        IntPtr stdout = GetStdHandle(StandardOutputHandle);
+        if (stdout == IntPtr.Zero || stdout == InvalidHandleValue)
+        {
+            return 1;
+        }
+
+        IntPtr commandLine = GetCommandLineW();
+        if (commandLine == IntPtr.Zero)
+        {
+            return 1;
+        }
+
+        IntPtr argvPointer = CommandLineToArgvW(commandLine, out int argc);
+        if (argvPointer == IntPtr.Zero)
+        {
+            return 1;
+        }
+
+        try
+        {
+            char** argv = (char**)argvPointer;
+            for (int index = 1; index < argc; index++)
+            {
+                char* pointer = argv[index];
+                uint byteLength = checked((uint)(MeasureNullTerminated(pointer) * sizeof(char)));
+                if (!WriteFile(stdout, (byte*)pointer, byteLength, out _, IntPtr.Zero))
+                {
+                    return 1;
+                }
+
+                char newline = '\n';
+                if (!WriteFile(stdout, (byte*)&newline, sizeof(char), out _, IntPtr.Zero))
+                {
+                    return 1;
+                }
+            }
+        }
+        finally
+        {
+            _ = LocalFree(argvPointer);
+        }
+
+        return 0;
+    }
+
+    private static int MeasureNullTerminated(char* pointer)
+    {
+        int length = 0;
+        while (pointer[length] != '\0')
+        {
+            length++;
+        }
+
+        return length;
+    }
+
+    private const int StandardOutputHandle = -11;
+    private static readonly IntPtr InvalidHandleValue = new(-1);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [LibraryImport("kernel32.dll", EntryPoint = "GetCommandLineW")]
+    private static partial IntPtr GetCommandLineW();
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [LibraryImport("kernel32.dll", EntryPoint = "GetStdHandle", SetLastError = true)]
+    private static partial IntPtr GetStdHandle(int standardHandle);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [LibraryImport("kernel32.dll", EntryPoint = "WriteFile", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool WriteFile(
+        IntPtr file,
+        byte* buffer,
+        uint bytesToWrite,
+        out uint bytesWritten,
+        IntPtr overlapped);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [LibraryImport("shell32.dll", EntryPoint = "CommandLineToArgvW", SetLastError = true)]
+    private static partial IntPtr CommandLineToArgvW(IntPtr commandLine, out int argumentCount);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [LibraryImport("kernel32.dll", EntryPoint = "LocalFree", SetLastError = true)]
+    private static partial IntPtr LocalFree(IntPtr memory);
 }
 ```
 
@@ -534,6 +638,21 @@ extern int scout_entry(int argc, char **argv, char **envp);
 
 int main(int argc, char **argv, char **envp) {
     return scout_entry(argc, argv, envp);
+}
+```
+
+**`spike/native/scout_wmain.c`** (Windows driver — the CRT enters at `wmain`, but the managed spike reads the authoritative UTF-16 command line with `GetCommandLineW`)
+```c
+#include <wchar.h>
+
+extern int scout_entry(int argc, char **argv, char **envp);
+
+int wmain(int argc, wchar_t **argv, wchar_t **envp)
+{
+    (void)argc;
+    (void)argv;
+    (void)envp;
+    return scout_entry(0, (char **)0, (char **)0);
 }
 ```
 
@@ -612,6 +731,143 @@ printf '\377\n' > "$OUT/expected"
 "$OUT/scout-spike" "$(printf '\377')" > "$OUT/got"
 cmp "$OUT/expected" "$OUT/got"
 printf 'OK %s: non-UTF-8 argv round-trip\n' "$RID"
+```
+
+**`spike/build-windows.ps1`** (Windows driver for `win-x64` and `win-arm64`; run from a Visual Studio Developer command prompt so `cl.exe`/`link.exe` match the hosted runner)
+```powershell
+param(
+    [Parameter(Mandatory = $true)]
+    [ValidateSet("win-x64", "win-arm64")]
+    [string] $Rid
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$Out = Join-Path $Root "spike\out\$Rid"
+$Runtime = Join-Path $env:USERPROFILE ".nuget\packages\microsoft.netcore.app.runtime.nativeaot.$Rid\10.0.2\runtimes\$Rid\native"
+
+Push-Location $Root
+try {
+    function Require-Tool {
+        param([string] $Name)
+        if ($null -eq (Get-Command $Name -ErrorAction SilentlyContinue)) {
+            throw "$Name was not found. Run this script from a Visual Studio Developer command prompt."
+        }
+    }
+
+    function Require-Path {
+        param([string] $Path)
+        if (-not (Test-Path $Path)) {
+            throw "Missing required file: $Path"
+        }
+
+        return $Path
+    }
+
+    function Add-IfExists {
+        param(
+            [System.Collections.Generic.List[string]] $Items,
+            [string] $Path
+        )
+
+        if (Test-Path $Path) {
+            $Items.Add($Path)
+        }
+    }
+
+    function Assert-EqualBytes {
+        param([string] $Expected, [string] $Actual)
+        [byte[]] $expectedBytes = [System.IO.File]::ReadAllBytes($Expected)
+        [byte[]] $actualBytes = [System.IO.File]::ReadAllBytes($Actual)
+        if ($expectedBytes.Length -ne $actualBytes.Length) {
+            throw "Unexpected Windows UTF-16 argv output length."
+        }
+
+        for ($index = 0; $index -lt $expectedBytes.Length; $index++) {
+            if ($expectedBytes[$index] -ne $actualBytes[$index]) {
+                throw "Unexpected Windows UTF-16 argv byte at offset $index."
+            }
+        }
+    }
+
+    Require-Tool "cl.exe"
+    Require-Tool "link.exe"
+
+    dotnet publish (Join-Path $Root "spike\Scout.Entry") -r $Rid -c Release -p:NativeLib=Static -o $Out
+    New-Item -ItemType Directory -Force -Path $Out | Out-Null
+
+    $DriverObject = Join-Path $Out "scout_wmain.obj"
+    & cl.exe /nologo /O2 /TC /c (Join-Path $Root "spike\native\scout_wmain.c") "/Fo$DriverObject"
+    if ($LASTEXITCODE -ne 0) {
+        throw "cl.exe failed for scout_wmain.c."
+    }
+
+    $Libraries = [System.Collections.Generic.List[string]]::new()
+    $Libraries.Add((Require-Path (Join-Path $Out "Scout.Entry.lib")))
+    $Libraries.Add((Require-Path (Join-Path $Runtime "dllmain.obj")))
+    $Libraries.Add((Require-Path (Join-Path $Runtime "bootstrapperdll.obj")))
+    $Libraries.Add((Require-Path (Join-Path $Runtime "Runtime.WorkstationGC.lib")))
+    if ($Rid -eq "win-x64") {
+        Add-IfExists $Libraries (Join-Path $Runtime "Runtime.VxsortEnabled.lib")
+        Add-IfExists $Libraries (Join-Path $Runtime "Runtime.VxsortDisabled.lib")
+    }
+
+    $Libraries.Add((Require-Path (Join-Path $Runtime "eventpipe-disabled.lib")))
+    $Libraries.Add((Require-Path (Join-Path $Runtime "standalonegc-disabled.lib")))
+    $Libraries.Add((Require-Path (Join-Path $Runtime "aotminipal.lib")))
+    $Libraries.Add((Require-Path (Join-Path $Runtime "zlibstatic.lib")))
+    $Libraries.Add((Require-Path (Join-Path $Runtime "brotlicommon.lib")))
+    $Libraries.Add((Require-Path (Join-Path $Runtime "brotlienc.lib")))
+    $Libraries.Add((Require-Path (Join-Path $Runtime "brotlidec.lib")))
+    $Libraries.Add((Require-Path (Join-Path $Runtime "System.Globalization.Native.Aot.lib")))
+    $Libraries.Add((Require-Path (Join-Path $Runtime "System.IO.Compression.Native.Aot.lib")))
+
+    $OutputExe = Join-Path $Out "scout-spike.exe"
+    & link.exe /NOLOGO /MANIFEST:NO /SUBSYSTEM:CONSOLE /ENTRY:wmainCRTStartup /INCREMENTAL:NO /MERGE:.managedcode=.text /MERGE:hydrated=.bss /OPT:REF /OPT:ICF /NODEFAULTLIB:libucrt.lib /DEFAULTLIB:ucrt.lib "/OUT:$OutputExe" $DriverObject @Libraries advapi32.lib bcrypt.lib crypt32.lib iphlpapi.lib kernel32.lib mswsock.lib ncrypt.lib normaliz.lib ntdll.lib ole32.lib oleaut32.lib secur32.lib shell32.lib user32.lib version.lib ws2_32.lib
+    if ($LASTEXITCODE -ne 0) {
+        throw "link.exe failed for $OutputExe."
+    }
+
+    $Expected = Join-Path $Out "expected.utf16le"
+    $Actual = Join-Path $Out "got.utf16le"
+    $Argument = "caf$([char]0x00E9)"
+    [System.IO.File]::WriteAllBytes($Expected, [System.Text.Encoding]::Unicode.GetBytes("$Argument`n"))
+
+    $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $StartInfo.FileName = $OutputExe
+    $StartInfo.ArgumentList.Add($Argument)
+    $StartInfo.RedirectStandardOutput = $true
+    $Process = [System.Diagnostics.Process]::Start($StartInfo)
+    if ($null -eq $Process) {
+        throw "Failed to start $OutputExe."
+    }
+
+    try {
+        $Output = [System.IO.File]::Create($Actual)
+        try {
+            $Process.StandardOutput.BaseStream.CopyTo($Output)
+        }
+        finally {
+            $Output.Dispose()
+        }
+
+        $Process.WaitForExit()
+        if ($Process.ExitCode -ne 0) {
+            throw "$OutputExe failed with exit code $($Process.ExitCode)."
+        }
+    }
+    finally {
+        $Process.Dispose()
+    }
+
+    Assert-EqualBytes $Expected $Actual
+    Write-Host "OK ${Rid}: UTF-16 argv round-trip"
+}
+finally {
+    Pop-Location
+}
 ```
 
 **Actual result on osx-arm64 (executed 2026-05-28, SDK 10.0.102) — PASS:**
