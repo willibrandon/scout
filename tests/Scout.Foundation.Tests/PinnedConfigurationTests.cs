@@ -127,7 +127,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("runner: windows-11-arm", workflow, StringComparison.Ordinal);
         Assert.Contains("bench/run-hyperfine.sh --gate", workflow, StringComparison.Ordinal);
         Assert.Contains("runs-on: macos-15", releaseGateWorkflow, StringComparison.Ordinal);
-        Assert.Contains("brew install hyperfine", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("Install pinned hyperfine", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("eng/setup-hyperfine.sh", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("GitHub-hosted", benchmarkReadme, StringComparison.Ordinal);
         for (int index = 0; index < githubHostedRunnerLabels.Length; index++)
         {
@@ -150,6 +151,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.DoesNotContain("actions/checkout@v4", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("actions/setup-dotnet@v4", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("macos-13", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("brew install hyperfine", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("-p:PublishAot=true", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("continue-on-error: true", workflow, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("if: github.event_name == 'workflow_dispatch'", workflow, StringComparison.Ordinal);
@@ -1686,6 +1688,36 @@ public sealed partial class PinnedConfigurationTests
 
         byte[] hash = SHA256.HashData(File.ReadAllBytes(path));
         Assert.Equal(expectedSha256, Convert.ToHexString(hash));
+    }
+
+    /// <summary>
+    /// Verifies hosted release gates install hyperfine from checksum-verified pinned Homebrew artifacts.
+    /// </summary>
+    [Fact]
+    public void HostedReleaseGatesProvisionPinnedHyperfine()
+    {
+        string root = FindRepositoryRoot();
+        string workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "release-gates.yml"));
+        string script = File.ReadAllText(Path.Combine(root, "eng", "setup-hyperfine.sh"));
+
+        Assert.Contains("Install pinned hyperfine", workflow, StringComparison.Ordinal);
+        Assert.Contains("eng/setup-hyperfine.sh", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("brew install hyperfine", workflow, StringComparison.Ordinal);
+        Assert.Contains("read_lock_table_value \"tool.macos\" \"$NAME\" \"version\"", script, StringComparison.Ordinal);
+        Assert.Contains("read_lock_table_value \"tool.macos\" \"$NAME\" \"source_url\"", script, StringComparison.Ordinal);
+        Assert.Contains("read_lock_table_value \"tool.macos\" \"$NAME\" \"source_sha256\"", script, StringComparison.Ordinal);
+        Assert.Contains("read_lock_table_value \"tool.macos\" \"$NAME\" \"bottle_url\"", script, StringComparison.Ordinal);
+        Assert.Contains("read_lock_table_value \"tool.macos\" \"$NAME\" \"bottle_sha256\"", script, StringComparison.Ordinal);
+        Assert.Contains("read_lock_table_value \"tool.macos\" \"$NAME\" \"sha256\"", script, StringComparison.Ordinal);
+        Assert.Contains("brew info --json=v2 \"$NAME\"", script, StringComparison.Ordinal);
+        Assert.Contains("verify_homebrew_metadata", script, StringComparison.Ordinal);
+        Assert.Contains("brew fetch --formula --build-from-source \"$NAME\"", script, StringComparison.Ordinal);
+        Assert.Contains("check_file_hash \"hyperfine source archive\"", script, StringComparison.Ordinal);
+        Assert.Contains("brew fetch --formula \"$NAME\"", script, StringComparison.Ordinal);
+        Assert.Contains("check_file_hash \"hyperfine bottle archive\"", script, StringComparison.Ordinal);
+        Assert.Contains("check_file_hash \"macOS tool hyperfine\"", script, StringComparison.Ordinal);
+        Assert.Contains("version_matches \"$PATH_VALUE\" \"$VERSION\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("continue-on-error", script, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

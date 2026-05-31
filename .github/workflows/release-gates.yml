@@ -59,10 +59,8 @@ jobs:
           dotnet-version: 10.0.102
       - name: Build pinned ripgrep oracle
         run: eng/setup-ripgrep-oracle.sh
-      - name: Install hyperfine
-        run: |
-          brew install hyperfine
-          hyperfine --version
+      - name: Install pinned hyperfine
+        run: eng/setup-hyperfine.sh
       - name: Fetch pinned corpora
         run: eng/fetch-corpora.sh --all
       - name: Preflight
