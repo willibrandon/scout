@@ -444,6 +444,122 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies runtime JSON output remains a hand-written byte writer.
+    /// </summary>
+    [Fact]
+    public void RuntimeJsonOutputDoesNotUseBclJson()
+    {
+        string root = FindRepositoryRoot();
+        var violations = new List<string>();
+        string[] forbiddenTokens =
+        [
+            "System.Text.Json",
+            "JsonSerializer",
+            "Utf8JsonWriter",
+            "JsonDocument",
+            "JsonNode",
+            "JsonObject",
+            "JsonArray",
+            "Newtonsoft.Json",
+            "DataContractJsonSerializer",
+            "JavaScriptSerializer",
+        ];
+
+        foreach (string path in EnumerateRuntimeSourceFiles(root))
+        {
+            string text = File.ReadAllText(path);
+            foreach (string token in forbiddenTokens)
+            {
+                if (text.Contains(token, StringComparison.Ordinal))
+                {
+                    violations.Add($"{Path.GetRelativePath(root, path)}: {token}");
+                }
+            }
+        }
+
+        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>
+    /// Verifies runtime code avoids reflection, <c>dynamic</c>, and runtime code generation.
+    /// </summary>
+    [Fact]
+    public void RuntimeCodeDoesNotUseReflectionDynamicOrRuntimeCodegen()
+    {
+        string root = FindRepositoryRoot();
+        var violations = new List<string>();
+        string[] forbiddenTokens =
+        [
+            "System.Reflection",
+            "Activator.CreateInstance",
+            "Type.GetType",
+            ".GetType(",
+            ".GetTypes(",
+            ".GetMethods(",
+            ".GetProperties(",
+            ".GetFields(",
+            ".GetConstructors(",
+            "MakeGenericType",
+            "MakeGenericMethod",
+            "Assembly.Load",
+            "dynamic ",
+            "System.Linq.Expressions",
+            "Expression.Compile",
+            "Reflection.Emit",
+            "RuntimeFeature.IsDynamicCodeSupported",
+            "RuntimeFeature.IsDynamicCodeCompiled",
+        ];
+
+        foreach (string path in EnumerateRuntimeSourceFiles(root))
+        {
+            string text = File.ReadAllText(path);
+            foreach (string token in forbiddenTokens)
+            {
+                if (text.Contains(token, StringComparison.Ordinal))
+                {
+                    violations.Add($"{Path.GetRelativePath(root, path)}: {token}");
+                }
+            }
+        }
+
+        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>
+    /// Verifies runtime stdout/stderr paths do not use text-based <see cref="Console" /> writers.
+    /// </summary>
+    [Fact]
+    public void RuntimeOutputDoesNotUseConsoleTextWriters()
+    {
+        string root = FindRepositoryRoot();
+        var violations = new List<string>();
+        string[] forbiddenTokens =
+        [
+            "Console.Write",
+            "Console.Out",
+            "Console.Error",
+            "Console.SetOut",
+            "Console.SetError",
+            "new StreamWriter(Console.OpenStandardOutput",
+            "new StreamWriter(Console.OpenStandardError",
+        ];
+
+        foreach (string path in EnumerateRuntimeSourceFiles(root))
+        {
+            string text = File.ReadAllText(path);
+            foreach (string token in forbiddenTokens)
+            {
+                if (text.Contains(token, StringComparison.Ordinal))
+                {
+                    violations.Add($"{Path.GetRelativePath(root, path)}: {token}");
+                }
+            }
+        }
+
+        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>
     /// Verifies runtime code routes environment variable reads through the byte-preserving OS layer.
     /// </summary>
     [Fact]
@@ -1500,6 +1616,25 @@ public sealed partial class PinnedConfigurationTests
             {
                 yield return path;
             }
+        }
+    }
+
+    private static IEnumerable<string> EnumerateRuntimeSourceFiles(string root)
+    {
+        string sourceRoot = Path.Combine(root, "src");
+        string sourceGeneratorRoot = Path.Combine("src", "Scout.SourceGen");
+        foreach (string path in Directory.EnumerateFiles(sourceRoot, "*.cs", SearchOption.AllDirectories))
+        {
+            string relativePath = Path.GetRelativePath(root, path);
+            if (ContainsPathSegment(relativePath, "bin") ||
+                ContainsPathSegment(relativePath, "obj") ||
+                relativePath.StartsWith(sourceGeneratorRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal) ||
+                relativePath.StartsWith(sourceGeneratorRoot + Path.AltDirectorySeparatorChar, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            yield return path;
         }
     }
 
