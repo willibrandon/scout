@@ -226,9 +226,21 @@ check_file_hash() {
 check_macos_tool_hash() {
     name="$1"
     path="$(read_lock_table_value "tool.macos" "$name" "path")" || fail "Missing macOS tool path for $name in tests/PREREQS.lock."
+    version="$(read_lock_table_value "tool.macos" "$name" "version")" || fail "Missing macOS tool version for $name in tests/PREREQS.lock."
     sha256="$(read_lock_table_value "tool.macos" "$name" "sha256")" || fail "Missing macOS tool hash for $name in tests/PREREQS.lock."
 
-    check_file_hash "macOS tool $name" "$path" "$sha256"
+    require_literal "$sha256" "macOS tool $name sha256"
+    [ -f "$path" ] || fail "Missing macOS tool $name: $path"
+
+    actual_sha256="$(sha256_file "$path")"
+    if [ "$actual_sha256" = "$sha256" ]; then
+        return
+    fi
+
+    printf 'Expected macOS tool %s sha256 %s, got %s\n' "$name" "$sha256" "$actual_sha256" >&2
+    printf 'Hosted macOS replacement block for %s:\n' "$name" >&2
+    printf '[[tool.macos]]\nname = "%s"\nversion = "%s"\npath = "%s"\nsha256 = "%s"\n\n' "$name" "$version" "$path" "$actual_sha256" >&2
+    MACOS_TOOL_FAILURES=1
 }
 
 check_pinned_path_corpora() {
@@ -321,6 +333,7 @@ ACTUAL_PCRE2_VERSION="$( ( "$RG_PCRE2_PATH" --pcre2-version || true ) | sed -n '
 expect_equal "PCRE2 reference rg PCRE2 version" "$EXPECTED_PCRE2_VERSION" "$ACTUAL_PCRE2_VERSION"
 
 if [ "$(uname -s)" = "Darwin" ]; then
+    MACOS_TOOL_FAILURES=0
     check_macos_tool_hash "gzip"
     check_macos_tool_hash "bzip2"
     check_macos_tool_hash "xz"
@@ -335,6 +348,10 @@ if [ "$(uname -s)" = "Darwin" ]; then
     check_file_hash "macOS tool hyperfine" "$HYPERFINE_PATH" "$HYPERFINE_SHA256"
     ACTUAL_HYPERFINE_VERSION="$("$HYPERFINE_PATH" --version | sed -n '1p')"
     expect_equal "hyperfine version" "hyperfine $HYPERFINE_VERSION" "$ACTUAL_HYPERFINE_VERSION"
+
+    if [ "$MACOS_TOOL_FAILURES" -ne 0 ]; then
+        fail "One or more macOS tool hashes do not match tests/PREREQS.lock."
+    fi
 fi
 
 check_pinned_path_corpora
