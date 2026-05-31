@@ -9,7 +9,7 @@ namespace Scout;
 public sealed class RegexCorpusCoverageTests
 {
     private const int ExpectedUpstreamCaseCount = 839;
-    private const int ExpectedSupportedCaseCount = 476;
+    private const int ExpectedSupportedCaseCount = 482;
 
     private static readonly (string RelativePath, int Count)[] ExpectedUpstreamFileCounts =
     [
@@ -50,7 +50,7 @@ public sealed class RegexCorpusCoverageTests
         ("line-terminator.toml", 10),
         ("misc.toml", 16),
         ("multiline.toml", 140),
-        ("no-unicode.toml", 15),
+        ("no-unicode.toml", 21),
         ("regex-lite.toml", 9),
         ("regression.toml", 56),
         ("set.toml", 30),
