@@ -16,9 +16,9 @@ internal sealed class RegexSparseDfa
         this.states = states;
     }
 
-    public static bool TryCompile(RegexNfa nfa, int stateLimit, out RegexSparseDfa? dfa)
+    public static bool TryCompile(RegexNfa nfa, int stateLimit, ulong dfaSizeLimit, out RegexSparseDfa? dfa)
     {
-        if (TryBuild(nfa, stateLimit, out RegexSparseDfaState[]? states))
+        if (TryBuild(nfa, stateLimit, dfaSizeLimit, out RegexSparseDfaState[]? states))
         {
             dfa = new RegexSparseDfa(nfa, states!);
             return true;
@@ -73,11 +73,12 @@ internal sealed class RegexSparseDfa
         return false;
     }
 
-    private static bool TryBuild(RegexNfa nfa, int stateLimit, out RegexSparseDfaState[]? states)
+    private static bool TryBuild(RegexNfa nfa, int stateLimit, ulong dfaSizeLimit, out RegexSparseDfaState[]? states)
     {
         var stateSets = new List<int[]>();
         var transitionRows = new List<Dictionary<byte, int>?>();
         var indexes = new Dictionary<RegexDfaStateKey, int>();
+        var budget = new RegexDfaBudget(dfaSizeLimit);
         if (Intern(RegexDfaOperations.Closure(nfa, nfa.StartState)) < 0)
         {
             states = null;
@@ -92,6 +93,12 @@ internal sealed class RegexSparseDfa
                 int[] next = RegexDfaOperations.Move(nfa, stateSets[stateIndex], (byte)value);
                 if (next.Length > 0)
                 {
+                    if (!budget.TryReserve(RegexDfaBudget.SparseTransitionBytes))
+                    {
+                        states = null;
+                        return false;
+                    }
+
                     int nextIndex = Intern(next);
                     if (nextIndex < 0)
                     {
@@ -126,6 +133,11 @@ internal sealed class RegexSparseDfa
             }
 
             if (stateSets.Count >= stateLimit)
+            {
+                return -1;
+            }
+
+            if (!budget.TryReserve(RegexDfaBudget.EstimateStateBytes(nfaStates.Length, denseTransitions: false)))
             {
                 return -1;
             }

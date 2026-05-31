@@ -73,6 +73,20 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies the DFA size limit can force fallback to the PikeVM.
+    /// </summary>
+    [Fact]
+    public void MetaEngineFallsBackToPikeVmWhenDfaSizeLimitCannotFitStartState()
+    {
+        RegexNfa nfa = CompileNfa("needle"u8);
+
+        var engine = RegexMetaEngine.Compile(nfa, prefilter: null, dfaSizeLimit: 0);
+
+        Assert.Equal(RegexEngineKind.PikeVm, engine.Kind);
+        Assert.Equal(new RegexMatch(2, 6), engine.Find("xxneedle yy"u8, startAt: 0));
+    }
+
+    /// <summary>
     /// Verifies the meta engine selects the sparse DFA for medium position-independent NFAs.
     /// </summary>
     [Fact]
@@ -416,6 +430,23 @@ public sealed class RegexAutomatonTests
         Assert.Equal(new RegexMatch(0, 3), automaton.Find("foo"u8));
         Assert.Null(automaton.Find("xfoo"u8));
         Assert.Null(automaton.Find("foox"u8));
+    }
+
+    /// <summary>
+    /// Verifies a zero DFA cache limit preserves match semantics through fallback.
+    /// </summary>
+    [Fact]
+    public void DfaSizeLimitFallbackPreservesMatches()
+    {
+        var automaton = RegexAutomaton.Compile(
+            "needle"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            dfaSizeLimit: 0);
+
+        Assert.Equal(new RegexMatch(2, 6), automaton.Find("xxneedle yy"u8));
+        Assert.Null(automaton.Find("xxhaystack yy"u8));
     }
 
     private static RegexNfa CompileNfa(ReadOnlySpan<byte> pattern)

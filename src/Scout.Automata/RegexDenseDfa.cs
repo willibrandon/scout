@@ -16,9 +16,9 @@ internal sealed class RegexDenseDfa
         this.states = states;
     }
 
-    public static bool TryCompile(RegexNfa nfa, int stateLimit, out RegexDenseDfa? dfa)
+    public static bool TryCompile(RegexNfa nfa, int stateLimit, ulong dfaSizeLimit, out RegexDenseDfa? dfa)
     {
-        if (TryBuild(nfa, stateLimit, out RegexDenseDfaState[]? states))
+        if (TryBuild(nfa, stateLimit, dfaSizeLimit, out RegexDenseDfaState[]? states))
         {
             dfa = new RegexDenseDfa(nfa, states!);
             return true;
@@ -74,11 +74,12 @@ internal sealed class RegexDenseDfa
         return false;
     }
 
-    private static bool TryBuild(RegexNfa nfa, int stateLimit, out RegexDenseDfaState[]? states)
+    private static bool TryBuild(RegexNfa nfa, int stateLimit, ulong dfaSizeLimit, out RegexDenseDfaState[]? states)
     {
         var stateSets = new List<int[]>();
         var transitionRows = new List<int[]?>();
         var indexes = new Dictionary<RegexDfaStateKey, int>();
+        var budget = new RegexDfaBudget(dfaSizeLimit);
         if (Intern(RegexDfaOperations.Closure(nfa, nfa.StartState)) < 0)
         {
             states = null;
@@ -123,6 +124,11 @@ internal sealed class RegexDenseDfa
             }
 
             if (stateSets.Count >= stateLimit)
+            {
+                return -1;
+            }
+
+            if (!budget.TryReserve(RegexDfaBudget.EstimateStateBytes(nfaStates.Length, denseTransitions: true)))
             {
                 return -1;
             }

@@ -46,6 +46,7 @@ public sealed class RegexAutomaton
     /// <param name="crlf">Whether CRLF mode treats carriage returns and line feeds as line terminators.</param>
     /// <param name="lineTerminator">The line terminator byte used when CRLF mode is disabled.</param>
     /// <param name="utf8">Whether empty and scalar-consuming matches must respect UTF-8 code point boundaries.</param>
+    /// <param name="dfaSizeLimit">The maximum DFA cache size in bytes, or <see langword="null" /> for the default.</param>
     /// <returns>The compiled automaton.</returns>
     public static RegexAutomaton Compile(
         ReadOnlySpan<byte> pattern,
@@ -54,14 +55,15 @@ public sealed class RegexAutomaton
         bool dotMatchesNewline,
         bool crlf = false,
         byte lineTerminator = (byte)'\n',
-        bool utf8 = true)
+        bool utf8 = true,
+        ulong? dfaSizeLimit = null)
     {
         RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
         var options = new RegexCompileOptions(caseInsensitive, swapGreed: false, multiLine, dotMatchesNewline, crlf, lineTerminator, utf8);
         RegexNfa nfa = RegexNfaCompiler.Compile(
             tree.Root,
             options);
-        return new RegexAutomaton(RegexMetaEngine.Compile(nfa, RegexPrefilter.Compile(tree.Root, options)));
+        return new RegexAutomaton(RegexMetaEngine.Compile(nfa, RegexPrefilter.Compile(tree.Root, options), dfaSizeLimit));
     }
 
     internal RegexPrefilterKind PrefilterKind => engine.PrefilterKind;

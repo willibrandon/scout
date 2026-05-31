@@ -10,6 +10,7 @@ internal sealed class RegexMetaEngine
     private const int SparseDfaStateLimit = 64;
     private const int OnePassDfaNfaStateLimit = 48;
     private const int BoundedBacktrackerNfaStateLimit = 24;
+    private const ulong DefaultDfaSizeLimit = 1000UL * 1024UL * 1024UL;
 
     private readonly PikeVm? pikeVm;
     private readonly RegexBoundedBacktracker? boundedBacktracker;
@@ -48,10 +49,15 @@ internal sealed class RegexMetaEngine
 
     public static RegexMetaEngine Compile(RegexNfa nfa)
     {
-        return Compile(nfa, prefilter: null);
+        return Compile(nfa, prefilter: null, dfaSizeLimit: null);
     }
 
     public static RegexMetaEngine Compile(RegexNfa nfa, RegexPrefilter? prefilter)
+    {
+        return Compile(nfa, prefilter, dfaSizeLimit: null);
+    }
+
+    public static RegexMetaEngine Compile(RegexNfa nfa, RegexPrefilter? prefilter, ulong? dfaSizeLimit)
     {
         if (!RegexDfaOperations.CanCompile(nfa))
         {
@@ -95,8 +101,9 @@ internal sealed class RegexMetaEngine
                 nfa.Utf8);
         }
 
+        ulong effectiveDfaSizeLimit = dfaSizeLimit ?? DefaultDfaSizeLimit;
         if (nfa.States.Count <= DenseDfaNfaStateLimit &&
-            RegexDenseDfa.TryCompile(nfa, DenseDfaStateLimit, out RegexDenseDfa? denseDfa))
+            RegexDenseDfa.TryCompile(nfa, DenseDfaStateLimit, effectiveDfaSizeLimit, out RegexDenseDfa? denseDfa))
         {
             return new RegexMetaEngine(
                 RegexEngineKind.DenseDfa,
@@ -111,7 +118,7 @@ internal sealed class RegexMetaEngine
         }
 
         if (nfa.States.Count <= SparseDfaNfaStateLimit &&
-            RegexSparseDfa.TryCompile(nfa, SparseDfaStateLimit, out RegexSparseDfa? sparseDfa))
+            RegexSparseDfa.TryCompile(nfa, SparseDfaStateLimit, effectiveDfaSizeLimit, out RegexSparseDfa? sparseDfa))
         {
             return new RegexMetaEngine(
                 RegexEngineKind.SparseDfa,
@@ -125,6 +132,20 @@ internal sealed class RegexMetaEngine
                 nfa.Utf8);
         }
 
+        if (!RegexLazyDfa.TryCreate(nfa, effectiveDfaSizeLimit, out RegexLazyDfa? lazyDfa))
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.PikeVm,
+                new PikeVm(nfa),
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                prefilter,
+                nfa.Utf8);
+        }
+
         return new RegexMetaEngine(
             RegexEngineKind.LazyDfa,
             pikeVm: null,
@@ -132,7 +153,7 @@ internal sealed class RegexMetaEngine
             onePassDfa: null,
             denseDfa: null,
             sparseDfa: null,
-            lazyDfa: new RegexLazyDfa(nfa),
+            lazyDfa: lazyDfa,
             prefilter,
             nfa.Utf8);
     }
