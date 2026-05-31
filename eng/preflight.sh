@@ -168,11 +168,7 @@ check_pinned_path_corpora() {
             flush()
         }
     ' "$LOCK" | while IFS='|' read -r name path sha256; do
-        case "$sha256" in
-            resolved@*)
-                continue
-                ;;
-        esac
+        require_literal "$sha256" "corpus $name sha256"
         path="$(resolve_repo_path "$path")"
         check_file_hash "corpus $name" "$path" "$sha256"
     done
