@@ -75,7 +75,9 @@ normalize_elapsed() {
     sed -E \
         -e 's/"elapsed":\{"secs":[0-9]+,"nanos":[0-9]+,"human":"[^"]+"\}/"elapsed":{"secs":0,"nanos":0,"human":"<elapsed>"}/g' \
         -e 's/"elapsed":\{"human":"[^"]+","nanos":[0-9]+,"secs":[0-9]+\}/"elapsed":{"human":"<elapsed>","nanos":0,"secs":0}/g' \
-        -e 's/"elapsed_total":\{"human":"[^"]+","nanos":[0-9]+,"secs":[0-9]+\}/"elapsed_total":{"human":"<elapsed>","nanos":0,"secs":0}/g'
+        -e 's/"elapsed_total":\{"human":"[^"]+","nanos":[0-9]+,"secs":[0-9]+\}/"elapsed_total":{"human":"<elapsed>","nanos":0,"secs":0}/g' \
+        -e 's/^[0-9]+\.[0-9]{6} seconds spent searching$/0.000000 seconds spent searching/g' \
+        -e 's/^[0-9]+\.[0-9]{6} seconds total$/0.000000 seconds total/g'
 }
 
 run_tool() {
@@ -305,6 +307,9 @@ compare_case json_lookahead mask-elapsed -P --json 'foo(?=bar)' pcre2-smoke.txt
 compare_case json_lookahead_only_matching mask-elapsed -P --json -o 'foo(?=bar)' pcre2-smoke.txt
 compare_case json_multi_file mask-elapsed-sort-lines -P --json 'foo(?=bar)' pcre2-smoke.txt pcre2-smoke-2.txt
 compare_case json_quiet mask-elapsed -P --json -q 'foo(?=bar)' pcre2-smoke.txt
+compare_case json_stats_lookahead mask-elapsed -P --json --stats 'foo(?=bar)' pcre2-smoke.txt
+compare_case stats_lookahead mask-elapsed -P --stats 'foo(?=bar)' pcre2-smoke.txt
+compare_case stats_recursive_lookahead_threads mask-elapsed-sort-lines -P --threads 4 --stats 'foo(?=bar)' pcre2-dir
 compare_case json_lookbehind mask-elapsed -P -U --json '(?<=foo\n)bar' lookbehind
 compare_case r1412_lookbehind_replacement exact -P -nU -rquux '(?<=foo\n)bar' lookbehind
 compare_case r1401_lookahead_only_matching_1 exact -P -N -o '.*o(?!.*\s)' ip1.txt

@@ -1131,6 +1131,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("compare_case json_lookahead_only_matching mask-elapsed -P --json -o 'foo(?=bar)' pcre2-smoke.txt", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case json_multi_file mask-elapsed-sort-lines -P --json 'foo(?=bar)' pcre2-smoke.txt pcre2-smoke-2.txt", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case json_quiet mask-elapsed -P --json -q 'foo(?=bar)' pcre2-smoke.txt", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("seconds spent searching", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case json_stats_lookahead mask-elapsed -P --json --stats 'foo(?=bar)' pcre2-smoke.txt", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case stats_lookahead mask-elapsed -P --stats 'foo(?=bar)' pcre2-smoke.txt", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case stats_recursive_lookahead_threads mask-elapsed-sort-lines -P --threads 4 --stats 'foo(?=bar)' pcre2-dir", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case r1401_lookahead_only_matching_1 exact -P -N -o '.*o(?!.*\\s)'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case json_lookbehind mask-elapsed -P -U --json '(?<=foo\\n)bar'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case r1412_lookbehind_replacement exact -P -nU -rquux '(?<=foo\\n)bar'", differentialScript, StringComparison.Ordinal);
@@ -1149,6 +1153,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("ThreadLocal<Pcre2Regex>", pcre2SearchOperations, StringComparison.Ordinal);
         Assert.Contains("SearchWalkPlanning.GetSearchWalkThreadCount", pcre2SearchOperations, StringComparison.Ordinal);
         Assert.Contains("BuildParallel().Run", pcre2SearchOperations, StringComparison.Ordinal);
+        Assert.Contains("CollectPcre2SearchStats", pcre2SearchOperations, StringComparison.Ordinal);
+        Assert.DoesNotContain("!lowArgs.Stats", pcre2SearchOperations, StringComparison.Ordinal);
         Assert.Contains("Pcre2Config(ConfigVersion", pcre2Library, StringComparison.Ordinal);
         Assert.DoesNotContain("PCRE2 10.46 is available", pcre2Library, StringComparison.Ordinal);
         Assert.Contains("[LibraryImport(\"__Internal\", EntryPoint = \"pcre2_config_8\")]", pcre2Library, StringComparison.Ordinal);

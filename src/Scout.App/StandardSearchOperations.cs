@@ -33,7 +33,7 @@ internal static class StandardSearchOperations
         bool wroteHeadingOutput = false;
         bool matched = false;
         bool errored = false;
-        bool stats = lowArgs.Stats && lowArgs.MaxCount != 0;
+        bool stats = lowArgs.Stats && lowArgs.SearchMode != CliSearchMode.Json && lowArgs.MaxCount != 0;
         long statsStarted = Stopwatch.GetTimestamp();
         SearchStats searchStats = default;
         bool useDefaultCurrentDirectory = positional.Count == firstPathIndex &&

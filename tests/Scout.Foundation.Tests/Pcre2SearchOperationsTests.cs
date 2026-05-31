@@ -43,12 +43,22 @@ public sealed class Pcre2SearchOperationsTests
     }
 
     /// <summary>
+    /// Verifies stats are supported by the native PCRE2 search path.
+    /// </summary>
+    [Fact]
+    public void AllowsStats()
+    {
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--stats", "needle", "haystack.txt")));
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--max-count", "2", "--stats", "needle", "haystack.txt")));
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--json", "--stats", "needle", "haystack.txt")));
+    }
+
+    /// <summary>
     /// Verifies max-count does not hide unsupported PCRE2 option combinations.
     /// </summary>
     [Fact]
     public void RejectsUnsupportedOptionCombinationsWithMaxCount()
     {
-        Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--max-count", "2", "--stats", "needle")));
         Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--json", "--context", "1", "needle")));
         Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--context", "1", "needle")));
         Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--passthru", "needle")));

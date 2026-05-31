@@ -24,3 +24,5 @@ the per-RID static `libpcre2-8`/`pcre2-8.lib` build into the AOT entry image.
 Directory searches use the same sorted-serial/default-parallel walker planning
 as the default engine; parallel PCRE2 workers each own a compiled regex and
 match-data block so native match state is never shared across worker threads.
+PCRE2 search statistics are aggregated through the shared `SearchStats` output
+format and covered by native differentials against the pinned `rg -P` binary.
