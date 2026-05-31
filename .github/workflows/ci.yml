@@ -257,3 +257,22 @@ jobs:
           call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=${{ matrix.vsarch }}
           pwsh -NoProfile -ExecutionPolicy Bypass -File spike/build-windows.ps1 ${{ matrix.rid }}
           pwsh -NoProfile -ExecutionPolicy Bypass -File native/build-app-windows.ps1 ${{ matrix.rid }}
+
+  release-gates:
+    name: release gates dispatch
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+      contents: read
+    needs:
+      - portable-build-linux
+      - portable-build-host
+      - native-linux
+      - native-macos
+      - native-windows
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !cancelled() && !failure() }}
+    steps:
+      - name: Dispatch Release Gates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run release-gates.yml --ref main -f checkout_ref="${{ github.sha }}"

@@ -2,13 +2,11 @@ name: Release Gates
 
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows:
-      - CI
-    branches:
-      - main
-    types:
-      - completed
+    inputs:
+      checkout_ref:
+        description: Commit SHA or ref to test. Defaults to the workflow ref.
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -25,14 +23,13 @@ env:
 
 jobs:
   full-tests:
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_sha == github.sha) }}
     name: full pinned tests
     runs-on: macos-15
     timeout-minutes: 360
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ inputs.checkout_ref || github.sha }}
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.102
@@ -50,14 +47,13 @@ jobs:
         run: native/build-app-unix.sh osx-arm64 --with-differentials
 
   performance-gate:
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_sha == github.sha) }}
     name: hyperfine performance gate
     runs-on: macos-15
     timeout-minutes: 360
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ inputs.checkout_ref || github.sha }}
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.102
