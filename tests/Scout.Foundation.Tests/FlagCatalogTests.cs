@@ -205,6 +205,128 @@ public sealed class FlagCatalogTests
     }
 
     /// <summary>
+    /// Verifies the generated catalog preserves the pinned upstream <c>FLAGS</c> ordering.
+    /// </summary>
+    [Fact]
+    public void CatalogMatchesPinnedUpstreamFlagOrder()
+    {
+        string[] expected =
+        [
+            "--regexp",
+            "--file",
+            "--after-context",
+            "--before-context",
+            "--binary",
+            "--block-buffered",
+            "--byte-offset",
+            "--case-sensitive",
+            "--color",
+            "--colors",
+            "--column",
+            "--context",
+            "--context-separator",
+            "--count",
+            "--count-matches",
+            "--crlf",
+            "--debug",
+            "--dfa-size-limit",
+            "--encoding",
+            "--engine",
+            "--field-context-separator",
+            "--field-match-separator",
+            "--files",
+            "--files-with-matches",
+            "--files-without-match",
+            "--fixed-strings",
+            "--follow",
+            "--generate",
+            "--glob",
+            "--glob-case-insensitive",
+            "--heading",
+            "--help",
+            "--hidden",
+            "--hostname-bin",
+            "--hyperlink-format",
+            "--iglob",
+            "--ignore-case",
+            "--ignore-file",
+            "--ignore-file-case-insensitive",
+            "--include-zero",
+            "--invert-match",
+            "--json",
+            "--line-buffered",
+            "--line-number",
+            "--no-line-number",
+            "--line-regexp",
+            "--max-columns",
+            "--max-columns-preview",
+            "--max-count",
+            "--max-depth",
+            "--max-filesize",
+            "--mmap",
+            "--multiline",
+            "--multiline-dotall",
+            "--no-config",
+            "--ignore",
+            "--ignore-dot",
+            "--ignore-exclude",
+            "--ignore-files",
+            "--ignore-global",
+            "--ignore-messages",
+            "--ignore-parent",
+            "--ignore-vcs",
+            "--messages",
+            "--require-git",
+            "--unicode",
+            "--null",
+            "--null-data",
+            "--one-file-system",
+            "--only-matching",
+            "--path-separator",
+            "--passthru",
+            "--pcre2",
+            "--pcre2-version",
+            "--pre",
+            "--pre-glob",
+            "--pretty",
+            "--quiet",
+            "--regex-size-limit",
+            "--replace",
+            "--search-zip",
+            "--smart-case",
+            "--sort",
+            "--sortr",
+            "--stats",
+            "--stop-on-nonmatch",
+            "--text",
+            "--threads",
+            "--trace",
+            "--trim",
+            "--type",
+            "--type-not",
+            "--type-add",
+            "--type-clear",
+            "--type-list",
+            "--unrestricted",
+            "--version",
+            "--vimgrep",
+            "--with-filename",
+            "--no-filename",
+            "--word-regexp",
+            "--auto-hybrid-regex",
+            "--pcre2-unicode",
+            "--sort-files",
+        ];
+
+        ReadOnlySpan<FlagDescriptor> descriptors = GeneratedFlagCatalog.Descriptors;
+        Assert.Equal(expected.Length, descriptors.Length);
+        for (int index = 0; index < expected.Length; index++)
+        {
+            Assert.Equal(expected[index], descriptors[index].LongName);
+        }
+    }
+
+    /// <summary>
     /// Verifies generated flag descriptors do not define duplicate canonical spellings.
     /// </summary>
     [Fact]
