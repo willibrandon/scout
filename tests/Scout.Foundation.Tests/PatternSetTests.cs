@@ -8,6 +8,25 @@ namespace Scout;
 public sealed class PatternSetTests
 {
     /// <summary>
+    /// Verifies literal-only patterns use one multi-regex Aho-Corasick accelerator.
+    /// </summary>
+    [Fact]
+    public void UsesLiteralMultiRegexAccelerator()
+    {
+        var set = PatternSet.Compile(
+        [
+            "abcd"u8.ToArray(),
+            "ab"u8.ToArray(),
+            @"[[:alpha:]]+\d+"u8.ToArray(),
+        ]);
+
+        Assert.True(set.UsesLiteralAccelerator);
+        Assert.True(set.IsMatch("zzab"u8));
+        Assert.Equal(new PatternSetMatch(0, new RegexMatch(2, 4)), set.Find("zzabcd abc123"u8));
+        Assert.Equal([0, 1, 2], set.MatchingPatternIds("zzabcd abc123"u8));
+    }
+
+    /// <summary>
     /// Verifies matching pattern identifiers are returned in insertion order.
     /// </summary>
     [Fact]
