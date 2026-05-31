@@ -19,11 +19,14 @@ env:
   DOTNET_NOLOGO: "1"
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  LINUX_SNAPSHOT_URL: "http://snapshot.debian.org/archive/debian/20260501T000000Z"
 
 jobs:
-  portable-build:
+  portable-build-linux:
     name: portable build (${{ matrix.rid }})
     runs-on: ${{ matrix.runner }}
+    container:
+      image: docker.io/library/debian:bookworm-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb
     strategy:
       fail-fast: false
       matrix:
@@ -32,6 +35,67 @@ jobs:
             runner: ubuntu-24.04
           - rid: linux-arm64
             runner: ubuntu-24.04-arm
+    steps:
+      - name: Pinned snapshot apt prerequisites
+        shell: sh
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          printf 'deb %s bookworm main\n' "$LINUX_SNAPSHOT_URL" > /etc/apt/sources.list
+          printf 'Acquire::Check-Valid-Until false;\nAcquire::Retries 3;\n' > /etc/apt/apt.conf.d/99snapshot
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            bash \
+            bzip2 \
+            brotli \
+            ca-certificates \
+            clang \
+            curl \
+            git \
+            gzip \
+            libgssapi-krb5-2 \
+            libicu72 \
+            libssl3 \
+            lz4 \
+            ncompress \
+            tar \
+            xz-utils \
+            zlib1g \
+            zstd
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.102
+      - name: Restore
+        run: dotnet restore Scout.slnx
+      - name: MSBuild warning gates
+        shell: bash
+        run: eng/check-msbuild-warning-gates.sh
+      - name: Build
+        run: dotnet build Scout.slnx --no-restore
+      - name: Fuzz smoke
+        shell: bash
+        run: |
+          dotnet run --project fuzz/Scout.Fuzz/Scout.Fuzz.csproj --no-build -- regex-parse
+          dotnet run --project fuzz/Scout.Fuzz/Scout.Fuzz.csproj --no-build -- glob-compile
+          dotnet run --project fuzz/Scout.Fuzz/Scout.Fuzz.csproj --no-build -- search-loop
+      - name: Format
+        run: dotnet format Scout.slnx --no-restore --verify-no-changes
+      - name: Publish Native AOT static library
+        shell: bash
+        run: >
+          dotnet publish src/Scout.App/Scout.App.csproj
+          -r ${{ matrix.rid }}
+          -c Release
+          -p:NativeLib=Static
+          -o artifacts/app/${{ matrix.rid }}
+
+  portable-build-host:
+    name: portable build (${{ matrix.rid }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
           - rid: osx-x64
             runner: macos-15-intel
           - rid: osx-arm64
@@ -90,9 +154,11 @@ jobs:
       - name: Native pinned differentials
         run: native/build-app-unix.sh osx-arm64 --with-differentials
 
-  native-unix:
+  native-linux:
     name: native Unix link (${{ matrix.rid }})
     runs-on: ${{ matrix.runner }}
+    container:
+      image: docker.io/library/debian:bookworm-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb
     strategy:
       fail-fast: false
       matrix:
@@ -101,6 +167,49 @@ jobs:
             runner: ubuntu-24.04
           - rid: linux-arm64
             runner: ubuntu-24.04-arm
+    steps:
+      - name: Pinned snapshot apt prerequisites
+        shell: sh
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          printf 'deb %s bookworm main\n' "$LINUX_SNAPSHOT_URL" > /etc/apt/sources.list
+          printf 'Acquire::Check-Valid-Until false;\nAcquire::Retries 3;\n' > /etc/apt/apt.conf.d/99snapshot
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            bash \
+            binutils \
+            bzip2 \
+            brotli \
+            build-essential \
+            ca-certificates \
+            clang \
+            curl \
+            git \
+            gzip \
+            libgssapi-krb5-2 \
+            libicu72 \
+            libssl3 \
+            lz4 \
+            ncompress \
+            tar \
+            xz-utils \
+            zlib1g \
+            zlib1g-dev \
+            zstd
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.102
+      - name: Link native executable
+        run: native/build-app-unix.sh ${{ matrix.rid }} --smoke-only
+
+  native-macos:
+    name: native Unix link (${{ matrix.rid }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
           - rid: osx-x64
             runner: macos-15-intel
           - rid: osx-arm64

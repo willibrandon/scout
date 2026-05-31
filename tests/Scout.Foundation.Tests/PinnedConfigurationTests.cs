@@ -59,6 +59,12 @@ public sealed partial class PinnedConfigurationTests
         string workflow = File.ReadAllText(workflowPath);
 
         Assert.Contains("FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: \"true\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("LINUX_SNAPSHOT_URL: \"http://snapshot.debian.org/archive/debian/20260501T000000Z\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("image: docker.io/library/debian:bookworm-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb", workflow, StringComparison.Ordinal);
+        Assert.Contains("Pinned snapshot apt prerequisites", workflow, StringComparison.Ordinal);
+        Assert.Contains("printf 'deb %s bookworm main\\n' \"$LINUX_SNAPSHOT_URL\" > /etc/apt/sources.list", workflow, StringComparison.Ordinal);
+        Assert.Contains("Acquire::Check-Valid-Until false", workflow, StringComparison.Ordinal);
+        Assert.Contains("apt-get install -y --no-install-recommends", workflow, StringComparison.Ordinal);
         Assert.Contains("uses: actions/checkout@v6", workflow, StringComparison.Ordinal);
         Assert.Contains("uses: actions/setup-dotnet@v5", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet-version: 10.0.102", workflow, StringComparison.Ordinal);
@@ -84,6 +90,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("runner: macos-15", workflow, StringComparison.Ordinal);
         Assert.Contains("runner: windows-2025-vs2026", workflow, StringComparison.Ordinal);
         Assert.Contains("bench/run-hyperfine.sh --gate", workflow, StringComparison.Ordinal);
+        Assert.Contains("libicu72", workflow, StringComparison.Ordinal);
+        Assert.Contains("zlib1g-dev", workflow, StringComparison.Ordinal);
+        Assert.Contains("ncompress", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("actions/checkout@v4", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("actions/setup-dotnet@v4", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("macos-13", workflow, StringComparison.Ordinal);
