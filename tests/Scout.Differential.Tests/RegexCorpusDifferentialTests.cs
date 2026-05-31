@@ -10,7 +10,7 @@ namespace Scout;
 /// </summary>
 public sealed class RegexCorpusDifferentialTests
 {
-    private const int ExpectedDifferentialCaseCount = 445;
+    private const int ExpectedDifferentialCaseCount = 484;
     private const int ExpectedSupportedOnlyCaseCount = 47;
 
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
@@ -30,6 +30,7 @@ public sealed class RegexCorpusDifferentialTests
         ("regex-lite.toml", 9),
         ("regression.toml", 51),
         ("set.toml", 29),
+        ("unicode.toml", 39),
         ("word-boundary-special.toml", 41),
     ];
 
@@ -423,6 +424,45 @@ public sealed class RegexCorpusDifferentialTests
         ("regex-lite.toml", "empty-no-split-codepoint"),
         ("regex-lite.toml", "negated-class-always-matches-codepoint"),
         ("regex-lite.toml", "word-boundary-negated"),
+        ("unicode.toml", "class7"),
+        ("unicode.toml", "class9"),
+        ("unicode.toml", "class10"),
+        ("unicode.toml", "class-gencat1"),
+        ("unicode.toml", "class-gencat2"),
+        ("unicode.toml", "class-gencat3"),
+        ("unicode.toml", "class-gencat4"),
+        ("unicode.toml", "class-gencat5"),
+        ("unicode.toml", "class-gencat6"),
+        ("unicode.toml", "class-gencat7"),
+        ("unicode.toml", "class-gencat8"),
+        ("unicode.toml", "class-gencat9"),
+        ("unicode.toml", "class-gencat10"),
+        ("unicode.toml", "class-gencat11"),
+        ("unicode.toml", "class-gencat12"),
+        ("unicode.toml", "class-gencat13"),
+        ("unicode.toml", "class-gencat14"),
+        ("unicode.toml", "class-gencat15"),
+        ("unicode.toml", "class-gencat16"),
+        ("unicode.toml", "class-gencat18"),
+        ("unicode.toml", "class-gencat19"),
+        ("unicode.toml", "class-gencat20"),
+        ("unicode.toml", "class-gencat21"),
+        ("unicode.toml", "class-gencat22"),
+        ("unicode.toml", "class-gencat23"),
+        ("unicode.toml", "class-gencat24"),
+        ("unicode.toml", "class-gencat25"),
+        ("unicode.toml", "class-gencat26"),
+        ("unicode.toml", "class-gencat27"),
+        ("unicode.toml", "class-gencat28"),
+        ("unicode.toml", "class-gencat29"),
+        ("unicode.toml", "class-gencat30"),
+        ("unicode.toml", "class-gencat31"),
+        ("unicode.toml", "class-gencat32"),
+        ("unicode.toml", "class-gencat33"),
+        ("unicode.toml", "class-gencat34"),
+        ("unicode.toml", "class-gencat35"),
+        ("unicode.toml", "class-gencat36"),
+        ("unicode.toml", "class-gencat37"),
         ("set.toml", "basic30"),
         ("set.toml", "basic40"),
         ("set.toml", "basic10-leftmost-first"),

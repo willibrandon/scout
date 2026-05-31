@@ -154,6 +154,8 @@ internal static class RegexByteClass
         {
             RegexSyntaxKind.Dot
                 or RegexSyntaxKind.AnyClass
+                or RegexSyntaxKind.UnicodePropertyClass
+                or RegexSyntaxKind.NotUnicodePropertyClass
                 or RegexSyntaxKind.NotDigitClass
                 or RegexSyntaxKind.NotWordClass
                 or RegexSyntaxKind.NotWhitespaceClass => codepointMode,
@@ -190,6 +192,10 @@ internal static class RegexByteClass
             RegexSyntaxKind.NotWordClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) && !IsRegexWordRune(value, unicodeClasses),
             RegexSyntaxKind.WhitespaceClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) && IsRegexWhitespaceRune(value, unicodeClasses),
             RegexSyntaxKind.NotWhitespaceClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) && !IsRegexWhitespaceRune(value, unicodeClasses),
+            RegexSyntaxKind.UnicodePropertyClass => unicodeClasses && IsUnicodePropertyRune(value, expression),
+            RegexSyntaxKind.NotUnicodePropertyClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) &&
+                unicodeClasses &&
+                !IsUnicodePropertyRune(value, expression),
             _ => false,
         };
     }
@@ -836,6 +842,12 @@ internal static class RegexByteClass
         }
 
         return RegexUnicodeTables.IsAlphabetic(value);
+    }
+
+    private static bool IsUnicodePropertyRune(Rune value, ReadOnlySpan<byte> expression)
+    {
+        return expression.Length == 1 &&
+            RegexUnicodeTables.IsGeneralCategory((RegexUnicodePropertyKind)expression[0], value);
     }
 
     private static bool TryFoldUnicodeScalarToAscii(Rune value, out byte folded)

@@ -361,9 +361,10 @@ internal sealed class RegexSyntaxParseState
             return escapedNode;
         }
 
-        if (escaped == (byte)'p' && TryParseUnicodeAnyClass(position, out RegexSyntaxNode anyClassNode))
+        if ((escaped == (byte)'p' || escaped == (byte)'P') &&
+            TryParseUnicodePropertyClass(position, negated: escaped == (byte)'P', out RegexSyntaxNode propertyNode))
         {
-            return anyClassNode;
+            return propertyNode;
         }
 
         return escaped switch
@@ -386,17 +387,317 @@ internal sealed class RegexSyntaxParseState
         };
     }
 
-    private bool TryParseUnicodeAnyClass(int position, out RegexSyntaxNode node)
+    private bool TryParseUnicodePropertyClass(int position, bool negated, out RegexSyntaxNode node)
     {
         node = new RegexEmptyNode(position);
-        if (index + 5 > Pattern.Length || !Pattern.Slice(index, 5).SequenceEqual("{Any}"u8))
+        int start = index;
+        ReadOnlySpan<byte> name;
+        if (index < Pattern.Length && Pattern[index] == (byte)'{')
         {
+            int nameStart = index + 1;
+            int nameEnd = nameStart;
+            while (nameEnd < Pattern.Length && Pattern[nameEnd] != (byte)'}')
+            {
+                nameEnd++;
+            }
+
+            if (nameEnd >= Pattern.Length || nameEnd == nameStart)
+            {
+                index = start;
+                return false;
+            }
+
+            name = Pattern[nameStart..nameEnd];
+            index = nameEnd + 1;
+        }
+        else
+        {
+            if (index >= Pattern.Length)
+            {
+                return false;
+            }
+
+            name = Pattern.Slice(index, 1);
+            index++;
+        }
+
+        if (!negated && PropertyNameEquals(name, "any"))
+        {
+            node = new RegexAtomNode(RegexSyntaxKind.AnyClass, ReadOnlyMemory<byte>.Empty, position);
+            return true;
+        }
+
+        if (!TryGetUnicodePropertyKind(name, out RegexUnicodePropertyKind propertyKind))
+        {
+            index = start;
             return false;
         }
 
-        index += 5;
-        node = new RegexAtomNode(RegexSyntaxKind.AnyClass, ReadOnlyMemory<byte>.Empty, position);
+        node = new RegexAtomNode(
+            negated ? RegexSyntaxKind.NotUnicodePropertyClass : RegexSyntaxKind.UnicodePropertyClass,
+            new[] { (byte)propertyKind },
+            position);
         return true;
+    }
+
+    private static bool TryGetUnicodePropertyKind(ReadOnlySpan<byte> name, out RegexUnicodePropertyKind propertyKind)
+    {
+        propertyKind = RegexUnicodePropertyKind.Letter;
+        if (PropertyNameEquals(name, "lc") || PropertyNameEquals(name, "casedletter"))
+        {
+            propertyKind = RegexUnicodePropertyKind.CasedLetter;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "pe") || PropertyNameEquals(name, "closepunctuation"))
+        {
+            propertyKind = RegexUnicodePropertyKind.ClosePunctuation;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "pc") || PropertyNameEquals(name, "connectorpunctuation"))
+        {
+            propertyKind = RegexUnicodePropertyKind.ConnectorPunctuation;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "cc") || PropertyNameEquals(name, "control"))
+        {
+            propertyKind = RegexUnicodePropertyKind.Control;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "sc") || PropertyNameEquals(name, "currencysymbol"))
+        {
+            propertyKind = RegexUnicodePropertyKind.CurrencySymbol;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "pd") || PropertyNameEquals(name, "dashpunctuation"))
+        {
+            propertyKind = RegexUnicodePropertyKind.DashPunctuation;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "nd") || PropertyNameEquals(name, "decimalnumber") || PropertyNameEquals(name, "digit"))
+        {
+            propertyKind = RegexUnicodePropertyKind.DecimalNumber;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "me") || PropertyNameEquals(name, "enclosingmark"))
+        {
+            propertyKind = RegexUnicodePropertyKind.EnclosingMark;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "pf") || PropertyNameEquals(name, "finalpunctuation"))
+        {
+            propertyKind = RegexUnicodePropertyKind.FinalPunctuation;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "cf") || PropertyNameEquals(name, "format"))
+        {
+            propertyKind = RegexUnicodePropertyKind.Format;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "pi") || PropertyNameEquals(name, "initialpunctuation"))
+        {
+            propertyKind = RegexUnicodePropertyKind.InitialPunctuation;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "l") || PropertyNameEquals(name, "letter"))
+        {
+            propertyKind = RegexUnicodePropertyKind.Letter;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "nl") || PropertyNameEquals(name, "letternumber"))
+        {
+            propertyKind = RegexUnicodePropertyKind.LetterNumber;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "zl") || PropertyNameEquals(name, "lineseparator"))
+        {
+            propertyKind = RegexUnicodePropertyKind.LineSeparator;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "ll") || PropertyNameEquals(name, "lowercaseletter"))
+        {
+            propertyKind = RegexUnicodePropertyKind.LowercaseLetter;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "m") || PropertyNameEquals(name, "mark"))
+        {
+            propertyKind = RegexUnicodePropertyKind.Mark;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "sm") || PropertyNameEquals(name, "mathsymbol"))
+        {
+            propertyKind = RegexUnicodePropertyKind.MathSymbol;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "lm") || PropertyNameEquals(name, "modifierletter"))
+        {
+            propertyKind = RegexUnicodePropertyKind.ModifierLetter;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "sk") || PropertyNameEquals(name, "modifiersymbol"))
+        {
+            propertyKind = RegexUnicodePropertyKind.ModifierSymbol;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "mn") || PropertyNameEquals(name, "nonspacingmark"))
+        {
+            propertyKind = RegexUnicodePropertyKind.NonspacingMark;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "n") || PropertyNameEquals(name, "number"))
+        {
+            propertyKind = RegexUnicodePropertyKind.Number;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "ps") || PropertyNameEquals(name, "openpunctuation"))
+        {
+            propertyKind = RegexUnicodePropertyKind.OpenPunctuation;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "c") || PropertyNameEquals(name, "other"))
+        {
+            propertyKind = RegexUnicodePropertyKind.Other;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "lo") || PropertyNameEquals(name, "otherletter"))
+        {
+            propertyKind = RegexUnicodePropertyKind.OtherLetter;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "no") || PropertyNameEquals(name, "othernumber"))
+        {
+            propertyKind = RegexUnicodePropertyKind.OtherNumber;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "po") || PropertyNameEquals(name, "otherpunctuation"))
+        {
+            propertyKind = RegexUnicodePropertyKind.OtherPunctuation;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "so") || PropertyNameEquals(name, "othersymbol"))
+        {
+            propertyKind = RegexUnicodePropertyKind.OtherSymbol;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "zp") || PropertyNameEquals(name, "paragraphseparator"))
+        {
+            propertyKind = RegexUnicodePropertyKind.ParagraphSeparator;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "co") || PropertyNameEquals(name, "privateuse"))
+        {
+            propertyKind = RegexUnicodePropertyKind.PrivateUse;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "p") || PropertyNameEquals(name, "punctuation"))
+        {
+            propertyKind = RegexUnicodePropertyKind.Punctuation;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "z") || PropertyNameEquals(name, "separator"))
+        {
+            propertyKind = RegexUnicodePropertyKind.Separator;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "zs") || PropertyNameEquals(name, "spaceseparator"))
+        {
+            propertyKind = RegexUnicodePropertyKind.SpaceSeparator;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "mc") || PropertyNameEquals(name, "spacingmark"))
+        {
+            propertyKind = RegexUnicodePropertyKind.SpacingMark;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "s") || PropertyNameEquals(name, "symbol"))
+        {
+            propertyKind = RegexUnicodePropertyKind.Symbol;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "lt") || PropertyNameEquals(name, "titlecaseletter"))
+        {
+            propertyKind = RegexUnicodePropertyKind.TitlecaseLetter;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "cn") || PropertyNameEquals(name, "unassigned"))
+        {
+            propertyKind = RegexUnicodePropertyKind.Unassigned;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "lu") || PropertyNameEquals(name, "uppercaseletter"))
+        {
+            propertyKind = RegexUnicodePropertyKind.UppercaseLetter;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool PropertyNameEquals(ReadOnlySpan<byte> name, string expected)
+    {
+        int expectedIndex = 0;
+        for (int index = 0; index < name.Length; index++)
+        {
+            byte value = name[index];
+            if (value is (byte)'_' or (byte)'-' or (byte)' ')
+            {
+                continue;
+            }
+
+            if (expectedIndex >= expected.Length)
+            {
+                return false;
+            }
+
+            if (value is >= (byte)'A' and <= (byte)'Z')
+            {
+                value = (byte)(value + 32);
+            }
+
+            if (value != expected[expectedIndex])
+            {
+                return false;
+            }
+
+            expectedIndex++;
+        }
+
+        return expectedIndex == expected.Length;
     }
 
     private bool TryParseNamedWordBoundary(out RegexSyntaxKind boundaryKind)

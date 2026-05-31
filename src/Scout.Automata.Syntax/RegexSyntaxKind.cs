@@ -26,6 +26,16 @@ public enum RegexSyntaxKind
     AnyClass,
 
     /// <summary>
+    /// Matches a pinned Unicode property class.
+    /// </summary>
+    UnicodePropertyClass,
+
+    /// <summary>
+    /// Matches the negation of a pinned Unicode property class.
+    /// </summary>
+    NotUnicodePropertyClass,
+
+    /// <summary>
     /// Matches a bracketed character class.
     /// </summary>
     CharacterClass,
