@@ -19,12 +19,20 @@ SCOUT_BIN=artifacts/bin/osx-arm64/scout \
 bench/run-hyperfine.sh --gate
 ```
 
-GitHub's default `CI` workflow runs only hosted cross-platform build, test,
-format, fuzz, and native link checks. The full pinned test pass and hyperfine
-performance gate live in the `Release Gates` workflow because they require the
-self-hosted `scout/osx-arm64` runner with the pinned local ripgrep checkout,
-macOS tool hashes, and benchmark corpora. The workflow first checks for an
-online repository runner with the `self-hosted`, `scout`, and `osx-arm64`
+GitHub's default `CI` workflow runs hosted cross-platform build, test, format,
+fuzz, and native link checks. After `CI` succeeds on `main`, the `Release Gates`
+workflow starts automatically; it can also be started manually from Actions. The
+full pinned test pass and hyperfine performance gate live there because they
+require the self-hosted `scout/osx-arm64` runner with:
+
+- `self-hosted`, `scout`, and `osx-arm64` labels.
+- A local release-LTO ripgrep checkout matching `tests/PREREQS.lock`.
+- The pinned macOS tools from `tests/PREREQS.lock`, including hyperfine 1.20.0
+  at `/opt/homebrew/bin/hyperfine`.
+- Enough disk for the pinned corpora, including the OpenSubtitles text file and
+  Linux source tree under `artifacts/corpora`.
+
+The workflow first checks for an online repository runner with the required
 labels so missing runner setup fails immediately instead of leaving the gates
 queued. That readiness check needs a `RELEASE_GATES_RUNNER_TOKEN` secret with
 repository `Administration: read` permission because GitHub requires admin read
