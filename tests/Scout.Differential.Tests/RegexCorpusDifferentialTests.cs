@@ -10,8 +10,8 @@ namespace Scout;
 /// </summary>
 public sealed class RegexCorpusDifferentialTests
 {
-    private const int ExpectedDifferentialCaseCount = 278;
-    private const int ExpectedSupportedOnlyCaseCount = 213;
+    private const int ExpectedDifferentialCaseCount = 314;
+    private const int ExpectedSupportedOnlyCaseCount = 177;
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
@@ -28,7 +28,7 @@ public sealed class RegexCorpusDifferentialTests
         ("multiline.toml", 14),
         ("no-unicode.toml", 22),
         ("regex-lite.toml", 9),
-        ("regression.toml", 13),
+        ("regression.toml", 49),
         ("set.toml", 29),
         ("word-boundary-special.toml", 41),
     ];
@@ -45,7 +45,7 @@ public sealed class RegexCorpusDifferentialTests
         ("misc.toml", 2),
         ("multiline.toml", 126),
         ("no-unicode.toml", 1),
-        ("regression.toml", 43),
+        ("regression.toml", 7),
         ("set.toml", 1),
         ("substring.toml", 4),
         ("word-boundary-special.toml", 7),
@@ -215,6 +215,42 @@ public sealed class RegexCorpusDifferentialTests
         ("regression.toml", "partial-anchor-alternate-begin"),
         ("regression.toml", "partial-anchor-alternate-end"),
         ("regression.toml", "lits-unambiguous-100"),
+        ("regression.toml", "unsorted-binary-search-100"),
+        ("regression.toml", "unsorted-binary-search-200"),
+        ("regression.toml", "word-boundary-ascii-no-capture"),
+        ("regression.toml", "word-boundary-ascii-capture"),
+        ("regression.toml", "lits-unambiguous-200"),
+        ("regression.toml", "strange-anchor-non-complete-prefix"),
+        ("regression.toml", "strange-anchor-non-complete-suffix"),
+        ("regression.toml", "captures-after-dfa-premature-end-100"),
+        ("regression.toml", "captures-after-dfa-premature-end-200"),
+        ("regression.toml", "captures-after-dfa-premature-end-300"),
+        ("regression.toml", "captures-after-dfa-premature-end-400"),
+        ("regression.toml", "literal-panic"),
+        ("regression.toml", "empty-flag-expr"),
+        ("regression.toml", "flags-are-unset"),
+        ("regression.toml", "reverse-suffix-100"),
+        ("regression.toml", "reverse-suffix-200"),
+        ("regression.toml", "reverse-suffix-300"),
+        ("regression.toml", "stops"),
+        ("regression.toml", "stops-ascii"),
+        ("regression.toml", "adjacent-line-boundary-100"),
+        ("regression.toml", "adjacent-line-boundary-200"),
+        ("regression.toml", "anchored-prefix-100"),
+        ("regression.toml", "anchored-prefix-200"),
+        ("regression.toml", "anchored-prefix-300"),
+        ("regression.toml", "aho-corasick-100"),
+        ("regression.toml", "interior-anchor-capture"),
+        ("regression.toml", "fowler-basic154-unanchored"),
+        ("regression.toml", "impossible-branch"),
+        ("regression.toml", "captures-wrong-order"),
+        ("regression.toml", "missed-match"),
+        ("regression.toml", "regex-to-glob"),
+        ("regression.toml", "reverse-inner-plus-shorter-than-expected"),
+        ("regression.toml", "reverse-inner-short"),
+        ("regression.toml", "prefilter-with-aho-corasick-standard-semantics"),
+        ("regression.toml", "non-prefix-literal-quit-state"),
+        ("regression.toml", "hir-optimization-out-of-order-class"),
         ("multiline.toml", "repeat7"),
         ("multiline.toml", "repeat7-no-multi"),
         ("multiline.toml", "repeat8"),
