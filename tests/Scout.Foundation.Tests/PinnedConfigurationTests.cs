@@ -12,7 +12,7 @@ namespace Scout;
 /// <summary>
 /// Verifies the repository-level pins required by the Scout design.
 /// </summary>
-public sealed class PinnedConfigurationTests
+public sealed partial class PinnedConfigurationTests
 {
     private const string PinnedRipgrepCommit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119";
     private const string ReferenceRipgrepRoot = "/Users/brandon/src/ripgrep";
@@ -264,27 +264,43 @@ public sealed class PinnedConfigurationTests
     }
 
     /// <summary>
-    /// Verifies the repository contains no skipped xUnit tests.
+    /// Verifies the repository contains no skipped, ignored, explicit, or quarantined tests.
     /// </summary>
     [Fact]
-    public void RepositoryContainsNoSkippedTests()
+    public void RepositoryContainsNoSkippedIgnoredOrQuarantinedTests()
     {
         string root = FindRepositoryRoot();
-        Regex skippedTestPattern = CreateSkippedTestPattern();
+        (string Label, Regex Pattern)[] forbiddenPatterns = CreateForbiddenTestWaiverPatterns();
         var violations = new List<string>();
 
         foreach (string path in EnumerateTestSourceFiles(root))
         {
             string text = File.ReadAllText(path);
-            Match match = skippedTestPattern.Match(text);
-            if (match.Success)
+            foreach ((string label, Regex pattern) in forbiddenPatterns)
             {
-                string relativePath = Path.GetRelativePath(root, path);
-                violations.Add($"{relativePath}: skipped test attribute '{match.Value}'.");
+                Match match = pattern.Match(text);
+                if (match.Success)
+                {
+                    string relativePath = Path.GetRelativePath(root, path);
+                    violations.Add($"{relativePath}: {label} '{match.Value}'.");
+                }
             }
         }
 
         Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>
+    /// Verifies the parity ledger carries no release waivers.
+    /// </summary>
+    [Fact]
+    public void ParityLedgerContainsNoTrackedGaps()
+    {
+        string root = FindRepositoryRoot();
+        string parity = File.ReadAllText(Path.Combine(root, "docs", "PARITY.md"));
+
+        Assert.Contains("Scout has no accepted runtime deviations from the pinned ripgrep behavior.", parity, StringComparison.Ordinal);
+        Assert.Equal("None.", ReadMarkdownSection(parity, "Tracked Gaps").Trim());
     }
 
     /// <summary>
@@ -1198,10 +1214,69 @@ public sealed class PinnedConfigurationTests
         return new Regex(string.Join("|", patterns), RegexOptions.CultureInvariant);
     }
 
-    private static Regex CreateSkippedTestPattern()
+    private static (string Label, Regex Pattern)[] CreateForbiddenTestWaiverPatterns()
     {
-        string pattern = Regex.Escape("[") + @"\s*(?:[A-Za-z_][A-Za-z0-9_]*\.)?(?:Fact|Theory)\s*\([^)\r\n]*\bSkip\s*=";
-        return new Regex(pattern, RegexOptions.CultureInvariant);
+        return
+        [
+            ("xUnit skip attribute", XUnitSkipAttributePattern()),
+            ("xUnit explicit attribute", XUnitExplicitAttributePattern()),
+            ("ignore or explicit attribute", IgnoreOrExplicitAttributePattern()),
+            ("quarantine or skip trait", QuarantineOrSkipTraitPattern()),
+            ("runtime test skip", RuntimeTestSkipPattern()),
+            ("skip exception", SkipExceptionPattern()),
+        ];
+    }
+
+    [GeneratedRegex(@"\[\s*(?:[A-Za-z_][A-Za-z0-9_]*\.)?(?:Fact|Theory)\s*\([^)\r\n]*\bSkip\s*=", RegexOptions.CultureInvariant)]
+    private static partial Regex XUnitSkipAttributePattern();
+
+    [GeneratedRegex(@"\[\s*(?:[A-Za-z_][A-Za-z0-9_]*\.)?(?:Fact|Theory)\s*\([^)\r\n]*\bExplicit\s*=", RegexOptions.CultureInvariant)]
+    private static partial Regex XUnitExplicitAttributePattern();
+
+    [GeneratedRegex(@"\[\s*(?:[A-Za-z_][A-Za-z0-9_]*\.)?(?:Ignore|Explicit)\b", RegexOptions.CultureInvariant)]
+    private static partial Regex IgnoreOrExplicitAttributePattern();
+
+    [GeneratedRegex(@"\[\s*(?:[A-Za-z_][A-Za-z0-9_]*\.)?Trait\s*\([^)\r\n]*(?:Quarantine|Skipped|Ignored)[^)\r\n]*\)", RegexOptions.CultureInvariant)]
+    private static partial Regex QuarantineOrSkipTraitPattern();
+
+    [GeneratedRegex(@"\bAssert\s*\.\s*Skip\s*\(", RegexOptions.CultureInvariant)]
+    private static partial Regex RuntimeTestSkipPattern();
+
+    [GeneratedRegex(@"\bthrow\s+new\s+(?:[A-Za-z_][A-Za-z0-9_]*\.)?SkipException\s*\(", RegexOptions.CultureInvariant)]
+    private static partial Regex SkipExceptionPattern();
+
+    private static string ReadMarkdownSection(string markdown, string heading)
+    {
+        string headingLine = "## " + heading;
+        using var reader = new StringReader(markdown);
+        bool inSection = false;
+        var lines = new List<string>();
+
+        while (reader.ReadLine() is { } line)
+        {
+            if (line.StartsWith("## ", StringComparison.Ordinal))
+            {
+                if (inSection)
+                {
+                    break;
+                }
+
+                inSection = string.Equals(line.Trim(), headingLine, StringComparison.Ordinal);
+                continue;
+            }
+
+            if (inSection)
+            {
+                lines.Add(line);
+            }
+        }
+
+        if (!inSection && lines.Count == 0)
+        {
+            throw new InvalidOperationException("Missing markdown section: " + headingLine);
+        }
+
+        return string.Join(Environment.NewLine, lines);
     }
 
     private static IEnumerable<string> EnumerateSuppressionScanFiles(string root)
