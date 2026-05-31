@@ -117,7 +117,7 @@ internal static class RegexByteClass
             RegexSyntaxKind.AbsoluteStartAnchor => position == 0,
             RegexSyntaxKind.AbsoluteEndAnchor => position == haystack.Length,
             RegexSyntaxKind.WordBoundary => IsRegexWordBoundary(haystack, position, useUnicodeWord),
-            RegexSyntaxKind.NotWordBoundary => !IsRegexWordBoundary(haystack, position, useUnicodeWord),
+            RegexSyntaxKind.NotWordBoundary => IsRegexNotWordBoundary(haystack, position, useUnicodeWord),
             RegexSyntaxKind.WordStartBoundary => IsRegexWordStartBoundary(haystack, position, useUnicodeWord),
             RegexSyntaxKind.WordEndBoundary => IsRegexWordEndBoundary(haystack, position, useUnicodeWord),
             RegexSyntaxKind.WordStartHalfBoundary => IsRegexWordStartHalfBoundary(haystack, position, useUnicodeWord),
@@ -849,6 +849,19 @@ internal static class RegexByteClass
         return leftIsWord != rightIsWord;
     }
 
+    private static bool IsRegexNotWordBoundary(ReadOnlySpan<byte> haystack, int position, bool unicodeWord)
+    {
+        return IsRegexWordContextValid(haystack, position, unicodeWord) &&
+            !IsRegexWordBoundary(haystack, position, unicodeWord);
+    }
+
+    private static bool IsRegexWordContextValid(ReadOnlySpan<byte> haystack, int position, bool unicodeWord)
+    {
+        return !unicodeWord ||
+            IsValidRegexWordContextBefore(haystack, position) &&
+            IsValidRegexWordContextAt(haystack, position);
+    }
+
     private static bool IsRegexWordStartBoundary(ReadOnlySpan<byte> haystack, int position, bool unicodeWord)
     {
         bool leftIsWord = IsRegexWordBefore(haystack, position, unicodeWord);
@@ -914,6 +927,32 @@ internal static class RegexByteClass
 
         return TryDecodeUtf8Scalar(haystack, position, out Rune rune, out _) &&
             IsRegexWordRune(rune, unicodeClasses: true);
+    }
+
+    private static bool IsValidRegexWordContextBefore(ReadOnlySpan<byte> haystack, int position)
+    {
+        if (position <= 0)
+        {
+            return true;
+        }
+
+        int firstCandidate = Math.Max(0, position - 4);
+        for (int index = firstCandidate; index < position; index++)
+        {
+            if (TryDecodeUtf8Scalar(haystack, index, out _, out int length) &&
+                index + length == position)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsValidRegexWordContextAt(ReadOnlySpan<byte> haystack, int position)
+    {
+        return position >= haystack.Length ||
+            TryDecodeUtf8Scalar(haystack, position, out _, out _);
     }
 
     private static bool IsRegexDigitRune(Rune value, bool unicodeClasses)
