@@ -710,8 +710,6 @@ internal static class ScoutApplication
             !lowArgs.Stats &&
             !lowArgs.FixedStrings &&
             !lowArgs.NullData &&
-            !lowArgs.LineRegexp &&
-            !lowArgs.WordRegexp &&
             !lowArgs.Vimgrep &&
             !lowArgs.InvertMatch &&
             !(lowArgs.SearchMode == CliSearchMode.Json && lowArgs.OnlyMatching) &&
@@ -922,7 +920,7 @@ internal static class ScoutApplication
 
         if (lowArgs.Quiet)
         {
-            return SearchPcre2Quiet(bytes, regex, lowArgs.SearchMode, lowArgs.Multiline);
+            return SearchPcre2Quiet(bytes, regex, lowArgs.SearchMode, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline);
         }
 
         if (!heading)
@@ -940,6 +938,8 @@ internal static class ScoutApplication
                 lowArgs.OnlyMatching,
                 lowArgs.Replacement,
                 patterns,
+                lowArgs.LineRegexp,
+                lowArgs.WordRegexp,
                 lowArgs.Multiline,
                 EffectiveLineNumber(lowArgs),
                 EffectiveColumn(lowArgs),
@@ -964,6 +964,8 @@ internal static class ScoutApplication
             lowArgs.OnlyMatching,
             lowArgs.Replacement,
             patterns,
+            lowArgs.LineRegexp,
+            lowArgs.WordRegexp,
             lowArgs.Multiline,
             EffectiveLineNumber(lowArgs),
             EffectiveColumn(lowArgs),
@@ -994,9 +996,9 @@ internal static class ScoutApplication
         return matched;
     }
 
-    private static bool SearchPcre2Quiet(byte[] bytes, Pcre2Regex regex, CliSearchMode searchMode, bool multiline)
+    private static bool SearchPcre2Quiet(byte[] bytes, Pcre2Regex regex, CliSearchMode searchMode, bool lineRegexp, bool wordRegexp, bool multiline)
     {
-        bool hasMatch = multiline ? regex.TryFind(bytes, out _) : HasPcre2Match(bytes, regex);
+        bool hasMatch = multiline ? HasPcre2MultilineMatch(bytes, regex, lineRegexp, wordRegexp) : HasPcre2Match(bytes, regex, lineRegexp, wordRegexp);
         if (searchMode == CliSearchMode.FilesWithoutMatch)
         {
             return !hasMatch;
@@ -1004,13 +1006,13 @@ internal static class ScoutApplication
 
         if (searchMode == CliSearchMode.CountMatches)
         {
-            long count = multiline ? CountPcre2MultilineMatches(bytes, regex) : CountPcre2Matches(bytes, regex);
+            long count = multiline ? CountPcre2MultilineMatches(bytes, regex, lineRegexp, wordRegexp) : CountPcre2Matches(bytes, regex, lineRegexp, wordRegexp);
             return count > 0;
         }
 
         if (searchMode == CliSearchMode.Count)
         {
-            long count = multiline ? CountPcre2MultilineMatchingLines(bytes, regex) : CountPcre2MatchingLines(bytes, regex);
+            long count = multiline ? CountPcre2MultilineMatchingLines(bytes, regex, lineRegexp, wordRegexp) : CountPcre2MatchingLines(bytes, regex, lineRegexp, wordRegexp);
             return count > 0;
         }
 
@@ -1121,6 +1123,8 @@ internal static class ScoutApplication
         bool onlyMatching,
         ReadOnlyMemory<byte>? replacement,
         IReadOnlyList<byte[]> patterns,
+        bool lineRegexp,
+        bool wordRegexp,
         bool multiline,
         bool lineNumber,
         bool column,
@@ -1131,46 +1135,46 @@ internal static class ScoutApplication
     {
         if (multiline)
         {
-            return RunPcre2MultilineSearchMode(bytes, regex, output, separators, path, prefix, lineLimit, color, searchMode, replacement, patterns, lineNumber, column, byteOffset, trim, includeZero, nullPathTerminator);
+            return RunPcre2MultilineSearchMode(bytes, regex, output, separators, path, prefix, lineLimit, color, searchMode, replacement, patterns, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, includeZero, nullPathTerminator);
         }
 
         if (searchMode == CliSearchMode.Count)
         {
             long count = onlyMatching
-                ? CountPcre2Matches(bytes, regex)
-                : CountPcre2MatchingLines(bytes, regex);
+                ? CountPcre2Matches(bytes, regex, lineRegexp, wordRegexp)
+                : CountPcre2MatchingLines(bytes, regex, lineRegexp, wordRegexp);
             return WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.CountMatches)
         {
-            return WriteCount(output, prefix, color, CountPcre2Matches(bytes, regex), includeZero, nullPathTerminator, separators.LineTerminator);
+            return WriteCount(output, prefix, color, CountPcre2Matches(bytes, regex, lineRegexp, wordRegexp), includeZero, nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.FilesWithMatches)
         {
-            return WritePathIf(output, path, color, HasPcre2Match(bytes, regex), nullPathTerminator, separators.LineTerminator);
+            return WritePathIf(output, path, color, HasPcre2Match(bytes, regex, lineRegexp, wordRegexp), nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.FilesWithoutMatch)
         {
-            return WritePathIf(output, path, color, !HasPcre2Match(bytes, regex), nullPathTerminator, separators.LineTerminator);
+            return WritePathIf(output, path, color, !HasPcre2Match(bytes, regex, lineRegexp, wordRegexp), nullPathTerminator, separators.LineTerminator);
         }
 
         if (replacement is ReadOnlyMemory<byte> replacementValue)
         {
-            return SearchPcre2ReplacedLines(bytes, regex, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, patterns);
+            return SearchPcre2ReplacedLines(bytes, regex, output, separators, prefix, lineLimit, color, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, patterns);
         }
 
-        return SearchPcre2Lines(bytes, regex, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, onlyMatching);
+        return SearchPcre2Lines(bytes, regex, output, separators, prefix, lineLimit, color, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, nullPathTerminator, onlyMatching);
     }
 
     private static bool RunPcre2JsonSearch(byte[] bytes, Pcre2Regex regex, RawByteWriter output, byte[] path, CliLowArgs lowArgs, JsonSearchSummary summary)
     {
         var writer = new JsonFileWriter(output, path, lowArgs.Quiet, binaryOffset: GetPcre2JsonBinaryOffset(bytes, lowArgs.TextMode));
         bool matched = lowArgs.Multiline
-            ? SearchPcre2JsonMultilineBytes(bytes, regex, writer)
-            : SearchPcre2JsonLines(bytes, regex, writer);
+            ? SearchPcre2JsonMultilineBytes(bytes, regex, writer, lowArgs.LineRegexp, lowArgs.WordRegexp)
+            : SearchPcre2JsonLines(bytes, regex, writer, lowArgs.LineRegexp, lowArgs.WordRegexp);
         writer.Finish((ulong)bytes.Length, summary);
         return matched;
     }
@@ -1180,7 +1184,7 @@ internal static class ScoutApplication
         return textMode ? -1 : bytes.AsSpan().IndexOf((byte)0);
     }
 
-    private static bool SearchPcre2JsonLines(byte[] bytes, Pcre2Regex regex, JsonFileWriter writer)
+    private static bool SearchPcre2JsonLines(byte[] bytes, Pcre2Regex regex, JsonFileWriter writer, bool lineRegexp, bool wordRegexp)
     {
         bool matched = false;
         int lineStart = 0;
@@ -1200,7 +1204,7 @@ internal static class ScoutApplication
             }
 
             matches.Clear();
-            CollectPcre2LineMatches(matchLine, regex, matches);
+            CollectPcre2LineMatches(matchLine, regex, matches, lineRegexp, wordRegexp);
             if (matches.Count > 0)
             {
                 writer.WriteMatchLine(lineNumber, lineStart, outputLine, matches);
@@ -1219,22 +1223,26 @@ internal static class ScoutApplication
         return matched;
     }
 
-    private static void CollectPcre2LineMatches(ReadOnlySpan<byte> line, Pcre2Regex regex, List<JsonMatchSpan> matches)
+    private static void CollectPcre2LineMatches(ReadOnlySpan<byte> line, Pcre2Regex regex, List<JsonMatchSpan> matches, bool lineRegexp, bool wordRegexp)
     {
         int startOffset = 0;
         while (startOffset <= line.Length && regex.TryFind(line, startOffset, out Pcre2Match match))
         {
-            matches.Add(new JsonMatchSpan(match.Start, match.Start + match.Length, replacement: null));
+            if (Pcre2MatchSatisfies(line, match, lineRegexp, wordRegexp))
+            {
+                matches.Add(new JsonMatchSpan(match.Start, match.Start + match.Length, replacement: null));
+            }
+
             startOffset = match.Length == 0 ? match.Start + 1 : match.Start + match.Length;
         }
     }
 
-    private static bool SearchPcre2JsonMultilineBytes(byte[] bytes, Pcre2Regex regex, JsonFileWriter writer)
+    private static bool SearchPcre2JsonMultilineBytes(byte[] bytes, Pcre2Regex regex, JsonFileWriter writer, bool lineRegexp, bool wordRegexp)
     {
         bool matched = false;
         int offset = 0;
         var matches = new List<JsonMatchSpan>(capacity: 1);
-        while (offset <= bytes.Length && regex.TryFind(bytes, offset, out Pcre2Match match))
+        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, ref offset, out Pcre2Match match))
         {
             matched = true;
             int firstLineStart = GetLineStart(bytes, match.Start);
@@ -1248,7 +1256,6 @@ internal static class ScoutApplication
                 bytes.AsSpan(firstLineStart, lineEnd - firstLineStart),
                 matches,
                 (ulong)(1 + CountLineFeeds(bytes.AsSpan(firstLineStart, lastLineStart - firstLineStart))));
-            offset = AdvanceAfterPcre2Match(match, bytes.Length);
         }
 
         return matched;
@@ -1266,6 +1273,8 @@ internal static class ScoutApplication
         CliSearchMode searchMode,
         ReadOnlyMemory<byte>? replacement,
         IReadOnlyList<byte[]> patterns,
+        bool lineRegexp,
+        bool wordRegexp,
         bool lineNumber,
         bool column,
         bool byteOffset,
@@ -1275,30 +1284,30 @@ internal static class ScoutApplication
     {
         if (searchMode == CliSearchMode.Count)
         {
-            return WriteCount(output, prefix, color, CountPcre2MultilineMatchingLines(bytes, regex), includeZero, nullPathTerminator, separators.LineTerminator);
+            return WriteCount(output, prefix, color, CountPcre2MultilineMatchingLines(bytes, regex, lineRegexp, wordRegexp), includeZero, nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.CountMatches)
         {
-            return WriteCount(output, prefix, color, CountPcre2MultilineMatches(bytes, regex), includeZero, nullPathTerminator, separators.LineTerminator);
+            return WriteCount(output, prefix, color, CountPcre2MultilineMatches(bytes, regex, lineRegexp, wordRegexp), includeZero, nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.FilesWithMatches)
         {
-            return WritePathIf(output, path, color, regex.TryFind(bytes, out _), nullPathTerminator, separators.LineTerminator);
+            return WritePathIf(output, path, color, HasPcre2MultilineMatch(bytes, regex, lineRegexp, wordRegexp), nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.FilesWithoutMatch)
         {
-            return WritePathIf(output, path, color, !regex.TryFind(bytes, out _), nullPathTerminator, separators.LineTerminator);
+            return WritePathIf(output, path, color, !HasPcre2MultilineMatch(bytes, regex, lineRegexp, wordRegexp), nullPathTerminator, separators.LineTerminator);
         }
 
         if (replacement is ReadOnlyMemory<byte> replacementValue)
         {
-            return SearchPcre2MultilineReplacedBytes(bytes, regex, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, patterns);
+            return SearchPcre2MultilineReplacedBytes(bytes, regex, output, separators, prefix, lineLimit, color, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, patterns);
         }
 
-        return SearchPcre2MultilineBytes(bytes, regex, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator);
+        return SearchPcre2MultilineBytes(bytes, regex, output, separators, prefix, lineLimit, color, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, nullPathTerminator);
     }
 
     private static bool SearchPcre2MultilineBytes(
@@ -1309,6 +1318,8 @@ internal static class ScoutApplication
         OutputPath? prefix,
         OutputLineLimit lineLimit,
         OutputColor color,
+        bool lineRegexp,
+        bool wordRegexp,
         bool lineNumber,
         bool column,
         bool byteOffset,
@@ -1319,7 +1330,7 @@ internal static class ScoutApplication
         bool matched = false;
         int offset = 0;
         int lastWrittenLineStart = -1;
-        while (offset <= bytes.Length && regex.TryFind(bytes, offset, out Pcre2Match match))
+        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, ref offset, out Pcre2Match match))
         {
             matched = true;
             int firstLineStart = GetLineStart(bytes, match.Start);
@@ -1342,7 +1353,6 @@ internal static class ScoutApplication
                 lineStart = GetNextLineStart(lineEnd, bytes.Length);
             }
 
-            offset = AdvanceAfterPcre2Match(match, bytes.Length);
         }
 
         return matched;
@@ -1356,6 +1366,8 @@ internal static class ScoutApplication
         OutputPath? prefix,
         OutputLineLimit lineLimit,
         OutputColor color,
+        bool lineRegexp,
+        bool wordRegexp,
         bool lineNumber,
         bool column,
         bool byteOffset,
@@ -1369,7 +1381,7 @@ internal static class ScoutApplication
         int groupStart = -1;
         int groupEnd = -1;
         List<Pcre2Match> groupMatches = [];
-        while (offset <= bytes.Length && regex.TryFind(bytes, offset, out Pcre2Match match))
+        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, ref offset, out Pcre2Match match))
         {
             matched = true;
             GetPcre2MultilineReplacementRange(bytes, match, out int rangeStart, out int rangeEnd);
@@ -1392,7 +1404,6 @@ internal static class ScoutApplication
             }
 
             groupMatches.Add(match);
-            offset = AdvanceAfterPcre2Match(match, bytes.Length);
         }
 
         if (groupStart >= 0)
@@ -1411,6 +1422,8 @@ internal static class ScoutApplication
         OutputPath? prefix,
         OutputLineLimit lineLimit,
         OutputColor color,
+        bool lineRegexp,
+        bool wordRegexp,
         bool lineNumber,
         bool column,
         bool byteOffset,
@@ -1434,15 +1447,15 @@ internal static class ScoutApplication
                 matchLine = matchLine[..^1];
             }
 
-            if (regex.TryFind(matchLine, out Pcre2Match firstMatch))
+            if (TryFindPcre2LineMatch(matchLine, regex, lineRegexp, wordRegexp, out Pcre2Match firstMatch))
             {
                 if (onlyMatching)
                 {
-                    WritePcre2OnlyMatches(matchLine, regex, output, separators, prefix, color, currentLineNumber, lineStart, lineNumber, column, byteOffset, trim, nullPathTerminator);
+                    WritePcre2OnlyMatches(matchLine, regex, output, separators, prefix, color, currentLineNumber, lineStart, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, nullPathTerminator);
                 }
                 else
                 {
-                    WritePcre2MatchedLine(outputLine, matchLine, regex, output, separators, prefix, lineLimit, color, currentLineNumber, lineStart, firstMatch, lineNumber, column, byteOffset, trim, nullPathTerminator);
+                    WritePcre2MatchedLine(outputLine, matchLine, regex, output, separators, prefix, lineLimit, color, currentLineNumber, lineStart, firstMatch, lineRegexp, wordRegexp, lineNumber, column, byteOffset, trim, nullPathTerminator);
                 }
 
                 matched = true;
@@ -1507,6 +1520,8 @@ internal static class ScoutApplication
         OutputPath? prefix,
         OutputLineLimit lineLimit,
         OutputColor color,
+        bool lineRegexp,
+        bool wordRegexp,
         bool lineNumber,
         bool column,
         bool byteOffset,
@@ -1535,14 +1550,18 @@ internal static class ScoutApplication
             int startOffset = 0;
             while (startOffset <= matchLine.Length && regex.TryFind(matchLine, startOffset, out Pcre2Match match))
             {
-                matched = true;
-                sink.MatchedLine(
-                    currentLineNumber,
-                    lineStart,
-                    lineStart + match.Start,
-                    match.Start + 1L,
-                    outputLine,
-                    matchLine.Slice(match.Start, match.Length));
+                if (Pcre2MatchSatisfies(matchLine, match, lineRegexp, wordRegexp))
+                {
+                    matched = true;
+                    sink.MatchedLine(
+                        currentLineNumber,
+                        lineStart,
+                        lineStart + match.Start,
+                        match.Start + 1L,
+                        outputLine,
+                        matchLine.Slice(match.Start, match.Length));
+                }
+
                 startOffset = match.Length == 0 ? match.Start + 1 : match.Start + match.Length;
             }
 
@@ -1571,6 +1590,8 @@ internal static class ScoutApplication
         long lineNumber,
         int lineStart,
         Pcre2Match firstMatch,
+        bool lineRegexp,
+        bool wordRegexp,
         bool printLineNumber,
         bool printColumn,
         bool printByteOffset,
@@ -1580,7 +1601,7 @@ internal static class ScoutApplication
         if (color.Enabled)
         {
             var sink = new ColoredSearchSink(output, prefix, separators.FieldMatch, printLineNumber, printColumn, printByteOffset, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
-            WritePcre2ColoredMatches(matchLine, regex, ref sink, lineNumber, lineStart, outputLine);
+            WritePcre2ColoredMatches(matchLine, regex, ref sink, lineNumber, lineStart, outputLine, lineRegexp, wordRegexp);
             sink.Flush();
             return;
         }
@@ -1595,23 +1616,29 @@ internal static class ScoutApplication
         ref ColoredSearchSink sink,
         long lineNumber,
         int lineStart,
-        ReadOnlySpan<byte> outputLine)
+        ReadOnlySpan<byte> outputLine,
+        bool lineRegexp,
+        bool wordRegexp)
     {
         int startOffset = 0;
         while (startOffset <= matchLine.Length && regex.TryFind(matchLine, startOffset, out Pcre2Match match))
         {
-            sink.MatchedLine(
-                lineNumber,
-                lineStart,
-                lineStart + match.Start,
-                match.Start + 1L,
-                outputLine,
-                matchLine.Slice(match.Start, match.Length));
+            if (Pcre2MatchSatisfies(matchLine, match, lineRegexp, wordRegexp))
+            {
+                sink.MatchedLine(
+                    lineNumber,
+                    lineStart,
+                    lineStart + match.Start,
+                    match.Start + 1L,
+                    outputLine,
+                    matchLine.Slice(match.Start, match.Length));
+            }
+
             startOffset = match.Length == 0 ? match.Start + 1 : match.Start + match.Length;
         }
     }
 
-    private static bool HasPcre2Match(byte[] bytes, Pcre2Regex regex)
+    private static bool HasPcre2Match(byte[] bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp)
     {
         int lineStart = 0;
         while (lineStart <= bytes.Length)
@@ -1625,7 +1652,7 @@ internal static class ScoutApplication
                 line = line[..^1];
             }
 
-            if (regex.TryFind(line, out _))
+            if (TryFindPcre2LineMatch(line, regex, lineRegexp, wordRegexp, out _))
             {
                 return true;
             }
@@ -1641,7 +1668,7 @@ internal static class ScoutApplication
         return false;
     }
 
-    private static long CountPcre2MatchingLines(byte[] bytes, Pcre2Regex regex)
+    private static long CountPcre2MatchingLines(byte[] bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp)
     {
         long count = 0;
         int lineStart = 0;
@@ -1656,7 +1683,7 @@ internal static class ScoutApplication
                 line = line[..^1];
             }
 
-            if (regex.TryFind(line, out _))
+            if (TryFindPcre2LineMatch(line, regex, lineRegexp, wordRegexp, out _))
             {
                 count++;
             }
@@ -1672,7 +1699,7 @@ internal static class ScoutApplication
         return count;
     }
 
-    private static long CountPcre2Matches(byte[] bytes, Pcre2Regex regex)
+    private static long CountPcre2Matches(byte[] bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp)
     {
         long count = 0;
         int lineStart = 0;
@@ -1687,7 +1714,7 @@ internal static class ScoutApplication
                 line = line[..^1];
             }
 
-            count += CountPcre2LineMatches(line, regex);
+            count += CountPcre2LineMatches(line, regex, lineRegexp, wordRegexp);
 
             if (lineFeed < 0)
             {
@@ -1700,25 +1727,29 @@ internal static class ScoutApplication
         return count;
     }
 
-    private static int CountPcre2LineMatches(ReadOnlySpan<byte> line, Pcre2Regex regex)
+    private static int CountPcre2LineMatches(ReadOnlySpan<byte> line, Pcre2Regex regex, bool lineRegexp, bool wordRegexp)
     {
         int count = 0;
         int startOffset = 0;
         while (startOffset <= line.Length && regex.TryFind(line, startOffset, out Pcre2Match match))
         {
-            count++;
+            if (Pcre2MatchSatisfies(line, match, lineRegexp, wordRegexp))
+            {
+                count++;
+            }
+
             startOffset = match.Length == 0 ? match.Start + 1 : match.Start + match.Length;
         }
 
         return count;
     }
 
-    private static long CountPcre2MultilineMatchingLines(byte[] bytes, Pcre2Regex regex)
+    private static long CountPcre2MultilineMatchingLines(byte[] bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp)
     {
         long count = 0;
         int offset = 0;
         int lastCountedLineStart = -1;
-        while (offset <= bytes.Length && regex.TryFind(bytes, offset, out Pcre2Match match))
+        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, ref offset, out Pcre2Match match))
         {
             int firstLineStart = GetLineStart(bytes, match.Start);
             int lastLineStart = GetLineStart(bytes, GetInclusivePcre2MatchEnd(match));
@@ -1734,23 +1765,66 @@ internal static class ScoutApplication
                 lineStart = GetNextLineStart(lineEnd, bytes.Length);
             }
 
-            offset = AdvanceAfterPcre2Match(match, bytes.Length);
         }
 
         return count;
     }
 
-    private static long CountPcre2MultilineMatches(byte[] bytes, Pcre2Regex regex)
+    private static long CountPcre2MultilineMatches(byte[] bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp)
     {
         long count = 0;
         int offset = 0;
-        while (offset <= bytes.Length && regex.TryFind(bytes, offset, out Pcre2Match match))
+        while (TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, ref offset, out _))
         {
             count++;
-            offset = AdvanceAfterPcre2Match(match, bytes.Length);
         }
 
         return count;
+    }
+
+    private static bool HasPcre2MultilineMatch(byte[] bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp)
+    {
+        int offset = 0;
+        return TryFindNextPcre2Match(bytes, regex, lineRegexp, wordRegexp, ref offset, out _);
+    }
+
+    private static bool TryFindPcre2LineMatch(ReadOnlySpan<byte> line, Pcre2Regex regex, bool lineRegexp, bool wordRegexp, out Pcre2Match match)
+    {
+        int startOffset = 0;
+        while (startOffset <= line.Length && regex.TryFind(line, startOffset, out match))
+        {
+            if (Pcre2MatchSatisfies(line, match, lineRegexp, wordRegexp))
+            {
+                return true;
+            }
+
+            startOffset = AdvanceAfterPcre2Match(match, line.Length);
+        }
+
+        match = default;
+        return false;
+    }
+
+    private static bool TryFindNextPcre2Match(ReadOnlySpan<byte> bytes, Pcre2Regex regex, bool lineRegexp, bool wordRegexp, ref int offset, out Pcre2Match match)
+    {
+        while (offset <= bytes.Length && regex.TryFind(bytes, offset, out match))
+        {
+            offset = AdvanceAfterPcre2Match(match, bytes.Length);
+            if (Pcre2MatchSatisfies(bytes, match, lineRegexp, wordRegexp))
+            {
+                return true;
+            }
+        }
+
+        match = default;
+        return false;
+    }
+
+    private static bool Pcre2MatchSatisfies(ReadOnlySpan<byte> bytes, Pcre2Match match, bool lineRegexp, bool wordRegexp)
+    {
+        int end = match.Start + match.Length;
+        return (!lineRegexp || IsLineMatch(bytes, match.Start, end)) &&
+            (!wordRegexp || IsWordMatch(bytes, match.Start, end));
     }
 
     private static int GetInclusivePcre2MatchEnd(Pcre2Match match)
@@ -1773,6 +1847,8 @@ internal static class ScoutApplication
         OutputColor color,
         long lineNumber,
         int lineStart,
+        bool lineRegexp,
+        bool wordRegexp,
         bool printLineNumber,
         bool printColumn,
         bool printByteOffset,
@@ -1783,7 +1859,11 @@ internal static class ScoutApplication
         int startOffset = 0;
         while (startOffset <= line.Length && regex.TryFind(line, startOffset, out Pcre2Match match))
         {
-            sink.Matched(lineNumber, lineStart + match.Start, match.Start + 1L, line.Slice(match.Start, match.Length));
+            if (Pcre2MatchSatisfies(line, match, lineRegexp, wordRegexp))
+            {
+                sink.Matched(lineNumber, lineStart + match.Start, match.Start + 1L, line.Slice(match.Start, match.Length));
+            }
+
             startOffset = match.Length == 0 ? match.Start + 1 : match.Start + match.Length;
         }
     }

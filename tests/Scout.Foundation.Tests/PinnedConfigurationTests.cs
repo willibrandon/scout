@@ -751,6 +751,8 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("run_tool_stdin()", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case basic_lookahead_multi_file sort-lines -P -n 'foo(?=bar)'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case recursive_lookahead sort-lines -P -n 'foo(?=bar)' pcre2-dir", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case line_regexp exact -P -x 'foo(?=bar)bar' pcre2-smoke.txt", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case word_regexp exact -P -w 'foo(?=-)' pcre2-word.txt", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_stdin_case explicit_stdin_lookahead exact \"$WORK/pcre2-smoke.txt\" -P 'foo(?=bar)' -", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_stdin_case implicit_stdin_lookahead exact \"$WORK/pcre2-smoke.txt\" -P 'foo(?=bar)'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("mask-elapsed-sort-lines", differentialScript, StringComparison.Ordinal);
