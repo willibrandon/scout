@@ -502,26 +502,12 @@ internal static class JsonSearchOperations
 
     private static long GetJsonMultilineLineNumber(ReadOnlySpan<byte> bytes, int lineStart, bool nullData)
     {
-        return nullData ? 1 + CountBytes(bytes[..Math.Clamp(lineStart, 0, bytes.Length)], 0) : MultilineSearchOperations.GetLineNumber(bytes, lineStart);
+        return nullData ? 1 + ByteCounter.Count(bytes[..Math.Clamp(lineStart, 0, bytes.Length)], 0) : MultilineSearchOperations.GetLineNumber(bytes, lineStart);
     }
 
     private static long CountJsonMultilineLineTerminators(ReadOnlySpan<byte> bytes, bool nullData)
     {
-        return nullData ? CountBytes(bytes, 0) : MultilineSearchOperations.CountLineFeeds(bytes);
-    }
-
-    private static long CountBytes(ReadOnlySpan<byte> bytes, byte value)
-    {
-        long count = 0;
-        for (int index = 0; index < bytes.Length; index++)
-        {
-            if (bytes[index] == value)
-            {
-                count++;
-            }
-        }
-
-        return count;
+        return nullData ? ByteCounter.Count(bytes, 0) : MultilineSearchOperations.CountLineFeeds(bytes);
     }
 
     private static bool WriteJsonMultilineInvertedMatches(

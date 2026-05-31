@@ -913,15 +913,6 @@ internal static class MultilineSearchOperations
 
     internal static long CountLineFeeds(ReadOnlySpan<byte> bytes)
     {
-        long count = 0;
-        for (int index = 0; index < bytes.Length; index++)
-        {
-            if (bytes[index] == (byte)'\n')
-            {
-                count++;
-            }
-        }
-
-        return count;
+        return ByteCounter.Count(bytes, (byte)'\n');
     }
 }

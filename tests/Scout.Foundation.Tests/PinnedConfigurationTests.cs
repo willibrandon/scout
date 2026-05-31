@@ -1393,6 +1393,32 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies the design-required bytecount port has SIMD gates and is used by multiline accounting.
+    /// </summary>
+    [Fact]
+    public void ByteCounterIncludesRequiredSimdGates()
+    {
+        string root = FindRepositoryRoot();
+        string byteCounter = File.ReadAllText(Path.Combine(root, "src", "Scout.Automata", "ByteCounter.cs"));
+        string multiline = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "MultilineSearchOperations.cs"));
+        string pcre2 = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "Pcre2SearchOperations.cs"));
+        string json = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "JsonSearchOperations.cs"));
+        string upstream = File.ReadAllText(Path.Combine(root, "src", "Scout.Automata", "UPSTREAM.md"));
+
+        Assert.Contains("Avx512BW.IsSupported", byteCounter, StringComparison.Ordinal);
+        Assert.Contains("Avx2.IsSupported", byteCounter, StringComparison.Ordinal);
+        Assert.Contains("Sse2.IsSupported", byteCounter, StringComparison.Ordinal);
+        Assert.Contains("AdvSimd.IsSupported", byteCounter, StringComparison.Ordinal);
+        Assert.Contains("CountVector512", byteCounter, StringComparison.Ordinal);
+        Assert.Contains("BitOperations.PopCount", byteCounter, StringComparison.Ordinal);
+        Assert.Contains("ByteCounter.Count(bytes, (byte)'\\n')", multiline, StringComparison.Ordinal);
+        Assert.Contains("ByteCounter.Count(bytes, (byte)'\\n')", pcre2, StringComparison.Ordinal);
+        Assert.Contains("ByteCounter.Count(bytes", json, StringComparison.Ordinal);
+        Assert.Contains("SIMD byte", upstream, StringComparison.Ordinal);
+        Assert.Contains("counting", upstream, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies the regex conformance corpus files are pinned by hash.
     /// </summary>
     [Fact]

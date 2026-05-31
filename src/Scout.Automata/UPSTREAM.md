@@ -16,5 +16,6 @@ checksum = "843bc0191f75f3e22651ae5f1e72939ab2f72a4bc30fa80a066bd66edefc24d4"
 ```
 
 The implementation covers NFA construction, PikeVM execution, prefilter
-selection, bounded backtracking, dense/sparse/lazy/one-pass DFA tiers, and the
-meta engine/`PatternSet` surface used by glob and ignore matching.
+selection, bounded backtracking, dense/sparse/lazy/one-pass DFA tiers, SIMD byte
+counting for line-number and multiline accounting, and the meta
+engine/`PatternSet` surface used by glob and ignore matching.
