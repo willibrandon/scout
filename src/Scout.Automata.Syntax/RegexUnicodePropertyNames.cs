@@ -16,6 +16,11 @@ public static class RegexUnicodePropertyNames
     public static bool TryGetKind(ReadOnlySpan<byte> name, out RegexUnicodePropertyKind propertyKind)
     {
         propertyKind = RegexUnicodePropertyKind.Letter;
+        if (TryGetBreakPropertyKind(name, out propertyKind))
+        {
+            return true;
+        }
+
         if (NameEquals(name, "lc") || NameEquals(name, "casedletter"))
         {
             propertyKind = RegexUnicodePropertyKind.CasedLetter;
@@ -253,6 +258,117 @@ public static class RegexUnicodePropertyNames
         if (NameEquals(name, "lu") || NameEquals(name, "uppercaseletter"))
         {
             propertyKind = RegexUnicodePropertyKind.UppercaseLetter;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetBreakPropertyKind(ReadOnlySpan<byte> name, out RegexUnicodePropertyKind propertyKind)
+    {
+        propertyKind = RegexUnicodePropertyKind.None;
+        int separator = name.IndexOf((byte)'=');
+        if (separator >= 0)
+        {
+            ReadOnlySpan<byte> propertyName = name[..separator];
+            ReadOnlySpan<byte> propertyValue = name[(separator + 1)..];
+            if ((NameEquals(propertyName, "graphemeclusterbreak") || NameEquals(propertyName, "gcb")) &&
+                TryGetGraphemeClusterBreakKind(propertyValue, out propertyKind))
+            {
+                return true;
+            }
+
+            if ((NameEquals(propertyName, "wordbreak") || NameEquals(propertyName, "wb")) &&
+                TryGetWordBreakKind(propertyValue, out propertyKind))
+            {
+                return true;
+            }
+
+            return (NameEquals(propertyName, "sentencebreak") || NameEquals(propertyName, "sb")) &&
+                TryGetSentenceBreakKind(propertyValue, out propertyKind);
+        }
+
+        return TryGetGraphemeClusterBreakKind(name, out propertyKind);
+    }
+
+    private static bool TryGetGraphemeClusterBreakKind(ReadOnlySpan<byte> value, out RegexUnicodePropertyKind propertyKind)
+    {
+        propertyKind = RegexUnicodePropertyKind.None;
+        if (NameEquals(value, "prepend"))
+        {
+            propertyKind = RegexUnicodePropertyKind.GraphemeClusterBreakPrepend;
+            return true;
+        }
+
+        if (NameEquals(value, "regionalindicator") || NameEquals(value, "ri"))
+        {
+            propertyKind = RegexUnicodePropertyKind.GraphemeClusterBreakRegionalIndicator;
+            return true;
+        }
+
+        if (NameEquals(value, "lvt"))
+        {
+            propertyKind = RegexUnicodePropertyKind.GraphemeClusterBreakLvt;
+            return true;
+        }
+
+        if (NameEquals(value, "zwj"))
+        {
+            propertyKind = RegexUnicodePropertyKind.GraphemeClusterBreakZwj;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetWordBreakKind(ReadOnlySpan<byte> value, out RegexUnicodePropertyKind propertyKind)
+    {
+        propertyKind = RegexUnicodePropertyKind.None;
+        if (NameEquals(value, "hebrewletter"))
+        {
+            propertyKind = RegexUnicodePropertyKind.WordBreakHebrewLetter;
+            return true;
+        }
+
+        if (NameEquals(value, "extendnumlet"))
+        {
+            propertyKind = RegexUnicodePropertyKind.WordBreakExtendNumLet;
+            return true;
+        }
+
+        if (NameEquals(value, "wsegspace"))
+        {
+            propertyKind = RegexUnicodePropertyKind.WordBreakWSegSpace;
+            return true;
+        }
+
+        if (NameEquals(value, "numeric"))
+        {
+            propertyKind = RegexUnicodePropertyKind.WordBreakNumeric;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetSentenceBreakKind(ReadOnlySpan<byte> value, out RegexUnicodePropertyKind propertyKind)
+    {
+        propertyKind = RegexUnicodePropertyKind.None;
+        if (NameEquals(value, "lower"))
+        {
+            propertyKind = RegexUnicodePropertyKind.SentenceBreakLower;
+            return true;
+        }
+
+        if (NameEquals(value, "close"))
+        {
+            propertyKind = RegexUnicodePropertyKind.SentenceBreakClose;
+            return true;
+        }
+
+        if (NameEquals(value, "scontinue") || NameEquals(value, "sc"))
+        {
+            propertyKind = RegexUnicodePropertyKind.SentenceBreakSContinue;
             return true;
         }
 

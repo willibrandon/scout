@@ -162,7 +162,7 @@ internal static class RegexByteClass
             RegexSyntaxKind.DigitClass
                 or RegexSyntaxKind.WordClass
                 or RegexSyntaxKind.WhitespaceClass => unicodeClasses,
-            RegexSyntaxKind.Literal => unicodeClasses && caseInsensitive,
+            RegexSyntaxKind.Literal => expression.Length > 1 || unicodeClasses && caseInsensitive,
             RegexSyntaxKind.CharacterClass => codepointMode && IsNegatedClass(expression) ||
                 unicodeClasses && (ContainsScalarClassToken(expression) || caseInsensitive && ContainsLiteralClassToken(expression)),
             _ => false,
@@ -182,7 +182,7 @@ internal static class RegexByteClass
     {
         return kind switch
         {
-            RegexSyntaxKind.Literal => expression.Length > 0 && RuneEqualsLiteral(value, expression[0], caseInsensitive, unicodeClasses),
+            RegexSyntaxKind.Literal => RuneEqualsLiteral(value, expression, caseInsensitive, unicodeClasses),
             RegexSyntaxKind.Dot => dotMatchesNewline || !IsLineTerminator(value, crlf, lineTerminator),
             RegexSyntaxKind.AnyClass => true,
             RegexSyntaxKind.CharacterClass => ClassMatches(value, expression, caseInsensitive, multiLine, crlf, lineTerminator, unicodeClasses),
@@ -811,15 +811,35 @@ internal static class RegexByteClass
 
     private static bool RuneEqualsLiteral(Rune value, byte literal, bool caseInsensitive, bool unicodeClasses)
     {
-        if (value.IsAscii)
+        ReadOnlySpan<byte> literalSpan = stackalloc byte[] { literal };
+        return RuneEqualsLiteral(value, literalSpan, caseInsensitive, unicodeClasses);
+    }
+
+    private static bool RuneEqualsLiteral(Rune value, ReadOnlySpan<byte> literal, bool caseInsensitive, bool unicodeClasses)
+    {
+        if (!TryDecodeLiteralRune(literal, out Rune literalRune))
         {
-            return ByteEquals((byte)value.Value, literal, caseInsensitive);
+            return false;
         }
 
-        return caseInsensitive &&
-            unicodeClasses &&
-            TryFoldUnicodeScalarToAscii(value, out byte folded) &&
-            ByteEquals(folded, literal, caseInsensitive);
+        if (!caseInsensitive || !unicodeClasses)
+        {
+            return value.Value == literalRune.Value;
+        }
+
+        return RegexUnicodeTables.IsSimpleCaseFold(value, literalRune);
+    }
+
+    private static bool TryDecodeLiteralRune(ReadOnlySpan<byte> literal, out Rune rune)
+    {
+        if (literal.Length == 1 && literal[0] <= 0x7F)
+        {
+            rune = new Rune(literal[0]);
+            return true;
+        }
+
+        return Rune.DecodeFromUtf8(literal, out rune, out int consumed) == OperationStatus.Done &&
+            consumed == literal.Length;
     }
 
     private static bool IsRegexWordBoundary(ReadOnlySpan<byte> haystack, int position, bool unicodeWord)
@@ -962,24 +982,23 @@ internal static class RegexByteClass
         }
 
         return RegexUnicodeTables.IsGeneralCategory(kind, value) ||
-            RegexUnicodeTables.IsBooleanProperty(kind, value);
+            RegexUnicodeTables.IsBooleanProperty(kind, value) ||
+            RegexUnicodeTables.IsBreakProperty(kind, value);
     }
 
     private static bool TryFoldUnicodeScalarToAscii(Rune value, out byte folded)
     {
-        folded = 0;
-        // Pinned regex-syntax 0.8.8 simple folds whose non-ASCII members fold into ASCII.
-        switch (value.Value)
+        for (byte candidate = (byte)'a'; candidate <= (byte)'z'; candidate++)
         {
-            case 0x017F:
-                folded = (byte)'s';
+            if (RegexUnicodeTables.IsSimpleCaseFold(value, new Rune(candidate)))
+            {
+                folded = candidate;
                 return true;
-            case 0x212A:
-                folded = (byte)'k';
-                return true;
-            default:
-                return false;
+            }
         }
+
+        folded = 0;
+        return false;
     }
 
     private static bool IsAsciiAlphaByte(byte value)

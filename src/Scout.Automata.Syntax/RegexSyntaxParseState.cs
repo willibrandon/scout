@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Text;
 
@@ -114,8 +115,21 @@ internal sealed class RegexSyntaxParseState
             (byte)'^' => new RegexAtomNode(RegexSyntaxKind.StartAnchor, ReadOnlyMemory<byte>.Empty, position),
             (byte)'$' => new RegexAtomNode(RegexSyntaxKind.EndAnchor, ReadOnlyMemory<byte>.Empty, position),
             (byte)'\\' => ParseEscape(position),
-            _ => new RegexAtomNode(RegexSyntaxKind.Literal, new[] { token }, position),
+            _ => ParseLiteral(position, token),
         };
+    }
+
+    private RegexAtomNode ParseLiteral(int position, byte token)
+    {
+        if (token > 0x7F &&
+            Rune.DecodeFromUtf8(Pattern[position..], out _, out int length) == OperationStatus.Done &&
+            length > 1)
+        {
+            index = position + length;
+            return new RegexAtomNode(RegexSyntaxKind.Literal, Pattern.Slice(position, length).ToArray(), position);
+        }
+
+        return new RegexAtomNode(RegexSyntaxKind.Literal, new[] { token }, position);
     }
 
     private RegexSyntaxNode ParseGroup(int position)

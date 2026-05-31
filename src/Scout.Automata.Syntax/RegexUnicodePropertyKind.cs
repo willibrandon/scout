@@ -126,6 +126,61 @@ public enum RegexUnicodePropertyKind
     ExtendedPictographic,
 
     /// <summary>
+    /// The Grapheme_Cluster_Break=Prepend property value.
+    /// </summary>
+    GraphemeClusterBreakPrepend,
+
+    /// <summary>
+    /// The Grapheme_Cluster_Break=Regional_Indicator property value.
+    /// </summary>
+    GraphemeClusterBreakRegionalIndicator,
+
+    /// <summary>
+    /// The Grapheme_Cluster_Break=LVT property value.
+    /// </summary>
+    GraphemeClusterBreakLvt,
+
+    /// <summary>
+    /// The Grapheme_Cluster_Break=ZWJ property value.
+    /// </summary>
+    GraphemeClusterBreakZwj,
+
+    /// <summary>
+    /// The Word_Break=Hebrew_Letter property value.
+    /// </summary>
+    WordBreakHebrewLetter,
+
+    /// <summary>
+    /// The Word_Break=ExtendNumLet property value.
+    /// </summary>
+    WordBreakExtendNumLet,
+
+    /// <summary>
+    /// The Word_Break=WSegSpace property value.
+    /// </summary>
+    WordBreakWSegSpace,
+
+    /// <summary>
+    /// The Word_Break=Numeric property value.
+    /// </summary>
+    WordBreakNumeric,
+
+    /// <summary>
+    /// The Sentence_Break=Lower property value.
+    /// </summary>
+    SentenceBreakLower,
+
+    /// <summary>
+    /// The Sentence_Break=Close property value.
+    /// </summary>
+    SentenceBreakClose,
+
+    /// <summary>
+    /// The Sentence_Break=SContinue property value.
+    /// </summary>
+    SentenceBreakSContinue,
+
+    /// <summary>
     /// The Number general category.
     /// </summary>
     Number,

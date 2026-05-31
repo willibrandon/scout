@@ -887,10 +887,16 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("Unicode version: " + unicodeVersion + ".", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("internal static bool IsGeneralCategory(RegexUnicodePropertyKind kind, Rune value)", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("internal static bool IsBooleanProperty(RegexUnicodePropertyKind kind, Rune value)", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("internal static bool IsBreakProperty(RegexUnicodePropertyKind kind, Rune value)", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("internal static bool IsSimpleCaseFold(Rune left, Rune right)", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static readonly UnicodeScalarRange[] DecimalNumber", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static readonly UnicodeScalarRange[] PerlWord", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static readonly UnicodeScalarRange[] PerlSpace", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static readonly UnicodeScalarRange[] Alphabetic", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static readonly UnicodeScalarPair[] SimpleCaseFold", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static readonly UnicodeScalarRange[] BreakPropertyGraphemeClusterBreakRegionalIndicator", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static readonly UnicodeScalarRange[] BreakPropertyWordBreakHebrewLetter", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static readonly UnicodeScalarRange[] BreakPropertySentenceBreakSContinue", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static readonly UnicodeScalarRange[] BooleanPropertyMath", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static readonly UnicodeScalarRange[] BooleanPropertyEmoji", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static readonly UnicodeScalarRange[] BooleanPropertyExtendedPictographic", regexUnicodeTables, StringComparison.Ordinal);
@@ -901,6 +907,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("RegexUnicodeTables.IsAlphabetic", regexByteClass, StringComparison.Ordinal);
         Assert.Contains("RegexUnicodeTables.IsGeneralCategory", regexByteClass, StringComparison.Ordinal);
         Assert.Contains("RegexUnicodeTables.IsBooleanProperty", regexByteClass, StringComparison.Ordinal);
+        Assert.Contains("RegexUnicodeTables.IsBreakProperty", regexByteClass, StringComparison.Ordinal);
+        Assert.Contains("RegexUnicodeTables.IsSimpleCaseFold", regexByteClass, StringComparison.Ordinal);
         Assert.Contains("TryParseUnicodePropertyClass", regexSyntaxParseState, StringComparison.Ordinal);
         Assert.Contains("public static bool TryGetKind", regexUnicodePropertyNames, StringComparison.Ordinal);
         Assert.Contains("public static bool NameEquals", regexUnicodePropertyNames, StringComparison.Ordinal);

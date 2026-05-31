@@ -10,7 +10,7 @@ namespace Scout;
 /// </summary>
 public sealed class RegexCorpusDifferentialTests
 {
-    private const int ExpectedDifferentialCaseCount = 505;
+    private const int ExpectedDifferentialCaseCount = 529;
     private const int ExpectedSupportedOnlyCaseCount = 47;
 
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
@@ -30,7 +30,7 @@ public sealed class RegexCorpusDifferentialTests
         ("regex-lite.toml", 9),
         ("regression.toml", 51),
         ("set.toml", 29),
-        ("unicode.toml", 60),
+        ("unicode.toml", 84),
         ("word-boundary-special.toml", 41),
     ];
 
@@ -424,6 +424,14 @@ public sealed class RegexCorpusDifferentialTests
         ("regex-lite.toml", "empty-no-split-codepoint"),
         ("regex-lite.toml", "negated-class-always-matches-codepoint"),
         ("regex-lite.toml", "word-boundary-negated"),
+        ("unicode.toml", "literal1"),
+        ("unicode.toml", "literal2"),
+        ("unicode.toml", "literal3"),
+        ("unicode.toml", "literal4"),
+        ("unicode.toml", "wb-100"),
+        ("unicode.toml", "wb-200"),
+        ("unicode.toml", "wb-300"),
+        ("unicode.toml", "wb-400"),
         ("unicode.toml", "class1"),
         ("unicode.toml", "class2"),
         ("unicode.toml", "class3"),
@@ -484,6 +492,22 @@ public sealed class RegexCorpusDifferentialTests
         ("unicode.toml", "class-emoji2"),
         ("unicode.toml", "class-emoji3"),
         ("unicode.toml", "class-emoji4"),
+        ("unicode.toml", "class-gcb1"),
+        ("unicode.toml", "class-gcb2"),
+        ("unicode.toml", "class-gcb3"),
+        ("unicode.toml", "class-gcb4"),
+        ("unicode.toml", "class-gcb5"),
+        ("unicode.toml", "class-gcb6"),
+        ("unicode.toml", "class-word-break1"),
+        ("unicode.toml", "class-word-break2"),
+        ("unicode.toml", "class-word-break3"),
+        ("unicode.toml", "class-word-break4"),
+        ("unicode.toml", "class-word-break5"),
+        ("unicode.toml", "class-sentence-break1"),
+        ("unicode.toml", "class-sentence-break2"),
+        ("unicode.toml", "class-sentence-break3"),
+        ("unicode.toml", "class-sentence-break4"),
+        ("unicode.toml", "class-sentence-break5"),
         ("set.toml", "basic30"),
         ("set.toml", "basic40"),
         ("set.toml", "basic10-leftmost-first"),
