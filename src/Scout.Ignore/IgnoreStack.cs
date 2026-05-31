@@ -297,13 +297,13 @@ internal sealed class IgnoreStack
             return null;
         }
 
-        const string prefix = "gitdir:";
+        const string prefix = "gitdir: ";
         if (line is null || !line.StartsWith(prefix, StringComparison.Ordinal))
         {
             return null;
         }
 
-        string path = line[prefix.Length..].Trim();
+        string path = line[prefix.Length..];
         if (Path.IsPathRooted(path))
         {
             return Path.GetFullPath(path);

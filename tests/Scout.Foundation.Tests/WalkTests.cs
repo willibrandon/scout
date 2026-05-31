@@ -464,6 +464,57 @@ public sealed class WalkTests
     }
 
     /// <summary>
+    /// Verifies linked worktree <c>.git/info/exclude</c> discovery follows the upstream common-dir rules.
+    /// </summary>
+    [Fact]
+    public void GitExcludeReadsLinkedWorktreeCommonDir()
+    {
+        string root = CreateTempDirectory();
+        string gitDirectory = Path.Combine(root, ".git");
+        string worktreeGitDirectory = Path.Combine(gitDirectory, "worktrees", "linked-worktree");
+        string linkedWorktree = Path.Combine(root, "linked-worktree");
+        string commonDirectoryFile = Path.Combine(worktreeGitDirectory, "commondir");
+        Directory.CreateDirectory(Path.Combine(gitDirectory, "info"));
+        Directory.CreateDirectory(worktreeGitDirectory);
+        Directory.CreateDirectory(linkedWorktree);
+        File.WriteAllText(Path.Combine(gitDirectory, "info", "exclude"), "ignore_me\n");
+        File.WriteAllText(Path.Combine(linkedWorktree, ".git"), "gitdir: " + worktreeGitDirectory);
+        File.WriteAllText(Path.Combine(linkedWorktree, "ignore_me"), string.Empty);
+        File.WriteAllText(Path.Combine(linkedWorktree, "keep"), string.Empty);
+
+        File.WriteAllText(commonDirectoryFile, "../..");
+        Assert.Equal(["keep"], Collect(linkedWorktree, new WalkBuilder(linkedWorktree)));
+
+        File.WriteAllText(commonDirectoryFile, gitDirectory);
+        Assert.Equal(["keep"], Collect(linkedWorktree, new WalkBuilder(linkedWorktree)));
+
+        File.Delete(commonDirectoryFile);
+        Assert.Equal(["ignore_me", "keep"], Collect(linkedWorktree, new WalkBuilder(linkedWorktree)));
+
+        File.WriteAllText(Path.Combine(linkedWorktree, ".git"), "garbage");
+        Assert.Equal(["ignore_me", "keep"], Collect(linkedWorktree, new WalkBuilder(linkedWorktree)));
+    }
+
+    /// <summary>
+    /// Verifies malformed linked-worktree <c>.git</c> files do not activate git exclude rules.
+    /// </summary>
+    [Fact]
+    public void GitExcludeRequiresGitDirPrefixSpace()
+    {
+        string root = CreateTempDirectory();
+        string gitDirectory = Path.Combine(root, ".git");
+        string linkedWorktree = Path.Combine(root, "linked-worktree");
+        Directory.CreateDirectory(Path.Combine(gitDirectory, "info"));
+        Directory.CreateDirectory(linkedWorktree);
+        File.WriteAllText(Path.Combine(gitDirectory, "info", "exclude"), "ignore_me\n");
+        File.WriteAllText(Path.Combine(linkedWorktree, ".git"), "gitdir:" + gitDirectory);
+        File.WriteAllText(Path.Combine(linkedWorktree, "ignore_me"), string.Empty);
+        File.WriteAllText(Path.Combine(linkedWorktree, "keep"), string.Empty);
+
+        Assert.Equal(["ignore_me", "keep"], Collect(linkedWorktree, new WalkBuilder(linkedWorktree)));
+    }
+
+    /// <summary>
     /// Verifies global gitignore files apply below repository ignore sources and can be disabled.
     /// </summary>
     [Fact]
