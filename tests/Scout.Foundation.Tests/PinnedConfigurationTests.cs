@@ -260,6 +260,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("-getProperty:AnalysisMode", script, StringComparison.Ordinal);
         Assert.Contains("-getProperty:EnforceCodeStyleInBuild", script, StringComparison.Ordinal);
         Assert.Contains("-getItem:EditorConfigFiles", script, StringComparison.Ordinal);
+        Assert.Contains("scan_repository_suppression_files", script, StringComparison.Ordinal);
+        Assert.Contains("repository-suppression-scan.txt", script, StringComparison.Ordinal);
+        Assert.Contains("GlobalSuppressions.cs files are forbidden", script, StringComparison.Ordinal);
+        Assert.Contains("forbidden repository suppression token", script, StringComparison.Ordinal);
         Assert.Contains("json_item_full_paths", script, StringComparison.Ordinal);
         Assert.Contains("scan_editor_config_file", script, StringComparison.Ordinal);
         Assert.Contains("check_evaluated_editor_config_files", script, StringComparison.Ordinal);

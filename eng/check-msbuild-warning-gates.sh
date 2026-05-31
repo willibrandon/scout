@@ -133,6 +133,59 @@ scan_editor_config_file() {
     fi
 }
 
+scan_repository_suppression_files() {
+    output="$OUT/repository-suppression-scan.txt"
+    : > "$output"
+
+    find "$ROOT" \
+        \( -path "$ROOT/.git" -o -path "$ROOT/.git/*" -o -path "*/bin" -o -path "*/bin/*" \) -prune -o \
+        \( -name '*.cs' -o -name '*.props' -o -name '*.targets' -o -name '.editorconfig' -o -name '.globalconfig' -o -name 'GlobalSuppressions.cs' \) \
+        -type f -print | sort | while IFS= read -r file; do
+            relative="$(relative_path "$file")"
+            printf '%s\n' "$relative" >> "$output"
+
+            if [ "$(basename "$file")" = "GlobalSuppressions.cs" ]; then
+                fail "$relative: GlobalSuppressions.cs files are forbidden."
+            fi
+
+            if grep -E '#pragma[[:space:]]+warning[[:space:]]+disable' "$file" >/dev/null; then
+                fail "$relative: forbidden repository suppression token '#pragma warning disable'."
+            fi
+
+            if grep -E '\[[[:space:]]*(Unconditional)?SuppressMessage([^[:alnum:]_]|$)' "$file" >/dev/null; then
+                fail "$relative: forbidden repository suppression token 'SuppressMessage'."
+            fi
+
+            if grep -E '<[[:space:]]*NoWarn([^[:alnum:]_]|$)' "$file" >/dev/null; then
+                fail "$relative: forbidden repository suppression token '<NoWarn'."
+            fi
+
+            if grep -E '<[[:space:]]*WarningsNotAsErrors([^[:alnum:]_]|$)' "$file" >/dev/null; then
+                fail "$relative: forbidden repository suppression token '<WarningsNotAsErrors'."
+            fi
+
+            if grep -E '<[[:space:]]*DisabledWarnings([^[:alnum:]_]|$)' "$file" >/dev/null; then
+                fail "$relative: forbidden repository suppression token '<DisabledWarnings'."
+            fi
+
+            if grep -E '#nullable[[:space:]]+disable' "$file" >/dev/null; then
+                fail "$relative: forbidden repository suppression token '#nullable disable'."
+            fi
+
+            if grep -E 'dotnet_(analyzer_diagnostic|diagnostic)\.[^\r\n]*severity[[:space:]]*=[[:space:]]*(none|silent)($|[[:space:]#;])' "$file" >/dev/null; then
+                fail "$relative: analyzer severity config contains none/silent."
+            fi
+
+            if grep -E 'dotnet_diagnostic\.(SCOUT000[1-3]|IDE0130)\.severity[[:space:]]*=[[:space:]]*([^e[:space:]#;]|e[^r[:space:]#;]|er[^r[:space:]#;]|err[^o[:space:]#;]|erro[^r[:space:]#;]|error[^[:space:]#;])' "$file" >/dev/null; then
+                fail "$relative: Scout structural analyzers and IDE0130 must stay pinned to error."
+            fi
+
+            if grep -E 'dotnet_analyzer_diagnostic\.category-Scout\.Structure\.severity[[:space:]]*=[[:space:]]*([^e[:space:]#;]|e[^r[:space:]#;]|er[^r[:space:]#;]|err[^o[:space:]#;]|erro[^r[:space:]#;]|error[^[:space:]#;])' "$file" >/dev/null; then
+                fail "$relative: Scout.Structure analyzer category must stay pinned to error."
+            fi
+        done
+}
+
 check_evaluated_editor_config_files() {
     project="$1"
     evaluation_output="$2"
@@ -176,6 +229,7 @@ check_analyzer_severity_config() {
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
+scan_repository_suppression_files
 check_analyzer_severity_config
 
 find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" -name '*.csproj' -type f | sort | while IFS= read -r project; do
