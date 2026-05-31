@@ -311,6 +311,182 @@ public sealed class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies every ported or behavior-replaced upstream project records its pinned provenance.
+    /// </summary>
+    [Fact]
+    public void PortedProjectsRecordUpstreamProvenance()
+    {
+        string root = FindRepositoryRoot();
+        (string RelativePath, string[] Fragments)[] upstreamFiles =
+        [
+            ("src/Scout.App/UPSTREAM.md",
+            [
+                "name = \"ripgrep\"",
+                "version = \"15.1.0\"",
+                "commit = \"" + PinnedRipgrepCommit + "\"",
+                "name = \"lexopt\"",
+                "version = \"0.3.1\"",
+                "name = \"textwrap\"",
+                "version = \"0.16.2\"",
+            ]),
+            ("src/Scout.Automata/UPSTREAM.md",
+            [
+                "name = \"regex-automata\"",
+                "version = \"0.4.13\"",
+                "checksum = \"5276caf25ac86c8d810222b3dbb938e512c55c6831a10f3e6ed1c93b84041f1c\"",
+                "commit = \"" + PinnedRipgrepCommit + "\"",
+                "name = \"regex\"",
+                "version = \"1.12.2\"",
+            ]),
+            ("src/Scout.Automata.AhoCorasick/UPSTREAM.md",
+            [
+                "name = \"aho-corasick\"",
+                "version = \"1.1.3\"",
+                "checksum = \"8e60d3430d3a69478ad0993f19238d2df97c507009a52b3c10addcd7f6bcb916\"",
+                "commit = \"" + PinnedRipgrepCommit + "\"",
+            ]),
+            ("src/Scout.Automata.Memmem/UPSTREAM.md",
+            [
+                "name = \"memchr\"",
+                "version = \"2.7.6\"",
+                "checksum = \"f52b00d39961fc5b2736ea853c9cc86238e165017a493d1d5c8eac6bdc4cc273\"",
+                "commit = \"" + PinnedRipgrepCommit + "\"",
+            ]),
+            ("src/Scout.Automata.Syntax/UPSTREAM.md",
+            [
+                "name = \"regex-syntax\"",
+                "version = \"0.8.8\"",
+                "checksum = \"7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58\"",
+                "commit = \"" + PinnedRipgrepCommit + "\"",
+            ]),
+            ("src/Scout.Bytes/UPSTREAM.md",
+            [
+                "name = \"bstr\"",
+                "version = \"1.12.0\"",
+                "checksum = \"234113d19d0d7d613b40e86fb654acf958910802bcceab913a4f9e7cda03b1a4\"",
+                "commit = \"" + PinnedRipgrepCommit + "\"",
+            ]),
+            ("src/Scout.Cli/UPSTREAM.md",
+            [
+                "name = \"grep-cli\"",
+                "version = \"0.1.12\"",
+                "commit = \"" + PinnedRipgrepCommit + "\"",
+                "name = \"termcolor\"",
+                "version = \"1.4.1\"",
+                "name = \"winapi-util\"",
+                "version = \"0.1.11\"",
+            ]),
+            ("src/Scout.Diagnostics/UPSTREAM.md",
+            [
+                "name = \"log\"",
+                "version = \"0.4.28\"",
+                "checksum = \"34080505efa8e45a4b816c349525ebe327ceaa8559756f0356cba97ef3bf7432\"",
+                "commit = \"" + PinnedRipgrepCommit + "\"",
+            ]),
+            ("src/Scout.Encoding/UPSTREAM.md",
+            [
+                "name = \"encoding_rs\"",
+                "version = \"0.8.35\"",
+                "checksum = \"75030f3c4f45dafd7586dd6780965a8c7e8e285a5ecb86713e63a79c5b2766f3\"",
+                "commit = \"" + PinnedRipgrepCommit + "\"",
+            ]),
+            ("src/Scout.Encoding.Io/UPSTREAM.md",
+            [
+                "name = \"encoding_rs_io\"",
+                "version = \"0.1.7\"",
+                "checksum = \"1cc3c5651fb62ab8aa3103998dade57efdd028544bd300516baa31840c252a83\"",
+                "commit = \"" + PinnedRipgrepCommit + "\"",
+            ]),
+            ("src/Scout.Errors/UPSTREAM.md",
+            [
+                "name = \"anyhow\"",
+                "version = \"1.0.100\"",
+                "checksum = \"a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61\"",
+                "commit = \"" + PinnedRipgrepCommit + "\"",
+            ]),
+            ("src/Scout.Globbing/UPSTREAM.md",
+            [
+                "name = \"globset\"",
+                "version = \"0.4.18\"",
+                "commit = \"" + PinnedRipgrepCommit + "\"",
+            ]),
+            ("src/Scout.Ignore/UPSTREAM.md",
+            [
+                "name = \"ignore\"",
+                "version = \"0.4.25\"",
+                "commit = \"" + PinnedRipgrepCommit + "\"",
+            ]),
+            ("src/Scout.Matching/UPSTREAM.md",
+            [
+                "name = \"grep-matcher\"",
+                "version = \"0.1.8\"",
+                "commit = \"" + PinnedRipgrepCommit + "\"",
+            ]),
+            ("src/Scout.Os/UPSTREAM.md",
+            [
+                "name = \"libc\"",
+                "version = \"0.2.177\"",
+                "name = \"windows-sys\"",
+                "version = \"0.61.2\"",
+                "name = \"winapi-util\"",
+                "version = \"0.1.11\"",
+                "commit = \"" + PinnedRipgrepCommit + "\"",
+            ]),
+            ("src/Scout.Pcre2/UPSTREAM.md",
+            [
+                "name = \"grep-pcre2\"",
+                "version = \"0.1.9\"",
+                "commit = \"" + PinnedRipgrepCommit + "\"",
+                "name = \"pcre2\"",
+                "version = \"0.2.11\"",
+                "name = \"pcre2-sys\"",
+                "version = \"0.2.10\"",
+                "native/pcre2/UPSTREAM",
+            ]),
+            ("src/Scout.Printing/UPSTREAM.md",
+            [
+                "name = \"grep-printer\"",
+                "version = \"0.3.1\"",
+                "commit = \"" + PinnedRipgrepCommit + "\"",
+                "name = \"serde_json\"",
+                "version = \"1.0.145\"",
+                "name = \"itoa\"",
+                "version = \"1.0.15\"",
+                "name = \"ryu\"",
+                "version = \"1.0.20\"",
+            ]),
+            ("src/Scout.Regex/UPSTREAM.md",
+            [
+                "name = \"grep-regex\"",
+                "version = \"0.1.14\"",
+                "commit = \"" + PinnedRipgrepCommit + "\"",
+            ]),
+            ("src/Scout.Searching/UPSTREAM.md",
+            [
+                "name = \"grep-searcher\"",
+                "version = \"0.1.16\"",
+                "commit = \"" + PinnedRipgrepCommit + "\"",
+                "name = \"memmap2\"",
+                "version = \"0.9.9\"",
+                "checksum = \"744133e4a0e0a658e1374cf3bf8e415c4052a15a111acd372764c55b4177d490\"",
+            ]),
+        ];
+
+        for (int fileIndex = 0; fileIndex < upstreamFiles.Length; fileIndex++)
+        {
+            (string relativePath, string[] fragments) = upstreamFiles[fileIndex];
+            string path = Path.Combine(root, relativePath);
+
+            Assert.True(File.Exists(path), "Missing upstream provenance file: " + relativePath);
+            string text = File.ReadAllText(path);
+            for (int fragmentIndex = 0; fragmentIndex < fragments.Length; fragmentIndex++)
+            {
+                Assert.Contains(fragments[fragmentIndex], text, StringComparison.Ordinal);
+            }
+        }
+    }
+
+    /// <summary>
     /// Verifies third-party notices include the license texts required by the design.
     /// </summary>
     [Fact]
