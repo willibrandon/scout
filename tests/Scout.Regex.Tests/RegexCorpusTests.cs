@@ -380,6 +380,7 @@ public sealed class RegexCorpusTests
                 "mixed",
                 "case1",
                 "case2",
+                "case3",
                 "negate1",
                 "case4",
                 "negate2",

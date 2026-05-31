@@ -24,7 +24,7 @@ internal sealed class RegexOnePassDfa
         {
             RegexNfaState state = nfa.States[index];
             RegexNfaStateKind kind = state.Kind;
-            if (state.Utf8 && RegexByteClass.RequiresUtf8ScalarMatch(state.AtomKind, state.Value.Span, state.UnicodeClasses))
+            if (state.Utf8 && RegexByteClass.RequiresUtf8ScalarMatch(state.AtomKind, state.Value.Span, state.CaseInsensitive, state.UnicodeClasses))
             {
                 return false;
             }

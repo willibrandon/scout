@@ -11,7 +11,7 @@ internal static class RegexDfaOperations
         {
             RegexNfaState state = nfa.States[index];
             if (state.Kind == RegexNfaStateKind.Predicate ||
-                state.Utf8 && RegexByteClass.RequiresUtf8ScalarMatch(state.AtomKind, state.Value.Span, state.UnicodeClasses))
+                state.Utf8 && RegexByteClass.RequiresUtf8ScalarMatch(state.AtomKind, state.Value.Span, state.CaseInsensitive, state.UnicodeClasses))
             {
                 return false;
             }

@@ -373,6 +373,17 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies Unicode case-insensitive matching applies simple folds that reach ASCII.
+    /// </summary>
+    [Fact]
+    public void UnicodeCaseInsensitiveClassesFoldToAscii()
+    {
+        Assert.Equal(new RegexMatch(0, 7), RegexAutomaton.Compile("[a-z]+"u8, caseInsensitive: true, multiLine: false, dotMatchesNewline: false).Find("aA\u212AaA"u8));
+        Assert.Equal(new RegexMatch(0, 3), RegexAutomaton.Compile("k"u8, caseInsensitive: true, multiLine: false, dotMatchesNewline: false).Find("\u212A"u8));
+        Assert.Null(RegexAutomaton.Compile("[a-z]+"u8, caseInsensitive: true, multiLine: false, dotMatchesNewline: false, unicodeClasses: false).Find("\u212A"u8));
+    }
+
+    /// <summary>
     /// Verifies UTF-8 mode does not report matches inside a valid code point.
     /// </summary>
     [Fact]
