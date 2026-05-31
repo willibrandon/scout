@@ -1119,6 +1119,11 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("compare_case fixed_literal exact -P -F -n 'foo(?=bar)' pcre2-fixed", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case fixed_literal_json mask-elapsed -P -F --json 'foo(?=bar)' pcre2-fixed", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case fixed_literal_multiline exact -P -F --multiline -n 'foo\\nbar' pcre2-fixed", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case null_data_line exact -P --null-data -n 'needle' pcre2-null", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case null_data_only_matching exact -P --null-data -o 'needle' pcre2-null", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case null_data_count exact -P --null-data --count 'needle' pcre2-null", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case null_data_json mask-elapsed -P --null-data --json 'needle' pcre2-null", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case null_data_context exact -P --null-data -n -C1 'needle' pcre2-null", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case basic_lookahead_multi_file sort-lines -P -n 'foo(?=bar)'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case recursive_lookahead sort-lines -P -n 'foo(?=bar)' pcre2-dir", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case recursive_lookahead_threads sort-lines -P --threads 4 -n 'foo(?=bar)' pcre2-dir", differentialScript, StringComparison.Ordinal);
