@@ -1697,6 +1697,7 @@ public sealed partial class PinnedConfigurationTests
             ("quarantine or skip trait", QuarantineOrSkipTraitPattern()),
             ("runtime test skip", RuntimeTestSkipPattern()),
             ("skip exception", SkipExceptionPattern()),
+            ("fixture capability return", FixtureCapabilityReturnPattern()),
         ];
     }
 
@@ -1717,6 +1718,9 @@ public sealed partial class PinnedConfigurationTests
 
     [GeneratedRegex(@"\bthrow\s+new\s+(?:[A-Za-z_][A-Za-z0-9_]*\.)?SkipException\s*\(", RegexOptions.CultureInvariant)]
     private static partial Regex SkipExceptionPattern();
+
+    [GeneratedRegex(@"if\s*\([^{;]*(?:TryCreateDirectorySymlink|TryCreateFileSymlink)[^{;]*\)\s*\{\s*return;\s*\}", RegexOptions.CultureInvariant)]
+    private static partial Regex FixtureCapabilityReturnPattern();
 
     private static string ReadMarkdownSection(string markdown, string heading)
     {

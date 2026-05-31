@@ -112,24 +112,26 @@ public sealed class SearchFileReaderTests
     {
         if (OperatingSystem.IsWindows())
         {
-            return;
+            Assert.Throws<PlatformNotSupportedException>(() => SearchFileReader.ReadUnixPath("unused"u8, SearchEncodingKind.None));
         }
-
-        string root = CreateTempDirectory();
-        try
+        else
         {
-            string path = Path.Combine(root, "input.txt");
-            File.WriteAllText(path, "needle\n");
-            byte[] pathBytes = Encoding.UTF8.GetBytes(path);
+            string root = CreateTempDirectory();
+            try
+            {
+                string path = Path.Combine(root, "input.txt");
+                File.WriteAllText(path, "needle\n");
+                byte[] pathBytes = Encoding.UTF8.GetBytes(path);
 
-            SearchFileReadResult result = SearchFileReader.ReadUnixPath(pathBytes, SearchEncodingKind.None);
+                SearchFileReadResult result = SearchFileReader.ReadUnixPath(pathBytes, SearchEncodingKind.None);
 
-            Assert.Equal(SearchFileReadKind.Buffered, result.Kind);
-            Assert.Equal("needle\n"u8.ToArray(), result.GetBytes());
-        }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
+                Assert.Equal(SearchFileReadKind.Buffered, result.Kind);
+                Assert.Equal("needle\n"u8.ToArray(), result.GetBytes());
+            }
+            finally
+            {
+                Directory.Delete(root, recursive: true);
+            }
         }
     }
 

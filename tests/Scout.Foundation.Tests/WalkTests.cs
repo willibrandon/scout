@@ -163,11 +163,8 @@ public sealed class WalkTests
         Directory.CreateDirectory(Path.Combine(root, "a", "b"));
         File.WriteAllText(Path.Combine(root, "a", "b", "foo"), string.Empty);
         File.WriteAllText(Path.Combine(root, "real"), string.Empty);
-        if (!TryCreateDirectorySymlink(Path.Combine(root, "a", "b"), Path.Combine(root, "z"))
-            || !TryCreateFileSymlink(Path.Combine(root, "real"), Path.Combine(root, "file-link")))
-        {
-            return;
-        }
+        Assert.True(TryCreateDirectorySymlink(Path.Combine(root, "a", "b"), Path.Combine(root, "z")), "Required directory symlink could not be created.");
+        Assert.True(TryCreateFileSymlink(Path.Combine(root, "real"), Path.Combine(root, "file-link")), "Required file symlink could not be created.");
 
         Assert.Equal(["a", "a/b", "a/b/foo", "real"], Collect(root, new WalkBuilder(root)));
         Assert.Equal(["a", "a/b", "a/b/foo", "file-link", "real", "z", "z/foo"], Collect(root, new WalkBuilder(root).FollowLinks(true)));
@@ -186,10 +183,7 @@ public sealed class WalkTests
 
         string root = CreateTempDirectory();
         Directory.CreateDirectory(Path.Combine(root, "a", "b"));
-        if (!TryCreateDirectorySymlink(Path.Combine(root, "a"), Path.Combine(root, "a", "b", "c")))
-        {
-            return;
-        }
+        Assert.True(TryCreateDirectorySymlink(Path.Combine(root, "a"), Path.Combine(root, "a", "b", "c")), "Required directory symlink could not be created.");
 
         Assert.Equal(["a", "a/b"], Collect(root, new WalkBuilder(root)));
         Assert.Equal(["a", "a/b"], Collect(root, new WalkBuilder(root).FollowLinks(true)));
@@ -210,10 +204,7 @@ public sealed class WalkTests
         string target = Path.Combine(root, "target");
         string link = Path.Combine(root, "link");
         File.WriteAllText(target, string.Empty);
-        if (!TryCreateFileSymlink(target, link))
-        {
-            return;
-        }
+        Assert.True(TryCreateFileSymlink(target, link), "Required file symlink could not be created.");
 
         Assert.Equal(FileIdentity.FromPath(target), FileIdentity.FromPath(link));
         Assert.NotEqual(FileIdentity.FromPath(target), FileIdentity.FromPath(link, followLinks: false));
@@ -254,18 +245,12 @@ public sealed class WalkTests
         }
 
         Directory.CreateDirectory(Path.Combine(root, "same_file"));
-        if (!TryCreateDirectorySymlink(external, Path.Combine(root, "same_file", "alink")))
-        {
-            return;
-        }
+        Assert.True(TryCreateDirectorySymlink(external, Path.Combine(root, "same_file", "alink")), "Required cross-device directory symlink could not be created.");
 
         List<string> baseline = Collect(
             root,
             new WalkBuilder(root).Hidden(false).FollowLinks(true).MaxDepth(3));
-        if (!baseline.Exists(static path => path.StartsWith("same_file/alink/", StringComparison.Ordinal)))
-        {
-            return;
-        }
+        Assert.Contains(baseline, static path => path.StartsWith("same_file/alink/", StringComparison.Ordinal));
 
         List<string> paths = Collect(
             root,

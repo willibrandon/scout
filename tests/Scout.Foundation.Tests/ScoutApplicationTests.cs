@@ -5110,10 +5110,7 @@ public sealed class ScoutApplicationTests
         string root = CreateTempDirectory();
         string target = CreateTempDirectory();
         File.WriteAllText(Path.Combine(target, "linked.txt"), "needle linked\n");
-        if (!TryCreateDirectorySymlink(target, Path.Combine(root, "link")))
-        {
-            return;
-        }
+        Assert.True(TryCreateDirectorySymlink(target, Path.Combine(root, "link")), "Required directory symlink could not be created.");
 
         using MemoryStream output = new();
         using MemoryStream error = new();

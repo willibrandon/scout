@@ -17,34 +17,36 @@ public sealed class RawUnixDirectoryTests
     {
         if (OperatingSystem.IsWindows() || (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()))
         {
-            return;
+            Assert.Throws<PlatformNotSupportedException>(() => RawUnixDirectory.Enumerate("unused"u8));
         }
-
-        string root = CreateTempDirectory();
-        try
+        else
         {
-            string file = Path.Combine(root, "alpha.txt");
-            File.WriteAllText(file, "needle");
-
-            RawUnixDirectoryEntry[] entries = RawUnixDirectory.Enumerate(Encoding.UTF8.GetBytes(root));
-            byte[] name = "alpha.txt"u8.ToArray();
-            byte[] fullPath = Encoding.UTF8.GetBytes(file);
-            bool found = false;
-            for (int index = 0; index < entries.Length; index++)
+            string root = CreateTempDirectory();
+            try
             {
-                if (entries[index].Name.Span.SequenceEqual(name) &&
-                    entries[index].FullPath.Span.SequenceEqual(fullPath))
-                {
-                    found = true;
-                    break;
-                }
-            }
+                string file = Path.Combine(root, "alpha.txt");
+                File.WriteAllText(file, "needle");
 
-            Assert.True(found);
-        }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
+                RawUnixDirectoryEntry[] entries = RawUnixDirectory.Enumerate(Encoding.UTF8.GetBytes(root));
+                byte[] name = "alpha.txt"u8.ToArray();
+                byte[] fullPath = Encoding.UTF8.GetBytes(file);
+                bool found = false;
+                for (int index = 0; index < entries.Length; index++)
+                {
+                    if (entries[index].Name.Span.SequenceEqual(name) &&
+                        entries[index].FullPath.Span.SequenceEqual(fullPath))
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+
+                Assert.True(found);
+            }
+            finally
+            {
+                Directory.Delete(root, recursive: true);
+            }
         }
     }
 
