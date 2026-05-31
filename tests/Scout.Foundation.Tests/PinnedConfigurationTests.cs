@@ -59,6 +59,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.True(File.Exists(releaseGateWorkflowPath), "Missing release gate workflow: " + releaseGateWorkflowPath);
         string ciWorkflow = File.ReadAllText(workflowPath);
         string releaseGateWorkflow = File.ReadAllText(releaseGateWorkflowPath);
+        string benchmarkReadme = File.ReadAllText(Path.Combine(root, "bench", "README.md"));
         string workflow = ciWorkflow + "\n" + releaseGateWorkflow;
 
         Assert.Contains("push:", ciWorkflow, StringComparison.Ordinal);
@@ -113,10 +114,14 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("bench/run-hyperfine.sh --gate", workflow, StringComparison.Ordinal);
         Assert.Contains("runs-on: macos-15", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("brew install hyperfine", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("GitHub-hosted", benchmarkReadme, StringComparison.Ordinal);
+        Assert.Contains("It does not require any personal machine", benchmarkReadme, StringComparison.Ordinal);
         Assert.DoesNotContain("clean: false", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("self-hosted", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("RELEASE_GATES_RUNNER_TOKEN", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("self-hosted", ciWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("self-hosted", benchmarkReadme, StringComparison.Ordinal);
+        Assert.DoesNotContain("RELEASE_GATES_RUNNER_TOKEN", benchmarkReadme, StringComparison.Ordinal);
         Assert.Contains("libicu72", workflow, StringComparison.Ordinal);
         Assert.Contains("zlib1g-dev", workflow, StringComparison.Ordinal);
         Assert.Contains("ncompress", workflow, StringComparison.Ordinal);
