@@ -67,6 +67,22 @@ public sealed class Pcre2SearchOperationsTests
     }
 
     /// <summary>
+    /// Verifies multiline context output can use the native PCRE2 search path.
+    /// </summary>
+    [Fact]
+    public void AllowsMultilineContextOutput()
+    {
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--context", "1", "needle")));
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--passthru", "needle")));
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--only-matching", "--context", "1", "needle")));
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--replace", "x", "--context", "1", "needle")));
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--invert-match", "--context", "1", "needle")));
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--vimgrep", "--context", "1", "needle")));
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--vimgrep", "--only-matching", "--context", "1", "needle")));
+        Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--vimgrep", "--replace", "x", "--context", "1", "needle")));
+    }
+
+    /// <summary>
     /// Verifies stats are supported by the native PCRE2 search path.
     /// </summary>
     [Fact]
@@ -78,15 +94,13 @@ public sealed class Pcre2SearchOperationsTests
     }
 
     /// <summary>
-    /// Verifies max-count does not hide unsupported PCRE2 option combinations.
+    /// Verifies unsupported PCRE2 option combinations stay rejected.
     /// </summary>
     [Fact]
-    public void RejectsUnsupportedOptionCombinationsWithMaxCount()
+    public void RejectsUnsupportedOptionCombinations()
     {
-        Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--context", "1", "needle")));
-        Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--passthru", "needle")));
-        Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--invert-match", "--context", "1", "needle")));
-        Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--multiline", "--vimgrep", "--context", "1", "needle")));
+        Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--json", "--multiline", "--context", "1", "needle")));
+        Assert.False(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--json", "--multiline", "--passthru", "needle")));
     }
 
     private static CliLowArgs ParseLowArgs(params string[] arguments)

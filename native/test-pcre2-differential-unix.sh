@@ -340,16 +340,31 @@ compare_case r3139_multiline_lookahead exact -P --multiline '(?s)Start(?=.*thing
 compare_case r3139_multiline_files_with_matches exact -P --multiline --files-with-matches '(?s)Start(?=.*thing2)' multiline-lookahead
 compare_case multiline_only_matching exact -P --multiline -o '(?s)foo\nbar' pcre2-multiline-vimgrep
 compare_case multiline_only_matching_replacement exact -P --multiline -o -r X '(?s)foo\nbar' pcre2-multiline-vimgrep
+compare_case multiline_context exact -P --multiline -n -C1 '(?s)foo\nbar' pcre2-multiline-vimgrep
+compare_case multiline_before_after exact -P --multiline -n -B1 -A2 '(?s)foo\nbar' pcre2-multiline-vimgrep
+compare_case multiline_passthru exact -P --multiline -n --passthru '(?s)foo\nbar' pcre2-multiline-vimgrep
+compare_case multiline_passthru_max_count exact -P --multiline -n --passthru -m1 '(?s)foo\nbar|foo' pcre2-multiline-vimgrep
+compare_case multiline_context_max_count exact -P --multiline -n -C1 -m1 '(?s)foo\nbar|foo' pcre2-multiline-vimgrep
+compare_case multiline_context_only_matching exact -P --multiline -n -o -C1 '(?s)foo\nbar' pcre2-multiline-vimgrep
+compare_case multiline_context_only_matching_replacement exact -P --multiline -n -o -r X -C1 '(?s)foo\nbar' pcre2-multiline-vimgrep
+compare_case multiline_context_replacement exact -P --multiline -n -r X -C1 '(?s)foo\nbar' pcre2-multiline-vimgrep
+compare_case multiline_context_replacement_max_count exact -P --multiline -n -r X -C1 -m1 '(?s)foo\nbar|foo' pcre2-multiline-vimgrep
 compare_case vimgrep_multiline exact -P --vimgrep --multiline '(?s)foo\nbar' pcre2-multiline-vimgrep
 compare_case vimgrep_multiline_byte_offset exact -P --vimgrep -b --multiline '(?s)foo\nbar' pcre2-multiline-vimgrep
 compare_case vimgrep_multiline_only_matching exact -P --vimgrep --multiline -o '(?s)foo\nbar' pcre2-multiline-vimgrep
 compare_case vimgrep_multiline_replacement exact -P --vimgrep --multiline -r X '(?s)foo\nbar' pcre2-multiline-vimgrep
+compare_case vimgrep_multiline_context exact -P --vimgrep --multiline -C1 '(?s)foo\nbar' pcre2-multiline-vimgrep
+compare_case vimgrep_multiline_context_only_matching exact -P --vimgrep --multiline -o -C1 '(?s)foo\nbar' pcre2-multiline-vimgrep
+compare_case vimgrep_multiline_context_replacement exact -P --vimgrep --multiline -r X -C1 '(?s)foo\nbar' pcre2-multiline-vimgrep
 compare_case multiline_invert exact -P --multiline -n -v '(?s)foo\nbar' pcre2-multiline-vimgrep
+compare_case multiline_invert_context exact -P --multiline -n -v -C1 '(?s)foo\nbar' pcre2-multiline-vimgrep
+compare_case multiline_invert_passthru exact -P --multiline -n -v --passthru '(?s)foo\nbar' pcre2-multiline-vimgrep
 compare_case multiline_invert_count exact -P --multiline -v --count '(?s)foo\nbar' pcre2-multiline-vimgrep
 compare_case multiline_invert_count_matches exact -P --multiline -v --count-matches '(?s)foo\nbar' pcre2-multiline-vimgrep
 compare_case multiline_invert_files_with_matches exact -P --multiline -v --files-with-matches '(?s)foo\nbar' pcre2-multiline-vimgrep
 compare_case multiline_invert_files_without_match exact -P --multiline -v --files-without-match '(?s)foo\nbar' pcre2-multiline-vimgrep
 compare_case multiline_invert_vimgrep exact -P --vimgrep --multiline -v '(?s)foo\nbar' pcre2-multiline-vimgrep
+compare_case multiline_invert_vimgrep_context exact -P --vimgrep --multiline -v -C1 '(?s)foo\nbar' pcre2-multiline-vimgrep
 compare_case multiline_invert_quiet exact -P --multiline -q -v '(?s)foo\nbar' pcre2-multiline-vimgrep
 
 printf 'OK %s: PCRE2 native differentials matched pinned rg\n' "$RID"
