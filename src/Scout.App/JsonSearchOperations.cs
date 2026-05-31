@@ -315,7 +315,7 @@ internal static class JsonSearchOperations
         int binaryOffset = textMode || nullData ? -1 : bytes.AsSpan().IndexOf((byte)0);
         byte[] searchBytes = BinaryDetection.GetSearchBytes(bytes, textMode, nullData);
         var writer = new JsonFileWriter(output, path, quiet, binaryOffset);
-        bool matched = multiline && (nullData || PatternPreparation.ShouldUseJsonMultilineRegex(pattern, multilineDotall)) && TrySearchJsonMultilineBytes(searchBytes, pattern, writer, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multilineDotall, crlf, nullData, replacement, maxCount, beforeContext, afterContext, passthru, out bool multilineMatched)
+        bool matched = multiline && (nullData || PatternPreparation.ShouldUseJsonMultilineRegex(pattern, multilineDotall)) && TrySearchJsonMultilineBytes(searchBytes, pattern, writer, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multilineDotall, crlf, nullData, replacement, maxCount, beforeContext, afterContext, passthru, stopOnNonmatch, out bool multilineMatched)
             ? multilineMatched
             : SearchJsonLines(searchBytes, pattern, writer, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, crlf, nullData, replacement, maxCount, beforeContext, afterContext, passthru, stopOnNonmatch);
         writer.Finish((ulong)bytes.Length, summary);
@@ -338,14 +338,12 @@ internal static class JsonSearchOperations
         ulong beforeContext,
         ulong afterContext,
         bool passthru,
+        bool stopOnNonmatch,
         out bool matched)
     {
         matched = false;
-        if ((replacement is not null && !invertMatch) ||
-            crlf ||
-            beforeContext > 0 ||
-            afterContext > 0 ||
-            passthru)
+        bool contextOutputRequested = beforeContext > 0 || afterContext > 0 || passthru;
+        if (crlf || (nullData && contextOutputRequested))
         {
             return false;
         }
@@ -357,10 +355,31 @@ internal static class JsonSearchOperations
 
         if (invertMatch)
         {
-            matched = WriteJsonMultilineInvertedMatches(bytes, patterns, writer, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
+            matched = contextOutputRequested
+                ? SearchJsonMultilineInvertedContextBytes(bytes, patterns, writer, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount, beforeContext, afterContext, passthru)
+                : WriteJsonMultilineInvertedMatches(bytes, patterns, writer, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
             return true;
         }
 
+        matched = contextOutputRequested
+            ? SearchJsonMultilineContextBytes(bytes, patterns, writer, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, replacement, maxCount, beforeContext, afterContext, passthru, stopOnNonmatch)
+            : SearchJsonMultilineMatchBytes(bytes, patterns, writer, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, nullData, replacement, maxCount);
+        return true;
+    }
+
+    private static bool SearchJsonMultilineMatchBytes(
+        ReadOnlySpan<byte> bytes,
+        IReadOnlyList<byte[]> patterns,
+        JsonFileWriter writer,
+        bool asciiCaseInsensitive,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool multilineDotall,
+        bool nullData,
+        ReadOnlyMemory<byte>? replacement,
+        ulong? maxCount)
+    {
+        bool matched = false;
         int offset = 0;
         int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         ulong emitted = 0;
@@ -402,14 +421,17 @@ internal static class JsonSearchOperations
 
             if (!omitSubmatch)
             {
-                matches.Add(new JsonMatchSpan(match.Start - groupStart, match.Start - groupStart + match.Length, replacement: null));
+                byte[]? expandedReplacement = replacement is ReadOnlyMemory<byte> replacementValue
+                    ? ReplacementFormatter.Expand(replacementValue.Span, bytes.Slice(match.Start, match.Length), patterns, asciiCaseInsensitive)
+                    : null;
+                matches.Add(new JsonMatchSpan(match.Start - groupStart, match.Start - groupStart + match.Length, expandedReplacement));
             }
 
             emitted++;
             if (maxCount is ulong limit && emitted >= limit)
             {
                 WriteJsonMultilineMatchGroup(bytes, writer, groupStart, groupEnd, groupLastLineStart, matches, nullData);
-                return true;
+                return matched;
             }
 
             offset = MultilineSearchOperations.AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
@@ -420,6 +442,177 @@ internal static class JsonSearchOperations
             WriteJsonMultilineMatchGroup(bytes, writer, groupStart, groupEnd, groupLastLineStart, matches, nullData);
         }
 
+        return matched;
+    }
+
+    private static bool SearchJsonMultilineContextBytes(
+        ReadOnlySpan<byte> bytes,
+        IReadOnlyList<byte[]> patterns,
+        JsonFileWriter writer,
+        bool asciiCaseInsensitive,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool multilineDotall,
+        ReadOnlyMemory<byte>? replacement,
+        ulong? maxCount,
+        ulong beforeContext,
+        ulong afterContext,
+        bool passthru,
+        bool stopOnNonmatch)
+    {
+        List<RegexMatch> matches = MultilineSearchOperations.CollectMultilineMatches(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall);
+        List<ContextLineInfo> lines = MultilineSearchOperations.BuildMultilineContextLines(bytes, matches, stopOnNonmatch);
+        bool[] included = new bool[lines.Count];
+        bool matched = passthru
+            ? ContextSearchOperations.IncludePassthruLines(lines, included)
+            : MultilineSearchOperations.IncludeMultilineContextLines(bytes, lines, matches, included, beforeContext, afterContext, maxCount);
+        ulong? renderedMatchLimit = passthru ? maxCount : null;
+        var contextMatches = new List<JsonMatchSpan>(capacity: 0);
+        for (int index = 0; index < lines.Count; index++)
+        {
+            if (!included[index])
+            {
+                continue;
+            }
+
+            ContextLineInfo line = lines[index];
+            if (line.SelectedMatch && MultilineSearchOperations.MultilineLineHasRenderedMatch(bytes, line, matches, renderedMatchLimit))
+            {
+                if (TryWriteJsonMultilineMatchGroupStartingAtLine(bytes, lines, index, matches, renderedMatchLimit, replacement, patterns, asciiCaseInsensitive, writer, out int consumedLineIndex))
+                {
+                    index = Math.Max(index, consumedLineIndex);
+                }
+
+                continue;
+            }
+
+            writer.WriteContextLine(line.LineNumber, line.Start, bytes.Slice(line.Start, line.Length), contextMatches);
+        }
+
+        return matched;
+    }
+
+    private static bool SearchJsonMultilineInvertedContextBytes(
+        ReadOnlySpan<byte> bytes,
+        IReadOnlyList<byte[]> patterns,
+        JsonFileWriter writer,
+        bool asciiCaseInsensitive,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool multilineDotall,
+        ulong? maxCount,
+        ulong beforeContext,
+        ulong afterContext,
+        bool passthru)
+    {
+        List<ContextLineInfo> lines = MultilineSearchOperations.BuildMultilineInvertedLines(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall);
+        bool[] included = new bool[lines.Count];
+        bool matched = passthru
+            ? ContextSearchOperations.IncludePassthruLines(lines, included)
+            : ContextSearchOperations.IncludeContextLines(lines, included, beforeContext, afterContext, maxCount);
+        var matches = new List<JsonMatchSpan>(capacity: 0);
+        ulong passthruPrimaryMatches = 0;
+        for (int index = 0; index < lines.Count; index++)
+        {
+            if (!included[index])
+            {
+                continue;
+            }
+
+            ContextLineInfo line = lines[index];
+            bool selectedMatch = line.SelectedMatch;
+            if (passthru && selectedMatch && maxCount is ulong limit)
+            {
+                if (passthruPrimaryMatches >= limit)
+                {
+                    selectedMatch = false;
+                }
+                else
+                {
+                    passthruPrimaryMatches++;
+                }
+            }
+
+            if (selectedMatch)
+            {
+                writer.WriteMatchLine(line.LineNumber, line.Start, bytes.Slice(line.Start, line.Length), matches);
+            }
+            else
+            {
+                writer.WriteContextLine(line.LineNumber, line.Start, bytes.Slice(line.Start, line.Length), matches);
+            }
+        }
+
+        return matched;
+    }
+
+    private static bool TryWriteJsonMultilineMatchGroupStartingAtLine(
+        ReadOnlySpan<byte> bytes,
+        List<ContextLineInfo> lines,
+        int lineIndex,
+        List<RegexMatch> regexMatches,
+        ulong? renderedMatchLimit,
+        ReadOnlyMemory<byte>? replacement,
+        IReadOnlyList<byte[]> patterns,
+        bool asciiCaseInsensitive,
+        JsonFileWriter writer,
+        out int consumedLineIndex)
+    {
+        ContextLineInfo line = lines[lineIndex];
+        consumedLineIndex = lineIndex;
+        int groupStart = -1;
+        int groupEnd = -1;
+        int groupLastLineStart = -1;
+        var matches = new List<JsonMatchSpan>(capacity: 1);
+        for (int index = 0; index < regexMatches.Count; index++)
+        {
+            if (!MultilineSearchOperations.IsMultilineContextMatchRendered(index, renderedMatchLimit))
+            {
+                break;
+            }
+
+            RegexMatch match = regexMatches[index];
+            int firstLineStart = MultilineSearchOperations.GetLineStart(bytes, match.Start);
+            if (groupStart < 0)
+            {
+                if (firstLineStart != line.Start)
+                {
+                    continue;
+                }
+
+                groupStart = firstLineStart;
+            }
+            else if (firstLineStart > groupEnd)
+            {
+                break;
+            }
+
+            int lastLineStart = MultilineSearchOperations.GetLineStart(bytes, MultilineSearchOperations.GetInclusiveMatchEnd(match));
+            int lineEnd = MultilineSearchOperations.GetLineEnd(bytes, lastLineStart);
+            if (lineEnd > groupEnd)
+            {
+                groupEnd = lineEnd;
+                groupLastLineStart = lastLineStart;
+            }
+
+            byte[]? expandedReplacement = replacement is ReadOnlyMemory<byte> replacementValue
+                ? ReplacementFormatter.Expand(replacementValue.Span, bytes.Slice(match.Start, match.Length), patterns, asciiCaseInsensitive)
+                : null;
+            matches.Add(new JsonMatchSpan(match.Start - groupStart, match.Start - groupStart + match.Length, expandedReplacement));
+        }
+
+        if (groupStart < 0)
+        {
+            return false;
+        }
+
+        writer.WriteMatchLine(
+            MultilineSearchOperations.GetLineNumber(bytes, groupStart),
+            groupStart,
+            bytes[groupStart..groupEnd],
+            matches,
+            (ulong)(1 + MultilineSearchOperations.CountLineFeeds(bytes[groupStart..groupLastLineStart])));
+        consumedLineIndex = Math.Max(consumedLineIndex, MultilineSearchOperations.GetMultilineLineIndex(lines, groupLastLineStart));
         return true;
     }
 

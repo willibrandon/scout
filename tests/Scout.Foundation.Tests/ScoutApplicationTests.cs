@@ -1088,6 +1088,39 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies JSON multiline context, passthru, inverted, and replacement records match pinned ripgrep.
+    /// </summary>
+    [Fact]
+    public void MultilineJsonContextAndReplacementMatchesPinnedRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "one\nxxfoo\nbarxx\nfoo\nlast\n");
+
+        (int contextExitCode, byte[] contextOutput, string contextError) = RunScout("--json", "-U", "-C1", "foo\nbar", path);
+        (int pinnedContextExitCode, byte[] pinnedContextOutput, string pinnedContextError) = RunPinnedRipgrep("--json", "-U", "-C1", "foo\nbar", path);
+        (int passthruExitCode, byte[] passthruOutput, string passthruError) = RunScout("--json", "-U", "--passthru", "-m1", "foo\nbar|foo", path);
+        (int pinnedPassthruExitCode, byte[] pinnedPassthruOutput, string pinnedPassthruError) = RunPinnedRipgrep("--json", "-U", "--passthru", "-m1", "foo\nbar|foo", path);
+        (int invertExitCode, byte[] invertOutput, string invertError) = RunScout("--json", "-U", "-v", "-C1", "foo\nbar", path);
+        (int pinnedInvertExitCode, byte[] pinnedInvertOutput, string pinnedInvertError) = RunPinnedRipgrep("--json", "-U", "-v", "-C1", "foo\nbar", path);
+        (int replacementExitCode, byte[] replacementOutput, string replacementError) = RunScout("--json", "-U", "-C1", "-r", "X", "foo\nbar|foo", path);
+        (int pinnedReplacementExitCode, byte[] pinnedReplacementOutput, string pinnedReplacementError) = RunPinnedRipgrep("--json", "-U", "-C1", "-r", "X", "foo\nbar|foo", path);
+
+        Assert.Equal(pinnedContextExitCode, contextExitCode);
+        Assert.Equal(NormalizeJsonTimings(pinnedContextOutput), NormalizeJsonTimings(contextOutput));
+        Assert.Equal(pinnedContextError, contextError);
+        Assert.Equal(pinnedPassthruExitCode, passthruExitCode);
+        Assert.Equal(NormalizeJsonTimings(pinnedPassthruOutput), NormalizeJsonTimings(passthruOutput));
+        Assert.Equal(pinnedPassthruError, passthruError);
+        Assert.Equal(pinnedInvertExitCode, invertExitCode);
+        Assert.Equal(NormalizeJsonTimings(pinnedInvertOutput), NormalizeJsonTimings(invertOutput));
+        Assert.Equal(pinnedInvertError, invertError);
+        Assert.Equal(pinnedReplacementExitCode, replacementExitCode);
+        Assert.Equal(NormalizeJsonTimings(pinnedReplacementOutput), NormalizeJsonTimings(replacementOutput));
+        Assert.Equal(pinnedReplacementError, replacementError);
+    }
+
+    /// <summary>
     /// Verifies multiline regex search honors case-insensitive mode and scoped disabling.
     /// </summary>
     [Fact]

@@ -875,7 +875,7 @@ internal static class MultilineSearchOperations
         return found;
     }
 
-    private static List<RegexMatch> CollectMultilineMatches(ReadOnlySpan<byte> bytes, IReadOnlyList<byte[]> patterns, bool asciiCaseInsensitive, bool lineRegexp, bool wordRegexp, bool multilineDotall)
+    internal static List<RegexMatch> CollectMultilineMatches(ReadOnlySpan<byte> bytes, IReadOnlyList<byte[]> patterns, bool asciiCaseInsensitive, bool lineRegexp, bool wordRegexp, bool multilineDotall)
     {
         List<RegexMatch> matches = [];
         int offset = 0;
@@ -889,7 +889,7 @@ internal static class MultilineSearchOperations
         return matches;
     }
 
-    private static bool IncludeMultilineContextLines(
+    internal static bool IncludeMultilineContextLines(
         ReadOnlySpan<byte> bytes,
         List<ContextLineInfo> lines,
         List<RegexMatch> matches,
@@ -939,7 +939,7 @@ internal static class MultilineSearchOperations
         }
     }
 
-    private static List<ContextLineInfo> BuildMultilineContextLines(ReadOnlySpan<byte> bytes, List<RegexMatch> matches)
+    internal static List<ContextLineInfo> BuildMultilineContextLines(ReadOnlySpan<byte> bytes, List<RegexMatch> matches, bool stopOnNonmatch = false)
     {
         var physicalLines = new List<ContextLineInfo>();
         int lineStart = 0;
@@ -960,10 +960,18 @@ internal static class MultilineSearchOperations
         }
 
         var lines = new List<ContextLineInfo>(physicalLines.Count);
+        bool hasSelectedMatch = false;
         for (int index = 0; index < physicalLines.Count; index++)
         {
             ContextLineInfo line = physicalLines[index];
-            lines.Add(new ContextLineInfo(line.Start, line.Length, line.LineNumber, matchedLines[index], matchColumns[index], matchedLines[index], matchColumns[index]));
+            bool selected = matchedLines[index];
+            lines.Add(new ContextLineInfo(line.Start, line.Length, line.LineNumber, selected, matchColumns[index], selected, matchColumns[index]));
+            if (stopOnNonmatch && hasSelectedMatch && !selected)
+            {
+                break;
+            }
+
+            hasSelectedMatch |= selected;
         }
 
         return lines;
@@ -1082,7 +1090,7 @@ internal static class MultilineSearchOperations
         }
     }
 
-    private static int GetMultilineLineIndex(List<ContextLineInfo> lines, int lineStart)
+    internal static int GetMultilineLineIndex(List<ContextLineInfo> lines, int lineStart)
     {
         for (int index = 0; index < lines.Count; index++)
         {
@@ -1095,7 +1103,7 @@ internal static class MultilineSearchOperations
         return -1;
     }
 
-    private static bool MultilineLineHasRenderedMatch(ReadOnlySpan<byte> bytes, ContextLineInfo line, List<RegexMatch> matches, ulong? renderedMatchLimit)
+    internal static bool MultilineLineHasRenderedMatch(ReadOnlySpan<byte> bytes, ContextLineInfo line, List<RegexMatch> matches, ulong? renderedMatchLimit)
     {
         for (int index = 0; index < matches.Count; index++)
         {
@@ -1120,7 +1128,7 @@ internal static class MultilineSearchOperations
         return line.Start >= firstLineStart && line.Start <= lastLineStart;
     }
 
-    private static bool IsMultilineContextMatchRendered(int matchIndex, ulong? renderedMatchLimit)
+    internal static bool IsMultilineContextMatchRendered(int matchIndex, ulong? renderedMatchLimit)
     {
         return renderedMatchLimit is not ulong limit || (ulong)matchIndex < limit;
     }
