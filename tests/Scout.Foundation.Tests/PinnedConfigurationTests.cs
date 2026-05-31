@@ -296,6 +296,29 @@ public sealed class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies native binary differentials cover generated help, man, and completion artifacts.
+    /// </summary>
+    [Fact]
+    public void NativeGeneratedArtifactDifferentialsAreWired()
+    {
+        string root = FindRepositoryRoot();
+        string appBuildScript = File.ReadAllText(Path.Combine(root, "native", "build-app-unix.sh"));
+        string generatedArtifactScript = File.ReadAllText(Path.Combine(root, "native", "test-generated-artifacts-unix.sh"));
+
+        Assert.Contains("\"$ROOT/native/test-generated-artifacts-unix.sh\" \"$RID\" \"$BIN/scout\"", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("ripgrep_rg_path", generatedArtifactScript, StringComparison.Ordinal);
+        Assert.Contains("ripgrep_rg_sha256", generatedArtifactScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case help_long --help", generatedArtifactScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case help_short -h", generatedArtifactScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case generate_man --generate man", generatedArtifactScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case generate_man_inline --generate=man", generatedArtifactScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case generate_complete_bash --generate complete-bash", generatedArtifactScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case generate_complete_zsh --generate complete-zsh", generatedArtifactScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case generate_complete_fish --generate complete-fish", generatedArtifactScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case generate_complete_powershell --generate complete-powershell", generatedArtifactScript, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies the upstream lockfile has been vendored into Scout.
     /// </summary>
     [Fact]

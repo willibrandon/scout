@@ -199,6 +199,7 @@ expect_equal_file "PCRE2 multiline count" "$BIN/pcre2-multiline-count.expected" 
 printf '2\n' > "$BIN/pcre2-multiline-count-matches.expected"
 expect_equal_file "PCRE2 multiline count-matches" "$BIN/pcre2-multiline-count-matches.expected" "$BIN/pcre2-multiline-count-matches.out"
 if [ "$DIFFERENTIAL_MODE" = "--with-differentials" ]; then
+    "$ROOT/native/test-generated-artifacts-unix.sh" "$RID" "$BIN/scout"
     "$ROOT/native/test-pcre2-differential-unix.sh" "$RID" "$BIN/scout"
     "$ROOT/native/test-invalid-utf8-differential-unix.sh" "$RID" "$BIN/scout"
 fi
