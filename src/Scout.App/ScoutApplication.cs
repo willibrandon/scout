@@ -156,17 +156,17 @@ internal static class ScoutApplication
 
         if (lowArgs.TypeList)
         {
-            return RunTypeList(lowArgs, output, diagnostics);
+            return SearchWalkPlanning.RunTypeList(lowArgs, output, diagnostics);
         }
 
-        if (!TryValidateOverrideGlobs(lowArgs, diagnostics))
+        if (!SearchWalkPlanning.TryValidateOverrideGlobs(lowArgs, diagnostics))
         {
             return ExitCode.Error;
         }
 
         if (lowArgs.SearchMode == CliSearchMode.Files)
         {
-            if (!TryBuildFileTypeMatcher(lowArgs, out FileTypeMatcher? fileTypes, out ScoutError? error))
+            if (!SearchWalkPlanning.TryBuildFileTypeMatcher(lowArgs, out FileTypeMatcher? fileTypes, out ScoutError? error))
             {
                 diagnostics.ErrorMessage(error!.WithContext("rg"));
                 return ExitCode.Error;
@@ -250,7 +250,7 @@ internal static class ScoutApplication
             return ExitCode.Error;
         }
 
-        if (!TryBuildFileTypeMatcher(lowArgs, out FileTypeMatcher? searchFileTypes, out ScoutError? searchError))
+        if (!SearchWalkPlanning.TryBuildFileTypeMatcher(lowArgs, out FileTypeMatcher? searchFileTypes, out ScoutError? searchError))
         {
             diagnostics.ErrorMessage(searchError!.WithContext("rg"));
             return ExitCode.Error;
@@ -277,8 +277,8 @@ internal static class ScoutApplication
         OutputLineLimit lineLimit = GetOutputLineLimit(lowArgs);
         OutputColor color = GetOutputColor(lowArgs);
         bool heading = ShouldUseHeading(lowArgs);
-        bool lineNumber = EffectiveLineNumber(lowArgs);
-        bool column = EffectiveColumn(lowArgs);
+        bool lineNumber = SearchOutputFormatting.EffectiveLineNumber(lowArgs);
+        bool column = SearchOutputFormatting.EffectiveColumn(lowArgs);
         bool wroteHeadingOutput = false;
         bool matched = false;
         bool errored = false;
@@ -378,7 +378,7 @@ internal static class ScoutApplication
         }
 
         output.Flush();
-        return GetSearchExitCode(matched, errored, lowArgs.Quiet);
+        return SearchOutputFormatting.GetSearchExitCode(matched, errored, lowArgs.Quiet);
     }
 
     private static int RunPcre2Search(
@@ -410,7 +410,7 @@ internal static class ScoutApplication
             return ExitCode.NoMatch;
         }
 
-        if (!TryBuildFileTypeMatcher(lowArgs, out FileTypeMatcher? fileTypes, out ScoutError? error))
+        if (!SearchWalkPlanning.TryBuildFileTypeMatcher(lowArgs, out FileTypeMatcher? fileTypes, out ScoutError? error))
         {
             diagnostics.ErrorMessage(error!.WithContext("rg"));
             return ExitCode.Error;
@@ -436,11 +436,11 @@ internal static class ScoutApplication
                 using var regex = new Pcre2Regex(pattern, GetPcre2CompileOptions(lowArgs, patterns));
                 JsonSearchSummary? jsonSummary = lowArgs.SearchMode == CliSearchMode.Json ? new JsonSearchSummary() : null;
                 OutputPath stdinPath = new(StandardInputPath, hyperlinkPath: null, hyperlinkFormat: null, host: string.Empty);
-                OutputPath? prefix = GetStandardInputPrefix(lowArgs.SearchMode, autoPrefixPath: false, lowArgs.WithFilename);
+                OutputPath? prefix = SearchOutputFormatting.GetStandardInputPrefix(lowArgs.SearchMode, autoPrefixPath: false, lowArgs.WithFilename);
                 matched = RunPcre2SearchModeWithOptionalHeading(stdinBytes, regex, output, separators, stdinPath, prefix, lineLimit, color, lowArgs, patterns, jsonSummary, heading, ref wroteHeadingOutput);
                 jsonSummary?.WriteSummary(output);
                 output.Flush();
-                return GetSearchExitCode(matched, errored, lowArgs.Quiet);
+                return SearchOutputFormatting.GetSearchExitCode(matched, errored, lowArgs.Quiet);
             }
             catch (Pcre2Exception exception)
             {
@@ -485,7 +485,7 @@ internal static class ScoutApplication
 
             jsonSummary?.WriteSummary(output);
             output.Flush();
-            return GetSearchExitCode(matched, errored, lowArgs.Quiet);
+            return SearchOutputFormatting.GetSearchExitCode(matched, errored, lowArgs.Quiet);
         }
         catch (Pcre2Exception exception)
         {
@@ -540,8 +540,8 @@ internal static class ScoutApplication
         string? path = pathArgument.Text;
         if (pathArgument.IsRawUnixPath)
         {
-            OutputPath outputPath = CreateRawUnixOutputPath(pathArgument);
-            OutputPath? prefix = GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
+            OutputPath outputPath = SearchOutputFormatting.CreateRawUnixOutputPath(pathArgument);
+            OutputPath? prefix = SearchOutputFormatting.GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
             SearchPcre2RawUnixFile(pathArgument, lowArgs, regex, patterns, jsonSummary, output, diagnostics, outputPath, prefix, separators, lineLimit, color, heading, ref wroteHeadingOutput, ref matched, ref errored);
             return;
         }
@@ -551,7 +551,7 @@ internal static class ScoutApplication
         {
             byte[] bytes = SearchFileContentReader.ReadSearchStream(standardInput, lowArgs.EncodingMode);
             OutputPath outputPath = new(StandardInputPath, hyperlinkPath: null, hyperlinkFormat: null, host: string.Empty);
-            OutputPath? prefix = GetStandardInputPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename);
+            OutputPath? prefix = SearchOutputFormatting.GetStandardInputPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename);
             matched |= RunPcre2SearchModeWithOptionalHeading(bytes, regex, output, separators, outputPath, prefix, lineLimit, color, lowArgs, patterns, jsonSummary, heading, ref wroteHeadingOutput);
             return;
         }
@@ -564,8 +564,8 @@ internal static class ScoutApplication
 
         if (File.Exists(path))
         {
-            OutputPath outputPath = CreateOutputPath(path, pathArgument.DisplayBytes, lowArgs, color);
-            OutputPath? prefix = GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
+            OutputPath outputPath = SearchOutputFormatting.CreateOutputPath(path, pathArgument.DisplayBytes, lowArgs, color);
+            OutputPath? prefix = SearchOutputFormatting.GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
             SearchPcre2File(path, lowArgs, autoMmapEligible, regex, patterns, jsonSummary, output, diagnostics, outputPath, prefix, separators, lineLimit, color, heading, ref wroteHeadingOutput, ref matched, ref errored);
             return;
         }
@@ -598,7 +598,7 @@ internal static class ScoutApplication
         }
 
         string fullRoot = Path.GetFullPath(root);
-        foreach (DirEntry entry in GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics))
+        foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics))
         {
             byte[] displayPath = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
             SearchPcre2DirectoryEntryFile(entry, displayPath, lowArgs, regex, patterns, jsonSummary, output, diagnostics, separators, lineLimit, color, heading, ref wroteHeadingOutput, ref matched, ref errored);
@@ -626,8 +626,8 @@ internal static class ScoutApplication
         ref bool matched,
         ref bool errored)
     {
-        OutputPath outputPath = CreateDirectoryEntryOutputPath(entry, displayPath, lowArgs, color);
-        OutputPath? prefix = GetFileSearchPrefix(lowArgs.SearchMode, autoPrefixPath: true, lowArgs.WithFilename, outputPath);
+        OutputPath outputPath = SearchOutputFormatting.CreateDirectoryEntryOutputPath(entry, displayPath, lowArgs, color);
+        OutputPath? prefix = SearchOutputFormatting.GetFileSearchPrefix(lowArgs.SearchMode, autoPrefixPath: true, lowArgs.WithFilename, outputPath);
         if (entry.IsRawUnixPath)
         {
             var path = SearchPathArgument.FromUnixBytes(entry.UnixPathBytes, displayPath);
@@ -736,8 +736,8 @@ internal static class ScoutApplication
                 lowArgs.LineRegexp,
                 lowArgs.WordRegexp,
                 lowArgs.Multiline,
-                EffectiveLineNumber(lowArgs),
-                EffectiveColumn(lowArgs),
+                SearchOutputFormatting.EffectiveLineNumber(lowArgs),
+                SearchOutputFormatting.EffectiveColumn(lowArgs),
                 lowArgs.ByteOffset,
                 lowArgs.Trim,
                 lowArgs.IncludeZero,
@@ -762,8 +762,8 @@ internal static class ScoutApplication
             lowArgs.LineRegexp,
             lowArgs.WordRegexp,
             lowArgs.Multiline,
-            EffectiveLineNumber(lowArgs),
-            EffectiveColumn(lowArgs),
+            SearchOutputFormatting.EffectiveLineNumber(lowArgs),
+            SearchOutputFormatting.EffectiveColumn(lowArgs),
             lowArgs.ByteOffset,
             lowArgs.Trim,
             lowArgs.IncludeZero,
@@ -783,7 +783,7 @@ internal static class ScoutApplication
         if (prefix is not null)
         {
             prefix.WriteLabel(output, color);
-            WriteSearchPathTerminator(output, lowArgs.NullPathTerminator, separators.LineTerminator);
+            SearchOutputFormatting.WriteSearchPathTerminator(output, lowArgs.NullPathTerminator, separators.LineTerminator);
         }
 
         output.Write(body);
@@ -940,22 +940,22 @@ internal static class ScoutApplication
             long count = onlyMatching
                 ? CountPcre2Matches(bytes, regex, lineRegexp, wordRegexp)
                 : CountPcre2MatchingLines(bytes, regex, lineRegexp, wordRegexp);
-            return WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, separators.LineTerminator);
+            return SearchOutputFormatting.WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.CountMatches)
         {
-            return WriteCount(output, prefix, color, CountPcre2Matches(bytes, regex, lineRegexp, wordRegexp), includeZero, nullPathTerminator, separators.LineTerminator);
+            return SearchOutputFormatting.WriteCount(output, prefix, color, CountPcre2Matches(bytes, regex, lineRegexp, wordRegexp), includeZero, nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.FilesWithMatches)
         {
-            return WritePathIf(output, path, color, HasPcre2Match(bytes, regex, lineRegexp, wordRegexp), nullPathTerminator, separators.LineTerminator);
+            return SearchOutputFormatting.WritePathIf(output, path, color, HasPcre2Match(bytes, regex, lineRegexp, wordRegexp), nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.FilesWithoutMatch)
         {
-            return WritePathIf(output, path, color, !HasPcre2Match(bytes, regex, lineRegexp, wordRegexp), nullPathTerminator, separators.LineTerminator);
+            return SearchOutputFormatting.WritePathIf(output, path, color, !HasPcre2Match(bytes, regex, lineRegexp, wordRegexp), nullPathTerminator, separators.LineTerminator);
         }
 
         if (replacement is ReadOnlyMemory<byte> replacementValue)
@@ -1081,22 +1081,22 @@ internal static class ScoutApplication
     {
         if (searchMode == CliSearchMode.Count)
         {
-            return WriteCount(output, prefix, color, CountPcre2MultilineMatchingLines(bytes, regex, lineRegexp, wordRegexp), includeZero, nullPathTerminator, separators.LineTerminator);
+            return SearchOutputFormatting.WriteCount(output, prefix, color, CountPcre2MultilineMatchingLines(bytes, regex, lineRegexp, wordRegexp), includeZero, nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.CountMatches)
         {
-            return WriteCount(output, prefix, color, CountPcre2MultilineMatches(bytes, regex, lineRegexp, wordRegexp), includeZero, nullPathTerminator, separators.LineTerminator);
+            return SearchOutputFormatting.WriteCount(output, prefix, color, CountPcre2MultilineMatches(bytes, regex, lineRegexp, wordRegexp), includeZero, nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.FilesWithMatches)
         {
-            return WritePathIf(output, path, color, HasPcre2MultilineMatch(bytes, regex, lineRegexp, wordRegexp), nullPathTerminator, separators.LineTerminator);
+            return SearchOutputFormatting.WritePathIf(output, path, color, HasPcre2MultilineMatch(bytes, regex, lineRegexp, wordRegexp), nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.FilesWithoutMatch)
         {
-            return WritePathIf(output, path, color, !HasPcre2MultilineMatch(bytes, regex, lineRegexp, wordRegexp), nullPathTerminator, separators.LineTerminator);
+            return SearchOutputFormatting.WritePathIf(output, path, color, !HasPcre2MultilineMatch(bytes, regex, lineRegexp, wordRegexp), nullPathTerminator, separators.LineTerminator);
         }
 
         if (replacement is ReadOnlyMemory<byte> replacementValue)
@@ -1724,7 +1724,7 @@ internal static class ScoutApplication
 
         summary.WriteSummary(output);
         output.Flush();
-        return GetSearchExitCode(matched, errored, lowArgs.Quiet);
+        return SearchOutputFormatting.GetSearchExitCode(matched, errored, lowArgs.Quiet);
     }
 
     private static bool SearchJsonStandardInput(
@@ -1771,7 +1771,7 @@ internal static class ScoutApplication
 
         if (Directory.Exists(path))
         {
-            int threadCount = GetSearchWalkThreadCount(lowArgs);
+            int threadCount = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
             if (threadCount > 1)
             {
                 SearchJsonDirectoryParallel(path, pattern, defaultRoot, lowArgs, fileTypes, asciiCaseInsensitive, summary, output, diagnostics, threadCount, ref matched, ref errored);
@@ -1779,7 +1779,7 @@ internal static class ScoutApplication
             }
 
             string fullRoot = Path.GetFullPath(path);
-            foreach (DirEntry entry in GetSortedFileEntries(path, lowArgs, fileTypes, diagnostics))
+            foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(path, lowArgs, fileTypes, diagnostics))
             {
                 byte[] displayPath = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(path, fullRoot, entry, defaultRoot, pathSeparator: null);
                 SearchJsonDirectoryEntryFile(entry, displayPath, pattern, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, ref matched, ref errored);
@@ -1830,7 +1830,7 @@ internal static class ScoutApplication
 
         try
         {
-            CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() => entry =>
+            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() => entry =>
             {
                 if (!entry.IsFile)
                 {
@@ -1972,7 +1972,7 @@ internal static class ScoutApplication
         }
 
         output.Flush();
-        return GetSearchExitCode(emitted, errored, lowArgs.Quiet);
+        return SearchOutputFormatting.GetSearchExitCode(emitted, errored, lowArgs.Quiet);
     }
 
     private static void ListFilesPath(
@@ -1990,7 +1990,7 @@ internal static class ScoutApplication
             if (!lowArgs.Quiet)
             {
                 output.Write(StandardInputPath);
-                WritePathTerminator(output, lowArgs.NullPathTerminator);
+                SearchOutputFormatting.WritePathTerminator(output, lowArgs.NullPathTerminator);
             }
 
             emitted = true;
@@ -2002,7 +2002,7 @@ internal static class ScoutApplication
             if (!lowArgs.Quiet)
             {
                 output.Write(SearchPathArgument.GetPathBytes(path, lowArgs.PathSeparator));
-                WritePathTerminator(output, lowArgs.NullPathTerminator);
+                SearchOutputFormatting.WritePathTerminator(output, lowArgs.NullPathTerminator);
             }
 
             emitted = true;
@@ -2017,7 +2017,7 @@ internal static class ScoutApplication
         }
 
         string fullRoot = Path.GetFullPath(path);
-        int threadCount = GetFilesWalkThreadCount(lowArgs);
+        int threadCount = SearchWalkPlanning.GetFilesWalkThreadCount(lowArgs);
         if (threadCount > 1)
         {
             ListFilesDirectoryParallel(path, fullRoot, defaultRoot, lowArgs, fileTypes, output, diagnostics, ref emitted);
@@ -2037,7 +2037,7 @@ internal static class ScoutApplication
         DiagnosticMessenger diagnostics,
         ref bool emitted)
     {
-        foreach (DirEntry entry in GetSortedFileEntries(path, lowArgs, fileTypes, diagnostics))
+        foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(path, lowArgs, fileTypes, diagnostics))
         {
             string displayPath = defaultRoot
                 ? SearchPathArgument.GetSearchDirectoryDisplayPath(path, fullRoot, entry.FullPath, defaultRoot: true)
@@ -2048,7 +2048,7 @@ internal static class ScoutApplication
             if (!lowArgs.Quiet)
             {
                 output.Write(displayPathBytes);
-                WritePathTerminator(output, lowArgs.NullPathTerminator);
+                SearchOutputFormatting.WritePathTerminator(output, lowArgs.NullPathTerminator);
             }
 
             emitted = true;
@@ -2065,7 +2065,7 @@ internal static class ScoutApplication
         DiagnosticMessenger diagnostics,
         ref bool emitted)
     {
-        int threadCount = GetFilesWalkThreadCount(lowArgs);
+        int threadCount = SearchWalkPlanning.GetFilesWalkThreadCount(lowArgs);
         using var entries = new BlockingCollection<DirEntry>();
         int found = 0;
         var printTask = Task.Run(() =>
@@ -2079,13 +2079,13 @@ internal static class ScoutApplication
                     ? SearchPathArgument.GetSearchDirectoryDisplayPathBytes(path, fullRoot, entry, defaultRoot, lowArgs.PathSeparator)
                     : SearchPathArgument.GetPathBytes(displayPath, lowArgs.PathSeparator);
                 output.Write(displayPathBytes);
-                WritePathTerminator(output, lowArgs.NullPathTerminator);
+                SearchOutputFormatting.WritePathTerminator(output, lowArgs.NullPathTerminator);
             }
         });
 
         try
         {
-            CreateWalkBuilder(path, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() => entry =>
+            SearchWalkPlanning.CreateWalkBuilder(path, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() => entry =>
             {
                 if (!entry.IsFile)
                 {
@@ -2148,7 +2148,7 @@ internal static class ScoutApplication
         ref bool wroteHeadingOutput)
     {
         byte[] bytes = SearchFileContentReader.ReadSearchStream(standardInput, encodingMode);
-        return SearchBytesWithOptionalHeading(bytes, pattern, output, GetStandardInputPrefix(searchMode, autoPrefixPath, withFilename), separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, false, heading, ref wroteHeadingOutput);
+        return SearchBytesWithOptionalHeading(bytes, pattern, output, SearchOutputFormatting.GetStandardInputPrefix(searchMode, autoPrefixPath, withFilename), separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, false, heading, ref wroteHeadingOutput);
     }
 
     private static void SearchPath(
@@ -2176,17 +2176,17 @@ internal static class ScoutApplication
         string? path = pathArgument.Text;
         if (pathArgument.IsRawUnixPath)
         {
-            OutputPath outputPath = CreateRawUnixOutputPath(pathArgument);
-            OutputPath? prefix = GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
-            SearchRawUnixFile(pathArgument, pattern, lowArgs, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, EffectiveLineNumber(lowArgs), EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored);
+            OutputPath outputPath = SearchOutputFormatting.CreateRawUnixOutputPath(pathArgument);
+            OutputPath? prefix = SearchOutputFormatting.GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
+            SearchRawUnixFile(pathArgument, pattern, lowArgs, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, SearchOutputFormatting.EffectiveLineNumber(lowArgs), SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored);
             return;
         }
 
         path ??= pathArgument.DisplayText;
         if (path == "-")
         {
-            OutputPath? prefix = GetStandardInputPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename);
-            matched |= SearchStandardInput(pattern, standardInput, output, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, EffectiveLineNumber(lowArgs), EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.EncodingMode, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, lowArgs.StopOnNonmatch, heading, ref wroteHeadingOutput);
+            OutputPath? prefix = SearchOutputFormatting.GetStandardInputPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename);
+            matched |= SearchStandardInput(pattern, standardInput, output, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, SearchOutputFormatting.EffectiveLineNumber(lowArgs), SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.EncodingMode, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, lowArgs.StopOnNonmatch, heading, ref wroteHeadingOutput);
             return;
         }
 
@@ -2198,9 +2198,9 @@ internal static class ScoutApplication
 
         if (File.Exists(path))
         {
-            OutputPath outputPath = CreateOutputPath(path, pathArgument.DisplayBytes, lowArgs, color);
-            OutputPath? prefix = GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
-            SearchFile(path, pattern, lowArgs, false, autoMmapEligible, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, EffectiveLineNumber(lowArgs), EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored);
+            OutputPath outputPath = SearchOutputFormatting.CreateOutputPath(path, pathArgument.DisplayBytes, lowArgs, color);
+            OutputPath? prefix = SearchOutputFormatting.GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
+            SearchFile(path, pattern, lowArgs, false, autoMmapEligible, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, SearchOutputFormatting.EffectiveLineNumber(lowArgs), SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored);
             return;
         }
 
@@ -2246,7 +2246,7 @@ internal static class ScoutApplication
         ref SearchStats stats)
     {
         byte[] bytes = SearchFileContentReader.ReadSearchStream(standardInput, encodingMode);
-        return SearchBytesWithStats(bytes, pattern, output, GetStandardInputPrefix(searchMode, autoPrefixPath, withFilename), separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, false, heading, ref wroteHeadingOutput, ref stats);
+        return SearchBytesWithStats(bytes, pattern, output, SearchOutputFormatting.GetStandardInputPrefix(searchMode, autoPrefixPath, withFilename), separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, false, heading, ref wroteHeadingOutput, ref stats);
     }
 
     private static void SearchPathWithStats(
@@ -2275,17 +2275,17 @@ internal static class ScoutApplication
         string? path = pathArgument.Text;
         if (pathArgument.IsRawUnixPath)
         {
-            OutputPath outputPath = CreateRawUnixOutputPath(pathArgument);
-            OutputPath? prefix = GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
-            SearchRawUnixFileWithStats(pathArgument, pattern, lowArgs, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, EffectiveLineNumber(lowArgs), EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
+            OutputPath outputPath = SearchOutputFormatting.CreateRawUnixOutputPath(pathArgument);
+            OutputPath? prefix = SearchOutputFormatting.GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
+            SearchRawUnixFileWithStats(pathArgument, pattern, lowArgs, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, SearchOutputFormatting.EffectiveLineNumber(lowArgs), SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
             return;
         }
 
         path ??= pathArgument.DisplayText;
         if (path == "-")
         {
-            OutputPath? prefix = GetStandardInputPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename);
-            matched |= SearchStandardInputWithStats(pattern, standardInput, output, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, EffectiveLineNumber(lowArgs), EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.EncodingMode, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, lowArgs.StopOnNonmatch, heading, ref wroteHeadingOutput, ref stats);
+            OutputPath? prefix = SearchOutputFormatting.GetStandardInputPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename);
+            matched |= SearchStandardInputWithStats(pattern, standardInput, output, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, SearchOutputFormatting.EffectiveLineNumber(lowArgs), SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.EncodingMode, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, lowArgs.StopOnNonmatch, heading, ref wroteHeadingOutput, ref stats);
             return;
         }
 
@@ -2297,9 +2297,9 @@ internal static class ScoutApplication
 
         if (File.Exists(path))
         {
-            OutputPath outputPath = CreateOutputPath(path, pathArgument.DisplayBytes, lowArgs, color);
-            OutputPath? prefix = GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
-            SearchFileWithStats(path, pattern, lowArgs, false, autoMmapEligible, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, EffectiveLineNumber(lowArgs), EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
+            OutputPath outputPath = SearchOutputFormatting.CreateOutputPath(path, pathArgument.DisplayBytes, lowArgs, color);
+            OutputPath? prefix = SearchOutputFormatting.GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
+            SearchFileWithStats(path, pattern, lowArgs, false, autoMmapEligible, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, SearchOutputFormatting.EffectiveLineNumber(lowArgs), SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
             return;
         }
 
@@ -2404,7 +2404,7 @@ internal static class ScoutApplication
         ref bool matched,
         ref bool errored)
     {
-        int threadCount = GetSearchWalkThreadCount(lowArgs);
+        int threadCount = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
         if (threadCount > 1)
         {
             SearchDirectoryParallel(root, pattern, defaultRoot, lowArgs, separators, lineLimit, color, fileTypes, output, diagnostics, logger, asciiCaseInsensitive, heading, threadCount, ref wroteHeadingOutput, ref matched, ref errored);
@@ -2414,7 +2414,7 @@ internal static class ScoutApplication
         string fullRoot = Path.GetFullPath(root);
         bool interFileContextSeparator = ShouldWriteInterFileContextSeparator(lowArgs, heading, separators);
         bool wroteContextBody = false;
-        foreach (DirEntry entry in GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics))
+        foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics))
         {
             byte[] displayPathBytes = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
             if (interFileContextSeparator)
@@ -2526,7 +2526,7 @@ internal static class ScoutApplication
 
         try
         {
-            CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() => entry =>
+            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() => entry =>
             {
                 if (!entry.IsFile)
                 {
@@ -2605,7 +2605,7 @@ internal static class ScoutApplication
         ref bool errored,
         ref SearchStats stats)
     {
-        int threadCount = GetSearchWalkThreadCount(lowArgs);
+        int threadCount = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
         if (threadCount > 1)
         {
             SearchDirectoryParallelWithStats(root, pattern, defaultRoot, lowArgs, separators, lineLimit, color, fileTypes, output, diagnostics, logger, asciiCaseInsensitive, heading, threadCount, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
@@ -2615,7 +2615,7 @@ internal static class ScoutApplication
         string fullRoot = Path.GetFullPath(root);
         bool interFileContextSeparator = ShouldWriteInterFileContextSeparator(lowArgs, heading, separators);
         bool wroteContextBody = false;
-        foreach (DirEntry entry in GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics))
+        foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics))
         {
             byte[] displayPathBytes = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
             if (interFileContextSeparator)
@@ -2732,7 +2732,7 @@ internal static class ScoutApplication
 
         try
         {
-            CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() => entry =>
+            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() => entry =>
             {
                 if (!entry.IsFile)
                 {
@@ -2817,16 +2817,16 @@ internal static class ScoutApplication
         ref bool matched,
         ref bool errored)
     {
-        OutputPath outputPath = CreateDirectoryEntryOutputPath(entry, displayPath, lowArgs, color);
-        OutputPath? prefix = GetFileSearchPrefix(lowArgs.SearchMode, autoPrefixPath: true, lowArgs.WithFilename, outputPath);
+        OutputPath outputPath = SearchOutputFormatting.CreateDirectoryEntryOutputPath(entry, displayPath, lowArgs, color);
+        OutputPath? prefix = SearchOutputFormatting.GetFileSearchPrefix(lowArgs.SearchMode, autoPrefixPath: true, lowArgs.WithFilename, outputPath);
         if (entry.IsRawUnixPath)
         {
             var path = SearchPathArgument.FromUnixBytes(entry.UnixPathBytes, displayPath);
-            SearchRawUnixFile(path, pattern, lowArgs, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, EffectiveLineNumber(lowArgs), EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored);
+            SearchRawUnixFile(path, pattern, lowArgs, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, SearchOutputFormatting.EffectiveLineNumber(lowArgs), SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored);
             return;
         }
 
-        SearchFile(entry.FullPath, pattern, lowArgs, implicitSearch: true, autoMmapEligible: false, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, EffectiveLineNumber(lowArgs), EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored);
+        SearchFile(entry.FullPath, pattern, lowArgs, implicitSearch: true, autoMmapEligible: false, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, SearchOutputFormatting.EffectiveLineNumber(lowArgs), SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored);
     }
 
     private static void SearchDirectoryEntryFileWithStats(
@@ -2847,16 +2847,16 @@ internal static class ScoutApplication
         ref bool errored,
         ref SearchStats stats)
     {
-        OutputPath outputPath = CreateDirectoryEntryOutputPath(entry, displayPath, lowArgs, color);
-        OutputPath? prefix = GetFileSearchPrefix(lowArgs.SearchMode, autoPrefixPath: true, lowArgs.WithFilename, outputPath);
+        OutputPath outputPath = SearchOutputFormatting.CreateDirectoryEntryOutputPath(entry, displayPath, lowArgs, color);
+        OutputPath? prefix = SearchOutputFormatting.GetFileSearchPrefix(lowArgs.SearchMode, autoPrefixPath: true, lowArgs.WithFilename, outputPath);
         if (entry.IsRawUnixPath)
         {
             var path = SearchPathArgument.FromUnixBytes(entry.UnixPathBytes, displayPath);
-            SearchRawUnixFileWithStats(path, pattern, lowArgs, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, EffectiveLineNumber(lowArgs), EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
+            SearchRawUnixFileWithStats(path, pattern, lowArgs, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, SearchOutputFormatting.EffectiveLineNumber(lowArgs), SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
             return;
         }
 
-        SearchFileWithStats(entry.FullPath, pattern, lowArgs, implicitSearch: true, autoMmapEligible: false, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, EffectiveLineNumber(lowArgs), EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
+        SearchFileWithStats(entry.FullPath, pattern, lowArgs, implicitSearch: true, autoMmapEligible: false, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, SearchOutputFormatting.EffectiveLineNumber(lowArgs), SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
     }
 
     private static bool ShouldWriteInterFileContextSeparator(CliLowArgs lowArgs, bool heading, OutputSeparators separators)
@@ -2877,332 +2877,6 @@ internal static class ScoutApplication
         }
 
         wroteContextBody = true;
-    }
-
-    private static int RunTypeList(CliLowArgs lowArgs, RawByteWriter output, DiagnosticMessenger diagnostics)
-    {
-        if (!TryBuildFileTypeMatcher(lowArgs, out FileTypeMatcher? fileTypes, out ScoutError? error))
-        {
-            diagnostics.ErrorMessage(error!.WithContext("rg"));
-            return ExitCode.Error;
-        }
-
-        foreach (FileTypeDefinition definition in fileTypes!.Definitions)
-        {
-            output.Write(Utf8.GetBytes(definition.Name));
-            output.Write(": "u8);
-            for (int index = 0; index < definition.Globs.Count; index++)
-            {
-                if (index > 0)
-                {
-                    output.Write(", "u8);
-                }
-
-                output.Write(Utf8.GetBytes(definition.Globs[index]));
-            }
-
-            output.Write("\n"u8);
-        }
-
-        output.Flush();
-        return ExitCode.Success;
-    }
-
-    private static WalkBuilder CreateWalkBuilder(string path, CliLowArgs lowArgs, FileTypeMatcher fileTypes, DiagnosticMessenger diagnostics)
-    {
-        WalkBuilder builder = new WalkBuilder(path)
-            .Hidden(!lowArgs.IncludeHidden)
-            .FollowLinks(lowArgs.FollowLinks)
-            .SameFileSystem(lowArgs.OneFileSystem)
-            .MaxDepth(GetWalkMaxDepth(lowArgs.MaxDepth))
-            .MaxFileSize(GetWalkMaxFileSize(lowArgs.MaxFileSize))
-            .Overrides(BuildOverrides(lowArgs))
-            .FileTypes(fileTypes)
-            .Ignore(lowArgs.RespectDotIgnoreFiles)
-            .GitIgnore(lowArgs.RespectGitIgnoreFiles)
-            .GitExclude(lowArgs.RespectGitIgnoreFiles && lowArgs.RespectGitExcludeFiles)
-            .GitGlobal(lowArgs.RespectGitIgnoreFiles && lowArgs.RespectGlobalIgnoreFiles)
-            .Parents(lowArgs.RespectParentIgnoreFiles)
-            .RequireGit(lowArgs.RequireGitRepository)
-            .IgnoreCaseInsensitive(lowArgs.IgnoreFileCaseInsensitive);
-        if (lowArgs.RespectExplicitIgnoreFiles)
-        {
-            for (int index = 0; index < lowArgs.IgnoreFiles.Count; index++)
-            {
-                if (!builder.TryAddIgnoreFile(lowArgs.IgnoreFiles[index], out string? errorMessage) && lowArgs.Messages)
-                {
-                    diagnostics.ErrorMessage(new ScoutError(errorMessage!).WithContext("rg"));
-                }
-            }
-        }
-
-        if (lowArgs.SortMode is { Reverse: false, Kind: CliSortKind.Path })
-        {
-            builder.SortByFileName();
-        }
-
-        return builder;
-    }
-
-    private static List<DirEntry> GetSortedFileEntries(string root, CliLowArgs lowArgs, FileTypeMatcher fileTypes, DiagnosticMessenger diagnostics)
-    {
-        int threadCount = GetDirectoryWalkThreadCount(lowArgs);
-        List<DirEntry> entries = threadCount > 1
-            ? GetParallelFileEntries(root, lowArgs, fileTypes, diagnostics, threadCount)
-            : GetSerialFileEntries(root, lowArgs, fileTypes, diagnostics);
-        SortFileEntries(entries, lowArgs.SortMode);
-        return entries;
-    }
-
-    private static List<DirEntry> GetSerialFileEntries(string root, CliLowArgs lowArgs, FileTypeMatcher fileTypes, DiagnosticMessenger diagnostics)
-    {
-        List<DirEntry> entries = [];
-        foreach (DirEntry entry in CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics).Build())
-        {
-            if (entry.IsFile)
-            {
-                entries.Add(entry);
-            }
-        }
-
-        return entries;
-    }
-
-    private static List<DirEntry> GetParallelFileEntries(string root, CliLowArgs lowArgs, FileTypeMatcher fileTypes, DiagnosticMessenger diagnostics, int threadCount)
-    {
-        List<DirEntry> entries = [];
-        object entriesLock = new();
-        CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() => entry =>
-        {
-            if (entry.IsFile)
-            {
-                lock (entriesLock)
-                {
-                    entries.Add(entry);
-                }
-            }
-
-            return WalkState.Continue;
-        });
-
-        return entries;
-    }
-
-    private static int GetDirectoryWalkThreadCount(CliLowArgs lowArgs)
-    {
-        if (lowArgs.Threads is not ulong requestedThreads || requestedThreads <= 1)
-        {
-            return 1;
-        }
-
-        ulong resolvedThreads = SearchThreadPlanner.Resolve(requestedThreads, lowArgs.SortMode is not null, isOneFile: false);
-        if (resolvedThreads <= 1)
-        {
-            return 1;
-        }
-
-        return resolvedThreads > int.MaxValue ? int.MaxValue : (int)resolvedThreads;
-    }
-
-    private static int GetFilesWalkThreadCount(CliLowArgs lowArgs)
-    {
-        ulong resolvedThreads = SearchThreadPlanner.Resolve(lowArgs.Threads, lowArgs.SortMode is not null, isOneFile: false);
-        if (resolvedThreads <= 1)
-        {
-            return 1;
-        }
-
-        return resolvedThreads > int.MaxValue ? int.MaxValue : (int)resolvedThreads;
-    }
-
-    private static int GetSearchWalkThreadCount(CliLowArgs lowArgs)
-    {
-        ulong resolvedThreads = SearchThreadPlanner.Resolve(lowArgs.Threads, lowArgs.SortMode is not null, isOneFile: false);
-        if (resolvedThreads <= 1)
-        {
-            return 1;
-        }
-
-        return resolvedThreads > int.MaxValue ? int.MaxValue : (int)resolvedThreads;
-    }
-
-    private static bool TryBuildFileTypeMatcher(CliLowArgs lowArgs, out FileTypeMatcher? fileTypes, out ScoutError? error)
-    {
-        FileTypeMatcherBuilder builder = new FileTypeMatcherBuilder().AddDefaults();
-        try
-        {
-            for (int index = 0; index < lowArgs.TypeChanges.Count; index++)
-            {
-                CliTypeChange change = lowArgs.TypeChanges[index];
-                ApplyTypeChange(builder, change);
-            }
-
-            fileTypes = builder.Build();
-            error = null;
-            return true;
-        }
-        catch (InvalidOperationException exception)
-        {
-            fileTypes = null;
-            error = new ScoutError(exception.Message);
-            return false;
-        }
-        catch (ArgumentException)
-        {
-            fileTypes = null;
-            error = new ScoutError("invalid definition (format is type:glob, e.g., html:*.html)");
-            return false;
-        }
-    }
-
-    private static void ApplyTypeChange(FileTypeMatcherBuilder builder, CliTypeChange change)
-    {
-        switch (change.Kind)
-        {
-            case CliTypeChangeKind.Select:
-                builder.Select(change.Value);
-                break;
-
-            case CliTypeChangeKind.Negate:
-                builder.Negate(change.Value);
-                break;
-
-            case CliTypeChangeKind.Add:
-                builder.AddDefinition(change.Value);
-                break;
-
-            case CliTypeChangeKind.Clear:
-                builder.Clear(change.Value);
-                break;
-        }
-    }
-
-    private static void SortFileEntries(List<DirEntry> entries, CliSortMode? sortMode)
-    {
-        if (sortMode is null || sortMode.Value is { Reverse: false, Kind: CliSortKind.Path })
-        {
-            return;
-        }
-
-        CliSortMode mode = sortMode.Value;
-        if (mode.Kind == CliSortKind.Path)
-        {
-            entries.Sort((left, right) => ComparePath(left, right, mode.Reverse));
-            return;
-        }
-
-        entries.Sort((left, right) => CompareTime(left, right, mode));
-    }
-
-    private static int ComparePath(DirEntry left, DirEntry right, bool reverse)
-    {
-        int comparison = left.IsRawUnixPath && right.IsRawUnixPath
-            ? left.UnixPathBytes.SequenceCompareTo(right.UnixPathBytes)
-            : StringComparer.Ordinal.Compare(left.FullPath, right.FullPath);
-        return reverse ? -comparison : comparison;
-    }
-
-    private static int CompareTime(DirEntry left, DirEntry right, CliSortMode mode)
-    {
-        DateTime? leftTime = left.IsRawUnixPath ? null : GetSortTime(left.FullPath, mode.Kind);
-        DateTime? rightTime = right.IsRawUnixPath ? null : GetSortTime(right.FullPath, mode.Kind);
-        int comparison = CompareNullableTime(leftTime, rightTime);
-        return mode.Reverse ? -comparison : comparison;
-    }
-
-    private static int CompareNullableTime(DateTime? left, DateTime? right)
-    {
-        if (left.HasValue && right.HasValue)
-        {
-            return left.Value.CompareTo(right.Value);
-        }
-
-        if (left.HasValue)
-        {
-            return -1;
-        }
-
-        return right.HasValue ? 1 : 0;
-    }
-
-    private static DateTime? GetSortTime(string path, CliSortKind kind)
-    {
-        try
-        {
-            var info = new FileInfo(path);
-            return kind switch
-            {
-                CliSortKind.LastModified => info.LastWriteTimeUtc,
-                CliSortKind.LastAccessed => info.LastAccessTimeUtc,
-                CliSortKind.Created => info.CreationTimeUtc,
-                _ => null,
-            };
-        }
-        catch (IOException)
-        {
-            return null;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return null;
-        }
-    }
-
-    private static int? GetWalkMaxDepth(ulong? maxDepth)
-    {
-        if (maxDepth is null)
-        {
-            return null;
-        }
-
-        return maxDepth.Value > int.MaxValue ? int.MaxValue : (int)maxDepth.Value;
-    }
-
-    private static long? GetWalkMaxFileSize(ulong? maxFileSize)
-    {
-        if (maxFileSize is null)
-        {
-            return null;
-        }
-
-        return maxFileSize.Value > long.MaxValue ? long.MaxValue : (long)maxFileSize.Value;
-    }
-
-    private static Override BuildOverrides(CliLowArgs lowArgs)
-    {
-        if (lowArgs.GlobPatterns.Count == 0)
-        {
-            return Override.Empty;
-        }
-
-        var builder = new OverrideBuilder(Directory.GetCurrentDirectory());
-        for (int index = 0; index < lowArgs.GlobPatterns.Count; index++)
-        {
-            CliGlobPattern pattern = lowArgs.GlobPatterns[index];
-            builder.Add(pattern.Value, pattern.CaseInsensitive || lowArgs.GlobCaseInsensitive);
-        }
-
-        return builder.Build();
-    }
-
-    private static bool TryValidateOverrideGlobs(CliLowArgs lowArgs, DiagnosticMessenger diagnostics)
-    {
-        var builder = new OverrideBuilder(Directory.GetCurrentDirectory());
-        for (int index = 0; index < lowArgs.GlobPatterns.Count; index++)
-        {
-            CliGlobPattern pattern = lowArgs.GlobPatterns[index];
-            try
-            {
-                builder.Add(pattern.Value, pattern.CaseInsensitive || lowArgs.GlobCaseInsensitive);
-            }
-            catch (GlobParseException exception)
-            {
-                diagnostics.ErrorMessage(new ScoutError($"error parsing glob '{pattern.Value}': {exception.Message}").WithContext("rg"));
-                return false;
-            }
-        }
-
-        return true;
     }
 
     private static OutputSeparators GetOutputSeparators(CliLowArgs lowArgs)
@@ -3575,7 +3249,7 @@ internal static class ScoutApplication
 
             if (searchMode == CliSearchMode.FilesWithMatches)
             {
-                WritePathIf(output, prefix, color, condition: true, nullPathTerminator, separators.LineTerminator);
+                SearchOutputFormatting.WritePathIf(output, prefix, color, condition: true, nullPathTerminator, separators.LineTerminator);
                 return true;
             }
 
@@ -3672,7 +3346,7 @@ internal static class ScoutApplication
 
         if (searchMode == CliSearchMode.FilesWithoutMatch)
         {
-            return WritePathIf(output, prefix, color, !matched, nullPathTerminator, separators.LineTerminator);
+            return SearchOutputFormatting.WritePathIf(output, prefix, color, !matched, nullPathTerminator, separators.LineTerminator);
         }
 
         return FinishStreamingSearch(output, prefix, color, searchMode, quiet, includeZero, nullPathTerminator, separators.LineTerminator, matched, count);
@@ -3697,7 +3371,7 @@ internal static class ScoutApplication
 
         return searchMode switch
         {
-            CliSearchMode.Count or CliSearchMode.CountMatches => WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, lineTerminator),
+            CliSearchMode.Count or CliSearchMode.CountMatches => SearchOutputFormatting.WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, lineTerminator),
             CliSearchMode.FilesWithoutMatch => false,
             _ => matched,
         };
@@ -4191,7 +3865,7 @@ internal static class ScoutApplication
         if (prefix is not null)
         {
             prefix.WriteLabel(output, color);
-            WriteSearchPathTerminator(output, nullPathTerminator, separators.LineTerminator);
+            SearchOutputFormatting.WriteSearchPathTerminator(output, nullPathTerminator, separators.LineTerminator);
         }
 
         output.Write(body);
@@ -4402,23 +4076,23 @@ internal static class ScoutApplication
             long count = onlyMatching && !invertMatch
                 ? LiteralLineSearcher.CountMatches(searchSpan, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData)
                 : LiteralLineSearcher.CountMatchingLines(searchSpan, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
-            return WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, separators.LineTerminator);
+            return SearchOutputFormatting.WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.CountMatches)
         {
             long count = LiteralLineSearcher.CountMatches(searchSpan, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
-            return WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, separators.LineTerminator);
+            return SearchOutputFormatting.WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.FilesWithMatches)
         {
-            return WritePathIf(output, prefix, color, LiteralLineSearcher.HasMatch(searchSpan, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData), nullPathTerminator, separators.LineTerminator);
+            return SearchOutputFormatting.WritePathIf(output, prefix, color, LiteralLineSearcher.HasMatch(searchSpan, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData), nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.FilesWithoutMatch)
         {
-            return WritePathIf(output, prefix, color, !LiteralLineSearcher.HasMatch(searchSpan, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData), nullPathTerminator, separators.LineTerminator);
+            return SearchOutputFormatting.WritePathIf(output, prefix, color, !LiteralLineSearcher.HasMatch(searchSpan, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData), nullPathTerminator, separators.LineTerminator);
         }
 
         if (passthru || beforeContext > 0 || afterContext > 0)
@@ -4516,13 +4190,13 @@ internal static class ScoutApplication
         {
             if (searchMode == CliSearchMode.FilesWithoutMatch)
             {
-                matched = WritePathIf(output, prefix, color, true, nullPathTerminator, separators.LineTerminator);
+                matched = SearchOutputFormatting.WritePathIf(output, prefix, color, true, nullPathTerminator, separators.LineTerminator);
                 return true;
             }
 
             if (searchMode == CliSearchMode.Count || searchMode == CliSearchMode.CountMatches)
             {
-                matched = WriteCount(output, prefix, color, 0, includeZero, nullPathTerminator, separators.LineTerminator);
+                matched = SearchOutputFormatting.WriteCount(output, prefix, color, 0, includeZero, nullPathTerminator, separators.LineTerminator);
                 return true;
             }
 
@@ -4537,20 +4211,20 @@ internal static class ScoutApplication
 
         if (searchMode == CliSearchMode.FilesWithMatches)
         {
-            matched = WritePathIf(output, prefix, color, true, nullPathTerminator, separators.LineTerminator);
+            matched = SearchOutputFormatting.WritePathIf(output, prefix, color, true, nullPathTerminator, separators.LineTerminator);
             return true;
         }
 
         if (searchMode == CliSearchMode.FilesWithoutMatch)
         {
-            matched = WritePathIf(output, prefix, color, false, nullPathTerminator, separators.LineTerminator);
+            matched = SearchOutputFormatting.WritePathIf(output, prefix, color, false, nullPathTerminator, separators.LineTerminator);
             return true;
         }
 
         long count = CountMultilineMatches(searchSpan, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
         if (searchMode == CliSearchMode.Count || searchMode == CliSearchMode.CountMatches)
         {
-            matched = WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, separators.LineTerminator);
+            matched = SearchOutputFormatting.WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, separators.LineTerminator);
             return true;
         }
 
@@ -4628,17 +4302,17 @@ internal static class ScoutApplication
 
         if (searchMode == CliSearchMode.FilesWithMatches)
         {
-            return WritePathIf(output, prefix, color, hasSelectedMatch, nullPathTerminator, separators.LineTerminator);
+            return SearchOutputFormatting.WritePathIf(output, prefix, color, hasSelectedMatch, nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.FilesWithoutMatch)
         {
-            return WritePathIf(output, prefix, color, !hasSelectedMatch, nullPathTerminator, separators.LineTerminator);
+            return SearchOutputFormatting.WritePathIf(output, prefix, color, !hasSelectedMatch, nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.Count || searchMode == CliSearchMode.CountMatches)
         {
-            return WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, separators.LineTerminator);
+            return SearchOutputFormatting.WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, separators.LineTerminator);
         }
 
         var sink = new StandardSearchSink(output, prefix, separators.FieldMatch, separators.FieldContext, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
@@ -6357,178 +6031,6 @@ internal static class ScoutApplication
         }
 
         return LiteralLineSearcher.HasMatch(bytes, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, crlf, nullData);
-    }
-
-    private static int GetSearchExitCode(bool matched, bool errored, bool quiet)
-    {
-        if (matched && (quiet || !errored))
-        {
-            return ExitCode.Success;
-        }
-
-        if (!matched && !errored)
-        {
-            return ExitCode.NoMatch;
-        }
-
-        return ExitCode.Error;
-    }
-
-    private static bool EffectiveLineNumber(CliLowArgs lowArgs)
-    {
-        return lowArgs.LineNumber || (EffectiveColumn(lowArgs) && !lowArgs.LineNumberSpecified) || (lowArgs.Vimgrep && !lowArgs.LineNumberSpecified);
-    }
-
-    private static bool EffectiveColumn(CliLowArgs lowArgs)
-    {
-        return lowArgs.Column || (lowArgs.Vimgrep && !lowArgs.ColumnSpecified);
-    }
-
-    private static bool WriteCount(
-        RawByteWriter output,
-        OutputPath? prefix,
-        OutputColor color,
-        long count,
-        bool includeZero,
-        bool nullPathTerminator,
-        ReadOnlyMemory<byte> lineTerminator)
-    {
-        bool matched = count != 0;
-        if (!matched && !includeZero)
-        {
-            return false;
-        }
-
-        if (prefix is not null)
-        {
-            prefix.WriteLabel(output, color);
-            WritePrefixTerminator(output, nullPathTerminator, matchSeparator: true);
-        }
-
-        WriteNumber(output, count);
-        output.Write(lineTerminator.Span);
-        return matched;
-    }
-
-    private static bool WritePathIf(
-        RawByteWriter output,
-        OutputPath? path,
-        OutputColor color,
-        bool condition,
-        bool nullPathTerminator,
-        ReadOnlyMemory<byte> lineTerminator)
-    {
-        if (!condition)
-        {
-            return false;
-        }
-
-        if (path is null)
-        {
-            output.Write(StandardInputPath);
-        }
-        else
-        {
-            path.WriteLabel(output, color);
-        }
-
-        WriteSearchPathTerminator(output, nullPathTerminator, lineTerminator);
-        return true;
-    }
-
-    private static void WriteSearchPathTerminator(
-        RawByteWriter output,
-        bool nullPathTerminator,
-        ReadOnlyMemory<byte> lineTerminator)
-    {
-        if (nullPathTerminator)
-        {
-            output.Write(NullByte);
-            return;
-        }
-
-        output.Write(lineTerminator.Span);
-    }
-
-    private static void WritePathTerminator(RawByteWriter output, bool nullPathTerminator)
-    {
-        output.Write(nullPathTerminator ? NullByte : "\n"u8);
-    }
-
-    private static void WritePrefixTerminator(RawByteWriter output, bool nullPathTerminator, bool matchSeparator)
-    {
-        if (nullPathTerminator)
-        {
-            output.Write(NullByte);
-            return;
-        }
-
-        output.Write(matchSeparator ? ":"u8 : "-"u8);
-    }
-
-    private static OutputPath CreateOutputPath(string physicalPath, byte[] displayPath, CliLowArgs lowArgs, OutputColor color)
-    {
-        string? hyperlinkFormat = color.Enabled ? lowArgs.HyperlinkFormat : null;
-        byte[]? hyperlinkPath = string.IsNullOrEmpty(hyperlinkFormat)
-            ? null
-            : OutputPath.CreateHyperlinkPath(physicalPath);
-        string host = SearchDiagnosticLogging.GetHyperlinkHost(lowArgs, hyperlinkFormat);
-        return new OutputPath(displayPath, hyperlinkPath, hyperlinkFormat, host);
-    }
-
-    private static OutputPath CreateDirectoryEntryOutputPath(DirEntry entry, byte[] displayPath, CliLowArgs lowArgs, OutputColor color)
-    {
-        return entry.IsRawUnixPath
-            ? new OutputPath(displayPath, hyperlinkPath: null, hyperlinkFormat: null, host: string.Empty)
-            : CreateOutputPath(entry.FullPath, displayPath, lowArgs, color);
-    }
-
-    private static OutputPath CreateRawUnixOutputPath(SearchPathArgument path)
-    {
-        return new OutputPath(path.DisplayBytes, hyperlinkPath: null, hyperlinkFormat: null, host: string.Empty);
-    }
-
-    private static OutputPath? GetStandardInputPrefix(CliSearchMode searchMode, bool autoPrefixPath, bool? withFilename)
-    {
-        if (IsFileListMode(searchMode) || ShouldPrefixMatchFields(autoPrefixPath, withFilename))
-        {
-            return new OutputPath(StandardInputPath, hyperlinkPath: null, hyperlinkFormat: null, host: string.Empty);
-        }
-
-        return null;
-    }
-
-    private static OutputPath? GetFileSearchPrefix(CliSearchMode searchMode, bool autoPrefixPath, bool? withFilename, OutputPath path)
-    {
-        return IsFileListMode(searchMode) || ShouldPrefixMatchFields(autoPrefixPath, withFilename)
-            ? path
-            : null;
-    }
-
-    private static bool IsFileListMode(CliSearchMode searchMode)
-    {
-        return searchMode == CliSearchMode.FilesWithMatches || searchMode == CliSearchMode.FilesWithoutMatch;
-    }
-
-    private static bool ShouldPrefixMatchFields(bool autoPrefixPath, bool? withFilename)
-    {
-        return withFilename ?? autoPrefixPath;
-    }
-
-    private static void WriteNumber(RawByteWriter output, long value)
-    {
-        Span<byte> buffer = stackalloc byte[20];
-        ulong number = (ulong)value;
-        int index = buffer.Length;
-        do
-        {
-            index--;
-            buffer[index] = (byte)((number % 10) + (byte)'0');
-            number /= 10;
-        }
-        while (number != 0);
-
-        output.Write(buffer[index..]);
     }
 
 }
