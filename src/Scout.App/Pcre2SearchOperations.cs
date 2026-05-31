@@ -160,7 +160,7 @@ internal static class Pcre2SearchOperations
             !lowArgs.Vimgrep &&
             !(lowArgs.Multiline && lowArgs.InvertMatch) &&
             !(lowArgs.Multiline && lowArgs.OnlyMatching) &&
-            !(contextRequested && (lowArgs.SearchMode != CliSearchMode.Standard || lowArgs.Multiline)) &&
+            !(contextRequested && ((lowArgs.SearchMode != CliSearchMode.Standard && lowArgs.SearchMode != CliSearchMode.Json) || lowArgs.Multiline)) &&
             (lowArgs.Replacement is null || (lowArgs.SearchMode == CliSearchMode.Standard && !lowArgs.OnlyMatching));
     }
 
@@ -961,7 +961,7 @@ internal static class Pcre2SearchOperations
         var writer = new JsonFileWriter(output, path, lowArgs.Quiet, binaryOffset: GetPcre2JsonBinaryOffset(bytes, lowArgs.TextMode));
         bool matched = lowArgs.Multiline
             ? SearchPcre2JsonMultilineBytes(bytes, regex, writer, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.MaxCount)
-            : SearchPcre2JsonLines(bytes, regex, writer, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.InvertMatch, lowArgs.MaxCount);
+            : SearchPcre2JsonLines(bytes, regex, writer, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.InvertMatch, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch);
         writer.Finish((ulong)bytes.Length, summary);
         return matched;
     }
@@ -971,7 +971,71 @@ internal static class Pcre2SearchOperations
         return textMode ? -1 : bytes.AsSpan().IndexOf((byte)0);
     }
 
-    private static bool SearchPcre2JsonLines(byte[] bytes, Pcre2Regex regex, JsonFileWriter writer, bool lineRegexp, bool wordRegexp, bool invertMatch, ulong? maxCount)
+    private static bool SearchPcre2JsonLines(
+        byte[] bytes,
+        Pcre2Regex regex,
+        JsonFileWriter writer,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool invertMatch,
+        ulong? maxCount,
+        ulong beforeContext,
+        ulong afterContext,
+        bool passthru,
+        bool stopOnNonmatch)
+    {
+        if (beforeContext == 0 && afterContext == 0 && !passthru)
+        {
+            return SearchPcre2JsonMatchingLines(bytes, regex, writer, lineRegexp, wordRegexp, invertMatch, maxCount);
+        }
+
+        List<ContextLineInfo> lines = BuildPcre2ContextLines(bytes, regex, lineRegexp, wordRegexp, invertMatch, stopOnNonmatch);
+        if (lines.Count == 0)
+        {
+            return false;
+        }
+
+        bool[] included = new bool[lines.Count];
+        bool matched = passthru
+            ? ContextSearchOperations.IncludePassthruLines(lines, included)
+            : ContextSearchOperations.IncludeContextLines(lines, included, beforeContext, afterContext, maxCount);
+        var matches = new List<JsonMatchSpan>();
+        for (int index = 0; index < lines.Count; index++)
+        {
+            if (!included[index])
+            {
+                continue;
+            }
+
+            ContextLineInfo line = lines[index];
+            ReadOnlySpan<byte> outputLine = bytes.AsSpan(line.Start, line.Length);
+            ReadOnlySpan<byte> matchLine = GetPcre2MatchLine(outputLine);
+            if (line.SelectedMatch)
+            {
+                matches.Clear();
+                if (!invertMatch)
+                {
+                    CollectPcre2LineMatches(matchLine, regex, matches, lineRegexp, wordRegexp);
+                }
+
+                writer.WriteMatchLine(line.LineNumber, line.Start, outputLine, matches);
+            }
+            else
+            {
+                matches.Clear();
+                if (invertMatch && line.OriginalMatch)
+                {
+                    CollectPcre2LineMatches(matchLine, regex, matches, lineRegexp, wordRegexp);
+                }
+
+                writer.WriteContextLine(line.LineNumber, line.Start, outputLine, matches);
+            }
+        }
+
+        return matched;
+    }
+
+    private static bool SearchPcre2JsonMatchingLines(byte[] bytes, Pcre2Regex regex, JsonFileWriter writer, bool lineRegexp, bool wordRegexp, bool invertMatch, ulong? maxCount)
     {
         bool matched = false;
         int lineStart = 0;

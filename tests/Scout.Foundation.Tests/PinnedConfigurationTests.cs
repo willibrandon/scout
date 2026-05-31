@@ -1133,6 +1133,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("compare_case json_quiet mask-elapsed -P --json -q 'foo(?=bar)' pcre2-smoke.txt", differentialScript, StringComparison.Ordinal);
         Assert.Contains("seconds spent searching", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case json_stats_lookahead mask-elapsed -P --json --stats 'foo(?=bar)' pcre2-smoke.txt", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case json_context_lookahead mask-elapsed -P --json -C1 'foo(?=bar)' pcre2-context", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case json_passthru_lookahead mask-elapsed -P --json --passthru 'foo(?=bar)' pcre2-context", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case stats_lookahead mask-elapsed -P --stats 'foo(?=bar)' pcre2-smoke.txt", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case stats_recursive_lookahead_threads mask-elapsed-sort-lines -P --threads 4 --stats 'foo(?=bar)' pcre2-dir", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case r1401_lookahead_only_matching_1 exact -P -N -o '.*o(?!.*\\s)'", differentialScript, StringComparison.Ordinal);
