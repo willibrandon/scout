@@ -10,14 +10,14 @@ namespace Scout;
 /// </summary>
 public sealed class RegexCorpusDifferentialTests
 {
-    private const int ExpectedDifferentialCaseCount = 260;
-    private const int ExpectedSupportedOnlyCaseCount = 231;
+    private const int ExpectedDifferentialCaseCount = 265;
+    private const int ExpectedSupportedOnlyCaseCount = 226;
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     private static readonly (string RelativePath, int Count)[] ExpectedDifferentialFileCounts =
     [
-        ("bytes.toml", 24),
+        ("bytes.toml", 25),
         ("crazy.toml", 47),
         ("crlf.toml", 4),
         ("empty.toml", 19),
@@ -27,7 +27,7 @@ public sealed class RegexCorpusDifferentialTests
         ("misc.toml", 13),
         ("multiline.toml", 14),
         ("no-unicode.toml", 22),
-        ("regex-lite.toml", 5),
+        ("regex-lite.toml", 9),
         ("regression.toml", 13),
         ("set.toml", 29),
         ("word-boundary-special.toml", 41),
@@ -36,7 +36,7 @@ public sealed class RegexCorpusDifferentialTests
     private static readonly (string RelativePath, int Count)[] ExpectedSupportedOnlyFileCounts =
     [
         ("anchored.toml", 10),
-        ("bytes.toml", 2),
+        ("bytes.toml", 1),
         ("crazy.toml", 5),
         ("crlf.toml", 11),
         ("flags.toml", 2),
@@ -45,7 +45,6 @@ public sealed class RegexCorpusDifferentialTests
         ("misc.toml", 3),
         ("multiline.toml", 126),
         ("no-unicode.toml", 1),
-        ("regex-lite.toml", 4),
         ("regression.toml", 43),
         ("set.toml", 1),
         ("substring.toml", 4),
@@ -187,6 +186,7 @@ public sealed class RegexCorpusDifferentialTests
         ("bytes.toml", "negate-ascii"),
         ("bytes.toml", "negate-unicode"),
         ("bytes.toml", "null-bytes"),
+        ("bytes.toml", "mixed-dot"),
         ("bytes.toml", "word-boundary-ascii-100"),
         ("bytes.toml", "word-boundary-ascii-200"),
         ("regression.toml", "negated-char-class-100"),
@@ -243,6 +243,10 @@ public sealed class RegexCorpusDifferentialTests
         ("regex-lite.toml", "perl-class-word"),
         ("regex-lite.toml", "word-boundary"),
         ("regex-lite.toml", "case-insensitive-is-ascii-only"),
+        ("regex-lite.toml", "dot-always-matches-codepoint"),
+        ("regex-lite.toml", "empty-no-split-codepoint"),
+        ("regex-lite.toml", "negated-class-always-matches-codepoint"),
+        ("regex-lite.toml", "word-boundary-negated"),
         ("set.toml", "basic30"),
         ("set.toml", "basic40"),
         ("set.toml", "basic10-leftmost-first"),

@@ -1932,7 +1932,7 @@ public static class LiteralLineSearcher
             return true;
         }
 
-        if (ContainsNonCapturingGroup(pattern) || RequiresAutomatonRegex(haystack, pattern, asciiCaseInsensitive))
+        if (ContainsAutomatonOnlyRegexSyntax(pattern) || RequiresAutomatonRegex(haystack, pattern, asciiCaseInsensitive))
         {
             var automaton = RegexAutomaton.Compile(pattern, asciiCaseInsensitive, multiLine: false, dotMatchesNewline: false);
             ReadOnlySpan<byte> automatonHaystack = TrimAutomatonLineTerminator(haystack);
@@ -2045,13 +2045,15 @@ public static class LiteralLineSearcher
             or (byte)'P';
     }
 
-    private static bool ContainsNonCapturingGroup(ReadOnlySpan<byte> pattern)
+    private static bool ContainsAutomatonOnlyRegexSyntax(ReadOnlySpan<byte> pattern)
     {
         for (int index = 0; index + 2 < pattern.Length; index++)
         {
             if (pattern[index] == (byte)'(' &&
                 pattern[index + 1] == (byte)'?' &&
-                (pattern[index + 2] == (byte)':' || IsScopedInlineFlagGroup(pattern, index + 2)))
+                (pattern[index + 2] == (byte)':' ||
+                    IsScopedInlineFlagGroup(pattern, index + 2) ||
+                    IsUnicodeModeFlagGroup(pattern, index + 2)))
             {
                 return true;
             }
@@ -2071,6 +2073,11 @@ public static class LiteralLineSearcher
                 return sawFlag;
             }
 
+            if (value == (byte)')')
+            {
+                return false;
+            }
+
             if (value == (byte)'-')
             {
                 index++;
@@ -2083,6 +2090,42 @@ public static class LiteralLineSearcher
             }
 
             sawFlag = true;
+            index++;
+        }
+
+        return false;
+    }
+
+    private static bool IsUnicodeModeFlagGroup(ReadOnlySpan<byte> pattern, int index)
+    {
+        bool sawFlag = false;
+        bool sawUnicodeFlag = false;
+        while (index < pattern.Length)
+        {
+            byte value = pattern[index];
+            if (value == (byte)':')
+            {
+                return false;
+            }
+
+            if (value == (byte)')')
+            {
+                return sawFlag && sawUnicodeFlag;
+            }
+
+            if (value == (byte)'-')
+            {
+                index++;
+                continue;
+            }
+
+            if (!IsRegexFlagByte(value))
+            {
+                return false;
+            }
+
+            sawFlag = true;
+            sawUnicodeFlag |= value == (byte)'u';
             index++;
         }
 
