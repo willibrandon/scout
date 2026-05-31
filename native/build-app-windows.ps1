@@ -117,4 +117,16 @@ if ($LASTEXITCODE -ne 0 -or ($SmokeOutput -join "`n") -ne "foobar`nfoobarfoo") {
     throw "Unexpected PCRE2 smoke output: $SmokeOutput"
 }
 
+$SmokePath2 = Join-Path $Bin "pcre2-smoke-2.txt"
+Set-Content -NoNewline -Encoding ascii -Path $SmokePath2 -Value "barfoo`nfoobar`n"
+$MultiOutput = @(& $OutputExe -P -n "foo(?=bar)" $SmokePath $SmokePath2)
+$ExpectedMultiOutput = @(
+    "${SmokePath}:1:foobar",
+    "${SmokePath}:3:foobarfoo",
+    "${SmokePath2}:2:foobar"
+)
+if ($LASTEXITCODE -ne 0 -or ($MultiOutput -join "`n") -ne ($ExpectedMultiOutput -join "`n")) {
+    throw "Unexpected PCRE2 multi-file output: $MultiOutput"
+}
+
 Write-Host "OK ${Rid}: Scout.App native Windows export linked with PCRE2 and smoke checks passed"

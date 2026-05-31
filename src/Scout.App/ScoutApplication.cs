@@ -416,12 +416,12 @@ internal static class ScoutApplication
 
         if (lowArgs.RegexEngine == CliRegexEngine.Pcre2)
         {
-            return RunPcre2Search(positional, firstPathIndex, lowArgs, patterns, output, diagnostics);
+            return RunPcre2Search(positional, firstPathIndex, patternsReadFromStandardInput, lowArgs, patterns, standardInput, standardInputIsReadable, output, diagnostics);
         }
 
         if (ShouldAutoUsePcre2(lowArgs, patterns))
         {
-            return RunPcre2Search(positional, firstPathIndex, lowArgs, patterns, output, diagnostics);
+            return RunPcre2Search(positional, firstPathIndex, patternsReadFromStandardInput, lowArgs, patterns, standardInput, standardInputIsReadable, output, diagnostics);
         }
 
         if (!lowArgs.Multiline && ContainsLineTerminator(patterns, lowArgs.NullData, lowArgs.FixedStrings))
@@ -589,8 +589,11 @@ internal static class ScoutApplication
     private static int RunPcre2Search(
         IReadOnlyList<OsString> positional,
         int firstPathIndex,
+        bool patternsReadFromStandardInput,
         CliLowArgs lowArgs,
         IReadOnlyList<byte[]> patterns,
+        Stream standardInput,
+        bool standardInputIsReadable,
         RawByteWriter output,
         DiagnosticMessenger diagnostics)
     {
@@ -600,51 +603,339 @@ internal static class ScoutApplication
             return ExitCode.Error;
         }
 
-        if (!CanRunSimplePcre2Search(positional, firstPathIndex, lowArgs))
+        if (!CanRunPcre2Search(lowArgs))
         {
-            diagnostics.ErrorMessage(new ScoutError("PCRE2 search currently supports standard single-file searches only").WithContext("rg"));
+            diagnostics.ErrorMessage(new ScoutError("PCRE2 search does not support this option combination").WithContext("rg"));
             return ExitCode.Error;
         }
 
-        if (!TryGetPathText(positional[firstPathIndex], diagnostics, out string path))
+        if (lowArgs.MaxCount == 0)
         {
-            return ExitCode.Error;
+            output.Flush();
+            return ExitCode.NoMatch;
         }
 
-        if (!File.Exists(path))
+        if (!TryBuildFileTypeMatcher(lowArgs, out FileTypeMatcher? fileTypes, out ScoutError? error))
         {
-            diagnostics.ErrorMessage(MissingPathError(path, simple: true));
+            diagnostics.ErrorMessage(error!.WithContext("rg"));
             return ExitCode.Error;
         }
 
         OutputSeparators separators = GetOutputSeparators(lowArgs);
-        bool autoMmapEligible = IsAutoMmapEligible([CreateTextSearchPath(path)]);
-        if (!TryReadSearchFileBytes(path, lowArgs, autoMmapEligible, diagnostics, out byte[] bytes, out _))
+        OutputLineLimit lineLimit = GetOutputLineLimit(lowArgs);
+        OutputColor color = GetOutputColor(lowArgs);
+        bool heading = ShouldUseHeading(lowArgs);
+        bool wroteHeadingOutput = false;
+        bool matched = false;
+        bool errored = false;
+        bool useDefaultCurrentDirectory = positional.Count == firstPathIndex &&
+            (patternsReadFromStandardInput || !standardInputIsReadable);
+
+        var paths = new List<SearchPathArgument>(Math.Max(1, positional.Count - firstPathIndex));
+        if (positional.Count == firstPathIndex && !useDefaultCurrentDirectory)
         {
-            return ExitCode.Error;
+            try
+            {
+                byte[] stdinBytes = ReadSearchStream(standardInput, lowArgs.EncodingMode);
+                byte[] pattern = BuildPcre2Pattern(patterns);
+                using var regex = new Pcre2Regex(pattern, GetPcre2CompileOptions(lowArgs, patterns));
+                JsonSearchSummary? jsonSummary = lowArgs.SearchMode == CliSearchMode.Json ? new JsonSearchSummary() : null;
+                OutputPath stdinPath = new(StandardInputPath, hyperlinkPath: null, hyperlinkFormat: null, host: string.Empty);
+                OutputPath? prefix = GetStandardInputPrefix(lowArgs.SearchMode, autoPrefixPath: false, lowArgs.WithFilename);
+                matched = RunPcre2SearchModeWithOptionalHeading(stdinBytes, regex, output, separators, stdinPath, prefix, lineLimit, color, lowArgs, patterns, jsonSummary, heading, ref wroteHeadingOutput);
+                jsonSummary?.WriteSummary(output);
+                output.Flush();
+                return GetSearchExitCode(matched, errored, lowArgs.Quiet);
+            }
+            catch (Pcre2Exception exception)
+            {
+                diagnostics.ErrorMessage(new ScoutError(exception.Message).WithContext("rg"));
+                return ExitCode.Error;
+            }
         }
 
+        if (useDefaultCurrentDirectory)
+        {
+            paths.Add(CreateTextSearchPath("."));
+        }
+
+        for (int index = firstPathIndex; index < positional.Count; index++)
+        {
+            if (TryGetSearchPathArgument(positional[index], lowArgs.PathSeparator, diagnostics, out SearchPathArgument path))
+            {
+                paths.Add(path);
+            }
+            else
+            {
+                errored = true;
+            }
+        }
+
+        bool prefixPaths = paths.Count > 1 || ContainsDirectory(paths);
+        bool autoMmapEligible = IsAutoMmapEligible(paths);
         try
         {
             byte[] pattern = BuildPcre2Pattern(patterns);
             using var regex = new Pcre2Regex(pattern, GetPcre2CompileOptions(lowArgs, patterns));
-            byte[] displayPath = GetPcre2DisplayPath(positional[firstPathIndex], path);
-            if (lowArgs.SearchMode == CliSearchMode.Json)
+            JsonSearchSummary? jsonSummary = lowArgs.SearchMode == CliSearchMode.Json ? new JsonSearchSummary() : null;
+            for (int index = 0; index < paths.Count; index++)
             {
-                bool jsonMatched = RunPcre2JsonSearch(bytes, regex, output, displayPath, lowArgs);
-                output.Flush();
-                return jsonMatched ? ExitCode.Success : ExitCode.NoMatch;
+                bool defaultRoot = useDefaultCurrentDirectory && index == 0;
+                SearchPcre2Path(paths[index], standardInput, defaultRoot, prefixPaths, autoMmapEligible, lowArgs, regex, patterns, jsonSummary, separators, lineLimit, color, fileTypes!, output, diagnostics, heading, ref wroteHeadingOutput, ref matched, ref errored);
+                if (matched && lowArgs.Quiet)
+                {
+                    break;
+                }
             }
 
-            bool matched = RunPcre2SearchMode(
+            jsonSummary?.WriteSummary(output);
+            output.Flush();
+            return GetSearchExitCode(matched, errored, lowArgs.Quiet);
+        }
+        catch (Pcre2Exception exception)
+        {
+            diagnostics.ErrorMessage(new ScoutError(exception.Message).WithContext("rg"));
+            return ExitCode.Error;
+        }
+    }
+
+    private static bool CanRunPcre2Search(CliLowArgs lowArgs)
+    {
+        return (lowArgs.SearchMode is CliSearchMode.Standard
+                or CliSearchMode.Json
+                or CliSearchMode.Count
+                or CliSearchMode.CountMatches
+                or CliSearchMode.FilesWithMatches
+                or CliSearchMode.FilesWithoutMatch) &&
+            !lowArgs.Stats &&
+            !lowArgs.FixedStrings &&
+            !lowArgs.NullData &&
+            !lowArgs.LineRegexp &&
+            !lowArgs.WordRegexp &&
+            !lowArgs.Vimgrep &&
+            !lowArgs.InvertMatch &&
+            !(lowArgs.SearchMode == CliSearchMode.Json && lowArgs.OnlyMatching) &&
+            !(lowArgs.Multiline && lowArgs.OnlyMatching) &&
+            (lowArgs.Replacement is null || (lowArgs.SearchMode == CliSearchMode.Standard && !lowArgs.OnlyMatching)) &&
+            (lowArgs.MaxCount is null || lowArgs.MaxCount == 0) &&
+            lowArgs.BeforeContext == 0 &&
+            lowArgs.AfterContext == 0 &&
+            !lowArgs.Passthru;
+    }
+
+    private static void SearchPcre2Path(
+        SearchPathArgument pathArgument,
+        Stream standardInput,
+        bool defaultRoot,
+        bool prefixPaths,
+        bool autoMmapEligible,
+        CliLowArgs lowArgs,
+        Pcre2Regex regex,
+        IReadOnlyList<byte[]> patterns,
+        JsonSearchSummary? jsonSummary,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        FileTypeMatcher fileTypes,
+        RawByteWriter output,
+        DiagnosticMessenger diagnostics,
+        bool heading,
+        ref bool wroteHeadingOutput,
+        ref bool matched,
+        ref bool errored)
+    {
+        string? path = pathArgument.Text;
+        if (pathArgument.IsRawUnixPath)
+        {
+            OutputPath outputPath = CreateRawUnixOutputPath(pathArgument);
+            OutputPath? prefix = GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
+            SearchPcre2RawUnixFile(pathArgument, lowArgs, regex, patterns, jsonSummary, output, diagnostics, outputPath, prefix, separators, lineLimit, color, heading, ref wroteHeadingOutput, ref matched, ref errored);
+            return;
+        }
+
+        path ??= pathArgument.DisplayText;
+        if (path == "-")
+        {
+            byte[] bytes = ReadSearchStream(standardInput, lowArgs.EncodingMode);
+            OutputPath outputPath = new(StandardInputPath, hyperlinkPath: null, hyperlinkFormat: null, host: string.Empty);
+            OutputPath? prefix = GetStandardInputPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename);
+            matched |= RunPcre2SearchModeWithOptionalHeading(bytes, regex, output, separators, outputPath, prefix, lineLimit, color, lowArgs, patterns, jsonSummary, heading, ref wroteHeadingOutput);
+            return;
+        }
+
+        if (Directory.Exists(path))
+        {
+            SearchPcre2Directory(path, defaultRoot, lowArgs, regex, patterns, jsonSummary, separators, lineLimit, color, fileTypes, output, diagnostics, heading, ref wroteHeadingOutput, ref matched, ref errored);
+            return;
+        }
+
+        if (File.Exists(path))
+        {
+            OutputPath outputPath = CreateOutputPath(path, pathArgument.DisplayBytes, lowArgs, color);
+            OutputPath? prefix = GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
+            SearchPcre2File(path, lowArgs, autoMmapEligible, regex, patterns, jsonSummary, output, diagnostics, outputPath, prefix, separators, lineLimit, color, heading, ref wroteHeadingOutput, ref matched, ref errored);
+            return;
+        }
+
+        SearchErrorMessage(lowArgs, diagnostics, MissingPathError(path, prefixPaths));
+        errored = true;
+    }
+
+    private static void SearchPcre2Directory(
+        string root,
+        bool defaultRoot,
+        CliLowArgs lowArgs,
+        Pcre2Regex regex,
+        IReadOnlyList<byte[]> patterns,
+        JsonSearchSummary? jsonSummary,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        FileTypeMatcher fileTypes,
+        RawByteWriter output,
+        DiagnosticMessenger diagnostics,
+        bool heading,
+        ref bool wroteHeadingOutput,
+        ref bool matched,
+        ref bool errored)
+    {
+        if (matched && lowArgs.Quiet)
+        {
+            return;
+        }
+
+        string fullRoot = Path.GetFullPath(root);
+        foreach (DirEntry entry in GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics))
+        {
+            byte[] displayPath = GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
+            SearchPcre2DirectoryEntryFile(entry, displayPath, lowArgs, regex, patterns, jsonSummary, output, diagnostics, separators, lineLimit, color, heading, ref wroteHeadingOutput, ref matched, ref errored);
+            if (matched && lowArgs.Quiet)
+            {
+                return;
+            }
+        }
+    }
+
+    private static void SearchPcre2DirectoryEntryFile(
+        DirEntry entry,
+        byte[] displayPath,
+        CliLowArgs lowArgs,
+        Pcre2Regex regex,
+        IReadOnlyList<byte[]> patterns,
+        JsonSearchSummary? jsonSummary,
+        RawByteWriter output,
+        DiagnosticMessenger diagnostics,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool heading,
+        ref bool wroteHeadingOutput,
+        ref bool matched,
+        ref bool errored)
+    {
+        OutputPath outputPath = CreateDirectoryEntryOutputPath(entry, displayPath, lowArgs, color);
+        OutputPath? prefix = GetFileSearchPrefix(lowArgs.SearchMode, autoPrefixPath: true, lowArgs.WithFilename, outputPath);
+        if (entry.IsRawUnixPath)
+        {
+            var path = SearchPathArgument.FromUnixBytes(entry.UnixPathBytes, displayPath);
+            SearchPcre2RawUnixFile(path, lowArgs, regex, patterns, jsonSummary, output, diagnostics, outputPath, prefix, separators, lineLimit, color, heading, ref wroteHeadingOutput, ref matched, ref errored);
+            return;
+        }
+
+        SearchPcre2File(entry.FullPath, lowArgs, autoMmapEligible: false, regex, patterns, jsonSummary, output, diagnostics, outputPath, prefix, separators, lineLimit, color, heading, ref wroteHeadingOutput, ref matched, ref errored);
+    }
+
+    private static void SearchPcre2File(
+        string path,
+        CliLowArgs lowArgs,
+        bool autoMmapEligible,
+        Pcre2Regex regex,
+        IReadOnlyList<byte[]> patterns,
+        JsonSearchSummary? jsonSummary,
+        RawByteWriter output,
+        DiagnosticMessenger diagnostics,
+        OutputPath outputPath,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool heading,
+        ref bool wroteHeadingOutput,
+        ref bool matched,
+        ref bool errored)
+    {
+        if (!TryReadSearchFileBytes(path, lowArgs, autoMmapEligible, diagnostics, out byte[] bytes, out _))
+        {
+            errored = true;
+            return;
+        }
+
+        matched |= RunPcre2SearchModeWithOptionalHeading(bytes, regex, output, separators, outputPath, prefix, lineLimit, color, lowArgs, patterns, jsonSummary, heading, ref wroteHeadingOutput);
+    }
+
+    private static void SearchPcre2RawUnixFile(
+        SearchPathArgument path,
+        CliLowArgs lowArgs,
+        Pcre2Regex regex,
+        IReadOnlyList<byte[]> patterns,
+        JsonSearchSummary? jsonSummary,
+        RawByteWriter output,
+        DiagnosticMessenger diagnostics,
+        OutputPath outputPath,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool heading,
+        ref bool wroteHeadingOutput,
+        ref bool matched,
+        ref bool errored)
+    {
+        if (!TryReadRawUnixSearchFileBytes(path, lowArgs, diagnostics, out byte[] bytes, out _))
+        {
+            errored = true;
+            return;
+        }
+
+        matched |= RunPcre2SearchModeWithOptionalHeading(bytes, regex, output, separators, outputPath, prefix, lineLimit, color, lowArgs, patterns, jsonSummary, heading, ref wroteHeadingOutput);
+    }
+
+    private static bool RunPcre2SearchModeWithOptionalHeading(
+        byte[] bytes,
+        Pcre2Regex regex,
+        RawByteWriter output,
+        OutputSeparators separators,
+        OutputPath path,
+        OutputPath? prefix,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        CliLowArgs lowArgs,
+        IReadOnlyList<byte[]> patterns,
+        JsonSearchSummary? jsonSummary,
+        bool heading,
+        ref bool wroteHeadingOutput)
+    {
+        if (lowArgs.SearchMode == CliSearchMode.Json)
+        {
+            return RunPcre2JsonSearch(bytes, regex, output, path.Display, lowArgs, jsonSummary!);
+        }
+
+        if (lowArgs.Quiet)
+        {
+            return SearchPcre2Quiet(bytes, regex, lowArgs.SearchMode, lowArgs.Multiline);
+        }
+
+        if (!heading)
+        {
+            return RunPcre2SearchMode(
                 bytes,
                 regex,
                 output,
                 separators,
-                new OutputPath(displayPath, hyperlinkPath: null, hyperlinkFormat: null, host: string.Empty),
-                GetPcre2MatchPrefix(displayPath, lowArgs),
-                GetOutputLineLimit(lowArgs),
-                GetOutputColor(lowArgs),
+                path,
+                prefix,
+                lineLimit,
+                color,
                 lowArgs.SearchMode,
                 lowArgs.OnlyMatching,
                 lowArgs.Replacement,
@@ -656,40 +947,74 @@ internal static class ScoutApplication
                 lowArgs.Trim,
                 lowArgs.IncludeZero,
                 lowArgs.NullPathTerminator);
-            output.Flush();
-            return matched ? ExitCode.Success : ExitCode.NoMatch;
         }
-        catch (Pcre2Exception exception)
+
+        using MemoryStream bufferedOutput = new();
+        var bufferedWriter = new RawByteWriter(bufferedOutput);
+        bool matched = RunPcre2SearchMode(
+            bytes,
+            regex,
+            bufferedWriter,
+            separators,
+            path,
+            null,
+            lineLimit,
+            color,
+            lowArgs.SearchMode,
+            lowArgs.OnlyMatching,
+            lowArgs.Replacement,
+            patterns,
+            lowArgs.Multiline,
+            EffectiveLineNumber(lowArgs),
+            EffectiveColumn(lowArgs),
+            lowArgs.ByteOffset,
+            lowArgs.Trim,
+            lowArgs.IncludeZero,
+            lowArgs.NullPathTerminator);
+        bufferedWriter.Flush();
+        byte[] body = bufferedOutput.ToArray();
+        if (body.Length == 0)
         {
-            diagnostics.ErrorMessage(new ScoutError(exception.Message).WithContext("rg"));
-            return ExitCode.Error;
+            return matched;
         }
+
+        if (wroteHeadingOutput)
+        {
+            output.Write("\n"u8);
+        }
+
+        if (prefix is not null)
+        {
+            prefix.WriteLabel(output, color);
+            WriteSearchPathTerminator(output, lowArgs.NullPathTerminator, separators.LineTerminator);
+        }
+
+        output.Write(body);
+        wroteHeadingOutput = true;
+        return matched;
     }
 
-    private static bool CanRunSimplePcre2Search(IReadOnlyList<OsString> positional, int firstPathIndex, CliLowArgs lowArgs)
+    private static bool SearchPcre2Quiet(byte[] bytes, Pcre2Regex regex, CliSearchMode searchMode, bool multiline)
     {
-        return (lowArgs.SearchMode is CliSearchMode.Standard
-                or CliSearchMode.Json
-                or CliSearchMode.Count
-                or CliSearchMode.CountMatches
-                or CliSearchMode.FilesWithMatches
-                or CliSearchMode.FilesWithoutMatch) &&
-            positional.Count == firstPathIndex + 1 &&
-            !lowArgs.Stats &&
-            !lowArgs.Quiet &&
-            !lowArgs.FixedStrings &&
-            !lowArgs.NullData &&
-            !lowArgs.LineRegexp &&
-            !lowArgs.WordRegexp &&
-            !lowArgs.Vimgrep &&
-            !lowArgs.InvertMatch &&
-            !(lowArgs.SearchMode == CliSearchMode.Json && lowArgs.OnlyMatching) &&
-            !(lowArgs.Multiline && lowArgs.OnlyMatching) &&
-            (lowArgs.Replacement is null || (lowArgs.SearchMode == CliSearchMode.Standard && !lowArgs.OnlyMatching)) &&
-            lowArgs.MaxCount is null &&
-            lowArgs.BeforeContext == 0 &&
-            lowArgs.AfterContext == 0 &&
-            !lowArgs.Passthru;
+        bool hasMatch = multiline ? regex.TryFind(bytes, out _) : HasPcre2Match(bytes, regex);
+        if (searchMode == CliSearchMode.FilesWithoutMatch)
+        {
+            return !hasMatch;
+        }
+
+        if (searchMode == CliSearchMode.CountMatches)
+        {
+            long count = multiline ? CountPcre2MultilineMatches(bytes, regex) : CountPcre2Matches(bytes, regex);
+            return count > 0;
+        }
+
+        if (searchMode == CliSearchMode.Count)
+        {
+            long count = multiline ? CountPcre2MultilineMatchingLines(bytes, regex) : CountPcre2MatchingLines(bytes, regex);
+            return count > 0;
+        }
+
+        return hasMatch;
     }
 
     private static bool ShouldAutoUsePcre2(CliLowArgs lowArgs, IReadOnlyList<byte[]> patterns)
@@ -735,20 +1060,6 @@ internal static class ScoutApplication
         {
             return true;
         }
-    }
-
-    private static byte[] GetPcre2DisplayPath(OsString argument, string path)
-    {
-        return argument.IsUnixBytes
-            ? argument.AsUnixBytes().ToArray()
-            : Utf8.GetBytes(path);
-    }
-
-    private static OutputPath? GetPcre2MatchPrefix(byte[] displayPath, CliLowArgs lowArgs)
-    {
-        return lowArgs.WithFilename is true
-            ? new OutputPath(displayPath, hyperlinkPath: null, hyperlinkFormat: null, host: string.Empty)
-            : null;
     }
 
     private static Pcre2CompileOptions GetPcre2CompileOptions(CliLowArgs lowArgs, IReadOnlyList<byte[]> patterns)
@@ -854,15 +1165,13 @@ internal static class ScoutApplication
         return SearchPcre2Lines(bytes, regex, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, onlyMatching);
     }
 
-    private static bool RunPcre2JsonSearch(byte[] bytes, Pcre2Regex regex, RawByteWriter output, byte[] path, CliLowArgs lowArgs)
+    private static bool RunPcre2JsonSearch(byte[] bytes, Pcre2Regex regex, RawByteWriter output, byte[] path, CliLowArgs lowArgs, JsonSearchSummary summary)
     {
-        var summary = new JsonSearchSummary();
-        var writer = new JsonFileWriter(output, path, quiet: false, binaryOffset: GetPcre2JsonBinaryOffset(bytes, lowArgs.TextMode));
+        var writer = new JsonFileWriter(output, path, lowArgs.Quiet, binaryOffset: GetPcre2JsonBinaryOffset(bytes, lowArgs.TextMode));
         bool matched = lowArgs.Multiline
             ? SearchPcre2JsonMultilineBytes(bytes, regex, writer)
             : SearchPcre2JsonLines(bytes, regex, writer);
         writer.Finish((ulong)bytes.Length, summary);
-        summary.WriteSummary(output);
         return matched;
     }
 

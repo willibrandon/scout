@@ -712,6 +712,9 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("-P --files-with-matches 'foo(?=bar)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --files-without-match 'nomatch(?=bar)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P -n 'foo(?=bar)'", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("pcre2-smoke-2.txt", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("PCRE2 multi-file prefixes", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("PCRE2 explicit stdin", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --column 'bar'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P -H -n --column -b -o 'o(?=o)'", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-P --multiline '(?s)Start(?=.*thing2)'", appBuildScript, StringComparison.Ordinal);
@@ -736,6 +739,8 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("pcre2-8.lib", windowsAppBuildScript, StringComparison.Ordinal);
         Assert.Contains("& $OutputExe -V", windowsAppBuildScript, StringComparison.Ordinal);
         Assert.Contains("--pcre2-version", windowsAppBuildScript, StringComparison.Ordinal);
+        Assert.Contains("$SmokePath2", windowsAppBuildScript, StringComparison.Ordinal);
+        Assert.Contains("Unexpected PCRE2 multi-file output", windowsAppBuildScript, StringComparison.Ordinal);
         Assert.Contains("\"$ROOT/native/test-pcre2-differential-unix.sh\" \"$RID\" \"$BIN/scout\"", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("ripgrep_pcre2_rg_profile = \"release-lto\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("ripgrep_pcre2_rg_features = \"pcre2\"", prerequisiteLock, StringComparison.Ordinal);
@@ -743,6 +748,14 @@ public sealed class PinnedConfigurationTests
         Assert.Contains("ripgrep_pcre2_rg_sha256 = \"49d486acea41e80f9a17834944677cf70bdbaeff12dc186c6d8630770d81bbe9\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("ripgrep_pcre2_reported_version = \"PCRE2 10.45 is available (JIT is available)\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("compare_case f1155_auto_hybrid_regex exact --no-pcre2 --auto-hybrid-regex '(?<=the )Sherlock'", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("run_tool_stdin()", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case basic_lookahead_multi_file sort-lines -P -n 'foo(?=bar)'", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case recursive_lookahead sort-lines -P -n 'foo(?=bar)' pcre2-dir", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_stdin_case explicit_stdin_lookahead exact \"$WORK/pcre2-smoke.txt\" -P 'foo(?=bar)' -", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_stdin_case implicit_stdin_lookahead exact \"$WORK/pcre2-smoke.txt\" -P 'foo(?=bar)'", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("mask-elapsed-sort-lines", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case json_multi_file mask-elapsed-sort-lines -P --json 'foo(?=bar)' pcre2-smoke.txt pcre2-smoke-2.txt", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case json_quiet mask-elapsed -P --json -q 'foo(?=bar)' pcre2-smoke.txt", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case r1401_lookahead_only_matching_1 exact -P -N -o '.*o(?!.*\\s)'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case json_lookbehind mask-elapsed -P -U --json '(?<=foo\\n)bar'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case r1412_lookbehind_replacement exact -P -nU -rquux '(?<=foo\\n)bar'", differentialScript, StringComparison.Ordinal);

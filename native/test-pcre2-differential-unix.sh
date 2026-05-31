@@ -86,6 +86,15 @@ run_tool() {
     (cd "$WORK" && "$tool" "$@") > "$stdout" 2> "$stderr"
 }
 
+run_tool_stdin() {
+    input="$1"
+    tool="$2"
+    stdout="$3"
+    stderr="$4"
+    shift 4
+    (cd "$WORK" && "$tool" "$@" < "$input") > "$stdout" 2> "$stderr"
+}
+
 compare_case() {
     name="$1"
     mode="$2"
@@ -131,6 +140,86 @@ compare_case() {
             normalize_elapsed < "$scout_stderr" > "$normalized_scout_stderr"
             normalize_elapsed < "$rg_stderr" > "$normalized_rg_stderr"
             ;;
+        mask-elapsed-sort-lines)
+            normalize_elapsed < "$scout_stdout" | LC_ALL=C sort > "$normalized_scout_stdout"
+            normalize_elapsed < "$rg_stdout" | LC_ALL=C sort > "$normalized_rg_stdout"
+            normalize_elapsed < "$scout_stderr" | LC_ALL=C sort > "$normalized_scout_stderr"
+            normalize_elapsed < "$rg_stderr" | LC_ALL=C sort > "$normalized_rg_stderr"
+            ;;
+        sort-lines)
+            LC_ALL=C sort "$scout_stdout" > "$normalized_scout_stdout"
+            LC_ALL=C sort "$rg_stdout" > "$normalized_rg_stdout"
+            cp "$scout_stderr" "$normalized_scout_stderr"
+            cp "$rg_stderr" "$normalized_rg_stderr"
+            ;;
+        *)
+            fail "Unknown PCRE2 differential normalization mode: $mode"
+            ;;
+    esac
+
+    if ! diff -u "$normalized_rg_stdout" "$normalized_scout_stdout"; then
+        printf 'PCRE2 differential stdout mismatch for %s\n' "$name" >&2
+        exit 1
+    fi
+
+    if ! diff -u "$normalized_rg_stderr" "$normalized_scout_stderr"; then
+        printf 'PCRE2 differential stderr mismatch for %s\n' "$name" >&2
+        exit 1
+    fi
+}
+
+compare_stdin_case() {
+    name="$1"
+    mode="$2"
+    input="$3"
+    shift 3
+
+    scout_stdout="$OUT/$name.scout.stdout"
+    scout_stderr="$OUT/$name.scout.stderr"
+    rg_stdout="$OUT/$name.rg.stdout"
+    rg_stderr="$OUT/$name.rg.stderr"
+    normalized_scout_stdout="$OUT/$name.scout.normalized.stdout"
+    normalized_rg_stdout="$OUT/$name.rg.normalized.stdout"
+    normalized_scout_stderr="$OUT/$name.scout.normalized.stderr"
+    normalized_rg_stderr="$OUT/$name.rg.normalized.stderr"
+
+    if run_tool_stdin "$input" "$SCOUT" "$scout_stdout" "$scout_stderr" "$@"; then
+        scout_status=0
+    else
+        scout_status=$?
+    fi
+
+    if run_tool_stdin "$input" "$RG_PCRE2" "$rg_stdout" "$rg_stderr" "$@"; then
+        rg_status=0
+    else
+        rg_status=$?
+    fi
+
+    if [ "$scout_status" -ne "$rg_status" ]; then
+        printf 'PCRE2 differential status mismatch for %s\n' "$name" >&2
+        printf 'scout=%s rg=%s\n' "$scout_status" "$rg_status" >&2
+        exit 1
+    fi
+
+    case "$mode" in
+        exact)
+            cp "$scout_stdout" "$normalized_scout_stdout"
+            cp "$rg_stdout" "$normalized_rg_stdout"
+            cp "$scout_stderr" "$normalized_scout_stderr"
+            cp "$rg_stderr" "$normalized_rg_stderr"
+            ;;
+        mask-elapsed)
+            normalize_elapsed < "$scout_stdout" > "$normalized_scout_stdout"
+            normalize_elapsed < "$rg_stdout" > "$normalized_rg_stdout"
+            normalize_elapsed < "$scout_stderr" > "$normalized_scout_stderr"
+            normalize_elapsed < "$rg_stderr" > "$normalized_rg_stderr"
+            ;;
+        mask-elapsed-sort-lines)
+            normalize_elapsed < "$scout_stdout" | LC_ALL=C sort > "$normalized_scout_stdout"
+            normalize_elapsed < "$rg_stdout" | LC_ALL=C sort > "$normalized_rg_stdout"
+            normalize_elapsed < "$scout_stderr" | LC_ALL=C sort > "$normalized_scout_stderr"
+            normalize_elapsed < "$rg_stderr" | LC_ALL=C sort > "$normalized_rg_stderr"
+            ;;
         sort-lines)
             LC_ALL=C sort "$scout_stdout" > "$normalized_scout_stdout"
             LC_ALL=C sort "$rg_stdout" > "$normalized_rg_stdout"
@@ -166,10 +255,14 @@ rm -rf "$OUT"
 mkdir -p "$WORK"
 
 printf 'foobar\nfoo\nfoobarfoo\n' > "$WORK/pcre2-smoke.txt"
+printf 'barfoo\nfoobar\n' > "$WORK/pcre2-smoke-2.txt"
 printf 'foo\nbar\n' > "$WORK/lookbehind"
 printf 'For the Doctor Watsons of this world, as opposed to the Sherlock\n' > "$WORK/sherlock"
 printf 'foo 42\nxoyz\ncat\tdog\n' > "$WORK/ip1.txt"
 printf 'foo 42\nxoyz\ncat\tdog\nfoo' > "$WORK/ip2.txt"
+mkdir -p "$WORK/pcre2-dir/sub"
+printf 'foo\nfoobar\n' > "$WORK/pcre2-dir/a.txt"
+printf 'foobarfoo\n' > "$WORK/pcre2-dir/sub/b.txt"
 cat > "$WORK/counts" <<'EOF'
 def A;
 def B;
@@ -188,8 +281,14 @@ Start
 EOF
 
 compare_case basic_lookahead exact -P 'foo(?=bar)' pcre2-smoke.txt
+compare_case basic_lookahead_multi_file sort-lines -P -n 'foo(?=bar)' pcre2-smoke.txt pcre2-smoke-2.txt
+compare_case recursive_lookahead sort-lines -P -n 'foo(?=bar)' pcre2-dir
+compare_stdin_case explicit_stdin_lookahead exact "$WORK/pcre2-smoke.txt" -P 'foo(?=bar)' -
+compare_stdin_case implicit_stdin_lookahead exact "$WORK/pcre2-smoke.txt" -P 'foo(?=bar)'
 compare_case f1155_auto_hybrid_regex exact --no-pcre2 --auto-hybrid-regex '(?<=the )Sherlock' sherlock
 compare_case json_lookahead mask-elapsed -P --json 'foo(?=bar)' pcre2-smoke.txt
+compare_case json_multi_file mask-elapsed-sort-lines -P --json 'foo(?=bar)' pcre2-smoke.txt pcre2-smoke-2.txt
+compare_case json_quiet mask-elapsed -P --json -q 'foo(?=bar)' pcre2-smoke.txt
 compare_case json_lookbehind mask-elapsed -P -U --json '(?<=foo\n)bar' lookbehind
 compare_case r1412_lookbehind_replacement exact -P -nU -rquux '(?<=foo\n)bar' lookbehind
 compare_case r1401_lookahead_only_matching_1 exact -P -N -o '.*o(?!.*\s)' ip1.txt
