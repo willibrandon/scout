@@ -198,7 +198,7 @@ internal static class ScoutApplication
                 if (source.IsFile)
                 {
                     patternsReadFromStandardInput |= IsStandardInputArgument(source.Value);
-                    if (!TryLoadPatternFile(source.Value, patterns, standardInput, diagnostics))
+                    if (!PatternFileLoader.TryLoad(source.Value, patterns, standardInput, diagnostics))
                     {
                         return ExitCode.Error;
                     }
@@ -305,12 +305,12 @@ internal static class ScoutApplication
         var paths = new List<SearchPathArgument>(positional.Count - firstPathIndex);
         if (useDefaultCurrentDirectory)
         {
-            paths.Add(CreateTextSearchPath("."));
+            paths.Add(SearchPathArgument.CreateText("."));
         }
 
         for (int index = firstPathIndex; index < positional.Count; index++)
         {
-            if (TryGetSearchPathArgument(positional[index], lowArgs.PathSeparator, diagnostics, out SearchPathArgument path))
+            if (SearchPathArgument.TryCreate(positional[index], lowArgs.PathSeparator, diagnostics, out SearchPathArgument path))
             {
                 paths.Add(path);
             }
@@ -320,8 +320,8 @@ internal static class ScoutApplication
             }
         }
 
-        bool prefixPaths = lowArgs.Vimgrep || paths.Count > 1 || ContainsDirectory(paths);
-        bool autoMmapEligible = IsAutoMmapEligible(paths);
+        bool prefixPaths = lowArgs.Vimgrep || paths.Count > 1 || SearchPathArgument.ContainsDirectory(paths);
+        bool autoMmapEligible = SearchPathArgument.IsAutoMmapEligible(paths);
         bool interPathContextSeparator = ShouldWriteInterFileContextSeparator(lowArgs, heading, separators);
         bool wroteContextBody = false;
         for (int index = 0; index < paths.Count; index++)
@@ -432,7 +432,7 @@ internal static class ScoutApplication
         {
             try
             {
-                byte[] stdinBytes = ReadSearchStream(standardInput, lowArgs.EncodingMode);
+                byte[] stdinBytes = SearchFileContentReader.ReadSearchStream(standardInput, lowArgs.EncodingMode);
                 byte[] pattern = BuildPcre2Pattern(patterns);
                 using var regex = new Pcre2Regex(pattern, GetPcre2CompileOptions(lowArgs, patterns));
                 JsonSearchSummary? jsonSummary = lowArgs.SearchMode == CliSearchMode.Json ? new JsonSearchSummary() : null;
@@ -452,12 +452,12 @@ internal static class ScoutApplication
 
         if (useDefaultCurrentDirectory)
         {
-            paths.Add(CreateTextSearchPath("."));
+            paths.Add(SearchPathArgument.CreateText("."));
         }
 
         for (int index = firstPathIndex; index < positional.Count; index++)
         {
-            if (TryGetSearchPathArgument(positional[index], lowArgs.PathSeparator, diagnostics, out SearchPathArgument path))
+            if (SearchPathArgument.TryCreate(positional[index], lowArgs.PathSeparator, diagnostics, out SearchPathArgument path))
             {
                 paths.Add(path);
             }
@@ -467,8 +467,8 @@ internal static class ScoutApplication
             }
         }
 
-        bool prefixPaths = paths.Count > 1 || ContainsDirectory(paths);
-        bool autoMmapEligible = IsAutoMmapEligible(paths);
+        bool prefixPaths = paths.Count > 1 || SearchPathArgument.ContainsDirectory(paths);
+        bool autoMmapEligible = SearchPathArgument.IsAutoMmapEligible(paths);
         try
         {
             byte[] pattern = BuildPcre2Pattern(patterns);
@@ -550,7 +550,7 @@ internal static class ScoutApplication
         path ??= pathArgument.DisplayText;
         if (path == "-")
         {
-            byte[] bytes = ReadSearchStream(standardInput, lowArgs.EncodingMode);
+            byte[] bytes = SearchFileContentReader.ReadSearchStream(standardInput, lowArgs.EncodingMode);
             OutputPath outputPath = new(StandardInputPath, hyperlinkPath: null, hyperlinkFormat: null, host: string.Empty);
             OutputPath? prefix = GetStandardInputPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename);
             matched |= RunPcre2SearchModeWithOptionalHeading(bytes, regex, output, separators, outputPath, prefix, lineLimit, color, lowArgs, patterns, jsonSummary, heading, ref wroteHeadingOutput);
@@ -601,7 +601,7 @@ internal static class ScoutApplication
         string fullRoot = Path.GetFullPath(root);
         foreach (DirEntry entry in GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics))
         {
-            byte[] displayPath = GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
+            byte[] displayPath = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
             SearchPcre2DirectoryEntryFile(entry, displayPath, lowArgs, regex, patterns, jsonSummary, output, diagnostics, separators, lineLimit, color, heading, ref wroteHeadingOutput, ref matched, ref errored);
             if (matched && lowArgs.Quiet)
             {
@@ -658,7 +658,7 @@ internal static class ScoutApplication
         ref bool matched,
         ref bool errored)
     {
-        if (!TryReadSearchFileBytes(path, lowArgs, autoMmapEligible, diagnostics, out byte[] bytes, out _))
+        if (!SearchFileContentReader.TryRead(path, lowArgs, autoMmapEligible, diagnostics, out byte[] bytes, out _))
         {
             errored = true;
             return;
@@ -685,7 +685,7 @@ internal static class ScoutApplication
         ref bool matched,
         ref bool errored)
     {
-        if (!TryReadRawUnixSearchFileBytes(path, lowArgs, diagnostics, out byte[] bytes, out _))
+        if (!SearchFileContentReader.TryReadRawUnix(path, lowArgs, diagnostics, out byte[] bytes, out _))
         {
             errored = true;
             return;
@@ -1701,12 +1701,12 @@ internal static class ScoutApplication
         var paths = new List<SearchPathArgument>(positional.Count - firstPathIndex);
         if (useDefaultCurrentDirectory)
         {
-            paths.Add(CreateTextSearchPath("."));
+            paths.Add(SearchPathArgument.CreateText("."));
         }
 
         for (int index = firstPathIndex; index < positional.Count; index++)
         {
-            if (TryGetSearchPathArgument(positional[index], lowArgs.PathSeparator, diagnostics, out SearchPathArgument path))
+            if (SearchPathArgument.TryCreate(positional[index], lowArgs.PathSeparator, diagnostics, out SearchPathArgument path))
             {
                 paths.Add(path);
             }
@@ -1716,7 +1716,7 @@ internal static class ScoutApplication
             }
         }
 
-        bool autoMmapEligible = IsAutoMmapEligible(paths);
+        bool autoMmapEligible = SearchPathArgument.IsAutoMmapEligible(paths);
         for (int index = 0; index < paths.Count; index++)
         {
             bool defaultRoot = useDefaultCurrentDirectory && index == 0;
@@ -1824,7 +1824,7 @@ internal static class ScoutApplication
         JsonSearchSummary summary,
         RawByteWriter output)
     {
-        byte[] bytes = ReadSearchStream(standardInput, lowArgs.EncodingMode);
+        byte[] bytes = SearchFileContentReader.ReadSearchStream(standardInput, lowArgs.EncodingMode);
         return SearchJsonBytes(bytes, pattern, output, StandardInputPath, summary, lowArgs.TextMode, lowArgs.Quiet, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.Crlf, lowArgs.NullData, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch);
     }
 
@@ -1870,7 +1870,7 @@ internal static class ScoutApplication
             string fullRoot = Path.GetFullPath(path);
             foreach (DirEntry entry in GetSortedFileEntries(path, lowArgs, fileTypes, diagnostics))
             {
-                byte[] displayPath = GetSearchDirectoryDisplayPathBytes(path, fullRoot, entry, defaultRoot, pathSeparator: null);
+                byte[] displayPath = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(path, fullRoot, entry, defaultRoot, pathSeparator: null);
                 SearchJsonDirectoryEntryFile(entry, displayPath, pattern, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, ref matched, ref errored);
             }
 
@@ -1931,7 +1931,7 @@ internal static class ScoutApplication
                 var fileSummary = new JsonSearchSummary();
                 bool fileMatched = false;
                 bool fileErrored = false;
-                byte[] displayPath = GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, pathSeparator: null);
+                byte[] displayPath = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, pathSeparator: null);
                 SearchJsonDirectoryEntryFile(entry, displayPath, pattern, lowArgs, asciiCaseInsensitive, fileSummary, writer, diagnostics, ref fileMatched, ref fileErrored);
                 writer.Flush();
                 if (fileMatched)
@@ -1981,7 +1981,7 @@ internal static class ScoutApplication
         ref bool matched,
         ref bool errored)
     {
-        if (!TryReadSearchFileBytes(path, lowArgs, autoMmapEligible, diagnostics, out byte[] bytes, out _))
+        if (!SearchFileContentReader.TryRead(path, lowArgs, autoMmapEligible, diagnostics, out byte[] bytes, out _))
         {
             errored = true;
             return;
@@ -2001,7 +2001,7 @@ internal static class ScoutApplication
         ref bool matched,
         ref bool errored)
     {
-        if (!TryReadRawUnixSearchFileBytes(path, lowArgs, diagnostics, out byte[] bytes, out _))
+        if (!SearchFileContentReader.TryReadRawUnix(path, lowArgs, diagnostics, out byte[] bytes, out _))
         {
             errored = true;
             return;
@@ -2049,7 +2049,7 @@ internal static class ScoutApplication
         {
             for (int index = 0; index < positional.Count; index++)
             {
-                if (TryGetPathText(positional[index], diagnostics, out string path))
+                if (SearchPathArgument.TryGetText(positional[index], diagnostics, out string path))
                 {
                     ListFilesPath(path, defaultRoot: false, lowArgs, fileTypes, output, diagnostics, ref emitted, ref errored);
                 }
@@ -2090,7 +2090,7 @@ internal static class ScoutApplication
         {
             if (!lowArgs.Quiet)
             {
-                output.Write(GetPathBytes(path, lowArgs.PathSeparator));
+                output.Write(SearchPathArgument.GetPathBytes(path, lowArgs.PathSeparator));
                 WritePathTerminator(output, lowArgs.NullPathTerminator);
             }
 
@@ -2129,11 +2129,11 @@ internal static class ScoutApplication
         foreach (DirEntry entry in GetSortedFileEntries(path, lowArgs, fileTypes, diagnostics))
         {
             string displayPath = defaultRoot
-                ? GetSearchDirectoryDisplayPath(path, fullRoot, entry.FullPath, defaultRoot: true)
-                : GetDirectoryDisplayPath(path, fullRoot, entry.FullPath);
+                ? SearchPathArgument.GetSearchDirectoryDisplayPath(path, fullRoot, entry.FullPath, defaultRoot: true)
+                : SearchPathArgument.GetDirectoryDisplayPath(path, fullRoot, entry.FullPath);
             byte[] displayPathBytes = entry.IsRawUnixPath
-                ? GetSearchDirectoryDisplayPathBytes(path, fullRoot, entry, defaultRoot, lowArgs.PathSeparator)
-                : GetPathBytes(displayPath, lowArgs.PathSeparator);
+                ? SearchPathArgument.GetSearchDirectoryDisplayPathBytes(path, fullRoot, entry, defaultRoot, lowArgs.PathSeparator)
+                : SearchPathArgument.GetPathBytes(displayPath, lowArgs.PathSeparator);
             if (!lowArgs.Quiet)
             {
                 output.Write(displayPathBytes);
@@ -2162,11 +2162,11 @@ internal static class ScoutApplication
             foreach (DirEntry entry in entries.GetConsumingEnumerable())
             {
                 string displayPath = defaultRoot
-                    ? GetSearchDirectoryDisplayPath(path, fullRoot, entry.FullPath, defaultRoot: true)
-                    : GetDirectoryDisplayPath(path, fullRoot, entry.FullPath);
+                    ? SearchPathArgument.GetSearchDirectoryDisplayPath(path, fullRoot, entry.FullPath, defaultRoot: true)
+                    : SearchPathArgument.GetDirectoryDisplayPath(path, fullRoot, entry.FullPath);
                 byte[] displayPathBytes = entry.IsRawUnixPath
-                    ? GetSearchDirectoryDisplayPathBytes(path, fullRoot, entry, defaultRoot, lowArgs.PathSeparator)
-                    : GetPathBytes(displayPath, lowArgs.PathSeparator);
+                    ? SearchPathArgument.GetSearchDirectoryDisplayPathBytes(path, fullRoot, entry, defaultRoot, lowArgs.PathSeparator)
+                    : SearchPathArgument.GetPathBytes(displayPath, lowArgs.PathSeparator);
                 output.Write(displayPathBytes);
                 WritePathTerminator(output, lowArgs.NullPathTerminator);
             }
@@ -2236,7 +2236,7 @@ internal static class ScoutApplication
         bool heading,
         ref bool wroteHeadingOutput)
     {
-        byte[] bytes = ReadSearchStream(standardInput, encodingMode);
+        byte[] bytes = SearchFileContentReader.ReadSearchStream(standardInput, encodingMode);
         return SearchBytesWithOptionalHeading(bytes, pattern, output, GetStandardInputPrefix(searchMode, autoPrefixPath, withFilename), separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, false, heading, ref wroteHeadingOutput);
     }
 
@@ -2334,7 +2334,7 @@ internal static class ScoutApplication
         ref bool wroteHeadingOutput,
         ref SearchStats stats)
     {
-        byte[] bytes = ReadSearchStream(standardInput, encodingMode);
+        byte[] bytes = SearchFileContentReader.ReadSearchStream(standardInput, encodingMode);
         return SearchBytesWithStats(bytes, pattern, output, GetStandardInputPrefix(searchMode, autoPrefixPath, withFilename), separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, false, heading, ref wroteHeadingOutput, ref stats);
     }
 
@@ -2431,7 +2431,7 @@ internal static class ScoutApplication
         bool heading,
         ref bool wroteHeadingOutput)
     {
-        byte[] bytes = ReadSearchStream(standardInput, encodingMode);
+        byte[] bytes = SearchFileContentReader.ReadSearchStream(standardInput, encodingMode);
         return SearchBytesWithOptionalHeading(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, false, heading, ref wroteHeadingOutput);
     }
 
@@ -2471,7 +2471,7 @@ internal static class ScoutApplication
         ref bool wroteHeadingOutput,
         ref SearchStats stats)
     {
-        byte[] bytes = ReadSearchStream(standardInput, encodingMode);
+        byte[] bytes = SearchFileContentReader.ReadSearchStream(standardInput, encodingMode);
         return SearchBytesWithStats(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, false, heading, ref wroteHeadingOutput, ref stats);
     }
 
@@ -2505,7 +2505,7 @@ internal static class ScoutApplication
         bool wroteContextBody = false;
         foreach (DirEntry entry in GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics))
         {
-            byte[] displayPathBytes = GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
+            byte[] displayPathBytes = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
             if (interFileContextSeparator)
             {
                 using MemoryStream buffer = new();
@@ -2627,7 +2627,7 @@ internal static class ScoutApplication
                 bool fileWroteHeading = false;
                 bool fileMatched = false;
                 bool fileErrored = false;
-                byte[] displayPathBytes = GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
+                byte[] displayPathBytes = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
                 SearchDirectoryEntryFile(
                     entry,
                     displayPathBytes,
@@ -2706,7 +2706,7 @@ internal static class ScoutApplication
         bool wroteContextBody = false;
         foreach (DirEntry entry in GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics))
         {
-            byte[] displayPathBytes = GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
+            byte[] displayPathBytes = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
             if (interFileContextSeparator)
             {
                 using MemoryStream buffer = new();
@@ -2834,7 +2834,7 @@ internal static class ScoutApplication
                 bool fileMatched = false;
                 bool fileErrored = false;
                 SearchStats fileStats = default;
-                byte[] displayPathBytes = GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
+                byte[] displayPathBytes = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
                 SearchDirectoryEntryFileWithStats(
                     entry,
                     displayPathBytes,
@@ -3396,7 +3396,7 @@ internal static class ScoutApplication
             return;
         }
 
-        if (!TryReadSearchFileBytes(path, lowArgs, autoMmapEligible, diagnostics, out byte[] bytes, out SearchFileReadKind readKind))
+        if (!SearchFileContentReader.TryRead(path, lowArgs, autoMmapEligible, diagnostics, out byte[] bytes, out SearchFileReadKind readKind))
         {
             errored = true;
             return;
@@ -3442,7 +3442,7 @@ internal static class ScoutApplication
         ref bool matched,
         ref bool errored)
     {
-        if (!TryReadRawUnixSearchFileBytes(path, lowArgs, diagnostics, out byte[] bytes, out SearchFileReadKind readKind))
+        if (!SearchFileContentReader.TryReadRawUnix(path, lowArgs, diagnostics, out byte[] bytes, out SearchFileReadKind readKind))
         {
             errored = true;
             return;
@@ -4131,7 +4131,7 @@ internal static class ScoutApplication
         ref bool errored,
         ref SearchStats stats)
     {
-        if (!TryReadSearchFileBytes(path, lowArgs, autoMmapEligible, diagnostics, out byte[] bytes, out SearchFileReadKind readKind))
+        if (!SearchFileContentReader.TryRead(path, lowArgs, autoMmapEligible, diagnostics, out byte[] bytes, out SearchFileReadKind readKind))
         {
             errored = true;
             return;
@@ -4178,7 +4178,7 @@ internal static class ScoutApplication
         ref bool errored,
         ref SearchStats stats)
     {
-        if (!TryReadRawUnixSearchFileBytes(path, lowArgs, diagnostics, out byte[] bytes, out SearchFileReadKind readKind))
+        if (!SearchFileContentReader.TryReadRawUnix(path, lowArgs, diagnostics, out byte[] bytes, out SearchFileReadKind readKind))
         {
             errored = true;
             return;
@@ -4226,292 +4226,6 @@ internal static class ScoutApplication
     private static bool ShouldQuitOnBinary(CliLowArgs lowArgs, bool implicitSearch)
     {
         return implicitSearch && !lowArgs.SearchBinaryFiles && !lowArgs.TextMode;
-    }
-
-    private static bool TryReadSearchFileBytes(
-        string path,
-        CliLowArgs lowArgs,
-        bool autoMmapEligible,
-        DiagnosticMessenger diagnostics,
-        out byte[] bytes,
-        out SearchFileReadKind readKind)
-    {
-        readKind = SearchFileReadKind.Buffered;
-        if (!TryReadPreprocessedBytes(path, lowArgs, diagnostics, out bytes, out bool handled))
-        {
-            return false;
-        }
-
-        if (handled)
-        {
-            bytes = ApplySearchEncoding(bytes, lowArgs.EncodingMode);
-            return true;
-        }
-
-        try
-        {
-            SearchFileReadResult result = SearchFileReader.Read(
-                path,
-                ToSearchEncodingKind(lowArgs.EncodingMode),
-                ToSearchMmapMode(lowArgs.MmapMode),
-                autoMmapEligible);
-            bytes = result.GetBytes();
-            readKind = result.Kind;
-            return true;
-        }
-        catch (IOException exception)
-        {
-            SearchErrorMessage(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path}: {exception.Message}").WithContext($"rg: {path}"));
-            bytes = [];
-            return false;
-        }
-        catch (UnauthorizedAccessException exception)
-        {
-            SearchErrorMessage(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path}: {exception.Message}").WithContext($"rg: {path}"));
-            bytes = [];
-            return false;
-        }
-    }
-
-    private static bool TryReadRawUnixSearchFileBytes(
-        SearchPathArgument path,
-        CliLowArgs lowArgs,
-        DiagnosticMessenger diagnostics,
-        out byte[] bytes,
-        out SearchFileReadKind readKind)
-    {
-        readKind = SearchFileReadKind.Buffered;
-        try
-        {
-            SearchFileReadResult result = SearchFileReader.ReadUnixPath(path.UnixBytes!, ToSearchEncodingKind(lowArgs.EncodingMode));
-            bytes = result.GetBytes();
-            readKind = result.Kind;
-            return true;
-        }
-        catch (IOException exception)
-        {
-            SearchErrorMessage(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path.DisplayText}: {exception.Message}").WithContext($"rg: {path.DisplayText}"));
-            bytes = [];
-            return false;
-        }
-        catch (UnauthorizedAccessException exception)
-        {
-            SearchErrorMessage(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path.DisplayText}: {exception.Message}").WithContext($"rg: {path.DisplayText}"));
-            bytes = [];
-            return false;
-        }
-        catch (ArgumentException exception)
-        {
-            SearchErrorMessage(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path.DisplayText}: {exception.Message}").WithContext($"rg: {path.DisplayText}"));
-            bytes = [];
-            return false;
-        }
-    }
-
-    private static bool TryReadPreprocessedBytes(
-        string path,
-        CliLowArgs lowArgs,
-        DiagnosticMessenger diagnostics,
-        out byte[] bytes,
-        out bool handled)
-    {
-        bytes = [];
-        handled = false;
-        if (ShouldRunPreprocessor(path, lowArgs))
-        {
-            handled = true;
-            if (TryRunSearchCommand(path, lowArgs.Preprocessor!, [path], pipeFileToStandardInput: true, fallbackOnStartError: false, out bytes, out ScoutError? error))
-            {
-                return true;
-            }
-
-            SearchErrorMessage(lowArgs, diagnostics, error!.WithContext($"rg: {path}"));
-            return false;
-        }
-
-        if (!lowArgs.SearchZip || !TryGetDecompressionCommand(path, out string program, out string[] arguments))
-        {
-            return true;
-        }
-
-        if (TryRunSearchCommand(path, program, arguments, pipeFileToStandardInput: false, fallbackOnStartError: true, out bytes, out ScoutError? decompressionError))
-        {
-            handled = true;
-            return true;
-        }
-
-        if (decompressionError is not null)
-        {
-            handled = true;
-            SearchErrorMessage(lowArgs, diagnostics, decompressionError.WithContext($"rg: {path}"));
-            return false;
-        }
-
-        return true;
-    }
-
-    private static bool ShouldRunPreprocessor(string path, CliLowArgs lowArgs)
-    {
-        if (lowArgs.Preprocessor is null)
-        {
-            return false;
-        }
-
-        if (lowArgs.PreprocessorGlobs.Count == 0)
-        {
-            return true;
-        }
-
-        string fullPath = Path.GetFullPath(path);
-        string baseDirectory = Path.GetPathRoot(fullPath) ?? Directory.GetCurrentDirectory();
-        var builder = new OverrideBuilder(baseDirectory);
-        for (int index = 0; index < lowArgs.PreprocessorGlobs.Count; index++)
-        {
-            builder.Add(lowArgs.PreprocessorGlobs[index]);
-        }
-
-        Override matcher = builder.Build();
-        return !matcher.IsIgnored(fullPath, isDirectory: false);
-    }
-
-    private static bool TryGetDecompressionCommand(string path, out string program, out string[] arguments)
-    {
-        if (CliDecompressionMatcher.TryGetAvailableDefaultCommand(path, out CliDecompressionCommand? command) &&
-            command is not null)
-        {
-            program = command.Program;
-            arguments = command.CreateArguments(path);
-            return true;
-        }
-
-        program = string.Empty;
-        arguments = [];
-        return false;
-    }
-
-    private static bool TryRunSearchCommand(
-        string path,
-        string program,
-        string[] arguments,
-        bool pipeFileToStandardInput,
-        bool fallbackOnStartError,
-        out byte[] bytes,
-        out ScoutError? error)
-    {
-        bytes = [];
-        error = null;
-        using var process = new Process();
-        process.StartInfo.FileName = program;
-        process.StartInfo.RedirectStandardError = true;
-        process.StartInfo.RedirectStandardOutput = true;
-        process.StartInfo.RedirectStandardInput = pipeFileToStandardInput;
-        process.StartInfo.UseShellExecute = false;
-        for (int index = 0; index < arguments.Length; index++)
-        {
-            process.StartInfo.ArgumentList.Add(arguments[index]);
-        }
-
-        try
-        {
-            if (!process.Start())
-            {
-                if (fallbackOnStartError)
-                {
-                    return false;
-                }
-
-                error = new ScoutError($"preprocessor command could not start: '{program}': process did not start");
-                return false;
-            }
-        }
-        catch (Win32Exception exception)
-        {
-            if (fallbackOnStartError)
-            {
-                return false;
-            }
-
-            error = new ScoutError($"preprocessor command could not start: '{program}': {exception.Message}");
-            return false;
-        }
-        catch (InvalidOperationException exception)
-        {
-            if (fallbackOnStartError)
-            {
-                return false;
-            }
-
-            error = new ScoutError($"preprocessor command could not start: '{program}': {exception.Message}");
-            return false;
-        }
-
-        Task<byte[]> standardOutput = ReadAllBytesAsync(process.StandardOutput.BaseStream);
-        Task<string> standardError = process.StandardError.ReadToEndAsync();
-        if (pipeFileToStandardInput)
-        {
-            CopyFileToProcessStandardInput(path, process);
-        }
-
-        process.WaitForExit();
-        bytes = standardOutput.GetAwaiter().GetResult();
-        string stderr = standardError.GetAwaiter().GetResult();
-        if (process.ExitCode == 0)
-        {
-            return true;
-        }
-
-        string message = pipeFileToStandardInput
-            ? $"preprocessor command failed: '{program}': {stderr.TrimEnd()}"
-            : $"{program} command failed: {stderr.TrimEnd()}";
-        error = new ScoutError(message);
-        bytes = [];
-        return false;
-    }
-
-    private static void CopyFileToProcessStandardInput(string path, Process process)
-    {
-        using Stream input = File.OpenRead(path);
-        byte[] buffer = new byte[81920];
-        try
-        {
-            int read;
-            while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
-            {
-                try
-                {
-                    process.StandardInput.BaseStream.Write(buffer, 0, read);
-                }
-                catch (IOException)
-                {
-                    break;
-                }
-            }
-        }
-        finally
-        {
-            CloseProcessStandardInput(process);
-        }
-    }
-
-    private static void CloseProcessStandardInput(Process process)
-    {
-        try
-        {
-            process.StandardInput.Close();
-        }
-        catch (IOException)
-        {
-        }
-        catch (InvalidOperationException)
-        {
-        }
-    }
-
-    private static async Task<byte[]> ReadAllBytesAsync(Stream stream)
-    {
-        using var buffer = new MemoryStream();
-        await stream.CopyToAsync(buffer).ConfigureAwait(false);
-        return buffer.ToArray();
     }
 
     private static bool SearchBytesWithOptionalHeading(
@@ -5948,75 +5662,6 @@ internal static class ScoutApplication
         return BinaryDetection.GetSearchBytes(bytes, textMode, nullData);
     }
 
-    private static byte[] ApplySearchEncoding(byte[] bytes, CliEncodingMode encodingMode)
-    {
-        return SearchEncoding.Decode(bytes, ToSearchEncodingKind(encodingMode));
-    }
-
-    private static byte[] ReadSearchStream(Stream stream, CliEncodingMode encodingMode)
-    {
-        return SearchEncodingReader.ReadToEnd(stream, ToSearchEncodingKind(encodingMode));
-    }
-
-    private static SearchEncodingKind ToSearchEncodingKind(CliEncodingMode encodingMode)
-    {
-        return encodingMode switch
-        {
-            CliEncodingMode.None => SearchEncodingKind.None,
-            CliEncodingMode.Utf8 => SearchEncodingKind.Utf8,
-            CliEncodingMode.Utf16 => SearchEncodingKind.Utf16,
-            CliEncodingMode.Utf16Le => SearchEncodingKind.Utf16Le,
-            CliEncodingMode.Utf16Be => SearchEncodingKind.Utf16Be,
-            CliEncodingMode.EucKr => SearchEncodingKind.EucKr,
-            CliEncodingMode.EucJp => SearchEncodingKind.EucJp,
-            CliEncodingMode.Big5 => SearchEncodingKind.Big5,
-            CliEncodingMode.Gb18030 => SearchEncodingKind.Gb18030,
-            CliEncodingMode.Gbk => SearchEncodingKind.Gbk,
-            CliEncodingMode.ShiftJis => SearchEncodingKind.ShiftJis,
-            CliEncodingMode.Ibm866 => SearchEncodingKind.Ibm866,
-            CliEncodingMode.Iso88592 => SearchEncodingKind.Iso88592,
-            CliEncodingMode.Iso88593 => SearchEncodingKind.Iso88593,
-            CliEncodingMode.Iso88594 => SearchEncodingKind.Iso88594,
-            CliEncodingMode.Iso88595 => SearchEncodingKind.Iso88595,
-            CliEncodingMode.Iso88596 => SearchEncodingKind.Iso88596,
-            CliEncodingMode.Iso88597 => SearchEncodingKind.Iso88597,
-            CliEncodingMode.Iso88598 => SearchEncodingKind.Iso88598,
-            CliEncodingMode.Iso88598I => SearchEncodingKind.Iso88598I,
-            CliEncodingMode.Iso885910 => SearchEncodingKind.Iso885910,
-            CliEncodingMode.Iso885913 => SearchEncodingKind.Iso885913,
-            CliEncodingMode.Iso885914 => SearchEncodingKind.Iso885914,
-            CliEncodingMode.Iso885915 => SearchEncodingKind.Iso885915,
-            CliEncodingMode.Iso885916 => SearchEncodingKind.Iso885916,
-            CliEncodingMode.Iso2022Jp => SearchEncodingKind.Iso2022Jp,
-            CliEncodingMode.Koi8R => SearchEncodingKind.Koi8R,
-            CliEncodingMode.Koi8U => SearchEncodingKind.Koi8U,
-            CliEncodingMode.Macintosh => SearchEncodingKind.Macintosh,
-            CliEncodingMode.Windows874 => SearchEncodingKind.Windows874,
-            CliEncodingMode.Windows1250 => SearchEncodingKind.Windows1250,
-            CliEncodingMode.Windows1251 => SearchEncodingKind.Windows1251,
-            CliEncodingMode.Windows1252 => SearchEncodingKind.Windows1252,
-            CliEncodingMode.Windows1253 => SearchEncodingKind.Windows1253,
-            CliEncodingMode.Windows1254 => SearchEncodingKind.Windows1254,
-            CliEncodingMode.Windows1255 => SearchEncodingKind.Windows1255,
-            CliEncodingMode.Windows1256 => SearchEncodingKind.Windows1256,
-            CliEncodingMode.Windows1257 => SearchEncodingKind.Windows1257,
-            CliEncodingMode.Windows1258 => SearchEncodingKind.Windows1258,
-            CliEncodingMode.XMacCyrillic => SearchEncodingKind.XMacCyrillic,
-            CliEncodingMode.XUserDefined => SearchEncodingKind.XUserDefined,
-            _ => SearchEncodingKind.Auto,
-        };
-    }
-
-    private static SearchMmapMode ToSearchMmapMode(CliMmapMode mmapMode)
-    {
-        return mmapMode switch
-        {
-            CliMmapMode.AlwaysTryMmap => SearchMmapMode.AlwaysTryMmap,
-            CliMmapMode.Never => SearchMmapMode.Never,
-            _ => SearchMmapMode.Auto,
-        };
-    }
-
     private static void WriteBinaryFileMatches(RawByteWriter output, OutputPath? prefix, OutputColor color, int binaryOffset)
     {
         if (prefix is not null)
@@ -7040,410 +6685,4 @@ internal static class ScoutApplication
         output.Write(buffer[index..]);
     }
 
-    private static bool TryLoadPatternFile(OsString argument, List<byte[]> patterns, Stream standardInput, DiagnosticMessenger diagnostics)
-    {
-        if (!TryGetPathText(argument, diagnostics, out string path))
-        {
-            return false;
-        }
-
-        byte[] bytes;
-        try
-        {
-            bytes = path == "-"
-                ? ReadAllBytes(standardInput)
-                : File.ReadAllBytes(path);
-        }
-        catch (FileNotFoundException)
-        {
-            diagnostics.ErrorMessage(new ScoutError($"{path}: No such file or directory (os error 2)").WithContext("rg"));
-            return false;
-        }
-        catch (DirectoryNotFoundException)
-        {
-            diagnostics.ErrorMessage(new ScoutError($"{path}: No such file or directory (os error 2)").WithContext("rg"));
-            return false;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            diagnostics.ErrorMessage(new ScoutError($"{path}: Permission denied (os error 13)").WithContext("rg"));
-            return false;
-        }
-        catch (IOException exception)
-        {
-            diagnostics.ErrorMessage(new ScoutError($"{path}: {exception.Message}").WithContext("rg"));
-            return false;
-        }
-
-        return TryAddPatternFilePatterns(path, bytes, patterns, diagnostics);
-    }
-
-    private static byte[] ReadAllBytes(Stream stream)
-    {
-        using MemoryStream buffer = new();
-        stream.CopyTo(buffer);
-        return buffer.ToArray();
-    }
-
-    private static bool TryAddPatternFilePatterns(
-        string path,
-        byte[] bytes,
-        List<byte[]> patterns,
-        DiagnosticMessenger diagnostics)
-    {
-        int lineStart = 0;
-        int lineNumber = 1;
-        while (lineStart < bytes.Length)
-        {
-            ReadOnlySpan<byte> remaining = bytes.AsSpan(lineStart);
-            int lineFeed = remaining.IndexOf((byte)'\n');
-            ReadOnlySpan<byte> line;
-            if (lineFeed < 0)
-            {
-                line = remaining;
-                lineStart = bytes.Length;
-            }
-            else
-            {
-                line = remaining[..lineFeed];
-                if (!line.IsEmpty && line[^1] == (byte)'\r')
-                {
-                    line = line[..^1];
-                }
-
-                lineStart += lineFeed + 1;
-            }
-
-            if (!TryValidatePatternFileLine(path, lineNumber, line, diagnostics))
-            {
-                return false;
-            }
-
-            patterns.Add(line.ToArray());
-            lineNumber++;
-        }
-
-        return true;
-    }
-
-    private static bool TryValidatePatternFileLine(
-        string path,
-        int lineNumber,
-        ReadOnlySpan<byte> line,
-        DiagnosticMessenger diagnostics)
-    {
-        if (!TryGetUtf8InvalidOffset(line, out int invalidOffset))
-        {
-            return true;
-        }
-
-        string escaped = EscapePatternFileLine(line);
-        diagnostics.ErrorMessage(new ScoutError(
-            $"{path}:{lineNumber}: found invalid UTF-8 in pattern at byte offset {invalidOffset}: {escaped} (disable Unicode mode and use hex escape sequences to match arbitrary bytes in a pattern, e.g., '(?-u)\\xFF')").WithContext("rg"));
-        return false;
-    }
-
-    private static bool TryGetUtf8InvalidOffset(ReadOnlySpan<byte> bytes, out int invalidOffset)
-    {
-        int index = 0;
-        while (index < bytes.Length)
-        {
-            byte first = bytes[index];
-            if (first <= 0x7F)
-            {
-                index++;
-                continue;
-            }
-
-            int length = GetUtf8SequenceLength(bytes[index..]);
-            if (length == 0 || index + length > bytes.Length)
-            {
-                invalidOffset = index;
-                return true;
-            }
-
-            for (int continuation = 1; continuation < length; continuation++)
-            {
-                if (!IsUtf8Continuation(bytes[index + continuation]))
-                {
-                    invalidOffset = index;
-                    return true;
-                }
-            }
-
-            index += length;
-        }
-
-        invalidOffset = -1;
-        return false;
-    }
-
-    private static int GetUtf8SequenceLength(ReadOnlySpan<byte> bytes)
-    {
-        byte first = bytes[0];
-        if (first is >= 0xC2 and <= 0xDF)
-        {
-            return 2;
-        }
-
-        if (first == 0xE0)
-        {
-            return bytes.Length >= 2 && bytes[1] is >= 0xA0 and <= 0xBF ? 3 : 0;
-        }
-
-        if (first is >= 0xE1 and <= 0xEC or >= 0xEE and <= 0xEF)
-        {
-            return 3;
-        }
-
-        if (first == 0xED)
-        {
-            return bytes.Length >= 2 && bytes[1] is >= 0x80 and <= 0x9F ? 3 : 0;
-        }
-
-        if (first == 0xF0)
-        {
-            return bytes.Length >= 2 && bytes[1] is >= 0x90 and <= 0xBF ? 4 : 0;
-        }
-
-        if (first is >= 0xF1 and <= 0xF3)
-        {
-            return 4;
-        }
-
-        if (first == 0xF4)
-        {
-            return bytes.Length >= 2 && bytes[1] is >= 0x80 and <= 0x8F ? 4 : 0;
-        }
-
-        return 0;
-    }
-
-    private static bool IsUtf8Continuation(byte value)
-    {
-        return value is >= 0x80 and <= 0xBF;
-    }
-
-    private static string EscapePatternFileLine(ReadOnlySpan<byte> line)
-    {
-        var builder = new StringBuilder();
-        for (int index = 0; index < line.Length; index++)
-        {
-            byte value = line[index];
-            if (value is >= 0x20 and <= 0x7E && value != (byte)'\\')
-            {
-                builder.Append((char)value);
-            }
-            else if (value == (byte)'\\')
-            {
-                builder.Append(@"\\");
-            }
-            else
-            {
-                builder.Append(@"\x");
-                builder.Append(value.ToString("X2", CultureInfo.InvariantCulture));
-            }
-        }
-
-        return builder.ToString();
-    }
-
-    private static byte[] GetPathBytes(string path, byte? pathSeparator)
-    {
-        byte[] bytes = Utf8.GetBytes(path);
-        ApplyPathSeparator(bytes, pathSeparator);
-        return bytes;
-    }
-
-    private static byte[] GetPathBytes(ReadOnlySpan<byte> path, byte? pathSeparator)
-    {
-        byte[] bytes = path.ToArray();
-        ApplyPathSeparator(bytes, pathSeparator);
-        return bytes;
-    }
-
-    private static void ApplyPathSeparator(byte[] bytes, byte? pathSeparator)
-    {
-        if (pathSeparator is not byte separator)
-        {
-            return;
-        }
-
-        for (int index = 0; index < bytes.Length; index++)
-        {
-            if (bytes[index] == (byte)'/' || (OperatingSystem.IsWindows() && bytes[index] == (byte)'\\'))
-            {
-                bytes[index] = separator;
-            }
-        }
-    }
-
-    private static bool TryGetPathText(OsString argument, DiagnosticMessenger diagnostics, out string path)
-    {
-        if (argument.TryGetText(out path))
-        {
-            return true;
-        }
-
-        diagnostics.ErrorMessage(new ScoutError("invalid CLI arguments").WithContext("rg"));
-        return false;
-    }
-
-    private static SearchPathArgument CreateTextSearchPath(string path)
-    {
-        return SearchPathArgument.FromText(path, GetPathBytes(path, pathSeparator: null));
-    }
-
-    private static bool TryGetSearchPathArgument(
-        OsString argument,
-        byte? pathSeparator,
-        DiagnosticMessenger diagnostics,
-        out SearchPathArgument path)
-    {
-        if (argument.TryGetText(out string text))
-        {
-            path = SearchPathArgument.FromText(text, GetPathBytes(text, pathSeparator));
-            return true;
-        }
-
-        if (argument.IsUnixBytes && !OperatingSystem.IsWindows())
-        {
-            ReadOnlySpan<byte> bytes = argument.AsUnixBytes();
-            if (bytes.IndexOf((byte)0) >= 0)
-            {
-                diagnostics.ErrorMessage(new ScoutError("invalid CLI arguments").WithContext("rg"));
-                path = default;
-                return false;
-            }
-
-            path = SearchPathArgument.FromUnixBytes(bytes, GetPathBytes(bytes, pathSeparator));
-            return true;
-        }
-
-        diagnostics.ErrorMessage(new ScoutError("invalid CLI arguments").WithContext("rg"));
-        path = default;
-        return false;
-    }
-
-    private static bool ContainsDirectory(List<SearchPathArgument> paths)
-    {
-        for (int index = 0; index < paths.Count; index++)
-        {
-            string? path = paths[index].Text;
-            if (path is not null && path != "-" && Directory.Exists(path))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static bool IsAutoMmapEligible(List<SearchPathArgument> paths)
-    {
-        if (paths.Count == 0 || paths.Count > 10)
-        {
-            return false;
-        }
-
-        for (int index = 0; index < paths.Count; index++)
-        {
-            string? path = paths[index].Text;
-            if (path is null || !File.Exists(path))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static string GetDirectoryDisplayPath(string rootArgument, string fullRoot, string fullPath)
-    {
-        string relative = Path.GetRelativePath(fullRoot, fullPath);
-        string root = Path.TrimEndingDirectorySeparator(rootArgument);
-        if (root.Length == 0)
-        {
-            root = rootArgument;
-        }
-
-        if (root == ".")
-        {
-            return "." + Path.DirectorySeparatorChar + relative;
-        }
-
-        return Path.Combine(root, relative);
-    }
-
-    private static string GetSearchDirectoryDisplayPath(string rootArgument, string fullRoot, string fullPath, bool defaultRoot)
-    {
-        if (defaultRoot)
-        {
-            return Path.GetRelativePath(fullRoot, fullPath);
-        }
-
-        return GetDirectoryDisplayPath(rootArgument, fullRoot, fullPath);
-    }
-
-    private static byte[] GetSearchDirectoryDisplayPathBytes(
-        string rootArgument,
-        string fullRoot,
-        DirEntry entry,
-        bool defaultRoot,
-        byte? pathSeparator)
-    {
-        if (entry.IsRawUnixPath && TryGetRawUnixRelativePath(fullRoot, entry, out byte[] relativePath))
-        {
-            byte[] displayPath = defaultRoot
-                ? relativePath
-                : CombineRawDisplayPath(rootArgument, relativePath);
-            ApplyPathSeparator(displayPath, pathSeparator);
-            return displayPath;
-        }
-
-        return GetPathBytes(GetSearchDirectoryDisplayPath(rootArgument, fullRoot, entry.FullPath, defaultRoot), pathSeparator);
-    }
-
-    private static bool TryGetRawUnixRelativePath(string fullRoot, DirEntry entry, out byte[] relativePath)
-    {
-        byte[] rootBytes = Utf8.GetBytes(Path.TrimEndingDirectorySeparator(fullRoot));
-        ReadOnlySpan<byte> path = entry.UnixPathBytes;
-        if (!path.StartsWith(rootBytes))
-        {
-            relativePath = [];
-            return false;
-        }
-
-        int offset = rootBytes.Length;
-        if (offset < path.Length && path[offset] == (byte)'/')
-        {
-            offset++;
-        }
-
-        relativePath = path[offset..].ToArray();
-        return relativePath.Length > 0;
-    }
-
-    private static byte[] CombineRawDisplayPath(string rootArgument, ReadOnlySpan<byte> relativePath)
-    {
-        string root = Path.TrimEndingDirectorySeparator(rootArgument);
-        if (root.Length == 0)
-        {
-            root = rootArgument;
-        }
-
-        byte[] rootBytes = Utf8.GetBytes(root);
-        bool needsSeparator = rootBytes.Length != 1 || rootBytes[0] != (byte)'/';
-        byte[] displayPath = new byte[rootBytes.Length + (needsSeparator ? 1 : 0) + relativePath.Length];
-        rootBytes.CopyTo(displayPath);
-        int offset = rootBytes.Length;
-        if (needsSeparator)
-        {
-            displayPath[offset] = (byte)'/';
-            offset++;
-        }
-
-        relativePath.CopyTo(displayPath.AsSpan(offset));
-        return displayPath;
-    }
 }
