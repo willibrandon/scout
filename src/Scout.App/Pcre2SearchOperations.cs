@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Scout;
 
@@ -101,12 +104,13 @@ internal static class Pcre2SearchOperations
         try
         {
             byte[] pattern = BuildPcre2Pattern(patterns);
-            using var regex = new Pcre2Regex(pattern, GetPcre2CompileOptions(lowArgs, patterns));
+            Pcre2CompileOptions compileOptions = GetPcre2CompileOptions(lowArgs, patterns);
+            using var regex = new Pcre2Regex(pattern, compileOptions);
             JsonSearchSummary? jsonSummary = lowArgs.SearchMode == CliSearchMode.Json ? new JsonSearchSummary() : null;
             for (int index = 0; index < paths.Count; index++)
             {
                 bool defaultRoot = useDefaultCurrentDirectory && index == 0;
-                SearchPcre2Path(paths[index], standardInput, defaultRoot, prefixPaths, autoMmapEligible, lowArgs, regex, patterns, jsonSummary, separators, lineLimit, color, fileTypes!, output, diagnostics, heading, ref wroteHeadingOutput, ref matched, ref errored);
+                SearchPcre2Path(paths[index], standardInput, defaultRoot, prefixPaths, autoMmapEligible, lowArgs, regex, pattern, compileOptions, patterns, jsonSummary, separators, lineLimit, color, fileTypes!, output, diagnostics, heading, ref wroteHeadingOutput, ref matched, ref errored);
                 if (matched && lowArgs.Quiet)
                 {
                     break;
@@ -153,6 +157,8 @@ internal static class Pcre2SearchOperations
         bool autoMmapEligible,
         CliLowArgs lowArgs,
         Pcre2Regex regex,
+        byte[] pcre2Pattern,
+        Pcre2CompileOptions compileOptions,
         IReadOnlyList<byte[]> patterns,
         JsonSearchSummary? jsonSummary,
         OutputSeparators separators,
@@ -187,7 +193,7 @@ internal static class Pcre2SearchOperations
 
         if (Directory.Exists(path))
         {
-            SearchPcre2Directory(path, defaultRoot, lowArgs, regex, patterns, jsonSummary, separators, lineLimit, color, fileTypes, output, diagnostics, heading, ref wroteHeadingOutput, ref matched, ref errored);
+            SearchPcre2Directory(path, defaultRoot, lowArgs, regex, pcre2Pattern, compileOptions, patterns, jsonSummary, separators, lineLimit, color, fileTypes, output, diagnostics, heading, ref wroteHeadingOutput, ref matched, ref errored);
             return;
         }
 
@@ -208,6 +214,8 @@ internal static class Pcre2SearchOperations
         bool defaultRoot,
         CliLowArgs lowArgs,
         Pcre2Regex regex,
+        byte[] pcre2Pattern,
+        Pcre2CompileOptions compileOptions,
         IReadOnlyList<byte[]> patterns,
         JsonSearchSummary? jsonSummary,
         OutputSeparators separators,
@@ -226,6 +234,13 @@ internal static class Pcre2SearchOperations
             return;
         }
 
+        int threadCount = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
+        if (threadCount > 1)
+        {
+            SearchPcre2DirectoryParallel(root, defaultRoot, lowArgs, pcre2Pattern, compileOptions, patterns, jsonSummary, separators, lineLimit, color, fileTypes, output, diagnostics, heading, threadCount, ref wroteHeadingOutput, ref matched, ref errored);
+            return;
+        }
+
         string fullRoot = Path.GetFullPath(root);
         foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics))
         {
@@ -236,6 +251,116 @@ internal static class Pcre2SearchOperations
                 return;
             }
         }
+    }
+
+    private static void SearchPcre2DirectoryParallel(
+        string root,
+        bool defaultRoot,
+        CliLowArgs lowArgs,
+        byte[] pcre2Pattern,
+        Pcre2CompileOptions compileOptions,
+        IReadOnlyList<byte[]> patterns,
+        JsonSearchSummary? jsonSummary,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        FileTypeMatcher fileTypes,
+        RawByteWriter output,
+        DiagnosticMessenger diagnostics,
+        bool heading,
+        int threadCount,
+        ref bool wroteHeadingOutput,
+        ref bool matched,
+        ref bool errored)
+    {
+        string fullRoot = Path.GetFullPath(root);
+        using var outputs = new BlockingCollection<byte[]>();
+        using var workerRegexes = new ThreadLocal<Pcre2Regex>(() => new Pcre2Regex(pcre2Pattern, compileOptions), trackAllValues: true);
+        object summaryLock = new();
+        int matchedFlag = 0;
+        int erroredFlag = 0;
+        bool printedHeading = wroteHeadingOutput;
+        var printTask = Task.Run(() =>
+        {
+            foreach (byte[] body in outputs.GetConsumingEnumerable())
+            {
+                if (body.Length == 0)
+                {
+                    continue;
+                }
+
+                if (heading && printedHeading)
+                {
+                    output.Write("\n"u8);
+                }
+
+                output.Write(body);
+                if (heading)
+                {
+                    printedHeading = true;
+                }
+            }
+        });
+
+        try
+        {
+            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() => entry =>
+            {
+                if (!entry.IsFile)
+                {
+                    return WalkState.Continue;
+                }
+
+                using MemoryStream buffer = new();
+                var writer = new RawByteWriter(buffer);
+                JsonSearchSummary? fileSummary = jsonSummary is null ? null : new JsonSearchSummary();
+                bool fileWroteHeading = false;
+                bool fileMatched = false;
+                bool fileErrored = false;
+                byte[] displayPath = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
+                SearchPcre2DirectoryEntryFile(entry, displayPath, lowArgs, workerRegexes.Value!, patterns, fileSummary, writer, diagnostics, separators, lineLimit, color, heading, ref fileWroteHeading, ref fileMatched, ref fileErrored);
+                writer.Flush();
+                if (fileMatched)
+                {
+                    Interlocked.Exchange(ref matchedFlag, 1);
+                }
+
+                if (fileErrored)
+                {
+                    Interlocked.Exchange(ref erroredFlag, 1);
+                }
+
+                if (fileSummary is not null)
+                {
+                    lock (summaryLock)
+                    {
+                        jsonSummary!.Add(fileSummary);
+                    }
+                }
+
+                byte[] body = buffer.ToArray();
+                if (body.Length > 0)
+                {
+                    outputs.Add(body);
+                }
+
+                return fileMatched && lowArgs.Quiet ? WalkState.Quit : WalkState.Continue;
+            });
+        }
+        finally
+        {
+            outputs.CompleteAdding();
+        }
+
+        printTask.GetAwaiter().GetResult();
+        foreach (Pcre2Regex workerRegex in workerRegexes.Values)
+        {
+            workerRegex.Dispose();
+        }
+
+        wroteHeadingOutput = printedHeading;
+        matched |= Volatile.Read(ref matchedFlag) != 0;
+        errored |= Volatile.Read(ref erroredFlag) != 0;
     }
 
     private static void SearchPcre2DirectoryEntryFile(

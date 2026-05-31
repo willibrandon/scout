@@ -1015,6 +1015,7 @@ public sealed partial class PinnedConfigurationTests
         string invalidUtf8DifferentialScript = File.ReadAllText(Path.Combine(root, "native", "test-invalid-utf8-differential-unix.sh"));
         string pcre2Library = File.ReadAllText(Path.Combine(root, "src", "Scout.Pcre2", "Pcre2Library.cs"));
         string pcre2Regex = File.ReadAllText(Path.Combine(root, "src", "Scout.Pcre2", "Pcre2Regex.cs"));
+        string pcre2SearchOperations = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "Pcre2SearchOperations.cs"));
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
         string headerPath = Path.Combine(sourceRoot, "include", "pcre2.h");
 
@@ -1117,6 +1118,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("run_tool_stdin()", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case basic_lookahead_multi_file sort-lines -P -n 'foo(?=bar)'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case recursive_lookahead sort-lines -P -n 'foo(?=bar)' pcre2-dir", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case recursive_lookahead_threads sort-lines -P --threads 4 -n 'foo(?=bar)' pcre2-dir", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case line_regexp exact -P -x 'foo(?=bar)bar' pcre2-smoke.txt", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case word_regexp exact -P -w 'foo(?=-)' pcre2-word.txt", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case context exact -P -n -C1 'foo(?=bar)' pcre2-context", differentialScript, StringComparison.Ordinal);
@@ -1143,6 +1145,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("<DirectPInvoke Include=\"__Internal\" />", directoryBuildProps, StringComparison.Ordinal);
         Assert.Contains("PCRE2 10.46 is available (JIT is available)", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("ConfigVersion = 11", pcre2Library, StringComparison.Ordinal);
+        Assert.Contains("SearchPcre2DirectoryParallel", pcre2SearchOperations, StringComparison.Ordinal);
+        Assert.Contains("ThreadLocal<Pcre2Regex>", pcre2SearchOperations, StringComparison.Ordinal);
+        Assert.Contains("SearchWalkPlanning.GetSearchWalkThreadCount", pcre2SearchOperations, StringComparison.Ordinal);
+        Assert.Contains("BuildParallel().Run", pcre2SearchOperations, StringComparison.Ordinal);
         Assert.Contains("Pcre2Config(ConfigVersion", pcre2Library, StringComparison.Ordinal);
         Assert.DoesNotContain("PCRE2 10.46 is available", pcre2Library, StringComparison.Ordinal);
         Assert.Contains("[LibraryImport(\"__Internal\", EntryPoint = \"pcre2_config_8\")]", pcre2Library, StringComparison.Ordinal);

@@ -291,6 +291,7 @@ EOF
 compare_case basic_lookahead exact -P 'foo(?=bar)' pcre2-smoke.txt
 compare_case basic_lookahead_multi_file sort-lines -P -n 'foo(?=bar)' pcre2-smoke.txt pcre2-smoke-2.txt
 compare_case recursive_lookahead sort-lines -P -n 'foo(?=bar)' pcre2-dir
+compare_case recursive_lookahead_threads sort-lines -P --threads 4 -n 'foo(?=bar)' pcre2-dir
 compare_case line_regexp exact -P -x 'foo(?=bar)bar' pcre2-smoke.txt
 compare_case word_regexp exact -P -w 'foo(?=-)' pcre2-word.txt
 compare_case context exact -P -n -C1 'foo(?=bar)' pcre2-context
