@@ -336,6 +336,135 @@ public sealed class GlobTests
         Assert.False(set.IsMatch(Bytes(path)));
     }
 
+    /// <summary>
+    /// Verifies literal candidate extraction follows upstream globset strategy cases.
+    /// </summary>
+    /// <param name="pattern">The upstream glob pattern.</param>
+    /// <param name="expected">The expected extracted literal, or <see langword="null" />.</param>
+    /// <param name="option">The upstream builder option set.</param>
+    [Theory]
+    [InlineData("foo", "foo", "default")]
+    [InlineData("/foo", "/foo", "default")]
+    [InlineData("/foo/", "/foo/", "default")]
+    [InlineData("/foo/bar", "/foo/bar", "default")]
+    [InlineData("*.foo", null, "default")]
+    [InlineData("foo/bar", "foo/bar", "default")]
+    [InlineData("**/foo/bar", null, "default")]
+    [InlineData("foo", null, "case-insensitive")]
+    public void LiteralStrategyMatchesUpstreamExtraction(string pattern, string? expected, string option)
+    {
+        var glob = Glob.Parse(Bytes(pattern), GetOptions(option));
+
+        AssertStrategyResult(glob.TryGetLiteral(out byte[] actual), actual, expected);
+    }
+
+    /// <summary>
+    /// Verifies extension-only candidate extraction follows upstream globset strategy cases.
+    /// </summary>
+    /// <param name="pattern">The upstream glob pattern.</param>
+    /// <param name="expected">The expected extracted extension, or <see langword="null" />.</param>
+    /// <param name="option">The upstream builder option set.</param>
+    [Theory]
+    [InlineData("**/*.rs", ".rs", "default")]
+    [InlineData("**/*.rs.bak", null, "default")]
+    [InlineData("*.rs", ".rs", "default")]
+    [InlineData("a*.rs", null, "default")]
+    [InlineData("/*.c", null, "default")]
+    [InlineData("*.c", null, "literal-separator")]
+    [InlineData("*.c", ".c", "default")]
+    public void ExtensionOnlyStrategyMatchesUpstreamExtraction(string pattern, string? expected, string option)
+    {
+        var glob = Glob.Parse(Bytes(pattern), GetOptions(option));
+
+        AssertStrategyResult(glob.TryGetExtensionOnly(out byte[] actual), actual, expected);
+    }
+
+    /// <summary>
+    /// Verifies required-extension candidate extraction follows upstream globset strategy cases.
+    /// </summary>
+    /// <param name="pattern">The upstream glob pattern.</param>
+    /// <param name="expected">The expected extracted extension, or <see langword="null" />.</param>
+    /// <param name="option">The upstream builder option set.</param>
+    [Theory]
+    [InlineData("*.rs", ".rs", "default")]
+    [InlineData("/foo/bar/*.rs", ".rs", "default")]
+    [InlineData("/foo/bar/.rs", ".rs", "default")]
+    [InlineData(".rs", ".rs", "default")]
+    [InlineData("./rs", null, "default")]
+    [InlineData("foo", null, "default")]
+    [InlineData(".foo/", null, "default")]
+    [InlineData("foo/", null, "default")]
+    public void RequiredExtensionStrategyMatchesUpstreamExtraction(string pattern, string? expected, string option)
+    {
+        var glob = Glob.Parse(Bytes(pattern), GetOptions(option));
+
+        AssertStrategyResult(glob.TryGetRequiredExtension(out byte[] actual), actual, expected);
+    }
+
+    /// <summary>
+    /// Verifies fixed-prefix candidate extraction preserves necessary path filters.
+    /// </summary>
+    /// <param name="pattern">The upstream glob pattern.</param>
+    /// <param name="expected">The expected extracted prefix, or <see langword="null" />.</param>
+    /// <param name="option">The upstream builder option set.</param>
+    [Theory]
+    [InlineData("/foo", "/foo", "default")]
+    [InlineData("/foo/*", "/foo/", "default")]
+    [InlineData("**/foo", null, "default")]
+    [InlineData("foo/**", "foo/", "default")]
+    [InlineData("foo/*", "foo/", "literal-separator")]
+    [InlineData("a*.rs", "a", "default")]
+    public void FixedPrefixStrategyExtractsNecessaryCandidatePrefix(string pattern, string? expected, string option)
+    {
+        var glob = Glob.Parse(Bytes(pattern), GetOptions(option));
+
+        AssertStrategyResult(glob.TryGetFixedPrefix(out byte[] actual), actual, expected);
+    }
+
+    /// <summary>
+    /// Verifies fixed-suffix candidate extraction preserves necessary path filters.
+    /// </summary>
+    /// <param name="pattern">The upstream glob pattern.</param>
+    /// <param name="expected">The expected extracted suffix, or <see langword="null" />.</param>
+    /// <param name="option">The upstream builder option set.</param>
+    [Theory]
+    [InlineData("**/foo/bar", "/foo/bar", "default")]
+    [InlineData("*/foo/bar", "/foo/bar", "default")]
+    [InlineData("*/foo/bar", "/foo/bar", "literal-separator")]
+    [InlineData("foo/bar", null, "default")]
+    [InlineData("*.foo", ".foo", "default")]
+    [InlineData("*.foo", ".foo", "literal-separator")]
+    [InlineData("**/*_test", "_test", "default")]
+    [InlineData("a*.rs", ".rs", "default")]
+    public void FixedSuffixStrategyExtractsNecessaryCandidateSuffix(string pattern, string? expected, string option)
+    {
+        var glob = Glob.Parse(Bytes(pattern), GetOptions(option));
+
+        AssertStrategyResult(glob.TryGetFixedSuffix(out byte[] actual), actual, expected);
+    }
+
+    /// <summary>
+    /// Verifies recursive component suffix extraction preserves the exact whole-path candidate.
+    /// </summary>
+    /// <param name="pattern">The upstream glob pattern.</param>
+    /// <param name="expectedSuffix">The expected path-suffix candidate, or <see langword="null" />.</param>
+    /// <param name="expectedExactLiteral">The expected exact whole-path candidate, or <see langword="null" />.</param>
+    [Theory]
+    [InlineData("**/foo/bar", "/foo/bar", "foo/bar")]
+    [InlineData("**/foo", "/foo", "foo")]
+    [InlineData("foo", null, null)]
+    [InlineData("*/foo", null, null)]
+    public void ComponentSuffixStrategyMatchesRecursiveExtraction(string pattern, string? expectedSuffix, string? expectedExactLiteral)
+    {
+        var glob = Glob.Parse(Bytes(pattern));
+        bool actualResult = glob.TryGetComponentSuffix(out byte[] actualSuffix, out byte[] actualExactLiteral);
+        bool expectedResult = expectedSuffix is not null;
+
+        Assert.Equal(expectedResult, actualResult);
+        AssertStrategyResult(actualResult, actualSuffix, expectedSuffix);
+        AssertStrategyResult(actualResult, actualExactLiteral, expectedExactLiteral);
+    }
+
     private static void AssertParseError(
         byte[] pattern,
         GlobParseErrorKind expectedKind,
@@ -348,6 +477,18 @@ public sealed class GlobTests
         Assert.Equal(pattern, exception.GlobPattern.ToArray());
         Assert.Equal(expectedRangeStart, exception.RangeStart);
         Assert.Equal(expectedRangeEnd, exception.RangeEnd);
+    }
+
+    private static void AssertStrategyResult(bool actualResult, byte[] actual, string? expected)
+    {
+        Assert.Equal(expected is not null, actualResult);
+        if (expected is null)
+        {
+            Assert.Empty(actual);
+            return;
+        }
+
+        Assert.Equal(Bytes(expected), actual);
     }
 
     private static GlobOptions GetOptions(string option)

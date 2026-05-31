@@ -190,6 +190,12 @@ public sealed class Glob
     internal bool TryGetLiteral(out byte[] literal)
     {
         var bytes = new List<byte>();
+        if (options.AsciiCaseInsensitive)
+        {
+            literal = [];
+            return false;
+        }
+
         int patternIndex = 0;
         while (patternIndex < pattern.Length)
         {
@@ -299,21 +305,6 @@ public sealed class Glob
             return false;
         }
 
-        int start = 0;
-        for (int index = bytes.Count - 1; index >= 0; index--)
-        {
-            if (IsSeparator(bytes[index]))
-            {
-                start = index + 1;
-                break;
-            }
-        }
-
-        if (start > 0)
-        {
-            bytes.RemoveRange(0, start);
-        }
-
         suffix = bytes.ToArray();
         return suffix.Length != 0;
     }
@@ -377,32 +368,58 @@ public sealed class Glob
     internal bool TryGetRequiredExtension(out byte[] extension)
     {
         extension = [];
-        if (options.AsciiCaseInsensitive || !TryGetFixedSuffix(out byte[] suffix))
+        if (options.AsciiCaseInsensitive)
         {
             return false;
         }
 
-        int dotIndex = -1;
-        for (int index = suffix.Length - 1; index >= 0; index--)
+        var reversed = new List<byte>();
+        int patternIndex = pattern.Length - 1;
+        while (patternIndex >= 0)
         {
-            if (IsSeparator(suffix[index]))
+            byte token = pattern[patternIndex];
+            if (IsEscapedPatternIndex(patternIndex))
+            {
+                if (IsSeparator(token))
+                {
+                    return false;
+                }
+
+                reversed.Add(token);
+                if (token == (byte)'.')
+                {
+                    break;
+                }
+
+                patternIndex -= 2;
+                continue;
+            }
+
+            if (IsSeparator(token) || IsReverseGlobMetacharacter(token))
             {
                 return false;
             }
 
-            if (suffix[index] == (byte)'.')
+            reversed.Add(token);
+            if (token == (byte)'.')
             {
-                dotIndex = index;
                 break;
             }
+
+            patternIndex--;
         }
 
-        if (dotIndex < 0 || dotIndex == suffix.Length - 1)
+        if (reversed.Count <= 1 || reversed[^1] != (byte)'.')
         {
             return false;
         }
 
-        extension = suffix[dotIndex..];
+        extension = new byte[reversed.Count];
+        for (int index = 0; index < reversed.Count; index++)
+        {
+            extension[index] = reversed[reversed.Count - index - 1];
+        }
+
         return true;
     }
 
@@ -1113,6 +1130,27 @@ public sealed class Glob
     private static bool IsGlobMetacharacter(byte token)
     {
         return token is (byte)'*' or (byte)'?' or (byte)'[' or (byte)'{';
+    }
+
+    private static bool IsReverseGlobMetacharacter(byte token)
+    {
+        return token is (byte)'*' or (byte)'?' or (byte)'[' or (byte)']' or (byte)'{' or (byte)'}';
+    }
+
+    private bool IsEscapedPatternIndex(int patternIndex)
+    {
+        if (!options.BackslashEscapes)
+        {
+            return false;
+        }
+
+        int backslashCount = 0;
+        for (int index = patternIndex - 1; index >= 0 && pattern[index] == (byte)'\\'; index--)
+        {
+            backslashCount++;
+        }
+
+        return backslashCount % 2 != 0;
     }
 
     private static byte[] Combine(ReadOnlySpan<byte> left, ReadOnlySpan<byte> right)

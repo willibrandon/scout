@@ -16,6 +16,8 @@ ordered match collection, matches-into reuse, and prepared candidate path
 support, including required-extension and component-suffix candidate filtering.
 Covered tests include the upstream match/non-match matrix cases for recursive
 wildcards, brace alternatives, case-insensitive matching, backslash escaping,
-and literal-separator character classes. Later milestone work extends this
+literal-separator character classes, upstream literal, extension-only, and
+required-extension extraction cases, plus Scout's prefix/suffix candidate
+filters for recursive and wildcard patterns. Later milestone work extends this
 project with the complete upstream token/regex extraction matrix and the
 remaining ported upstream tests.
