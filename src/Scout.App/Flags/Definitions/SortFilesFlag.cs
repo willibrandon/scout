@@ -4,16 +4,16 @@ namespace Scout.Flags.Definitions;
 
 internal readonly struct SortFilesFlag : IFlag<SortFilesFlag>
 {
-    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(
+    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.SwitchWithName(
         "--sort-files",
         shortName: null,
         "--no-sort-files",
         aliases: [],
         FlagCategory.Search,
         "Sort results by path.",
-        static lowArgs =>
+        static (lowArgs, matchedName) =>
         {
-            lowArgs.SetSortMode(new CliSortMode(reverse: false, CliSortKind.Path));
+            lowArgs.SetSortMode(matchedName == "--no-sort-files" ? null : new CliSortMode(reverse: false, CliSortKind.Path));
             return null;
         });
 }

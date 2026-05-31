@@ -4,16 +4,16 @@ namespace Scout.Flags.Definitions;
 
 internal readonly struct MultilineFlag : IFlag<MultilineFlag>
 {
-    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(
+    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.SwitchWithName(
         "--multiline",
         'U',
         "--no-multiline",
         aliases: [],
         FlagCategory.Regex,
         "Permit matches to span line terminators.",
-        static lowArgs =>
+        static (lowArgs, matchedName) =>
         {
-            lowArgs.SetMultiline(true);
+            lowArgs.SetMultiline(matchedName != "--no-multiline");
             return null;
         });
 }

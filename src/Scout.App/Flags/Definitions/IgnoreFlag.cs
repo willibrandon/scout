@@ -4,16 +4,16 @@ namespace Scout.Flags.Definitions;
 
 internal readonly struct IgnoreFlag : IFlag<IgnoreFlag>
 {
-    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(
+    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.SwitchWithName(
         "--ignore",
         shortName: null,
         "--no-ignore",
         aliases: [],
         FlagCategory.Search,
         "Respect ignore files.",
-        static lowArgs =>
+        static (lowArgs, matchedName) =>
         {
-            lowArgs.SetRespectIgnoreFiles(true);
+            lowArgs.SetRespectIgnoreFiles(matchedName != "--no-ignore");
             return null;
         });
 }

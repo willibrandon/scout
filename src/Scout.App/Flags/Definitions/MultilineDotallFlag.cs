@@ -4,16 +4,16 @@ namespace Scout.Flags.Definitions;
 
 internal readonly struct MultilineDotallFlag : IFlag<MultilineDotallFlag>
 {
-    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(
+    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.SwitchWithName(
         "--multiline-dotall",
         shortName: null,
         "--no-multiline-dotall",
         aliases: [],
         FlagCategory.Regex,
         "Make dot match line terminators in multiline mode.",
-        static lowArgs =>
+        static (lowArgs, matchedName) =>
         {
-            lowArgs.SetMultilineDotall(true);
+            lowArgs.SetMultilineDotall(matchedName != "--no-multiline-dotall");
             return null;
         });
 }

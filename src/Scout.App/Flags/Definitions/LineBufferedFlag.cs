@@ -4,16 +4,16 @@ namespace Scout.Flags.Definitions;
 
 internal readonly struct LineBufferedFlag : IFlag<LineBufferedFlag>
 {
-    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(
+    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.SwitchWithName(
         "--line-buffered",
         shortName: null,
         "--no-line-buffered",
         aliases: [],
         FlagCategory.Output,
         "Use line buffering for stdout.",
-        static lowArgs =>
+        static (lowArgs, matchedName) =>
         {
-            lowArgs.SetBufferMode(CliBufferMode.Line);
+            lowArgs.SetBufferMode(matchedName == "--no-line-buffered" ? CliBufferMode.Auto : CliBufferMode.Line);
             return null;
         });
 }

@@ -29,11 +29,16 @@ public sealed class FlagCatalogTests
         Assert.True(GeneratedFlagCatalog.TryFindShortSwitch('.', out FlagDescriptor hidden));
         Assert.Equal("--hidden", hidden.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindLongSwitch("--no-follow", out FlagDescriptor noFollow));
-        Assert.Equal("--no-follow", noFollow.LongName);
+        Assert.Equal("--follow", noFollow.LongName);
+        Assert.Equal("--no-follow", noFollow.NegatedName);
         Assert.True(GeneratedFlagCatalog.TryFindLongSwitch("--search-zip", out FlagDescriptor searchZip));
         Assert.Equal("--search-zip", searchZip.LongName);
+        Assert.True(GeneratedFlagCatalog.TryFindLongSwitch("--no-search-zip", out FlagDescriptor noSearchZip));
+        Assert.Equal("--search-zip", noSearchZip.LongName);
+        Assert.Equal("--no-search-zip", noSearchZip.NegatedName);
         Assert.True(GeneratedFlagCatalog.TryFindLongSwitch("--no-mmap", out FlagDescriptor noMmap));
-        Assert.Equal("--no-mmap", noMmap.LongName);
+        Assert.Equal("--mmap", noMmap.LongName);
+        Assert.Equal("--no-mmap", noMmap.NegatedName);
         Assert.True(GeneratedFlagCatalog.TryFindLongSwitch("--multiline-dotall", out FlagDescriptor multilineDotall));
         Assert.Equal("--multiline-dotall", multilineDotall.LongName);
         Assert.True(GeneratedFlagCatalog.TryFindLongSwitch("--ignore-vcs", out FlagDescriptor ignoreVcs));

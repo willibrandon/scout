@@ -4,16 +4,16 @@ namespace Scout.Flags.Definitions;
 
 internal readonly struct InvertMatchFlag : IFlag<InvertMatchFlag>
 {
-    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(
+    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.SwitchWithName(
         "--invert-match",
         'v',
         "--no-invert-match",
         aliases: [],
         FlagCategory.Matching,
         "Invert line matching.",
-        static lowArgs =>
+        static (lowArgs, matchedName) =>
         {
-            lowArgs.SetInvertMatch(true);
+            lowArgs.SetInvertMatch(matchedName != "--no-invert-match");
             return null;
         });
 }

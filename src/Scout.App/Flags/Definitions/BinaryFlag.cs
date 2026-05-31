@@ -4,16 +4,16 @@ namespace Scout.Flags.Definitions;
 
 internal readonly struct BinaryFlag : IFlag<BinaryFlag>
 {
-    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(
+    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.SwitchWithName(
         "--binary",
         shortName: null,
         "--no-binary",
         aliases: [],
         FlagCategory.Binary,
         "Search binary files with suppression.",
-        static lowArgs =>
+        static (lowArgs, matchedName) =>
         {
-            lowArgs.SetSearchBinaryFiles(true);
+            lowArgs.SetSearchBinaryFiles(matchedName != "--no-binary");
             return null;
         });
 }

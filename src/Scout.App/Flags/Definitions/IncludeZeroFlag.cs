@@ -4,16 +4,16 @@ namespace Scout.Flags.Definitions;
 
 internal readonly struct IncludeZeroFlag : IFlag<IncludeZeroFlag>
 {
-    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(
+    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.SwitchWithName(
         "--include-zero",
         shortName: null,
         "--no-include-zero",
         aliases: [],
         FlagCategory.Output,
         "Include zero-count entries in count output.",
-        static lowArgs =>
+        static (lowArgs, matchedName) =>
         {
-            lowArgs.SetIncludeZero(true);
+            lowArgs.SetIncludeZero(matchedName != "--no-include-zero");
             return null;
         });
 }

@@ -4,16 +4,16 @@ namespace Scout.Flags.Definitions;
 
 internal readonly struct UnicodeFlag : IFlag<UnicodeFlag>
 {
-    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(
+    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.SwitchWithName(
         "--unicode",
         shortName: null,
         "--no-unicode",
         aliases: [],
         FlagCategory.Regex,
         "Enable Unicode regex mode.",
-        static lowArgs =>
+        static (lowArgs, matchedName) =>
         {
-            lowArgs.SetUnicode(true);
+            lowArgs.SetUnicode(matchedName != "--no-unicode");
             return null;
         });
 }

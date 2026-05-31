@@ -4,16 +4,16 @@ namespace Scout.Flags.Definitions;
 
 internal readonly struct HiddenFlag : IFlag<HiddenFlag>
 {
-    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(
+    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.SwitchWithName(
         "--hidden",
         '.',
         "--no-hidden",
         aliases: [],
         FlagCategory.Search,
         "Search hidden files and directories.",
-        static lowArgs =>
+        static (lowArgs, matchedName) =>
         {
-            lowArgs.SetIncludeHidden(true);
+            lowArgs.SetIncludeHidden(matchedName != "--no-hidden");
             return null;
         });
 }

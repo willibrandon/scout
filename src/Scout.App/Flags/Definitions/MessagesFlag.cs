@@ -4,16 +4,16 @@ namespace Scout.Flags.Definitions;
 
 internal readonly struct MessagesFlag : IFlag<MessagesFlag>
 {
-    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(
+    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.SwitchWithName(
         "--messages",
         shortName: null,
         "--no-messages",
         aliases: [],
         FlagCategory.Diagnostics,
         "Print non-fatal search diagnostics.",
-        static lowArgs =>
+        static (lowArgs, matchedName) =>
         {
-            lowArgs.SetMessages(true);
+            lowArgs.SetMessages(matchedName != "--no-messages");
             return null;
         });
 }

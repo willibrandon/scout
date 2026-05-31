@@ -4,16 +4,16 @@ namespace Scout.Flags.Definitions;
 
 internal readonly struct TextFlag : IFlag<TextFlag>
 {
-    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(
+    public static FlagDescriptor Descriptor { get; } = FlagDescriptor.SwitchWithName(
         "--text",
         'a',
         "--no-text",
         aliases: [],
         FlagCategory.Binary,
         "Search binary files as if they were text.",
-        static lowArgs =>
+        static (lowArgs, matchedName) =>
         {
-            lowArgs.SetTextMode(true);
+            lowArgs.SetTextMode(matchedName != "--no-text");
             return null;
         });
 }
