@@ -402,6 +402,7 @@ public sealed class RegexCorpusTests
                 "class-gencat14",
                 "class-gencat15",
                 "class-gencat16",
+                "class-gencat17",
                 "class-gencat18",
                 "class-gencat19",
                 "class-gencat20",
@@ -422,6 +423,10 @@ public sealed class RegexCorpusTests
                 "class-gencat35",
                 "class-gencat36",
                 "class-gencat37",
+                "class-emoji1",
+                "class-emoji2",
+                "class-emoji3",
+                "class-emoji4",
             ]),
             ("no-unicode.toml",
             [

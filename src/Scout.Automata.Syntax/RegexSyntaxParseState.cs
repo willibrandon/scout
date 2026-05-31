@@ -539,6 +539,12 @@ internal sealed class RegexSyntaxParseState
             return true;
         }
 
+        if (PropertyNameEquals(name, "math"))
+        {
+            propertyKind = RegexUnicodePropertyKind.Math;
+            return true;
+        }
+
         if (PropertyNameEquals(name, "sm") || PropertyNameEquals(name, "mathsymbol"))
         {
             propertyKind = RegexUnicodePropertyKind.MathSymbol;
@@ -560,6 +566,18 @@ internal sealed class RegexSyntaxParseState
         if (PropertyNameEquals(name, "mn") || PropertyNameEquals(name, "nonspacingmark"))
         {
             propertyKind = RegexUnicodePropertyKind.NonspacingMark;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "emoji"))
+        {
+            propertyKind = RegexUnicodePropertyKind.Emoji;
+            return true;
+        }
+
+        if (PropertyNameEquals(name, "extendedpictographic"))
+        {
+            propertyKind = RegexUnicodePropertyKind.ExtendedPictographic;
             return true;
         }
 

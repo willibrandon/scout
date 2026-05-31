@@ -10,7 +10,7 @@ namespace Scout;
 /// </summary>
 public sealed class RegexCorpusDifferentialTests
 {
-    private const int ExpectedDifferentialCaseCount = 484;
+    private const int ExpectedDifferentialCaseCount = 489;
     private const int ExpectedSupportedOnlyCaseCount = 47;
 
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
@@ -30,7 +30,7 @@ public sealed class RegexCorpusDifferentialTests
         ("regex-lite.toml", 9),
         ("regression.toml", 51),
         ("set.toml", 29),
-        ("unicode.toml", 39),
+        ("unicode.toml", 44),
         ("word-boundary-special.toml", 41),
     ];
 
@@ -443,6 +443,7 @@ public sealed class RegexCorpusDifferentialTests
         ("unicode.toml", "class-gencat14"),
         ("unicode.toml", "class-gencat15"),
         ("unicode.toml", "class-gencat16"),
+        ("unicode.toml", "class-gencat17"),
         ("unicode.toml", "class-gencat18"),
         ("unicode.toml", "class-gencat19"),
         ("unicode.toml", "class-gencat20"),
@@ -463,6 +464,10 @@ public sealed class RegexCorpusDifferentialTests
         ("unicode.toml", "class-gencat35"),
         ("unicode.toml", "class-gencat36"),
         ("unicode.toml", "class-gencat37"),
+        ("unicode.toml", "class-emoji1"),
+        ("unicode.toml", "class-emoji2"),
+        ("unicode.toml", "class-emoji3"),
+        ("unicode.toml", "class-emoji4"),
         ("set.toml", "basic30"),
         ("set.toml", "basic40"),
         ("set.toml", "basic10-leftmost-first"),

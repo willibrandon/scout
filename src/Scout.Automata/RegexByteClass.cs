@@ -847,7 +847,8 @@ internal static class RegexByteClass
     private static bool IsUnicodePropertyRune(Rune value, ReadOnlySpan<byte> expression)
     {
         return expression.Length == 1 &&
-            RegexUnicodeTables.IsGeneralCategory((RegexUnicodePropertyKind)expression[0], value);
+            (RegexUnicodeTables.IsGeneralCategory((RegexUnicodePropertyKind)expression[0], value) ||
+                RegexUnicodeTables.IsBooleanProperty((RegexUnicodePropertyKind)expression[0], value));
     }
 
     private static bool TryFoldUnicodeScalarToAscii(Rune value, out byte folded)

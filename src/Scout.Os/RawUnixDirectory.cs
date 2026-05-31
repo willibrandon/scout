@@ -13,6 +13,10 @@ public static unsafe partial class RawUnixDirectory
 {
     private const int LinuxDirentNameOffset = 19;
     private const int MacOSDirentNameOffset = 21;
+    private const int MacOSDirentNameLengthOffset = 18;
+    private const int MacOSLegacyDirentNameOffset = 8;
+    private const int MacOSLegacyDirentNameLengthOffset = 7;
+    private const int MacOSLegacyDirentRecordLengthOffset = 4;
     private const int DirentRecordLengthOffset = 16;
     private const uint DirectoryMode = 0x1FF;
 
@@ -118,6 +122,13 @@ public static unsafe partial class RawUnixDirectory
     private static byte[] ReadName(nint entryPointer)
     {
         byte* entry = (byte*)entryPointer;
+        if (OperatingSystem.IsMacOS() &&
+            (TryReadMacOSName(entry, DirentRecordLengthOffset, MacOSDirentNameLengthOffset, MacOSDirentNameOffset, twoByteNameLength: true, out byte[] name) ||
+                TryReadMacOSName(entry, MacOSLegacyDirentRecordLengthOffset, MacOSLegacyDirentNameLengthOffset, MacOSLegacyDirentNameOffset, twoByteNameLength: false, out name)))
+        {
+            return name;
+        }
+
         int nameOffset = OperatingSystem.IsMacOS() ? MacOSDirentNameOffset : LinuxDirentNameOffset;
         int recordLength = BitConverter.ToUInt16(new ReadOnlySpan<byte>(entry + DirentRecordLengthOffset, sizeof(ushort)));
         int maxNameLength = Math.Max(0, recordLength - nameOffset);
@@ -128,6 +139,30 @@ public static unsafe partial class RawUnixDirectory
         }
 
         return new ReadOnlySpan<byte>(entry + nameOffset, nameLength).ToArray();
+    }
+
+    private static bool TryReadMacOSName(
+        byte* entry,
+        int recordLengthOffset,
+        int nameLengthOffset,
+        int nameOffset,
+        bool twoByteNameLength,
+        out byte[] name)
+    {
+        name = [];
+        int recordLength = BitConverter.ToUInt16(new ReadOnlySpan<byte>(entry + recordLengthOffset, sizeof(ushort)));
+        int nameLength = twoByteNameLength
+            ? BitConverter.ToUInt16(new ReadOnlySpan<byte>(entry + nameLengthOffset, sizeof(ushort)))
+            : entry[nameLengthOffset];
+        if (nameLength <= 0 ||
+            recordLength < nameOffset + nameLength + 1 ||
+            entry[nameOffset + nameLength] != 0)
+        {
+            return false;
+        }
+
+        name = new ReadOnlySpan<byte>(entry + nameOffset, nameLength).ToArray();
+        return true;
     }
 
     private static bool IsCurrentOrParent(ReadOnlySpan<byte> name)

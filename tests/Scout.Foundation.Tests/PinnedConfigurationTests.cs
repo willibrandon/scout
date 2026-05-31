@@ -876,19 +876,25 @@ public sealed partial class PinnedConfigurationTests
         Assert.True(File.Exists(Path.Combine(tablesRoot, "mod.rs")), "Missing regex-syntax unicode_tables module file.");
         Assert.Contains("Unicode version: " + unicodeVersion + ".", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("internal static bool IsGeneralCategory(RegexUnicodePropertyKind kind, Rune value)", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("internal static bool IsBooleanProperty(RegexUnicodePropertyKind kind, Rune value)", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static readonly UnicodeScalarRange[] DecimalNumber", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static readonly UnicodeScalarRange[] PerlWord", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static readonly UnicodeScalarRange[] PerlSpace", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static readonly UnicodeScalarRange[] Alphabetic", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static readonly UnicodeScalarRange[] BooleanPropertyMath", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static readonly UnicodeScalarRange[] BooleanPropertyEmoji", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static readonly UnicodeScalarRange[] BooleanPropertyExtendedPictographic", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static readonly UnicodeScalarRange[] GeneralCategoryUppercaseLetter", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("RegexUnicodeTables.IsDecimalNumber", regexByteClass, StringComparison.Ordinal);
         Assert.Contains("RegexUnicodeTables.IsPerlWord", regexByteClass, StringComparison.Ordinal);
         Assert.Contains("RegexUnicodeTables.IsPerlSpace", regexByteClass, StringComparison.Ordinal);
         Assert.Contains("RegexUnicodeTables.IsAlphabetic", regexByteClass, StringComparison.Ordinal);
         Assert.Contains("RegexUnicodeTables.IsGeneralCategory", regexByteClass, StringComparison.Ordinal);
+        Assert.Contains("RegexUnicodeTables.IsBooleanProperty", regexByteClass, StringComparison.Ordinal);
         Assert.Contains("TryParseUnicodePropertyClass", regexSyntaxParseState, StringComparison.Ordinal);
         Assert.DoesNotContain("TryParseUnicodeAnyClass", regexSyntaxParseState, StringComparison.Ordinal);
         Assert.Contains("UppercaseLetter", regexUnicodePropertyKind, StringComparison.Ordinal);
+        Assert.Contains("ExtendedPictographic", regexUnicodePropertyKind, StringComparison.Ordinal);
         Assert.DoesNotContain("Rune.GetUnicodeCategory", regexByteClass, StringComparison.Ordinal);
         Assert.DoesNotContain("Rune.IsWhiteSpace", regexByteClass, StringComparison.Ordinal);
         string[] actualTables = Directory.GetFiles(tablesRoot, "*.rs")

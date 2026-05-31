@@ -91,6 +91,11 @@ public enum RegexUnicodePropertyKind
     Mark,
 
     /// <summary>
+    /// The Math binary property.
+    /// </summary>
+    Math,
+
+    /// <summary>
     /// The Math_Symbol general category.
     /// </summary>
     MathSymbol,
@@ -109,6 +114,16 @@ public enum RegexUnicodePropertyKind
     /// The Nonspacing_Mark general category.
     /// </summary>
     NonspacingMark,
+
+    /// <summary>
+    /// The Emoji binary property.
+    /// </summary>
+    Emoji,
+
+    /// <summary>
+    /// The Extended_Pictographic binary property.
+    /// </summary>
+    ExtendedPictographic,
 
     /// <summary>
     /// The Number general category.
