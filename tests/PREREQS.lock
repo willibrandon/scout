@@ -109,6 +109,34 @@ path = "/usr/bin/uncompress"
 sha256 = "c2e461b27668bd63c4cbd85649f7c4ceb63fc2447bf657d231e0d9fd4f42a055"
 
 [[tool.macos]]
+name = "gzip"
+environment = "github-actions"
+version = "Apple gzip 475"
+path = "/usr/bin/gzip"
+sha256 = "7bd218bc6b12fced475163901547a796736f72f99533cbec60eea150ed21afa3"
+
+[[tool.macos]]
+name = "bzip2"
+environment = "github-actions"
+version = "1.0.8"
+path = "/usr/bin/bzip2"
+sha256 = "14e28b6b7955cbd6cd2a8139ca41186a922143a4fa3715ddd8e331f41db8fc80"
+
+[[tool.macos]]
+name = "xz"
+environment = "github-actions"
+version = "5.8.2"
+path = "/opt/homebrew/bin/xz"
+sha256 = "995c8e2f72446f0d0e3a29f6c3d52286cfecedfc4ffb2b42d25c3ce1ad77034c"
+
+[[tool.macos]]
+name = "uncompress"
+environment = "github-actions"
+version = "Apple compress file_cmds-475"
+path = "/usr/bin/uncompress"
+sha256 = "aec4becd30850078aa28747caa0c76227c9e848378377e37f98d531203fe6aa4"
+
+[[tool.macos]]
 name = "hyperfine"
 version = "1.20.0"
 path = "/opt/homebrew/bin/hyperfine"

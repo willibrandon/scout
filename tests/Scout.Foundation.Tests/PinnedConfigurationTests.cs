@@ -1595,6 +1595,43 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies hosted macOS release gates use GitHub-hosted tool hashes instead of local machine hashes.
+    /// </summary>
+    [Fact]
+    public void HostedMacosDecompressionToolHashesArePinned()
+    {
+        (string Name, string Version, string Path, string Sha256)[] tools =
+        [
+            ("gzip", "Apple gzip 475", "/usr/bin/gzip", "7bd218bc6b12fced475163901547a796736f72f99533cbec60eea150ed21afa3"),
+            ("bzip2", "1.0.8", "/usr/bin/bzip2", "14e28b6b7955cbd6cd2a8139ca41186a922143a4fa3715ddd8e331f41db8fc80"),
+            ("xz", "5.8.2", "/opt/homebrew/bin/xz", "995c8e2f72446f0d0e3a29f6c3d52286cfecedfc4ffb2b42d25c3ce1ad77034c"),
+            ("uncompress", "Apple compress file_cmds-475", "/usr/bin/uncompress", "aec4becd30850078aa28747caa0c76227c9e848378377e37f98d531203fe6aa4"),
+        ];
+
+        string root = FindRepositoryRoot();
+        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
+
+        Assert.Contains("read_lock_environment_table_value()", preflight, StringComparison.Ordinal);
+        Assert.Contains("read_lock_environment_table_value \"tool.macos\" \"$name\" \"$HOST_ORACLE_ENVIRONMENT\" \"path\"", preflight, StringComparison.Ordinal);
+        Assert.Contains("environment = \"%s\"", preflight, StringComparison.Ordinal);
+
+        for (int index = 0; index < tools.Length; index++)
+        {
+            (string name, string version, string path, string sha256) = tools[index];
+            string block = string.Join(
+                "\n",
+                "[[tool.macos]]",
+                "name = \"" + name + "\"",
+                "environment = \"github-actions\"",
+                "version = \"" + version + "\"",
+                "path = \"" + path + "\"",
+                "sha256 = \"" + sha256 + "\"");
+            Assert.Contains(block, prerequisiteLock, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
     /// Verifies every Linux decompression tool invoked by ripgrep's default table is represented in the prerequisite lock.
     /// </summary>
     [Fact]

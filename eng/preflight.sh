@@ -38,32 +38,64 @@ read_lock_value() {
     ' "$LOCK"
 }
 
-read_lock_table_value() {
-    awk -v header="[[${1}]]" -v name="$2" -v key="$3" "$strip_toml_value"'
+read_lock_named_table_value() {
+    awk -v header="[[${1}]]" -v name="$2" -v environment="$3" -v key="$4" "$strip_toml_value"'
+        function reset_table() {
+            in_table = 0
+            table_name = ""
+            table_environment = ""
+            table_value = ""
+        }
+        function maybe_emit() {
+            if (found) {
+                return
+            }
+            if (in_table && table_name == name && table_value != "" &&
+                ((environment == "" && table_environment == "") || (environment != "" && table_environment == environment))) {
+                print table_value
+                found = 1
+                exit 0
+            }
+        }
         $0 == header {
+            maybe_emit()
             in_table = 1
-            matched = 0
+            table_name = ""
+            table_environment = ""
+            table_value = ""
             next
         }
         in_table && $0 ~ /^\[/ {
-            in_table = 0
-            matched = 0
+            maybe_emit()
+            reset_table()
         }
         in_table && $0 ~ /^[[:space:]]*name[[:space:]]*=/ {
-            matched = value_of($0) == name
+            table_name = value_of($0)
             next
         }
-        in_table && matched && $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
-            print value_of($0)
-            found = 1
-            exit 0
+        in_table && $0 ~ /^[[:space:]]*environment[[:space:]]*=/ {
+            table_environment = value_of($0)
+            next
+        }
+        in_table && $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
+            table_value = value_of($0)
+            next
         }
         END {
+            maybe_emit()
             if (!found) {
                 exit 1
             }
         }
     ' "$LOCK"
+}
+
+read_lock_table_value() {
+    read_lock_named_table_value "$1" "$2" "" "$3"
+}
+
+read_lock_environment_table_value() {
+    read_lock_named_table_value "$1" "$2" "$3" "$4"
 }
 
 host_rid() {
@@ -225,9 +257,14 @@ check_file_hash() {
 
 check_macos_tool_hash() {
     name="$1"
-    path="$(read_lock_table_value "tool.macos" "$name" "path")" || fail "Missing macOS tool path for $name in tests/PREREQS.lock."
-    version="$(read_lock_table_value "tool.macos" "$name" "version")" || fail "Missing macOS tool version for $name in tests/PREREQS.lock."
-    sha256="$(read_lock_table_value "tool.macos" "$name" "sha256")" || fail "Missing macOS tool hash for $name in tests/PREREQS.lock."
+    if path="$(read_lock_environment_table_value "tool.macos" "$name" "$HOST_ORACLE_ENVIRONMENT" "path")"; then
+        version="$(read_lock_environment_table_value "tool.macos" "$name" "$HOST_ORACLE_ENVIRONMENT" "version")" || fail "Missing macOS tool version for $name in tests/PREREQS.lock."
+        sha256="$(read_lock_environment_table_value "tool.macos" "$name" "$HOST_ORACLE_ENVIRONMENT" "sha256")" || fail "Missing macOS tool hash for $name in tests/PREREQS.lock."
+    else
+        path="$(read_lock_table_value "tool.macos" "$name" "path")" || fail "Missing macOS tool path for $name in tests/PREREQS.lock."
+        version="$(read_lock_table_value "tool.macos" "$name" "version")" || fail "Missing macOS tool version for $name in tests/PREREQS.lock."
+        sha256="$(read_lock_table_value "tool.macos" "$name" "sha256")" || fail "Missing macOS tool hash for $name in tests/PREREQS.lock."
+    fi
 
     require_literal "$sha256" "macOS tool $name sha256"
     [ -f "$path" ] || fail "Missing macOS tool $name: $path"
@@ -239,7 +276,7 @@ check_macos_tool_hash() {
 
     printf 'Expected macOS tool %s sha256 %s, got %s\n' "$name" "$sha256" "$actual_sha256" >&2
     printf 'Hosted macOS replacement block for %s:\n' "$name" >&2
-    printf '[[tool.macos]]\nname = "%s"\nversion = "%s"\npath = "%s"\nsha256 = "%s"\n\n' "$name" "$version" "$path" "$actual_sha256" >&2
+    printf '[[tool.macos]]\nname = "%s"\nenvironment = "%s"\nversion = "%s"\npath = "%s"\nsha256 = "%s"\n\n' "$name" "$HOST_ORACLE_ENVIRONMENT" "$version" "$path" "$actual_sha256" >&2
     MACOS_TOOL_FAILURES=1
 }
 
