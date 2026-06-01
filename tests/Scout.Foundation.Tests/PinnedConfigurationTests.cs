@@ -850,8 +850,14 @@ public sealed partial class PinnedConfigurationTests
         string root = FindRepositoryRoot();
         string appBuildScript = File.ReadAllText(Path.Combine(root, "native", "build-app-unix.sh"));
         string generatedArtifactScript = File.ReadAllText(Path.Combine(root, "native", "test-generated-artifacts-unix.sh"));
+        string oracleScript = File.ReadAllText(Path.Combine(root, "eng", "read-ripgrep-oracle.sh"));
 
         Assert.Contains("\"$ROOT/native/test-generated-artifacts-unix.sh\" \"$RID\" \"$BIN/scout\"", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("read_lock_rid_table_value()", oracleScript, StringComparison.Ordinal);
+        Assert.Contains("oracle_environment()", oracleScript, StringComparison.Ordinal);
+        Assert.Contains("read_ripgrep_oracle_value \"path\" \"ripgrep_rg_path\"", generatedArtifactScript, StringComparison.Ordinal);
+        Assert.Contains("read_ripgrep_oracle_value \"sha256\" \"ripgrep_rg_sha256\"", generatedArtifactScript, StringComparison.Ordinal);
+        Assert.Contains("resolve_repo_path", generatedArtifactScript, StringComparison.Ordinal);
         Assert.Contains("ripgrep_rg_path", generatedArtifactScript, StringComparison.Ordinal);
         Assert.Contains("ripgrep_rg_sha256", generatedArtifactScript, StringComparison.Ordinal);
         Assert.Contains("compare_case help_long --help", generatedArtifactScript, StringComparison.Ordinal);
@@ -1434,6 +1440,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("$SmokePath2", windowsAppBuildScript, StringComparison.Ordinal);
         Assert.Contains("Unexpected PCRE2 multi-file output", windowsAppBuildScript, StringComparison.Ordinal);
         Assert.Contains("\"$ROOT/native/test-pcre2-differential-unix.sh\" \"$RID\" \"$BIN/scout\"", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("read_ripgrep_oracle_value \"pcre2_path\" \"ripgrep_pcre2_rg_path\"", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("read_ripgrep_oracle_value \"pcre2_sha256\" \"ripgrep_pcre2_rg_sha256\"", differentialScript, StringComparison.Ordinal);
         Assert.Contains("ripgrep_pcre2_rg_profile = \"release-lto\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("ripgrep_pcre2_rg_features = \"pcre2\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("ripgrep_pcre2_rg_path = \"" + defaultPcre2RipgrepPath + "\"", prerequisiteLock, StringComparison.Ordinal);
@@ -1535,6 +1543,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("compare_case multiline_invert_vimgrep_context exact -P --vimgrep --multiline -v -C1 '(?s)foo\\nbar' pcre2-multiline-vimgrep", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case multiline_invert_quiet exact -P --multiline -q -v '(?s)foo\\nbar' pcre2-multiline-vimgrep", differentialScript, StringComparison.Ordinal);
         Assert.Contains("\"$ROOT/native/test-invalid-utf8-differential-unix.sh\" \"$RID\" \"$BIN/scout\"", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("read_ripgrep_oracle_value \"path\" \"ripgrep_rg_path\"", invalidUtf8DifferentialScript, StringComparison.Ordinal);
+        Assert.Contains("read_ripgrep_oracle_value \"sha256\" \"ripgrep_rg_sha256\"", invalidUtf8DifferentialScript, StringComparison.Ordinal);
         Assert.Contains("r210_explicit_invalid_utf8_path", invalidUtf8DifferentialScript, StringComparison.Ordinal);
         Assert.Contains("json_explicit_invalid_utf8_path", invalidUtf8DifferentialScript, StringComparison.Ordinal);
         Assert.Contains("json_recursive_invalid_utf8_path", invalidUtf8DifferentialScript, StringComparison.Ordinal);

@@ -48,6 +48,21 @@ read_lock_value() {
     ' "$LOCK"
 }
 
+read_ripgrep_oracle_value() {
+    sh "$ROOT/eng/read-ripgrep-oracle.sh" "$1" "$2"
+}
+
+resolve_repo_path() {
+    case "$1" in
+        /*)
+            printf '%s\n' "$1"
+            ;;
+        *)
+            printf '%s/%s\n' "$ROOT" "$1"
+            ;;
+    esac
+}
+
 sha256_file() {
     if command -v shasum >/dev/null 2>&1; then
         shasum -a 256 "$1" | awk '{ print $1 }'
@@ -118,8 +133,9 @@ compare_case() {
 
 [ -x "$SCOUT" ] || fail "Missing executable Scout binary: $SCOUT"
 
-RG="$(read_lock_value "ripgrep_rg_path")" || fail "Missing ripgrep_rg_path in tests/PREREQS.lock."
-RG_SHA256="$(read_lock_value "ripgrep_rg_sha256")" || fail "Missing ripgrep_rg_sha256 in tests/PREREQS.lock."
+RG_VALUE="$(read_ripgrep_oracle_value "path" "ripgrep_rg_path")" || fail "Missing ripgrep oracle path in tests/PREREQS.lock."
+RG="$(resolve_repo_path "$RG_VALUE")"
+RG_SHA256="$(read_ripgrep_oracle_value "sha256" "ripgrep_rg_sha256")" || fail "Missing ripgrep oracle sha256 in tests/PREREQS.lock."
 [ -x "$RG" ] || fail "Missing executable reference rg binary: $RG"
 expect_equal "reference rg sha256" "$RG_SHA256" "$(sha256_file "$RG")"
 

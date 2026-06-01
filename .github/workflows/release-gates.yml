@@ -39,6 +39,8 @@ jobs:
         run: dotnet restore Scout.slnx
       - name: Fetch pinned corpora
         run: eng/fetch-corpora.sh --all
+      - name: Install pinned hyperfine
+        run: eng/setup-hyperfine.sh
       - name: Preflight
         run: eng/preflight.sh
       - name: Test
