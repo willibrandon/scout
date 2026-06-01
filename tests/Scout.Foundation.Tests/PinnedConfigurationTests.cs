@@ -108,8 +108,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("MSBuild warning gates", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/check-msbuild-warning-gates.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/verify-linux-prereqs.sh ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
-        Assert.Contains("portable-build-linux-arm64", workflow, StringComparison.Ordinal);
-        Assert.Contains("native-linux-arm64", workflow, StringComparison.Ordinal);
+        Assert.Contains("linux-arm64-host", workflow, StringComparison.Ordinal);
+        Assert.Contains("Linux ARM hosted gates", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/install-linux-host-prereqs.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/preflight.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("cancel-in-progress: true", workflow, StringComparison.Ordinal);
@@ -117,6 +117,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("Build pinned ripgrep oracle", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("eng/setup-ripgrep-oracle.sh", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("spike/build-unix.sh ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("spike/build-unix.sh linux-arm64", workflow, StringComparison.Ordinal);
         Assert.Contains("spike/build-windows.ps1 ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
         Assert.Contains("native/build-app-unix.sh ${{ matrix.rid }} --smoke-only", workflow, StringComparison.Ordinal);
         Assert.Contains("native/build-app-unix.sh osx-arm64 --with-differentials", workflow, StringComparison.Ordinal);

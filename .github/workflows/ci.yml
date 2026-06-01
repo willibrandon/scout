@@ -99,8 +99,8 @@ jobs:
           -p:NativeLib=Static
           -o artifacts/app/${{ matrix.rid }}
 
-  portable-build-linux-arm64:
-    name: portable build (linux-arm64)
+  linux-arm64-host:
+    name: Linux ARM hosted gates
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
@@ -138,6 +138,10 @@ jobs:
           -c Release
           -p:NativeLib=Static
           -o artifacts/app/linux-arm64
+      - name: Link native entry spike
+        run: spike/build-unix.sh linux-arm64
+      - name: Link native executable
+        run: native/build-app-unix.sh linux-arm64 --smoke-only
 
   portable-build-host:
     name: portable build (${{ matrix.rid }})
@@ -243,22 +247,6 @@ jobs:
       - name: Link native executable
         run: native/build-app-unix.sh ${{ matrix.rid }} --smoke-only
 
-  native-linux-arm64:
-    name: native Unix link (linux-arm64)
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - uses: actions/checkout@v6
-      - name: Install Linux host prerequisites
-        shell: sh
-        run: eng/install-linux-host-prereqs.sh
-      - uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: 10.0.102
-      - name: Link native entry spike
-        run: spike/build-unix.sh linux-arm64
-      - name: Link native executable
-        run: native/build-app-unix.sh linux-arm64 --smoke-only
-
   native-macos:
     name: native Unix link (${{ matrix.rid }})
     runs-on: ${{ matrix.runner }}
@@ -318,10 +306,9 @@ jobs:
       contents: read
     needs:
       - portable-build-linux
-      - portable-build-linux-arm64
+      - linux-arm64-host
       - portable-build-host
       - native-linux
-      - native-linux-arm64
       - native-macos
       - native-windows
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !cancelled() && !failure() }}
