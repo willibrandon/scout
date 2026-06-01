@@ -1858,6 +1858,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("check_ratio_gate", script, StringComparison.Ordinal);
         Assert.Contains("make_cold_tiny_corpus", script, StringComparison.Ordinal);
         Assert.Contains("resolve_hyperfine()", script, StringComparison.Ordinal);
+        Assert.Contains("read_ripgrep_oracle_value \"path\" \"ripgrep_rg_path\"", script, StringComparison.Ordinal);
+        Assert.Contains("read_ripgrep_oracle_value \"sha256\" \"ripgrep_rg_sha256\"", script, StringComparison.Ordinal);
         Assert.Contains("if [ \"$MODE\" = \"gate\" ]; then", script, StringComparison.Ordinal);
         Assert.Contains("Missing pinned hyperfine path in tests/PREREQS.lock.", script, StringComparison.Ordinal);
         Assert.Contains("check_file_hash \"hyperfine\" \"$pinned_path\" \"$pinned_sha256\"", script, StringComparison.Ordinal);

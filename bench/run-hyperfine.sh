@@ -166,6 +166,10 @@ resolve_repo_path() {
     esac
 }
 
+read_ripgrep_oracle_value() {
+    sh "$ROOT/eng/read-ripgrep-oracle.sh" "$1" "$2"
+}
+
 host_rid() {
     os="$(uname -s)"
     arch="$(uname -m)"
@@ -478,8 +482,9 @@ fi
 RID="$(host_rid)"
 DEFAULT_SCOUT_BIN="$ROOT/artifacts/bin/$RID/scout"
 SCOUT_BIN="${SCOUT_BIN:-$DEFAULT_SCOUT_BIN}"
-RG_BIN="$(read_lock_value "ripgrep_rg_path")" || fail "Missing ripgrep_rg_path in tests/PREREQS.lock."
-RG_SHA256="$(read_lock_value "ripgrep_rg_sha256")" || fail "Missing ripgrep_rg_sha256 in tests/PREREQS.lock."
+RG_VALUE="$(read_ripgrep_oracle_value "path" "ripgrep_rg_path")" || fail "Missing ripgrep oracle path in tests/PREREQS.lock."
+RG_BIN="$(resolve_repo_path "$RG_VALUE")"
+RG_SHA256="$(read_ripgrep_oracle_value "sha256" "ripgrep_rg_sha256")" || fail "Missing ripgrep oracle sha256 in tests/PREREQS.lock."
 HYPERFINE="$(resolve_hyperfine)"
 
 [ -x "$SCOUT_BIN" ] || fail "Missing executable Native AOT scout binary: $SCOUT_BIN"
