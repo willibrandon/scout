@@ -43,4 +43,12 @@ internal static class DiagnosticDescriptors
         category: "Scout.Structure",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
+
+    internal static readonly DiagnosticDescriptor DuplicateFlagOrder = new(
+        id: "SCOUT0006",
+        title: "Flag definition order values must be unique",
+        messageFormat: "Flag definitions '{0}' and '{1}' both declare pinned upstream order {2}",
+        category: "Scout.Structure",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
 }

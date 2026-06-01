@@ -43,7 +43,8 @@ public sealed class FlagCatalogSourceGenerator : IIncrementalGenerator
             order = -1;
         }
 
-        return new FlagCatalogEntry(symbol.Name, symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), order);
+        Location? location = symbol.Locations.Length > 0 ? symbol.Locations[0] : null;
+        return new FlagCatalogEntry(symbol.Name, symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), order, location);
     }
 
     private static bool ImplementsFlagInterface(INamedTypeSymbol symbol)
@@ -101,18 +102,33 @@ public sealed class FlagCatalogSourceGenerator : IIncrementalGenerator
         }
 
         bool hasErrors = false;
+        var entriesByOrder = new Dictionary<int, FlagCatalogEntry>();
         for (int index = 0; index < entries.Length; index++)
         {
-            if (entries[index].Order >= 0)
+            FlagCatalogEntry entry = entries[index];
+            if (entry.Order < 0)
             {
-                continue;
+                context.ReportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.FlagOrderIsRequired,
+                    entry.Location ?? Location.None,
+                    entry.TypeName));
+                hasErrors = true;
             }
 
-            context.ReportDiagnostic(Diagnostic.Create(
-                DiagnosticDescriptors.FlagOrderIsRequired,
-                Location.None,
-                entries[index].TypeName));
-            hasErrors = true;
+            if (entry.Order >= 0 && entriesByOrder.TryGetValue(entry.Order, out FlagCatalogEntry existing))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.DuplicateFlagOrder,
+                    entry.Location ?? Location.None,
+                    existing.TypeName,
+                    entry.TypeName,
+                    entry.Order));
+                hasErrors = true;
+            }
+            else if (entry.Order >= 0)
+            {
+                entriesByOrder.Add(entry.Order, entry);
+            }
         }
 
         if (hasErrors)

@@ -9,3 +9,4 @@ SCOUT0002 | Scout.Structure | Error | Type names must match file names.
 SCOUT0003 | Scout.Structure | Error | Namespaces must match the evaluated root namespace and folder structure.
 SCOUT0004 | Scout.Structure | Error | Hand-written and generated tests must not be skipped, ignored, explicit, or quarantined.
 SCOUT0005 | Scout.Structure | Error | Flag definitions must declare their pinned upstream order.
+SCOUT0006 | Scout.Structure | Error | Flag definition order values must be unique.
