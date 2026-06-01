@@ -375,6 +375,7 @@ public static class LiteralLineSearcher
         int searchOffset = 0;
         int lineStart = 0;
         long lineNumber = 1;
+        byte terminator = GetLineTerminator(nullData);
         while (searchOffset < haystack.Length)
         {
             int found = Find(haystack[searchOffset..], needle, asciiCaseInsensitive);
@@ -384,16 +385,12 @@ public static class LiteralLineSearcher
             }
 
             int matchStart = searchOffset + found;
-            while (lineStart < haystack.Length)
+            ReadOnlySpan<byte> skipped = haystack.Slice(lineStart, matchStart - lineStart);
+            int previousTerminator = skipped.LastIndexOf(terminator);
+            if (previousTerminator >= 0)
             {
-                int currentLineLength = GetLineLength(haystack[lineStart..], nullData);
-                if (matchStart < lineStart + currentLineLength)
-                {
-                    break;
-                }
-
-                lineStart += currentLineLength;
-                lineNumber++;
+                lineNumber += ByteCounter.Count(skipped, terminator);
+                lineStart += previousTerminator + 1;
             }
 
             int lineLength = GetLineLength(haystack[lineStart..], nullData);
