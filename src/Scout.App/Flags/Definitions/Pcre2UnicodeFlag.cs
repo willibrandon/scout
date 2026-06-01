@@ -2,6 +2,7 @@ using Scout;
 
 namespace Scout.Flags.Definitions;
 
+[FlagOrder(102)]
 internal readonly struct Pcre2UnicodeFlag : IFlag<Pcre2UnicodeFlag>
 {
     public static FlagDescriptor Descriptor { get; } = FlagDescriptor.SwitchWithName(

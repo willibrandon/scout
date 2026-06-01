@@ -2,6 +2,7 @@ using Scout;
 
 namespace Scout.Flags.Definitions;
 
+[FlagOrder(61)]
 internal readonly struct IgnoreParentFlag : IFlag<IgnoreParentFlag>
 {
     public static FlagDescriptor Descriptor { get; } = FlagDescriptor.SwitchWithName(

@@ -23,6 +23,7 @@ dotnet_diagnostic.SCOUT0001.severity = error
 dotnet_diagnostic.SCOUT0002.severity = error
 dotnet_diagnostic.SCOUT0003.severity = error
 dotnet_diagnostic.SCOUT0004.severity = error
+dotnet_diagnostic.SCOUT0005.severity = error
 
 [tests/**/*.cs]
 dotnet_code_quality.CA1515.output_kind = DynamicallyLinkedLibrary

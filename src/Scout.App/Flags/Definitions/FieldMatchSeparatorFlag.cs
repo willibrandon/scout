@@ -2,6 +2,7 @@ using Scout;
 
 namespace Scout.Flags.Definitions;
 
+[FlagOrder(21)]
 internal readonly struct FieldMatchSeparatorFlag : IFlag<FieldMatchSeparatorFlag>
 {
     public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Value(

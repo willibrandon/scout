@@ -2,6 +2,7 @@ using Scout;
 
 namespace Scout.Flags.Definitions;
 
+[FlagOrder(45)]
 internal readonly struct LineRegexpFlag : IFlag<LineRegexpFlag>
 {
     public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(

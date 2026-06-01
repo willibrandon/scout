@@ -38,7 +38,12 @@ public sealed class FlagCatalogSourceGenerator : IIncrementalGenerator
             return default;
         }
 
-        return new FlagCatalogEntry(symbol.Name, symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        if (!TryGetFlagOrder(symbol, out int order))
+        {
+            order = -1;
+        }
+
+        return new FlagCatalogEntry(symbol.Name, symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), order);
     }
 
     private static bool ImplementsFlagInterface(INamedTypeSymbol symbol)
@@ -61,9 +66,56 @@ public sealed class FlagCatalogSourceGenerator : IIncrementalGenerator
         return false;
     }
 
+    private static bool TryGetFlagOrder(INamedTypeSymbol symbol, out int order)
+    {
+        ImmutableArray<AttributeData> attributes = symbol.GetAttributes();
+        for (int index = 0; index < attributes.Length; index++)
+        {
+            AttributeData attribute = attributes[index];
+            INamedTypeSymbol? attributeClass = attribute.AttributeClass;
+            if (attributeClass is null ||
+                attributeClass.Name != "FlagOrderAttribute" ||
+                attributeClass.ContainingNamespace?.ToDisplayString() != "Scout" ||
+                attribute.ConstructorArguments.Length != 1)
+            {
+                continue;
+            }
+
+            TypedConstant argument = attribute.ConstructorArguments[0];
+            if (argument.Value is int value && value >= 0)
+            {
+                order = value;
+                return true;
+            }
+        }
+
+        order = -1;
+        return false;
+    }
+
     private static void Generate(SourceProductionContext context, ImmutableArray<FlagCatalogEntry> entries)
     {
         if (entries.Length == 0)
+        {
+            return;
+        }
+
+        bool hasErrors = false;
+        for (int index = 0; index < entries.Length; index++)
+        {
+            if (entries[index].Order >= 0)
+            {
+                continue;
+            }
+
+            context.ReportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.FlagOrderIsRequired,
+                Location.None,
+                entries[index].TypeName));
+            hasErrors = true;
+        }
+
+        if (hasErrors)
         {
             return;
         }
@@ -81,7 +133,7 @@ public sealed class FlagCatalogSourceGenerator : IIncrementalGenerator
         }
 
         var sorted = new List<FlagCatalogEntry>(entriesByName.Values);
-        sorted.Sort(CompareByPinnedUpstreamOrder);
+        sorted.Sort(CompareByFlagDefinitionOrder);
 
         ImmutableArray<FlagCatalogEntry>.Builder builder = ImmutableArray.CreateBuilder<FlagCatalogEntry>(sorted.Count);
         for (int index = 0; index < sorted.Count; index++)
@@ -92,124 +144,12 @@ public sealed class FlagCatalogSourceGenerator : IIncrementalGenerator
         return builder.ToImmutable();
     }
 
-    private static int CompareByPinnedUpstreamOrder(FlagCatalogEntry left, FlagCatalogEntry right)
+    private static int CompareByFlagDefinitionOrder(FlagCatalogEntry left, FlagCatalogEntry right)
     {
-        int order = GetPinnedUpstreamOrder(left.TypeName).CompareTo(GetPinnedUpstreamOrder(right.TypeName));
+        int order = left.Order.CompareTo(right.Order);
         return order != 0
             ? order
             : string.Compare(left.FullyQualifiedName, right.FullyQualifiedName, StringComparison.Ordinal);
-    }
-
-    private static int GetPinnedUpstreamOrder(string typeName)
-    {
-        return typeName switch
-        {
-            "RegexpFlag" => 0,
-            "FileFlag" => 1,
-            "AfterContextFlag" => 2,
-            "BeforeContextFlag" => 3,
-            "BinaryFlag" => 4,
-            "BlockBufferedFlag" => 5,
-            "ByteOffsetFlag" => 6,
-            "CaseSensitiveFlag" => 7,
-            "ColorFlag" => 8,
-            "ColorsFlag" => 9,
-            "ColumnFlag" => 10,
-            "ContextFlag" => 11,
-            "ContextSeparatorFlag" => 12,
-            "CountFlag" => 13,
-            "CountMatchesFlag" => 14,
-            "CrlfFlag" => 15,
-            "DebugFlag" => 16,
-            "DfaSizeLimitFlag" => 17,
-            "EncodingFlag" => 18,
-            "EngineFlag" => 19,
-            "FieldContextSeparatorFlag" => 20,
-            "FieldMatchSeparatorFlag" => 21,
-            "FilesFlag" => 22,
-            "FilesWithMatchesFlag" => 23,
-            "FilesWithoutMatchFlag" => 24,
-            "FixedStringsFlag" => 25,
-            "FollowFlag" => 26,
-            "GenerateFlag" => 27,
-            "GlobFlag" => 28,
-            "GlobCaseInsensitiveFlag" => 29,
-            "HeadingFlag" => 30,
-            "HelpFlag" => 31,
-            "HiddenFlag" => 32,
-            "HostnameBinFlag" => 33,
-            "HyperlinkFormatFlag" => 34,
-            "IglobFlag" => 35,
-            "IgnoreCaseFlag" => 36,
-            "IgnoreFileFlag" => 37,
-            "IgnoreFileCaseInsensitiveFlag" => 38,
-            "IncludeZeroFlag" => 39,
-            "InvertMatchFlag" => 40,
-            "JsonFlag" => 41,
-            "LineBufferedFlag" => 42,
-            "LineNumberFlag" => 43,
-            "LineNumberNoFlag" => 44,
-            "LineRegexpFlag" => 45,
-            "MaxColumnsFlag" => 46,
-            "MaxColumnsPreviewFlag" => 47,
-            "MaxCountFlag" => 48,
-            "MaxDepthFlag" => 49,
-            "MaxFilesizeFlag" => 50,
-            "MmapFlag" => 51,
-            "MultilineFlag" => 52,
-            "MultilineDotallFlag" => 53,
-            "NoConfigFlag" => 54,
-            "IgnoreFlag" => 55,
-            "IgnoreDotFlag" => 56,
-            "IgnoreExcludeFlag" => 57,
-            "IgnoreFilesFlag" => 58,
-            "IgnoreGlobalFlag" => 59,
-            "IgnoreMessagesFlag" => 60,
-            "IgnoreParentFlag" => 61,
-            "IgnoreVcsFlag" => 62,
-            "MessagesFlag" => 63,
-            "RequireGitFlag" => 64,
-            "UnicodeFlag" => 65,
-            "NullFlag" => 66,
-            "NullDataFlag" => 67,
-            "OneFileSystemFlag" => 68,
-            "OnlyMatchingFlag" => 69,
-            "PathSeparatorFlag" => 70,
-            "PassthruFlag" => 71,
-            "Pcre2Flag" => 72,
-            "Pcre2VersionFlag" => 73,
-            "PreFlag" => 74,
-            "PreGlobFlag" => 75,
-            "PrettyFlag" => 76,
-            "QuietFlag" => 77,
-            "RegexSizeLimitFlag" => 78,
-            "ReplaceFlag" => 79,
-            "SearchZipFlag" => 80,
-            "SmartCaseFlag" => 81,
-            "SortFlag" => 82,
-            "SortrFlag" => 83,
-            "StatsFlag" => 84,
-            "StopOnNonmatchFlag" => 85,
-            "TextFlag" => 86,
-            "ThreadsFlag" => 87,
-            "TraceFlag" => 88,
-            "TrimFlag" => 89,
-            "TypeFlag" => 90,
-            "TypeNotFlag" => 91,
-            "TypeAddFlag" => 92,
-            "TypeClearFlag" => 93,
-            "TypeListFlag" => 94,
-            "UnrestrictedFlag" => 95,
-            "VersionFlag" => 96,
-            "VimgrepFlag" => 97,
-            "WithFilenameFlag" => 98,
-            "WithFilenameNoFlag" => 99,
-            "WordRegexpFlag" => 100,
-            "AutoHybridRegexFlag" => 101,
-            "Pcre2UnicodeFlag" => 102,
-            "SortFilesFlag" => 103,
-            _ => int.MaxValue,
-        };
     }
 
     private static string GenerateCatalog(ImmutableArray<FlagCatalogEntry> entries)

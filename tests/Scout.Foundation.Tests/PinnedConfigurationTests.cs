@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -505,6 +506,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Equal(GeneratedFlagCatalog.Descriptors.Length, definitionFiles.Length);
         Assert.Equal(104, definitionFiles.Length);
 
+        var orders = new HashSet<int>();
         foreach (string path in definitionFiles)
         {
             string text = File.ReadAllText(path);
@@ -517,9 +519,61 @@ public sealed partial class PinnedConfigurationTests
             {
                 violations.Add(Path.GetRelativePath(root, path) + " does not implement IFlag<TSelf>.");
             }
+
+            if (!TryReadFlagOrder(text, out int order))
+            {
+                violations.Add(Path.GetRelativePath(root, path) + " does not declare [FlagOrder(<pinned upstream index>)].");
+            }
+            else if (!orders.Add(order))
+            {
+                violations.Add(Path.GetRelativePath(root, path) + " duplicates flag order " + order + ".");
+            }
+        }
+
+        for (int order = 0; order < definitionFiles.Length; order++)
+        {
+            if (!orders.Contains(order))
+            {
+                violations.Add("Missing flag order " + order + ".");
+            }
         }
 
         Assert.Empty(violations);
+    }
+
+    /// <summary>
+    /// Verifies the flag catalog generator reads ordering from flag definitions.
+    /// </summary>
+    [Fact]
+    public void FlagCatalogGeneratorReadsOrderFromDefinitions()
+    {
+        string root = FindRepositoryRoot();
+        string generator = File.ReadAllText(Path.Combine(root, "src", "Scout.SourceGen", "FlagCatalogSourceGenerator.cs"));
+
+        Assert.Contains("FlagOrderAttribute", generator, StringComparison.Ordinal);
+        Assert.Contains("CompareByFlagDefinitionOrder", generator, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetPinnedUpstreamOrder", generator, StringComparison.Ordinal);
+    }
+
+    private static bool TryReadFlagOrder(string source, out int order)
+    {
+        const string Prefix = "[FlagOrder(";
+        int start = source.IndexOf(Prefix, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            order = -1;
+            return false;
+        }
+
+        start += Prefix.Length;
+        int end = source.IndexOf(')', start);
+        if (end < start)
+        {
+            order = -1;
+            return false;
+        }
+
+        return int.TryParse(source[start..end], NumberStyles.None, CultureInfo.InvariantCulture, out order);
     }
 
     /// <summary>

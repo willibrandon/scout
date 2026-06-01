@@ -2,6 +2,7 @@ using Scout;
 
 namespace Scout.Flags.Definitions;
 
+[FlagOrder(100)]
 internal readonly struct WordRegexpFlag : IFlag<WordRegexpFlag>
 {
     public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(

@@ -2,6 +2,7 @@ using Scout;
 
 namespace Scout.Flags.Definitions;
 
+[FlagOrder(78)]
 internal readonly struct RegexSizeLimitFlag : IFlag<RegexSizeLimitFlag>
 {
     public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Value(

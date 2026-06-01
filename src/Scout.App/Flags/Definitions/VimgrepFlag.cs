@@ -2,6 +2,7 @@ using Scout;
 
 namespace Scout.Flags.Definitions;
 
+[FlagOrder(97)]
 internal readonly struct VimgrepFlag : IFlag<VimgrepFlag>
 {
     public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(

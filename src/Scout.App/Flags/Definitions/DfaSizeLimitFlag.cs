@@ -2,6 +2,7 @@ using Scout;
 
 namespace Scout.Flags.Definitions;
 
+[FlagOrder(17)]
 internal readonly struct DfaSizeLimitFlag : IFlag<DfaSizeLimitFlag>
 {
     public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Value(

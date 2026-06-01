@@ -2,6 +2,7 @@ using Scout;
 
 namespace Scout.Flags.Definitions;
 
+[FlagOrder(29)]
 internal readonly struct GlobCaseInsensitiveFlag : IFlag<GlobCaseInsensitiveFlag>
 {
     public static FlagDescriptor Descriptor { get; } = FlagDescriptor.SwitchWithName(

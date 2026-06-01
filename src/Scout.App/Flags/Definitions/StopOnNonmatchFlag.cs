@@ -2,6 +2,7 @@ using Scout;
 
 namespace Scout.Flags.Definitions;
 
+[FlagOrder(85)]
 internal readonly struct StopOnNonmatchFlag : IFlag<StopOnNonmatchFlag>
 {
     public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(

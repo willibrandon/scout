@@ -2,6 +2,7 @@ using Scout;
 
 namespace Scout.Flags.Definitions;
 
+[FlagOrder(50)]
 internal readonly struct MaxFilesizeFlag : IFlag<MaxFilesizeFlag>
 {
     public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Value(

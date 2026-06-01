@@ -2,6 +2,7 @@ using Scout;
 
 namespace Scout.Flags.Definitions;
 
+[FlagOrder(38)]
 internal readonly struct IgnoreFileCaseInsensitiveFlag : IFlag<IgnoreFileCaseInsensitiveFlag>
 {
     public static FlagDescriptor Descriptor { get; } = FlagDescriptor.SwitchWithName(

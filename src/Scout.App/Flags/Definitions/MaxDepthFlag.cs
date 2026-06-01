@@ -2,6 +2,7 @@ using Scout;
 
 namespace Scout.Flags.Definitions;
 
+[FlagOrder(49)]
 internal readonly struct MaxDepthFlag : IFlag<MaxDepthFlag>
 {
     public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Value(

@@ -2,6 +2,7 @@ using Scout;
 
 namespace Scout.Flags.Definitions;
 
+[FlagOrder(34)]
 internal readonly struct HyperlinkFormatFlag : IFlag<HyperlinkFormatFlag>
 {
     public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Value(

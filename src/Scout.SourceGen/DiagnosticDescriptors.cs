@@ -35,4 +35,12 @@ internal static class DiagnosticDescriptors
         category: "Scout.Structure",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
+
+    internal static readonly DiagnosticDescriptor FlagOrderIsRequired = new(
+        id: "SCOUT0005",
+        title: "Flag definitions must declare their pinned upstream order",
+        messageFormat: "Flag definition '{0}' must be annotated with [FlagOrder(<pinned upstream index>)]",
+        category: "Scout.Structure",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
 }

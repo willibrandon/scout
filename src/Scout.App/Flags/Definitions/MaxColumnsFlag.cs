@@ -2,6 +2,7 @@ using Scout;
 
 namespace Scout.Flags.Definitions;
 
+[FlagOrder(46)]
 internal readonly struct MaxColumnsFlag : IFlag<MaxColumnsFlag>
 {
     public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Value(

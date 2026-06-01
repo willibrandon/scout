@@ -2,6 +2,7 @@ using Scout;
 
 namespace Scout.Flags.Definitions;
 
+[FlagOrder(77)]
 internal readonly struct QuietFlag : IFlag<QuietFlag>
 {
     public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(

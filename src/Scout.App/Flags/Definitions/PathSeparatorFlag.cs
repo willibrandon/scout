@@ -2,6 +2,7 @@ using Scout;
 
 namespace Scout.Flags.Definitions;
 
+[FlagOrder(70)]
 internal readonly struct PathSeparatorFlag : IFlag<PathSeparatorFlag>
 {
     public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Value(

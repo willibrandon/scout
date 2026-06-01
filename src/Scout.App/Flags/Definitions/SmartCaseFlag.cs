@@ -2,6 +2,7 @@ using Scout;
 
 namespace Scout.Flags.Definitions;
 
+[FlagOrder(81)]
 internal readonly struct SmartCaseFlag : IFlag<SmartCaseFlag>
 {
     public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(

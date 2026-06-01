@@ -2,6 +2,7 @@ using Scout;
 
 namespace Scout.Flags.Definitions;
 
+[FlagOrder(33)]
 internal readonly struct HostnameBinFlag : IFlag<HostnameBinFlag>
 {
     public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Value(

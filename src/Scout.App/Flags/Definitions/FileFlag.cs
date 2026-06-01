@@ -2,6 +2,7 @@ using Scout;
 
 namespace Scout.Flags.Definitions;
 
+[FlagOrder(1)]
 internal readonly struct FileFlag : IFlag<FileFlag>
 {
     public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Value(

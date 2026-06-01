@@ -2,6 +2,7 @@ using Scout;
 
 namespace Scout.Flags.Definitions;
 
+[FlagOrder(67)]
 internal readonly struct NullDataFlag : IFlag<NullDataFlag>
 {
     public static FlagDescriptor Descriptor { get; } = FlagDescriptor.Switch(
