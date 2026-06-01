@@ -41,9 +41,9 @@ base_image = "debian:bookworm-slim"
 index_digest = "sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb"
 amd64_digest = "sha256:b29f74a267526ae6ea104eed6c46133b0ca70ce812525df8cd5817698f0a624a"
 arm64_digest = "sha256:f1433d3ee18e12f45682b29d91b6356e54e40d6b47f5f8ac81e80f35cca8cfe7"
-snapshot_url = "http://snapshot.debian.org/archive/debian/20260501T000000Z"
-libc6_version = "2.36-9+deb12u13"
-libc_bin_version = "2.36-9+deb12u13"
+snapshot_url = "http://snapshot.debian.org/archive/debian/20260531T000000Z"
+libc6_version = "2.36-9+deb12u14"
+libc_bin_version = "2.36-9+deb12u14"
 
 [pcre2]
 binding = "pcre2"

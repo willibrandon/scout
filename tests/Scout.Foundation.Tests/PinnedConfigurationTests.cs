@@ -81,14 +81,15 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("gh workflow run release-gates.yml --repo \"${{ github.repository }}\" --ref main -f checkout_ref=\"${{ github.sha }}\"", ciWorkflow, StringComparison.Ordinal);
         Assert.Contains("checkout_ref:", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: \"true\"", workflow, StringComparison.Ordinal);
-        Assert.Contains("LINUX_LIBC_VERSION: \"2.36-9+deb12u13\"", workflow, StringComparison.Ordinal);
-        Assert.Contains("LINUX_SNAPSHOT_URL: \"http://snapshot.debian.org/archive/debian/20260501T000000Z\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("LINUX_LIBC_VERSION: \"2.36-9+deb12u14\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("LINUX_SNAPSHOT_URL: \"http://snapshot.debian.org/archive/debian/20260531T000000Z\"", workflow, StringComparison.Ordinal);
         Assert.Contains("image: docker.io/library/debian:bookworm-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb", workflow, StringComparison.Ordinal);
         Assert.Contains("Pinned snapshot apt prerequisites", workflow, StringComparison.Ordinal);
         Assert.Contains("rm -f /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list", workflow, StringComparison.Ordinal);
         Assert.Contains("printf 'deb %s bookworm main\\n' \"$LINUX_SNAPSHOT_URL\" > /etc/apt/sources.list", workflow, StringComparison.Ordinal);
         Assert.Contains("Acquire::Check-Valid-Until false", workflow, StringComparison.Ordinal);
-        Assert.Contains("apt-get install -y --no-install-recommends --allow-downgrades", workflow, StringComparison.Ordinal);
+        Assert.Contains("apt-get install -y --no-install-recommends", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("--allow-downgrades", workflow, StringComparison.Ordinal);
         Assert.Contains("libc6=\"$LINUX_LIBC_VERSION\"", workflow, StringComparison.Ordinal);
         Assert.Contains("libc-bin=\"$LINUX_LIBC_VERSION\"", workflow, StringComparison.Ordinal);
         Assert.Contains("uses: actions/checkout@v6", workflow, StringComparison.Ordinal);
@@ -1695,9 +1696,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("index_digest = \"sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("amd64_digest = \"sha256:b29f74a267526ae6ea104eed6c46133b0ca70ce812525df8cd5817698f0a624a\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("arm64_digest = \"sha256:f1433d3ee18e12f45682b29d91b6356e54e40d6b47f5f8ac81e80f35cca8cfe7\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("snapshot_url = \"http://snapshot.debian.org/archive/debian/20260501T000000Z\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("libc6_version = \"2.36-9+deb12u13\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("libc_bin_version = \"2.36-9+deb12u13\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("snapshot_url = \"http://snapshot.debian.org/archive/debian/20260531T000000Z\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("libc6_version = \"2.36-9+deb12u14\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("libc_bin_version = \"2.36-9+deb12u14\"", prerequisiteLock, StringComparison.Ordinal);
 
         for (int index = 0; index < tools.Length; index++)
         {
@@ -1734,7 +1735,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("LINUX_LIBC_VERSION", verifyScript, StringComparison.Ordinal);
         Assert.Contains("dpkg-query -W -f='${Version}' libc6", verifyScript, StringComparison.Ordinal);
         Assert.Contains("Unpinned Debian source remains", verifyScript, StringComparison.Ordinal);
-        Assert.Contains("--allow-downgrades libc6='\"$LIBC_VERSION\"' libc-bin='\"$LIBC_VERSION\"'", resolveScript, StringComparison.Ordinal);
+        Assert.Contains("--no-install-recommends libc6='\"$LIBC_VERSION\"' libc-bin='\"$LIBC_VERSION\"'", resolveScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("--allow-downgrades", resolveScript, StringComparison.Ordinal);
         Assert.Contains("rm -f /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list", resolveScript, StringComparison.Ordinal);
     }
 
