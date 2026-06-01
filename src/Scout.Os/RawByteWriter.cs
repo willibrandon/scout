@@ -8,7 +8,7 @@ namespace Scout;
 /// </summary>
 public sealed class RawByteWriter
 {
-    private const int BufferSize = 8192;
+    private const int BufferSize = 64 * 1024;
 
     private static readonly byte[] NewLine = [(byte)'\n'];
 
