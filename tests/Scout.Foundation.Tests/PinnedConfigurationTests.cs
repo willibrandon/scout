@@ -850,7 +850,11 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("OK ${Rid}: UTF-16 argv round-trip", spikeWindowsBuildScript, StringComparison.Ordinal);
         Assert.Contains("Unix RIDs include a deliberately non-UTF-8 `argv` byte round-trip; Windows RIDs include a non-ASCII UTF-16 command-line round-trip", design, StringComparison.Ordinal);
         Assert.Contains("raw non-UTF-8 Unix `argv` bytes; non-ASCII Windows UTF-16 command line", design, StringComparison.Ordinal);
-        Assert.Contains("Reproducing on the remaining four RIDs", design, StringComparison.Ordinal);
+        Assert.Contains("local transcript plus CI proof", design, StringComparison.Ordinal);
+        Assert.Contains("Unix jobs run `spike/build-unix.sh` for `osx-arm64`, `osx-x64`, `linux-x64`, and `linux-arm64`", design, StringComparison.Ordinal);
+        Assert.Contains("Windows jobs run `spike/build-windows.ps1` for `win-x64` and `win-arm64`", design, StringComparison.Ordinal);
+        Assert.Contains("green CI run for the commit under test", design, StringComparison.Ordinal);
+        Assert.DoesNotContain("Reproducing on the remaining four RIDs", design, StringComparison.Ordinal);
         Assert.DoesNotContain("Reproducing on the remaining five RIDs", design, StringComparison.Ordinal);
         Assert.DoesNotContain("raw non-UTF-8 `argv`/`envp` byte round-trip, built and run on all six RIDs", design, StringComparison.Ordinal);
     }
