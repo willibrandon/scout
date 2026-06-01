@@ -49,6 +49,7 @@ DIFFERENTIAL_MODE="${2:---with-differentials}"
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 OUT="$ROOT/artifacts/app/$RID"
 BIN="$ROOT/artifacts/bin/$RID"
+REAL_BIN="$BIN/scout-real"
 PCRE2_LIB="$ROOT/artifacts/native/pcre2/$RID/lib/libpcre2-8.a"
 
 cd "$ROOT"
@@ -89,7 +90,7 @@ if [ "$RID" = "osx-arm64" ]; then
         -Wl,-force_load,"$PCRE2_LIB" \
         -lc++ -lobjc -lz \
         -framework Foundation -framework Security -framework GSS -framework CryptoKit -framework Network \
-        -o "$BIN/scout"
+        -o "$REAL_BIN"
 elif [ "$RID" = "osx-x64" ]; then
     clang -arch x86_64 "$ROOT/native/entry/scout_main.c" \
         "$OUT/scout.a" \
@@ -102,7 +103,7 @@ elif [ "$RID" = "osx-x64" ]; then
         -Wl,-force_load,"$PCRE2_LIB" \
         -lc++ -lobjc -lz \
         -framework Foundation -framework Security -framework GSS -framework CryptoKit -framework Network \
-        -o "$BIN/scout"
+        -o "$REAL_BIN"
 elif [ "$RID" = "linux-x64" ] || [ "$RID" = "linux-arm64" ]; then
     CC="${CC:-cc}"
     VXSORT_ARCHIVE=
@@ -122,7 +123,13 @@ elif [ "$RID" = "linux-x64" ] || [ "$RID" = "linux-arm64" ]; then
         -Wl,--whole-archive "$PCRE2_LIB" -Wl,--no-whole-archive \
         -Wl,--end-group \
         -lstdc++ -lz -lpthread -ldl -lm -lrt \
-        -o "$BIN/scout"
+        -o "$REAL_BIN"
+fi
+
+if [ "$RID" = "osx-arm64" ] || [ "$RID" = "osx-x64" ]; then
+    clang -O2 -DSCOUT_LAUNCHER "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -o "$BIN/scout"
+else
+    "$CC" -O2 -DSCOUT_LAUNCHER "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -o "$BIN/scout"
 fi
 
 "$BIN/scout" -V > "$BIN/version.out"
@@ -131,6 +138,10 @@ expect_equal_file "scout -V" "$BIN/version.expected" "$BIN/version.out"
 "$BIN/scout" --pcre2-version > "$BIN/pcre2-version.out"
 printf 'PCRE2 10.46 is available (JIT is available)\n' > "$BIN/pcre2-version.expected"
 expect_equal_file "scout --pcre2-version" "$BIN/pcre2-version.expected" "$BIN/pcre2-version.out"
+printf 'needle\n' > "$BIN/native-fast-literal.txt"
+"$BIN/scout" --no-config needle "$BIN/native-fast-literal.txt" > "$BIN/native-fast-literal.out"
+printf 'needle\n' > "$BIN/native-fast-literal.expected"
+expect_equal_file "native fast literal search" "$BIN/native-fast-literal.expected" "$BIN/native-fast-literal.out"
 cat > "$BIN/pcre2-smoke.txt" <<'EOF'
 foobar
 foo
@@ -252,8 +263,8 @@ for symbol in \
     pcre2_match_data_create_from_pattern_8 \
     pcre2_match_data_free_8; do
     exported_symbol="$PCRE2_SYMBOL_PREFIX$symbol"
-    if ! nm -g "$BIN/scout" | grep " $exported_symbol$" >/dev/null; then
-        printf 'Missing native PCRE2 symbol %s in %s.\n' "$exported_symbol" "$BIN/scout" >&2
+    if ! nm -g "$REAL_BIN" | grep " $exported_symbol$" >/dev/null; then
+        printf 'Missing native PCRE2 symbol %s in %s.\n' "$exported_symbol" "$REAL_BIN" >&2
         exit 1
     fi
 done

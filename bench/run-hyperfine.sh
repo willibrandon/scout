@@ -424,6 +424,27 @@ run_pair() {
     fi
 }
 
+run_pair_no_shell() {
+    name="$1"
+    gate="$2"
+    rg_command="$3"
+    scout_command="$4"
+    json="$OUT_DIR/$name.json"
+
+    printf '%s\n' "== $name"
+    "$HYPERFINE" \
+        -N \
+        --warmup "$WARMUP" \
+        --runs "$RUNS" \
+        --export-json "$json" \
+        --command-name "rg:$name" "$rg_command" \
+        --command-name "scout:$name" "$scout_command"
+
+    if [ "$MODE" = "gate" ]; then
+        check_ratio_gate "$name" "$gate" "$json"
+    fi
+}
+
 list_workloads() {
     printf '%s\n' \
         'smoke_large_literal          generated single file, no release gate' \
@@ -516,12 +537,12 @@ if [ "$MODE" = "smoke" ]; then
         "1.30" \
         "$Q_RG --no-config -n 'needle' $Q_TREE" \
         "$Q_SCOUT --no-config -n 'needle' $Q_TREE"
-    run_pair \
+    run_pair_no_shell \
         "smoke_cold_version" \
         "1.00" \
         "$Q_RG --no-config --version" \
         "$Q_SCOUT --no-config --version"
-    run_pair \
+    run_pair_no_shell \
         "smoke_cold_tiny_search" \
         "1.00" \
         "$Q_RG --no-config 'needle' $Q_TINY" \
@@ -559,12 +580,12 @@ run_pair \
     "1.30" \
     "$Q_RG --no-config -n 'struct' $Q_LINUX" \
     "$Q_SCOUT --no-config -n 'struct' $Q_LINUX"
-run_pair \
+run_pair_no_shell \
     "cold_version" \
     "1.00" \
     "$Q_RG --no-config --version" \
     "$Q_SCOUT --no-config --version"
-run_pair \
+run_pair_no_shell \
     "cold_tiny_search" \
     "1.00" \
     "$Q_RG --no-config 'needle' $Q_TINY" \

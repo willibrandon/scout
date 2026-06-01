@@ -813,6 +813,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("LocalFree", nativeArgumentReader, StringComparison.Ordinal);
         Assert.Contains("OsString.FromUnixBytes", nativeArgumentReader, StringComparison.Ordinal);
         Assert.Contains("OsString.FromWindowsString", nativeArgumentReader, StringComparison.Ordinal);
+        Assert.Contains("try_run_native_fast_path(argc, argv)", unixEntry, StringComparison.Ordinal);
+        Assert.Contains("run_simple_tiny_search", unixEntry, StringComparison.Ordinal);
         Assert.Contains("return scout_entry(argc, argv, envp);", unixEntry, StringComparison.Ordinal);
         Assert.Contains("int wmain(int argc, wchar_t **argv, wchar_t **envp)", windowsEntry, StringComparison.Ordinal);
         Assert.Contains("return scout_entry(0, (char **)0, (char **)0);", windowsEntry, StringComparison.Ordinal);
@@ -1391,6 +1393,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("osx-arm64|osx-x64|linux-x64|linux-arm64", appBuildScript, StringComparison.Ordinal);
         Assert.DoesNotContain("not implemented", appBuildScript, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("\"$ROOT/native/pcre2/build-unix.sh\" \"$RID\"", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("REAL_BIN=\"$BIN/scout-real\"", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("-DSCOUT_LAUNCHER", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("artifacts/native/pcre2/$RID/lib/libpcre2-8.a", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-Wl,-force_load,\"$PCRE2_LIB\"", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-Wl,--whole-archive \"$PCRE2_LIB\" -Wl,--no-whole-archive", appBuildScript, StringComparison.Ordinal);
@@ -1875,6 +1879,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("cold_tiny_search", script, StringComparison.Ordinal);
         Assert.Contains("peak RSS <= 1.50x or rg + 32MiB", script, StringComparison.Ordinal);
         Assert.Contains("check_ratio_gate", script, StringComparison.Ordinal);
+        Assert.Contains("run_pair_no_shell", script, StringComparison.Ordinal);
+        Assert.Contains("-N", script, StringComparison.Ordinal);
         Assert.Contains("make_cold_tiny_corpus", script, StringComparison.Ordinal);
         Assert.Contains("resolve_hyperfine()", script, StringComparison.Ordinal);
         Assert.Contains("read_ripgrep_oracle_value \"path\" \"ripgrep_rg_path\"", script, StringComparison.Ordinal);
