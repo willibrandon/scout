@@ -426,20 +426,21 @@ internal static class StandardSearchTargetOperations
 
         try
         {
-            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() => entry =>
+            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() =>
             {
-                if (!entry.IsFile)
-                {
-                    return WalkState.Continue;
-                }
-
                 MemoryStream buffer = new();
-                bool fileMatched = false;
-                bool transferredBuffer = false;
-                try
+                var writer = new RawByteWriter(buffer);
+                return entry =>
                 {
-                    var writer = new RawByteWriter(buffer);
+                    if (!entry.IsFile)
+                    {
+                        return WalkState.Continue;
+                    }
+
+                    buffer.Position = 0;
+                    buffer.SetLength(0);
                     bool fileWroteHeading = false;
+                    bool fileMatched = false;
                     bool fileErrored = false;
                     byte[] displayPathBytes = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
                     SearchDirectoryEntryFile(
@@ -471,19 +472,11 @@ internal static class StandardSearchTargetOperations
 
                     if (buffer.Length > 0)
                     {
-                        outputs.Add(new BufferedSearchOutput(buffer));
-                        transferredBuffer = true;
+                        outputs.Add(BufferedSearchOutput.CopyFrom(buffer));
                     }
-                }
-                finally
-                {
-                    if (!transferredBuffer)
-                    {
-                        buffer.Dispose();
-                    }
-                }
 
-                return fileMatched && lowArgs.Quiet ? WalkState.Quit : WalkState.Continue;
+                    return fileMatched && lowArgs.Quiet ? WalkState.Quit : WalkState.Continue;
+                };
             });
         }
         finally
@@ -646,18 +639,19 @@ internal static class StandardSearchTargetOperations
 
         try
         {
-            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() => entry =>
+            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() =>
             {
-                if (!entry.IsFile)
-                {
-                    return WalkState.Continue;
-                }
-
                 MemoryStream buffer = new();
-                bool transferredBuffer = false;
-                try
+                var writer = new RawByteWriter(buffer);
+                return entry =>
                 {
-                    var writer = new RawByteWriter(buffer);
+                    if (!entry.IsFile)
+                    {
+                        return WalkState.Continue;
+                    }
+
+                    buffer.Position = 0;
+                    buffer.SetLength(0);
                     bool fileWroteHeading = false;
                     bool fileMatched = false;
                     bool fileErrored = false;
@@ -698,19 +692,11 @@ internal static class StandardSearchTargetOperations
 
                     if (buffer.Length > 0)
                     {
-                        outputs.Add(new BufferedSearchOutput(buffer));
-                        transferredBuffer = true;
+                        outputs.Add(BufferedSearchOutput.CopyFrom(buffer));
                     }
-                }
-                finally
-                {
-                    if (!transferredBuffer)
-                    {
-                        buffer.Dispose();
-                    }
-                }
 
-                return WalkState.Continue;
+                    return WalkState.Continue;
+                };
             });
         }
         finally
