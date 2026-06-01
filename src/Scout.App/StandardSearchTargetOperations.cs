@@ -8,7 +8,7 @@ namespace Scout;
 
 internal static class StandardSearchTargetOperations
 {
-    private const int ParallelOutputFlushThreshold = 64 * 1024;
+    private const int ParallelOutputFlushThreshold = 256 * 1024;
 
     internal static bool SearchStandardInput(
         IReadOnlyList<byte[]> pattern,

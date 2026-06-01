@@ -5,6 +5,7 @@ namespace Scout;
 internal struct StandardSearchSink : ILineSink
 {
     private static readonly byte[] NullByte = [0];
+    private static readonly byte[] UninitializedPlainLinePrefix = [];
 
     private readonly RawByteWriter output;
     private readonly OutputPath? prefix;
@@ -20,7 +21,7 @@ internal struct StandardSearchSink : ILineSink
     private readonly ReadOnlyMemory<byte> lineTerminator;
     private readonly long lineNumberOffset;
     private readonly long byteOffsetOffset;
-    private readonly byte[]? plainLinePrefix;
+    private byte[]? plainLinePrefix;
     private byte[]? plainLineHeaderBuffer;
 
     public StandardSearchSink(
@@ -54,7 +55,9 @@ internal struct StandardSearchSink : ILineSink
         this.lineTerminator = lineTerminator;
         this.lineNumberOffset = lineNumberOffset;
         this.byteOffsetOffset = byteOffsetOffset;
-        plainLinePrefix = CreatePlainLinePrefix(prefix, matchSeparator, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color);
+        plainLinePrefix = CanUsePlainLinePrefix(prefix, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color)
+            ? UninitializedPlainLinePrefix
+            : null;
         plainLineHeaderBuffer = null;
     }
 
@@ -233,9 +236,8 @@ internal struct StandardSearchSink : ILineSink
         return lineTerminator.Length == 1 && lineTerminator.Span[0] == 0;
     }
 
-    private static byte[]? CreatePlainLinePrefix(
+    private static bool CanUsePlainLinePrefix(
         OutputPath? prefix,
-        ReadOnlyMemory<byte> matchSeparator,
         bool lineNumber,
         bool column,
         bool byteOffset,
@@ -254,9 +256,14 @@ internal struct StandardSearchSink : ILineSink
             nullPathTerminator ||
             lineLimit.IsEnabled)
         {
-            return null;
+            return false;
         }
 
+        return true;
+    }
+
+    private static byte[] CreatePlainLinePrefix(OutputPath prefix, ReadOnlyMemory<byte> matchSeparator)
+    {
         byte[] bytes = new byte[prefix.Display.Length + matchSeparator.Length];
         prefix.Display.CopyTo(bytes, 0);
         matchSeparator.CopyTo(bytes.AsMemory(prefix.Display.Length));
@@ -266,6 +273,11 @@ internal struct StandardSearchSink : ILineSink
     private void WritePlainLineHeader(long lineNumber)
     {
         ReadOnlySpan<byte> separator = matchSeparator.Span;
+        if (ReferenceEquals(plainLinePrefix, UninitializedPlainLinePrefix))
+        {
+            plainLinePrefix = CreatePlainLinePrefix(prefix!, matchSeparator);
+        }
+
         int digitCount = CountDigits(lineNumber);
         int headerLength = plainLinePrefix!.Length + digitCount + separator.Length;
         byte[] header = plainLineHeaderBuffer ??= new byte[plainLinePrefix.Length + 20 + separator.Length];
