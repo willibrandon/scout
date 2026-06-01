@@ -161,6 +161,28 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
+    /// Verifies class-sequence regex acceleration can skip earliest-column Unicode work when only line selection is needed.
+    /// </summary>
+    [Fact]
+    public void SearchClassSequenceAcceleratorCanSkipUnicodeColumnFallback()
+    {
+        var sink = new CapturingLineSink();
+        byte[][] patterns = ["\\w{5}\\s+\\w{5}\\s+\\w{5}"u8.ToArray()];
+        byte[] haystack = Encoding.UTF8.GetBytes("\u00e9\u00e9\u00e9\u00e9\u00e9 fghij klmno abcde fghij klmno\n");
+
+        bool matched = LiteralLineSearcher.Search(
+            haystack,
+            patterns,
+            ref sink,
+            requireMatchColumn: false);
+
+        Assert.True(matched);
+        Assert.Equal(1UL, sink.MatchedLines);
+        Assert.True(sink.MatchColumn > 1);
+        Assert.Equal(haystack, sink.Line);
+    }
+
+    /// <summary>
     /// Verifies Unicode class-sequence backtracking stays on UTF-8 scalar boundaries.
     /// </summary>
     [Fact]

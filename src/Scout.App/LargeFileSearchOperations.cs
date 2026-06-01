@@ -482,7 +482,8 @@ internal static class LargeFileSearchOperations
                 separators.LineTerminator,
                 lineNumberValue - 1,
                 segmentStartOffset);
-            matched |= LiteralLineSearcher.Search(segment, pattern, ref sink, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, remainingMatches, separators.Crlf, separators.NullData);
+            bool requireMatchColumn = column || prefix?.HasHyperlink == true;
+            matched |= LiteralLineSearcher.Search(segment, pattern, ref sink, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, remainingMatches, separators.Crlf, separators.NullData, requireMatchColumn);
             matchedLines += sink.MatchedLines;
             lineNumberValue += (long)lineCount;
             return maxCount is ulong limitAfterSearch && matchedLines >= limitAfterSearch;
@@ -598,7 +599,8 @@ internal static class LargeFileSearchOperations
                     wordRegexp: false,
                     maxMatchingLines: null,
                     crlf: false,
-                    nullData: false);
+                    nullData: false,
+                    requireMatchColumn: column || prefix?.HasHyperlink == true);
                 segmentOutput.Flush();
                 segmentMatchedLines = sink.MatchedLines;
             }

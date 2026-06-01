@@ -135,6 +135,7 @@ public static class LiteralLineSearcher
     /// <param name="maxMatchingLines">The maximum matching lines to emit, or <see langword="null" /> for no limit.</param>
     /// <param name="crlf">Whether CRLF should be treated as a line terminator for line-boundary matching.</param>
     /// <param name="nullData">Whether NUL should be treated as the line terminator.</param>
+    /// <param name="requireMatchColumn">Whether the sink requires the earliest match column for selected lines.</param>
     /// <returns><see langword="true" /> when at least one line matched.</returns>
     public static bool Search<TSink>(
         ReadOnlySpan<byte> haystack,
@@ -146,7 +147,8 @@ public static class LiteralLineSearcher
         bool wordRegexp = false,
         ulong? maxMatchingLines = null,
         bool crlf = false,
-        bool nullData = false)
+        bool nullData = false,
+        bool requireMatchColumn = true)
         where TSink : struct, ILineSink
     {
         ArgumentNullException.ThrowIfNull(needles);
@@ -174,7 +176,7 @@ public static class LiteralLineSearcher
             needles.Count == 1 &&
             regexPlan?.GetAccelerator(0) is RegexClassSequenceAccelerator accelerator)
         {
-            return SearchAcceleratedRegexLines(haystack, needles, regexPlan, accelerator, ref sink, asciiCaseInsensitive, maxMatchingLines);
+            return SearchAcceleratedRegexLines(haystack, needles, regexPlan, accelerator, ref sink, asciiCaseInsensitive, maxMatchingLines, requireMatchColumn);
         }
 
         bool matched = false;
@@ -211,10 +213,11 @@ public static class LiteralLineSearcher
         RegexClassSequenceAccelerator accelerator,
         ref TSink sink,
         bool asciiCaseInsensitive,
-        ulong? maxMatchingLines)
+        ulong? maxMatchingLines,
+        bool requireMatchColumn)
         where TSink : struct, ILineSink
     {
-        if (accelerator.CanUseLineByLineSearch)
+        if (accelerator.CanUseLineByLineSearch && requireMatchColumn)
         {
             return SearchAcceleratedRegexLinesByLine(
                 haystack,
@@ -223,7 +226,8 @@ public static class LiteralLineSearcher
                 accelerator,
                 ref sink,
                 asciiCaseInsensitive,
-                maxMatchingLines);
+                maxMatchingLines,
+                requireMatchColumn);
         }
 
         bool matched = false;
@@ -241,14 +245,14 @@ public static class LiteralLineSearcher
                 return matched;
             }
 
-            int eventOffset = foundMatch && (nonAscii < 0 || matchStart <= nonAscii) ? matchStart : nonAscii;
+            int eventOffset = foundMatch && (!requireMatchColumn || nonAscii < 0 || matchStart <= nonAscii) ? matchStart : nonAscii;
             int lineStart = GetSearchLineStart(haystack, eventOffset);
             int lineEnd = GetSearchLineEnd(haystack, lineStart);
             lineNumber += CountLineTerminators(haystack.Slice(countedOffset, lineStart - countedOffset));
 
             bool lineMatched;
             int lineMatchStart;
-            if (foundMatch && matchStart < lineEnd && (nonAscii < 0 || matchStart <= nonAscii || nonAscii >= lineEnd))
+            if (foundMatch && matchStart < lineEnd && (!requireMatchColumn || nonAscii < 0 || matchStart <= nonAscii || nonAscii >= lineEnd))
             {
                 lineMatched = true;
                 lineMatchStart = matchStart - lineStart;
@@ -304,7 +308,8 @@ public static class LiteralLineSearcher
         RegexClassSequenceAccelerator accelerator,
         ref TSink sink,
         bool asciiCaseInsensitive,
-        ulong? maxMatchingLines)
+        ulong? maxMatchingLines,
+        bool requireMatchColumn)
         where TSink : struct, ILineSink
     {
         bool matched = false;
@@ -319,7 +324,9 @@ public static class LiteralLineSearcher
             ReadOnlySpan<byte> line = remaining[..lineLength];
             bool lineMatched = accelerator.TryFind(line, offset: 0, out int lineMatchStart, out _);
             int lineEnd = lineStart + lineLength;
-            if (nextNonAscii >= lineStart && nextNonAscii < lineEnd && (!lineMatched || nextNonAscii - lineStart < lineMatchStart))
+            if (nextNonAscii >= lineStart &&
+                nextNonAscii < lineEnd &&
+                (!lineMatched || (requireMatchColumn && nextNonAscii - lineStart < lineMatchStart)))
             {
                 lineMatched = accelerator.TryFindUnicode(line, offset: 0, out lineMatchStart, out _, out bool completedUnicodeSearch);
                 if (!completedUnicodeSearch)
