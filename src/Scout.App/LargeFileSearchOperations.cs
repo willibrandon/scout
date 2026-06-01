@@ -12,6 +12,7 @@ internal static class LargeFileSearchOperations
 
     internal static bool TrySearch(
         string path,
+        long? knownLength,
         IReadOnlyList<byte[]> pattern,
         CliLowArgs lowArgs,
         bool implicitSearch,
@@ -48,7 +49,7 @@ internal static class LargeFileSearchOperations
     {
         try
         {
-            if (!CanSearchStreaming(path, lowArgs, implicitSearch, color, searchMode, vimgrep, onlyMatching, replacement, beforeContext, afterContext, passthru, heading))
+            if (!CanSearchStreaming(path, knownLength, lowArgs, implicitSearch, color, searchMode, vimgrep, onlyMatching, replacement, beforeContext, afterContext, passthru, heading))
             {
                 return false;
             }
@@ -96,6 +97,7 @@ internal static class LargeFileSearchOperations
 
     private static bool CanSearchStreaming(
         string path,
+        long? knownLength,
         CliLowArgs lowArgs,
         bool implicitSearch,
         OutputColor color,
@@ -108,7 +110,7 @@ internal static class LargeFileSearchOperations
         bool passthru,
         bool heading)
     {
-        long length = new FileInfo(path).Length;
+        long length = knownLength ?? new FileInfo(path).Length;
         long streamingThreshold = implicitSearch
             ? ImplicitSearchStreamingFileThreshold
             : StreamingFileThreshold;
