@@ -1695,12 +1695,22 @@ public sealed partial class PinnedConfigurationTests
 
         string root = FindRepositoryRoot();
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        string ciWorkflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "ci.yml"));
+        string resolver = File.ReadAllText(Path.Combine(root, "eng", "resolve-linux-prereqs.sh"));
+        string design = File.ReadAllText(Path.Combine(root, "docs", "DESIGN.md"));
+        string snapshotDate = ReadTopLevelTomlValue(prerequisiteLock, "linux_snapshot");
+        string snapshotUrl = "http://snapshot.debian.org/archive/debian/" + snapshotDate.Replace("-", string.Empty, StringComparison.Ordinal) + "T000000Z";
 
+        Assert.Equal("2026-05-31", snapshotDate);
         Assert.Contains("base_image = \"debian:bookworm-slim\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("index_digest = \"sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("amd64_digest = \"sha256:b29f74a267526ae6ea104eed6c46133b0ca70ce812525df8cd5817698f0a624a\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("arm64_digest = \"sha256:f1433d3ee18e12f45682b29d91b6356e54e40d6b47f5f8ac81e80f35cca8cfe7\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("snapshot_url = \"http://snapshot.debian.org/archive/debian/20260531T000000Z\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("snapshot_url = \"" + snapshotUrl + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("LINUX_SNAPSHOT_URL: \"" + snapshotUrl + "\"", ciWorkflow, StringComparison.Ordinal);
+        Assert.Contains("SNAPSHOT_DATE=\"2026-05-31\"", resolver, StringComparison.Ordinal);
+        Assert.Contains("date `2026-05-31`", design, StringComparison.Ordinal);
+        Assert.Contains("deb http://snapshot.debian.org/archive/debian/20260531T000000Z bookworm main", design, StringComparison.Ordinal);
         Assert.Contains("libc6_version = \"2.36-9+deb12u14\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("libc_bin_version = \"2.36-9+deb12u14\"", prerequisiteLock, StringComparison.Ordinal);
 
@@ -2316,6 +2326,34 @@ public sealed partial class PinnedConfigurationTests
         }
 
         return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string ReadTopLevelTomlValue(string toml, string key)
+    {
+        string prefix = key + " = ";
+        using var reader = new StringReader(toml);
+        while (reader.ReadLine() is { } line)
+        {
+            if (line.StartsWith('['))
+            {
+                break;
+            }
+
+            if (!line.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            string value = line.Substring(prefix.Length).Trim();
+            if (value.Length >= 2 && value[0] == '"' && value[value.Length - 1] == '"')
+            {
+                return value.Substring(1, value.Length - 2);
+            }
+
+            return value;
+        }
+
+        throw new InvalidOperationException("Missing top-level TOML value: " + key);
     }
 
     private static IEnumerable<string> EnumerateSuppressionScanFiles(string root)

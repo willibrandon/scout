@@ -1,7 +1,9 @@
 #!/usr/bin/env sh
 set -eu
 
-SNAPSHOT_URL="http://snapshot.debian.org/archive/debian/20260531T000000Z"
+SNAPSHOT_DATE="2026-05-31"
+SNAPSHOT_STAMP="$(printf '%s' "$SNAPSHOT_DATE" | tr -d '-')T000000Z"
+SNAPSHOT_URL="http://snapshot.debian.org/archive/debian/${SNAPSHOT_STAMP}"
 AMD64_DIGEST="sha256:b29f74a267526ae6ea104eed6c46133b0ca70ce812525df8cd5817698f0a624a"
 ARM64_DIGEST="sha256:f1433d3ee18e12f45682b29d91b6356e54e40d6b47f5f8ac81e80f35cca8cfe7"
 LIBC_VERSION="2.36-9+deb12u14"
