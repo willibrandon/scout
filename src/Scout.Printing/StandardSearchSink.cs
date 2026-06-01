@@ -5,7 +5,6 @@ namespace Scout;
 internal struct StandardSearchSink : ILineSink
 {
     private static readonly byte[] NullByte = [0];
-    private static readonly byte[] UninitializedPlainLinePrefix = [];
 
     private readonly RawByteWriter output;
     private readonly OutputPath? prefix;
@@ -21,6 +20,7 @@ internal struct StandardSearchSink : ILineSink
     private readonly ReadOnlyMemory<byte> lineTerminator;
     private readonly long lineNumberOffset;
     private readonly long byteOffsetOffset;
+    private readonly bool usePlainLineHeader;
     private byte[]? plainLinePrefix;
     private byte[]? plainLineHeaderBuffer;
 
@@ -55,9 +55,8 @@ internal struct StandardSearchSink : ILineSink
         this.lineTerminator = lineTerminator;
         this.lineNumberOffset = lineNumberOffset;
         this.byteOffsetOffset = byteOffsetOffset;
-        plainLinePrefix = CanUsePlainLinePrefix(prefix, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color)
-            ? UninitializedPlainLinePrefix
-            : null;
+        usePlainLineHeader = CanUsePlainLineHeader(prefix, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color);
+        plainLinePrefix = null;
         plainLineHeaderBuffer = null;
     }
 
@@ -68,7 +67,7 @@ internal struct StandardSearchSink : ILineSink
         MatchedLines++;
         lineNumber += lineNumberOffset;
         byteOffset += byteOffsetOffset;
-        if (plainLinePrefix is not null)
+        if (usePlainLineHeader)
         {
             WritePlainLineHeader(lineNumber);
             output.Write(line);
@@ -236,7 +235,7 @@ internal struct StandardSearchSink : ILineSink
         return lineTerminator.Length == 1 && lineTerminator.Span[0] == 0;
     }
 
-    private static bool CanUsePlainLinePrefix(
+    private static bool CanUsePlainLineHeader(
         OutputPath? prefix,
         bool lineNumber,
         bool column,
@@ -246,8 +245,7 @@ internal struct StandardSearchSink : ILineSink
         OutputLineLimit lineLimit,
         OutputColor color)
     {
-        if (prefix is null ||
-            prefix.HasHyperlink ||
+        if (prefix?.HasHyperlink == true ||
             color.Enabled ||
             !lineNumber ||
             column ||
@@ -273,11 +271,7 @@ internal struct StandardSearchSink : ILineSink
     private void WritePlainLineHeader(long lineNumber)
     {
         ReadOnlySpan<byte> separator = matchSeparator.Span;
-        if (ReferenceEquals(plainLinePrefix, UninitializedPlainLinePrefix))
-        {
-            plainLinePrefix = CreatePlainLinePrefix(prefix!, matchSeparator);
-        }
-
+        plainLinePrefix ??= prefix is null ? [] : CreatePlainLinePrefix(prefix, matchSeparator);
         int digitCount = CountDigits(lineNumber);
         int headerLength = plainLinePrefix!.Length + digitCount + separator.Length;
         byte[] header = plainLineHeaderBuffer ??= new byte[plainLinePrefix.Length + 20 + separator.Length];
