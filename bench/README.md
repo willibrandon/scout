@@ -41,6 +41,9 @@ manifest. The committed lockfile now contains frozen hashes, so
 `SCOUT_BENCH_OPENSUBTITLES_EN` and `SCOUT_BENCH_LINUX_TREE` can override them.
 
 The script enforces the wall-time gates from `docs/DESIGN.md` with hyperfine's
-median wall time, plus a peak RSS gate of 1.5x or 32 MiB over rg, whichever is
-larger. Median timing keeps all hosted-runner samples while preventing one noisy
-wall-clock outlier from deciding the release gate.
+median wall time, plus a median per-run peak RSS gate of 1.5x or 32 MiB over rg,
+whichever is larger. Median timing and median per-run peak RSS keep all
+hosted-runner samples while preventing one noisy sample from deciding the
+release gate. In gate mode, the Linux-tree workloads use five runs and three
+warmups by default because hosted macOS filesystem timings are noisier; explicit
+`--runs` and `--warmup` values still override those defaults.

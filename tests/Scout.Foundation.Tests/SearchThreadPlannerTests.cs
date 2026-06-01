@@ -59,6 +59,35 @@ public sealed class SearchThreadPlannerTests
     }
 
     /// <summary>
+    /// Verifies default macOS directory search fan-out avoids oversaturating hosted file I/O.
+    /// </summary>
+    [Fact]
+    public void SearchWalkPlanningCapsMacOsDefaultDirectorySearchThreads()
+    {
+        var lowArgs = new CliLowArgs();
+        int upstreamDefault = Math.Min(Environment.ProcessorCount, 12);
+        int expected = OperatingSystem.IsMacOS() ? Math.Min(upstreamDefault, 4) : upstreamDefault;
+
+        int threads = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
+
+        Assert.Equal(expected, threads);
+    }
+
+    /// <summary>
+    /// Verifies explicit directory search thread counts bypass platform default caps.
+    /// </summary>
+    [Fact]
+    public void SearchWalkPlanningHonorsExplicitDirectorySearchThreads()
+    {
+        var lowArgs = new CliLowArgs();
+        lowArgs.SetThreads(12);
+
+        int threads = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
+
+        Assert.Equal(12, threads);
+    }
+
+    /// <summary>
     /// Verifies invalid available parallelism is rejected.
     /// </summary>
     [Fact]

@@ -59,6 +59,16 @@ public readonly struct FileIdentity : IEquatable<FileIdentity>
         return new FileIdentity(Normalize(fullPath));
     }
 
+    internal static FileIdentity FromPathMetadata(string path, FileSystemMetadata metadata)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+
+        string normalizedPath = Normalize(path);
+        return !metadata.IsEmpty
+            ? new FileIdentity(metadata, normalizedPath)
+            : new FileIdentity(normalizedPath);
+    }
+
     internal static FileIdentity FromRawUnixPath(ReadOnlySpan<byte> path, FileSystemMetadata metadata)
     {
         if (!metadata.IsEmpty)

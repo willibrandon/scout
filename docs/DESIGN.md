@@ -240,7 +240,7 @@ Stdin readability heuristics (Unix `fstat`, Windows `GetFileType`); output buffe
 
 #### 4.8.1 Parallelism semantics (corrected & specified, per Codex)
 Exact replication of upstream:
-- **Default thread count** = `available_parallelism().map_or(1, get).min(12)` — the cap of **12** is confirmed at `crates/core/flags/hiargs.rs:173`; overridable by `-j/--threads`.
+- **Default thread count** = `available_parallelism().map_or(1, get).min(12)` — the cap of **12** is confirmed at `crates/core/flags/hiargs.rs:173`; overridable by `-j/--threads`. Scout preserves that planner result, but caps default macOS directory-search fan-out at 4 workers because hosted macOS file I/O regresses sharply at 12 workers; explicit `-j/--threads` values still bypass the platform default cap.
 - **Forced single-threaded** exactly per upstream: `threads = 1` when `low.sort.is_some() || paths.is_one_file` (`hiargs.rs:168`) — i.e. whenever output is **sorted** (`--sort`/`--sortr`) or there is a **single file/stdin** subject (`is_one_file`, defined via `paths.len() == 1 && (path == "-" || !is_dir)` at `hiargs.rs:1094`). `main.rs` then dispatches the serial path when `args.threads() == 1` (`main.rs:87,89`). An assertion (`hiargs.rs:912`) enforces "sorting implies single threaded." All of this is ported verbatim and pinned by tests.
 - **Work-stealing** parallel walker (port of `crossbeam-deque` semantics) with per-thread `Sink`/`Printer` and an ordered output stage preserving upstream's interleaving/ordering guarantees.
 
@@ -428,7 +428,7 @@ Flag tables, help/man text, and shell completions are generated deterministicall
 | `encoding_rs` exact parity. | **High** | Full port up front (§4.4.1) gated by `encoding_rs` vectors. |
 | JSON byte parity vs serde_json. | **High** | Hand-written byte writer with pinned escaping (§4.5.1). |
 | PCRE2 static link + reproducible native builds per RID. | **High** | Vendored source, per-RID scripts, provenance, JIT fallback (§4.3). |
-| Parallelism ordering/cap parity. | High | Exact replication incl. 12-cap and forced-serial cases (§4.8.1), pinned by tests. |
+| Parallelism ordering/cap parity. | High | Exact planner replication incl. 12-cap and forced-serial cases (§4.8.1), plus the measured macOS default directory-search cap, pinned by tests. |
 | Performance gates unmet. | High | Gates block release (§9); M8 dedicated; escalate if physically infeasible. |
 | Name collisions (Docker Scout, Scout APM, etc.). | Medium | Honest disclosure (§1); distinct package IDs; pre-1.0 trademark check; mechanical rename path. |
 | Silent behavioral drift. | High | Differential suite (§8.3) + `PARITY.md` + no-skip policy. |

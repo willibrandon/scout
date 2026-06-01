@@ -5,9 +5,13 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 LOCK="$ROOT/tests/PREREQS.lock"
 MODE="smoke"
 RUNS="3"
+RUNS_SPECIFIED="0"
 WARMUP="1"
+WARMUP_SPECIFIED="0"
 OUT_DIR="$ROOT/artifacts/bench/hyperfine"
 PEAK_RSS_HEADROOM_BYTES="33554432"
+GATE_TREE_RUNS="5"
+GATE_TREE_WARMUP="3"
 
 fail() {
     printf '%s\n' "$1" >&2
@@ -337,26 +341,24 @@ hyperfine_json_metric() {
     ' "$json"
 }
 
-hyperfine_json_max_memory() {
+hyperfine_json_memory_samples() {
     json="$1"
     index="$2"
     awk -v want="$index" '
         $1 == "\"memory_usage_byte\":" {
             seen++
             in_memory = seen == want
-            max = 0
             next
         }
         in_memory && $0 ~ /\]/ {
-            print max
             found = 1
             exit 0
         }
         in_memory {
             value = $1
             gsub(/,/, "", value)
-            if (value ~ /^[0-9]+$/ && value > max) {
-                max = value
+            if (value ~ /^[0-9]+$/) {
+                print value
             }
         }
         END {
@@ -367,14 +369,69 @@ hyperfine_json_max_memory() {
     ' "$json"
 }
 
+median_numbers() {
+    awk '
+        /^[0-9]+$/ {
+            values[count] = $1
+            count++
+        }
+        END {
+            if (count == 0) {
+                exit 1
+            }
+
+            for (i = 0; i < count; i++) {
+                for (j = i + 1; j < count; j++) {
+                    if (values[j] < values[i]) {
+                        tmp = values[i]
+                        values[i] = values[j]
+                        values[j] = tmp
+                    }
+                }
+            }
+
+            middle = int(count / 2)
+            if (count % 2 == 1) {
+                printf "%.0f\n", values[middle]
+            } else {
+                printf "%.0f\n", (values[middle - 1] + values[middle]) / 2
+            }
+        }
+    '
+}
+
+hyperfine_json_median_memory() {
+    hyperfine_json_memory_samples "$1" "$2" | median_numbers
+}
+
+gate_tree_runs() {
+    if [ "$MODE" = "gate" ] && [ "$RUNS_SPECIFIED" = "0" ]; then
+        printf '%s\n' "$GATE_TREE_RUNS"
+        return
+    fi
+
+    printf '%s\n' "$RUNS"
+}
+
+gate_tree_warmup() {
+    if [ "$MODE" = "gate" ] && [ "$WARMUP_SPECIFIED" = "0" ]; then
+        printf '%s\n' "$GATE_TREE_WARMUP"
+        return
+    fi
+
+    printf '%s\n' "$WARMUP"
+}
+
 check_ratio_gate() {
     name="$1"
     gate="$2"
     json="$3"
     rg_median="$(hyperfine_json_metric "$json" 1 "median")" || fail "Could not read rg median from $json."
     scout_median="$(hyperfine_json_metric "$json" 2 "median")" || fail "Could not read scout median from $json."
-    rg_memory="$(hyperfine_json_max_memory "$json" 1)" || fail "Could not read rg memory from $json."
-    scout_memory="$(hyperfine_json_max_memory "$json" 2)" || fail "Could not read scout memory from $json."
+    rg_memory="$(hyperfine_json_median_memory "$json" 1)" || fail "Could not read rg memory from $json."
+    scout_memory="$(hyperfine_json_median_memory "$json" 2)" || fail "Could not read scout memory from $json."
+    [ -n "$rg_memory" ] || fail "Could not read rg memory from $json."
+    [ -n "$scout_memory" ] || fail "Could not read scout memory from $json."
     awk -v name="$name" -v rg="$rg_median" -v scout="$scout_median" -v gate="$gate" '
         BEGIN {
             if (rg <= 0) {
@@ -397,7 +454,8 @@ check_ratio_gate() {
             ratio = scout / rg
             ratio_limit = rg * 1.5
             headroom_limit = rg + headroom
-            printf "%s peak RSS ratio %.3fx (gate 1.500x or rg + 32MiB)\n", name, ratio
+            printf "%s median peak RSS %d bytes vs rg %d bytes\n", name, scout, rg
+            printf "%s median peak RSS ratio %.3fx (gate 1.500x or rg + 32MiB)\n", name, ratio
             if (scout > ratio_limit && scout > headroom_limit) {
                 exit 1
             }
@@ -410,12 +468,14 @@ run_pair() {
     gate="$2"
     rg_command="$3"
     scout_command="$4"
+    runs="${5:-$RUNS}"
+    warmup="${6:-$WARMUP}"
     json="$OUT_DIR/$name.json"
 
     printf '%s\n' "== $name"
     "$HYPERFINE" \
-        --warmup "$WARMUP" \
-        --runs "$RUNS" \
+        --warmup "$warmup" \
+        --runs "$runs" \
         --export-json "$json" \
         --command-name "rg:$name" "$rg_command" \
         --command-name "scout:$name" "$scout_command"
@@ -430,13 +490,15 @@ run_pair_no_shell() {
     gate="$2"
     rg_command="$3"
     scout_command="$4"
+    runs="${5:-$RUNS}"
+    warmup="${6:-$WARMUP}"
     json="$OUT_DIR/$name.json"
 
     printf '%s\n' "== $name"
     "$HYPERFINE" \
         -N \
-        --warmup "$WARMUP" \
-        --runs "$RUNS" \
+        --warmup "$warmup" \
+        --runs "$runs" \
         --export-json "$json" \
         --command-name "rg:$name" "$rg_command" \
         --command-name "scout:$name" "$scout_command"
@@ -477,11 +539,13 @@ while [ "$#" -gt 0 ]; do
         --runs)
             [ "$#" -ge 2 ] || fail "Missing value for --runs."
             RUNS="$2"
+            RUNS_SPECIFIED="1"
             shift 2
             ;;
         --warmup)
             [ "$#" -ge 2 ] || fail "Missing value for --warmup."
             WARMUP="$2"
+            WARMUP_SPECIFIED="1"
             shift 2
             ;;
         --output-dir)
@@ -560,6 +624,8 @@ LINUX_TREE="$(require_gate_corpus_tree "linux-kernel" "$LINUX_TREE")"
 Q_OPEN="$(shell_quote "$OPENSUBTITLES_EN")"
 Q_LINUX="$(shell_quote "$LINUX_TREE")"
 Q_TINY="$(shell_quote "$OUT_DIR/cold-tiny.txt")"
+TREE_RUNS="$(gate_tree_runs)"
+TREE_WARMUP="$(gate_tree_warmup)"
 
 run_pair \
     "subtitles_en_literal" \
@@ -575,12 +641,16 @@ run_pair \
     "linux_recursive_literal" \
     "1.25" \
     "$Q_RG --no-config -n 'PM_RESUME' $Q_LINUX" \
-    "$Q_SCOUT --no-config -n 'PM_RESUME' $Q_LINUX"
+    "$Q_SCOUT --no-config -n 'PM_RESUME' $Q_LINUX" \
+    "$TREE_RUNS" \
+    "$TREE_WARMUP"
 run_pair \
     "linux_many_small_parallel" \
     "1.30" \
     "$Q_RG --no-config -n 'struct' $Q_LINUX" \
-    "$Q_SCOUT --no-config -n 'struct' $Q_LINUX"
+    "$Q_SCOUT --no-config -n 'struct' $Q_LINUX" \
+    "$TREE_RUNS" \
+    "$TREE_WARMUP"
 run_pair_no_shell \
     "cold_version" \
     "1.00" \

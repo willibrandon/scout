@@ -106,6 +106,36 @@ internal static unsafe partial class NativeFileSystemMetadata
         return false;
     }
 
+    public static bool TryGetUnixStatus(string path, bool followLinks, out NativeUnixFileStatus status)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            status = default;
+            return false;
+        }
+
+        byte* linkStatus = stackalloc byte[StatBufferSize];
+        if (LStat(path, linkStatus) != 0)
+        {
+            status = default;
+            return false;
+        }
+
+        byte* effectiveStatus = linkStatus;
+        if (followLinks)
+        {
+            byte* targetStatus = stackalloc byte[StatBufferSize];
+            if (Stat(path, targetStatus) == 0)
+            {
+                effectiveStatus = targetStatus;
+            }
+        }
+
+        return TryCreateUnixStatus(linkStatus, effectiveStatus, out status);
+    }
+
     public static bool TryGetRawUnixStatus(ReadOnlySpan<byte> path, bool followLinks, out NativeUnixFileStatus status)
     {
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
@@ -141,23 +171,7 @@ internal static unsafe partial class NativeFileSystemMetadata
                 }
             }
 
-            if (!TryReadUnixFileType(linkStatus, out uint linkFileType) ||
-                !TryReadUnixFileType(effectiveStatus, out uint effectiveFileType))
-            {
-                status = default;
-                return false;
-            }
-
-            FileAttributes attributes = BuildAttributes(effectiveFileType, linkFileType);
-            long? length = effectiveFileType == UnixRegularFile ? ReadSize(effectiveStatus) : null;
-            FileSystemMetadata metadata = ReadMetadata(effectiveStatus);
-            status = new NativeUnixFileStatus(
-                attributes,
-                effectiveFileType == UnixDirectory,
-                linkFileType == UnixSymbolicLink,
-                length,
-                metadata);
-            return true;
+            return TryCreateUnixStatus(linkStatus, effectiveStatus, out status);
         }
     }
 
@@ -172,6 +186,27 @@ internal static unsafe partial class NativeFileSystemMetadata
         }
 
         metadata = ReadMetadata(status);
+        return true;
+    }
+
+    private static bool TryCreateUnixStatus(byte* linkStatus, byte* effectiveStatus, out NativeUnixFileStatus status)
+    {
+        if (!TryReadUnixFileType(linkStatus, out uint linkFileType) ||
+            !TryReadUnixFileType(effectiveStatus, out uint effectiveFileType))
+        {
+            status = default;
+            return false;
+        }
+
+        FileAttributes attributes = BuildAttributes(effectiveFileType, linkFileType);
+        long? length = effectiveFileType == UnixRegularFile ? ReadSize(effectiveStatus) : null;
+        FileSystemMetadata metadata = ReadMetadata(effectiveStatus);
+        status = new NativeUnixFileStatus(
+            attributes,
+            effectiveFileType == UnixDirectory,
+            linkFileType == UnixSymbolicLink,
+            length,
+            metadata);
         return true;
     }
 

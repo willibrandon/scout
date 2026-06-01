@@ -350,6 +350,21 @@ public sealed class Walk : IEnumerable<DirEntry>
 
     private DirEntry CreateTextEntry(string path, int depth)
     {
+        if (!followLinks &&
+            NativeFileSystemMetadata.TryGetUnixStatus(path, followLinks: false, out NativeUnixFileStatus status) &&
+            !status.IsSymbolicLink)
+        {
+            return new DirEntry(
+                path,
+                depth,
+                status.Attributes,
+                status.IsDirectory,
+                status.IsSymbolicLink,
+                isStdin: false,
+                status.Length,
+                FileIdentity.FromPathMetadata(path, status.Metadata));
+        }
+
         FileAttributes attributes = File.GetAttributes(path);
         bool isSymbolicLink = (attributes & FileAttributes.ReparsePoint) != 0;
         bool isDirectory = (attributes & FileAttributes.Directory) != 0;
@@ -471,7 +486,7 @@ public sealed class Walk : IEnumerable<DirEntry>
 
     private static void AddRawInvalidUtf8Children(DirEntry entry, ref List<WalkPath>? paths)
     {
-        if (OperatingSystem.IsWindows() || (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()))
+        if (!OperatingSystem.IsLinux())
         {
             return;
         }
