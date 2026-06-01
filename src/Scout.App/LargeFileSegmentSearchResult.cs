@@ -2,16 +2,16 @@ namespace Scout;
 
 internal readonly struct LargeFileSegmentSearchResult
 {
-    public LargeFileSegmentSearchResult(bool matched, ulong matchedLines, string? outputPath)
+    public LargeFileSegmentSearchResult(bool matched, ulong matchedLines, ReadOnlyMemory<byte> outputBytes)
     {
         Matched = matched;
         MatchedLines = matchedLines;
-        OutputPath = outputPath;
+        OutputBytes = outputBytes;
     }
 
     public bool Matched { get; }
 
     public ulong MatchedLines { get; }
 
-    public string? OutputPath { get; }
+    public ReadOnlyMemory<byte> OutputBytes { get; }
 }

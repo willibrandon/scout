@@ -138,6 +138,29 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
+    /// Verifies class-sequence regex acceleration recognizes Unicode whitespace separators.
+    /// </summary>
+    [Fact]
+    public void SearchUsesClassSequenceAcceleratorForUnicodeWhitespace()
+    {
+        var sink = new CapturingLineSink();
+        byte[][] patterns = ["\\w{5}\\s+\\w{5}\\s+\\w{5}"u8.ToArray()];
+        byte[] haystack = Encoding.UTF8.GetBytes("tiny\nabcde\u00a0fghij klmno\nomega\n");
+
+        bool matched = LiteralLineSearcher.Search(
+            haystack,
+            patterns,
+            ref sink);
+
+        Assert.True(matched);
+        Assert.Equal(1UL, sink.MatchedLines);
+        Assert.Equal(2, sink.LineNumber);
+        Assert.Equal(5, sink.ByteOffset);
+        Assert.Equal(1, sink.MatchColumn);
+        Assert.Equal(Encoding.UTF8.GetBytes("abcde\u00a0fghij klmno\n"), sink.Line);
+    }
+
+    /// <summary>
     /// Verifies Unicode class-sequence backtracking stays on UTF-8 scalar boundaries.
     /// </summary>
     [Fact]

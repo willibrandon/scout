@@ -5,7 +5,7 @@ namespace Scout;
 
 internal static class LargeFileSearchOperations
 {
-    private const int StreamingFileBufferLength = 1_048_576;
+    private const int StreamingFileBufferLength = 786_432;
     private const int ImplicitSearchStreamingFileBufferLength = 262_144;
     private const long ImplicitSearchStreamingFileThreshold = 65_536;
     private const long StreamingFileThreshold = int.MaxValue;
@@ -568,57 +568,50 @@ internal static class LargeFileSearchOperations
 
         LargeFileSegmentSearchResult ProcessBufferedSegment(byte[] segmentBytes, int segmentLength, long segmentStartOffset, long segmentLineNumber)
         {
-            string outputPath = Path.Combine(Path.GetTempPath(), "scout-segment-" + Guid.NewGuid().ToString("N") + ".out");
-            try
+            bool segmentMatched;
+            ulong segmentMatchedLines;
+            using var outputStream = new MemoryStream();
             {
-                bool segmentMatched;
-                ulong segmentMatchedLines;
-                using (var outputStream = new FileStream(outputPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read, bufferSize: 8192))
-                {
-                    var segmentOutput = new RawByteWriter(outputStream);
-                    var sink = new StandardSearchSink(
-                        segmentOutput,
-                        prefix,
-                        separators.FieldMatch,
-                        separators.FieldContext,
-                        lineNumber,
-                        column,
-                        byteOffset,
-                        trim,
-                        nullPathTerminator,
-                        lineLimit,
-                        color,
-                        separators.LineTerminator,
-                        segmentLineNumber - 1,
-                        segmentStartOffset);
-                    segmentMatched = LiteralLineSearcher.Search(
-                        segmentBytes.AsSpan(0, segmentLength),
-                        pattern,
-                        ref sink,
-                        asciiCaseInsensitive,
-                        invertMatch: false,
-                        lineRegexp: false,
-                        wordRegexp: false,
-                        maxMatchingLines: null,
-                        crlf: false,
-                        nullData: false);
-                    segmentOutput.Flush();
-                    segmentMatchedLines = sink.MatchedLines;
-                }
-
-                if (new FileInfo(outputPath).Length == 0)
-                {
-                    TryDeleteFile(outputPath);
-                    return new LargeFileSegmentSearchResult(segmentMatched, segmentMatchedLines, outputPath: null);
-                }
-
-                return new LargeFileSegmentSearchResult(segmentMatched, segmentMatchedLines, outputPath);
+                var segmentOutput = new RawByteWriter(outputStream);
+                var sink = new StandardSearchSink(
+                    segmentOutput,
+                    prefix,
+                    separators.FieldMatch,
+                    separators.FieldContext,
+                    lineNumber,
+                    column,
+                    byteOffset,
+                    trim,
+                    nullPathTerminator,
+                    lineLimit,
+                    color,
+                    separators.LineTerminator,
+                    segmentLineNumber - 1,
+                    segmentStartOffset);
+                segmentMatched = LiteralLineSearcher.Search(
+                    segmentBytes.AsSpan(0, segmentLength),
+                    pattern,
+                    ref sink,
+                    asciiCaseInsensitive,
+                    invertMatch: false,
+                    lineRegexp: false,
+                    wordRegexp: false,
+                    maxMatchingLines: null,
+                    crlf: false,
+                    nullData: false);
+                segmentOutput.Flush();
+                segmentMatchedLines = sink.MatchedLines;
             }
-            catch
+
+            ReadOnlyMemory<byte> outputBytes = ReadOnlyMemory<byte>.Empty;
+            if (outputStream.Length != 0)
             {
-                TryDeleteFile(outputPath);
-                throw;
+                outputBytes = outputStream.TryGetBuffer(out ArraySegment<byte> buffer)
+                    ? new ReadOnlyMemory<byte>(buffer.Array!, buffer.Offset, buffer.Count)
+                    : outputStream.ToArray();
             }
+
+            return new LargeFileSegmentSearchResult(segmentMatched, segmentMatchedLines, outputBytes);
         }
 
         bool SearchSegmentsInParallel()
@@ -629,27 +622,9 @@ internal static class LargeFileSearchOperations
             void DrainOne()
             {
                 LargeFileSegmentSearchResult result = pending.Dequeue().GetAwaiter().GetResult();
-                if (result.OutputPath is not null)
+                if (!result.OutputBytes.IsEmpty)
                 {
-                    try
-                    {
-                        using var outputStream = new FileStream(result.OutputPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 8192, FileOptions.SequentialScan);
-                        byte[] copyBuffer = new byte[8192];
-                        while (true)
-                        {
-                            int read = outputStream.Read(copyBuffer, 0, copyBuffer.Length);
-                            if (read == 0)
-                            {
-                                break;
-                            }
-
-                            output.Write(copyBuffer.AsSpan(0, read));
-                        }
-                    }
-                    finally
-                    {
-                        TryDeleteFile(result.OutputPath);
-                    }
+                    output.Write(result.OutputBytes.Span);
                 }
 
                 matched |= result.Matched;
@@ -769,25 +744,6 @@ internal static class LargeFileSearchOperations
 
             DrainAll();
             return matched;
-        }
-
-        static void TryDeleteFile(string? path)
-        {
-            if (path is null)
-            {
-                return;
-            }
-
-            try
-            {
-                File.Delete(path);
-            }
-            catch (IOException)
-            {
-            }
-            catch (UnauthorizedAccessException)
-            {
-            }
         }
 
         if (CanSearchSegmentsInParallel())

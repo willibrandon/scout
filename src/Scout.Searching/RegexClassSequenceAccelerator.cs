@@ -101,6 +101,11 @@ internal sealed class RegexClassSequenceAccelerator
     public bool TryFindUnicode(ReadOnlySpan<byte> haystack, int offset, out int matchStart, out int matchLength, out bool completed)
     {
         int start = Math.Clamp(offset, 0, haystack.Length);
+        if (fastPath == WhitespaceSeparatedFixedFastPath)
+        {
+            return TryFindUnicodeWhitespaceSeparatedFixed(haystack, start, out matchStart, out matchLength, out completed);
+        }
+
         int index = start;
         while (index < haystack.Length)
         {
@@ -127,6 +132,94 @@ internal sealed class RegexClassSequenceAccelerator
             }
 
             index += scalarLength;
+        }
+
+        completed = true;
+        matchStart = -1;
+        matchLength = 0;
+        return false;
+    }
+
+    private bool TryFindUnicodeWhitespaceSeparatedFixed(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        out int matchStart,
+        out int matchLength,
+        out bool completed)
+    {
+        int search = start;
+        while (search < haystack.Length)
+        {
+            if (!TryFindUnicodeKind(haystack, search, Whitespace, out int firstSeparator, out completed))
+            {
+                matchStart = -1;
+                matchLength = 0;
+                return false;
+            }
+
+            if (!TrySkipUnicodeRun(haystack, firstSeparator, Whitespace, out int firstSeparatorEnd, out completed))
+            {
+                matchStart = -1;
+                matchLength = 0;
+                return false;
+            }
+
+            if (TryGetUnicodeRunStartBefore(haystack, firstSeparator, kinds[0], minimums[0], start, out int candidate) &&
+                TryHasUnicodeRun(haystack, firstSeparatorEnd, kinds[2], minimums[2], out int secondRunEnd, out completed))
+            {
+                if (!completed)
+                {
+                    matchStart = -1;
+                    matchLength = 0;
+                    return false;
+                }
+
+                if (TryMatchUnicodeAtom(haystack, secondRunEnd, kinds[3], out _, out completed))
+                {
+                    if (!TrySkipUnicodeRun(haystack, secondRunEnd, kinds[3], out int secondSeparatorEnd, out completed))
+                    {
+                        matchStart = -1;
+                        matchLength = 0;
+                        return false;
+                    }
+
+                    if (TryHasUnicodeRun(haystack, secondSeparatorEnd, kinds[4], minimums[4], out int end, out completed))
+                    {
+                        if (!completed)
+                        {
+                            matchStart = -1;
+                            matchLength = 0;
+                            return false;
+                        }
+
+                        matchStart = candidate;
+                        matchLength = end - candidate;
+                        completed = true;
+                        return true;
+                    }
+
+                    if (!completed)
+                    {
+                        matchStart = -1;
+                        matchLength = 0;
+                        return false;
+                    }
+                }
+                else if (!completed)
+                {
+                    matchStart = -1;
+                    matchLength = 0;
+                    return false;
+                }
+            }
+            else if (!completed)
+            {
+                matchStart = -1;
+                matchLength = 0;
+                return false;
+            }
+
+            search = firstSeparatorEnd;
         }
 
         completed = true;
@@ -534,6 +627,124 @@ internal sealed class RegexClassSequenceAccelerator
         }
 
         return candidate;
+    }
+
+    private static bool TryFindUnicodeKind(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        int kind,
+        out int position,
+        out bool completed)
+    {
+        int index = start;
+        while (index < haystack.Length)
+        {
+            if (!TryMatchUnicodeAtom(haystack, index, kind, out int length, out completed))
+            {
+                if (!completed)
+                {
+                    position = -1;
+                    return false;
+                }
+
+                if (!TryGetScalarLength(haystack, index, out length))
+                {
+                    completed = false;
+                    position = -1;
+                    return false;
+                }
+            }
+            else
+            {
+                position = index;
+                completed = true;
+                return true;
+            }
+
+            index += length;
+        }
+
+        completed = true;
+        position = -1;
+        return false;
+    }
+
+    private static bool TrySkipUnicodeRun(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        int kind,
+        out int end,
+        out bool completed)
+    {
+        completed = true;
+        int index = start;
+        while (index < haystack.Length &&
+            TryMatchUnicodeAtom(haystack, index, kind, out int length, out completed))
+        {
+            index += length;
+        }
+
+        if (!completed)
+        {
+            end = start;
+            return false;
+        }
+
+        end = index;
+        return index > start;
+    }
+
+    private static bool TryHasUnicodeRun(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        int kind,
+        int length,
+        out int end,
+        out bool completed)
+    {
+        int index = start;
+        for (int count = 0; count < length; count++)
+        {
+            if (!TryMatchUnicodeAtom(haystack, index, kind, out int scalarLength, out completed))
+            {
+                end = start;
+                return false;
+            }
+
+            index += scalarLength;
+        }
+
+        completed = true;
+        end = index;
+        return true;
+    }
+
+    private static bool TryGetUnicodeRunStartBefore(
+        ReadOnlySpan<byte> haystack,
+        int end,
+        int kind,
+        int length,
+        int minimumStart,
+        out int start)
+    {
+        int previousEnd = end;
+        for (int count = 0; count < length; count++)
+        {
+            int previousStart = PreviousScalarStart(haystack, minimumStart, previousEnd);
+            if (previousStart < minimumStart ||
+                !TryMatchUnicodeAtom(haystack, previousStart, kind, out int scalarLength, out bool completed) ||
+                !completed ||
+                previousStart + scalarLength != previousEnd)
+            {
+                start = -1;
+                return false;
+            }
+
+            previousEnd = previousStart;
+        }
+
+        start = previousEnd;
+        return true;
     }
 
     private static bool TryAppendNode(RegexSyntaxNode node, List<int> kinds, List<int> minimums, List<int> maximums)
