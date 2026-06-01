@@ -6,11 +6,20 @@ namespace Scout;
 
 internal sealed class IgnoreRule
 {
+    private const int FastKindNone = 0;
+    private const int FastKindExact = 1;
+    private const int FastKindSuffix = 2;
+    private const int FastKindPrefix = 3;
+    private const int FastKindAll = 4;
+
     private readonly string baseDirectory;
     private readonly string patternText;
     private readonly bool negated;
     private readonly bool directoryOnly;
     private readonly bool basenameOnly;
+    private readonly bool asciiCaseInsensitive;
+    private readonly int fastKind;
+    private readonly string fastText;
     private readonly Glob glob;
 
     private IgnoreRule(
@@ -25,7 +34,9 @@ internal sealed class IgnoreRule
         this.patternText = patternText;
         this.negated = negated;
         this.directoryOnly = directoryOnly;
+        this.asciiCaseInsensitive = asciiCaseInsensitive;
         basenameOnly = !rooted && !ContainsSeparator(patternText);
+        fastKind = DetectFastKind(patternText, basenameOnly, out fastText);
         glob = Glob.Parse(
             Encoding.UTF8.GetBytes(patternText),
             new GlobOptions(
@@ -36,6 +47,8 @@ internal sealed class IgnoreRule
     }
 
     internal string BaseDirectory => baseDirectory;
+
+    internal bool NeedsRelativePath => !basenameOnly;
 
     public static bool TryParse(string baseDirectory, string line, bool asciiCaseInsensitive, out IgnoreRule? rule)
     {
@@ -89,6 +102,11 @@ internal sealed class IgnoreRule
 
     public IgnoreDecision Match(DirEntry entry)
     {
+        return Match(entry, relativePath: null);
+    }
+
+    internal IgnoreDecision Match(DirEntry entry, string? relativePath)
+    {
         if (directoryOnly && !entry.IsDirectory)
         {
             return IgnoreDecision.None;
@@ -101,16 +119,16 @@ internal sealed class IgnoreRule
         }
         else
         {
-            string? relative = GetRelativePath(entry.FullPath);
-            if (relative is null)
+            relativePath ??= GetRelativePath(entry.FullPath);
+            if (relativePath is null)
             {
                 return IgnoreDecision.None;
             }
 
-            candidate = relative;
+            candidate = relativePath;
         }
 
-        if (!glob.IsMatch(Encoding.UTF8.GetBytes(candidate)))
+        if (!IsMatch(candidate))
         {
             return IgnoreDecision.None;
         }
@@ -127,6 +145,96 @@ internal sealed class IgnoreRule
         }
 
         return NormalizePattern(relative);
+    }
+
+    private bool IsMatch(string candidate)
+    {
+        return fastKind switch
+        {
+            FastKindExact => EqualsPattern(candidate, patternText, asciiCaseInsensitive),
+            FastKindSuffix => EndsWithPattern(candidate, fastText, asciiCaseInsensitive),
+            FastKindPrefix => StartsWithPattern(candidate, fastText, asciiCaseInsensitive),
+            FastKindAll => true,
+            _ => glob.IsMatch(Encoding.UTF8.GetBytes(candidate)),
+        };
+    }
+
+    private static int DetectFastKind(string pattern, bool basenameOnly, out string fastText)
+    {
+        fastText = pattern;
+        if (pattern.Length == 0 || pattern.Contains('\\', StringComparison.Ordinal))
+        {
+            return FastKindNone;
+        }
+
+        if (pattern == "**")
+        {
+            return FastKindAll;
+        }
+
+        if (basenameOnly && pattern[0] == '*' && !ContainsGlobMeta(pattern.AsSpan(1)))
+        {
+            fastText = pattern[1..];
+            return fastText.Length == 0 ? FastKindNone : FastKindSuffix;
+        }
+
+        if (basenameOnly && pattern[^1] == '*' && !ContainsGlobMeta(pattern.AsSpan(0, pattern.Length - 1)))
+        {
+            fastText = pattern[..^1];
+            return fastText.Length == 0 ? FastKindNone : FastKindPrefix;
+        }
+
+        return ContainsGlobMeta(pattern) ? FastKindNone : FastKindExact;
+    }
+
+    private static bool EqualsPattern(string candidate, string pattern, bool asciiCaseInsensitive)
+    {
+        return asciiCaseInsensitive
+            ? EqualsAsciiIgnoreCase(candidate, pattern)
+            : string.Equals(candidate, pattern, StringComparison.Ordinal);
+    }
+
+    private static bool EndsWithPattern(string candidate, string suffix, bool asciiCaseInsensitive)
+    {
+        if (suffix.Length > candidate.Length)
+        {
+            return false;
+        }
+
+        return EqualsPattern(candidate[^suffix.Length..], suffix, asciiCaseInsensitive);
+    }
+
+    private static bool StartsWithPattern(string candidate, string prefix, bool asciiCaseInsensitive)
+    {
+        if (prefix.Length > candidate.Length)
+        {
+            return false;
+        }
+
+        return EqualsPattern(candidate[..prefix.Length], prefix, asciiCaseInsensitive);
+    }
+
+    private static bool EqualsAsciiIgnoreCase(string left, string right)
+    {
+        if (left.Length != right.Length)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < left.Length; index++)
+        {
+            if (FoldAscii(left[index]) != FoldAscii(right[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static char FoldAscii(char value)
+    {
+        return value is >= 'A' and <= 'Z' ? (char)(value + ('a' - 'A')) : value;
     }
 
     private static string TrimTrailingWhitespace(string text)
@@ -179,5 +287,18 @@ internal sealed class IgnoreRule
     private static bool ContainsSeparator(string text)
     {
         return text.Contains('/', StringComparison.Ordinal) || text.Contains('\\', StringComparison.Ordinal);
+    }
+
+    private static bool ContainsGlobMeta(ReadOnlySpan<char> text)
+    {
+        for (int index = 0; index < text.Length; index++)
+        {
+            if (text[index] is '*' or '?' or '[')
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

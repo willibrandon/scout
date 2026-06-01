@@ -388,7 +388,7 @@ internal static class StandardSearchTargetOperations
         ref bool errored)
     {
         string fullRoot = Path.GetFullPath(root);
-        using var outputs = new BlockingCollection<byte[]>();
+        using var outputs = new BlockingCollection<BufferedSearchOutput>();
         int matchedFlag = 0;
         int erroredFlag = 0;
         bool printedHeading = wroteHeadingOutput;
@@ -396,27 +396,30 @@ internal static class StandardSearchTargetOperations
         bool printedContextBody = false;
         var printTask = Task.Run(() =>
         {
-            foreach (byte[] body in outputs.GetConsumingEnumerable())
+            foreach (BufferedSearchOutput body in outputs.GetConsumingEnumerable())
             {
-                if (body.Length == 0)
+                using (body)
                 {
-                    continue;
-                }
+                    if (body.Length == 0)
+                    {
+                        continue;
+                    }
 
-                if (heading && printedHeading)
-                {
-                    output.Write("\n"u8);
-                }
+                    if (heading && printedHeading)
+                    {
+                        output.Write("\n"u8);
+                    }
 
-                if (interFileContextSeparator)
-                {
-                    StandardSearchOperations.WriteInterFileContextSeparatorIfNeeded(output, separators, ref printedContextBody);
-                }
+                    if (interFileContextSeparator)
+                    {
+                        StandardSearchOperations.WriteInterFileContextSeparatorIfNeeded(output, separators, ref printedContextBody);
+                    }
 
-                output.Write(body);
-                if (heading)
-                {
-                    printedHeading = true;
+                    body.WriteTo(output);
+                    if (heading)
+                    {
+                        printedHeading = true;
+                    }
                 }
             }
         });
@@ -430,43 +433,54 @@ internal static class StandardSearchTargetOperations
                     return WalkState.Continue;
                 }
 
-                using MemoryStream buffer = new();
-                var writer = new RawByteWriter(buffer);
-                bool fileWroteHeading = false;
+                MemoryStream buffer = new();
                 bool fileMatched = false;
-                bool fileErrored = false;
-                byte[] displayPathBytes = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
-                SearchDirectoryEntryFile(
-                    entry,
-                    displayPathBytes,
-                    pattern,
-                    lowArgs,
-                    writer,
-                    diagnostics,
-                    logger,
-                    separators,
-                    lineLimit,
-                    color,
-                    asciiCaseInsensitive,
-                    heading,
-                    ref fileWroteHeading,
-                    ref fileMatched,
-                    ref fileErrored);
-                writer.Flush();
-                if (fileMatched)
+                bool transferredBuffer = false;
+                try
                 {
-                    Interlocked.Exchange(ref matchedFlag, 1);
-                }
+                    var writer = new RawByteWriter(buffer);
+                    bool fileWroteHeading = false;
+                    bool fileErrored = false;
+                    byte[] displayPathBytes = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
+                    SearchDirectoryEntryFile(
+                        entry,
+                        displayPathBytes,
+                        pattern,
+                        lowArgs,
+                        writer,
+                        diagnostics,
+                        logger,
+                        separators,
+                        lineLimit,
+                        color,
+                        asciiCaseInsensitive,
+                        heading,
+                        ref fileWroteHeading,
+                        ref fileMatched,
+                        ref fileErrored);
+                    writer.Flush();
+                    if (fileMatched)
+                    {
+                        Interlocked.Exchange(ref matchedFlag, 1);
+                    }
 
-                if (fileErrored)
-                {
-                    Interlocked.Exchange(ref erroredFlag, 1);
-                }
+                    if (fileErrored)
+                    {
+                        Interlocked.Exchange(ref erroredFlag, 1);
+                    }
 
-                byte[] body = buffer.ToArray();
-                if (body.Length > 0)
+                    if (buffer.Length > 0)
+                    {
+                        outputs.Add(new BufferedSearchOutput(buffer));
+                        transferredBuffer = true;
+                    }
+                }
+                finally
                 {
-                    outputs.Add(body);
+                    if (!transferredBuffer)
+                    {
+                        buffer.Dispose();
+                    }
                 }
 
                 return fileMatched && lowArgs.Quiet ? WalkState.Quit : WalkState.Continue;
@@ -592,7 +606,7 @@ internal static class StandardSearchTargetOperations
         ref SearchStats stats)
     {
         string fullRoot = Path.GetFullPath(root);
-        using var outputs = new BlockingCollection<byte[]>();
+        using var outputs = new BlockingCollection<BufferedSearchOutput>();
         object statsLock = new();
         SearchStats aggregateStats = default;
         int matchedFlag = 0;
@@ -602,27 +616,30 @@ internal static class StandardSearchTargetOperations
         bool printedContextBody = false;
         var printTask = Task.Run(() =>
         {
-            foreach (byte[] body in outputs.GetConsumingEnumerable())
+            foreach (BufferedSearchOutput body in outputs.GetConsumingEnumerable())
             {
-                if (body.Length == 0)
+                using (body)
                 {
-                    continue;
-                }
+                    if (body.Length == 0)
+                    {
+                        continue;
+                    }
 
-                if (heading && printedHeading)
-                {
-                    output.Write("\n"u8);
-                }
+                    if (heading && printedHeading)
+                    {
+                        output.Write("\n"u8);
+                    }
 
-                if (interFileContextSeparator)
-                {
-                    StandardSearchOperations.WriteInterFileContextSeparatorIfNeeded(output, separators, ref printedContextBody);
-                }
+                    if (interFileContextSeparator)
+                    {
+                        StandardSearchOperations.WriteInterFileContextSeparatorIfNeeded(output, separators, ref printedContextBody);
+                    }
 
-                output.Write(body);
-                if (heading)
-                {
-                    printedHeading = true;
+                    body.WriteTo(output);
+                    if (heading)
+                    {
+                        printedHeading = true;
+                    }
                 }
             }
         });
@@ -636,50 +653,61 @@ internal static class StandardSearchTargetOperations
                     return WalkState.Continue;
                 }
 
-                using MemoryStream buffer = new();
-                var writer = new RawByteWriter(buffer);
-                bool fileWroteHeading = false;
-                bool fileMatched = false;
-                bool fileErrored = false;
-                SearchStats fileStats = default;
-                byte[] displayPathBytes = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
-                SearchDirectoryEntryFileWithStats(
-                    entry,
-                    displayPathBytes,
-                    pattern,
-                    lowArgs,
-                    writer,
-                    diagnostics,
-                    logger,
-                    separators,
-                    lineLimit,
-                    color,
-                    asciiCaseInsensitive,
-                    heading,
-                    ref fileWroteHeading,
-                    ref fileMatched,
-                    ref fileErrored,
-                    ref fileStats);
-                writer.Flush();
-                if (fileMatched)
+                MemoryStream buffer = new();
+                bool transferredBuffer = false;
+                try
                 {
-                    Interlocked.Exchange(ref matchedFlag, 1);
-                }
+                    var writer = new RawByteWriter(buffer);
+                    bool fileWroteHeading = false;
+                    bool fileMatched = false;
+                    bool fileErrored = false;
+                    SearchStats fileStats = default;
+                    byte[] displayPathBytes = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
+                    SearchDirectoryEntryFileWithStats(
+                        entry,
+                        displayPathBytes,
+                        pattern,
+                        lowArgs,
+                        writer,
+                        diagnostics,
+                        logger,
+                        separators,
+                        lineLimit,
+                        color,
+                        asciiCaseInsensitive,
+                        heading,
+                        ref fileWroteHeading,
+                        ref fileMatched,
+                        ref fileErrored,
+                        ref fileStats);
+                    writer.Flush();
+                    if (fileMatched)
+                    {
+                        Interlocked.Exchange(ref matchedFlag, 1);
+                    }
 
-                if (fileErrored)
-                {
-                    Interlocked.Exchange(ref erroredFlag, 1);
-                }
+                    if (fileErrored)
+                    {
+                        Interlocked.Exchange(ref erroredFlag, 1);
+                    }
 
-                lock (statsLock)
-                {
-                    aggregateStats.Add(fileStats);
-                }
+                    lock (statsLock)
+                    {
+                        aggregateStats.Add(fileStats);
+                    }
 
-                byte[] body = buffer.ToArray();
-                if (body.Length > 0)
+                    if (buffer.Length > 0)
+                    {
+                        outputs.Add(new BufferedSearchOutput(buffer));
+                        transferredBuffer = true;
+                    }
+                }
+                finally
                 {
-                    outputs.Add(body);
+                    if (!transferredBuffer)
+                    {
+                        buffer.Dispose();
+                    }
                 }
 
                 return WalkState.Continue;

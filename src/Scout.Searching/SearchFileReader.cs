@@ -80,8 +80,38 @@ public static class SearchFileReader
 
     private static byte[] ReadBuffered(string path, SearchEncodingKind encodingKind)
     {
-        using FileStream stream = File.OpenRead(path);
+        if (encodingKind is SearchEncodingKind.Auto or SearchEncodingKind.None)
+        {
+            return ReadRawBuffered(path, encodingKind);
+        }
+
+        using FileStream stream = OpenReadStream(path);
         return SearchEncodingReader.ReadToEnd(stream, encodingKind);
+    }
+
+    private static byte[] ReadRawBuffered(string path, SearchEncodingKind encodingKind)
+    {
+        using FileStream stream = OpenReadStream(path);
+        long length = stream.Length;
+        if (length > int.MaxValue)
+        {
+            throw new IOException("file is too large to search in memory");
+        }
+
+        byte[] bytes = GC.AllocateUninitializedArray<byte>(checked((int)length));
+        stream.ReadExactly(bytes);
+        return SearchEncoding.Decode(bytes, encodingKind);
+    }
+
+    private static FileStream OpenReadStream(string path)
+    {
+        return new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 4096,
+            FileOptions.SequentialScan);
     }
 
     private static bool TryReadMemoryMapped(string path, SearchEncodingKind encodingKind, out byte[] bytes)

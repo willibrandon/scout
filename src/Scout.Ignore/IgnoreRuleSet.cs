@@ -79,9 +79,23 @@ internal sealed class IgnoreRuleSet
     public IgnoreDecision Match(DirEntry entry)
     {
         IgnoreDecision decision = IgnoreDecision.None;
+        string? relativePath = null;
+        bool relativePathComputed = false;
         for (int index = 0; index < rules.Count; index++)
         {
-            IgnoreDecision current = rules[index].Match(entry);
+            IgnoreRule rule = rules[index];
+            if (rule.NeedsRelativePath && !relativePathComputed)
+            {
+                relativePath = GetRelativePath(entry.FullPath);
+                relativePathComputed = true;
+            }
+
+            if (rule.NeedsRelativePath && relativePath is null)
+            {
+                continue;
+            }
+
+            IgnoreDecision current = rule.Match(entry, relativePath);
             if (current != IgnoreDecision.None)
             {
                 decision = current;
@@ -89,6 +103,22 @@ internal sealed class IgnoreRuleSet
         }
 
         return decision;
+    }
+
+    private string? GetRelativePath(string fullPath)
+    {
+        if (baseDirectory is null)
+        {
+            return null;
+        }
+
+        string relative = Path.GetRelativePath(baseDirectory, fullPath);
+        if (relative == "." || PathUtil.IsRelativePathOutsideBase(relative))
+        {
+            return null;
+        }
+
+        return NormalizePattern(relative);
     }
 
     public IgnoreDecision MatchPathOrAnyParents(DirEntry entry)
@@ -127,5 +157,10 @@ internal sealed class IgnoreRuleSet
         }
 
         return IgnoreDecision.None;
+    }
+
+    private static string NormalizePattern(string text)
+    {
+        return text.Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/');
     }
 }

@@ -58,7 +58,7 @@ internal static class StandardSearchByteOperations
             return SearchBytes(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary);
         }
 
-        if (TrySearchBinarySuppressed(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary, out bool binaryMatched))
+        if (TrySearchBinarySuppressed(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary, out bool binaryMatched, out _))
         {
             return binaryMatched;
         }
@@ -232,12 +232,12 @@ internal static class StandardSearchByteOperations
             return false;
         }
 
-        if (TrySearchBinarySuppressed(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary, out bool binaryMatched))
+        if (TrySearchBinarySuppressed(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary, out bool binaryMatched, out bool convertBinaryNuls))
         {
             return binaryMatched;
         }
 
-        byte[] searchBytes = GetBinaryConvertedSearchBytes(bytes, textMode, separators.NullData);
+        byte[] searchBytes = convertBinaryNuls ? BinaryDetection.ConvertNulToLineFeed(bytes) : bytes;
         int stopLength = stopOnNonmatch
             ? ContextSearchOperations.GetStopOnNonmatchLength(searchBytes, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, separators.Crlf, separators.NullData)
             : searchBytes.Length;
@@ -386,9 +386,11 @@ internal static class StandardSearchByteOperations
         bool nullPathTerminator,
         bool stopOnNonmatch,
         bool quitOnBinary,
-        out bool matched)
+        out bool matched,
+        out bool convertBinaryNuls)
     {
         matched = false;
+        convertBinaryNuls = false;
         BinaryDetectionResult binaryDetection = BinaryDetection.Detect(bytes, textMode, separators.NullData, quitOnBinary);
         if (!binaryDetection.IsBinary)
         {
@@ -426,6 +428,7 @@ internal static class StandardSearchByteOperations
 
         if (searchMode != CliSearchMode.Standard)
         {
+            convertBinaryNuls = true;
             return false;
         }
 
@@ -520,11 +523,6 @@ internal static class StandardSearchByteOperations
         int length = Math.Min(binaryOffset, BinaryDetectionInitialBufferLength);
         int lastLineFeed = bytes.AsSpan(0, length).LastIndexOf((byte)'\n');
         return lastLineFeed < 0 ? 0 : lastLineFeed + 1;
-    }
-
-    private static byte[] GetBinaryConvertedSearchBytes(byte[] bytes, bool textMode, bool nullData)
-    {
-        return BinaryDetection.GetSearchBytes(bytes, textMode, nullData);
     }
 
     private static void WriteBinaryFileMatches(RawByteWriter output, OutputPath? prefix, OutputColor color, int binaryOffset)

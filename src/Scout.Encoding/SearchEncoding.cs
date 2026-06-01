@@ -17,7 +17,7 @@ public static class SearchEncoding
     public static byte[] Decode(byte[] bytes, SearchEncodingKind encodingKind)
     {
         ArgumentNullException.ThrowIfNull(bytes);
-        if (encodingKind == SearchEncodingKind.None)
+        if (encodingKind == SearchEncodingKind.None || (encodingKind == SearchEncodingKind.Auto && !HasBom(bytes)))
         {
             return bytes;
         }
@@ -103,6 +103,12 @@ public static class SearchEncoding
             SearchEncodingKind.XUserDefined => DecodeUserDefined(bytes),
             _ => bytes.ToArray(),
         };
+    }
+
+    private static bool HasBom(ReadOnlySpan<byte> bytes)
+    {
+        return (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF) ||
+            (bytes.Length >= 2 && ((bytes[0] == 0xFF && bytes[1] == 0xFE) || (bytes[0] == 0xFE && bytes[1] == 0xFF)));
     }
 
     internal static int GetStreamingSafePrefixLength(ReadOnlySpan<byte> bytes, SearchEncodingKind encodingKind)
