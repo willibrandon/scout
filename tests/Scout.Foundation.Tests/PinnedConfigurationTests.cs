@@ -1873,7 +1873,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("linux_many_small_parallel", script, StringComparison.Ordinal);
         Assert.Contains("cold_version", script, StringComparison.Ordinal);
         Assert.Contains("cold_tiny_search", script, StringComparison.Ordinal);
-        Assert.Contains("peak RSS <= 1.50x", script, StringComparison.Ordinal);
+        Assert.Contains("peak RSS <= 1.50x or rg + 32MiB", script, StringComparison.Ordinal);
         Assert.Contains("check_ratio_gate", script, StringComparison.Ordinal);
         Assert.Contains("make_cold_tiny_corpus", script, StringComparison.Ordinal);
         Assert.Contains("resolve_hyperfine()", script, StringComparison.Ordinal);

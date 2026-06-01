@@ -1,7 +1,4 @@
 using System.IO;
-using System.Numerics;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 
 namespace Scout;
 
@@ -389,14 +386,14 @@ internal static class LargeFileSearchOperations
                 return false;
             }
 
+            if (fastLiteralPattern is not null)
+            {
+                return ProcessFastLiteralSegment(segment, segmentStartOffset, fastLiteralPattern);
+            }
+
             if (!textMode && !separators.NullData && segment.IndexOf((byte)0) >= 0)
             {
                 return true;
-            }
-
-            if (fastLiteralPattern is not null)
-            {
-                return ProcessFastLiteralSegment(segment, segmentStartOffset, lineCount, fastLiteralPattern);
             }
 
             ulong? remainingMatches = null;
@@ -443,13 +440,17 @@ internal static class LargeFileSearchOperations
             return maxCount is ulong limitAfterSearch && matchedLines >= limitAfterSearch;
         }
 
-        bool ProcessFastLiteralSegment(ReadOnlySpan<byte> segment, long segmentStartOffset, ulong lineCount, ReadOnlySpan<byte> needle)
+        bool ProcessFastLiteralSegment(ReadOnlySpan<byte> segment, long segmentStartOffset, ReadOnlySpan<byte> needle)
         {
+            if (!textMode && !separators.NullData && segment.IndexOf((byte)0) >= 0)
+            {
+                return true;
+            }
+
             if (quiet)
             {
                 if (segment.IndexOf(needle) < 0)
                 {
-                    lineNumberValue += (long)lineCount;
                     return false;
                 }
 
@@ -471,8 +472,7 @@ internal static class LargeFileSearchOperations
                 color,
                 separators.LineTerminator);
             int searchOffset = 0;
-            int currentLineStart = 0;
-            int currentLineEnd = GetSegmentLineEnd(segment, currentLineStart, terminator);
+            int countedOffset = 0;
             long currentLineNumber = lineNumberValue;
             while (searchOffset < segment.Length)
             {
@@ -483,12 +483,10 @@ internal static class LargeFileSearchOperations
                 }
 
                 int matchIndex = searchOffset + found;
-                while (matchIndex >= currentLineEnd && currentLineEnd < segment.Length)
-                {
-                    currentLineStart = currentLineEnd;
-                    currentLineEnd = GetSegmentLineEnd(segment, currentLineStart, terminator);
-                    currentLineNumber++;
-                }
+                int currentLineStart = GetSegmentLineStart(segment, matchIndex, terminator);
+                currentLineNumber += ByteCounter.Count(segment.Slice(countedOffset, currentLineStart - countedOffset), terminator);
+                countedOffset = currentLineStart;
+                int currentLineEnd = GetSegmentLineEnd(segment, currentLineStart, terminator);
 
                 long matchedByteOffset = segmentStartOffset + currentLineStart;
                 long matchedColumn = matchIndex - currentLineStart + 1;
@@ -503,7 +501,7 @@ internal static class LargeFileSearchOperations
                 searchOffset = currentLineEnd;
             }
 
-            lineNumberValue += (long)lineCount;
+            lineNumberValue = currentLineNumber + ByteCounter.Count(segment[countedOffset..], terminator);
             return false;
         }
 
@@ -549,7 +547,10 @@ internal static class LargeFileSearchOperations
                 {
                     int completeLength = lastTerminator + 1;
                     ReadOnlySpan<byte> segment = chunk.Slice(segmentStart, completeLength);
-                    if (ProcessSegment(segment, chunkOffset + segmentStart, CountByte(segment, terminator)))
+                    ulong lineCount = fastLiteralPattern is null
+                        ? (ulong)ByteCounter.Count(segment, terminator)
+                        : 0;
+                    if (ProcessSegment(segment, chunkOffset + segmentStart, lineCount))
                     {
                         return matched;
                     }
@@ -585,6 +586,12 @@ internal static class LargeFileSearchOperations
         return terminatorOffset < 0 ? segment.Length : lineStart + terminatorOffset + 1;
     }
 
+    private static int GetSegmentLineStart(ReadOnlySpan<byte> segment, int matchIndex, byte terminator)
+    {
+        int previousTerminator = segment[..matchIndex].LastIndexOf(terminator);
+        return previousTerminator < 0 ? 0 : previousTerminator + 1;
+    }
+
     private static byte[]? GetFastStreamingLiteralPattern(
         IReadOnlyList<byte[]> pattern,
         bool asciiCaseInsensitive,
@@ -615,38 +622,4 @@ internal static class LargeFileSearchOperations
         return candidate;
     }
 
-    private static ulong CountByte(ReadOnlySpan<byte> bytes, byte value)
-    {
-        ulong count = 0;
-        int index = 0;
-        if (bytes.Length >= sizeof(ulong))
-        {
-            ulong repeated = UInt64WithRepeatedByte(value);
-            ref byte start = ref MemoryMarshal.GetReference(bytes);
-            int wordLength = bytes.Length - sizeof(ulong) + 1;
-            while (index < wordLength)
-            {
-                ulong word = Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref start, index));
-                ulong comparison = word ^ repeated;
-                ulong zeroBytes = (comparison - 0x0101010101010101UL) & ~comparison & 0x8080808080808080UL;
-                count += (ulong)BitOperations.PopCount(zeroBytes);
-                index += sizeof(ulong);
-            }
-        }
-
-        for (; index < bytes.Length; index++)
-        {
-            if (bytes[index] == value)
-            {
-                count++;
-            }
-        }
-
-        return count;
-    }
-
-    private static ulong UInt64WithRepeatedByte(byte value)
-    {
-        return 0x0101010101010101UL * value;
-    }
 }

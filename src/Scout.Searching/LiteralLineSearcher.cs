@@ -86,6 +86,14 @@ public static class LiteralLineSearcher
             return false;
         }
 
+        if (!invertMatch &&
+            !lineRegexp &&
+            !wordRegexp &&
+            needle.Length != 0)
+        {
+            return SearchLiteralRegexLines(haystack, needle, ref sink, asciiCaseInsensitive, maxMatchingLines, nullData);
+        }
+
         bool matched = false;
         ulong matchedLines = 0;
         int lineStart = 0;
@@ -147,6 +155,16 @@ public static class LiteralLineSearcher
             return false;
         }
 
+        if (!invertMatch &&
+            !lineRegexp &&
+            !wordRegexp &&
+            needles.Count == 1 &&
+            IsLiteralRegex(needles[0]) &&
+            needles[0].Length != 0)
+        {
+            return SearchLiteralRegexLines(haystack, needles[0], ref sink, asciiCaseInsensitive, maxMatchingLines, nullData);
+        }
+
         bool matched = false;
         ulong matchedLines = 0;
         int lineStart = 0;
@@ -168,6 +186,58 @@ public static class LiteralLineSearcher
             }
 
             lineStart += lineLength;
+            lineNumber++;
+        }
+
+        return matched;
+    }
+
+    private static bool SearchLiteralRegexLines<TSink>(
+        ReadOnlySpan<byte> haystack,
+        ReadOnlySpan<byte> needle,
+        ref TSink sink,
+        bool asciiCaseInsensitive,
+        ulong? maxMatchingLines,
+        bool nullData)
+        where TSink : struct, ILineSink
+    {
+        bool matched = false;
+        ulong matchedLines = 0;
+        int searchOffset = 0;
+        int lineStart = 0;
+        long lineNumber = 1;
+        while (searchOffset < haystack.Length)
+        {
+            int found = Find(haystack[searchOffset..], needle, asciiCaseInsensitive);
+            if (found < 0)
+            {
+                return matched;
+            }
+
+            int matchStart = searchOffset + found;
+            while (lineStart < haystack.Length)
+            {
+                int currentLineLength = GetLineLength(haystack[lineStart..], nullData);
+                if (matchStart < lineStart + currentLineLength)
+                {
+                    break;
+                }
+
+                lineStart += currentLineLength;
+                lineNumber++;
+            }
+
+            int lineLength = GetLineLength(haystack[lineStart..], nullData);
+            sink.MatchedLine(lineNumber, lineStart, matchStart - lineStart + 1, haystack.Slice(lineStart, lineLength));
+            matched = true;
+            matchedLines++;
+            if (maxMatchingLines is ulong limit && matchedLines >= limit)
+            {
+                return true;
+            }
+
+            searchOffset = lineStart + lineLength;
+            lineStart = searchOffset;
             lineNumber++;
         }
 
@@ -1922,9 +1992,30 @@ public static class LiteralLineSearcher
     {
         matchStart = -1;
         matchLength = 0;
+        if (IsLiteralRegex(pattern))
+        {
+            if (asciiCaseInsensitive &&
+                ContainsNonAscii(pattern) &&
+                TryFindUtf8IgnoreCase(haystack[offset..], pattern, out int literalUtf8Start, out int literalUtf8Length))
+            {
+                matchStart = offset + literalUtf8Start;
+                matchLength = literalUtf8Length;
+                return true;
+            }
+
+            int found = Find(haystack[offset..], pattern, asciiCaseInsensitive);
+            if (found < 0)
+            {
+                return false;
+            }
+
+            matchStart = offset + found;
+            matchLength = pattern.Length;
+            return true;
+        }
+
         if (asciiCaseInsensitive &&
             ContainsNonAscii(pattern) &&
-            IsLiteralRegex(pattern) &&
             TryFindUtf8IgnoreCase(haystack[offset..], pattern, out int utf8Start, out int utf8Length))
         {
             matchStart = offset + utf8Start;

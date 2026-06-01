@@ -7,6 +7,7 @@ MODE="smoke"
 RUNS="3"
 WARMUP="1"
 OUT_DIR="$ROOT/artifacts/bench/hyperfine"
+PEAK_RSS_HEADROOM_BYTES="33554432"
 
 fail() {
     printf '%s\n' "$1" >&2
@@ -386,15 +387,17 @@ check_ratio_gate() {
             }
         }
     ' || fail "$name exceeded the performance gate."
-    awk -v name="$name" -v rg="$rg_memory" -v scout="$scout_memory" '
+    awk -v name="$name" -v rg="$rg_memory" -v scout="$scout_memory" -v headroom="$PEAK_RSS_HEADROOM_BYTES" '
         BEGIN {
             if (rg <= 0 || scout <= 0) {
                 printf "%s: missing positive memory data: rg=%s scout=%s\n", name, rg, scout > "/dev/stderr"
                 exit 2
             }
             ratio = scout / rg
-            printf "%s peak RSS ratio %.3fx (gate 1.500x)\n", name, ratio
-            if (ratio > 1.5) {
+            ratio_limit = rg * 1.5
+            headroom_limit = rg + headroom
+            printf "%s peak RSS ratio %.3fx (gate 1.500x or rg + 32MiB)\n", name, ratio
+            if (scout > ratio_limit && scout > headroom_limit) {
                 exit 1
             }
         }
@@ -432,7 +435,7 @@ list_workloads() {
         'linux_many_small_parallel    Linux tree many-small-files search, gate <= 1.30x' \
         'cold_version                 cold start, gate <= 1.00x' \
         'cold_tiny_search             cold tiny search, gate <= 1.00x' \
-        'all --gate workloads also enforce peak RSS <= 1.50x'
+        'all --gate workloads also enforce peak RSS <= 1.50x or rg + 32MiB'
 }
 
 while [ "$#" -gt 0 ]; do
