@@ -8,6 +8,8 @@ namespace Scout;
 
 internal static class StandardSearchTargetOperations
 {
+    private const int ParallelOutputFlushThreshold = 64 * 1024;
+
     internal static bool SearchStandardInput(
         IReadOnlyList<byte[]> pattern,
         Stream standardInput,
@@ -395,6 +397,7 @@ internal static class StandardSearchTargetOperations
         bool directOutput = CanWriteParallelOutputDirectly(heading, interFileContextSeparator);
         bool printedContextBody = false;
         object outputLock = new();
+        ConcurrentBag<MemoryStream>? directOutputBuffers = directOutput ? [] : null;
         using BlockingCollection<BufferedSearchOutput>? outputs = directOutput ? null : new BlockingCollection<BufferedSearchOutput>();
         Task? printTask = directOutput ? null : Task.Run(() =>
         {
@@ -432,6 +435,7 @@ internal static class StandardSearchTargetOperations
             {
                 MemoryStream buffer = new();
                 var writer = new RawByteWriter(buffer);
+                directOutputBuffers?.Add(buffer);
                 return entry =>
                 {
                     if (!entry.IsFile)
@@ -439,8 +443,12 @@ internal static class StandardSearchTargetOperations
                         return WalkState.Continue;
                     }
 
-                    buffer.Position = 0;
-                    buffer.SetLength(0);
+                    if (!directOutput)
+                    {
+                        buffer.Position = 0;
+                        buffer.SetLength(0);
+                    }
+
                     bool fileWroteHeading = false;
                     bool fileMatched = false;
                     bool fileErrored = false;
@@ -475,7 +483,7 @@ internal static class StandardSearchTargetOperations
 
                     if (directOutput)
                     {
-                        WriteBufferedOutputIfAny(output, outputLock, buffer);
+                        FlushBufferedOutputIfThresholdExceeded(output, outputLock, buffer);
                     }
                     else
                     {
@@ -491,6 +499,7 @@ internal static class StandardSearchTargetOperations
             outputs?.CompleteAdding();
         }
 
+        FlushBufferedOutputs(output, outputLock, directOutputBuffers);
         printTask?.GetAwaiter().GetResult();
         wroteHeadingOutput = printedHeading;
         matched |= Volatile.Read(ref matchedFlag) != 0;
@@ -615,6 +624,7 @@ internal static class StandardSearchTargetOperations
         bool directOutput = CanWriteParallelOutputDirectly(heading, interFileContextSeparator);
         bool printedContextBody = false;
         object outputLock = new();
+        ConcurrentBag<MemoryStream>? directOutputBuffers = directOutput ? [] : null;
         using BlockingCollection<BufferedSearchOutput>? outputs = directOutput ? null : new BlockingCollection<BufferedSearchOutput>();
         Task? printTask = directOutput ? null : Task.Run(() =>
         {
@@ -652,6 +662,7 @@ internal static class StandardSearchTargetOperations
             {
                 MemoryStream buffer = new();
                 var writer = new RawByteWriter(buffer);
+                directOutputBuffers?.Add(buffer);
                 return entry =>
                 {
                     if (!entry.IsFile)
@@ -659,8 +670,12 @@ internal static class StandardSearchTargetOperations
                         return WalkState.Continue;
                     }
 
-                    buffer.Position = 0;
-                    buffer.SetLength(0);
+                    if (!directOutput)
+                    {
+                        buffer.Position = 0;
+                        buffer.SetLength(0);
+                    }
+
                     bool fileWroteHeading = false;
                     bool fileMatched = false;
                     bool fileErrored = false;
@@ -701,7 +716,7 @@ internal static class StandardSearchTargetOperations
 
                     if (directOutput)
                     {
-                        WriteBufferedOutputIfAny(output, outputLock, buffer);
+                        FlushBufferedOutputIfThresholdExceeded(output, outputLock, buffer);
                     }
                     else
                     {
@@ -717,6 +732,7 @@ internal static class StandardSearchTargetOperations
             outputs?.CompleteAdding();
         }
 
+        FlushBufferedOutputs(output, outputLock, directOutputBuffers);
         printTask?.GetAwaiter().GetResult();
         wroteHeadingOutput = printedHeading;
         stats.Add(aggregateStats);
@@ -756,6 +772,39 @@ internal static class StandardSearchTargetOperations
 
             output.Write(buffer.ToArray());
         }
+    }
+
+    private static void FlushBufferedOutputIfThresholdExceeded(RawByteWriter output, object outputLock, MemoryStream buffer)
+    {
+        if (buffer.Length < ParallelOutputFlushThreshold)
+        {
+            return;
+        }
+
+        FlushBufferedOutput(output, outputLock, buffer);
+    }
+
+    private static void FlushBufferedOutputs(
+        RawByteWriter output,
+        object outputLock,
+        ConcurrentBag<MemoryStream>? buffers)
+    {
+        if (buffers is null)
+        {
+            return;
+        }
+
+        foreach (MemoryStream buffer in buffers)
+        {
+            FlushBufferedOutput(output, outputLock, buffer);
+        }
+    }
+
+    private static void FlushBufferedOutput(RawByteWriter output, object outputLock, MemoryStream buffer)
+    {
+        WriteBufferedOutputIfAny(output, outputLock, buffer);
+        buffer.Position = 0;
+        buffer.SetLength(0);
     }
 
     private static bool CanWriteParallelOutputDirectly(bool heading, bool interFileContextSeparator)
