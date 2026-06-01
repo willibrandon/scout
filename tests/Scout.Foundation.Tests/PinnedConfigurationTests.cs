@@ -108,6 +108,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("MSBuild warning gates", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/check-msbuild-warning-gates.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/verify-linux-prereqs.sh ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("portable-build-linux-arm64", workflow, StringComparison.Ordinal);
+        Assert.Contains("native-linux-arm64", workflow, StringComparison.Ordinal);
+        Assert.Contains("eng/install-linux-host-prereqs.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/preflight.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("cancel-in-progress: true", workflow, StringComparison.Ordinal);
         Assert.Contains("ref: ${{ inputs.checkout_ref || github.sha }}", releaseGateWorkflow, StringComparison.Ordinal);
@@ -121,7 +124,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("vsarch: amd64", workflow, StringComparison.Ordinal);
         Assert.Contains("vsarch: arm64", workflow, StringComparison.Ordinal);
         Assert.Contains("runner: ubuntu-24.04", workflow, StringComparison.Ordinal);
-        Assert.Contains("runner: ubuntu-24.04-arm", workflow, StringComparison.Ordinal);
+        Assert.Contains("runs-on: ubuntu-24.04-arm", workflow, StringComparison.Ordinal);
         Assert.Contains("runner: macos-26-intel", workflow, StringComparison.Ordinal);
         Assert.Contains("runner: macos-26", workflow, StringComparison.Ordinal);
         Assert.Contains("runner: windows-2025-vs2026", workflow, StringComparison.Ordinal);
@@ -176,7 +179,7 @@ public sealed partial class PinnedConfigurationTests
         ];
         for (int index = 0; index < requiredRids.Length; index++)
         {
-            Assert.Contains("rid: " + requiredRids[index], workflow, StringComparison.Ordinal);
+            Assert.Contains(requiredRids[index], workflow, StringComparison.Ordinal);
         }
     }
 

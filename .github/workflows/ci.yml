@@ -34,8 +34,6 @@ jobs:
         include:
           - rid: linux-x64
             runner: ubuntu-24.04
-          - rid: linux-arm64
-            runner: ubuntu-24.04-arm
     steps:
       - name: Pinned snapshot apt prerequisites
         shell: sh
@@ -100,6 +98,46 @@ jobs:
           -c Release
           -p:NativeLib=Static
           -o artifacts/app/${{ matrix.rid }}
+
+  portable-build-linux-arm64:
+    name: portable build (linux-arm64)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Linux host prerequisites
+        shell: sh
+        run: eng/install-linux-host-prereqs.sh
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.102
+      - name: Restore
+        run: dotnet restore Scout.slnx
+      - name: MSBuild warning gates
+        shell: bash
+        run: eng/check-msbuild-warning-gates.sh
+      - name: Build
+        run: dotnet build Scout.slnx --no-restore
+      - name: Portable tests
+        run: |
+          dotnet test tests/Scout.Regex.Tests/Scout.Regex.Tests.csproj --no-restore
+          dotnet test tests/Scout.Foundation.Tests/Scout.Foundation.Tests.csproj --no-restore --filter "FullyQualifiedName!~ScoutApplicationTests&FullyQualifiedName!~ScoutApplicationRuntimeTests&FullyQualifiedName!~PinnedConfigurationTests"
+          dotnet test tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore --filter "FullyQualifiedName~DifferentialCasePolicyTests|FullyQualifiedName~DifferentialOutputNormalizerTests"
+      - name: Fuzz smoke
+        shell: bash
+        run: |
+          dotnet run --project fuzz/Scout.Fuzz/Scout.Fuzz.csproj --no-build -- regex-parse
+          dotnet run --project fuzz/Scout.Fuzz/Scout.Fuzz.csproj --no-build -- glob-compile
+          dotnet run --project fuzz/Scout.Fuzz/Scout.Fuzz.csproj --no-build -- search-loop
+      - name: Format
+        run: dotnet format Scout.slnx --no-restore --verify-no-changes
+      - name: Publish Native AOT static library
+        shell: bash
+        run: >
+          dotnet publish src/Scout.App/Scout.App.csproj
+          -r linux-arm64
+          -c Release
+          -p:NativeLib=Static
+          -o artifacts/app/linux-arm64
 
   portable-build-host:
     name: portable build (${{ matrix.rid }})
@@ -161,8 +199,6 @@ jobs:
         include:
           - rid: linux-x64
             runner: ubuntu-24.04
-          - rid: linux-arm64
-            runner: ubuntu-24.04-arm
     steps:
       - name: Pinned snapshot apt prerequisites
         shell: sh
@@ -206,6 +242,22 @@ jobs:
         run: spike/build-unix.sh ${{ matrix.rid }}
       - name: Link native executable
         run: native/build-app-unix.sh ${{ matrix.rid }} --smoke-only
+
+  native-linux-arm64:
+    name: native Unix link (linux-arm64)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Linux host prerequisites
+        shell: sh
+        run: eng/install-linux-host-prereqs.sh
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.102
+      - name: Link native entry spike
+        run: spike/build-unix.sh linux-arm64
+      - name: Link native executable
+        run: native/build-app-unix.sh linux-arm64 --smoke-only
 
   native-macos:
     name: native Unix link (${{ matrix.rid }})
@@ -266,8 +318,10 @@ jobs:
       contents: read
     needs:
       - portable-build-linux
+      - portable-build-linux-arm64
       - portable-build-host
       - native-linux
+      - native-linux-arm64
       - native-macos
       - native-windows
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !cancelled() && !failure() }}
