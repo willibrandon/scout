@@ -1970,6 +1970,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("cold_tiny_search", script, StringComparison.Ordinal);
         Assert.Contains("peak RSS <= 1.50x or rg + 32MiB", script, StringComparison.Ordinal);
         Assert.Contains("check_ratio_gate", script, StringComparison.Ordinal);
+        Assert.Contains("hyperfine_json_metric", script, StringComparison.Ordinal);
+        Assert.Contains("median ratio", script, StringComparison.Ordinal);
+        Assert.Contains("median wall time", readme, StringComparison.Ordinal);
         Assert.Contains("run_pair_no_shell", script, StringComparison.Ordinal);
         Assert.Contains("-N", script, StringComparison.Ordinal);
         Assert.Contains("make_cold_tiny_corpus", script, StringComparison.Ordinal);

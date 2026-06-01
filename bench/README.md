@@ -40,5 +40,7 @@ manifest. The committed lockfile now contains frozen hashes, so
 `run-hyperfine.sh` can use the lockfile paths by default, or
 `SCOUT_BENCH_OPENSUBTITLES_EN` and `SCOUT_BENCH_LINUX_TREE` can override them.
 
-The script enforces the wall-time gates from `docs/DESIGN.md` and a peak RSS
-gate of 1.5x or 32 MiB over rg, whichever is larger.
+The script enforces the wall-time gates from `docs/DESIGN.md` with hyperfine's
+median wall time, plus a peak RSS gate of 1.5x or 32 MiB over rg, whichever is
+larger. Median timing keeps all hosted-runner samples while preventing one noisy
+wall-clock outlier from deciding the release gate.

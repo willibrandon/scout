@@ -316,11 +316,12 @@ make_cold_tiny_corpus() {
     fi
 }
 
-hyperfine_json_mean() {
+hyperfine_json_metric() {
     json="$1"
     index="$2"
-    awk -v want="$index" '
-        $1 == "\"mean\":" {
+    metric="$3"
+    awk -v want="$index" -v key="\"$metric\":" '
+        $1 == key {
             gsub(/,/, "", $2)
             seen++
             if (seen == want) {
@@ -370,18 +371,18 @@ check_ratio_gate() {
     name="$1"
     gate="$2"
     json="$3"
-    rg_mean="$(hyperfine_json_mean "$json" 1)" || fail "Could not read rg mean from $json."
-    scout_mean="$(hyperfine_json_mean "$json" 2)" || fail "Could not read scout mean from $json."
+    rg_median="$(hyperfine_json_metric "$json" 1 "median")" || fail "Could not read rg median from $json."
+    scout_median="$(hyperfine_json_metric "$json" 2 "median")" || fail "Could not read scout median from $json."
     rg_memory="$(hyperfine_json_max_memory "$json" 1)" || fail "Could not read rg memory from $json."
     scout_memory="$(hyperfine_json_max_memory "$json" 2)" || fail "Could not read scout memory from $json."
-    awk -v name="$name" -v rg="$rg_mean" -v scout="$scout_mean" -v gate="$gate" '
+    awk -v name="$name" -v rg="$rg_median" -v scout="$scout_median" -v gate="$gate" '
         BEGIN {
             if (rg <= 0) {
-                printf "%s: rg mean is not positive: %s\n", name, rg > "/dev/stderr"
+                printf "%s: rg median is not positive: %s\n", name, rg > "/dev/stderr"
                 exit 2
             }
             ratio = scout / rg
-            printf "%s ratio %.3fx (gate %.3fx)\n", name, ratio, gate
+            printf "%s median ratio %.3fx (gate %.3fx)\n", name, ratio, gate
             if (ratio > gate) {
                 exit 1
             }

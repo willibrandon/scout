@@ -5,7 +5,7 @@ namespace Scout;
 
 internal static class LargeFileSearchOperations
 {
-    private const int StreamingFileBufferLength = 786_432;
+    private const int StreamingFileBufferLength = 1024 * 1024;
     private const int ImplicitSearchStreamingFileBufferLength = 262_144;
     private const long ImplicitSearchStreamingFileThreshold = 65_536;
     private const long StreamingFileThreshold = int.MaxValue;
