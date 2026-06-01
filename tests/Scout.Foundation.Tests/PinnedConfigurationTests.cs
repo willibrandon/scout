@@ -1772,9 +1772,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("read_lock_table_value \"tool.macos\" \"$NAME\" \"sha256\"", script, StringComparison.Ordinal);
         Assert.Contains("brew info --json=v2 \"$NAME\"", script, StringComparison.Ordinal);
         Assert.Contains("verify_homebrew_metadata", script, StringComparison.Ordinal);
-        Assert.Contains("brew fetch --formula --build-from-source \"$NAME\"", script, StringComparison.Ordinal);
+        Assert.Contains("retry_command()", script, StringComparison.Ordinal);
+        Assert.Contains("retry_command brew fetch --formula --build-from-source \"$NAME\"", script, StringComparison.Ordinal);
         Assert.Contains("check_file_hash \"hyperfine source archive\"", script, StringComparison.Ordinal);
-        Assert.Contains("brew fetch --formula \"$NAME\"", script, StringComparison.Ordinal);
+        Assert.Contains("retry_command brew fetch --formula \"$NAME\"", script, StringComparison.Ordinal);
         Assert.Contains("check_file_hash \"hyperfine bottle archive\"", script, StringComparison.Ordinal);
         Assert.Contains("check_file_hash \"macOS tool hyperfine\"", script, StringComparison.Ordinal);
         Assert.Contains("version_matches \"$PATH_VALUE\" \"$VERSION\"", script, StringComparison.Ordinal);

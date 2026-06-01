@@ -151,6 +151,28 @@ verify_homebrew_metadata() {
     ' "$json_path" "$expected_version" "$expected_source_url" "$expected_source_sha256" "$expected_bottle_url" "$expected_bottle_sha256"
 }
 
+retry_command() {
+    attempt=1
+    max_attempts=3
+    delay_seconds=10
+
+    while [ "$attempt" -le "$max_attempts" ]; do
+        if "$@"; then
+            return 0
+        fi
+
+        status=$?
+        if [ "$attempt" -eq "$max_attempts" ]; then
+            return "$status"
+        fi
+
+        printf 'Command failed with exit %s; retrying in %s seconds (%s/%s): %s\n' "$status" "$delay_seconds" "$attempt" "$max_attempts" "$*" >&2
+        sleep "$delay_seconds"
+        attempt=$((attempt + 1))
+        delay_seconds=$((delay_seconds * 2))
+    done
+}
+
 [ "$(uname -s)" = "Darwin" ] || fail "Pinned hyperfine provisioning is only defined for macOS release gates."
 require_command brew
 require_command sed
@@ -176,11 +198,11 @@ trap 'rm -f "$BREW_INFO"' EXIT
 brew info --json=v2 "$NAME" > "$BREW_INFO"
 verify_homebrew_metadata "$BREW_INFO" "$VERSION" "$SOURCE_URL" "$SOURCE_SHA256" "$BOTTLE_URL" "$BOTTLE_SHA256"
 
-brew fetch --formula --build-from-source "$NAME"
+retry_command brew fetch --formula --build-from-source "$NAME"
 SOURCE_ARCHIVE="$(brew --cache --build-from-source "$NAME")"
 check_file_hash "hyperfine source archive" "$SOURCE_ARCHIVE" "$SOURCE_SHA256"
 
-brew fetch --formula "$NAME"
+retry_command brew fetch --formula "$NAME"
 BOTTLE_ARCHIVE="$(brew --cache "$NAME")"
 check_file_hash "hyperfine bottle archive" "$BOTTLE_ARCHIVE" "$BOTTLE_SHA256"
 
