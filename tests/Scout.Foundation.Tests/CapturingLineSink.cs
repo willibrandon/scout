@@ -8,6 +8,10 @@ internal struct CapturingLineSink : ILineSink
 
     public long LineNumber { get; private set; }
 
+    public long ByteOffset { get; private set; }
+
+    public long MatchColumn { get; private set; }
+
     public byte[] Line { get; private set; }
 
     public ulong ContextLines { get; private set; }
@@ -16,6 +20,8 @@ internal struct CapturingLineSink : ILineSink
     {
         MatchedLines++;
         LineNumber = lineNumber;
+        ByteOffset = byteOffset;
+        MatchColumn = matchColumn;
         Line = line.ToArray();
     }
 

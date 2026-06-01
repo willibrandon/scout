@@ -1,10 +1,11 @@
+using System.Buffers;
 using System.IO;
 
 namespace Scout;
 
 internal static class LargeFileSearchOperations
 {
-    private const int StreamingFileBufferLength = 16_777_216;
+    private const int StreamingFileBufferLength = 1_048_576;
     private const long StreamingFileThreshold = int.MaxValue;
 
     internal static bool TrySearch(
@@ -73,7 +74,8 @@ internal static class LargeFileSearchOperations
                 trim,
                 includeZero,
                 nullPathTerminator,
-                lowArgs.StopOnNonmatch);
+                lowArgs.StopOnNonmatch,
+                SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs));
         }
         catch (IOException exception)
         {
@@ -146,7 +148,8 @@ internal static class LargeFileSearchOperations
         bool trim,
         bool includeZero,
         bool nullPathTerminator,
-        bool stopOnNonmatch)
+        bool stopOnNonmatch,
+        int threadCount)
     {
         if (maxCount == 0)
         {
@@ -174,7 +177,8 @@ internal static class LargeFileSearchOperations
                 textMode,
                 quiet,
                 trim,
-                nullPathTerminator);
+                nullPathTerminator,
+                threadCount);
         }
 
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, StreamingFileBufferLength, FileOptions.SequentialScan);
@@ -366,7 +370,8 @@ internal static class LargeFileSearchOperations
         bool textMode,
         bool quiet,
         bool trim,
-        bool nullPathTerminator)
+        bool nullPathTerminator,
+        int threadCount)
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, StreamingFileBufferLength, FileOptions.SequentialScan);
         byte[] buffer = new byte[StreamingFileBufferLength];
@@ -503,6 +508,248 @@ internal static class LargeFileSearchOperations
 
             lineNumberValue = currentLineNumber + ByteCounter.Count(segment[countedOffset..], terminator);
             return false;
+        }
+
+        bool CanSearchSegmentsInParallel()
+        {
+            return threadCount > 1 &&
+                fastLiteralPattern is null &&
+                maxCount is null &&
+                !quiet &&
+                !invertMatch &&
+                !lineRegexp &&
+                !wordRegexp &&
+                !separators.NullData &&
+                !separators.Crlf;
+        }
+
+        LargeFileSegmentSearchResult ProcessBufferedSegment(byte[] segmentBytes, int segmentLength, long segmentStartOffset, long segmentLineNumber)
+        {
+            string outputPath = Path.Combine(Path.GetTempPath(), "scout-segment-" + Guid.NewGuid().ToString("N") + ".out");
+            try
+            {
+                bool segmentMatched;
+                ulong segmentMatchedLines;
+                using (var outputStream = new FileStream(outputPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read, bufferSize: 8192))
+                {
+                    var segmentOutput = new RawByteWriter(outputStream);
+                    var sink = new StandardSearchSink(
+                        segmentOutput,
+                        prefix,
+                        separators.FieldMatch,
+                        separators.FieldContext,
+                        lineNumber,
+                        column,
+                        byteOffset,
+                        trim,
+                        nullPathTerminator,
+                        lineLimit,
+                        color,
+                        separators.LineTerminator,
+                        segmentLineNumber - 1,
+                        segmentStartOffset);
+                    segmentMatched = LiteralLineSearcher.Search(
+                        segmentBytes.AsSpan(0, segmentLength),
+                        pattern,
+                        ref sink,
+                        asciiCaseInsensitive,
+                        invertMatch: false,
+                        lineRegexp: false,
+                        wordRegexp: false,
+                        maxMatchingLines: null,
+                        crlf: false,
+                        nullData: false);
+                    segmentOutput.Flush();
+                    segmentMatchedLines = sink.MatchedLines;
+                }
+
+                if (new FileInfo(outputPath).Length == 0)
+                {
+                    TryDeleteFile(outputPath);
+                    return new LargeFileSegmentSearchResult(segmentMatched, segmentMatchedLines, outputPath: null);
+                }
+
+                return new LargeFileSegmentSearchResult(segmentMatched, segmentMatchedLines, outputPath);
+            }
+            catch
+            {
+                TryDeleteFile(outputPath);
+                throw;
+            }
+        }
+
+        bool SearchSegmentsInParallel()
+        {
+            int parallelism = Math.Clamp(threadCount, 1, 3);
+            var pending = new Queue<Task<LargeFileSegmentSearchResult>>();
+
+            void DrainOne()
+            {
+                LargeFileSegmentSearchResult result = pending.Dequeue().GetAwaiter().GetResult();
+                if (result.OutputPath is not null)
+                {
+                    try
+                    {
+                        using var outputStream = new FileStream(result.OutputPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 8192, FileOptions.SequentialScan);
+                        byte[] copyBuffer = new byte[8192];
+                        while (true)
+                        {
+                            int read = outputStream.Read(copyBuffer, 0, copyBuffer.Length);
+                            if (read == 0)
+                            {
+                                break;
+                            }
+
+                            output.Write(copyBuffer.AsSpan(0, read));
+                        }
+                    }
+                    finally
+                    {
+                        TryDeleteFile(result.OutputPath);
+                    }
+                }
+
+                matched |= result.Matched;
+                matchedLines += result.MatchedLines;
+            }
+
+            void DrainAll()
+            {
+                while (pending.Count != 0)
+                {
+                    DrainOne();
+                }
+            }
+
+            void QueueSegment(ReadOnlySpan<byte> segment, long segmentStartOffset, ulong lineCount)
+            {
+                int segmentLength = segment.Length;
+                byte[] segmentBytes = ArrayPool<byte>.Shared.Rent(segmentLength);
+                segment.CopyTo(segmentBytes);
+                long segmentLineNumber = lineNumberValue;
+                lineNumberValue += (long)lineCount;
+                pending.Enqueue(Task.Run(() =>
+                {
+                    try
+                    {
+                        return ProcessBufferedSegment(segmentBytes, segmentLength, segmentStartOffset, segmentLineNumber);
+                    }
+                    finally
+                    {
+                        ArrayPool<byte>.Shared.Return(segmentBytes);
+                    }
+                }));
+                if (pending.Count >= parallelism)
+                {
+                    DrainOne();
+                }
+            }
+
+            while (true)
+            {
+                int read = stream.Read(buffer, 0, buffer.Length);
+                if (read == 0)
+                {
+                    break;
+                }
+
+                long chunkOffset = absoluteOffset;
+                absoluteOffset += read;
+                int segmentStart = 0;
+                ReadOnlySpan<byte> chunk = buffer.AsSpan(0, read);
+
+                if (pendingLine is not null)
+                {
+                    int firstTerminator = chunk.IndexOf(terminator);
+                    if (firstTerminator < 0)
+                    {
+                        pendingLine.Write(chunk);
+                        continue;
+                    }
+
+                    int pendingLength = firstTerminator + 1;
+                    pendingLine.Write(chunk[..pendingLength]);
+                    byte[] line = pendingLine.ToArray();
+                    pendingLine.Dispose();
+                    pendingLine = null;
+                    if (!textMode && line.AsSpan().IndexOf((byte)0) >= 0)
+                    {
+                        DrainAll();
+                        return matched;
+                    }
+
+                    QueueSegment(line, pendingLineOffset, lineCount: 1);
+                    segmentStart = pendingLength;
+                }
+
+                if (segmentStart < read)
+                {
+                    int lastTerminator = chunk[segmentStart..].LastIndexOf(terminator);
+                    if (lastTerminator >= 0)
+                    {
+                        int completeLength = lastTerminator + 1;
+                        ReadOnlySpan<byte> segment = chunk.Slice(segmentStart, completeLength);
+                        if (!textMode && segment.IndexOf((byte)0) >= 0)
+                        {
+                            DrainAll();
+                            return matched;
+                        }
+
+                        QueueSegment(segment, chunkOffset + segmentStart, (ulong)ByteCounter.Count(segment, terminator));
+                        segmentStart += completeLength;
+                    }
+                }
+
+                if (segmentStart < read)
+                {
+                    pendingLine = new MemoryStream();
+                    pendingLineOffset = chunkOffset + segmentStart;
+                    pendingLine.Write(chunk[segmentStart..]);
+                }
+            }
+
+            if (pendingLine is not null)
+            {
+                byte[] line = pendingLine.ToArray();
+                pendingLine.Dispose();
+                if (line.Length != 0)
+                {
+                    if (!textMode && line.AsSpan().IndexOf((byte)0) >= 0)
+                    {
+                        DrainAll();
+                        return matched;
+                    }
+
+                    QueueSegment(line, pendingLineOffset, lineCount: 1);
+                }
+            }
+
+            DrainAll();
+            return matched;
+        }
+
+        static void TryDeleteFile(string? path)
+        {
+            if (path is null)
+            {
+                return;
+            }
+
+            try
+            {
+                File.Delete(path);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+
+        if (CanSearchSegmentsInParallel())
+        {
+            return SearchSegmentsInParallel();
         }
 
         while (true)
