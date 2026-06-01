@@ -607,6 +607,21 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies the Unix OS layer exposes byte-preserving link target reads.
+    /// </summary>
+    [Fact]
+    public void UnixOsLayerReadsLinkTargetsAsBytes()
+    {
+        string root = FindRepositoryRoot();
+        string metadataPath = Path.Combine(root, "src", "Scout.Ignore", "NativeFileSystemMetadata.cs");
+        string metadata = File.ReadAllText(metadataPath);
+
+        Assert.Contains("TryReadRawUnixLinkTarget(ReadOnlySpan<byte> path, out byte[] target)", metadata, StringComparison.Ordinal);
+        Assert.Contains("[LibraryImport(\"libc\", EntryPoint = \"readlink\", SetLastError = true)]", metadata, StringComparison.Ordinal);
+        Assert.Contains("private static partial nint ReadLinkRaw(byte* path, byte* buffer, nuint bufferLength);", metadata, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies CLI utilities own external decompression and preprocessor process spawning.
     /// </summary>
     [Fact]

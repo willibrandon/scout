@@ -75,6 +75,37 @@ internal static unsafe partial class NativeFileSystemMetadata
         return false;
     }
 
+    public static bool TryReadRawUnixLinkTarget(ReadOnlySpan<byte> path, out byte[] target)
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            target = [];
+            return false;
+        }
+
+        if (path.IsEmpty || path.Contains((byte)0))
+        {
+            target = [];
+            return false;
+        }
+
+        byte[] terminatedPath = new byte[path.Length + 1];
+        path.CopyTo(terminatedPath);
+        fixed (byte* pathPointer = terminatedPath)
+        {
+            byte* buffer = stackalloc byte[ReadLinkBufferSize];
+            nint length = ReadLinkRaw(pathPointer, buffer, (nuint)ReadLinkBufferSize);
+            if (length >= 0)
+            {
+                target = new ReadOnlySpan<byte>(buffer, (int)length).ToArray();
+                return true;
+            }
+        }
+
+        target = [];
+        return false;
+    }
+
     public static bool TryGetRawUnixStatus(ReadOnlySpan<byte> path, bool followLinks, out NativeUnixFileStatus status)
     {
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
@@ -234,4 +265,8 @@ internal static unsafe partial class NativeFileSystemMetadata
         SetLastError = true,
         StringMarshalling = StringMarshalling.Utf8)]
     private static partial nint ReadLink(string path, byte* buffer, nuint bufferLength);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [LibraryImport("libc", EntryPoint = "readlink", SetLastError = true)]
+    private static partial nint ReadLinkRaw(byte* path, byte* buffer, nuint bufferLength);
 }
