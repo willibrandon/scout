@@ -923,6 +923,37 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies the release trademark/search gate records known name collisions.
+    /// </summary>
+    [Fact]
+    public void TrademarkCheckRecordsKnownCollisions()
+    {
+        string root = FindRepositoryRoot();
+        string design = File.ReadAllText(Path.Combine(root, "docs", "DESIGN.md"));
+        string trademarkCheck = File.ReadAllText(Path.Combine(root, "docs", "TRADEMARK-CHECK.md"));
+
+        Assert.Contains("docs/TRADEMARK-CHECK.md", design, StringComparison.Ordinal);
+        Assert.Contains("Date: 2026-06-01", trademarkCheck, StringComparison.Ordinal);
+        Assert.Contains("Gate status: done", trademarkCheck, StringComparison.Ordinal);
+        Assert.Contains("not a legal opinion", trademarkCheck, StringComparison.Ordinal);
+        Assert.Contains("Scout (ripgrep port)", trademarkCheck, StringComparison.Ordinal);
+        Assert.Contains("USPTO Trademark Search", trademarkCheck, StringComparison.Ordinal);
+        Assert.Contains("https://tmsearch.uspto.gov/", trademarkCheck, StringComparison.Ordinal);
+        Assert.Contains("Docker Scout", trademarkCheck, StringComparison.Ordinal);
+        Assert.Contains("docker scout", trademarkCheck, StringComparison.Ordinal);
+        Assert.Contains("Scout Monitoring", trademarkCheck, StringComparison.Ordinal);
+        Assert.Contains("Scout APM", trademarkCheck, StringComparison.Ordinal);
+        Assert.Contains("openSUSE Scout", trademarkCheck, StringComparison.Ordinal);
+        Assert.Contains("crates.io `scout`", trademarkCheck, StringComparison.Ordinal);
+        Assert.Contains("npm `scout`", trademarkCheck, StringComparison.Ordinal);
+        Assert.Contains("No searched source showed an exact conflict", trademarkCheck, StringComparison.Ordinal);
+        Assert.Contains("Do not claim the name is unique.", trademarkCheck, StringComparison.Ordinal);
+        Assert.Contains("Do not ship an `sc` alias.", trademarkCheck, StringComparison.Ordinal);
+        Assert.Contains("Re-run this check before any public v1.0 announcement", trademarkCheck, StringComparison.Ordinal);
+        Assert.Contains("mechanical rename path", trademarkCheck, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies generated help, man, and completion payloads are build-time source generator inputs.
     /// </summary>
     [Fact]
