@@ -268,4 +268,5 @@ for symbol in \
         exit 1
     fi
 done
+"$ROOT/eng/package-release.sh" "$RID"
 printf 'OK %s: Scout.App native export linked with PCRE2 and smoke checks passed\n' "$RID"

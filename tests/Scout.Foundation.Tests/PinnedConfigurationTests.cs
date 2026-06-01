@@ -885,6 +885,44 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies native release packaging is wired for every shipped RID.
+    /// </summary>
+    [Fact]
+    public void NativeReleasePackagingIsWiredForEveryRid()
+    {
+        string root = FindRepositoryRoot();
+        string unixBuildScript = File.ReadAllText(Path.Combine(root, "native", "build-app-unix.sh"));
+        string windowsBuildScript = File.ReadAllText(Path.Combine(root, "native", "build-app-windows.ps1"));
+        string unixPackageScript = File.ReadAllText(Path.Combine(root, "eng", "package-release.sh"));
+        string windowsPackageScript = File.ReadAllText(Path.Combine(root, "eng", "package-release.ps1"));
+
+        Assert.Contains("\"$ROOT/eng/package-release.sh\" \"$RID\"", unixBuildScript, StringComparison.Ordinal);
+        Assert.Contains("eng\\package-release.ps1", windowsBuildScript, StringComparison.Ordinal);
+        Assert.Contains("artifacts/packages", unixPackageScript, StringComparison.Ordinal);
+        Assert.Contains("artifacts\\packages", windowsPackageScript, StringComparison.Ordinal);
+        Assert.Contains("scout-$RID.tar.gz", unixPackageScript, StringComparison.Ordinal);
+        Assert.Contains("scout-$Rid.zip", windowsPackageScript, StringComparison.Ordinal);
+        Assert.Contains("THIRD-PARTY-NOTICES.md", unixPackageScript, StringComparison.Ordinal);
+        Assert.Contains("THIRD-PARTY-NOTICES.md", windowsPackageScript, StringComparison.Ordinal);
+        Assert.Contains("PARITY.md", unixPackageScript, StringComparison.Ordinal);
+        Assert.Contains("PARITY.md", windowsPackageScript, StringComparison.Ordinal);
+        Assert.Contains("SCOUT-PACKAGE.txt", unixPackageScript, StringComparison.Ordinal);
+        Assert.Contains("SCOUT-PACKAGE.txt", windowsPackageScript, StringComparison.Ordinal);
+        Assert.Contains("4857d6fa67db69a95cd4b6f2adda5d807d4d0119", unixPackageScript, StringComparison.Ordinal);
+        Assert.Contains("4857d6fa67db69a95cd4b6f2adda5d807d4d0119", windowsPackageScript, StringComparison.Ordinal);
+        Assert.Contains("sha256_file \"$ARCHIVE\"", unixPackageScript, StringComparison.Ordinal);
+        Assert.Contains("Get-FileHash -Algorithm SHA256 -Path $Archive", windowsPackageScript, StringComparison.Ordinal);
+
+        string[] unixRids = ["osx-arm64", "osx-x64", "linux-x64", "linux-arm64"];
+        for (int index = 0; index < unixRids.Length; index++)
+        {
+            Assert.Contains(unixRids[index], unixPackageScript, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("[ValidateSet(\"win-x64\", \"win-arm64\")]", windowsPackageScript, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies generated help, man, and completion payloads are build-time source generator inputs.
     /// </summary>
     [Fact]

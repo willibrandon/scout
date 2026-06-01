@@ -132,6 +132,7 @@ if ($LASTEXITCODE -ne 0 -or ($MultiOutput -join "`n") -ne ($ExpectedMultiOutput 
     throw "Unexpected PCRE2 multi-file output: $MultiOutput"
 }
 
+& (Join-Path $Root "eng\package-release.ps1") $Rid
 Write-Host "OK ${Rid}: Scout.App native Windows export linked with PCRE2 and smoke checks passed"
 }
 finally {
