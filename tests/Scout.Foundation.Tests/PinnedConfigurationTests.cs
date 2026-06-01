@@ -264,15 +264,22 @@ public sealed partial class PinnedConfigurationTests
         string defaultExecutablePath = PinnedRipgrepOracle.DefaultExecutablePath;
         string expectedSha256 = PinnedRipgrepOracle.ExpectedSha256;
 
-        Assert.Contains("[[ripgrep_oracle]]", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("rid = \"" + PinnedRipgrepOracle.HostRid + "\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("environment = \"" + PinnedRipgrepOracle.HostOracleEnvironment + "\"", prerequisiteLock, StringComparison.Ordinal);
+        string oracleBlock = string.Join(
+            "\n",
+            "[[ripgrep_oracle]]",
+            "rid = \"" + PinnedRipgrepOracle.HostRid + "\"",
+            "environment = \"" + PinnedRipgrepOracle.HostOracleEnvironment + "\"",
+            "profile = \"release-lto\"",
+            "path = \"" + defaultExecutablePath + "\"",
+            "sha256 = \"" + expectedSha256 + "\"");
+        Assert.Contains(oracleBlock, prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("environment = \"github-actions\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("path = \"" + defaultExecutablePath + "\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("sha256 = \"" + expectedSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("ripgrep_rg_profile = \"release-lto\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("ripgrep_rg_path = \"" + defaultExecutablePath + "\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("ripgrep_rg_sha256 = \"" + expectedSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
+        if (string.Equals(PinnedRipgrepOracle.HostOracleEnvironment, "local", StringComparison.Ordinal))
+        {
+            Assert.Contains("ripgrep_rg_path = \"" + defaultExecutablePath + "\"", prerequisiteLock, StringComparison.Ordinal);
+            Assert.Contains("ripgrep_rg_sha256 = \"" + expectedSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
+        }
     }
 
     /// <summary>
@@ -1442,10 +1449,16 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("\"$ROOT/native/test-pcre2-differential-unix.sh\" \"$RID\" \"$BIN/scout\"", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("read_ripgrep_oracle_value \"pcre2_path\" \"ripgrep_pcre2_rg_path\"", differentialScript, StringComparison.Ordinal);
         Assert.Contains("read_ripgrep_oracle_value \"pcre2_sha256\" \"ripgrep_pcre2_rg_sha256\"", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("pcre2_path = \"" + defaultPcre2RipgrepPath + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("pcre2_sha256 = \"" + expectedPcre2RipgrepSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("ripgrep_pcre2_rg_profile = \"release-lto\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("ripgrep_pcre2_rg_features = \"pcre2\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("ripgrep_pcre2_rg_path = \"" + defaultPcre2RipgrepPath + "\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("ripgrep_pcre2_rg_sha256 = \"" + expectedPcre2RipgrepSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
+        if (string.Equals(PinnedRipgrepOracle.HostOracleEnvironment, "local", StringComparison.Ordinal))
+        {
+            Assert.Contains("ripgrep_pcre2_rg_path = \"" + defaultPcre2RipgrepPath + "\"", prerequisiteLock, StringComparison.Ordinal);
+            Assert.Contains("ripgrep_pcre2_rg_sha256 = \"" + expectedPcre2RipgrepSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
+        }
+
         Assert.Contains("ripgrep_pcre2_reported_version = \"" + expectedPcre2ReportedVersion + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("compare_case f1155_auto_hybrid_regex exact --no-pcre2 --auto-hybrid-regex '(?<=the )Sherlock'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("run_tool_stdin()", differentialScript, StringComparison.Ordinal);
@@ -1572,31 +1585,37 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
-    /// Verifies the macOS decompression tools in the prerequisite lock match the local binaries.
+    /// Verifies the macOS decompression tools in the prerequisite lock match the host binaries.
     /// </summary>
     [Fact]
     public void MacosDecompressionToolsMatchPinnedHashes()
     {
-        (string Name, string Version, string Path, string Sha256)[] tools =
+        (string Name, string Version, string Path, string LocalSha256, string? HostedSha256)[] tools =
         [
-            ("gzip", "Apple gzip 475", "/usr/bin/gzip", "A1983798AB66B3431190813540CB0EC691DCB8EE28DE36744B88FD8B91CD9FCD"),
-            ("bzip2", "1.0.8", "/usr/bin/bzip2", "8DA4D460440E876D81875D814F3A0EEAD38BA0FB94FEF81A9BE87560A897DEE1"),
-            ("xz", "5.8.2", "/opt/homebrew/bin/xz", "B7926EA19ABF39913EE064329261D03EC66271CF5EE4759E5A1A928A3E165540"),
-            ("zstd", "1.5.7", "/opt/homebrew/bin/zstd", "AFF8169FB421BB925FB16C44A7E0143FA2C7A941DC45CCE76B15062A2CE54917"),
-            ("lz4", "1.10.0", "/opt/homebrew/bin/lz4", "B7DCCDC84A76F0359C26C67393A6D50B4B073F8BF85078DCA7CCF877502B00E5"),
-            ("brotli", "1.2.0", "/opt/homebrew/bin/brotli", "528B0B00C1B2F8323E6185DC40D10F0324D21F9CBCCA6D8B549F6B2E49520ECF"),
-            ("uncompress", "Apple compress file_cmds-475", "/usr/bin/uncompress", "C2E461B27668BD63C4CBD85649F7C4CEB63FC2447BF657D231E0D9FD4F42A055"),
+            ("gzip", "Apple gzip 475", "/usr/bin/gzip", "A1983798AB66B3431190813540CB0EC691DCB8EE28DE36744B88FD8B91CD9FCD", "7BD218BC6B12FCED475163901547A796736F72F99533CBEC60EEA150ED21AFA3"),
+            ("bzip2", "1.0.8", "/usr/bin/bzip2", "8DA4D460440E876D81875D814F3A0EEAD38BA0FB94FEF81A9BE87560A897DEE1", "14E28B6B7955CBD6CD2A8139CA41186A922143A4FA3715DDD8E331F41DB8FC80"),
+            ("xz", "5.8.2", "/opt/homebrew/bin/xz", "B7926EA19ABF39913EE064329261D03EC66271CF5EE4759E5A1A928A3E165540", "995C8E2F72446F0D0E3A29F6C3D52286CFECEDFC4FFB2B42D25C3CE1AD77034C"),
+            ("zstd", "1.5.7", "/opt/homebrew/bin/zstd", "AFF8169FB421BB925FB16C44A7E0143FA2C7A941DC45CCE76B15062A2CE54917", null),
+            ("lz4", "1.10.0", "/opt/homebrew/bin/lz4", "B7DCCDC84A76F0359C26C67393A6D50B4B073F8BF85078DCA7CCF877502B00E5", null),
+            ("brotli", "1.2.0", "/opt/homebrew/bin/brotli", "528B0B00C1B2F8323E6185DC40D10F0324D21F9CBCCA6D8B549F6B2E49520ECF", null),
+            ("uncompress", "Apple compress file_cmds-475", "/usr/bin/uncompress", "C2E461B27668BD63C4CBD85649F7C4CEB63FC2447BF657D231E0D9FD4F42A055", "AEC4BECD30850078AA28747CAA0C76227C9E848378377E37F98D531203FE6AA4"),
         ];
 
         string root = FindRepositoryRoot();
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        bool hosted = string.Equals(Environment.GetEnvironmentVariable("GITHUB_ACTIONS"), "true", StringComparison.OrdinalIgnoreCase);
         for (int index = 0; index < tools.Length; index++)
         {
-            (string name, string version, string path, string expectedSha256) = tools[index];
+            (string name, string version, string path, string localSha256, string? hostedSha256) = tools[index];
+            string expectedSha256 = hosted && hostedSha256 is not null ? hostedSha256 : localSha256;
             Assert.Contains("name = \"" + name + "\"", prerequisiteLock, StringComparison.Ordinal);
             Assert.Contains("version = \"" + version + "\"", prerequisiteLock, StringComparison.Ordinal);
             Assert.Contains("path = \"" + path + "\"", prerequisiteLock, StringComparison.Ordinal);
-            Assert.Contains("sha256 = \"" + expectedSha256.ToLowerInvariant() + "\"", prerequisiteLock, StringComparison.Ordinal);
+            Assert.Contains("sha256 = \"" + localSha256.ToLowerInvariant() + "\"", prerequisiteLock, StringComparison.Ordinal);
+            if (hostedSha256 is not null)
+            {
+                Assert.Contains("sha256 = \"" + hostedSha256.ToLowerInvariant() + "\"", prerequisiteLock, StringComparison.Ordinal);
+            }
 
             Assert.True(File.Exists(path), "Missing macOS prerequisite tool: " + path);
             byte[] hash = SHA256.HashData(File.ReadAllBytes(path));
