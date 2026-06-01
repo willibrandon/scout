@@ -311,11 +311,13 @@ internal static class StandardSearchTargetOperations
         }
 
         string fullRoot = Path.GetFullPath(root);
+        SearchDirectoryDisplayPathFormatter displayPaths =
+            SearchPathArgument.CreateDirectoryDisplayPathFormatter(root, fullRoot, defaultRoot, lowArgs.PathSeparator);
         bool interFileContextSeparator = StandardSearchOperations.ShouldWriteInterFileContextSeparator(lowArgs, heading, separators);
         bool wroteContextBody = false;
         foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics))
         {
-            byte[] displayPathBytes = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
+            byte[] displayPathBytes = displayPaths.GetBytes(entry);
             if (interFileContextSeparator)
             {
                 using MemoryStream buffer = new();
@@ -390,6 +392,8 @@ internal static class StandardSearchTargetOperations
         ref bool errored)
     {
         string fullRoot = Path.GetFullPath(root);
+        SearchDirectoryDisplayPathFormatter displayPaths =
+            SearchPathArgument.CreateDirectoryDisplayPathFormatter(root, fullRoot, defaultRoot, lowArgs.PathSeparator);
         int matchedFlag = 0;
         int erroredFlag = 0;
         bool printedHeading = wroteHeadingOutput;
@@ -452,7 +456,7 @@ internal static class StandardSearchTargetOperations
                     bool fileWroteHeading = false;
                     bool fileMatched = false;
                     bool fileErrored = false;
-                    byte[] displayPathBytes = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
+                    byte[] displayPathBytes = displayPaths.GetBytes(entry);
                     SearchDirectoryEntryFile(
                         entry,
                         displayPathBytes,
@@ -533,11 +537,13 @@ internal static class StandardSearchTargetOperations
         }
 
         string fullRoot = Path.GetFullPath(root);
+        SearchDirectoryDisplayPathFormatter displayPaths =
+            SearchPathArgument.CreateDirectoryDisplayPathFormatter(root, fullRoot, defaultRoot, lowArgs.PathSeparator);
         bool interFileContextSeparator = StandardSearchOperations.ShouldWriteInterFileContextSeparator(lowArgs, heading, separators);
         bool wroteContextBody = false;
         foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics))
         {
-            byte[] displayPathBytes = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
+            byte[] displayPathBytes = displayPaths.GetBytes(entry);
             if (interFileContextSeparator)
             {
                 using MemoryStream buffer = new();
@@ -615,6 +621,8 @@ internal static class StandardSearchTargetOperations
         ref SearchStats stats)
     {
         string fullRoot = Path.GetFullPath(root);
+        SearchDirectoryDisplayPathFormatter displayPaths =
+            SearchPathArgument.CreateDirectoryDisplayPathFormatter(root, fullRoot, defaultRoot, lowArgs.PathSeparator);
         object statsLock = new();
         SearchStats aggregateStats = default;
         int matchedFlag = 0;
@@ -680,7 +688,7 @@ internal static class StandardSearchTargetOperations
                     bool fileMatched = false;
                     bool fileErrored = false;
                     SearchStats fileStats = default;
-                    byte[] displayPathBytes = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
+                    byte[] displayPathBytes = displayPaths.GetBytes(entry);
                     SearchDirectoryEntryFileWithStats(
                         entry,
                         displayPathBytes,

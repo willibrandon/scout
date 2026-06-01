@@ -167,6 +167,25 @@ internal readonly struct SearchPathArgument
         bool defaultRoot,
         byte? pathSeparator)
     {
+        return CreateDirectoryDisplayPathFormatter(rootArgument, fullRoot, defaultRoot, pathSeparator).GetBytes(entry);
+    }
+
+    public static SearchDirectoryDisplayPathFormatter CreateDirectoryDisplayPathFormatter(
+        string rootArgument,
+        string fullRoot,
+        bool defaultRoot,
+        byte? pathSeparator)
+    {
+        return new SearchDirectoryDisplayPathFormatter(rootArgument, fullRoot, defaultRoot, pathSeparator);
+    }
+
+    internal static byte[] GetSearchDirectoryDisplayPathBytesUncached(
+        string rootArgument,
+        string fullRoot,
+        DirEntry entry,
+        bool defaultRoot,
+        byte? pathSeparator)
+    {
         if (entry.IsRawUnixPath && TryGetRawUnixRelativePath(fullRoot, entry, out byte[] relativePath))
         {
             byte[] displayPath = defaultRoot
@@ -174,12 +193,6 @@ internal readonly struct SearchPathArgument
                 : CombineRawDisplayPath(rootArgument, relativePath);
             ApplyPathSeparator(displayPath, pathSeparator);
             return displayPath;
-        }
-
-        if (!entry.IsRawUnixPath &&
-            TryGetDisplayPathBytesFromFullPath(rootArgument, fullRoot, entry.FullPath, defaultRoot, pathSeparator, out byte[] displayBytes))
-        {
-            return displayBytes;
         }
 
         return GetPathBytes(GetSearchDirectoryDisplayPath(rootArgument, fullRoot, entry.FullPath, defaultRoot), pathSeparator);
@@ -221,70 +234,12 @@ internal readonly struct SearchPathArgument
         return relativePath.Length > 0;
     }
 
-    private static bool TryGetDisplayPathBytesFromFullPath(
-        string rootArgument,
-        string fullRoot,
-        string fullPath,
-        bool defaultRoot,
-        byte? pathSeparator,
-        out byte[] displayPath)
-    {
-        string rootPath = Path.TrimEndingDirectorySeparator(fullRoot);
-        StringComparison comparison = OperatingSystem.IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-        if (rootPath.Length == 0 ||
-            fullPath.Length <= rootPath.Length ||
-            !fullPath.StartsWith(rootPath, comparison) ||
-            !IsDirectorySeparator(fullPath[rootPath.Length]))
-        {
-            displayPath = [];
-            return false;
-        }
-
-        ReadOnlySpan<char> relativePath = fullPath.AsSpan(rootPath.Length + 1);
-        displayPath = defaultRoot
-            ? GetPathBytes(relativePath, pathSeparator)
-            : CombineDisplayPath(rootArgument, relativePath, pathSeparator);
-        return displayPath.Length > 0;
-    }
-
     private static byte[] GetPathBytes(ReadOnlySpan<char> path, byte? pathSeparator)
     {
         byte[] bytes = new byte[Utf8Lossy.GetByteCount(path)];
         Utf8Lossy.GetBytes(path, bytes);
         ApplyPathSeparator(bytes, pathSeparator);
         return bytes;
-    }
-
-    private static byte[] CombineDisplayPath(string rootArgument, ReadOnlySpan<char> relativePath, byte? pathSeparator)
-    {
-        string root = Path.TrimEndingDirectorySeparator(rootArgument);
-        if (root.Length == 0)
-        {
-            root = rootArgument;
-        }
-
-        ReadOnlySpan<char> prefix = root;
-        bool hasTrailingSeparator = root != "." && Path.EndsInDirectorySeparator(root);
-        int separatorLength = hasTrailingSeparator ? 0 : 1;
-        int byteCount = Utf8Lossy.GetByteCount(prefix) + separatorLength + Utf8Lossy.GetByteCount(relativePath);
-        byte[] displayPath = new byte[byteCount];
-        int offset = Utf8Lossy.GetBytes(prefix, displayPath);
-        if (separatorLength != 0)
-        {
-            displayPath[offset] = (byte)Path.DirectorySeparatorChar;
-            offset++;
-        }
-
-        Utf8Lossy.GetBytes(relativePath, displayPath.AsSpan(offset));
-        ApplyPathSeparator(displayPath, pathSeparator);
-        return displayPath;
-    }
-
-    private static bool IsDirectorySeparator(char value)
-    {
-        return value == Path.DirectorySeparatorChar || value == Path.AltDirectorySeparatorChar;
     }
 
     private static byte[] CombineRawDisplayPath(string rootArgument, ReadOnlySpan<byte> relativePath)
