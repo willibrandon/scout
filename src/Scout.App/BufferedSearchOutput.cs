@@ -13,13 +13,6 @@ internal sealed class BufferedSearchOutput : IDisposable
         this.stream = stream;
     }
 
-    public static BufferedSearchOutput CopyFrom(MemoryStream stream)
-    {
-        ArgumentNullException.ThrowIfNull(stream);
-        byte[] bytes = stream.ToArray();
-        return new BufferedSearchOutput(new MemoryStream(bytes, 0, bytes.Length, writable: false, publiclyVisible: true));
-    }
-
     public long Length => stream.Length;
 
     public void WriteTo(RawByteWriter output)

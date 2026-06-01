@@ -388,15 +388,17 @@ internal static class StandardSearchTargetOperations
         ref bool errored)
     {
         string fullRoot = Path.GetFullPath(root);
-        using var outputs = new BlockingCollection<BufferedSearchOutput>();
         int matchedFlag = 0;
         int erroredFlag = 0;
         bool printedHeading = wroteHeadingOutput;
         bool interFileContextSeparator = StandardSearchOperations.ShouldWriteInterFileContextSeparator(lowArgs, heading, separators);
+        bool directOutput = CanWriteParallelOutputDirectly(heading, interFileContextSeparator);
         bool printedContextBody = false;
-        var printTask = Task.Run(() =>
+        object outputLock = new();
+        using BlockingCollection<BufferedSearchOutput>? outputs = directOutput ? null : new BlockingCollection<BufferedSearchOutput>();
+        Task? printTask = directOutput ? null : Task.Run(() =>
         {
-            foreach (BufferedSearchOutput body in outputs.GetConsumingEnumerable())
+            foreach (BufferedSearchOutput body in outputs!.GetConsumingEnumerable())
             {
                 using (body)
                 {
@@ -460,6 +462,7 @@ internal static class StandardSearchTargetOperations
                         ref fileMatched,
                         ref fileErrored);
                     writer.Flush();
+
                     if (fileMatched)
                     {
                         Interlocked.Exchange(ref matchedFlag, 1);
@@ -470,9 +473,13 @@ internal static class StandardSearchTargetOperations
                         Interlocked.Exchange(ref erroredFlag, 1);
                     }
 
-                    if (buffer.Length > 0)
+                    if (directOutput)
                     {
-                        outputs.Add(BufferedSearchOutput.CopyFrom(buffer));
+                        WriteBufferedOutputIfAny(output, outputLock, buffer);
+                    }
+                    else
+                    {
+                        AddBufferedOutputIfAny(outputs, ref buffer, ref writer);
                     }
 
                     return fileMatched && lowArgs.Quiet ? WalkState.Quit : WalkState.Continue;
@@ -481,10 +488,10 @@ internal static class StandardSearchTargetOperations
         }
         finally
         {
-            outputs.CompleteAdding();
+            outputs?.CompleteAdding();
         }
 
-        printTask.GetAwaiter().GetResult();
+        printTask?.GetAwaiter().GetResult();
         wroteHeadingOutput = printedHeading;
         matched |= Volatile.Read(ref matchedFlag) != 0;
         errored |= Volatile.Read(ref erroredFlag) != 0;
@@ -599,17 +606,19 @@ internal static class StandardSearchTargetOperations
         ref SearchStats stats)
     {
         string fullRoot = Path.GetFullPath(root);
-        using var outputs = new BlockingCollection<BufferedSearchOutput>();
         object statsLock = new();
         SearchStats aggregateStats = default;
         int matchedFlag = 0;
         int erroredFlag = 0;
         bool printedHeading = wroteHeadingOutput;
         bool interFileContextSeparator = StandardSearchOperations.ShouldWriteInterFileContextSeparator(lowArgs, heading, separators);
+        bool directOutput = CanWriteParallelOutputDirectly(heading, interFileContextSeparator);
         bool printedContextBody = false;
-        var printTask = Task.Run(() =>
+        object outputLock = new();
+        using BlockingCollection<BufferedSearchOutput>? outputs = directOutput ? null : new BlockingCollection<BufferedSearchOutput>();
+        Task? printTask = directOutput ? null : Task.Run(() =>
         {
-            foreach (BufferedSearchOutput body in outputs.GetConsumingEnumerable())
+            foreach (BufferedSearchOutput body in outputs!.GetConsumingEnumerable())
             {
                 using (body)
                 {
@@ -690,9 +699,13 @@ internal static class StandardSearchTargetOperations
                         aggregateStats.Add(fileStats);
                     }
 
-                    if (buffer.Length > 0)
+                    if (directOutput)
                     {
-                        outputs.Add(BufferedSearchOutput.CopyFrom(buffer));
+                        WriteBufferedOutputIfAny(output, outputLock, buffer);
+                    }
+                    else
+                    {
+                        AddBufferedOutputIfAny(outputs, ref buffer, ref writer);
                     }
 
                     return WalkState.Continue;
@@ -701,14 +714,53 @@ internal static class StandardSearchTargetOperations
         }
         finally
         {
-            outputs.CompleteAdding();
+            outputs?.CompleteAdding();
         }
 
-        printTask.GetAwaiter().GetResult();
+        printTask?.GetAwaiter().GetResult();
         wroteHeadingOutput = printedHeading;
         stats.Add(aggregateStats);
         matched |= Volatile.Read(ref matchedFlag) != 0;
         errored |= Volatile.Read(ref erroredFlag) != 0;
+    }
+
+    private static void AddBufferedOutputIfAny(
+        BlockingCollection<BufferedSearchOutput>? outputs,
+        ref MemoryStream buffer,
+        ref RawByteWriter writer)
+    {
+        if (buffer.Length == 0)
+        {
+            return;
+        }
+
+        outputs!.Add(new BufferedSearchOutput(buffer));
+        buffer = new MemoryStream();
+        writer = new RawByteWriter(buffer);
+    }
+
+    private static void WriteBufferedOutputIfAny(RawByteWriter output, object outputLock, MemoryStream buffer)
+    {
+        if (buffer.Length == 0)
+        {
+            return;
+        }
+
+        lock (outputLock)
+        {
+            if (buffer.TryGetBuffer(out ArraySegment<byte> segment))
+            {
+                output.Write(segment.AsSpan(0, checked((int)buffer.Length)));
+                return;
+            }
+
+            output.Write(buffer.ToArray());
+        }
+    }
+
+    private static bool CanWriteParallelOutputDirectly(bool heading, bool interFileContextSeparator)
+    {
+        return !heading && !interFileContextSeparator;
     }
 
     private static void SearchDirectoryEntryFile(
