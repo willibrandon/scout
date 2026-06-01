@@ -503,6 +503,51 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
+    /// Verifies large files reached by recursive search can use the streaming path without changing output.
+    /// </summary>
+    [Fact]
+    public void LargeImplicitDirectoryFileSearchesLikeRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "large.txt");
+        using (var writer = new StreamWriter(path, append: false, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
+        {
+            for (int index = 0; index < 150_000; index++)
+            {
+                writer.WriteLine("alpha");
+            }
+
+            writer.WriteLine("needle");
+        }
+
+        (int exitCode, byte[] output, string error) = RunScout("--no-config", "--threads", "2", "-n", "needle", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-config", "--threads", "2", "-n", "needle", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies implicit streaming is bypassed for BOM-bearing files that need decoding.
+    /// </summary>
+    [Fact]
+    public void LargeImplicitBomFileSearchesLikeRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "utf16.txt");
+        string body = new string('a', 600_000) + "\nneedle\n";
+        File.WriteAllText(path, body, Encoding.Unicode);
+
+        (int exitCode, byte[] output, string error) = RunScout("--no-config", "--threads", "2", "-n", "needle", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-config", "--threads", "2", "-n", "needle", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies newly covered parser flags preserve literal-search parity when their behavior is neutral.
     /// </summary>
     [Fact]

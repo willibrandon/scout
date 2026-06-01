@@ -6,6 +6,8 @@ namespace Scout;
 internal static class LargeFileSearchOperations
 {
     private const int StreamingFileBufferLength = 1_048_576;
+    private const int ImplicitSearchStreamingFileBufferLength = 262_144;
+    private const long ImplicitSearchStreamingFileThreshold = 65_536;
     private const long StreamingFileThreshold = int.MaxValue;
 
     internal static bool TrySearch(
@@ -75,7 +77,8 @@ internal static class LargeFileSearchOperations
                 includeZero,
                 nullPathTerminator,
                 lowArgs.StopOnNonmatch,
-                SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs));
+                SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs),
+                implicitSearch ? ImplicitSearchStreamingFileBufferLength : StreamingFileBufferLength);
         }
         catch (IOException exception)
         {
@@ -105,12 +108,23 @@ internal static class LargeFileSearchOperations
         bool passthru,
         bool heading)
     {
-        if (new FileInfo(path).Length <= StreamingFileThreshold)
+        long length = new FileInfo(path).Length;
+        long streamingThreshold = implicitSearch
+            ? ImplicitSearchStreamingFileThreshold
+            : StreamingFileThreshold;
+        if (length <= streamingThreshold)
         {
             return false;
         }
 
-        return !implicitSearch &&
+        if (implicitSearch &&
+            ((lowArgs.MmapMode == CliMmapMode.AlwaysTryMmap && length <= StreamingFileThreshold) ||
+            !CanStreamImplicitEncoding(path, lowArgs.EncodingMode)))
+        {
+            return false;
+        }
+
+        return
             !lowArgs.Multiline &&
             !lowArgs.SearchZip &&
             lowArgs.Preprocessor is null &&
@@ -124,6 +138,32 @@ internal static class LargeFileSearchOperations
             afterContext == 0 &&
             !passthru &&
             !heading;
+    }
+
+    private static bool CanStreamImplicitEncoding(string path, CliEncodingMode encodingMode)
+    {
+        if (encodingMode == CliEncodingMode.None)
+        {
+            return true;
+        }
+
+        if (encodingMode != CliEncodingMode.Auto)
+        {
+            return false;
+        }
+
+        Span<byte> prefix = stackalloc byte[3];
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, bufferSize: 3);
+        int read = stream.Read(prefix);
+        return !HasEncodingBom(prefix[..read]);
+    }
+
+    private static bool HasEncodingBom(ReadOnlySpan<byte> prefix)
+    {
+        return (prefix.Length >= 3 && prefix[0] == 0xEF && prefix[1] == 0xBB && prefix[2] == 0xBF) ||
+            (prefix.Length >= 2 &&
+            ((prefix[0] == 0xFF && prefix[1] == 0xFE) ||
+            (prefix[0] == 0xFE && prefix[1] == 0xFF)));
     }
 
     private static bool SearchStreaming(
@@ -149,7 +189,8 @@ internal static class LargeFileSearchOperations
         bool includeZero,
         bool nullPathTerminator,
         bool stopOnNonmatch,
-        int threadCount)
+        int threadCount,
+        int bufferLength)
     {
         if (maxCount == 0)
         {
@@ -178,11 +219,12 @@ internal static class LargeFileSearchOperations
                 quiet,
                 trim,
                 nullPathTerminator,
-                threadCount);
+                threadCount,
+                bufferLength);
         }
 
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, StreamingFileBufferLength, FileOptions.SequentialScan);
-        byte[] buffer = new byte[StreamingFileBufferLength];
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, bufferLength, FileOptions.SequentialScan);
+        byte[] buffer = new byte[bufferLength];
         MemoryStream? pendingLine = null;
         long pendingLineOffset = 0;
         long absoluteOffset = 0;
@@ -371,10 +413,11 @@ internal static class LargeFileSearchOperations
         bool quiet,
         bool trim,
         bool nullPathTerminator,
-        int threadCount)
+        int threadCount,
+        int bufferLength)
     {
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, StreamingFileBufferLength, FileOptions.SequentialScan);
-        byte[] buffer = new byte[StreamingFileBufferLength];
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, bufferLength, FileOptions.SequentialScan);
+        byte[] buffer = new byte[bufferLength];
         MemoryStream? pendingLine = null;
         long pendingLineOffset = 0;
         long absoluteOffset = 0;
