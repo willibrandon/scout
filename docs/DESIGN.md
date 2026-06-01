@@ -890,7 +890,7 @@ $ ./out-x64/scout-spike "$(printf '\xff')" | xxd -p
 ff0a
 RESULT_X64=PASS
 ```
-On x64 the link additionally needs `libRuntime.VxsortEnabled.a` (the GC's AVX2/AVX-512 sort, absent on arm64) — the sole per-arch link delta observed. The `0xFF` byte survives unchanged on both architectures (no U+FFFD) — proving raw non-UTF-8 `argv` reaches managed code intact via the C-shim + `scout_entry` export. The remaining **four** RIDs (`linux-x64`, `linux-arm64`, `win-x64`, `win-arm64` — Windows via `wmain`/`GetCommandLineW` with the same `scout_entry` ABI) are reproduced in their own CI environments; CI fails M0 if any RID's link or assertion fails.
+On x64 the link additionally needs `libRuntime.VxsortEnabled.a` (the GC's AVX2/AVX-512 sort, absent on arm64) — the sole per-arch link delta observed. The `0xFF` byte survives unchanged on both architectures (no U+FFFD) — proving raw non-UTF-8 `argv` reaches managed code intact via the C-shim + `scout_entry` export. The complete release matrix is reproduced in CI: Unix RIDs (`osx-arm64`, `osx-x64`, `linux-x64`, `linux-arm64`) use `spike/build-unix.sh`; Windows RIDs (`win-x64`, `win-arm64`) use `spike/build-windows.ps1` with `wmain`/`GetCommandLineW` and the same `scout_entry` ABI. CI fails M0 if any RID's link or assertion fails.
 
 ---
 

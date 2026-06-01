@@ -853,9 +853,11 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("local transcript plus CI proof", design, StringComparison.Ordinal);
         Assert.Contains("Unix jobs run `spike/build-unix.sh` for `osx-arm64`, `osx-x64`, `linux-x64`, and `linux-arm64`", design, StringComparison.Ordinal);
         Assert.Contains("Windows jobs run `spike/build-windows.ps1` for `win-x64` and `win-arm64`", design, StringComparison.Ordinal);
+        Assert.Contains("The complete release matrix is reproduced in CI", design, StringComparison.Ordinal);
         Assert.Contains("green CI run for the commit under test", design, StringComparison.Ordinal);
         Assert.DoesNotContain("Reproducing on the remaining four RIDs", design, StringComparison.Ordinal);
         Assert.DoesNotContain("Reproducing on the remaining five RIDs", design, StringComparison.Ordinal);
+        Assert.DoesNotContain("The remaining **four** RIDs", design, StringComparison.Ordinal);
         Assert.DoesNotContain("raw non-UTF-8 `argv`/`envp` byte round-trip, built and run on all six RIDs", design, StringComparison.Ordinal);
     }
 
