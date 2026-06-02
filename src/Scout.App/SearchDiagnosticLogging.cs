@@ -110,6 +110,7 @@ internal static class SearchDiagnosticLogging
         if (readKind == SearchFileReadKind.MemoryMapped)
         {
             logger.Trace("grep_searcher::searcher", RipgrepSourcePath("crates/searcher/src/searcher/mod.rs"), 690, $"Some(\"{EscapeLogString(path)}\"): searching via memory map");
+            logger.Trace("grep_searcher::searcher", RipgrepSourcePath("crates/searcher/src/searcher/mod.rs"), 792, "slice reader: searching via slice-by-line strategy");
         }
         else
         {

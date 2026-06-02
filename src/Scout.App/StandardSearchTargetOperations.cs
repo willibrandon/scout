@@ -965,8 +965,9 @@ internal static class StandardSearchTargetOperations
         }
 
         SearchDiagnosticLogging.LogTraceSearchPath(logger, path, readKind);
-        bool searchTextMode = textMode || SearchesBinaryAsText(readKind, lowArgs, searchMode);
-        matched |= StandardSearchByteOperations.SearchBytesWithOptionalHeading(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, searchTextMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, ShouldQuitOnBinary(lowArgs, implicitSearch, searchTextMode), heading, ref wroteHeadingOutput);
+        bool memoryMapped = IsMemoryMapped(readKind);
+        bool searchTextMode = textMode || SearchesBinaryAsText(readKind, lowArgs, searchMode, bytes, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp);
+        matched |= StandardSearchByteOperations.SearchBytesWithOptionalHeading(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, searchTextMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, ShouldQuitOnBinary(lowArgs, implicitSearch, searchTextMode), heading, ref wroteHeadingOutput, memoryMapped);
     }
 
     private static void SearchRawUnixFile(
@@ -1061,8 +1062,9 @@ internal static class StandardSearchTargetOperations
         }
 
         SearchDiagnosticLogging.LogTraceSearchPath(logger, path, readKind);
-        bool searchTextMode = textMode || SearchesBinaryAsText(readKind, lowArgs, searchMode);
-        matched |= StandardSearchByteOperations.SearchBytesWithStats(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, searchTextMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, ShouldQuitOnBinary(lowArgs, implicitSearch, searchTextMode), heading, ref wroteHeadingOutput, ref stats);
+        bool memoryMapped = IsMemoryMapped(readKind);
+        bool searchTextMode = textMode || SearchesBinaryAsText(readKind, lowArgs, searchMode, bytes, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp);
+        matched |= StandardSearchByteOperations.SearchBytesWithStats(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, searchTextMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, ShouldQuitOnBinary(lowArgs, implicitSearch, searchTextMode), heading, ref wroteHeadingOutput, ref stats, memoryMapped);
     }
 
     private static void SearchRawUnixFileWithStats(
@@ -1112,10 +1114,65 @@ internal static class StandardSearchTargetOperations
         matched |= StandardSearchByteOperations.SearchBytesWithStats(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, quitOnBinary: false, heading, ref wroteHeadingOutput, ref stats);
     }
 
-    private static bool SearchesBinaryAsText(SearchFileReadKind readKind, CliLowArgs lowArgs, CliSearchMode searchMode)
+    private static bool IsMemoryMapped(SearchFileReadKind readKind)
     {
-        return readKind == SearchFileReadKind.MemoryMapped &&
-            (lowArgs.MmapMode == CliMmapMode.AlwaysTryMmap || searchMode != CliSearchMode.Standard);
+        return readKind == SearchFileReadKind.MemoryMapped;
+    }
+
+    private static bool SearchesBinaryAsText(
+        SearchFileReadKind readKind,
+        CliLowArgs lowArgs,
+        CliSearchMode searchMode,
+        byte[] bytes,
+        IReadOnlyList<byte[]> pattern,
+        bool asciiCaseInsensitive,
+        bool invertMatch,
+        bool lineRegexp,
+        bool wordRegexp)
+    {
+        if (!IsMemoryMapped(readKind))
+        {
+            return false;
+        }
+
+        if (searchMode != CliSearchMode.Standard)
+        {
+            return true;
+        }
+
+        if (lowArgs.MmapMode != CliMmapMode.AlwaysTryMmap)
+        {
+            return false;
+        }
+
+        if (lowArgs.Multiline || lowArgs.NullData)
+        {
+            return true;
+        }
+
+        return !HasSelectedMatchLineContainingNul(bytes, pattern, lowArgs, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp);
+    }
+
+    private static bool HasSelectedMatchLineContainingNul(
+        byte[] bytes,
+        IReadOnlyList<byte[]> pattern,
+        CliLowArgs lowArgs,
+        bool asciiCaseInsensitive,
+        bool invertMatch,
+        bool lineRegexp,
+        bool wordRegexp)
+    {
+        List<ContextLineInfo> lines = ContextSearchOperations.BuildLines(bytes, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Crlf, lowArgs.NullData, lowArgs.StopOnNonmatch);
+        for (int index = 0; index < lines.Count; index++)
+        {
+            ContextLineInfo line = lines[index];
+            if (line.SelectedMatch && bytes.AsSpan(line.Start, line.Length).Contains((byte)0))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool ShouldQuitOnBinary(CliLowArgs lowArgs, bool implicitSearch, bool searchTextMode)
