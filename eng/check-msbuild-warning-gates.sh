@@ -6,6 +6,9 @@ OUT="${1:-$ROOT/artifacts/msbuild-warning-gates}"
 
 cd "$ROOT"
 
+export MSBUILDDISABLENODEREUSE=1
+dotnet build-server shutdown >/dev/null 2>&1 || true
+
 fail() {
     printf '%s\n' "$1" >&2
     exit 1
@@ -242,12 +245,14 @@ find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" -name '*.csproj' -type
     editor_config_list="$OUT/$safe_name.editorconfig-files"
     : > "$output"
 
-    dotnet msbuild -noAutoResponse "$project" -nologo \
+    printf 'Checking MSBuild warning gates for %s\n' "$relative_project"
+
+    dotnet msbuild -noAutoResponse "$project" -nologo -nodeReuse:false \
         -getProperty:NoWarn \
         -getProperty:TreatWarningsAsErrors \
         > "$raw_evaluation_output"
 
-    dotnet msbuild "$project" -nologo \
+    dotnet msbuild "$project" -nologo -nodeReuse:false \
         -getProperty:NoWarn \
         -getProperty:WarningsNotAsErrors \
         -getProperty:TreatWarningsAsErrors \
