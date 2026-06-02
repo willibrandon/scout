@@ -965,7 +965,7 @@ internal static class StandardSearchTargetOperations
         }
 
         SearchDiagnosticLogging.LogTraceSearchPath(logger, path, readKind);
-        bool searchTextMode = textMode || SearchesBinaryAsText(readKind);
+        bool searchTextMode = textMode || SearchesBinaryAsText(readKind, lowArgs, searchMode);
         matched |= StandardSearchByteOperations.SearchBytesWithOptionalHeading(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, searchTextMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, ShouldQuitOnBinary(lowArgs, implicitSearch, searchTextMode), heading, ref wroteHeadingOutput);
     }
 
@@ -1061,7 +1061,7 @@ internal static class StandardSearchTargetOperations
         }
 
         SearchDiagnosticLogging.LogTraceSearchPath(logger, path, readKind);
-        bool searchTextMode = textMode || SearchesBinaryAsText(readKind);
+        bool searchTextMode = textMode || SearchesBinaryAsText(readKind, lowArgs, searchMode);
         matched |= StandardSearchByteOperations.SearchBytesWithStats(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, searchTextMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, ShouldQuitOnBinary(lowArgs, implicitSearch, searchTextMode), heading, ref wroteHeadingOutput, ref stats);
     }
 
@@ -1112,9 +1112,10 @@ internal static class StandardSearchTargetOperations
         matched |= StandardSearchByteOperations.SearchBytesWithStats(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, quitOnBinary: false, heading, ref wroteHeadingOutput, ref stats);
     }
 
-    private static bool SearchesBinaryAsText(SearchFileReadKind readKind)
+    private static bool SearchesBinaryAsText(SearchFileReadKind readKind, CliLowArgs lowArgs, CliSearchMode searchMode)
     {
-        return readKind == SearchFileReadKind.MemoryMapped;
+        return readKind == SearchFileReadKind.MemoryMapped &&
+            (lowArgs.MmapMode == CliMmapMode.AlwaysTryMmap || searchMode != CliSearchMode.Standard);
     }
 
     private static bool ShouldQuitOnBinary(CliLowArgs lowArgs, bool implicitSearch, bool searchTextMode)

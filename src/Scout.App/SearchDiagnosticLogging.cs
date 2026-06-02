@@ -110,11 +110,13 @@ internal static class SearchDiagnosticLogging
         if (readKind == SearchFileReadKind.MemoryMapped)
         {
             logger.Trace("grep_searcher::searcher", RipgrepSourcePath("crates/searcher/src/searcher/mod.rs"), 690, $"Some(\"{EscapeLogString(path)}\"): searching via memory map");
-            return;
+        }
+        else
+        {
+            logger.Trace("grep_searcher::searcher", RipgrepSourcePath("crates/searcher/src/searcher/mod.rs"), 711, $"Some(\"{EscapeLogString(path)}\"): searching using generic reader");
+            logger.Trace("grep_searcher::searcher", RipgrepSourcePath("crates/searcher/src/searcher/mod.rs"), 762, "generic reader: searching via roll buffer strategy");
         }
 
-        logger.Trace("grep_searcher::searcher", RipgrepSourcePath("crates/searcher/src/searcher/mod.rs"), 711, $"Some(\"{EscapeLogString(path)}\"): searching using generic reader");
-        logger.Trace("grep_searcher::searcher", RipgrepSourcePath("crates/searcher/src/searcher/mod.rs"), 762, "generic reader: searching via roll buffer strategy");
         logger.Trace("grep_searcher::searcher::core", RipgrepSourcePath("crates/searcher/src/searcher/core.rs"), 67, "searcher core: will use fast line searcher");
     }
 
