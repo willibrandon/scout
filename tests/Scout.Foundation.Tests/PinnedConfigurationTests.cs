@@ -273,6 +273,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("LINUX_LIBC_VERSION", workflow, StringComparison.Ordinal);
         Assert.Contains("capture ripgrep oracle (linux-arm64)", workflow, StringComparison.Ordinal);
         Assert.Contains("runs-on: ubuntu-24.04-arm", workflow, StringComparison.Ordinal);
+        Assert.Contains(
+            "capture ripgrep oracle (linux-arm64)\n    runs-on: ubuntu-24.04-arm\n    timeout-minutes: 90\n    container:\n      image: docker.io/library/debian:bookworm-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb",
+            workflow,
+            StringComparison.Ordinal);
         Assert.Contains("runner: macos-26-intel", workflow, StringComparison.Ordinal);
         Assert.Contains("runner: macos-26", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/capture-ripgrep-oracle.sh", workflow, StringComparison.Ordinal);
@@ -1880,6 +1884,7 @@ public sealed partial class PinnedConfigurationTests
             ("linux-x64", "brotli", "brotli", "brotli", "/usr/bin/brotli", "1.0.9-2+b6", "b111a83afdee0f0555f988968d2de0e7ddb4561db36ef31f71a1d1d95af937ce"),
             ("linux-x64", "zstd", "zstd", "zstd", "/usr/bin/zstd", "1.5.4+dfsg2-5", "cee5aaa2d86c0bf168fc57b759439f5900f2a3b55a9250271c473a7b08e3d3e3"),
             ("linux-x64", "uncompress", "ncompress", "uncompress", "/usr/bin/uncompress", "4.2.4.6-6", "55c2f67ca4c3cca0ebac659f0075461dd671ec4937ecd6c71123bb49ed322ebd"),
+            ("linux-x64", "unzip", "unzip", "unzip", "/usr/bin/unzip", "6.0-28", "e2f7d58ad17fb5ad25d4e3cfb72870089dec4a54805d83650b8fd1b648a0c29b"),
             ("linux-arm64", "gzip", "gzip", "gzip", "/usr/bin/gzip", "1.12-1", "d3afaebcb97bf6fa214a813d89b108f48955665ea596228340ec80580ee55a0e"),
             ("linux-arm64", "bzip2", "bzip2", "bzip2", "/usr/bin/bzip2", "1.0.8-5+b1", "40cbbed6f2decef80c0620931b095623705422c19cb5c14b8b27f125a3a5be21"),
             ("linux-arm64", "xz", "xz-utils", "xz", "/usr/bin/xz", "5.4.1-1", "26c98f8bc8f57e82b65b015cb699088ea1da2fc29557f4bc97bbce4fc0069cc8"),
@@ -1887,12 +1892,15 @@ public sealed partial class PinnedConfigurationTests
             ("linux-arm64", "brotli", "brotli", "brotli", "/usr/bin/brotli", "1.0.9-2+b6", "bc0ff60a77a83a039e136e6b77d4373ef5a01f233f7d42360aef5ce9a70194e5"),
             ("linux-arm64", "zstd", "zstd", "zstd", "/usr/bin/zstd", "1.5.4+dfsg2-5", "f3336accc2f38ffc03c3ee4b123b53d06ce14abfb4d19028841883c408fdbaf2"),
             ("linux-arm64", "uncompress", "ncompress", "uncompress", "/usr/bin/uncompress", "4.2.4.6-6", "55c2f67ca4c3cca0ebac659f0075461dd671ec4937ecd6c71123bb49ed322ebd"),
+            ("linux-arm64", "unzip", "unzip", "unzip", "/usr/bin/unzip", "6.0-28", "b607a8f5f7056dcccb7d81e83cd25115d73e0ef07e337581a4f591ceb01e6f41"),
         ];
 
         string root = FindRepositoryRoot();
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
         string ciWorkflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "ci.yml"));
+        string releaseGateWorkflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "release-gates.yml"));
         string resolver = File.ReadAllText(Path.Combine(root, "eng", "resolve-linux-prereqs.sh"));
+        string hostInstaller = File.ReadAllText(Path.Combine(root, "eng", "install-linux-host-prereqs.sh"));
         string design = File.ReadAllText(Path.Combine(root, "docs", "DESIGN.md"));
         string snapshotDate = ReadTopLevelTomlValue(prerequisiteLock, "linux_snapshot");
         string snapshotUrl = "http://snapshot.debian.org/archive/debian/" + snapshotDate.Replace("-", string.Empty, StringComparison.Ordinal) + "T000000Z";
@@ -1909,6 +1917,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("deb http://snapshot.debian.org/archive/debian/20260531T000000Z bookworm main", design, StringComparison.Ordinal);
         Assert.Contains("libc6_version = \"2.36-9+deb12u14\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("libc_bin_version = \"2.36-9+deb12u14\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("unzip \\", ciWorkflow, StringComparison.Ordinal);
+        Assert.Contains("unzip \\", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("unzip \\", hostInstaller, StringComparison.Ordinal);
+        Assert.Contains("unzip:unzip", resolver, StringComparison.Ordinal);
 
         for (int index = 0; index < tools.Length; index++)
         {

@@ -52,11 +52,11 @@ rid = "linux-arm64"
 environment = "github-actions"
 profile = "release-lto"
 path = "artifacts/ripgrep-oracle/linux-arm64/ripgrep/target/release-lto/rg"
-sha256 = "bbb337cf1f24e5d69173d18b90f1e7e2e62e652c4334c3c8ad2a78ee24175127"
+sha256 = "66b647fead60eb0bd793dd6ddde779e4797bb6e3160d8a7087377784b7ed372d"
 pcre2_profile = "release-lto"
 pcre2_features = "pcre2"
 pcre2_path = "artifacts/ripgrep-oracle/linux-arm64/ripgrep/target/pcre2/release-lto/rg"
-pcre2_sha256 = "f2dcbb139b2ea70e96491a6d0e291e083886ffebbb76a8ca838353e471ffa0fc"
+pcre2_sha256 = "94ebace8314f44d0525c0db0fa80dd575b8551b7b829505c3e27ad81a567118a"
 
 [[ripgrep_oracle]]
 rid = "osx-arm64"
@@ -243,6 +243,15 @@ version = "4.2.4.6-6"
 sha256 = "55c2f67ca4c3cca0ebac659f0075461dd671ec4937ecd6c71123bb49ed322ebd"
 
 [[tool.linux]]
+rid = "linux-x64"
+name = "unzip"
+package = "unzip"
+binary = "unzip"
+path = "/usr/bin/unzip"
+version = "6.0-28"
+sha256 = "e2f7d58ad17fb5ad25d4e3cfb72870089dec4a54805d83650b8fd1b648a0c29b"
+
+[[tool.linux]]
 rid = "linux-arm64"
 name = "gzip"
 package = "gzip"
@@ -304,6 +313,15 @@ binary = "uncompress"
 path = "/usr/bin/uncompress"
 version = "4.2.4.6-6"
 sha256 = "55c2f67ca4c3cca0ebac659f0075461dd671ec4937ecd6c71123bb49ed322ebd"
+
+[[tool.linux]]
+rid = "linux-arm64"
+name = "unzip"
+package = "unzip"
+binary = "unzip"
+path = "/usr/bin/unzip"
+version = "6.0-28"
+sha256 = "b607a8f5f7056dcccb7d81e83cd25115d73e0ef07e337581a4f591ceb01e6f41"
 
 [[corpus]]
 name = "opensubtitles-en"

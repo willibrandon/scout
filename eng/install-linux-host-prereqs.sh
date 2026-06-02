@@ -23,6 +23,7 @@ $SUDO apt-get install -y --no-install-recommends \
     lz4 \
     ncompress \
     tar \
+    unzip \
     xz-utils \
     zlib1g \
     zlib1g-dev \

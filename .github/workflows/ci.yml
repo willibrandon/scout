@@ -60,6 +60,7 @@ jobs:
             lz4 \
             ncompress \
             tar \
+            unzip \
             xz-utils \
             zlib1g \
             zstd
@@ -231,6 +232,7 @@ jobs:
             lz4 \
             ncompress \
             tar \
+            unzip \
             xz-utils \
             zlib1g \
             zlib1g-dev \

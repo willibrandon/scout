@@ -67,6 +67,7 @@ jobs:
             ncompress \
             pkg-config \
             tar \
+            unzip \
             xz-utils \
             zlib1g \
             zlib1g-dev \
@@ -177,6 +178,7 @@ jobs:
             lz4 \
             ncompress \
             tar \
+            unzip \
             xz-utils \
             zlib1g \
             zlib1g-dev \
