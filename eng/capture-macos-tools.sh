@@ -103,8 +103,47 @@ json_string_field() {
     " "$json_path"
 }
 
+json_hyperfine_bottle_field() {
+    json_path="$1"
+    bottle_tag="$2"
+    field="$3"
+
+    brew ruby -rjson -e '
+        document = JSON.parse(File.read(ARGV[0]))
+        formula = document.fetch("formulae").find { |item| item.fetch("name") == "hyperfine" }
+        exit 1 if formula.nil?
+        files = formula.fetch("bottle").fetch("stable").fetch("files")
+        bottle = files[ARGV[1]]
+        exit 1 if bottle.nil?
+        value = bottle.fetch(ARGV[2])
+        exit 1 if value.nil? || value == ""
+        puts value
+    ' "$json_path" "$bottle_tag" "$field"
+}
+
+hyperfine_bottle_tag() {
+    version="$1"
+    archive="$(brew --cache --formula --force-bottle hyperfine 2>/dev/null || true)"
+    [ -f "$archive" ] || return 1
+
+    file="${archive##*/}"
+    payload="${file##*--hyperfine--}"
+    case "$payload" in
+        "$version".*.bottle.tar.gz)
+            tag="${payload#$version.}"
+            tag="${tag%.bottle.tar.gz}"
+            [ -n "$tag" ] || return 1
+            printf '%s\n' "$tag"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 capture_hyperfine_metadata() {
     [ "$1" = "hyperfine" ] || return 0
+    version="$2"
     command -v brew >/dev/null 2>&1 || return 0
 
     json_path="$(mktemp "${TMPDIR:-/tmp}/hyperfine-brew-info.XXXXXX.json")"
@@ -118,11 +157,21 @@ capture_hyperfine_metadata() {
         printf 'source_sha256 = "%s"\n' "$source_sha256"
     fi
 
-    bottle_url="$(json_string_field "$json_path" "formula.fetch('bottle').fetch('stable').fetch('files').values.first&.fetch('url')" || true)"
-    bottle_sha256="$(json_string_field "$json_path" "formula.fetch('bottle').fetch('stable').fetch('files').values.first&.fetch('sha256')" || true)"
+    bottle_tag="$(hyperfine_bottle_tag "$version" || true)"
+    if [ -z "$bottle_tag" ]; then
+        brew fetch --formula --force-bottle hyperfine >/dev/null 2>&1 || true
+        bottle_tag="$(hyperfine_bottle_tag "$version" || true)"
+    fi
+
+    [ -n "$bottle_tag" ] || fail "Could not determine installed Homebrew bottle tag for hyperfine $version."
+    bottle_url="$(json_hyperfine_bottle_field "$json_path" "$bottle_tag" "url" || true)"
+    bottle_sha256="$(json_hyperfine_bottle_field "$json_path" "$bottle_tag" "sha256" || true)"
     if [ -n "$bottle_url" ] && [ -n "$bottle_sha256" ]; then
+        printf 'bottle_tag = "%s"\n' "$bottle_tag"
         printf 'bottle_url = "%s"\n' "$bottle_url"
         printf 'bottle_sha256 = "%s"\n' "$bottle_sha256"
+    else
+        fail "Homebrew metadata did not contain bottle tag $bottle_tag for hyperfine $version."
     fi
 }
 
@@ -139,7 +188,7 @@ capture_tool() {
     printf 'environment = "%s"\n' "$HOST_ENVIRONMENT"
     printf 'version = "%s"\n' "$version"
     printf 'path = "%s"\n' "$path"
-    capture_hyperfine_metadata "$name"
+    capture_hyperfine_metadata "$name" "$version"
     printf 'sha256 = "%s"\n' "$sha256"
     printf '\n'
 }

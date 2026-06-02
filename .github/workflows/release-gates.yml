@@ -95,10 +95,18 @@ jobs:
       - name: Native pinned differentials
         run: native/build-app-unix.sh ${{ matrix.rid }} --with-differentials
 
-  full-tests-macos-arm64:
-    name: full pinned tests (osx-arm64)
-    runs-on: macos-26
+  full-tests-macos:
+    name: full pinned tests (${{ matrix.rid }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: osx-x64
+            runner: macos-26-intel
+          - rid: osx-arm64
+            runner: macos-26
     steps:
       - uses: actions/checkout@v6
         with:
@@ -119,7 +127,7 @@ jobs:
       - name: Test
         run: dotnet test Scout.slnx --no-restore
       - name: Native pinned differentials
-        run: native/build-app-unix.sh osx-arm64 --with-differentials
+        run: native/build-app-unix.sh ${{ matrix.rid }} --with-differentials
 
   performance-gate:
     name: hyperfine performance gate

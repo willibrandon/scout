@@ -143,13 +143,15 @@ sha256 = "c2e461b27668bd63c4cbd85649f7c4ceb63fc2447bf657d231e0d9fd4f42a055"
 
 [[tool.macos]]
 name = "gzip"
+rid = "osx-arm64"
 environment = "github-actions"
-version = "Apple gzip 475"
+version = "Apple gzip 479"
 path = "/usr/bin/gzip"
 sha256 = "7bd218bc6b12fced475163901547a796736f72f99533cbec60eea150ed21afa3"
 
 [[tool.macos]]
 name = "bzip2"
+rid = "osx-arm64"
 environment = "github-actions"
 version = "1.0.8"
 path = "/usr/bin/bzip2"
@@ -157,15 +159,41 @@ sha256 = "14e28b6b7955cbd6cd2a8139ca41186a922143a4fa3715ddd8e331f41db8fc80"
 
 [[tool.macos]]
 name = "xz"
+rid = "osx-arm64"
 environment = "github-actions"
-version = "5.8.2"
+version = "5.8.3"
 path = "/opt/homebrew/bin/xz"
 sha256 = "995c8e2f72446f0d0e3a29f6c3d52286cfecedfc4ffb2b42d25c3ce1ad77034c"
 
 [[tool.macos]]
-name = "uncompress"
+name = "zstd"
+rid = "osx-arm64"
 environment = "github-actions"
-version = "Apple compress file_cmds-475"
+version = "1.5.7"
+path = "/opt/homebrew/bin/zstd"
+sha256 = "aff8169fb421bb925fb16c44a7e0143fa2c7a941dc45cce76b15062a2ce54917"
+
+[[tool.macos]]
+name = "lz4"
+rid = "osx-arm64"
+environment = "github-actions"
+version = "1.10.0"
+path = "/opt/homebrew/bin/lz4"
+sha256 = "b7dccdc84a76f0359c26c67393a6d50b4b073f8bf85078dca7ccf877502b00e5"
+
+[[tool.macos]]
+name = "brotli"
+rid = "osx-arm64"
+environment = "github-actions"
+version = "1.2.0"
+path = "/opt/homebrew/bin/brotli"
+sha256 = "528b0b00c1b2f8323e6185dc40d10f0324d21f9cbcca6d8b549f6b2e49520ecf"
+
+[[tool.macos]]
+name = "uncompress"
+rid = "osx-arm64"
+environment = "github-actions"
+version = "Apple compress file_cmds-479"
 path = "/usr/bin/uncompress"
 sha256 = "aec4becd30850078aa28747caa0c76227c9e848378377e37f98d531203fe6aa4"
 
@@ -175,9 +203,92 @@ version = "1.20.0"
 path = "/opt/homebrew/bin/hyperfine"
 source_url = "https://github.com/sharkdp/hyperfine/archive/refs/tags/v1.20.0.tar.gz"
 source_sha256 = "f90c3b096af568438be7da52336784635a962c9822f10f98e5ad11ae8c7f5c64"
+bottle_tag = "arm64_tahoe"
 bottle_url = "https://ghcr.io/v2/homebrew/core/hyperfine/blobs/sha256:2a79829da44dc03e12ea4977b6bfa122cea8487e741c24a7fbcc7ce6a4788db3"
 bottle_sha256 = "2a79829da44dc03e12ea4977b6bfa122cea8487e741c24a7fbcc7ce6a4788db3"
 sha256 = "b7272e98214e951452bcbc81eaf0b8f0db391dce05b58ce8ab42985b632c5e94"
+
+[[tool.macos]]
+name = "hyperfine"
+rid = "osx-arm64"
+environment = "github-actions"
+version = "1.20.0"
+path = "/opt/homebrew/bin/hyperfine"
+source_url = "https://github.com/sharkdp/hyperfine/archive/refs/tags/v1.20.0.tar.gz"
+source_sha256 = "f90c3b096af568438be7da52336784635a962c9822f10f98e5ad11ae8c7f5c64"
+bottle_tag = "arm64_tahoe"
+bottle_url = "https://ghcr.io/v2/homebrew/core/hyperfine/blobs/sha256:2a79829da44dc03e12ea4977b6bfa122cea8487e741c24a7fbcc7ce6a4788db3"
+bottle_sha256 = "2a79829da44dc03e12ea4977b6bfa122cea8487e741c24a7fbcc7ce6a4788db3"
+sha256 = "b7272e98214e951452bcbc81eaf0b8f0db391dce05b58ce8ab42985b632c5e94"
+
+[[tool.macos]]
+name = "gzip"
+rid = "osx-x64"
+environment = "github-actions"
+version = "Apple gzip 479"
+path = "/usr/bin/gzip"
+sha256 = "7bd218bc6b12fced475163901547a796736f72f99533cbec60eea150ed21afa3"
+
+[[tool.macos]]
+name = "bzip2"
+rid = "osx-x64"
+environment = "github-actions"
+version = "1.0.8"
+path = "/usr/bin/bzip2"
+sha256 = "14e28b6b7955cbd6cd2a8139ca41186a922143a4fa3715ddd8e331f41db8fc80"
+
+[[tool.macos]]
+name = "xz"
+rid = "osx-x64"
+environment = "github-actions"
+version = "5.8.3"
+path = "/usr/local/bin/xz"
+sha256 = "2ce7374ab7c6426659e3662a6a759df41e03e30bfd90898073bab1d77f7c51b2"
+
+[[tool.macos]]
+name = "zstd"
+rid = "osx-x64"
+environment = "github-actions"
+version = "1.5.7"
+path = "/usr/local/bin/zstd"
+sha256 = "9f04cf059d3043bd5ac7260bda6ebea8c21d9981210c5e7331cd0871ba20b2f6"
+
+[[tool.macos]]
+name = "lz4"
+rid = "osx-x64"
+environment = "github-actions"
+version = "1.10.0"
+path = "/usr/local/bin/lz4"
+sha256 = "eba5a3b6e501b482d57c3abbaf81751d79e8a544fab25b8f9110a207365f97fb"
+
+[[tool.macos]]
+name = "brotli"
+rid = "osx-x64"
+environment = "github-actions"
+version = "1.2.0"
+path = "/usr/local/bin/brotli"
+sha256 = "22567695dde38e3cb9393ac0ab0b45379e9e188357f6cff69b0ed23959abd5c2"
+
+[[tool.macos]]
+name = "uncompress"
+rid = "osx-x64"
+environment = "github-actions"
+version = "Apple compress file_cmds-479"
+path = "/usr/bin/uncompress"
+sha256 = "aec4becd30850078aa28747caa0c76227c9e848378377e37f98d531203fe6aa4"
+
+[[tool.macos]]
+name = "hyperfine"
+rid = "osx-x64"
+environment = "github-actions"
+version = "1.20.0"
+path = "/usr/local/bin/hyperfine"
+source_url = "https://github.com/sharkdp/hyperfine/archive/refs/tags/v1.20.0.tar.gz"
+source_sha256 = "f90c3b096af568438be7da52336784635a962c9822f10f98e5ad11ae8c7f5c64"
+bottle_tag = "sonoma"
+bottle_url = "https://ghcr.io/v2/homebrew/core/hyperfine/blobs/sha256:35f05803354dc8621b9bdf918d50aef83eca450b90babc5b9899ca151177c39a"
+bottle_sha256 = "35f05803354dc8621b9bdf918d50aef83eca450b90babc5b9899ca151177c39a"
+sha256 = "d2ed929d79d8feb7c0ef3578c105181786876a913039e0b2c89ed56942aee0a4"
 
 [[tool.linux]]
 rid = "linux-x64"

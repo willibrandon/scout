@@ -275,8 +275,9 @@ verify_homebrew_metadata() {
     expected_version="$2"
     expected_source_url="$3"
     expected_source_sha256="$4"
-    expected_bottle_url="$5"
-    expected_bottle_sha256="$6"
+    expected_bottle_tag="$5"
+    expected_bottle_url="$6"
+    expected_bottle_sha256="$7"
 
     brew ruby -rjson -e '
         document = JSON.parse(File.read(ARGV[0]))
@@ -286,8 +287,9 @@ verify_homebrew_metadata() {
         expected_version = ARGV[1]
         expected_source_url = ARGV[2]
         expected_source_sha256 = ARGV[3]
-        expected_bottle_url = ARGV[4]
-        expected_bottle_sha256 = ARGV[5]
+        expected_bottle_tag = ARGV[4]
+        expected_bottle_url = ARGV[5]
+        expected_bottle_sha256 = ARGV[6]
 
         actual_version = formula.fetch("versions").fetch("stable")
         abort("Expected hyperfine version #{expected_version}, got #{actual_version}") unless actual_version == expected_version
@@ -298,12 +300,13 @@ verify_homebrew_metadata() {
         abort("Expected hyperfine source URL #{expected_source_url}, got #{actual_source_url}") unless actual_source_url == expected_source_url
         abort("Expected hyperfine source SHA-256 #{expected_source_sha256}, got #{actual_source_sha256}") unless actual_source_sha256 == expected_source_sha256
 
-        bottles = formula.fetch("bottle").fetch("stable").fetch("files").values
-        match = bottles.find do |bottle|
-            bottle.fetch("url") == expected_bottle_url && bottle.fetch("sha256") == expected_bottle_sha256
-        end
-        abort("Expected hyperfine bottle #{expected_bottle_url} with SHA-256 #{expected_bottle_sha256}; Homebrew metadata did not contain it.") if match.nil?
-    ' "$json_path" "$expected_version" "$expected_source_url" "$expected_source_sha256" "$expected_bottle_url" "$expected_bottle_sha256"
+        bottle = formula.fetch("bottle").fetch("stable").fetch("files")[expected_bottle_tag]
+        abort("Expected hyperfine bottle tag #{expected_bottle_tag}; Homebrew metadata did not contain it.") if bottle.nil?
+        actual_bottle_url = bottle.fetch("url")
+        actual_bottle_sha256 = bottle.fetch("sha256")
+        abort("Expected hyperfine bottle URL #{expected_bottle_url}, got #{actual_bottle_url}") unless actual_bottle_url == expected_bottle_url
+        abort("Expected hyperfine bottle SHA-256 #{expected_bottle_sha256}, got #{actual_bottle_sha256}") unless actual_bottle_sha256 == expected_bottle_sha256
+    ' "$json_path" "$expected_version" "$expected_source_url" "$expected_source_sha256" "$expected_bottle_tag" "$expected_bottle_url" "$expected_bottle_sha256"
 }
 
 retry_command() {
@@ -339,6 +342,7 @@ VERSION="$(read_macos_tool_value "$NAME" "version")" || fail "Missing macOS hype
 PATH_VALUE="$(read_macos_tool_value "$NAME" "path")" || fail "Missing macOS hyperfine path in tests/PREREQS.lock."
 SOURCE_URL="$(read_macos_tool_value "$NAME" "source_url")" || fail "Missing macOS hyperfine source URL in tests/PREREQS.lock."
 SOURCE_SHA256="$(read_macos_tool_value "$NAME" "source_sha256")" || fail "Missing macOS hyperfine source hash in tests/PREREQS.lock."
+BOTTLE_TAG="$(read_macos_tool_value "$NAME" "bottle_tag")" || fail "Missing macOS hyperfine bottle tag in tests/PREREQS.lock."
 BOTTLE_URL="$(read_macos_tool_value "$NAME" "bottle_url")" || fail "Missing macOS hyperfine bottle URL in tests/PREREQS.lock."
 BOTTLE_SHA256="$(read_macos_tool_value "$NAME" "bottle_sha256")" || fail "Missing macOS hyperfine bottle hash in tests/PREREQS.lock."
 BINARY_SHA256="$(read_macos_tool_value "$NAME" "sha256")" || fail "Missing macOS hyperfine binary hash in tests/PREREQS.lock."
@@ -346,6 +350,7 @@ BINARY_SHA256="$(read_macos_tool_value "$NAME" "sha256")" || fail "Missing macOS
 require_literal "$VERSION" "macOS hyperfine version"
 require_literal "$SOURCE_URL" "macOS hyperfine source URL"
 require_literal "$SOURCE_SHA256" "macOS hyperfine source SHA-256"
+require_literal "$BOTTLE_TAG" "macOS hyperfine bottle tag"
 require_literal "$BOTTLE_URL" "macOS hyperfine bottle URL"
 require_literal "$BOTTLE_SHA256" "macOS hyperfine bottle SHA-256"
 require_literal "$BINARY_SHA256" "macOS hyperfine binary SHA-256"
@@ -353,14 +358,14 @@ require_literal "$BINARY_SHA256" "macOS hyperfine binary SHA-256"
 BREW_INFO="$(mktemp "${TMPDIR:-/tmp}/hyperfine-brew-info.XXXXXX.json")"
 trap 'rm -f "$BREW_INFO"' EXIT
 brew info --json=v2 "$NAME" > "$BREW_INFO"
-verify_homebrew_metadata "$BREW_INFO" "$VERSION" "$SOURCE_URL" "$SOURCE_SHA256" "$BOTTLE_URL" "$BOTTLE_SHA256"
+verify_homebrew_metadata "$BREW_INFO" "$VERSION" "$SOURCE_URL" "$SOURCE_SHA256" "$BOTTLE_TAG" "$BOTTLE_URL" "$BOTTLE_SHA256"
 
 retry_command brew fetch --formula --build-from-source "$NAME"
 SOURCE_ARCHIVE="$(brew --cache --build-from-source "$NAME")"
 check_file_hash "hyperfine source archive" "$SOURCE_ARCHIVE" "$SOURCE_SHA256"
 
-retry_command brew fetch --formula "$NAME"
-BOTTLE_ARCHIVE="$(brew --cache "$NAME")"
+retry_command brew fetch --formula --bottle-tag="$BOTTLE_TAG" "$NAME"
+BOTTLE_ARCHIVE="$(brew --cache --formula --bottle-tag="$BOTTLE_TAG" "$NAME")"
 check_file_hash "hyperfine bottle archive" "$BOTTLE_ARCHIVE" "$BOTTLE_SHA256"
 
 if ! hash_matches "$PATH_VALUE" "$BINARY_SHA256" || ! version_matches "$PATH_VALUE" "$VERSION"; then

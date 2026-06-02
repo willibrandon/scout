@@ -116,8 +116,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("ref: ${{ inputs.checkout_ref || github.sha }}", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("Build pinned ripgrep oracle", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("eng/setup-ripgrep-oracle.sh", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("full-tests-macos:", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("full pinned tests (${{ matrix.rid }})", releaseGateWorkflow, StringComparison.Ordinal);
-        Assert.Contains("full pinned tests (osx-arm64)", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("full-tests-macos-arm64", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("release native Linux gate (linux-x64)", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("release native Linux gate (linux-arm64)", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("release native macOS gate (${{ matrix.rid }})", releaseGateWorkflow, StringComparison.Ordinal);
@@ -300,8 +301,12 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("rid = \"%s\"", macosToolScript, StringComparison.Ordinal);
         Assert.Contains("environment = \"%s\"", macosToolScript, StringComparison.Ordinal);
         Assert.Contains("capture_tool hyperfine", macosToolScript, StringComparison.Ordinal);
+        Assert.Contains("hyperfine_bottle_tag()", macosToolScript, StringComparison.Ordinal);
+        Assert.Contains("json_hyperfine_bottle_field()", macosToolScript, StringComparison.Ordinal);
         Assert.Contains("source_sha256", macosToolScript, StringComparison.Ordinal);
+        Assert.Contains("bottle_tag", macosToolScript, StringComparison.Ordinal);
         Assert.Contains("bottle_sha256", macosToolScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("values.first", macosToolScript, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1850,12 +1855,16 @@ public sealed partial class PinnedConfigurationTests
     [Fact]
     public void HostedMacosDecompressionToolHashesArePinned()
     {
-        (string Name, string Version, string Path, string Sha256)[] tools =
+        (string Rid, string Name, string Version, string Path, string Sha256)[] tools =
         [
-            ("gzip", "Apple gzip 475", "/usr/bin/gzip", "7bd218bc6b12fced475163901547a796736f72f99533cbec60eea150ed21afa3"),
-            ("bzip2", "1.0.8", "/usr/bin/bzip2", "14e28b6b7955cbd6cd2a8139ca41186a922143a4fa3715ddd8e331f41db8fc80"),
-            ("xz", "5.8.2", "/opt/homebrew/bin/xz", "995c8e2f72446f0d0e3a29f6c3d52286cfecedfc4ffb2b42d25c3ce1ad77034c"),
-            ("uncompress", "Apple compress file_cmds-475", "/usr/bin/uncompress", "aec4becd30850078aa28747caa0c76227c9e848378377e37f98d531203fe6aa4"),
+            ("osx-arm64", "gzip", "Apple gzip 479", "/usr/bin/gzip", "7bd218bc6b12fced475163901547a796736f72f99533cbec60eea150ed21afa3"),
+            ("osx-arm64", "bzip2", "1.0.8", "/usr/bin/bzip2", "14e28b6b7955cbd6cd2a8139ca41186a922143a4fa3715ddd8e331f41db8fc80"),
+            ("osx-arm64", "xz", "5.8.3", "/opt/homebrew/bin/xz", "995c8e2f72446f0d0e3a29f6c3d52286cfecedfc4ffb2b42d25c3ce1ad77034c"),
+            ("osx-arm64", "uncompress", "Apple compress file_cmds-479", "/usr/bin/uncompress", "aec4becd30850078aa28747caa0c76227c9e848378377e37f98d531203fe6aa4"),
+            ("osx-x64", "gzip", "Apple gzip 479", "/usr/bin/gzip", "7bd218bc6b12fced475163901547a796736f72f99533cbec60eea150ed21afa3"),
+            ("osx-x64", "bzip2", "1.0.8", "/usr/bin/bzip2", "14e28b6b7955cbd6cd2a8139ca41186a922143a4fa3715ddd8e331f41db8fc80"),
+            ("osx-x64", "xz", "5.8.3", "/usr/local/bin/xz", "2ce7374ab7c6426659e3662a6a759df41e03e30bfd90898073bab1d77f7c51b2"),
+            ("osx-x64", "uncompress", "Apple compress file_cmds-479", "/usr/bin/uncompress", "aec4becd30850078aa28747caa0c76227c9e848378377e37f98d531203fe6aa4"),
         ];
 
         string root = FindRepositoryRoot();
@@ -1871,11 +1880,12 @@ public sealed partial class PinnedConfigurationTests
 
         for (int index = 0; index < tools.Length; index++)
         {
-            (string name, string version, string path, string sha256) = tools[index];
+            (string rid, string name, string version, string path, string sha256) = tools[index];
             string block = string.Join(
                 "\n",
                 "[[tool.macos]]",
                 "name = \"" + name + "\"",
+                "rid = \"" + rid + "\"",
                 "environment = \"github-actions\"",
                 "version = \"" + version + "\"",
                 "path = \"" + path + "\"",
@@ -1995,8 +2005,12 @@ public sealed partial class PinnedConfigurationTests
         const string expectedSha256 = "B7272E98214E951452BCBC81EAF0B8F0DB391DCE05B58CE8AB42985B632C5E94";
         const string sourceUrl = "https://github.com/sharkdp/hyperfine/archive/refs/tags/v1.20.0.tar.gz";
         const string sourceSha256 = "f90c3b096af568438be7da52336784635a962c9822f10f98e5ad11ae8c7f5c64";
+        const string bottleTag = "arm64_tahoe";
         const string bottleUrl = "https://ghcr.io/v2/homebrew/core/hyperfine/blobs/sha256:2a79829da44dc03e12ea4977b6bfa122cea8487e741c24a7fbcc7ce6a4788db3";
         const string bottleSha256 = "2a79829da44dc03e12ea4977b6bfa122cea8487e741c24a7fbcc7ce6a4788db3";
+        const string x64BottleTag = "sonoma";
+        const string x64BottleSha256 = "35f05803354dc8621b9bdf918d50aef83eca450b90babc5b9899ca151177c39a";
+        const string x64BinarySha256 = "d2ed929d79d8feb7c0ef3578c105181786876a913039e0b2c89ed56942aee0a4";
 
         string root = FindRepositoryRoot();
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
@@ -2006,9 +2020,15 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("path = \"" + path + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("source_url = \"" + sourceUrl + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("source_sha256 = \"" + sourceSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("bottle_tag = \"" + bottleTag + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("bottle_url = \"" + bottleUrl + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("bottle_sha256 = \"" + bottleSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("sha256 = \"" + expectedSha256.ToLowerInvariant() + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("rid = \"osx-x64\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("path = \"/usr/local/bin/hyperfine\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("bottle_tag = \"" + x64BottleTag + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("bottle_sha256 = \"" + x64BottleSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("sha256 = \"" + x64BinarySha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
 
         if (OperatingSystem.IsMacOS())
         {
@@ -2043,6 +2063,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("read_macos_tool_value \"$NAME\" \"version\"", script, StringComparison.Ordinal);
         Assert.Contains("read_macos_tool_value \"$NAME\" \"source_url\"", script, StringComparison.Ordinal);
         Assert.Contains("read_macos_tool_value \"$NAME\" \"source_sha256\"", script, StringComparison.Ordinal);
+        Assert.Contains("read_macos_tool_value \"$NAME\" \"bottle_tag\"", script, StringComparison.Ordinal);
         Assert.Contains("read_macos_tool_value \"$NAME\" \"bottle_url\"", script, StringComparison.Ordinal);
         Assert.Contains("read_macos_tool_value \"$NAME\" \"bottle_sha256\"", script, StringComparison.Ordinal);
         Assert.Contains("read_macos_tool_value \"$NAME\" \"sha256\"", script, StringComparison.Ordinal);
@@ -2051,7 +2072,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("retry_command()", script, StringComparison.Ordinal);
         Assert.Contains("retry_command brew fetch --formula --build-from-source \"$NAME\"", script, StringComparison.Ordinal);
         Assert.Contains("check_file_hash \"hyperfine source archive\"", script, StringComparison.Ordinal);
-        Assert.Contains("retry_command brew fetch --formula \"$NAME\"", script, StringComparison.Ordinal);
+        Assert.Contains("retry_command brew fetch --formula --bottle-tag=\"$BOTTLE_TAG\" \"$NAME\"", script, StringComparison.Ordinal);
+        Assert.Contains("brew --cache --formula --bottle-tag=\"$BOTTLE_TAG\" \"$NAME\"", script, StringComparison.Ordinal);
         Assert.Contains("check_file_hash \"hyperfine bottle archive\"", script, StringComparison.Ordinal);
         Assert.Contains("check_file_hash \"macOS tool hyperfine\"", script, StringComparison.Ordinal);
         Assert.Contains("version_matches \"$PATH_VALUE\" \"$VERSION\"", script, StringComparison.Ordinal);
