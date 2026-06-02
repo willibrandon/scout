@@ -90,6 +90,24 @@ jobs:
       - name: Capture ripgrep oracle row
         run: eng/capture-ripgrep-oracle.sh
 
+  windows:
+    name: capture ripgrep oracle (${{ matrix.rid }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            runner: windows-2025-vs2026
+          - rid: win-arm64
+            runner: windows-11-arm
+    steps:
+      - uses: actions/checkout@v6
+      - name: Capture ripgrep oracle row
+        shell: pwsh
+        run: eng/capture-ripgrep-oracle.ps1
+
   macos-tools:
     name: capture macOS tools (${{ matrix.rid }})
     runs-on: ${{ matrix.runner }}

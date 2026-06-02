@@ -234,6 +234,7 @@ public sealed partial class PinnedConfigurationTests
         string root = FindRepositoryRoot();
         string workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "release-gates.yml"));
         string script = File.ReadAllText(Path.Combine(root, "eng", "setup-ripgrep-oracle.sh"));
+        string windowsScript = File.ReadAllText(Path.Combine(root, "eng", "setup-ripgrep-oracle.ps1"));
 
         Assert.Contains("Build pinned ripgrep oracle", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/setup-ripgrep-oracle.sh", workflow, StringComparison.Ordinal);
@@ -252,6 +253,17 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("PCRE2_SYS_STATIC=1", script, StringComparison.Ordinal);
         Assert.Contains("verify_binary_hash \"reference rg\"", script, StringComparison.Ordinal);
         Assert.Contains("verify_binary_hash \"PCRE2 reference rg\"", script, StringComparison.Ordinal);
+
+        Assert.Contains("Get-HostRid", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("Read-LockRidTableValue", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("Read-OracleValue", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("ripgrep_oracle", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("rg.exe", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("PCRE2_SYS_STATIC", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("Invoke-Checked cargo \"+$RustToolchain\" build --profile $RgProfile --bin rg", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("Invoke-Checked cargo \"+$RustToolchain\" build --profile $RgPcre2Profile --features $RgPcre2Features --bin rg", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("Assert-BinaryHash \"reference rg\"", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("Assert-BinaryHash \"PCRE2 reference rg\"", windowsScript, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -263,6 +275,7 @@ public sealed partial class PinnedConfigurationTests
         string root = FindRepositoryRoot();
         string workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "oracle-capture.yml"));
         string script = File.ReadAllText(Path.Combine(root, "eng", "capture-ripgrep-oracle.sh"));
+        string windowsScript = File.ReadAllText(Path.Combine(root, "eng", "capture-ripgrep-oracle.ps1"));
         string macosToolScript = File.ReadAllText(Path.Combine(root, "eng", "capture-macos-tools.sh"));
 
         Assert.Contains("workflow_dispatch:", workflow, StringComparison.Ordinal);
@@ -281,7 +294,10 @@ public sealed partial class PinnedConfigurationTests
             StringComparison.Ordinal);
         Assert.Contains("runner: macos-26-intel", workflow, StringComparison.Ordinal);
         Assert.Contains("runner: macos-26", workflow, StringComparison.Ordinal);
+        Assert.Contains("runner: windows-2025-vs2026", workflow, StringComparison.Ordinal);
+        Assert.Contains("runner: windows-11-arm", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/capture-ripgrep-oracle.sh", workflow, StringComparison.Ordinal);
+        Assert.Contains("eng/capture-ripgrep-oracle.ps1", workflow, StringComparison.Ordinal);
         Assert.Contains("capture macOS tools (${{ matrix.rid }})", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/capture-macos-tools.sh", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("self-hosted", workflow, StringComparison.Ordinal);
@@ -295,6 +311,15 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("sha256_file \"$RG_PATH\"", script, StringComparison.Ordinal);
         Assert.Contains("[[ripgrep_oracle]]", script, StringComparison.Ordinal);
         Assert.Contains("pcre2_sha256", script, StringComparison.Ordinal);
+
+        Assert.Contains("Get-HostRid", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("artifacts/ripgrep-oracle/$HostRid/ripgrep", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("rg.exe", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("Invoke-Checked cargo \"+$RustToolchain\" build --profile $RgProfile --bin rg", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("PCRE2_SYS_STATIC", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("Get-Sha256 $RgPath", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("[[ripgrep_oracle]]", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("pcre2_sha256", windowsScript, StringComparison.Ordinal);
 
         Assert.Contains("host_rid()", macosToolScript, StringComparison.Ordinal);
         Assert.Contains("oracle_environment()", macosToolScript, StringComparison.Ordinal);
