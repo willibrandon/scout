@@ -749,7 +749,7 @@ public sealed class ScoutApplicationRuntimeTests
     {
         string root = CreateTempDirectory();
         string path = Path.Combine(root, "input.txt");
-        string script = CreatePreprocessorScript(root, "cat >/dev/null\nprintf 'prefail\\n' >&2\nexit 7\n");
+        string script = CreateFailingPreprocessorScript(root);
         File.WriteAllText(path, "needle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--pre", script, "needle", path);
@@ -1501,10 +1501,25 @@ public sealed class ScoutApplicationRuntimeTests
 
     private static string CreatePreprocessorScript(string root)
     {
-        return CreatePreprocessorScript(root, "cat >/dev/null\nprintf 'needle from preprocessor\n'\n");
+        if (OperatingSystem.IsWindows())
+        {
+            return CreateWindowsPreprocessorScript(root, fail: false);
+        }
+
+        return CreateUnixPreprocessorScript(root, "cat >/dev/null\nprintf 'needle from preprocessor\n'\n");
     }
 
-    private static string CreatePreprocessorScript(string root, string body)
+    private static string CreateFailingPreprocessorScript(string root)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return CreateWindowsPreprocessorScript(root, fail: true);
+        }
+
+        return CreateUnixPreprocessorScript(root, "cat >/dev/null\nprintf 'prefail\\n' >&2\nexit 7\n");
+    }
+
+    private static string CreateUnixPreprocessorScript(string root, string body)
     {
         string path = Path.Combine(root, "preprocessor.sh");
         File.WriteAllText(path, "#!/bin/sh\n" + body);
@@ -1526,6 +1541,16 @@ public sealed class ScoutApplicationRuntimeTests
         string error = process.StandardError.ReadToEnd();
         process.WaitForExit();
         Assert.True(process.ExitCode == 0, error);
+        return path;
+    }
+
+    private static string CreateWindowsPreprocessorScript(string root, bool fail)
+    {
+        string path = Path.Combine(root, "preprocessor.cmd");
+        string body = fail
+            ? "@echo off\r\nmore >NUL\r\necho prefail 1>&2\r\nexit /B 7\r\n"
+            : "@echo off\r\nmore >NUL\r\necho needle from preprocessor\r\n";
+        File.WriteAllText(path, body);
         return path;
     }
 

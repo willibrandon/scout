@@ -78,7 +78,7 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
         Assert.Equal(0, exitCode);
-        Assert.Equal(ReadPinnedRipgrepOutput("-h"), output.ToArray());
+        Assert.Equal(ReadPinnedRipgrepGeneratedOutput("-h"), output.ToArray());
         Assert.Empty(error.ToArray());
     }
 
@@ -101,7 +101,7 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
         Assert.Equal(0, exitCode);
-        Assert.Equal(ReadPinnedRipgrepOutput("--help"), output.ToArray());
+        Assert.Equal(ReadPinnedRipgrepGeneratedOutput("--help"), output.ToArray());
         Assert.Empty(error.ToArray());
     }
 
@@ -402,7 +402,7 @@ public sealed class ScoutApplicationTests
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("a.c", path);
 
         Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(GeneratedTextOutput.ForCurrentPlatform(pinnedOutput), output);
         Assert.Equal(pinnedError, error);
     }
 
@@ -6058,7 +6058,7 @@ public sealed class ScoutApplicationTests
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrepWithConfig(config);
 
         Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(GeneratedTextOutput.ForCurrentPlatform(pinnedOutput), output);
         Assert.Equal(pinnedError, error);
     }
 
@@ -6255,10 +6255,10 @@ public sealed class ScoutApplicationTests
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--generate", kind);
 
         Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(GeneratedTextOutput.ForCurrentPlatform(pinnedOutput), output);
         Assert.Equal(pinnedError, error);
         Assert.Equal(pinnedExitCode, inlineExitCode);
-        Assert.Equal(pinnedOutput, inlineOutput);
+        Assert.Equal(GeneratedTextOutput.ForCurrentPlatform(pinnedOutput), inlineOutput);
         Assert.Equal(pinnedError, inlineError);
     }
 
@@ -6439,6 +6439,11 @@ public sealed class ScoutApplicationTests
         Assert.Equal(0, exitCode);
         Assert.Equal(string.Empty, error);
         return output;
+    }
+
+    private static byte[] ReadPinnedRipgrepGeneratedOutput(string argument)
+    {
+        return GeneratedTextOutput.ForCurrentPlatform(ReadPinnedRipgrepOutput(argument));
     }
 
     private static string NormalizeJsonTimings(byte[] output)

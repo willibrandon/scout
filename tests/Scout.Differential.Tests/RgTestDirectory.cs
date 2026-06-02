@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 
 namespace Scout;
 
@@ -97,7 +98,30 @@ internal sealed class RgTestDirectory : IDisposable
 
     public void Dispose()
     {
-        Directory.Delete(RootPath, recursive: true);
+        DeleteDirectory(RootPath);
+    }
+
+    private static void DeleteDirectory(string path)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                Directory.Delete(path, recursive: true);
+                return;
+            }
+            catch (Exception exception) when (ShouldRetryDelete(exception, attempt))
+            {
+                Thread.Sleep(50 * (attempt + 1));
+            }
+        }
+    }
+
+    private static bool ShouldRetryDelete(Exception exception, int attempt)
+    {
+        return OperatingSystem.IsWindows() &&
+            attempt < 5 &&
+            exception is IOException or UnauthorizedAccessException;
     }
 
     private static void CopyDirectory(string sourcePath, string destinationPath, string sourceRootPath, string destinationRootPath)
