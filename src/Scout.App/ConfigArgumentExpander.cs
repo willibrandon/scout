@@ -123,19 +123,19 @@ internal static class ConfigArgumentExpander
         catch (FileNotFoundException)
         {
             diagnostics.ErrorMessage(new ScoutError(
-                $"failed to read the file specified in RIPGREP_CONFIG_PATH: {displayPath}: No such file or directory (os error 2)").WithContext("rg"));
+                $"failed to read the file specified in RIPGREP_CONFIG_PATH: {displayPath}: {OsErrorMessages.NoSuchFileOrDirectory}").WithContext("rg"));
             return [];
         }
         catch (DirectoryNotFoundException)
         {
             diagnostics.ErrorMessage(new ScoutError(
-                $"failed to read the file specified in RIPGREP_CONFIG_PATH: {displayPath}: No such file or directory (os error 2)").WithContext("rg"));
+                $"failed to read the file specified in RIPGREP_CONFIG_PATH: {displayPath}: {OsErrorMessages.NoSuchFileOrDirectory}").WithContext("rg"));
             return [];
         }
         catch (IOException exception) when (IsNoSuchFileOrDirectory(exception))
         {
             diagnostics.ErrorMessage(new ScoutError(
-                $"failed to read the file specified in RIPGREP_CONFIG_PATH: {displayPath}: No such file or directory (os error 2)").WithContext("rg"));
+                $"failed to read the file specified in RIPGREP_CONFIG_PATH: {displayPath}: {OsErrorMessages.NoSuchFileOrDirectory}").WithContext("rg"));
             return [];
         }
         catch (UnauthorizedAccessException exception)
@@ -216,7 +216,8 @@ internal static class ConfigArgumentExpander
 
     private static bool IsNoSuchFileOrDirectory(IOException exception)
     {
-        return exception.Message.Contains("No such file or directory", StringComparison.Ordinal);
+        return exception.Message.Contains("No such file or directory", StringComparison.Ordinal) ||
+            exception.Message.Contains("The system cannot find the file specified", StringComparison.Ordinal);
     }
 
     private static ReadOnlySpan<byte> TrimAsciiWhitespace(ReadOnlySpan<byte> bytes)

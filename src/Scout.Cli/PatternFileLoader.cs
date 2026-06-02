@@ -22,17 +22,17 @@ internal static class PatternFileLoader
         }
         catch (FileNotFoundException)
         {
-            diagnostics.ErrorMessage(new ScoutError($"{path}: No such file or directory (os error 2)").WithContext("rg"));
+            diagnostics.ErrorMessage(new ScoutError($"{path}: {OsErrorMessages.NoSuchFileOrDirectory}").WithContext("rg"));
             return false;
         }
         catch (DirectoryNotFoundException)
         {
-            diagnostics.ErrorMessage(new ScoutError($"{path}: No such file or directory (os error 2)").WithContext("rg"));
+            diagnostics.ErrorMessage(new ScoutError($"{path}: {OsErrorMessages.NoSuchFileOrDirectory}").WithContext("rg"));
             return false;
         }
         catch (UnauthorizedAccessException)
         {
-            diagnostics.ErrorMessage(new ScoutError($"{path}: Permission denied (os error 13)").WithContext("rg"));
+            diagnostics.ErrorMessage(new ScoutError($"{path}: {OsErrorMessages.PermissionDenied}").WithContext("rg"));
             return false;
         }
         catch (IOException exception)

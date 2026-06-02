@@ -6270,7 +6270,7 @@ public sealed class ScoutApplicationTests
     private static void AssertGeneratedArtifact(byte[] expectedOutput, string compressedBase64)
     {
         Assert.False(string.IsNullOrWhiteSpace(compressedBase64));
-        Assert.Equal(expectedOutput, InflateGeneratedArtifact(compressedBase64));
+        Assert.Equal(expectedOutput, GeneratedTextOutput.ForCurrentPlatform(InflateGeneratedArtifact(compressedBase64)));
     }
 
     private static byte[] InflateGeneratedArtifact(string compressedBase64)

@@ -118,6 +118,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("Build pinned ripgrep oracle", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("eng/setup-ripgrep-oracle.sh", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("eng/setup-ripgrep-oracle.ps1", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("eng/install-windows-host-prereqs.ps1", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("full-tests-macos:", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("full-tests-windows:", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("full pinned tests (${{ matrix.rid }})", releaseGateWorkflow, StringComparison.Ordinal);

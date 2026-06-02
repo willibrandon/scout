@@ -635,7 +635,7 @@ internal static class DifferentialOutputNormalizer
             return true;
         }
 
-        int pathSeparator = line.IndexOf(':', StringComparison.Ordinal);
+        int pathSeparator = FindPathFieldSeparator(line, ':');
         if (pathSeparator > 0)
         {
             path = line[..pathSeparator];
@@ -650,6 +650,20 @@ internal static class DifferentialOutputNormalizer
         }
 
         return false;
+    }
+
+    private static int FindPathFieldSeparator(string line, char separator)
+    {
+        int start = IsWindowsDrivePathLine(line) ? 2 : 0;
+        return line.IndexOf(separator, start);
+    }
+
+    private static bool IsWindowsDrivePathLine(string line)
+    {
+        return line.Length >= 3 &&
+            char.IsAsciiLetter(line[0]) &&
+            line[1] == ':' &&
+            (line[2] == '\\' || line[2] == '/');
     }
 
     private static bool TryGetJsonPathKey(string line, [NotNullWhen(true)] out string? path)

@@ -56,7 +56,7 @@ internal static class CliSearchCommandRunner
                 return false;
             }
 
-            error = new ScoutError($"preprocessor command could not start: '{commandDisplay}': {exception.Message}");
+            error = new ScoutError($"preprocessor command could not start: '{commandDisplay}': {OsErrorMessages.FormatWin32Exception(exception)}");
             return false;
         }
         catch (InvalidOperationException exception)

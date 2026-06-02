@@ -16,8 +16,8 @@ internal static class SearchApplicationDiagnostics
     internal static ScoutError MissingPath(string path, bool simple = false)
     {
         string message = simple
-            ? "No such file or directory (os error 2)"
-            : $"IO error for operation on {path}: No such file or directory (os error 2)";
+            ? OsErrorMessages.NoSuchFileOrDirectory
+            : $"IO error for operation on {path}: {OsErrorMessages.NoSuchFileOrDirectory}";
         return new ScoutError(message).WithContext($"rg: {path}");
     }
 }

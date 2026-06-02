@@ -87,6 +87,11 @@ internal sealed class OutputPath
                 return null;
             }
 
+            if (OperatingSystem.IsWindows() && IsWindowsDrivePath(fullPath))
+            {
+                fullPath = "/" + fullPath;
+            }
+
             return PercentEncodePath(Utf8.GetBytes(fullPath));
         }
         catch (ArgumentException)
@@ -123,6 +128,14 @@ internal sealed class OutputPath
         }
 
         return current;
+    }
+
+    private static bool IsWindowsDrivePath(string path)
+    {
+        return path.Length >= 3 &&
+            char.IsAsciiLetter(path[0]) &&
+            path[1] == ':' &&
+            (path[2] == '\\' || path[2] == '/');
     }
 
     private static FileSystemInfo? ResolveLinkTarget(string path)

@@ -21,7 +21,7 @@ internal readonly struct OutputColor
     public OutputColor(bool enabled)
     {
         Enabled = enabled;
-        pathStart = enabled ? "\u001b[0m\u001b[35m"u8.ToArray() : ReadOnlyMemory<byte>.Empty;
+        pathStart = enabled ? DefaultPathPrefix() : ReadOnlyMemory<byte>.Empty;
         lineStart = enabled ? "\u001b[0m\u001b[32m"u8.ToArray() : ReadOnlyMemory<byte>.Empty;
         numberStart = enabled ? "\u001b[0m"u8.ToArray() : ReadOnlyMemory<byte>.Empty;
         matchStart = enabled ? "\u001b[0m\u001b[1m\u001b[31m"u8.ToArray() : ReadOnlyMemory<byte>.Empty;
@@ -71,7 +71,7 @@ internal readonly struct OutputColor
         int[] underline = CreateStyleArray();
         int[] italic = CreateStyleArray();
 
-        SetBasicColor(fgKind, fgA, CliColorSpecParser.OutputPath, 5);
+        SetBasicColor(fgKind, fgA, CliColorSpecParser.OutputPath, OperatingSystem.IsWindows() ? 4 : 5);
         SetBasicColor(fgKind, fgA, CliColorSpecParser.OutputLine, 2);
         SetBasicColor(fgKind, fgA, CliColorSpecParser.OutputMatch, 3);
         bold[CliColorSpecParser.OutputMatch] = StyleTrue;
@@ -231,6 +231,13 @@ internal readonly struct OutputColor
         int[] values = new int[OutputCount];
         Array.Fill(values, StyleUnset);
         return values;
+    }
+
+    private static byte[] DefaultPathPrefix()
+    {
+        return OperatingSystem.IsWindows()
+            ? "\u001b[0m\u001b[36m"u8.ToArray()
+            : "\u001b[0m\u001b[35m"u8.ToArray();
     }
 
     private static void ApplySpec(

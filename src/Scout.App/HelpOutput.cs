@@ -6,8 +6,8 @@ namespace Scout;
 
 internal static class HelpOutput
 {
-    private static readonly Lazy<byte[]> ShortBytes = new(() => Inflate(GeneratedShortHelpArtifact.CompressedBase64));
-    private static readonly Lazy<byte[]> LongBytes = new(() => Inflate(GeneratedLongHelpArtifact.CompressedBase64));
+    private static readonly Lazy<byte[]> ShortBytes = new(() => GeneratedTextOutput.ForCurrentPlatform(Inflate(GeneratedShortHelpArtifact.CompressedBase64)));
+    private static readonly Lazy<byte[]> LongBytes = new(() => GeneratedTextOutput.ForCurrentPlatform(Inflate(GeneratedLongHelpArtifact.CompressedBase64)));
 
     internal static ReadOnlySpan<byte> Short => ShortBytes.Value;
 

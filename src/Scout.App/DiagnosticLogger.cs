@@ -36,6 +36,13 @@ internal readonly struct DiagnosticLogger
 
     private void Log(string level, string target, string file, int line, string message)
     {
-        diagnostics.Message($"rg: {level}|{target}|{file}:{line}: {message}");
+        diagnostics.Message($"rg: {level}|{target}|{FormatSourcePath(file)}:{line}: {message}");
+    }
+
+    private static string FormatSourcePath(string file)
+    {
+        return OperatingSystem.IsWindows()
+            ? file.Replace('/', '\\')
+            : file.Replace('\\', '/');
     }
 }

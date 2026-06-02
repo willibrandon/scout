@@ -29,7 +29,9 @@ internal sealed class IgnoreRuleSet
     {
         if (Directory.Exists(path))
         {
-            errorMessage = $"{path}: line 1: Is a directory (os error 21)";
+            errorMessage = OperatingSystem.IsWindows()
+                ? $"{path}: {OsErrorMessages.DirectoryAsFile}"
+                : $"{path}: line 1: {OsErrorMessages.DirectoryAsFile}";
             return false;
         }
 
@@ -41,17 +43,17 @@ internal sealed class IgnoreRuleSet
         }
         catch (FileNotFoundException)
         {
-            errorMessage = $"{path}: No such file or directory (os error 2)";
+            errorMessage = $"{path}: {OsErrorMessages.NoSuchFileOrDirectory}";
             return false;
         }
         catch (DirectoryNotFoundException)
         {
-            errorMessage = $"{path}: No such file or directory (os error 2)";
+            errorMessage = $"{path}: {OsErrorMessages.NoSuchFileOrDirectory}";
             return false;
         }
         catch (UnauthorizedAccessException)
         {
-            errorMessage = $"{path}: Permission denied (os error 13)";
+            errorMessage = $"{path}: {OsErrorMessages.PermissionDenied}";
             return false;
         }
         catch (IOException exception)

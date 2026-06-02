@@ -341,6 +341,28 @@ public sealed class DifferentialOutputNormalizerTests
     }
 
     /// <summary>
+    /// Verifies Windows drive-letter colons are not mistaken for match separators.
+    /// </summary>
+    [Fact]
+    public void SortLinesGroupsWindowsDrivePathOutputByFullPath()
+    {
+        string input =
+            "C:\\root\\b.txt:1:needle\n" +
+            "C:\\root\\a.txt:1:needle\n" +
+            "C:\\root\\b.txt:2:needle\n" +
+            "C:\\root\\a.txt:2:needle\n";
+
+        byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(Utf8.GetBytes(input), DifferentialComparisonMode.SortLines);
+
+        Assert.Equal(
+            "C:\\root\\a.txt:1:needle\n" +
+            "C:\\root\\a.txt:2:needle\n" +
+            "C:\\root\\b.txt:1:needle\n" +
+            "C:\\root\\b.txt:2:needle\n",
+            Utf8.GetString(normalized));
+    }
+
+    /// <summary>
     /// Verifies stdout-only upstream assertions can require non-empty stdout without pinning terminal-specific bytes.
     /// </summary>
     [Fact]

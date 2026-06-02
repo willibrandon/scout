@@ -6,11 +6,11 @@ namespace Scout;
 
 internal static class GenerateOutput
 {
-    private static readonly Lazy<byte[]> ManBytes = new(() => Inflate(GeneratedManPageArtifact.CompressedBase64));
-    private static readonly Lazy<byte[]> CompleteBashBytes = new(() => Inflate(GeneratedCompleteBashArtifact.CompressedBase64));
-    private static readonly Lazy<byte[]> CompleteZshBytes = new(() => Inflate(GeneratedCompleteZshArtifact.CompressedBase64));
-    private static readonly Lazy<byte[]> CompleteFishBytes = new(() => Inflate(GeneratedCompleteFishArtifact.CompressedBase64));
-    private static readonly Lazy<byte[]> CompletePowerShellBytes = new(() => Inflate(GeneratedCompletePowerShellArtifact.CompressedBase64));
+    private static readonly Lazy<byte[]> ManBytes = new(() => GeneratedTextOutput.ForCurrentPlatform(Inflate(GeneratedManPageArtifact.CompressedBase64)));
+    private static readonly Lazy<byte[]> CompleteBashBytes = new(() => GeneratedTextOutput.ForCurrentPlatform(Inflate(GeneratedCompleteBashArtifact.CompressedBase64)));
+    private static readonly Lazy<byte[]> CompleteZshBytes = new(() => GeneratedTextOutput.ForCurrentPlatform(Inflate(GeneratedCompleteZshArtifact.CompressedBase64)));
+    private static readonly Lazy<byte[]> CompleteFishBytes = new(() => GeneratedTextOutput.ForCurrentPlatform(Inflate(GeneratedCompleteFishArtifact.CompressedBase64)));
+    private static readonly Lazy<byte[]> CompletePowerShellBytes = new(() => GeneratedTextOutput.ForCurrentPlatform(Inflate(GeneratedCompletePowerShellArtifact.CompressedBase64)));
 
     internal static ReadOnlySpan<byte> Get(CliGenerateMode mode)
     {
