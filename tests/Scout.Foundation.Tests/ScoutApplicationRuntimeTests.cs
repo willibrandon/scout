@@ -1442,7 +1442,14 @@ public sealed class ScoutApplicationRuntimeTests
 
     private static void WriteCompressedFile(string path, string program, string[] arguments, byte[] contents)
     {
+        if (OperatingSystem.IsWindows() && string.Equals(program, "compress", StringComparison.Ordinal))
+        {
+            program = "gzip";
+            arguments = ["-c"];
+        }
+
         bool useInputFile = string.Equals(program, "compress", StringComparison.Ordinal);
+        useInputFile |= OperatingSystem.IsWindows() && string.Equals(program, "gzip", StringComparison.Ordinal) && arguments is ["-c"];
         string? inputPath = null;
         ProcessStartInfo startInfo = new(program)
         {

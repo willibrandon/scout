@@ -119,6 +119,13 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("eng/setup-ripgrep-oracle.sh", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("eng/setup-ripgrep-oracle.ps1", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("eng/install-windows-host-prereqs.ps1", releaseGateWorkflow, StringComparison.Ordinal);
+        string windowsPrereqs = File.ReadAllText(Path.Combine(root, "eng", "install-windows-host-prereqs.ps1"));
+        Assert.Contains("\"lz4\"", windowsPrereqs, StringComparison.Ordinal);
+        Assert.Contains("\"brotli\"", windowsPrereqs, StringComparison.Ordinal);
+        Assert.Contains("\"zstd\"", windowsPrereqs, StringComparison.Ordinal);
+        Assert.Contains("\"uncompress\"", windowsPrereqs, StringComparison.Ordinal);
+        Assert.Contains("\"C:\\tools\\msys64\"", windowsPrereqs, StringComparison.Ordinal);
+        Assert.DoesNotContain(" ncompress", windowsPrereqs, StringComparison.Ordinal);
         Assert.Contains("full-tests-macos:", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("full-tests-windows:", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("full pinned tests (${{ matrix.rid }})", releaseGateWorkflow, StringComparison.Ordinal);

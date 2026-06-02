@@ -12,8 +12,12 @@ $requiredCommands = @(
     "lz4",
     "brotli",
     "zstd",
-    "compress",
     "uncompress"
+)
+
+$msysRoots = @(
+    "C:\msys64",
+    "C:\tools\msys64"
 )
 
 function Add-PathEntry {
@@ -54,24 +58,43 @@ function Get-Chocolatey {
     return Get-Command choco -ErrorAction SilentlyContinue
 }
 
-Add-PathEntry "C:\msys64\usr\bin"
+function Add-MsysPaths {
+    foreach ($root in $msysRoots) {
+        Add-PathEntry (Join-Path $root "usr\bin")
+    }
+}
+
+function Get-Pacman {
+    foreach ($root in $msysRoots) {
+        $candidate = Join-Path $root "usr\bin\pacman.exe"
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
+Add-MsysPaths
 Add-PathEntry "C:\ProgramData\chocolatey\bin"
 
 $missing = Get-MissingCommands
 if ($missing.Count -gt 0) {
-    $pacman = "C:\msys64\usr\bin\pacman.exe"
-    if (-not (Test-Path -LiteralPath $pacman -PathType Leaf)) {
+    $pacman = Get-Pacman
+    if ($null -eq $pacman) {
         $choco = Get-Chocolatey
         if ($null -eq $choco) {
             throw "Missing MSYS2 pacman and Chocolatey; cannot install Windows host prerequisites."
         }
 
         & $choco.Source install msys2 --no-progress -y
+        Add-MsysPaths
+        $pacman = Get-Pacman
     }
 
-    if (Test-Path -LiteralPath $pacman -PathType Leaf) {
-        & $pacman -Sy --noconfirm --needed gzip bzip2 xz lz4 brotli zstd ncompress
-        Add-PathEntry "C:\msys64\usr\bin"
+    if ($null -ne $pacman) {
+        & $pacman -Sy --noconfirm --needed gzip bzip2 xz lz4 brotli zstd
+        Add-MsysPaths
     }
 }
 
