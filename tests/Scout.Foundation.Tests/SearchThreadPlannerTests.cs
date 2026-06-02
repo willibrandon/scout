@@ -74,16 +74,16 @@ public sealed class SearchThreadPlannerTests
     }
 
     /// <summary>
-    /// Verifies default macOS search fan-out is lower on constrained hosts.
+    /// Verifies default macOS directory search fan-out is capped at four threads.
     /// </summary>
     [Theory]
     [InlineData(1, 1)]
     [InlineData(2, 2)]
-    [InlineData(3, 2)]
-    [InlineData(4, 2)]
+    [InlineData(3, 3)]
+    [InlineData(4, 4)]
     [InlineData(5, 4)]
     [InlineData(12, 4)]
-    public void SearchWalkPlanningCapsConstrainedMacOsDefaultDirectorySearchThreads(int upstreamDefault, int expectedThreads)
+    public void SearchWalkPlanningCapsMacOsDefaultDirectorySearchThreadMatrix(int upstreamDefault, int expectedThreads)
     {
         int threads = SearchWalkPlanning.GetMacOsDefaultSearchWalkThreadCount(upstreamDefault);
 

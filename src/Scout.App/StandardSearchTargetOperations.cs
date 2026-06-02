@@ -765,7 +765,7 @@ internal static class StandardSearchTargetOperations
 
     private static RawByteWriter CreateParallelOutputWriter(MemoryStream buffer)
     {
-        return new RawByteWriter(buffer, RawByteWriterBufferMode.Block);
+        return new RawByteWriter(buffer);
     }
 
     private static void WriteBufferedOutputIfAny(RawByteWriter output, object outputLock, MemoryStream buffer)
