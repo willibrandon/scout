@@ -25,16 +25,17 @@ fuzz, and native link checks. After `CI` succeeds on `main`, it dispatches the
 also be started manually from Actions. Release Gates repeat the native
 entrypoint and final `scout` executable smoke checks on all six hosted release
 RIDs: `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`, `win-x64`, and
-`win-arm64`. The full pinned test pass and hyperfine performance gate run on
-GitHub-hosted `macos-26` runners. The pinned CI runner labels are
-`ubuntu-24.04, ubuntu-24.04-arm, macos-26-intel, macos-26,
-windows-2025-vs2026, and windows-11-arm`; those are the only labels the
-configuration allows. The workflow builds the pinned release-LTO `rg` oracle
-from source, installs hyperfine with Homebrew, fetches the pinned corpora into
-`artifacts/corpora`, and verifies every frozen hash from `tests/PREREQS.lock`
-before measuring. Cancelled, failed, or stale CI completions do not queue
-release work. It does not require any personal machine, privately managed
-runner, or repository secret.
+`win-arm64`. Full pinned test passes currently run on the hosted Unix RIDs with
+complete oracle/tool pin support: `linux-x64`, `linux-arm64`, and `osx-arm64`.
+The hyperfine performance gate runs on GitHub-hosted `macos-26` arm64. The
+pinned CI runner labels are `ubuntu-24.04, ubuntu-24.04-arm, macos-26-intel,
+macos-26, windows-2025-vs2026, and windows-11-arm`; those are the only labels
+the configuration allows. The workflow builds the pinned release-LTO `rg` oracle
+from source, installs hyperfine with Homebrew where required, fetches the pinned
+corpora into `artifacts/corpora`, and verifies every frozen hash from
+`tests/PREREQS.lock` before measuring. Cancelled, failed, or stale CI
+completions do not queue release work. It does not require any personal machine,
+privately managed runner, or repository secret.
 
 `eng/fetch-corpora.sh` prints replacement `[[corpus]]` blocks for
 `tests/PREREQS.lock` after it downloads OpenSubtitles and the pinned Linux

@@ -116,6 +116,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("ref: ${{ inputs.checkout_ref || github.sha }}", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("Build pinned ripgrep oracle", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("eng/setup-ripgrep-oracle.sh", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("full pinned tests (${{ matrix.rid }})", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("full pinned tests (osx-arm64)", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("release native Linux gate (linux-x64)", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("release native Linux gate (linux-arm64)", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("release native macOS gate (${{ matrix.rid }})", releaseGateWorkflow, StringComparison.Ordinal);
@@ -129,6 +131,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("spike/build-unix.sh linux-arm64", workflow, StringComparison.Ordinal);
         Assert.Contains("spike/build-windows.ps1 ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
         Assert.Contains("native/build-app-unix.sh ${{ matrix.rid }} --smoke-only", workflow, StringComparison.Ordinal);
+        Assert.Contains("native/build-app-unix.sh ${{ matrix.rid }} --with-differentials", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("native/build-app-unix.sh osx-arm64 --with-differentials", workflow, StringComparison.Ordinal);
         Assert.Contains("native/build-app-windows.ps1 ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
         Assert.Contains("vsarch: amd64", workflow, StringComparison.Ordinal);
@@ -1816,9 +1819,12 @@ public sealed partial class PinnedConfigurationTests
                 Assert.Contains("sha256 = \"" + hostedSha256.ToLowerInvariant() + "\"", prerequisiteLock, StringComparison.Ordinal);
             }
 
-            Assert.True(File.Exists(path), "Missing macOS prerequisite tool: " + path);
-            byte[] hash = SHA256.HashData(File.ReadAllBytes(path));
-            Assert.Equal(expectedSha256, Convert.ToHexString(hash));
+            if (OperatingSystem.IsMacOS())
+            {
+                Assert.True(File.Exists(path), "Missing macOS prerequisite tool: " + path);
+                byte[] hash = SHA256.HashData(File.ReadAllBytes(path));
+                Assert.Equal(expectedSha256, Convert.ToHexString(hash));
+            }
         }
     }
 
@@ -1971,13 +1977,16 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("bottle_sha256 = \"" + bottleSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("sha256 = \"" + expectedSha256.ToLowerInvariant() + "\"", prerequisiteLock, StringComparison.Ordinal);
 
-        Assert.True(File.Exists(path), "Missing macOS prerequisite tool: " + path);
-        (int exitCode, string output, string error) = RunProcess(path, ["--version"]);
-        Assert.True(exitCode == 0, error);
-        Assert.Equal("hyperfine " + version, output.Trim());
+        if (OperatingSystem.IsMacOS())
+        {
+            Assert.True(File.Exists(path), "Missing macOS prerequisite tool: " + path);
+            (int exitCode, string output, string error) = RunProcess(path, ["--version"]);
+            Assert.True(exitCode == 0, error);
+            Assert.Equal("hyperfine " + version, output.Trim());
 
-        byte[] hash = SHA256.HashData(File.ReadAllBytes(path));
-        Assert.Equal(expectedSha256, Convert.ToHexString(hash));
+            byte[] hash = SHA256.HashData(File.ReadAllBytes(path));
+            Assert.Equal(expectedSha256, Convert.ToHexString(hash));
+        }
     }
 
     /// <summary>
