@@ -1338,7 +1338,12 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("PYTHON=python3", verifier, StringComparison.Ordinal);
         Assert.Contains("PYTHON=python", verifier, StringComparison.Ordinal);
         Assert.Contains("\"$PYTHON\" \"$ROOT/eng/generate-regex-unicode-tables.py\"", verifier, StringComparison.Ordinal);
-        Assert.Contains("cmp \"$generated\" \"$ROOT/src/Scout.Automata/RegexUnicodeTables.cs\"", verifier, StringComparison.Ordinal);
+        Assert.Contains("normalize_windows_text_file()", verifier, StringComparison.Ordinal);
+        Assert.Contains("sed 's/\\r$//'", verifier, StringComparison.Ordinal);
+        Assert.Contains("cp \"$ROOT/src/Scout.Automata/RegexUnicodeTables.cs\" \"$actual\"", verifier, StringComparison.Ordinal);
+        Assert.Contains("normalize_windows_text_file \"$generated\"", verifier, StringComparison.Ordinal);
+        Assert.Contains("normalize_windows_text_file \"$actual\"", verifier, StringComparison.Ordinal);
+        Assert.Contains("cmp \"$generated\" \"$actual\"", verifier, StringComparison.Ordinal);
         Assert.Contains("require_archive_entry \"UnicodeData.txt\"", verifier, StringComparison.Ordinal);
         Assert.Contains("require_archive_entry \"CaseFolding.txt\"", verifier, StringComparison.Ordinal);
         Assert.Contains("require_archive_entry \"PropertyAliases.txt\"", verifier, StringComparison.Ordinal);

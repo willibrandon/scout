@@ -44,6 +44,29 @@ require_archive_entry() {
         fail "Vendored UCD archive is missing $entry."
 }
 
+is_windows_shell() {
+    case "$(uname -s 2>/dev/null || printf unknown)" in
+        MINGW*|MSYS*|CYGWIN*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+normalize_windows_text_file() {
+    path="$1"
+
+    if ! is_windows_shell; then
+        return 0
+    fi
+
+    normalized="$path.lf"
+    sed 's/\r$//' "$path" > "$normalized"
+    mv "$normalized" "$path"
+}
+
 [ "$VERSION" = "16.0.0" ] || fail "Unexpected Unicode version: $VERSION"
 [ -f "$ARCHIVE" ] || fail "Missing vendored UCD archive: $ARCHIVE"
 
@@ -95,9 +118,13 @@ require_table_header "sentence_break.rs" "sentence-break"
 require_table_header "word_break.rs" "word-break"
 
 generated="$(mktemp)"
-trap 'rm -f "$generated"' EXIT
+actual="$(mktemp)"
+trap 'rm -f "$generated" "$actual"' EXIT
 "$PYTHON" "$ROOT/eng/generate-regex-unicode-tables.py" > "$generated"
-cmp "$generated" "$ROOT/src/Scout.Automata/RegexUnicodeTables.cs" >/dev/null ||
+cp "$ROOT/src/Scout.Automata/RegexUnicodeTables.cs" "$actual"
+normalize_windows_text_file "$generated"
+normalize_windows_text_file "$actual"
+cmp "$generated" "$actual" >/dev/null ||
     fail "src/Scout.Automata/RegexUnicodeTables.cs is stale; run eng/generate-regex-unicode-tables.py."
 
 printf 'Scout Unicode data and generated table provenance match Unicode %s.\n' "$VERSION"
