@@ -20,6 +20,8 @@ env:
   DOTNET_NOLOGO: "1"
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  LINUX_LIBC_VERSION: "2.36-9+deb12u14"
+  LINUX_SNAPSHOT_URL: "http://snapshot.debian.org/archive/debian/20260531T000000Z"
 
 jobs:
   full-tests:
@@ -71,3 +73,131 @@ jobs:
         run: native/build-app-unix.sh osx-arm64 --with-differentials
       - name: Run hyperfine gates
         run: bench/run-hyperfine.sh --gate
+
+  native-linux-x64:
+    name: release native Linux gate (linux-x64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    container:
+      image: docker.io/library/debian:bookworm-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb
+    steps:
+      - name: Pinned snapshot apt prerequisites
+        shell: sh
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          rm -f /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list
+          printf 'deb %s bookworm main\n' "$LINUX_SNAPSHOT_URL" > /etc/apt/sources.list
+          printf 'Acquire::Check-Valid-Until false;\nAcquire::Retries 3;\n' > /etc/apt/apt.conf.d/99snapshot
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            bash \
+            binutils \
+            bzip2 \
+            brotli \
+            build-essential \
+            ca-certificates \
+            clang \
+            curl \
+            git \
+            gzip \
+            libc6="$LINUX_LIBC_VERSION" \
+            libc-bin="$LINUX_LIBC_VERSION" \
+            libgssapi-krb5-2 \
+            libicu72 \
+            libssl3 \
+            lz4 \
+            ncompress \
+            tar \
+            xz-utils \
+            zlib1g \
+            zlib1g-dev \
+            zstd
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
+      - name: Verify Linux prerequisites
+        shell: sh
+        run: eng/verify-linux-prereqs.sh linux-x64
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.102
+      - name: Native entry spike
+        run: spike/build-unix.sh linux-x64
+      - name: Native executable smoke
+        run: native/build-app-unix.sh linux-x64 --smoke-only
+
+  native-linux-arm64:
+    name: release native Linux gate (linux-arm64)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
+      - name: Install Linux host prerequisites
+        shell: sh
+        run: eng/install-linux-host-prereqs.sh
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.102
+      - name: Native entry spike
+        run: spike/build-unix.sh linux-arm64
+      - name: Native executable smoke
+        run: native/build-app-unix.sh linux-arm64 --smoke-only
+
+  native-macos:
+    name: release native macOS gate (${{ matrix.rid }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: osx-x64
+            runner: macos-26-intel
+          - rid: osx-arm64
+            runner: macos-26
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.102
+      - name: Native entry spike
+        run: spike/build-unix.sh ${{ matrix.rid }}
+      - name: Native executable smoke
+        run: native/build-app-unix.sh ${{ matrix.rid }} --smoke-only
+
+  native-windows:
+    name: release native Windows gate (${{ matrix.rid }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            runner: windows-2025-vs2026
+            vsarch: amd64
+          - rid: win-arm64
+            runner: windows-11-arm
+            vsarch: arm64
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.102
+      - name: Native executable smoke
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=* delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath`) do set "VSINSTALL=%%i"
+          if not defined VSINSTALL (
+            echo Visual Studio installation not found.
+            exit /b 1
+          )
+          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=${{ matrix.vsarch }}
+          pwsh -NoProfile -ExecutionPolicy Bypass -File spike/build-windows.ps1 ${{ matrix.rid }}
+          pwsh -NoProfile -ExecutionPolicy Bypass -File native/build-app-windows.ps1 ${{ matrix.rid }}

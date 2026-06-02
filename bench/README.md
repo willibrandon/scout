@@ -22,9 +22,12 @@ bench/run-hyperfine.sh --gate
 GitHub's default `CI` workflow runs hosted cross-platform build, test, format,
 fuzz, and native link checks. After `CI` succeeds on `main`, it dispatches the
 `Release Gates` workflow with the exact successful commit SHA; the workflow can
-also be started manually from Actions. The full pinned test pass and hyperfine
-performance gate run on GitHub-hosted `macos-26` runners. The pinned CI runner
-labels are `ubuntu-24.04, ubuntu-24.04-arm, macos-26-intel, macos-26,
+also be started manually from Actions. Release Gates repeat the native
+entrypoint and final `scout` executable smoke checks on all six hosted release
+RIDs: `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`, `win-x64`, and
+`win-arm64`. The full pinned test pass and hyperfine performance gate run on
+GitHub-hosted `macos-26` runners. The pinned CI runner labels are
+`ubuntu-24.04, ubuntu-24.04-arm, macos-26-intel, macos-26,
 windows-2025-vs2026, and windows-11-arm`; those are the only labels the
 configuration allows. The workflow builds the pinned release-LTO `rg` oracle
 from source, installs hyperfine with Homebrew, fetches the pinned corpora into

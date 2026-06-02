@@ -117,7 +117,16 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("ref: ${{ inputs.checkout_ref || github.sha }}", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("Build pinned ripgrep oracle", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("eng/setup-ripgrep-oracle.sh", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("release native Linux gate (linux-x64)", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("release native Linux gate (linux-arm64)", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("release native macOS gate (${{ matrix.rid }})", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("release native Windows gate (${{ matrix.rid }})", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("native/build-app-unix.sh linux-x64 --smoke-only", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("native/build-app-unix.sh linux-arm64 --smoke-only", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("native/build-app-unix.sh ${{ matrix.rid }} --smoke-only", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("native/build-app-windows.ps1 ${{ matrix.rid }}", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("spike/build-unix.sh ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("spike/build-unix.sh linux-x64", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("spike/build-unix.sh linux-arm64", workflow, StringComparison.Ordinal);
         Assert.Contains("spike/build-windows.ps1 ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
         Assert.Contains("native/build-app-unix.sh ${{ matrix.rid }} --smoke-only", workflow, StringComparison.Ordinal);
