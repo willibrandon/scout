@@ -115,6 +115,24 @@ function Ensure-ReferenceCheckout {
     Invoke-Checked git -C $Reference checkout --detach $ExpectedCommit
 }
 
+function Set-ReproducibleWindowsRustBuildEnvironment {
+    $sourceDateEpoch = (& git -C $Reference show -s --format=%ct HEAD)
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($sourceDateEpoch)) {
+        throw "Could not read pinned ripgrep commit timestamp for reproducible Windows Rust build."
+    }
+
+    $env:CARGO_INCREMENTAL = "0"
+    $env:SOURCE_DATE_EPOCH = $sourceDateEpoch.Trim()
+    $breproFlag = "-C link-arg=/Brepro"
+    if ([string]::IsNullOrWhiteSpace($env:RUSTFLAGS)) {
+        $env:RUSTFLAGS = $breproFlag
+    } elseif ($env:RUSTFLAGS -notlike "*/Brepro*") {
+        $env:RUSTFLAGS = ($env:RUSTFLAGS.Trim() + " " + $breproFlag).Trim()
+    }
+
+    Write-Host "Using reproducible Windows Rust build flags: SOURCE_DATE_EPOCH=$env:SOURCE_DATE_EPOCH RUSTFLAGS=$env:RUSTFLAGS."
+}
+
 function Build-Ripgrep {
     Push-Location $Reference
     try {
@@ -198,6 +216,8 @@ $actualRipgrep = (& git -C $Reference rev-parse HEAD)
 if ($actualRipgrep -ne $ExpectedRipgrep) {
     throw "Expected ripgrep commit $ExpectedRipgrep, got $actualRipgrep."
 }
+
+Set-ReproducibleWindowsRustBuildEnvironment
 
 Build-Ripgrep
 if (-not (Test-Path $RgPath)) {

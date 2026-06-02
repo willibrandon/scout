@@ -238,6 +238,7 @@ public sealed partial class PinnedConfigurationTests
         string workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "release-gates.yml"));
         string script = File.ReadAllText(Path.Combine(root, "eng", "setup-ripgrep-oracle.sh"));
         string windowsScript = File.ReadAllText(Path.Combine(root, "eng", "setup-ripgrep-oracle.ps1"));
+        string windowsCaptureScript = File.ReadAllText(Path.Combine(root, "eng", "capture-ripgrep-oracle.ps1"));
         string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
 
         Assert.Contains("Build pinned ripgrep oracle", workflow, StringComparison.Ordinal);
@@ -270,6 +271,12 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("$trimmed.Length -eq 0", windowsScript, StringComparison.Ordinal);
         Assert.Contains("Read-OracleValue", windowsScript, StringComparison.Ordinal);
         Assert.Contains("SCOUT_ORACLE_ENVIRONMENT", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("SOURCE_DATE_EPOCH", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("CARGO_INCREMENTAL", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("/Brepro", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("SOURCE_DATE_EPOCH", windowsCaptureScript, StringComparison.Ordinal);
+        Assert.Contains("CARGO_INCREMENTAL", windowsCaptureScript, StringComparison.Ordinal);
+        Assert.Contains("/Brepro", windowsCaptureScript, StringComparison.Ordinal);
         Assert.Contains("ripgrep_oracle", windowsScript, StringComparison.Ordinal);
         Assert.Contains("rg.exe", windowsScript, StringComparison.Ordinal);
         Assert.Contains("PCRE2_SYS_STATIC", windowsScript, StringComparison.Ordinal);
