@@ -132,6 +132,11 @@ def normalize_elapsed(output):
         output,
     )
     output = re.sub(
+        rb'"elapsed":\{"human":"[^"]+","nanos":[0-9]+,"secs":[0-9]+\}',
+        b'"elapsed":{"human":"<elapsed>","nanos":0,"secs":0}',
+        output,
+    )
+    output = re.sub(
         rb'"elapsed_total":\{"human":"[^"]+","nanos":[0-9]+,"secs":[0-9]+\}',
         b'"elapsed_total":{"human":"<elapsed>","nanos":0,"secs":0}',
         output,
