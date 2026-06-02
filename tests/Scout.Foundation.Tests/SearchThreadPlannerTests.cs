@@ -66,11 +66,28 @@ public sealed class SearchThreadPlannerTests
     {
         var lowArgs = new CliLowArgs();
         int upstreamDefault = Math.Min(Environment.ProcessorCount, 12);
-        int expected = OperatingSystem.IsMacOS() ? Math.Min(upstreamDefault, 4) : upstreamDefault;
+        int expected = OperatingSystem.IsMacOS() ? SearchWalkPlanning.GetMacOsDefaultSearchWalkThreadCount(upstreamDefault) : upstreamDefault;
 
         int threads = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
 
         Assert.Equal(expected, threads);
+    }
+
+    /// <summary>
+    /// Verifies default macOS search fan-out is lower on constrained hosts.
+    /// </summary>
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(2, 2)]
+    [InlineData(3, 2)]
+    [InlineData(4, 2)]
+    [InlineData(5, 4)]
+    [InlineData(12, 4)]
+    public void SearchWalkPlanningCapsConstrainedMacOsDefaultDirectorySearchThreads(int upstreamDefault, int expectedThreads)
+    {
+        int threads = SearchWalkPlanning.GetMacOsDefaultSearchWalkThreadCount(upstreamDefault);
+
+        Assert.Equal(expectedThreads, threads);
     }
 
     /// <summary>

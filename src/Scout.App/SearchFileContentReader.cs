@@ -11,7 +11,8 @@ internal static class SearchFileContentReader
         bool autoMmapEligible,
         DiagnosticMessenger diagnostics,
         out byte[] bytes,
-        out SearchFileReadKind readKind)
+        out SearchFileReadKind readKind,
+        long? knownLength = null)
     {
         readKind = SearchFileReadKind.Buffered;
         if (!TryReadPreprocessedBytes(path, lowArgs, diagnostics, out bytes, out bool handled))
@@ -31,7 +32,8 @@ internal static class SearchFileContentReader
                 path,
                 ToSearchEncodingKind(lowArgs.EncodingMode),
                 ToSearchMmapMode(lowArgs.MmapMode),
-                autoMmapEligible);
+                autoMmapEligible,
+                knownLength);
             bytes = result.GetBytes();
             readKind = result.Kind;
             return true;

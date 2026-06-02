@@ -7,6 +7,8 @@ namespace Scout;
 
 internal static class SearchWalkPlanning
 {
+    private const int MacOsConstrainedSearchWalkParallelism = 4;
+    private const int MacOsConstrainedSearchWalkThreadCount = 2;
     private const int MacOsDefaultSearchWalkThreadCount = 4;
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
@@ -107,10 +109,18 @@ internal static class SearchWalkPlanning
         int threadCount = resolvedThreads > int.MaxValue ? int.MaxValue : (int)resolvedThreads;
         if (lowArgs.Threads is null && OperatingSystem.IsMacOS())
         {
-            return Math.Min(threadCount, MacOsDefaultSearchWalkThreadCount);
+            return GetMacOsDefaultSearchWalkThreadCount(threadCount);
         }
 
         return threadCount;
+    }
+
+    internal static int GetMacOsDefaultSearchWalkThreadCount(int threadCount)
+    {
+        int macOsDefaultThreads = threadCount <= MacOsConstrainedSearchWalkParallelism
+            ? MacOsConstrainedSearchWalkThreadCount
+            : MacOsDefaultSearchWalkThreadCount;
+        return Math.Min(threadCount, macOsDefaultThreads);
     }
 
     internal static bool TryBuildFileTypeMatcher(CliLowArgs lowArgs, out FileTypeMatcher? fileTypes, out ScoutError? error)

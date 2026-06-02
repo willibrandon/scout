@@ -39,6 +39,25 @@ public static class SearchFileReader
         SearchMmapMode mmapMode,
         bool allowMemoryMap)
     {
+        return Read(path, encodingKind, mmapMode, allowMemoryMap, knownLength: null);
+    }
+
+    /// <summary>
+    /// Reads a search file and decodes it according to the requested search encoding.
+    /// </summary>
+    /// <param name="path">The file path to read.</param>
+    /// <param name="encodingKind">The requested search-input encoding.</param>
+    /// <param name="mmapMode">The requested memory-map mode.</param>
+    /// <param name="allowMemoryMap">Whether automatic mmap selection is allowed for this path.</param>
+    /// <param name="knownLength">The file length from directory metadata, when available.</param>
+    /// <returns>The decoded bytes and the strategy used to read them.</returns>
+    public static SearchFileReadResult Read(
+        string path,
+        SearchEncodingKind encodingKind,
+        SearchMmapMode mmapMode,
+        bool allowMemoryMap,
+        long? knownLength)
+    {
         ArgumentException.ThrowIfNullOrEmpty(path);
 
         if (ShouldTryMemoryMap(mmapMode, allowMemoryMap) &&
@@ -47,7 +66,7 @@ public static class SearchFileReader
             return new SearchFileReadResult(mappedBytes, SearchFileReadKind.MemoryMapped);
         }
 
-        return new SearchFileReadResult(ReadBuffered(path, encodingKind), SearchFileReadKind.Buffered);
+        return new SearchFileReadResult(ReadBuffered(path, encodingKind, knownLength), SearchFileReadKind.Buffered);
     }
 
     /// <summary>
@@ -78,21 +97,21 @@ public static class SearchFileReader
         };
     }
 
-    private static byte[] ReadBuffered(string path, SearchEncodingKind encodingKind)
+    private static byte[] ReadBuffered(string path, SearchEncodingKind encodingKind, long? knownLength)
     {
         if (encodingKind is SearchEncodingKind.Auto or SearchEncodingKind.None)
         {
-            return ReadRawBuffered(path, encodingKind);
+            return ReadRawBuffered(path, encodingKind, knownLength);
         }
 
         using FileStream stream = OpenReadStream(path);
         return SearchEncodingReader.ReadToEnd(stream, encodingKind);
     }
 
-    private static byte[] ReadRawBuffered(string path, SearchEncodingKind encodingKind)
+    private static byte[] ReadRawBuffered(string path, SearchEncodingKind encodingKind, long? knownLength)
     {
         using FileStream stream = OpenReadStream(path);
-        long length = stream.Length;
+        long length = knownLength ?? stream.Length;
         if (length > int.MaxValue)
         {
             throw new IOException("file is too large to search in memory");

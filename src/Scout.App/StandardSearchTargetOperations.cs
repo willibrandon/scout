@@ -198,7 +198,7 @@ internal static class StandardSearchTargetOperations
         {
             OutputPath outputPath = SearchOutputFormatting.CreateOutputPath(path, pathArgument.DisplayBytes, lowArgs, color);
             OutputPath? prefix = SearchOutputFormatting.GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
-            SearchFileWithStats(path, pattern, lowArgs, false, autoMmapEligible, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, SearchOutputFormatting.EffectiveLineNumber(lowArgs), SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
+            SearchFileWithStats(path, null, pattern, lowArgs, false, autoMmapEligible, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, SearchOutputFormatting.EffectiveLineNumber(lowArgs), SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
             return;
         }
 
@@ -438,7 +438,7 @@ internal static class StandardSearchTargetOperations
             SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() =>
             {
                 MemoryStream buffer = new();
-                var writer = new RawByteWriter(buffer);
+                RawByteWriter writer = CreateParallelOutputWriter(buffer);
                 directOutputBuffers?.Add(buffer);
                 return entry =>
                 {
@@ -669,7 +669,7 @@ internal static class StandardSearchTargetOperations
             SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() =>
             {
                 MemoryStream buffer = new();
-                var writer = new RawByteWriter(buffer);
+                RawByteWriter writer = CreateParallelOutputWriter(buffer);
                 directOutputBuffers?.Add(buffer);
                 return entry =>
                 {
@@ -760,7 +760,12 @@ internal static class StandardSearchTargetOperations
 
         outputs!.Add(new BufferedSearchOutput(buffer));
         buffer = new MemoryStream();
-        writer = new RawByteWriter(buffer);
+        writer = CreateParallelOutputWriter(buffer);
+    }
+
+    private static RawByteWriter CreateParallelOutputWriter(MemoryStream buffer)
+    {
+        return new RawByteWriter(buffer, RawByteWriterBufferMode.Block);
     }
 
     private static void WriteBufferedOutputIfAny(RawByteWriter output, object outputLock, MemoryStream buffer)
@@ -876,7 +881,7 @@ internal static class StandardSearchTargetOperations
             return;
         }
 
-        SearchFileWithStats(entry.FullPath, pattern, lowArgs, implicitSearch: true, autoMmapEligible: false, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, SearchOutputFormatting.EffectiveLineNumber(lowArgs), SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
+        SearchFileWithStats(entry.FullPath, entry.Length, pattern, lowArgs, implicitSearch: true, autoMmapEligible: false, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, SearchOutputFormatting.EffectiveLineNumber(lowArgs), SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
     }
 
     private static void SearchFile(
@@ -958,7 +963,7 @@ internal static class StandardSearchTargetOperations
             return;
         }
 
-        if (!SearchFileContentReader.TryRead(path, lowArgs, autoMmapEligible, diagnostics, out byte[] bytes, out SearchFileReadKind readKind))
+        if (!SearchFileContentReader.TryRead(path, lowArgs, autoMmapEligible, diagnostics, out byte[] bytes, out SearchFileReadKind readKind, knownLength))
         {
             errored = true;
             return;
@@ -1018,6 +1023,7 @@ internal static class StandardSearchTargetOperations
 
     private static void SearchFileWithStats(
         string path,
+        long? knownLength,
         IReadOnlyList<byte[]> pattern,
         CliLowArgs lowArgs,
         bool implicitSearch,
@@ -1055,7 +1061,7 @@ internal static class StandardSearchTargetOperations
         ref bool errored,
         ref SearchStats stats)
     {
-        if (!SearchFileContentReader.TryRead(path, lowArgs, autoMmapEligible, diagnostics, out byte[] bytes, out SearchFileReadKind readKind))
+        if (!SearchFileContentReader.TryRead(path, lowArgs, autoMmapEligible, diagnostics, out byte[] bytes, out SearchFileReadKind readKind, knownLength))
         {
             errored = true;
             return;

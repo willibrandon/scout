@@ -105,6 +105,30 @@ public sealed class SearchFileReaderTests
     }
 
     /// <summary>
+    /// Verifies buffered reads can reuse directory-walk length metadata.
+    /// </summary>
+    [Fact]
+    public void ReadBufferedUsesKnownLength()
+    {
+        string root = CreateTempDirectory();
+        try
+        {
+            string path = Path.Combine(root, "input.txt");
+            byte[] expected = "needle\n"u8.ToArray();
+            File.WriteAllBytes(path, expected);
+
+            SearchFileReadResult result = SearchFileReader.Read(path, SearchEncodingKind.None, SearchMmapMode.Never, allowMemoryMap: true, knownLength: expected.Length);
+
+            Assert.Equal(SearchFileReadKind.Buffered, result.Kind);
+            Assert.Equal(expected, result.GetBytes());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
     /// Verifies Unix raw-byte path reads bypass text path APIs.
     /// </summary>
     [Fact]
