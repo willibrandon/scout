@@ -104,13 +104,13 @@ public static class SearchFileReader
             return ReadRawBuffered(path, encodingKind, knownLength);
         }
 
-        using FileStream stream = OpenReadStream(path);
+        using FileStream stream = OpenReadStream(path, bufferSize: 4096);
         return SearchEncodingReader.ReadToEnd(stream, encodingKind);
     }
 
     private static byte[] ReadRawBuffered(string path, SearchEncodingKind encodingKind, long? knownLength)
     {
-        using FileStream stream = OpenReadStream(path);
+        using FileStream stream = OpenReadStream(path, bufferSize: 1);
         long length = knownLength ?? stream.Length;
         if (length > int.MaxValue)
         {
@@ -122,14 +122,14 @@ public static class SearchFileReader
         return SearchEncoding.Decode(bytes, encodingKind);
     }
 
-    private static FileStream OpenReadStream(string path)
+    private static FileStream OpenReadStream(string path, int bufferSize)
     {
         return new FileStream(
             path,
             FileMode.Open,
             FileAccess.Read,
             FileShare.ReadWrite | FileShare.Delete,
-            bufferSize: 4096,
+            bufferSize,
             FileOptions.SequentialScan);
     }
 

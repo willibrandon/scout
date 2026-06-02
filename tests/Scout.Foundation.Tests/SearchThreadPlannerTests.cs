@@ -74,15 +74,16 @@ public sealed class SearchThreadPlannerTests
     }
 
     /// <summary>
-    /// Verifies default macOS directory search fan-out is capped at four threads.
+    /// Verifies default macOS directory search fan-out permits modest I/O oversubscription.
     /// </summary>
     [Theory]
     [InlineData(1, 1)]
-    [InlineData(2, 2)]
-    [InlineData(3, 3)]
-    [InlineData(4, 4)]
-    [InlineData(5, 4)]
-    [InlineData(12, 4)]
+    [InlineData(2, 4)]
+    [InlineData(3, 6)]
+    [InlineData(4, 6)]
+    [InlineData(5, 6)]
+    [InlineData(6, 6)]
+    [InlineData(12, 6)]
     public void SearchWalkPlanningCapsMacOsDefaultDirectorySearchThreadMatrix(int upstreamDefault, int expectedThreads)
     {
         int threads = SearchWalkPlanning.GetMacOsDefaultSearchWalkThreadCount(upstreamDefault);

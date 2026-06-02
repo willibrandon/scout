@@ -106,6 +106,11 @@ internal static class SearchDiagnosticLogging
 
     internal static void LogTraceSearchPath(DiagnosticLogger logger, string path, SearchFileReadKind readKind)
     {
+        if (!logger.IsTraceEnabled)
+        {
+            return;
+        }
+
         logger.Trace("rg::search", "crates/core/search.rs", 255, $"{path}: binary detection: BinaryDetection(Convert(0))");
         if (readKind == SearchFileReadKind.MemoryMapped)
         {
