@@ -402,7 +402,7 @@ public sealed class ScoutApplicationTests
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("a.c", path);
 
         Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(GeneratedTextOutput.ForCurrentPlatform(pinnedOutput), output);
+        Assert.Equal(pinnedOutput, output);
         Assert.Equal(pinnedError, error);
     }
 
@@ -6058,7 +6058,7 @@ public sealed class ScoutApplicationTests
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrepWithConfig(config);
 
         Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(GeneratedTextOutput.ForCurrentPlatform(pinnedOutput), output);
+        Assert.Equal(pinnedOutput, output);
         Assert.Equal(pinnedError, error);
     }
 
@@ -6197,7 +6197,7 @@ public sealed class ScoutApplicationTests
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrepWithConfig(config);
 
         Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(GeneratedTextOutput.ForCurrentPlatform(pinnedOutput), output);
         Assert.Equal(pinnedError, error);
     }
 
