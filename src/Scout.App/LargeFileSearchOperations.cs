@@ -78,7 +78,7 @@ internal static class LargeFileSearchOperations
                 includeZero,
                 nullPathTerminator,
                 lowArgs.StopOnNonmatch,
-                SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs),
+                SearchWalkPlanning.GetLargeFileSearchThreadCount(lowArgs),
                 implicitSearch ? ImplicitSearchStreamingFileBufferLength : StreamingFileBufferLength);
         }
         catch (IOException exception)

@@ -91,6 +91,38 @@ public sealed class SearchThreadPlannerTests
     }
 
     /// <summary>
+    /// Verifies default macOS large-file search fan-out keeps enough workers for segmented regex throughput.
+    /// </summary>
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(2, 2)]
+    [InlineData(3, 3)]
+    [InlineData(4, 4)]
+    [InlineData(5, 4)]
+    [InlineData(12, 4)]
+    public void SearchWalkPlanningCapsMacOsDefaultLargeFileSearchThreads(int upstreamDefault, int expectedThreads)
+    {
+        int threads = SearchWalkPlanning.GetMacOsDefaultLargeFileSearchThreadCount(upstreamDefault);
+
+        Assert.Equal(expectedThreads, threads);
+    }
+
+    /// <summary>
+    /// Verifies default large-file search planning does not inherit the constrained directory-walk cap.
+    /// </summary>
+    [Fact]
+    public void SearchWalkPlanningKeepsDefaultLargeFileSearchParallelismOnMacOs()
+    {
+        var lowArgs = new CliLowArgs();
+        int upstreamDefault = Math.Min(Environment.ProcessorCount, 12);
+        int expected = OperatingSystem.IsMacOS() ? SearchWalkPlanning.GetMacOsDefaultLargeFileSearchThreadCount(upstreamDefault) : upstreamDefault;
+
+        int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(lowArgs);
+
+        Assert.Equal(expected, threads);
+    }
+
+    /// <summary>
     /// Verifies explicit directory search thread counts bypass platform default caps.
     /// </summary>
     [Fact]
@@ -100,6 +132,20 @@ public sealed class SearchThreadPlannerTests
         lowArgs.SetThreads(12);
 
         int threads = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
+
+        Assert.Equal(12, threads);
+    }
+
+    /// <summary>
+    /// Verifies explicit large-file search thread counts bypass platform default caps.
+    /// </summary>
+    [Fact]
+    public void SearchWalkPlanningHonorsExplicitLargeFileSearchThreads()
+    {
+        var lowArgs = new CliLowArgs();
+        lowArgs.SetThreads(12);
+
+        int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(lowArgs);
 
         Assert.Equal(12, threads);
     }

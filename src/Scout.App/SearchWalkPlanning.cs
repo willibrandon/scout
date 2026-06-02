@@ -10,6 +10,7 @@ internal static class SearchWalkPlanning
     private const int MacOsConstrainedSearchWalkParallelism = 4;
     private const int MacOsConstrainedSearchWalkThreadCount = 2;
     private const int MacOsDefaultSearchWalkThreadCount = 4;
+    private const int MacOsDefaultLargeFileSearchThreadCount = 4;
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
     internal static int RunTypeList(CliLowArgs lowArgs, RawByteWriter output, DiagnosticMessenger diagnostics)
@@ -115,12 +116,34 @@ internal static class SearchWalkPlanning
         return threadCount;
     }
 
+    internal static int GetLargeFileSearchThreadCount(CliLowArgs lowArgs)
+    {
+        ulong resolvedThreads = SearchThreadPlanner.Resolve(lowArgs.Threads, lowArgs.SortMode is not null, isOneFile: false);
+        if (resolvedThreads <= 1)
+        {
+            return 1;
+        }
+
+        int threadCount = resolvedThreads > int.MaxValue ? int.MaxValue : (int)resolvedThreads;
+        if (lowArgs.Threads is null && OperatingSystem.IsMacOS())
+        {
+            return GetMacOsDefaultLargeFileSearchThreadCount(threadCount);
+        }
+
+        return threadCount;
+    }
+
     internal static int GetMacOsDefaultSearchWalkThreadCount(int threadCount)
     {
         int macOsDefaultThreads = threadCount <= MacOsConstrainedSearchWalkParallelism
             ? MacOsConstrainedSearchWalkThreadCount
             : MacOsDefaultSearchWalkThreadCount;
         return Math.Min(threadCount, macOsDefaultThreads);
+    }
+
+    internal static int GetMacOsDefaultLargeFileSearchThreadCount(int threadCount)
+    {
+        return Math.Min(threadCount, MacOsDefaultLargeFileSearchThreadCount);
     }
 
     internal static bool TryBuildFileTypeMatcher(CliLowArgs lowArgs, out FileTypeMatcher? fileTypes, out ScoutError? error)
