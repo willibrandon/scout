@@ -116,7 +116,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("ref: ${{ inputs.checkout_ref || github.sha }}", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("Build pinned ripgrep oracle", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("eng/setup-ripgrep-oracle.sh", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("eng/setup-ripgrep-oracle.ps1", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("full-tests-macos:", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("full-tests-windows:", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("full pinned tests (${{ matrix.rid }})", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("full-tests-macos-arm64", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("release native Linux gate (linux-x64)", releaseGateWorkflow, StringComparison.Ordinal);
@@ -135,6 +137,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("native/build-app-unix.sh ${{ matrix.rid }} --with-differentials", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("native/build-app-unix.sh osx-arm64 --with-differentials", workflow, StringComparison.Ordinal);
         Assert.Contains("native/build-app-windows.ps1 ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_HOST_RID: ${{ matrix.rid }}", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("vsarch: amd64", workflow, StringComparison.Ordinal);
         Assert.Contains("vsarch: arm64", workflow, StringComparison.Ordinal);
         Assert.Contains("runner: ubuntu-24.04", workflow, StringComparison.Ordinal);
@@ -235,14 +238,18 @@ public sealed partial class PinnedConfigurationTests
         string workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "release-gates.yml"));
         string script = File.ReadAllText(Path.Combine(root, "eng", "setup-ripgrep-oracle.sh"));
         string windowsScript = File.ReadAllText(Path.Combine(root, "eng", "setup-ripgrep-oracle.ps1"));
+        string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
 
         Assert.Contains("Build pinned ripgrep oracle", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/setup-ripgrep-oracle.sh", workflow, StringComparison.Ordinal);
+        Assert.Contains("eng/setup-ripgrep-oracle.ps1", workflow, StringComparison.Ordinal);
         Assert.Contains("SCOUT_RIPGREP_REFERENCE", script, StringComparison.Ordinal);
         Assert.Contains("host_rid()", script, StringComparison.Ordinal);
         Assert.Contains("oracle_environment()", script, StringComparison.Ordinal);
         Assert.Contains("read_lock_rid_table_value()", script, StringComparison.Ordinal);
         Assert.Contains("derive_reference_from_oracle_path()", script, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_HOST_RID: ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("win-arm64", workflow, StringComparison.Ordinal);
         Assert.Contains("ripgrep_commit", script, StringComparison.Ordinal);
         Assert.Contains("ripgrep_rg_sha256", script, StringComparison.Ordinal);
         Assert.Contains("ripgrep_pcre2_rg_sha256", script, StringComparison.Ordinal);
@@ -264,6 +271,77 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("Invoke-Checked cargo \"+$RustToolchain\" build --profile $RgPcre2Profile --features $RgPcre2Features --bin rg", windowsScript, StringComparison.Ordinal);
         Assert.Contains("Assert-BinaryHash \"reference rg\"", windowsScript, StringComparison.Ordinal);
         Assert.Contains("Assert-BinaryHash \"PCRE2 reference rg\"", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_HOST_RID", preflight, StringComparison.Ordinal);
+        Assert.Contains("MINGW*:x86_64", preflight, StringComparison.Ordinal);
+        Assert.Contains("MINGW*:aarch64", preflight, StringComparison.Ordinal);
+        Assert.Contains("*/target/*/rg.exe", preflight, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Verifies every hosted release-test RID has a frozen ripgrep oracle row.
+    /// </summary>
+    [Fact]
+    public void HostedRipgrepOracleRowsCoverReleaseTestRids()
+    {
+        string root = FindRepositoryRoot();
+        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        (string Rid, string Path, string Sha256, string Pcre2Path, string Pcre2Sha256)[] rows =
+        [
+            (
+                "osx-arm64",
+                "artifacts/ripgrep-oracle/osx-arm64/ripgrep/target/release-lto/rg",
+                "e73f0e779d12d2f106b814c0168fdac0ecd94d8d1b9dc9c2e413f51a5d98773c",
+                "artifacts/ripgrep-oracle/osx-arm64/ripgrep/target/pcre2/release-lto/rg",
+                "f70d897d9cd1a361f136a7f631ca01a9c693124c839656ea1a1a2fac18467363"),
+            (
+                "osx-x64",
+                "artifacts/ripgrep-oracle/osx-x64/ripgrep/target/release-lto/rg",
+                "c44615baad18aeb7e4ed8f145c0c74df54bffe2136b38c501a144d664dd28683",
+                "artifacts/ripgrep-oracle/osx-x64/ripgrep/target/pcre2/release-lto/rg",
+                "6c1306b2d604d259e5ba15478eb2742b79ff746a6763354e99f077c6c0b962ac"),
+            (
+                "linux-x64",
+                "artifacts/ripgrep-oracle/linux-x64/ripgrep/target/release-lto/rg",
+                "72867b9f6264ce775d3d7a9a5467f8a7eac027072556d72b09b929ada166481f",
+                "artifacts/ripgrep-oracle/linux-x64/ripgrep/target/pcre2/release-lto/rg",
+                "da2c2a9028c8c6262846e80162fa1ecfc05e9d1c1f3cea8c2f4deb3512865cd8"),
+            (
+                "linux-arm64",
+                "artifacts/ripgrep-oracle/linux-arm64/ripgrep/target/release-lto/rg",
+                "66b647fead60eb0bd793dd6ddde779e4797bb6e3160d8a7087377784b7ed372d",
+                "artifacts/ripgrep-oracle/linux-arm64/ripgrep/target/pcre2/release-lto/rg",
+                "6f67dc71baf7200c25f2cb70ed2c541a9b4edd93c1ae9414d076816d1e1df77b"),
+            (
+                "win-x64",
+                "artifacts/ripgrep-oracle/win-x64/ripgrep/target/release-lto/rg.exe",
+                "81c238cdc09564cc4ee10743053c1e4233c045f49a0d9951dda8d99e806058ba",
+                "artifacts/ripgrep-oracle/win-x64/ripgrep/target/pcre2/release-lto/rg.exe",
+                "8bc234596ff53719605892bc0a9a2f112eb2d4b3f873825dedb2b411c26a58d8"),
+            (
+                "win-arm64",
+                "artifacts/ripgrep-oracle/win-arm64/ripgrep/target/release-lto/rg.exe",
+                "27fa01f4666d50f542ddcf36d0a81a7e0cfb28af6cac39cdf087b0f8239a8067",
+                "artifacts/ripgrep-oracle/win-arm64/ripgrep/target/pcre2/release-lto/rg.exe",
+                "72c96e71384f66f243d3018e60f3c8241c6c736425d0f4677b92686bbecd48f6"),
+        ];
+
+        for (int index = 0; index < rows.Length; index++)
+        {
+            (string rid, string path, string sha256, string pcre2Path, string pcre2Sha256) = rows[index];
+            string block = string.Join(
+                "\n",
+                "[[ripgrep_oracle]]",
+                "rid = \"" + rid + "\"",
+                "environment = \"github-actions\"",
+                "profile = \"release-lto\"",
+                "path = \"" + path + "\"",
+                "sha256 = \"" + sha256 + "\"",
+                "pcre2_profile = \"release-lto\"",
+                "pcre2_features = \"pcre2\"",
+                "pcre2_path = \"" + pcre2Path + "\"",
+                "pcre2_sha256 = \"" + pcre2Sha256 + "\"");
+            Assert.Contains(block, prerequisiteLock, StringComparison.Ordinal);
+        }
     }
 
     /// <summary>
@@ -1238,6 +1316,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("EXPECTED_SHA256=\"c86dd81f2b14a43b0cc064aa5f89aa7241386801e35c59c7984e579832634eb2\"", verifier, StringComparison.Ordinal);
         Assert.Contains("unzip -l \"$ARCHIVE\"", verifier, StringComparison.Ordinal);
         Assert.Contains("eng/generate-regex-unicode-tables.py", verifier, StringComparison.Ordinal);
+        Assert.Contains("PYTHON=python3", verifier, StringComparison.Ordinal);
+        Assert.Contains("PYTHON=python", verifier, StringComparison.Ordinal);
+        Assert.Contains("\"$PYTHON\" \"$ROOT/eng/generate-regex-unicode-tables.py\"", verifier, StringComparison.Ordinal);
         Assert.Contains("cmp \"$generated\" \"$ROOT/src/Scout.Automata/RegexUnicodeTables.cs\"", verifier, StringComparison.Ordinal);
         Assert.Contains("require_archive_entry \"UnicodeData.txt\"", verifier, StringComparison.Ordinal);
         Assert.Contains("require_archive_entry \"CaseFolding.txt\"", verifier, StringComparison.Ordinal);

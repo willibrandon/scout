@@ -55,8 +55,15 @@ if ! command -v unzip >/dev/null 2>&1; then
     fail "unzip is required to inspect the vendored UCD archive."
 fi
 
-if ! command -v python3 >/dev/null 2>&1; then
-    fail "python3 is required to regenerate Scout's regex Unicode tables."
+PYTHON="${PYTHON:-}"
+if [ -z "$PYTHON" ]; then
+    if command -v python3 >/dev/null 2>&1; then
+        PYTHON=python3
+    elif command -v python >/dev/null 2>&1; then
+        PYTHON=python
+    else
+        fail "python3 or python is required to regenerate Scout's regex Unicode tables."
+    fi
 fi
 
 require_archive_entry "UnicodeData.txt"
@@ -89,7 +96,7 @@ require_table_header "word_break.rs" "word-break"
 
 generated="$(mktemp)"
 trap 'rm -f "$generated"' EXIT
-python3 "$ROOT/eng/generate-regex-unicode-tables.py" > "$generated"
+"$PYTHON" "$ROOT/eng/generate-regex-unicode-tables.py" > "$generated"
 cmp "$generated" "$ROOT/src/Scout.Automata/RegexUnicodeTables.cs" >/dev/null ||
     fail "src/Scout.Automata/RegexUnicodeTables.cs is stale; run eng/generate-regex-unicode-tables.py."
 

@@ -129,6 +129,41 @@ jobs:
       - name: Native pinned differentials
         run: native/build-app-unix.sh ${{ matrix.rid }} --with-differentials
 
+  full-tests-windows:
+    name: full pinned tests (${{ matrix.rid }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            runner: windows-2025-vs2026
+          - rid: win-arm64
+            runner: windows-11-arm
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.102
+      - name: Build pinned ripgrep oracle
+        shell: pwsh
+        run: eng/setup-ripgrep-oracle.ps1
+      - name: Restore
+        run: dotnet restore Scout.slnx
+      - name: Fetch pinned corpora
+        shell: bash
+        run: eng/fetch-corpora.sh --all
+      - name: Preflight
+        shell: bash
+        env:
+          SCOUT_HOST_RID: ${{ matrix.rid }}
+        run: eng/preflight.sh
+      - name: Test
+        run: dotnet test Scout.slnx --no-restore
+
   performance-gate:
     name: hyperfine performance gate
     runs-on: macos-26
