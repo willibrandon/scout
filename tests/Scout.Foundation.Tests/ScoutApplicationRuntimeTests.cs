@@ -1442,10 +1442,12 @@ public sealed class ScoutApplicationRuntimeTests
 
     private static void WriteCompressedFile(string path, string program, string[] arguments, byte[] contents)
     {
+        bool useInputFile = string.Equals(program, "compress", StringComparison.Ordinal);
+        string? inputPath = null;
         ProcessStartInfo startInfo = new(program)
         {
             RedirectStandardError = true,
-            RedirectStandardInput = true,
+            RedirectStandardInput = !useInputFile,
             RedirectStandardOutput = true,
             UseShellExecute = false,
         };
@@ -1454,19 +1456,40 @@ public sealed class ScoutApplicationRuntimeTests
             startInfo.ArgumentList.Add(arguments[index]);
         }
 
+        if (useInputFile)
+        {
+            inputPath = path + ".input";
+            File.WriteAllBytes(inputPath, contents);
+            startInfo.ArgumentList.Add(inputPath);
+        }
+
         using Process process = new()
         {
             StartInfo = startInfo,
         };
-        Assert.True(process.Start());
-        process.StandardInput.BaseStream.Write(contents);
-        process.StandardInput.Close();
-        using MemoryStream output = new();
-        process.StandardOutput.BaseStream.CopyTo(output);
-        string error = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-        Assert.True(process.ExitCode == 0, error);
-        File.WriteAllBytes(path, output.ToArray());
+        try
+        {
+            Assert.True(process.Start());
+            if (!useInputFile)
+            {
+                process.StandardInput.BaseStream.Write(contents);
+                process.StandardInput.Close();
+            }
+
+            using MemoryStream output = new();
+            process.StandardOutput.BaseStream.CopyTo(output);
+            string error = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            Assert.True(process.ExitCode == 0, $"{program} {string.Join(' ', arguments)} failed with exit code {process.ExitCode}: {error}");
+            File.WriteAllBytes(path, output.ToArray());
+        }
+        finally
+        {
+            if (inputPath is not null)
+            {
+                File.Delete(inputPath);
+            }
+        }
     }
 
     private static string CreatePreprocessorScript(string root)

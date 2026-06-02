@@ -82,7 +82,7 @@ internal static class JsonSearchOperations
         RawByteWriter output)
     {
         byte[] bytes = SearchFileContentReader.ReadSearchStream(standardInput, lowArgs.EncodingMode);
-        return SearchJsonBytes(bytes, pattern, output, StandardInputPath, summary, lowArgs.TextMode, lowArgs.Quiet, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.Crlf, lowArgs.NullData, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch);
+        return SearchJsonBytes(bytes, pattern, output, StandardInputPath, summary, lowArgs.TextMode, searchBinaryAsText: false, lowArgs.Quiet, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.Crlf, lowArgs.NullData, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch);
     }
 
     private static void SearchJsonPath(
@@ -238,13 +238,13 @@ internal static class JsonSearchOperations
         ref bool matched,
         ref bool errored)
     {
-        if (!SearchFileContentReader.TryRead(path, lowArgs, autoMmapEligible, diagnostics, out byte[] bytes, out _))
+        if (!SearchFileContentReader.TryRead(path, lowArgs, autoMmapEligible, diagnostics, out byte[] bytes, out SearchFileReadKind readKind))
         {
             errored = true;
             return;
         }
 
-        matched |= SearchJsonBytes(bytes, pattern, output, displayPath, summary, lowArgs.TextMode, lowArgs.Quiet, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.Crlf, lowArgs.NullData, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch);
+        matched |= SearchJsonBytes(bytes, pattern, output, displayPath, summary, lowArgs.TextMode, SearchesBinaryAsText(readKind), lowArgs.Quiet, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.Crlf, lowArgs.NullData, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch);
     }
 
     private static void SearchJsonRawUnixFile(
@@ -264,7 +264,7 @@ internal static class JsonSearchOperations
             return;
         }
 
-        matched |= SearchJsonBytes(bytes, pattern, output, path.DisplayBytes, summary, lowArgs.TextMode, lowArgs.Quiet, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.Crlf, lowArgs.NullData, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch);
+        matched |= SearchJsonBytes(bytes, pattern, output, path.DisplayBytes, summary, lowArgs.TextMode, searchBinaryAsText: false, lowArgs.Quiet, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.Crlf, lowArgs.NullData, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch);
     }
 
     private static void SearchJsonDirectoryEntryFile(
@@ -296,6 +296,7 @@ internal static class JsonSearchOperations
         byte[] path,
         JsonSearchSummary summary,
         bool textMode,
+        bool searchBinaryAsText,
         bool quiet,
         bool asciiCaseInsensitive,
         bool invertMatch,
@@ -313,13 +314,19 @@ internal static class JsonSearchOperations
         bool stopOnNonmatch)
     {
         int binaryOffset = textMode || nullData ? -1 : bytes.AsSpan().IndexOf((byte)0);
-        byte[] searchBytes = BinaryDetection.GetSearchBytes(bytes, textMode, nullData);
+        byte[] searchBytes = BinaryDetection.GetSearchBytes(bytes, textMode || searchBinaryAsText, nullData);
         var writer = new JsonFileWriter(output, path, quiet, binaryOffset);
         bool matched = multiline && (nullData || PatternPreparation.ShouldUseJsonMultilineRegex(pattern, multilineDotall)) && TrySearchJsonMultilineBytes(searchBytes, pattern, writer, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multilineDotall, crlf, nullData, replacement, maxCount, beforeContext, afterContext, passthru, stopOnNonmatch, out bool multilineMatched)
             ? multilineMatched
             : SearchJsonLines(searchBytes, pattern, writer, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, crlf, nullData, replacement, maxCount, beforeContext, afterContext, passthru, stopOnNonmatch);
-        writer.Finish((ulong)bytes.Length, summary);
+        ulong bytesSearched = searchBinaryAsText && binaryOffset >= 0 ? (ulong)binaryOffset : (ulong)bytes.Length;
+        writer.Finish(bytesSearched, summary);
         return matched;
+    }
+
+    private static bool SearchesBinaryAsText(SearchFileReadKind readKind)
+    {
+        return readKind == SearchFileReadKind.MemoryMapped;
     }
 
     private static bool TrySearchJsonMultilineBytes(

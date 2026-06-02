@@ -965,7 +965,8 @@ internal static class StandardSearchTargetOperations
         }
 
         SearchDiagnosticLogging.LogTraceSearchPath(logger, path, readKind);
-        matched |= StandardSearchByteOperations.SearchBytesWithOptionalHeading(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, ShouldQuitOnBinary(lowArgs, implicitSearch), heading, ref wroteHeadingOutput);
+        bool searchTextMode = textMode || SearchesBinaryAsText(readKind);
+        matched |= StandardSearchByteOperations.SearchBytesWithOptionalHeading(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, searchTextMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, ShouldQuitOnBinary(lowArgs, implicitSearch, searchTextMode), heading, ref wroteHeadingOutput);
     }
 
     private static void SearchRawUnixFile(
@@ -1060,7 +1061,8 @@ internal static class StandardSearchTargetOperations
         }
 
         SearchDiagnosticLogging.LogTraceSearchPath(logger, path, readKind);
-        matched |= StandardSearchByteOperations.SearchBytesWithStats(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, ShouldQuitOnBinary(lowArgs, implicitSearch), heading, ref wroteHeadingOutput, ref stats);
+        bool searchTextMode = textMode || SearchesBinaryAsText(readKind);
+        matched |= StandardSearchByteOperations.SearchBytesWithStats(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, searchTextMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, ShouldQuitOnBinary(lowArgs, implicitSearch, searchTextMode), heading, ref wroteHeadingOutput, ref stats);
     }
 
     private static void SearchRawUnixFileWithStats(
@@ -1110,9 +1112,14 @@ internal static class StandardSearchTargetOperations
         matched |= StandardSearchByteOperations.SearchBytesWithStats(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, quitOnBinary: false, heading, ref wroteHeadingOutput, ref stats);
     }
 
-    private static bool ShouldQuitOnBinary(CliLowArgs lowArgs, bool implicitSearch)
+    private static bool SearchesBinaryAsText(SearchFileReadKind readKind)
     {
-        return implicitSearch && !lowArgs.SearchBinaryFiles && !lowArgs.TextMode;
+        return readKind == SearchFileReadKind.MemoryMapped;
+    }
+
+    private static bool ShouldQuitOnBinary(CliLowArgs lowArgs, bool implicitSearch, bool searchTextMode)
+    {
+        return implicitSearch && !lowArgs.SearchBinaryFiles && !searchTextMode;
     }
 
 }
