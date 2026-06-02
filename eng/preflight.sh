@@ -319,6 +319,54 @@ expect_equal() {
     fi
 }
 
+is_windows_shell() {
+    case "$(uname -s 2>/dev/null || printf unknown)" in
+        MINGW*|MSYS*|CYGWIN*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+normalize_windows_text_file() {
+    path="$1"
+
+    if ! is_windows_shell; then
+        return 0
+    fi
+
+    normalized="$path.lf"
+    sed 's/\r$//' "$path" > "$normalized"
+    mv "$normalized" "$path"
+}
+
+compare_pinned_text_file() {
+    left="$1"
+    right="$2"
+    label="$3"
+
+    if ! is_windows_shell; then
+        cmp "$left" "$right" || fail "$label differs."
+        return 0
+    fi
+
+    left_normalized="$(mktemp)"
+    right_normalized="$(mktemp)"
+    cp "$left" "$left_normalized"
+    cp "$right" "$right_normalized"
+    normalize_windows_text_file "$left_normalized"
+    normalize_windows_text_file "$right_normalized"
+
+    if ! cmp "$left_normalized" "$right_normalized"; then
+        rm -f "$left_normalized" "$right_normalized"
+        fail "$label differs."
+    fi
+
+    rm -f "$left_normalized" "$right_normalized"
+}
+
 sha256_file() {
     if command -v shasum >/dev/null 2>&1; then
         shasum -a 256 "$1" | awk '{ print $1 }'
@@ -501,5 +549,5 @@ fi
 
 check_pinned_path_corpora
 
-cmp "$REFERENCE/Cargo.lock" "$ROOT/upstream/Cargo.lock"
+compare_pinned_text_file "$REFERENCE/Cargo.lock" "$ROOT/upstream/Cargo.lock" "Pinned Cargo.lock"
 printf 'Scout preflight passed.\n'

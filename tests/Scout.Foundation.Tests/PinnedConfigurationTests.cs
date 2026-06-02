@@ -1284,11 +1284,16 @@ public sealed partial class PinnedConfigurationTests
     {
         string root = FindRepositoryRoot();
         string cargoLock = File.ReadAllText(Path.Combine(root, "upstream", "Cargo.lock"));
+        string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
 
         Assert.Contains("name = \"regex-automata\"", cargoLock, StringComparison.Ordinal);
         Assert.Contains("version = \"0.4.13\"", cargoLock, StringComparison.Ordinal);
         Assert.Contains("name = \"regex-syntax\"", cargoLock, StringComparison.Ordinal);
         Assert.Contains("version = \"0.8.8\"", cargoLock, StringComparison.Ordinal);
+        Assert.Contains("compare_pinned_text_file()", preflight, StringComparison.Ordinal);
+        Assert.Contains("normalize_windows_text_file \"$left_normalized\"", preflight, StringComparison.Ordinal);
+        Assert.Contains("normalize_windows_text_file \"$right_normalized\"", preflight, StringComparison.Ordinal);
+        Assert.Contains("compare_pinned_text_file \"$REFERENCE/Cargo.lock\" \"$ROOT/upstream/Cargo.lock\" \"Pinned Cargo.lock\"", preflight, StringComparison.Ordinal);
     }
 
     /// <summary>
