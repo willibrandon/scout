@@ -250,6 +250,42 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies hosted oracle capture can produce frozen lockfile rows without relying on private runners.
+    /// </summary>
+    [Fact]
+    public void HostedOracleCaptureUsesGitHubHostedUnixRunners()
+    {
+        string root = FindRepositoryRoot();
+        string workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "oracle-capture.yml"));
+        string script = File.ReadAllText(Path.Combine(root, "eng", "capture-ripgrep-oracle.sh"));
+
+        Assert.Contains("workflow_dispatch:", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("push:", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("pull_request:", workflow, StringComparison.Ordinal);
+        Assert.Contains("capture ripgrep oracle (linux-x64)", workflow, StringComparison.Ordinal);
+        Assert.Contains("runs-on: ubuntu-24.04", workflow, StringComparison.Ordinal);
+        Assert.Contains("image: docker.io/library/debian:bookworm-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb", workflow, StringComparison.Ordinal);
+        Assert.Contains("LINUX_SNAPSHOT_URL", workflow, StringComparison.Ordinal);
+        Assert.Contains("LINUX_LIBC_VERSION", workflow, StringComparison.Ordinal);
+        Assert.Contains("capture ripgrep oracle (linux-arm64)", workflow, StringComparison.Ordinal);
+        Assert.Contains("runs-on: ubuntu-24.04-arm", workflow, StringComparison.Ordinal);
+        Assert.Contains("runner: macos-26-intel", workflow, StringComparison.Ordinal);
+        Assert.Contains("runner: macos-26", workflow, StringComparison.Ordinal);
+        Assert.Contains("eng/capture-ripgrep-oracle.sh", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("self-hosted", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("RELEASE_GATES_RUNNER_TOKEN", workflow, StringComparison.Ordinal);
+
+        Assert.Contains("host_rid()", script, StringComparison.Ordinal);
+        Assert.Contains("oracle_environment()", script, StringComparison.Ordinal);
+        Assert.Contains("artifacts/ripgrep-oracle/$HOST_RID/ripgrep", script, StringComparison.Ordinal);
+        Assert.Contains("cargo \"+$RUST_TOOLCHAIN\" build --profile \"$RG_PROFILE\" --bin rg", script, StringComparison.Ordinal);
+        Assert.Contains("PCRE2_SYS_STATIC=1", script, StringComparison.Ordinal);
+        Assert.Contains("sha256_file \"$RG_PATH\"", script, StringComparison.Ordinal);
+        Assert.Contains("[[ripgrep_oracle]]", script, StringComparison.Ordinal);
+        Assert.Contains("pcre2_sha256", script, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies the pinned ripgrep binary exists and reports the pinned revision.
     /// </summary>
     [Fact]

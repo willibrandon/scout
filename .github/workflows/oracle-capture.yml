@@ -1,0 +1,84 @@
+name: Oracle Capture
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  LINUX_LIBC_VERSION: "2.36-9+deb12u14"
+  LINUX_SNAPSHOT_URL: "http://snapshot.debian.org/archive/debian/20260531T000000Z"
+
+jobs:
+  unix-linux-x64:
+    name: capture ripgrep oracle (linux-x64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    container:
+      image: docker.io/library/debian:bookworm-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb
+    steps:
+      - name: Pinned snapshot apt prerequisites
+        shell: sh
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          rm -f /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list
+          printf 'deb %s bookworm main\n' "$LINUX_SNAPSHOT_URL" > /etc/apt/sources.list
+          printf 'Acquire::Check-Valid-Until false;\nAcquire::Retries 3;\n' > /etc/apt/apt.conf.d/99snapshot
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            bash \
+            build-essential \
+            ca-certificates \
+            clang \
+            curl \
+            git \
+            libc6="$LINUX_LIBC_VERSION" \
+            libc-bin="$LINUX_LIBC_VERSION" \
+            pkg-config \
+            zlib1g-dev
+      - uses: actions/checkout@v6
+      - name: Capture ripgrep oracle row
+        shell: sh
+        run: eng/capture-ripgrep-oracle.sh
+
+  unix-linux-arm64:
+    name: capture ripgrep oracle (linux-arm64)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Linux oracle prerequisites
+        shell: sh
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            ca-certificates \
+            clang \
+            curl \
+            git \
+            pkg-config \
+            zlib1g-dev
+      - name: Capture ripgrep oracle row
+        shell: sh
+        run: eng/capture-ripgrep-oracle.sh
+
+  unix-macos:
+    name: capture ripgrep oracle (${{ matrix.rid }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: osx-x64
+            runner: macos-26-intel
+          - rid: osx-arm64
+            runner: macos-26
+    steps:
+      - uses: actions/checkout@v6
+      - name: Capture ripgrep oracle row
+        run: eng/capture-ripgrep-oracle.sh
