@@ -16,8 +16,7 @@ internal static class VersionOutput
             Pcre2Library.FeatureLabel +
             GetSimdLines() +
             "\n\n" +
-            Pcre2Library.VersionText +
-            "\n");
+            Pcre2Library.VersionText);
     }
 
     private static string GetSimdLines()

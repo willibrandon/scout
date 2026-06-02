@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
-using System.Runtime.InteropServices;
-using System.Runtime.Intrinsics.X86;
 using System.Text;
 using System.Text.Json.Nodes;
 
@@ -34,7 +32,7 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
         Assert.Equal(0, exitCode);
-        Assert.Equal("ripgrep 15.1.0 (rev 4857d6fa67)\n"u8.ToArray(), output.ToArray());
+        Assert.Equal(ReadPinnedRipgrepOutput("-V"), output.ToArray());
         Assert.Empty(error.ToArray());
     }
 
@@ -57,41 +55,8 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
         Assert.Equal(0, exitCode);
-        Assert.Equal(
-            Encoding.ASCII.GetBytes("ripgrep 15.1.0 (rev 4857d6fa67)\n\nfeatures:-pcre2" + GetExpectedSimdLines() + "\n\nPCRE2 is not available in this build of ripgrep.\n\n"),
-            output.ToArray());
+        Assert.Equal(ReadPinnedRipgrepOutput("--version"), output.ToArray());
         Assert.Empty(error.ToArray());
-    }
-
-    private static string GetExpectedSimdLines()
-    {
-        return RuntimeInformation.ProcessArchitecture switch
-        {
-            Architecture.X64 => "\nsimd(compile):+SSE2,-SSSE3,-AVX2\nsimd(runtime):" +
-                JoinFeatureSigns(
-                    ("SSE2", Sse2.IsSupported),
-                    ("SSSE3", Ssse3.IsSupported),
-                    ("AVX2", Avx2.IsSupported)),
-            Architecture.Arm64 => "\nsimd(compile):+NEON\nsimd(runtime):+NEON",
-            _ => string.Empty,
-        };
-    }
-
-    private static string JoinFeatureSigns(params (string Name, bool Enabled)[] features)
-    {
-        var builder = new StringBuilder();
-        for (int index = 0; index < features.Length; index++)
-        {
-            if (index > 0)
-            {
-                builder.Append(',');
-            }
-
-            builder.Append(features[index].Enabled ? '+' : '-');
-            builder.Append(features[index].Name);
-        }
-
-        return builder.ToString();
     }
 
     /// <summary>
