@@ -1362,9 +1362,14 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("\"$PYTHON\" \"$ROOT/eng/generate-regex-unicode-tables.py\"", verifier, StringComparison.Ordinal);
         Assert.Contains("normalize_windows_text_file()", verifier, StringComparison.Ordinal);
         Assert.Contains("sed 's/\\r$//'", verifier, StringComparison.Ordinal);
+        Assert.Contains("artifacts/preflight/unicode-data", verifier, StringComparison.Ordinal);
+        Assert.Contains("RegexUnicodeTables.generated.cs", verifier, StringComparison.Ordinal);
+        Assert.Contains("RegexUnicodeTables.actual.cs", verifier, StringComparison.Ordinal);
         Assert.Contains("cp \"$ROOT/src/Scout.Automata/RegexUnicodeTables.cs\" \"$actual\"", verifier, StringComparison.Ordinal);
         Assert.Contains("normalize_windows_text_file \"$generated\"", verifier, StringComparison.Ordinal);
         Assert.Contains("normalize_windows_text_file \"$actual\"", verifier, StringComparison.Ordinal);
+        Assert.Contains("Unicode verifier did not create generated output", verifier, StringComparison.Ordinal);
+        Assert.Contains("Unicode verifier did not create actual output", verifier, StringComparison.Ordinal);
         Assert.Contains("cmp \"$generated\" \"$actual\"", verifier, StringComparison.Ordinal);
         Assert.Contains("require_archive_entry \"UnicodeData.txt\"", verifier, StringComparison.Ordinal);
         Assert.Contains("require_archive_entry \"CaseFolding.txt\"", verifier, StringComparison.Ordinal);

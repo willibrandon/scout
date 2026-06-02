@@ -117,13 +117,17 @@ require_table_header "script_extension.rs" "script-extension"
 require_table_header "sentence_break.rs" "sentence-break"
 require_table_header "word_break.rs" "word-break"
 
-generated="$(mktemp)"
-actual="$(mktemp)"
-trap 'rm -f "$generated" "$actual"' EXIT
+TMP="$ROOT/artifacts/preflight/unicode-data"
+rm -rf "$TMP"
+mkdir -p "$TMP"
+generated="$TMP/RegexUnicodeTables.generated.cs"
+actual="$TMP/RegexUnicodeTables.actual.cs"
 "$PYTHON" "$ROOT/eng/generate-regex-unicode-tables.py" > "$generated"
 cp "$ROOT/src/Scout.Automata/RegexUnicodeTables.cs" "$actual"
 normalize_windows_text_file "$generated"
 normalize_windows_text_file "$actual"
+[ -f "$generated" ] || fail "Unicode verifier did not create generated output: $generated"
+[ -f "$actual" ] || fail "Unicode verifier did not create actual output: $actual"
 cmp "$generated" "$actual" >/dev/null ||
     fail "src/Scout.Automata/RegexUnicodeTables.cs is stale; run eng/generate-regex-unicode-tables.py."
 
