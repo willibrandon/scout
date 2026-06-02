@@ -249,7 +249,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("read_lock_rid_table_value()", script, StringComparison.Ordinal);
         Assert.Contains("derive_reference_from_oracle_path()", script, StringComparison.Ordinal);
         Assert.Contains("SCOUT_HOST_RID: ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_ORACLE_ENVIRONMENT: github-actions", workflow, StringComparison.Ordinal);
+        Assert.Contains("timeout-minutes: 30", workflow, StringComparison.Ordinal);
         Assert.Contains("win-arm64", workflow, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_ORACLE_ENVIRONMENT", script, StringComparison.Ordinal);
         Assert.Contains("ripgrep_commit", script, StringComparison.Ordinal);
         Assert.Contains("ripgrep_rg_sha256", script, StringComparison.Ordinal);
         Assert.Contains("ripgrep_pcre2_rg_sha256", script, StringComparison.Ordinal);
@@ -263,7 +266,10 @@ public sealed partial class PinnedConfigurationTests
 
         Assert.Contains("Get-HostRid", windowsScript, StringComparison.Ordinal);
         Assert.Contains("Read-LockRidTableValue", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("Read-LockRidTableValueAnyEnvironment", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("$trimmed.Length -eq 0", windowsScript, StringComparison.Ordinal);
         Assert.Contains("Read-OracleValue", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_ORACLE_ENVIRONMENT", windowsScript, StringComparison.Ordinal);
         Assert.Contains("ripgrep_oracle", windowsScript, StringComparison.Ordinal);
         Assert.Contains("rg.exe", windowsScript, StringComparison.Ordinal);
         Assert.Contains("PCRE2_SYS_STATIC", windowsScript, StringComparison.Ordinal);
@@ -272,6 +278,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("Assert-BinaryHash \"reference rg\"", windowsScript, StringComparison.Ordinal);
         Assert.Contains("Assert-BinaryHash \"PCRE2 reference rg\"", windowsScript, StringComparison.Ordinal);
         Assert.Contains("SCOUT_HOST_RID", preflight, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_ORACLE_ENVIRONMENT", preflight, StringComparison.Ordinal);
         Assert.Contains("MINGW*:x86_64", preflight, StringComparison.Ordinal);
         Assert.Contains("MINGW*:aarch64", preflight, StringComparison.Ordinal);
         Assert.Contains("*/target/*/rg.exe", preflight, StringComparison.Ordinal);

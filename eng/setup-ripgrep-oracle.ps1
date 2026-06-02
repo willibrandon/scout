@@ -54,6 +54,10 @@ function Read-LockRidTableValue {
             continue
         }
 
+        if ($trimmed.Length -eq 0) {
+            continue
+        }
+
         if (Try-ReadAssignment $trimmed "rid" ([ref] $value)) {
             $matchedRid = [string]::Equals($value, $Rid, [System.StringComparison]::Ordinal)
             continue
@@ -67,6 +71,61 @@ function Read-LockRidTableValue {
         if ($matchedRid -and $matchedEnvironment -and (Try-ReadAssignment $trimmed $Key ([ref] $value))) {
             return $value
         }
+    }
+
+    throw "Missing $Table.$Key for $Rid in tests/PREREQS.lock."
+}
+
+function Read-LockRidTableValueAnyEnvironment {
+    param(
+        [Parameter(Mandatory = $true)][string] $Table,
+        [Parameter(Mandatory = $true)][string] $Rid,
+        [Parameter(Mandatory = $true)][string] $Key
+    )
+
+    $header = "[[$Table]]"
+    $inTable = $false
+    $matchedRid = $false
+    $value = ""
+    $matches = [System.Collections.Generic.List[string]]::new()
+    foreach ($line in [System.IO.File]::ReadLines($Lock)) {
+        $trimmed = $line.Trim()
+        if ($trimmed -eq $header) {
+            $inTable = $true
+            $matchedRid = $false
+            continue
+        }
+
+        if ($inTable -and $trimmed.StartsWith("[", [System.StringComparison]::Ordinal)) {
+            $inTable = $false
+            $matchedRid = $false
+        }
+
+        if (-not $inTable) {
+            continue
+        }
+
+        if ($trimmed.Length -eq 0) {
+            continue
+        }
+
+        if (Try-ReadAssignment $trimmed "rid" ([ref] $value)) {
+            $matchedRid = [string]::Equals($value, $Rid, [System.StringComparison]::Ordinal)
+            continue
+        }
+
+        if ($matchedRid -and (Try-ReadAssignment $trimmed $Key ([ref] $value))) {
+            $matches.Add($value)
+            continue
+        }
+    }
+
+    if ($matches.Count -eq 1) {
+        return $matches[0]
+    }
+
+    if ($matches.Count -gt 1) {
+        throw "Multiple $Table.$Key rows for $Rid in tests/PREREQS.lock; set SCOUT_ORACLE_ENVIRONMENT to disambiguate."
     }
 
     throw "Missing $Table.$Key for $Rid in tests/PREREQS.lock."
@@ -116,8 +175,13 @@ function Read-OracleValue {
             return Read-LockRidTableValue "ripgrep_oracle" $HostRid "" $TableKey
         }
         catch {
-            if (Test-LockHasTable "ripgrep_oracle") {
-                throw "Could not find ripgrep_oracle.$TableKey for host RID $HostRid in tests/PREREQS.lock."
+            try {
+                return Read-LockRidTableValueAnyEnvironment "ripgrep_oracle" $HostRid $TableKey
+            }
+            catch {
+                if (Test-LockHasTable "ripgrep_oracle") {
+                    throw "Could not find ripgrep_oracle.$TableKey for host RID $HostRid in tests/PREREQS.lock."
+                }
             }
         }
     }
@@ -126,6 +190,14 @@ function Read-OracleValue {
 }
 
 function Get-HostRid {
+    if (-not [string]::IsNullOrWhiteSpace($env:SCOUT_HOST_RID)) {
+        switch ($env:SCOUT_HOST_RID) {
+            "win-x64" { return "win-x64" }
+            "win-arm64" { return "win-arm64" }
+            default { throw "Unsupported SCOUT_HOST_RID for Windows pinned ripgrep oracle: $env:SCOUT_HOST_RID" }
+        }
+    }
+
     if (-not [System.OperatingSystem]::IsWindows()) {
         throw "Windows pinned ripgrep oracle setup must run on Windows."
     }
@@ -140,6 +212,14 @@ function Get-HostRid {
 }
 
 function Get-OracleEnvironment {
+    if (-not [string]::IsNullOrWhiteSpace($env:SCOUT_ORACLE_ENVIRONMENT)) {
+        switch ($env:SCOUT_ORACLE_ENVIRONMENT) {
+            "github-actions" { return "github-actions" }
+            "local" { return "local" }
+            default { throw "Unsupported SCOUT_ORACLE_ENVIRONMENT: $env:SCOUT_ORACLE_ENVIRONMENT" }
+        }
+    }
+
     if ([string]::Equals($env:GITHUB_ACTIONS, "true", [System.StringComparison]::OrdinalIgnoreCase)) {
         return "github-actions"
     }
@@ -292,6 +372,7 @@ $ExpectedRipgrep = Read-LockValue "ripgrep_commit"
 $RustToolchain = Read-LockValue "cargo"
 $HostRid = Get-HostRid
 $HostOracleEnvironment = Get-OracleEnvironment
+Write-Host "Using ripgrep oracle host RID $HostRid ($HostOracleEnvironment)."
 $RgProfile = Read-OracleValue "profile" "ripgrep_rg_profile"
 $RgPath = Resolve-RepoPath (Read-OracleValue "path" "ripgrep_rg_path")
 $RgSha256 = Read-OracleValue "sha256" "ripgrep_rg_sha256"

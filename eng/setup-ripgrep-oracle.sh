@@ -61,6 +61,18 @@ host_rid() {
 }
 
 oracle_environment() {
+    if [ -n "${SCOUT_ORACLE_ENVIRONMENT:-}" ]; then
+        case "$SCOUT_ORACLE_ENVIRONMENT" in
+            github-actions|local)
+                printf '%s\n' "$SCOUT_ORACLE_ENVIRONMENT"
+                return
+                ;;
+            *)
+                fail "Unsupported SCOUT_ORACLE_ENVIRONMENT for pinned ripgrep oracle: $SCOUT_ORACLE_ENVIRONMENT"
+                ;;
+        esac
+    fi
+
     if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
         printf 'github-actions\n'
     else

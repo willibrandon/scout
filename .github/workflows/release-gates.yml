@@ -83,12 +83,19 @@ jobs:
         with:
           dotnet-version: 10.0.102
       - name: Build pinned ripgrep oracle
+        env:
+          SCOUT_HOST_RID: ${{ matrix.rid }}
+          SCOUT_ORACLE_ENVIRONMENT: github-actions
         run: eng/setup-ripgrep-oracle.sh
       - name: Restore
         run: dotnet restore Scout.slnx
       - name: Fetch pinned corpora
         run: eng/fetch-corpora.sh --all
       - name: Preflight
+        timeout-minutes: 30
+        env:
+          SCOUT_HOST_RID: ${{ matrix.rid }}
+          SCOUT_ORACLE_ENVIRONMENT: github-actions
         run: eng/preflight.sh
       - name: Test
         run: dotnet test Scout.slnx --no-restore
@@ -115,6 +122,9 @@ jobs:
         with:
           dotnet-version: 10.0.102
       - name: Build pinned ripgrep oracle
+        env:
+          SCOUT_HOST_RID: ${{ matrix.rid }}
+          SCOUT_ORACLE_ENVIRONMENT: github-actions
         run: eng/setup-ripgrep-oracle.sh
       - name: Restore
         run: dotnet restore Scout.slnx
@@ -123,6 +133,10 @@ jobs:
       - name: Install pinned hyperfine
         run: eng/setup-hyperfine.sh
       - name: Preflight
+        timeout-minutes: 30
+        env:
+          SCOUT_HOST_RID: ${{ matrix.rid }}
+          SCOUT_ORACLE_ENVIRONMENT: github-actions
         run: eng/preflight.sh
       - name: Test
         run: dotnet test Scout.slnx --no-restore
@@ -150,6 +164,9 @@ jobs:
           dotnet-version: 10.0.102
       - name: Build pinned ripgrep oracle
         shell: pwsh
+        env:
+          SCOUT_HOST_RID: ${{ matrix.rid }}
+          SCOUT_ORACLE_ENVIRONMENT: github-actions
         run: eng/setup-ripgrep-oracle.ps1
       - name: Restore
         run: dotnet restore Scout.slnx
@@ -158,8 +175,10 @@ jobs:
         run: eng/fetch-corpora.sh --all
       - name: Preflight
         shell: bash
+        timeout-minutes: 30
         env:
           SCOUT_HOST_RID: ${{ matrix.rid }}
+          SCOUT_ORACLE_ENVIRONMENT: github-actions
         run: eng/preflight.sh
       - name: Test
         run: dotnet test Scout.slnx --no-restore
@@ -176,12 +195,19 @@ jobs:
         with:
           dotnet-version: 10.0.102
       - name: Build pinned ripgrep oracle
+        env:
+          SCOUT_HOST_RID: osx-arm64
+          SCOUT_ORACLE_ENVIRONMENT: github-actions
         run: eng/setup-ripgrep-oracle.sh
       - name: Install pinned hyperfine
         run: eng/setup-hyperfine.sh
       - name: Fetch pinned corpora
         run: eng/fetch-corpora.sh --all
       - name: Preflight
+        timeout-minutes: 30
+        env:
+          SCOUT_HOST_RID: osx-arm64
+          SCOUT_ORACLE_ENVIRONMENT: github-actions
         run: eng/preflight.sh
       - name: Link native executable
         run: native/build-app-unix.sh osx-arm64 --with-differentials
