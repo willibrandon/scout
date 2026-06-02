@@ -46,8 +46,9 @@ fi
 [ -f "$RG_PATH" ] || fail "Missing pinned rg: $RG_PATH"
 [ -x "$RG_PATH" ] || fail "Pinned rg is not executable: $RG_PATH"
 
-TMP="$(mktemp -d "${TMPDIR:-/tmp}/scout-generated-artifacts.XXXXXX")"
-trap 'rm -rf "$TMP"' EXIT INT HUP TERM
+TMP="$ROOT/artifacts/preflight/generated-artifacts"
+rm -rf "$TMP"
+mkdir -p "$TMP"
 
 decode_artifact() {
     tr -d '[:space:]' < "$1" | base64 -d | gzip -dc
@@ -88,6 +89,9 @@ compare_artifact() {
     decode_artifact "$ARTIFACTS/$artifact" > "$actual"
     normalize_windows_generated_artifact_output "$expected"
     normalize_windows_generated_artifact_output "$actual"
+
+    [ -f "$expected" ] || fail "Generated artifact verifier did not create expected output for $name: $expected"
+    [ -f "$actual" ] || fail "Generated artifact verifier did not create actual output for $name: $actual"
 
     if ! cmp -s "$expected" "$actual"; then
         printf 'Generated artifact drift for %s.\n' "$name" >&2

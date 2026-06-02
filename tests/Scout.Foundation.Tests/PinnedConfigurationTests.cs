@@ -1245,11 +1245,15 @@ public sealed partial class PinnedConfigurationTests
         Assert.DoesNotContain("private const string", helpOutput, StringComparison.Ordinal);
         Assert.DoesNotContain("private const string", generateOutput, StringComparison.Ordinal);
         Assert.Contains("\"$ROOT/eng/verify-generated-artifacts.sh\" \"$RG_PATH\"", preflight, StringComparison.Ordinal);
+        Assert.Contains("artifacts/preflight/generated-artifacts", verifier, StringComparison.Ordinal);
+        Assert.Contains("mkdir -p \"$TMP\"", verifier, StringComparison.Ordinal);
         Assert.Contains("base64 -d | gzip -dc", verifier, StringComparison.Ordinal);
         Assert.Contains("normalize_windows_generated_artifact_output()", verifier, StringComparison.Ordinal);
         Assert.Contains("sed 's/\\r$//'", verifier, StringComparison.Ordinal);
         Assert.Contains("normalize_windows_generated_artifact_output \"$expected\"", verifier, StringComparison.Ordinal);
         Assert.Contains("normalize_windows_generated_artifact_output \"$actual\"", verifier, StringComparison.Ordinal);
+        Assert.Contains("Generated artifact verifier did not create expected output", verifier, StringComparison.Ordinal);
+        Assert.Contains("Generated artifact verifier did not create actual output", verifier, StringComparison.Ordinal);
         Assert.Contains("cmp -s", verifier, StringComparison.Ordinal);
         Assert.Contains("diff -u", verifier, StringComparison.Ordinal);
         Assert.Contains(
