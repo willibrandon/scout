@@ -78,7 +78,7 @@ function Get-Pacman {
 Add-MsysPaths
 Add-PathEntry "C:\ProgramData\chocolatey\bin"
 
-$missing = Get-MissingCommands
+$missing = @(Get-MissingCommands)
 if ($missing.Count -gt 0) {
     $pacman = Get-Pacman
     if ($null -eq $pacman) {
@@ -98,7 +98,7 @@ if ($missing.Count -gt 0) {
     }
 }
 
-$missing = Get-MissingCommands
+$missing = @(Get-MissingCommands)
 $chocolateyPackages = @()
 if ($missing -contains "lz4") {
     $chocolateyPackages += "lz4"
@@ -122,7 +122,7 @@ if ($chocolateyPackages.Count -gt 0) {
     Add-PathEntry "C:\ProgramData\chocolatey\bin"
 }
 
-$missing = Get-MissingCommands
+$missing = @(Get-MissingCommands)
 if ($missing.Count -gt 0) {
     throw "Missing Windows host prerequisite command(s): $($missing -join ', ')"
 }
