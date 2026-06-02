@@ -88,6 +88,145 @@ read_lock_table_value() {
     ' "$LOCK"
 }
 
+oracle_environment() {
+    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+        printf 'github-actions\n'
+    else
+        printf 'local\n'
+    fi
+}
+
+read_lock_rid_table_value() {
+    awk -v header="[[${1}]]" -v name="$2" -v rid="$3" -v environment="$4" -v key="$5" "$strip_toml_value"'
+        function reset_table() {
+            in_table = 0
+            table_name = ""
+            table_rid = ""
+            table_environment = ""
+            table_value = ""
+        }
+        function maybe_emit() {
+            if (found) {
+                return
+            }
+            if (in_table && table_name == name && table_rid == rid && table_value != "" &&
+                ((environment == "" && table_environment == "") || (environment != "" && table_environment == environment))) {
+                print table_value
+                found = 1
+                exit 0
+            }
+        }
+        $0 == header {
+            maybe_emit()
+            in_table = 1
+            table_name = ""
+            table_rid = ""
+            table_environment = ""
+            table_value = ""
+            next
+        }
+        in_table && $0 ~ /^\[/ {
+            maybe_emit()
+            reset_table()
+        }
+        in_table && $0 ~ /^[[:space:]]*name[[:space:]]*=/ {
+            table_name = value_of($0)
+            next
+        }
+        in_table && $0 ~ /^[[:space:]]*rid[[:space:]]*=/ {
+            table_rid = value_of($0)
+            next
+        }
+        in_table && $0 ~ /^[[:space:]]*environment[[:space:]]*=/ {
+            table_environment = value_of($0)
+            next
+        }
+        in_table && $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
+            table_value = value_of($0)
+            next
+        }
+        END {
+            maybe_emit()
+            if (!found) {
+                exit 1
+            }
+        }
+    ' "$LOCK"
+}
+
+read_lock_environment_table_value() {
+    awk -v header="[[${1}]]" -v name="$2" -v environment="$3" -v key="$4" "$strip_toml_value"'
+        function reset_table() {
+            in_table = 0
+            table_name = ""
+            table_environment = ""
+            table_value = ""
+        }
+        function maybe_emit() {
+            if (found) {
+                return
+            }
+            if (in_table && table_name == name && table_environment == environment && table_value != "") {
+                print table_value
+                found = 1
+                exit 0
+            }
+        }
+        $0 == header {
+            maybe_emit()
+            in_table = 1
+            table_name = ""
+            table_environment = ""
+            table_value = ""
+            next
+        }
+        in_table && $0 ~ /^\[/ {
+            maybe_emit()
+            reset_table()
+        }
+        in_table && $0 ~ /^[[:space:]]*name[[:space:]]*=/ {
+            table_name = value_of($0)
+            next
+        }
+        in_table && $0 ~ /^[[:space:]]*environment[[:space:]]*=/ {
+            table_environment = value_of($0)
+            next
+        }
+        in_table && $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
+            table_value = value_of($0)
+            next
+        }
+        END {
+            maybe_emit()
+            if (!found) {
+                exit 1
+            }
+        }
+    ' "$LOCK"
+}
+
+read_macos_tool_value() {
+    name="$1"
+    key="$2"
+
+    if value="$(read_lock_rid_table_value "tool.macos" "$name" "$RID" "$HOST_ORACLE_ENVIRONMENT" "$key")"; then
+        printf '%s\n' "$value"
+        return 0
+    fi
+
+    if value="$(read_lock_rid_table_value "tool.macos" "$name" "$RID" "" "$key")"; then
+        printf '%s\n' "$value"
+        return 0
+    fi
+
+    if value="$(read_lock_environment_table_value "tool.macos" "$name" "$HOST_ORACLE_ENVIRONMENT" "$key")"; then
+        printf '%s\n' "$value"
+        return 0
+    fi
+
+    read_lock_table_value "tool.macos" "$name" "$key"
+}
+
 read_corpus_value() {
     awk -v name="$1" -v key="$2" "$strip_toml_value"'
         $0 == "[[corpus]]" {
@@ -241,9 +380,9 @@ check_tool_version() {
 }
 
 resolve_hyperfine() {
-    pinned_path="$(read_lock_table_value "tool.macos" "hyperfine" "path")" || pinned_path=""
-    pinned_sha256="$(read_lock_table_value "tool.macos" "hyperfine" "sha256")" || pinned_sha256=""
-    pinned_version="$(read_lock_table_value "tool.macos" "hyperfine" "version")" || pinned_version=""
+    pinned_path="$(read_macos_tool_value "hyperfine" "path")" || pinned_path=""
+    pinned_sha256="$(read_macos_tool_value "hyperfine" "sha256")" || pinned_sha256=""
+    pinned_version="$(read_macos_tool_value "hyperfine" "version")" || pinned_version=""
 
     if [ "$MODE" = "gate" ]; then
         [ -n "$pinned_path" ] || fail "Missing pinned hyperfine path in tests/PREREQS.lock."
@@ -589,6 +728,7 @@ if [ "$MODE" = "list" ]; then
 fi
 
 RID="$(host_rid)"
+HOST_ORACLE_ENVIRONMENT="$(oracle_environment)"
 DEFAULT_SCOUT_BIN="$ROOT/artifacts/bin/$RID/scout"
 SCOUT_BIN="${SCOUT_BIN:-$DEFAULT_SCOUT_BIN}"
 RG_VALUE="$(read_ripgrep_oracle_value "path" "ripgrep_rg_path")" || fail "Missing ripgrep oracle path in tests/PREREQS.lock."

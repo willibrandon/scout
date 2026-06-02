@@ -98,6 +98,86 @@ read_lock_environment_table_value() {
     read_lock_named_table_value "$1" "$2" "$3" "$4"
 }
 
+read_lock_macos_tool_value() {
+    name="$1"
+    key="$2"
+
+    if value="$(read_lock_rid_named_table_value "tool.macos" "$name" "$HOST_RID" "$HOST_ORACLE_ENVIRONMENT" "$key")"; then
+        printf '%s\n' "$value"
+        return 0
+    fi
+
+    if value="$(read_lock_rid_named_table_value "tool.macos" "$name" "$HOST_RID" "" "$key")"; then
+        printf '%s\n' "$value"
+        return 0
+    fi
+
+    if value="$(read_lock_environment_table_value "tool.macos" "$name" "$HOST_ORACLE_ENVIRONMENT" "$key")"; then
+        printf '%s\n' "$value"
+        return 0
+    fi
+
+    read_lock_table_value "tool.macos" "$name" "$key"
+}
+
+read_lock_rid_named_table_value() {
+    awk -v header="[[${1}]]" -v name="$2" -v rid="$3" -v environment="$4" -v key="$5" "$strip_toml_value"'
+        function reset_table() {
+            in_table = 0
+            table_name = ""
+            table_rid = ""
+            table_environment = ""
+            table_value = ""
+        }
+        function maybe_emit() {
+            if (found) {
+                return
+            }
+            if (in_table && table_name == name && table_rid == rid && table_value != "" &&
+                ((environment == "" && table_environment == "") || (environment != "" && table_environment == environment))) {
+                print table_value
+                found = 1
+                exit 0
+            }
+        }
+        $0 == header {
+            maybe_emit()
+            in_table = 1
+            table_name = ""
+            table_rid = ""
+            table_environment = ""
+            table_value = ""
+            next
+        }
+        in_table && $0 ~ /^\[/ {
+            maybe_emit()
+            reset_table()
+        }
+        in_table && $0 ~ /^[[:space:]]*name[[:space:]]*=/ {
+            table_name = value_of($0)
+            next
+        }
+        in_table && $0 ~ /^[[:space:]]*rid[[:space:]]*=/ {
+            table_rid = value_of($0)
+            next
+        }
+        in_table && $0 ~ /^[[:space:]]*environment[[:space:]]*=/ {
+            table_environment = value_of($0)
+            next
+        }
+        in_table && $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
+            table_value = value_of($0)
+            next
+        }
+        END {
+            maybe_emit()
+            if (!found) {
+                exit 1
+            }
+        }
+    ' "$LOCK"
+}
+
 host_rid() {
     os="$(uname -s)"
     arch="$(uname -m)"
@@ -257,14 +337,9 @@ check_file_hash() {
 
 check_macos_tool_hash() {
     name="$1"
-    if path="$(read_lock_environment_table_value "tool.macos" "$name" "$HOST_ORACLE_ENVIRONMENT" "path")"; then
-        version="$(read_lock_environment_table_value "tool.macos" "$name" "$HOST_ORACLE_ENVIRONMENT" "version")" || fail "Missing macOS tool version for $name in tests/PREREQS.lock."
-        sha256="$(read_lock_environment_table_value "tool.macos" "$name" "$HOST_ORACLE_ENVIRONMENT" "sha256")" || fail "Missing macOS tool hash for $name in tests/PREREQS.lock."
-    else
-        path="$(read_lock_table_value "tool.macos" "$name" "path")" || fail "Missing macOS tool path for $name in tests/PREREQS.lock."
-        version="$(read_lock_table_value "tool.macos" "$name" "version")" || fail "Missing macOS tool version for $name in tests/PREREQS.lock."
-        sha256="$(read_lock_table_value "tool.macos" "$name" "sha256")" || fail "Missing macOS tool hash for $name in tests/PREREQS.lock."
-    fi
+    path="$(read_lock_macos_tool_value "$name" "path")" || fail "Missing macOS tool path for $name in tests/PREREQS.lock."
+    version="$(read_lock_macos_tool_value "$name" "version")" || fail "Missing macOS tool version for $name in tests/PREREQS.lock."
+    sha256="$(read_lock_macos_tool_value "$name" "sha256")" || fail "Missing macOS tool hash for $name in tests/PREREQS.lock."
 
     require_literal "$sha256" "macOS tool $name sha256"
     [ -f "$path" ] || fail "Missing macOS tool $name: $path"
@@ -379,9 +454,9 @@ if [ "$(uname -s)" = "Darwin" ]; then
     check_macos_tool_hash "brotli"
     check_macos_tool_hash "uncompress"
 
-    HYPERFINE_PATH="$(read_lock_table_value "tool.macos" "hyperfine" "path")" || fail "Missing macOS hyperfine path in tests/PREREQS.lock."
-    HYPERFINE_VERSION="$(read_lock_table_value "tool.macos" "hyperfine" "version")" || fail "Missing macOS hyperfine version in tests/PREREQS.lock."
-    HYPERFINE_SHA256="$(read_lock_table_value "tool.macos" "hyperfine" "sha256")" || fail "Missing macOS hyperfine hash in tests/PREREQS.lock."
+    HYPERFINE_PATH="$(read_lock_macos_tool_value "hyperfine" "path")" || fail "Missing macOS hyperfine path in tests/PREREQS.lock."
+    HYPERFINE_VERSION="$(read_lock_macos_tool_value "hyperfine" "version")" || fail "Missing macOS hyperfine version in tests/PREREQS.lock."
+    HYPERFINE_SHA256="$(read_lock_macos_tool_value "hyperfine" "sha256")" || fail "Missing macOS hyperfine hash in tests/PREREQS.lock."
     check_file_hash "macOS tool hyperfine" "$HYPERFINE_PATH" "$HYPERFINE_SHA256"
     ACTUAL_HYPERFINE_VERSION="$("$HYPERFINE_PATH" --version | sed -n '1p')"
     expect_equal "hyperfine version" "hyperfine $HYPERFINE_VERSION" "$ACTUAL_HYPERFINE_VERSION"

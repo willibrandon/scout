@@ -262,6 +262,7 @@ public sealed partial class PinnedConfigurationTests
         string root = FindRepositoryRoot();
         string workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "oracle-capture.yml"));
         string script = File.ReadAllText(Path.Combine(root, "eng", "capture-ripgrep-oracle.sh"));
+        string macosToolScript = File.ReadAllText(Path.Combine(root, "eng", "capture-macos-tools.sh"));
 
         Assert.Contains("workflow_dispatch:", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("push:", workflow, StringComparison.Ordinal);
@@ -280,6 +281,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("runner: macos-26-intel", workflow, StringComparison.Ordinal);
         Assert.Contains("runner: macos-26", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/capture-ripgrep-oracle.sh", workflow, StringComparison.Ordinal);
+        Assert.Contains("capture macOS tools (${{ matrix.rid }})", workflow, StringComparison.Ordinal);
+        Assert.Contains("eng/capture-macos-tools.sh", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("self-hosted", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("RELEASE_GATES_RUNNER_TOKEN", workflow, StringComparison.Ordinal);
 
@@ -291,6 +294,14 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("sha256_file \"$RG_PATH\"", script, StringComparison.Ordinal);
         Assert.Contains("[[ripgrep_oracle]]", script, StringComparison.Ordinal);
         Assert.Contains("pcre2_sha256", script, StringComparison.Ordinal);
+
+        Assert.Contains("host_rid()", macosToolScript, StringComparison.Ordinal);
+        Assert.Contains("oracle_environment()", macosToolScript, StringComparison.Ordinal);
+        Assert.Contains("rid = \"%s\"", macosToolScript, StringComparison.Ordinal);
+        Assert.Contains("environment = \"%s\"", macosToolScript, StringComparison.Ordinal);
+        Assert.Contains("capture_tool hyperfine", macosToolScript, StringComparison.Ordinal);
+        Assert.Contains("source_sha256", macosToolScript, StringComparison.Ordinal);
+        Assert.Contains("bottle_sha256", macosToolScript, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1851,8 +1862,11 @@ public sealed partial class PinnedConfigurationTests
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
         string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
 
+        Assert.Contains("read_lock_rid_named_table_value()", preflight, StringComparison.Ordinal);
         Assert.Contains("read_lock_environment_table_value()", preflight, StringComparison.Ordinal);
-        Assert.Contains("read_lock_environment_table_value \"tool.macos\" \"$name\" \"$HOST_ORACLE_ENVIRONMENT\" \"path\"", preflight, StringComparison.Ordinal);
+        Assert.Contains("read_lock_macos_tool_value()", preflight, StringComparison.Ordinal);
+        Assert.Contains("read_lock_rid_named_table_value \"tool.macos\" \"$name\" \"$HOST_RID\" \"$HOST_ORACLE_ENVIRONMENT\" \"$key\"", preflight, StringComparison.Ordinal);
+        Assert.Contains("read_lock_environment_table_value \"tool.macos\" \"$name\" \"$HOST_ORACLE_ENVIRONMENT\" \"$key\"", preflight, StringComparison.Ordinal);
         Assert.Contains("environment = \"%s\"", preflight, StringComparison.Ordinal);
 
         for (int index = 0; index < tools.Length; index++)
@@ -2021,12 +2035,17 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("Install pinned hyperfine", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/setup-hyperfine.sh", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("brew install hyperfine", workflow, StringComparison.Ordinal);
-        Assert.Contains("read_lock_table_value \"tool.macos\" \"$NAME\" \"version\"", script, StringComparison.Ordinal);
-        Assert.Contains("read_lock_table_value \"tool.macos\" \"$NAME\" \"source_url\"", script, StringComparison.Ordinal);
-        Assert.Contains("read_lock_table_value \"tool.macos\" \"$NAME\" \"source_sha256\"", script, StringComparison.Ordinal);
-        Assert.Contains("read_lock_table_value \"tool.macos\" \"$NAME\" \"bottle_url\"", script, StringComparison.Ordinal);
-        Assert.Contains("read_lock_table_value \"tool.macos\" \"$NAME\" \"bottle_sha256\"", script, StringComparison.Ordinal);
-        Assert.Contains("read_lock_table_value \"tool.macos\" \"$NAME\" \"sha256\"", script, StringComparison.Ordinal);
+        Assert.Contains("HOST_RID=\"$(host_rid)\"", script, StringComparison.Ordinal);
+        Assert.Contains("HOST_ORACLE_ENVIRONMENT=\"$(oracle_environment)\"", script, StringComparison.Ordinal);
+        Assert.Contains("read_lock_rid_table_value()", script, StringComparison.Ordinal);
+        Assert.Contains("read_lock_environment_table_value()", script, StringComparison.Ordinal);
+        Assert.Contains("read_macos_tool_value()", script, StringComparison.Ordinal);
+        Assert.Contains("read_macos_tool_value \"$NAME\" \"version\"", script, StringComparison.Ordinal);
+        Assert.Contains("read_macos_tool_value \"$NAME\" \"source_url\"", script, StringComparison.Ordinal);
+        Assert.Contains("read_macos_tool_value \"$NAME\" \"source_sha256\"", script, StringComparison.Ordinal);
+        Assert.Contains("read_macos_tool_value \"$NAME\" \"bottle_url\"", script, StringComparison.Ordinal);
+        Assert.Contains("read_macos_tool_value \"$NAME\" \"bottle_sha256\"", script, StringComparison.Ordinal);
+        Assert.Contains("read_macos_tool_value \"$NAME\" \"sha256\"", script, StringComparison.Ordinal);
         Assert.Contains("brew info --json=v2 \"$NAME\"", script, StringComparison.Ordinal);
         Assert.Contains("verify_homebrew_metadata", script, StringComparison.Ordinal);
         Assert.Contains("retry_command()", script, StringComparison.Ordinal);

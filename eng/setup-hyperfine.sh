@@ -47,6 +47,161 @@ read_lock_table_value() {
     ' "$LOCK"
 }
 
+host_rid() {
+    os="$(uname -s)"
+    arch="$(uname -m)"
+    case "$os:$arch" in
+        Darwin:arm64)
+            printf 'osx-arm64\n'
+            ;;
+        Darwin:x86_64)
+            printf 'osx-x64\n'
+            ;;
+        *)
+            fail "Unsupported host for pinned hyperfine: $os $arch"
+            ;;
+    esac
+}
+
+oracle_environment() {
+    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+        printf 'github-actions\n'
+    else
+        printf 'local\n'
+    fi
+}
+
+read_lock_rid_table_value() {
+    awk -v header="[[${1}]]" -v name="$2" -v rid="$3" -v environment="$4" -v key="$5" "$strip_toml_value"'
+        function reset_table() {
+            in_table = 0
+            table_name = ""
+            table_rid = ""
+            table_environment = ""
+            table_value = ""
+        }
+        function maybe_emit() {
+            if (found) {
+                return
+            }
+            if (in_table && table_name == name && table_rid == rid && table_value != "" &&
+                ((environment == "" && table_environment == "") || (environment != "" && table_environment == environment))) {
+                print table_value
+                found = 1
+                exit 0
+            }
+        }
+        $0 == header {
+            maybe_emit()
+            in_table = 1
+            table_name = ""
+            table_rid = ""
+            table_environment = ""
+            table_value = ""
+            next
+        }
+        in_table && $0 ~ /^\[/ {
+            maybe_emit()
+            reset_table()
+        }
+        in_table && $0 ~ /^[[:space:]]*name[[:space:]]*=/ {
+            table_name = value_of($0)
+            next
+        }
+        in_table && $0 ~ /^[[:space:]]*rid[[:space:]]*=/ {
+            table_rid = value_of($0)
+            next
+        }
+        in_table && $0 ~ /^[[:space:]]*environment[[:space:]]*=/ {
+            table_environment = value_of($0)
+            next
+        }
+        in_table && $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
+            table_value = value_of($0)
+            next
+        }
+        END {
+            maybe_emit()
+            if (!found) {
+                exit 1
+            }
+        }
+    ' "$LOCK"
+}
+
+read_lock_environment_table_value() {
+    awk -v header="[[${1}]]" -v name="$2" -v environment="$3" -v key="$4" "$strip_toml_value"'
+        function reset_table() {
+            in_table = 0
+            table_name = ""
+            table_environment = ""
+            table_value = ""
+        }
+        function maybe_emit() {
+            if (found) {
+                return
+            }
+            if (in_table && table_name == name && table_environment == environment && table_value != "") {
+                print table_value
+                found = 1
+                exit 0
+            }
+        }
+        $0 == header {
+            maybe_emit()
+            in_table = 1
+            table_name = ""
+            table_environment = ""
+            table_value = ""
+            next
+        }
+        in_table && $0 ~ /^\[/ {
+            maybe_emit()
+            reset_table()
+        }
+        in_table && $0 ~ /^[[:space:]]*name[[:space:]]*=/ {
+            table_name = value_of($0)
+            next
+        }
+        in_table && $0 ~ /^[[:space:]]*environment[[:space:]]*=/ {
+            table_environment = value_of($0)
+            next
+        }
+        in_table && $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
+            table_value = value_of($0)
+            next
+        }
+        END {
+            maybe_emit()
+            if (!found) {
+                exit 1
+            }
+        }
+    ' "$LOCK"
+}
+
+read_macos_tool_value() {
+    name="$1"
+    key="$2"
+
+    if value="$(read_lock_rid_table_value "tool.macos" "$name" "$HOST_RID" "$HOST_ORACLE_ENVIRONMENT" "$key")"; then
+        printf '%s\n' "$value"
+        return 0
+    fi
+
+    if value="$(read_lock_rid_table_value "tool.macos" "$name" "$HOST_RID" "" "$key")"; then
+        printf '%s\n' "$value"
+        return 0
+    fi
+
+    if value="$(read_lock_environment_table_value "tool.macos" "$name" "$HOST_ORACLE_ENVIRONMENT" "$key")"; then
+        printf '%s\n' "$value"
+        return 0
+    fi
+
+    read_lock_table_value "tool.macos" "$name" "$key"
+}
+
 require_literal() {
     value="$1"
     label="$2"
@@ -177,14 +332,16 @@ retry_command() {
 require_command brew
 require_command sed
 
+HOST_RID="$(host_rid)"
+HOST_ORACLE_ENVIRONMENT="$(oracle_environment)"
 NAME="hyperfine"
-VERSION="$(read_lock_table_value "tool.macos" "$NAME" "version")" || fail "Missing macOS hyperfine version in tests/PREREQS.lock."
-PATH_VALUE="$(read_lock_table_value "tool.macos" "$NAME" "path")" || fail "Missing macOS hyperfine path in tests/PREREQS.lock."
-SOURCE_URL="$(read_lock_table_value "tool.macos" "$NAME" "source_url")" || fail "Missing macOS hyperfine source URL in tests/PREREQS.lock."
-SOURCE_SHA256="$(read_lock_table_value "tool.macos" "$NAME" "source_sha256")" || fail "Missing macOS hyperfine source hash in tests/PREREQS.lock."
-BOTTLE_URL="$(read_lock_table_value "tool.macos" "$NAME" "bottle_url")" || fail "Missing macOS hyperfine bottle URL in tests/PREREQS.lock."
-BOTTLE_SHA256="$(read_lock_table_value "tool.macos" "$NAME" "bottle_sha256")" || fail "Missing macOS hyperfine bottle hash in tests/PREREQS.lock."
-BINARY_SHA256="$(read_lock_table_value "tool.macos" "$NAME" "sha256")" || fail "Missing macOS hyperfine binary hash in tests/PREREQS.lock."
+VERSION="$(read_macos_tool_value "$NAME" "version")" || fail "Missing macOS hyperfine version in tests/PREREQS.lock."
+PATH_VALUE="$(read_macos_tool_value "$NAME" "path")" || fail "Missing macOS hyperfine path in tests/PREREQS.lock."
+SOURCE_URL="$(read_macos_tool_value "$NAME" "source_url")" || fail "Missing macOS hyperfine source URL in tests/PREREQS.lock."
+SOURCE_SHA256="$(read_macos_tool_value "$NAME" "source_sha256")" || fail "Missing macOS hyperfine source hash in tests/PREREQS.lock."
+BOTTLE_URL="$(read_macos_tool_value "$NAME" "bottle_url")" || fail "Missing macOS hyperfine bottle URL in tests/PREREQS.lock."
+BOTTLE_SHA256="$(read_macos_tool_value "$NAME" "bottle_sha256")" || fail "Missing macOS hyperfine bottle hash in tests/PREREQS.lock."
+BINARY_SHA256="$(read_macos_tool_value "$NAME" "sha256")" || fail "Missing macOS hyperfine binary hash in tests/PREREQS.lock."
 
 require_literal "$VERSION" "macOS hyperfine version"
 require_literal "$SOURCE_URL" "macOS hyperfine source URL"
