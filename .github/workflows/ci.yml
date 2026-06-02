@@ -59,6 +59,7 @@ jobs:
             libssl3 \
             lz4 \
             ncompress \
+            python3 \
             tar \
             unzip \
             xz-utils \
@@ -231,6 +232,7 @@ jobs:
             libssl3 \
             lz4 \
             ncompress \
+            python3 \
             tar \
             unzip \
             xz-utils \

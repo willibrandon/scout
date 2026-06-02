@@ -56,7 +56,7 @@ sha256 = "66b647fead60eb0bd793dd6ddde779e4797bb6e3160d8a7087377784b7ed372d"
 pcre2_profile = "release-lto"
 pcre2_features = "pcre2"
 pcre2_path = "artifacts/ripgrep-oracle/linux-arm64/ripgrep/target/pcre2/release-lto/rg"
-pcre2_sha256 = "94ebace8314f44d0525c0db0fa80dd575b8551b7b829505c3e27ad81a567118a"
+pcre2_sha256 = "6f67dc71baf7200c25f2cb70ed2c541a9b4edd93c1ae9414d076816d1e1df77b"
 
 [[ripgrep_oracle]]
 rid = "osx-arm64"
@@ -252,6 +252,15 @@ version = "6.0-28"
 sha256 = "e2f7d58ad17fb5ad25d4e3cfb72870089dec4a54805d83650b8fd1b648a0c29b"
 
 [[tool.linux]]
+rid = "linux-x64"
+name = "python3"
+package = "python3-minimal"
+binary = "python3"
+path = "/usr/bin/python3"
+version = "3.11.2-1+b1"
+sha256 = "c6e1f1ef67ab331cbb83bfbd5bbb9b766fbb2228ce848b038141cb7d2cad3158"
+
+[[tool.linux]]
 rid = "linux-arm64"
 name = "gzip"
 package = "gzip"
@@ -322,6 +331,15 @@ binary = "unzip"
 path = "/usr/bin/unzip"
 version = "6.0-28"
 sha256 = "b607a8f5f7056dcccb7d81e83cd25115d73e0ef07e337581a4f591ceb01e6f41"
+
+[[tool.linux]]
+rid = "linux-arm64"
+name = "python3"
+package = "python3-minimal"
+binary = "python3"
+path = "/usr/bin/python3"
+version = "3.11.2-1+b1"
+sha256 = "ef8ea6cdde1ed5696b130d90a07026a3088e0c767166a3a627233da845a9fae9"
 
 [[corpus]]
 name = "opensubtitles-en"

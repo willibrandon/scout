@@ -22,8 +22,8 @@ EOF
 printf "Acquire::Check-Valid-Until false;\nAcquire::Retries 3;\n" >/etc/apt/apt.conf.d/99snapshot
 apt-get update >/dev/null
 apt-get install -y --no-install-recommends libc6='"$LIBC_VERSION"' libc-bin='"$LIBC_VERSION"' >/dev/null
-apt-get install -y --no-install-recommends gzip bzip2 xz-utils lz4 brotli zstd ncompress unzip ca-certificates >/dev/null
-for spec in gzip:gzip bzip2:bzip2 xz:xz-utils lz4:lz4 brotli:brotli zstd:zstd uncompress:ncompress unzip:unzip; do
+apt-get install -y --no-install-recommends gzip bzip2 xz-utils lz4 brotli zstd ncompress unzip python3 ca-certificates >/dev/null
+for spec in gzip:gzip bzip2:bzip2 xz:xz-utils lz4:lz4 brotli:brotli zstd:zstd uncompress:ncompress unzip:unzip python3:python3-minimal; do
     name=${spec%%:*}
     package=${spec#*:}
     binary=$(command -v "$name")

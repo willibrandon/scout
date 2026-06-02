@@ -1870,10 +1870,10 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
-    /// Verifies every Linux decompression tool invoked by ripgrep's default table is represented in the prerequisite lock.
+    /// Verifies every pinned Linux command-line prerequisite is represented in the prerequisite lock.
     /// </summary>
     [Fact]
-    public void LinuxDecompressionToolsCoverPinnedDefaultCommandTable()
+    public void LinuxPrerequisiteToolsCoverPinnedCommandRequirements()
     {
         (string Rid, string Name, string Package, string Binary, string Path, string Version, string Sha256)[] tools =
         [
@@ -1885,6 +1885,7 @@ public sealed partial class PinnedConfigurationTests
             ("linux-x64", "zstd", "zstd", "zstd", "/usr/bin/zstd", "1.5.4+dfsg2-5", "cee5aaa2d86c0bf168fc57b759439f5900f2a3b55a9250271c473a7b08e3d3e3"),
             ("linux-x64", "uncompress", "ncompress", "uncompress", "/usr/bin/uncompress", "4.2.4.6-6", "55c2f67ca4c3cca0ebac659f0075461dd671ec4937ecd6c71123bb49ed322ebd"),
             ("linux-x64", "unzip", "unzip", "unzip", "/usr/bin/unzip", "6.0-28", "e2f7d58ad17fb5ad25d4e3cfb72870089dec4a54805d83650b8fd1b648a0c29b"),
+            ("linux-x64", "python3", "python3-minimal", "python3", "/usr/bin/python3", "3.11.2-1+b1", "c6e1f1ef67ab331cbb83bfbd5bbb9b766fbb2228ce848b038141cb7d2cad3158"),
             ("linux-arm64", "gzip", "gzip", "gzip", "/usr/bin/gzip", "1.12-1", "d3afaebcb97bf6fa214a813d89b108f48955665ea596228340ec80580ee55a0e"),
             ("linux-arm64", "bzip2", "bzip2", "bzip2", "/usr/bin/bzip2", "1.0.8-5+b1", "40cbbed6f2decef80c0620931b095623705422c19cb5c14b8b27f125a3a5be21"),
             ("linux-arm64", "xz", "xz-utils", "xz", "/usr/bin/xz", "5.4.1-1", "26c98f8bc8f57e82b65b015cb699088ea1da2fc29557f4bc97bbce4fc0069cc8"),
@@ -1893,6 +1894,7 @@ public sealed partial class PinnedConfigurationTests
             ("linux-arm64", "zstd", "zstd", "zstd", "/usr/bin/zstd", "1.5.4+dfsg2-5", "f3336accc2f38ffc03c3ee4b123b53d06ce14abfb4d19028841883c408fdbaf2"),
             ("linux-arm64", "uncompress", "ncompress", "uncompress", "/usr/bin/uncompress", "4.2.4.6-6", "55c2f67ca4c3cca0ebac659f0075461dd671ec4937ecd6c71123bb49ed322ebd"),
             ("linux-arm64", "unzip", "unzip", "unzip", "/usr/bin/unzip", "6.0-28", "b607a8f5f7056dcccb7d81e83cd25115d73e0ef07e337581a4f591ceb01e6f41"),
+            ("linux-arm64", "python3", "python3-minimal", "python3", "/usr/bin/python3", "3.11.2-1+b1", "ef8ea6cdde1ed5696b130d90a07026a3088e0c767166a3a627233da845a9fae9"),
         ];
 
         string root = FindRepositoryRoot();
@@ -1921,6 +1923,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("unzip \\", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("unzip \\", hostInstaller, StringComparison.Ordinal);
         Assert.Contains("unzip:unzip", resolver, StringComparison.Ordinal);
+        Assert.Contains("python3 \\", ciWorkflow, StringComparison.Ordinal);
+        Assert.Contains("python3 \\", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("python3 \\", hostInstaller, StringComparison.Ordinal);
+        Assert.Contains("python3:python3-minimal", resolver, StringComparison.Ordinal);
 
         for (int index = 0; index < tools.Length; index++)
         {

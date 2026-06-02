@@ -22,6 +22,7 @@ $SUDO apt-get install -y --no-install-recommends \
     gzip \
     lz4 \
     ncompress \
+    python3 \
     tar \
     unzip \
     xz-utils \
