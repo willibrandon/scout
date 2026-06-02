@@ -807,6 +807,21 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies implicit stdin detection honors Darwin stat layout differences across native RIDs.
+    /// </summary>
+    [Fact]
+    public void StandardInputProbeHandlesMacosX64StatLayout()
+    {
+        string root = FindRepositoryRoot();
+        string probePath = Path.Combine(root, "src", "Scout.Cli", "StandardInputProbe.cs");
+        string probe = File.ReadAllText(probePath);
+
+        Assert.Contains("RuntimeInformation.ProcessArchitecture == Architecture.X64", probe, StringComparison.Ordinal);
+        Assert.Contains("? [8, 4]", probe, StringComparison.Ordinal);
+        Assert.Contains(": [4, 8]", probe, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies the Unix OS layer exposes byte-preserving link target reads.
     /// </summary>
     [Fact]
@@ -1770,6 +1785,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("\"$ROOT/native/pcre2/build-unix.sh\" \"$RID\"", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("REAL_BIN=\"$BIN/scout-real\"", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-DSCOUT_LAUNCHER", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("clang -arch arm64 -O2 -DSCOUT_LAUNCHER", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("clang -arch x86_64 -O2 -DSCOUT_LAUNCHER", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("artifacts/native/pcre2/$RID/lib/libpcre2-8.a", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-Wl,-force_load,\"$PCRE2_LIB\"", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-Wl,--whole-archive \"$PCRE2_LIB\" -Wl,--no-whole-archive", appBuildScript, StringComparison.Ordinal);

@@ -126,8 +126,10 @@ elif [ "$RID" = "linux-x64" ] || [ "$RID" = "linux-arm64" ]; then
         -o "$REAL_BIN"
 fi
 
-if [ "$RID" = "osx-arm64" ] || [ "$RID" = "osx-x64" ]; then
-    clang -O2 -DSCOUT_LAUNCHER "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -o "$BIN/scout"
+if [ "$RID" = "osx-arm64" ]; then
+    clang -arch arm64 -O2 -DSCOUT_LAUNCHER "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -o "$BIN/scout"
+elif [ "$RID" = "osx-x64" ]; then
+    clang -arch x86_64 -O2 -DSCOUT_LAUNCHER "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -o "$BIN/scout"
 else
     "$CC" -O2 -DSCOUT_LAUNCHER "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -o "$BIN/scout"
 fi

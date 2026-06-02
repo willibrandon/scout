@@ -56,9 +56,7 @@ public static unsafe partial class StandardInputProbe
 
     private static bool TryReadUnixFileType(byte* status, out uint fileType)
     {
-        ReadOnlySpan<int> modeOffsets = OperatingSystem.IsMacOS()
-            ? [4]
-            : [16, 24];
+        ReadOnlySpan<int> modeOffsets = UnixModeOffsetsForCurrentPlatform;
         for (int index = 0; index < modeOffsets.Length; index++)
         {
             uint mode = BitConverter.ToUInt32(new ReadOnlySpan<byte>(status + modeOffsets[index], sizeof(uint)));
@@ -73,6 +71,16 @@ public static unsafe partial class StandardInputProbe
         fileType = 0;
         return false;
     }
+
+    private static ReadOnlySpan<int> UnixModeOffsetsForCurrentPlatform =>
+        OperatingSystem.IsMacOS()
+            ? MacOSModeOffsets
+            : [16, 24];
+
+    private static ReadOnlySpan<int> MacOSModeOffsets =>
+        RuntimeInformation.ProcessArchitecture == Architecture.X64
+            ? [8, 4]
+            : [4, 8];
 
     private static bool IsReadableWindows()
     {
