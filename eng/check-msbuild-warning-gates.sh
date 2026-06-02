@@ -8,6 +8,7 @@ cd "$ROOT"
 
 export MSBUILDDISABLENODEREUSE=1
 dotnet build-server shutdown >/dev/null 2>&1 || true
+MSBUILD_EVALUATION_TIMEOUT_SECONDS="${SCOUT_MSBUILD_WARNING_GATE_TIMEOUT_SECONDS:-300}"
 
 fail() {
     printf '%s\n' "$1" >&2
@@ -82,6 +83,70 @@ write_property() {
     value="$2"
     output="$3"
     printf '%s=%s\n' "$label" "$value" >> "$output"
+}
+
+require_positive_integer() {
+    value="$1"
+    label="$2"
+
+    case "$value" in
+        ""|*[!0-9]*)
+            fail "$label must be a positive integer."
+            ;;
+        0)
+            fail "$label must be greater than zero."
+            ;;
+    esac
+}
+
+run_with_timeout() {
+    timeout_seconds="$1"
+    description="$2"
+    shift 2
+
+    "$@" &
+    command_pid="$!"
+    (
+        sleep "$timeout_seconds"
+        if kill -0 "$command_pid" 2>/dev/null; then
+            printf '%s timed out after %s seconds.\n' "$description" "$timeout_seconds" >&2
+            kill "$command_pid" 2>/dev/null || true
+            sleep 2
+            if kill -0 "$command_pid" 2>/dev/null; then
+                kill -KILL "$command_pid" 2>/dev/null || true
+            fi
+        fi
+    ) &
+    watchdog_pid="$!"
+
+    set +e
+    wait "$command_pid"
+    status="$?"
+    set -e
+
+    if kill -0 "$watchdog_pid" 2>/dev/null; then
+        kill "$watchdog_pid" 2>/dev/null || true
+    fi
+    wait "$watchdog_pid" 2>/dev/null || true
+
+    case "$status" in
+        137|143)
+            fail "$description timed out after $timeout_seconds seconds."
+            ;;
+    esac
+
+    return "$status"
+}
+
+run_msbuild_evaluation() {
+    description="$1"
+    output="$2"
+    shift 2
+
+    printf '  %s\n' "$description"
+    if ! run_with_timeout "$MSBUILD_EVALUATION_TIMEOUT_SECONDS" "$description" "$@" > "$output"; then
+        fail "$description failed."
+    fi
 }
 
 check_raw_nowarn() {
@@ -233,6 +298,7 @@ check_analyzer_severity_config() {
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
+require_positive_integer "$MSBUILD_EVALUATION_TIMEOUT_SECONDS" "SCOUT_MSBUILD_WARNING_GATE_TIMEOUT_SECONDS"
 scan_repository_suppression_files
 check_analyzer_severity_config
 
@@ -247,12 +313,13 @@ find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" -name '*.csproj' -type
 
     printf 'Checking MSBuild warning gates for %s\n' "$relative_project"
 
-    dotnet msbuild -noAutoResponse "$project" -nologo -nodeReuse:false \
+    run_msbuild_evaluation "Raw MSBuild property evaluation for $relative_project" "$raw_evaluation_output" \
+        dotnet msbuild -noAutoResponse "$project" -nologo -nodeReuse:false \
         -getProperty:NoWarn \
-        -getProperty:TreatWarningsAsErrors \
-        > "$raw_evaluation_output"
+        -getProperty:TreatWarningsAsErrors
 
-    dotnet msbuild "$project" -nologo -nodeReuse:false \
+    run_msbuild_evaluation "Imported MSBuild property evaluation for $relative_project" "$evaluation_output" \
+        dotnet msbuild "$project" -nologo -nodeReuse:false \
         -getProperty:NoWarn \
         -getProperty:WarningsNotAsErrors \
         -getProperty:TreatWarningsAsErrors \
@@ -260,8 +327,7 @@ find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" -name '*.csproj' -type
         -getProperty:AnalysisLevel \
         -getProperty:AnalysisMode \
         -getProperty:EnforceCodeStyleInBuild \
-        -getItem:EditorConfigFiles \
-        > "$evaluation_output"
+        -getItem:EditorConfigFiles
 
     raw_no_warn="$(json_property "NoWarn" "$raw_evaluation_output")"
     no_warn="$(json_property "NoWarn" "$evaluation_output")"

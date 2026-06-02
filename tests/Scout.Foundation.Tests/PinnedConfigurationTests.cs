@@ -576,6 +576,11 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("SCOUT[0-9]+", script, StringComparison.Ordinal);
         Assert.Contains("dotnet_diagnostic\\.SCOUT0004\\.severity", script, StringComparison.Ordinal);
         Assert.Contains("none|silent", script, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_MSBUILD_WARNING_GATE_TIMEOUT_SECONDS", script, StringComparison.Ordinal);
+        Assert.Contains("run_with_timeout", script, StringComparison.Ordinal);
+        Assert.Contains("Raw MSBuild property evaluation", script, StringComparison.Ordinal);
+        Assert.Contains("Imported MSBuild property evaluation", script, StringComparison.Ordinal);
+        Assert.Contains("timed out after", script, StringComparison.Ordinal);
 
         string responseFile = File.ReadAllText(Path.Combine(root, "Directory.Build.rsp"));
         Assert.Contains("-p:NoWarn=", responseFile, StringComparison.Ordinal);
