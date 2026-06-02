@@ -1382,7 +1382,18 @@ public sealed class ScoutApplicationRuntimeTests
             osArguments[index + 1] = OsString.FromText(arguments[index]);
         }
 
-        int exitCode = ScoutApplication.Run(osArguments, outputWriter, errorWriter, configPath: null);
+        string? previousSourceRoot = Environment.GetEnvironmentVariable("SCOUT_RIPGREP_SOURCE_ROOT");
+        Environment.SetEnvironmentVariable("SCOUT_RIPGREP_SOURCE_ROOT", PinnedRipgrepOracle.ReferenceRoot);
+        int exitCode;
+        try
+        {
+            exitCode = ScoutApplication.Run(osArguments, outputWriter, errorWriter, configPath: null);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SCOUT_RIPGREP_SOURCE_ROOT", previousSourceRoot);
+        }
+
         return (exitCode, output.ToArray(), Utf8(error.ToArray()));
     }
 
@@ -1399,7 +1410,18 @@ public sealed class ScoutApplicationRuntimeTests
             osArguments[index + 1] = OsString.FromText(arguments[index]);
         }
 
-        int exitCode = ScoutApplication.Run(osArguments, outputWriter, errorWriter, configPath);
+        string? previousSourceRoot = Environment.GetEnvironmentVariable("SCOUT_RIPGREP_SOURCE_ROOT");
+        Environment.SetEnvironmentVariable("SCOUT_RIPGREP_SOURCE_ROOT", PinnedRipgrepOracle.ReferenceRoot);
+        int exitCode;
+        try
+        {
+            exitCode = ScoutApplication.Run(osArguments, outputWriter, errorWriter, configPath);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SCOUT_RIPGREP_SOURCE_ROOT", previousSourceRoot);
+        }
+
         return (exitCode, output.ToArray(), Utf8(error.ToArray()));
     }
 

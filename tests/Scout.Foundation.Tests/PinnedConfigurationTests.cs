@@ -16,7 +16,6 @@ namespace Scout;
 public sealed partial class PinnedConfigurationTests
 {
     private const string PinnedRipgrepCommit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119";
-    private const string ReferenceRipgrepRoot = "/Users/brandon/src/ripgrep";
     private const string PinnedPcre2Commit = "56c87ccac13b01c3c1ecdf71e4fc2fedccea50a2";
 
     /// <summary>
@@ -212,9 +211,11 @@ public sealed partial class PinnedConfigurationTests
     [Fact]
     public void ReferenceRipgrepCheckoutMatchesPinnedCommit()
     {
-        Assert.True(Directory.Exists(ReferenceRipgrepRoot), "Missing reference checkout: " + ReferenceRipgrepRoot);
+        string referenceRipgrepRoot = PinnedRipgrepOracle.ReferenceRoot;
 
-        (int exitCode, string output, string error) = RunProcess("git", ["-C", ReferenceRipgrepRoot, "rev-parse", "HEAD"]);
+        Assert.True(Directory.Exists(referenceRipgrepRoot), "Missing reference checkout: " + referenceRipgrepRoot);
+
+        (int exitCode, string output, string error) = RunProcess("git", ["-C", referenceRipgrepRoot, "rev-parse", "HEAD"]);
 
         Assert.True(exitCode == 0, error);
         Assert.Equal(PinnedRipgrepCommit, output.Trim());
@@ -312,7 +313,7 @@ public sealed partial class PinnedConfigurationTests
 
         string root = FindRepositoryRoot();
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
-        string defaultExecutablePath = PinnedRipgrepOracle.DefaultExecutablePath;
+        string defaultExecutablePath = PinnedRipgrepOracle.ReadHostOracleValue("path", "ripgrep_rg_path");
         string expectedSha256 = PinnedRipgrepOracle.ExpectedSha256;
 
         string oracleBlock = string.Join(
@@ -1545,7 +1546,7 @@ public sealed partial class PinnedConfigurationTests
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
         string headerPath = Path.Combine(sourceRoot, "include", "pcre2.h");
         string pinnedPcre2RipgrepBinaryPath = PinnedPcre2RipgrepOracle.ExecutablePath;
-        string defaultPcre2RipgrepPath = PinnedPcre2RipgrepOracle.DefaultExecutablePath;
+        string defaultPcre2RipgrepPath = PinnedRipgrepOracle.ReadHostOracleValue("pcre2_path", "ripgrep_pcre2_rg_path");
         string expectedPcre2RipgrepSha256 = PinnedPcre2RipgrepOracle.ExpectedSha256;
         string expectedPcre2ReportedVersion = PinnedPcre2RipgrepOracle.ReportedVersion;
 

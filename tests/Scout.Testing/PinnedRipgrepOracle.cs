@@ -26,6 +26,8 @@ internal static class PinnedRipgrepOracle
 
     internal static string ExpectedSha256 => ReadHostOracleValue("sha256", "ripgrep_rg_sha256");
 
+    internal static string ReferenceRoot => DeriveReferenceRoot(DefaultExecutablePath);
+
     internal static ProcessStartInfo CreateStartInfo(bool redirectStandardInput = false)
     {
         return new ProcessStartInfo(ExecutablePath)
@@ -241,6 +243,19 @@ internal static class PinnedRipgrepOracle
         }
 
         return Path.GetFullPath(Path.Combine(FindRepositoryRoot(), path));
+    }
+
+    private static string DeriveReferenceRoot(string executablePath)
+    {
+        string fullPath = Path.GetFullPath(executablePath);
+        string targetSegment = Path.DirectorySeparatorChar + "target" + Path.DirectorySeparatorChar;
+        int targetIndex = fullPath.IndexOf(targetSegment, StringComparison.Ordinal);
+        if (targetIndex < 0)
+        {
+            throw new InvalidOperationException("Could not derive ripgrep reference root from " + executablePath + ".");
+        }
+
+        return fullPath[..targetIndex];
     }
 
     private static string FindRepositoryRoot()

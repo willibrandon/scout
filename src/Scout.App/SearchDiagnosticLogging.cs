@@ -9,6 +9,8 @@ namespace Scout;
 
 internal static class SearchDiagnosticLogging
 {
+    private const string DefaultRipgrepSourceRoot = "/Users/brandon/src/ripgrep";
+
     internal static void LogSearchConfiguration(
         DiagnosticLogger logger,
         IReadOnlyList<OsString> positional,
@@ -32,8 +34,8 @@ internal static class SearchDiagnosticLogging
         LogGlobalIgnoreConfiguration(logger, lowArgs.RespectGitIgnoreFiles && lowArgs.RespectGlobalIgnoreFiles);
         if (patterns.Count > 0)
         {
-            logger.Debug("grep_regex::config", "/Users/brandon/src/ripgrep/crates/regex/src/config.rs", 175, $"assembling HIR from {patterns.Count} fixed string literals");
-            logger.Trace("grep_regex::matcher", "/Users/brandon/src/ripgrep/crates/regex/src/matcher.rs", 66, $"final regex: \"(?:{EscapeLogPattern(patterns[0])})\"");
+            logger.Debug("grep_regex::config", RipgrepSourcePath("crates/regex/src/config.rs"), 175, $"assembling HIR from {patterns.Count} fixed string literals");
+            logger.Trace("grep_regex::matcher", RipgrepSourcePath("crates/regex/src/matcher.rs"), 66, $"final regex: \"(?:{EscapeLogPattern(patterns[0])})\"");
             logger.Trace("grep_regex::literal", "crates/regex/src/literal.rs", 74, "skipping inner literal extraction, existing regex is believed to already be accelerated");
         }
     }
@@ -107,15 +109,15 @@ internal static class SearchDiagnosticLogging
         logger.Trace("rg::search", "crates/core/search.rs", 255, $"{path}: binary detection: BinaryDetection(Convert(0))");
         if (readKind == SearchFileReadKind.MemoryMapped)
         {
-            logger.Trace("grep_searcher::searcher", "/Users/brandon/src/ripgrep/crates/searcher/src/searcher/mod.rs", 690, $"Some(\"{EscapeLogString(path)}\"): searching via memory map");
+            logger.Trace("grep_searcher::searcher", RipgrepSourcePath("crates/searcher/src/searcher/mod.rs"), 690, $"Some(\"{EscapeLogString(path)}\"): searching via memory map");
         }
         else
         {
-            logger.Trace("grep_searcher::searcher", "/Users/brandon/src/ripgrep/crates/searcher/src/searcher/mod.rs", 711, $"Some(\"{EscapeLogString(path)}\"): searching using generic reader");
-            logger.Trace("grep_searcher::searcher", "/Users/brandon/src/ripgrep/crates/searcher/src/searcher/mod.rs", 762, "generic reader: searching via roll buffer strategy");
+            logger.Trace("grep_searcher::searcher", RipgrepSourcePath("crates/searcher/src/searcher/mod.rs"), 711, $"Some(\"{EscapeLogString(path)}\"): searching using generic reader");
+            logger.Trace("grep_searcher::searcher", RipgrepSourcePath("crates/searcher/src/searcher/mod.rs"), 762, "generic reader: searching via roll buffer strategy");
         }
 
-        logger.Trace("grep_searcher::searcher::core", "/Users/brandon/src/ripgrep/crates/searcher/src/searcher/core.rs", 67, "searcher core: will use fast line searcher");
+        logger.Trace("grep_searcher::searcher::core", RipgrepSourcePath("crates/searcher/src/searcher/core.rs"), 67, "searcher core: will use fast line searcher");
     }
 
     internal static string GetHyperlinkHost(CliLowArgs lowArgs, string? hyperlinkFormat)
@@ -165,5 +167,19 @@ internal static class SearchDiagnosticLogging
             host = string.Empty;
             return false;
         }
+    }
+
+    private static string RipgrepSourcePath(string relativePath)
+    {
+        string sourceRoot = ProcessEnvironment.GetVariable("SCOUT_RIPGREP_SOURCE_ROOT")
+            ?? ProcessEnvironment.GetVariable("SCOUT_RIPGREP_REFERENCE")
+            ?? DefaultRipgrepSourceRoot;
+        sourceRoot = sourceRoot.TrimEnd('/', '\\');
+        if (sourceRoot.Length == 0)
+        {
+            return relativePath;
+        }
+
+        return sourceRoot.Replace('\\', '/') + "/" + relativePath;
     }
 }
