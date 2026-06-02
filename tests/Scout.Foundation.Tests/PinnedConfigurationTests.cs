@@ -1323,6 +1323,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("name = \"regex-syntax\"", cargoLock, StringComparison.Ordinal);
         Assert.Contains("version = \"0.8.8\"", cargoLock, StringComparison.Ordinal);
         Assert.Contains("compare_pinned_text_file()", preflight, StringComparison.Ordinal);
+        Assert.Contains("artifacts/preflight/text-compare", preflight, StringComparison.Ordinal);
+        Assert.Contains("mkdir -p \"$text_compare_tmp\"", preflight, StringComparison.Ordinal);
+        Assert.Contains("left_normalized=\"$(mktemp \"$text_compare_tmp/left.XXXXXX\")\"", preflight, StringComparison.Ordinal);
+        Assert.Contains("right_normalized=\"$(mktemp \"$text_compare_tmp/right.XXXXXX\")\"", preflight, StringComparison.Ordinal);
         Assert.Contains("normalize_windows_text_file \"$left_normalized\"", preflight, StringComparison.Ordinal);
         Assert.Contains("normalize_windows_text_file \"$right_normalized\"", preflight, StringComparison.Ordinal);
         Assert.Contains("compare_pinned_text_file \"$REFERENCE/Cargo.lock\" \"$ROOT/upstream/Cargo.lock\" \"Pinned Cargo.lock\"", preflight, StringComparison.Ordinal);

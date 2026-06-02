@@ -352,8 +352,12 @@ compare_pinned_text_file() {
         return 0
     fi
 
-    left_normalized="$(mktemp)"
-    right_normalized="$(mktemp)"
+    text_compare_tmp="$ROOT/artifacts/preflight/text-compare"
+    rm -rf "$text_compare_tmp"
+    mkdir -p "$text_compare_tmp"
+
+    left_normalized="$(mktemp "$text_compare_tmp/left.XXXXXX")"
+    right_normalized="$(mktemp "$text_compare_tmp/right.XXXXXX")"
     cp "$left" "$left_normalized"
     cp "$right" "$right_normalized"
     normalize_windows_text_file "$left_normalized"
