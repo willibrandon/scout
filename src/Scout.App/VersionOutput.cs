@@ -23,7 +23,7 @@ internal static class VersionOutput
     {
         return RuntimeInformation.ProcessArchitecture switch
         {
-            Architecture.X64 => "\nsimd(compile):+SSE2,-SSSE3,-AVX2\nsimd(runtime):" +
+            Architecture.X64 => "\nsimd(compile):+SSE2,+SSSE3,-AVX2\nsimd(runtime):" +
                 JoinFeatureSigns(
                     ("SSE2", Sse2.IsSupported),
                     ("SSSE3", Ssse3.IsSupported),

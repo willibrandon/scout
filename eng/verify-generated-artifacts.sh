@@ -53,6 +53,29 @@ decode_artifact() {
     tr -d '[:space:]' < "$1" | base64 -d | gzip -dc
 }
 
+is_windows_shell() {
+    case "$(uname -s 2>/dev/null || printf unknown)" in
+        MINGW*|MSYS*|CYGWIN*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+normalize_windows_generated_artifact_output() {
+    path="$1"
+
+    if ! is_windows_shell; then
+        return 0
+    fi
+
+    normalized="$path.lf"
+    sed 's/\r$//' "$path" > "$normalized"
+    mv "$normalized" "$path"
+}
+
 compare_artifact() {
     name="$1"
     artifact="$2"
@@ -63,6 +86,8 @@ compare_artifact() {
 
     "$RG_PATH" "$@" > "$expected"
     decode_artifact "$ARTIFACTS/$artifact" > "$actual"
+    normalize_windows_generated_artifact_output "$expected"
+    normalize_windows_generated_artifact_output "$actual"
 
     if ! cmp -s "$expected" "$actual"; then
         printf 'Generated artifact drift for %s.\n' "$name" >&2

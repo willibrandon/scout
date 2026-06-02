@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -1232,6 +1233,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.DoesNotContain("private const string", generateOutput, StringComparison.Ordinal);
         Assert.Contains("\"$ROOT/eng/verify-generated-artifacts.sh\" \"$RG_PATH\"", preflight, StringComparison.Ordinal);
         Assert.Contains("base64 -d | gzip -dc", verifier, StringComparison.Ordinal);
+        Assert.Contains("normalize_windows_generated_artifact_output()", verifier, StringComparison.Ordinal);
+        Assert.Contains("sed 's/\\r$//'", verifier, StringComparison.Ordinal);
+        Assert.Contains("normalize_windows_generated_artifact_output \"$expected\"", verifier, StringComparison.Ordinal);
+        Assert.Contains("normalize_windows_generated_artifact_output \"$actual\"", verifier, StringComparison.Ordinal);
         Assert.Contains("cmp -s", verifier, StringComparison.Ordinal);
         Assert.Contains("diff -u", verifier, StringComparison.Ordinal);
         Assert.Contains(
@@ -1946,11 +1951,9 @@ public sealed partial class PinnedConfigurationTests
 
         string root = FindRepositoryRoot();
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
-        bool hosted = string.Equals(Environment.GetEnvironmentVariable("GITHUB_ACTIONS"), "true", StringComparison.OrdinalIgnoreCase);
         for (int index = 0; index < tools.Length; index++)
         {
             (string name, string version, string path, string localSha256, string? hostedSha256) = tools[index];
-            string expectedSha256 = hosted && hostedSha256 is not null ? hostedSha256 : localSha256;
             Assert.Contains("name = \"" + name + "\"", prerequisiteLock, StringComparison.Ordinal);
             Assert.Contains("version = \"" + version + "\"", prerequisiteLock, StringComparison.Ordinal);
             Assert.Contains("path = \"" + path + "\"", prerequisiteLock, StringComparison.Ordinal);
@@ -1962,9 +1965,11 @@ public sealed partial class PinnedConfigurationTests
 
             if (OperatingSystem.IsMacOS())
             {
-                Assert.True(File.Exists(path), "Missing macOS prerequisite tool: " + path);
-                byte[] hash = SHA256.HashData(File.ReadAllBytes(path));
-                Assert.Equal(expectedSha256, Convert.ToHexString(hash));
+                string hostPath = ReadMacosToolValue(prerequisiteLock, name, "path");
+                string hostSha256 = ReadMacosToolValue(prerequisiteLock, name, "sha256").ToUpperInvariant();
+                Assert.True(File.Exists(hostPath), "Missing macOS prerequisite tool: " + hostPath);
+                byte[] hash = SHA256.HashData(File.ReadAllBytes(hostPath));
+                Assert.Equal(hostSha256, Convert.ToHexString(hash));
             }
         }
     }
@@ -1997,6 +2002,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("read_lock_rid_named_table_value \"tool.macos\" \"$name\" \"$HOST_RID\" \"$HOST_ORACLE_ENVIRONMENT\" \"$key\"", preflight, StringComparison.Ordinal);
         Assert.Contains("read_lock_environment_table_value \"tool.macos\" \"$name\" \"$HOST_ORACLE_ENVIRONMENT\" \"$key\"", preflight, StringComparison.Ordinal);
         Assert.Contains("environment = \"%s\"", preflight, StringComparison.Ordinal);
+        Assert.Equal("/opt/homebrew/bin/xz", ReadMacosToolValue(prerequisiteLock, "xz", "osx-arm64", "github-actions", "path"));
+        Assert.Equal("/usr/local/bin/xz", ReadMacosToolValue(prerequisiteLock, "xz", "osx-x64", "github-actions", "path"));
+        Assert.Equal("995c8e2f72446f0d0e3a29f6c3d52286cfecedfc4ffb2b42d25c3ce1ad77034c", ReadMacosToolValue(prerequisiteLock, "xz", "osx-arm64", "github-actions", "sha256"));
+        Assert.Equal("2ce7374ab7c6426659e3662a6a759df41e03e30bfd90898073bab1d77f7c51b2", ReadMacosToolValue(prerequisiteLock, "xz", "osx-x64", "github-actions", "sha256"));
 
         for (int index = 0; index < tools.Length; index++)
         {
@@ -2152,13 +2161,17 @@ public sealed partial class PinnedConfigurationTests
 
         if (OperatingSystem.IsMacOS())
         {
-            Assert.True(File.Exists(path), "Missing macOS prerequisite tool: " + path);
-            (int exitCode, string output, string error) = RunProcess(path, ["--version"]);
-            Assert.True(exitCode == 0, error);
-            Assert.Equal("hyperfine " + version, output.Trim());
+            string hostPath = ReadMacosToolValue(prerequisiteLock, name, "path");
+            string hostVersion = ReadMacosToolValue(prerequisiteLock, name, "version");
+            string hostSha256 = ReadMacosToolValue(prerequisiteLock, name, "sha256").ToUpperInvariant();
 
-            byte[] hash = SHA256.HashData(File.ReadAllBytes(path));
-            Assert.Equal(expectedSha256, Convert.ToHexString(hash));
+            Assert.True(File.Exists(hostPath), "Missing macOS prerequisite tool: " + hostPath);
+            (int exitCode, string output, string error) = RunProcess(hostPath, ["--version"]);
+            Assert.True(exitCode == 0, error);
+            Assert.Equal("hyperfine " + hostVersion, output.Trim());
+
+            byte[] hash = SHA256.HashData(File.ReadAllBytes(hostPath));
+            Assert.Equal(hostSha256, Convert.ToHexString(hash));
         }
     }
 
@@ -2755,6 +2768,172 @@ public sealed partial class PinnedConfigurationTests
         }
 
         throw new InvalidOperationException("Missing top-level TOML value: " + key);
+    }
+
+    private static string ReadMacosToolValue(string toml, string name, string key)
+    {
+        return ReadMacosToolValue(toml, name, CurrentHostRid(), CurrentOracleEnvironment(), key);
+    }
+
+    private static string ReadMacosToolValue(string toml, string name, string rid, string environment, string key)
+    {
+        if (TryReadMacosToolValue(toml, name, rid, environment, key, out string? exactRidEnvironmentValue))
+        {
+            return exactRidEnvironmentValue!;
+        }
+
+        if (TryReadMacosToolValue(toml, name, rid, string.Empty, key, out string? exactRidValue))
+        {
+            return exactRidValue!;
+        }
+
+        if (TryReadMacosToolValue(toml, name, string.Empty, environment, key, out string? environmentValue))
+        {
+            return environmentValue!;
+        }
+
+        if (TryReadMacosToolValue(toml, name, string.Empty, string.Empty, key, out string? defaultValue))
+        {
+            return defaultValue!;
+        }
+
+        throw new InvalidOperationException("Missing macOS tool TOML value: " + name + "." + key);
+    }
+
+    private static bool TryReadMacosToolValue(
+        string toml,
+        string name,
+        string rid,
+        string environment,
+        string key,
+        out string? value)
+    {
+        foreach (Dictionary<string, string> table in EnumerateTomlArrayTables(toml, "tool.macos"))
+        {
+            if (!table.TryGetValue("name", out string? tableName) ||
+                !string.Equals(tableName, name, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            string tableRid = table.TryGetValue("rid", out string? ridValue) ? ridValue : string.Empty;
+            string tableEnvironment = table.TryGetValue("environment", out string? environmentValue) ? environmentValue : string.Empty;
+            if (!string.Equals(tableRid, rid, StringComparison.Ordinal) ||
+                !string.Equals(tableEnvironment, environment, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (table.TryGetValue(key, out value))
+            {
+                return true;
+            }
+        }
+
+        value = null;
+        return false;
+    }
+
+    private static IEnumerable<Dictionary<string, string>> EnumerateTomlArrayTables(string toml, string tableName)
+    {
+        string header = "[[" + tableName + "]]";
+        Dictionary<string, string>? table = null;
+        using var reader = new StringReader(toml);
+        while (reader.ReadLine() is { } line)
+        {
+            if (string.Equals(line.Trim(), header, StringComparison.Ordinal))
+            {
+                if (table is not null)
+                {
+                    yield return table;
+                }
+
+                table = new Dictionary<string, string>(StringComparer.Ordinal);
+                continue;
+            }
+
+            if (line.Length > 0 && line[0] == '[')
+            {
+                if (table is not null)
+                {
+                    yield return table;
+                    table = null;
+                }
+
+                continue;
+            }
+
+            if (table is null)
+            {
+                continue;
+            }
+
+            int equalsIndex = line.IndexOf('=');
+            if (equalsIndex < 0)
+            {
+                continue;
+            }
+
+            string key = line.Substring(0, equalsIndex).Trim();
+            string value = line.Substring(equalsIndex + 1).Trim();
+            if (value.Length >= 2 && value[0] == '"' && value[value.Length - 1] == '"')
+            {
+                value = value.Substring(1, value.Length - 2);
+            }
+
+            table[key] = value;
+        }
+
+        if (table is not null)
+        {
+            yield return table;
+        }
+    }
+
+    private static string CurrentHostRid()
+    {
+        string? configuredRid = Environment.GetEnvironmentVariable("SCOUT_HOST_RID");
+        if (!string.IsNullOrWhiteSpace(configuredRid))
+        {
+            return configuredRid;
+        }
+
+        string architecture = RuntimeInformation.ProcessArchitecture switch
+        {
+            Architecture.Arm64 => "arm64",
+            Architecture.X64 => "x64",
+            _ => RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant(),
+        };
+
+        if (OperatingSystem.IsMacOS())
+        {
+            return "osx-" + architecture;
+        }
+
+        if (OperatingSystem.IsLinux())
+        {
+            return "linux-" + architecture;
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            return "win-" + architecture;
+        }
+
+        throw new PlatformNotSupportedException("Unsupported host platform.");
+    }
+
+    private static string CurrentOracleEnvironment()
+    {
+        string? configuredEnvironment = Environment.GetEnvironmentVariable("SCOUT_ORACLE_ENVIRONMENT");
+        if (!string.IsNullOrWhiteSpace(configuredEnvironment))
+        {
+            return configuredEnvironment;
+        }
+
+        return string.Equals(Environment.GetEnvironmentVariable("GITHUB_ACTIONS"), "true", StringComparison.OrdinalIgnoreCase)
+            ? "github-actions"
+            : string.Empty;
     }
 
     private static IEnumerable<string> EnumerateSuppressionScanFiles(string root)
