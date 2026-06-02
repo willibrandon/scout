@@ -53,7 +53,7 @@ public sealed class WalkParallel
             tasks[index] = Task.Factory.StartNew(
                 () => RunWorker(workerIndex, stacks, visitorFactory(), ref remaining, ref quit),
                 CancellationToken.None,
-                TaskCreationOptions.LongRunning,
+                TaskCreationOptions.DenyChildAttach,
                 TaskScheduler.Default);
         }
 
