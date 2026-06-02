@@ -328,15 +328,15 @@ public sealed partial class PinnedConfigurationTests
             (
                 "win-x64",
                 "artifacts/ripgrep-oracle/win-x64/ripgrep/target/release-lto/rg.exe",
-                "81c238cdc09564cc4ee10743053c1e4233c045f49a0d9951dda8d99e806058ba",
+                "fe41d3c694b071f1c2b02f6bcd5e290032d13003ec303a1deab9cdf8b47353ba",
                 "artifacts/ripgrep-oracle/win-x64/ripgrep/target/pcre2/release-lto/rg.exe",
-                "8bc234596ff53719605892bc0a9a2f112eb2d4b3f873825dedb2b411c26a58d8"),
+                "57153890221954c2ded22c9176f4233975cf1f10f83966539c2dcdf0ff4bc339"),
             (
                 "win-arm64",
                 "artifacts/ripgrep-oracle/win-arm64/ripgrep/target/release-lto/rg.exe",
-                "27fa01f4666d50f542ddcf36d0a81a7e0cfb28af6cac39cdf087b0f8239a8067",
+                "17fe68feb940d7b96031efac8094e0376c5e3d109e87d4577de493a2abe94cd2",
                 "artifacts/ripgrep-oracle/win-arm64/ripgrep/target/pcre2/release-lto/rg.exe",
-                "72c96e71384f66f243d3018e60f3c8241c6c736425d0f4677b92686bbecd48f6"),
+                "a5891179d4c8aa2dc61a337f27d27cbea0349f760c696acb0d6abf4aa1f05329"),
         ];
 
         for (int index = 0; index < rows.Length; index++)
