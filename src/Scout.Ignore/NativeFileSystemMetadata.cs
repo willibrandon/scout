@@ -10,14 +10,13 @@ internal static unsafe partial class NativeFileSystemMetadata
     private const int StatBufferSize = 512;
     private const int ReadLinkBufferSize = 4096;
     private const int UnixDeviceOffset = 0;
-    private const int UnixInodeOffset = 8;
-    private const int MacOSModeOffset = 4;
-    private const int MacOSSizeOffset = 96;
-    private const int LinuxSizeOffset = 48;
     private const uint UnixFileTypeMask = 0xF000;
+    private const uint UnixFifo = 0x1000;
+    private const uint UnixCharacterDevice = 0x2000;
     private const uint UnixDirectory = 0x4000;
     private const uint UnixRegularFile = 0x8000;
     private const uint UnixSymbolicLink = 0xA000;
+    private const uint UnixSocket = 0xC000;
 
     public static bool TryGet(string path, bool followLinks, out FileSystemMetadata metadata)
     {
@@ -133,7 +132,11 @@ internal static unsafe partial class NativeFileSystemMetadata
             }
         }
 
-        return TryCreateUnixStatus(linkStatus, effectiveStatus, out status);
+        uint? linkExpectedFileType = TryGetExpectedTextFileType(path, followLinks: false);
+        uint? effectiveExpectedFileType = followLinks
+            ? TryGetExpectedTextFileType(path, followLinks: true)
+            : linkExpectedFileType;
+        return TryCreateUnixStatus(linkStatus, effectiveStatus, linkExpectedFileType, effectiveExpectedFileType, out status);
     }
 
     public static bool TryGetRawUnixStatus(ReadOnlySpan<byte> path, bool followLinks, out NativeUnixFileStatus status)
@@ -171,7 +174,7 @@ internal static unsafe partial class NativeFileSystemMetadata
                 }
             }
 
-            return TryCreateUnixStatus(linkStatus, effectiveStatus, out status);
+            return TryCreateUnixStatus(linkStatus, effectiveStatus, null, null, out status);
         }
     }
 
@@ -185,22 +188,34 @@ internal static unsafe partial class NativeFileSystemMetadata
             return false;
         }
 
-        metadata = ReadMetadata(status);
+        uint? expectedFileType = TryGetExpectedTextFileType(path, followLinks);
+        if (!TrySelectUnixStatLayout(status, expectedFileType, out UnixStatLayout layout))
+        {
+            metadata = default;
+            return false;
+        }
+
+        metadata = ReadMetadata(status, layout);
         return true;
     }
 
-    private static bool TryCreateUnixStatus(byte* linkStatus, byte* effectiveStatus, out NativeUnixFileStatus status)
+    private static bool TryCreateUnixStatus(
+        byte* linkStatus,
+        byte* effectiveStatus,
+        uint? linkExpectedFileType,
+        uint? effectiveExpectedFileType,
+        out NativeUnixFileStatus status)
     {
-        if (!TryReadUnixFileType(linkStatus, out uint linkFileType) ||
-            !TryReadUnixFileType(effectiveStatus, out uint effectiveFileType))
+        if (!TryReadUnixFileType(linkStatus, linkExpectedFileType, out uint linkFileType, out _) ||
+            !TryReadUnixFileType(effectiveStatus, effectiveExpectedFileType, out uint effectiveFileType, out UnixStatLayout effectiveLayout))
         {
             status = default;
             return false;
         }
 
         FileAttributes attributes = BuildAttributes(effectiveFileType, linkFileType);
-        long? length = effectiveFileType == UnixRegularFile ? ReadSize(effectiveStatus) : null;
-        FileSystemMetadata metadata = ReadMetadata(effectiveStatus);
+        long? length = effectiveFileType == UnixRegularFile ? ReadSize(effectiveStatus, effectiveLayout) : null;
+        FileSystemMetadata metadata = ReadMetadata(effectiveStatus, effectiveLayout);
         status = new NativeUnixFileStatus(
             attributes,
             effectiveFileType == UnixDirectory,
@@ -210,10 +225,12 @@ internal static unsafe partial class NativeFileSystemMetadata
         return true;
     }
 
-    private static FileSystemMetadata ReadMetadata(byte* status)
+    private static FileSystemMetadata ReadMetadata(byte* status, UnixStatLayout layout)
     {
         ulong device = ReadDevice(status);
-        ulong fileId = BitConverter.ToUInt64(new ReadOnlySpan<byte>(status + UnixInodeOffset, sizeof(ulong)));
+        ulong fileId = layout.InodeSize == sizeof(uint)
+            ? BitConverter.ToUInt32(new ReadOnlySpan<byte>(status + layout.InodeOffset, sizeof(uint)))
+            : BitConverter.ToUInt64(new ReadOnlySpan<byte>(status + layout.InodeOffset, sizeof(ulong)));
         return new FileSystemMetadata(FileSystemDevice.FromUInt64(device), fileId);
     }
 
@@ -227,30 +244,94 @@ internal static unsafe partial class NativeFileSystemMetadata
         return BitConverter.ToUInt64(new ReadOnlySpan<byte>(status + UnixDeviceOffset, sizeof(ulong)));
     }
 
-    private static bool TryReadUnixFileType(byte* status, out uint fileType)
+    private static bool TrySelectUnixStatLayout(byte* status, uint? expectedFileType, out UnixStatLayout layout)
     {
-        ReadOnlySpan<int> modeOffsets = OperatingSystem.IsMacOS()
-            ? [MacOSModeOffset]
-            : [16, 24];
-        for (int index = 0; index < modeOffsets.Length; index++)
+        if (TryReadUnixFileType(status, expectedFileType, out _, out layout))
         {
-            uint mode = BitConverter.ToUInt32(new ReadOnlySpan<byte>(status + modeOffsets[index], sizeof(uint)));
-            uint candidate = mode & UnixFileTypeMask;
-            if (candidate is UnixRegularFile or UnixDirectory or UnixSymbolicLink or 0x1000 or 0x2000 or 0xC000)
+            return true;
+        }
+
+        layout = default;
+        return false;
+    }
+
+    private static bool TryReadUnixFileType(byte* status, uint? expectedFileType, out uint fileType, out UnixStatLayout layout)
+    {
+        ReadOnlySpan<UnixStatLayout> layouts = UnixStatLayout.ForCurrentPlatform;
+        if (expectedFileType.HasValue)
+        {
+            for (int index = 0; index < layouts.Length; index++)
+            {
+                uint expectedCandidate = ReadFileType(status, layouts[index]);
+                if (expectedCandidate == expectedFileType.Value)
+                {
+                    fileType = expectedCandidate;
+                    layout = layouts[index];
+                    return true;
+                }
+            }
+        }
+
+        for (int index = 0; index < layouts.Length; index++)
+        {
+            uint candidate = ReadFileType(status, layouts[index]);
+            if (candidate is UnixRegularFile or UnixDirectory or UnixSymbolicLink or UnixFifo or UnixCharacterDevice or UnixSocket)
             {
                 fileType = candidate;
+                layout = layouts[index];
                 return true;
             }
         }
 
         fileType = 0;
+        layout = default;
         return false;
     }
 
-    private static long ReadSize(byte* status)
+    private static uint ReadFileType(byte* status, UnixStatLayout layout)
     {
-        int offset = OperatingSystem.IsMacOS() ? MacOSSizeOffset : LinuxSizeOffset;
-        return BitConverter.ToInt64(new ReadOnlySpan<byte>(status + offset, sizeof(long)));
+        uint mode = BitConverter.ToUInt32(new ReadOnlySpan<byte>(status + layout.ModeOffset, sizeof(uint)));
+        return mode & UnixFileTypeMask;
+    }
+
+    private static uint? TryGetExpectedTextFileType(string path, bool followLinks)
+    {
+        try
+        {
+            FileAttributes attributes = File.GetAttributes(path);
+            if (!followLinks && (attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                return UnixSymbolicLink;
+            }
+
+            if ((attributes & FileAttributes.Directory) != 0 || (followLinks && Directory.Exists(path)))
+            {
+                return UnixDirectory;
+            }
+
+            return File.Exists(path) ? UnixRegularFile : null;
+        }
+        catch (FileNotFoundException)
+        {
+            return null;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static long ReadSize(byte* status, UnixStatLayout layout)
+    {
+        return BitConverter.ToInt64(new ReadOnlySpan<byte>(status + layout.SizeOffset, sizeof(long)));
     }
 
     private static FileAttributes BuildAttributes(uint effectiveFileType, uint linkFileType)
