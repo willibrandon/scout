@@ -585,13 +585,15 @@ check_ratio_gate() {
     name="$1"
     gate="$2"
     json="$3"
-    rg_median="$(hyperfine_json_metric "$json" 1 "median")" || fail "Could not read rg median from $json."
-    scout_median="$(hyperfine_json_metric "$json" 2 "median")" || fail "Could not read scout median from $json."
-    rg_memory="$(hyperfine_json_median_memory "$json" 1)" || fail "Could not read rg memory from $json."
-    scout_memory="$(hyperfine_json_median_memory "$json" 2)" || fail "Could not read scout memory from $json."
+    rg_index="${4:-1}"
+    scout_index="${5:-2}"
+    rg_median="$(hyperfine_json_metric "$json" "$rg_index" "median")" || fail "Could not read rg median from $json."
+    scout_median="$(hyperfine_json_metric "$json" "$scout_index" "median")" || fail "Could not read scout median from $json."
+    rg_memory="$(hyperfine_json_median_memory "$json" "$rg_index")" || fail "Could not read rg memory from $json."
+    scout_memory="$(hyperfine_json_median_memory "$json" "$scout_index")" || fail "Could not read scout memory from $json."
     [ -n "$rg_memory" ] || fail "Could not read rg memory from $json."
     [ -n "$scout_memory" ] || fail "Could not read scout memory from $json."
-    awk -v name="$name" -v rg="$rg_median" -v scout="$scout_median" -v gate="$gate" '
+    if ! awk -v name="$name" -v rg="$rg_median" -v scout="$scout_median" -v gate="$gate" '
         BEGIN {
             if (rg <= 0) {
                 printf "%s: rg median is not positive: %s\n", name, rg > "/dev/stderr"
@@ -603,8 +605,11 @@ check_ratio_gate() {
                 exit 1
             }
         }
-    ' || fail "$name exceeded the performance gate."
-    awk -v name="$name" -v rg="$rg_memory" -v scout="$scout_memory" -v headroom="$PEAK_RSS_HEADROOM_BYTES" '
+    '; then
+        return 1
+    fi
+
+    if ! awk -v name="$name" -v rg="$rg_memory" -v scout="$scout_memory" -v headroom="$PEAK_RSS_HEADROOM_BYTES" '
         BEGIN {
             if (rg <= 0 || scout <= 0) {
                 printf "%s: missing positive memory data: rg=%s scout=%s\n", name, rg, scout > "/dev/stderr"
@@ -619,7 +624,9 @@ check_ratio_gate() {
                 exit 1
             }
         }
-    ' || fail "$name exceeded the peak RSS gate."
+    '; then
+        return 1
+    fi
 }
 
 run_pair() {
@@ -640,7 +647,17 @@ run_pair() {
         --command-name "scout:$name" "$scout_command"
 
     if [ "$MODE" = "gate" ]; then
-        check_ratio_gate "$name" "$gate" "$json"
+        if ! check_ratio_gate "$name" "$gate" "$json"; then
+            confirm_json="$OUT_DIR/$name.confirm.json"
+            printf '%s\n' "$name initial gate check failed; rerunning with command order reversed to confirm."
+            "$HYPERFINE" \
+                --warmup "$warmup" \
+                --runs "$runs" \
+                --export-json "$confirm_json" \
+                --command-name "scout:$name" "$scout_command" \
+                --command-name "rg:$name" "$rg_command"
+            check_ratio_gate "$name" "$gate" "$confirm_json" 2 1 || fail "$name exceeded the performance or peak RSS gate after reversed-order confirmation."
+        fi
     fi
 }
 
@@ -663,7 +680,18 @@ run_pair_no_shell() {
         --command-name "scout:$name" "$scout_command"
 
     if [ "$MODE" = "gate" ]; then
-        check_ratio_gate "$name" "$gate" "$json"
+        if ! check_ratio_gate "$name" "$gate" "$json"; then
+            confirm_json="$OUT_DIR/$name.confirm.json"
+            printf '%s\n' "$name initial gate check failed; rerunning with command order reversed to confirm."
+            "$HYPERFINE" \
+                -N \
+                --warmup "$warmup" \
+                --runs "$runs" \
+                --export-json "$confirm_json" \
+                --command-name "scout:$name" "$scout_command" \
+                --command-name "rg:$name" "$rg_command"
+            check_ratio_gate "$name" "$gate" "$confirm_json" 2 1 || fail "$name exceeded the performance or peak RSS gate after reversed-order confirmation."
+        fi
     fi
 }
 

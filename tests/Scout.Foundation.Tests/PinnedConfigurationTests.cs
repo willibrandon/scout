@@ -2144,8 +2144,11 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("gate_tree_runs", script, StringComparison.Ordinal);
         Assert.Contains("gate_tree_warmup", script, StringComparison.Ordinal);
         Assert.Contains("median ratio", script, StringComparison.Ordinal);
+        Assert.Contains("rerunning with command order reversed to confirm", script, StringComparison.Ordinal);
+        Assert.Contains("check_ratio_gate \"$name\" \"$gate\" \"$confirm_json\" 2 1", script, StringComparison.Ordinal);
         Assert.Contains("median wall time", readme, StringComparison.Ordinal);
         Assert.Contains("median per-run peak RSS", readme, StringComparison.Ordinal);
+        Assert.Contains("order reversed before the failure is accepted", readme, StringComparison.Ordinal);
         Assert.Contains("OpenSubtitles workloads use five runs and two", readme, StringComparison.Ordinal);
         Assert.Contains("Linux-tree workloads use five runs and three", readme, StringComparison.Ordinal);
         Assert.Contains("run_pair_no_shell", script, StringComparison.Ordinal);
