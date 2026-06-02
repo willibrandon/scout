@@ -10,6 +10,8 @@ WARMUP="1"
 WARMUP_SPECIFIED="0"
 OUT_DIR="$ROOT/artifacts/bench/hyperfine"
 PEAK_RSS_HEADROOM_BYTES="33554432"
+GATE_OPENSUBTITLES_RUNS="5"
+GATE_OPENSUBTITLES_WARMUP="2"
 GATE_TREE_RUNS="5"
 GATE_TREE_WARMUP="3"
 
@@ -404,6 +406,24 @@ hyperfine_json_median_memory() {
     hyperfine_json_memory_samples "$1" "$2" | median_numbers
 }
 
+gate_opensubtitles_runs() {
+    if [ "$MODE" = "gate" ] && [ "$RUNS_SPECIFIED" = "0" ]; then
+        printf '%s\n' "$GATE_OPENSUBTITLES_RUNS"
+        return
+    fi
+
+    printf '%s\n' "$RUNS"
+}
+
+gate_opensubtitles_warmup() {
+    if [ "$MODE" = "gate" ] && [ "$WARMUP_SPECIFIED" = "0" ]; then
+        printf '%s\n' "$GATE_OPENSUBTITLES_WARMUP"
+        return
+    fi
+
+    printf '%s\n' "$WARMUP"
+}
+
 gate_tree_runs() {
     if [ "$MODE" = "gate" ] && [ "$RUNS_SPECIFIED" = "0" ]; then
         printf '%s\n' "$GATE_TREE_RUNS"
@@ -624,6 +644,8 @@ LINUX_TREE="$(require_gate_corpus_tree "linux-kernel" "$LINUX_TREE")"
 Q_OPEN="$(shell_quote "$OPENSUBTITLES_EN")"
 Q_LINUX="$(shell_quote "$LINUX_TREE")"
 Q_TINY="$(shell_quote "$OUT_DIR/cold-tiny.txt")"
+OPENSUBTITLES_RUNS="$(gate_opensubtitles_runs)"
+OPENSUBTITLES_WARMUP="$(gate_opensubtitles_warmup)"
 TREE_RUNS="$(gate_tree_runs)"
 TREE_WARMUP="$(gate_tree_warmup)"
 
@@ -631,12 +653,16 @@ run_pair \
     "subtitles_en_literal" \
     "1.20" \
     "$Q_RG --no-config --mmap -n 'Sherlock Holmes' $Q_OPEN" \
-    "$Q_SCOUT --no-config --mmap -n 'Sherlock Holmes' $Q_OPEN"
+    "$Q_SCOUT --no-config --mmap -n 'Sherlock Holmes' $Q_OPEN" \
+    "$OPENSUBTITLES_RUNS" \
+    "$OPENSUBTITLES_WARMUP"
 run_pair \
     "subtitles_en_regex" \
     "1.20" \
     "$Q_RG --no-config -n '\\w{5}\\s+\\w{5}\\s+\\w{5}' $Q_OPEN" \
-    "$Q_SCOUT --no-config -n '\\w{5}\\s+\\w{5}\\s+\\w{5}' $Q_OPEN"
+    "$Q_SCOUT --no-config -n '\\w{5}\\s+\\w{5}\\s+\\w{5}' $Q_OPEN" \
+    "$OPENSUBTITLES_RUNS" \
+    "$OPENSUBTITLES_WARMUP"
 run_pair \
     "linux_recursive_literal" \
     "1.25" \

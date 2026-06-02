@@ -44,6 +44,7 @@ The script enforces the wall-time gates from `docs/DESIGN.md` with hyperfine's
 median wall time, plus a median per-run peak RSS gate of 1.5x or 32 MiB over rg,
 whichever is larger. Median timing and median per-run peak RSS keep all
 hosted-runner samples while preventing one noisy sample from deciding the
-release gate. In gate mode, the Linux-tree workloads use five runs and three
-warmups by default because hosted macOS filesystem timings are noisier; explicit
-`--runs` and `--warmup` values still override those defaults.
+release gate. In gate mode, the OpenSubtitles workloads use five runs and two
+warmups, and the Linux-tree workloads use five runs and three warmups by default
+because hosted macOS filesystem timings are noisier; explicit `--runs` and
+`--warmup` values still override those defaults.

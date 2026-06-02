@@ -2042,6 +2042,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("hyperfine_json_metric", script, StringComparison.Ordinal);
         Assert.Contains("hyperfine_json_median_memory", script, StringComparison.Ordinal);
         Assert.Contains("median peak RSS ratio", script, StringComparison.Ordinal);
+        Assert.Contains("GATE_OPENSUBTITLES_RUNS=\"5\"", script, StringComparison.Ordinal);
+        Assert.Contains("GATE_OPENSUBTITLES_WARMUP=\"2\"", script, StringComparison.Ordinal);
+        Assert.Contains("gate_opensubtitles_runs", script, StringComparison.Ordinal);
+        Assert.Contains("gate_opensubtitles_warmup", script, StringComparison.Ordinal);
         Assert.Contains("GATE_TREE_RUNS=\"5\"", script, StringComparison.Ordinal);
         Assert.Contains("GATE_TREE_WARMUP=\"3\"", script, StringComparison.Ordinal);
         Assert.Contains("gate_tree_runs", script, StringComparison.Ordinal);
@@ -2049,6 +2053,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("median ratio", script, StringComparison.Ordinal);
         Assert.Contains("median wall time", readme, StringComparison.Ordinal);
         Assert.Contains("median per-run peak RSS", readme, StringComparison.Ordinal);
+        Assert.Contains("OpenSubtitles workloads use five runs and two", readme, StringComparison.Ordinal);
         Assert.Contains("Linux-tree workloads use five runs and three", readme, StringComparison.Ordinal);
         Assert.Contains("run_pair_no_shell", script, StringComparison.Ordinal);
         Assert.Contains("-N", script, StringComparison.Ordinal);
