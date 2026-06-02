@@ -2208,9 +2208,12 @@ public sealed partial class PinnedConfigurationTests
     {
         string root = FindRepositoryRoot();
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        string fetchCorpora = File.ReadAllText(Path.Combine(root, "eng", "fetch-corpora.sh"));
         string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
 
         Assert.DoesNotContain("resolved@", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("only_windows_tar_symlink_errors", fetchCorpora, StringComparison.Ordinal);
+        Assert.Contains("Ignoring Windows tar symlink creation errors", fetchCorpora, StringComparison.Ordinal);
         Assert.Contains("require_literal \"$sha256\" \"corpus $name sha256\"", preflight, StringComparison.Ordinal);
         Assert.DoesNotContain("resolved@*)\n                continue", preflight, StringComparison.Ordinal);
         Assert.Contains("name = \"opensubtitles-en\"", prerequisiteLock, StringComparison.Ordinal);

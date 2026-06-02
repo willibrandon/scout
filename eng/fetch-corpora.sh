@@ -73,6 +73,64 @@ sha256_tree() {
     ) | sha256_stream
 }
 
+is_windows_shell() {
+    case "$(uname -s 2>/dev/null || printf 'unknown')" in
+        MINGW*|MSYS*|CYGWIN*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+only_windows_tar_symlink_errors() {
+    awk '
+        BEGIN {
+            ok = 1
+            saw_symlink_error = 0
+        }
+        /Cannot create symlink to/ {
+            saw_symlink_error = 1
+            next
+        }
+        /Exiting with failure status due to previous errors/ {
+            next
+        }
+        /^[[:space:]]*$/ {
+            next
+        }
+        {
+            ok = 0
+        }
+        END {
+            exit !(ok && saw_symlink_error)
+        }
+    ' "$1"
+}
+
+extract_tar_gz() {
+    archive="$1"
+    destination="$2"
+    tar_errors="$(mktemp "$destination/tar-errors.XXXXXX")"
+
+    if tar -xzf "$archive" -C "$destination" 2>"$tar_errors"; then
+        rm -f "$tar_errors"
+        return 0
+    fi
+
+    status="$?"
+    cat "$tar_errors" >&2
+    if is_windows_shell && only_windows_tar_symlink_errors "$tar_errors"; then
+        printf 'Ignoring Windows tar symlink creation errors; the pinned tree hash covers regular files only.\n' >&2
+        rm -f "$tar_errors"
+        return 0
+    fi
+
+    rm -f "$tar_errors"
+    return "$status"
+}
+
 file_bytes() {
     wc -c < "$1" | tr -d ' '
 }
@@ -153,7 +211,7 @@ prepare_linux() {
         top_level="$(tar -tzf "$linux_archive" | sed -n '1s#/.*##p')"
         [ -n "$top_level" ] || fail "Could not determine Linux archive root."
         printf 'Extracting Linux corpus to %s\n' "$linux_tree" >&2
-        tar -xzf "$linux_archive" -C "$extract_dir"
+        extract_tar_gz "$linux_archive" "$extract_dir"
         [ -d "$extract_dir/$top_level" ] || fail "Missing extracted Linux root: $top_level"
         mv "$extract_dir/$top_level" "$linux_tree"
         rmdir "$extract_dir"
