@@ -56,9 +56,9 @@ internal static class PinnedRipgrepOracle
         string? overridePath = Environment.GetEnvironmentVariable(environmentVariable);
         string executablePath = string.IsNullOrWhiteSpace(overridePath) ? defaultPath : ResolveOraclePath(overridePath);
         string expectedSha256 = ReadHostOracleValue(tableSha256Key, rootSha256Key);
-        if (expectedSha256.StartsWith("resolved@", StringComparison.Ordinal))
+        if (!IsLowercaseSha256(expectedSha256))
         {
-            throw new InvalidOperationException(rootSha256Key + " has not been frozen in tests/PREREQS.lock.");
+            throw new InvalidOperationException(rootSha256Key + " must be a literal lowercase SHA-256 in tests/PREREQS.lock.");
         }
 
         if (!File.Exists(executablePath))
@@ -75,6 +75,26 @@ internal static class PinnedRipgrepOracle
         }
 
         return executablePath;
+    }
+
+    private static bool IsLowercaseSha256(string value)
+    {
+        if (value.Length != 64)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < value.Length; index++)
+        {
+            char character = value[index];
+            bool isHex = character is >= '0' and <= '9' or >= 'a' and <= 'f';
+            if (!isHex)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     internal static string ReadPrerequisiteValue(string key)

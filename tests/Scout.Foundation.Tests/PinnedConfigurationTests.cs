@@ -591,16 +591,16 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
-    /// Verifies checked-in source files do not carry implementation deferral markers.
+    /// Verifies checked-in implementation and build files do not carry implementation deferral markers.
     /// </summary>
     [Fact]
-    public void SourceFilesContainNoImplementationDeferralMarkers()
+    public void ImplementationFilesContainNoImplementationDeferralMarkers()
     {
         string root = FindRepositoryRoot();
         Regex forbiddenPattern = CreateForbiddenImplementationDeferralPattern();
         var violations = new List<string>();
 
-        foreach (string path in EnumerateCheckedInSourceFiles(root))
+        foreach (string path in EnumerateImplementationDeferralScanFiles(root))
         {
             string text = File.ReadAllText(path);
             Match match = forbiddenPattern.Match(text);
@@ -1334,6 +1334,16 @@ public sealed partial class PinnedConfigurationTests
         string spikeWindowsEntry = File.ReadAllText(Path.Combine(root, "spike", "native", "scout_wmain.c"));
         string spikeWindowsBuildScript = File.ReadAllText(Path.Combine(root, "spike", "build-windows.ps1"));
         string design = File.ReadAllText(Path.Combine(root, "docs", "DESIGN.md"));
+        string[] forbiddenFallbacks =
+        [
+            "Environment.GetCommandLineArgs",
+            "Environment.CommandLine",
+            "/proc/self/cmdline",
+            "static int Main(",
+            "static void Main(",
+            "string[] args",
+        ];
+        var fallbackViolations = new List<string>();
 
         Assert.Contains("[UnmanagedCallersOnly(EntryPoint = \"scout_entry\")]", scoutEntry, StringComparison.Ordinal);
         Assert.Contains("NativeArgumentReader.CaptureUnix(argc, argv)", scoutEntry, StringComparison.Ordinal);
@@ -1385,6 +1395,40 @@ public sealed partial class PinnedConfigurationTests
         Assert.DoesNotContain("Reproducing on the remaining five RIDs", design, StringComparison.Ordinal);
         Assert.DoesNotContain("The remaining **four** RIDs", design, StringComparison.Ordinal);
         Assert.DoesNotContain("raw non-UTF-8 `argv`/`envp` byte round-trip, built and run on all six RIDs", design, StringComparison.Ordinal);
+
+        foreach (string path in EnumerateRuntimeSourceFiles(root))
+        {
+            string text = File.ReadAllText(path);
+            for (int tokenIndex = 0; tokenIndex < forbiddenFallbacks.Length; tokenIndex++)
+            {
+                string token = forbiddenFallbacks[tokenIndex];
+                if (text.Contains(token, StringComparison.Ordinal))
+                {
+                    fallbackViolations.Add($"{Path.GetRelativePath(root, path)}: {token}");
+                }
+            }
+        }
+
+        string[] nativeEntryPaths =
+        [
+            Path.Combine(root, "native", "entry", "scout_main.c"),
+            Path.Combine(root, "native", "entry", "scout_wmain.c"),
+        ];
+        for (int pathIndex = 0; pathIndex < nativeEntryPaths.Length; pathIndex++)
+        {
+            string path = nativeEntryPaths[pathIndex];
+            string text = File.ReadAllText(path);
+            for (int tokenIndex = 0; tokenIndex < forbiddenFallbacks.Length; tokenIndex++)
+            {
+                string token = forbiddenFallbacks[tokenIndex];
+                if (text.Contains(token, StringComparison.Ordinal))
+                {
+                    fallbackViolations.Add($"{Path.GetRelativePath(root, path)}: {token}");
+                }
+            }
+        }
+
+        Assert.True(fallbackViolations.Count == 0, string.Join(Environment.NewLine, fallbackViolations));
     }
 
     /// <summary>
@@ -1434,6 +1478,12 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("artifacts\\packages", windowsPackageScript, StringComparison.Ordinal);
         Assert.Contains("scout-$RID.tar.gz", unixPackageScript, StringComparison.Ordinal);
         Assert.Contains("scout-$Rid.zip", windowsPackageScript, StringComparison.Ordinal);
+        Assert.Contains("binary = \"scout\"", unixPackageScript, StringComparison.Ordinal);
+        Assert.Contains("'binary = \"scout.exe\"'", windowsPackageScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("binary = \"sc\"", unixPackageScript, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("'binary = \"sc.exe\"'", windowsPackageScript, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"$STAGE/sc\"", unixPackageScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("Join-Path $Stage \"sc.exe\"", windowsPackageScript, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("THIRD-PARTY-NOTICES.md", unixPackageScript, StringComparison.Ordinal);
         Assert.Contains("THIRD-PARTY-NOTICES.md", windowsPackageScript, StringComparison.Ordinal);
         Assert.Contains("PARITY.md", unixPackageScript, StringComparison.Ordinal);
@@ -2648,6 +2698,38 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies every hash-like prerequisite lock value is a literal SHA-256 digest.
+    /// </summary>
+    [Fact]
+    public void PrerequisiteLockHashesAreLiteralSha256Values()
+    {
+        string root = FindRepositoryRoot();
+        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        string oracle = File.ReadAllText(Path.Combine(root, "tests", "Scout.Testing", "PinnedRipgrepOracle.cs"));
+        MatchCollection matches = PrerequisiteHashAssignmentPattern().Matches(prerequisiteLock);
+        var violations = new List<string>();
+
+        Assert.Contains("IsLowercaseSha256(expectedSha256)", oracle, StringComparison.Ordinal);
+        Assert.DoesNotContain("StartsWith(\"resolved@", oracle, StringComparison.Ordinal);
+        Assert.NotEmpty(matches);
+        foreach (Match match in matches)
+        {
+            string key = match.Groups["key"].Value;
+            string value = match.Groups["value"].Value;
+            bool isLiteral = key.EndsWith("_digest", StringComparison.Ordinal)
+                ? Sha256DigestPattern().IsMatch(value)
+                : Sha256HexPattern().IsMatch(value);
+
+            if (!isLiteral)
+            {
+                violations.Add(key + " = \"" + value + "\"");
+            }
+        }
+
+        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>
     /// Verifies the hyperfine benchsuite covers every release-gate workload class.
     /// </summary>
     [Fact]
@@ -3100,6 +3182,15 @@ public sealed partial class PinnedConfigurationTests
     [GeneratedRegex(@"\[\[package\]\]\s+name = ""(?<name>[^""]+)""\s+version = ""(?<version>[^""]+)""", RegexOptions.CultureInvariant)]
     private static partial Regex CargoLockPackagePattern();
 
+    [GeneratedRegex(@"(?m)^\s*(?<key>[A-Za-z0-9_]*(?:sha256|digest))\s*=\s*""(?<value>[^""]*)""\s*$", RegexOptions.CultureInvariant)]
+    private static partial Regex PrerequisiteHashAssignmentPattern();
+
+    [GeneratedRegex(@"^[0-9a-f]{64}$", RegexOptions.CultureInvariant)]
+    private static partial Regex Sha256HexPattern();
+
+    [GeneratedRegex(@"^sha256:[0-9a-f]{64}$", RegexOptions.CultureInvariant)]
+    private static partial Regex Sha256DigestPattern();
+
     [GeneratedRegex(@"if\s*\([^{;]*(?:TryCreateDirectorySymlink|TryCreateFileSymlink)[^{;]*\)\s*\{\s*return;\s*\}", RegexOptions.CultureInvariant)]
     private static partial Regex FixtureCapabilityReturnPattern();
 
@@ -3425,17 +3516,50 @@ public sealed partial class PinnedConfigurationTests
         }
     }
 
-    private static IEnumerable<string> EnumerateCheckedInSourceFiles(string root)
+    private static IEnumerable<string> EnumerateImplementationDeferralScanFiles(string root)
     {
-        string sourceRoot = Path.Combine(root, "src");
-        foreach (string path in Directory.EnumerateFiles(sourceRoot, "*.cs", SearchOption.AllDirectories))
+        string[] scanRoots = ["src", "tests", "eng", "bench", "native", "spike"];
+        for (int rootIndex = 0; rootIndex < scanRoots.Length; rootIndex++)
         {
-            string relativePath = Path.GetRelativePath(root, path);
-            if (!ContainsPathSegment(relativePath, "bin") && !ContainsPathSegment(relativePath, "obj"))
+            string scanRoot = Path.Combine(root, scanRoots[rootIndex]);
+            foreach (string path in Directory.EnumerateFiles(scanRoot, "*", SearchOption.AllDirectories))
             {
+                string relativePath = Path.GetRelativePath(root, path);
+                if (ContainsPathSegment(relativePath, "bin") ||
+                    ContainsPathSegment(relativePath, "obj") ||
+                    ContainsPathSegment(relativePath, "artifacts") ||
+                    IsVendoredPcre2Source(relativePath) ||
+                    string.Equals(relativePath, Path.Combine("tests", "Scout.Foundation.Tests", "PinnedConfigurationTests.cs"), StringComparison.Ordinal) ||
+                    !IsImplementationDeferralScanFile(path))
+                {
+                    continue;
+                }
+
                 yield return path;
             }
         }
+    }
+
+    private static bool IsImplementationDeferralScanFile(string path)
+    {
+        string extension = Path.GetExtension(path);
+        return string.Equals(extension, ".cs", StringComparison.Ordinal) ||
+            string.Equals(extension, ".csproj", StringComparison.Ordinal) ||
+            string.Equals(extension, ".props", StringComparison.Ordinal) ||
+            string.Equals(extension, ".targets", StringComparison.Ordinal) ||
+            string.Equals(extension, ".sh", StringComparison.Ordinal) ||
+            string.Equals(extension, ".ps1", StringComparison.Ordinal) ||
+            string.Equals(extension, ".c", StringComparison.Ordinal) ||
+            string.Equals(extension, ".h", StringComparison.Ordinal) ||
+            string.Equals(extension, ".yml", StringComparison.Ordinal) ||
+            string.Equals(extension, ".yaml", StringComparison.Ordinal);
+    }
+
+    private static bool IsVendoredPcre2Source(string relativePath)
+    {
+        string vendoredRoot = Path.Combine("native", "pcre2", "pcre2-10.46");
+        return relativePath.StartsWith(vendoredRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal) ||
+            relativePath.StartsWith(vendoredRoot + Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
     }
 
     private static IEnumerable<string> EnumerateTestSourceFiles(string root)
