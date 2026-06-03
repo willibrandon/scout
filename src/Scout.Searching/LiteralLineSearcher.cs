@@ -591,20 +591,24 @@ public static class LiteralLineSearcher
             int nonAsciiLineEnd = GetSearchLineEnd(haystack, nonAsciiLineStart);
             lineNumber += CountLineTerminators(haystack.Slice(countedOffset, nonAsciiLineStart - countedOffset));
             ReadOnlySpan<byte> line = haystack.Slice(nonAsciiLineStart, nonAsciiLineEnd - nonAsciiLineStart);
-            bool lineMatched = accelerator.TryFindUnicode(line, offset: 0, out int lineMatchStart, out _, out bool completedUnicodeSearch);
-            if (!completedUnicodeSearch)
+            bool lineMatched = accelerator.TryFind(line, offset: 0, out int lineMatchStart, out _);
+            if (!lineMatched)
             {
-                lineMatched = TryMatchLine(
-                    line,
-                    needles,
-                    regexPlan,
-                    asciiCaseInsensitive,
-                    invertMatch: false,
-                    lineRegexp: false,
-                    wordRegexp: false,
-                    crlf: false,
-                    nullData: false,
-                    out lineMatchStart);
+                lineMatched = accelerator.TryFindUnicode(line, offset: 0, out lineMatchStart, out _, out bool completedUnicodeSearch);
+                if (!completedUnicodeSearch)
+                {
+                    lineMatched = TryMatchLine(
+                        line,
+                        needles,
+                        regexPlan,
+                        asciiCaseInsensitive,
+                        invertMatch: false,
+                        lineRegexp: false,
+                        wordRegexp: false,
+                        crlf: false,
+                        nullData: false,
+                        out lineMatchStart);
+                }
             }
 
             if (lineMatched)
