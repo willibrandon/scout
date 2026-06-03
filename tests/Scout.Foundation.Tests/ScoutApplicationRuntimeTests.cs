@@ -1697,7 +1697,7 @@ public sealed class ScoutApplicationRuntimeTests
         return stream.ToArray();
     }
 
-    private static void WriteRepeated(Stream stream, byte value, int count)
+    private static void WriteRepeated(MemoryStream stream, byte value, int count)
     {
         byte[] buffer = new byte[Math.Min(count, 4096)];
         Array.Fill(buffer, value);
