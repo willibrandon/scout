@@ -1760,6 +1760,30 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies large implicit file count uses regex-compatible streaming output.
+    /// </summary>
+    [Fact]
+    public void LargeImplicitRegexCountMatchesRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "large.txt");
+        using (var writer = new StreamWriter(path))
+        {
+            for (int index = 0; index < 10000; index++)
+            {
+                writer.WriteLine(index % 3 == 0 ? "alpha bravo charl" : "miss");
+            }
+        }
+
+        (int exitCode, byte[] output, string error) = RunScout("--no-mmap", "--count", @"\w{5}\s+\w{5}\s+\w{5}", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-mmap", "--count", @"\w{5}\s+\w{5}\s+\w{5}", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies count mode omits files with no matches and returns no-match.
     /// </summary>
     [Fact]
@@ -2216,6 +2240,89 @@ public sealed class ScoutApplicationTests
         Assert.Equal(pinnedExitCode, exitCode);
         Assert.Equal(pinnedOutput, output);
         Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies terminal output uses ripgrep's automatic heading mode for directory searches.
+    /// </summary>
+    [Fact]
+    public void TerminalDirectorySearchUsesAutoHeading()
+    {
+        string root = CreateTempDirectory();
+        string first = Path.Combine(root, "a.cs");
+        string second = Path.Combine(root, "b.cs");
+        File.WriteAllText(first, "public class A\n");
+        File.WriteAllText(second, "public class B\n");
+
+        (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "--sort=path", "-n", "public.*class", root);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal($"{first}\n1:public class A\n\n{second}\n1:public class B\n", Utf8(output));
+        Assert.Empty(error);
+    }
+
+    /// <summary>
+    /// Verifies terminal output uses automatic heading mode in the parallel directory path.
+    /// </summary>
+    [Fact]
+    public void TerminalParallelDirectorySearchUsesAutoHeading()
+    {
+        string root = CreateTempDirectory();
+        string first = Path.Combine(root, "a.cs");
+        string second = Path.Combine(root, "b.cs");
+        string third = Path.Combine(root, "c.cs");
+        File.WriteAllText(first, "public class A\n");
+        File.WriteAllText(second, "public class B\n");
+        File.WriteAllText(third, "public class C\n");
+
+        (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "--threads=2", "-n", "public.*class", root);
+
+        Assert.Equal(0, exitCode);
+        var expectedBlocks = new HashSet<string>
+        {
+            $"{first}\n1:public class A",
+            $"{second}\n1:public class B",
+            $"{third}\n1:public class C",
+        };
+        HashSet<string> actualBlocks = SplitHeadingBlocks(Utf8(output));
+        Assert.True(expectedBlocks.SetEquals(actualBlocks), Utf8(output));
+        Assert.Empty(error);
+    }
+
+    /// <summary>
+    /// Verifies no-heading disables automatic terminal heading mode.
+    /// </summary>
+    [Fact]
+    public void TerminalNoHeadingDisablesAutoHeading()
+    {
+        string root = CreateTempDirectory();
+        string first = Path.Combine(root, "a.cs");
+        string second = Path.Combine(root, "b.cs");
+        File.WriteAllText(first, "public class A\n");
+        File.WriteAllText(second, "public class B\n");
+
+        (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "--sort=path", "--no-heading", "-n", "public.*class", root);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal($"{first}:1:public class A\n{second}:1:public class B\n", Utf8(output));
+        Assert.Empty(error);
+    }
+
+    /// <summary>
+    /// Verifies terminal output uses automatic heading mode when a single file is explicitly prefixed.
+    /// </summary>
+    [Fact]
+    public void TerminalSingleFileWithFilenameUsesAutoHeading()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.cs");
+        File.WriteAllText(path, "public class A\n");
+
+        (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "-H", "-n", "public.*class", path);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal($"{path}\n1:public class A\n", Utf8(output));
+        Assert.Empty(error);
     }
 
     /// <summary>
@@ -6298,6 +6405,35 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(osArguments, outputWriter, errorWriter, configPath: null);
         return (exitCode, output.ToArray(), Utf8(error.ToArray()));
+    }
+
+    private static (int ExitCode, byte[] Output, string Error) RunScoutTerminal(params string[] arguments)
+    {
+        using MemoryStream output = new();
+        using MemoryStream error = new();
+        var outputWriter = new RawByteWriter(output);
+        var errorWriter = new RawByteWriter(error);
+        var osArguments = new OsString[arguments.Length + 1];
+        osArguments[0] = OsString.FromUnixBytes("scout"u8);
+        for (int index = 0; index < arguments.Length; index++)
+        {
+            osArguments[index + 1] = OsString.FromText(arguments[index]);
+        }
+
+        int exitCode = ScoutApplication.Run(osArguments, outputWriter, errorWriter, standardOutputIsTerminal: true);
+        return (exitCode, output.ToArray(), Utf8(error.ToArray()));
+    }
+
+    private static HashSet<string> SplitHeadingBlocks(string output)
+    {
+        var blocks = new HashSet<string>(StringComparer.Ordinal);
+        string[] split = output.Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
+        for (int index = 0; index < split.Length; index++)
+        {
+            blocks.Add(split[index].TrimEnd('\n'));
+        }
+
+        return blocks;
     }
 
     private static (int ExitCode, byte[] Output, string Error) RunScoutFromEnvironment(params string[] arguments)

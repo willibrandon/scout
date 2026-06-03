@@ -8,7 +8,7 @@ internal static class ScoutApplication
 {
     internal static int Run(ReadOnlySpan<OsString> arguments, RawByteWriter output, RawByteWriter error)
     {
-        using Stream standardInput = Console.OpenStandardInput();
+        using Stream standardInput = RawStandardStreams.OpenInput();
         return Run(arguments, output, error, standardInput, StandardInputProbe.IsReadable(), standardOutputIsTerminal: false, configPathOverride: null, useConfigPathOverride: false);
     }
 
@@ -18,7 +18,7 @@ internal static class ScoutApplication
         RawByteWriter error,
         bool standardOutputIsTerminal)
     {
-        using Stream standardInput = Console.OpenStandardInput();
+        using Stream standardInput = RawStandardStreams.OpenInput();
         return Run(arguments, output, error, standardInput, StandardInputProbe.IsReadable(), standardOutputIsTerminal, configPathOverride: null, useConfigPathOverride: false);
     }
 
@@ -28,7 +28,7 @@ internal static class ScoutApplication
         RawByteWriter error,
         string? configPath)
     {
-        using Stream standardInput = Console.OpenStandardInput();
+        using Stream standardInput = RawStandardStreams.OpenInput();
         return Run(arguments, output, error, standardInput, StandardInputProbe.IsReadable(), standardOutputIsTerminal: false, configPath, useConfigPathOverride: true);
     }
 
@@ -236,12 +236,12 @@ internal static class ScoutApplication
 
         if (lowArgs.RegexEngine == CliRegexEngine.Pcre2)
         {
-            return Pcre2SearchOperations.Run(positional, firstPathIndex, patternsReadFromStandardInput, lowArgs, patterns, standardInput, standardInputIsReadable, output, diagnostics);
+            return Pcre2SearchOperations.Run(positional, firstPathIndex, patternsReadFromStandardInput, lowArgs, patterns, standardInput, standardInputIsReadable, standardOutputIsTerminal, output, diagnostics);
         }
 
         if (Pcre2SearchOperations.ShouldAutoUse(lowArgs, patterns))
         {
-            return Pcre2SearchOperations.Run(positional, firstPathIndex, patternsReadFromStandardInput, lowArgs, patterns, standardInput, standardInputIsReadable, output, diagnostics);
+            return Pcre2SearchOperations.Run(positional, firstPathIndex, patternsReadFromStandardInput, lowArgs, patterns, standardInput, standardInputIsReadable, standardOutputIsTerminal, output, diagnostics);
         }
 
         if (!lowArgs.Multiline && PatternPreparation.ContainsLineTerminator(patterns, lowArgs.NullData, lowArgs.FixedStrings))
@@ -310,6 +310,7 @@ internal static class ScoutApplication
             diagnostics,
             logger,
             standardInput,
-            standardInputIsReadable);
+            standardInputIsReadable,
+            standardOutputIsTerminal);
     }
 }

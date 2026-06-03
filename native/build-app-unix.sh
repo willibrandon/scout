@@ -39,6 +39,13 @@ expect_contains() {
     return 1
 }
 
+strip_macos_binary() {
+    path="$1"
+    if command -v strip >/dev/null 2>&1; then
+        strip -x "$path"
+    fi
+}
+
 if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
     printf 'usage: %s <rid> [--with-differentials|--smoke-only]\n' "$0" >&2
     exit 2
@@ -88,9 +95,11 @@ if [ "$RID" = "osx-arm64" ]; then
         "$RT/libSystem.IO.Compression.Native.a" "$RT/libSystem.Net.Security.Native.a" \
         "$RT/libSystem.Security.Cryptography.Native.Apple.a" \
         -Wl,-force_load,"$PCRE2_LIB" \
+        -Wl,-dead_strip -Wl,-dead_strip_dylibs \
         -lc++ -lobjc -lz \
         -framework Foundation -framework Security -framework GSS -framework CryptoKit -framework Network \
         -o "$REAL_BIN"
+    strip_macos_binary "$REAL_BIN"
 elif [ "$RID" = "osx-x64" ]; then
     clang -arch x86_64 "$ROOT/native/entry/scout_main.c" \
         "$OUT/scout.a" \
@@ -101,9 +110,11 @@ elif [ "$RID" = "osx-x64" ]; then
         "$RT/libSystem.IO.Compression.Native.a" "$RT/libSystem.Net.Security.Native.a" \
         "$RT/libSystem.Security.Cryptography.Native.Apple.a" \
         -Wl,-force_load,"$PCRE2_LIB" \
+        -Wl,-dead_strip -Wl,-dead_strip_dylibs \
         -lc++ -lobjc -lz \
         -framework Foundation -framework Security -framework GSS -framework CryptoKit -framework Network \
         -o "$REAL_BIN"
+    strip_macos_binary "$REAL_BIN"
 elif [ "$RID" = "linux-x64" ] || [ "$RID" = "linux-arm64" ]; then
     CC="${CC:-cc}"
     VXSORT_ARCHIVE=
@@ -127,9 +138,11 @@ elif [ "$RID" = "linux-x64" ] || [ "$RID" = "linux-arm64" ]; then
 fi
 
 if [ "$RID" = "osx-arm64" ]; then
-    clang -arch arm64 -O2 -DSCOUT_LAUNCHER "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -o "$BIN/scout"
+    clang -arch arm64 -O2 -DSCOUT_LAUNCHER "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -Wl,-dead_strip -Wl,-dead_strip_dylibs -o "$BIN/scout"
+    strip_macos_binary "$BIN/scout"
 elif [ "$RID" = "osx-x64" ]; then
-    clang -arch x86_64 -O2 -DSCOUT_LAUNCHER "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -o "$BIN/scout"
+    clang -arch x86_64 -O2 -DSCOUT_LAUNCHER "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -Wl,-dead_strip -Wl,-dead_strip_dylibs -o "$BIN/scout"
+    strip_macos_binary "$BIN/scout"
 else
     "$CC" -O2 -DSCOUT_LAUNCHER "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -o "$BIN/scout"
 fi

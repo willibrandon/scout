@@ -23,6 +23,7 @@ internal static class Pcre2SearchOperations
         IReadOnlyList<byte[]> patterns,
         Stream standardInput,
         bool standardInputIsReadable,
+        bool standardOutputIsTerminal,
         RawByteWriter output,
         DiagnosticMessenger diagnostics)
     {
@@ -54,7 +55,6 @@ internal static class Pcre2SearchOperations
         OutputLineLimit lineLimit = GetOutputLineLimit(lowArgs);
         OutputColor color = GetOutputColor(lowArgs);
         List<byte[]> pcre2Patterns = PreparePcre2Patterns(patterns, lowArgs.FixedStrings);
-        bool heading = ShouldUseHeading(lowArgs);
         bool wroteHeadingOutput = false;
         bool matched = false;
         bool errored = false;
@@ -69,6 +69,7 @@ internal static class Pcre2SearchOperations
         {
             try
             {
+                bool stdinHeading = ShouldUseHeading(lowArgs, standardOutputIsTerminal, autoPrefixPath: false);
                 byte[] stdinBytes = SearchFileContentReader.ReadSearchStream(standardInput, lowArgs.EncodingMode);
                 byte[] pattern = BuildPcre2Pattern(pcre2Patterns);
                 using var regex = new Pcre2Regex(pattern, GetPcre2CompileOptions(lowArgs, pcre2Patterns));
@@ -76,8 +77,8 @@ internal static class Pcre2SearchOperations
                 OutputPath stdinPath = new(StandardInputPath, hyperlinkPath: null, hyperlinkFormat: null, host: string.Empty);
                 OutputPath? prefix = SearchOutputFormatting.GetStandardInputPrefix(lowArgs.SearchMode, lowArgs.Vimgrep, lowArgs.WithFilename);
                 matched = stats
-                    ? RunPcre2SearchModeWithStats(stdinBytes, regex, output, separators, stdinPath, prefix, lineLimit, color, lowArgs, pcre2Patterns, jsonSummary, heading, ref wroteHeadingOutput, ref searchStats)
-                    : RunPcre2SearchModeWithOptionalHeading(stdinBytes, regex, output, separators, stdinPath, prefix, lineLimit, color, lowArgs, pcre2Patterns, jsonSummary, heading, ref wroteHeadingOutput);
+                    ? RunPcre2SearchModeWithStats(stdinBytes, regex, output, separators, stdinPath, prefix, lineLimit, color, lowArgs, pcre2Patterns, jsonSummary, stdinHeading, ref wroteHeadingOutput, ref searchStats)
+                    : RunPcre2SearchModeWithOptionalHeading(stdinBytes, regex, output, separators, stdinPath, prefix, lineLimit, color, lowArgs, pcre2Patterns, jsonSummary, stdinHeading, ref wroteHeadingOutput);
                 jsonSummary?.WriteSummary(output);
                 if (stats)
                 {
@@ -113,6 +114,7 @@ internal static class Pcre2SearchOperations
 
         bool prefixPaths = lowArgs.Vimgrep || paths.Count > 1 || SearchPathArgument.ContainsDirectory(paths);
         bool autoMmapEligible = SearchPathArgument.IsAutoMmapEligible(paths);
+        bool pathHeading = ShouldUseHeading(lowArgs, standardOutputIsTerminal, prefixPaths);
         try
         {
             byte[] pattern = BuildPcre2Pattern(pcre2Patterns);
@@ -122,7 +124,7 @@ internal static class Pcre2SearchOperations
             for (int index = 0; index < paths.Count; index++)
             {
                 bool defaultRoot = useDefaultCurrentDirectory && index == 0;
-                SearchPcre2Path(paths[index], standardInput, defaultRoot, prefixPaths, autoMmapEligible, lowArgs, regex, pattern, compileOptions, pcre2Patterns, jsonSummary, separators, lineLimit, color, fileTypes!, stats, ref searchStats, output, diagnostics, heading, ref wroteHeadingOutput, ref matched, ref errored);
+                SearchPcre2Path(paths[index], standardInput, defaultRoot, prefixPaths, autoMmapEligible, lowArgs, regex, pattern, compileOptions, pcre2Patterns, jsonSummary, separators, lineLimit, color, fileTypes!, stats, ref searchStats, output, diagnostics, pathHeading, ref wroteHeadingOutput, ref matched, ref errored);
                 if (matched && lowArgs.Quiet)
                 {
                     break;
@@ -3640,9 +3642,19 @@ internal static class Pcre2SearchOperations
         return OutputColor.Create(lowArgs.ColorMode is CliColorMode.Always or CliColorMode.Ansi, lowArgs.ColorSpecs);
     }
 
-    private static bool ShouldUseHeading(CliLowArgs lowArgs)
+    private static bool ShouldUseHeading(CliLowArgs lowArgs, bool standardOutputIsTerminal, bool autoPrefixPath)
     {
-        return lowArgs.Heading && !lowArgs.Vimgrep && !lowArgs.Quiet && lowArgs.SearchMode == CliSearchMode.Standard;
+        if (lowArgs.Vimgrep || lowArgs.Quiet || lowArgs.SearchMode != CliSearchMode.Standard)
+        {
+            return false;
+        }
+
+        if (lowArgs.HeadingSpecified)
+        {
+            return lowArgs.Heading;
+        }
+
+        return standardOutputIsTerminal && (lowArgs.WithFilename ?? autoPrefixPath);
     }
 
     private static void WriteMultilineReplacementBody(

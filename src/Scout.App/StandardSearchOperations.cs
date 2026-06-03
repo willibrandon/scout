@@ -22,12 +22,12 @@ internal static class StandardSearchOperations
         DiagnosticMessenger diagnostics,
         DiagnosticLogger logger,
         Stream standardInput,
-        bool standardInputIsReadable)
+        bool standardInputIsReadable,
+        bool standardOutputIsTerminal)
     {
         OutputSeparators separators = GetOutputSeparators(lowArgs);
         OutputLineLimit lineLimit = GetOutputLineLimit(lowArgs);
         OutputColor color = GetOutputColor(lowArgs);
-        bool heading = ShouldUseHeading(lowArgs);
         bool lineNumber = SearchOutputFormatting.EffectiveLineNumber(lowArgs);
         bool column = SearchOutputFormatting.EffectiveColumn(lowArgs);
         bool wroteHeadingOutput = false;
@@ -40,9 +40,10 @@ internal static class StandardSearchOperations
             (patternsReadFromStandardInput || !standardInputIsReadable);
         if (positional.Count == firstPathIndex && !useDefaultCurrentDirectory)
         {
+            bool stdinHeading = ShouldUseHeading(lowArgs, standardOutputIsTerminal, autoPrefixPath: false);
             matched = stats
-                ? StandardSearchTargetOperations.SearchStandardInputWithStats(patterns, standardInput, output, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, false, lineNumber, column, lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.WithFilename, lowArgs.EncodingMode, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, lowArgs.StopOnNonmatch, heading, ref wroteHeadingOutput, ref searchStats)
-                : StandardSearchTargetOperations.SearchStandardInput(patterns, standardInput, output, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, false, lineNumber, column, lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.WithFilename, lowArgs.EncodingMode, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, lowArgs.StopOnNonmatch, heading, ref wroteHeadingOutput);
+                ? StandardSearchTargetOperations.SearchStandardInputWithStats(patterns, standardInput, output, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, false, lineNumber, column, lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.WithFilename, lowArgs.EncodingMode, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, lowArgs.StopOnNonmatch, stdinHeading, ref wroteHeadingOutput, ref searchStats)
+                : StandardSearchTargetOperations.SearchStandardInput(patterns, standardInput, output, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, false, lineNumber, column, lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.WithFilename, lowArgs.EncodingMode, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, lowArgs.StopOnNonmatch, stdinHeading, ref wroteHeadingOutput);
             if (stats)
             {
                 StatsTextWriter.Write(output, searchStats, Stopwatch.GetElapsedTime(statsStarted));
@@ -72,7 +73,8 @@ internal static class StandardSearchOperations
 
         bool prefixPaths = lowArgs.Vimgrep || paths.Count > 1 || SearchPathArgument.ContainsDirectory(paths);
         bool autoMmapEligible = SearchPathArgument.IsAutoMmapEligible(paths);
-        bool interPathContextSeparator = ShouldWriteInterFileContextSeparator(lowArgs, heading, separators);
+        bool pathHeading = ShouldUseHeading(lowArgs, standardOutputIsTerminal, prefixPaths);
+        bool interPathContextSeparator = ShouldWriteInterFileContextSeparator(lowArgs, pathHeading, separators);
         bool wroteContextBody = false;
         for (int index = 0; index < paths.Count; index++)
         {
@@ -86,12 +88,12 @@ internal static class StandardSearchOperations
                 if (stats)
                 {
                     SearchStats pathStats = default;
-                    StandardSearchTargetOperations.SearchPathWithStats(paths[index], patterns, standardInput, defaultRoot, prefixPaths, paths.Count > 1, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, writer, diagnostics, logger, asciiCaseInsensitive, heading, ref wroteHeadingOutput, ref pathMatched, ref pathErrored, ref pathStats);
+                    StandardSearchTargetOperations.SearchPathWithStats(paths[index], patterns, standardInput, defaultRoot, prefixPaths, paths.Count > 1, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, writer, diagnostics, logger, asciiCaseInsensitive, pathHeading, ref wroteHeadingOutput, ref pathMatched, ref pathErrored, ref pathStats);
                     searchStats.Add(pathStats);
                 }
                 else
                 {
-                    StandardSearchTargetOperations.SearchPath(paths[index], patterns, standardInput, defaultRoot, prefixPaths, paths.Count > 1, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, writer, diagnostics, logger, asciiCaseInsensitive, heading, ref wroteHeadingOutput, ref pathMatched, ref pathErrored);
+                    StandardSearchTargetOperations.SearchPath(paths[index], patterns, standardInput, defaultRoot, prefixPaths, paths.Count > 1, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, writer, diagnostics, logger, asciiCaseInsensitive, pathHeading, ref wroteHeadingOutput, ref pathMatched, ref pathErrored);
                 }
 
                 writer.Flush();
@@ -109,11 +111,11 @@ internal static class StandardSearchOperations
 
             if (stats)
             {
-                StandardSearchTargetOperations.SearchPathWithStats(paths[index], patterns, standardInput, defaultRoot, prefixPaths, paths.Count > 1, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, output, diagnostics, logger, asciiCaseInsensitive, heading, ref wroteHeadingOutput, ref matched, ref errored, ref searchStats);
+                StandardSearchTargetOperations.SearchPathWithStats(paths[index], patterns, standardInput, defaultRoot, prefixPaths, paths.Count > 1, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, output, diagnostics, logger, asciiCaseInsensitive, pathHeading, ref wroteHeadingOutput, ref matched, ref errored, ref searchStats);
             }
             else
             {
-                StandardSearchTargetOperations.SearchPath(paths[index], patterns, standardInput, defaultRoot, prefixPaths, paths.Count > 1, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, output, diagnostics, logger, asciiCaseInsensitive, heading, ref wroteHeadingOutput, ref matched, ref errored);
+                StandardSearchTargetOperations.SearchPath(paths[index], patterns, standardInput, defaultRoot, prefixPaths, paths.Count > 1, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, output, diagnostics, logger, asciiCaseInsensitive, pathHeading, ref wroteHeadingOutput, ref matched, ref errored);
             }
         }
 
@@ -172,8 +174,18 @@ internal static class StandardSearchOperations
         return OutputColor.Create(lowArgs.ColorMode is CliColorMode.Always or CliColorMode.Ansi, lowArgs.ColorSpecs);
     }
 
-    private static bool ShouldUseHeading(CliLowArgs lowArgs)
+    private static bool ShouldUseHeading(CliLowArgs lowArgs, bool standardOutputIsTerminal, bool autoPrefixPath)
     {
-        return lowArgs.Heading && !lowArgs.Vimgrep && !lowArgs.Quiet && lowArgs.SearchMode == CliSearchMode.Standard;
+        if (lowArgs.Vimgrep || lowArgs.Quiet || lowArgs.SearchMode != CliSearchMode.Standard)
+        {
+            return false;
+        }
+
+        if (lowArgs.HeadingSpecified)
+        {
+            return lowArgs.Heading;
+        }
+
+        return standardOutputIsTerminal && (lowArgs.WithFilename ?? autoPrefixPath);
     }
 }

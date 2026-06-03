@@ -242,7 +242,7 @@ Stdin readability heuristics (Unix `fstat`, Windows `GetFileType`); output buffe
 Exact replication of upstream:
 - **Default thread count** = `available_parallelism().map_or(1, get).min(12)` — the cap of **12** is confirmed at `crates/core/flags/hiargs.rs:173`; overridable by `-j/--threads`. Scout preserves that planner result, but caps default macOS directory-search fan-out at 4 workers because hosted macOS file I/O regresses sharply at 12 workers; explicit `-j/--threads` values still bypass the platform default cap.
 - **Forced single-threaded** exactly per upstream: `threads = 1` when `low.sort.is_some() || paths.is_one_file` (`hiargs.rs:168`) — i.e. whenever output is **sorted** (`--sort`/`--sortr`) or there is a **single file/stdin** subject (`is_one_file`, defined via `paths.len() == 1 && (path == "-" || !is_dir)` at `hiargs.rs:1094`). `main.rs` then dispatches the serial path when `args.threads() == 1` (`main.rs:87,89`). An assertion (`hiargs.rs:912`) enforces "sorting implies single threaded." All of this is ported verbatim and pinned by tests.
-- **Work-stealing** parallel walker (port of `crossbeam-deque` semantics) with per-thread `Sink`/`Printer` and an ordered output stage preserving upstream's interleaving/ordering guarantees.
+- **Work-stealing** parallel walker (port of `crossbeam-deque` semantics) with per-thread `Sink`/`Printer`. Per-file output remains internally ordered and uncorrupted, but upstream does not promise stable inter-file order for default parallel directory walks. Exact byte gates therefore use sorted/forced-serial searches; differential cases over default or explicit parallel output normalize path order.
 
 #### 4.8.2 Rules & types
 `.gitignore`/`.ignore`/`.rgignore` per-directory rule stacks, global gitignore, `--no-ignore*` family, `Match<T>` (None/Ignore/Whitelist), negation precedence; built-in file-type table (incl. the `container` type at the pin), `--type`/`-T`/`--type-add`/`--type-list`; overrides (`-g`/`--iglob`); `--hidden`; symlink follow (`-L`) with loop detection via device+inode (Unix) / file-id (Windows); `--max-depth`, sorting.
@@ -350,7 +350,7 @@ Six layers, all required. **No-skip policy (hard):** a skipped, ignored, or quar
 
 1. **Unit tests** — port of ~52 inline `#[cfg(test)]` modules, one assertion-for-assertion.
 2. **Integration tests** — port of `tests/*.rs` driving the built `scout` binary as a subprocess on the same fixtures; the `rgtest!` macro harness is reimplemented as a fixture + source generator emitting one xUnit test per upstream case.
-3. **Differential / conformance suite (mandatory)** — runs **both** `scout` and the pinned real `rg` over a large corpus × thousands of flag combinations, asserting **byte-identical stdout, stderr, and exit code**. Any diff is fixed or recorded in `PARITY.md`.
+3. **Differential / conformance suite (mandatory)** — runs **both** `scout` and the pinned real `rg` over a large corpus × thousands of flag combinations. Deterministic cases assert **byte-identical stdout, stderr, and exit code**. Cases with upstream-unstable fields or ordering, such as elapsed-time summaries, JSON summaries, and default parallel directory/file-list output, must opt into an explicit normalizer; any remaining diff is fixed or recorded in `PARITY.md`.
 4. **Regex conformance** — port of the `regex` crate's test suite, gating `Scout.Automata` independently.
 5. **Encoding conformance** — `encoding_rs` test vectors gating `Scout.Encoding` (§4.4.1).
 6. **Fuzzing** — port of `fuzz/` targets via `SharpFuzz` (regex parse, glob compile, search loop).
@@ -386,7 +386,7 @@ Performance parity is a **blocking** acceptance criterion, not best-effort. The 
 | Cold-start (`scout --version`, tiny search) | ≤ **1.0×** (AOT expected at parity or better) |
 | Peak RSS | ≤ **1.5×** |
 
-The earlier "20–30% initially, tightening later / tracked misses" language is removed. M8 (perf hardening) exists to *reach* these gates; **v1 does not ship until every gate is green.** Profiling via `dotnet-trace`/`EventPipe` + Linux `perf`. (If a gate proves physically unachievable on a given workload, that is escalated to the stakeholder for an explicit, documented gate change — never silently absorbed.)
+The earlier "20–30% initially, tightening later / tracked misses" language is removed. M8 (perf hardening) exists to *reach* these gates; **v1 does not ship until every gate is green.** Profiling via `dotnet-trace`/`EventPipe` + Linux `perf`. (If a gate proves physically unachievable on a given workload, that is escalated to the stakeholder for an explicit, documented gate change in `PARITY.md` and the benchsuite — never silently absorbed.)
 
 ---
 
@@ -401,7 +401,7 @@ To honor "do not defer," **no milestone before full parity is described as shipp
 - **M4 — Searcher + Encoding (internal).** `Scout.Searching`, `Scout.Encoding`(+`.Io`). Gate: ported searcher tests + encoding conformance green.
 - **M5 — Printer + CLI utils (internal).** Incl. byte-exact JSON writer (§4.5.1). Gate: ported printer/cli tests + `tests/json.rs` byte-exact.
 - **M6 — PCRE2 (internal).** Static-linked per RID (§4.3). Gate: `-P` tests green on all RIDs.
-- **M7 — `scout` binary (internal).** All ~104 flags, orchestration, generators. Gate: **all root integration tests + full differential suite byte-identical.**
+- **M7 — `scout` binary (internal).** All ~104 flags, orchestration, generators. Gate: **all root integration tests + full differential suite exact or explicitly normalized per policy.**
 - **M8 — Performance (internal).** Reach every §9 gate.
 - **Release (v1.0) — the first and only shippable artifact.** Every feature, every test, differential suite, and all perf gates green; trademark check done; packaging per RID; `PARITY.md` complete.
 
@@ -424,7 +424,7 @@ Flag tables, help/man text, and shell completions are generated deterministicall
 | Risk | Severity | Mitigation |
 |------|----------|------------|
 | Porting `regex-automata`/`regex-syntax` is enormous & subtle. | **High** | First milestone; gated by the regex crate's own conformance suite; faithful architectural port; isolated behind `IMatcher`. |
-| Byte-exact output across all boundaries (argv/env/paths/stdout/**stderr**). | **High** | Raw byte I/O layer (§4.1, §4.9); ported `anyhow`-equivalent error/cause-chain formatting + verbatim message strings (§4.10.1); native-entry proof-of-build spike (§4.1.1); differential suite asserts byte-identical stdout **and stderr**. |
+| Byte-exact output across all boundaries (argv/env/paths/stdout/**stderr**). | **High** | Raw byte I/O layer (§4.1, §4.9); ported `anyhow`-equivalent error/cause-chain formatting + verbatim message strings (§4.10.1); native-entry proof-of-build spike (§4.1.1); differential suite asserts byte-identical stdout/stderr where upstream output is deterministic and uses explicit normalizers only for known unstable order/time fields. |
 | `encoding_rs` exact parity. | **High** | Full port up front (§4.4.1) gated by `encoding_rs` vectors. |
 | JSON byte parity vs serde_json. | **High** | Hand-written byte writer with pinned escaping (§4.5.1). |
 | PCRE2 static link + reproducible native builds per RID. | **High** | Vendored source, per-RID scripts, provenance, JIT fallback (§4.3). |

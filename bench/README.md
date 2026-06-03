@@ -45,13 +45,18 @@ manifest. The committed lockfile now contains frozen hashes, so
 `SCOUT_BENCH_OPENSUBTITLES_EN` and `SCOUT_BENCH_LINUX_TREE` can override them.
 
 The script enforces the wall-time gates from `docs/DESIGN.md` with hyperfine's
-median wall time, plus a median per-run peak RSS gate of 1.5x or 32 MiB over rg,
-whichever is larger. Median timing and median per-run peak RSS keep all
-hosted-runner samples while preventing one noisy sample from deciding the
-release gate. Because hyperfine 1.20 runs command groups in input order instead
-of interleaving them, a failed gate is rerun with the `scout` and `rg` command
-order reversed before the failure is accepted. In gate mode, the
-OpenSubtitles workloads use five runs and two warmups, and the
+median wall time. Median peak RSS is capped at 1.5x rg for every workload except
+`subtitles_en_literal`, where `docs/PARITY.md` records the explicit §9 Native AOT
+fixed-image escalation: the script first measures an rg and `scout-real` tiny
+`--mmap -n` literal RSS floor and allows only that measured floor delta in addition
+to the 1.5x rg limit. Median timing and median per-run peak RSS keep all
+hosted-runner samples while preventing one noisy sample from deciding the release
+gate. Because hyperfine 1.20 runs command groups in input order instead of
+interleaving them, a failed timing gate is rerun with the `scout` and `rg`
+command order reversed before the failure is accepted.
+Peak RSS is judged from the rg-first run so the later rg command cannot inherit an
+earlier scout process peak on macOS.
+In gate mode, the OpenSubtitles workloads use five runs and two warmups, and the
 Linux-tree workloads use five runs and three warmups by default because hosted
 macOS filesystem timings are noisier; explicit `--runs` and `--warmup` values
 still override those defaults.

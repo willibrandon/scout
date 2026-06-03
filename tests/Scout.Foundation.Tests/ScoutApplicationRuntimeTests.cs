@@ -900,6 +900,168 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
+    /// Verifies files-without-match treats binary-quit files like ripgrep.
+    /// </summary>
+    [Fact]
+    public void BinaryFileFilesWithoutMatchStopsAtFirstNul()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        File.WriteAllBytes(path, Encoding.UTF8.GetBytes("aaa\0needle\n"));
+
+        (int exitCode, byte[] output, string error) = RunScout("--files-without-match", "needle", path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--files-without-match", "needle", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies implicit large binary count mode suppresses output like ripgrep.
+    /// </summary>
+    [Fact]
+    public void LargeImplicitBinaryCountSuppressesOutput()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        File.WriteAllBytes(path, CreateLargeBinaryCountInput());
+
+        (int exitCode, byte[] output, string error) = RunScout("--no-mmap", "-c", "needle", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-mmap", "-c", "needle", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies large binary count mode converts NUL bytes to line feeds like ripgrep.
+    /// </summary>
+    [Fact]
+    public void LargeBinaryCountModeUsesConvertedBinaryLines()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        File.WriteAllBytes(path, CreateLargeBinaryCountInput());
+
+        (int exitCode, byte[] output, string error) = RunScout("--no-mmap", "--binary", "-c", "needle", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-mmap", "--binary", "-c", "needle", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies implicit large binary count-matches mode suppresses output like ripgrep.
+    /// </summary>
+    [Fact]
+    public void LargeImplicitBinaryCountMatchesSuppressesOutput()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        File.WriteAllBytes(path, CreateLargeBinaryCountInput());
+
+        (int exitCode, byte[] output, string error) = RunScout("--no-mmap", "--count-matches", "needle", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-mmap", "--count-matches", "needle", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies large binary count-matches mode converts NUL bytes to line feeds like ripgrep.
+    /// </summary>
+    [Fact]
+    public void LargeBinaryCountMatchesModeUsesConvertedBinaryLines()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        File.WriteAllBytes(path, CreateLargeBinaryCountInput());
+
+        (int exitCode, byte[] output, string error) = RunScout("--no-mmap", "--binary", "--count-matches", "needle", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-mmap", "--binary", "--count-matches", "needle", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies large count-matches mode applies max-count to matching lines across stream segments.
+    /// </summary>
+    [Fact]
+    public void LargeCountMatchesMaxCountLimitsMatchingLines()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllBytes(path, CreateLargeCountMatchesMaxCountInput());
+
+        (int exitCode, byte[] output, string error) = RunScout("--no-mmap", "--count-matches", "-m", "3", "needle", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-mmap", "--count-matches", "-m", "3", "needle", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies implicit large binary standard search stops at ripgrep's binary-safe prefix.
+    /// </summary>
+    [Fact]
+    public void LargeImplicitBinaryStandardStopsAtFirstNul()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        File.WriteAllBytes(path, CreateLargeBinaryCountInput());
+
+        (int exitCode, byte[] output, string error) = RunScout("--no-mmap", "--sort=path", "needle", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-mmap", "--sort=path", "needle", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies large binary standard search reports binary matches after converted NUL bytes.
+    /// </summary>
+    [Fact]
+    public void LargeBinaryStandardReportsBinaryMatch()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        File.WriteAllBytes(path, CreateLargeBinaryMatchAfterNulInput());
+
+        (int exitCode, byte[] output, string error) = RunScout("--no-mmap", "--binary", "needle", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-mmap", "--binary", "needle", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies large files-without-match mode treats binary-quit files like ripgrep.
+    /// </summary>
+    [Fact]
+    public void LargeBinaryFilesWithoutMatchStopsAtFirstNul()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        File.WriteAllBytes(path, CreateLargeBinaryMatchAfterNulInput());
+
+        (int exitCode, byte[] output, string error) = RunScout("--no-mmap", "--files-without-match", "needle", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-mmap", "--files-without-match", "needle", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies context mode stops before matches that appear after the first NUL byte.
     /// </summary>
     [Fact]
@@ -1430,6 +1592,49 @@ public sealed class ScoutApplicationRuntimeTests
         string path = Path.Combine(Path.GetTempPath(), "scout-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
+    }
+
+    private static byte[] CreateLargeBinaryCountInput()
+    {
+        using MemoryStream stream = new();
+        byte[] before = Encoding.UTF8.GetBytes("needle before\n");
+        byte[] binary = Encoding.UTF8.GetBytes("alpha\0needle after\n");
+        byte[] after = Encoding.UTF8.GetBytes("needle tail\n");
+        for (int index = 0; index < 25_000; index++)
+        {
+            stream.Write(before);
+        }
+
+        stream.Write(binary);
+        for (int index = 0; index < 25_000; index++)
+        {
+            stream.Write(after);
+        }
+
+        return stream.ToArray();
+    }
+
+    private static byte[] CreateLargeBinaryMatchAfterNulInput()
+    {
+        using MemoryStream stream = new();
+        byte[] before = Encoding.UTF8.GetBytes("alpha before\n");
+        byte[] binary = Encoding.UTF8.GetBytes("alpha\0needle after\n");
+        for (int index = 0; index < 25_000; index++)
+        {
+            stream.Write(before);
+        }
+
+        stream.Write(binary);
+        return stream.ToArray();
+    }
+
+    private static byte[] CreateLargeCountMatchesMaxCountInput()
+    {
+        using MemoryStream stream = new();
+        stream.Write("needle needle "u8);
+        stream.Write(new byte[300_000]);
+        stream.Write("\nneedle needle\nneedle needle\nneedle needle\n"u8);
+        return stream.ToArray();
     }
 
     private static void WriteGzipFile(string path, string contents)

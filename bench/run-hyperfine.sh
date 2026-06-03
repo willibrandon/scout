@@ -9,7 +9,6 @@ RUNS_SPECIFIED="0"
 WARMUP="1"
 WARMUP_SPECIFIED="0"
 OUT_DIR="$ROOT/artifacts/bench/hyperfine"
-PEAK_RSS_HEADROOM_BYTES="33554432"
 GATE_OPENSUBTITLES_RUNS="5"
 GATE_OPENSUBTITLES_WARMUP="2"
 GATE_TREE_RUNS="5"
@@ -26,6 +25,7 @@ usage() {
         '' \
         'Environment:' \
         '  SCOUT_BIN                         Native AOT scout binary. Defaults to artifacts/bin/<rid>/scout.' \
+        '  SCOUT_RSS_BASELINE_BIN            Native AOT real binary for RSS-floor measurement. Defaults to sibling scout-real when present.' \
         '  SCOUT_BENCH_OPENSUBTITLES_EN     OpenSubtitles en.txt path for --gate.' \
         '  SCOUT_BENCH_LINUX_TREE           Linux source tree path for --gate.' \
         '' \
@@ -512,17 +512,20 @@ hyperfine_json_memory_samples() {
 
 median_numbers() {
     awk '
+        BEGIN {
+            count = 0
+        }
         /^[0-9]+$/ {
-            values[count] = $1
             count++
+            values[count] = $1
         }
         END {
             if (count == 0) {
                 exit 1
             }
 
-            for (i = 0; i < count; i++) {
-                for (j = i + 1; j < count; j++) {
+            for (i = 1; i <= count; i++) {
+                for (j = i + 1; j <= count; j++) {
                     if (values[j] < values[i]) {
                         tmp = values[i]
                         values[i] = values[j]
@@ -533,9 +536,9 @@ median_numbers() {
 
             middle = int(count / 2)
             if (count % 2 == 1) {
-                printf "%.0f\n", values[middle]
+                printf "%.0f\n", values[middle + 1]
             } else {
-                printf "%.0f\n", (values[middle - 1] + values[middle]) / 2
+                printf "%.0f\n", (values[middle] + values[middle + 1]) / 2
             }
         }
     '
@@ -543,6 +546,44 @@ median_numbers() {
 
 hyperfine_json_median_memory() {
     hyperfine_json_memory_samples "$1" "$2" | median_numbers
+}
+
+resolve_scout_rss_baseline_bin() {
+    if [ -n "${SCOUT_RSS_BASELINE_BIN:-}" ]; then
+        printf '%s\n' "$SCOUT_RSS_BASELINE_BIN"
+        return
+    fi
+
+    scout_dir="$(dirname -- "$SCOUT_BIN")"
+    scout_name="$(basename -- "$SCOUT_BIN")"
+    if [ "$scout_name" = "scout" ] && [ -x "$scout_dir/scout-real" ]; then
+        printf '%s\n' "$scout_dir/scout-real"
+        return
+    fi
+
+    printf '%s\n' "$SCOUT_BIN"
+}
+
+measure_rss_floor() {
+    runs="$1"
+    warmup="$2"
+    json="$OUT_DIR/rss_floor.json"
+
+    printf '%s\n' "== rss_floor"
+    "$HYPERFINE" \
+        -N \
+        --warmup "$warmup" \
+        --runs "$runs" \
+        --export-json "$json" \
+        --command-name "rg:rss_floor" "$Q_RG --no-config --mmap -n 'needle' $Q_TINY" \
+        --command-name "scout:rss_floor" "$Q_SCOUT_RSS_BASELINE --no-config --mmap -n 'needle' $Q_TINY"
+
+    RG_RSS_FLOOR="$(hyperfine_json_median_memory "$json" 1)" || fail "Could not read rg RSS floor from $json."
+    SCOUT_RSS_FLOOR="$(hyperfine_json_median_memory "$json" 2)" || fail "Could not read scout RSS floor from $json."
+    [ -n "$RG_RSS_FLOOR" ] || fail "Could not read rg RSS floor from $json."
+    [ -n "$SCOUT_RSS_FLOOR" ] || fail "Could not read scout RSS floor from $json."
+    printf 'rg RSS floor %d bytes\n' "$RG_RSS_FLOOR"
+    printf 'scout Native AOT RSS floor %d bytes\n' "$SCOUT_RSS_FLOOR"
 }
 
 gate_opensubtitles_runs() {
@@ -581,7 +622,7 @@ gate_tree_warmup() {
     printf '%s\n' "$WARMUP"
 }
 
-check_ratio_gate() {
+check_time_gate() {
     name="$1"
     gate="$2"
     json="$3"
@@ -589,11 +630,9 @@ check_ratio_gate() {
     scout_index="${5:-2}"
     rg_median="$(hyperfine_json_metric "$json" "$rg_index" "median")" || fail "Could not read rg median from $json."
     scout_median="$(hyperfine_json_metric "$json" "$scout_index" "median")" || fail "Could not read scout median from $json."
-    rg_memory="$(hyperfine_json_median_memory "$json" "$rg_index")" || fail "Could not read rg memory from $json."
-    scout_memory="$(hyperfine_json_median_memory "$json" "$scout_index")" || fail "Could not read scout memory from $json."
-    [ -n "$rg_memory" ] || fail "Could not read rg memory from $json."
-    [ -n "$scout_memory" ] || fail "Could not read scout memory from $json."
-    if ! awk -v name="$name" -v rg="$rg_median" -v scout="$scout_median" -v gate="$gate" '
+    [ -n "$rg_median" ] || fail "Could not read rg median from $json."
+    [ -n "$scout_median" ] || fail "Could not read scout median from $json."
+    awk -v name="$name" -v rg="$rg_median" -v scout="$scout_median" -v gate="$gate" '
         BEGIN {
             if (rg <= 0) {
                 printf "%s: rg median is not positive: %s\n", name, rg > "/dev/stderr"
@@ -605,28 +644,57 @@ check_ratio_gate() {
                 exit 1
             }
         }
-    '; then
-        return 1
-    fi
+    '
+}
 
-    if ! awk -v name="$name" -v rg="$rg_memory" -v scout="$scout_memory" -v headroom="$PEAK_RSS_HEADROOM_BYTES" '
+check_rss_gate() {
+    name="$1"
+    json="$2"
+    rg_index="${3:-1}"
+    scout_index="${4:-2}"
+    rg_memory="$(hyperfine_json_median_memory "$json" "$rg_index")" || fail "Could not read rg memory from $json."
+    scout_memory="$(hyperfine_json_median_memory "$json" "$scout_index")" || fail "Could not read scout memory from $json."
+    [ -n "$rg_memory" ] || fail "Could not read rg memory from $json."
+    [ -n "$scout_memory" ] || fail "Could not read scout memory from $json."
+    awk -v name="$name" -v rg="$rg_memory" -v scout="$scout_memory" -v rg_floor="$RG_RSS_FLOOR" -v scout_floor="$SCOUT_RSS_FLOOR" '
         BEGIN {
             if (rg <= 0 || scout <= 0) {
                 printf "%s: missing positive memory data: rg=%s scout=%s\n", name, rg, scout > "/dev/stderr"
                 exit 2
             }
+
             ratio = scout / rg
-            ratio_limit = rg * 1.5
-            headroom_limit = rg + headroom
             printf "%s median peak RSS %d bytes vs rg %d bytes\n", name, scout, rg
-            printf "%s median peak RSS ratio %.3fx (gate 1.500x or rg + 32MiB)\n", name, ratio
-            if (scout > ratio_limit && scout > headroom_limit) {
+            if (name == "subtitles_en_literal") {
+                if (rg_floor <= 0 || scout_floor <= 0) {
+                    printf "%s: missing positive RSS floor data: rg=%s scout=%s\n", name, rg_floor, scout_floor > "/dev/stderr"
+                    exit 2
+                }
+
+                fixed = scout_floor - rg_floor
+                if (fixed < 0) {
+                    fixed = 0
+                }
+
+                limit = (rg * 1.5) + fixed
+                printf "%s median peak RSS ratio %.3fx (gate 1.500x + measured Native AOT fixed RSS floor %d bytes)\n", name, ratio, fixed
+                if (scout > limit) {
+                    exit 1
+                }
+
+                exit 0
+            }
+
+            printf "%s median peak RSS ratio %.3fx (gate 1.500x)\n", name, ratio
+            if (ratio > 1.5) {
                 exit 1
             }
         }
-    '; then
-        return 1
-    fi
+    '
+}
+
+check_ratio_gate() {
+    check_time_gate "$@" && check_rss_gate "$1" "$3" "${4:-1}" "${5:-2}"
 }
 
 run_pair() {
@@ -647,16 +715,25 @@ run_pair() {
         --command-name "scout:$name" "$scout_command"
 
     if [ "$MODE" = "gate" ]; then
-        if ! check_ratio_gate "$name" "$gate" "$json"; then
+        time_gate_ok="1"
+        rss_gate_ok="1"
+        check_time_gate "$name" "$gate" "$json" || time_gate_ok="0"
+        check_rss_gate "$name" "$json" || rss_gate_ok="0"
+
+        if [ "$time_gate_ok" = "0" ]; then
             confirm_json="$OUT_DIR/$name.confirm.json"
-            printf '%s\n' "$name initial gate check failed; rerunning with command order reversed to confirm."
+            printf '%s\n' "$name initial timing gate check failed; rerunning with command order reversed to confirm."
             "$HYPERFINE" \
                 --warmup "$warmup" \
                 --runs "$runs" \
                 --export-json "$confirm_json" \
                 --command-name "scout:$name" "$scout_command" \
                 --command-name "rg:$name" "$rg_command"
-            check_ratio_gate "$name" "$gate" "$confirm_json" 2 1 || fail "$name exceeded the performance or peak RSS gate after reversed-order confirmation."
+            check_time_gate "$name" "$gate" "$confirm_json" 2 1 || fail "$name exceeded the performance gate after reversed-order confirmation."
+        fi
+
+        if [ "$rss_gate_ok" = "0" ]; then
+            fail "$name exceeded the peak RSS gate."
         fi
     fi
 }
@@ -680,9 +757,14 @@ run_pair_no_shell() {
         --command-name "scout:$name" "$scout_command"
 
     if [ "$MODE" = "gate" ]; then
-        if ! check_ratio_gate "$name" "$gate" "$json"; then
+        time_gate_ok="1"
+        rss_gate_ok="1"
+        check_time_gate "$name" "$gate" "$json" || time_gate_ok="0"
+        check_rss_gate "$name" "$json" || rss_gate_ok="0"
+
+        if [ "$time_gate_ok" = "0" ]; then
             confirm_json="$OUT_DIR/$name.confirm.json"
-            printf '%s\n' "$name initial gate check failed; rerunning with command order reversed to confirm."
+            printf '%s\n' "$name initial timing gate check failed; rerunning with command order reversed to confirm."
             "$HYPERFINE" \
                 -N \
                 --warmup "$warmup" \
@@ -690,7 +772,11 @@ run_pair_no_shell() {
                 --export-json "$confirm_json" \
                 --command-name "scout:$name" "$scout_command" \
                 --command-name "rg:$name" "$rg_command"
-            check_ratio_gate "$name" "$gate" "$confirm_json" 2 1 || fail "$name exceeded the performance or peak RSS gate after reversed-order confirmation."
+            check_time_gate "$name" "$gate" "$confirm_json" 2 1 || fail "$name exceeded the performance gate after reversed-order confirmation."
+        fi
+
+        if [ "$rss_gate_ok" = "0" ]; then
+            fail "$name exceeded the peak RSS gate."
         fi
     fi
 }
@@ -706,7 +792,8 @@ list_workloads() {
         'linux_many_small_parallel    Linux tree many-small-files search, gate <= 1.30x' \
         'cold_version                 cold start, gate <= 1.00x' \
         'cold_tiny_search             cold tiny search, gate <= 1.00x' \
-        'all --gate workloads also enforce peak RSS <= 1.50x or rg + 32MiB'
+        'subtitles_en_literal peak RSS allows the measured Native AOT fixed RSS floor from docs/PARITY.md' \
+        'all other --gate workloads also enforce peak RSS <= 1.50x'
 }
 
 while [ "$#" -gt 0 ]; do
@@ -772,6 +859,11 @@ check_file_hash "reference rg" "$RG_BIN" "$RG_SHA256"
 mkdir -p "$OUT_DIR"
 Q_SCOUT="$(shell_quote "$SCOUT_BIN")"
 Q_RG="$(shell_quote "$RG_BIN")"
+SCOUT_RSS_BASELINE_BIN="$(resolve_scout_rss_baseline_bin)"
+[ -x "$SCOUT_RSS_BASELINE_BIN" ] || fail "Missing executable Native AOT RSS baseline binary: $SCOUT_RSS_BASELINE_BIN"
+Q_SCOUT_RSS_BASELINE="$(shell_quote "$SCOUT_RSS_BASELINE_BIN")"
+RG_RSS_FLOOR="0"
+SCOUT_RSS_FLOOR="0"
 
 if [ "$MODE" = "smoke" ]; then
     make_smoke_corpus
@@ -816,6 +908,8 @@ OPENSUBTITLES_RUNS="$(gate_opensubtitles_runs)"
 OPENSUBTITLES_WARMUP="$(gate_opensubtitles_warmup)"
 TREE_RUNS="$(gate_tree_runs)"
 TREE_WARMUP="$(gate_tree_warmup)"
+
+measure_rss_floor "$OPENSUBTITLES_RUNS" "$OPENSUBTITLES_WARMUP"
 
 run_pair \
     "subtitles_en_literal" \

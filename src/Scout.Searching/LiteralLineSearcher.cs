@@ -168,6 +168,47 @@ public static class LiteralLineSearcher
         }
 
         var regexPlan = RegexSearchPlan.Create(needles, asciiCaseInsensitive);
+        return SearchWithRegexPlan(
+            haystack,
+            needles,
+            regexPlan,
+            ref sink,
+            asciiCaseInsensitive,
+            invertMatch,
+            lineRegexp,
+            wordRegexp,
+            maxMatchingLines,
+            crlf,
+            nullData,
+            requireMatchColumn);
+    }
+
+    internal static RegexSearchPlan? CreateRegexSearchPlan(IReadOnlyList<byte[]> needles, bool asciiCaseInsensitive, bool compileAutomata)
+    {
+        return RegexSearchPlan.Create(needles, asciiCaseInsensitive, compileAutomata);
+    }
+
+    internal static bool SearchWithRegexPlan<TSink>(
+        ReadOnlySpan<byte> haystack,
+        IReadOnlyList<byte[]> needles,
+        RegexSearchPlan? regexPlan,
+        ref TSink sink,
+        bool asciiCaseInsensitive = false,
+        bool invertMatch = false,
+        bool lineRegexp = false,
+        bool wordRegexp = false,
+        ulong? maxMatchingLines = null,
+        bool crlf = false,
+        bool nullData = false,
+        bool requireMatchColumn = true)
+        where TSink : struct, ILineSink
+    {
+        ArgumentNullException.ThrowIfNull(needles);
+        if (maxMatchingLines == 0)
+        {
+            return false;
+        }
+
         if (!invertMatch &&
             !lineRegexp &&
             !wordRegexp &&
@@ -204,6 +245,55 @@ public static class LiteralLineSearcher
         }
 
         return matched;
+    }
+
+    internal static long CountMatchingLinesWithRegexPlan(
+        ReadOnlySpan<byte> haystack,
+        IReadOnlyList<byte[]> needles,
+        RegexSearchPlan? regexPlan,
+        bool asciiCaseInsensitive = false,
+        bool invertMatch = false,
+        bool lineRegexp = false,
+        bool wordRegexp = false,
+        ulong? maxMatchingLines = null,
+        bool crlf = false,
+        bool nullData = false)
+    {
+        if (!invertMatch &&
+            !lineRegexp &&
+            !wordRegexp &&
+            !crlf &&
+            !nullData &&
+            needles.Count == 1 &&
+            regexPlan?.GetAccelerator(0) is RegexClassSequenceAccelerator)
+        {
+            var sink = new CountingLineSink();
+            _ = SearchWithRegexPlan(
+                haystack,
+                needles,
+                regexPlan,
+                ref sink,
+                asciiCaseInsensitive,
+                invertMatch: false,
+                lineRegexp: false,
+                wordRegexp: false,
+                maxMatchingLines,
+                crlf: false,
+                nullData: false,
+                requireMatchColumn: false);
+            return (long)sink.MatchedLines;
+        }
+
+        return CountMatchingLines(
+            haystack,
+            needles,
+            asciiCaseInsensitive,
+            invertMatch,
+            lineRegexp,
+            wordRegexp,
+            maxMatchingLines,
+            crlf,
+            nullData);
     }
 
     private static bool SearchAcceleratedRegexLines<TSink>(

@@ -74,16 +74,16 @@ public sealed class SearchThreadPlannerTests
     }
 
     /// <summary>
-    /// Verifies default macOS directory search fan-out permits modest I/O oversubscription.
+    /// Verifies default macOS directory search fan-out is capped at the measured platform limit.
     /// </summary>
     [Theory]
     [InlineData(1, 1)]
-    [InlineData(2, 4)]
-    [InlineData(3, 6)]
-    [InlineData(4, 6)]
-    [InlineData(5, 6)]
-    [InlineData(6, 6)]
-    [InlineData(12, 6)]
+    [InlineData(2, 2)]
+    [InlineData(3, 3)]
+    [InlineData(4, 4)]
+    [InlineData(5, 4)]
+    [InlineData(6, 4)]
+    [InlineData(12, 4)]
     public void SearchWalkPlanningCapsMacOsDefaultDirectorySearchThreadMatrix(int upstreamDefault, int expectedThreads)
     {
         int threads = SearchWalkPlanning.GetMacOsDefaultSearchWalkThreadCount(upstreamDefault);
@@ -121,6 +121,20 @@ public sealed class SearchThreadPlannerTests
         int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(lowArgs);
 
         Assert.Equal(expected, threads);
+    }
+
+    /// <summary>
+    /// Verifies explicit one-file large searches follow ripgrep's forced-serial planner rule.
+    /// </summary>
+    [Fact]
+    public void SearchWalkPlanningForcesExplicitOneFileLargeSearchSerial()
+    {
+        var lowArgs = new CliLowArgs();
+        lowArgs.SetThreads(12);
+
+        int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(lowArgs, isOneFile: true);
+
+        Assert.Equal(1, threads);
     }
 
     /// <summary>

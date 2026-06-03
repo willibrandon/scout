@@ -16,19 +16,28 @@ internal sealed class RegexSearchPlan
 
     public static RegexSearchPlan? Create(IReadOnlyList<byte[]> needles, bool asciiCaseInsensitive)
     {
+        return Create(needles, asciiCaseInsensitive, compileAutomata: true);
+    }
+
+    public static RegexSearchPlan? Create(IReadOnlyList<byte[]> needles, bool asciiCaseInsensitive, bool compileAutomata)
+    {
         RegexAutomaton?[]? automata = null;
         RegexClassSequenceAccelerator?[]? accelerators = null;
         for (int index = 0; index < needles.Count; index++)
         {
             byte[] needle = needles[index];
             ArgumentNullException.ThrowIfNull(needle);
+            bool hasAccelerator = false;
             if (RegexClassSequenceAccelerator.TryCompile(needle, out RegexClassSequenceAccelerator? accelerator))
             {
                 accelerators ??= new RegexClassSequenceAccelerator?[needles.Count];
                 accelerators[index] = accelerator;
+                hasAccelerator = true;
             }
 
-            if (!LiteralLineSearcher.ShouldPrecompileRegexAutomaton(needle, asciiCaseInsensitive))
+            if (hasAccelerator ||
+                !compileAutomata ||
+                !LiteralLineSearcher.ShouldPrecompileRegexAutomaton(needle, asciiCaseInsensitive))
             {
                 continue;
             }

@@ -11,7 +11,7 @@ internal static class StandardSearchByteOperations
 {
     private static readonly byte[] LineFeed = [(byte)'\n'];
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
-    private const int BinaryDetectionInitialBufferLength = 65_536;
+    internal const int BinaryDetectionBufferLength = 65_536;
 
     internal static bool SearchBytesWithOptionalHeading(
         byte[] bytes,
@@ -292,9 +292,17 @@ internal static class StandardSearchByteOperations
 
         if (searchMode == CliSearchMode.Count)
         {
-            long count = onlyMatching && !invertMatch
-                ? LiteralLineSearcher.CountMatches(searchSpan, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData)
-                : LiteralLineSearcher.CountMatchingLines(searchSpan, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
+            long count;
+            if (onlyMatching && !invertMatch)
+            {
+                count = LiteralLineSearcher.CountMatches(searchSpan, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
+            }
+            else
+            {
+                RegexSearchPlan? regexPlan = LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: true);
+                count = LiteralLineSearcher.CountMatchingLinesWithRegexPlan(searchSpan, pattern, regexPlan, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
+            }
+
             return SearchOutputFormatting.WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, separators.LineTerminator);
         }
 
@@ -407,6 +415,12 @@ internal static class StandardSearchByteOperations
             if (quiet)
             {
                 matched = HasBinarySafePrefixMatch(bytes, binaryDetection.Offset, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf);
+                return true;
+            }
+
+            if (searchMode == CliSearchMode.FilesWithoutMatch)
+            {
+                matched = true;
                 return true;
             }
 
@@ -526,19 +540,20 @@ internal static class StandardSearchByteOperations
         return SearchBytes(safeBytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode: true, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary: false);
     }
 
-    private static int GetBinarySafePrefixLength(byte[] bytes, int binaryOffset)
+    internal static int GetBinarySafePrefixLength(byte[] bytes, int binaryOffset)
     {
-        if (binaryOffset <= BinaryDetectionInitialBufferLength)
+        int length = binaryOffset - (binaryOffset % BinaryDetectionBufferLength);
+        if (length <= 0)
         {
             return 0;
         }
 
-        int length = Math.Min(binaryOffset, BinaryDetectionInitialBufferLength);
+        length = Math.Min(length, bytes.Length);
         int lastLineFeed = bytes.AsSpan(0, length).LastIndexOf((byte)'\n');
         return lastLineFeed < 0 ? 0 : lastLineFeed + 1;
     }
 
-    private static void WriteBinaryFileMatches(RawByteWriter output, OutputPath? prefix, OutputColor color, int binaryOffset)
+    internal static void WriteBinaryFileMatches(RawByteWriter output, OutputPath? prefix, OutputColor color, long binaryOffset)
     {
         if (prefix is not null)
         {
@@ -552,7 +567,7 @@ internal static class StandardSearchByteOperations
         output.Write(LineFeed);
     }
 
-    private static void WriteBinaryFileStoppedWarning(RawByteWriter output, OutputPath? prefix, OutputColor color, int binaryOffset)
+    internal static void WriteBinaryFileStoppedWarning(RawByteWriter output, OutputPath? prefix, OutputColor color, long binaryOffset)
     {
         if (prefix is not null)
         {

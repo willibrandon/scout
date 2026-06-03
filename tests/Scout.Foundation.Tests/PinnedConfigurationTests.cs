@@ -1026,6 +1026,9 @@ public sealed partial class PinnedConfigurationTests
             "Console.Error",
             "Console.SetOut",
             "Console.SetError",
+            "Console.OpenStandardInput",
+            "Console.OpenStandardOutput",
+            "Console.OpenStandardError",
             "new StreamWriter(Console.OpenStandardOutput",
             "new StreamWriter(Console.OpenStandardError",
         ];
@@ -1793,6 +1796,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("clang -arch x86_64 -O2 -DSCOUT_LAUNCHER", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("artifacts/native/pcre2/$RID/lib/libpcre2-8.a", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-Wl,-force_load,\"$PCRE2_LIB\"", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("strip_macos_binary()", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("strip -x \"$path\"", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("strip_macos_binary \"$REAL_BIN\"", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("strip_macos_binary \"$BIN/scout\"", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-Wl,--whole-archive \"$PCRE2_LIB\" -Wl,--no-whole-archive", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-Wl,--start-group", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("libSystem.Security.Cryptography.Native.OpenSsl.a", appBuildScript, StringComparison.Ordinal);
@@ -2334,6 +2341,7 @@ public sealed partial class PinnedConfigurationTests
         string root = FindRepositoryRoot();
         string script = File.ReadAllText(Path.Combine(root, "bench", "run-hyperfine.sh"));
         string readme = File.ReadAllText(Path.Combine(root, "bench", "README.md"));
+        string parity = File.ReadAllText(Path.Combine(root, "docs", "PARITY.md"));
 
         Assert.Contains("subtitles_en_literal", script, StringComparison.Ordinal);
         Assert.Contains("subtitles_en_regex", script, StringComparison.Ordinal);
@@ -2341,10 +2349,24 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("linux_many_small_parallel", script, StringComparison.Ordinal);
         Assert.Contains("cold_version", script, StringComparison.Ordinal);
         Assert.Contains("cold_tiny_search", script, StringComparison.Ordinal);
-        Assert.Contains("peak RSS <= 1.50x or rg + 32MiB", script, StringComparison.Ordinal);
+        Assert.Contains("peak RSS <= 1.50x", script, StringComparison.Ordinal);
+        Assert.Contains("gate 1.500x", script, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_RSS_BASELINE_BIN", script, StringComparison.Ordinal);
+        Assert.Contains("resolve_scout_rss_baseline_bin", script, StringComparison.Ordinal);
+        Assert.Contains("measure_rss_floor", script, StringComparison.Ordinal);
+        Assert.Contains("$Q_RG --no-config --mmap -n 'needle' $Q_TINY", script, StringComparison.Ordinal);
+        Assert.Contains("$Q_SCOUT_RSS_BASELINE --no-config --mmap -n 'needle' $Q_TINY", script, StringComparison.Ordinal);
+        Assert.Contains("scout-real", script, StringComparison.Ordinal);
+        Assert.Contains("measured Native AOT fixed RSS floor", script, StringComparison.Ordinal);
+        Assert.Contains("name == \"subtitles_en_literal\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("32MiB", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("33554432", script, StringComparison.Ordinal);
+        Assert.Contains("check_time_gate", script, StringComparison.Ordinal);
+        Assert.Contains("check_rss_gate", script, StringComparison.Ordinal);
         Assert.Contains("check_ratio_gate", script, StringComparison.Ordinal);
         Assert.Contains("hyperfine_json_metric", script, StringComparison.Ordinal);
         Assert.Contains("hyperfine_json_median_memory", script, StringComparison.Ordinal);
+        Assert.Contains("count = 0", script, StringComparison.Ordinal);
         Assert.Contains("median peak RSS ratio", script, StringComparison.Ordinal);
         Assert.Contains("GATE_OPENSUBTITLES_RUNS=\"5\"", script, StringComparison.Ordinal);
         Assert.Contains("GATE_OPENSUBTITLES_WARMUP=\"2\"", script, StringComparison.Ordinal);
@@ -2355,11 +2377,20 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("gate_tree_runs", script, StringComparison.Ordinal);
         Assert.Contains("gate_tree_warmup", script, StringComparison.Ordinal);
         Assert.Contains("median ratio", script, StringComparison.Ordinal);
-        Assert.Contains("rerunning with command order reversed to confirm", script, StringComparison.Ordinal);
-        Assert.Contains("check_ratio_gate \"$name\" \"$gate\" \"$confirm_json\" 2 1", script, StringComparison.Ordinal);
+        Assert.Contains("initial timing gate check failed; rerunning with command order reversed to confirm", script, StringComparison.Ordinal);
+        Assert.Contains("check_time_gate \"$name\" \"$gate\" \"$confirm_json\" 2 1", script, StringComparison.Ordinal);
+        Assert.Contains("exceeded the peak RSS gate", script, StringComparison.Ordinal);
         Assert.Contains("median wall time", readme, StringComparison.Ordinal);
         Assert.Contains("median per-run peak RSS", readme, StringComparison.Ordinal);
-        Assert.Contains("order reversed before the failure is accepted", readme, StringComparison.Ordinal);
+        Assert.Contains("`subtitles_en_literal`, where `docs/PARITY.md` records the explicit", readme, StringComparison.Ordinal);
+        Assert.Contains("measures an rg and `scout-real` tiny", readme, StringComparison.Ordinal);
+        Assert.Contains("`--mmap -n` literal RSS floor", readme, StringComparison.Ordinal);
+        Assert.Contains("Native AOT fixed RSS floor for `subtitles_en_literal`", parity, StringComparison.Ordinal);
+        Assert.Contains("accepted explicit gate change under `docs/DESIGN.md` §9", parity, StringComparison.Ordinal);
+        Assert.Contains("tiny `--mmap -n` literal search", parity, StringComparison.Ordinal);
+        Assert.Contains("max(0, scout_floor - rg_floor)", parity, StringComparison.Ordinal);
+        Assert.Contains("failed timing gate is rerun", readme, StringComparison.Ordinal);
+        Assert.Contains("Peak RSS is judged from the rg-first run", readme, StringComparison.Ordinal);
         Assert.Contains("OpenSubtitles workloads use five runs and two", readme, StringComparison.Ordinal);
         Assert.Contains("Linux-tree workloads use five runs and three", readme, StringComparison.Ordinal);
         Assert.Contains("run_pair_no_shell", script, StringComparison.Ordinal);

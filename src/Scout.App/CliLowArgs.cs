@@ -358,6 +358,11 @@ public sealed class CliLowArgs
     public bool Heading { get; private set; }
 
     /// <summary>
+    /// Gets a value indicating whether heading behavior was explicitly configured.
+    /// </summary>
+    public bool HeadingSpecified { get; private set; }
+
+    /// <summary>
     /// Gets a value indicating whether line matching should be inverted.
     /// </summary>
     public bool InvertMatch { get; private set; }
@@ -609,6 +614,7 @@ public sealed class CliLowArgs
     {
         ColorMode = CliColorMode.Always;
         Heading = true;
+        HeadingSpecified = true;
         LineNumber = true;
         LineNumberSpecified = true;
     }
@@ -1100,6 +1106,7 @@ public sealed class CliLowArgs
     public void SetHeading(bool yes)
     {
         Heading = yes;
+        HeadingSpecified = true;
     }
 
     /// <summary>
