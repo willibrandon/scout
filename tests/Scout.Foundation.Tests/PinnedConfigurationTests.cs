@@ -1711,13 +1711,49 @@ public sealed partial class PinnedConfigurationTests
     {
         string root = FindRepositoryRoot();
         string notices = File.ReadAllText(Path.Combine(root, "docs", "THIRD-PARTY-NOTICES.md"));
+        string[] requiredInventoryRows =
+        [
+            "| ripgrep | `/Users/brandon/src/ripgrep` at `" + PinnedRipgrepCommit + "` | MIT OR Unlicense |",
+            "| grep | 0.4.1, from pinned ripgrep workspace | MIT OR Unlicense |",
+            "| grep-cli | 0.1.12, from pinned ripgrep workspace | MIT OR Unlicense |",
+            "| grep-matcher | 0.1.8, from pinned ripgrep workspace | MIT OR Unlicense |",
+            "| grep-pcre2 | 0.1.9, from pinned ripgrep workspace | MIT OR Unlicense |",
+            "| grep-printer | 0.3.1, from pinned ripgrep workspace | MIT OR Unlicense |",
+            "| grep-regex | 0.1.14, from pinned ripgrep workspace | MIT OR Unlicense |",
+            "| grep-searcher | 0.1.16, from pinned ripgrep workspace | MIT OR Unlicense |",
+            "| globset | 0.4.18, from pinned ripgrep workspace | MIT OR Unlicense |",
+            "| ignore | 0.4.25, from pinned ripgrep workspace | MIT OR Unlicense |",
+            "| regex | 1.12.2 | MIT OR Apache-2.0 |",
+            "| regex-syntax | 0.8.8 | MIT OR Apache-2.0 |",
+            "| regex-automata | 0.4.13 | MIT OR Apache-2.0 |",
+            "| aho-corasick | 1.1.3 | MIT OR Unlicense |",
+            "| memchr | 2.7.6 | MIT OR Unlicense |",
+            "| bstr | 1.12.0 | MIT OR Apache-2.0 |",
+            "| encoding_rs | 0.8.35 | MIT OR Apache-2.0; WHATWG data under BSD-3-Clause |",
+            "| encoding_rs_io | 0.1.7 | MIT OR Apache-2.0 |",
+            "| walkdir | 2.5.0 | MIT OR Unlicense |",
+            "| same-file | 1.0.6 | MIT OR Unlicense |",
+            "| termcolor | 1.4.1 | MIT OR Unlicense |",
+            "| crossbeam-deque | 0.8.6 | MIT OR Apache-2.0 |",
+            "| crossbeam-channel | 0.5.15 | MIT OR Apache-2.0 |",
+            "| crossbeam-epoch | 0.9.18 | MIT OR Apache-2.0 |",
+            "| crossbeam-utils | 0.8.21 | MIT OR Apache-2.0 |",
+            "| anyhow | 1.0.100 | MIT OR Apache-2.0 |",
+            "| lexopt | 0.3.1 | MIT |",
+            "| textwrap | 0.16.2 | MIT |",
+            "| log | 0.4.28 | MIT OR Apache-2.0 |",
+            "| pcre2 | 0.2.11 Rust binding | MIT OR Unlicense |",
+            "| pcre2-sys | 0.2.10 Rust binding | MIT OR Unlicense |",
+            "| PCRE2 C library | 10.46, vendored in `native/pcre2/pcre2-10.46` | BSD-3-Clause |",
+        ];
 
         Assert.DoesNotContain("release blocker", notices, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("| ripgrep |", notices, StringComparison.Ordinal);
-        Assert.Contains("| regex-syntax | 0.8.8 | MIT OR Apache-2.0 |", notices, StringComparison.Ordinal);
-        Assert.Contains("| encoding_rs | 0.8.35 | MIT OR Apache-2.0; WHATWG data under BSD-3-Clause |", notices, StringComparison.Ordinal);
-        Assert.Contains("| crossbeam-deque | 0.8.6 | MIT OR Apache-2.0 |", notices, StringComparison.Ordinal);
-        Assert.Contains("| PCRE2 C library | 10.46", notices, StringComparison.Ordinal);
+        for (int index = 0; index < requiredInventoryRows.Length; index++)
+        {
+            string row = requiredInventoryRows[index];
+            Assert.True(notices.Contains(row, StringComparison.Ordinal), "Missing third-party notice inventory row: " + row);
+        }
+
         Assert.Contains("Apache License\n                        Version 2.0, January 2004", notices, StringComparison.Ordinal);
         Assert.Contains("This is free and unencumbered software released into the public domain.", notices, StringComparison.Ordinal);
         Assert.Contains("Copyright (c) 2019 The Crossbeam Project Developers", notices, StringComparison.Ordinal);

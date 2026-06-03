@@ -9,6 +9,16 @@ whose code or algorithm is ported must have its license reproduced here.
 | Component | Version / source | License |
 |-----------|------------------|---------|
 | ripgrep | `/Users/brandon/src/ripgrep` at `4857d6fa67db69a95cd4b6f2adda5d807d4d0119` | MIT OR Unlicense |
+| grep | 0.4.1, from pinned ripgrep workspace | MIT OR Unlicense |
+| grep-cli | 0.1.12, from pinned ripgrep workspace | MIT OR Unlicense |
+| grep-matcher | 0.1.8, from pinned ripgrep workspace | MIT OR Unlicense |
+| grep-pcre2 | 0.1.9, from pinned ripgrep workspace | MIT OR Unlicense |
+| grep-printer | 0.3.1, from pinned ripgrep workspace | MIT OR Unlicense |
+| grep-regex | 0.1.14, from pinned ripgrep workspace | MIT OR Unlicense |
+| grep-searcher | 0.1.16, from pinned ripgrep workspace | MIT OR Unlicense |
+| globset | 0.4.18, from pinned ripgrep workspace | MIT OR Unlicense |
+| ignore | 0.4.25, from pinned ripgrep workspace | MIT OR Unlicense |
+| regex | 1.12.2 | MIT OR Apache-2.0 |
 | regex-syntax | 0.8.8 | MIT OR Apache-2.0 |
 | regex-automata | 0.4.13 | MIT OR Apache-2.0 |
 | aho-corasick | 1.1.3 | MIT OR Unlicense |
@@ -33,7 +43,9 @@ whose code or algorithm is ported must have its license reproduced here.
 
 ## MIT License - Andrew Gallant
 
-Applies to: ripgrep, aho-corasick, memchr, encoding_rs_io, walkdir, termcolor.
+Applies to: ripgrep, grep, grep-cli, grep-matcher, grep-pcre2, grep-printer,
+grep-regex, grep-searcher, globset, ignore, aho-corasick, memchr,
+encoding_rs_io, walkdir, termcolor.
 
 ```text
 The MIT License (MIT)
@@ -145,7 +157,7 @@ SOFTWARE.
 
 ## MIT License - The Rust Project Developers
 
-Applies to: regex-syntax, regex-automata, log.
+Applies to: regex, regex-syntax, regex-automata, log.
 
 ```text
 Copyright (c) 2014 The Rust Project Developers
@@ -538,8 +550,9 @@ limitations under the License.
 
 ## Unlicense
 
-Applies to: ripgrep, aho-corasick, memchr, walkdir, same-file, termcolor,
-pcre2, pcre2-sys.
+Applies to: ripgrep, grep, grep-cli, grep-matcher, grep-pcre2, grep-printer,
+grep-regex, grep-searcher, globset, ignore, aho-corasick, memchr, walkdir,
+same-file, termcolor, pcre2, pcre2-sys.
 
 ```text
 This is free and unencumbered software released into the public domain.
