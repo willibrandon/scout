@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Scout;
 
@@ -133,7 +134,7 @@ internal static class FileListingOperations
         int threadCount = SearchWalkPlanning.GetFilesWalkThreadCount(lowArgs);
         using var entries = new BlockingCollection<DirEntry>();
         int found = 0;
-        var printThread = BackgroundThread.Start(() =>
+        var printTask = Task.Run(() =>
         {
             foreach (DirEntry entry in entries.GetConsumingEnumerable())
             {
@@ -172,7 +173,7 @@ internal static class FileListingOperations
             entries.CompleteAdding();
         }
 
-        printThread.Join();
+        printTask.GetAwaiter().GetResult();
         emitted |= Volatile.Read(ref found) != 0;
     }
 }

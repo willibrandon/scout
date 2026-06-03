@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Scout;
 
@@ -402,7 +403,7 @@ internal static class StandardSearchTargetOperations
         object outputLock = new();
         ConcurrentBag<MemoryStream>? directOutputBuffers = directOutput ? [] : null;
         using BlockingCollection<BufferedSearchOutput>? outputs = directOutput ? null : new BlockingCollection<BufferedSearchOutput>();
-        BackgroundThread? printThread = directOutput ? null : BackgroundThread.Start(() =>
+        Task? printTask = directOutput ? null : Task.Run(() =>
         {
             foreach (BufferedSearchOutput body in outputs!.GetConsumingEnumerable())
             {
@@ -503,7 +504,7 @@ internal static class StandardSearchTargetOperations
         }
 
         FlushBufferedOutputs(output, outputLock, directOutputBuffers);
-        printThread?.Join();
+        printTask?.GetAwaiter().GetResult();
         wroteHeadingOutput = printedHeading;
         matched |= Volatile.Read(ref matchedFlag) != 0;
         errored |= Volatile.Read(ref erroredFlag) != 0;
@@ -633,7 +634,7 @@ internal static class StandardSearchTargetOperations
         object outputLock = new();
         ConcurrentBag<MemoryStream>? directOutputBuffers = directOutput ? [] : null;
         using BlockingCollection<BufferedSearchOutput>? outputs = directOutput ? null : new BlockingCollection<BufferedSearchOutput>();
-        BackgroundThread? printThread = directOutput ? null : BackgroundThread.Start(() =>
+        Task? printTask = directOutput ? null : Task.Run(() =>
         {
             foreach (BufferedSearchOutput body in outputs!.GetConsumingEnumerable())
             {
@@ -740,7 +741,7 @@ internal static class StandardSearchTargetOperations
         }
 
         FlushBufferedOutputs(output, outputLock, directOutputBuffers);
-        printThread?.Join();
+        printTask?.GetAwaiter().GetResult();
         wroteHeadingOutput = printedHeading;
         stats.Add(aggregateStats);
         matched |= Volatile.Read(ref matchedFlag) != 0;

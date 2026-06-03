@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Scout;
 
@@ -297,7 +298,7 @@ internal static class Pcre2SearchOperations
         int matchedFlag = 0;
         int erroredFlag = 0;
         bool printedHeading = wroteHeadingOutput;
-        var printThread = BackgroundThread.Start(() =>
+        var printTask = Task.Run(() =>
         {
             foreach (byte[] body in outputs.GetConsumingEnumerable())
             {
@@ -378,7 +379,7 @@ internal static class Pcre2SearchOperations
             outputs.CompleteAdding();
         }
 
-        printThread.Join();
+        printTask.GetAwaiter().GetResult();
         foreach (Pcre2Regex workerRegex in workerRegexes.Values)
         {
             workerRegex.Dispose();

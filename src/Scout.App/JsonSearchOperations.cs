@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Scout;
 
@@ -162,7 +163,7 @@ internal static class JsonSearchOperations
         object summaryLock = new();
         int matchedFlag = 0;
         int erroredFlag = 0;
-        var printThread = BackgroundThread.Start(() =>
+        var printTask = Task.Run(() =>
         {
             foreach (byte[] body in outputs.GetConsumingEnumerable())
             {
@@ -219,7 +220,7 @@ internal static class JsonSearchOperations
             outputs.CompleteAdding();
         }
 
-        printThread.Join();
+        printTask.GetAwaiter().GetResult();
         matched |= Volatile.Read(ref matchedFlag) != 0;
         errored |= Volatile.Read(ref erroredFlag) != 0;
     }
