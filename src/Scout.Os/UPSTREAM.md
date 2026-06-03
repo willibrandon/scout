@@ -19,6 +19,6 @@ checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"
 ```
 
-The implementation owns Unix raw byte paths, directory iteration, raw standard
-streams, Windows UTF-16 boundaries, and direct `LibraryImport` declarations for
-the exact OS APIs Scout uses.
+The implementation owns Unix raw byte paths, raw `getcwd`, directory iteration,
+raw standard streams, Windows UTF-16 boundaries, and direct `LibraryImport`
+declarations for the exact OS APIs Scout uses.
