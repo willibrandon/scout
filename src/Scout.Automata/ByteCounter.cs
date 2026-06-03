@@ -106,17 +106,24 @@ public static class ByteCounter
     {
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
         var needleVector = Vector128.Create(needle);
-        long count = 0;
+        Vector128<uint> counts = Vector128<uint>.Zero;
         int offset = 0;
         int vectorLimit = haystack.Length - (haystack.Length % Vector128<byte>.Count);
         while (offset < vectorLimit)
         {
             var block = Vector128.LoadUnsafe(ref reference, (nuint)offset);
-            uint mask = AdvSimd.CompareEqual(block, needleVector).ExtractMostSignificantBits();
-            count += BitOperations.PopCount(mask);
+            Vector128<byte> matches = AdvSimd.ShiftRightLogical(AdvSimd.CompareEqual(block, needleVector), 7);
+            Vector128<ushort> pairCounts = AdvSimd.AddPairwiseWidening(matches);
+            Vector128<uint> quadCounts = AdvSimd.AddPairwiseWidening(pairCounts);
+            counts = AdvSimd.Add(counts, quadCounts);
             offset += Vector128<byte>.Count;
         }
 
+        long count =
+            counts.GetElement(0) +
+            counts.GetElement(1) +
+            counts.GetElement(2) +
+            counts.GetElement(3);
         return count + CountScalar(haystack, needle, offset);
     }
 

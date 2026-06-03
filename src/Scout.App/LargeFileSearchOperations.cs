@@ -11,6 +11,7 @@ internal static unsafe class LargeFileSearchOperations
     private const int StreamingFileBufferLength = 131_072;
     private const int StreamingFileStreamBufferLength = 1;
     private const int ImplicitSearchStreamingFileBufferLength = 262_144;
+    private const int ExplicitFastLiteralStreamingFileBufferLength = 4 * 1024 * 1024;
     private const long ImplicitSearchStreamingFileThreshold = 65_536;
     private const long StreamingFileThreshold = int.MaxValue;
     private const int BinaryDetectionBlockLength = StandardSearchByteOperations.BinaryDetectionBufferLength;
@@ -86,7 +87,8 @@ internal static unsafe class LargeFileSearchOperations
                 lowArgs.StopOnNonmatch,
                 implicitSearch && !lowArgs.SearchBinaryFiles && !textMode,
                 SearchWalkPlanning.GetLargeFileSearchThreadCount(lowArgs, isOneFile),
-                implicitSearch ? ImplicitSearchStreamingFileBufferLength : StreamingFileBufferLength);
+                implicitSearch ? ImplicitSearchStreamingFileBufferLength : StreamingFileBufferLength,
+                implicitSearch ? ImplicitSearchStreamingFileBufferLength : ExplicitFastLiteralStreamingFileBufferLength);
         }
         catch (IOException exception)
         {
@@ -200,7 +202,8 @@ internal static unsafe class LargeFileSearchOperations
         bool stopOnNonmatch,
         bool quitOnBinary,
         int threadCount,
-        int bufferLength)
+        int bufferLength,
+        int fastLiteralBufferLength)
     {
         if (maxCount == 0)
         {
@@ -234,7 +237,7 @@ internal static unsafe class LargeFileSearchOperations
                 output,
                 separators.FieldMatch,
                 separators.LineTerminator,
-                Math.Max(bufferLength, BinaryDetectionBlockLength));
+                Math.Max(fastLiteralBufferLength, BinaryDetectionBlockLength));
         }
 
         if (!textMode &&

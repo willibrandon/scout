@@ -36,4 +36,16 @@ public sealed class ByteCounterTests
         Assert.Equal(0, ByteCounter.Count([], 0x00));
         Assert.Equal(2, ByteCounter.Count([0x00, 0xff, 0x00], 0x00));
     }
+
+    /// <summary>
+    /// Counts large all-match inputs without overflowing vector accumulators.
+    /// </summary>
+    [Fact]
+    public void CountHandlesLargeAllMatchInput()
+    {
+        byte[] haystack = new byte[(1024 * 1024) + 123];
+        Array.Fill(haystack, (byte)'\n');
+
+        Assert.Equal(haystack.Length, ByteCounter.Count(haystack, (byte)'\n'));
+    }
 }
