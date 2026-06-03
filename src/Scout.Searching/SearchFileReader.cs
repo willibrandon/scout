@@ -1,5 +1,3 @@
-using System;
-using System.IO;
 using System.IO.MemoryMappedFiles;
 using Microsoft.Win32.SafeHandles;
 

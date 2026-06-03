@@ -306,8 +306,8 @@ scan_repository_suppression_files() {
                 fail "$relative: analyzer severity config contains none/silent."
             fi
 
-            if grep -E 'dotnet_diagnostic\.(SCOUT[0-9]+|IDE0130|VSTHRD[0-9]+)\.severity[[:space:]]*=[[:space:]]*([^e[:space:]#;]|e[^r[:space:]#;]|er[^r[:space:]#;]|err[^o[:space:]#;]|erro[^r[:space:]#;]|error[^[:space:]#;])' "$file" >/dev/null; then
-                fail "$relative: Scout structural analyzers, threading analyzers, and IDE0130 must stay pinned to error."
+            if grep -E 'dotnet_diagnostic\.(SCOUT[0-9]+|IDE0005|IDE0130|VSTHRD[0-9]+)\.severity[[:space:]]*=[[:space:]]*([^e[:space:]#;]|e[^r[:space:]#;]|er[^r[:space:]#;]|err[^o[:space:]#;]|erro[^r[:space:]#;]|error[^[:space:]#;])' "$file" >/dev/null; then
+                fail "$relative: Scout structural analyzers, threading analyzers, IDE0005, and IDE0130 must stay pinned to error."
             fi
 
             if grep -E 'dotnet_analyzer_diagnostic\.category-Scout\.Structure\.severity[[:space:]]*=[[:space:]]*([^e[:space:]#;]|e[^r[:space:]#;]|er[^r[:space:]#;]|err[^o[:space:]#;]|erro[^r[:space:]#;]|error[^[:space:]#;])' "$file" >/dev/null; then
@@ -351,6 +351,7 @@ check_analyzer_severity_config() {
 
     require_net_analyzer_category_severity_configs
     require_config_severity "$ROOT/.globalconfig" 'dotnet_analyzer_diagnostic\.category-Scout\.Structure\.severity' "Scout.Structure analyzer category"
+    require_config_severity "$ROOT/.editorconfig" 'dotnet_diagnostic\.IDE0005\.severity' "IDE0005"
     require_config_severity "$ROOT/.editorconfig" 'dotnet_diagnostic\.IDE0130\.severity' "IDE0130"
     require_scout_diagnostic_severity_configs
     require_threading_diagnostic_severity_configs

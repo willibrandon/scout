@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace Scout;

@@ -35,7 +35,7 @@
   </Target>
 
   <Target Name="ScoutScanForSuppressionEscapeHatches" BeforeTargets="CoreCompile">
-    <Error Condition="Exists('%(ScoutSuppressionScanFile.FullPath)') and $([System.Text.RegularExpressions.Regex]::IsMatch($([System.IO.File]::ReadAllText('%(ScoutSuppressionScanFile.FullPath)')), '(#pragma\s+warning\s+disable)|(\[\s*(Unconditional)?Suppress[M]essage\b)|(&lt;\s*No[W]arn\b)|(&lt;\s*Warnings[N]otAsErrors\b)|(&lt;\s*Disabled[W]arnings\b)|(#nullable\s+disable)|(dotnet_diagnostic\.[^\r\n]*severity\s*=\s*(none|silent))|(dotnet_diagnostic\.(SCOUT[0-9]+|IDE0130|VSTHRD[0-9]+)\.severity\s*=\s*(?!error\b)[^\s#;]+)|(dotnet_analyzer_diagnostic\.category-(Design|Documentation|Globalization|Interoperability|Maintainability|Naming|Performance|Reliability|Scout\.Structure|Security|Usage)\.severity\s*=\s*(?!error\b)[^\s#;]+)'))"
+    <Error Condition="Exists('%(ScoutSuppressionScanFile.FullPath)') and $([System.Text.RegularExpressions.Regex]::IsMatch($([System.IO.File]::ReadAllText('%(ScoutSuppressionScanFile.FullPath)')), '(#pragma\s+warning\s+disable)|(\[\s*(Unconditional)?Suppress[M]essage\b)|(&lt;\s*No[W]arn\b)|(&lt;\s*Warnings[N]otAsErrors\b)|(&lt;\s*Disabled[W]arnings\b)|(#nullable\s+disable)|(dotnet_diagnostic\.[^\r\n]*severity\s*=\s*(none|silent))|(dotnet_diagnostic\.(SCOUT[0-9]+|IDE0005|IDE0130|VSTHRD[0-9]+)\.severity\s*=\s*(?!error\b)[^\s#;]+)|(dotnet_analyzer_diagnostic\.category-(Design|Documentation|Globalization|Interoperability|Maintainability|Naming|Performance|Reliability|Scout\.Structure|Security|Usage)\.severity\s*=\s*(?!error\b)[^\s#;]+)'))"
            Text="Scout forbids warning/nullability suppression escape hatches in %(ScoutSuppressionScanFile.Identity)." />
   </Target>
 

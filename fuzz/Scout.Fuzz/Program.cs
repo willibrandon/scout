@@ -1,4 +1,3 @@
-using System;
 using SharpFuzz;
 
 namespace Scout;

@@ -1,8 +1,5 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
-using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -681,6 +678,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("require_net_analyzer_category_severity_configs", script, StringComparison.Ordinal);
         Assert.Contains("Interoperability Maintainability Naming", script, StringComparison.Ordinal);
         Assert.Contains("Usage", script, StringComparison.Ordinal);
+        Assert.Contains("IDE0005", script, StringComparison.Ordinal);
         Assert.Contains("SCOUT[0-9]+", script, StringComparison.Ordinal);
         Assert.Contains("VSTHRD[0-9]+", script, StringComparison.Ordinal);
         Assert.Contains("require_threading_diagnostic_severity_configs", script, StringComparison.Ordinal);
@@ -697,6 +695,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("timed out after", script, StringComparison.Ordinal);
         Assert.Contains("-size 0c", script, StringComparison.Ordinal);
         Assert.Contains("Project warning-gate property dump is empty", script, StringComparison.Ordinal);
+
+        string editorConfig = File.ReadAllText(Path.Combine(root, ".editorconfig"));
+        Assert.Contains("dotnet_diagnostic." + "IDE0005.severity = " + "error", editorConfig, StringComparison.Ordinal);
 
         string responseFile = File.ReadAllText(Path.Combine(root, "Directory.Build.rsp"));
         Assert.Contains("-p:NoWarn=", responseFile, StringComparison.Ordinal);
@@ -3100,7 +3101,7 @@ public sealed partial class PinnedConfigurationTests
             @"<\s*Disabled" + "Warnings" + @"\b",
             Regex.Escape("#nullable " + "disable"),
             @"dotnet_diagnostic\.[^\r\n]*severity\s*=\s*(none|silent)\b",
-            @"dotnet_diagnostic\.(SCOUT[0-9]+|IDE0130|VSTHRD[0-9]+)\.severity\s*=\s*(?!error\b)[^\s#;]+",
+            @"dotnet_diagnostic\.(SCOUT[0-9]+|IDE0005|IDE0130|VSTHRD[0-9]+)\.severity\s*=\s*(?!error\b)[^\s#;]+",
             @"dotnet_analyzer_diagnostic\.category-(Design|Documentation|Globalization|Interoperability|Maintainability|Naming|Performance|Reliability|Scout\.Structure|Security|Usage)\.severity\s*=\s*(?!error\b)[^\s#;]+",
         ];
 

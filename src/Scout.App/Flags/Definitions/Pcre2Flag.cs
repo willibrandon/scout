@@ -1,4 +1,3 @@
-using Scout;
 
 namespace Scout.Flags.Definitions;
 
