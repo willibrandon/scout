@@ -3,7 +3,6 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace Scout;
 
@@ -70,24 +69,27 @@ internal static class CliSearchCommandRunner
             return false;
         }
 
-        Task<byte[]> standardOutput = ReadAllBytesAsync(process.StandardOutput.BaseStream);
-        Task<string> standardError = process.StandardError.ReadToEndAsync();
+        byte[] standardOutput = [];
+        string standardError = string.Empty;
+        using var standardOutputReader = CliBackgroundWorkItem.Queue(() => standardOutput = ReadAllBytes(process.StandardOutput.BaseStream));
+        using var standardErrorReader = CliBackgroundWorkItem.Queue(() => standardError = process.StandardError.ReadToEnd());
         if (pipeFileToStandardInput)
         {
             CopyFileToProcessStandardInput(path, process);
         }
 
         process.WaitForExit();
-        bytes = standardOutput.GetAwaiter().GetResult();
-        string stderr = standardError.GetAwaiter().GetResult();
+        standardOutputReader.Join();
+        standardErrorReader.Join();
+        bytes = standardOutput;
         if (process.ExitCode == 0)
         {
             return true;
         }
 
         string message = pipeFileToStandardInput
-            ? $"preprocessor command failed: '{commandDisplay}': {FormatCommandStderr(stderr)}"
-            : $"{program} command failed: {FormatCommandStderr(stderr)}";
+            ? $"preprocessor command failed: '{commandDisplay}': {FormatCommandStderr(standardError)}"
+            : $"{program} command failed: {FormatCommandStderr(standardError)}";
         error = new ScoutError(message);
         bytes = [];
         return false;
@@ -132,10 +134,10 @@ internal static class CliSearchCommandRunner
         }
     }
 
-    private static async Task<byte[]> ReadAllBytesAsync(Stream stream)
+    private static byte[] ReadAllBytes(Stream stream)
     {
         using var buffer = new MemoryStream();
-        await stream.CopyToAsync(buffer).ConfigureAwait(false);
+        stream.CopyTo(buffer);
         return buffer.ToArray();
     }
 

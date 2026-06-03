@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Runtime.ExceptionServices;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace Scout;
 
@@ -46,18 +46,42 @@ public sealed class WalkParallel
         }
 
         int quit = 0;
-        var tasks = new Task[stacks.Length];
-        for (int index = 0; index < tasks.Length; index++)
+        ExceptionDispatchInfo? failure = null;
+        object failureLock = new();
+        using var completed = new CountdownEvent(stacks.Length);
+        for (int index = 0; index < stacks.Length; index++)
         {
             int workerIndex = index;
-            tasks[index] = Task.Factory.StartNew(
-                () => RunWorker(workerIndex, stacks, visitorFactory(), ref remaining, ref quit),
-                CancellationToken.None,
-                TaskCreationOptions.DenyChildAttach,
-                TaskScheduler.Default);
+            Func<DirEntry, WalkState> visitor = visitorFactory();
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try
+                {
+                    RunWorker(workerIndex, stacks, visitor, ref remaining, ref quit);
+                }
+                catch (Exception exception) when (CaptureFailure(exception))
+                {
+                }
+                finally
+                {
+                    completed.Signal();
+                }
+            });
         }
 
-        Task.WaitAll(tasks);
+        completed.Wait();
+        failure?.Throw();
+
+        bool CaptureFailure(Exception exception)
+        {
+            Volatile.Write(ref quit, 1);
+            lock (failureLock)
+            {
+                failure ??= ExceptionDispatchInfo.Capture(exception);
+            }
+
+            return true;
+        }
     }
 
     private void RunWorker(
