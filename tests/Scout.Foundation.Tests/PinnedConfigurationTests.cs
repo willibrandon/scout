@@ -591,6 +591,30 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies checked-in source files do not carry implementation deferral markers.
+    /// </summary>
+    [Fact]
+    public void SourceFilesContainNoImplementationDeferralMarkers()
+    {
+        string root = FindRepositoryRoot();
+        Regex forbiddenPattern = CreateForbiddenImplementationDeferralPattern();
+        var violations = new List<string>();
+
+        foreach (string path in EnumerateCheckedInSourceFiles(root))
+        {
+            string text = File.ReadAllText(path);
+            Match match = forbiddenPattern.Match(text);
+            if (match.Success)
+            {
+                string relativePath = Path.GetRelativePath(root, path);
+                violations.Add($"{relativePath}: forbidden implementation deferral marker '{match.Value}'.");
+            }
+        }
+
+        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>
     /// Verifies CI evaluates warning gates after MSBuild imports are applied.
     /// </summary>
     [Fact]
@@ -1840,6 +1864,17 @@ public sealed partial class PinnedConfigurationTests
                 "version = \"0.9.9\"",
                 "checksum = \"744133e4a0e0a658e1374cf3bf8e415c4052a15a111acd372764c55b4177d490\"",
             ]),
+            ("src/Scout.SourceGen/UPSTREAM.md",
+            [
+                "name = \"Scout.SourceGen\"",
+                "commit = \"" + PinnedRipgrepCommit + "\"",
+                "role = \"source generators and repository policy analyzers\"",
+                "name = \"Microsoft.CodeAnalysis.CSharp\"",
+                "version = \"5.0.0\"",
+                "crates/core/flags/defs.rs",
+                "tests/*.rs",
+                "rgtest!",
+            ]),
         ];
 
         for (int fileIndex = 0; fileIndex < upstreamFiles.Length; fileIndex++)
@@ -1854,6 +1889,35 @@ public sealed partial class PinnedConfigurationTests
                 Assert.Contains(fragments[fragmentIndex], text, StringComparison.Ordinal);
             }
         }
+    }
+
+    /// <summary>
+    /// Verifies every source project carries a sibling upstream provenance file.
+    /// </summary>
+    [Fact]
+    public void SourceProjectsHaveUpstreamProvenanceFiles()
+    {
+        string root = FindRepositoryRoot();
+        string sourceRoot = Path.Combine(root, "src");
+        var missing = new List<string>();
+
+        foreach (string projectPath in Directory.EnumerateFiles(sourceRoot, "*.csproj", SearchOption.AllDirectories))
+        {
+            string relativeProjectPath = Path.GetRelativePath(root, projectPath);
+            if (ContainsPathSegment(relativeProjectPath, "bin") || ContainsPathSegment(relativeProjectPath, "obj"))
+            {
+                continue;
+            }
+
+            string projectDirectory = Path.GetDirectoryName(projectPath) ?? sourceRoot;
+            string upstreamPath = Path.Combine(projectDirectory, "UPSTREAM.md");
+            if (!File.Exists(upstreamPath))
+            {
+                missing.Add(Path.GetRelativePath(root, upstreamPath));
+            }
+        }
+
+        Assert.Empty(missing);
     }
 
     /// <summary>
@@ -2978,6 +3042,28 @@ public sealed partial class PinnedConfigurationTests
         return new Regex(string.Join("|", patterns), RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
     }
 
+    private static Regex CreateForbiddenImplementationDeferralPattern()
+    {
+        string[] patterns =
+        [
+            @"\bNotImplementedException\b",
+            @"\bTODO\b",
+            @"\bFIXME\b",
+            @"\bHACK\b",
+            @"\bnot\s+implemented\b",
+            @"\bnot\s+yet\s+implemented\b",
+            @"\bout[-\s]+of[-\s]+scope\b",
+            @"\bscope\s+reduction\b",
+            @"\bdeferred\b",
+            @"\bstubbed\b",
+            @"\bstub\b",
+            @"\bfuture\s+work\b",
+            @"\blater\s+milestone\b",
+        ];
+
+        return new Regex(string.Join("|", patterns), RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+    }
+
     private static (string Label, Regex Pattern)[] CreateForbiddenTestWaiverPatterns()
     {
         return
@@ -3330,6 +3416,19 @@ public sealed partial class PinnedConfigurationTests
     {
         string sourceRoot = Path.Combine(root, "src");
         foreach (string path in Directory.EnumerateFiles(sourceRoot, "UPSTREAM.md", SearchOption.AllDirectories))
+        {
+            string relativePath = Path.GetRelativePath(root, path);
+            if (!ContainsPathSegment(relativePath, "bin") && !ContainsPathSegment(relativePath, "obj"))
+            {
+                yield return path;
+            }
+        }
+    }
+
+    private static IEnumerable<string> EnumerateCheckedInSourceFiles(string root)
+    {
+        string sourceRoot = Path.Combine(root, "src");
+        foreach (string path in Directory.EnumerateFiles(sourceRoot, "*.cs", SearchOption.AllDirectories))
         {
             string relativePath = Path.GetRelativePath(root, path);
             if (!ContainsPathSegment(relativePath, "bin") && !ContainsPathSegment(relativePath, "obj"))
