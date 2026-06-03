@@ -11,6 +11,7 @@
     <PackageVersion Include="Microsoft.DotNet.ILCompiler"
                     Version="10.0.2"
                     Condition="'$(MSBuildProjectName)' != 'Scout.App' and '$(MSBuildProjectName)' != 'Scout.Entry'" />
+    <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.14.15" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageVersion Include="SharpFuzz" Version="2.2.0" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />

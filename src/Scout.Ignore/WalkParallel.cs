@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
+using System.Runtime.ExceptionServices;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace Scout;
 
@@ -46,18 +47,65 @@ public sealed class WalkParallel
         }
 
         int quit = 0;
-        var tasks = new Task[stacks.Length];
-        for (int index = 0; index < tasks.Length; index++)
+        var threads = new Thread[stacks.Length];
+        ExceptionDispatchInfo? firstException = null;
+        object exceptionLock = new();
+        for (int index = 0; index < threads.Length; index++)
         {
             int workerIndex = index;
-            tasks[index] = Task.Factory.StartNew(
-                () => RunWorker(workerIndex, stacks, visitorFactory(), ref remaining, ref quit),
-                CancellationToken.None,
-                TaskCreationOptions.DenyChildAttach,
-                TaskScheduler.Default);
+            threads[index] = new Thread(() =>
+            {
+                try
+                {
+                    RunWorker(workerIndex, stacks, visitorFactory(), ref remaining, ref quit);
+                }
+                catch (IOException exception)
+                {
+                    CaptureWorkerException(exception);
+                }
+                catch (UnauthorizedAccessException exception)
+                {
+                    CaptureWorkerException(exception);
+                }
+                catch (ArgumentException exception)
+                {
+                    CaptureWorkerException(exception);
+                }
+                catch (ObjectDisposedException exception)
+                {
+                    CaptureWorkerException(exception);
+                }
+                catch (InvalidOperationException exception)
+                {
+                    CaptureWorkerException(exception);
+                }
+                catch (NotSupportedException exception)
+                {
+                    CaptureWorkerException(exception);
+                }
+            })
+            {
+                IsBackground = true,
+                Name = "scout-walk-worker",
+            };
+            threads[index].Start();
         }
 
-        Task.WaitAll(tasks);
+        for (int index = 0; index < threads.Length; index++)
+        {
+            threads[index].Join();
+        }
+
+        firstException?.Throw();
+
+        void CaptureWorkerException(Exception exception)
+        {
+            Volatile.Write(ref quit, 1);
+            lock (exceptionLock)
+            {
+                firstException ??= ExceptionDispatchInfo.Capture(exception);
+            }
+        }
     }
 
     private void RunWorker(

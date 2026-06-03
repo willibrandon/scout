@@ -17,7 +17,7 @@ public sealed class NoSkippedTestsAnalyzerTests
     /// Verifies a normal test attribute is accepted.
     /// </summary>
     [Fact]
-    public async Task AcceptsNormalTests()
+    public async Task AcceptsNormalTestsAsync()
     {
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
             """
@@ -39,7 +39,7 @@ public sealed class NoSkippedTestsAnalyzerTests
     /// Verifies xUnit skip attributes are rejected.
     /// </summary>
     [Fact]
-    public async Task ReportsXunitSkipAttributes()
+    public async Task ReportsXunitSkipAttributesAsync()
     {
         string skip = "Sk" + "ip";
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
@@ -62,7 +62,7 @@ public sealed class NoSkippedTestsAnalyzerTests
     /// Verifies generated test sources are rejected even when their hint path is outside the tests folder.
     /// </summary>
     [Fact]
-    public async Task ReportsGeneratedXunitSkipAttributesInTestProjects()
+    public async Task ReportsGeneratedXunitSkipAttributesInTestProjectsAsync()
     {
         string skip = "Sk" + "ip";
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAtPathAsync(
@@ -86,7 +86,7 @@ public sealed class NoSkippedTestsAnalyzerTests
     /// Verifies xUnit explicit attributes are rejected.
     /// </summary>
     [Fact]
-    public async Task ReportsXunitExplicitAttributes()
+    public async Task ReportsXunitExplicitAttributesAsync()
     {
         string explicitArgument = "Exp" + "licit";
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
@@ -109,7 +109,7 @@ public sealed class NoSkippedTestsAnalyzerTests
     /// Verifies explicit or ignored test attributes are rejected.
     /// </summary>
     [Fact]
-    public async Task ReportsExplicitOrIgnoredAttributes()
+    public async Task ReportsExplicitOrIgnoredAttributesAsync()
     {
         string explicitAttribute = "Exp" + "licit";
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
@@ -132,7 +132,7 @@ public sealed class NoSkippedTestsAnalyzerTests
     /// Verifies quarantine-like traits are rejected.
     /// </summary>
     [Fact]
-    public async Task ReportsQuarantineTraits()
+    public async Task ReportsQuarantineTraitsAsync()
     {
         string trait = "Tra" + "it";
         string quarantine = "Quaran" + "tine";
@@ -156,7 +156,7 @@ public sealed class NoSkippedTestsAnalyzerTests
     /// Verifies runtime skip calls are rejected.
     /// </summary>
     [Fact]
-    public async Task ReportsRuntimeSkipCalls()
+    public async Task ReportsRuntimeSkipCallsAsync()
     {
         string skip = "Sk" + "ip";
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
@@ -180,7 +180,7 @@ public sealed class NoSkippedTestsAnalyzerTests
     /// Verifies skip exceptions are rejected.
     /// </summary>
     [Fact]
-    public async Task ReportsSkipExceptions()
+    public async Task ReportsSkipExceptionsAsync()
     {
         string exception = "Sk" + "ipException";
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
@@ -204,7 +204,7 @@ public sealed class NoSkippedTestsAnalyzerTests
     /// Verifies fixture capability returns are rejected.
     /// </summary>
     [Fact]
-    public async Task ReportsFixtureCapabilityReturns()
+    public async Task ReportsFixtureCapabilityReturnsAsync()
     {
         string probe = "TryCreate" + "DirectorySymlink";
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
@@ -231,7 +231,7 @@ public sealed class NoSkippedTestsAnalyzerTests
     /// Verifies platform guard returns are rejected.
     /// </summary>
     [Fact]
-    public async Task ReportsPlatformGuardReturns()
+    public async Task ReportsPlatformGuardReturnsAsync()
     {
         string platform = "Operating" + "System";
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(

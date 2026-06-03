@@ -18,7 +18,7 @@ public sealed class OneTypePerFileAnalyzerTests
     /// Verifies a single type with a matching file name is accepted.
     /// </summary>
     [Fact]
-    public async Task AcceptsSingleMatchingType()
+    public async Task AcceptsSingleMatchingTypeAsync()
     {
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
             "Parser.cs",
@@ -37,7 +37,7 @@ public sealed class OneTypePerFileAnalyzerTests
     /// Verifies files declaring multiple top-level types are rejected.
     /// </summary>
     [Fact]
-    public async Task ReportsMultipleTopLevelTypes()
+    public async Task ReportsMultipleTopLevelTypesAsync()
     {
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
             "Parser.cs",
@@ -63,7 +63,7 @@ public sealed class OneTypePerFileAnalyzerTests
     /// Verifies nested types count against the one-type-per-file rule.
     /// </summary>
     [Fact]
-    public async Task ReportsNestedTypes()
+    public async Task ReportsNestedTypesAsync()
     {
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
             "Parser.cs",
@@ -88,7 +88,7 @@ public sealed class OneTypePerFileAnalyzerTests
     /// Verifies delegates count as type declarations.
     /// </summary>
     [Fact]
-    public async Task ReportsDelegatesAsTypes()
+    public async Task ReportsDelegatesAsTypesAsync()
     {
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
             "Parser.cs",
@@ -112,7 +112,7 @@ public sealed class OneTypePerFileAnalyzerTests
     /// Verifies a single type must match its file name.
     /// </summary>
     [Fact]
-    public async Task ReportsTypeNameFileNameMismatch()
+    public async Task ReportsTypeNameFileNameMismatchAsync()
     {
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
             "Parser.cs",
@@ -134,7 +134,7 @@ public sealed class OneTypePerFileAnalyzerTests
     /// Verifies generated files compare against the pre-.g file stem.
     /// </summary>
     [Fact]
-    public async Task AcceptsGeneratedFileStem()
+    public async Task AcceptsGeneratedFileStemAsync()
     {
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
             "GeneratedFlagCatalog.g.cs",
@@ -153,7 +153,7 @@ public sealed class OneTypePerFileAnalyzerTests
     /// Verifies external LibraryImport-generated files are outside Scout's structural policy.
     /// </summary>
     [Fact]
-    public async Task IgnoresExternalLibraryImportGeneratedFiles()
+    public async Task IgnoresExternalLibraryImportGeneratedFilesAsync()
     {
         string filePath = Path.Combine(
             Path.GetTempPath(),
@@ -185,7 +185,7 @@ public sealed class OneTypePerFileAnalyzerTests
     /// Verifies checked-in sources obey the one-type-per-file rule.
     /// </summary>
     [Fact]
-    public async Task RepositorySourcesUseOneTypePerFile()
+    public async Task RepositorySourcesUseOneTypePerFileAsync()
     {
         string root = FindRepositoryRoot();
         var violations = new List<string>();

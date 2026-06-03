@@ -754,12 +754,15 @@ public sealed class RegexCorpusDifferentialTests
     /// Gets regex corpus cases that currently exercise supported CLI-facing regex behavior.
     /// </summary>
     /// <returns>The corpus case parameters.</returns>
-    public static IEnumerable<object[]> CorpusCases()
+    public static TheoryData<string, string> CorpusCases()
     {
+        var data = new TheoryData<string, string>();
         for (int index = 0; index < DifferentialCases.Length; index++)
         {
-            yield return [DifferentialCases[index].RelativePath, DifferentialCases[index].Name];
+            data.Add(DifferentialCases[index].RelativePath, DifferentialCases[index].Name);
         }
+
+        return data;
     }
 
     private static string[] CorpusCaseKeys()

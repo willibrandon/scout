@@ -2,8 +2,9 @@ using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.ExceptionServices;
 using System.Text;
-using System.Threading.Tasks;
+using System.Threading;
 
 namespace Scout;
 
@@ -70,27 +71,41 @@ internal static class CliSearchCommandRunner
             return false;
         }
 
-        Task<byte[]> standardOutput = ReadAllBytesAsync(process.StandardOutput.BaseStream);
-        Task<string> standardError = process.StandardError.ReadToEndAsync();
+        byte[] standardOutput = [];
+        string standardError = string.Empty;
+        ExceptionDispatchInfo? readerException = null;
+        object readerExceptionLock = new();
+        Thread standardOutputReader = StartReaderThread(() => standardOutput = ReadAllBytes(process.StandardOutput.BaseStream), CaptureReaderException);
+        Thread standardErrorReader = StartReaderThread(() => standardError = process.StandardError.ReadToEnd(), CaptureReaderException);
         if (pipeFileToStandardInput)
         {
             CopyFileToProcessStandardInput(path, process);
         }
 
         process.WaitForExit();
-        bytes = standardOutput.GetAwaiter().GetResult();
-        string stderr = standardError.GetAwaiter().GetResult();
+        standardOutputReader.Join();
+        standardErrorReader.Join();
+        readerException?.Throw();
+        bytes = standardOutput;
         if (process.ExitCode == 0)
         {
             return true;
         }
 
         string message = pipeFileToStandardInput
-            ? $"preprocessor command failed: '{commandDisplay}': {FormatCommandStderr(stderr)}"
-            : $"{program} command failed: {FormatCommandStderr(stderr)}";
+            ? $"preprocessor command failed: '{commandDisplay}': {FormatCommandStderr(standardError)}"
+            : $"{program} command failed: {FormatCommandStderr(standardError)}";
         error = new ScoutError(message);
         bytes = [];
         return false;
+
+        void CaptureReaderException(Exception exception)
+        {
+            lock (readerExceptionLock)
+            {
+                readerException ??= ExceptionDispatchInfo.Capture(exception);
+            }
+        }
     }
 
     private static void CopyFileToProcessStandardInput(string path, Process process)
@@ -132,10 +147,43 @@ internal static class CliSearchCommandRunner
         }
     }
 
-    private static async Task<byte[]> ReadAllBytesAsync(Stream stream)
+    private static Thread StartReaderThread(ThreadStart read, Action<Exception> captureException)
+    {
+        Thread thread = new(() =>
+        {
+            try
+            {
+                read();
+            }
+            catch (IOException exception)
+            {
+                captureException(exception);
+            }
+            catch (ObjectDisposedException exception)
+            {
+                captureException(exception);
+            }
+            catch (InvalidOperationException exception)
+            {
+                captureException(exception);
+            }
+            catch (NotSupportedException exception)
+            {
+                captureException(exception);
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "scout-command-reader",
+        };
+        thread.Start();
+        return thread;
+    }
+
+    private static byte[] ReadAllBytes(Stream stream)
     {
         using var buffer = new MemoryStream();
-        await stream.CopyToAsync(buffer).ConfigureAwait(false);
+        stream.CopyTo(buffer);
         return buffer.ToArray();
     }
 

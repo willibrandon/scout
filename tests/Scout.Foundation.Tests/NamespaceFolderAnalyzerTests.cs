@@ -38,7 +38,7 @@ public sealed class NamespaceFolderAnalyzerTests
     [InlineData("Scout.Regex")]
     [InlineData("Scout.Searching")]
     [InlineData("Scout.SourceGen")]
-    public async Task ReportsProjectNameNamespaceAtProjectRoot(string @namespace)
+    public async Task ReportsProjectNameNamespaceAtProjectRootAsync(string @namespace)
     {
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeNamespaceAsync(@namespace).ConfigureAwait(true);
 
@@ -54,7 +54,7 @@ public sealed class NamespaceFolderAnalyzerTests
     /// Verifies the repository root namespace is accepted at the project root.
     /// </summary>
     [Fact]
-    public async Task AcceptsRootNamespaceAtProjectRoot()
+    public async Task AcceptsRootNamespaceAtProjectRootAsync()
     {
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeNamespaceAsync("Scout").ConfigureAwait(true);
 
@@ -65,7 +65,7 @@ public sealed class NamespaceFolderAnalyzerTests
     /// Verifies checked-in sources use namespaces that match their project folder structure.
     /// </summary>
     [Fact]
-    public async Task RepositorySourcesUseExpectedNamespaces()
+    public async Task RepositorySourcesUseExpectedNamespacesAsync()
     {
         string root = FindRepositoryRoot();
         var mismatches = new List<string>();

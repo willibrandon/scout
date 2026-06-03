@@ -958,16 +958,19 @@ public sealed class RegexCorpusTests
     /// Gets every supported regex corpus case as xUnit data.
     /// </summary>
     /// <returns>The corpus case parameters.</returns>
-    public static IEnumerable<object[]> CorpusCases()
+    public static TheoryData<string, string> CorpusCases()
     {
+        var data = new TheoryData<string, string>();
         for (int groupIndex = 0; groupIndex < CorpusGroups.Length; groupIndex++)
         {
             (string relativePath, string[] names) = CorpusGroups[groupIndex];
             for (int index = 0; index < names.Length; index++)
             {
-                yield return [relativePath, names[index]];
+                data.Add(relativePath, names[index]);
             }
         }
+
+        return data;
     }
 
     internal static string[] CorpusCaseKeys()

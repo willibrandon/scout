@@ -112,10 +112,10 @@ public static class ByteCounter
         while (offset < vectorLimit)
         {
             var block = Vector128.LoadUnsafe(ref reference, (nuint)offset);
-            Vector128<byte> matches = AdvSimd.ShiftRightLogical(AdvSimd.CompareEqual(block, needleVector), 7);
+            var matches = Vector128.ShiftRightLogical(Vector128.Equals(block, needleVector), 7);
             Vector128<ushort> pairCounts = AdvSimd.AddPairwiseWidening(matches);
             Vector128<uint> quadCounts = AdvSimd.AddPairwiseWidening(pairCounts);
-            counts = AdvSimd.Add(counts, quadCounts);
+            counts += quadCounts;
             offset += Vector128<byte>.Count;
         }
 

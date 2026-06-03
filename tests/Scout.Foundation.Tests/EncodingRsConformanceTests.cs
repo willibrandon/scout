@@ -15,15 +15,18 @@ public sealed class EncodingRsConformanceTests
     /// <summary>
     /// Gets the upstream decode-vector cases Scout currently supports.
     /// </summary>
-    public static IEnumerable<object[]> DecodeVectorCases()
+    public static TheoryData<SearchEncodingKind, string, string> DecodeVectorCases()
     {
-        yield return [SearchEncodingKind.Big5, "big5_in.txt", "big5_in_ref.txt"];
-        yield return [SearchEncodingKind.EucKr, "euc_kr_in.txt", "euc_kr_in_ref.txt"];
-        yield return [SearchEncodingKind.Gb18030, "gb18030_in.txt", "gb18030_in_ref.txt"];
-        yield return [SearchEncodingKind.Iso2022Jp, "iso_2022_jp_in.txt", "iso_2022_jp_in_ref.txt"];
-        yield return [SearchEncodingKind.EucJp, "jis0208_in.txt", "jis0208_in_ref.txt"];
-        yield return [SearchEncodingKind.EucJp, "jis0212_in.txt", "jis0212_in_ref.txt"];
-        yield return [SearchEncodingKind.ShiftJis, "shift_jis_in.txt", "shift_jis_in_ref.txt"];
+        return new TheoryData<SearchEncodingKind, string, string>
+        {
+            { SearchEncodingKind.Big5, "big5_in.txt", "big5_in_ref.txt" },
+            { SearchEncodingKind.EucKr, "euc_kr_in.txt", "euc_kr_in_ref.txt" },
+            { SearchEncodingKind.Gb18030, "gb18030_in.txt", "gb18030_in_ref.txt" },
+            { SearchEncodingKind.Iso2022Jp, "iso_2022_jp_in.txt", "iso_2022_jp_in_ref.txt" },
+            { SearchEncodingKind.EucJp, "jis0208_in.txt", "jis0208_in_ref.txt" },
+            { SearchEncodingKind.EucJp, "jis0212_in.txt", "jis0212_in_ref.txt" },
+            { SearchEncodingKind.ShiftJis, "shift_jis_in.txt", "shift_jis_in_ref.txt" },
+        };
     }
 
     /// <summary>

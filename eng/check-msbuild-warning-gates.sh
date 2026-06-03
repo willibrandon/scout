@@ -172,6 +172,27 @@ check_true() {
     fi
 }
 
+check_false() {
+    project="$1"
+    property="$2"
+    value="$3"
+
+    if [ "$value" != "false" ]; then
+        fail "$project has evaluated $property='$value', expected false."
+    fi
+}
+
+check_equals() {
+    project="$1"
+    property="$2"
+    value="$3"
+    expected="$4"
+
+    if [ "$value" != "$expected" ]; then
+        fail "$project has evaluated $property='$value', expected $expected."
+    fi
+}
+
 check_empty() {
     project="$1"
     property="$2"
@@ -180,6 +201,22 @@ check_empty() {
     if [ -n "$value" ]; then
         fail "$project has evaluated $property='$value', expected empty."
     fi
+}
+
+is_runtime_aot_project() {
+    project="$1"
+
+    case "$project" in
+        src/Scout.SourceGen/Scout.SourceGen.csproj|tests/*|bench/*|fuzz/*)
+            return 1
+            ;;
+        src/*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
 }
 
 require_config_severity() {
@@ -196,6 +233,23 @@ require_scout_diagnostic_severity_configs() {
     descriptors="$ROOT/src/Scout.SourceGen/DiagnosticDescriptors.cs"
     grep -Eo 'SCOUT[0-9]{4}' "$descriptors" | sort -u | while IFS= read -r diagnostic_id; do
         [ -n "$diagnostic_id" ] || continue
+        require_config_severity "$ROOT/.editorconfig" "dotnet_diagnostic\\.$diagnostic_id\\.severity" "$diagnostic_id"
+    done
+}
+
+require_net_analyzer_category_severity_configs() {
+    for category in Design Documentation Globalization Interoperability Maintainability Naming Performance Reliability Security Usage; do
+        require_config_severity "$ROOT/.globalconfig" "dotnet_analyzer_diagnostic\\.category-$category\\.severity" "$category analyzer category"
+    done
+}
+
+require_threading_diagnostic_severity_configs() {
+    for diagnostic_id in \
+        VSTHRD001 VSTHRD002 VSTHRD003 VSTHRD004 \
+        VSTHRD010 VSTHRD011 VSTHRD012 \
+        VSTHRD100 VSTHRD101 VSTHRD102 VSTHRD103 VSTHRD104 VSTHRD105 VSTHRD106 VSTHRD107 VSTHRD108 VSTHRD109 \
+        VSTHRD110 VSTHRD111 VSTHRD112 VSTHRD113 VSTHRD114 VSTHRD115 \
+        VSTHRD200 VSTHRD201; do
         require_config_severity "$ROOT/.editorconfig" "dotnet_diagnostic\\.$diagnostic_id\\.severity" "$diagnostic_id"
     done
 }
@@ -252,8 +306,8 @@ scan_repository_suppression_files() {
                 fail "$relative: analyzer severity config contains none/silent."
             fi
 
-            if grep -E 'dotnet_diagnostic\.(SCOUT[0-9]+|IDE0130)\.severity[[:space:]]*=[[:space:]]*([^e[:space:]#;]|e[^r[:space:]#;]|er[^r[:space:]#;]|err[^o[:space:]#;]|erro[^r[:space:]#;]|error[^[:space:]#;])' "$file" >/dev/null; then
-                fail "$relative: Scout structural analyzers and IDE0130 must stay pinned to error."
+            if grep -E 'dotnet_diagnostic\.(SCOUT[0-9]+|IDE0130|VSTHRD[0-9]+)\.severity[[:space:]]*=[[:space:]]*([^e[:space:]#;]|e[^r[:space:]#;]|er[^r[:space:]#;]|err[^o[:space:]#;]|erro[^r[:space:]#;]|error[^[:space:]#;])' "$file" >/dev/null; then
+                fail "$relative: Scout structural analyzers, threading analyzers, and IDE0130 must stay pinned to error."
             fi
 
             if grep -E 'dotnet_analyzer_diagnostic\.category-Scout\.Structure\.severity[[:space:]]*=[[:space:]]*([^e[:space:]#;]|e[^r[:space:]#;]|er[^r[:space:]#;]|err[^o[:space:]#;]|erro[^r[:space:]#;]|error[^[:space:]#;])' "$file" >/dev/null; then
@@ -295,9 +349,11 @@ check_analyzer_severity_config() {
         fail "Analyzer severity config contains none/silent."
     fi
 
+    require_net_analyzer_category_severity_configs
     require_config_severity "$ROOT/.globalconfig" 'dotnet_analyzer_diagnostic\.category-Scout\.Structure\.severity' "Scout.Structure analyzer category"
     require_config_severity "$ROOT/.editorconfig" 'dotnet_diagnostic\.IDE0130\.severity' "IDE0130"
     require_scout_diagnostic_severity_configs
+    require_threading_diagnostic_severity_configs
 }
 
 rm -rf "$OUT"
@@ -331,6 +387,17 @@ find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" -name '*.csproj' -type
         -getProperty:MSBuildTreatWarningsAsErrors \
         -getProperty:AnalysisLevel \
         -getProperty:AnalysisMode \
+        -getProperty:IsAotCompatible \
+        -getProperty:EnableTrimAnalyzer \
+        -getProperty:EnableAotAnalyzer \
+        -getProperty:TrimMode \
+        -getProperty:ILLinkTreatWarningsAsErrors \
+        -getProperty:TrimmerSingleWarn \
+        -getProperty:SuppressTrimAnalysisWarnings \
+        -getProperty:RuntimeFrameworkVersion \
+        -getProperty:PublishAot \
+        -getProperty:NativeLib \
+        -getProperty:OutputType \
         -getProperty:EnforceCodeStyleInBuild \
         -getProperty:GenerateDocumentationFile \
         -getProperty:Nullable \
@@ -344,6 +411,17 @@ find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" -name '*.csproj' -type
     msbuild_treat_warnings_as_errors="$(json_property "MSBuildTreatWarningsAsErrors" "$evaluation_output")"
     analysis_level="$(json_property "AnalysisLevel" "$evaluation_output")"
     analysis_mode="$(json_property "AnalysisMode" "$evaluation_output")"
+    is_aot_compatible="$(json_property "IsAotCompatible" "$evaluation_output")"
+    enable_trim_analyzer="$(json_property "EnableTrimAnalyzer" "$evaluation_output")"
+    enable_aot_analyzer="$(json_property "EnableAotAnalyzer" "$evaluation_output")"
+    trim_mode="$(json_property "TrimMode" "$evaluation_output")"
+    il_link_treat_warnings_as_errors="$(json_property "ILLinkTreatWarningsAsErrors" "$evaluation_output")"
+    trimmer_single_warn="$(json_property "TrimmerSingleWarn" "$evaluation_output")"
+    suppress_trim_analysis_warnings="$(json_property "SuppressTrimAnalysisWarnings" "$evaluation_output")"
+    runtime_framework_version="$(json_property "RuntimeFrameworkVersion" "$evaluation_output")"
+    publish_aot="$(json_property "PublishAot" "$evaluation_output")"
+    native_lib="$(json_property "NativeLib" "$evaluation_output")"
+    output_type="$(json_property "OutputType" "$evaluation_output")"
     enforce_code_style="$(json_property "EnforceCodeStyleInBuild" "$evaluation_output")"
     generate_documentation_file="$(json_property "GenerateDocumentationFile" "$evaluation_output")"
     nullable="$(json_property "Nullable" "$evaluation_output")"
@@ -357,6 +435,17 @@ find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" -name '*.csproj' -type
     write_property "MSBuildTreatWarningsAsErrors" "$msbuild_treat_warnings_as_errors" "$property_output"
     write_property "AnalysisLevel" "$analysis_level" "$property_output"
     write_property "AnalysisMode" "$analysis_mode" "$property_output"
+    write_property "IsAotCompatible" "$is_aot_compatible" "$property_output"
+    write_property "EnableTrimAnalyzer" "$enable_trim_analyzer" "$property_output"
+    write_property "EnableAotAnalyzer" "$enable_aot_analyzer" "$property_output"
+    write_property "TrimMode" "$trim_mode" "$property_output"
+    write_property "ILLinkTreatWarningsAsErrors" "$il_link_treat_warnings_as_errors" "$property_output"
+    write_property "TrimmerSingleWarn" "$trimmer_single_warn" "$property_output"
+    write_property "SuppressTrimAnalysisWarnings" "$suppress_trim_analysis_warnings" "$property_output"
+    write_property "RuntimeFrameworkVersion" "$runtime_framework_version" "$property_output"
+    write_property "PublishAot" "$publish_aot" "$property_output"
+    write_property "NativeLib" "$native_lib" "$property_output"
+    write_property "OutputType" "$output_type" "$property_output"
     write_property "EnforceCodeStyleInBuild" "$enforce_code_style" "$property_output"
     write_property "GenerateDocumentationFile" "$generate_documentation_file" "$property_output"
     write_property "Nullable" "$nullable" "$property_output"
@@ -375,6 +464,30 @@ find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" -name '*.csproj' -type
     if [ "$analysis_mode" != "AllEnabledByDefault" ]; then
         fail "$relative_project has evaluated AnalysisMode='$analysis_mode', expected AllEnabledByDefault."
     fi
+
+    check_equals "$relative_project" "TrimMode" "$trim_mode" "full"
+    check_true "$relative_project" "ILLinkTreatWarningsAsErrors" "$il_link_treat_warnings_as_errors"
+    check_false "$relative_project" "TrimmerSingleWarn" "$trimmer_single_warn"
+    check_false "$relative_project" "SuppressTrimAnalysisWarnings" "$suppress_trim_analysis_warnings"
+    check_equals "$relative_project" "RuntimeFrameworkVersion" "$runtime_framework_version" "10.0.2"
+    if is_runtime_aot_project "$relative_project"; then
+        check_true "$relative_project" "IsAotCompatible" "$is_aot_compatible"
+        check_true "$relative_project" "EnableTrimAnalyzer" "$enable_trim_analyzer"
+        check_true "$relative_project" "EnableAotAnalyzer" "$enable_aot_analyzer"
+    else
+        check_false "$relative_project" "IsAotCompatible" "$is_aot_compatible"
+    fi
+
+    case "$relative_project" in
+        src/Scout.App/Scout.App.csproj)
+            check_true "$relative_project" "PublishAot" "$publish_aot"
+            check_equals "$relative_project" "NativeLib" "$native_lib" "Static"
+            check_equals "$relative_project" "OutputType" "$output_type" "Library"
+            ;;
+        *)
+            check_empty "$relative_project" "PublishAot" "$publish_aot"
+            ;;
+    esac
 
     check_true "$relative_project" "EnforceCodeStyleInBuild" "$enforce_code_style"
     check_true "$relative_project" "GenerateDocumentationFile" "$generate_documentation_file"

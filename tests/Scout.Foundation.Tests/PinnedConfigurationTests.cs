@@ -494,9 +494,52 @@ public sealed partial class PinnedConfigurationTests
 
         AssertPackageVersion(document, "Microsoft.DotNet.ILCompiler", "10.0.2");
         AssertPackageVersion(document, "Microsoft.CodeAnalysis.NetAnalyzers", "10.0.102");
+        AssertPackageVersion(document, "Microsoft.VisualStudio.Threading.Analyzers", "17.14.15");
         AssertPackageVersion(document, "BenchmarkDotNet", "0.15.8");
         AssertPackageVersion(document, "SharpFuzz", "2.2.0");
         AssertPackageVersion(document, "xunit.v3", "3.2.2");
+    }
+
+    /// <summary>
+    /// Verifies Native AOT and trimming policy is explicit instead of SDK-defaulted.
+    /// </summary>
+    [Fact]
+    public void NativeAotAndTrimPolicyIsPinned()
+    {
+        string root = FindRepositoryRoot();
+        var document = XDocument.Load(Path.Combine(root, "Directory.Build.props"));
+        XElement defaults = document.Root!.Elements("PropertyGroup").First(static group => group.Attribute("Condition") is null);
+        XElement sourceGenerator = document.Root.Elements("PropertyGroup").Single(
+            static group => string.Equals(group.Attribute("Condition")?.Value, "'$(MSBuildProjectName)' == 'Scout.SourceGen'", StringComparison.Ordinal));
+        XElement app = document.Root.Elements("PropertyGroup").Single(
+            static group => string.Equals(group.Attribute("Condition")?.Value, "'$(MSBuildProjectName)' == 'Scout.App'", StringComparison.Ordinal));
+
+        Assert.Equal("net10.0", defaults.Element("TargetFramework")?.Value);
+        Assert.Equal("14.0", defaults.Element("LangVersion")?.Value);
+        Assert.Equal("true", defaults.Element("IsAotCompatible")?.Value);
+        Assert.Equal("full", defaults.Element("TrimMode")?.Value);
+        Assert.Equal("true", defaults.Element("ILLinkTreatWarningsAsErrors")?.Value);
+        Assert.Equal("false", defaults.Element("TrimmerSingleWarn")?.Value);
+        Assert.Equal("false", defaults.Element("SuppressTrimAnalysisWarnings")?.Value);
+        Assert.Equal("true", defaults.Element("_TrimmerShowRedundantSuppressions")?.Value);
+        Assert.Equal("10.0.2", defaults.Element("RuntimeFrameworkVersion")?.Value);
+        Assert.Contains(
+            document.Root.Elements("ItemGroup").Elements("PackageReference"),
+            static reference => string.Equals(reference.Attribute("Include")?.Value, "Microsoft.CodeAnalysis.NetAnalyzers", StringComparison.Ordinal) &&
+                string.Equals(reference.Attribute("PrivateAssets")?.Value, "all", StringComparison.Ordinal));
+        Assert.Contains(
+            document.Root.Elements("ItemGroup").Elements("PackageReference"),
+            static reference => string.Equals(reference.Attribute("Include")?.Value, "Microsoft.VisualStudio.Threading.Analyzers", StringComparison.Ordinal) &&
+                string.Equals(reference.Attribute("PrivateAssets")?.Value, "all", StringComparison.Ordinal));
+
+        Assert.Equal("netstandard2.0", sourceGenerator.Element("TargetFramework")?.Value);
+        Assert.Equal("false", sourceGenerator.Element("IsAotCompatible")?.Value);
+        Assert.Equal("true", sourceGenerator.Element("EnforceExtendedAnalyzerRules")?.Value);
+
+        Assert.Equal("scout", app.Element("AssemblyName")?.Value);
+        Assert.Equal("Library", app.Element("OutputType")?.Value);
+        Assert.Equal("Static", app.Element("NativeLib")?.Value);
+        Assert.Equal("true", app.Element("PublishAot")?.Value);
     }
 
     /// <summary>
@@ -564,6 +607,17 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("-getProperty:MSBuildTreatWarningsAsErrors", script, StringComparison.Ordinal);
         Assert.Contains("-getProperty:AnalysisLevel", script, StringComparison.Ordinal);
         Assert.Contains("-getProperty:AnalysisMode", script, StringComparison.Ordinal);
+        Assert.Contains("-getProperty:IsAotCompatible", script, StringComparison.Ordinal);
+        Assert.Contains("-getProperty:EnableTrimAnalyzer", script, StringComparison.Ordinal);
+        Assert.Contains("-getProperty:EnableAotAnalyzer", script, StringComparison.Ordinal);
+        Assert.Contains("-getProperty:TrimMode", script, StringComparison.Ordinal);
+        Assert.Contains("-getProperty:ILLinkTreatWarningsAsErrors", script, StringComparison.Ordinal);
+        Assert.Contains("-getProperty:TrimmerSingleWarn", script, StringComparison.Ordinal);
+        Assert.Contains("-getProperty:SuppressTrimAnalysisWarnings", script, StringComparison.Ordinal);
+        Assert.Contains("-getProperty:RuntimeFrameworkVersion", script, StringComparison.Ordinal);
+        Assert.Contains("-getProperty:PublishAot", script, StringComparison.Ordinal);
+        Assert.Contains("-getProperty:NativeLib", script, StringComparison.Ordinal);
+        Assert.Contains("-getProperty:OutputType", script, StringComparison.Ordinal);
         Assert.Contains("-getProperty:EnforceCodeStyleInBuild", script, StringComparison.Ordinal);
         Assert.Contains("-getProperty:GenerateDocumentationFile", script, StringComparison.Ordinal);
         Assert.Contains("-getProperty:Nullable", script, StringComparison.Ordinal);
@@ -584,11 +638,30 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("check_empty \"$relative_project\" \"WarningsNotAsErrors\"", script, StringComparison.Ordinal);
         Assert.Contains("check_true \"$relative_project\" \"TreatWarningsAsErrors\"", script, StringComparison.Ordinal);
         Assert.Contains("check_true \"$relative_project\" \"MSBuildTreatWarningsAsErrors\"", script, StringComparison.Ordinal);
+        Assert.Contains("is_runtime_aot_project", script, StringComparison.Ordinal);
+        Assert.Contains("check_equals \"$relative_project\" \"TrimMode\"", script, StringComparison.Ordinal);
+        Assert.Contains("check_true \"$relative_project\" \"ILLinkTreatWarningsAsErrors\"", script, StringComparison.Ordinal);
+        Assert.Contains("check_false \"$relative_project\" \"TrimmerSingleWarn\"", script, StringComparison.Ordinal);
+        Assert.Contains("check_false \"$relative_project\" \"SuppressTrimAnalysisWarnings\"", script, StringComparison.Ordinal);
+        Assert.Contains("check_equals \"$relative_project\" \"RuntimeFrameworkVersion\"", script, StringComparison.Ordinal);
+        Assert.Contains("check_true \"$relative_project\" \"IsAotCompatible\"", script, StringComparison.Ordinal);
+        Assert.Contains("check_true \"$relative_project\" \"EnableTrimAnalyzer\"", script, StringComparison.Ordinal);
+        Assert.Contains("check_true \"$relative_project\" \"EnableAotAnalyzer\"", script, StringComparison.Ordinal);
+        Assert.Contains("check_true \"$relative_project\" \"PublishAot\"", script, StringComparison.Ordinal);
+        Assert.Contains("check_equals \"$relative_project\" \"NativeLib\"", script, StringComparison.Ordinal);
+        Assert.Contains("check_equals \"$relative_project\" \"OutputType\"", script, StringComparison.Ordinal);
         Assert.Contains("check_true \"$relative_project\" \"GenerateDocumentationFile\"", script, StringComparison.Ordinal);
         Assert.Contains("expected enable", script, StringComparison.Ordinal);
         Assert.Contains("expected 14.0", script, StringComparison.Ordinal);
         Assert.Contains("dotnet_analyzer_diagnostic\\.category-Scout\\.Structure\\.severity", script, StringComparison.Ordinal);
+        Assert.Contains("require_net_analyzer_category_severity_configs", script, StringComparison.Ordinal);
+        Assert.Contains("Interoperability Maintainability Naming", script, StringComparison.Ordinal);
+        Assert.Contains("Usage", script, StringComparison.Ordinal);
         Assert.Contains("SCOUT[0-9]+", script, StringComparison.Ordinal);
+        Assert.Contains("VSTHRD[0-9]+", script, StringComparison.Ordinal);
+        Assert.Contains("require_threading_diagnostic_severity_configs", script, StringComparison.Ordinal);
+        Assert.Contains("VSTHRD001 VSTHRD002 VSTHRD003 VSTHRD004", script, StringComparison.Ordinal);
+        Assert.Contains("VSTHRD200 VSTHRD201", script, StringComparison.Ordinal);
         Assert.Contains("require_scout_diagnostic_severity_configs", script, StringComparison.Ordinal);
         Assert.Contains("grep -Eo 'SCOUT[0-9]{4}'", script, StringComparison.Ordinal);
         Assert.Contains("dotnet_diagnostic\\\\.$diagnostic_id\\\\.severity", script, StringComparison.Ordinal);
@@ -1085,7 +1158,7 @@ public sealed partial class PinnedConfigurationTests
     /// Verifies the synchronous search hot path does not use async machinery.
     /// </summary>
     [Fact]
-    public void SearchHotPathDoesNotUseAsync()
+    public void SearchHotPathDoesNotUseAsyncMachinery()
     {
         string root = FindRepositoryRoot();
         var violations = new List<string>();
@@ -2881,8 +2954,8 @@ public sealed partial class PinnedConfigurationTests
             @"<\s*Disabled" + "Warnings" + @"\b",
             Regex.Escape("#nullable " + "disable"),
             @"dotnet_diagnostic\.[^\r\n]*severity\s*=\s*(none|silent)\b",
-            @"dotnet_diagnostic\.(SCOUT[0-9]+|IDE0130)\.severity\s*=\s*(?!error\b)[^\s#;]+",
-            @"dotnet_analyzer_diagnostic\.category-Scout\.Structure\.severity\s*=\s*(?!error\b)[^\s#;]+",
+            @"dotnet_diagnostic\.(SCOUT[0-9]+|IDE0130|VSTHRD[0-9]+)\.severity\s*=\s*(?!error\b)[^\s#;]+",
+            @"dotnet_analyzer_diagnostic\.category-(Design|Documentation|Globalization|Interoperability|Maintainability|Naming|Performance|Reliability|Scout\.Structure|Security|Usage)\.severity\s*=\s*(?!error\b)[^\s#;]+",
         ];
 
         return new Regex(string.Join("|", patterns), RegexOptions.CultureInvariant);

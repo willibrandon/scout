@@ -15,6 +15,10 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <InvariantTimezone>true</InvariantTimezone>
     <IsAotCompatible>true</IsAotCompatible>
+    <TrimMode>full</TrimMode>
+    <ILLinkTreatWarningsAsErrors>true</ILLinkTreatWarningsAsErrors>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <SuppressTrimAnalysisWarnings>false</SuppressTrimAnalysisWarnings>
     <_TrimmerShowRedundantSuppressions>true</_TrimmerShowRedundantSuppressions>
     <RuntimeFrameworkVersion>10.0.2</RuntimeFrameworkVersion>
     <RootNamespace>Scout</RootNamespace>
@@ -70,5 +74,6 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" PrivateAssets="all" />
   </ItemGroup>
 </Project>
