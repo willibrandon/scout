@@ -565,6 +565,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("-getProperty:AnalysisLevel", script, StringComparison.Ordinal);
         Assert.Contains("-getProperty:AnalysisMode", script, StringComparison.Ordinal);
         Assert.Contains("-getProperty:EnforceCodeStyleInBuild", script, StringComparison.Ordinal);
+        Assert.Contains("-getProperty:GenerateDocumentationFile", script, StringComparison.Ordinal);
+        Assert.Contains("-getProperty:Nullable", script, StringComparison.Ordinal);
+        Assert.Contains("-getProperty:LangVersion", script, StringComparison.Ordinal);
         Assert.Contains("-getItem:EditorConfigFiles", script, StringComparison.Ordinal);
         Assert.Contains("scan_repository_suppression_files", script, StringComparison.Ordinal);
         Assert.Contains("repository-suppression-scan.txt", script, StringComparison.Ordinal);
@@ -575,20 +578,28 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("check_evaluated_editor_config_files", script, StringComparison.Ordinal);
         Assert.Contains("-noAutoResponse", script, StringComparison.Ordinal);
         Assert.Contains("check_raw_nowarn", script, StringComparison.Ordinal);
+        Assert.Contains("property_output", script, StringComparison.Ordinal);
         Assert.Contains("write_property \"RawNoWarn\"", script, StringComparison.Ordinal);
         Assert.Contains("check_empty \"$relative_project\" \"NoWarn\"", script, StringComparison.Ordinal);
         Assert.Contains("check_empty \"$relative_project\" \"WarningsNotAsErrors\"", script, StringComparison.Ordinal);
         Assert.Contains("check_true \"$relative_project\" \"TreatWarningsAsErrors\"", script, StringComparison.Ordinal);
         Assert.Contains("check_true \"$relative_project\" \"MSBuildTreatWarningsAsErrors\"", script, StringComparison.Ordinal);
+        Assert.Contains("check_true \"$relative_project\" \"GenerateDocumentationFile\"", script, StringComparison.Ordinal);
+        Assert.Contains("expected enable", script, StringComparison.Ordinal);
+        Assert.Contains("expected 14.0", script, StringComparison.Ordinal);
         Assert.Contains("dotnet_analyzer_diagnostic\\.category-Scout\\.Structure\\.severity", script, StringComparison.Ordinal);
         Assert.Contains("SCOUT[0-9]+", script, StringComparison.Ordinal);
-        Assert.Contains("dotnet_diagnostic\\.SCOUT0004\\.severity", script, StringComparison.Ordinal);
+        Assert.Contains("require_scout_diagnostic_severity_configs", script, StringComparison.Ordinal);
+        Assert.Contains("grep -Eo 'SCOUT[0-9]{4}'", script, StringComparison.Ordinal);
+        Assert.Contains("dotnet_diagnostic\\\\.$diagnostic_id\\\\.severity", script, StringComparison.Ordinal);
         Assert.Contains("none|silent", script, StringComparison.Ordinal);
         Assert.Contains("SCOUT_MSBUILD_WARNING_GATE_TIMEOUT_SECONDS", script, StringComparison.Ordinal);
         Assert.Contains("run_with_timeout", script, StringComparison.Ordinal);
         Assert.Contains("Raw MSBuild property evaluation", script, StringComparison.Ordinal);
         Assert.Contains("Imported MSBuild property evaluation", script, StringComparison.Ordinal);
         Assert.Contains("timed out after", script, StringComparison.Ordinal);
+        Assert.Contains("-size 0c", script, StringComparison.Ordinal);
+        Assert.Contains("Project warning-gate property dump is empty", script, StringComparison.Ordinal);
 
         string responseFile = File.ReadAllText(Path.Combine(root, "Directory.Build.rsp"));
         Assert.Contains("-p:NoWarn=", responseFile, StringComparison.Ordinal);
@@ -644,6 +655,28 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("TryCreateDirectorySymlink", analyzer, StringComparison.Ordinal);
         Assert.Contains("TryCreateFileSymlink", analyzer, StringComparison.Ordinal);
         Assert.Contains("OperatingSystem.", analyzer, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Verifies the parity build does not introduce a Scout-specific config environment variable.
+    /// </summary>
+    [Fact]
+    public void RuntimeSurfacesDoNotReadScoutConfigPath()
+    {
+        string root = FindRepositoryRoot();
+        string forbiddenVariable = "SCOUT_" + "CONFIG_PATH";
+        var violations = new List<string>();
+
+        foreach (string path in EnumerateRuntimeAndBuildSurfaceFiles(root))
+        {
+            string text = File.ReadAllText(path);
+            if (text.Contains(forbiddenVariable, StringComparison.Ordinal))
+            {
+                violations.Add(Path.GetRelativePath(root, path));
+            }
+        }
+
+        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
     }
 
     /// <summary>
@@ -997,6 +1030,115 @@ public sealed partial class PinnedConfigurationTests
         ];
 
         foreach (string path in EnumerateRuntimeSourceFiles(root))
+        {
+            string text = File.ReadAllText(path);
+            foreach (string token in forbiddenTokens)
+            {
+                if (text.Contains(token, StringComparison.Ordinal))
+                {
+                    violations.Add($"{Path.GetRelativePath(root, path)}: {token}");
+                }
+            }
+        }
+
+        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>
+    /// Verifies runtime behavior is pinned to invariant globalization and avoids culture-sensitive APIs.
+    /// </summary>
+    [Fact]
+    public void RuntimeGlobalizationIsInvariantAndCultureInsensitive()
+    {
+        string root = FindRepositoryRoot();
+        var buildProperties = XDocument.Load(Path.Combine(root, "Directory.Build.props"));
+        Assert.Equal("true", buildProperties.Descendants("InvariantGlobalization").Single().Value);
+        Assert.Equal("true", buildProperties.Descendants("InvariantTimezone").Single().Value);
+
+        var violations = new List<string>();
+        (string Label, Regex Pattern)[] forbiddenPatterns =
+        [
+            ("current culture", RuntimeCurrentCulturePattern()),
+            ("culture comparer", RuntimeCultureComparerPattern()),
+            ("culture-sensitive casing", RuntimeCultureSensitiveCasingPattern()),
+            ("culture-sensitive comparison", RuntimeCultureSensitiveComparePattern()),
+            ("culture comparison helpers", RuntimeCultureComparisonHelperPattern()),
+        ];
+
+        foreach (string path in EnumerateRuntimeSourceFiles(root))
+        {
+            string text = File.ReadAllText(path);
+            foreach ((string label, Regex pattern) in forbiddenPatterns)
+            {
+                Match match = pattern.Match(text);
+                if (match.Success)
+                {
+                    violations.Add($"{Path.GetRelativePath(root, path)}: {label} '{match.Value}'.");
+                }
+            }
+        }
+
+        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>
+    /// Verifies the synchronous search hot path does not use async machinery.
+    /// </summary>
+    [Fact]
+    public void SearchHotPathDoesNotUseAsync()
+    {
+        string root = FindRepositoryRoot();
+        var violations = new List<string>();
+        string[] forbiddenTokens =
+        [
+            "async ",
+            "await ",
+            "Task",
+            "ValueTask",
+        ];
+
+        foreach (string path in EnumerateSearchHotPathSourceFiles(root))
+        {
+            string text = File.ReadAllText(path);
+            foreach (string token in forbiddenTokens)
+            {
+                if (text.Contains(token, StringComparison.Ordinal))
+                {
+                    violations.Add($"{Path.GetRelativePath(root, path)}: {token}");
+                }
+            }
+        }
+
+        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>
+    /// Verifies the synchronous search hot path does not use LINQ.
+    /// </summary>
+    [Fact]
+    public void SearchHotPathDoesNotUseLinq()
+    {
+        string root = FindRepositoryRoot();
+        var violations = new List<string>();
+        string[] forbiddenTokens =
+        [
+            "using System.Linq;",
+            "System.Linq",
+            "Enumerable.",
+            ".Select(",
+            ".Where(",
+            ".OrderBy(",
+            ".OrderByDescending(",
+            ".ThenBy(",
+            ".ThenByDescending(",
+            ".GroupBy(",
+            ".Join(",
+            ".GroupJoin(",
+            ".Zip(",
+            ".Aggregate(",
+        ];
+
+        foreach (string path in EnumerateSearchHotPathSourceFiles(root))
         {
             string text = File.ReadAllText(path);
             foreach (string token in forbiddenTokens)
@@ -2805,6 +2947,21 @@ public sealed partial class PinnedConfigurationTests
     [GeneratedRegex(@"if\s*\([^{;]*OperatingSystem\.[^{;]*\)\s*\{\s*return;\s*\}", RegexOptions.CultureInvariant)]
     private static partial Regex PlatformGuardReturnPattern();
 
+    [GeneratedRegex(@"\b(CurrentCulture|CurrentUICulture|DefaultThreadCurrentCulture|DefaultThreadCurrentUICulture)\b", RegexOptions.CultureInvariant)]
+    private static partial Regex RuntimeCurrentCulturePattern();
+
+    [GeneratedRegex(@"\b(StringComparer|StringComparison)\.(CurrentCulture|InvariantCulture)", RegexOptions.CultureInvariant)]
+    private static partial Regex RuntimeCultureComparerPattern();
+
+    [GeneratedRegex(@"\.(ToLower|ToUpper)\s*\(", RegexOptions.CultureInvariant)]
+    private static partial Regex RuntimeCultureSensitiveCasingPattern();
+
+    [GeneratedRegex(@"\bstring\.Compare\s*\(", RegexOptions.CultureInvariant)]
+    private static partial Regex RuntimeCultureSensitiveComparePattern();
+
+    [GeneratedRegex(@"\b(CompareInfo|CompareOptions|TextInfo)\b", RegexOptions.CultureInvariant)]
+    private static partial Regex RuntimeCultureComparisonHelperPattern();
+
     [GeneratedRegex(@"^\s*(?:runs-on|runner):\s*(?<label>[^\r\n#]+?)\s*(?:#.*)?$", RegexOptions.CultureInvariant)]
     private static partial Regex WorkflowRunnerLabelPattern();
 
@@ -3139,6 +3296,86 @@ public sealed partial class PinnedConfigurationTests
 
             yield return path;
         }
+    }
+
+    private static IEnumerable<string> EnumerateSearchHotPathSourceFiles(string root)
+    {
+        string[] projectDirectories =
+        [
+            "Scout.Matching",
+            "Scout.Automata.Syntax",
+            "Scout.Automata",
+            "Scout.Automata.Memmem",
+            "Scout.Automata.AhoCorasick",
+            "Scout.Regex",
+            "Scout.Searching",
+            "Scout.Printing",
+        ];
+
+        for (int index = 0; index < projectDirectories.Length; index++)
+        {
+            string directory = Path.Combine(root, "src", projectDirectories[index]);
+            foreach (string path in Directory.EnumerateFiles(directory, "*.cs", SearchOption.AllDirectories))
+            {
+                string relativePath = Path.GetRelativePath(root, path);
+                if (!ContainsPathSegment(relativePath, "bin") && !ContainsPathSegment(relativePath, "obj"))
+                {
+                    yield return path;
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<string> EnumerateRuntimeAndBuildSurfaceFiles(string root)
+    {
+        string[] roots =
+        [
+            "src",
+            "bench",
+            "fuzz",
+            "eng",
+            "native",
+            ".github",
+        ];
+
+        for (int index = 0; index < roots.Length; index++)
+        {
+            string directory = Path.Combine(root, roots[index]);
+            if (!Directory.Exists(directory))
+            {
+                continue;
+            }
+
+            foreach (string path in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
+            {
+                string relativePath = Path.GetRelativePath(root, path);
+                if (ContainsPathSegment(relativePath, "bin") ||
+                    ContainsPathSegment(relativePath, "obj"))
+                {
+                    continue;
+                }
+
+                if (IsRuntimeOrBuildSurfaceFile(path))
+                {
+                    yield return path;
+                }
+            }
+        }
+    }
+
+    private static bool IsRuntimeOrBuildSurfaceFile(string path)
+    {
+        string fileName = Path.GetFileName(path);
+        string extension = Path.GetExtension(path);
+        return string.Equals(extension, ".cs", StringComparison.Ordinal) ||
+            string.Equals(extension, ".sh", StringComparison.Ordinal) ||
+            string.Equals(extension, ".ps1", StringComparison.Ordinal) ||
+            string.Equals(extension, ".yml", StringComparison.Ordinal) ||
+            string.Equals(extension, ".yaml", StringComparison.Ordinal) ||
+            string.Equals(extension, ".props", StringComparison.Ordinal) ||
+            string.Equals(extension, ".targets", StringComparison.Ordinal) ||
+            string.Equals(extension, ".csproj", StringComparison.Ordinal) ||
+            string.Equals(fileName, "Dockerfile", StringComparison.Ordinal);
     }
 
     private static string FindRepositoryRoot()

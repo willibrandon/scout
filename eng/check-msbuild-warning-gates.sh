@@ -81,8 +81,8 @@ normalize_json_path() {
 write_property() {
     label="$1"
     value="$2"
-    output="$3"
-    printf '%s=%s\n' "$label" "$value" >> "$output"
+    property_output_file="$3"
+    printf '%s=%s\n' "$label" "$value" >> "$property_output_file"
 }
 
 require_positive_integer() {
@@ -140,11 +140,11 @@ run_with_timeout() {
 
 run_msbuild_evaluation() {
     description="$1"
-    output="$2"
+    evaluation_file="$2"
     shift 2
 
     printf '  %s\n' "$description"
-    if ! run_with_timeout "$MSBUILD_EVALUATION_TIMEOUT_SECONDS" "$description" "$@" > "$output"; then
+    if ! run_with_timeout "$MSBUILD_EVALUATION_TIMEOUT_SECONDS" "$description" "$@" > "$evaluation_file"; then
         fail "$description failed."
     fi
 }
@@ -192,6 +192,14 @@ require_config_severity() {
     fi
 }
 
+require_scout_diagnostic_severity_configs() {
+    descriptors="$ROOT/src/Scout.SourceGen/DiagnosticDescriptors.cs"
+    grep -Eo 'SCOUT[0-9]{4}' "$descriptors" | sort -u | while IFS= read -r diagnostic_id; do
+        [ -n "$diagnostic_id" ] || continue
+        require_config_severity "$ROOT/.editorconfig" "dotnet_diagnostic\\.$diagnostic_id\\.severity" "$diagnostic_id"
+    done
+}
+
 scan_editor_config_file() {
     project="$1"
     config="$2"
@@ -202,15 +210,15 @@ scan_editor_config_file() {
 }
 
 scan_repository_suppression_files() {
-    output="$OUT/repository-suppression-scan.txt"
-    : > "$output"
+    suppression_scan_output="$OUT/repository-suppression-scan.txt"
+    : > "$suppression_scan_output"
 
     find "$ROOT" \
         \( -path "$ROOT/.git" -o -path "$ROOT/.git/*" -o -path "*/bin" -o -path "*/bin/*" \) -prune -o \
         \( -name '*.cs' -o -name '*.props' -o -name '*.targets' -o -name '.editorconfig' -o -name '.globalconfig' -o -name 'GlobalSuppressions.cs' \) \
         -type f -print | sort | while IFS= read -r file; do
             relative="$(relative_path "$file")"
-            printf '%s\n' "$relative" >> "$output"
+            printf '%s\n' "$relative" >> "$suppression_scan_output"
 
             if [ "$(basename "$file")" = "GlobalSuppressions.cs" ]; then
                 fail "$relative: GlobalSuppressions.cs files are forbidden."
@@ -257,14 +265,14 @@ scan_repository_suppression_files() {
 check_evaluated_editor_config_files() {
     project="$1"
     evaluation_output="$2"
-    output="$3"
+    property_output_file="$3"
     config_list="$4"
 
     json_item_full_paths "$evaluation_output" > "$config_list"
     while IFS= read -r raw_config; do
         [ -n "$raw_config" ] || continue
         config="$(normalize_json_path "$raw_config")"
-        write_property "EditorConfigFile" "$(relative_path "$config")" "$output"
+        write_property "EditorConfigFile" "$(relative_path "$config")" "$property_output_file"
         if [ ! -f "$config" ]; then
             fail "$project imports missing analyzer config '$raw_config'."
         fi
@@ -274,13 +282,13 @@ check_evaluated_editor_config_files() {
 }
 
 check_analyzer_severity_config() {
-    output="$OUT/analyzer-severities.txt"
-    : > "$output"
+    severity_output="$OUT/analyzer-severities.txt"
+    : > "$severity_output"
 
     for config in "$ROOT/.globalconfig" "$ROOT/.editorconfig"; do
         [ -f "$config" ] || continue
-        printf '# %s\n' "$(relative_path "$config")" >> "$output"
-        grep -E 'dotnet_(analyzer_diagnostic|diagnostic)\..*severity[[:space:]]*=' "$config" >> "$output" || true
+        printf '# %s\n' "$(relative_path "$config")" >> "$severity_output"
+        grep -E 'dotnet_(analyzer_diagnostic|diagnostic)\..*severity[[:space:]]*=' "$config" >> "$severity_output" || true
     done
 
     if grep -E 'dotnet_diagnostic\.[^\r\n]*severity[[:space:]]*=[[:space:]]*(none|silent)($|[[:space:]#;])' "$ROOT/.globalconfig" "$ROOT/.editorconfig" >/dev/null 2>&1; then
@@ -289,10 +297,7 @@ check_analyzer_severity_config() {
 
     require_config_severity "$ROOT/.globalconfig" 'dotnet_analyzer_diagnostic\.category-Scout\.Structure\.severity' "Scout.Structure analyzer category"
     require_config_severity "$ROOT/.editorconfig" 'dotnet_diagnostic\.IDE0130\.severity' "IDE0130"
-    require_config_severity "$ROOT/.editorconfig" 'dotnet_diagnostic\.SCOUT0001\.severity' "SCOUT0001"
-    require_config_severity "$ROOT/.editorconfig" 'dotnet_diagnostic\.SCOUT0002\.severity' "SCOUT0002"
-    require_config_severity "$ROOT/.editorconfig" 'dotnet_diagnostic\.SCOUT0003\.severity' "SCOUT0003"
-    require_config_severity "$ROOT/.editorconfig" 'dotnet_diagnostic\.SCOUT0004\.severity' "SCOUT0004"
+    require_scout_diagnostic_severity_configs
 }
 
 rm -rf "$OUT"
@@ -305,11 +310,11 @@ check_analyzer_severity_config
 find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" -name '*.csproj' -type f | sort | while IFS= read -r project; do
     relative_project="$(relative_path "$project")"
     safe_name="$(printf '%s' "$relative_project" | tr '/\\:' '___')"
-    output="$OUT/$safe_name.properties"
+    property_output="$OUT/$safe_name.properties"
     evaluation_output="$OUT/$safe_name.evaluation.json"
     raw_evaluation_output="$OUT/$safe_name.raw-evaluation.json"
     editor_config_list="$OUT/$safe_name.editorconfig-files"
-    : > "$output"
+    : > "$property_output"
 
     printf 'Checking MSBuild warning gates for %s\n' "$relative_project"
 
@@ -327,6 +332,9 @@ find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" -name '*.csproj' -type
         -getProperty:AnalysisLevel \
         -getProperty:AnalysisMode \
         -getProperty:EnforceCodeStyleInBuild \
+        -getProperty:GenerateDocumentationFile \
+        -getProperty:Nullable \
+        -getProperty:LangVersion \
         -getItem:EditorConfigFiles
 
     raw_no_warn="$(json_property "NoWarn" "$raw_evaluation_output")"
@@ -337,18 +345,24 @@ find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" -name '*.csproj' -type
     analysis_level="$(json_property "AnalysisLevel" "$evaluation_output")"
     analysis_mode="$(json_property "AnalysisMode" "$evaluation_output")"
     enforce_code_style="$(json_property "EnforceCodeStyleInBuild" "$evaluation_output")"
+    generate_documentation_file="$(json_property "GenerateDocumentationFile" "$evaluation_output")"
+    nullable="$(json_property "Nullable" "$evaluation_output")"
+    lang_version="$(json_property "LangVersion" "$evaluation_output")"
 
-    write_property "Project" "$relative_project" "$output"
-    write_property "RawNoWarn" "$raw_no_warn" "$output"
-    write_property "NoWarn" "$no_warn" "$output"
-    write_property "WarningsNotAsErrors" "$warnings_not_as_errors" "$output"
-    write_property "TreatWarningsAsErrors" "$treat_warnings_as_errors" "$output"
-    write_property "MSBuildTreatWarningsAsErrors" "$msbuild_treat_warnings_as_errors" "$output"
-    write_property "AnalysisLevel" "$analysis_level" "$output"
-    write_property "AnalysisMode" "$analysis_mode" "$output"
-    write_property "EnforceCodeStyleInBuild" "$enforce_code_style" "$output"
+    write_property "Project" "$relative_project" "$property_output"
+    write_property "RawNoWarn" "$raw_no_warn" "$property_output"
+    write_property "NoWarn" "$no_warn" "$property_output"
+    write_property "WarningsNotAsErrors" "$warnings_not_as_errors" "$property_output"
+    write_property "TreatWarningsAsErrors" "$treat_warnings_as_errors" "$property_output"
+    write_property "MSBuildTreatWarningsAsErrors" "$msbuild_treat_warnings_as_errors" "$property_output"
+    write_property "AnalysisLevel" "$analysis_level" "$property_output"
+    write_property "AnalysisMode" "$analysis_mode" "$property_output"
+    write_property "EnforceCodeStyleInBuild" "$enforce_code_style" "$property_output"
+    write_property "GenerateDocumentationFile" "$generate_documentation_file" "$property_output"
+    write_property "Nullable" "$nullable" "$property_output"
+    write_property "LangVersion" "$lang_version" "$property_output"
 
-    check_evaluated_editor_config_files "$relative_project" "$evaluation_output" "$output" "$editor_config_list"
+    check_evaluated_editor_config_files "$relative_project" "$evaluation_output" "$property_output" "$editor_config_list"
     check_raw_nowarn "$relative_project" "$raw_no_warn"
     check_empty "$relative_project" "NoWarn" "$no_warn"
     check_empty "$relative_project" "WarningsNotAsErrors" "$warnings_not_as_errors"
@@ -363,10 +377,23 @@ find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" -name '*.csproj' -type
     fi
 
     check_true "$relative_project" "EnforceCodeStyleInBuild" "$enforce_code_style"
+    check_true "$relative_project" "GenerateDocumentationFile" "$generate_documentation_file"
+    if [ "$nullable" != "enable" ]; then
+        fail "$relative_project has evaluated Nullable='$nullable', expected enable."
+    fi
+
+    if [ "$lang_version" != "14.0" ]; then
+        fail "$relative_project has evaluated LangVersion='$lang_version', expected 14.0."
+    fi
 done
 
 if ! find "$OUT" -name '*.properties' -type f | grep . >/dev/null; then
     fail "No project warning-gate property dumps were produced."
+fi
+
+empty_property_dump="$(find "$OUT" -name '*.properties' -type f -size 0c | head -n 1)"
+if [ -n "$empty_property_dump" ]; then
+    fail "Project warning-gate property dump is empty: $(relative_path "$empty_property_dump")."
 fi
 
 printf 'MSBuild warning gates passed. Dumps written to %s\n' "$OUT"
