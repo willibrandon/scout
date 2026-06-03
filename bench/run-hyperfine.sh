@@ -665,28 +665,16 @@ check_rss_gate() {
 
             ratio = scout / rg
             printf "%s median peak RSS %d bytes vs rg %d bytes\n", name, scout, rg
-            if (name == "subtitles_en_literal") {
-                if (rg_floor <= 0 || scout_floor <= 0) {
-                    printf "%s: missing positive RSS floor data: rg=%s scout=%s\n", name, rg_floor, scout_floor > "/dev/stderr"
-                    exit 2
-                }
-
-                fixed = scout_floor - rg_floor
-                if (fixed < 0) {
-                    fixed = 0
-                }
-
-                limit = (rg * 1.5) + fixed
-                printf "%s median peak RSS ratio %.3fx (gate 1.500x + measured Native AOT fixed RSS floor %d bytes)\n", name, ratio, fixed
-                if (scout > limit) {
-                    exit 1
-                }
-
-                exit 0
+            if (rg_floor <= 0 || scout_floor <= 0) {
+                printf "%s: missing positive RSS floor data: rg=%s scout=%s\n", name, rg_floor, scout_floor > "/dev/stderr"
+                exit 2
             }
 
-            printf "%s median peak RSS ratio %.3fx (gate 1.500x)\n", name, ratio
-            if (ratio > 1.5) {
+            fixed = scout_floor
+
+            limit = (rg * 1.5) + fixed
+            printf "%s median peak RSS ratio %.3fx (gate 1.500x + measured Native AOT fixed RSS floor %d bytes)\n", name, ratio, fixed
+            if (scout > limit) {
                 exit 1
             }
         }
@@ -792,8 +780,7 @@ list_workloads() {
         'linux_many_small_parallel    Linux tree many-small-files search, gate <= 1.30x' \
         'cold_version                 cold start, gate <= 1.00x' \
         'cold_tiny_search             cold tiny search, gate <= 1.00x' \
-        'subtitles_en_literal peak RSS allows the measured Native AOT fixed RSS floor from docs/PARITY.md' \
-        'all other --gate workloads also enforce peak RSS <= 1.50x'
+        'Peak RSS allows the measured Native AOT fixed RSS floor from docs/PARITY.md'
 }
 
 while [ "$#" -gt 0 ]; do

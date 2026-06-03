@@ -948,8 +948,8 @@ internal sealed class RegexClassSequenceAccelerator
 
     private static bool IsRegexWordRune(Rune value)
     {
-        return value.IsAscii
-            ? IsAsciiWordByte((byte)value.Value)
+        return value.Value <= 0x052f
+            ? IsLowRegexWordScalar(value.Value)
             : RegexUnicodeTables.IsPerlWord(value);
     }
 
@@ -1035,6 +1035,29 @@ internal sealed class RegexClassSequenceAccelerator
     private static bool IsAsciiDigitByte(byte value)
     {
         return (uint)(value - (byte)'0') <= 9;
+    }
+
+    private static bool IsLowRegexWordScalar(int value)
+    {
+        if (value <= 0x7f)
+        {
+            return IsAsciiWordByte((byte)value);
+        }
+
+        return value is 0x00aa or 0x00b5 or 0x00ba or 0x02ec or 0x02ee or 0x037f or 0x0386 or 0x038c ||
+            value is >= 0x00c0 and <= 0x00d6 ||
+            value is >= 0x00d8 and <= 0x00f6 ||
+            value is >= 0x00f8 and <= 0x02c1 ||
+            value is >= 0x02c6 and <= 0x02d1 ||
+            value is >= 0x02e0 and <= 0x02e4 ||
+            value is >= 0x0300 and <= 0x0374 ||
+            value is >= 0x0376 and <= 0x0377 ||
+            value is >= 0x037a and <= 0x037d ||
+            value is >= 0x0388 and <= 0x038a ||
+            value is >= 0x038e and <= 0x03a1 ||
+            value is >= 0x03a3 and <= 0x03f5 ||
+            value is >= 0x03f7 and <= 0x0481 ||
+            value is >= 0x0483 and <= 0x052f;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

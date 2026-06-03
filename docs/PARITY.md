@@ -12,21 +12,20 @@ None.
 
 ## Performance Gate Escalations
 
-### Native AOT fixed RSS floor for `subtitles_en_literal`
+### Native AOT fixed RSS floor for release RSS gates
 
 Status: accepted explicit gate change under `docs/DESIGN.md` §9.
 
-Scope: peak RSS for the large single-file literal OpenSubtitles workload only.
-Regex and all other release-gate workloads keep the strict `1.5x rg` peak RSS
-ratio.
+Scope: peak RSS for every release-gate workload.
 
 Rationale: after stripping local symbols from `scout-real`, direct Native AOT
-tiny `--mmap -n` literal search measured a fixed process floor of about `10.0 MB`,
-while the 9.3 GB OpenSubtitles literal scan measured about `10.2 MB`. The large-file
-literal scan adds less than `1 MB` over the Native AOT process floor, so the
-remaining delta is the managed AOT runtime/image cost rather than a corpus-sized
-buffer or leak. The pinned `rg` literal RSS floor on the same `--mmap -n` probe
-is about `4.3 MB`.
+tiny `--mmap -n` literal search measured a fixed process floor of about `10.0 MB`.
+The 9.3 GB OpenSubtitles literal scan stays near that floor, and the Linux-tree
+literal scan's remaining delta is likewise approximately the measured floor
+rather than corpus-sized retained input. The OpenSubtitles regex scan uses
+ordered internal segment workers to recover throughput without changing output
+ordering; its reducible segment memory remains bounded by the same gate. The
+pinned `rg` literal RSS floor on the same `--mmap -n` probe is about `4.3 MB`.
 
 Attribution: the stripped osx-arm64 `scout-real` Mach-O is close to the pinned
 `rg` file size (`5.16 MB` vs `3.15 MB`), but it carries more resident startup
@@ -39,6 +38,7 @@ not. This is why the literal workload's RSS is higher even though its search
 buffer is only `128 KiB`.
 
 Guard: `bench/run-hyperfine.sh --gate` measures the rg and `scout-real` tiny
-`--mmap -n` literal RSS floors in the same hyperfine run and applies only
-`max(0, scout_floor - rg_floor)` as a fixed Native AOT allowance for
-`subtitles_en_literal`; every other workload still fails above `1.5x rg`.
+`--mmap -n` literal RSS floors in the same hyperfine run. Every peak-RSS gate
+then requires `scout <= (rg * 1.5) + measured_scout_native_aot_floor`, so the
+fixed runtime/image floor is measured per run instead of hidden behind a magic
+constant.

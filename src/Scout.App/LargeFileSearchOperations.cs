@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace Scout;
 
@@ -11,6 +13,7 @@ internal static unsafe class LargeFileSearchOperations
     private const int ImplicitSearchStreamingFileBufferLength = 262_144;
     private const long ImplicitSearchStreamingFileThreshold = 65_536;
     private const long StreamingFileThreshold = int.MaxValue;
+    private const int BinaryDetectionBlockLength = StandardSearchByteOperations.BinaryDetectionBufferLength;
 
     internal static bool TrySearch(
         string path,
@@ -204,9 +207,40 @@ internal static unsafe class LargeFileSearchOperations
             return false;
         }
 
+        byte fastLiteralTerminator = separators.NullData ? (byte)0 : (byte)'\n';
+        byte[]? fastLiteralPattern = GetFastStreamingLiteralPattern(pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, fastLiteralTerminator);
+        if (CanSearchFastNoPrefixLiteralLines(
+            fastLiteralPattern,
+            prefix,
+            separators,
+            lineLimit,
+            color,
+            searchMode,
+            lineNumber,
+            column,
+            byteOffset,
+            maxCount,
+            textMode,
+            quiet,
+            trim,
+            nullPathTerminator,
+            stopOnNonmatch,
+            quitOnBinary))
+        {
+            return SearchFastNoPrefixLiteralLines(
+                path,
+                pattern,
+                fastLiteralPattern!,
+                output,
+                separators.FieldMatch,
+                separators.LineTerminator,
+                Math.Max(bufferLength, BinaryDetectionBlockLength));
+        }
+
         if (!textMode &&
             !separators.NullData &&
-            searchMode is CliSearchMode.Standard or CliSearchMode.FilesWithMatches or CliSearchMode.FilesWithoutMatch &&
+            (searchMode is CliSearchMode.FilesWithMatches or CliSearchMode.FilesWithoutMatch ||
+            (searchMode == CliSearchMode.Standard && quitOnBinary)) &&
             TryFindBinaryOffset(path, bufferLength, out long binaryOffset))
         {
             if (quitOnBinary)
@@ -455,6 +489,253 @@ internal static unsafe class LargeFileSearchOperations
         }
 
         return FinishSearch(output, prefix, color, searchMode, quiet, includeZero, nullPathTerminator, separators.LineTerminator, matched, count);
+    }
+
+    private static bool CanSearchFastNoPrefixLiteralLines(
+        byte[]? fastLiteralPattern,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        CliSearchMode searchMode,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        ulong? maxCount,
+        bool textMode,
+        bool quiet,
+        bool trim,
+        bool nullPathTerminator,
+        bool stopOnNonmatch,
+        bool quitOnBinary)
+    {
+        return fastLiteralPattern is not null &&
+            prefix is null &&
+            !separators.NullData &&
+            !separators.Crlf &&
+            !lineLimit.IsEnabled &&
+            !color.Enabled &&
+            searchMode == CliSearchMode.Standard &&
+            lineNumber &&
+            !column &&
+            !byteOffset &&
+            maxCount is null &&
+            !textMode &&
+            !quiet &&
+            !trim &&
+            !nullPathTerminator &&
+            !stopOnNonmatch &&
+            !quitOnBinary;
+    }
+
+    private static bool SearchFastNoPrefixLiteralLines(
+        string path,
+        IReadOnlyList<byte[]> pattern,
+        byte[] needle,
+        RawByteWriter output,
+        ReadOnlyMemory<byte> fieldSeparator,
+        ReadOnlyMemory<byte> lineTerminator,
+        int bufferLength)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, StreamingFileStreamBufferLength, FileOptions.SequentialScan);
+        using var bufferOwner = new NativeByteBuffer(bufferLength);
+        MemoryStream? oversizedLine = null;
+        long absoluteOffset = 0;
+        long carriedOffset = 0;
+        int carriedLength = 0;
+        long lineNumberValue = 1;
+        bool matched = false;
+
+        void WriteMatchedLine(long lineNumber, ReadOnlySpan<byte> line)
+        {
+            WriteNumber(output, lineNumber);
+            output.Write(fieldSeparator.Span);
+            output.Write(line);
+            if (line.IsEmpty || line[^1] != (byte)'\n')
+            {
+                output.Write(lineTerminator.Span);
+            }
+        }
+
+        void ProcessLiteralSegment(ReadOnlySpan<byte> segment)
+        {
+            int searchOffset = 0;
+            int countedOffset = 0;
+            long currentLineNumber = lineNumberValue;
+            while (searchOffset < segment.Length)
+            {
+                int found = segment[searchOffset..].IndexOf(needle);
+                if (found < 0)
+                {
+                    break;
+                }
+
+                int matchIndex = searchOffset + found;
+                int currentLineStart = GetSegmentLineStart(segment, matchIndex, (byte)'\n');
+                currentLineNumber += ByteCounter.Count(segment.Slice(countedOffset, currentLineStart - countedOffset), (byte)'\n');
+                countedOffset = currentLineStart;
+                int currentLineEnd = GetSegmentLineEnd(segment, currentLineStart, (byte)'\n');
+
+                WriteMatchedLine(currentLineNumber, segment.Slice(currentLineStart, currentLineEnd - currentLineStart));
+                matched = true;
+                searchOffset = currentLineEnd;
+            }
+
+            lineNumberValue = currentLineNumber + ByteCounter.Count(segment[countedOffset..], (byte)'\n');
+        }
+
+        int ProcessCompleteLines(ReadOnlySpan<byte> segment)
+        {
+            int lastTerminator = segment.LastIndexOf((byte)'\n');
+            if (lastTerminator < 0)
+            {
+                return 0;
+            }
+
+            int completeLength = lastTerminator + 1;
+            ProcessLiteralSegment(segment[..completeLength]);
+            return completeLength;
+        }
+
+        bool FinishBinary(long binaryOffset)
+        {
+            oversizedLine?.Dispose();
+            oversizedLine = null;
+            bool binaryMatched = HasConvertedBinaryMatch(
+                path,
+                pattern,
+                asciiCaseInsensitive: false,
+                invertMatch: false,
+                lineRegexp: false,
+                wordRegexp: false,
+                maxCount: null,
+                bufferLength);
+            if (binaryMatched)
+            {
+                StandardSearchByteOperations.WriteBinaryFileMatches(output, prefix: null, new OutputColor(false), binaryOffset);
+                matched = true;
+            }
+
+            return matched;
+        }
+
+        void CarryTail(Span<byte> buffer, int processedLength, int combinedLength, long combinedOffset)
+        {
+            int tailLength = combinedLength - processedLength;
+            if (tailLength == 0)
+            {
+                carriedLength = 0;
+                return;
+            }
+
+            buffer.Slice(processedLength, tailLength).CopyTo(buffer);
+            carriedLength = tailLength;
+            carriedOffset = combinedOffset + processedLength;
+        }
+
+        while (true)
+        {
+            Span<byte> buffer = bufferOwner.Span;
+            if (carriedLength == buffer.Length)
+            {
+                oversizedLine ??= new MemoryStream();
+                oversizedLine.Write(buffer);
+                carriedLength = 0;
+                carriedOffset = absoluteOffset;
+            }
+
+            int read = stream.Read(buffer[carriedLength..]);
+            if (read == 0)
+            {
+                break;
+            }
+
+            long combinedOffset = carriedLength == 0 ? absoluteOffset : carriedOffset;
+            absoluteOffset += read;
+            int combinedLength = carriedLength + read;
+            Span<byte> combined = buffer[..combinedLength];
+            int nulOffset = combined.IndexOf((byte)0);
+            if (nulOffset >= 0)
+            {
+                long binaryOffset = combinedOffset + nulOffset;
+                long safeEnd = binaryOffset - (binaryOffset % BinaryDetectionBlockLength);
+                int safeLength = (int)Math.Clamp(safeEnd - combinedOffset, 0, combinedLength);
+                if (oversizedLine is null)
+                {
+                    _ = ProcessCompleteLines(combined[..safeLength]);
+                }
+
+                return FinishBinary(binaryOffset);
+            }
+
+            long safeEndOffset = absoluteOffset - (absoluteOffset % BinaryDetectionBlockLength);
+            int processLimit = (int)Math.Clamp(safeEndOffset - combinedOffset, 0, combinedLength);
+            int processedLength = 0;
+            if (oversizedLine is not null)
+            {
+                int firstTerminator = combined[..processLimit].IndexOf((byte)'\n');
+                if (firstTerminator >= 0)
+                {
+                    int oversizedLineLength = firstTerminator + 1;
+                    oversizedLine.Write(combined[..oversizedLineLength]);
+                    byte[] line = oversizedLine.ToArray();
+                    oversizedLine.Dispose();
+                    oversizedLine = null;
+                    ProcessLiteralSegment(line);
+                    processedLength = oversizedLineLength + ProcessCompleteLines(combined[oversizedLineLength..processLimit]);
+                }
+                else if (processLimit != 0)
+                {
+                    oversizedLine.Write(combined[..processLimit]);
+                    processedLength = processLimit;
+                }
+            }
+            else if (processLimit != 0)
+            {
+                processedLength = ProcessCompleteLines(combined[..processLimit]);
+            }
+
+            CarryTail(buffer, processedLength, combinedLength, combinedOffset);
+        }
+
+        if (oversizedLine is not null)
+        {
+            if (carriedLength != 0)
+            {
+                oversizedLine.Write(bufferOwner.Span[..carriedLength]);
+                carriedLength = 0;
+            }
+
+            byte[] line = oversizedLine.ToArray();
+            oversizedLine.Dispose();
+            oversizedLine = null;
+            if (line.Length != 0)
+            {
+                ProcessLiteralSegment(line);
+            }
+        }
+        else if (carriedLength != 0)
+        {
+            ProcessLiteralSegment(bufferOwner.Span[..carriedLength]);
+        }
+
+        return matched;
+    }
+
+    private static void WriteNumber(RawByteWriter output, long value)
+    {
+        Span<byte> buffer = stackalloc byte[20];
+        ulong number = (ulong)value;
+        int index = buffer.Length;
+        do
+        {
+            index--;
+            buffer[index] = (byte)((number % 10) + (byte)'0');
+            number /= 10;
+        }
+        while (number != 0);
+
+        output.Write(buffer[index..]);
     }
 
     private static bool TryFindBinaryOffset(string path, int bufferLength, out long binaryOffset)
@@ -1094,6 +1375,8 @@ internal static unsafe class LargeFileSearchOperations
         long lineNumberValue = 1;
         ulong matchedLines = 0;
         bool matched = false;
+        bool binaryDetected = false;
+        long detectedBinaryOffset = -1;
         byte terminator = separators.NullData ? (byte)0 : (byte)'\n';
         byte[]? fastLiteralPattern = GetFastStreamingLiteralPattern(pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, terminator);
         bool searchSegmentsInParallel = threadCount > 1 &&
@@ -1109,7 +1392,50 @@ internal static unsafe class LargeFileSearchOperations
             ? LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: !searchSegmentsInParallel)
             : null;
 
-        bool ProcessSegment(ReadOnlySpan<byte> segment, long segmentStartOffset, ulong lineCount)
+        bool DetectBinary(ReadOnlySpan<byte> segment, long segmentStartOffset)
+        {
+            if (textMode || separators.NullData)
+            {
+                return false;
+            }
+
+            int nulOffset = segment.IndexOf((byte)0);
+            if (nulOffset < 0)
+            {
+                return false;
+            }
+
+            binaryDetected = true;
+            detectedBinaryOffset = segmentStartOffset + nulOffset;
+            return true;
+        }
+
+        bool FinishAfterStop()
+        {
+            if (!binaryDetected)
+            {
+                return matched;
+            }
+
+            bool binaryMatched = HasConvertedBinaryMatch(
+                path,
+                pattern,
+                asciiCaseInsensitive,
+                invertMatch,
+                lineRegexp,
+                wordRegexp,
+                maxCount,
+                bufferLength);
+            if (binaryMatched)
+            {
+                StandardSearchByteOperations.WriteBinaryFileMatches(output, prefix, color, detectedBinaryOffset);
+                matched = true;
+            }
+
+            return matched;
+        }
+
+        bool ProcessSegment(ReadOnlySpan<byte> segment, long segmentStartOffset, long lineCount)
         {
             if (segment.IsEmpty)
             {
@@ -1121,7 +1447,7 @@ internal static unsafe class LargeFileSearchOperations
                 return ProcessFastLiteralSegment(segment, segmentStartOffset, fastLiteralPattern);
             }
 
-            if (!textMode && !separators.NullData && segment.IndexOf((byte)0) >= 0)
+            if (DetectBinary(segment, segmentStartOffset))
             {
                 return true;
             }
@@ -1165,15 +1491,29 @@ internal static unsafe class LargeFileSearchOperations
                 lineNumberValue - 1,
                 segmentStartOffset);
             bool requireMatchColumn = column || prefix?.HasHyperlink == true;
-            matched |= LiteralLineSearcher.SearchWithRegexPlan(segment, pattern, regexPlan, ref sink, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, remainingMatches, separators.Crlf, separators.NullData, requireMatchColumn);
+            bool segmentMatched = LiteralLineSearcher.SearchWithRegexPlanAndCountLines(
+                segment,
+                pattern,
+                regexPlan,
+                ref sink,
+                out long searchedLines,
+                asciiCaseInsensitive,
+                invertMatch,
+                lineRegexp,
+                wordRegexp,
+                remainingMatches,
+                separators.Crlf,
+                separators.NullData,
+                requireMatchColumn);
+            matched |= segmentMatched;
             matchedLines += sink.MatchedLines;
-            lineNumberValue += (long)lineCount;
+            lineNumberValue += searchedLines == 0 ? lineCount : searchedLines;
             return maxCount is ulong limitAfterSearch && matchedLines >= limitAfterSearch;
         }
 
         bool ProcessFastLiteralSegment(ReadOnlySpan<byte> segment, long segmentStartOffset, ReadOnlySpan<byte> needle)
         {
-            if (!textMode && !separators.NullData && segment.IndexOf((byte)0) >= 0)
+            if (DetectBinary(segment, segmentStartOffset))
             {
                 return true;
             }
@@ -1271,13 +1611,18 @@ internal static unsafe class LargeFileSearchOperations
         bool SearchSegmentsInParallel()
         {
             int parallelism = Math.Clamp(threadCount, 1, 3);
-            var pending = new Queue<Task<LargeFileSegmentSearchResult>>();
+            using var workItems = new BlockingCollection<(long Sequence, nint SegmentAddress, int SegmentLength, long SegmentStartOffset, long SegmentLineNumber)>(parallelism);
+            using var completedItems = new BlockingCollection<(long Sequence, LargeFileSegmentSearchResult Result, Exception? Error)>(parallelism);
+            var completedBySequence = new Dictionary<long, LargeFileSegmentSearchResult>();
+            Thread[] workers = StartSegmentWorkers(parallelism, workItems, completedItems);
             int carriedLength = 0;
             long carriedOffset = 0;
+            long nextSequence = 0;
+            long nextDrainSequence = 0;
+            int pendingCount = 0;
 
-            void DrainOne()
+            void DrainResult(LargeFileSegmentSearchResult result)
             {
-                LargeFileSegmentSearchResult result = pending.Dequeue().GetAwaiter().GetResult();
                 try
                 {
                     if (result.Matches is not null)
@@ -1318,25 +1663,73 @@ internal static unsafe class LargeFileSearchOperations
                 }
             }
 
+            void DrainCompletedInOrder()
+            {
+                while (completedBySequence.Remove(nextDrainSequence, out LargeFileSegmentSearchResult result))
+                {
+                    DrainResult(result);
+                    nextDrainSequence++;
+                    pendingCount--;
+                }
+            }
+
+            Exception? ReceiveOne()
+            {
+                (long Sequence, LargeFileSegmentSearchResult Result, Exception? Error) completed = completedItems.Take();
+                if (completed.Error is not null)
+                {
+                    pendingCount--;
+                    return completed.Error;
+                }
+
+                completedBySequence.Add(completed.Sequence, completed.Result);
+                DrainCompletedInOrder();
+                return null;
+            }
+
             void DrainAll()
             {
-                while (pending.Count != 0)
+                workItems.CompleteAdding();
+                Exception? workerError = null;
+                while (pendingCount != 0)
                 {
-                    DrainOne();
+                    workerError ??= ReceiveOne();
+                }
+
+                for (int index = 0; index < workers.Length; index++)
+                {
+                    workers[index].Join();
+                }
+
+                if (workerError is not null)
+                {
+                    throw new InvalidOperationException("Large-file segment search failed.", workerError);
                 }
             }
 
             void DrainPendingAfterFailure()
             {
-                while (pending.Count != 0)
+                workItems.CompleteAdding();
+                pendingCount -= completedBySequence.Count;
+                foreach (LargeFileSegmentSearchResult result in completedBySequence.Values)
                 {
-                    Task<LargeFileSegmentSearchResult> task = pending.Dequeue();
-                    ((IAsyncResult)task).AsyncWaitHandle.WaitOne();
-                    if (task.IsCompletedSuccessfully)
+                    NativeMemory.Free((void*)result.SegmentAddress);
+                }
+
+                completedBySequence.Clear();
+                while (pendingCount != 0)
+                {
+                    (long Sequence, LargeFileSegmentSearchResult Result, Exception? Error) completed = completedItems.Take();
+                    pendingCount--;
+                    if (completed.Error is null)
                     {
-                        LargeFileSegmentSearchResult result = task.Result;
-                        NativeMemory.Free((void*)result.SegmentAddress);
+                        NativeMemory.Free((void*)completed.Result.SegmentAddress);
                     }
+                }
+
+                for (int index = 0; index < workers.Length; index++)
+                {
+                    workers[index].Join();
                 }
             }
 
@@ -1352,22 +1745,69 @@ internal static unsafe class LargeFileSearchOperations
                 segment.CopyTo(new Span<byte>((void*)segmentAddress, segmentLength));
                 long segmentLineNumber = lineNumberValue;
                 lineNumberValue += (long)lineCount;
-                pending.Enqueue(Task.Run(() =>
+                pendingCount++;
+                long sequence = nextSequence;
+                nextSequence++;
+                workItems.Add((sequence, segmentAddress, segmentLength, segmentStartOffset, segmentLineNumber));
+                while (pendingCount >= parallelism)
                 {
-                    try
+                    Exception? workerError = ReceiveOne();
+                    if (workerError is not null)
                     {
-                        return ProcessBufferedSegment(segmentAddress, segmentLength, segmentStartOffset, segmentLineNumber);
+                        throw new InvalidOperationException("Large-file segment search failed.", workerError);
                     }
-                    catch
-                    {
-                        NativeMemory.Free((void*)segmentAddress);
-                        throw;
-                    }
-                }));
-                if (pending.Count >= parallelism)
-                {
-                    DrainOne();
                 }
+            }
+
+            Thread[] StartSegmentWorkers(
+                int count,
+                BlockingCollection<(long Sequence, nint SegmentAddress, int SegmentLength, long SegmentStartOffset, long SegmentLineNumber)> work,
+                BlockingCollection<(long Sequence, LargeFileSegmentSearchResult Result, Exception? Error)> completed)
+            {
+                var result = new Thread[count];
+                for (int index = 0; index < result.Length; index++)
+                {
+                    result[index] = new Thread(
+                        () =>
+                        {
+                            foreach ((long sequence, nint segmentAddress, int segmentLength, long segmentStartOffset, long segmentLineNumber) in work.GetConsumingEnumerable())
+                            {
+                                try
+                                {
+                                    LargeFileSegmentSearchResult segmentResult = ProcessBufferedSegment(segmentAddress, segmentLength, segmentStartOffset, segmentLineNumber);
+                                    completed.Add((sequence, segmentResult, null));
+                                }
+                                catch (IOException exception)
+                                {
+                                    NativeMemory.Free((void*)segmentAddress);
+                                    completed.Add((sequence, default, exception));
+                                }
+                                catch (UnauthorizedAccessException exception)
+                                {
+                                    NativeMemory.Free((void*)segmentAddress);
+                                    completed.Add((sequence, default, exception));
+                                }
+                                catch (InvalidOperationException exception)
+                                {
+                                    NativeMemory.Free((void*)segmentAddress);
+                                    completed.Add((sequence, default, exception));
+                                }
+                                catch (ArgumentException exception)
+                                {
+                                    NativeMemory.Free((void*)segmentAddress);
+                                    completed.Add((sequence, default, exception));
+                                }
+                            }
+                        },
+                        maxStackSize: 128 * 1024)
+                    {
+                        IsBackground = true,
+                        Name = "scout-large-file-search",
+                    };
+                    result[index].Start();
+                }
+
+                return result;
             }
 
             bool QueueCompleteLinesAndCarry(ReadOnlySpan<byte> chunk, long chunkOffset, int segmentStart, Span<byte> buffer)
@@ -1379,7 +1819,7 @@ internal static unsafe class LargeFileSearchOperations
                     {
                         int completeLength = lastTerminator + 1;
                         ReadOnlySpan<byte> segment = chunk.Slice(segmentStart, completeLength);
-                        if (!textMode && segment.IndexOf((byte)0) >= 0)
+                        if (DetectBinary(segment, chunkOffset + segmentStart))
                         {
                             DrainAll();
                             return true;
@@ -1441,16 +1881,16 @@ internal static unsafe class LargeFileSearchOperations
                         byte[] line = pendingLine.ToArray();
                         pendingLine.Dispose();
                         pendingLine = null;
-                        if (!textMode && line.AsSpan().IndexOf((byte)0) >= 0)
+                        if (DetectBinary(line, pendingLineOffset))
                         {
                             DrainAll();
-                            return matched;
+                            return FinishAfterStop();
                         }
 
                         QueueSegment(line, pendingLineOffset, lineCount: 1);
                         if (QueueCompleteLinesAndCarry(chunk, chunkOffset, pendingLength, buffer))
                         {
-                            return matched;
+                            return FinishAfterStop();
                         }
 
                         continue;
@@ -1477,7 +1917,7 @@ internal static unsafe class LargeFileSearchOperations
                     ReadOnlySpan<byte> combined = buffer[..combinedLength];
                     if (QueueCompleteLinesAndCarry(combined, combinedOffset, segmentStart: 0, buffer))
                     {
-                        return matched;
+                        return FinishAfterStop();
                     }
                 }
 
@@ -1487,10 +1927,10 @@ internal static unsafe class LargeFileSearchOperations
                     pendingLine.Dispose();
                     if (line.Length != 0)
                     {
-                        if (!textMode && line.AsSpan().IndexOf((byte)0) >= 0)
+                        if (DetectBinary(line, pendingLineOffset))
                         {
                             DrainAll();
-                            return matched;
+                            return FinishAfterStop();
                         }
 
                         QueueSegment(line, pendingLineOffset, lineCount: 1);
@@ -1499,17 +1939,17 @@ internal static unsafe class LargeFileSearchOperations
                 else if (carriedLength != 0)
                 {
                     ReadOnlySpan<byte> line = bufferOwner.Span[..carriedLength];
-                    if (!textMode && line.IndexOf((byte)0) >= 0)
+                    if (DetectBinary(line, carriedOffset))
                     {
                         DrainAll();
-                        return matched;
+                        return FinishAfterStop();
                     }
 
                     QueueSegment(line, carriedOffset, lineCount: 1);
                 }
 
                 DrainAll();
-                return matched;
+                return FinishAfterStop();
             }
             catch
             {
@@ -1520,7 +1960,8 @@ internal static unsafe class LargeFileSearchOperations
 
         if (CanSearchSegmentsInParallel())
         {
-            return SearchSegmentsInParallel();
+            bool parallelMatched = SearchSegmentsInParallel();
+            return binaryDetected ? FinishAfterStop() : parallelMatched;
         }
 
         int carriedLength = 0;
@@ -1535,10 +1976,7 @@ internal static unsafe class LargeFileSearchOperations
                 {
                     int completeLength = lastTerminator + 1;
                     ReadOnlySpan<byte> segment = chunk.Slice(segmentStart, completeLength);
-                    ulong lineCount = fastLiteralPattern is null
-                        ? (ulong)ByteCounter.Count(segment, terminator)
-                        : 0;
-                    if (ProcessSegment(segment, chunkOffset + segmentStart, lineCount))
+                    if (ProcessSegment(segment, chunkOffset + segmentStart, lineCount: 0))
                     {
                         return true;
                     }
@@ -1598,12 +2036,12 @@ internal static unsafe class LargeFileSearchOperations
                 pendingLine = null;
                 if (ProcessSegment(line, pendingLineOffset, lineCount: 1))
                 {
-                    return matched;
+                    return FinishAfterStop();
                 }
 
                 if (ProcessCompleteLinesAndCarry(chunk, chunkOffset, pendingLength, buffer))
                 {
-                    return matched;
+                    return FinishAfterStop();
                 }
 
                 continue;
@@ -1630,7 +2068,7 @@ internal static unsafe class LargeFileSearchOperations
             ReadOnlySpan<byte> combined = buffer[..combinedLength];
             if (ProcessCompleteLinesAndCarry(combined, combinedOffset, segmentStart: 0, buffer))
             {
-                return matched;
+                return FinishAfterStop();
             }
         }
 
@@ -1640,15 +2078,15 @@ internal static unsafe class LargeFileSearchOperations
             pendingLine.Dispose();
             if (line.Length != 0 && ProcessSegment(line, pendingLineOffset, lineCount: 1))
             {
-                return matched;
+                return FinishAfterStop();
             }
         }
         else if (carriedLength != 0 && ProcessSegment(bufferOwner.Span[..carriedLength], carriedOffset, lineCount: 1))
         {
-            return matched;
+            return FinishAfterStop();
         }
 
-        return matched;
+        return FinishAfterStop();
     }
 
     private static int GetSegmentLineEnd(ReadOnlySpan<byte> segment, int lineStart, byte terminator)

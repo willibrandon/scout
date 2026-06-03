@@ -247,6 +247,79 @@ public static class LiteralLineSearcher
         return matched;
     }
 
+    internal static bool SearchWithRegexPlanAndCountLines<TSink>(
+        ReadOnlySpan<byte> haystack,
+        IReadOnlyList<byte[]> needles,
+        RegexSearchPlan? regexPlan,
+        ref TSink sink,
+        out long searchedLines,
+        bool asciiCaseInsensitive = false,
+        bool invertMatch = false,
+        bool lineRegexp = false,
+        bool wordRegexp = false,
+        ulong? maxMatchingLines = null,
+        bool crlf = false,
+        bool nullData = false,
+        bool requireMatchColumn = true)
+        where TSink : struct, ILineSink
+    {
+        ArgumentNullException.ThrowIfNull(needles);
+        searchedLines = 0;
+        if (maxMatchingLines == 0)
+        {
+            return false;
+        }
+
+        if (!invertMatch &&
+            !lineRegexp &&
+            !wordRegexp &&
+            !crlf &&
+            !nullData &&
+            needles.Count == 1 &&
+            regexPlan?.GetAccelerator(0) is RegexClassSequenceAccelerator accelerator)
+        {
+            return SearchAcceleratedRegexLines(
+                haystack,
+                needles,
+                regexPlan,
+                accelerator,
+                ref sink,
+                out searchedLines,
+                countSearchedLines: true,
+                asciiCaseInsensitive: asciiCaseInsensitive,
+                maxMatchingLines: maxMatchingLines,
+                requireMatchColumn: requireMatchColumn);
+        }
+
+        bool matched = false;
+        ulong matchedLines = 0;
+        int lineStart = 0;
+        long lineNumber = 1;
+        while (lineStart < haystack.Length)
+        {
+            ReadOnlySpan<byte> remaining = haystack[lineStart..];
+            int lineLength = GetLineLength(remaining, nullData);
+            ReadOnlySpan<byte> line = remaining[..lineLength];
+            if (TryMatchLine(line, needles, regexPlan, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, crlf, nullData, out int matchStart))
+            {
+                sink.MatchedLine(lineNumber, lineStart, matchStart < 0 ? 0 : matchStart + 1, line);
+                matched = true;
+                matchedLines++;
+                if (maxMatchingLines is ulong limit && matchedLines >= limit)
+                {
+                    searchedLines = lineNumber;
+                    return true;
+                }
+            }
+
+            lineStart += lineLength;
+            lineNumber++;
+        }
+
+        searchedLines = lineNumber - 1;
+        return matched;
+    }
+
     internal static long CountMatchingLinesWithRegexPlan(
         ReadOnlySpan<byte> haystack,
         IReadOnlyList<byte[]> needles,
@@ -307,6 +380,32 @@ public static class LiteralLineSearcher
         bool requireMatchColumn)
         where TSink : struct, ILineSink
     {
+        return SearchAcceleratedRegexLines(
+            haystack,
+            needles,
+            regexPlan,
+            accelerator,
+            ref sink,
+            out _,
+            countSearchedLines: false,
+            asciiCaseInsensitive: asciiCaseInsensitive,
+            maxMatchingLines: maxMatchingLines,
+            requireMatchColumn: requireMatchColumn);
+    }
+
+    private static bool SearchAcceleratedRegexLines<TSink>(
+        ReadOnlySpan<byte> haystack,
+        IReadOnlyList<byte[]> needles,
+        RegexSearchPlan regexPlan,
+        RegexClassSequenceAccelerator accelerator,
+        ref TSink sink,
+        out long searchedLines,
+        bool countSearchedLines,
+        bool asciiCaseInsensitive,
+        ulong? maxMatchingLines,
+        bool requireMatchColumn)
+        where TSink : struct, ILineSink
+    {
         if (accelerator.CanUseLineByLineSearch && requireMatchColumn)
         {
             return SearchAcceleratedRegexLinesByLine(
@@ -315,11 +414,14 @@ public static class LiteralLineSearcher
                 regexPlan,
                 accelerator,
                 ref sink,
+                out searchedLines,
+                countSearchedLines,
                 asciiCaseInsensitive,
                 maxMatchingLines,
                 requireMatchColumn);
         }
 
+        searchedLines = 0;
         bool matched = false;
         ulong matchedLines = 0;
         int searchOffset = 0;
@@ -332,17 +434,23 @@ public static class LiteralLineSearcher
             int nonAscii = nextNonAscii >= searchOffset ? nextNonAscii : -1;
             if (!foundMatch && nonAscii < 0)
             {
+                if (countSearchedLines)
+                {
+                    searchedLines = lineNumber - 1 + CountSearchLines(haystack[countedOffset..]);
+                }
+
                 return matched;
             }
 
-            int eventOffset = foundMatch && (!requireMatchColumn || nonAscii < 0 || matchStart <= nonAscii) ? matchStart : nonAscii;
+            bool canUseAsciiMatch = foundMatch && CanUseAsciiRegexMatch(haystack, matchStart, nonAscii, requireMatchColumn);
+            int eventOffset = canUseAsciiMatch ? matchStart : nonAscii;
             int lineStart = GetSearchLineStart(haystack, eventOffset);
             int lineEnd = GetSearchLineEnd(haystack, lineStart);
             lineNumber += CountLineTerminators(haystack.Slice(countedOffset, lineStart - countedOffset));
 
             bool lineMatched;
             int lineMatchStart;
-            if (foundMatch && matchStart < lineEnd && (!requireMatchColumn || nonAscii < 0 || matchStart <= nonAscii || nonAscii >= lineEnd))
+            if (foundMatch && matchStart < lineEnd && canUseAsciiMatch)
             {
                 lineMatched = true;
                 lineMatchStart = matchStart - lineStart;
@@ -374,6 +482,11 @@ public static class LiteralLineSearcher
                 matchedLines++;
                 if (maxMatchingLines is ulong limit && matchedLines >= limit)
                 {
+                    if (countSearchedLines)
+                    {
+                        searchedLines = lineNumber;
+                    }
+
                     return true;
                 }
             }
@@ -388,6 +501,11 @@ public static class LiteralLineSearcher
             lineNumber++;
         }
 
+        if (countSearchedLines)
+        {
+            searchedLines = lineNumber - 1 + CountSearchLines(haystack[countedOffset..]);
+        }
+
         return matched;
     }
 
@@ -397,11 +515,14 @@ public static class LiteralLineSearcher
         RegexSearchPlan regexPlan,
         RegexClassSequenceAccelerator accelerator,
         ref TSink sink,
+        out long searchedLines,
+        bool countSearchedLines,
         bool asciiCaseInsensitive,
         ulong? maxMatchingLines,
         bool requireMatchColumn)
         where TSink : struct, ILineSink
     {
+        searchedLines = 0;
         bool matched = false;
         ulong matchedLines = 0;
         long lineNumber = 1;
@@ -447,12 +568,22 @@ public static class LiteralLineSearcher
                 matchedLines++;
                 if (maxMatchingLines is ulong limit && matchedLines >= limit)
                 {
+                    if (countSearchedLines)
+                    {
+                        searchedLines = lineNumber;
+                    }
+
                     return true;
                 }
             }
 
             lineStart = lineEnd;
             lineNumber++;
+        }
+
+        if (countSearchedLines)
+        {
+            searchedLines = lineNumber - 1;
         }
 
         return matched;
@@ -4439,6 +4570,17 @@ public static class LiteralLineSearcher
         return ByteCounter.Count(bytes, (byte)'\n');
     }
 
+    private static long CountSearchLines(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.IsEmpty)
+        {
+            return 0;
+        }
+
+        long terminators = CountLineTerminators(bytes);
+        return bytes[^1] == (byte)'\n' ? terminators : terminators + 1;
+    }
+
     private static byte GetLineTerminator(bool nullData)
     {
         return nullData ? (byte)0 : (byte)'\n';
@@ -4448,6 +4590,16 @@ public static class LiteralLineSearcher
     {
         int relativeIndex = bytes[offset..].IndexOfAnyExceptInRange((byte)0x00, (byte)0x7f);
         return relativeIndex < 0 ? -1 : offset + relativeIndex;
+    }
+
+    private static bool CanUseAsciiRegexMatch(ReadOnlySpan<byte> haystack, int matchStart, int nonAscii, bool requireMatchColumn)
+    {
+        if (nonAscii < 0 || matchStart <= nonAscii)
+        {
+            return true;
+        }
+
+        return !requireMatchColumn && haystack.Slice(nonAscii, matchStart - nonAscii).IndexOf((byte)'\n') < 0;
     }
 
     private static int Find(ReadOnlySpan<byte> haystack, ReadOnlySpan<byte> needle, bool asciiCaseInsensitive)

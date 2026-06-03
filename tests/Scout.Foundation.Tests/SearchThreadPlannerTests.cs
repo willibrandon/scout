@@ -124,17 +124,17 @@ public sealed class SearchThreadPlannerTests
     }
 
     /// <summary>
-    /// Verifies explicit one-file large searches follow ripgrep's forced-serial planner rule.
+    /// Verifies explicit one-file large searches can use Scout's ordered internal segment workers.
     /// </summary>
     [Fact]
-    public void SearchWalkPlanningForcesExplicitOneFileLargeSearchSerial()
+    public void SearchWalkPlanningAllowsExplicitOneFileLargeSearchSegmentWorkers()
     {
         var lowArgs = new CliLowArgs();
         lowArgs.SetThreads(12);
 
         int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(lowArgs, isOneFile: true);
 
-        Assert.Equal(1, threads);
+        Assert.Equal(12, threads);
     }
 
     /// <summary>

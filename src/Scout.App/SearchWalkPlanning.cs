@@ -116,7 +116,7 @@ internal static class SearchWalkPlanning
 
     internal static int GetLargeFileSearchThreadCount(CliLowArgs lowArgs, bool isOneFile = false)
     {
-        ulong resolvedThreads = SearchThreadPlanner.Resolve(lowArgs.Threads, lowArgs.SortMode is not null, isOneFile);
+        ulong resolvedThreads = SearchThreadPlanner.Resolve(lowArgs.Threads, lowArgs.SortMode is not null, isOneFile: false);
         if (resolvedThreads <= 1)
         {
             return 1;

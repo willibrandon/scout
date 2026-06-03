@@ -1008,6 +1008,42 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
+    /// Verifies the large-file fast literal line-number path matches ripgrep across block boundaries.
+    /// </summary>
+    [Fact]
+    public void LargeFastLiteralLineNumbersMatchPinnedRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllBytes(path, CreateLargeFastLiteralLineNumberInput());
+
+        (int exitCode, byte[] output, string error) = RunScout("--no-mmap", "--binary", "--no-filename", "-n", "needle", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-mmap", "--binary", "--no-filename", "-n", "needle", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies the large-file fast literal path preserves safe-prefix output before a late NUL.
+    /// </summary>
+    [Fact]
+    public void LargeFastLiteralBinaryFallbackMatchesPinnedRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        File.WriteAllBytes(path, CreateLargeFastLiteralBinaryInput());
+
+        (int exitCode, byte[] output, string error) = RunScout("--no-mmap", "--binary", "--no-filename", "-n", "needle", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-mmap", "--binary", "--no-filename", "-n", "needle", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies implicit large binary standard search stops at ripgrep's binary-safe prefix.
     /// </summary>
     [Fact]
@@ -1635,6 +1671,42 @@ public sealed class ScoutApplicationRuntimeTests
         stream.Write(new byte[300_000]);
         stream.Write("\nneedle needle\nneedle needle\nneedle needle\n"u8);
         return stream.ToArray();
+    }
+
+    private static byte[] CreateLargeFastLiteralLineNumberInput()
+    {
+        using MemoryStream stream = new();
+        stream.Write("needle first\n"u8);
+        WriteRepeated(stream, (byte)'x', 70_000);
+        stream.Write("\nneedle second\n"u8);
+        WriteRepeated(stream, (byte)'y', 70_000);
+        stream.Write("\ntail needle"u8);
+        return stream.ToArray();
+    }
+
+    private static byte[] CreateLargeFastLiteralBinaryInput()
+    {
+        using MemoryStream stream = new();
+        byte[] safeLine = "needle before\n"u8.ToArray();
+        for (int index = 0; index < 6_000; index++)
+        {
+            stream.Write(safeLine);
+        }
+
+        stream.Write("alpha\0needle after\n"u8);
+        return stream.ToArray();
+    }
+
+    private static void WriteRepeated(Stream stream, byte value, int count)
+    {
+        byte[] buffer = new byte[Math.Min(count, 4096)];
+        Array.Fill(buffer, value);
+        while (count > 0)
+        {
+            int length = Math.Min(count, buffer.Length);
+            stream.Write(buffer.AsSpan(0, length));
+            count -= length;
+        }
     }
 
     private static void WriteGzipFile(string path, string contents)
