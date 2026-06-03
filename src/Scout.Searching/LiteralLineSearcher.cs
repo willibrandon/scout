@@ -406,6 +406,20 @@ public static class LiteralLineSearcher
         bool requireMatchColumn)
         where TSink : struct, ILineSink
     {
+        if (!requireMatchColumn)
+        {
+            return SearchAcceleratedRegexLinesWithoutMatchColumn(
+                haystack,
+                needles,
+                regexPlan,
+                accelerator,
+                ref sink,
+                out searchedLines,
+                countSearchedLines,
+                asciiCaseInsensitive,
+                maxMatchingLines);
+        }
+
         if (accelerator.CanUseLineByLineSearch && requireMatchColumn)
         {
             return SearchAcceleratedRegexLinesByLine(
@@ -497,6 +511,125 @@ public static class LiteralLineSearcher
             {
                 nextNonAscii = IndexOfNonAscii(haystack, searchOffset);
             }
+
+            lineNumber++;
+        }
+
+        if (countSearchedLines)
+        {
+            searchedLines = lineNumber - 1 + CountSearchLines(haystack[countedOffset..]);
+        }
+
+        return matched;
+    }
+
+    private static bool SearchAcceleratedRegexLinesWithoutMatchColumn<TSink>(
+        ReadOnlySpan<byte> haystack,
+        IReadOnlyList<byte[]> needles,
+        RegexSearchPlan regexPlan,
+        RegexClassSequenceAccelerator accelerator,
+        ref TSink sink,
+        out long searchedLines,
+        bool countSearchedLines,
+        bool asciiCaseInsensitive,
+        ulong? maxMatchingLines)
+        where TSink : struct, ILineSink
+    {
+        searchedLines = 0;
+        bool matched = false;
+        ulong matchedLines = 0;
+        int searchOffset = 0;
+        int countedOffset = 0;
+        int nextNonAscii = IndexOfNonAscii(haystack, offset: 0);
+        long lineNumber = 1;
+        while (searchOffset < haystack.Length)
+        {
+            int asciiSearchEnd = nextNonAscii >= searchOffset
+                ? GetSearchLineStart(haystack, nextNonAscii)
+                : haystack.Length;
+            if (asciiSearchEnd > searchOffset &&
+                accelerator.TryFind(haystack[..asciiSearchEnd], searchOffset, out int matchStart, out _))
+            {
+                int lineStart = GetSearchLineStart(haystack, matchStart);
+                int lineEnd = GetSearchLineEnd(haystack, lineStart);
+                lineNumber += CountLineTerminators(haystack.Slice(countedOffset, lineStart - countedOffset));
+                sink.MatchedLine(lineNumber, lineStart, matchColumn: 0, haystack.Slice(lineStart, lineEnd - lineStart));
+                matched = true;
+                matchedLines++;
+                if (maxMatchingLines is ulong limit && matchedLines >= limit)
+                {
+                    if (countSearchedLines)
+                    {
+                        searchedLines = lineNumber;
+                    }
+
+                    return true;
+                }
+
+                searchOffset = lineEnd;
+                countedOffset = lineEnd;
+                if (nextNonAscii >= 0 && nextNonAscii < searchOffset)
+                {
+                    nextNonAscii = IndexOfNonAscii(haystack, searchOffset);
+                }
+
+                lineNumber++;
+                continue;
+            }
+
+            if (nextNonAscii < searchOffset)
+            {
+                if (countSearchedLines)
+                {
+                    searchedLines = lineNumber - 1 + CountSearchLines(haystack[countedOffset..]);
+                }
+
+                return matched;
+            }
+
+            int nonAsciiLineStart = GetSearchLineStart(haystack, nextNonAscii);
+            int nonAsciiLineEnd = GetSearchLineEnd(haystack, nonAsciiLineStart);
+            lineNumber += CountLineTerminators(haystack.Slice(countedOffset, nonAsciiLineStart - countedOffset));
+            ReadOnlySpan<byte> line = haystack.Slice(nonAsciiLineStart, nonAsciiLineEnd - nonAsciiLineStart);
+            bool lineMatched = accelerator.TryFindUnicode(line, offset: 0, out int lineMatchStart, out _, out bool completedUnicodeSearch);
+            if (!completedUnicodeSearch)
+            {
+                lineMatched = TryMatchLine(
+                    line,
+                    needles,
+                    regexPlan,
+                    asciiCaseInsensitive,
+                    invertMatch: false,
+                    lineRegexp: false,
+                    wordRegexp: false,
+                    crlf: false,
+                    nullData: false,
+                    out lineMatchStart);
+            }
+
+            if (lineMatched)
+            {
+                sink.MatchedLine(lineNumber, nonAsciiLineStart, lineMatchStart < 0 ? 0 : lineMatchStart + 1, line);
+                matched = true;
+                matchedLines++;
+                if (maxMatchingLines is ulong limit && matchedLines >= limit)
+                {
+                    if (countSearchedLines)
+                    {
+                        searchedLines = lineNumber;
+                    }
+
+                    return true;
+                }
+            }
+
+            searchOffset = nonAsciiLineEnd;
+            countedOffset = nonAsciiLineEnd;
+            do
+            {
+                nextNonAscii = IndexOfNonAscii(haystack, nextNonAscii + 1);
+            }
+            while (nextNonAscii >= 0 && nextNonAscii < searchOffset);
 
             lineNumber++;
         }

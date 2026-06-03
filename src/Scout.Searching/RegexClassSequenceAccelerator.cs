@@ -273,16 +273,16 @@ internal sealed class RegexClassSequenceAccelerator
             return TryFindWord5WhitespaceWord5WhitespaceWord5(haystack, start, out matchStart, out matchLength);
         }
 
-        int index = Math.Min(haystack.Length, start + minimums[0]);
-        while (index < haystack.Length)
+        int search = Math.Min(haystack.Length, start + minimums[0]);
+        while (search < haystack.Length)
         {
-            if (!IsRegexWhitespaceByte(haystack[index]))
+            int whitespaceOffset = haystack[search..].IndexOfAny(WhitespaceBytes);
+            if (whitespaceOffset < 0)
             {
-                index++;
-                continue;
+                break;
             }
 
-            int firstSeparator = index;
+            int firstSeparator = search + whitespaceOffset;
             int candidate = firstSeparator - minimums[0];
             int firstSeparatorEnd = SkipWhitespace(haystack, firstSeparator);
             if (candidate >= start &&
@@ -302,7 +302,7 @@ internal sealed class RegexClassSequenceAccelerator
                 }
             }
 
-            index = firstSeparatorEnd;
+            search = firstSeparatorEnd;
         }
 
         matchStart = -1;
@@ -312,16 +312,16 @@ internal sealed class RegexClassSequenceAccelerator
 
     private static bool TryFindWord5WhitespaceWord5WhitespaceWord5(ReadOnlySpan<byte> haystack, int start, out int matchStart, out int matchLength)
     {
-        int index = Math.Min(haystack.Length, start + 5);
-        while (index < haystack.Length)
+        int search = Math.Min(haystack.Length, start + 5);
+        while (search < haystack.Length)
         {
-            if (!IsRegexWhitespaceByte(haystack[index]))
+            int whitespaceOffset = haystack[search..].IndexOfAny(WhitespaceBytes);
+            if (whitespaceOffset < 0)
             {
-                index++;
-                continue;
+                break;
             }
 
-            int firstSeparator = index;
+            int firstSeparator = search + whitespaceOffset;
             int candidate = firstSeparator - 5;
             int firstSeparatorEnd = SkipWhitespace(haystack, firstSeparator);
             if (candidate >= start &&
@@ -341,7 +341,7 @@ internal sealed class RegexClassSequenceAccelerator
                 }
             }
 
-            index = firstSeparatorEnd;
+            search = firstSeparatorEnd;
         }
 
         matchStart = -1;
