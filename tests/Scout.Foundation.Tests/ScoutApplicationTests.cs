@@ -4049,6 +4049,27 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies color always highlights literal regex matches at their true offsets late in a line.
+    /// </summary>
+    [Fact]
+    public void ColorAlwaysHighlightsLiteralRegexMatchOffsets()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(
+            path,
+            "public sealed class Pcre2Regex\n" +
+            "    /// Initializes a new instance of the <see cref=\"Pcre2Regex\" /> class.\n");
+
+        (int exitCode, byte[] output, string error) = RunScout("--color=always", "-n", "class", path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--color=always", "-n", "class", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies color always highlights only-matching output.
     /// </summary>
     [Fact]

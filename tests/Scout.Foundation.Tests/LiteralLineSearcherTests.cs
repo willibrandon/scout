@@ -93,6 +93,66 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
+    /// Verifies multi-pattern match-line search reports literal regex match offsets late in a line.
+    /// </summary>
+    [Fact]
+    public void SearchMatchLinesReportsLiteralRegexOffsets()
+    {
+        var sink = new CapturingMatchLineSink();
+        AssertMatchLineReportsLiteralRegexOffset(["class"u8.ToArray()], ref sink);
+    }
+
+    /// <summary>
+    /// Verifies multi-pattern match-line search reports global match offsets across multiple lines.
+    /// </summary>
+    [Fact]
+    public void SearchMatchLinesReportsLiteralRegexOffsetsAcrossLines()
+    {
+        var sink = new CapturingMatchLineSink();
+
+        bool matched = LiteralLineSearcher.SearchMatchLines(
+            "public sealed class Pcre2Regex\n    /// Initializes a new instance of the <see cref=\"Pcre2Regex\" /> class.\n"u8,
+            ["class"u8.ToArray()],
+            ref sink);
+
+        Assert.True(matched);
+        Assert.Equal(2UL, sink.Matches);
+        Assert.Equal(2, sink.LineNumber);
+        Assert.Equal(31, sink.LineByteOffset);
+        Assert.Equal(99, sink.MatchByteOffset);
+        Assert.Equal(69, sink.MatchColumn);
+        Assert.Equal("class"u8.ToArray(), sink.Match.ToArray());
+    }
+
+    /// <summary>
+    /// Verifies scoped group match-line search reports inner match offsets.
+    /// </summary>
+    [Fact]
+    public void SearchMatchLinesReportsScopedRegexInnerOffsets()
+    {
+        var sink = new CapturingMatchLineSink();
+
+        AssertMatchLineReportsLiteralRegexOffset(["(?:class)"u8.ToArray()], ref sink);
+        sink = new CapturingMatchLineSink();
+        AssertMatchLineReportsLiteralRegexOffset(["(?-u:class)"u8.ToArray()], ref sink);
+    }
+
+    private static void AssertMatchLineReportsLiteralRegexOffset(byte[][] patterns, ref CapturingMatchLineSink sink)
+    {
+        bool matched = LiteralLineSearcher.SearchMatchLines(
+            "    /// Initializes a new instance of the <see cref=\"Pcre2Regex\" /> class.\n"u8,
+            patterns,
+            ref sink);
+
+        Assert.True(matched);
+        Assert.Equal(1UL, sink.Matches);
+        Assert.Equal(1, sink.LineNumber);
+        Assert.Equal(68, sink.MatchByteOffset);
+        Assert.Equal(69, sink.MatchColumn);
+        Assert.Equal("class"u8.ToArray(), sink.Match.ToArray());
+    }
+
+    /// <summary>
     /// Verifies class-sequence regex acceleration reports line metadata for ASCII matches.
     /// </summary>
     [Fact]

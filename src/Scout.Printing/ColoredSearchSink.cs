@@ -66,7 +66,6 @@ internal struct ColoredSearchSink : IMatchLineSink
         ReadOnlySpan<byte> line,
         ReadOnlySpan<byte> match)
     {
-        _ = matchByteOffset;
         if (currentLine is not null && currentLineNumber != lineNumber)
         {
             Flush();
@@ -80,7 +79,7 @@ internal struct ColoredSearchSink : IMatchLineSink
             currentMatchColumn = matchColumn;
         }
 
-        starts.Add((int)matchColumn - 1);
+        starts.Add(checked((int)(matchByteOffset - lineByteOffset)));
         lengths.Add(match.Length);
     }
 
@@ -91,7 +90,7 @@ internal struct ColoredSearchSink : IMatchLineSink
             return;
         }
 
-        int trimOffset = GetTrimOffset(currentLine);
+        int trimOffset = trim ? GetTrimOffset(currentLine) : 0;
         ReadOnlySpan<byte> displayLine = trim ? currentLine.AsSpan(trimOffset) : currentLine;
         WritePrefix();
         if (lineLimit.IsExceeded(displayLine))
