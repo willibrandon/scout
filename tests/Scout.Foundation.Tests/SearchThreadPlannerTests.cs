@@ -58,10 +58,10 @@ public sealed class SearchThreadPlannerTests
     }
 
     /// <summary>
-    /// Verifies default macOS directory search fan-out avoids oversaturating hosted file I/O.
+    /// Verifies default macOS directory search fan-out keeps enough workers for hosted file I/O.
     /// </summary>
     [Fact]
-    public void SearchWalkPlanningCapsMacOsDefaultDirectorySearchThreads()
+    public void SearchWalkPlanningUsesMacOsDefaultDirectorySearchThreads()
     {
         var lowArgs = new CliLowArgs();
         int upstreamDefault = Math.Min(Environment.ProcessorCount, 12);
@@ -73,17 +73,17 @@ public sealed class SearchThreadPlannerTests
     }
 
     /// <summary>
-    /// Verifies default macOS directory search fan-out is capped at the measured platform limit.
+    /// Verifies default macOS directory search fan-out uses the measured hosted-runner target.
     /// </summary>
     [Theory]
     [InlineData(1, 1)]
-    [InlineData(2, 2)]
-    [InlineData(3, 3)]
-    [InlineData(4, 4)]
-    [InlineData(5, 4)]
-    [InlineData(6, 4)]
-    [InlineData(12, 4)]
-    public void SearchWalkPlanningCapsMacOsDefaultDirectorySearchThreadMatrix(int upstreamDefault, int expectedThreads)
+    [InlineData(2, 7)]
+    [InlineData(3, 7)]
+    [InlineData(4, 7)]
+    [InlineData(5, 7)]
+    [InlineData(6, 7)]
+    [InlineData(12, 7)]
+    public void SearchWalkPlanningUsesMacOsDefaultDirectorySearchThreadMatrix(int upstreamDefault, int expectedThreads)
     {
         int threads = SearchWalkPlanning.GetMacOsDefaultSearchWalkThreadCount(upstreamDefault);
 
