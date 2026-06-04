@@ -332,9 +332,18 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.checkout_ref || github.sha }}
+      - name: Install Windows host prerequisites
+        shell: pwsh
+        run: eng/install-windows-host-prereqs.ps1
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.102
+      - name: Build pinned ripgrep oracle
+        shell: pwsh
+        env:
+          SCOUT_HOST_RID: ${{ matrix.rid }}
+          SCOUT_ORACLE_ENVIRONMENT: github-actions
+        run: eng/setup-ripgrep-oracle.ps1
       - name: Native executable smoke
         shell: cmd
         run: |
@@ -345,4 +354,4 @@ jobs:
           )
           call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=${{ matrix.vsarch }}
           pwsh -NoProfile -ExecutionPolicy Bypass -File spike/build-windows.ps1 ${{ matrix.rid }}
-          pwsh -NoProfile -ExecutionPolicy Bypass -File native/build-app-windows.ps1 ${{ matrix.rid }}
+          pwsh -NoProfile -ExecutionPolicy Bypass -File native/build-app-windows.ps1 ${{ matrix.rid }} -DifferentialMode WithDifferentials

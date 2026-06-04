@@ -1,7 +1,10 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidateSet("win-x64", "win-arm64")]
-    [string] $Rid
+    [string] $Rid,
+
+    [ValidateSet("WithDifferentials", "SmokeOnly")]
+    [string] $DifferentialMode = "WithDifferentials"
 )
 
 Set-StrictMode -Version Latest
@@ -43,6 +46,23 @@ function Add-IfExists {
     if (Test-Path $Path) {
         $Items.Add($Path)
     }
+}
+
+function ConvertTo-BashPath {
+    param([string] $Path)
+
+    $cygpath = Get-Command "cygpath" -ErrorAction SilentlyContinue
+    if ($null -ne $cygpath) {
+        return ((& $cygpath.Source -u $Path) -join "").Trim()
+    }
+
+    return $Path.Replace("\", "/")
+}
+
+function Escape-BashSingleQuoted {
+    param([string] $Value)
+
+    return "'" + $Value.Replace("'", "'\''") + "'"
 }
 
 Require-Tool "cl.exe"
@@ -130,6 +150,38 @@ $ExpectedMultiOutput = @(
 )
 if ($LASTEXITCODE -ne 0 -or ($MultiOutput -join "`n") -ne ($ExpectedMultiOutput -join "`n")) {
     throw "Unexpected PCRE2 multi-file output: $MultiOutput"
+}
+
+if ($DifferentialMode -eq "WithDifferentials") {
+    $bash = Get-Command "bash" -ErrorAction SilentlyContinue
+    if ($null -eq $bash) {
+        throw "bash was not found; PCRE2 native differentials require the MSYS/Git bash available on Windows runners."
+    }
+
+    $previousHostRid = $env:SCOUT_HOST_RID
+    $previousOracleEnvironment = $env:SCOUT_ORACLE_ENVIRONMENT
+    try {
+        $env:SCOUT_HOST_RID = $Rid
+        if ([string]::IsNullOrWhiteSpace($env:SCOUT_ORACLE_ENVIRONMENT)) {
+            $env:SCOUT_ORACLE_ENVIRONMENT = if ([string]::Equals($env:GITHUB_ACTIONS, "true", [System.StringComparison]::OrdinalIgnoreCase)) {
+                "github-actions"
+            }
+            else {
+                "local"
+            }
+        }
+
+        $bashRoot = Escape-BashSingleQuoted (ConvertTo-BashPath $Root)
+        $bashScout = Escape-BashSingleQuoted (ConvertTo-BashPath $OutputExe)
+        & $bash.Source -lc "cd $bashRoot && ./native/test-pcre2-differential-unix.sh '$Rid' $bashScout"
+        if ($LASTEXITCODE -ne 0) {
+            throw "PCRE2 native Windows differentials failed for $Rid."
+        }
+    }
+    finally {
+        $env:SCOUT_HOST_RID = $previousHostRid
+        $env:SCOUT_ORACLE_ENVIRONMENT = $previousOracleEnvironment
+    }
 }
 
 & (Join-Path $Root "eng\package-release.ps1") $Rid

@@ -134,7 +134,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("native/build-app-unix.sh linux-x64 --smoke-only", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("native/build-app-unix.sh linux-arm64 --smoke-only", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("native/build-app-unix.sh ${{ matrix.rid }} --smoke-only", releaseGateWorkflow, StringComparison.Ordinal);
-        Assert.Contains("native/build-app-windows.ps1 ${{ matrix.rid }}", releaseGateWorkflow, StringComparison.Ordinal);
+        Assert.Contains("native/build-app-windows.ps1 ${{ matrix.rid }} -DifferentialMode WithDifferentials", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("spike/build-unix.sh ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
         Assert.Contains("spike/build-unix.sh linux-x64", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("spike/build-unix.sh linux-arm64", workflow, StringComparison.Ordinal);
@@ -142,7 +142,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("native/build-app-unix.sh ${{ matrix.rid }} --smoke-only", workflow, StringComparison.Ordinal);
         Assert.Contains("native/build-app-unix.sh ${{ matrix.rid }} --with-differentials", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("native/build-app-unix.sh osx-arm64 --with-differentials", workflow, StringComparison.Ordinal);
-        Assert.Contains("native/build-app-windows.ps1 ${{ matrix.rid }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("native/build-app-windows.ps1 ${{ matrix.rid }} -DifferentialMode SmokeOnly", workflow, StringComparison.Ordinal);
         Assert.Contains("SCOUT_HOST_RID: ${{ matrix.rid }}", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("vsarch: amd64", workflow, StringComparison.Ordinal);
         Assert.Contains("vsarch: arm64", workflow, StringComparison.Ordinal);
@@ -2108,6 +2108,7 @@ public sealed partial class PinnedConfigurationTests
         string appBuildScript = File.ReadAllText(Path.Combine(root, "native", "build-app-unix.sh"));
         string windowsAppBuildScript = File.ReadAllText(Path.Combine(root, "native", "build-app-windows.ps1"));
         string differentialScript = File.ReadAllText(Path.Combine(root, "native", "test-pcre2-differential-unix.sh"));
+        string oracleReader = File.ReadAllText(Path.Combine(root, "eng", "read-ripgrep-oracle.sh"));
         string invalidUtf8DifferentialScript = File.ReadAllText(Path.Combine(root, "native", "test-invalid-utf8-differential-unix.sh"));
         string pcre2Library = File.ReadAllText(Path.Combine(root, "src", "Scout.Pcre2", "Pcre2Library.cs"));
         string pcre2Regex = File.ReadAllText(Path.Combine(root, "src", "Scout.Pcre2", "Pcre2Regex.cs"));
@@ -2205,6 +2206,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("--smoke-only", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("if [ \"$DIFFERENTIAL_MODE\" = \"--with-differentials\" ]; then", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("[ValidateSet(\"win-x64\", \"win-arm64\")]", windowsAppBuildScript, StringComparison.Ordinal);
+        Assert.Contains("[ValidateSet(\"WithDifferentials\", \"SmokeOnly\")]", windowsAppBuildScript, StringComparison.Ordinal);
         Assert.Contains("native\\pcre2\\build-windows.ps1", windowsAppBuildScript, StringComparison.Ordinal);
         Assert.Contains("scout_wmain.c", windowsAppBuildScript, StringComparison.Ordinal);
         Assert.Contains("cl.exe", windowsAppBuildScript, StringComparison.Ordinal);
@@ -2220,9 +2222,17 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("--pcre2-version", windowsAppBuildScript, StringComparison.Ordinal);
         Assert.Contains("$SmokePath2", windowsAppBuildScript, StringComparison.Ordinal);
         Assert.Contains("Unexpected PCRE2 multi-file output", windowsAppBuildScript, StringComparison.Ordinal);
+        Assert.Contains("test-pcre2-differential-unix.sh", windowsAppBuildScript, StringComparison.Ordinal);
+        Assert.Contains("$env:SCOUT_HOST_RID = $Rid", windowsAppBuildScript, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_ORACLE_ENVIRONMENT", windowsAppBuildScript, StringComparison.Ordinal);
+        Assert.Contains("PCRE2 native Windows differentials failed", windowsAppBuildScript, StringComparison.Ordinal);
         Assert.Contains("\"$ROOT/native/test-pcre2-differential-unix.sh\" \"$RID\" \"$BIN/scout\"", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("read_ripgrep_oracle_value \"pcre2_path\" \"ripgrep_pcre2_rg_path\"", differentialScript, StringComparison.Ordinal);
         Assert.Contains("read_ripgrep_oracle_value \"pcre2_sha256\" \"ripgrep_pcre2_rg_sha256\"", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_HOST_RID", oracleReader, StringComparison.Ordinal);
+        Assert.Contains("win-x64|win-arm64", oracleReader, StringComparison.Ordinal);
+        Assert.Contains("MINGW*:x86_64", oracleReader, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_ORACLE_ENVIRONMENT", oracleReader, StringComparison.Ordinal);
         Assert.Contains("pcre2_path = \"" + defaultPcre2RipgrepPath + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("pcre2_sha256 = \"" + expectedPcre2RipgrepSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("ripgrep_pcre2_rg_profile = \"release-lto\"", prerequisiteLock, StringComparison.Ordinal);

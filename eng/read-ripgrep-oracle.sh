@@ -45,6 +45,18 @@ read_lock_value() {
 }
 
 host_rid() {
+    if [ -n "${SCOUT_HOST_RID:-}" ]; then
+        case "$SCOUT_HOST_RID" in
+            osx-arm64|osx-x64|linux-x64|linux-arm64|win-x64|win-arm64)
+                printf '%s\n' "$SCOUT_HOST_RID"
+                return
+                ;;
+            *)
+                fail "Unsupported SCOUT_HOST_RID for pinned ripgrep oracle: $SCOUT_HOST_RID"
+                ;;
+        esac
+    fi
+
     os="$(uname -s)"
     arch="$(uname -m)"
     case "$os:$arch" in
@@ -60,6 +72,12 @@ host_rid() {
         Linux:aarch64|Linux:arm64)
             printf 'linux-arm64\n'
             ;;
+        MINGW*:x86_64|MSYS*:x86_64|CYGWIN*:x86_64)
+            printf 'win-x64\n'
+            ;;
+        MINGW*:aarch64|MINGW*:arm64|MSYS*:aarch64|MSYS*:arm64|CYGWIN*:aarch64|CYGWIN*:arm64)
+            printf 'win-arm64\n'
+            ;;
         *)
             fail "Unsupported host for pinned ripgrep oracle: $os $arch"
             ;;
@@ -67,6 +85,18 @@ host_rid() {
 }
 
 oracle_environment() {
+    if [ -n "${SCOUT_ORACLE_ENVIRONMENT:-}" ]; then
+        case "$SCOUT_ORACLE_ENVIRONMENT" in
+            github-actions|local)
+                printf '%s\n' "$SCOUT_ORACLE_ENVIRONMENT"
+                return
+                ;;
+            *)
+                fail "Unsupported SCOUT_ORACLE_ENVIRONMENT for pinned ripgrep oracle: $SCOUT_ORACLE_ENVIRONMENT"
+                ;;
+        esac
+    fi
+
     if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
         printf 'github-actions\n'
     else

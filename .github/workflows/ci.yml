@@ -303,7 +303,7 @@ jobs:
           )
           call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=${{ matrix.vsarch }}
           pwsh -NoProfile -ExecutionPolicy Bypass -File spike/build-windows.ps1 ${{ matrix.rid }}
-          pwsh -NoProfile -ExecutionPolicy Bypass -File native/build-app-windows.ps1 ${{ matrix.rid }}
+          pwsh -NoProfile -ExecutionPolicy Bypass -File native/build-app-windows.ps1 ${{ matrix.rid }} -DifferentialMode SmokeOnly
 
   release-gates:
     name: release gates dispatch
