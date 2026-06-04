@@ -8,7 +8,7 @@ internal static unsafe class LargeFileSearchOperations
     private const int StreamingFileBufferLength = 131_072;
     private const int StreamingFileStreamBufferLength = 1;
     private const int ImplicitSearchStreamingFileBufferLength = 262_144;
-    private const int ExplicitFastLiteralStreamingFileBufferLength = 4 * 1024 * 1024;
+    private const int ExplicitFastLiteralStreamingFileBufferLength = 5 * 1024 * 1024;
     private const long ImplicitSearchStreamingFileThreshold = 65_536;
     private const long StreamingFileThreshold = int.MaxValue;
     private const int BinaryDetectionBlockLength = StandardSearchByteOperations.BinaryDetectionBufferLength;
