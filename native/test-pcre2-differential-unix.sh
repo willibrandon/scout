@@ -86,6 +86,31 @@ expect_equal() {
     fi
 }
 
+compare_files() {
+    expected="$1"
+    actual="$2"
+
+    if command -v diff >/dev/null 2>&1; then
+        diff -u "$expected" "$actual"
+        return
+    fi
+
+    if command -v cmp >/dev/null 2>&1; then
+        cmp -s "$expected" "$actual"
+        return
+    fi
+
+    expected_sha256="$(sha256_file "$expected")"
+    actual_sha256="$(sha256_file "$actual")"
+    if [ "$expected_sha256" = "$actual_sha256" ]; then
+        return 0
+    fi
+
+    printf 'Files differ: %s sha256=%s, %s sha256=%s\n' \
+        "$expected" "$expected_sha256" "$actual" "$actual_sha256" >&2
+    return 1
+}
+
 normalize_elapsed() {
     sed -E \
         -e 's/"elapsed":\{"secs":[0-9]+,"nanos":[0-9]+,"human":"[^"]+"\}/"elapsed":{"secs":0,"nanos":0,"human":"<elapsed>"}/g' \
@@ -174,12 +199,12 @@ compare_case() {
             ;;
     esac
 
-    if ! diff -u "$normalized_rg_stdout" "$normalized_scout_stdout"; then
+    if ! compare_files "$normalized_rg_stdout" "$normalized_scout_stdout"; then
         printf 'PCRE2 differential stdout mismatch for %s\n' "$name" >&2
         exit 1
     fi
 
-    if ! diff -u "$normalized_rg_stderr" "$normalized_scout_stderr"; then
+    if ! compare_files "$normalized_rg_stderr" "$normalized_scout_stderr"; then
         printf 'PCRE2 differential stderr mismatch for %s\n' "$name" >&2
         exit 1
     fi
@@ -248,12 +273,12 @@ compare_stdin_case() {
             ;;
     esac
 
-    if ! diff -u "$normalized_rg_stdout" "$normalized_scout_stdout"; then
+    if ! compare_files "$normalized_rg_stdout" "$normalized_scout_stdout"; then
         printf 'PCRE2 differential stdout mismatch for %s\n' "$name" >&2
         exit 1
     fi
 
-    if ! diff -u "$normalized_rg_stderr" "$normalized_scout_stderr"; then
+    if ! compare_files "$normalized_rg_stderr" "$normalized_scout_stderr"; then
         printf 'PCRE2 differential stderr mismatch for %s\n' "$name" >&2
         exit 1
     fi

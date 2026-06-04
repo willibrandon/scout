@@ -180,8 +180,9 @@ public static class CliParser
             if (bytes.Length == 2 &&
                 bytes[0] == (byte)'-' &&
                 bytes[1] != (byte)'-' &&
-                GeneratedFlagCatalog.TryFindShortValue((char)bytes[1], out descriptor))
+                GeneratedFlagCatalog.TryFindShortValue((char)bytes[1], out FlagDescriptor unixShortDescriptor))
             {
+                descriptor = unixShortDescriptor;
                 name = GetShortValueName((char)bytes[1]);
                 return true;
             }
@@ -190,8 +191,9 @@ public static class CliParser
                 bytes[0] == (byte)'-' &&
                 bytes[1] == (byte)'-' &&
                 TryDecodeUtf8(bytes, out string longName) &&
-                GeneratedFlagCatalog.TryFindLongValue(longName, out descriptor))
+                GeneratedFlagCatalog.TryFindLongValue(longName, out FlagDescriptor unixLongDescriptor))
             {
+                descriptor = unixLongDescriptor;
                 name = longName;
                 return true;
             }
@@ -211,8 +213,9 @@ public static class CliParser
         if (text.Length == 2 &&
             text[0] == '-' &&
             text[1] != '-' &&
-            GeneratedFlagCatalog.TryFindShortValue(text[1], out descriptor))
+            GeneratedFlagCatalog.TryFindShortValue(text[1], out FlagDescriptor textShortDescriptor))
         {
+            descriptor = textShortDescriptor;
             name = GetShortValueName(text[1]);
             return true;
         }
@@ -220,8 +223,9 @@ public static class CliParser
         if (text.Length > 2 &&
             text[0] == '-' &&
             text[1] == '-' &&
-            GeneratedFlagCatalog.TryFindLongValue(text, out descriptor))
+            GeneratedFlagCatalog.TryFindLongValue(text, out FlagDescriptor textLongDescriptor))
         {
+            descriptor = textLongDescriptor;
             name = text;
             return true;
         }
@@ -256,8 +260,9 @@ public static class CliParser
             int equalsIndex = bytes.IndexOf((byte)'=');
             if (equalsIndex > 2 &&
                 TryDecodeUtf8(bytes[..equalsIndex], out string longName) &&
-                GeneratedFlagCatalog.TryFindLongValue(longName, out descriptor))
+                GeneratedFlagCatalog.TryFindLongValue(longName, out FlagDescriptor longDescriptor))
             {
+                descriptor = longDescriptor;
                 name = longName;
                 value = OsString.FromUnixBytes(bytes[(equalsIndex + 1)..]);
                 return true;
@@ -267,7 +272,7 @@ public static class CliParser
         if (bytes.Length > 2 &&
             bytes[0] == (byte)'-' &&
             bytes[1] != (byte)'-' &&
-            GeneratedFlagCatalog.TryFindShortValue((char)bytes[1], out descriptor))
+            GeneratedFlagCatalog.TryFindShortValue((char)bytes[1], out FlagDescriptor shortDescriptor))
         {
             ReadOnlySpan<byte> inlineValue = bytes[2..];
             if (!inlineValue.IsEmpty && inlineValue[0] == (byte)'=')
@@ -275,6 +280,7 @@ public static class CliParser
                 inlineValue = inlineValue[1..];
             }
 
+            descriptor = shortDescriptor;
             name = GetShortValueName((char)bytes[1]);
             value = OsString.FromUnixBytes(inlineValue);
             return true;
@@ -294,8 +300,9 @@ public static class CliParser
             if (equalsIndex > 2)
             {
                 string longName = text[..equalsIndex];
-                if (GeneratedFlagCatalog.TryFindLongValue(longName, out descriptor))
+                if (GeneratedFlagCatalog.TryFindLongValue(longName, out FlagDescriptor longDescriptor))
                 {
+                    descriptor = longDescriptor;
                     name = longName;
                     value = OsString.FromText(text[(equalsIndex + 1)..]);
                     return true;
@@ -306,7 +313,7 @@ public static class CliParser
         if (text.Length > 2 &&
             text[0] == '-' &&
             text[1] != '-' &&
-            GeneratedFlagCatalog.TryFindShortValue(text[1], out descriptor))
+            GeneratedFlagCatalog.TryFindShortValue(text[1], out FlagDescriptor shortDescriptor))
         {
             string inlineValue = text[2..];
             if (inlineValue.Length > 0 && inlineValue[0] == '=')
@@ -314,6 +321,7 @@ public static class CliParser
                 inlineValue = inlineValue[1..];
             }
 
+            descriptor = shortDescriptor;
             name = GetShortValueName(text[1]);
             value = OsString.FromText(inlineValue);
             return true;
@@ -461,8 +469,9 @@ public static class CliParser
     {
         string matchedName = new(['-', flag]);
         if (GeneratedFlagCatalog.TryFindShortSpecial(flag, out FlagDescriptor descriptor) &&
-            descriptor.TryGetSpecialMode(matchedName, out mode))
+            descriptor.TryGetSpecialMode(matchedName, out CliSpecialMode specialMode))
         {
+            mode = specialMode;
             return true;
         }
 
