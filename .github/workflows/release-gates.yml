@@ -202,6 +202,8 @@ jobs:
           SCOUT_HOST_RID: osx-arm64
           SCOUT_ORACLE_ENVIRONMENT: github-actions
         run: eng/setup-ripgrep-oracle.sh
+      - name: Restore
+        run: dotnet restore Scout.slnx
       - name: Install pinned hyperfine
         run: eng/setup-hyperfine.sh
       - name: Fetch pinned corpora
