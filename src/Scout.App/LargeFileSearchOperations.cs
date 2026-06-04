@@ -1610,7 +1610,7 @@ internal static unsafe class LargeFileSearchOperations
 
         bool SearchSegmentsInParallel()
         {
-            int parallelism = Math.Clamp(threadCount, 1, 3);
+            int parallelism = Math.Clamp(threadCount, 1, 4);
             using var workItems = new BlockingCollection<(long Sequence, nint SegmentAddress, int SegmentLength, long SegmentStartOffset, long SegmentLineNumber)>(parallelism);
             using var completedItems = new BlockingCollection<(long Sequence, LargeFileSegmentSearchResult Result, Exception? Error)>(parallelism);
             var completedBySequence = new Dictionary<long, LargeFileSegmentSearchResult>();
