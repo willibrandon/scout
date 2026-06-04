@@ -8,6 +8,7 @@ internal static unsafe class LargeFileSearchOperations
     private const int StreamingFileBufferLength = 131_072;
     private const int StreamingFileStreamBufferLength = 1;
     private const int ImplicitSearchStreamingFileBufferLength = 262_144;
+    private const int ExplicitRegexStreamingFileBufferLength = 512 * 1024;
     private const int ExplicitFastLiteralStreamingFileBufferLength = 5 * 1024 * 1024;
     private const long ImplicitSearchStreamingFileThreshold = 65_536;
     private const long StreamingFileThreshold = int.MaxValue;
@@ -1368,7 +1369,6 @@ internal static unsafe class LargeFileSearchOperations
         int bufferLength)
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, StreamingFileStreamBufferLength, FileOptions.SequentialScan);
-        using var bufferOwner = new NativeByteBuffer(bufferLength);
         MemoryStream? pendingLine = null;
         long pendingLineOffset = 0;
         long absoluteOffset = 0;
@@ -1391,6 +1391,10 @@ internal static unsafe class LargeFileSearchOperations
         RegexSearchPlan? regexPlan = fastLiteralPattern is null
             ? LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: !searchSegmentsInParallel)
             : null;
+        int effectiveBufferLength = searchSegmentsInParallel
+            ? Math.Max(bufferLength, ExplicitRegexStreamingFileBufferLength)
+            : bufferLength;
+        using var bufferOwner = new NativeByteBuffer(effectiveBufferLength);
 
         bool DetectBinary(ReadOnlySpan<byte> segment, long segmentStartOffset)
         {
