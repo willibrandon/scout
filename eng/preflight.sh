@@ -488,6 +488,7 @@ ACTUAL_SDK="$(dotnet --version)"
 expect_equal ".NET SDK" "$EXPECTED_SDK" "$ACTUAL_SDK"
 
 "$ROOT/eng/check-msbuild-warning-gates.sh" "$ROOT/artifacts/preflight/msbuild-warning-gates"
+dotnet format "$ROOT/Scout.slnx" --no-restore --verify-no-changes
 
 EXPECTED_RIPGREP="$(read_lock_value "ripgrep_commit")" || fail "Missing ripgrep_commit in tests/PREREQS.lock."
 require_literal "$EXPECTED_RIPGREP" "ripgrep_commit"

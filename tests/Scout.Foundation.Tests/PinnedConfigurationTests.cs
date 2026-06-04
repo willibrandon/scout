@@ -622,6 +622,7 @@ public sealed partial class PinnedConfigurationTests
         string script = File.ReadAllText(Path.Combine(root, "eng", "check-msbuild-warning-gates.sh"));
 
         Assert.Contains("artifacts/preflight/msbuild-warning-gates", preflight, StringComparison.Ordinal);
+        Assert.Contains("dotnet format \"$ROOT/Scout.slnx\" --no-restore --verify-no-changes", preflight, StringComparison.Ordinal);
         Assert.Contains("-getProperty:NoWarn", script, StringComparison.Ordinal);
         Assert.Contains("-getProperty:WarningsNotAsErrors", script, StringComparison.Ordinal);
         Assert.Contains("-getProperty:TreatWarningsAsErrors", script, StringComparison.Ordinal);
