@@ -57,6 +57,6 @@ command order reversed before the failure is accepted.
 Peak RSS is judged from the rg-first run so the later rg command cannot inherit an
 earlier scout process peak on macOS.
 In gate mode, the OpenSubtitles workloads use five runs and two warmups, and the
-Linux-tree workloads use five runs and three warmups by default because hosted
+Linux-tree workloads use five runs and five warmups by default because hosted
 macOS filesystem timings are noisier; explicit `--runs` and `--warmup` values
 still override those defaults.

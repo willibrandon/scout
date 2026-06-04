@@ -4,7 +4,7 @@ namespace Scout;
 
 internal static class SearchWalkPlanning
 {
-    private const int MacOsDefaultSearchWalkThreadCount = 7;
+    private const int MacOsDefaultSearchWalkThreadCount = 5;
     private const int MacOsDefaultLargeFileSearchThreadCount = 4;
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 

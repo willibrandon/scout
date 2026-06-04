@@ -12,7 +12,7 @@ OUT_DIR="$ROOT/artifacts/bench/hyperfine"
 GATE_OPENSUBTITLES_RUNS="5"
 GATE_OPENSUBTITLES_WARMUP="2"
 GATE_TREE_RUNS="5"
-GATE_TREE_WARMUP="3"
+GATE_TREE_WARMUP="5"
 
 fail() {
     printf '%s\n' "$1" >&2

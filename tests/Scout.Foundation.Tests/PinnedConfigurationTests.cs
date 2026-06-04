@@ -2783,7 +2783,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("gate_opensubtitles_runs", script, StringComparison.Ordinal);
         Assert.Contains("gate_opensubtitles_warmup", script, StringComparison.Ordinal);
         Assert.Contains("GATE_TREE_RUNS=\"5\"", script, StringComparison.Ordinal);
-        Assert.Contains("GATE_TREE_WARMUP=\"3\"", script, StringComparison.Ordinal);
+        Assert.Contains("GATE_TREE_WARMUP=\"5\"", script, StringComparison.Ordinal);
         Assert.Contains("gate_tree_runs", script, StringComparison.Ordinal);
         Assert.Contains("gate_tree_warmup", script, StringComparison.Ordinal);
         Assert.Contains("median ratio", script, StringComparison.Ordinal);
@@ -2802,7 +2802,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("failed timing gate is rerun", readme, StringComparison.Ordinal);
         Assert.Contains("Peak RSS is judged from the rg-first run", readme, StringComparison.Ordinal);
         Assert.Contains("OpenSubtitles workloads use five runs and two", readme, StringComparison.Ordinal);
-        Assert.Contains("Linux-tree workloads use five runs and three", readme, StringComparison.Ordinal);
+        Assert.Contains("Linux-tree workloads use five runs and five", readme, StringComparison.Ordinal);
         Assert.Contains("run_pair_no_shell", script, StringComparison.Ordinal);
         Assert.Contains("-N", script, StringComparison.Ordinal);
         Assert.Contains("make_cold_tiny_corpus", script, StringComparison.Ordinal);
