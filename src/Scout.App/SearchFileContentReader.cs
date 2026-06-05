@@ -38,13 +38,13 @@ internal static class SearchFileContentReader
         }
         catch (IOException exception)
         {
-            SearchErrorMessage(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path}: {exception.Message}").WithContext($"rg: {path}"));
+            SearchErrorMessage(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path}: {exception.Message}").WithContext(ScoutErrorContext.ProgramPathContext(path)));
             bytes = [];
             return false;
         }
         catch (UnauthorizedAccessException exception)
         {
-            SearchErrorMessage(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path}: {exception.Message}").WithContext($"rg: {path}"));
+            SearchErrorMessage(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path}: {exception.Message}").WithContext(ScoutErrorContext.ProgramPathContext(path)));
             bytes = [];
             return false;
         }
@@ -67,19 +67,19 @@ internal static class SearchFileContentReader
         }
         catch (IOException exception)
         {
-            SearchErrorMessage(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path.DisplayText}: {exception.Message}").WithContext($"rg: {path.DisplayText}"));
+            SearchErrorMessage(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path.DisplayText}: {exception.Message}").WithContext(ScoutErrorContext.ProgramPathContext(path.DisplayText)));
             bytes = [];
             return false;
         }
         catch (UnauthorizedAccessException exception)
         {
-            SearchErrorMessage(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path.DisplayText}: {exception.Message}").WithContext($"rg: {path.DisplayText}"));
+            SearchErrorMessage(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path.DisplayText}: {exception.Message}").WithContext(ScoutErrorContext.ProgramPathContext(path.DisplayText)));
             bytes = [];
             return false;
         }
         catch (ArgumentException exception)
         {
-            SearchErrorMessage(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path.DisplayText}: {exception.Message}").WithContext($"rg: {path.DisplayText}"));
+            SearchErrorMessage(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path.DisplayText}: {exception.Message}").WithContext(ScoutErrorContext.ProgramPathContext(path.DisplayText)));
             bytes = [];
             return false;
         }
@@ -112,7 +112,7 @@ internal static class SearchFileContentReader
                 return true;
             }
 
-            SearchErrorMessage(lowArgs, diagnostics, error!.WithContext($"rg: {path}"));
+            SearchErrorMessage(lowArgs, diagnostics, error!.WithContext(ScoutErrorContext.ProgramPathContext(path)));
             return false;
         }
 
@@ -130,7 +130,7 @@ internal static class SearchFileContentReader
         if (decompressionError is not null)
         {
             handled = true;
-            SearchErrorMessage(lowArgs, diagnostics, decompressionError.WithContext($"rg: {path}"));
+            SearchErrorMessage(lowArgs, diagnostics, decompressionError.WithContext(ScoutErrorContext.ProgramPathContext(path)));
             return false;
         }
 

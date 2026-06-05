@@ -43,7 +43,7 @@ public sealed class PatternFileLoaderTests
         Assert.False(loaded);
         Assert.Empty(patterns);
         Assert.Equal(
-            "rg: -:1: found invalid UTF-8 in pattern at byte offset 1: a\\xFF (disable Unicode mode and use hex escape sequences to match arbitrary bytes in a pattern, e.g., '(?-u)\\xFF')\n"u8.ToArray(),
+            "scout: -:1: found invalid UTF-8 in pattern at byte offset 1: a\\xFF (disable Unicode mode and use hex escape sequences to match arbitrary bytes in a pattern, e.g., '(?-u)\\xFF')\n"u8.ToArray(),
             error.ToArray());
     }
 
@@ -62,6 +62,6 @@ public sealed class PatternFileLoaderTests
 
         Assert.False(loaded);
         Assert.Empty(patterns);
-        Assert.Equal("rg: invalid CLI arguments\n"u8.ToArray(), error.ToArray());
+        Assert.Equal("scout: invalid CLI arguments\n"u8.ToArray(), error.ToArray());
     }
 }

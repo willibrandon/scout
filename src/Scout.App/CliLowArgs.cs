@@ -391,7 +391,7 @@ public sealed class CliLowArgs
     public bool RespectIgnoreFiles { get; private set; } = true;
 
     /// <summary>
-    /// Gets a value indicating whether <c>.ignore</c> and <c>.rgignore</c> files should be respected.
+    /// Gets a value indicating whether <c>.ignore</c>, <c>.rgignore</c>, and <c>.scoutignore</c> files should be respected.
     /// </summary>
     public bool RespectDotIgnoreFiles { get; private set; } = true;
 
@@ -606,7 +606,7 @@ public sealed class CliLowArgs
     }
 
     /// <summary>
-    /// Applies ripgrep's pretty output alias.
+    /// Applies Scout's pretty output alias.
     /// </summary>
     public void SetPretty()
     {
@@ -1177,7 +1177,7 @@ public sealed class CliLowArgs
     /// <summary>
     /// Enables or disables dot ignore-file filtering.
     /// </summary>
-    /// <param name="yes">Whether <c>.ignore</c> and <c>.rgignore</c> files should be respected.</param>
+    /// <param name="yes">Whether <c>.ignore</c>, <c>.rgignore</c>, and <c>.scoutignore</c> files should be respected.</param>
     public void SetRespectDotIgnoreFiles(bool yes)
     {
         RespectDotIgnoreFiles = yes;

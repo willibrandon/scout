@@ -81,11 +81,12 @@ compare_artifact() {
     name="$1"
     artifact="$2"
     shift 2
+    kind="${artifact%.base64}"
 
     expected="$TMP/$name.expected"
     actual="$TMP/$name.actual"
 
-    "$RG_PATH" "$@" > "$expected"
+    "$RG_PATH" "$@" | "$ROOT/eng/transform-ripgrep-artifact.sh" "$kind" > "$expected"
     decode_artifact "$ARTIFACTS/$artifact" > "$actual"
     normalize_windows_generated_artifact_output "$expected"
     normalize_windows_generated_artifact_output "$actual"
@@ -110,4 +111,4 @@ compare_artifact generate_complete_zsh complete-zsh.base64 --generate complete-z
 compare_artifact generate_complete_fish complete-fish.base64 --generate complete-fish
 compare_artifact generate_complete_powershell complete-powershell.base64 --generate complete-powershell
 
-printf 'Scout generated artifacts match pinned rg.\n'
+printf 'Scout generated artifacts match transformed pinned rg artifacts.\n'

@@ -90,12 +90,12 @@ internal static unsafe class LargeFileSearchOperations
         }
         catch (IOException exception)
         {
-            SearchApplicationDiagnostics.ReportError(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path}: {exception.Message}").WithContext($"rg: {path}"));
+            SearchApplicationDiagnostics.ReportError(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path}: {exception.Message}").WithContext(ScoutErrorContext.ProgramPathContext(path)));
             errored = true;
         }
         catch (UnauthorizedAccessException exception)
         {
-            SearchApplicationDiagnostics.ReportError(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path}: {exception.Message}").WithContext($"rg: {path}"));
+            SearchApplicationDiagnostics.ReportError(lowArgs, diagnostics, new ScoutError($"IO error for operation on {path}: {exception.Message}").WithContext(ScoutErrorContext.ProgramPathContext(path)));
             errored = true;
         }
 

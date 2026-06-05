@@ -510,6 +510,7 @@ RG_VERSION="$( ( "$RG_PATH" --version || true ) | sed -n '1p' )"
 expect_equal "reference rg version" "ripgrep 15.1.0 (rev $RG_REV)" "$RG_VERSION"
 
 "$ROOT/eng/verify-generated-artifacts.sh" "$RG_PATH"
+"$ROOT/eng/verify-identity-rebrand.sh"
 "$ROOT/eng/verify-unicode-data.sh"
 
 RG_PCRE2_PROFILE="$(read_oracle_value "pcre2_profile" "ripgrep_pcre2_rg_profile")" || fail "Missing ripgrep_oracle.pcre2_profile for $HOST_RID in tests/PREREQS.lock."

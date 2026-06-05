@@ -82,7 +82,7 @@ internal static class ScoutApplication
 
         if (parseResult.Status == CliParseStatus.Error)
         {
-            diagnostics.ErrorMessage(parseResult.Error!.WithContext("rg"));
+            diagnostics.ErrorMessage(parseResult.Error!.WithContext(ScoutErrorContext.ProgramContext()));
             return ExitCode.Error;
         }
 
@@ -108,7 +108,7 @@ internal static class ScoutApplication
     {
         if (!PatternPreparation.TryGetPatternBytes(pattern, out byte[] bytes))
         {
-            diagnostics.ErrorMessage(new ScoutError("pattern given is not valid UTF-8").WithContext("rg"));
+            diagnostics.ErrorMessage(new ScoutError("pattern given is not valid UTF-8").WithContext(ScoutErrorContext.ProgramContext()));
             return false;
         }
 
@@ -183,7 +183,7 @@ internal static class ScoutApplication
         {
             if (!SearchWalkPlanning.TryBuildFileTypeMatcher(lowArgs, out FileTypeMatcher? fileTypes, out ScoutError? error))
             {
-                diagnostics.ErrorMessage(error!.WithContext("rg"));
+                diagnostics.ErrorMessage(error!.WithContext(ScoutErrorContext.ProgramContext()));
                 return ExitCode.Error;
             }
 
@@ -197,7 +197,7 @@ internal static class ScoutApplication
         {
             if (positional.Count == 0)
             {
-                diagnostics.ErrorMessage(new ScoutError("ripgrep requires at least one pattern to execute a search").WithContext("rg"));
+                diagnostics.ErrorMessage(new ScoutError("scout requires at least one pattern to execute a search").WithContext(ScoutErrorContext.ProgramContext()));
                 return ExitCode.Error;
             }
 
@@ -243,13 +243,13 @@ internal static class ScoutApplication
 
         if (!lowArgs.Multiline && PatternPreparation.ContainsLineTerminator(patterns, lowArgs.NullData, lowArgs.FixedStrings))
         {
-            diagnostics.ErrorMessage(new ScoutError(PatternPreparation.BuildLineTerminatorPatternError(lowArgs.NullData)).WithContext("rg"));
+            diagnostics.ErrorMessage(new ScoutError(PatternPreparation.BuildLineTerminatorPatternError(lowArgs.NullData)).WithContext(ScoutErrorContext.ProgramContext()));
             return ExitCode.Error;
         }
 
         if (!lowArgs.TextMode && !lowArgs.NullData && !lowArgs.FixedStrings && PatternPreparation.ContainsRegexNulLiteral(patterns))
         {
-            diagnostics.ErrorMessage(new ScoutError("pattern contains \"\\0\" but it is impossible to match\n\nConsider enabling text mode with the --text flag (or -a for short). Otherwise,\nbinary detection is enabled and matching a NUL byte is impossible.").WithContext("rg"));
+            diagnostics.ErrorMessage(new ScoutError("pattern contains \"\\0\" but it is impossible to match\n\nConsider enabling text mode with the --text flag (or -a for short). Otherwise,\nbinary detection is enabled and matching a NUL byte is impossible.").WithContext(ScoutErrorContext.ProgramContext()));
             return ExitCode.Error;
         }
 
@@ -274,7 +274,7 @@ internal static class ScoutApplication
 
         if (!SearchWalkPlanning.TryBuildFileTypeMatcher(lowArgs, out FileTypeMatcher? searchFileTypes, out ScoutError? searchError))
         {
-            diagnostics.ErrorMessage(searchError!.WithContext("rg"));
+            diagnostics.ErrorMessage(searchError!.WithContext(ScoutErrorContext.ProgramContext()));
             return ExitCode.Error;
         }
 

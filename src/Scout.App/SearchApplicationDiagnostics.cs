@@ -18,6 +18,6 @@ internal static class SearchApplicationDiagnostics
         string message = simple
             ? OsErrorMessages.NoSuchFileOrDirectory
             : $"IO error for operation on {path}: {OsErrorMessages.NoSuchFileOrDirectory}";
-        return new ScoutError(message).WithContext($"rg: {path}");
+        return new ScoutError(message).WithContext(ScoutErrorContext.ProgramPathContext(path));
     }
 }

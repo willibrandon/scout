@@ -65,6 +65,25 @@ function Escape-BashSingleQuoted {
     return "'" + $Value.Replace("'", "'\''") + "'"
 }
 
+$BuildProps = [xml](Get-Content (Join-Path $Root "Directory.Build.props"))
+function Read-MsBuildProperty {
+    param([string] $Name)
+
+    foreach ($propertyGroup in $BuildProps.Project.PropertyGroup) {
+        $value = $propertyGroup.$Name
+        if ($null -ne $value -and ([string]$value) -ne "") {
+            return [string] $value
+        }
+    }
+
+    throw "Missing MSBuild property $Name in Directory.Build.props."
+}
+
+$ScoutVersion = Read-MsBuildProperty "VersionPrefix"
+$ScoutRipgrepVersion = Read-MsBuildProperty "ScoutRipgrepVersion"
+$ScoutRipgrepRevisionShort = Read-MsBuildProperty "ScoutRipgrepRevisionShort"
+$ScoutShortVersion = "scout $ScoutVersion (ripgrep $ScoutRipgrepVersion compatible, rev $ScoutRipgrepRevisionShort)"
+
 Require-Tool "cl.exe"
 Require-Tool "link.exe"
 
@@ -124,7 +143,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $VersionOutput = @(& $OutputExe -V)
-if ($LASTEXITCODE -ne 0 -or $VersionOutput.Count -ne 1 -or $VersionOutput[0] -ne "ripgrep 15.1.0 (rev 4857d6fa67)") {
+if ($LASTEXITCODE -ne 0 -or $VersionOutput.Count -ne 1 -or $VersionOutput[0] -ne $ScoutShortVersion) {
     throw "Unexpected scout -V output: $VersionOutput"
 }
 

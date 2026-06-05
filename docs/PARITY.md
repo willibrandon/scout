@@ -1,10 +1,33 @@
 # Parity Ledger
 
-Scout has no accepted runtime deviations from the pinned ripgrep behavior.
+Scout has no accepted behavioral deviations from the pinned ripgrep behavior.
+Identity surfaces are intentionally Scout-specific, enumerated below, and
+guarded by Scout golden tests plus the rebrand audit.
 
 Pre-release implementation work may temporarily add tracked gaps here, but the
 release gate requires this file to contain zero waived, skipped, or accepted
 behavioral mismatches.
+
+## Accepted Identity Surfaces
+
+These are runtime surfaces where Scout intentionally differs from the pinned
+`rg` binary because they identify the product rather than search behavior:
+
+- Version banners: `-V` and `--version` print Scout's version while retaining
+  the pinned ripgrep compatibility coordinate.
+- Top-level stderr program prefixes use `scout:` instead of `rg:`.
+- `--debug`/`--trace` structural fields use Scout's program prefix, stable
+  Scout categories, and repo-relative Scout source locations. Debug message
+  bodies remain behavior and are compared against the pinned `rg`.
+- Help, man page, and shell completions are the deterministic Scout identity
+  transform of the pinned `rg` artifacts. Completions register only `scout`.
+- Help/man configuration and ignore-file documentation names
+  `SCOUT_CONFIG_PATH` and `.scoutignore`, while documenting
+  `RIPGREP_CONFIG_PATH` and `.rgignore` as compatibility inputs.
+- Product-voice diagnostics say Scout where the message identifies the tool,
+  for example the missing-pattern diagnostic and PCRE2 unavailable text.
+- Homepage, issue, and visible credit text identify Scout while preserving
+  ripgrep attribution in `THIRD-PARTY-NOTICES.md`.
 
 ## Tracked Gaps
 

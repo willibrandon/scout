@@ -749,7 +749,7 @@ internal static class PatternPreparation
                 diagnostics.ErrorMessage(new ScoutError(BuildRegexParseError(
                     patterns[index],
                     offset,
-                    "repetition operator missing expression")).WithContext("rg"));
+                    "repetition operator missing expression")).WithContext(ScoutErrorContext.ProgramContext()));
                 return false;
             }
         }
@@ -770,7 +770,7 @@ internal static class PatternPreparation
             compiledSize = SaturatingAdd(compiledSize, EstimateCompiledRegexSize(patterns[index], lowArgs.Unicode));
             if (compiledSize > limit)
             {
-                diagnostics.ErrorMessage(new ScoutError($"compiled regex exceeds size limit of {limit}").WithContext("rg"));
+                diagnostics.ErrorMessage(new ScoutError($"compiled regex exceeds size limit of {limit}").WithContext(ScoutErrorContext.ProgramContext()));
                 return false;
             }
         }

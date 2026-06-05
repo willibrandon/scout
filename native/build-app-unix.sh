@@ -46,6 +46,25 @@ strip_macos_binary() {
     fi
 }
 
+read_msbuild_property() {
+    property="$1"
+    awk -v property="$property" '
+        $0 ~ "<" property ">" {
+            value = $0
+            sub(".*<" property ">", "", value)
+            sub("</" property ">.*", "", value)
+            print value
+            found = 1
+            exit
+        }
+        END {
+            if (!found) {
+                exit 1
+            }
+        }
+    ' "$ROOT/Directory.Build.props"
+}
+
 if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
     printf 'usage: %s <rid> [--with-differentials|--smoke-only]\n' "$0" >&2
     exit 2
@@ -58,6 +77,15 @@ OUT="$ROOT/artifacts/app/$RID"
 BIN="$ROOT/artifacts/bin/$RID"
 REAL_BIN="$BIN/scout-real"
 PCRE2_LIB="$ROOT/artifacts/native/pcre2/$RID/lib/libpcre2-8.a"
+SCOUT_VERSION="$(read_msbuild_property VersionPrefix)"
+SCOUT_RIPGREP_VERSION="$(read_msbuild_property ScoutRipgrepVersion)"
+SCOUT_RIPGREP_REVISION_SHORT="$(read_msbuild_property ScoutRipgrepRevisionShort)"
+SCOUT_SHORT_VERSION="scout $SCOUT_VERSION (ripgrep $SCOUT_RIPGREP_VERSION compatible, rev $SCOUT_RIPGREP_REVISION_SHORT)"
+SCOUT_IDENTITY_CFLAGS=(
+    "-DSCOUT_VERSION=\"$SCOUT_VERSION\""
+    "-DSCOUT_RIPGREP_VERSION=\"$SCOUT_RIPGREP_VERSION\""
+    "-DSCOUT_RIPGREP_REVISION_SHORT=\"$SCOUT_RIPGREP_REVISION_SHORT\""
+)
 
 cd "$ROOT"
 
@@ -87,7 +115,7 @@ mkdir -p "$BIN"
 RT="$HOME/.nuget/packages/microsoft.netcore.app.runtime.nativeaot.$RID/10.0.2/runtimes/$RID/native"
 
 if [ "$RID" = "osx-arm64" ]; then
-    clang "$ROOT/native/entry/scout_main.c" \
+    clang "${SCOUT_IDENTITY_CFLAGS[@]}" "$ROOT/native/entry/scout_main.c" \
         "$OUT/scout.a" \
         "$RT/libbootstrapperdll.o" "$RT/libaotminipal.a" \
         "$RT/libRuntime.WorkstationGC.a" "$RT/libeventpipe-disabled.a" "$RT/libstandalonegc-disabled.a" \
@@ -101,7 +129,7 @@ if [ "$RID" = "osx-arm64" ]; then
         -o "$REAL_BIN"
     strip_macos_binary "$REAL_BIN"
 elif [ "$RID" = "osx-x64" ]; then
-    clang -arch x86_64 "$ROOT/native/entry/scout_main.c" \
+    clang -arch x86_64 "${SCOUT_IDENTITY_CFLAGS[@]}" "$ROOT/native/entry/scout_main.c" \
         "$OUT/scout.a" \
         "$RT/libbootstrapperdll.o" "$RT/libaotminipal.a" \
         "$RT/libRuntime.WorkstationGC.a" "$RT/libRuntime.VxsortEnabled.a" \
@@ -122,7 +150,7 @@ elif [ "$RID" = "linux-x64" ] || [ "$RID" = "linux-arm64" ]; then
         VXSORT_ARCHIVE="$RT/libRuntime.VxsortEnabled.a"
     fi
 
-    "$CC" "$ROOT/native/entry/scout_main.c" \
+    "$CC" "${SCOUT_IDENTITY_CFLAGS[@]}" "$ROOT/native/entry/scout_main.c" \
         -Wl,--start-group \
         "$OUT/scout.a" \
         "$RT/libbootstrapperdll.o" "$RT/libaotminipal.a" \
@@ -138,17 +166,17 @@ elif [ "$RID" = "linux-x64" ] || [ "$RID" = "linux-arm64" ]; then
 fi
 
 if [ "$RID" = "osx-arm64" ]; then
-    clang -arch arm64 -O2 -DSCOUT_LAUNCHER "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -Wl,-dead_strip -Wl,-dead_strip_dylibs -o "$BIN/scout"
+    clang -arch arm64 -O2 -DSCOUT_LAUNCHER "${SCOUT_IDENTITY_CFLAGS[@]}" "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -Wl,-dead_strip -Wl,-dead_strip_dylibs -o "$BIN/scout"
     strip_macos_binary "$BIN/scout"
 elif [ "$RID" = "osx-x64" ]; then
-    clang -arch x86_64 -O2 -DSCOUT_LAUNCHER "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -Wl,-dead_strip -Wl,-dead_strip_dylibs -o "$BIN/scout"
+    clang -arch x86_64 -O2 -DSCOUT_LAUNCHER "${SCOUT_IDENTITY_CFLAGS[@]}" "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -Wl,-dead_strip -Wl,-dead_strip_dylibs -o "$BIN/scout"
     strip_macos_binary "$BIN/scout"
 else
-    "$CC" -O2 -DSCOUT_LAUNCHER "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -o "$BIN/scout"
+    "$CC" -O2 -DSCOUT_LAUNCHER "${SCOUT_IDENTITY_CFLAGS[@]}" "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -o "$BIN/scout"
 fi
 
 "$BIN/scout" -V > "$BIN/version.out"
-printf 'ripgrep 15.1.0 (rev 4857d6fa67)\n' > "$BIN/version.expected"
+printf '%s\n' "$SCOUT_SHORT_VERSION" > "$BIN/version.expected"
 expect_equal_file "scout -V" "$BIN/version.expected" "$BIN/version.out"
 "$BIN/scout" --pcre2-version > "$BIN/pcre2-version.out"
 printf 'PCRE2 10.46 is available (JIT is available)\n' > "$BIN/pcre2-version.expected"

@@ -10,7 +10,7 @@ internal readonly struct IgnoreDotFlag : IFlag<IgnoreDotFlag>
         "--no-ignore-dot",
         aliases: [],
         FlagCategory.Search,
-        "Respect .ignore and .rgignore files.",
+        "Respect .ignore, .rgignore, and .scoutignore files.",
         static (lowArgs, matchedName) =>
         {
             lowArgs.SetRespectDotIgnoreFiles(matchedName != "--no-ignore-dot");

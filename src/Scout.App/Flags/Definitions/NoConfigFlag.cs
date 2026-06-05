@@ -10,6 +10,6 @@ internal readonly struct NoConfigFlag : IFlag<NoConfigFlag>
         negatedName: null,
         aliases: [],
         FlagCategory.Diagnostics,
-        "Disable ripgrep configuration expansion.",
+        "Disable Scout configuration expansion.",
         static _ => null);
 }

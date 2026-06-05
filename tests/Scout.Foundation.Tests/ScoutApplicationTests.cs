@@ -11,10 +11,10 @@ namespace Scout;
 public sealed class ScoutApplicationTests
 {
     /// <summary>
-    /// Verifies the short version mode writes the pinned upstream version bytes.
+    /// Verifies the short version mode writes Scout's version bytes.
     /// </summary>
     [Fact]
-    public void ShortVersionWritesPinnedUpstreamVersion()
+    public void ShortVersionWritesScoutVersion()
     {
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -29,15 +29,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
         Assert.Equal(0, exitCode);
-        Assert.Equal(ReadPinnedRipgrepOutput("-V"), output.ToArray());
+        Assert.Equal(VersionOutput.Short.ToArray(), output.ToArray());
         Assert.Empty(error.ToArray());
     }
 
     /// <summary>
-    /// Verifies the long version mode writes the pinned upstream long version bytes.
+    /// Verifies the long version mode writes Scout's long version bytes.
     /// </summary>
     [Fact]
-    public void LongVersionWritesPinnedUpstreamVersion()
+    public void LongVersionWritesScoutVersion()
     {
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -52,15 +52,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
         Assert.Equal(0, exitCode);
-        Assert.Equal(ReadPinnedRipgrepOutput("--version"), output.ToArray());
+        Assert.Equal(VersionOutput.GetLong(), output.ToArray());
         Assert.Empty(error.ToArray());
     }
 
     /// <summary>
-    /// Verifies short help output matches the pinned upstream binary.
+    /// Verifies short help output matches Scout's generated artifact.
     /// </summary>
     [Fact]
-    public void ShortHelpWritesPinnedUpstreamHelp()
+    public void ShortHelpWritesScoutHelp()
     {
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -75,15 +75,15 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
         Assert.Equal(0, exitCode);
-        Assert.Equal(ReadPinnedRipgrepGeneratedOutput("-h"), output.ToArray());
+        Assert.Equal(HelpOutput.Short.ToArray(), output.ToArray());
         Assert.Empty(error.ToArray());
     }
 
     /// <summary>
-    /// Verifies long help output matches the pinned upstream binary.
+    /// Verifies long help output matches Scout's generated artifact.
     /// </summary>
     [Fact]
-    public void LongHelpWritesPinnedUpstreamHelp()
+    public void LongHelpWritesScoutHelp()
     {
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -98,7 +98,7 @@ public sealed class ScoutApplicationTests
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
         Assert.Equal(0, exitCode);
-        Assert.Equal(ReadPinnedRipgrepGeneratedOutput("--help"), output.ToArray());
+        Assert.Equal(HelpOutput.Long.ToArray(), output.ToArray());
         Assert.Empty(error.ToArray());
     }
 
@@ -113,10 +113,10 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
-    /// Verifies parser errors are rendered with ripgrep's top-level prefix.
+    /// Verifies parser errors are rendered with Scout's top-level prefix.
     /// </summary>
     [Fact]
-    public void ParserErrorsUseRipgrepPrefix()
+    public void ParserErrorsUseScoutPrefix()
     {
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -132,14 +132,14 @@ public sealed class ScoutApplicationTests
 
         Assert.Equal(2, exitCode);
         Assert.Empty(output.ToArray());
-        Assert.Equal("rg: unrecognized flag --bogus\n"u8.ToArray(), error.ToArray());
+        Assert.Equal("scout: unrecognized flag --bogus\n"u8.ToArray(), error.ToArray());
     }
 
     /// <summary>
-    /// Verifies missing patterns match ripgrep's diagnostic.
+    /// Verifies missing patterns use Scout's diagnostic.
     /// </summary>
     [Fact]
-    public void MissingPatternWritesRipgrepDiagnosticError()
+    public void MissingPatternWritesScoutDiagnosticError()
     {
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -154,14 +154,14 @@ public sealed class ScoutApplicationTests
 
         Assert.Equal(2, exitCode);
         Assert.Empty(output.ToArray());
-        Assert.Equal("rg: ripgrep requires at least one pattern to execute a search\n"u8.ToArray(), error.ToArray());
+        Assert.Equal("scout: scout requires at least one pattern to execute a search\n"u8.ToArray(), error.ToArray());
     }
 
     /// <summary>
-    /// Verifies invalid UTF-8 implicit pattern arguments match ripgrep's diagnostic.
+    /// Verifies invalid UTF-8 implicit pattern arguments use Scout's diagnostic prefix.
     /// </summary>
     [Fact]
-    public void InvalidUtf8ImplicitPatternWritesRipgrepDiagnosticError()
+    public void InvalidUtf8ImplicitPatternWritesScoutDiagnosticError()
     {
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -178,14 +178,14 @@ public sealed class ScoutApplicationTests
 
         Assert.Equal(2, exitCode);
         Assert.Empty(output.ToArray());
-        Assert.Equal("rg: pattern given is not valid UTF-8\n"u8.ToArray(), error.ToArray());
+        Assert.Equal("scout: pattern given is not valid UTF-8\n"u8.ToArray(), error.ToArray());
     }
 
     /// <summary>
-    /// Verifies invalid UTF-8 explicit pattern arguments match ripgrep's diagnostic.
+    /// Verifies invalid UTF-8 explicit pattern arguments use Scout's diagnostic prefix.
     /// </summary>
     [Fact]
-    public void InvalidUtf8ExplicitPatternWritesRipgrepDiagnosticError()
+    public void InvalidUtf8ExplicitPatternWritesScoutDiagnosticError()
     {
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -203,7 +203,7 @@ public sealed class ScoutApplicationTests
 
         Assert.Equal(2, exitCode);
         Assert.Empty(output.ToArray());
-        Assert.Equal("rg: error parsing flag -e: value is not valid UTF-8\n"u8.ToArray(), error.ToArray());
+        Assert.Equal("scout: error parsing flag -e: value is not valid UTF-8\n"u8.ToArray(), error.ToArray());
     }
 
     /// <summary>
@@ -230,7 +230,7 @@ public sealed class ScoutApplicationTests
         Assert.Empty(output.ToArray());
         if (OperatingSystem.IsWindows())
         {
-            Assert.Equal("rg: invalid CLI arguments\n", stderr);
+            Assert.Equal("scout: invalid CLI arguments\n", stderr);
         }
         else
         {
@@ -6168,10 +6168,10 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
-    /// Verifies RIPGREP_CONFIG_PATH arguments are applied before command-line arguments.
+    /// Verifies Scout config path arguments are applied before command-line arguments.
     /// </summary>
     [Fact]
-    public void ConfigPathArgumentsMatchPinnedRipgrep()
+    public void ScoutConfigPathArgumentsMatchPinnedRipgrepBehavior()
     {
         string root = CreateTempDirectory();
         string path = Path.Combine(root, "input.txt");
@@ -6228,7 +6228,68 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
-    /// Verifies raw Unix RIPGREP_CONFIG_PATH bytes are not discarded when they are not valid UTF-8.
+    /// Verifies Scout's native config path wins when the ripgrep compatibility fallback is also set.
+    /// </summary>
+    [Fact]
+    public void ScoutConfigPathTakesPrecedenceOverRipgrepConfigPath()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        string scoutConfig = Path.Combine(root, "scout.conf");
+        string ripgrepConfig = Path.Combine(root, "rg.conf");
+        File.WriteAllText(path, "Needle\nneedle\n");
+        File.WriteAllText(scoutConfig, "-n\n--case-sensitive\nneedle\n" + path + "\n");
+        File.WriteAllText(ripgrepConfig, "-n\n--ignore-case\nneedle\n" + path + "\n");
+
+        (int exitCode, byte[] output, string error) = RunScoutWithEnvironmentConfig(scoutConfig, ripgrepConfig);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("2:needle\n"u8.ToArray(), output);
+        Assert.Equal(string.Empty, error);
+    }
+
+    /// <summary>
+    /// Verifies ripgrep's config path remains a compatibility fallback when Scout's native path is absent.
+    /// </summary>
+    [Fact]
+    public void RipgrepConfigPathIsCompatibilityFallback()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        string ripgrepConfig = Path.Combine(root, "rg.conf");
+        File.WriteAllText(path, "alpha\nneedle\n");
+        File.WriteAllText(ripgrepConfig, "-n\nneedle\n" + path + "\n");
+
+        (int exitCode, byte[] output, string error) = RunScoutWithEnvironmentConfig(null, ripgrepConfig);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("2:needle\n"u8.ToArray(), output);
+        Assert.Equal(string.Empty, error);
+    }
+
+    /// <summary>
+    /// Verifies Scout does not fall back to ripgrep's config path after Scout's native config path is selected.
+    /// </summary>
+    [Fact]
+    public void ScoutConfigPathReadErrorDoesNotFallBackToRipgrepConfigPath()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        string scoutConfig = Path.Combine(root, "missing.conf");
+        string ripgrepConfig = Path.Combine(root, "rg.conf");
+        File.WriteAllText(path, "needle\n");
+        File.WriteAllText(ripgrepConfig, "-n\n");
+
+        (int exitCode, byte[] output, string error) = RunScoutWithEnvironmentConfig(scoutConfig, ripgrepConfig, "needle", path);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("needle\n"u8.ToArray(), output);
+        Assert.Contains("failed to read the file specified in SCOUT_CONFIG_PATH", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("RIPGREP_CONFIG_PATH", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Verifies raw Unix SCOUT_CONFIG_PATH bytes are not discarded when they are not valid UTF-8.
     /// </summary>
     [Fact]
     public unsafe void RawUnixConfigPathEnvironmentPreservesInvalidBytes()
@@ -6239,7 +6300,7 @@ public sealed class ScoutApplicationTests
 
         byte[] rootBytes = Encoding.UTF8.GetBytes(root);
         byte[] configPath = [.. rootBytes, (byte)'/', .. "rg-"u8, 0xFF, .. ".conf"u8];
-        byte[] configEntry = [.. "RIPGREP_CONFIG_PATH="u8, .. configPath, 0x00];
+        byte[] configEntry = [.. "SCOUT_CONFIG_PATH="u8, .. configPath, 0x00];
         try
         {
             fixed (byte* configEntryPointer = configEntry)
@@ -6254,7 +6315,7 @@ public sealed class ScoutApplicationTests
 
             Assert.Equal(0, exitCode);
             Assert.Equal("needle\n"u8.ToArray(), output);
-            Assert.Contains("failed to read the file specified in RIPGREP_CONFIG_PATH", error, StringComparison.Ordinal);
+            Assert.Contains("failed to read the file specified in SCOUT_CONFIG_PATH", error, StringComparison.Ordinal);
         }
         finally
         {
@@ -6283,16 +6344,16 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
-    /// Verifies <c>--generate</c> outputs byte-identical man and completion artifacts.
+    /// Verifies <c>--generate</c> outputs Scout's byte-identical man and completion artifacts.
     /// </summary>
     [Fact]
-    public void GenerateOutputsMatchPinnedRipgrep()
+    public void GenerateOutputsMatchScoutArtifacts()
     {
-        AssertGenerateMatchesPinned("man");
-        AssertGenerateMatchesPinned("complete-bash");
-        AssertGenerateMatchesPinned("complete-zsh");
-        AssertGenerateMatchesPinned("complete-fish");
-        AssertGenerateMatchesPinned("complete-powershell");
+        AssertGenerateMatchesScoutArtifact("man", CliGenerateMode.Man);
+        AssertGenerateMatchesScoutArtifact("complete-bash", CliGenerateMode.CompleteBash);
+        AssertGenerateMatchesScoutArtifact("complete-zsh", CliGenerateMode.CompleteZsh);
+        AssertGenerateMatchesScoutArtifact("complete-fish", CliGenerateMode.CompleteFish);
+        AssertGenerateMatchesScoutArtifact("complete-powershell", CliGenerateMode.CompletePowerShell);
     }
 
     /// <summary>
@@ -6309,21 +6370,20 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
-    /// Verifies config files can select <c>--generate</c> like ripgrep.
+    /// Verifies config files can select <c>--generate</c>.
     /// </summary>
     [Fact]
-    public void GenerateFromConfigMatchesPinnedRipgrep()
+    public void GenerateFromConfigWritesScoutArtifact()
     {
         string root = CreateTempDirectory();
         string config = Path.Combine(root, "rg.conf");
         File.WriteAllText(config, "--generate\ncomplete-fish\n");
 
         (int exitCode, byte[] output, string error) = RunScoutWithConfig(config);
-        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrepWithConfig(config);
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(GeneratedTextOutput.ForCurrentPlatform(pinnedOutput), output);
-        Assert.Equal(pinnedError, error);
+        Assert.Equal(0, exitCode);
+        Assert.Equal(GenerateOutput.Get(CliGenerateMode.CompleteFish).ToArray(), output);
+        Assert.Equal(string.Empty, error);
     }
 
     /// <summary>
@@ -6337,11 +6397,10 @@ public sealed class ScoutApplicationTests
         File.WriteAllText(config, "--badflag\n");
 
         (int exitCode, byte[] output, string error) = RunScoutWithConfig(config, "-V");
-        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrepWithConfig(config, "-V");
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.Equal(0, exitCode);
+        Assert.Equal(VersionOutput.Short.ToArray(), output);
+        Assert.Equal(string.Empty, error);
     }
 
     /// <summary>
@@ -6373,18 +6432,18 @@ public sealed class ScoutApplicationTests
         Assert.Equal(pinnedError, error);
     }
 
-    private static void AssertGenerateMatchesPinned(string kind)
+    private static void AssertGenerateMatchesScoutArtifact(string kind, CliGenerateMode mode)
     {
         (int exitCode, byte[] output, string error) = RunScout("--generate", kind);
         (int inlineExitCode, byte[] inlineOutput, string inlineError) = RunScout("--generate=" + kind);
-        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--generate", kind);
+        byte[] expectedOutput = GenerateOutput.Get(mode).ToArray();
 
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(GeneratedTextOutput.ForCurrentPlatform(pinnedOutput), output);
-        Assert.Equal(pinnedError, error);
-        Assert.Equal(pinnedExitCode, inlineExitCode);
-        Assert.Equal(GeneratedTextOutput.ForCurrentPlatform(pinnedOutput), inlineOutput);
-        Assert.Equal(pinnedError, inlineError);
+        Assert.Equal(0, exitCode);
+        Assert.Equal(expectedOutput, output);
+        Assert.Equal(string.Empty, error);
+        Assert.Equal(0, inlineExitCode);
+        Assert.Equal(expectedOutput, inlineOutput);
+        Assert.Equal(string.Empty, inlineError);
     }
 
     private static void AssertGeneratedArtifact(CliGenerateMode mode, string compressedBase64)
@@ -6469,6 +6528,28 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(osArguments, outputWriter, errorWriter);
         return (exitCode, output.ToArray(), Utf8(error.ToArray()));
+    }
+
+    private static (int ExitCode, byte[] Output, string Error) RunScoutWithEnvironmentConfig(
+        string? scoutConfigPath,
+        string? ripgrepConfigPath,
+        params string[] arguments)
+    {
+        string? oldScoutConfigPath = Environment.GetEnvironmentVariable("SCOUT_CONFIG_PATH");
+        string? oldRipgrepConfigPath = Environment.GetEnvironmentVariable("RIPGREP_CONFIG_PATH");
+        try
+        {
+            ProcessEnvironment.UseCurrentProcessEnvironment();
+            Environment.SetEnvironmentVariable("SCOUT_CONFIG_PATH", scoutConfigPath);
+            Environment.SetEnvironmentVariable("RIPGREP_CONFIG_PATH", ripgrepConfigPath);
+            return RunScoutFromEnvironment(arguments);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SCOUT_CONFIG_PATH", oldScoutConfigPath);
+            Environment.SetEnvironmentVariable("RIPGREP_CONFIG_PATH", oldRipgrepConfigPath);
+            ProcessEnvironment.UseCurrentProcessEnvironment();
+        }
     }
 
     private static (int ExitCode, byte[] Output, string Error) RunScoutWithConfig(string configPath, params string[] arguments)
@@ -6586,20 +6667,6 @@ public sealed class ScoutApplicationTests
         return lines;
     }
 
-    private static byte[] ReadPinnedRipgrepOutput(string argument)
-    {
-        (int exitCode, byte[] output, string error) = RunPinnedRipgrep(argument);
-
-        Assert.Equal(0, exitCode);
-        Assert.Equal(string.Empty, error);
-        return output;
-    }
-
-    private static byte[] ReadPinnedRipgrepGeneratedOutput(string argument)
-    {
-        return GeneratedTextOutput.ForCurrentPlatform(ReadPinnedRipgrepOutput(argument));
-    }
-
     private static string NormalizeJsonTimings(byte[] output)
     {
         string[] lines = Utf8(output).Split('\n', StringSplitOptions.RemoveEmptyEntries);
@@ -6700,6 +6767,7 @@ public sealed class ScoutApplicationTests
     {
         ProcessStartInfo startInfo = PinnedRipgrepOracle.CreateStartInfo();
         startInfo.Environment.Remove("RIPGREP_CONFIG_PATH");
+        startInfo.Environment.Remove("SCOUT_CONFIG_PATH");
         for (int index = 0; index < arguments.Length; index++)
         {
             startInfo.ArgumentList.Add(arguments[index]);
@@ -6715,12 +6783,13 @@ public sealed class ScoutApplicationTests
         string error = process.StandardError.ReadToEnd();
         process.WaitForExit();
 
-        return (process.ExitCode, output.ToArray(), error);
+        return (process.ExitCode, output.ToArray(), NormalizePinnedRipgrepStderrForScout(error));
     }
 
     private static (int ExitCode, byte[] Output, string Error) RunPinnedRipgrepWithConfig(string configPath, params string[] arguments)
     {
         ProcessStartInfo startInfo = PinnedRipgrepOracle.CreateStartInfo();
+        startInfo.Environment.Remove("SCOUT_CONFIG_PATH");
         startInfo.Environment["RIPGREP_CONFIG_PATH"] = configPath;
         for (int index = 0; index < arguments.Length; index++)
         {
@@ -6737,6 +6806,25 @@ public sealed class ScoutApplicationTests
         string error = process.StandardError.ReadToEnd();
         process.WaitForExit();
 
-        return (process.ExitCode, output.ToArray(), error);
+        return (process.ExitCode, output.ToArray(), NormalizePinnedRipgrepStderrForScout(error));
+    }
+
+    private static string NormalizePinnedRipgrepStderrForScout(string error)
+    {
+        const string RipgrepConfigPathPlaceholder = "__SCOUT_RIPGREP_CONFIG_PATH__";
+        string normalized = error.Replace(
+            "SCOUT_CONFIG_PATH and RIPGREP_CONFIG_PATH environment variables are not set, therefore not reading any config file",
+            "SCOUT_CONFIG_PATH and " + RipgrepConfigPathPlaceholder + " environment variables are not set, therefore not reading any config file",
+            StringComparison.Ordinal);
+        normalized = normalized.Replace(
+            "RIPGREP_CONFIG_PATH environment variable is not set, therefore not reading any config file",
+            "SCOUT_CONFIG_PATH and " + RipgrepConfigPathPlaceholder + " environment variables are not set, therefore not reading any config file",
+            StringComparison.Ordinal);
+        normalized = normalized.Replace("RIPGREP_CONFIG_PATH", "SCOUT_CONFIG_PATH", StringComparison.Ordinal);
+        normalized = normalized.Replace(RipgrepConfigPathPlaceholder, "RIPGREP_CONFIG_PATH", StringComparison.Ordinal);
+        normalized = normalized.Replace("rg:", "scout:", StringComparison.Ordinal);
+        normalized = normalized.Replace("ripgrep requires at least one pattern to execute a search", "scout requires at least one pattern to execute a search", StringComparison.Ordinal);
+        normalized = normalized.Replace("this build of ripgrep", "this build of scout", StringComparison.Ordinal);
+        return normalized;
     }
 }

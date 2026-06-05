@@ -14,9 +14,9 @@ public sealed class Pcre2LibraryTests
         Assert.False(Pcre2Library.IsAvailable);
         Assert.False(Pcre2Library.IsJitAvailable);
         Assert.Equal("-pcre2", Pcre2Library.FeatureLabel);
-        Assert.Equal("PCRE2 is not available in this build of ripgrep.\n", Pcre2Library.VersionText);
-        Assert.Equal("PCRE2 is not available in this build of ripgrep", Pcre2Library.UnavailableErrorMessage);
-        Assert.Equal("PCRE2 is not available in this build of ripgrep.\n"u8.ToArray(), Pcre2Library.UnavailableVersionOutput.ToArray());
-        Assert.Equal("PCRE2 is not available in this build of ripgrep.\n"u8.ToArray(), Pcre2Library.GetVersionOutput());
+        Assert.Equal("PCRE2 is not available in this build of scout.\n", Pcre2Library.VersionText);
+        Assert.Equal("PCRE2 is not available in this build of scout", Pcre2Library.UnavailableErrorMessage);
+        Assert.Equal("PCRE2 is not available in this build of scout.\n"u8.ToArray(), Pcre2Library.UnavailableVersionOutput.ToArray());
+        Assert.Equal("PCRE2 is not available in this build of scout.\n"u8.ToArray(), Pcre2Library.GetVersionOutput());
     }
 }

@@ -18,13 +18,23 @@
 #define PCRE2_CONFIG_VERSION 11u
 #define SCOUT_FAST_SEARCH_MAX_BYTES 65536
 #define SCOUT_EXECUTABLE_PATH_MAX 4096
+#ifndef SCOUT_VERSION
+#define SCOUT_VERSION "0.1.0"
+#endif
+#ifndef SCOUT_RIPGREP_VERSION
+#define SCOUT_RIPGREP_VERSION "15.1.0"
+#endif
+#ifndef SCOUT_RIPGREP_REVISION_SHORT
+#define SCOUT_RIPGREP_REVISION_SHORT "4857d6fa67"
+#endif
 
 #ifndef SCOUT_LAUNCHER
 extern int scout_entry(int argc, char **argv, char **envp);
 #endif
 extern int pcre2_config_8(unsigned int what, void *where);
 
-static const char scout_short_version[] = "ripgrep 15.1.0 (rev 4857d6fa67)\n";
+static const char scout_short_version[] =
+    "scout " SCOUT_VERSION " (ripgrep " SCOUT_RIPGREP_VERSION " compatible, rev " SCOUT_RIPGREP_REVISION_SHORT ")\n";
 
 static int write_all(const char *bytes, size_t length)
 {

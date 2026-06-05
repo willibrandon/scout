@@ -24,13 +24,13 @@ internal static class Pcre2SearchOperations
     {
         if (!Pcre2Library.IsAvailable)
         {
-            diagnostics.ErrorMessage(new ScoutError(Pcre2Library.UnavailableErrorMessage).WithContext("rg"));
+            diagnostics.ErrorMessage(new ScoutError(Pcre2Library.UnavailableErrorMessage).WithContext(ScoutErrorContext.ProgramContext()));
             return ExitCode.Error;
         }
 
         if (!CanRun(lowArgs))
         {
-            diagnostics.ErrorMessage(new ScoutError("PCRE2 search does not support this option combination").WithContext("rg"));
+            diagnostics.ErrorMessage(new ScoutError("PCRE2 search does not support this option combination").WithContext(ScoutErrorContext.ProgramContext()));
             return ExitCode.Error;
         }
 
@@ -42,7 +42,7 @@ internal static class Pcre2SearchOperations
 
         if (!SearchWalkPlanning.TryBuildFileTypeMatcher(lowArgs, out FileTypeMatcher? fileTypes, out ScoutError? error))
         {
-            diagnostics.ErrorMessage(error!.WithContext("rg"));
+            diagnostics.ErrorMessage(error!.WithContext(ScoutErrorContext.ProgramContext()));
             return ExitCode.Error;
         }
 
@@ -85,7 +85,7 @@ internal static class Pcre2SearchOperations
             }
             catch (Pcre2Exception exception)
             {
-                diagnostics.ErrorMessage(new ScoutError(exception.Message).WithContext("rg"));
+                diagnostics.ErrorMessage(new ScoutError(exception.Message).WithContext(ScoutErrorContext.ProgramContext()));
                 return ExitCode.Error;
             }
         }
@@ -137,7 +137,7 @@ internal static class Pcre2SearchOperations
         }
         catch (Pcre2Exception exception)
         {
-            diagnostics.ErrorMessage(new ScoutError(exception.Message).WithContext("rg"));
+            diagnostics.ErrorMessage(new ScoutError(exception.Message).WithContext(ScoutErrorContext.ProgramContext()));
             return ExitCode.Error;
         }
     }
@@ -3614,7 +3614,7 @@ internal static class Pcre2SearchOperations
         string message = simple
             ? OsErrorMessages.NoSuchFileOrDirectory
             : $"IO error for operation on {path}: {OsErrorMessages.NoSuchFileOrDirectory}";
-        return new ScoutError(message).WithContext($"rg: {path}");
+        return new ScoutError(message).WithContext(ScoutErrorContext.ProgramPathContext(path));
     }
 
     private static OutputSeparators GetOutputSeparators(CliLowArgs lowArgs)
