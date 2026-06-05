@@ -11,6 +11,7 @@ my $man_version = "$version (ripgrep $rg_version compatible, rev $rg_rev)";
 
 local $/;
 my $text = <STDIN>;
+$text =~ s/\r\n/\n/g;
 
 sub replace_product_words {
     my ($value) = @_;

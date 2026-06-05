@@ -1549,6 +1549,7 @@ public sealed partial class PinnedConfigurationTests
         string generateOutput = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "GenerateOutput.cs"));
         string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
         string verifier = File.ReadAllText(Path.Combine(root, "eng", "verify-generated-artifacts.sh"));
+        string transform = File.ReadAllText(Path.Combine(root, "eng", "transform-ripgrep-artifact.pl"));
         string projectPath = Path.Combine(root, "src", "Scout.App", "Scout.App.csproj");
         var project = XDocument.Load(projectPath);
 
@@ -1566,6 +1567,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("Generated artifact verifier did not create actual output", verifier, StringComparison.Ordinal);
         Assert.Contains("cmp -s", verifier, StringComparison.Ordinal);
         Assert.Contains("diff -u", verifier, StringComparison.Ordinal);
+        Assert.Contains("$text =~ s/\\r\\n/\\n/g;", transform, StringComparison.Ordinal);
         Assert.Contains(
             project.Descendants("CompilerVisibleItemMetadata"),
             element =>
@@ -2349,6 +2351,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("invalid_utf8_pattern_argv", invalidUtf8DifferentialScript, StringComparison.Ordinal);
         Assert.Contains("invalid_utf8_regexp_argv", invalidUtf8DifferentialScript, StringComparison.Ordinal);
         Assert.Contains("\"elapsed\":{\"human\":\"<elapsed>\",\"nanos\":0,\"secs\":0}", invalidUtf8DifferentialScript, StringComparison.Ordinal);
+        Assert.Contains("normalize_stderr_identity", invalidUtf8DifferentialScript, StringComparison.Ordinal);
+        Assert.Contains("output.startswith(b\"rg: \")", invalidUtf8DifferentialScript, StringComparison.Ordinal);
+        Assert.Contains("b\"this build of ripgrep\"", invalidUtf8DifferentialScript, StringComparison.Ordinal);
         Assert.Contains("errno.EILSEQ", invalidUtf8DifferentialScript, StringComparison.Ordinal);
         Assert.Contains("subprocess.run", invalidUtf8DifferentialScript, StringComparison.Ordinal);
         Assert.DoesNotContain("SKIP invalid UTF-8", invalidUtf8DifferentialScript, StringComparison.Ordinal);
