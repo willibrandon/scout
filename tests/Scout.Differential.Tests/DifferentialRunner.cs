@@ -104,9 +104,7 @@ internal static class DifferentialRunner
             osArguments[index + 1] = OsString.FromText(arguments[index]);
         }
 
-        int exitCode = relativeConfigPath is null
-            ? ScoutApplication.Run(osArguments, outputWriter, errorWriter, input)
-            : ScoutApplication.Run(osArguments, outputWriter, errorWriter, input, relativeConfigPath);
+        int exitCode = ScoutApplication.Run(osArguments, outputWriter, errorWriter, input, relativeConfigPath);
         outputWriter.Flush();
         errorWriter.Flush();
         return new DifferentialRunResult(exitCode, output.ToArray(), Utf8.GetString(error.ToArray()));
@@ -121,6 +119,7 @@ internal static class DifferentialRunner
         }
 
         startInfo.Environment.Remove("RIPGREP_CONFIG_PATH");
+        startInfo.Environment.Remove("SCOUT_CONFIG_PATH");
         if (relativeConfigPath is not null)
         {
             startInfo.Environment["RIPGREP_CONFIG_PATH"] = relativeConfigPath;

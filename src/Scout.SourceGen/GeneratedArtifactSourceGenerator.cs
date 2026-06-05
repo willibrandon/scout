@@ -105,7 +105,7 @@ public sealed class GeneratedArtifactSourceGenerator : IIncrementalGenerator
         builder.Append("namespace Scout;\n");
         builder.Append('\n');
         builder.Append("/// <summary>\n");
-        builder.Append("/// Provides a source-generated compressed ripgrep artifact payload.\n");
+        builder.Append("/// Provides a source-generated compressed Scout artifact payload.\n");
         builder.Append("/// </summary>\n");
         builder.Append("internal static class ");
         builder.Append(entry.ClassName);

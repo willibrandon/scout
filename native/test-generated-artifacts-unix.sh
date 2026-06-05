@@ -95,11 +95,14 @@ run_tool() {
 
 compare_case() {
     name="$1"
+    kind="$2"
+    shift
     shift
 
     scout_stdout="$OUT/$name.scout.stdout"
     scout_stderr="$OUT/$name.scout.stderr"
     rg_stdout="$OUT/$name.rg.stdout"
+    rg_transformed_stdout="$OUT/$name.rg.transformed.stdout"
     rg_stderr="$OUT/$name.rg.stderr"
 
     if run_tool "$SCOUT" "$scout_stdout" "$scout_stderr" "$@"; then
@@ -120,7 +123,9 @@ compare_case() {
         exit 1
     fi
 
-    if ! diff -u "$rg_stdout" "$scout_stdout"; then
+    "$ROOT/eng/transform-ripgrep-artifact.sh" "$kind" < "$rg_stdout" > "$rg_transformed_stdout"
+
+    if ! diff -u "$rg_transformed_stdout" "$scout_stdout"; then
         printf 'Generated artifact stdout mismatch for %s\n' "$name" >&2
         exit 1
     fi
@@ -142,13 +147,13 @@ expect_equal "reference rg sha256" "$RG_SHA256" "$(sha256_file "$RG")"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
-compare_case help_long --help
-compare_case help_short -h
-compare_case generate_man --generate man
-compare_case generate_man_inline --generate=man
-compare_case generate_complete_bash --generate complete-bash
-compare_case generate_complete_zsh --generate complete-zsh
-compare_case generate_complete_fish --generate complete-fish
-compare_case generate_complete_powershell --generate complete-powershell
+compare_case help_long help-long --help
+compare_case help_short help-short -h
+compare_case generate_man man --generate man
+compare_case generate_man_inline man --generate=man
+compare_case generate_complete_bash complete-bash --generate complete-bash
+compare_case generate_complete_zsh complete-zsh --generate complete-zsh
+compare_case generate_complete_fish complete-fish --generate complete-fish
+compare_case generate_complete_powershell complete-powershell --generate complete-powershell
 
-printf 'OK %s: generated help/man/completion artifacts matched pinned rg\n' "$RID"
+printf 'OK %s: generated help/man/completion artifacts matched transformed pinned rg\n' "$RID"

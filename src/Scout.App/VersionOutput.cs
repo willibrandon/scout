@@ -6,12 +6,14 @@ namespace Scout;
 
 internal static class VersionOutput
 {
-    internal static ReadOnlySpan<byte> Short => "ripgrep 15.1.0 (rev 4857d6fa67)\n"u8;
+    private static readonly byte[] ShortBytes = Encoding.ASCII.GetBytes(BuildIdentity.ShortVersionLine + "\n");
+
+    internal static ReadOnlySpan<byte> Short => ShortBytes;
 
     internal static byte[] GetLong()
     {
         return Encoding.ASCII.GetBytes(
-            "ripgrep 15.1.0 (rev 4857d6fa67)\n\nfeatures:" +
+            BuildIdentity.ShortVersionLine + "\n\nfeatures:" +
             Pcre2Library.FeatureLabel +
             GetSimdLines() +
             "\n\n" +

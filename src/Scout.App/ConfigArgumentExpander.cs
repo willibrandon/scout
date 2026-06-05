@@ -5,6 +5,11 @@ namespace Scout;
 
 internal static class ConfigArgumentExpander
 {
+    private const string ScoutConfigPathVariable = "SCOUT_CONFIG_PATH";
+    private const string RipgrepConfigPathVariable = "RIPGREP_CONFIG_PATH";
+    private const string FlagsCategory = "Scout.App.Flags";
+    private const string SourceFile = "src/Scout.App/ConfigArgumentExpander.cs";
+
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
     public static OsString[]? BuildConfiguredArguments(
@@ -22,24 +27,32 @@ internal static class ConfigArgumentExpander
 
         if (HasNoConfigArgument(commandArguments))
         {
-            logger.Debug("rg::flags::parse", "crates/core/flags/parse.rs", 89, "not reading config files because --no-config is present");
+            // provenance: crates/core/flags/parse.rs:89
+            logger.Debug(FlagsCategory, SourceFile, "not reading config files because --no-config is present");
             return null;
         }
 
+        string configPathVariableName;
         OsString? configPath = useConfigPathOverride
-            ? configPathOverride is null ? null : OsString.FromText(configPathOverride)
-            : ProcessEnvironment.GetVariableOsString("RIPGREP_CONFIG_PATH");
+            ? GetConfigPathOverride(configPathOverride, out configPathVariableName)
+            : GetConfigPathFromEnvironment(out configPathVariableName);
         if (configPath is null || IsNullOrEmpty(configPath.Value))
         {
-            logger.Debug("rg::flags::config", "crates/core/flags/config.rs", 19, "RIPGREP_CONFIG_PATH environment variable is not set, therefore not reading any config file");
-            logger.Debug("rg::flags::parse", "crates/core/flags/parse.rs", 97, "no extra arguments found from configuration file");
+            // provenance: crates/core/flags/config.rs:19
+            string variableState = configPathVariableName.Contains(" and ", StringComparison.Ordinal)
+                ? "environment variables are not set"
+                : "environment variable is not set";
+            logger.Debug(FlagsCategory, SourceFile, $"{configPathVariableName} {variableState}, therefore not reading any config file");
+            // provenance: crates/core/flags/parse.rs:97
+            logger.Debug(FlagsCategory, SourceFile, "no extra arguments found from configuration file");
             return null;
         }
 
-        List<OsString> configArguments = ReadConfigArguments(configPath.Value, diagnostics);
+        List<OsString> configArguments = ReadConfigArguments(configPath.Value, configPathVariableName, diagnostics);
         if (configArguments.Count == 0)
         {
-            logger.Debug("rg::flags::parse", "crates/core/flags/parse.rs", 97, "no extra arguments found from configuration file");
+            // provenance: crates/core/flags/parse.rs:97
+            logger.Debug(FlagsCategory, SourceFile, "no extra arguments found from configuration file");
             return null;
         }
 
@@ -109,7 +122,33 @@ internal static class ConfigArgumentExpander
         return CliParser.TryParseSpecialMode(argument, out _);
     }
 
-    private static List<OsString> ReadConfigArguments(OsString configPath, DiagnosticMessenger diagnostics)
+    private static OsString? GetConfigPathOverride(string? configPathOverride, out string variableName)
+    {
+        variableName = ScoutConfigPathVariable;
+        return configPathOverride is null ? null : OsString.FromText(configPathOverride);
+    }
+
+    private static OsString? GetConfigPathFromEnvironment(out string variableName)
+    {
+        OsString? scoutConfigPath = ProcessEnvironment.GetVariableOsString(ScoutConfigPathVariable);
+        if (scoutConfigPath is not null && !IsNullOrEmpty(scoutConfigPath.Value))
+        {
+            variableName = ScoutConfigPathVariable;
+            return scoutConfigPath;
+        }
+
+        OsString? ripgrepConfigPath = ProcessEnvironment.GetVariableOsString(RipgrepConfigPathVariable);
+        if (ripgrepConfigPath is not null && !IsNullOrEmpty(ripgrepConfigPath.Value))
+        {
+            variableName = RipgrepConfigPathVariable;
+            return ripgrepConfigPath;
+        }
+
+        variableName = ScoutConfigPathVariable + " and " + RipgrepConfigPathVariable;
+        return null;
+    }
+
+    private static List<OsString> ReadConfigArguments(OsString configPath, string variableName, DiagnosticMessenger diagnostics)
     {
         string displayPath = DisplayPath(configPath);
         byte[] bytes;
@@ -120,31 +159,31 @@ internal static class ConfigArgumentExpander
         catch (FileNotFoundException)
         {
             diagnostics.ErrorMessage(new ScoutError(
-                $"failed to read the file specified in RIPGREP_CONFIG_PATH: {displayPath}: {OsErrorMessages.NoSuchFileOrDirectory}").WithContext("rg"));
+                $"failed to read the file specified in {variableName}: {displayPath}: {OsErrorMessages.NoSuchFileOrDirectory}").WithContext(ScoutErrorContext.ProgramContext()));
             return [];
         }
         catch (DirectoryNotFoundException)
         {
             diagnostics.ErrorMessage(new ScoutError(
-                $"failed to read the file specified in RIPGREP_CONFIG_PATH: {displayPath}: {OsErrorMessages.NoSuchFileOrDirectory}").WithContext("rg"));
+                $"failed to read the file specified in {variableName}: {displayPath}: {OsErrorMessages.NoSuchFileOrDirectory}").WithContext(ScoutErrorContext.ProgramContext()));
             return [];
         }
         catch (IOException exception) when (IsNoSuchFileOrDirectory(exception))
         {
             diagnostics.ErrorMessage(new ScoutError(
-                $"failed to read the file specified in RIPGREP_CONFIG_PATH: {displayPath}: {OsErrorMessages.NoSuchFileOrDirectory}").WithContext("rg"));
+                $"failed to read the file specified in {variableName}: {displayPath}: {OsErrorMessages.NoSuchFileOrDirectory}").WithContext(ScoutErrorContext.ProgramContext()));
             return [];
         }
         catch (UnauthorizedAccessException exception)
         {
             diagnostics.ErrorMessage(new ScoutError(
-                $"failed to read the file specified in RIPGREP_CONFIG_PATH: {exception.Message}").WithContext("rg"));
+                $"failed to read the file specified in {variableName}: {exception.Message}").WithContext(ScoutErrorContext.ProgramContext()));
             return [];
         }
         catch (IOException exception)
         {
             diagnostics.ErrorMessage(new ScoutError(
-                $"failed to read the file specified in RIPGREP_CONFIG_PATH: {exception.Message}").WithContext("rg"));
+                $"failed to read the file specified in {variableName}: {exception.Message}").WithContext(ScoutErrorContext.ProgramContext()));
             return [];
         }
 

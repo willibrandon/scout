@@ -34,6 +34,36 @@
            Text="Scout forbids GlobalSuppressions.cs files: @(ScoutGlobalSuppressionsFile)" />
   </Target>
 
+  <Target Name="ScoutGenerateBuildIdentity"
+          BeforeTargets="CoreCompile"
+          Condition="'$(MSBuildProjectName)' == 'Scout.App'">
+    <PropertyGroup>
+      <ScoutBuildIdentityFile>$(IntermediateOutputPath)BuildIdentity.cs</ScoutBuildIdentityFile>
+    </PropertyGroup>
+    <ItemGroup>
+      <ScoutBuildIdentityLine Remove="@(ScoutBuildIdentityLine)" />
+      <ScoutBuildIdentityLine Include="// &lt;auto-generated /&gt;" />
+      <ScoutBuildIdentityLine Include="namespace Scout%3B" />
+      <ScoutBuildIdentityLine Include="internal static class BuildIdentity" />
+      <ScoutBuildIdentityLine Include="{" />
+      <ScoutBuildIdentityLine Include="internal const string Version = &quot;$(VersionPrefix)&quot;%3B" />
+      <ScoutBuildIdentityLine Include="internal const string UpstreamRipgrepVersion = &quot;$(ScoutRipgrepVersion)&quot;%3B" />
+      <ScoutBuildIdentityLine Include="internal const string UpstreamRipgrepRevision = &quot;$(ScoutRipgrepRevision)&quot;%3B" />
+      <ScoutBuildIdentityLine Include="internal const string UpstreamRipgrepRevisionShort = &quot;$(ScoutRipgrepRevisionShort)&quot;%3B" />
+      <ScoutBuildIdentityLine Include="internal const string InformationalVersion = &quot;$(AssemblyInformationalVersion)&quot;%3B" />
+      <ScoutBuildIdentityLine Include="internal const string ShortVersionLine = &quot;scout $(VersionPrefix) (ripgrep $(ScoutRipgrepVersion) compatible, rev $(ScoutRipgrepRevisionShort))&quot;%3B" />
+      <ScoutBuildIdentityLine Include="}" />
+    </ItemGroup>
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <WriteLinesToFile File="$(ScoutBuildIdentityFile)"
+                      Lines="@(ScoutBuildIdentityLine)"
+                      Overwrite="true"
+                      Encoding="UTF-8" />
+    <ItemGroup>
+      <Compile Include="$(ScoutBuildIdentityFile)" />
+    </ItemGroup>
+  </Target>
+
   <Target Name="ScoutScanForSuppressionEscapeHatches" BeforeTargets="CoreCompile">
     <Error Condition="Exists('%(ScoutSuppressionScanFile.FullPath)') and $([System.Text.RegularExpressions.Regex]::IsMatch($([System.IO.File]::ReadAllText('%(ScoutSuppressionScanFile.FullPath)')), '(#pragma\s+warning\s+disable)|(\[\s*(Unconditional)?Suppress[M]essage\b)|(&lt;\s*No[W]arn\b)|(&lt;\s*Warnings[N]otAsErrors\b)|(&lt;\s*Disabled[W]arnings\b)|(#nullable\s+disable)|(dotnet_diagnostic\.[^\r\n]*severity\s*=\s*(none|silent))|(dotnet_diagnostic\.(SCOUT[0-9]+|IDE0005|IDE0130|VSTHRD[0-9]+)\.severity\s*=\s*(?!error\b)[^\s#;]+)|(dotnet_analyzer_diagnostic\.category-(Design|Documentation|Globalization|Interoperability|Maintainability|Naming|Performance|Reliability|Scout\.Structure|Security|Usage)\.severity\s*=\s*(?!error\b)[^\s#;]+)'))"
            Text="Scout forbids warning/nullability suppression escape hatches in %(ScoutSuppressionScanFile.Identity)." />

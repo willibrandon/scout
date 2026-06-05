@@ -10,7 +10,7 @@ internal readonly struct PrettyFlag : IFlag<PrettyFlag>
         negatedName: null,
         aliases: [],
         FlagCategory.Output,
-        "Apply ripgrep's pretty output alias.",
+        "Apply Scout's pretty output alias.",
         static lowArgs =>
         {
             lowArgs.SetPretty();

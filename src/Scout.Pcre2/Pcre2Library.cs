@@ -11,7 +11,7 @@ public static unsafe partial class Pcre2Library
     private const uint ConfigJit = 1;
     private const uint ConfigVersion = 11;
     private const int MaxVersionLength = 64;
-    private const string UnavailableVersionText = "PCRE2 is not available in this build of ripgrep.\n";
+    private const string UnavailableVersionText = "PCRE2 is not available in this build of scout.\n";
 
     /// <summary>
     /// Gets a value indicating whether this build has a linked PCRE2 runtime.
@@ -26,13 +26,13 @@ public static unsafe partial class Pcre2Library
     /// <summary>
     /// Gets the ripgrep-compatible error message used when PCRE2 is requested but not linked.
     /// </summary>
-    public const string UnavailableErrorMessage = "PCRE2 is not available in this build of ripgrep";
+    public const string UnavailableErrorMessage = "PCRE2 is not available in this build of scout";
 
     /// <summary>
     /// Gets the <c>--pcre2-version</c> output for a build without PCRE2.
     /// </summary>
     public static ReadOnlySpan<byte> UnavailableVersionOutput =>
-        "PCRE2 is not available in this build of ripgrep.\n"u8;
+        "PCRE2 is not available in this build of scout.\n"u8;
 
     /// <summary>
     /// Gets the <c>--pcre2-version</c> output for the current runtime.

@@ -343,6 +343,7 @@ public sealed class WalkBuilder
         if (defaultCustomIgnoreFiles)
         {
             ignoreFileNames.Add(".rgignore");
+            ignoreFileNames.Add(".scoutignore");
         }
 
         ignoreFileNames.AddRange(customIgnoreFileNames);

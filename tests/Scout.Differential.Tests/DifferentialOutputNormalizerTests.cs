@@ -341,6 +341,65 @@ public sealed class DifferentialOutputNormalizerTests
     }
 
     /// <summary>
+    /// Verifies stderr identity normalization is line-shaped and leaves ordinary text intact.
+    /// </summary>
+    [Fact]
+    public void NormalizeStderrMapsProgramPrefixAndConfigIdentity()
+    {
+        string input =
+            "rg: failed to read the file specified in RIPGREP_CONFIG_PATH: missing\n" +
+            "a file containing rg should not be rewritten\n";
+
+        string normalized = DifferentialOutputNormalizer.NormalizeStderr(input, DifferentialComparisonMode.Exact);
+
+        Assert.Equal(
+            "scout: failed to read the file specified in SCOUT_CONFIG_PATH: missing\n" +
+            "a file containing rg should not be rewritten\n",
+            normalized);
+    }
+
+    /// <summary>
+    /// Verifies debug structural fields are normalized without changing the debug message.
+    /// </summary>
+    [Fact]
+    public void NormalizeStderrMapsDebugStructure()
+    {
+        string pinned = "rg: DEBUG|rg::flags::parse|crates/core/flags/parse.rs:97: state message\n";
+        string scout = "scout: DEBUG|Scout.App.Flags|ConfigArgumentExpander.cs:43: state message\n";
+
+        Assert.Equal(
+            DifferentialOutputNormalizer.NormalizeStderr(pinned, DifferentialComparisonMode.Exact),
+            DifferentialOutputNormalizer.NormalizeStderr(scout, DifferentialComparisonMode.Exact));
+    }
+
+    /// <summary>
+    /// Verifies debug config identity normalization maps ripgrep's single env var to Scout's primary/fallback pair.
+    /// </summary>
+    [Fact]
+    public void NormalizeStderrMapsDebugConfigEnvironmentIdentity()
+    {
+        string pinned = "rg: DEBUG|rg::flags::config|crates/core/flags/config.rs:19: RIPGREP_CONFIG_PATH environment variable is not set, therefore not reading any config file\n";
+        string scout = "scout: DEBUG|Scout.App.Flags|src/Scout.App/ConfigArgumentExpander.cs:43: SCOUT_CONFIG_PATH and RIPGREP_CONFIG_PATH environment variables are not set, therefore not reading any config file\n";
+
+        Assert.Equal(
+            DifferentialOutputNormalizer.NormalizeStderr(pinned, DifferentialComparisonMode.Exact),
+            DifferentialOutputNormalizer.NormalizeStderr(scout, DifferentialComparisonMode.Exact));
+    }
+
+    /// <summary>
+    /// Verifies stdout normalization never rewrites identity-looking search bytes.
+    /// </summary>
+    [Fact]
+    public void NormalizeStdoutDoesNotMapIdentityText()
+    {
+        byte[] input = Utf8.GetBytes("text mentioning rg and RIPGREP_CONFIG_PATH\n");
+
+        byte[] normalized = DifferentialOutputNormalizer.NormalizeStdout(input, DifferentialComparisonMode.Exact);
+
+        Assert.Equal(input, normalized);
+    }
+
+    /// <summary>
     /// Verifies Windows drive-letter colons are not mistaken for match separators.
     /// </summary>
     [Fact]

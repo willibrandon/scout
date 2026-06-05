@@ -19,22 +19,22 @@ internal static class PatternFileLoader
         }
         catch (FileNotFoundException)
         {
-            diagnostics.ErrorMessage(new ScoutError($"{path}: {OsErrorMessages.NoSuchFileOrDirectory}").WithContext("rg"));
+            diagnostics.ErrorMessage(new ScoutError($"{path}: {OsErrorMessages.NoSuchFileOrDirectory}").WithContext(ScoutErrorContext.ProgramContext()));
             return false;
         }
         catch (DirectoryNotFoundException)
         {
-            diagnostics.ErrorMessage(new ScoutError($"{path}: {OsErrorMessages.NoSuchFileOrDirectory}").WithContext("rg"));
+            diagnostics.ErrorMessage(new ScoutError($"{path}: {OsErrorMessages.NoSuchFileOrDirectory}").WithContext(ScoutErrorContext.ProgramContext()));
             return false;
         }
         catch (UnauthorizedAccessException)
         {
-            diagnostics.ErrorMessage(new ScoutError($"{path}: {OsErrorMessages.PermissionDenied}").WithContext("rg"));
+            diagnostics.ErrorMessage(new ScoutError($"{path}: {OsErrorMessages.PermissionDenied}").WithContext(ScoutErrorContext.ProgramContext()));
             return false;
         }
         catch (IOException exception)
         {
-            diagnostics.ErrorMessage(new ScoutError($"{path}: {exception.Message}").WithContext("rg"));
+            diagnostics.ErrorMessage(new ScoutError($"{path}: {exception.Message}").WithContext(ScoutErrorContext.ProgramContext()));
             return false;
         }
 
@@ -102,7 +102,7 @@ internal static class PatternFileLoader
 
         string escaped = CliByteEscape.Escape(line);
         diagnostics.ErrorMessage(new ScoutError(
-            $"{path}:{lineNumber}: found invalid UTF-8 in pattern at byte offset {invalidOffset}: {escaped} (disable Unicode mode and use hex escape sequences to match arbitrary bytes in a pattern, e.g., '(?-u)\\xFF')").WithContext("rg"));
+            $"{path}:{lineNumber}: found invalid UTF-8 in pattern at byte offset {invalidOffset}: {escaped} (disable Unicode mode and use hex escape sequences to match arbitrary bytes in a pattern, e.g., '(?-u)\\xFF')").WithContext(ScoutErrorContext.ProgramContext()));
         return false;
     }
 
@@ -194,7 +194,7 @@ internal static class PatternFileLoader
             return true;
         }
 
-        diagnostics.ErrorMessage(new ScoutError("invalid CLI arguments").WithContext("rg"));
+        diagnostics.ErrorMessage(new ScoutError("invalid CLI arguments").WithContext(ScoutErrorContext.ProgramContext()));
         return false;
     }
 }

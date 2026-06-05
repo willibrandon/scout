@@ -362,39 +362,47 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
-    /// Verifies debug logging matches the pinned ripgrep diagnostics for a single file.
+    /// Verifies debug logging uses Scout-owned diagnostic identity for a single file.
     /// </summary>
     [Fact]
-    public void DebugLoggingMatchesPinnedRipgrepForSingleFile()
+    public void DebugLoggingUsesScoutDiagnosticIdentityForSingleFile()
     {
         string root = CreateTempDirectory();
         string path = Path.Combine(root, "input.txt");
         File.WriteAllText(path, "needle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--debug", "--no-config", "needle", path);
-        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--debug", "--no-config", "needle", path);
+        (int pinnedExitCode, byte[] pinnedOutput, _) = RunPinnedRipgrep("--debug", "--no-config", "needle", path);
 
         Assert.Equal(pinnedExitCode, exitCode);
         Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.Contains($"scout: DEBUG|Scout.App.Flags|{ScoutSource("src/Scout.App/ConfigArgumentExpander.cs")}:", error, StringComparison.Ordinal);
+        Assert.Contains($"scout: DEBUG|Scout.App.Flags|{ScoutSource("src/Scout.App/SearchDiagnosticLogging.cs")}:", error, StringComparison.Ordinal);
+        Assert.Contains($"scout: DEBUG|Scout.Regex|{ScoutSource("src/Scout.App/SearchDiagnosticLogging.cs")}:", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("rg::", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("crates/", error, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// Verifies trace logging matches the pinned ripgrep diagnostics for a single file.
+    /// Verifies trace logging uses Scout-owned diagnostic identity for a single file.
     /// </summary>
     [Fact]
-    public void TraceLoggingMatchesPinnedRipgrepForSingleFile()
+    public void TraceLoggingUsesScoutDiagnosticIdentityForSingleFile()
     {
         string root = CreateTempDirectory();
         string path = Path.Combine(root, "input.txt");
         File.WriteAllText(path, "needle\n");
 
         (int exitCode, byte[] output, string error) = RunScout("--trace", "--no-config", "needle", path);
-        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--trace", "--no-config", "needle", path);
+        (int pinnedExitCode, byte[] pinnedOutput, _) = RunPinnedRipgrep("--trace", "--no-config", "needle", path);
 
         Assert.Equal(pinnedExitCode, exitCode);
         Assert.Equal(pinnedOutput, output);
-        Assert.Equal(pinnedError, error);
+        Assert.Contains($"scout: DEBUG|Scout.App.Flags|{ScoutSource("src/Scout.App/ConfigArgumentExpander.cs")}:", error, StringComparison.Ordinal);
+        Assert.Contains($"scout: TRACE|Scout.Regex|{ScoutSource("src/Scout.App/SearchDiagnosticLogging.cs")}:", error, StringComparison.Ordinal);
+        Assert.Contains($"scout: TRACE|Scout.Searching|{ScoutSource("src/Scout.App/SearchDiagnosticLogging.cs")}:", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("rg::", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("crates/", error, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1850,6 +1858,13 @@ public sealed class ScoutApplicationRuntimeTests
         return Encoding.UTF8.GetString(bytes);
     }
 
+    private static string ScoutSource(string sourcePath)
+    {
+        return OperatingSystem.IsWindows()
+            ? sourcePath.Replace('/', '\\')
+            : sourcePath.Replace('\\', '/');
+    }
+
     private static string[] SortedUtf8Lines(byte[] bytes)
     {
         string[] lines = Utf8(bytes).Split('\n', StringSplitOptions.RemoveEmptyEntries);
@@ -1966,6 +1981,7 @@ public sealed class ScoutApplicationRuntimeTests
     {
         ProcessStartInfo startInfo = PinnedRipgrepOracle.CreateStartInfo();
         startInfo.Environment.Remove("RIPGREP_CONFIG_PATH");
+        startInfo.Environment.Remove("SCOUT_CONFIG_PATH");
         for (int index = 0; index < arguments.Length; index++)
         {
             startInfo.ArgumentList.Add(arguments[index]);
@@ -1981,12 +1997,13 @@ public sealed class ScoutApplicationRuntimeTests
         string error = process.StandardError.ReadToEnd();
         process.WaitForExit();
 
-        return (process.ExitCode, output.ToArray(), error);
+        return (process.ExitCode, output.ToArray(), NormalizePinnedRipgrepStderrForScout(error));
     }
 
     private static (int ExitCode, byte[] Output, string Error) RunPinnedRipgrepWithConfig(string configPath, params string[] arguments)
     {
         ProcessStartInfo startInfo = PinnedRipgrepOracle.CreateStartInfo();
+        startInfo.Environment.Remove("SCOUT_CONFIG_PATH");
         startInfo.Environment["RIPGREP_CONFIG_PATH"] = configPath;
         for (int index = 0; index < arguments.Length; index++)
         {
@@ -2003,6 +2020,25 @@ public sealed class ScoutApplicationRuntimeTests
         string error = process.StandardError.ReadToEnd();
         process.WaitForExit();
 
-        return (process.ExitCode, output.ToArray(), error);
+        return (process.ExitCode, output.ToArray(), NormalizePinnedRipgrepStderrForScout(error));
+    }
+
+    private static string NormalizePinnedRipgrepStderrForScout(string error)
+    {
+        const string RipgrepConfigPathPlaceholder = "__SCOUT_RIPGREP_CONFIG_PATH__";
+        string normalized = error.Replace(
+            "SCOUT_CONFIG_PATH and RIPGREP_CONFIG_PATH environment variables are not set, therefore not reading any config file",
+            "SCOUT_CONFIG_PATH and " + RipgrepConfigPathPlaceholder + " environment variables are not set, therefore not reading any config file",
+            StringComparison.Ordinal);
+        normalized = normalized.Replace(
+            "RIPGREP_CONFIG_PATH environment variable is not set, therefore not reading any config file",
+            "SCOUT_CONFIG_PATH and " + RipgrepConfigPathPlaceholder + " environment variables are not set, therefore not reading any config file",
+            StringComparison.Ordinal);
+        normalized = normalized.Replace("RIPGREP_CONFIG_PATH", "SCOUT_CONFIG_PATH", StringComparison.Ordinal);
+        normalized = normalized.Replace(RipgrepConfigPathPlaceholder, "RIPGREP_CONFIG_PATH", StringComparison.Ordinal);
+        normalized = normalized.Replace("rg:", "scout:", StringComparison.Ordinal);
+        normalized = normalized.Replace("ripgrep requires at least one pattern to execute a search", "scout requires at least one pattern to execute a search", StringComparison.Ordinal);
+        normalized = normalized.Replace("this build of ripgrep", "this build of scout", StringComparison.Ordinal);
+        return normalized;
     }
 }

@@ -12,7 +12,7 @@ internal static class SearchWalkPlanning
     {
         if (!TryBuildFileTypeMatcher(lowArgs, out FileTypeMatcher? fileTypes, out ScoutError? error))
         {
-            diagnostics.ErrorMessage(error!.WithContext("rg"));
+            diagnostics.ErrorMessage(error!.WithContext(ScoutErrorContext.ProgramContext()));
             return ExitCode.Error;
         }
 
@@ -60,7 +60,7 @@ internal static class SearchWalkPlanning
             {
                 if (!builder.TryAddIgnoreFile(lowArgs.IgnoreFiles[index], out string? errorMessage) && lowArgs.Messages)
                 {
-                    diagnostics.ErrorMessage(new ScoutError(errorMessage!).WithContext("rg"));
+                    diagnostics.ErrorMessage(new ScoutError(errorMessage!).WithContext(ScoutErrorContext.ProgramContext()));
                 }
             }
         }
@@ -184,7 +184,7 @@ internal static class SearchWalkPlanning
             }
             catch (GlobParseException exception)
             {
-                diagnostics.ErrorMessage(new ScoutError($"error parsing glob '{pattern.Value}': {exception.Message}").WithContext("rg"));
+                diagnostics.ErrorMessage(new ScoutError($"error parsing glob '{pattern.Value}': {exception.Message}").WithContext(ScoutErrorContext.ProgramContext()));
                 return false;
             }
         }

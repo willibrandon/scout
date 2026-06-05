@@ -144,6 +144,18 @@ def normalize_elapsed(output):
     return output
 
 
+def normalize_stderr_identity(output):
+    if output.startswith(b"rg: "):
+        output = b"scout: " + output[len(b"rg: ") :]
+    output = output.replace(b"RIPGREP_CONFIG_PATH", b"SCOUT_CONFIG_PATH")
+    output = output.replace(
+        b"ripgrep requires at least one pattern to execute a search",
+        b"scout requires at least one pattern to execute a search",
+    )
+    output = output.replace(b"this build of ripgrep", b"this build of scout")
+    return output
+
+
 def run(tool, work, args, input_bytes=None):
     options = {
         "cwd": work,
@@ -188,7 +200,7 @@ def compare(name, mode, scout, rg, work, out, args, input_bytes=None):
 
     if scout_stdout != rg_stdout:
         raise SystemExit(f"invalid UTF-8 differential stdout mismatch for {name}")
-    if scout_result.stderr != rg_result.stderr:
+    if normalize_stderr_identity(scout_result.stderr) != normalize_stderr_identity(rg_result.stderr):
         raise SystemExit(f"invalid UTF-8 differential stderr mismatch for {name}")
 
 

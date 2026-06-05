@@ -757,25 +757,24 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
-    /// Verifies the parity build does not introduce a Scout-specific config environment variable.
+    /// Verifies Scout config identity is wired as primary with ripgrep compatibility fallback.
     /// </summary>
     [Fact]
-    public void RuntimeSurfacesDoNotReadScoutConfigPath()
+    public void RuntimeSurfacesReadScoutConfigPathWithRipgrepFallback()
     {
         string root = FindRepositoryRoot();
-        string forbiddenVariable = "SCOUT_" + "CONFIG_PATH";
-        var violations = new List<string>();
+        string configExpander = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "ConfigArgumentExpander.cs"));
+        string design = File.ReadAllText(Path.Combine(root, "docs", "DESIGN.md"));
+        string parity = File.ReadAllText(Path.Combine(root, "docs", "PARITY.md"));
+        string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
 
-        foreach (string path in EnumerateRuntimeAndBuildSurfaceFiles(root))
-        {
-            string text = File.ReadAllText(path);
-            if (text.Contains(forbiddenVariable, StringComparison.Ordinal))
-            {
-                violations.Add(Path.GetRelativePath(root, path));
-            }
-        }
-
-        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+        Assert.Contains("SCOUT_CONFIG_PATH", configExpander, StringComparison.Ordinal);
+        Assert.Contains("RIPGREP_CONFIG_PATH", configExpander, StringComparison.Ordinal);
+        Assert.Contains("GetConfigPathFromEnvironment", configExpander, StringComparison.Ordinal);
+        Assert.Contains("`SCOUT_CONFIG_PATH` primary with `RIPGREP_CONFIG_PATH` compatibility fallback", design, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_CONFIG_PATH", parity, StringComparison.Ordinal);
+        Assert.Contains("RIPGREP_CONFIG_PATH", parity, StringComparison.Ordinal);
+        Assert.Contains("\"$ROOT/eng/verify-identity-rebrand.sh\"", preflight, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -787,7 +786,8 @@ public sealed partial class PinnedConfigurationTests
         string root = FindRepositoryRoot();
         string parity = File.ReadAllText(Path.Combine(root, "docs", "PARITY.md"));
 
-        Assert.Contains("Scout has no accepted runtime deviations from the pinned ripgrep behavior.", parity, StringComparison.Ordinal);
+        Assert.Contains("Scout has no accepted behavioral deviations from the pinned ripgrep behavior.", parity, StringComparison.Ordinal);
+        Assert.Contains("Identity surfaces are intentionally Scout-specific", parity, StringComparison.Ordinal);
         Assert.Equal("None.", ReadMarkdownSection(parity, "Tracked Gaps").Trim());
     }
 
@@ -1452,14 +1452,15 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("resolve_repo_path", generatedArtifactScript, StringComparison.Ordinal);
         Assert.Contains("ripgrep_rg_path", generatedArtifactScript, StringComparison.Ordinal);
         Assert.Contains("ripgrep_rg_sha256", generatedArtifactScript, StringComparison.Ordinal);
-        Assert.Contains("compare_case help_long --help", generatedArtifactScript, StringComparison.Ordinal);
-        Assert.Contains("compare_case help_short -h", generatedArtifactScript, StringComparison.Ordinal);
-        Assert.Contains("compare_case generate_man --generate man", generatedArtifactScript, StringComparison.Ordinal);
-        Assert.Contains("compare_case generate_man_inline --generate=man", generatedArtifactScript, StringComparison.Ordinal);
-        Assert.Contains("compare_case generate_complete_bash --generate complete-bash", generatedArtifactScript, StringComparison.Ordinal);
-        Assert.Contains("compare_case generate_complete_zsh --generate complete-zsh", generatedArtifactScript, StringComparison.Ordinal);
-        Assert.Contains("compare_case generate_complete_fish --generate complete-fish", generatedArtifactScript, StringComparison.Ordinal);
-        Assert.Contains("compare_case generate_complete_powershell --generate complete-powershell", generatedArtifactScript, StringComparison.Ordinal);
+        Assert.Contains("transform-ripgrep-artifact.sh", generatedArtifactScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case help_long help-long --help", generatedArtifactScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case help_short help-short -h", generatedArtifactScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case generate_man man --generate man", generatedArtifactScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case generate_man_inline man --generate=man", generatedArtifactScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case generate_complete_bash complete-bash --generate complete-bash", generatedArtifactScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case generate_complete_zsh complete-zsh --generate complete-zsh", generatedArtifactScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case generate_complete_fish complete-fish --generate complete-fish", generatedArtifactScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case generate_complete_powershell complete-powershell --generate complete-powershell", generatedArtifactScript, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1548,6 +1549,7 @@ public sealed partial class PinnedConfigurationTests
         string generateOutput = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "GenerateOutput.cs"));
         string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
         string verifier = File.ReadAllText(Path.Combine(root, "eng", "verify-generated-artifacts.sh"));
+        string transform = File.ReadAllText(Path.Combine(root, "eng", "transform-ripgrep-artifact.pl"));
         string projectPath = Path.Combine(root, "src", "Scout.App", "Scout.App.csproj");
         var project = XDocument.Load(projectPath);
 
@@ -1565,6 +1567,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("Generated artifact verifier did not create actual output", verifier, StringComparison.Ordinal);
         Assert.Contains("cmp -s", verifier, StringComparison.Ordinal);
         Assert.Contains("diff -u", verifier, StringComparison.Ordinal);
+        Assert.Contains("$text =~ s/\\r\\n/\\n/g;", transform, StringComparison.Ordinal);
         Assert.Contains(
             project.Descendants("CompilerVisibleItemMetadata"),
             element =>
@@ -2348,6 +2351,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("invalid_utf8_pattern_argv", invalidUtf8DifferentialScript, StringComparison.Ordinal);
         Assert.Contains("invalid_utf8_regexp_argv", invalidUtf8DifferentialScript, StringComparison.Ordinal);
         Assert.Contains("\"elapsed\":{\"human\":\"<elapsed>\",\"nanos\":0,\"secs\":0}", invalidUtf8DifferentialScript, StringComparison.Ordinal);
+        Assert.Contains("normalize_stderr_identity", invalidUtf8DifferentialScript, StringComparison.Ordinal);
+        Assert.Contains("output.startswith(b\"rg: \")", invalidUtf8DifferentialScript, StringComparison.Ordinal);
+        Assert.Contains("b\"this build of ripgrep\"", invalidUtf8DifferentialScript, StringComparison.Ordinal);
         Assert.Contains("errno.EILSEQ", invalidUtf8DifferentialScript, StringComparison.Ordinal);
         Assert.Contains("subprocess.run", invalidUtf8DifferentialScript, StringComparison.Ordinal);
         Assert.DoesNotContain("SKIP invalid UTF-8", invalidUtf8DifferentialScript, StringComparison.Ordinal);

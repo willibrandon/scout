@@ -6,7 +6,12 @@ namespace Scout;
 
 internal static class SearchDiagnosticLogging
 {
-    private const string DefaultRipgrepSourceRoot = "/Users/brandon/src/ripgrep";
+    private const string FlagsCategory = "Scout.App.Flags";
+    private const string RegexCategory = "Scout.Regex";
+    private const string SearchCategory = "Scout.Searching";
+    private const string IgnoreCategory = "Scout.Ignore";
+    private const string GlobbingCategory = "Scout.Globbing";
+    private const string SourceFile = "src/Scout.App/SearchDiagnosticLogging.cs";
 
     internal static void LogSearchConfiguration(
         DiagnosticLogger logger,
@@ -22,18 +27,27 @@ internal static class SearchDiagnosticLogging
 
         int pathCount = Math.Max(0, positional.Count - firstPathIndex);
         bool isOneFile = IsOneFileForLogging(positional, firstPathIndex);
-        logger.Debug("rg::flags::hiargs", "crates/core/flags/hiargs.rs", 954, $"read CWD from environment: {Directory.GetCurrentDirectory()}");
-        logger.Debug("rg::flags::hiargs", "crates/core/flags/hiargs.rs", 1092, $"number of paths given to search: {pathCount}");
-        logger.Debug("rg::flags::hiargs", "crates/core/flags/hiargs.rs", 1103, $"is_one_file? {FormatBool(isOneFile)}");
-        logger.Debug("rg::flags::hiargs", "crates/core/flags/hiargs.rs", 1278, $"found hostname for hyperlink configuration: {GetLoggingHostname(lowArgs)}");
-        logger.Debug("rg::flags::hiargs", "crates/core/flags/hiargs.rs", 1288, $"hyperlink format: \"{EscapeLogString(lowArgs.HyperlinkFormat ?? string.Empty)}\"");
-        logger.Debug("rg::flags::hiargs", "crates/core/flags/hiargs.rs", 175, $"using {GetLoggingThreadCount(lowArgs, isOneFile)} thread(s)");
+        // provenance: crates/core/flags/hiargs.rs:954
+        logger.Debug(FlagsCategory, SourceFile, $"read CWD from environment: {Directory.GetCurrentDirectory()}");
+        // provenance: crates/core/flags/hiargs.rs:1092
+        logger.Debug(FlagsCategory, SourceFile, $"number of paths given to search: {pathCount}");
+        // provenance: crates/core/flags/hiargs.rs:1103
+        logger.Debug(FlagsCategory, SourceFile, $"is_one_file? {FormatBool(isOneFile)}");
+        // provenance: crates/core/flags/hiargs.rs:1278
+        logger.Debug(FlagsCategory, SourceFile, $"found hostname for hyperlink configuration: {GetLoggingHostname(lowArgs)}");
+        // provenance: crates/core/flags/hiargs.rs:1288
+        logger.Debug(FlagsCategory, SourceFile, $"hyperlink format: \"{EscapeLogString(lowArgs.HyperlinkFormat ?? string.Empty)}\"");
+        // provenance: crates/core/flags/hiargs.rs:175
+        logger.Debug(FlagsCategory, SourceFile, $"using {GetLoggingThreadCount(lowArgs, isOneFile)} thread(s)");
         LogGlobalIgnoreConfiguration(logger, lowArgs.RespectGitIgnoreFiles && lowArgs.RespectGlobalIgnoreFiles);
         if (patterns.Count > 0)
         {
-            logger.Debug("grep_regex::config", RipgrepSourcePath("crates/regex/src/config.rs"), 175, $"assembling HIR from {patterns.Count} fixed string literals");
-            logger.Trace("grep_regex::matcher", RipgrepSourcePath("crates/regex/src/matcher.rs"), 66, $"final regex: \"(?:{EscapeLogPattern(patterns[0])})\"");
-            logger.Trace("grep_regex::literal", "crates/regex/src/literal.rs", 74, "skipping inner literal extraction, existing regex is believed to already be accelerated");
+            // provenance: crates/regex/src/config.rs:175
+            logger.Debug(RegexCategory, SourceFile, $"assembling HIR from {patterns.Count} fixed string literals");
+            // provenance: crates/regex/src/matcher.rs:66
+            logger.Trace(RegexCategory, SourceFile, $"final regex: \"(?:{EscapeLogPattern(patterns[0])})\"");
+            // provenance: crates/regex/src/literal.rs:74
+            logger.Trace(RegexCategory, SourceFile, "skipping inner literal extraction, existing regex is believed to already be accelerated");
         }
     }
 
@@ -87,8 +101,10 @@ internal static class SearchDiagnosticLogging
             return;
         }
 
-        logger.Debug("ignore::gitignore", "crates/ignore/src/gitignore.rs", 398, $"opened gitignore file: {globalIgnore}");
-        logger.Debug("globset", "crates/globset/src/lib.rs", 515, "built glob set; 1 literals, 0 basenames, 0 extensions, 0 prefixes, 1 suffixes, 0 required extensions, 0 regexes");
+        // provenance: crates/ignore/src/gitignore.rs:398
+        logger.Debug(IgnoreCategory, SourceFile, $"opened gitignore file: {globalIgnore}");
+        // provenance: crates/globset/src/lib.rs:515
+        logger.Debug(GlobbingCategory, SourceFile, "built glob set; 1 literals, 0 basenames, 0 extensions, 0 prefixes, 1 suffixes, 0 required extensions, 0 regexes");
     }
 
     private static string EscapeLogString(string value)
@@ -108,19 +124,25 @@ internal static class SearchDiagnosticLogging
             return;
         }
 
-        logger.Trace("rg::search", "crates/core/search.rs", 255, $"{path}: binary detection: BinaryDetection(Convert(0))");
+        // provenance: crates/core/search.rs:255
+        logger.Trace(SearchCategory, SourceFile, $"{path}: binary detection: BinaryDetection(Convert(0))");
         if (readKind == SearchFileReadKind.MemoryMapped)
         {
-            logger.Trace("grep_searcher::searcher", RipgrepSourcePath("crates/searcher/src/searcher/mod.rs"), 690, $"Some(\"{EscapeLogString(path)}\"): searching via memory map");
-            logger.Trace("grep_searcher::searcher", RipgrepSourcePath("crates/searcher/src/searcher/mod.rs"), 792, "slice reader: searching via slice-by-line strategy");
+            // provenance: crates/searcher/src/searcher/mod.rs:690
+            logger.Trace(SearchCategory, SourceFile, $"Some(\"{EscapeLogString(path)}\"): searching via memory map");
+            // provenance: crates/searcher/src/searcher/mod.rs:792
+            logger.Trace(SearchCategory, SourceFile, "slice reader: searching via slice-by-line strategy");
         }
         else
         {
-            logger.Trace("grep_searcher::searcher", RipgrepSourcePath("crates/searcher/src/searcher/mod.rs"), 711, $"Some(\"{EscapeLogString(path)}\"): searching using generic reader");
-            logger.Trace("grep_searcher::searcher", RipgrepSourcePath("crates/searcher/src/searcher/mod.rs"), 762, "generic reader: searching via roll buffer strategy");
+            // provenance: crates/searcher/src/searcher/mod.rs:711
+            logger.Trace(SearchCategory, SourceFile, $"Some(\"{EscapeLogString(path)}\"): searching using generic reader");
+            // provenance: crates/searcher/src/searcher/mod.rs:762
+            logger.Trace(SearchCategory, SourceFile, "generic reader: searching via roll buffer strategy");
         }
 
-        logger.Trace("grep_searcher::searcher::core", RipgrepSourcePath("crates/searcher/src/searcher/core.rs"), 67, "searcher core: will use fast line searcher");
+        // provenance: crates/searcher/src/searcher/core.rs:67
+        logger.Trace(SearchCategory, SourceFile, "searcher core: will use fast line searcher");
     }
 
     internal static string GetHyperlinkHost(CliLowArgs lowArgs, string? hyperlinkFormat)
@@ -172,17 +194,4 @@ internal static class SearchDiagnosticLogging
         }
     }
 
-    private static string RipgrepSourcePath(string relativePath)
-    {
-        string sourceRoot = ProcessEnvironment.GetVariable("SCOUT_RIPGREP_SOURCE_ROOT")
-            ?? ProcessEnvironment.GetVariable("SCOUT_RIPGREP_REFERENCE")
-            ?? DefaultRipgrepSourceRoot;
-        sourceRoot = sourceRoot.TrimEnd('/', '\\');
-        if (sourceRoot.Length == 0)
-        {
-            return relativePath;
-        }
-
-        return sourceRoot.Replace('\\', '/') + "/" + relativePath;
-    }
 }

@@ -1,4 +1,6 @@
 
+using System.Runtime.CompilerServices;
+
 namespace Scout;
 
 internal readonly struct DiagnosticLogger
@@ -17,7 +19,7 @@ internal readonly struct DiagnosticLogger
 
     public bool IsTraceEnabled => mode == CliLoggingMode.Trace;
 
-    public void Debug(string target, string file, int line, string message)
+    public void Debug(string target, string file, string message, [CallerLineNumber] int line = 0)
     {
         if (IsDebugEnabled)
         {
@@ -25,7 +27,7 @@ internal readonly struct DiagnosticLogger
         }
     }
 
-    public void Trace(string target, string file, int line, string message)
+    public void Trace(string target, string file, string message, [CallerLineNumber] int line = 0)
     {
         if (IsTraceEnabled)
         {
@@ -35,7 +37,7 @@ internal readonly struct DiagnosticLogger
 
     private void Log(string level, string target, string file, int line, string message)
     {
-        diagnostics.Message($"rg: {level}|{target}|{FormatSourcePath(file)}:{line}: {message}");
+        diagnostics.Message($"{ScoutErrorContext.ProgramName}: {level}|{target}|{FormatSourcePath(file)}:{line}: {message}");
     }
 
     private static string FormatSourcePath(string file)

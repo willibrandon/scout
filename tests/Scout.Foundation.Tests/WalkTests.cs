@@ -402,16 +402,36 @@ public sealed class WalkTests
         File.WriteAllText(Path.Combine(root, ".gitignore"), "git-only\n");
         File.WriteAllText(Path.Combine(root, ".ignore"), "dot-only\n");
         File.WriteAllText(Path.Combine(root, ".rgignore"), "rg-only\n");
+        File.WriteAllText(Path.Combine(root, ".scoutignore"), "scout-only\n");
         File.WriteAllText(Path.Combine(root, "git-only"), string.Empty);
         File.WriteAllText(Path.Combine(root, "dot-only"), string.Empty);
         File.WriteAllText(Path.Combine(root, "rg-only"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "scout-only"), string.Empty);
         File.WriteAllText(Path.Combine(root, "keep"), string.Empty);
 
         Assert.Equal(["git-only", "keep"], Collect(root, new WalkBuilder(root).GitIgnore(false)));
-        Assert.Equal(["dot-only", "keep", "rg-only"], Collect(root, new WalkBuilder(root).Ignore(false)));
+        Assert.Equal(["dot-only", "keep", "rg-only", "scout-only"], Collect(root, new WalkBuilder(root).Ignore(false)));
         Assert.Equal(
-            [".git", ".gitignore", ".ignore", ".rgignore", "dot-only", "git-only", "keep", "rg-only"],
+            [".git", ".gitignore", ".ignore", ".rgignore", ".scoutignore", "dot-only", "git-only", "keep", "rg-only", "scout-only"],
             Collect(root, new WalkBuilder(root).StandardFilters(false)));
+    }
+
+    /// <summary>
+    /// Verifies Scout-native ignore rules override matching .rgignore rules.
+    /// </summary>
+    [Fact]
+    public void ScoutIgnoreOverridesRgIgnore()
+    {
+        string root = CreateTempDirectory();
+        Directory.CreateDirectory(Path.Combine(root, ".git"));
+        File.WriteAllText(Path.Combine(root, ".rgignore"), "conflict\nrg-only\n");
+        File.WriteAllText(Path.Combine(root, ".scoutignore"), "!conflict\nscout-only\n");
+        File.WriteAllText(Path.Combine(root, "conflict"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "rg-only"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "scout-only"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "keep"), string.Empty);
+
+        Assert.Equal(["conflict", "keep"], Collect(root, new WalkBuilder(root)));
     }
 
     /// <summary>

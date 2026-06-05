@@ -48,7 +48,7 @@ internal readonly struct SearchPathArgument
             return true;
         }
 
-        diagnostics.ErrorMessage(new ScoutError("invalid CLI arguments").WithContext("rg"));
+        diagnostics.ErrorMessage(new ScoutError("invalid CLI arguments").WithContext(ScoutErrorContext.ProgramContext()));
         return false;
     }
 
@@ -69,7 +69,7 @@ internal readonly struct SearchPathArgument
             ReadOnlySpan<byte> bytes = argument.AsUnixBytes();
             if (bytes.IndexOf((byte)0) >= 0)
             {
-                diagnostics.ErrorMessage(new ScoutError("invalid CLI arguments").WithContext("rg"));
+                diagnostics.ErrorMessage(new ScoutError("invalid CLI arguments").WithContext(ScoutErrorContext.ProgramContext()));
                 path = default;
                 return false;
             }
@@ -78,7 +78,7 @@ internal readonly struct SearchPathArgument
             return true;
         }
 
-        diagnostics.ErrorMessage(new ScoutError("invalid CLI arguments").WithContext("rg"));
+        diagnostics.ErrorMessage(new ScoutError("invalid CLI arguments").WithContext(ScoutErrorContext.ProgramContext()));
         path = default;
         return false;
     }

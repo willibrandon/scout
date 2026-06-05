@@ -40,7 +40,7 @@ internal static class DifferentialOutputNormalizer
             return string.IsNullOrEmpty(error) ? string.Empty : "<non-empty stderr>";
         }
 
-        string normalized = error;
+        string normalized = NormalizeStderrIdentity(error);
         if (comparisonMode is DifferentialComparisonMode.MaskElapsed or DifferentialComparisonMode.SortLinesAndMaskElapsed)
         {
             normalized = MaskElapsed(normalized);
@@ -52,6 +52,82 @@ internal static class DifferentialOutputNormalizer
         }
 
         return normalized;
+    }
+
+    private static string NormalizeStderrIdentity(string error)
+    {
+        if (error.Length == 0)
+        {
+            return error;
+        }
+
+        string[] lines = error.Split('\n');
+        for (int index = 0; index < lines.Length; index++)
+        {
+            lines[index] = NormalizeStderrIdentityLine(lines[index]);
+        }
+
+        return string.Join('\n', lines);
+    }
+
+    private static string NormalizeStderrIdentityLine(string line)
+    {
+        string normalized = line;
+        if (normalized.StartsWith("rg: ", StringComparison.Ordinal))
+        {
+            normalized = "scout: " + normalized["rg: ".Length..];
+        }
+
+        const string RipgrepConfigPathPlaceholder = "__SCOUT_RIPGREP_CONFIG_PATH__";
+        normalized = normalized.Replace(
+            "SCOUT_CONFIG_PATH and RIPGREP_CONFIG_PATH environment variables are not set, therefore not reading any config file",
+            "SCOUT_CONFIG_PATH and " + RipgrepConfigPathPlaceholder + " environment variables are not set, therefore not reading any config file",
+            StringComparison.Ordinal);
+        normalized = normalized.Replace(
+            "RIPGREP_CONFIG_PATH environment variable is not set, therefore not reading any config file",
+            "SCOUT_CONFIG_PATH and " + RipgrepConfigPathPlaceholder + " environment variables are not set, therefore not reading any config file",
+            StringComparison.Ordinal);
+        normalized = normalized.Replace("RIPGREP_CONFIG_PATH", "SCOUT_CONFIG_PATH", StringComparison.Ordinal);
+        normalized = normalized.Replace(RipgrepConfigPathPlaceholder, "RIPGREP_CONFIG_PATH", StringComparison.Ordinal);
+        normalized = normalized.Replace("ripgrep requires at least one pattern to execute a search", "scout requires at least one pattern to execute a search", StringComparison.Ordinal);
+        normalized = normalized.Replace("this build of ripgrep", "this build of scout", StringComparison.Ordinal);
+
+        return NormalizeDebugIdentityLine(normalized);
+    }
+
+    private static string NormalizeDebugIdentityLine(string line)
+    {
+        const string Prefix = "scout: ";
+        if (!line.StartsWith(Prefix, StringComparison.Ordinal))
+        {
+            return line;
+        }
+
+        int firstPipe = line.IndexOf('|', Prefix.Length);
+        if (firstPipe < 0)
+        {
+            return line;
+        }
+
+        string level = line[Prefix.Length..firstPipe];
+        if (level is not ("DEBUG" or "TRACE"))
+        {
+            return line;
+        }
+
+        int secondPipe = line.IndexOf('|', firstPipe + 1);
+        if (secondPipe < 0)
+        {
+            return line;
+        }
+
+        int messageStart = line.IndexOf(": ", secondPipe + 1, StringComparison.Ordinal);
+        if (messageStart < 0)
+        {
+            return line;
+        }
+
+        return Prefix + level + "|<category>|<source>:0" + line[messageStart..];
     }
 
     private static string MaskElapsed(string text)

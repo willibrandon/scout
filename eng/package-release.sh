@@ -61,7 +61,7 @@ rid = "$RID"
 ripgrep_commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"
 dotnet_runtime = "10.0.2"
 pcre2 = "10.46"
-parity = "no accepted runtime deviations"
+parity = "behavioral parity; identity is Scout-specific (see PARITY.md)"
 EOF
 
 rm -f "$ARCHIVE" "$HASH_FILE"
