@@ -13,11 +13,12 @@ internal static class FileListingOperations
         RawByteWriter output,
         DiagnosticMessenger diagnostics)
     {
+        var color = OutputColor.Create(lowArgs.ColorMode is CliColorMode.Always or CliColorMode.Ansi, lowArgs.ColorSpecs);
         bool emitted = false;
         bool errored = false;
         if (positional.Count == 0)
         {
-            ListPath(path: ".", defaultRoot: true, lowArgs, fileTypes, output, diagnostics, ref emitted, ref errored);
+            ListPath(path: ".", defaultRoot: true, lowArgs, fileTypes, color, output, diagnostics, ref emitted, ref errored);
         }
         else
         {
@@ -25,7 +26,7 @@ internal static class FileListingOperations
             {
                 if (SearchPathArgument.TryGetText(positional[index], diagnostics, out string path))
                 {
-                    ListPath(path, defaultRoot: false, lowArgs, fileTypes, output, diagnostics, ref emitted, ref errored);
+                    ListPath(path, defaultRoot: false, lowArgs, fileTypes, color, output, diagnostics, ref emitted, ref errored);
                 }
                 else
                 {
@@ -43,6 +44,7 @@ internal static class FileListingOperations
         bool defaultRoot,
         CliLowArgs lowArgs,
         FileTypeMatcher fileTypes,
+        OutputColor color,
         RawByteWriter output,
         DiagnosticMessenger diagnostics,
         ref bool emitted,
@@ -52,7 +54,7 @@ internal static class FileListingOperations
         {
             if (!lowArgs.Quiet)
             {
-                output.Write(StandardInputPath);
+                WriteStandardInputPath(output, color);
                 SearchOutputFormatting.WritePathTerminator(output, lowArgs.NullPathTerminator);
             }
 
@@ -64,7 +66,7 @@ internal static class FileListingOperations
         {
             if (!lowArgs.Quiet)
             {
-                output.Write(SearchPathArgument.GetPathBytes(path, lowArgs.PathSeparator));
+                WritePath(path, SearchPathArgument.GetPathBytes(path, lowArgs.PathSeparator), lowArgs, color, output);
                 SearchOutputFormatting.WritePathTerminator(output, lowArgs.NullPathTerminator);
             }
 
@@ -83,11 +85,11 @@ internal static class FileListingOperations
         int threadCount = SearchWalkPlanning.GetFilesWalkThreadCount(lowArgs);
         if (threadCount > 1)
         {
-            ListDirectoryParallel(path, fullRoot, defaultRoot, lowArgs, fileTypes, output, diagnostics, ref emitted);
+            ListDirectoryParallel(path, fullRoot, defaultRoot, lowArgs, fileTypes, color, output, diagnostics, ref emitted);
             return;
         }
 
-        ListDirectorySerial(path, fullRoot, defaultRoot, lowArgs, fileTypes, output, diagnostics, ref emitted);
+        ListDirectorySerial(path, fullRoot, defaultRoot, lowArgs, fileTypes, color, output, diagnostics, ref emitted);
     }
 
     private static void ListDirectorySerial(
@@ -96,6 +98,7 @@ internal static class FileListingOperations
         bool defaultRoot,
         CliLowArgs lowArgs,
         FileTypeMatcher fileTypes,
+        OutputColor color,
         RawByteWriter output,
         DiagnosticMessenger diagnostics,
         ref bool emitted)
@@ -110,7 +113,7 @@ internal static class FileListingOperations
                 : SearchPathArgument.GetPathBytes(displayPath, lowArgs.PathSeparator);
             if (!lowArgs.Quiet)
             {
-                output.Write(displayPathBytes);
+                WriteDirectoryEntryPath(entry, displayPathBytes, lowArgs, color, output);
                 SearchOutputFormatting.WritePathTerminator(output, lowArgs.NullPathTerminator);
             }
 
@@ -124,6 +127,7 @@ internal static class FileListingOperations
         bool defaultRoot,
         CliLowArgs lowArgs,
         FileTypeMatcher fileTypes,
+        OutputColor color,
         RawByteWriter output,
         DiagnosticMessenger diagnostics,
         ref bool emitted)
@@ -141,7 +145,7 @@ internal static class FileListingOperations
                 byte[] displayPathBytes = entry.IsRawUnixPath
                     ? SearchPathArgument.GetSearchDirectoryDisplayPathBytes(path, fullRoot, entry, defaultRoot, lowArgs.PathSeparator)
                     : SearchPathArgument.GetPathBytes(displayPath, lowArgs.PathSeparator);
-                output.Write(displayPathBytes);
+                WriteDirectoryEntryPath(entry, displayPathBytes, lowArgs, color, output);
                 SearchOutputFormatting.WritePathTerminator(output, lowArgs.NullPathTerminator);
             }
         });
@@ -172,5 +176,23 @@ internal static class FileListingOperations
 
         printTask.Join();
         emitted |= Volatile.Read(ref found) != 0;
+    }
+
+    private static void WriteStandardInputPath(RawByteWriter output, OutputColor color)
+    {
+        var path = new OutputPath(StandardInputPath, hyperlinkPath: null, hyperlinkFormat: null, host: string.Empty);
+        path.WriteLabel(output, color);
+    }
+
+    private static void WritePath(string physicalPath, byte[] displayPath, CliLowArgs lowArgs, OutputColor color, RawByteWriter output)
+    {
+        OutputPath path = SearchOutputFormatting.CreateOutputPath(physicalPath, displayPath, lowArgs, color);
+        path.WriteLabel(output, color);
+    }
+
+    private static void WriteDirectoryEntryPath(DirEntry entry, byte[] displayPath, CliLowArgs lowArgs, OutputColor color, RawByteWriter output)
+    {
+        OutputPath path = SearchOutputFormatting.CreateDirectoryEntryOutputPath(entry, displayPath, lowArgs, color);
+        path.WriteLabel(output, color);
     }
 }
