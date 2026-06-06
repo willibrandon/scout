@@ -16,6 +16,7 @@ internal static class JsonSearchOperations
         FileTypeMatcher fileTypes,
         RawByteWriter output,
         DiagnosticMessenger diagnostics,
+        DiagnosticLogger logger,
         Stream standardInput,
         bool standardInputIsReadable)
     {
@@ -60,7 +61,7 @@ internal static class JsonSearchOperations
         for (int index = 0; index < paths.Count; index++)
         {
             bool defaultRoot = useDefaultCurrentDirectory && index == 0;
-            SearchJsonPath(paths[index], pattern, standardInput, defaultRoot, paths.Count > 1, autoMmapEligible, lowArgs, fileTypes, asciiCaseInsensitive, summary, output, diagnostics, ref matched, ref errored);
+            SearchJsonPath(paths[index], pattern, standardInput, defaultRoot, paths.Count > 1, autoMmapEligible, lowArgs, fileTypes, asciiCaseInsensitive, summary, output, diagnostics, logger, ref matched, ref errored);
         }
 
         summary.WriteSummary(output);
@@ -93,13 +94,14 @@ internal static class JsonSearchOperations
         JsonSearchSummary summary,
         RawByteWriter output,
         DiagnosticMessenger diagnostics,
+        DiagnosticLogger logger,
         ref bool matched,
         ref bool errored)
     {
         string? path = pathArgument.Text;
         if (pathArgument.IsRawUnixPath)
         {
-            SearchJsonRawUnixFile(pathArgument, pattern, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, ref matched, ref errored);
+            SearchJsonRawUnixFile(pathArgument, pattern, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, logger, ref matched, ref errored);
             return;
         }
 
@@ -115,15 +117,15 @@ internal static class JsonSearchOperations
             int threadCount = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
             if (threadCount > 1)
             {
-                SearchJsonDirectoryParallel(path, pattern, defaultRoot, lowArgs, fileTypes, asciiCaseInsensitive, summary, output, diagnostics, threadCount, ref matched, ref errored);
+                SearchJsonDirectoryParallel(path, pattern, defaultRoot, lowArgs, fileTypes, asciiCaseInsensitive, summary, output, diagnostics, logger, threadCount, ref matched, ref errored);
                 return;
             }
 
             string fullRoot = Path.GetFullPath(path);
-            foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(path, lowArgs, fileTypes, diagnostics))
+            foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(path, lowArgs, fileTypes, diagnostics, logger))
             {
                 byte[] displayPath = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(path, fullRoot, entry, defaultRoot, pathSeparator: null);
-                SearchJsonDirectoryEntryFile(entry, displayPath, pattern, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, ref matched, ref errored);
+                SearchJsonDirectoryEntryFile(entry, displayPath, pattern, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, logger, ref matched, ref errored);
             }
 
             return;
@@ -131,7 +133,7 @@ internal static class JsonSearchOperations
 
         if (File.Exists(path))
         {
-            SearchJsonFile(path, pathArgument.DisplayBytes, pattern, autoMmapEligible, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, ref matched, ref errored);
+            SearchJsonFile(path, pathArgument.DisplayBytes, pattern, autoMmapEligible, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, logger, ref matched, ref errored);
             return;
         }
 
@@ -149,6 +151,7 @@ internal static class JsonSearchOperations
         JsonSearchSummary summary,
         RawByteWriter output,
         DiagnosticMessenger diagnostics,
+        DiagnosticLogger logger,
         int threadCount,
         ref bool matched,
         ref bool errored)
@@ -171,7 +174,7 @@ internal static class JsonSearchOperations
 
         try
         {
-            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() => entry =>
+            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger).Threads(threadCount).BuildParallel().Run(() => entry =>
             {
                 if (!entry.IsFile)
                 {
@@ -184,7 +187,7 @@ internal static class JsonSearchOperations
                 bool fileMatched = false;
                 bool fileErrored = false;
                 byte[] displayPath = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, pathSeparator: null);
-                SearchJsonDirectoryEntryFile(entry, displayPath, pattern, lowArgs, asciiCaseInsensitive, fileSummary, writer, diagnostics, ref fileMatched, ref fileErrored);
+                SearchJsonDirectoryEntryFile(entry, displayPath, pattern, lowArgs, asciiCaseInsensitive, fileSummary, writer, diagnostics, logger, ref fileMatched, ref fileErrored);
                 writer.Flush();
                 if (fileMatched)
                 {
@@ -230,15 +233,17 @@ internal static class JsonSearchOperations
         JsonSearchSummary summary,
         RawByteWriter output,
         DiagnosticMessenger diagnostics,
+        DiagnosticLogger logger,
         ref bool matched,
         ref bool errored)
     {
-        if (!SearchFileContentReader.TryRead(path, lowArgs, autoMmapEligible, diagnostics, out byte[] bytes, out SearchFileReadKind readKind))
+        if (!SearchFileContentReader.TryRead(path, lowArgs, autoMmapEligible, diagnostics, logger, out byte[] bytes, out SearchFileReadKind readKind))
         {
             errored = true;
             return;
         }
 
+        SearchDiagnosticLogging.LogTraceSearchPath(logger, path, readKind);
         matched |= SearchJsonBytes(bytes, pattern, output, displayPath, summary, lowArgs.TextMode, SearchesBinaryAsText(readKind), lowArgs.Quiet, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.Crlf, lowArgs.NullData, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch);
     }
 
@@ -250,6 +255,7 @@ internal static class JsonSearchOperations
         JsonSearchSummary summary,
         RawByteWriter output,
         DiagnosticMessenger diagnostics,
+        DiagnosticLogger logger,
         ref bool matched,
         ref bool errored)
     {
@@ -259,6 +265,7 @@ internal static class JsonSearchOperations
             return;
         }
 
+        SearchDiagnosticLogging.LogTraceSearchPath(logger, path.DisplayText, SearchFileReadKind.Buffered);
         matched |= SearchJsonBytes(bytes, pattern, output, path.DisplayBytes, summary, lowArgs.TextMode, searchBinaryAsText: false, lowArgs.Quiet, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.Crlf, lowArgs.NullData, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch);
     }
 
@@ -271,17 +278,18 @@ internal static class JsonSearchOperations
         JsonSearchSummary summary,
         RawByteWriter output,
         DiagnosticMessenger diagnostics,
+        DiagnosticLogger logger,
         ref bool matched,
         ref bool errored)
     {
         if (entry.IsRawUnixPath)
         {
             var path = SearchPathArgument.FromUnixBytes(entry.UnixPathBytes, displayPath);
-            SearchJsonRawUnixFile(path, pattern, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, ref matched, ref errored);
+            SearchJsonRawUnixFile(path, pattern, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, logger, ref matched, ref errored);
             return;
         }
 
-        SearchJsonFile(entry.FullPath, displayPath, pattern, false, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, ref matched, ref errored);
+        SearchJsonFile(entry.FullPath, displayPath, pattern, false, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, logger, ref matched, ref errored);
     }
 
     private static bool SearchJsonBytes(

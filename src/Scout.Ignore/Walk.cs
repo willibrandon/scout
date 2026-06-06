@@ -28,6 +28,7 @@ public sealed class Walk : IEnumerable<DirEntry>
     private readonly FileTypeMatcher fileTypes;
     private readonly IgnoreRuleSet explicitIgnoreRules;
     private readonly string[] customIgnoreFileNames;
+    private readonly DiagnosticLogger logger;
 
     internal Walk(
         string[] paths,
@@ -48,7 +49,8 @@ public sealed class Walk : IEnumerable<DirEntry>
         Override overrides,
         FileTypeMatcher fileTypes,
         IgnoreRuleSet explicitIgnoreRules,
-        string[] customIgnoreFileNames)
+        string[] customIgnoreFileNames,
+        DiagnosticLogger logger)
     {
         this.paths = paths;
         this.minDepth = minDepth;
@@ -69,6 +71,7 @@ public sealed class Walk : IEnumerable<DirEntry>
         this.fileTypes = fileTypes;
         this.explicitIgnoreRules = explicitIgnoreRules;
         this.customIgnoreFileNames = customIgnoreFileNames;
+        this.logger = logger;
     }
 
     /// <inheritdoc />
@@ -158,7 +161,7 @@ public sealed class Walk : IEnumerable<DirEntry>
 
             string fullPath = Path.GetFullPath(path);
             IgnoreRuleSet globalGitRules = gitGlobal
-                ? GlobalGitIgnore.Load(Directory.GetCurrentDirectory(), ignoreCaseInsensitive)
+                ? GlobalGitIgnore.Load(Directory.GetCurrentDirectory(), ignoreCaseInsensitive, logger)
                 : new IgnoreRuleSet();
             var rootIgnoreStack = IgnoreStack.Create(globalGitRules);
             IgnoreStack ignoreStack = parents
@@ -169,7 +172,8 @@ public sealed class Walk : IEnumerable<DirEntry>
                     gitExclude,
                     requireGit,
                     ignoreCaseInsensitive,
-                    customIgnoreFileNames)
+                    customIgnoreFileNames,
+                    logger)
                 : rootIgnoreStack;
             FileSystemDevice rootDevice = GetRootDevice(fullPath);
             yield return new WalkWorkItem(WalkPath.FromText(fullPath), depth: 0, [], ignoreStack, rootDevice, isRoot: true);
@@ -219,25 +223,29 @@ public sealed class Walk : IEnumerable<DirEntry>
                 gitExclude,
                 requireGit,
                 ignoreCaseInsensitive,
-                customIgnoreFileNames)
+                customIgnoreFileNames,
+                logger)
             : ignoreStack;
         IgnoreDecision overrideDecision = isRoot ? IgnoreDecision.None : overrides.Match(entry);
         if (overrideDecision == IgnoreDecision.Ignore)
         {
+            IgnoreDiagnosticLogging.LogIgnored(logger, entry, "matched override glob");
             state = default;
             return false;
         }
 
+        IgnoreRule? matchedIgnoreRule = null;
         IgnoreDecision ignoreDecision = overrideDecision == IgnoreDecision.Whitelist || isRoot
             ? overrideDecision
-            : ignoreStack.Match(entry);
+            : ignoreStack.Match(entry, out matchedIgnoreRule);
         if (!isRoot && ignoreDecision == IgnoreDecision.None)
         {
-            ignoreDecision = explicitIgnoreRules.Match(entry);
+            ignoreDecision = explicitIgnoreRules.Match(entry, out matchedIgnoreRule);
         }
 
         if (ignoreDecision == IgnoreDecision.Ignore)
         {
+            IgnoreDiagnosticLogging.LogIgnoredByRule(logger, entry, matchedIgnoreRule);
             state = default;
             return false;
         }
@@ -247,6 +255,7 @@ public sealed class Walk : IEnumerable<DirEntry>
             IgnoreDecision typeDecision = fileTypes.Match(entry);
             if (typeDecision == IgnoreDecision.Ignore)
             {
+                IgnoreDiagnosticLogging.LogIgnored(logger, entry, "rejected by file type filters");
                 state = default;
                 return false;
             }
@@ -259,12 +268,14 @@ public sealed class Walk : IEnumerable<DirEntry>
 
         if (!isRoot && ignoreDecision != IgnoreDecision.Whitelist && hidden && PathUtil.IsHidden(entry))
         {
+            IgnoreDiagnosticLogging.LogIgnored(logger, entry, "hidden");
             state = default;
             return false;
         }
 
         if (entry.IsDirectory && followLinks && entry.IsSymbolicLink && ancestors.Contains(entry.Identity))
         {
+            IgnoreDiagnosticLogging.LogIgnored(logger, entry, "symbolic link cycle detected");
             state = default;
             return false;
         }

@@ -7,6 +7,8 @@ internal sealed class IgnoreRuleSet
 
     public bool IsEmpty => rules.Count == 0;
 
+    internal int Count => rules.Count;
+
     public void Add(IgnoreRule rule)
     {
         baseDirectory ??= rule.BaseDirectory;
@@ -59,6 +61,17 @@ internal sealed class IgnoreRuleSet
         }
     }
 
+    internal IgnoreGlobSetSummary GetGlobSetSummary(int startIndex)
+    {
+        var summary = new IgnoreGlobSetSummary(0, 0, 0, 0, 0, 0, 0);
+        for (int index = startIndex; index < rules.Count; index++)
+        {
+            summary = summary.Add(rules[index].GetGlobSetSummary());
+        }
+
+        return summary;
+    }
+
     private void AddFileLines(string baseDirectory, string path, bool asciiCaseInsensitive)
     {
         bool firstLine = true;
@@ -67,7 +80,7 @@ internal sealed class IgnoreRuleSet
             string currentLine = firstLine ? line.TrimStart('\uFEFF') : line;
             firstLine = false;
 
-            if (IgnoreRule.TryParse(baseDirectory, currentLine, asciiCaseInsensitive, out IgnoreRule? rule) && rule is not null)
+            if (IgnoreRule.TryParse(baseDirectory, currentLine, path, asciiCaseInsensitive, out IgnoreRule? rule) && rule is not null)
             {
                 Add(rule);
             }
@@ -76,7 +89,13 @@ internal sealed class IgnoreRuleSet
 
     public IgnoreDecision Match(DirEntry entry)
     {
+        return Match(entry, out _);
+    }
+
+    internal IgnoreDecision Match(DirEntry entry, out IgnoreRule? matchedRule)
+    {
         IgnoreDecision decision = IgnoreDecision.None;
+        matchedRule = null;
         string? relativePath = null;
         bool relativePathComputed = false;
         for (int index = 0; index < rules.Count; index++)
@@ -97,6 +116,7 @@ internal sealed class IgnoreRuleSet
             if (current != IgnoreDecision.None)
             {
                 decision = current;
+                matchedRule = rule;
             }
         }
 

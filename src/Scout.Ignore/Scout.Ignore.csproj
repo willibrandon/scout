@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\Scout.Diagnostics\Scout.Diagnostics.csproj" />
     <ProjectReference Include="..\Scout.Globbing\Scout.Globbing.csproj" />
     <ProjectReference Include="..\Scout.Os\Scout.Os.csproj" />
   </ItemGroup>

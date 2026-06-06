@@ -9,8 +9,6 @@ internal static class SearchDiagnosticLogging
     private const string FlagsCategory = "Scout.App.Flags";
     private const string RegexCategory = "Scout.Regex";
     private const string SearchCategory = "Scout.Searching";
-    private const string IgnoreCategory = "Scout.Ignore";
-    private const string GlobbingCategory = "Scout.Globbing";
     private const string SourceFile = "src/Scout.App/SearchDiagnosticLogging.cs";
 
     internal static void LogSearchConfiguration(
@@ -39,11 +37,11 @@ internal static class SearchDiagnosticLogging
         logger.Debug(FlagsCategory, SourceFile, $"hyperlink format: \"{EscapeLogString(lowArgs.HyperlinkFormat ?? string.Empty)}\"");
         // provenance: crates/core/flags/hiargs.rs:175
         logger.Debug(FlagsCategory, SourceFile, $"using {GetLoggingThreadCount(lowArgs, isOneFile)} thread(s)");
-        LogGlobalIgnoreConfiguration(logger, lowArgs.RespectGitIgnoreFiles && lowArgs.RespectGlobalIgnoreFiles);
+        LogDefaultDecompressionCommandAvailability(logger);
         if (patterns.Count > 0)
         {
             // provenance: crates/regex/src/config.rs:175
-            logger.Debug(RegexCategory, SourceFile, $"assembling HIR from {patterns.Count} fixed string literals");
+            logger.Debug(RegexCategory, SourceFile, $"assembling regex program from {patterns.Count} pattern(s)");
             // provenance: crates/regex/src/matcher.rs:66
             logger.Trace(RegexCategory, SourceFile, $"final regex: \"(?:{EscapeLogPattern(patterns[0])})\"");
             // provenance: crates/regex/src/literal.rs:74
@@ -88,23 +86,22 @@ internal static class SearchDiagnosticLogging
         return SearchThreadPlanner.Resolve(lowArgs.Threads, lowArgs.SortMode is not null, isOneFile);
     }
 
-    private static void LogGlobalIgnoreConfiguration(DiagnosticLogger logger, bool enabled)
+    private static void LogDefaultDecompressionCommandAvailability(DiagnosticLogger logger)
     {
-        if (!enabled)
+        for (int index = 0; index < CliDecompressionMatcher.DefaultCommands.Count; index++)
         {
-            return;
+            string program = CliDecompressionMatcher.DefaultCommands[index].Program;
+            if (!CliDecompressionMatcher.TryResolveBinary(program, out _))
+            {
+                LogDecompressionCommandUnavailable(logger, program);
+            }
         }
+    }
 
-        string? globalIgnore = GlobalGitIgnore.ResolveFilePath();
-        if (string.IsNullOrEmpty(globalIgnore) || !File.Exists(globalIgnore))
-        {
-            return;
-        }
-
-        // provenance: crates/ignore/src/gitignore.rs:398
-        logger.Debug(IgnoreCategory, SourceFile, $"opened gitignore file: {globalIgnore}");
-        // provenance: crates/globset/src/lib.rs:515
-        logger.Debug(GlobbingCategory, SourceFile, "built glob set; 1 literals, 0 basenames, 0 extensions, 0 prefixes, 1 suffixes, 0 required extensions, 0 regexes");
+    internal static void LogDecompressionCommandUnavailable(DiagnosticLogger logger, string program)
+    {
+        // provenance: crates/cli/src/decompress.rs:502
+        logger.Debug(SearchCategory, SourceFile, $"{program}: could not find executable in PATH");
     }
 
     private static string EscapeLogString(string value)

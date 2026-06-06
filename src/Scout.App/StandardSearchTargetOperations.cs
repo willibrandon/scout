@@ -311,7 +311,7 @@ internal static class StandardSearchTargetOperations
             SearchPathArgument.CreateDirectoryDisplayPathFormatter(root, fullRoot, defaultRoot, lowArgs.PathSeparator);
         bool interFileContextSeparator = StandardSearchOperations.ShouldWriteInterFileContextSeparator(lowArgs, heading, separators);
         bool wroteContextBody = false;
-        foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics))
+        foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics, logger))
         {
             byte[] displayPathBytes = displayPaths.GetBytes(entry);
             if (interFileContextSeparator)
@@ -431,7 +431,7 @@ internal static class StandardSearchTargetOperations
 
         try
         {
-            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() =>
+            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger).Threads(threadCount).BuildParallel().Run(() =>
             {
                 MemoryStream buffer = new();
                 RawByteWriter writer = CreateParallelOutputWriter(buffer);
@@ -537,7 +537,7 @@ internal static class StandardSearchTargetOperations
             SearchPathArgument.CreateDirectoryDisplayPathFormatter(root, fullRoot, defaultRoot, lowArgs.PathSeparator);
         bool interFileContextSeparator = StandardSearchOperations.ShouldWriteInterFileContextSeparator(lowArgs, heading, separators);
         bool wroteContextBody = false;
-        foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics))
+        foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics, logger))
         {
             byte[] displayPathBytes = displayPaths.GetBytes(entry);
             if (interFileContextSeparator)
@@ -662,7 +662,7 @@ internal static class StandardSearchTargetOperations
 
         try
         {
-            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() =>
+            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger).Threads(threadCount).BuildParallel().Run(() =>
             {
                 MemoryStream buffer = new();
                 RawByteWriter writer = CreateParallelOutputWriter(buffer);
@@ -961,7 +961,7 @@ internal static class StandardSearchTargetOperations
             return;
         }
 
-        if (!SearchFileContentReader.TryRead(path, lowArgs, autoMmapEligible, diagnostics, out byte[] bytes, out SearchFileReadKind readKind, knownLength))
+        if (!SearchFileContentReader.TryRead(path, lowArgs, autoMmapEligible, diagnostics, logger, out byte[] bytes, out SearchFileReadKind readKind, knownLength))
         {
             errored = true;
             return;
@@ -1059,7 +1059,7 @@ internal static class StandardSearchTargetOperations
         ref bool errored,
         ref SearchStats stats)
     {
-        if (!SearchFileContentReader.TryRead(path, lowArgs, autoMmapEligible, diagnostics, out byte[] bytes, out SearchFileReadKind readKind, knownLength))
+        if (!SearchFileContentReader.TryRead(path, lowArgs, autoMmapEligible, diagnostics, logger, out byte[] bytes, out SearchFileReadKind readKind, knownLength))
         {
             errored = true;
             return;
