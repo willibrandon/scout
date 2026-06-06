@@ -5,6 +5,11 @@ internal static class GlobalGitIgnore
 {
     public static IgnoreRuleSet Load(string baseDirectory, bool asciiCaseInsensitive)
     {
+        return Load(baseDirectory, asciiCaseInsensitive, default);
+    }
+
+    public static IgnoreRuleSet Load(string baseDirectory, bool asciiCaseInsensitive, DiagnosticLogger logger)
+    {
         var rules = new IgnoreRuleSet();
         string? path = ResolveFilePath();
         if (string.IsNullOrEmpty(path) || !File.Exists(path))
@@ -12,7 +17,10 @@ internal static class GlobalGitIgnore
             return rules;
         }
 
+        int startIndex = rules.Count;
+        IgnoreDiagnosticLogging.LogOpenedIgnoreFile(logger, path);
         rules.AddFile(baseDirectory, path, asciiCaseInsensitive);
+        IgnoreDiagnosticLogging.LogBuiltGlobSet(logger, rules.GetGlobSetSummary(startIndex));
         return rules;
     }
 

@@ -11,14 +11,15 @@ internal static class FileListingOperations
         CliLowArgs lowArgs,
         FileTypeMatcher fileTypes,
         RawByteWriter output,
-        DiagnosticMessenger diagnostics)
+        DiagnosticMessenger diagnostics,
+        DiagnosticLogger logger)
     {
         var color = OutputColor.Create(lowArgs.ColorMode is CliColorMode.Always or CliColorMode.Ansi, lowArgs.ColorSpecs);
         bool emitted = false;
         bool errored = false;
         if (positional.Count == 0)
         {
-            ListPath(path: ".", defaultRoot: true, lowArgs, fileTypes, color, output, diagnostics, ref emitted, ref errored);
+            ListPath(path: ".", defaultRoot: true, lowArgs, fileTypes, color, output, diagnostics, logger, ref emitted, ref errored);
         }
         else
         {
@@ -26,7 +27,7 @@ internal static class FileListingOperations
             {
                 if (SearchPathArgument.TryGetText(positional[index], diagnostics, out string path))
                 {
-                    ListPath(path, defaultRoot: false, lowArgs, fileTypes, color, output, diagnostics, ref emitted, ref errored);
+                    ListPath(path, defaultRoot: false, lowArgs, fileTypes, color, output, diagnostics, logger, ref emitted, ref errored);
                 }
                 else
                 {
@@ -47,6 +48,7 @@ internal static class FileListingOperations
         OutputColor color,
         RawByteWriter output,
         DiagnosticMessenger diagnostics,
+        DiagnosticLogger logger,
         ref bool emitted,
         ref bool errored)
     {
@@ -85,11 +87,11 @@ internal static class FileListingOperations
         int threadCount = SearchWalkPlanning.GetFilesWalkThreadCount(lowArgs);
         if (threadCount > 1)
         {
-            ListDirectoryParallel(path, fullRoot, defaultRoot, lowArgs, fileTypes, color, output, diagnostics, ref emitted);
+            ListDirectoryParallel(path, fullRoot, defaultRoot, lowArgs, fileTypes, color, output, diagnostics, logger, ref emitted);
             return;
         }
 
-        ListDirectorySerial(path, fullRoot, defaultRoot, lowArgs, fileTypes, color, output, diagnostics, ref emitted);
+        ListDirectorySerial(path, fullRoot, defaultRoot, lowArgs, fileTypes, color, output, diagnostics, logger, ref emitted);
     }
 
     private static void ListDirectorySerial(
@@ -101,9 +103,10 @@ internal static class FileListingOperations
         OutputColor color,
         RawByteWriter output,
         DiagnosticMessenger diagnostics,
+        DiagnosticLogger logger,
         ref bool emitted)
     {
-        foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(path, lowArgs, fileTypes, diagnostics))
+        foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(path, lowArgs, fileTypes, diagnostics, logger))
         {
             string displayPath = defaultRoot
                 ? SearchPathArgument.GetSearchDirectoryDisplayPath(path, fullRoot, entry.FullPath, defaultRoot: true)
@@ -130,6 +133,7 @@ internal static class FileListingOperations
         OutputColor color,
         RawByteWriter output,
         DiagnosticMessenger diagnostics,
+        DiagnosticLogger logger,
         ref bool emitted)
     {
         int threadCount = SearchWalkPlanning.GetFilesWalkThreadCount(lowArgs);
@@ -152,7 +156,7 @@ internal static class FileListingOperations
 
         try
         {
-            SearchWalkPlanning.CreateWalkBuilder(path, lowArgs, fileTypes, diagnostics).Threads(threadCount).BuildParallel().Run(() => entry =>
+            SearchWalkPlanning.CreateWalkBuilder(path, lowArgs, fileTypes, diagnostics, logger).Threads(threadCount).BuildParallel().Run(() => entry =>
             {
                 if (!entry.IsFile)
                 {

@@ -80,7 +80,7 @@ Back both helpers with a single `ProgramName = "scout"` constant. Net: program i
 
 ### 1.4 `--debug` / `--trace` — deterministic, stable Scout source locations (review fix H4)
 
-Verified live, format `rg: {LEVEL}|{target}|{file}:{line}: {message}` (`src/Scout.App/DiagnosticLogger.cs:38` — **correct path is `Scout.App`, review fix M6**):
+Verified live, format `rg: {LEVEL}|{target}|{file}:{line}: {message}` (`src/Scout.Diagnostics/DiagnosticLogger.cs`):
 ```
 rg: DEBUG|rg::flags::config|crates/core/flags/config.rs:19: RIPGREP_CONFIG_PATH … not set …
 rg: DEBUG|grep_regex::config|/Users/brandon/src/ripgrep/crates/regex/src/config.rs:175: assembling HIR …

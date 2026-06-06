@@ -8,12 +8,13 @@ internal static class SearchFileContentReader
         CliLowArgs lowArgs,
         bool autoMmapEligible,
         DiagnosticMessenger diagnostics,
+        DiagnosticLogger logger,
         out byte[] bytes,
         out SearchFileReadKind readKind,
         long? knownLength = null)
     {
         readKind = SearchFileReadKind.Buffered;
-        if (!TryReadPreprocessedBytes(path, lowArgs, diagnostics, out bytes, out bool handled))
+        if (!TryReadPreprocessedBytes(path, lowArgs, diagnostics, logger, out bytes, out bool handled))
         {
             return false;
         }
@@ -99,6 +100,7 @@ internal static class SearchFileContentReader
         string path,
         CliLowArgs lowArgs,
         DiagnosticMessenger diagnostics,
+        DiagnosticLogger logger,
         out byte[] bytes,
         out bool handled)
     {
@@ -116,7 +118,7 @@ internal static class SearchFileContentReader
             return false;
         }
 
-        if (!lowArgs.SearchZip || !TryGetDecompressionCommand(path, out string program, out string[] arguments))
+        if (!lowArgs.SearchZip || !TryGetDecompressionCommand(path, logger, out string program, out string[] arguments))
         {
             return true;
         }
@@ -161,7 +163,7 @@ internal static class SearchFileContentReader
         return !matcher.IsIgnored(fullPath, isDirectory: false);
     }
 
-    private static bool TryGetDecompressionCommand(string path, out string program, out string[] arguments)
+    private static bool TryGetDecompressionCommand(string path, DiagnosticLogger logger, out string program, out string[] arguments)
     {
         if (CliDecompressionMatcher.TryGetAvailableDefaultCommand(path, out CliDecompressionCommand? command) &&
             command is not null)
@@ -169,6 +171,13 @@ internal static class SearchFileContentReader
             program = command.Program;
             arguments = command.CreateArguments(path);
             return true;
+        }
+
+        if (logger.IsDebugEnabled &&
+            CliDecompressionMatcher.TryGetDefaultCommand(path, out CliDecompressionCommand? unavailableCommand) &&
+            unavailableCommand is not null)
+        {
+            SearchDiagnosticLogging.LogDecompressionCommandUnavailable(logger, unavailableCommand.Program);
         }
 
         program = string.Empty;

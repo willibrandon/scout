@@ -26,6 +26,7 @@ public sealed class WalkBuilder
     private FileTypeMatcher fileTypes = FileTypeMatcher.Empty;
     private readonly List<string> customIgnoreFileNames = [];
     private readonly IgnoreRuleSet explicitIgnoreRules = new();
+    private DiagnosticLogger logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WalkBuilder" /> class.
@@ -219,6 +220,17 @@ public sealed class WalkBuilder
     }
 
     /// <summary>
+    /// Sets the diagnostic logger used while building and evaluating traversal filters.
+    /// </summary>
+    /// <param name="diagnosticLogger">The logger to use for debug and trace output.</param>
+    /// <returns>This builder.</returns>
+    public WalkBuilder Diagnostics(DiagnosticLogger diagnosticLogger)
+    {
+        logger = diagnosticLogger;
+        return this;
+    }
+
+    /// <summary>
     /// Enables or disables the standard traversal filters enabled by default.
     /// </summary>
     /// <param name="yes">Whether standard filters should be enabled.</param>
@@ -366,7 +378,8 @@ public sealed class WalkBuilder
             overrides,
             fileTypes,
             explicitIgnoreRules,
-            ignoreFileNames.ToArray());
+            ignoreFileNames.ToArray(),
+            logger);
     }
 
     /// <summary>

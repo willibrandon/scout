@@ -56,7 +56,8 @@ internal sealed class IgnoreStack
         bool gitExclude,
         bool requireGit,
         bool ignoreCaseInsensitive,
-        IReadOnlyList<string> customIgnoreFileNames)
+        IReadOnlyList<string> customIgnoreFileNames,
+        DiagnosticLogger logger)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
         ArgumentNullException.ThrowIfNull(customIgnoreFileNames);
@@ -86,7 +87,8 @@ internal sealed class IgnoreStack
                 gitExclude,
                 requireGit,
                 ignoreCaseInsensitive,
-                customIgnoreFileNames);
+                customIgnoreFileNames,
+                logger);
         }
 
         return stack;
@@ -99,7 +101,8 @@ internal sealed class IgnoreStack
         bool gitExclude,
         bool requireGit,
         bool ignoreCaseInsensitive,
-        IReadOnlyList<string> customIgnoreFileNames)
+        IReadOnlyList<string> customIgnoreFileNames,
+        DiagnosticLogger logger)
     {
         ArgumentException.ThrowIfNullOrEmpty(directory);
         ArgumentNullException.ThrowIfNull(customIgnoreFileNames);
@@ -109,24 +112,24 @@ internal sealed class IgnoreStack
         var gitExcludeRuleSet = new IgnoreRuleSet();
         if (gitIgnore)
         {
-            AddFileRules(directory, ".gitignore", gitRuleSet, ignoreCaseInsensitive);
+            AddFileRules(directory, ".gitignore", gitRuleSet, ignoreCaseInsensitive, logger);
         }
 
         if (gitExclude)
         {
-            AddGitExcludeRules(directory, gitExcludeRuleSet, ignoreCaseInsensitive);
+            AddGitExcludeRules(directory, gitExcludeRuleSet, ignoreCaseInsensitive, logger);
         }
 
         var dotRuleSet = new IgnoreRuleSet();
         if (dotIgnore)
         {
-            AddFileRules(directory, ".ignore", dotRuleSet, ignoreCaseInsensitive);
+            AddFileRules(directory, ".ignore", dotRuleSet, ignoreCaseInsensitive, logger);
         }
 
         var customRuleSet = new IgnoreRuleSet();
         for (int index = 0; index < customIgnoreFileNames.Count; index++)
         {
-            AddFileRules(directory, customIgnoreFileNames[index], customRuleSet, ignoreCaseInsensitive);
+            AddFileRules(directory, customIgnoreFileNames[index], customRuleSet, ignoreCaseInsensitive, logger);
         }
 
         if (customRuleSet.IsEmpty && dotRuleSet.IsEmpty && gitRuleSet.IsEmpty && gitExcludeRuleSet.IsEmpty && !directoryHasGit)
@@ -139,36 +142,47 @@ internal sealed class IgnoreStack
 
     public IgnoreDecision Match(DirEntry entry)
     {
+        return Match(entry, out _);
+    }
+
+    internal IgnoreDecision Match(DirEntry entry, out IgnoreRule? matchedRule)
+    {
         bool anyGit = !requireGit || HasGitInStack();
         bool sawGit = false;
+        matchedRule = null;
         IgnoreDecision customDecision = IgnoreDecision.None;
         IgnoreDecision dotDecision = IgnoreDecision.None;
         IgnoreDecision gitDecision = IgnoreDecision.None;
         IgnoreDecision gitExcludeDecision = IgnoreDecision.None;
         IgnoreDecision globalGitDecision = IgnoreDecision.None;
+        IgnoreRule? customRule = null;
+        IgnoreRule? dotRule = null;
+        IgnoreRule? gitRule = null;
+        IgnoreRule? gitExcludeRule = null;
+        IgnoreRule? globalGitRule = null;
 
         for (IgnoreStack? current = this; current is not null; current = current.parent)
         {
             if (customDecision == IgnoreDecision.None)
             {
-                customDecision = current.customRules.Match(entry);
+                customDecision = current.customRules.Match(entry, out customRule);
             }
 
             if (dotDecision == IgnoreDecision.None)
             {
-                dotDecision = current.dotRules.Match(entry);
+                dotDecision = current.dotRules.Match(entry, out dotRule);
             }
 
             if (anyGit && !sawGit)
             {
                 if (gitDecision == IgnoreDecision.None)
                 {
-                    gitDecision = current.gitRules.Match(entry);
+                    gitDecision = current.gitRules.Match(entry, out gitRule);
                 }
 
                 if (gitExcludeDecision == IgnoreDecision.None)
                 {
-                    gitExcludeDecision = current.gitExcludeRules.Match(entry);
+                    gitExcludeDecision = current.gitExcludeRules.Match(entry, out gitExcludeRule);
                 }
             }
 
@@ -177,10 +191,21 @@ internal sealed class IgnoreStack
 
         if (anyGit)
         {
-            globalGitDecision = globalGitRules.Match(entry);
+            globalGitDecision = globalGitRules.Match(entry, out globalGitRule);
         }
 
-        return FirstDecision(customDecision, dotDecision, gitDecision, gitExcludeDecision, globalGitDecision);
+        return FirstDecision(
+            customDecision,
+            customRule,
+            dotDecision,
+            dotRule,
+            gitDecision,
+            gitRule,
+            gitExcludeDecision,
+            gitExcludeRule,
+            globalGitDecision,
+            globalGitRule,
+            out matchedRule);
     }
 
     private bool HasGitInStack()
@@ -198,31 +223,42 @@ internal sealed class IgnoreStack
 
     private static IgnoreDecision FirstDecision(
         IgnoreDecision customDecision,
+        IgnoreRule? customRule,
         IgnoreDecision dotDecision,
+        IgnoreRule? dotRule,
         IgnoreDecision gitDecision,
+        IgnoreRule? gitRule,
         IgnoreDecision gitExcludeDecision,
-        IgnoreDecision globalGitDecision)
+        IgnoreRule? gitExcludeRule,
+        IgnoreDecision globalGitDecision,
+        IgnoreRule? globalGitRule,
+        out IgnoreRule? matchedRule)
     {
         if (customDecision != IgnoreDecision.None)
         {
+            matchedRule = customRule;
             return customDecision;
         }
 
         if (dotDecision != IgnoreDecision.None)
         {
+            matchedRule = dotRule;
             return dotDecision;
         }
 
         if (gitDecision != IgnoreDecision.None)
         {
+            matchedRule = gitRule;
             return gitDecision;
         }
 
         if (gitExcludeDecision != IgnoreDecision.None)
         {
+            matchedRule = gitExcludeRule;
             return gitExcludeDecision;
         }
 
+        matchedRule = globalGitRule;
         return globalGitDecision;
     }
 
@@ -233,7 +269,7 @@ internal sealed class IgnoreStack
             || Directory.Exists(Path.Combine(directory, ".jj"));
     }
 
-    private static void AddFileRules(string directory, string fileName, IgnoreRuleSet ruleSet, bool ignoreCaseInsensitive)
+    private static void AddFileRules(string directory, string fileName, IgnoreRuleSet ruleSet, bool ignoreCaseInsensitive, DiagnosticLogger logger)
     {
         string path = Path.Combine(directory, fileName);
         if (!File.Exists(path))
@@ -241,15 +277,21 @@ internal sealed class IgnoreStack
             return;
         }
 
+        int startIndex = ruleSet.Count;
+        IgnoreDiagnosticLogging.LogOpenedIgnoreFile(logger, path);
         ruleSet.AddFile(directory, path, ignoreCaseInsensitive);
+        IgnoreDiagnosticLogging.LogBuiltGlobSet(logger, ruleSet.GetGlobSetSummary(startIndex));
     }
 
-    private static void AddGitExcludeRules(string directory, IgnoreRuleSet ruleSet, bool ignoreCaseInsensitive)
+    private static void AddGitExcludeRules(string directory, IgnoreRuleSet ruleSet, bool ignoreCaseInsensitive, DiagnosticLogger logger)
     {
         string? path = ResolveGitExcludePath(directory);
         if (path is not null && File.Exists(path))
         {
+            int startIndex = ruleSet.Count;
+            IgnoreDiagnosticLogging.LogOpenedIgnoreFile(logger, path);
             ruleSet.AddFile(directory, path, ignoreCaseInsensitive);
+            IgnoreDiagnosticLogging.LogBuiltGlobSet(logger, ruleSet.GetGlobSetSummary(startIndex));
         }
     }
 

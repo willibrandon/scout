@@ -187,7 +187,7 @@ internal static class ScoutApplication
                 return ExitCode.Error;
             }
 
-            return FileListingOperations.Run(positional, lowArgs, fileTypes!, output, diagnostics);
+            return FileListingOperations.Run(positional, lowArgs, fileTypes!, output, diagnostics, logger);
         }
 
         var patterns = new List<byte[]>();
@@ -233,12 +233,12 @@ internal static class ScoutApplication
 
         if (lowArgs.RegexEngine == CliRegexEngine.Pcre2)
         {
-            return Pcre2SearchOperations.Run(positional, firstPathIndex, patternsReadFromStandardInput, lowArgs, patterns, standardInput, standardInputIsReadable, standardOutputIsTerminal, output, diagnostics);
+            return Pcre2SearchOperations.Run(positional, firstPathIndex, patternsReadFromStandardInput, lowArgs, patterns, standardInput, standardInputIsReadable, standardOutputIsTerminal, output, diagnostics, logger);
         }
 
         if (Pcre2SearchOperations.ShouldAutoUse(lowArgs, patterns))
         {
-            return Pcre2SearchOperations.Run(positional, firstPathIndex, patternsReadFromStandardInput, lowArgs, patterns, standardInput, standardInputIsReadable, standardOutputIsTerminal, output, diagnostics);
+            return Pcre2SearchOperations.Run(positional, firstPathIndex, patternsReadFromStandardInput, lowArgs, patterns, standardInput, standardInputIsReadable, standardOutputIsTerminal, output, diagnostics, logger);
         }
 
         if (!lowArgs.Multiline && PatternPreparation.ContainsLineTerminator(patterns, lowArgs.NullData, lowArgs.FixedStrings))
@@ -292,7 +292,7 @@ internal static class ScoutApplication
         SearchDiagnosticLogging.LogSearchConfiguration(logger, positional, firstPathIndex, lowArgs, patterns);
         if (lowArgs.SearchMode == CliSearchMode.Json)
         {
-            return JsonSearchOperations.Run(positional, firstPathIndex, patternsReadFromStandardInput, lowArgs, patterns, asciiCaseInsensitive, searchFileTypes!, output, diagnostics, standardInput, standardInputIsReadable);
+            return JsonSearchOperations.Run(positional, firstPathIndex, patternsReadFromStandardInput, lowArgs, patterns, asciiCaseInsensitive, searchFileTypes!, output, diagnostics, logger, standardInput, standardInputIsReadable);
         }
 
         return StandardSearchOperations.Run(

@@ -6,12 +6,12 @@ namespace Scout;
 public enum CliLoggingMode
 {
     /// <summary>
-    /// Emit ripgrep debug diagnostics.
+    /// Emit Scout debug diagnostics.
     /// </summary>
     Debug,
 
     /// <summary>
-    /// Emit ripgrep trace diagnostics.
+    /// Emit Scout trace diagnostics.
     /// </summary>
     Trace,
 }

@@ -12,6 +12,8 @@ internal sealed class IgnoreRule
 
     private readonly string baseDirectory;
     private readonly string patternText;
+    private readonly string originalText;
+    private readonly string? sourcePath;
     private readonly bool negated;
     private readonly bool directoryOnly;
     private readonly bool basenameOnly;
@@ -23,6 +25,8 @@ internal sealed class IgnoreRule
     private IgnoreRule(
         string baseDirectory,
         string patternText,
+        string originalText,
+        string? sourcePath,
         bool negated,
         bool directoryOnly,
         bool rooted,
@@ -30,6 +34,8 @@ internal sealed class IgnoreRule
     {
         this.baseDirectory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(baseDirectory));
         this.patternText = patternText;
+        this.originalText = originalText;
+        this.sourcePath = sourcePath;
         this.negated = negated;
         this.directoryOnly = directoryOnly;
         this.asciiCaseInsensitive = asciiCaseInsensitive;
@@ -46,14 +52,60 @@ internal sealed class IgnoreRule
 
     internal string BaseDirectory => baseDirectory;
 
+    internal string PatternText => patternText;
+
+    internal string OriginalText => originalText;
+
+    internal string? SourcePath => sourcePath;
+
+    internal bool IsWhitelist => negated;
+
+    internal bool IsDirectoryOnly => directoryOnly;
+
+    internal bool IsBasenameOnly => basenameOnly;
+
+    internal int FastKind => fastKind;
+
+    internal string FastText => fastText;
+
     internal bool NeedsRelativePath => !basenameOnly;
 
+    internal IgnoreGlobSetSummary GetGlobSetSummary()
+    {
+        if (fastKind == FastKindExact)
+        {
+            return basenameOnly
+                ? new IgnoreGlobSetSummary(0, 1, 0, 0, 0, 0, 0)
+                : new IgnoreGlobSetSummary(1, 0, 0, 0, 0, 0, 0);
+        }
+
+        if (fastKind == FastKindPrefix)
+        {
+            return new IgnoreGlobSetSummary(0, 0, 0, 1, 0, 0, 0);
+        }
+
+        if (fastKind == FastKindSuffix)
+        {
+            return basenameOnly && fastText.Length > 0 && fastText[0] == '.'
+                ? new IgnoreGlobSetSummary(0, 0, 1, 0, 0, 0, 0)
+                : new IgnoreGlobSetSummary(0, 0, 0, 0, 1, 0, 0);
+        }
+
+        return new IgnoreGlobSetSummary(0, 0, 0, 0, 0, 0, 1);
+    }
+
     public static bool TryParse(string baseDirectory, string line, bool asciiCaseInsensitive, out IgnoreRule? rule)
+    {
+        return TryParse(baseDirectory, line, sourcePath: null, asciiCaseInsensitive, out rule);
+    }
+
+    internal static bool TryParse(string baseDirectory, string line, string? sourcePath, bool asciiCaseInsensitive, out IgnoreRule? rule)
     {
         ArgumentException.ThrowIfNullOrEmpty(baseDirectory);
         ArgumentNullException.ThrowIfNull(line);
 
         rule = null;
+        string original = line;
         string trimmed = TrimTrailingWhitespace(line);
         if (trimmed.Length == 0)
         {
@@ -94,7 +146,7 @@ internal sealed class IgnoreRule
             return false;
         }
 
-        rule = new IgnoreRule(baseDirectory, NormalizePattern(trimmed), negated, directoryOnly, rooted, asciiCaseInsensitive);
+        rule = new IgnoreRule(baseDirectory, NormalizePattern(trimmed), original, sourcePath, negated, directoryOnly, rooted, asciiCaseInsensitive);
         return true;
     }
 

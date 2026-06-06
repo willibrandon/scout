@@ -379,6 +379,38 @@ public sealed class ScoutApplicationRuntimeTests
         Assert.Contains($"scout: DEBUG|Scout.App.Flags|{ScoutSource("src/Scout.App/ConfigArgumentExpander.cs")}:", error, StringComparison.Ordinal);
         Assert.Contains($"scout: DEBUG|Scout.App.Flags|{ScoutSource("src/Scout.App/SearchDiagnosticLogging.cs")}:", error, StringComparison.Ordinal);
         Assert.Contains($"scout: DEBUG|Scout.Regex|{ScoutSource("src/Scout.App/SearchDiagnosticLogging.cs")}:", error, StringComparison.Ordinal);
+        Assert.Contains("assembling regex program from 1 pattern(s)", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("fixed string literals", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("rg::", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("crates/", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Verifies debug logging reports the ignore files and rules that prune directory entries.
+    /// </summary>
+    [Fact]
+    public void DebugLoggingReportsDirectoryIgnoreDecisions()
+    {
+        string root = CreateTempDirectory();
+        Directory.CreateDirectory(Path.Combine(root, ".git"));
+        string ignoredDirectory = Path.Combine(root, "ignored");
+        Directory.CreateDirectory(ignoredDirectory);
+        string ignoreFile = Path.Combine(root, ".gitignore");
+        File.WriteAllText(ignoreFile, "ignored/\n");
+        File.WriteAllText(Path.Combine(ignoredDirectory, "hit.txt"), "needle\n");
+        File.WriteAllText(Path.Combine(root, "keep.txt"), "needle\n");
+
+        (int exitCode, byte[] output, string error) = RunScout("--debug", "--no-config", "--threads", "1", "needle", root);
+        (int pinnedExitCode, byte[] pinnedOutput, _) = RunPinnedRipgrep("--debug", "--no-config", "--threads", "1", "needle", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Contains($"scout: DEBUG|Scout.Ignore|{ScoutSource("src/Scout.Ignore/IgnoreStack.cs")}:", error, StringComparison.Ordinal);
+        Assert.Contains($"opened ignore file: {ignoreFile}", error, StringComparison.Ordinal);
+        Assert.Contains($"scout: DEBUG|Scout.Globbing|{ScoutSource("src/Scout.Ignore/IgnoreStack.cs")}:", error, StringComparison.Ordinal);
+        Assert.Contains("built glob set;", error, StringComparison.Ordinal);
+        Assert.Contains($"scout: DEBUG|Scout.Ignore|{ScoutSource("src/Scout.Ignore/Walk.cs")}:", error, StringComparison.Ordinal);
+        Assert.Contains($"matched ignore rule from {ignoreFile}: \"ignored/\" -> \"ignored\", directory-only", error, StringComparison.Ordinal);
         Assert.DoesNotContain("rg::", error, StringComparison.Ordinal);
         Assert.DoesNotContain("crates/", error, StringComparison.Ordinal);
     }
