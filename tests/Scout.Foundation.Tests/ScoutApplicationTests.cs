@@ -4961,6 +4961,39 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies files mode applies path color, custom path color and path hyperlinks like ripgrep.
+    /// </summary>
+    [Fact]
+    public void FilesModePathColorAndHyperlinksMatchPinnedRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input file.txt");
+        File.WriteAllText(path, "keep\n");
+        string[][] argumentSets =
+        [
+            ["--color=always", "--files", root],
+            ["--color=always", "--colors", "path:fg:cyan", "--files", root],
+            ["--color=always", "--colors", "path:none", "--files", root],
+            ["--color=always", "--hyperlink-format", "file://{path}", "--files", root],
+            ["--color=always", "--colors", "path:none", "--hyperlink-format", "file://{path}", "--files", root],
+            ["--color=always", "--files", "--null", root],
+            ["--color=always", "--sort=path", "--files", root],
+            ["--color=always", "--files", path],
+            ["--color=always", "--files", "-"],
+        ];
+
+        foreach (string[] arguments in argumentSets)
+        {
+            (int exitCode, byte[] output, string error) = RunScout(arguments);
+            (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
+
+            Assert.Equal(pinnedExitCode, exitCode);
+            Assert.Equal(pinnedOutput, output);
+            Assert.Equal(pinnedError, error);
+        }
+    }
+
+    /// <summary>
     /// Verifies explicit multi-threaded files mode lists the same searchable files as ripgrep.
     /// </summary>
     [Fact]
