@@ -45,24 +45,38 @@ require_file() {
 }
 
 require_file "$BIN/scout"
+require_file "$BIN/scout-real"
 require_file "$ROOT/docs/PARITY.md"
 require_file "$ROOT/docs/THIRD-PARTY-NOTICES.md"
 
 rm -rf "$STAGE"
 mkdir -p "$STAGE" "$PACKAGE_ROOT"
 cp "$BIN/scout" "$STAGE/scout"
+cp "$BIN/scout-real" "$STAGE/scout-real"
 chmod 755 "$STAGE/scout"
+chmod 755 "$STAGE/scout-real"
 cp "$ROOT/docs/PARITY.md" "$STAGE/PARITY.md"
 cp "$ROOT/docs/THIRD-PARTY-NOTICES.md" "$STAGE/THIRD-PARTY-NOTICES.md"
 cat > "$STAGE/SCOUT-PACKAGE.txt" <<EOF
 name = "Scout"
 binary = "scout"
+real_binary = "scout-real"
 rid = "$RID"
 ripgrep_commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"
 dotnet_runtime = "10.0.2"
 pcre2 = "10.46"
 parity = "behavioral parity; identity is Scout-specific (see PARITY.md)"
 EOF
+
+smoke_input="$PACKAGE_ROOT/package-smoke-$RID.txt"
+smoke_output="$PACKAGE_ROOT/package-smoke-$RID.out"
+printf 'needle\n' > "$smoke_input"
+"$STAGE/scout" --no-config -n needle "$smoke_input" > "$smoke_output"
+printf '1:needle\n' | cmp -s - "$smoke_output" || {
+    printf 'Packaged scout smoke output mismatch for %s.\n' "$RID" >&2
+    exit 1
+}
+rm -f "$smoke_input" "$smoke_output"
 
 rm -f "$ARCHIVE" "$HASH_FILE"
 (
