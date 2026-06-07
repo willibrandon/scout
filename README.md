@@ -11,7 +11,7 @@ calling it.
 
 > **Status:** v0.1.0, tracking ripgrep 15.1.0 (commit `4857d6fa67`). Functional and fully
 > tested — 3,185 tests pass on all six supported platforms — but not yet published, and the
-> release packaging is still being finalized.
+> release workflow publishes native binaries, .NET tool packages, Homebrew, Scoop, and winget.
 
 ## Example
 
@@ -26,6 +26,20 @@ native/build-app-windows.ps1
 
 Scout's command line mirrors ripgrep's: if you know `rg`, you know `scout`. Run `scout --help`
 for the full reference.
+
+## Installation
+
+```sh
+dotnet tool install -g Scout
+brew install willibrandon/tap/scout
+scoop bucket add dotsider https://github.com/willibrandon/scoop-bucket
+scoop install scout
+winget install willibrandon.scout
+```
+
+Standalone archives are attached to each GitHub Release for `linux-x64`, `linux-arm64`,
+`osx-x64`, `osx-arm64`, `win-x64`, and `win-arm64`. Windows releases also include MSI
+installers for `win-x64` and `win-arm64`.
 
 ## Building
 

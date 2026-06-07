@@ -79,7 +79,12 @@ function Read-MsBuildProperty {
     throw "Missing MSBuild property $Name in Directory.Build.props."
 }
 
-$ScoutVersion = Read-MsBuildProperty "VersionPrefix"
+$ScoutVersion = if ([string]::IsNullOrWhiteSpace($env:SCOUT_RELEASE_VERSION)) {
+    Read-MsBuildProperty "VersionPrefix"
+}
+else {
+    $env:SCOUT_RELEASE_VERSION
+}
 $ScoutRipgrepVersion = Read-MsBuildProperty "ScoutRipgrepVersion"
 $ScoutRipgrepRevisionShort = Read-MsBuildProperty "ScoutRipgrepRevisionShort"
 $ScoutShortVersion = "scout $ScoutVersion (ripgrep $ScoutRipgrepVersion compatible, rev $ScoutRipgrepRevisionShort)"
@@ -88,7 +93,7 @@ Require-Tool "cl.exe"
 Require-Tool "link.exe"
 
 & (Join-Path $Root "native\pcre2\build-windows.ps1") $Rid
-dotnet publish (Join-Path $Root "src\Scout.App\Scout.App.csproj") -r $Rid -c Release -p:NativeLib=Static -o $Out
+dotnet publish (Join-Path $Root "src\Scout.App\Scout.App.csproj") -r $Rid -c Release -p:NativeLib=Static "-p:VersionPrefix=$ScoutVersion" "-p:Version=$ScoutVersion" -o $Out
 New-Item -ItemType Directory -Force -Path $Bin | Out-Null
 
 $DriverObject = Join-Path $Out "scout_wmain.obj"

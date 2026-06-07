@@ -14,6 +14,7 @@ STAGE_PARENT="$PACKAGE_ROOT/stage"
 STAGE="$STAGE_PARENT/scout-$RID"
 ARCHIVE="$PACKAGE_ROOT/scout-$RID.tar.gz"
 HASH_FILE="$ARCHIVE.sha256"
+SCOUT_VERSION="${SCOUT_RELEASE_VERSION:-}"
 
 case "$RID" in
     osx-arm64|osx-x64|linux-x64|linux-arm64)
@@ -49,6 +50,20 @@ require_file "$BIN/scout-real"
 require_file "$ROOT/docs/PARITY.md"
 require_file "$ROOT/docs/THIRD-PARTY-NOTICES.md"
 
+if [ -z "$SCOUT_VERSION" ]; then
+    SCOUT_VERSION="$(awk '
+        /<VersionPrefix>/ {
+            value = $0
+            sub(".*<VersionPrefix>", "", value)
+            sub("</VersionPrefix>.*", "", value)
+            print value
+            found = 1
+            exit
+        }
+        END { if (!found) exit 1 }
+    ' "$ROOT/Directory.Build.props")"
+fi
+
 rm -rf "$STAGE"
 mkdir -p "$STAGE" "$PACKAGE_ROOT"
 cp "$BIN/scout" "$STAGE/scout"
@@ -59,6 +74,7 @@ cp "$ROOT/docs/PARITY.md" "$STAGE/PARITY.md"
 cp "$ROOT/docs/THIRD-PARTY-NOTICES.md" "$STAGE/THIRD-PARTY-NOTICES.md"
 cat > "$STAGE/SCOUT-PACKAGE.txt" <<EOF
 name = "Scout"
+version = "$SCOUT_VERSION"
 binary = "scout"
 real_binary = "scout-real"
 rid = "$RID"
