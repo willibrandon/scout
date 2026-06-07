@@ -3769,6 +3769,57 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies terminal replace output follows ripgrep's automatic line-number behavior.
+    /// </summary>
+    [Fact]
+    public void TerminalReplacePrintsLineNumbers()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "needle needle\nmiss\nxx needle yy\n");
+
+        (int exitCode, byte[] output, string error) = RunScoutTerminal("--no-config", "--color=never", "-r", "X", "needle", path);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("1:X X\n3:xx X yy\n", Utf8(output));
+        Assert.Empty(error);
+    }
+
+    /// <summary>
+    /// Verifies no-line-number still suppresses terminal replace line numbers.
+    /// </summary>
+    [Fact]
+    public void TerminalReplaceNoLineNumberSuppressesLineNumbers()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "needle needle\nmiss\nxx needle yy\n");
+
+        (int exitCode, byte[] output, string error) = RunScoutTerminal("--no-config", "--color=never", "--no-line-number", "-r", "X", "needle", path);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("X X\nxx X yy\n", Utf8(output));
+        Assert.Empty(error);
+    }
+
+    /// <summary>
+    /// Verifies terminal only-matching replace output includes line numbers.
+    /// </summary>
+    [Fact]
+    public void TerminalReplaceOnlyMatchingPrintsLineNumbers()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "needle needle\n");
+
+        (int exitCode, byte[] output, string error) = RunScoutTerminal("--no-config", "--color=never", "-o", "-r", "X", "needle", path);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("1:X\n1:X\n", Utf8(output));
+        Assert.Empty(error);
+    }
+
+    /// <summary>
     /// Verifies replace mode combines with only-matching fields and adjusted offsets.
     /// </summary>
     [Fact]

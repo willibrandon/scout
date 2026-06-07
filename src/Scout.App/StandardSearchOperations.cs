@@ -26,7 +26,7 @@ internal static class StandardSearchOperations
         OutputSeparators separators = GetOutputSeparators(lowArgs);
         OutputLineLimit lineLimit = GetOutputLineLimit(lowArgs);
         OutputColor color = GetOutputColor(lowArgs);
-        bool lineNumber = SearchOutputFormatting.EffectiveLineNumber(lowArgs);
+        bool lineNumber = SearchOutputFormatting.EffectiveLineNumber(lowArgs, standardOutputIsTerminal);
         bool column = SearchOutputFormatting.EffectiveColumn(lowArgs);
         bool wroteHeadingOutput = false;
         bool matched = false;
@@ -86,12 +86,12 @@ internal static class StandardSearchOperations
                 if (stats)
                 {
                     SearchStats pathStats = default;
-                    StandardSearchTargetOperations.SearchPathWithStats(paths[index], patterns, standardInput, defaultRoot, prefixPaths, paths.Count > 1, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, writer, diagnostics, logger, asciiCaseInsensitive, pathHeading, ref wroteHeadingOutput, ref pathMatched, ref pathErrored, ref pathStats);
+                    StandardSearchTargetOperations.SearchPathWithStats(paths[index], patterns, standardInput, defaultRoot, prefixPaths, paths.Count > 1, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, writer, diagnostics, logger, asciiCaseInsensitive, lineNumber, pathHeading, ref wroteHeadingOutput, ref pathMatched, ref pathErrored, ref pathStats);
                     searchStats.Add(pathStats);
                 }
                 else
                 {
-                    StandardSearchTargetOperations.SearchPath(paths[index], patterns, standardInput, defaultRoot, prefixPaths, paths.Count > 1, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, writer, diagnostics, logger, asciiCaseInsensitive, pathHeading, ref wroteHeadingOutput, ref pathMatched, ref pathErrored);
+                    StandardSearchTargetOperations.SearchPath(paths[index], patterns, standardInput, defaultRoot, prefixPaths, paths.Count > 1, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, writer, diagnostics, logger, asciiCaseInsensitive, lineNumber, pathHeading, ref wroteHeadingOutput, ref pathMatched, ref pathErrored);
                 }
 
                 writer.Flush();
@@ -109,11 +109,11 @@ internal static class StandardSearchOperations
 
             if (stats)
             {
-                StandardSearchTargetOperations.SearchPathWithStats(paths[index], patterns, standardInput, defaultRoot, prefixPaths, paths.Count > 1, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, output, diagnostics, logger, asciiCaseInsensitive, pathHeading, ref wroteHeadingOutput, ref matched, ref errored, ref searchStats);
+                StandardSearchTargetOperations.SearchPathWithStats(paths[index], patterns, standardInput, defaultRoot, prefixPaths, paths.Count > 1, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, output, diagnostics, logger, asciiCaseInsensitive, lineNumber, pathHeading, ref wroteHeadingOutput, ref matched, ref errored, ref searchStats);
             }
             else
             {
-                StandardSearchTargetOperations.SearchPath(paths[index], patterns, standardInput, defaultRoot, prefixPaths, paths.Count > 1, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, output, diagnostics, logger, asciiCaseInsensitive, pathHeading, ref wroteHeadingOutput, ref matched, ref errored);
+                StandardSearchTargetOperations.SearchPath(paths[index], patterns, standardInput, defaultRoot, prefixPaths, paths.Count > 1, autoMmapEligible, lowArgs, separators, lineLimit, color, searchFileTypes!, output, diagnostics, logger, asciiCaseInsensitive, lineNumber, pathHeading, ref wroteHeadingOutput, ref matched, ref errored);
             }
         }
 
