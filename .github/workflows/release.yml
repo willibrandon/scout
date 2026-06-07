@@ -1,0 +1,734 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  LINUX_LIBC_VERSION: "2.36-9+deb12u14"
+  LINUX_SNAPSHOT_URL: "http://snapshot.debian.org/archive/debian/20260531T000000Z"
+
+jobs:
+  validate:
+    name: validate tag
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      version_core: ${{ steps.version.outputs.version_core }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate release tag
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          if [ "$tag" = "$version" ]; then
+            echo "Release tags must start with v." >&2
+            exit 1
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+            echo "Release tag must be vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-prerelease." >&2
+            exit 1
+          fi
+          version_core="${version%%-*}"
+          prerelease=false
+          if [[ "$version" == *-* ]]; then
+            prerelease=true
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "version_core=$version_core" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+  build-linux:
+    name: native package (${{ matrix.rid }})
+    needs: validate
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: docker.io/library/debian:bookworm-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            runner: ubuntu-24.04
+          - rid: linux-arm64
+            runner: ubuntu-24.04-arm
+    env:
+      SCOUT_RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+    steps:
+      - name: Pinned snapshot apt prerequisites
+        shell: sh
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          rm -f /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list
+          printf 'deb %s bookworm main\n' "$LINUX_SNAPSHOT_URL" > /etc/apt/sources.list
+          printf 'Acquire::Check-Valid-Until false;\nAcquire::Retries 3;\n' > /etc/apt/apt.conf.d/99snapshot
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            bash \
+            binutils \
+            bzip2 \
+            brotli \
+            build-essential \
+            ca-certificates \
+            clang \
+            curl \
+            git \
+            gzip \
+            libc6="$LINUX_LIBC_VERSION" \
+            libc-bin="$LINUX_LIBC_VERSION" \
+            libgssapi-krb5-2 \
+            libicu72 \
+            libssl3 \
+            lz4 \
+            ncompress \
+            python3 \
+            tar \
+            unzip \
+            xz-utils \
+            zlib1g \
+            zlib1g-dev \
+            zstd
+      - uses: actions/checkout@v6
+      - name: Verify Linux prerequisites
+        shell: sh
+        run: eng/verify-linux-prereqs.sh ${{ matrix.rid }}
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.102
+      - name: Build and package native binary
+        shell: bash
+        run: native/build-app-unix.sh ${{ matrix.rid }} --smoke-only
+      - name: Pack RID-specific dotnet tool
+        run: python3 eng/pack-dotnet-tool.py --version "${{ needs.validate.outputs.version }}" --rid ${{ matrix.rid }} --rid-only
+      - name: Upload release and tool artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: scout-${{ matrix.rid }}
+          path: |
+            artifacts/packages/scout-${{ matrix.rid }}.tar.gz
+            artifacts/packages/scout-${{ matrix.rid }}.tar.gz.sha256
+            artifacts/tool-packages/Scout.${{ matrix.rid }}.${{ needs.validate.outputs.version }}.nupkg
+            artifacts/tool-packages/Scout.${{ matrix.rid }}.${{ needs.validate.outputs.version }}.nupkg.sha256
+
+  build-macos:
+    name: native package (${{ matrix.rid }})
+    needs: validate
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: osx-x64
+            runner: macos-26-intel
+          - rid: osx-arm64
+            runner: macos-26
+    env:
+      SCOUT_RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.102
+      - name: Build and package native binary
+        run: native/build-app-unix.sh ${{ matrix.rid }} --smoke-only
+      - name: Pack RID-specific dotnet tool
+        run: python3 eng/pack-dotnet-tool.py --version "${{ needs.validate.outputs.version }}" --rid ${{ matrix.rid }} --rid-only
+      - name: Upload release and tool artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: scout-${{ matrix.rid }}
+          path: |
+            artifacts/packages/scout-${{ matrix.rid }}.tar.gz
+            artifacts/packages/scout-${{ matrix.rid }}.tar.gz.sha256
+            artifacts/tool-packages/Scout.${{ matrix.rid }}.${{ needs.validate.outputs.version }}.nupkg
+            artifacts/tool-packages/Scout.${{ matrix.rid }}.${{ needs.validate.outputs.version }}.nupkg.sha256
+
+  build-windows:
+    name: native package (${{ matrix.rid }})
+    needs: validate
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            runner: windows-2025-vs2026
+            vsarch: amd64
+            wixarch: x64
+          - rid: win-arm64
+            runner: windows-11-arm
+            vsarch: arm64
+            wixarch: arm64
+    env:
+      SCOUT_RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.102
+      - name: Build and package native binary
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=* delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath`) do set "VSINSTALL=%%i"
+          if not defined VSINSTALL (
+            echo Visual Studio installation not found.
+            exit /b 1
+          )
+          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=${{ matrix.vsarch }}
+          pwsh -NoProfile -ExecutionPolicy Bypass -File native/build-app-windows.ps1 ${{ matrix.rid }} -DifferentialMode SmokeOnly
+      - name: Install WiX Toolset
+        run: dotnet tool install --global wix --version 5.0.2
+      - name: Build MSI
+        shell: pwsh
+        run: |
+          $rid = "${{ matrix.rid }}"
+          wix build wix\scout.wxs `
+            -d SourceDir=artifacts\packages\stage\scout-$rid `
+            -d Version=${{ needs.validate.outputs.version_core }} `
+            -arch ${{ matrix.wixarch }} `
+            -out artifacts\packages\scout-$rid.msi
+          $hash = (Get-FileHash -Algorithm SHA256 -Path "artifacts\packages\scout-$rid.msi").Hash.ToLowerInvariant()
+          Set-Content -Encoding ascii -Path "artifacts\packages\scout-$rid.msi.sha256" -Value "$hash  scout-$rid.msi"
+      - name: Verify MSI installs correctly
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: |
+          $logFile = "artifacts\packages\msi-install.log"
+          $proc = Start-Process msiexec.exe -ArgumentList "/i", "artifacts\packages\scout-win-x64.msi", "/qn", "/l*v", $logFile -Wait -NoNewWindow -PassThru
+          if ($proc.ExitCode -ne 0) {
+            Write-Error "MSI installation failed with exit code: $($proc.ExitCode)"
+            if (Test-Path $logFile) {
+              Get-Content $logFile | Select-Object -Last 50
+            }
+            exit 1
+          }
+          $exePath = "${env:ProgramFiles}\scout\scout.exe"
+          if (-not (Test-Path $exePath)) {
+            Write-Error "scout.exe not found at $exePath"
+            exit 1
+          }
+          & $exePath -V
+          Start-Process msiexec.exe -ArgumentList "/x", "artifacts\packages\scout-win-x64.msi", "/qn" -Wait -NoNewWindow
+      - name: Pack RID-specific dotnet tool
+        shell: pwsh
+        run: python eng/pack-dotnet-tool.py --version "${{ needs.validate.outputs.version }}" --rid ${{ matrix.rid }} --rid-only
+      - name: Pack local pointer package for install smoke
+        shell: pwsh
+        run: python eng/pack-dotnet-tool.py --version "${{ needs.validate.outputs.version }}" --pointer-only --output artifacts\tool-test
+      - name: Verify local dotnet tool install
+        shell: pwsh
+        run: |
+          $installPath = "artifacts\tool-test\install"
+          New-Item -ItemType Directory -Force -Path $installPath | Out-Null
+          dotnet tool install Scout --tool-path $installPath --version "${{ needs.validate.outputs.version }}" --add-source (Resolve-Path artifacts\tool-packages) --add-source (Resolve-Path artifacts\tool-test)
+          & "$installPath\scout.exe" -V
+      - name: Upload release and tool artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: scout-${{ matrix.rid }}
+          path: |
+            artifacts/packages/scout-${{ matrix.rid }}.zip
+            artifacts/packages/scout-${{ matrix.rid }}.zip.sha256
+            artifacts/packages/scout-${{ matrix.rid }}.msi
+            artifacts/packages/scout-${{ matrix.rid }}.msi.sha256
+            artifacts/tool-packages/Scout.${{ matrix.rid }}.${{ needs.validate.outputs.version }}.nupkg
+            artifacts/tool-packages/Scout.${{ matrix.rid }}.${{ needs.validate.outputs.version }}.nupkg.sha256
+
+  pack-tool-pointer:
+    name: pack dotnet tool pointer
+    needs: validate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Pack pointer dotnet tool
+        run: python3 eng/pack-dotnet-tool.py --version "${{ needs.validate.outputs.version }}" --pointer-only
+      - name: Upload pointer package
+        uses: actions/upload-artifact@v7
+        with:
+          name: scout-tool-pointer
+          path: |
+            artifacts/tool-packages/Scout.${{ needs.validate.outputs.version }}.nupkg
+            artifacts/tool-packages/Scout.${{ needs.validate.outputs.version }}.nupkg.sha256
+
+  publish-nuget:
+    name: publish NuGet packages
+    needs:
+      - validate
+      - build-linux
+      - build-macos
+      - build-windows
+      - pack-tool-pointer
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.102
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts/downloaded
+      - name: Collect NuGet packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/nuget-source
+          find artifacts/downloaded -type f -name '*.nupkg' -exec cp {} artifacts/nuget-source/ \;
+          ls -la artifacts/nuget-source
+      - name: Verify local dotnet tool install
+        shell: bash
+        run: |
+          set -euo pipefail
+          install="$(mktemp -d)"
+          dotnet tool install Scout --tool-path "$install" --version "${{ needs.validate.outputs.version }}" --add-source "$(pwd)/artifacts/nuget-source"
+          "$install/scout" -V
+      - name: Push RID packages
+        shell: bash
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          set -euo pipefail
+          version="${{ needs.validate.outputs.version }}"
+          mapfile -t packages < <(find artifacts/nuget-source -type f -name "Scout.*.${version}.nupkg" ! -name "Scout.${version}.nupkg" | sort)
+          for package in "${packages[@]}"; do
+            dotnet nuget push "$package" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+          done
+      - name: Push pointer package
+        shell: bash
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          set -euo pipefail
+          package="$(find artifacts/nuget-source -type f -name "Scout.${{ needs.validate.outputs.version }}.nupkg" | head -1)"
+          dotnet nuget push "$package" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+  create-release:
+    name: create GitHub Release
+    needs:
+      - validate
+      - publish-nuget
+    runs-on: ubuntu-24.04
+    outputs:
+      sha256_linux_x64: ${{ steps.checksums.outputs.sha256_linux_x64 }}
+      sha256_linux_arm64: ${{ steps.checksums.outputs.sha256_linux_arm64 }}
+      sha256_osx_x64: ${{ steps.checksums.outputs.sha256_osx_x64 }}
+      sha256_osx_arm64: ${{ steps.checksums.outputs.sha256_osx_arm64 }}
+      sha256_win_x64: ${{ steps.checksums.outputs.sha256_win_x64 }}
+      sha256_win_arm64: ${{ steps.checksums.outputs.sha256_win_arm64 }}
+      sha256_win_x64_msi: ${{ steps.checksums.outputs.sha256_win_x64_msi }}
+      sha256_win_arm64_msi: ${{ steps.checksums.outputs.sha256_win_arm64_msi }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts/downloaded
+      - name: Collect release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/release
+          find artifacts/downloaded -type f \( -name 'scout-*.tar.gz' -o -name 'scout-*.tar.gz.sha256' -o -name 'scout-*.zip' -o -name 'scout-*.zip.sha256' -o -name 'scout-*.msi' -o -name 'scout-*.msi.sha256' \) -exec cp {} artifacts/release/ \;
+          ls -la artifacts/release
+      - name: Capture checksums
+        id: checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd artifacts/release
+          read_hash() { awk '{ print $1 }' "$1.sha256"; }
+          echo "sha256_linux_x64=$(read_hash scout-linux-x64.tar.gz)" >> "$GITHUB_OUTPUT"
+          echo "sha256_linux_arm64=$(read_hash scout-linux-arm64.tar.gz)" >> "$GITHUB_OUTPUT"
+          echo "sha256_osx_x64=$(read_hash scout-osx-x64.tar.gz)" >> "$GITHUB_OUTPUT"
+          echo "sha256_osx_arm64=$(read_hash scout-osx-arm64.tar.gz)" >> "$GITHUB_OUTPUT"
+          echo "sha256_win_x64=$(read_hash scout-win-x64.zip)" >> "$GITHUB_OUTPUT"
+          echo "sha256_win_arm64=$(read_hash scout-win-arm64.zip)" >> "$GITHUB_OUTPUT"
+          echo "sha256_win_x64_msi=$(read_hash scout-win-x64.msi)" >> "$GITHUB_OUTPUT"
+          echo "sha256_win_arm64_msi=$(read_hash scout-win-arm64.msi)" >> "$GITHUB_OUTPUT"
+          cat *.sha256
+      - name: Create GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          release_flags="--latest"
+          if [ "${{ needs.validate.outputs.prerelease }}" = "true" ]; then
+            release_flags="--prerelease"
+            previous_tag="$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || true)"
+          else
+            previous_tag="$(gh release list --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || true)"
+          fi
+          notes_flag=(--generate-notes)
+          if [ -n "$previous_tag" ]; then
+            notes_flag=(--generate-notes --notes-start-tag "$previous_tag")
+          fi
+          gh release create "$tag" \
+            --title "$tag" \
+            "${notes_flag[@]}" \
+            $release_flags \
+            artifacts/release/scout-linux-x64.tar.gz \
+            artifacts/release/scout-linux-x64.tar.gz.sha256 \
+            artifacts/release/scout-linux-arm64.tar.gz \
+            artifacts/release/scout-linux-arm64.tar.gz.sha256 \
+            artifacts/release/scout-osx-x64.tar.gz \
+            artifacts/release/scout-osx-x64.tar.gz.sha256 \
+            artifacts/release/scout-osx-arm64.tar.gz \
+            artifacts/release/scout-osx-arm64.tar.gz.sha256 \
+            artifacts/release/scout-win-x64.zip \
+            artifacts/release/scout-win-x64.zip.sha256 \
+            artifacts/release/scout-win-arm64.zip \
+            artifacts/release/scout-win-arm64.zip.sha256 \
+            artifacts/release/scout-win-x64.msi \
+            artifacts/release/scout-win-x64.msi.sha256 \
+            artifacts/release/scout-win-arm64.msi \
+            artifacts/release/scout-win-arm64.msi.sha256
+
+  update-homebrew:
+    name: update Homebrew tap
+    needs:
+      - validate
+      - create-release
+    if: needs.validate.outputs.prerelease == 'false'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Clone homebrew-tap
+        run: |
+          git clone https://x-access-token:${{ secrets.HOMEBREW_TAP_TOKEN }}@github.com/willibrandon/homebrew-tap.git
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Update scout formula
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd homebrew-tap
+          mkdir -p Formula
+          cat > Formula/scout.rb <<EOF
+          # typed: false
+          # frozen_string_literal: true
+
+          # Homebrew formula for Scout - ripgrep-compatible .NET Native AOT search
+          class Scout < Formula
+            desc "Feature-complete port of ripgrep to .NET Native AOT"
+            homepage "https://github.com/willibrandon/scout"
+            license "MIT"
+            version "${{ needs.validate.outputs.version }}"
+
+            on_macos do
+              on_arm do
+                url "https://github.com/willibrandon/scout/releases/download/v#{version}/scout-osx-arm64.tar.gz"
+                sha256 "${{ needs.create-release.outputs.sha256_osx_arm64 }}"
+              end
+              on_intel do
+                url "https://github.com/willibrandon/scout/releases/download/v#{version}/scout-osx-x64.tar.gz"
+                sha256 "${{ needs.create-release.outputs.sha256_osx_x64 }}"
+              end
+            end
+
+            on_linux do
+              on_arm do
+                url "https://github.com/willibrandon/scout/releases/download/v#{version}/scout-linux-arm64.tar.gz"
+                sha256 "${{ needs.create-release.outputs.sha256_linux_arm64 }}"
+              end
+              on_intel do
+                url "https://github.com/willibrandon/scout/releases/download/v#{version}/scout-linux-x64.tar.gz"
+                sha256 "${{ needs.create-release.outputs.sha256_linux_x64 }}"
+              end
+            end
+
+            def install
+              libexec.install Dir["*"]
+              bin.install_symlink libexec/"scout"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/scout --version")
+            end
+          end
+          EOF
+          ruby -c Formula/scout.rb
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path("README.md")
+          text = path.read_text(encoding="utf-8")
+          if "| [scout](https://github.com/willibrandon/scout) |" not in text:
+              text = text.replace(
+                  "| Formula | Description |\n|---------|-------------|\n",
+                  "| Formula | Description |\n|---------|-------------|\n| [scout](https://github.com/willibrandon/scout) | Feature-complete port of ripgrep to .NET Native AOT |\n",
+              )
+              text = text.replace(
+                  "brew install dotsider\n",
+                  "brew install scout\nbrew install dotsider\n",
+                  1,
+              )
+              text = text.replace(
+                  "brew install willibrandon/tap/dotsider\n",
+                  "brew install willibrandon/tap/scout\nbrew install willibrandon/tap/dotsider\n",
+                  1,
+              )
+              text = text.replace(
+                  "brew upgrade dotsider\n",
+                  "brew upgrade scout\nbrew upgrade dotsider\n",
+                  1,
+              )
+              text = text.replace(
+                  "### dotsider\n",
+                  "### scout\n\n| Platform | Architecture | Binary |\n|----------|--------------|--------|\n| macOS | Apple Silicon (arm64) | scout-osx-arm64 |\n| macOS | Intel (x86_64) | scout-osx-x64 |\n| Linux | arm64 | scout-linux-arm64 |\n| Linux | x86_64 | scout-linux-x64 |\n\n### dotsider\n",
+                  1,
+              )
+              text = text.replace(
+                  "xattr -d com.apple.quarantine $(which dotsider)\n",
+                  "xattr -d com.apple.quarantine $(which scout)\nxattr -d com.apple.quarantine $(which dotsider)\n",
+                  1,
+              )
+              text = text.replace(
+                  "- [dotsider issues](https://github.com/willibrandon/dotsider/issues)\n",
+                  "- [scout issues](https://github.com/willibrandon/scout/issues)\n- [dotsider issues](https://github.com/willibrandon/dotsider/issues)\n",
+                  1,
+              )
+              path.write_text(text, encoding="utf-8")
+          PY
+      - name: Commit and push
+        run: |
+          cd homebrew-tap
+          git add Formula/scout.rb README.md
+          git diff --staged --quiet || git commit -m "Update scout to ${{ needs.validate.outputs.version }}"
+          git push origin main
+
+  update-scoop:
+    name: update Scoop bucket
+    needs:
+      - validate
+      - create-release
+    if: needs.validate.outputs.prerelease == 'false'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Clone scoop-bucket
+        run: |
+          git clone https://x-access-token:${{ secrets.SCOOP_BUCKET_TOKEN }}@github.com/willibrandon/scoop-bucket.git
+          cd scoop-bucket
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Update scout manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd scoop-bucket
+          mkdir -p bucket
+          python3 <<'PY'
+          import json
+
+          version = "${{ needs.validate.outputs.version }}"
+          manifest = {
+              "version": version,
+              "description": "Feature-complete port of ripgrep to .NET Native AOT",
+              "homepage": "https://github.com/willibrandon/scout",
+              "license": "MIT",
+              "architecture": {
+                  "64bit": {
+                      "url": f"https://github.com/willibrandon/scout/releases/download/v{version}/scout-win-x64.zip",
+                      "hash": "${{ needs.create-release.outputs.sha256_win_x64 }}",
+                  },
+                  "arm64": {
+                      "url": f"https://github.com/willibrandon/scout/releases/download/v{version}/scout-win-arm64.zip",
+                      "hash": "${{ needs.create-release.outputs.sha256_win_arm64 }}",
+                  },
+              },
+              "bin": "scout.exe",
+              "checkver": "github",
+              "autoupdate": {
+                  "architecture": {
+                      "64bit": {
+                          "url": "https://github.com/willibrandon/scout/releases/download/v$version/scout-win-x64.zip",
+                      },
+                      "arm64": {
+                          "url": "https://github.com/willibrandon/scout/releases/download/v$version/scout-win-arm64.zip",
+                      },
+                  },
+                  "hash": {
+                      "url": "$url.sha256",
+                  },
+              },
+          }
+          with open("bucket/scout.json", "w", encoding="utf-8") as f:
+              json.dump(manifest, f, indent=4)
+              f.write("\n")
+          PY
+          python3 -m json.tool bucket/scout.json >/dev/null
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path("README.md")
+          text = path.read_text(encoding="utf-8")
+          if "| [scout](https://github.com/willibrandon/scout) |" not in text:
+              text = text.replace(
+                  "# Scoop Bucket for dotsider",
+                  "# Scoop Bucket",
+                  1,
+              )
+              text = text.replace(
+                  "[Scoop](https://scoop.sh) bucket for [dotsider](https://github.com/willibrandon/dotsider) \u2014 a TUI for analyzing .NET assemblies.",
+                  "[Scoop](https://scoop.sh) bucket for command-line tools by [willibrandon](https://github.com/willibrandon).",
+                  1,
+              )
+              text = text.replace(
+                  "scoop install dotsider\n",
+                  "scoop install scout\nscoop install dotsider\n",
+                  1,
+              )
+              text = text.replace(
+                  "scoop update dotsider\n",
+                  "scoop update scout\nscoop update dotsider\n",
+                  1,
+              )
+              text = text.replace(
+                  "| Package | Description |\n|---------|-------------|\n",
+                  "| Package | Description |\n|---------|-------------|\n| [scout](https://github.com/willibrandon/scout) | Feature-complete port of ripgrep to .NET Native AOT |\n",
+                  1,
+              )
+              path.write_text(text, encoding="utf-8")
+          PY
+      - name: Commit and push
+        run: |
+          cd scoop-bucket
+          git add bucket/scout.json README.md
+          git diff --staged --quiet || git commit -m "Update scout to ${{ needs.validate.outputs.version }}"
+          git push origin main
+
+  update-winget:
+    name: submit winget PR
+    needs:
+      - validate
+      - create-release
+    if: needs.validate.outputs.prerelease == 'false'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check if package exists in winget-pkgs
+        id: check
+        shell: pwsh
+        run: |
+          $response = Invoke-WebRequest -Uri "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/w/willibrandon/scout" -Method Head -SkipHttpErrorCheck
+          if ($response.StatusCode -eq 200) {
+            "exists=true" >> $env:GITHUB_OUTPUT
+          } else {
+            "exists=false" >> $env:GITHUB_OUTPUT
+          }
+      - name: Generate winget manifests
+        shell: pwsh
+        run: |
+          $version = "${{ needs.validate.outputs.version }}"
+          $manifestDir = "manifests/w/willibrandon/scout/$version"
+          New-Item -ItemType Directory -Path $manifestDir -Force | Out-Null
+          Copy-Item winget/willibrandon.scout.yaml $manifestDir/
+          Copy-Item winget/willibrandon.scout.installer.yaml $manifestDir/
+          Copy-Item winget/willibrandon.scout.locale.en-US.yaml $manifestDir/
+
+          Get-ChildItem $manifestDir -Filter *.yaml | ForEach-Object {
+            (Get-Content $_.FullName) -replace '0\.1\.0', $version | Set-Content $_.FullName
+          }
+          $installerYaml = "$manifestDir/willibrandon.scout.installer.yaml"
+          (Get-Content $installerYaml) -replace 'v0\.1\.0', "v$version" | Set-Content $installerYaml
+
+          $archs = @(
+            @{ Rid = 'x64'; ShaSuffix = 'X64'; PcSuffix = 'X64' },
+            @{ Rid = 'arm64'; ShaSuffix = 'ARM64'; PcSuffix = 'ARM64' }
+          )
+          foreach ($arch in $archs) {
+            $url = "https://github.com/willibrandon/scout/releases/download/v$version/scout-win-$($arch.Rid).msi"
+            $msiFile = New-TemporaryFile
+            Invoke-WebRequest -Uri $url -OutFile $msiFile.FullName
+
+            $sha256 = (Get-FileHash $msiFile.FullName -Algorithm SHA256).Hash
+            (Get-Content $installerYaml) -replace "PLACEHOLDER_SHA256_$($arch.ShaSuffix)", $sha256 | Set-Content $installerYaml
+
+            $pattern = 'ProductCode(\{[0-9a-fA-F-]{36}\})'
+            $stream = [System.IO.File]::OpenRead($msiFile.FullName)
+            $reader = [System.IO.StreamReader]::New($stream, [System.Text.Encoding]::ASCII)
+            $productCode = $null
+            while ($null -ne ($line = $reader.ReadLine())) {
+              if ($line -match $pattern) {
+                $productCode = $Matches[1]
+                break
+              }
+            }
+            $reader.Close()
+            $stream.Close()
+            Remove-Item $msiFile.FullName
+
+            if (-not $productCode) {
+              throw "Could not find ProductCode in $url"
+            }
+
+            (Get-Content $installerYaml) -replace "\{PLACEHOLDER_PRODUCT_CODE_$($arch.PcSuffix)\}", $productCode | Set-Content $installerYaml
+          }
+      - name: Submit winget PR via GitHub API
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_PKGS_TOKEN }}
+        run: |
+          $version = "${{ needs.validate.outputs.version }}"
+          $branch = "scout-$version"
+          $manifestDir = "manifests/w/willibrandon/scout/$version"
+
+          gh api repos/willibrandon/winget-pkgs/merge-upstream -X POST -f branch="master"
+
+          $forkRef = gh api repos/willibrandon/winget-pkgs/git/ref/heads/master --jq '.object.sha'
+          $baseTreeSha = gh api "repos/willibrandon/winget-pkgs/git/commits/$forkRef" --jq '.tree.sha'
+
+          $treeEntries = [System.Collections.ArrayList]@()
+          Get-ChildItem -Path $manifestDir -File | ForEach-Object {
+            $content = [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($_.FullName))
+            $blobResponse = gh api repos/willibrandon/winget-pkgs/git/blobs -X POST -f content="$content" -f encoding="base64"
+            $blobSha = $blobResponse | ConvertFrom-Json | Select-Object -ExpandProperty sha
+            $wingetPath = "manifests/w/willibrandon/scout/$version/$($_.Name)"
+            [void]$treeEntries.Add(@{path=$wingetPath; mode="100644"; type="blob"; sha=$blobSha})
+          }
+
+          $treeData = @{base_tree=$baseTreeSha; tree=$treeEntries.ToArray()}
+          $treeData | ConvertTo-Json -Depth 10 | Out-File -FilePath tree.json -Encoding utf8NoBOM
+          $newTree = gh api repos/willibrandon/winget-pkgs/git/trees -X POST --input tree.json
+          $newTreeSha = $newTree | ConvertFrom-Json | Select-Object -ExpandProperty sha
+
+          $commitJson = @{
+            message="Update willibrandon.scout to $version"
+            tree=$newTreeSha
+            parents=@($forkRef)
+          } | ConvertTo-Json -Compress
+          $commitJson | Out-File -FilePath commit.json -Encoding utf8NoBOM
+          $newCommit = gh api repos/willibrandon/winget-pkgs/git/commits -X POST --input commit.json
+          $newCommitSha = $newCommit | ConvertFrom-Json | Select-Object -ExpandProperty sha
+
+          $refExists = gh api "repos/willibrandon/winget-pkgs/git/ref/heads/$branch" 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh api "repos/willibrandon/winget-pkgs/git/refs/heads/$branch" -X PATCH -f sha="$newCommitSha" -F force=true
+          } else {
+            gh api repos/willibrandon/winget-pkgs/git/refs -X POST -f ref="refs/heads/$branch" -f sha="$newCommitSha"
+          }
+
+          if ("${{ steps.check.outputs.exists }}" -eq "true") {
+            $prTitle = "Update willibrandon.scout to $version"
+            $prBody = "## Description`n`nUpdate Scout to version $version`n`n## Release notes`n`nhttps://github.com/willibrandon/scout/releases/tag/v$version"
+          } else {
+            $prTitle = "New package: willibrandon.scout $version"
+            $prBody = "## Description`n`nAdd Scout version $version`n`n## Release notes`n`nhttps://github.com/willibrandon/scout/releases/tag/v$version"
+          }
+
+          gh pr create `
+            --repo microsoft/winget-pkgs `
+            --base master `
+            --head willibrandon:$branch `
+            --title $prTitle `
+            --body $prBody

@@ -14,6 +14,20 @@ $StageParent = Join-Path $PackageRoot "stage"
 $Stage = Join-Path $StageParent "scout-$Rid"
 $Archive = Join-Path $PackageRoot "scout-$Rid.zip"
 $HashFile = "$Archive.sha256"
+$BuildProps = [xml](Get-Content (Join-Path $Root "Directory.Build.props"))
+
+function Read-MsBuildProperty {
+    param([string] $Name)
+
+    foreach ($propertyGroup in $BuildProps.Project.PropertyGroup) {
+        $value = $propertyGroup.$Name
+        if ($null -ne $value -and ([string] $value) -ne "") {
+            return [string] $value
+        }
+    }
+
+    throw "Missing MSBuild property $Name in Directory.Build.props."
+}
 
 function Require-File {
     param([string] $Path)
@@ -28,6 +42,13 @@ Require-File $Exe
 Require-File (Join-Path $Root "docs\PARITY.md")
 Require-File (Join-Path $Root "docs\THIRD-PARTY-NOTICES.md")
 
+$ScoutVersion = if ([string]::IsNullOrWhiteSpace($env:SCOUT_RELEASE_VERSION)) {
+    Read-MsBuildProperty "VersionPrefix"
+}
+else {
+    $env:SCOUT_RELEASE_VERSION
+}
+
 Remove-Item -Recurse -Force $Stage -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Stage | Out-Null
 Copy-Item $Exe (Join-Path $Stage "scout.exe")
@@ -36,6 +57,7 @@ Copy-Item (Join-Path $Root "docs\THIRD-PARTY-NOTICES.md") (Join-Path $Stage "THI
 
 $Manifest = @(
     'name = "Scout"',
+    "version = `"$ScoutVersion`"",
     'binary = "scout.exe"',
     "rid = `"$Rid`"",
     'ripgrep_commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"',

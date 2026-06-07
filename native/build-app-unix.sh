@@ -77,7 +77,7 @@ OUT="$ROOT/artifacts/app/$RID"
 BIN="$ROOT/artifacts/bin/$RID"
 REAL_BIN="$BIN/scout-real"
 PCRE2_LIB="$ROOT/artifacts/native/pcre2/$RID/lib/libpcre2-8.a"
-SCOUT_VERSION="$(read_msbuild_property VersionPrefix)"
+SCOUT_VERSION="${SCOUT_RELEASE_VERSION:-$(read_msbuild_property VersionPrefix)}"
 SCOUT_RIPGREP_VERSION="$(read_msbuild_property ScoutRipgrepVersion)"
 SCOUT_RIPGREP_REVISION_SHORT="$(read_msbuild_property ScoutRipgrepRevisionShort)"
 SCOUT_SHORT_VERSION="scout $SCOUT_VERSION (ripgrep $SCOUT_RIPGREP_VERSION compatible, rev $SCOUT_RIPGREP_REVISION_SHORT)"
@@ -109,7 +109,7 @@ case "$RID" in
 esac
 
 "$ROOT/native/pcre2/build-unix.sh" "$RID"
-dotnet publish "$ROOT/src/Scout.App/Scout.App.csproj" -r "$RID" -c Release -p:NativeLib=Static -o "$OUT"
+dotnet publish "$ROOT/src/Scout.App/Scout.App.csproj" -r "$RID" -c Release -p:NativeLib=Static -p:VersionPrefix="$SCOUT_VERSION" -p:Version="$SCOUT_VERSION" -o "$OUT"
 mkdir -p "$BIN"
 
 RT="$HOME/.nuget/packages/microsoft.netcore.app.runtime.nativeaot.$RID/10.0.2/runtimes/$RID/native"
