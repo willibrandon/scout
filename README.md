@@ -29,17 +29,37 @@ for the full reference.
 
 ## Installation
 
+Choose one installation method:
+
+**.NET tool**
+
 ```sh
 dotnet tool install -g Scout
+```
+
+**Homebrew**
+
+```sh
 brew install willibrandon/tap/scout
+```
+
+**Scoop**
+
+```sh
 scoop bucket add dotsider https://github.com/willibrandon/scoop-bucket
 scoop install scout
+```
+
+**winget**
+
+```sh
 winget install willibrandon.scout
 ```
 
-Standalone archives are attached to each GitHub Release for `linux-x64`, `linux-arm64`,
-`osx-x64`, `osx-arm64`, `win-x64`, and `win-arm64`. Windows releases also include MSI
-installers for `win-x64` and `win-arm64`.
+Standalone archives are attached to each
+[GitHub Release](https://github.com/willibrandon/scout/releases) for `linux-x64`,
+`linux-arm64`, `osx-x64`, `osx-arm64`, `win-x64`, and `win-arm64`. Windows releases
+also include MSI installers for `win-x64` and `win-arm64`.
 
 ## Building
 
