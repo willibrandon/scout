@@ -1521,6 +1521,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("""Where-Object { $_.Name -in @("scout", "scout.exe", "scout.cmd") }""", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("throw \"scout tool shim not found in $installPath\"", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("& $command.FullName -V", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("GH_REPO: ${{ github.repository }}", releaseWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("""-d SourceDir=artifacts\packages\stage\scout-$rid""", releaseWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("""& "$installPath\scout.exe" -V""", releaseWorkflow, StringComparison.Ordinal);
     }
