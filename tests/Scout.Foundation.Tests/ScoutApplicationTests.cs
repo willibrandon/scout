@@ -2251,7 +2251,7 @@ public sealed class ScoutApplicationTests
         File.WriteAllText(first, "public class A\n");
         File.WriteAllText(second, "public class B\n");
 
-        (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "--sort=path", "-n", "public.*class", root);
+        (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "--sort=path", "public.*class", root);
 
         Assert.Equal(0, exitCode);
         Assert.Equal($"{first}\n1:public class A\n\n{second}\n1:public class B\n", Utf8(output));
@@ -2272,7 +2272,7 @@ public sealed class ScoutApplicationTests
         File.WriteAllText(second, "public class B\n");
         File.WriteAllText(third, "public class C\n");
 
-        (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "--threads=2", "-n", "public.*class", root);
+        (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "--threads=2", "public.*class", root);
 
         Assert.Equal(0, exitCode);
         var expectedBlocks = new HashSet<string>
@@ -2298,7 +2298,7 @@ public sealed class ScoutApplicationTests
         File.WriteAllText(first, "public class A\n");
         File.WriteAllText(second, "public class B\n");
 
-        (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "--sort=path", "--no-heading", "-n", "public.*class", root);
+        (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "--sort=path", "--no-heading", "public.*class", root);
 
         Assert.Equal(0, exitCode);
         Assert.Equal($"{first}:1:public class A\n{second}:1:public class B\n", Utf8(output));
@@ -2315,10 +2315,104 @@ public sealed class ScoutApplicationTests
         string path = Path.Combine(root, "input.cs");
         File.WriteAllText(path, "public class A\n");
 
-        (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "-H", "-n", "public.*class", path);
+        (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "-H", "public.*class", path);
 
         Assert.Equal(0, exitCode);
         Assert.Equal($"{path}\n1:public class A\n", Utf8(output));
+        Assert.Empty(error);
+    }
+
+    /// <summary>
+    /// Verifies terminal output prints automatic line numbers for single-file searches.
+    /// </summary>
+    [Fact]
+    public void TerminalSingleFileSearchUsesAutoLineNumbers()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.cs");
+        File.WriteAllText(path, "public class A\n");
+
+        (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "public.*class", path);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("1:public class A\n", Utf8(output));
+        Assert.Empty(error);
+    }
+
+    /// <summary>
+    /// Verifies no-line-number suppresses automatic terminal line numbers.
+    /// </summary>
+    [Fact]
+    public void TerminalSingleFileNoLineNumberSuppressesAutoLineNumbers()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.cs");
+        File.WriteAllText(path, "public class A\n");
+
+        (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "--no-line-number", "public.*class", path);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("public class A\n", Utf8(output));
+        Assert.Empty(error);
+    }
+
+    /// <summary>
+    /// Verifies terminal only-matching output prints automatic line numbers.
+    /// </summary>
+    [Fact]
+    public void TerminalOnlyMatchingUsesAutoLineNumbers()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.cs");
+        File.WriteAllText(path, "public class A\n");
+
+        (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "-o", "class\\s+\\w+", path);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("1:class A\n", Utf8(output));
+        Assert.Empty(error);
+    }
+
+    /// <summary>
+    /// Verifies terminal context output prints automatic line numbers and context separators.
+    /// </summary>
+    [Fact]
+    public void TerminalContextUsesAutoLineNumbers()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.cs");
+        File.WriteAllText(path, "before\npublic class A\nafter\n");
+
+        (int exitCode, byte[] output, string error) = RunScoutTerminal("--color=never", "-C1", "public.*class", path);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("1-before\n2:public class A\n3-after\n", Utf8(output));
+        Assert.Empty(error);
+    }
+
+    /// <summary>
+    /// Verifies terminal stdin-only searches do not get automatic line numbers.
+    /// </summary>
+    [Fact]
+    public void TerminalStandardInputDoesNotUseAutoLineNumbers()
+    {
+        (int exitCode, byte[] output, string error) = RunScoutTerminalWithStandardInput("public class A\n", "--color=never", "public.*class");
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("public class A\n", Utf8(output));
+        Assert.Empty(error);
+    }
+
+    /// <summary>
+    /// Verifies a single explicit stdin path also skips automatic terminal line numbers.
+    /// </summary>
+    [Fact]
+    public void TerminalExplicitStandardInputDoesNotUseAutoLineNumbers()
+    {
+        (int exitCode, byte[] output, string error) = RunScoutTerminalWithStandardInput("public class A\n", "--color=never", "public.*class", "-");
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("public class A\n", Utf8(output));
         Assert.Empty(error);
     }
 
@@ -3816,6 +3910,19 @@ public sealed class ScoutApplicationTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal("1:X\n1:X\n", Utf8(output));
+        Assert.Empty(error);
+    }
+
+    /// <summary>
+    /// Verifies terminal stdin-only replacement does not get automatic line numbers.
+    /// </summary>
+    [Fact]
+    public void TerminalStandardInputReplaceDoesNotUseAutoLineNumbers()
+    {
+        (int exitCode, byte[] output, string error) = RunScoutTerminalWithStandardInput("needle needle\n", "--color=never", "-r", "X", "needle");
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("X X\n", Utf8(output));
         Assert.Empty(error);
     }
 
@@ -6582,6 +6689,26 @@ public sealed class ScoutApplicationTests
         }
 
         int exitCode = ScoutApplication.Run(osArguments, outputWriter, errorWriter, standardOutputIsTerminal: true);
+        return (exitCode, output.ToArray(), Utf8(error.ToArray()));
+    }
+
+    private static (int ExitCode, byte[] Output, string Error) RunScoutTerminalWithStandardInput(
+        string input,
+        params string[] arguments)
+    {
+        using MemoryStream standardInput = new(Encoding.UTF8.GetBytes(input));
+        using MemoryStream output = new();
+        using MemoryStream error = new();
+        var outputWriter = new RawByteWriter(output);
+        var errorWriter = new RawByteWriter(error);
+        var osArguments = new OsString[arguments.Length + 1];
+        osArguments[0] = OsString.FromUnixBytes("scout"u8);
+        for (int index = 0; index < arguments.Length; index++)
+        {
+            osArguments[index + 1] = OsString.FromText(arguments[index]);
+        }
+
+        int exitCode = ScoutApplication.Run(osArguments, outputWriter, errorWriter, standardInput, standardOutputIsTerminal: true);
         return (exitCode, output.ToArray(), Utf8(error.ToArray()));
     }
 

@@ -26,7 +26,7 @@ internal static class StandardSearchOperations
         OutputSeparators separators = GetOutputSeparators(lowArgs);
         OutputLineLimit lineLimit = GetOutputLineLimit(lowArgs);
         OutputColor color = GetOutputColor(lowArgs);
-        bool lineNumber = SearchOutputFormatting.EffectiveLineNumber(lowArgs, standardOutputIsTerminal);
+        bool lineNumber = SearchOutputFormatting.EffectiveLineNumber(lowArgs, standardOutputIsTerminal, automaticLineNumberTarget: false);
         bool column = SearchOutputFormatting.EffectiveColumn(lowArgs);
         bool wroteHeadingOutput = false;
         bool matched = false;
@@ -36,6 +36,7 @@ internal static class StandardSearchOperations
         SearchStats searchStats = default;
         bool useDefaultCurrentDirectory = positional.Count == firstPathIndex &&
             (patternsReadFromStandardInput || !standardInputIsReadable);
+        int explicitPathArgumentCount = positional.Count - firstPathIndex;
         if (positional.Count == firstPathIndex && !useDefaultCurrentDirectory)
         {
             bool stdinHeading = ShouldUseHeading(lowArgs, standardOutputIsTerminal, autoPrefixPath: false);
@@ -69,6 +70,10 @@ internal static class StandardSearchOperations
             }
         }
 
+        lineNumber = SearchOutputFormatting.EffectiveLineNumber(
+            lowArgs,
+            standardOutputIsTerminal,
+            SearchOutputFormatting.ShouldUseAutomaticLineNumberTarget(useDefaultCurrentDirectory, explicitPathArgumentCount, paths));
         bool prefixPaths = lowArgs.Vimgrep || paths.Count > 1 || SearchPathArgument.ContainsDirectory(paths);
         bool autoMmapEligible = SearchPathArgument.IsAutoMmapEligible(paths);
         bool pathHeading = ShouldUseHeading(lowArgs, standardOutputIsTerminal, prefixPaths);

@@ -21,12 +21,12 @@ internal static class SearchOutputFormatting
         return ExitCode.Error;
     }
 
-    internal static bool EffectiveLineNumber(CliLowArgs lowArgs, bool standardOutputIsTerminal)
+    internal static bool EffectiveLineNumber(CliLowArgs lowArgs, bool standardOutputIsTerminal, bool automaticLineNumberTarget)
     {
         return lowArgs.LineNumber ||
             (EffectiveColumn(lowArgs) && !lowArgs.LineNumberSpecified) ||
             (lowArgs.Vimgrep && !lowArgs.LineNumberSpecified) ||
-            (standardOutputIsTerminal && lowArgs.Replacement is not null && !lowArgs.LineNumberSpecified);
+            (standardOutputIsTerminal && automaticLineNumberTarget && lowArgs.SearchMode == CliSearchMode.Standard && !lowArgs.LineNumberSpecified);
     }
 
     internal static bool EffectiveColumn(CliLowArgs lowArgs)
@@ -144,6 +144,26 @@ internal static class SearchOutputFormatting
             : null;
     }
 
+    internal static bool ShouldUseAutomaticLineNumberTarget(
+        bool useDefaultCurrentDirectory,
+        int explicitPathArgumentCount,
+        IReadOnlyList<SearchPathArgument> paths)
+    {
+        if (useDefaultCurrentDirectory)
+        {
+            return true;
+        }
+
+        if (explicitPathArgumentCount == 0)
+        {
+            return false;
+        }
+
+        return explicitPathArgumentCount != 1 ||
+            paths.Count != 1 ||
+            !IsStandardInputPath(paths[0]);
+    }
+
     private static void WritePrefixTerminator(RawByteWriter output, bool nullPathTerminator, bool matchSeparator)
     {
         if (nullPathTerminator)
@@ -163,6 +183,16 @@ internal static class SearchOutputFormatting
     private static bool ShouldPrefixMatchFields(bool autoPrefixPath, bool? withFilename)
     {
         return withFilename ?? autoPrefixPath;
+    }
+
+    private static bool IsStandardInputPath(SearchPathArgument path)
+    {
+        if (path.Text == "-")
+        {
+            return true;
+        }
+
+        return path.UnixBytes is { Length: 1 } bytes && bytes[0] == (byte)'-';
     }
 
     private static void WriteNumber(RawByteWriter output, long value)

@@ -50,7 +50,7 @@ internal static class Pcre2SearchOperations
         OutputSeparators separators = GetOutputSeparators(lowArgs);
         OutputLineLimit lineLimit = GetOutputLineLimit(lowArgs);
         OutputColor color = GetOutputColor(lowArgs);
-        bool lineNumber = SearchOutputFormatting.EffectiveLineNumber(lowArgs, standardOutputIsTerminal);
+        bool lineNumber = SearchOutputFormatting.EffectiveLineNumber(lowArgs, standardOutputIsTerminal, automaticLineNumberTarget: false);
         List<byte[]> pcre2Patterns = PreparePcre2Patterns(patterns, lowArgs.FixedStrings);
         SearchDiagnosticLogging.LogSearchConfiguration(logger, positional, firstPathIndex, lowArgs, pcre2Patterns);
         bool wroteHeadingOutput = false;
@@ -61,6 +61,7 @@ internal static class Pcre2SearchOperations
         SearchStats searchStats = default;
         bool useDefaultCurrentDirectory = positional.Count == firstPathIndex &&
             (patternsReadFromStandardInput || !standardInputIsReadable);
+        int explicitPathArgumentCount = positional.Count - firstPathIndex;
 
         var paths = new List<SearchPathArgument>(Math.Max(1, positional.Count - firstPathIndex));
         if (positional.Count == firstPathIndex && !useDefaultCurrentDirectory)
@@ -110,6 +111,10 @@ internal static class Pcre2SearchOperations
             }
         }
 
+        lineNumber = SearchOutputFormatting.EffectiveLineNumber(
+            lowArgs,
+            standardOutputIsTerminal,
+            SearchOutputFormatting.ShouldUseAutomaticLineNumberTarget(useDefaultCurrentDirectory, explicitPathArgumentCount, paths));
         bool prefixPaths = lowArgs.Vimgrep || paths.Count > 1 || SearchPathArgument.ContainsDirectory(paths);
         bool autoMmapEligible = SearchPathArgument.IsAutoMmapEligible(paths);
         bool pathHeading = ShouldUseHeading(lowArgs, standardOutputIsTerminal, prefixPaths);
