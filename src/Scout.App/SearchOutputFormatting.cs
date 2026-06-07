@@ -21,9 +21,12 @@ internal static class SearchOutputFormatting
         return ExitCode.Error;
     }
 
-    internal static bool EffectiveLineNumber(CliLowArgs lowArgs)
+    internal static bool EffectiveLineNumber(CliLowArgs lowArgs, bool standardOutputIsTerminal)
     {
-        return lowArgs.LineNumber || (EffectiveColumn(lowArgs) && !lowArgs.LineNumberSpecified) || (lowArgs.Vimgrep && !lowArgs.LineNumberSpecified);
+        return lowArgs.LineNumber ||
+            (EffectiveColumn(lowArgs) && !lowArgs.LineNumberSpecified) ||
+            (lowArgs.Vimgrep && !lowArgs.LineNumberSpecified) ||
+            (standardOutputIsTerminal && lowArgs.Replacement is not null && !lowArgs.LineNumberSpecified);
     }
 
     internal static bool EffectiveColumn(CliLowArgs lowArgs)
