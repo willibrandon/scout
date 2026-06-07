@@ -19,7 +19,7 @@
 #define SCOUT_FAST_SEARCH_MAX_BYTES 65536
 #define SCOUT_EXECUTABLE_PATH_MAX 4096
 #ifndef SCOUT_VERSION
-#define SCOUT_VERSION "0.1.0"
+#define SCOUT_VERSION "0.1.1"
 #endif
 #ifndef SCOUT_RIPGREP_VERSION
 #define SCOUT_RIPGREP_VERSION "15.1.0"
@@ -341,11 +341,37 @@ static int try_run_native_fast_path(int argc, char **argv)
 }
 
 #ifdef SCOUT_LAUNCHER
+static int try_resolve_path(char *buffer, size_t capacity)
+{
+    char *resolved = realpath(buffer, NULL);
+    if (resolved == NULL)
+    {
+        return 0;
+    }
+
+    size_t length = strlen(resolved);
+    if (length >= capacity)
+    {
+        free(resolved);
+        return 0;
+    }
+
+    memcpy(buffer, resolved, length + 1);
+    free(resolved);
+    return 1;
+}
+
 static int try_get_current_executable_path(char *buffer, size_t capacity)
 {
 #if defined(__APPLE__)
     uint32_t size = (uint32_t)capacity;
-    return _NSGetExecutablePath(buffer, &size) == 0;
+    if (_NSGetExecutablePath(buffer, &size) != 0)
+    {
+        return 0;
+    }
+
+    (void)try_resolve_path(buffer, capacity);
+    return 1;
 #elif defined(__linux__)
     ssize_t length = readlink("/proc/self/exe", buffer, capacity - 1);
     if (length < 0 || (size_t)length >= capacity)
@@ -354,6 +380,7 @@ static int try_get_current_executable_path(char *buffer, size_t capacity)
     }
 
     buffer[length] = '\0';
+    (void)try_resolve_path(buffer, capacity);
     return 1;
 #else
     (void)buffer;
@@ -372,6 +399,7 @@ static int make_real_binary_path(const char *argv0, char *buffer, size_t capacit
         }
 
         strcpy(buffer, argv0);
+        (void)try_resolve_path(buffer, capacity);
     }
 
     char *slash = strrchr(buffer, '/');

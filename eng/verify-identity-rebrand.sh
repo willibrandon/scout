@@ -45,7 +45,7 @@ for artifact in help-short help-long man complete-bash complete-zsh complete-fis
     decode_artifact "$ARTIFACTS/$artifact.base64" > "$TMP/$artifact"
 done
 
-require_contains "$TMP/help-short" "scout 0.1.0 (ripgrep 15.1.0 compatible, rev 4857d6fa67)"
+require_contains "$TMP/help-short" "scout 0.1.1 (ripgrep 15.1.0 compatible, rev 4857d6fa67)"
 require_contains "$TMP/help-short" "Scout ports ripgrep, originally authored by Andrew Gallant."
 require_contains "$TMP/help-short" "Project home page: https://github.com/willibrandon/scout"
 require_contains "$TMP/help-short" "scout [OPTIONS] PATTERN [PATH ...]"

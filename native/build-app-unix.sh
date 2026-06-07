@@ -185,6 +185,13 @@ printf 'needle\n' > "$BIN/native-fast-literal.txt"
 "$BIN/scout" --no-config needle "$BIN/native-fast-literal.txt" > "$BIN/native-fast-literal.out"
 printf 'needle\n' > "$BIN/native-fast-literal.expected"
 expect_equal_file "native fast literal search" "$BIN/native-fast-literal.expected" "$BIN/native-fast-literal.out"
+rm -rf "$BIN/symlink-smoke"
+mkdir -p "$BIN/symlink-smoke"
+ln -s "$BIN/scout" "$BIN/symlink-smoke/scout"
+"$BIN/symlink-smoke/scout" --help > "$BIN/symlink-help.out"
+expect_contains "symlinked launcher help" "USAGE:" "$BIN/symlink-help.out"
+"$BIN/symlink-smoke/scout" needle "$BIN/native-fast-literal.txt" > "$BIN/symlink-search.out"
+expect_equal_file "symlinked launcher search" "$BIN/native-fast-literal.expected" "$BIN/symlink-search.out"
 cat > "$BIN/pcre2-smoke.txt" <<'EOF'
 foobar
 foo

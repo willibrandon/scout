@@ -112,10 +112,47 @@ jobs:
         run: native/build-app-unix.sh ${{ matrix.rid }} --smoke-only
       - name: Pack RID-specific dotnet tool
         run: python3 eng/pack-dotnet-tool.py --version "${{ needs.validate.outputs.version }}" --rid ${{ matrix.rid }} --rid-only
+      - name: Pack local pointer package for install smoke
+        run: python3 eng/pack-dotnet-tool.py --version "${{ needs.validate.outputs.version }}" --pointer-only --output artifacts/tool-test
+      - name: Verify local dotnet tool install
+        shell: bash
+        run: |
+          set -euo pipefail
+          install="$(mktemp -d)"
+          cat > artifacts/tool-test/NuGet.Config <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="rid" value="$(pwd)/artifacts/tool-packages" />
+              <add key="pointer" value="$(pwd)/artifacts/tool-test" />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+            </packageSources>
+            <packageSourceMapping>
+              <packageSource key="rid">
+                <package pattern="Scout.*" />
+              </packageSource>
+              <packageSource key="pointer">
+                <package pattern="Scout" />
+              </packageSource>
+              <packageSource key="nuget.org">
+                <package pattern="Microsoft.*" />
+              </packageSource>
+            </packageSourceMapping>
+          </configuration>
+          EOF
+          dotnet tool install Scout --tool-path "$install" --version "${{ needs.validate.outputs.version }}" --configfile artifacts/tool-test/NuGet.Config
+          "$install/scout" --help > artifacts/tool-test/help.txt
+          grep 'USAGE:' artifacts/tool-test/help.txt
+          printf 'needle\n' > artifacts/tool-test/search.txt
+          "$install/scout" --no-config -n needle artifacts/tool-test/search.txt > artifacts/tool-test/search.out
+          printf '1:needle\n' | cmp -s - artifacts/tool-test/search.out
       - name: Upload release and tool artifacts
         uses: actions/upload-artifact@v7
         with:
           name: scout-${{ matrix.rid }}
+          if-no-files-found: error
+          overwrite: true
           path: |
             artifacts/packages/scout-${{ matrix.rid }}.tar.gz
             artifacts/packages/scout-${{ matrix.rid }}.tar.gz.sha256
@@ -145,10 +182,46 @@ jobs:
         run: native/build-app-unix.sh ${{ matrix.rid }} --smoke-only
       - name: Pack RID-specific dotnet tool
         run: python3 eng/pack-dotnet-tool.py --version "${{ needs.validate.outputs.version }}" --rid ${{ matrix.rid }} --rid-only
+      - name: Pack local pointer package for install smoke
+        run: python3 eng/pack-dotnet-tool.py --version "${{ needs.validate.outputs.version }}" --pointer-only --output artifacts/tool-test
+      - name: Verify local dotnet tool install
+        run: |
+          set -euo pipefail
+          install="$(mktemp -d)"
+          cat > artifacts/tool-test/NuGet.Config <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="rid" value="$(pwd)/artifacts/tool-packages" />
+              <add key="pointer" value="$(pwd)/artifacts/tool-test" />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+            </packageSources>
+            <packageSourceMapping>
+              <packageSource key="rid">
+                <package pattern="Scout.*" />
+              </packageSource>
+              <packageSource key="pointer">
+                <package pattern="Scout" />
+              </packageSource>
+              <packageSource key="nuget.org">
+                <package pattern="Microsoft.*" />
+              </packageSource>
+            </packageSourceMapping>
+          </configuration>
+          EOF
+          dotnet tool install Scout --tool-path "$install" --version "${{ needs.validate.outputs.version }}" --configfile artifacts/tool-test/NuGet.Config
+          "$install/scout" --help > artifacts/tool-test/help.txt
+          grep 'USAGE:' artifacts/tool-test/help.txt
+          printf 'needle\n' > artifacts/tool-test/search.txt
+          "$install/scout" --no-config -n needle artifacts/tool-test/search.txt > artifacts/tool-test/search.out
+          printf '1:needle\n' | cmp -s - artifacts/tool-test/search.out
       - name: Upload release and tool artifacts
         uses: actions/upload-artifact@v7
         with:
           name: scout-${{ matrix.rid }}
+          if-no-files-found: error
+          overwrite: true
           path: |
             artifacts/packages/scout-${{ matrix.rid }}.tar.gz
             artifacts/packages/scout-${{ matrix.rid }}.tar.gz.sha256
@@ -207,21 +280,29 @@ jobs:
         shell: pwsh
         run: |
           $logFile = "artifacts\packages\msi-install.log"
-          $proc = Start-Process msiexec.exe -ArgumentList "/i", "artifacts\packages\scout-win-x64.msi", "/qn", "/l*v", $logFile -Wait -NoNewWindow -PassThru
-          if ($proc.ExitCode -ne 0) {
-            Write-Error "MSI installation failed with exit code: $($proc.ExitCode)"
-            if (Test-Path $logFile) {
-              Get-Content $logFile | Select-Object -Last 50
+          $installMsi = "artifacts\packages\scout-win-x64-install-smoke.msi"
+          Copy-Item "artifacts\packages\scout-win-x64.msi" $installMsi -Force
+          try {
+            $proc = Start-Process msiexec.exe -ArgumentList "/i", $installMsi, "/qn", "/l*v", $logFile -Wait -NoNewWindow -PassThru
+            if ($proc.ExitCode -ne 0) {
+              Write-Error "MSI installation failed with exit code: $($proc.ExitCode)"
+              if (Test-Path $logFile) {
+                Get-Content $logFile | Select-Object -Last 50
+              }
+              exit 1
             }
-            exit 1
+            $exePath = "${env:ProgramFiles}\scout\scout.exe"
+            if (-not (Test-Path $exePath)) {
+              Write-Error "scout.exe not found at $exePath"
+              exit 1
+            }
+            & $exePath -V
           }
-          $exePath = "${env:ProgramFiles}\scout\scout.exe"
-          if (-not (Test-Path $exePath)) {
-            Write-Error "scout.exe not found at $exePath"
-            exit 1
+          finally {
+            Start-Process msiexec.exe -ArgumentList "/x", $installMsi, "/qn" -Wait -NoNewWindow
+            Start-Sleep -Seconds 2
+            Remove-Item $installMsi -Force -ErrorAction SilentlyContinue
           }
-          & $exePath -V
-          Start-Process msiexec.exe -ArgumentList "/x", "artifacts\packages\scout-win-x64.msi", "/qn" -Wait -NoNewWindow
       - name: Pack RID-specific dotnet tool
         shell: pwsh
         run: python eng/pack-dotnet-tool.py --version "${{ needs.validate.outputs.version }}" --rid ${{ matrix.rid }} --rid-only
@@ -233,7 +314,31 @@ jobs:
         run: |
           $installPath = "artifacts\tool-test\install"
           New-Item -ItemType Directory -Force -Path $installPath | Out-Null
-          dotnet tool install Scout --tool-path $installPath --version "${{ needs.validate.outputs.version }}" --add-source (Resolve-Path artifacts\tool-packages) --add-source (Resolve-Path artifacts\tool-test)
+          $ridSource = (Resolve-Path artifacts\tool-packages).Path
+          $pointerSource = (Resolve-Path artifacts\tool-test).Path
+          @"
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="rid" value="$ridSource" />
+              <add key="pointer" value="$pointerSource" />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+            </packageSources>
+            <packageSourceMapping>
+              <packageSource key="rid">
+                <package pattern="Scout.*" />
+              </packageSource>
+              <packageSource key="pointer">
+                <package pattern="Scout" />
+              </packageSource>
+              <packageSource key="nuget.org">
+                <package pattern="Microsoft.*" />
+              </packageSource>
+            </packageSourceMapping>
+          </configuration>
+          "@ | Set-Content -Encoding ascii -Path artifacts\tool-test\NuGet.Config
+          dotnet tool install Scout --tool-path $installPath --version "${{ needs.validate.outputs.version }}" --configfile artifacts\tool-test\NuGet.Config
           $command = Get-ChildItem -Path $installPath -File |
             Where-Object { $_.Name -in @("scout", "scout.exe", "scout.cmd") } |
             Select-Object -First 1
@@ -242,10 +347,22 @@ jobs:
             throw "scout tool shim not found in $installPath"
           }
           & $command.FullName -V
+          & $command.FullName --help > artifacts\tool-test\help.txt
+          if (-not (Select-String -SimpleMatch "USAGE:" artifacts\tool-test\help.txt)) {
+            throw "scout --help did not print usage text."
+          }
+          Set-Content -Encoding ascii -Path artifacts\tool-test\search.txt -Value "needle"
+          & $command.FullName --no-config -n needle artifacts\tool-test\search.txt > artifacts\tool-test\search.out
+          $actual = (Get-Content artifacts\tool-test\search.out -Raw).TrimEnd("`r", "`n")
+          if ($actual -ne "1:needle") {
+            throw "Unexpected scout search output: $actual"
+          }
       - name: Upload release and tool artifacts
         uses: actions/upload-artifact@v7
         with:
           name: scout-${{ matrix.rid }}
+          if-no-files-found: error
+          overwrite: true
           path: |
             artifacts/packages/scout-${{ matrix.rid }}.zip
             artifacts/packages/scout-${{ matrix.rid }}.zip.sha256
@@ -266,6 +383,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: scout-tool-pointer
+          if-no-files-found: error
+          overwrite: true
           path: |
             artifacts/tool-packages/Scout.${{ needs.validate.outputs.version }}.nupkg
             artifacts/tool-packages/Scout.${{ needs.validate.outputs.version }}.nupkg.sha256
@@ -298,8 +417,32 @@ jobs:
         run: |
           set -euo pipefail
           install="$(mktemp -d)"
-          dotnet tool install Scout --tool-path "$install" --version "${{ needs.validate.outputs.version }}" --add-source "$(pwd)/artifacts/nuget-source"
+          cat > artifacts/nuget-source/NuGet.Config <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="release-artifacts" value="$(pwd)/artifacts/nuget-source" />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+            </packageSources>
+            <packageSourceMapping>
+              <packageSource key="release-artifacts">
+                <package pattern="Scout" />
+                <package pattern="Scout.*" />
+              </packageSource>
+              <packageSource key="nuget.org">
+                <package pattern="Microsoft.*" />
+              </packageSource>
+            </packageSourceMapping>
+          </configuration>
+          EOF
+          dotnet tool install Scout --tool-path "$install" --version "${{ needs.validate.outputs.version }}" --configfile artifacts/nuget-source/NuGet.Config
           "$install/scout" -V
+          "$install/scout" --help > artifacts/nuget-source/help.txt
+          grep 'USAGE:' artifacts/nuget-source/help.txt
+          printf 'needle\n' > artifacts/nuget-source/search.txt
+          "$install/scout" --no-config -n needle artifacts/nuget-source/search.txt > artifacts/nuget-source/search.out
+          printf '1:needle\n' | cmp -s - artifacts/nuget-source/search.out
       - name: Push RID packages
         shell: bash
         env:
@@ -646,10 +789,10 @@ jobs:
           Copy-Item winget/willibrandon.scout.locale.en-US.yaml $manifestDir/
 
           Get-ChildItem $manifestDir -Filter *.yaml | ForEach-Object {
-            (Get-Content $_.FullName) -replace '0\.1\.0', $version | Set-Content $_.FullName
+            (Get-Content $_.FullName) -replace '^PackageVersion: .+$', "PackageVersion: $version" | Set-Content $_.FullName
           }
           $installerYaml = "$manifestDir/willibrandon.scout.installer.yaml"
-          (Get-Content $installerYaml) -replace 'v0\.1\.0', "v$version" | Set-Content $installerYaml
+          (Get-Content $installerYaml) -replace 'releases/download/v[^/]+/', "releases/download/v$version/" | Set-Content $installerYaml
 
           $archs = @(
             @{ Rid = 'x64'; ShaSuffix = 'X64'; PcSuffix = 'X64' },

@@ -9,9 +9,9 @@ reimplementation, not a wrapper: the regex engine, the directory walker, the glo
 logic, and the PCRE2 integration are all ported, so Scout *behaves like* ripgrep rather than
 calling it.
 
-> **Status:** v0.1.0, tracking ripgrep 15.1.0 (commit `4857d6fa67`). Functional and fully
-> tested — 3,185 tests pass on all six supported platforms — but not yet published, and the
-> release workflow publishes native binaries, .NET tool packages, Homebrew, Scoop, and winget.
+> **Status:** v0.1.1, tracking ripgrep 15.1.0 (commit `4857d6fa67`). Functional and fully
+> tested — 3,185 tests pass on all six supported platforms. The release workflow publishes native
+> binaries, .NET tool packages, Homebrew, Scoop, and winget.
 
 ## Example
 
