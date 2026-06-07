@@ -99,6 +99,13 @@ def package_metadata(package_id: str, version: str, package_type: str, commit: s
 """
 
 
+def repository_commit(root: Path) -> str:
+    github_sha = os.environ.get("GITHUB_SHA", "").strip()
+    if github_sha:
+        return github_sha
+    return run(["git", "rev-parse", "HEAD"], root)
+
+
 def pointer_settings(version: str) -> str:
     rid_entries = "\n".join(
         f'    <RuntimeIdentifierPackage RuntimeIdentifier="{rid}" Id="{PACKAGE_ID}.{rid}" />'
@@ -256,7 +263,7 @@ def main() -> int:
     root = Path(__file__).resolve().parent.parent
     version = args.version or read_version(root)
     output_dir = (root / args.output).resolve()
-    commit = run(["git", "rev-parse", "HEAD"], root)
+    commit = repository_commit(root)
 
     selected_rids = tuple(args.rid) if args.rid else RIDS
     built: list[Path] = []

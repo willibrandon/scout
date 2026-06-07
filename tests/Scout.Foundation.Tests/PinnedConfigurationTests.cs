@@ -1508,6 +1508,21 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies NuGet tool packages can resolve repository metadata in GitHub-hosted release containers.
+    /// </summary>
+    [Fact]
+    public void DotnetToolPackagingUsesActionsShaWhenAvailable()
+    {
+        string root = FindRepositoryRoot();
+        string packScript = File.ReadAllText(Path.Combine(root, "eng", "pack-dotnet-tool.py"));
+
+        Assert.Contains("def repository_commit(root: Path) -> str:", packScript, StringComparison.Ordinal);
+        Assert.Contains("os.environ.get(\"GITHUB_SHA\", \"\").strip()", packScript, StringComparison.Ordinal);
+        Assert.Contains("return run([\"git\", \"rev-parse\", \"HEAD\"], root)", packScript, StringComparison.Ordinal);
+        Assert.Contains("<repository type=\"git\" url=\"{xml(PROJECT_URL)}.git\"{repository_commit} />", packScript, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies the release trademark/search gate records known name collisions.
     /// </summary>
     [Fact]
