@@ -1508,6 +1508,23 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies Windows release packaging passes concrete paths to WiX and PowerShell.
+    /// </summary>
+    [Fact]
+    public void WindowsReleaseWorkflowUsesResolvedPackagePaths()
+    {
+        string root = FindRepositoryRoot();
+        string releaseWorkflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "release.yml"));
+
+        Assert.Contains("""$sourceDir = (Resolve-Path "artifacts\packages\stage\scout-$rid").Path""", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("-d SourceDir=$sourceDir", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("""$scoutPath = (Resolve-Path (Join-Path $installPath "scout.exe")).Path""", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("& $scoutPath -V", releaseWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("""-d SourceDir=artifacts\packages\stage\scout-$rid""", releaseWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("""& "$installPath\scout.exe" -V""", releaseWorkflow, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies NuGet tool packages can resolve repository metadata in GitHub-hosted release containers.
     /// </summary>
     [Fact]

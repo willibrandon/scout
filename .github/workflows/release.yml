@@ -194,8 +194,9 @@ jobs:
         shell: pwsh
         run: |
           $rid = "${{ matrix.rid }}"
+          $sourceDir = (Resolve-Path "artifacts\packages\stage\scout-$rid").Path
           wix build wix\scout.wxs `
-            -d SourceDir=artifacts\packages\stage\scout-$rid `
+            -d SourceDir=$sourceDir `
             -d Version=${{ needs.validate.outputs.version_core }} `
             -arch ${{ matrix.wixarch }} `
             -out artifacts\packages\scout-$rid.msi
@@ -233,7 +234,8 @@ jobs:
           $installPath = "artifacts\tool-test\install"
           New-Item -ItemType Directory -Force -Path $installPath | Out-Null
           dotnet tool install Scout --tool-path $installPath --version "${{ needs.validate.outputs.version }}" --add-source (Resolve-Path artifacts\tool-packages) --add-source (Resolve-Path artifacts\tool-test)
-          & "$installPath\scout.exe" -V
+          $scoutPath = (Resolve-Path (Join-Path $installPath "scout.exe")).Path
+          & $scoutPath -V
       - name: Upload release and tool artifacts
         uses: actions/upload-artifact@v7
         with:
