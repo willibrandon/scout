@@ -1518,8 +1518,9 @@ public sealed partial class PinnedConfigurationTests
 
         Assert.Contains("""$sourceDir = (Resolve-Path "artifacts\packages\stage\scout-$rid").Path""", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("-d SourceDir=$sourceDir", releaseWorkflow, StringComparison.Ordinal);
-        Assert.Contains("""$scoutPath = (Resolve-Path (Join-Path $installPath "scout.exe")).Path""", releaseWorkflow, StringComparison.Ordinal);
-        Assert.Contains("& $scoutPath -V", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("""Where-Object { $_.Name -in @("scout", "scout.exe", "scout.cmd") }""", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("throw \"scout tool shim not found in $installPath\"", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("& $command.FullName -V", releaseWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("""-d SourceDir=artifacts\packages\stage\scout-$rid""", releaseWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("""& "$installPath\scout.exe" -V""", releaseWorkflow, StringComparison.Ordinal);
     }

@@ -234,8 +234,14 @@ jobs:
           $installPath = "artifacts\tool-test\install"
           New-Item -ItemType Directory -Force -Path $installPath | Out-Null
           dotnet tool install Scout --tool-path $installPath --version "${{ needs.validate.outputs.version }}" --add-source (Resolve-Path artifacts\tool-packages) --add-source (Resolve-Path artifacts\tool-test)
-          $scoutPath = (Resolve-Path (Join-Path $installPath "scout.exe")).Path
-          & $scoutPath -V
+          $command = Get-ChildItem -Path $installPath -File |
+            Where-Object { $_.Name -in @("scout", "scout.exe", "scout.cmd") } |
+            Select-Object -First 1
+          if ($null -eq $command) {
+            Get-ChildItem -Path $installPath -Force
+            throw "scout tool shim not found in $installPath"
+          }
+          & $command.FullName -V
       - name: Upload release and tool artifacts
         uses: actions/upload-artifact@v7
         with:
