@@ -86,6 +86,7 @@ def package_metadata(package_id: str, version: str, package_type: str, commit: s
     <version>{xml(version)}</version>
     <authors>{xml(AUTHORS)}</authors>
     <license type="expression">MIT</license>
+    <licenseUrl>https://licenses.nuget.org/MIT</licenseUrl>
     <readme>README.md</readme>
     <projectUrl>{xml(PROJECT_URL)}</projectUrl>
     <description>{xml(DESCRIPTION)}</description>

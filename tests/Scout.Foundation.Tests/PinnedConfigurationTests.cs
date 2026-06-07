@@ -1537,6 +1537,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("def repository_commit(root: Path) -> str:", packScript, StringComparison.Ordinal);
         Assert.Contains("os.environ.get(\"GITHUB_SHA\", \"\").strip()", packScript, StringComparison.Ordinal);
         Assert.Contains("return run([\"git\", \"rev-parse\", \"HEAD\"], root)", packScript, StringComparison.Ordinal);
+        Assert.Contains("<license type=\"expression\">MIT</license>", packScript, StringComparison.Ordinal);
+        Assert.Contains("<licenseUrl>https://licenses.nuget.org/MIT</licenseUrl>", packScript, StringComparison.Ordinal);
         Assert.Contains("<repository type=\"git\" url=\"{xml(PROJECT_URL)}.git\"{repository_commit} />", packScript, StringComparison.Ordinal);
     }
 
