@@ -33,7 +33,7 @@ env:
 
 jobs:
   full-tests-linux:
-    name: full pinned tests (${{ matrix.rid }})
+    name: full pinned Linux tests
     if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
@@ -112,7 +112,7 @@ jobs:
         run: native/build-app-unix.sh ${{ matrix.rid }} --with-differentials
 
   full-tests-macos:
-    name: full pinned tests (${{ matrix.rid }})
+    name: full pinned macOS tests
     if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
@@ -154,7 +154,7 @@ jobs:
         run: native/build-app-unix.sh ${{ matrix.rid }} --with-differentials
 
   full-tests-windows:
-    name: full pinned tests (${{ matrix.rid }})
+    name: full pinned Windows tests
     if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
@@ -233,6 +233,7 @@ jobs:
 
   native-linux-x64:
     name: release native Linux gate (linux-x64)
+    if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     container:
@@ -287,6 +288,7 @@ jobs:
 
   native-linux-arm64:
     name: release native Linux gate (linux-arm64)
+    if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 120
     steps:
@@ -305,7 +307,8 @@ jobs:
         run: native/build-app-unix.sh linux-arm64 --smoke-only
 
   native-macos:
-    name: release native macOS gate (${{ matrix.rid }})
+    name: release native macOS gate
+    if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     strategy:
@@ -329,7 +332,8 @@ jobs:
         run: native/build-app-unix.sh ${{ matrix.rid }} --smoke-only
 
   native-windows:
-    name: release native Windows gate (${{ matrix.rid }})
+    name: release native Windows gate
+    if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     strategy:
