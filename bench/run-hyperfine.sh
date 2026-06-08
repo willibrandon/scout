@@ -10,9 +10,11 @@ WARMUP="1"
 WARMUP_SPECIFIED="0"
 OUT_DIR="$ROOT/artifacts/bench/hyperfine"
 GATE_OPENSUBTITLES_RUNS="5"
-GATE_OPENSUBTITLES_WARMUP="2"
+GATE_OPENSUBTITLES_WARMUP="5"
 GATE_TREE_RUNS="5"
 GATE_TREE_WARMUP="5"
+GATE_LARGE_FILE_THREADS="4"
+GATE_LARGE_FILE_SEGMENT_BUFFER_LENGTH="131072"
 
 fail() {
     printf '%s\n' "$1" >&2
@@ -465,49 +467,41 @@ hyperfine_json_metric() {
     json="$1"
     index="$2"
     metric="$3"
-    awk -v want="$index" -v key="\"$metric\":" '
-        $1 == key {
-            gsub(/,/, "", $2)
-            seen++
-            if (seen == want) {
-                print $2
-                exit 0
-            }
-        }
-        END {
-            if (seen < want) {
-                exit 1
-            }
-        }
-    ' "$json"
+    hyperfine_json_samples "$json" "$index" "$metric" | sed -n '1p'
+}
+
+hyperfine_json_samples() {
+    json="$1"
+    index="$2"
+    metric="$3"
+    python3 - "$json" "$index" "$metric" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+index = int(sys.argv[2]) - 1
+metric = sys.argv[3]
+
+with open(path, encoding="utf-8") as handle:
+    document = json.load(handle)
+
+try:
+    value = document["results"][index][metric]
+except (IndexError, KeyError):
+    sys.exit(1)
+
+if isinstance(value, list):
+    for item in value:
+        print(item)
+else:
+    print(value)
+PY
 }
 
 hyperfine_json_memory_samples() {
     json="$1"
     index="$2"
-    awk -v want="$index" '
-        $1 == "\"memory_usage_byte\":" {
-            seen++
-            in_memory = seen == want
-            next
-        }
-        in_memory && $0 ~ /\]/ {
-            found = 1
-            exit 0
-        }
-        in_memory {
-            value = $1
-            gsub(/,/, "", value)
-            if (value ~ /^[0-9]+$/) {
-                print value
-            }
-        }
-        END {
-            if (!found) {
-                exit 1
-            }
-        }
-    ' "$json"
+    hyperfine_json_samples "$json" "$index" "memory_usage_byte"
 }
 
 median_numbers() {
@@ -515,9 +509,9 @@ median_numbers() {
         BEGIN {
             count = 0
         }
-        /^[0-9]+$/ {
+        /^[0-9]+([.][0-9]+)?$/ {
             count++
-            values[count] = $1
+            values[count] = $1 + 0
         }
         END {
             if (count == 0) {
@@ -536,16 +530,28 @@ median_numbers() {
 
             middle = int(count / 2)
             if (count % 2 == 1) {
-                printf "%.0f\n", values[middle + 1]
+                printf "%.12g\n", values[middle + 1]
             } else {
-                printf "%.0f\n", (values[middle] + values[middle + 1]) / 2
+                printf "%.12g\n", (values[middle] + values[middle + 1]) / 2
             }
         }
     '
 }
 
+combined_hyperfine_json_metric_median() {
+    first_json="$1"
+    first_index="$2"
+    second_json="$3"
+    second_index="$4"
+    metric="$5"
+    {
+        hyperfine_json_samples "$first_json" "$first_index" "$metric"
+        hyperfine_json_samples "$second_json" "$second_index" "$metric"
+    } | median_numbers
+}
+
 hyperfine_json_median_memory() {
-    hyperfine_json_memory_samples "$1" "$2" | median_numbers
+    hyperfine_json_memory_samples "$1" "$2" | median_numbers | awk '{ printf "%.0f\n", $1 }'
 }
 
 resolve_scout_rss_baseline_bin() {
@@ -584,6 +590,81 @@ measure_rss_floor() {
     [ -n "$SCOUT_RSS_FLOOR" ] || fail "Could not read scout RSS floor from $json."
     printf 'rg RSS floor %d bytes\n' "$RG_RSS_FLOOR"
     printf 'scout Native AOT RSS floor %d bytes\n' "$SCOUT_RSS_FLOOR"
+}
+
+analyze_large_file_segments() {
+    name="$1"
+    path="$2"
+    buffer_length="$3"
+    thread_count="$4"
+    python3 - "$name" "$path" "$buffer_length" "$thread_count" <<'PY'
+import statistics
+import sys
+
+name = sys.argv[1]
+path = sys.argv[2]
+buffer_length = int(sys.argv[3])
+thread_count = int(sys.argv[4])
+terminator = b"\n"
+carry = b""
+segment_lengths = []
+line_counts = []
+
+with open(path, "rb", buffering=0) as handle:
+    while True:
+        read_length = buffer_length - len(carry)
+        if read_length <= 0:
+            segment_lengths.append(len(carry))
+            line_counts.append(carry.count(terminator))
+            carry = b""
+            read_length = buffer_length
+
+        chunk = handle.read(read_length)
+        if not chunk:
+            break
+
+        combined = carry + chunk
+        last_terminator = combined.rfind(terminator)
+        if last_terminator < 0:
+            carry = combined
+            continue
+
+        segment = combined[: last_terminator + 1]
+        segment_lengths.append(len(segment))
+        line_counts.append(segment.count(terminator))
+        carry = combined[last_terminator + 1 :]
+
+if carry:
+    segment_lengths.append(len(carry))
+    line_counts.append(max(1, carry.count(terminator)))
+
+if not segment_lengths:
+    print(f"{name} segment balance: no segments")
+    sys.exit(1)
+
+balanced_lengths = segment_lengths[:-1] if len(segment_lengths) > 1 else segment_lengths
+balanced_lines = line_counts[:-1] if len(line_counts) > 1 else line_counts
+median_length = statistics.median(balanced_lengths)
+median_lines = statistics.median(balanced_lines)
+max_length = max(balanced_lengths)
+max_lines = max(balanced_lines)
+length_ratio = max_length / median_length if median_length else float("inf")
+line_ratio = max_lines / median_lines if median_lines else float("inf")
+print(
+    f"{name} segment balance: segments={len(segment_lengths)} "
+    f"buffer={buffer_length} bytes median={median_length:.0f} max={max_length} "
+    f"max/median={length_ratio:.3f} line-max/median={line_ratio:.3f} threads={thread_count}"
+)
+
+if len(segment_lengths) < thread_count * 4:
+    print(f"{name}: too few segments for stable {thread_count}-thread large-file timing", file=sys.stderr)
+    sys.exit(1)
+
+if length_ratio > 1.10:
+    print(f"{name}: uneven byte segment split: max/median={length_ratio:.3f}", file=sys.stderr)
+    sys.exit(1)
+
+PY
 }
 
 gate_opensubtitles_runs() {
@@ -647,6 +728,30 @@ check_time_gate() {
     '
 }
 
+check_time_gate_combined() {
+    name="$1"
+    gate="$2"
+    json="$3"
+    reverse_json="$4"
+    rg_median="$(combined_hyperfine_json_metric_median "$json" 1 "$reverse_json" 2 "times")" || fail "Could not read rg time samples from $json and $reverse_json."
+    scout_median="$(combined_hyperfine_json_metric_median "$json" 2 "$reverse_json" 1 "times")" || fail "Could not read scout time samples from $json and $reverse_json."
+    [ -n "$rg_median" ] || fail "Could not read rg time samples from $json and $reverse_json."
+    [ -n "$scout_median" ] || fail "Could not read scout time samples from $json and $reverse_json."
+    awk -v name="$name" -v rg="$rg_median" -v scout="$scout_median" -v gate="$gate" '
+        BEGIN {
+            if (rg <= 0) {
+                printf "%s: rg combined median is not positive: %s\n", name, rg > "/dev/stderr"
+                exit 2
+            }
+            ratio = scout / rg
+            printf "%s combined median ratio %.3fx (gate %.3fx)\n", name, ratio, gate
+            if (ratio > gate) {
+                exit 1
+            }
+        }
+    '
+}
+
 check_rss_gate() {
     name="$1"
     json="$2"
@@ -703,22 +808,17 @@ run_pair() {
         --command-name "scout:$name" "$scout_command"
 
     if [ "$MODE" = "gate" ]; then
-        time_gate_ok="1"
         rss_gate_ok="1"
-        check_time_gate "$name" "$gate" "$json" || time_gate_ok="0"
+        reverse_json="$OUT_DIR/$name.reverse.json"
+        printf '%s\n' "$name running reversed command order for combined timing gate."
+        "$HYPERFINE" \
+            --warmup "$warmup" \
+            --runs "$runs" \
+            --export-json "$reverse_json" \
+            --command-name "scout:$name" "$scout_command" \
+            --command-name "rg:$name" "$rg_command"
+        check_time_gate_combined "$name" "$gate" "$json" "$reverse_json" || fail "$name exceeded the combined-order performance gate."
         check_rss_gate "$name" "$json" || rss_gate_ok="0"
-
-        if [ "$time_gate_ok" = "0" ]; then
-            confirm_json="$OUT_DIR/$name.confirm.json"
-            printf '%s\n' "$name initial timing gate check failed; rerunning with command order reversed to confirm."
-            "$HYPERFINE" \
-                --warmup "$warmup" \
-                --runs "$runs" \
-                --export-json "$confirm_json" \
-                --command-name "scout:$name" "$scout_command" \
-                --command-name "rg:$name" "$rg_command"
-            check_time_gate "$name" "$gate" "$confirm_json" 2 1 || fail "$name exceeded the performance gate after reversed-order confirmation."
-        fi
 
         if [ "$rss_gate_ok" = "0" ]; then
             fail "$name exceeded the peak RSS gate."
@@ -745,23 +845,18 @@ run_pair_no_shell() {
         --command-name "scout:$name" "$scout_command"
 
     if [ "$MODE" = "gate" ]; then
-        time_gate_ok="1"
         rss_gate_ok="1"
-        check_time_gate "$name" "$gate" "$json" || time_gate_ok="0"
+        reverse_json="$OUT_DIR/$name.reverse.json"
+        printf '%s\n' "$name running reversed command order for combined timing gate."
+        "$HYPERFINE" \
+            -N \
+            --warmup "$warmup" \
+            --runs "$runs" \
+            --export-json "$reverse_json" \
+            --command-name "scout:$name" "$scout_command" \
+            --command-name "rg:$name" "$rg_command"
+        check_time_gate_combined "$name" "$gate" "$json" "$reverse_json" || fail "$name exceeded the combined-order performance gate."
         check_rss_gate "$name" "$json" || rss_gate_ok="0"
-
-        if [ "$time_gate_ok" = "0" ]; then
-            confirm_json="$OUT_DIR/$name.confirm.json"
-            printf '%s\n' "$name initial timing gate check failed; rerunning with command order reversed to confirm."
-            "$HYPERFINE" \
-                -N \
-                --warmup "$warmup" \
-                --runs "$runs" \
-                --export-json "$confirm_json" \
-                --command-name "scout:$name" "$scout_command" \
-                --command-name "rg:$name" "$rg_command"
-            check_time_gate "$name" "$gate" "$confirm_json" 2 1 || fail "$name exceeded the performance gate after reversed-order confirmation."
-        fi
 
         if [ "$rss_gate_ok" = "0" ]; then
             fail "$name exceeded the peak RSS gate."
@@ -896,20 +991,21 @@ OPENSUBTITLES_WARMUP="$(gate_opensubtitles_warmup)"
 TREE_RUNS="$(gate_tree_runs)"
 TREE_WARMUP="$(gate_tree_warmup)"
 
+analyze_large_file_segments "subtitles_en_regex" "$OPENSUBTITLES_EN" "$GATE_LARGE_FILE_SEGMENT_BUFFER_LENGTH" "$GATE_LARGE_FILE_THREADS"
 measure_rss_floor "$OPENSUBTITLES_RUNS" "$OPENSUBTITLES_WARMUP"
 
 run_pair \
     "subtitles_en_literal" \
     "1.20" \
-    "$Q_RG --no-config --mmap -n 'Sherlock Holmes' $Q_OPEN" \
-    "$Q_SCOUT --no-config --mmap -n 'Sherlock Holmes' $Q_OPEN" \
+    "$Q_RG --no-config --threads $GATE_LARGE_FILE_THREADS --mmap -n 'Sherlock Holmes' $Q_OPEN" \
+    "$Q_SCOUT --no-config --threads $GATE_LARGE_FILE_THREADS --mmap -n 'Sherlock Holmes' $Q_OPEN" \
     "$OPENSUBTITLES_RUNS" \
     "$OPENSUBTITLES_WARMUP"
 run_pair \
     "subtitles_en_regex" \
     "1.20" \
-    "$Q_RG --no-config -n '\\w{5}\\s+\\w{5}\\s+\\w{5}' $Q_OPEN" \
-    "$Q_SCOUT --no-config -n '\\w{5}\\s+\\w{5}\\s+\\w{5}' $Q_OPEN" \
+    "$Q_RG --no-config --threads $GATE_LARGE_FILE_THREADS -n '\\w{5}\\s+\\w{5}\\s+\\w{5}' $Q_OPEN" \
+    "$Q_SCOUT --no-config --threads $GATE_LARGE_FILE_THREADS -n '\\w{5}\\s+\\w{5}\\s+\\w{5}' $Q_OPEN" \
     "$OPENSUBTITLES_RUNS" \
     "$OPENSUBTITLES_WARMUP"
 run_pair \

@@ -123,6 +123,21 @@ public sealed class SearchThreadPlannerTests
     }
 
     /// <summary>
+    /// Verifies default one-file large searches keep Scout's ordered internal segment workers.
+    /// </summary>
+    [Fact]
+    public void SearchWalkPlanningKeepsDefaultOneFileLargeSearchParallelism()
+    {
+        var lowArgs = new CliLowArgs();
+        int upstreamDefault = Math.Min(Environment.ProcessorCount, 12);
+        int expected = OperatingSystem.IsMacOS() ? SearchWalkPlanning.GetMacOsDefaultLargeFileSearchThreadCount(upstreamDefault) : upstreamDefault;
+
+        int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(lowArgs, isOneFile: true);
+
+        Assert.Equal(expected, threads);
+    }
+
+    /// <summary>
     /// Verifies explicit one-file large searches can use Scout's ordered internal segment workers.
     /// </summary>
     [Fact]

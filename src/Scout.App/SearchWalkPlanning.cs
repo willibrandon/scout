@@ -114,6 +114,7 @@ internal static class SearchWalkPlanning
 
     internal static int GetLargeFileSearchThreadCount(CliLowArgs lowArgs, bool isOneFile = false)
     {
+        // Large-file streaming uses ordered internal segment workers even when the search target is one file.
         ulong resolvedThreads = SearchThreadPlanner.Resolve(lowArgs.Threads, lowArgs.SortMode is not null, isOneFile: false);
         if (resolvedThreads <= 1)
         {
