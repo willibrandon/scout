@@ -287,6 +287,51 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
+    /// Verifies repeated capturing groups can backtrack inside each repeated group body.
+    /// </summary>
+    [Fact]
+    public void SearchBacktracksRepeatedCapturingGroups()
+    {
+        var sink = new CapturingLineSink();
+        byte[][] patterns = [@"\w+\s*\([^)]*(,[^)]*){8,}\)"u8.ToArray()];
+        byte[] haystack = "ApplyFlag(enabledFlags[index], enabled: true, ref caseInsensitive, ref swapGreed, ref multiLine, ref dotMatchesNewline, ref crlf, ref utf8, ref unicodeClasses);\n"u8.ToArray();
+
+        bool matched = LiteralLineSearcher.Search(
+            haystack,
+            patterns,
+            ref sink);
+
+        Assert.True(matched);
+        Assert.Equal(1UL, sink.MatchedLines);
+        Assert.Equal(1, sink.LineNumber);
+        Assert.Equal(1, sink.MatchColumn);
+        Assert.Equal(haystack, sink.Line);
+    }
+
+    /// <summary>
+    /// Verifies repeated capturing groups use the regex plan when emitting match-line records.
+    /// </summary>
+    [Fact]
+    public void SearchMatchLinesBacktracksRepeatedCapturingGroups()
+    {
+        var sink = new CapturingMatchLineSink();
+        byte[][] patterns = [@"\w+\s*\([^)]*(,[^)]*){8,}\)"u8.ToArray()];
+        byte[] haystack = "ApplyFlag(enabledFlags[index], enabled: true, ref caseInsensitive, ref swapGreed, ref multiLine, ref dotMatchesNewline, ref crlf, ref utf8, ref unicodeClasses);\n"u8.ToArray();
+
+        bool matched = LiteralLineSearcher.SearchMatchLines(
+            haystack,
+            patterns,
+            ref sink);
+
+        Assert.True(matched);
+        Assert.Equal(1UL, sink.Matches);
+        Assert.Equal(1, sink.LineNumber);
+        Assert.Equal(0, sink.MatchByteOffset);
+        Assert.Equal(1, sink.MatchColumn);
+        Assert.Equal("ApplyFlag(enabledFlags[index], enabled: true, ref caseInsensitive, ref swapGreed, ref multiLine, ref dotMatchesNewline, ref crlf, ref utf8, ref unicodeClasses)"u8.ToArray(), sink.Match);
+    }
+
+    /// <summary>
     /// Verifies class-sequence regex acceleration honors max-count limiting.
     /// </summary>
     [Fact]

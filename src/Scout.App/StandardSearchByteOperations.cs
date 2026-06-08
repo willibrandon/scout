@@ -130,9 +130,10 @@ internal static class StandardSearchByteOperations
         bool matched = SearchBytesWithOptionalHeading(bytes, pattern, bufferedWriter, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary, heading, ref wroteHeadingOutput, memoryMapped);
         bufferedWriter.Flush();
         byte[] body = buffer.ToArray();
+        TimeSpan searchElapsed = Stopwatch.GetElapsedTime(started);
         output.Write(body);
 
-        SearchStats fileStats = CollectSearchStats(bytes, pattern, searchMode, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, separators.Crlf, separators.NullData, maxCount, stopOnNonmatch, searchMode == CliSearchMode.Standard ? (ulong)body.Length : 0, Stopwatch.GetElapsedTime(started));
+        SearchStats fileStats = CollectSearchStats(bytes, pattern, searchMode, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, separators.Crlf, separators.NullData, maxCount, stopOnNonmatch, searchMode == CliSearchMode.Standard ? (ulong)body.Length : 0, searchElapsed);
         stats.Add(fileStats);
         return matched;
     }
@@ -158,6 +159,46 @@ internal static class StandardSearchByteOperations
         stats.AddBytesPrinted(bytesPrinted);
 
         bool statsInvertMatch = searchMode == CliSearchMode.FilesWithoutMatch ? false : invertMatch;
+        if (!stopOnNonmatch && maxCount is null)
+        {
+            RegexSearchPlan? regexPlan = LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: true);
+            long matchedLines = LiteralLineSearcher.CountMatchingLinesWithRegexPlan(
+                bytes,
+                pattern,
+                regexPlan,
+                asciiCaseInsensitive,
+                statsInvertMatch,
+                lineRegexp,
+                wordRegexp,
+                maxMatchingLines: null,
+                crlf,
+                nullData);
+            if (matchedLines > 0)
+            {
+                stats.AddMatchedLines((ulong)matchedLines);
+                stats.AddSearchWithMatch();
+            }
+
+            if (!statsInvertMatch)
+            {
+                long matches = LiteralLineSearcher.CountMatchesWithRegexPlan(
+                    bytes,
+                    pattern,
+                    regexPlan,
+                    asciiCaseInsensitive,
+                    invertMatch: false,
+                    lineRegexp,
+                    wordRegexp,
+                    maxMatchingLines: null,
+                    crlf,
+                    nullData);
+                stats.AddMatches((ulong)matches);
+            }
+
+            stats.AddBytesSearched((ulong)bytes.Length);
+            return stats;
+        }
+
         List<ContextLineInfo> lines = ContextSearchOperations.BuildLines(bytes, pattern, asciiCaseInsensitive, statsInvertMatch, lineRegexp, wordRegexp, crlf, nullData, stopOnNonmatch);
         ulong primaryMatches = 0;
         ulong bytesSearched = (ulong)bytes.Length;
