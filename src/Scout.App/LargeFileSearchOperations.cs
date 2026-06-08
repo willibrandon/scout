@@ -10,6 +10,7 @@ internal static unsafe class LargeFileSearchOperations
     private const int ImplicitSearchStreamingFileBufferLength = 262_144;
     private const int ExplicitRegexStreamingFileBufferLength = StreamingFileBufferLength;
     private const int ExplicitFastLiteralStreamingFileBufferLength = 6 * 1024 * 1024;
+    private const int ExplicitParallelLiteralStreamingFileBufferLength = 256 * 1024;
     private const long ImplicitSearchStreamingFileThreshold = 65_536;
     private const long StreamingFileThreshold = int.MaxValue;
     private const int BinaryDetectionBlockLength = StandardSearchByteOperations.BinaryDetectionBufferLength;
@@ -226,7 +227,8 @@ internal static unsafe class LargeFileSearchOperations
             trim,
             nullPathTerminator,
             stopOnNonmatch,
-            quitOnBinary))
+            quitOnBinary,
+            threadCount))
         {
             return SearchFastNoPrefixLiteralLines(
                 path,
@@ -236,6 +238,30 @@ internal static unsafe class LargeFileSearchOperations
                 separators.FieldMatch,
                 separators.LineTerminator,
                 Math.Max(fastLiteralBufferLength, BinaryDetectionBlockLength));
+        }
+
+        if (CanSearchFastLiteralCount(
+            fastLiteralPattern,
+            separators,
+            searchMode,
+            quiet,
+            stopOnNonmatch,
+            textMode))
+        {
+            return SearchFastLiteralCount(
+                path,
+                fastLiteralPattern!,
+                output,
+                prefix,
+                color,
+                searchMode,
+                maxCount,
+                textMode,
+                quitOnBinary,
+                includeZero,
+                nullPathTerminator,
+                separators.LineTerminator,
+                fastLiteralBufferLength);
         }
 
         if (!textMode &&
@@ -508,7 +534,8 @@ internal static unsafe class LargeFileSearchOperations
         bool trim,
         bool nullPathTerminator,
         bool stopOnNonmatch,
-        bool quitOnBinary)
+        bool quitOnBinary,
+        int threadCount)
     {
         return fastLiteralPattern is not null &&
             prefix is null &&
@@ -526,7 +553,25 @@ internal static unsafe class LargeFileSearchOperations
             !trim &&
             !nullPathTerminator &&
             !stopOnNonmatch &&
-            !quitOnBinary;
+            !quitOnBinary &&
+            threadCount <= 1;
+    }
+
+    private static bool CanSearchFastLiteralCount(
+        byte[]? fastLiteralPattern,
+        OutputSeparators separators,
+        CliSearchMode searchMode,
+        bool quiet,
+        bool stopOnNonmatch,
+        bool textMode)
+    {
+        return fastLiteralPattern is not null &&
+            (textMode || fastLiteralPattern.AsSpan().IndexOf((byte)0) < 0) &&
+            !separators.NullData &&
+            !separators.Crlf &&
+            searchMode is CliSearchMode.Count or CliSearchMode.CountMatches &&
+            !quiet &&
+            !stopOnNonmatch;
     }
 
     private static bool SearchFastNoPrefixLiteralLines(
@@ -723,6 +768,158 @@ internal static unsafe class LargeFileSearchOperations
         return matched;
     }
 
+    private static bool SearchFastLiteralCount(
+        string path,
+        byte[] needle,
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputColor color,
+        CliSearchMode searchMode,
+        ulong? maxCount,
+        bool textMode,
+        bool quitOnBinary,
+        bool includeZero,
+        bool nullPathTerminator,
+        ReadOnlyMemory<byte> lineTerminator,
+        int bufferLength)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, StreamingFileStreamBufferLength, FileOptions.SequentialScan);
+        using var bufferOwner = new NativeByteBuffer(bufferLength);
+        MemoryStream? pendingLine = null;
+        long count = 0;
+        ulong matchedLines = 0;
+        bool binarySuppressed = false;
+        bool includeNulTerminator = !textMode;
+
+        bool ProcessSegment(ReadOnlySpan<byte> segment)
+        {
+            if (segment.IsEmpty)
+            {
+                return false;
+            }
+
+            if (!textMode && segment.IndexOf((byte)0) >= 0 && quitOnBinary)
+            {
+                binarySuppressed = true;
+                return true;
+            }
+
+            if (searchMode == CliSearchMode.CountMatches && maxCount is null)
+            {
+                count += CountLiteralMatches(segment, needle);
+                return false;
+            }
+
+            int searchOffset = 0;
+            while (searchOffset < segment.Length)
+            {
+                int found = segment[searchOffset..].IndexOf(needle);
+                if (found < 0)
+                {
+                    return false;
+                }
+
+                int matchIndex = searchOffset + found;
+                int lineEnd = GetFastCountLineEnd(segment, matchIndex, includeNulTerminator);
+                matchedLines++;
+                if (searchMode == CliSearchMode.Count)
+                {
+                    count++;
+                }
+                else
+                {
+                    count += CountLiteralMatches(segment.Slice(searchOffset, lineEnd - searchOffset), needle);
+                }
+
+                if (maxCount is ulong limit && matchedLines >= limit)
+                {
+                    return true;
+                }
+
+                searchOffset = lineEnd;
+            }
+
+            return false;
+        }
+
+        bool Finish()
+        {
+            if (binarySuppressed)
+            {
+                return false;
+            }
+
+            return SearchOutputFormatting.WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, lineTerminator);
+        }
+
+        while (true)
+        {
+            Span<byte> buffer = bufferOwner.Span;
+            int read = stream.Read(buffer);
+            if (read == 0)
+            {
+                break;
+            }
+
+            int segmentStart = 0;
+            ReadOnlySpan<byte> chunk = buffer[..read];
+            if (pendingLine is not null)
+            {
+                int firstTerminator = GetFastCountLineTerminator(chunk, includeNulTerminator);
+                if (firstTerminator < 0)
+                {
+                    pendingLine.Write(chunk);
+                    continue;
+                }
+
+                int pendingLength = firstTerminator + 1;
+                pendingLine.Write(chunk[..pendingLength]);
+                byte[] line = pendingLine.ToArray();
+                pendingLine.Dispose();
+                pendingLine = null;
+                if (ProcessSegment(line))
+                {
+                    return Finish();
+                }
+
+                segmentStart = pendingLength;
+            }
+
+            if (segmentStart < read)
+            {
+                int lastTerminator = GetFastCountLastLineTerminator(chunk[segmentStart..], includeNulTerminator);
+                if (lastTerminator >= 0)
+                {
+                    int completeLength = lastTerminator + 1;
+                    if (ProcessSegment(chunk.Slice(segmentStart, completeLength)))
+                    {
+                        return Finish();
+                    }
+
+                    segmentStart += completeLength;
+                }
+            }
+
+            if (segmentStart < read)
+            {
+                pendingLine = new MemoryStream();
+                pendingLine.Write(chunk[segmentStart..]);
+            }
+        }
+
+        if (pendingLine is not null)
+        {
+            byte[] line = pendingLine.ToArray();
+            pendingLine.Dispose();
+            if (line.Length != 0 && ProcessSegment(line))
+            {
+                return Finish();
+            }
+        }
+
+        return Finish();
+    }
+
     private static void WriteNumber(RawByteWriter output, long value)
     {
         Span<byte> buffer = stackalloc byte[20];
@@ -737,6 +934,51 @@ internal static unsafe class LargeFileSearchOperations
         while (number != 0);
 
         output.Write(buffer[index..]);
+    }
+
+    private static long CountLiteralMatches(ReadOnlySpan<byte> segment, ReadOnlySpan<byte> needle)
+    {
+        long count = 0;
+        int offset = 0;
+        while (offset < segment.Length)
+        {
+            int found = segment[offset..].IndexOf(needle);
+            if (found < 0)
+            {
+                return count;
+            }
+
+            count++;
+            offset += found + needle.Length;
+        }
+
+        return count;
+    }
+
+    private static int GetFastCountLineEnd(ReadOnlySpan<byte> segment, int offset, bool includeNul)
+    {
+        int terminator = GetFastCountLineTerminator(segment[offset..], includeNul);
+        return terminator < 0 ? segment.Length : offset + terminator + 1;
+    }
+
+    private static int GetFastCountLineTerminator(ReadOnlySpan<byte> segment, bool includeNul)
+    {
+        if (!includeNul)
+        {
+            return segment.IndexOf((byte)'\n');
+        }
+
+        return segment.IndexOfAny((byte)'\n', (byte)0);
+    }
+
+    private static int GetFastCountLastLineTerminator(ReadOnlySpan<byte> segment, bool includeNul)
+    {
+        if (!includeNul)
+        {
+            return segment.LastIndexOf((byte)'\n');
+        }
+
+        return segment.LastIndexOfAny((byte)'\n', (byte)0);
     }
 
     private static bool TryFindBinaryOffset(string path, int bufferLength, out long binaryOffset)
@@ -1380,7 +1622,6 @@ internal static unsafe class LargeFileSearchOperations
         byte terminator = separators.NullData ? (byte)0 : (byte)'\n';
         byte[]? fastLiteralPattern = GetFastStreamingLiteralPattern(pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, terminator);
         bool searchSegmentsInParallel = threadCount > 1 &&
-            fastLiteralPattern is null &&
             maxCount is null &&
             !quiet &&
             !invertMatch &&
@@ -1392,7 +1633,7 @@ internal static unsafe class LargeFileSearchOperations
             ? LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: !searchSegmentsInParallel)
             : null;
         int effectiveBufferLength = searchSegmentsInParallel
-            ? Math.Max(bufferLength, ExplicitRegexStreamingFileBufferLength)
+            ? Math.Max(bufferLength, fastLiteralPattern is null ? ExplicitRegexStreamingFileBufferLength : ExplicitParallelLiteralStreamingFileBufferLength)
             : bufferLength;
         using var bufferOwner = new NativeByteBuffer(effectiveBufferLength);
 
@@ -1589,6 +1830,19 @@ internal static unsafe class LargeFileSearchOperations
         {
             ReadOnlySpan<byte> segment = new((void*)segmentAddress, segmentLength);
             var sink = new LargeFileSegmentMatchSink();
+            if (fastLiteralPattern is not null)
+            {
+                bool literalSegmentMatched = SearchFastLiteralBufferedSegment(segment, fastLiteralPattern, ref sink);
+                return new LargeFileSegmentSearchResult(
+                    literalSegmentMatched,
+                    sink.MatchedLines,
+                    segmentAddress,
+                    segmentLength,
+                    segmentStartOffset,
+                    segmentLineNumber,
+                    sink.Matches);
+            }
+
             bool segmentMatched = LiteralLineSearcher.SearchWithRegexPlan(
                 segment,
                 pattern,
@@ -1610,6 +1864,40 @@ internal static unsafe class LargeFileSearchOperations
                 segmentStartOffset,
                 segmentLineNumber,
                 sink.Matches);
+        }
+
+        bool SearchFastLiteralBufferedSegment(
+            ReadOnlySpan<byte> segment,
+            ReadOnlySpan<byte> needle,
+            ref LargeFileSegmentMatchSink sink)
+        {
+            bool segmentMatched = false;
+            int searchOffset = 0;
+            int countedOffset = 0;
+            long currentLineNumber = 1;
+            while (searchOffset < segment.Length)
+            {
+                int found = segment[searchOffset..].IndexOf(needle);
+                if (found < 0)
+                {
+                    return segmentMatched;
+                }
+
+                int matchIndex = searchOffset + found;
+                int currentLineStart = GetSegmentLineStart(segment, matchIndex, terminator);
+                currentLineNumber += ByteCounter.Count(segment.Slice(countedOffset, currentLineStart - countedOffset), terminator);
+                countedOffset = currentLineStart;
+                int currentLineEnd = GetSegmentLineEnd(segment, currentLineStart, terminator);
+                sink.MatchedLine(
+                    currentLineNumber,
+                    currentLineStart,
+                    matchIndex - currentLineStart + 1,
+                    segment.Slice(currentLineStart, currentLineEnd - currentLineStart));
+                segmentMatched = true;
+                searchOffset = currentLineEnd;
+            }
+
+            return segmentMatched;
         }
 
         bool SearchSegmentsInParallel()

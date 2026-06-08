@@ -309,6 +309,68 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
+    /// Verifies multiline regex stats count multiline matches and touched lines like ripgrep.
+    /// </summary>
+    [Fact]
+    public void StatsOutputCountsMultilineRegexLinesLikeRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.cs");
+        File.WriteAllText(path, """
+            internal static bool Foo(
+                ReadOnlySpan<byte> searchSpan,
+                ReadOnlySpan<byte> outputSpan,
+                IReadOnlyList<byte[]> patterns,
+                RawByteWriter output,
+                OutputPath? prefix,
+                OutputSeparators separators,
+                OutputLineLimit lineLimit,
+                OutputColor color,
+                CliSearchMode searchMode)
+            """);
+
+        const string Pattern = @"(?:public|private|protected|internal)[^;={}]*\([^)]*(?:,[^)]*){8,}\)";
+        (int exitCode, byte[] output, string error) = RunScout("--stats", "-U", Pattern, path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--stats", "-U", Pattern, path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(NormalizeStatsTimings(pinnedOutput), NormalizeStatsTimings(output));
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies multiline signature arity counts match ripgrep.
+    /// </summary>
+    [Fact]
+    public void CountMatchesMultilineSignatureArityRegexLikeRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.cs");
+        File.WriteAllText(path, """
+            internal static bool Foo(
+                ReadOnlySpan<byte> searchSpan,
+                ReadOnlySpan<byte> outputSpan,
+                IReadOnlyList<byte[]> patterns,
+                RawByteWriter output,
+                OutputPath? prefix,
+                OutputSeparators separators,
+                OutputLineLimit lineLimit,
+                OutputColor color,
+                CliSearchMode searchMode)
+            private int Bar(int one, int two)
+            public void Baz(a,b,c,d,e,f,g,h,i)
+            """);
+
+        const string Pattern = @"(?:public|private|protected|internal)[^;={}]*\([^)]*(?:,[^)]*){8,}\)";
+        (int exitCode, byte[] output, string error) = RunScout("--count-matches", "-U", Pattern, path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--count-matches", "-U", Pattern, path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies stats output is printed for no-match searches.
     /// </summary>
     [Fact]
@@ -1079,6 +1141,24 @@ public sealed class ScoutApplicationRuntimeTests
 
         (int exitCode, byte[] output, string error) = RunScout("--no-mmap", "--count-matches", "-m", "3", "needle", root);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-mmap", "--count-matches", "-m", "3", "needle", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies large plain-literal count mode matches ripgrep.
+    /// </summary>
+    [Fact]
+    public void LargeLiteralCountModeMatchesPinnedRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllBytes(path, CreateLargeCountMatchesMaxCountInput());
+
+        (int exitCode, byte[] output, string error) = RunScout("--no-mmap", "--count", "needle", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-mmap", "--count", "needle", root);
 
         Assert.Equal(pinnedExitCode, exitCode);
         Assert.Equal(pinnedOutput, output);

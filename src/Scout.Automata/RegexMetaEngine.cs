@@ -9,7 +9,7 @@ internal sealed class RegexMetaEngine
     private const int SparseDfaStateLimit = 64;
     private const int OnePassDfaNfaStateLimit = 48;
     private const int BoundedBacktrackerNfaStateLimit = 24;
-    private const ulong DefaultDfaSizeLimit = 1000UL * 1024UL * 1024UL;
+    private const ulong DefaultDfaSizeLimit = 2UL * 1024UL * 1024UL;
 
     private readonly PikeVm? pikeVm;
     private readonly RegexBoundedBacktracker? boundedBacktracker;

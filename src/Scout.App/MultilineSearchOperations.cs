@@ -55,7 +55,16 @@ internal static class MultilineSearchOperations
             return true;
         }
 
-        if (!TryFindMultilineMatch(searchSpan, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, startAt: 0, out RegexMatch firstMatch) ||
+        if (!vimgrep &&
+            replacement is null &&
+            !onlyMatching &&
+            TryCreateSignatureArityAccelerator(patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, out SignatureArityAccelerator? signatureAccelerator))
+        {
+            return SearchSignatureArityBytes(searchSpan, outputSpan, signatureAccelerator!, output, prefix, separators, lineLimit, color, searchMode, lineNumber, column, byteOffset, maxCount, quiet, trim, includeZero, nullPathTerminator, out matched);
+        }
+
+        RegexAutomaton[] automata = CompileMultilineAutomata(patterns, asciiCaseInsensitive, multilineDotall);
+        if (!TryFindMultilineMatch(searchSpan, automata, lineRegexp, wordRegexp, startAt: 0, out RegexMatch firstMatch) ||
             IsTrailingEmptyLineMatch(searchSpan, firstMatch))
         {
             if (searchMode == CliSearchMode.FilesWithoutMatch)
@@ -91,9 +100,9 @@ internal static class MultilineSearchOperations
             return true;
         }
 
-        long count = CountMultilineMatches(searchSpan, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
         if (searchMode == CliSearchMode.Count || searchMode == CliSearchMode.CountMatches)
         {
+            long count = CountMultilineMatches(searchSpan, automata, lineRegexp, wordRegexp, maxCount);
             matched = SearchOutputFormatting.WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, separators.LineTerminator);
             return true;
         }
@@ -103,17 +112,17 @@ internal static class MultilineSearchOperations
         {
             if (onlyMatching)
             {
-                WriteMultilineOnlyMatchingReplacements(outputSpan, patterns, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
+                WriteMultilineOnlyMatchingReplacements(outputSpan, patterns, automata, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
                 return true;
             }
 
-            WriteMultilineReplacedLines(outputSpan, patterns, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
+            WriteMultilineReplacedLines(outputSpan, patterns, automata, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
             return true;
         }
 
         if (onlyMatching && !vimgrep)
         {
-            WriteMultilineOnlyMatches(outputSpan, patterns, output, prefix, separators, color, lineNumber, column, byteOffset, trim, nullPathTerminator, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
+            WriteMultilineOnlyMatches(outputSpan, automata, output, prefix, separators, color, lineNumber, column, byteOffset, trim, nullPathTerminator, lineRegexp, wordRegexp, maxCount);
             return true;
         }
 
@@ -121,15 +130,83 @@ internal static class MultilineSearchOperations
         {
             if (onlyMatching)
             {
-                WriteMultilineOnlyMatches(outputSpan, patterns, output, prefix, separators, color, lineNumber: true, column: true, byteOffset, trim, nullPathTerminator, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
+                WriteMultilineOnlyMatches(outputSpan, automata, output, prefix, separators, color, lineNumber: true, column: true, byteOffset, trim, nullPathTerminator, lineRegexp, wordRegexp, maxCount);
                 return true;
             }
 
-            WriteMultilineVimgrepMatches(outputSpan, patterns, output, prefix, separators, lineLimit, color, trim, nullPathTerminator, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
+            WriteMultilineVimgrepMatches(outputSpan, automata, output, prefix, separators, lineLimit, color, trim, nullPathTerminator, lineRegexp, wordRegexp, maxCount);
             return true;
         }
 
-        WriteMultilineMatchedLines(outputSpan, patterns, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
+        WriteMultilineMatchedLines(outputSpan, automata, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, lineRegexp, wordRegexp, maxCount);
+        return true;
+    }
+
+    private static bool SearchSignatureArityBytes(
+        ReadOnlySpan<byte> searchSpan,
+        ReadOnlySpan<byte> outputSpan,
+        SignatureArityAccelerator accelerator,
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        CliSearchMode searchMode,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        ulong? maxCount,
+        bool quiet,
+        bool trim,
+        bool includeZero,
+        bool nullPathTerminator,
+        out bool matched)
+    {
+        matched = false;
+        if (!accelerator.TryFindNext(searchSpan, startAt: 0, out RegexMatch firstMatch))
+        {
+            if (searchMode == CliSearchMode.FilesWithoutMatch)
+            {
+                matched = SearchOutputFormatting.WritePathIf(output, prefix, color, true, nullPathTerminator, separators.LineTerminator);
+                return true;
+            }
+
+            if (searchMode == CliSearchMode.Count || searchMode == CliSearchMode.CountMatches)
+            {
+                matched = SearchOutputFormatting.WriteCount(output, prefix, color, 0, includeZero, nullPathTerminator, separators.LineTerminator);
+                return true;
+            }
+
+            return true;
+        }
+
+        if (quiet)
+        {
+            matched = searchMode != CliSearchMode.FilesWithoutMatch;
+            return true;
+        }
+
+        if (searchMode == CliSearchMode.FilesWithMatches)
+        {
+            matched = SearchOutputFormatting.WritePathIf(output, prefix, color, true, nullPathTerminator, separators.LineTerminator);
+            return true;
+        }
+
+        if (searchMode == CliSearchMode.FilesWithoutMatch)
+        {
+            matched = SearchOutputFormatting.WritePathIf(output, prefix, color, false, nullPathTerminator, separators.LineTerminator);
+            return true;
+        }
+
+        if (searchMode == CliSearchMode.Count || searchMode == CliSearchMode.CountMatches)
+        {
+            long count = accelerator.Count(searchSpan, maxCount);
+            matched = SearchOutputFormatting.WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, separators.LineTerminator);
+            return true;
+        }
+
+        matched = true;
+        WriteSignatureArityMatchedLines(outputSpan, accelerator, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, maxCount, firstMatch);
         return true;
     }
 
@@ -425,12 +502,12 @@ internal static class MultilineSearchOperations
         return true;
     }
 
-    private static long CountMultilineMatches(ReadOnlySpan<byte> bytes, IReadOnlyList<byte[]> patterns, bool asciiCaseInsensitive, bool lineRegexp, bool wordRegexp, bool multilineDotall, ulong? maxCount)
+    private static long CountMultilineMatches(ReadOnlySpan<byte> bytes, RegexAutomaton[] automata, bool lineRegexp, bool wordRegexp, ulong? maxCount)
     {
         long count = 0;
         int offset = 0;
         int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
-        while (TryFindNextMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, ref offset, ref suppressedEmptyStart, out RegexMatch match))
+        while (TryFindNextMultilineMatch(bytes, automata, lineRegexp, wordRegexp, ref offset, ref suppressedEmptyStart, out RegexMatch match))
         {
             count++;
             if (maxCount is ulong limit && (ulong)count >= limit)
@@ -444,6 +521,278 @@ internal static class MultilineSearchOperations
         return count;
     }
 
+    private static void WriteSignatureArityMatchedLines(
+        ReadOnlySpan<byte> bytes,
+        SignatureArityAccelerator accelerator,
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool trim,
+        bool nullPathTerminator,
+        ulong? maxCount,
+        RegexMatch firstMatch)
+    {
+        var sink = new StandardSearchSink(output, prefix, separators.FieldMatch, separators.FieldContext, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
+        int offset = 0;
+        int lastWrittenLineStart = -1;
+        int currentLineStart = 0;
+        long currentLineNumber = 1;
+        ulong emitted = 0;
+        RegexMatch match = firstMatch;
+        bool haveMatch = true;
+        while (haveMatch)
+        {
+            int firstLineStart = GetLineStart(bytes, match.Start);
+            int lastLineStart = GetLineStart(bytes, GetInclusiveMatchEnd(match));
+            AdvanceLineNumber(bytes, firstLineStart, ref currentLineStart, ref currentLineNumber);
+            long outputLineNumber = currentLineNumber;
+            long matchColumn = match.Start - firstLineStart + 1L;
+            for (int lineStart = firstLineStart; lineStart <= lastLineStart;)
+            {
+                int lineEnd = GetLineEnd(bytes, lineStart);
+                if (lineStart > lastWrittenLineStart)
+                {
+                    sink.MatchedLine(outputLineNumber, lineStart, matchColumn, bytes[lineStart..lineEnd]);
+                    lastWrittenLineStart = lineStart;
+                    emitted++;
+                    if (maxCount is ulong limit && emitted >= limit)
+                    {
+                        return;
+                    }
+                }
+
+                lineStart = GetNextLineStart(lineEnd, bytes.Length);
+                outputLineNumber++;
+            }
+
+            currentLineStart = Math.Max(currentLineStart, GetNextLineStart(GetLineEnd(bytes, lastLineStart), bytes.Length));
+            currentLineNumber = Math.Max(currentLineNumber, outputLineNumber);
+            offset = match.Start + match.Length;
+            haveMatch = accelerator.TryFindNext(bytes, offset, out match);
+        }
+    }
+
+    private static RegexAutomaton[] CompileMultilineAutomata(IReadOnlyList<byte[]> patterns, bool asciiCaseInsensitive, bool multilineDotall)
+    {
+        var automata = new RegexAutomaton[patterns.Count];
+        for (int index = 0; index < patterns.Count; index++)
+        {
+            automata[index] = RegexAutomaton.Compile(patterns[index], asciiCaseInsensitive, multiLine: true, dotMatchesNewline: multilineDotall);
+        }
+
+        return automata;
+    }
+
+    private static bool TryCreateSignatureArityAccelerator(
+        IReadOnlyList<byte[]> patterns,
+        bool asciiCaseInsensitive,
+        bool lineRegexp,
+        bool wordRegexp,
+        out SignatureArityAccelerator? accelerator)
+    {
+        accelerator = null;
+        if (patterns.Count != 1 ||
+            asciiCaseInsensitive ||
+            lineRegexp ||
+            wordRegexp)
+        {
+            return false;
+        }
+
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(patterns[0]);
+        if (UnwrapFlaglessGroup(tree.Root) is not RegexSequenceNode sequence ||
+            sequence.Nodes.Count != 6 ||
+            !TryReadPrefixAlternatives(sequence.Nodes[0], out byte[][] prefixes) ||
+            !TryReadNegatedLiteralClassStar(sequence.Nodes[1], out bool[] preOpenTerminators) ||
+            !TryReadLiteralByte(sequence.Nodes[2], (byte)'(') ||
+            !TryReadNegatedLiteralClassStar(sequence.Nodes[3], out bool[] closeTerminators) ||
+            !IsOnlyExcludedByte(closeTerminators, (byte)')') ||
+            !TryReadRepeatedCommaTail(sequence.Nodes[4], closeTerminators, out int requiredCommas) ||
+            !TryReadLiteralByte(sequence.Nodes[5], (byte)')'))
+        {
+            return false;
+        }
+
+        accelerator = new SignatureArityAccelerator(prefixes, preOpenTerminators, requiredCommas);
+        return true;
+    }
+
+    private static RegexSyntaxNode UnwrapFlaglessGroup(RegexSyntaxNode node)
+    {
+        while (node is RegexGroupNode { EnabledFlags.Length: 0, DisabledFlags.Length: 0 } group)
+        {
+            node = group.Child;
+        }
+
+        return node;
+    }
+
+    private static bool TryReadPrefixAlternatives(RegexSyntaxNode node, out byte[][] prefixes)
+    {
+        node = UnwrapFlaglessGroup(node);
+        if (node is RegexAlternationNode alternation)
+        {
+            byte[][] alternatives = new byte[alternation.Alternatives.Count][];
+            for (int index = 0; index < alternation.Alternatives.Count; index++)
+            {
+                if (!TryReadLiteralSequence(alternation.Alternatives[index], out byte[] literal) ||
+                    literal.Length == 0)
+                {
+                    prefixes = [];
+                    return false;
+                }
+
+                alternatives[index] = literal;
+            }
+
+            prefixes = alternatives;
+            return prefixes.Length > 0;
+        }
+
+        if (TryReadLiteralSequence(node, out byte[] prefix) &&
+            prefix.Length > 0)
+        {
+            prefixes = [prefix];
+            return true;
+        }
+
+        prefixes = [];
+        return false;
+    }
+
+    private static bool TryReadLiteralSequence(RegexSyntaxNode node, out byte[] literal)
+    {
+        node = UnwrapFlaglessGroup(node);
+        if (node is RegexAtomNode { Kind: RegexSyntaxKind.Literal } atom)
+        {
+            literal = atom.Value.ToArray();
+            return true;
+        }
+
+        if (node is not RegexSequenceNode sequence)
+        {
+            literal = [];
+            return false;
+        }
+
+        var bytes = new List<byte>();
+        for (int index = 0; index < sequence.Nodes.Count; index++)
+        {
+            RegexSyntaxNode child = UnwrapFlaglessGroup(sequence.Nodes[index]);
+            if (child is not RegexAtomNode { Kind: RegexSyntaxKind.Literal } childAtom)
+            {
+                literal = [];
+                return false;
+            }
+
+            bytes.AddRange(childAtom.Value.ToArray());
+        }
+
+        literal = bytes.ToArray();
+        return true;
+    }
+
+    private static bool TryReadLiteralByte(RegexSyntaxNode node, byte expected)
+    {
+        return UnwrapFlaglessGroup(node) is RegexAtomNode { Kind: RegexSyntaxKind.Literal } atom &&
+            atom.Value.Span.Length == 1 &&
+            atom.Value.Span[0] == expected;
+    }
+
+    private static bool TryReadNegatedLiteralClassStar(RegexSyntaxNode node, out bool[] excluded)
+    {
+        excluded = new bool[256];
+        if (UnwrapFlaglessGroup(node) is not RegexRepetitionNode { Minimum: 0, Maximum: null } repetition ||
+            UnwrapFlaglessGroup(repetition.Child) is not RegexAtomNode { Kind: RegexSyntaxKind.CharacterClass } atom)
+        {
+            return false;
+        }
+
+        return TryReadNegatedLiteralClass(atom.Value.Span, excluded);
+    }
+
+    private static bool TryReadNegatedLiteralClass(ReadOnlySpan<byte> expression, bool[] excluded)
+    {
+        if (expression.IsEmpty ||
+            expression[0] != (byte)'^')
+        {
+            return false;
+        }
+
+        for (int index = 1; index < expression.Length; index++)
+        {
+            byte value = expression[index];
+            if (value == (byte)'\\')
+            {
+                if (++index >= expression.Length)
+                {
+                    return false;
+                }
+
+                value = expression[index] switch
+                {
+                    (byte)'t' => (byte)'\t',
+                    (byte)'r' => (byte)'\r',
+                    (byte)'n' => (byte)'\n',
+                    (byte)'f' => (byte)'\f',
+                    byte escaped => escaped,
+                };
+            }
+
+            excluded[value] = true;
+        }
+
+        return true;
+    }
+
+    private static bool TryReadRepeatedCommaTail(RegexSyntaxNode node, bool[] closeTerminators, out int requiredCommas)
+    {
+        requiredCommas = 0;
+        if (UnwrapFlaglessGroup(node) is not RegexRepetitionNode { Minimum: > 0, Maximum: null } repetition ||
+            UnwrapFlaglessGroup(repetition.Child) is not RegexSequenceNode sequence ||
+            sequence.Nodes.Count != 2 ||
+            !TryReadLiteralByte(sequence.Nodes[0], (byte)',') ||
+            !TryReadNegatedLiteralClassStar(sequence.Nodes[1], out bool[] repeatedTerminators) ||
+            !ExcludedSetsEqual(closeTerminators, repeatedTerminators))
+        {
+            return false;
+        }
+
+        requiredCommas = repetition.Minimum;
+        return true;
+    }
+
+    private static bool IsOnlyExcludedByte(bool[] excluded, byte value)
+    {
+        for (int index = 0; index < excluded.Length; index++)
+        {
+            if (excluded[index] != (index == value))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool ExcludedSetsEqual(bool[] left, bool[] right)
+    {
+        for (int index = 0; index < left.Length; index++)
+        {
+            if (left[index] != right[index])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     internal static bool TryFindNextMultilineMatch(
         ReadOnlySpan<byte> bytes,
         IReadOnlyList<byte[]> patterns,
@@ -455,7 +804,44 @@ internal static class MultilineSearchOperations
         ref int suppressedEmptyStart,
         out RegexMatch match)
     {
-        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, offset, out match))
+        RegexAutomaton[] automata = CompileMultilineAutomata(patterns, asciiCaseInsensitive, multilineDotall);
+        return TryFindNextMultilineMatch(bytes, automata, lineRegexp, wordRegexp, ref offset, ref suppressedEmptyStart, out match);
+    }
+
+    internal static bool TryCollectSignatureArityMatches(
+        ReadOnlySpan<byte> bytes,
+        IReadOnlyList<byte[]> patterns,
+        bool asciiCaseInsensitive,
+        bool lineRegexp,
+        bool wordRegexp,
+        out List<RegexMatch> matches)
+    {
+        matches = [];
+        if (!TryCreateSignatureArityAccelerator(patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, out SignatureArityAccelerator? accelerator))
+        {
+            return false;
+        }
+
+        int offset = 0;
+        while (accelerator!.TryFindNext(bytes, offset, out RegexMatch match))
+        {
+            matches.Add(match);
+            offset = match.Start + match.Length;
+        }
+
+        return true;
+    }
+
+    private static bool TryFindNextMultilineMatch(
+        ReadOnlySpan<byte> bytes,
+        RegexAutomaton[] automata,
+        bool lineRegexp,
+        bool wordRegexp,
+        ref int offset,
+        ref int suppressedEmptyStart,
+        out RegexMatch match)
+    {
+        while (offset <= bytes.Length && TryFindMultilineMatch(bytes, automata, lineRegexp, wordRegexp, offset, out match))
         {
             if (IsTrailingEmptyLineMatch(bytes, match))
             {
@@ -499,7 +885,7 @@ internal static class MultilineSearchOperations
 
     private static void WriteMultilineMatchedLines(
         ReadOnlySpan<byte> bytes,
-        IReadOnlyList<byte[]> patterns,
+        RegexAutomaton[] automata,
         RawByteWriter output,
         OutputPath? prefix,
         OutputSeparators separators,
@@ -510,29 +896,30 @@ internal static class MultilineSearchOperations
         bool byteOffset,
         bool trim,
         bool nullPathTerminator,
-        bool asciiCaseInsensitive,
         bool lineRegexp,
         bool wordRegexp,
-        bool multilineDotall,
         ulong? maxCount)
     {
         var sink = new StandardSearchSink(output, prefix, separators.FieldMatch, separators.FieldContext, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
         int offset = 0;
         int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         int lastWrittenLineStart = -1;
+        int currentLineStart = 0;
+        long currentLineNumber = 1;
         ulong emitted = 0;
-        while (TryFindNextMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, ref offset, ref suppressedEmptyStart, out RegexMatch match))
+        while (TryFindNextMultilineMatch(bytes, automata, lineRegexp, wordRegexp, ref offset, ref suppressedEmptyStart, out RegexMatch match))
         {
             int firstLineStart = GetLineStart(bytes, match.Start);
             int lastLineStart = GetLineStart(bytes, GetInclusiveMatchEnd(match));
-            long firstLineNumber = GetLineNumber(bytes, firstLineStart);
+            AdvanceLineNumber(bytes, firstLineStart, ref currentLineStart, ref currentLineNumber);
+            long outputLineNumber = currentLineNumber;
             long matchColumn = match.Start - firstLineStart + 1L;
             for (int lineStart = firstLineStart; lineStart <= lastLineStart;)
             {
                 int lineEnd = GetLineEnd(bytes, lineStart);
                 if (lineStart > lastWrittenLineStart)
                 {
-                    sink.MatchedLine(firstLineNumber + CountLineFeeds(bytes[firstLineStart..lineStart]), lineStart, matchColumn, bytes[lineStart..lineEnd]);
+                    sink.MatchedLine(outputLineNumber, lineStart, matchColumn, bytes[lineStart..lineEnd]);
                     lastWrittenLineStart = lineStart;
                     emitted++;
                     if (maxCount is ulong limit && emitted >= limit)
@@ -542,15 +929,36 @@ internal static class MultilineSearchOperations
                 }
 
                 lineStart = GetNextLineStart(lineEnd, bytes.Length);
+                outputLineNumber++;
             }
 
+            currentLineStart = Math.Max(currentLineStart, GetNextLineStart(GetLineEnd(bytes, lastLineStart), bytes.Length));
+            currentLineNumber = Math.Max(currentLineNumber, outputLineNumber);
             offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
+        }
+    }
+
+    private static void AdvanceLineNumber(ReadOnlySpan<byte> bytes, int targetLineStart, ref int currentLineStart, ref long currentLineNumber)
+    {
+        if (targetLineStart < currentLineStart)
+        {
+            currentLineNumber = GetLineNumber(bytes, targetLineStart);
+            currentLineStart = targetLineStart;
+            return;
+        }
+
+        while (currentLineStart < targetLineStart)
+        {
+            int lineEnd = GetLineEnd(bytes, currentLineStart);
+            currentLineStart = GetNextLineStart(lineEnd, bytes.Length);
+            currentLineNumber++;
         }
     }
 
     private static void WriteMultilineReplacedLines(
         ReadOnlySpan<byte> bytes,
         IReadOnlyList<byte[]> patterns,
+        RegexAutomaton[] automata,
         RawByteWriter output,
         OutputPath? prefix,
         OutputSeparators separators,
@@ -574,7 +982,7 @@ internal static class MultilineSearchOperations
         int groupStart = -1;
         int groupEnd = -1;
         List<RegexMatch> groupMatches = [];
-        while (TryFindNextMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, ref offset, ref suppressedEmptyStart, out RegexMatch match))
+        while (TryFindNextMultilineMatch(bytes, automata, lineRegexp, wordRegexp, ref offset, ref suppressedEmptyStart, out RegexMatch match))
         {
             GetMultilineReplacementRange(bytes, match, out int rangeStart, out int rangeEnd);
             if (groupStart >= 0 && rangeStart >= groupEnd)
@@ -614,6 +1022,7 @@ internal static class MultilineSearchOperations
     private static void WriteMultilineOnlyMatchingReplacements(
         ReadOnlySpan<byte> bytes,
         IReadOnlyList<byte[]> patterns,
+        RegexAutomaton[] automata,
         RawByteWriter output,
         OutputPath? prefix,
         OutputSeparators separators,
@@ -634,7 +1043,7 @@ internal static class MultilineSearchOperations
         int offset = 0;
         int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         ulong emitted = 0;
-        while (TryFindNextMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, ref offset, ref suppressedEmptyStart, out RegexMatch match))
+        while (TryFindNextMultilineMatch(bytes, automata, lineRegexp, wordRegexp, ref offset, ref suppressedEmptyStart, out RegexMatch match))
         {
             byte[] body = ReplacementFormatter.Expand(replacement.Span, bytes.Slice(match.Start, match.Length), patterns, asciiCaseInsensitive);
             int lineStart = GetLineStart(bytes, match.Start);
@@ -734,7 +1143,7 @@ internal static class MultilineSearchOperations
 
     private static void WriteMultilineOnlyMatches(
         ReadOnlySpan<byte> bytes,
-        IReadOnlyList<byte[]> patterns,
+        RegexAutomaton[] automata,
         RawByteWriter output,
         OutputPath? prefix,
         OutputSeparators separators,
@@ -744,17 +1153,15 @@ internal static class MultilineSearchOperations
         bool byteOffset,
         bool trim,
         bool nullPathTerminator,
-        bool asciiCaseInsensitive,
         bool lineRegexp,
         bool wordRegexp,
-        bool multilineDotall,
         ulong? maxCount)
     {
         var sink = new StandardMatchSink(output, prefix, separators.FieldMatch, lineNumber, column, byteOffset, trim, nullPathTerminator: nullPathTerminator, color: color, lineTerminator: separators.LineTerminator);
         int offset = 0;
         int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         ulong emitted = 0;
-        while (TryFindNextMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, ref offset, ref suppressedEmptyStart, out RegexMatch match))
+        while (TryFindNextMultilineMatch(bytes, automata, lineRegexp, wordRegexp, ref offset, ref suppressedEmptyStart, out RegexMatch match))
         {
             int firstLineStart = GetLineStart(bytes, match.Start);
             long firstLineNumber = GetLineNumber(bytes, firstLineStart);
@@ -797,7 +1204,7 @@ internal static class MultilineSearchOperations
 
     private static void WriteMultilineVimgrepMatches(
         ReadOnlySpan<byte> bytes,
-        IReadOnlyList<byte[]> patterns,
+        RegexAutomaton[] automata,
         RawByteWriter output,
         OutputPath? prefix,
         OutputSeparators separators,
@@ -805,17 +1212,15 @@ internal static class MultilineSearchOperations
         OutputColor color,
         bool trim,
         bool nullPathTerminator,
-        bool asciiCaseInsensitive,
         bool lineRegexp,
         bool wordRegexp,
-        bool multilineDotall,
         ulong? maxCount)
     {
         var sink = new StandardSearchSink(output, prefix, separators.FieldMatch, separators.FieldContext, lineNumber: true, column: true, byteOffset: false, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
         int offset = 0;
         int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         ulong emitted = 0;
-        while (TryFindNextMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, ref offset, ref suppressedEmptyStart, out RegexMatch match))
+        while (TryFindNextMultilineMatch(bytes, automata, lineRegexp, wordRegexp, ref offset, ref suppressedEmptyStart, out RegexMatch match))
         {
             int lineStart = GetLineStart(bytes, match.Start);
             int lineEnd = GetLineEnd(bytes, lineStart);
@@ -834,11 +1239,17 @@ internal static class MultilineSearchOperations
 
     private static bool TryFindMultilineMatch(ReadOnlySpan<byte> bytes, IReadOnlyList<byte[]> patterns, bool asciiCaseInsensitive, bool lineRegexp, bool wordRegexp, bool multilineDotall, int startAt, out RegexMatch match)
     {
+        RegexAutomaton[] automata = CompileMultilineAutomata(patterns, asciiCaseInsensitive, multilineDotall);
+        return TryFindMultilineMatch(bytes, automata, lineRegexp, wordRegexp, startAt, out match);
+    }
+
+    private static bool TryFindMultilineMatch(ReadOnlySpan<byte> bytes, RegexAutomaton[] automata, bool lineRegexp, bool wordRegexp, int startAt, out RegexMatch match)
+    {
         match = default;
         bool found = false;
-        for (int index = 0; index < patterns.Count; index++)
+        for (int index = 0; index < automata.Length; index++)
         {
-            var automaton = RegexAutomaton.Compile(patterns[index], asciiCaseInsensitive, multiLine: true, dotMatchesNewline: multilineDotall);
+            RegexAutomaton automaton = automata[index];
             int candidateStartAt = startAt;
             RegexMatch? candidate = null;
             while (candidateStartAt <= bytes.Length)
@@ -876,9 +1287,10 @@ internal static class MultilineSearchOperations
     internal static List<RegexMatch> CollectMultilineMatches(ReadOnlySpan<byte> bytes, IReadOnlyList<byte[]> patterns, bool asciiCaseInsensitive, bool lineRegexp, bool wordRegexp, bool multilineDotall)
     {
         List<RegexMatch> matches = [];
+        RegexAutomaton[] automata = CompileMultilineAutomata(patterns, asciiCaseInsensitive, multilineDotall);
         int offset = 0;
         int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
-        while (TryFindNextMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, ref offset, ref suppressedEmptyStart, out RegexMatch match))
+        while (TryFindNextMultilineMatch(bytes, automata, lineRegexp, wordRegexp, ref offset, ref suppressedEmptyStart, out RegexMatch match))
         {
             matches.Add(match);
             offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
@@ -990,9 +1402,10 @@ internal static class MultilineSearchOperations
 
         bool[] matchedLines = new bool[physicalLines.Count];
         long[] matchColumns = new long[physicalLines.Count];
+        RegexAutomaton[] automata = CompileMultilineAutomata(patterns, asciiCaseInsensitive, multilineDotall);
         int offset = 0;
         int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
-        while (TryFindNextMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, ref offset, ref suppressedEmptyStart, out RegexMatch match))
+        while (TryFindNextMultilineMatch(bytes, automata, lineRegexp, wordRegexp, ref offset, ref suppressedEmptyStart, out RegexMatch match))
         {
             MarkMultilineContextMatch(bytes, physicalLines, matchedLines, matchColumns, match);
             offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
@@ -1022,9 +1435,10 @@ internal static class MultilineSearchOperations
         }
 
         bool[] matchedLines = new bool[physicalLines.Count];
+        RegexAutomaton[] automata = CompileMultilineAutomata(patterns, asciiCaseInsensitive, multilineDotall);
         int offset = 0;
         int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
-        while (TryFindNextMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, ref offset, ref suppressedEmptyStart, out RegexMatch match))
+        while (TryFindNextMultilineMatch(bytes, automata, lineRegexp, wordRegexp, ref offset, ref suppressedEmptyStart, out RegexMatch match))
         {
             MarkMultilineMatchedLines(bytes, physicalLines, matchedLines, match);
             offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
@@ -1455,4 +1869,5 @@ internal static class MultilineSearchOperations
     {
         return ByteCounter.Count(bytes, (byte)'\n');
     }
+
 }
