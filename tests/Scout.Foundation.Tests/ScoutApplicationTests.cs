@@ -4292,6 +4292,135 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies color always highlights each vimgrep context record independently.
+    /// </summary>
+    [Fact]
+    public void ColorAlwaysHighlightsVimgrepContextOutput()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "needle needle\n");
+
+        (int exitCode, byte[] output, string error) = RunScout("--color=always", "--vimgrep", "-C1", "needle", path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--color=always", "--vimgrep", "-C1", "needle", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies color always highlights the current vimgrep replacement record.
+    /// </summary>
+    [Fact]
+    public void ColorAlwaysHighlightsVimgrepReplacementOutput()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "needle needle\n");
+
+        (int exitCode, byte[] output, string error) = RunScout("--color=always", "--vimgrep", "-r", "X", "needle", path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--color=always", "--vimgrep", "-r", "X", "needle", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies color always highlights multiline vimgrep records.
+    /// </summary>
+    [Fact]
+    public void ColorAlwaysHighlightsMultilineVimgrepOutput()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.cs");
+        File.WriteAllText(path, """
+            internal static bool SearchQuiet(
+                ReadOnlySpan<byte> bytes,
+                IReadOnlyList<byte[]> pattern,
+                CliSearchMode searchMode,
+                bool asciiCaseInsensitive,
+                bool invertMatch,
+                bool lineRegexp,
+                bool wordRegexp,
+                ulong? maxCount,
+                bool crlf,
+                bool nullData)
+            """);
+
+        const string Pattern = @"(?:public|private|protected|internal)[^;={}]*\([^)]*(?:,[^)]*){8,}\)";
+        (int exitCode, byte[] output, string error) = RunScout("--color=always", "-U", "--vimgrep", Pattern, path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--color=always", "-U", "--vimgrep", Pattern, path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies color always highlights multiline vimgrep context records.
+    /// </summary>
+    [Fact]
+    public void ColorAlwaysHighlightsMultilineVimgrepContextOutput()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.cs");
+        File.WriteAllText(path, """
+            internal static bool SearchQuiet(
+                ReadOnlySpan<byte> bytes,
+                IReadOnlyList<byte[]> pattern,
+                CliSearchMode searchMode,
+                bool asciiCaseInsensitive,
+                bool invertMatch,
+                bool lineRegexp,
+                bool wordRegexp,
+                ulong? maxCount,
+                bool crlf,
+                bool nullData)
+            """);
+
+        const string Pattern = @"(?:public|private|protected|internal)[^;={}]*\([^)]*(?:,[^)]*){8,}\)";
+        (int exitCode, byte[] output, string error) = RunScout("--color=always", "-U", "--vimgrep", "-C1", Pattern, path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--color=always", "-U", "--vimgrep", "-C1", Pattern, path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies color always highlights multiline vimgrep replacement output.
+    /// </summary>
+    [Fact]
+    public void ColorAlwaysHighlightsMultilineVimgrepReplacementOutput()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.cs");
+        File.WriteAllText(path, """
+            internal static bool SearchQuiet(
+                ReadOnlySpan<byte> bytes,
+                IReadOnlyList<byte[]> pattern,
+                CliSearchMode searchMode,
+                bool asciiCaseInsensitive,
+                bool invertMatch,
+                bool lineRegexp,
+                bool wordRegexp,
+                ulong? maxCount,
+                bool crlf,
+                bool nullData)
+            """);
+
+        const string Pattern = @"(?:public|private|protected|internal)[^;={}]*\([^)]*(?:,[^)]*){8,}\)";
+        (int exitCode, byte[] output, string error) = RunScout("--color=always", "-U", "--vimgrep", "-r", "X", Pattern, path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--color=always", "-U", "--vimgrep", "-r", "X", Pattern, path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies color always highlights replacement output.
     /// </summary>
     [Fact]

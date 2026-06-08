@@ -1164,9 +1164,10 @@ internal static class MultilineSearchOperations
         }
 
         List<long> replacementColumns = [];
-        byte[] body = ReplacementFormatter.ReplaceLine(bytes[recordStart..recordEnd], starts, lengths, replacement.Span, patterns, asciiCaseInsensitive, replacementColumns);
+        List<int> replacementLengths = [];
+        byte[] body = ReplacementFormatter.ReplaceLine(bytes[recordStart..recordEnd], starts, lengths, replacement.Span, patterns, asciiCaseInsensitive, replacementColumns, replacementLengths);
         int lineStart = GetLineStart(bytes, recordStart);
-        WriteMultilineReplacementBody(body, recordStart, GetLineNumber(bytes, lineStart), replacementColumns.Count > 0 ? replacementColumns[0] : 1, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator);
+        WriteMultilineReplacementBody(body, recordStart, GetLineNumber(bytes, lineStart), replacementColumns.Count > 0 ? replacementColumns[0] : 1, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementColumns, replacementLengths);
     }
 
     private static void WriteMultilineReplacementBody(
@@ -1183,7 +1184,9 @@ internal static class MultilineSearchOperations
         bool column,
         bool byteOffset,
         bool trim,
-        bool nullPathTerminator)
+        bool nullPathTerminator,
+        IReadOnlyList<long>? replacementColumns = null,
+        IReadOnlyList<int>? replacementLengths = null)
     {
         var sink = new StandardSearchSink(output, prefix, separators.FieldMatch, separators.FieldContext, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
         if (body.IsEmpty)
@@ -1199,7 +1202,18 @@ internal static class MultilineSearchOperations
         {
             int outputLineEnd = GetLineEnd(body, outputLineStart);
             long outputColumn = outputLineStart == 0 ? firstColumn : 1;
-            sink.MatchedLine(outputLineNumber, outputByteOffset, outputColumn, body[outputLineStart..outputLineEnd]);
+            if (replacementColumns is not null && replacementLengths is not null)
+            {
+                List<int> lineStarts = [];
+                List<int> lineLengths = [];
+                AddLineReplacementSpans(outputLineStart, outputLineEnd, replacementColumns, replacementLengths, lineStarts, lineLengths);
+                sink.MatchedLine(outputLineNumber, outputByteOffset, outputColumn, body[outputLineStart..outputLineEnd], lineStarts, lineLengths);
+            }
+            else
+            {
+                sink.MatchedLine(outputLineNumber, outputByteOffset, outputColumn, body[outputLineStart..outputLineEnd]);
+            }
+
             if (outputLineEnd >= body.Length)
             {
                 break;
@@ -1208,6 +1222,30 @@ internal static class MultilineSearchOperations
             outputByteOffset += outputLineEnd - outputLineStart;
             outputLineNumber++;
             outputLineStart = outputLineEnd;
+        }
+    }
+
+    private static void AddLineReplacementSpans(
+        int lineStart,
+        int lineEnd,
+        IReadOnlyList<long> replacementColumns,
+        IReadOnlyList<int> replacementLengths,
+        List<int> lineStarts,
+        List<int> lineLengths)
+    {
+        for (int index = 0; index < replacementColumns.Count; index++)
+        {
+            int replacementStart = checked((int)replacementColumns[index] - 1);
+            int replacementEnd = replacementStart + replacementLengths[index];
+            if (replacementEnd <= lineStart || replacementStart >= lineEnd)
+            {
+                continue;
+            }
+
+            int start = Math.Max(replacementStart, lineStart);
+            int end = Math.Min(replacementEnd, lineEnd);
+            lineStarts.Add(start - lineStart);
+            lineLengths.Add(end - start);
         }
     }
 
@@ -1304,7 +1342,7 @@ internal static class MultilineSearchOperations
             int lineEnd = GetLineEnd(bytes, lineStart);
             long lineNumber = GetLineNumber(bytes, lineStart);
             long matchColumn = match.Start - lineStart + 1L;
-            sink.MatchedLine(lineNumber, lineStart, matchColumn, bytes[lineStart..lineEnd]);
+            sink.MatchedLine(lineNumber, lineStart, matchColumn, bytes[lineStart..lineEnd], match.Start - lineStart, match.Length);
             emitted++;
             if (maxCount is ulong limit && emitted >= limit)
             {
@@ -1843,7 +1881,7 @@ internal static class MultilineSearchOperations
             }
 
             int lineEnd = GetLineEnd(bytes, line.Start);
-            sink.MatchedLine(line.LineNumber, line.Start, match.Start - line.Start + 1L, bytes[line.Start..lineEnd]);
+            sink.MatchedLine(line.LineNumber, line.Start, match.Start - line.Start + 1L, bytes[line.Start..lineEnd], match.Start - line.Start, match.Length);
             int lastLineStart = GetLineStart(bytes, GetInclusiveMatchEnd(match));
             consumedLineIndex = Math.Max(consumedLineIndex, GetMultilineLineIndex(lines, lastLineStart));
             wrote = true;

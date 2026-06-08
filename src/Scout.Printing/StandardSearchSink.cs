@@ -59,6 +59,21 @@ internal struct StandardSearchSink : ILineSink
 
     public void MatchedLine(long lineNumber, long byteOffset, long matchColumn, ReadOnlySpan<byte> line)
     {
+        WriteMatchedLine(lineNumber, byteOffset, matchColumn, line, highlightStarts: null, highlightLengths: null);
+    }
+
+    public void MatchedLine(long lineNumber, long byteOffset, long matchColumn, ReadOnlySpan<byte> line, int highlightMatchStart, int highlightMatchLength)
+    {
+        MatchedLine(lineNumber, byteOffset, matchColumn, line, [highlightMatchStart], [highlightMatchLength]);
+    }
+
+    public void MatchedLine(long lineNumber, long byteOffset, long matchColumn, ReadOnlySpan<byte> line, IReadOnlyList<int> highlightStarts, IReadOnlyList<int> highlightLengths)
+    {
+        WriteMatchedLine(lineNumber, byteOffset, matchColumn, line, highlightStarts, highlightLengths);
+    }
+
+    private void WriteMatchedLine(long lineNumber, long byteOffset, long matchColumn, ReadOnlySpan<byte> line, IReadOnlyList<int>? highlightStarts, IReadOnlyList<int>? highlightLengths)
+    {
         MatchedLines++;
         lineNumber += lineNumberOffset;
         byteOffset += byteOffsetOffset;
@@ -74,7 +89,8 @@ internal struct StandardSearchSink : ILineSink
             return;
         }
 
-        ReadOnlySpan<byte> displayLine = trim ? TrimLeadingAsciiWhitespace(line) : line;
+        int trimOffset = trim ? GetTrimOffset(line) : 0;
+        ReadOnlySpan<byte> displayLine = line[trimOffset..];
         bool linked = false;
         bool hasLineNumber = this.lineNumber;
         bool hasColumn = column && matchColumn > 0;
@@ -128,7 +144,7 @@ internal struct StandardSearchSink : ILineSink
             output.Write(matchSeparator.Span);
         }
 
-        WriteBody(displayLine, context: false);
+        WriteBody(displayLine, context: false, highlightStarts, highlightLengths, -trimOffset);
     }
 
     public void ContextLine(long lineNumber, long byteOffset, long contextColumn, ReadOnlySpan<byte> line)
@@ -192,13 +208,18 @@ internal struct StandardSearchSink : ILineSink
         WriteBody(displayLine, context: true);
     }
 
-    private void WriteBody(ReadOnlySpan<byte> displayLine, bool context)
+    private void WriteBody(
+        ReadOnlySpan<byte> displayLine,
+        bool context,
+        IReadOnlyList<int>? highlightStarts = null,
+        IReadOnlyList<int>? highlightLengths = null,
+        int highlightOffset = 0)
     {
         if (lineLimit.IsExceeded(displayLine))
         {
             if (lineLimit.Preview)
             {
-                output.Write(displayLine[..lineLimit.GetPreviewLength(displayLine)]);
+                WriteBodyWithOptionalHighlights(displayLine[..lineLimit.GetPreviewLength(displayLine)], highlightStarts, highlightLengths, highlightOffset);
                 output.Write(" [... omitted end of long line]"u8);
             }
             else
@@ -210,11 +231,77 @@ internal struct StandardSearchSink : ILineSink
             return;
         }
 
-        output.Write(displayLine);
+        WriteBodyWithOptionalHighlights(displayLine, highlightStarts, highlightLengths, highlightOffset);
         if (!HasInputTerminator(displayLine))
         {
             output.Write(lineTerminator.Span);
         }
+    }
+
+    private void WriteBodyWithOptionalHighlights(
+        ReadOnlySpan<byte> displayLine,
+        IReadOnlyList<int>? highlightStarts,
+        IReadOnlyList<int>? highlightLengths,
+        int highlightOffset)
+    {
+        if (!color.Enabled ||
+            highlightStarts is null ||
+            highlightLengths is null ||
+            highlightStarts.Count == 0)
+        {
+            output.Write(displayLine);
+            return;
+        }
+
+        int contentLength = GetDisplayContentLength(displayLine);
+        List<int> displayStarts = [];
+        List<int> displayLengths = [];
+        for (int index = 0; index < highlightStarts.Count; index++)
+        {
+            int start = highlightStarts[index] + highlightOffset;
+            int length = highlightLengths[index];
+            if (length <= 0 ||
+                start >= contentLength ||
+                start + length <= 0)
+            {
+                continue;
+            }
+
+            if (start < 0)
+            {
+                length += start;
+                start = 0;
+            }
+
+            length = Math.Min(length, contentLength - start);
+            if (length <= 0)
+            {
+                continue;
+            }
+
+            displayStarts.Add(start);
+            displayLengths.Add(length);
+        }
+
+        if (displayStarts.Count == 0)
+        {
+            output.Write(displayLine);
+            return;
+        }
+
+        ColoredLineWriter.Write(output, displayLine, displayStarts, displayLengths, color);
+    }
+
+    private int GetDisplayContentLength(ReadOnlySpan<byte> displayLine)
+    {
+        if (displayLine.IsEmpty)
+        {
+            return 0;
+        }
+
+        return IsNullLineTerminator()
+            ? displayLine[^1] == 0 ? displayLine.Length - 1 : displayLine.Length
+            : displayLine[^1] == (byte)'\n' ? displayLine.Length - 1 : displayLine.Length;
     }
 
     private bool HasInputTerminator(ReadOnlySpan<byte> bytes)
@@ -299,13 +386,18 @@ internal struct StandardSearchSink : ILineSink
 
     private static ReadOnlySpan<byte> TrimLeadingAsciiWhitespace(ReadOnlySpan<byte> bytes)
     {
+        return bytes[GetTrimOffset(bytes)..];
+    }
+
+    private static int GetTrimOffset(ReadOnlySpan<byte> bytes)
+    {
         int index = 0;
         while (index < bytes.Length && IsAsciiWhitespace(bytes[index]))
         {
             index++;
         }
 
-        return bytes[index..];
+        return index;
     }
 
     private static bool IsAsciiWhitespace(byte value)
