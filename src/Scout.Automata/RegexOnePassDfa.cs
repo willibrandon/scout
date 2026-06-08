@@ -65,10 +65,16 @@ internal sealed class RegexOnePassDfa
                 return fallback.TryMatchAt(haystack, start, out length);
             }
 
-            if (next.Count == 0 && deferredAcceptLength >= 0)
+            if (next.Count == 0)
             {
-                length = deferredAcceptLength;
-                return true;
+                if (deferredAcceptLength >= 0)
+                {
+                    length = deferredAcceptLength;
+                    return true;
+                }
+
+                length = 0;
+                return false;
             }
 
             (current, next) = (next, current);

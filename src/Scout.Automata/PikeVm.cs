@@ -6,6 +6,8 @@ internal sealed class PikeVm
     private readonly RegexNfa nfa;
     private List<(int State, int Position)> current = [];
     private List<(int State, int Position)> next = [];
+    private HashSet<(int State, int Position)> currentSeen = [];
+    private HashSet<(int State, int Position)> nextSeen = [];
 
     public PikeVm(RegexNfa nfa)
     {
@@ -25,7 +27,8 @@ internal sealed class PikeVm
     public bool TryMatchLongestAt(ReadOnlySpan<byte> haystack, int start, out int length)
     {
         current.Clear();
-        AddThread(nfa.StartState, haystack, start, current, new bool[nfa.States.Count], new bool[nfa.States.Count]);
+        currentSeen.Clear();
+        AddThread(nfa.StartState, haystack, start, current, currentSeen, new bool[nfa.States.Count], new bool[nfa.States.Count]);
         int longestAcceptLength = -1;
         while (current.Count > 0)
         {
@@ -36,12 +39,13 @@ internal sealed class PikeVm
             }
 
             next.Clear();
+            nextSeen.Clear();
             for (int index = 0; index < current.Count; index++)
             {
                 (int stateIndex, int threadPosition) = current[index];
                 if (threadPosition != position)
                 {
-                    next.Add(current[index]);
+                    AddThreadEntry(stateIndex, threadPosition, next, nextSeen);
                     continue;
                 }
 
@@ -61,11 +65,12 @@ internal sealed class PikeVm
                         state.UnicodeClasses,
                         out int consume))
                 {
-                    AddThread(state.Next, haystack, position + consume, next, new bool[nfa.States.Count], new bool[nfa.States.Count]);
+                    AddThread(state.Next, haystack, position + consume, next, nextSeen, new bool[nfa.States.Count], new bool[nfa.States.Count]);
                 }
             }
 
             (current, next) = (next, current);
+            (currentSeen, nextSeen) = (nextSeen, currentSeen);
         }
 
         if (longestAcceptLength >= 0)
@@ -81,7 +86,8 @@ internal sealed class PikeVm
     public void AddMatchLengthsAt(ReadOnlySpan<byte> haystack, int start, List<int> lengths)
     {
         current.Clear();
-        AddThread(nfa.StartState, haystack, start, current, new bool[nfa.States.Count], new bool[nfa.States.Count]);
+        currentSeen.Clear();
+        AddThread(nfa.StartState, haystack, start, current, currentSeen, new bool[nfa.States.Count], new bool[nfa.States.Count]);
         while (current.Count > 0)
         {
             int position = MinPosition(current);
@@ -95,12 +101,13 @@ internal sealed class PikeVm
             }
 
             next.Clear();
+            nextSeen.Clear();
             for (int index = 0; index < current.Count; index++)
             {
                 (int stateIndex, int threadPosition) = current[index];
                 if (threadPosition != position)
                 {
-                    next.Add(current[index]);
+                    AddThreadEntry(stateIndex, threadPosition, next, nextSeen);
                     continue;
                 }
 
@@ -120,18 +127,20 @@ internal sealed class PikeVm
                         state.UnicodeClasses,
                         out int consume))
                 {
-                    AddThread(state.Next, haystack, position + consume, next, new bool[nfa.States.Count], new bool[nfa.States.Count]);
+                    AddThread(state.Next, haystack, position + consume, next, nextSeen, new bool[nfa.States.Count], new bool[nfa.States.Count]);
                 }
             }
 
             (current, next) = (next, current);
+            (currentSeen, nextSeen) = (nextSeen, currentSeen);
         }
     }
 
     private bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, bool earliest, out int length)
     {
         current.Clear();
-        AddThread(nfa.StartState, haystack, start, current, new bool[nfa.States.Count], new bool[nfa.States.Count]);
+        currentSeen.Clear();
+        AddThread(nfa.StartState, haystack, start, current, currentSeen, new bool[nfa.States.Count], new bool[nfa.States.Count]);
         int deferredAcceptLength = -1;
         while (current.Count > 0)
         {
@@ -148,12 +157,13 @@ internal sealed class PikeVm
             }
 
             next.Clear();
+            nextSeen.Clear();
             for (int index = 0; index < current.Count; index++)
             {
                 (int stateIndex, int threadPosition) = current[index];
                 if (threadPosition != position)
                 {
-                    next.Add(current[index]);
+                    AddThreadEntry(stateIndex, threadPosition, next, nextSeen);
                     continue;
                 }
 
@@ -173,11 +183,12 @@ internal sealed class PikeVm
                         state.UnicodeClasses,
                         out int consume))
                 {
-                    AddThread(state.Next, haystack, position + consume, next, new bool[nfa.States.Count], new bool[nfa.States.Count]);
+                    AddThread(state.Next, haystack, position + consume, next, nextSeen, new bool[nfa.States.Count], new bool[nfa.States.Count]);
                 }
             }
 
             (current, next) = (next, current);
+            (currentSeen, nextSeen) = (nextSeen, currentSeen);
         }
 
         if (deferredAcceptLength >= 0)
@@ -195,6 +206,7 @@ internal sealed class PikeVm
         ReadOnlySpan<byte> haystack,
         int position,
         List<(int State, int Position)> threads,
+        HashSet<(int State, int Position)> seen,
         bool[] visited,
         bool[] closedSplits)
     {
@@ -205,7 +217,7 @@ internal sealed class PikeVm
 
         if (visited[stateIndex])
         {
-            AddClosedSplitExit(stateIndex, haystack, position, threads, visited, closedSplits);
+            AddClosedSplitExit(stateIndex, haystack, position, threads, seen, visited, closedSplits);
             return;
         }
 
@@ -216,19 +228,31 @@ internal sealed class PikeVm
             case RegexNfaStateKind.Split:
             case RegexNfaStateKind.GreedyLoopSplit:
             case RegexNfaStateKind.LazyLoopSplit:
-                AddThread(state.Next, haystack, position, threads, visited, closedSplits);
-                AddThread(state.Alternative, haystack, position, threads, visited, closedSplits);
+                AddThread(state.Next, haystack, position, threads, seen, visited, closedSplits);
+                AddThread(state.Alternative, haystack, position, threads, seen, visited, closedSplits);
                 break;
             case RegexNfaStateKind.Predicate:
                 if (RegexByteClass.PredicateMatches(haystack, position, state.AtomKind, state.MultiLine, state.Crlf, state.LineTerminator, state.Utf8, state.UnicodeClasses))
                 {
-                    AddThread(state.Next, haystack, position, threads, visited, closedSplits);
+                    AddThread(state.Next, haystack, position, threads, seen, visited, closedSplits);
                 }
 
                 break;
             default:
-                threads.Add((stateIndex, position));
+                AddThreadEntry(stateIndex, position, threads, seen);
                 break;
+        }
+    }
+
+    private static void AddThreadEntry(
+        int stateIndex,
+        int position,
+        List<(int State, int Position)> threads,
+        HashSet<(int State, int Position)> seen)
+    {
+        if (seen.Add((stateIndex, position)))
+        {
+            threads.Add((stateIndex, position));
         }
     }
 
@@ -237,6 +261,7 @@ internal sealed class PikeVm
         ReadOnlySpan<byte> haystack,
         int position,
         List<(int State, int Position)> threads,
+        HashSet<(int State, int Position)> seen,
         bool[] visited,
         bool[] closedSplits)
     {
@@ -250,10 +275,10 @@ internal sealed class PikeVm
         switch (state.Kind)
         {
             case RegexNfaStateKind.GreedyLoopSplit:
-                AddThread(state.Alternative, haystack, position, threads, visited, closedSplits);
+                AddThread(state.Alternative, haystack, position, threads, seen, visited, closedSplits);
                 break;
             case RegexNfaStateKind.LazyLoopSplit:
-                AddThread(state.Next, haystack, position, threads, visited, closedSplits);
+                AddThread(state.Next, haystack, position, threads, seen, visited, closedSplits);
                 break;
         }
     }

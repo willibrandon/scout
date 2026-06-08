@@ -594,6 +594,107 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies a leading alternation inside a sequence uses a prefix-set prefilter.
+    /// </summary>
+    [Fact]
+    public void BuildsPrefixPrefilterForSequenceLeadingAlternation()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"(?:public|private|protected|internal)[^;={}]*\([^)]*(?:,[^)]*){8,}\)"u8,
+            multiLine: true,
+            dotMatchesNewline: false);
+
+        Assert.NotEqual(RegexPrefilterKind.None, automaton.PrefilterKind);
+        Assert.Equal(
+            new RegexMatch(7, 41),
+            automaton.Find("ignore\ninternal static void M(a,b,c,d,e,f,g,h,i)\n"u8));
+    }
+
+    /// <summary>
+    /// Verifies impossible sequence-prefix candidates are skipped without hiding a later valid match.
+    /// </summary>
+    [Fact]
+    public void SequenceAlternationPrefixGatePreservesLaterSignatureMatch()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"(?:public|private|protected|internal)[^;={}]*\([^)]*(?:,[^)]*){8,}\)"u8,
+            multiLine: true,
+            dotMatchesNewline: false);
+
+        const string prefix = "public nope;\nprivate nope;\n";
+        const string match = "internal static void M(a,b,c,d,e,f,g,h,i)";
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes(prefix + match + "\n");
+
+        Assert.Equal(
+            new RegexMatch(prefix.Length, match.Length),
+            automaton.Find(haystack));
+    }
+
+    /// <summary>
+    /// Verifies prefix-gate skipping stays conservative when terminators can also start a prefix.
+    /// </summary>
+    [Fact]
+    public void SequenceAlternationPrefixGatePreservesOverlappingTerminatorPrefix()
+    {
+        var automaton = RegexAutomaton.Compile(@"(?:x|y)[^x]*a"u8);
+
+        Assert.Equal(new RegexMatch(1, 2), automaton.Find("xxa"u8));
+    }
+
+    /// <summary>
+    /// Verifies prefix-gate skipping is not applied across inline flag changes.
+    /// </summary>
+    [Fact]
+    public void SequenceAlternationPrefixGateIgnoresInlineFlagShapes()
+    {
+        var automaton = RegexAutomaton.Compile(@"(?:a|b)[^x]*(?i)z"u8);
+
+        Assert.Equal(new RegexMatch(0, 2), automaton.Find("aZ"u8));
+    }
+
+    /// <summary>
+    /// Verifies a large lazy-DFA state space fails over before pathological no-match verification stalls.
+    /// </summary>
+    [Fact(Timeout = 1000)]
+    public void RejectsUnterminatedRepeatedRegexSignatureWithoutStalling()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"(?:public|private|protected|internal)[^;={}]*\([^)]*(?:,[^)]*){8,}\)"u8,
+            multiLine: true,
+            dotMatchesNewline: false);
+        var fallbackAutomaton = RegexAutomaton.Compile(
+            @"(?:public|private|protected|internal)[^;={}]*\([^)]*(?:,[^)]*){8,}\)"u8,
+            caseInsensitive: false,
+            multiLine: true,
+            dotMatchesNewline: false,
+            dfaSizeLimit: 0);
+
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes(
+            "internal static bool Foo(" +
+            string.Concat(Enumerable.Repeat("ReadOnlyMemory<byte>? replacement,", 20)));
+
+        Assert.Null(automaton.Find(haystack));
+        Assert.Null(fallbackAutomaton.Find(haystack));
+    }
+
+    /// <summary>
+    /// Verifies failed lazy-DFA prefix candidates stop at the dead state instead of rescanning to EOF.
+    /// </summary>
+    [Fact(Timeout = 1000)]
+    public void RejectsManyFailedSignaturePrefixesWithoutRescanningRemainder()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"(?:public|private|protected|internal)[^;={}]*\([^)]*(?:,[^)]*){8,}\)"u8,
+            multiLine: true,
+            dotMatchesNewline: false);
+
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes(
+            string.Concat(Enumerable.Repeat("public nope;\n", 20_000)));
+
+        Assert.Null(automaton.Find(haystack));
+    }
+
+    /// <summary>
     /// Verifies a zero DFA cache limit preserves match semantics through fallback.
     /// </summary>
     [Fact]

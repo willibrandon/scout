@@ -133,7 +133,7 @@ internal static class StandardSearchByteOperations
         TimeSpan searchElapsed = Stopwatch.GetElapsedTime(started);
         output.Write(body);
 
-        SearchStats fileStats = CollectSearchStats(bytes, pattern, searchMode, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, separators.Crlf, separators.NullData, maxCount, stopOnNonmatch, searchMode == CliSearchMode.Standard ? (ulong)body.Length : 0, searchElapsed);
+        SearchStats fileStats = CollectSearchStats(bytes, pattern, searchMode, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, separators.Crlf, separators.NullData, maxCount, stopOnNonmatch, searchMode == CliSearchMode.Standard ? (ulong)body.Length : 0, searchElapsed);
         stats.Add(fileStats);
         return matched;
     }
@@ -146,6 +146,8 @@ internal static class StandardSearchByteOperations
         bool invertMatch,
         bool lineRegexp,
         bool wordRegexp,
+        bool multiline,
+        bool multilineDotall,
         bool crlf,
         bool nullData,
         ulong? maxCount,
@@ -159,6 +161,53 @@ internal static class StandardSearchByteOperations
         stats.AddBytesPrinted(bytesPrinted);
 
         bool statsInvertMatch = searchMode == CliSearchMode.FilesWithoutMatch ? false : invertMatch;
+        if (multiline &&
+            !crlf &&
+            !nullData &&
+            PatternPreparation.ShouldUseMultilineRegex(pattern, multilineDotall))
+        {
+            List<RegexMatch> matches = MultilineSearchOperations.TryCollectSignatureArityMatches(bytes, pattern, asciiCaseInsensitive, lineRegexp, wordRegexp, out List<RegexMatch> acceleratedMatches)
+                ? acceleratedMatches
+                : MultilineSearchOperations.CollectMultilineMatches(bytes, pattern, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall);
+            List<ContextLineInfo> multilineLines = statsInvertMatch
+                ? MultilineSearchOperations.BuildMultilineInvertedLines(bytes, pattern, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall)
+                : MultilineSearchOperations.BuildMultilineContextLines(bytes, matches, stopOnNonmatch);
+            ulong matchedLines = 0;
+            for (int index = 0; index < multilineLines.Count; index++)
+            {
+                if (!multilineLines[index].SelectedMatch)
+                {
+                    continue;
+                }
+
+                matchedLines++;
+                if (maxCount is ulong limit && matchedLines >= limit)
+                {
+                    break;
+                }
+            }
+
+            if (matchedLines > 0)
+            {
+                stats.AddMatchedLines(matchedLines);
+                stats.AddSearchWithMatch();
+            }
+
+            if (!statsInvertMatch)
+            {
+                ulong matchCount = (ulong)matches.Count;
+                if (maxCount is ulong limit && matchCount > limit)
+                {
+                    matchCount = limit;
+                }
+
+                stats.AddMatches(matchCount);
+            }
+
+            stats.AddBytesSearched((ulong)bytes.Length);
+            return stats;
+        }
+
         if (!stopOnNonmatch && maxCount is null)
         {
             RegexSearchPlan? regexPlan = LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: true);

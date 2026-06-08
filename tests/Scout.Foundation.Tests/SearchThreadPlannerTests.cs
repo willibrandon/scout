@@ -77,12 +77,12 @@ public sealed class SearchThreadPlannerTests
     /// </summary>
     [Theory]
     [InlineData(1, 1)]
-    [InlineData(2, 5)]
-    [InlineData(3, 5)]
-    [InlineData(4, 5)]
-    [InlineData(5, 5)]
-    [InlineData(6, 5)]
-    [InlineData(12, 5)]
+    [InlineData(2, 4)]
+    [InlineData(3, 4)]
+    [InlineData(4, 4)]
+    [InlineData(5, 4)]
+    [InlineData(6, 4)]
+    [InlineData(12, 4)]
     public void SearchWalkPlanningUsesMacOsDefaultDirectorySearchThreadMatrix(int upstreamDefault, int expectedThreads)
     {
         int threads = SearchWalkPlanning.GetMacOsDefaultSearchWalkThreadCount(upstreamDefault);
@@ -118,6 +118,21 @@ public sealed class SearchThreadPlannerTests
         int expected = OperatingSystem.IsMacOS() ? SearchWalkPlanning.GetMacOsDefaultLargeFileSearchThreadCount(upstreamDefault) : upstreamDefault;
 
         int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(lowArgs);
+
+        Assert.Equal(expected, threads);
+    }
+
+    /// <summary>
+    /// Verifies default one-file large searches keep Scout's ordered internal segment workers.
+    /// </summary>
+    [Fact]
+    public void SearchWalkPlanningKeepsDefaultOneFileLargeSearchParallelism()
+    {
+        var lowArgs = new CliLowArgs();
+        int upstreamDefault = Math.Min(Environment.ProcessorCount, 12);
+        int expected = OperatingSystem.IsMacOS() ? SearchWalkPlanning.GetMacOsDefaultLargeFileSearchThreadCount(upstreamDefault) : upstreamDefault;
+
+        int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(lowArgs, isOneFile: true);
 
         Assert.Equal(expected, threads);
     }

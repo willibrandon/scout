@@ -7,12 +7,20 @@ on:
         description: Commit SHA or ref to test. Defaults to the workflow ref.
         required: false
         type: string
+      gate:
+        description: Gate subset to run.
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - performance
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.checkout_ref || github.ref }}
+  group: ${{ github.workflow }}-${{ inputs.gate || 'all' }}-${{ inputs.checkout_ref || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -25,7 +33,8 @@ env:
 
 jobs:
   full-tests-linux:
-    name: full pinned tests (${{ matrix.rid }})
+    name: full pinned Linux tests
+    if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
     container:
@@ -103,7 +112,8 @@ jobs:
         run: native/build-app-unix.sh ${{ matrix.rid }} --with-differentials
 
   full-tests-macos:
-    name: full pinned tests (${{ matrix.rid }})
+    name: full pinned macOS tests
+    if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
     strategy:
@@ -144,7 +154,8 @@ jobs:
         run: native/build-app-unix.sh ${{ matrix.rid }} --with-differentials
 
   full-tests-windows:
-    name: full pinned tests (${{ matrix.rid }})
+    name: full pinned Windows tests
+    if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
     strategy:
@@ -188,6 +199,7 @@ jobs:
 
   performance-gate:
     name: hyperfine performance gate
+    if: ${{ inputs.gate == '' || inputs.gate == 'all' || inputs.gate == 'performance' }}
     runs-on: macos-26
     timeout-minutes: 360
     steps:
@@ -221,6 +233,7 @@ jobs:
 
   native-linux-x64:
     name: release native Linux gate (linux-x64)
+    if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     container:
@@ -275,6 +288,7 @@ jobs:
 
   native-linux-arm64:
     name: release native Linux gate (linux-arm64)
+    if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 120
     steps:
@@ -293,7 +307,8 @@ jobs:
         run: native/build-app-unix.sh linux-arm64 --smoke-only
 
   native-macos:
-    name: release native macOS gate (${{ matrix.rid }})
+    name: release native macOS gate
+    if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     strategy:
@@ -317,7 +332,8 @@ jobs:
         run: native/build-app-unix.sh ${{ matrix.rid }} --smoke-only
 
   native-windows:
-    name: release native Windows gate (${{ matrix.rid }})
+    name: release native Windows gate
+    if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     strategy:

@@ -4225,6 +4225,37 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies color always highlights optimized multiline signature matches.
+    /// </summary>
+    [Fact]
+    public void ColorAlwaysHighlightsMultilineSignatureArityOutput()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.cs");
+        File.WriteAllText(path, """
+            internal static bool SearchQuiet(
+                ReadOnlySpan<byte> bytes,
+                IReadOnlyList<byte[]> pattern,
+                CliSearchMode searchMode,
+                bool asciiCaseInsensitive,
+                bool invertMatch,
+                bool lineRegexp,
+                bool wordRegexp,
+                ulong? maxCount,
+                bool crlf,
+                bool nullData)
+            """);
+
+        const string Pattern = @"(?:public|private|protected|internal)[^;={}]*\([^)]*(?:,[^)]*){8,}\)";
+        (int exitCode, byte[] output, string error) = RunScout("--color=always", "-U", Pattern, path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--color=always", "-U", Pattern, path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies color always highlights only-matching output.
     /// </summary>
     [Fact]
@@ -5331,6 +5362,30 @@ public sealed class ScoutApplicationTests
         Assert.Equal(0, exitCode);
         Assert.Equal($"{Path.Combine(root, "child", "keep.txt")}:needle child\n", Utf8(output.ToArray()));
         Assert.Empty(error.ToArray());
+    }
+
+    /// <summary>
+    /// Verifies recursive literal search output matches ripgrep after filtering many no-match files.
+    /// </summary>
+    [Fact]
+    public void LiteralSearchRecursesDirectoriesWithManyNoMatchFiles()
+    {
+        string root = CreateTempDirectory();
+        string child = Path.Combine(root, "child");
+        Directory.CreateDirectory(child);
+        for (int index = 0; index < 32; index++)
+        {
+            File.WriteAllText(Path.Combine(root, $"miss-{index:D2}.txt"), "miss\n");
+        }
+
+        File.WriteAllText(Path.Combine(child, "keep.txt"), "miss\nneedle child\n");
+
+        (int exitCode, byte[] output, string error) = RunScout("--threads=2", "--path-separator", "/", "needle", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--threads=2", "--path-separator", "/", "needle", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
     }
 
     /// <summary>

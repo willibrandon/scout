@@ -4,6 +4,8 @@ internal sealed class IgnoreRuleSet
 {
     private readonly List<IgnoreRule> rules = [];
     private string? baseDirectory;
+    private GlobSet? globSet;
+    private bool[]? fileRuleEligibility;
 
     public bool IsEmpty => rules.Count == 0;
 
@@ -13,6 +15,8 @@ internal sealed class IgnoreRuleSet
     {
         baseDirectory ??= rule.BaseDirectory;
         rules.Add(rule);
+        globSet = null;
+        fileRuleEligibility = null;
     }
 
     public void AddFile(string baseDirectory, string path, bool asciiCaseInsensitive)
@@ -94,25 +98,38 @@ internal sealed class IgnoreRuleSet
 
     internal IgnoreDecision Match(DirEntry entry, out IgnoreRule? matchedRule)
     {
+        matchedRule = null;
+        if (rules.Count == 0)
+        {
+            return IgnoreDecision.None;
+        }
+
+        string? relativePath = GetRelativePath(entry.FullPath);
+        if (relativePath is null)
+        {
+            return MatchSlow(entry, out matchedRule);
+        }
+
+        var candidate = GlobCandidate.FromBytes(System.Text.Encoding.UTF8.GetBytes(relativePath));
+        ReadOnlySpan<bool> eligible = entry.IsDirectory ? [] : GetFileRuleEligibility();
+        int matchedIndex = GetGlobSet().LastMatchingIndex(candidate, eligible);
+        if (matchedIndex < 0)
+        {
+            return IgnoreDecision.None;
+        }
+
+        matchedRule = rules[matchedIndex];
+        return matchedRule.IsWhitelist ? IgnoreDecision.Whitelist : IgnoreDecision.Ignore;
+    }
+
+    private IgnoreDecision MatchSlow(DirEntry entry, out IgnoreRule? matchedRule)
+    {
         IgnoreDecision decision = IgnoreDecision.None;
         matchedRule = null;
-        string? relativePath = null;
-        bool relativePathComputed = false;
         for (int index = 0; index < rules.Count; index++)
         {
             IgnoreRule rule = rules[index];
-            if (rule.NeedsRelativePath && !relativePathComputed)
-            {
-                relativePath = GetRelativePath(entry.FullPath);
-                relativePathComputed = true;
-            }
-
-            if (rule.NeedsRelativePath && relativePath is null)
-            {
-                continue;
-            }
-
-            IgnoreDecision current = rule.Match(entry, relativePath);
+            IgnoreDecision current = rule.Match(entry);
             if (current != IgnoreDecision.None)
             {
                 decision = current;
@@ -121,6 +138,39 @@ internal sealed class IgnoreRuleSet
         }
 
         return decision;
+    }
+
+    private GlobSet GetGlobSet()
+    {
+        if (globSet is not null)
+        {
+            return globSet;
+        }
+
+        var globs = new Glob[rules.Count];
+        for (int index = 0; index < rules.Count; index++)
+        {
+            globs[index] = rules[index].Glob;
+        }
+
+        globSet = GlobSet.Create(globs);
+        return globSet;
+    }
+
+    private bool[] GetFileRuleEligibility()
+    {
+        if (fileRuleEligibility is not null)
+        {
+            return fileRuleEligibility;
+        }
+
+        fileRuleEligibility = new bool[rules.Count];
+        for (int index = 0; index < rules.Count; index++)
+        {
+            fileRuleEligibility[index] = !rules[index].IsDirectoryOnly;
+        }
+
+        return fileRuleEligibility;
     }
 
     private string? GetRelativePath(string fullPath)

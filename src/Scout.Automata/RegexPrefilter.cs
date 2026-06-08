@@ -6,24 +6,28 @@ internal sealed class RegexPrefilter
     private readonly MemmemFinder? memmem;
     private readonly RegexTeddyPrefilter? teddy;
     private readonly AhoCorasickAutomaton? ahoCorasick;
+    private readonly RegexPrefixCandidateGate? candidateGate;
 
     private RegexPrefilter(
         RegexPrefilterKind kind,
         MemmemFinder? memmem,
         RegexTeddyPrefilter? teddy,
-        AhoCorasickAutomaton? ahoCorasick)
+        AhoCorasickAutomaton? ahoCorasick,
+        RegexPrefixCandidateGate? candidateGate = null)
     {
         Kind = kind;
         this.memmem = memmem;
         this.teddy = teddy;
         this.ahoCorasick = ahoCorasick;
+        this.candidateGate = candidateGate;
     }
 
     public RegexPrefilterKind Kind { get; }
 
     public static RegexPrefilter? Compile(RegexSyntaxNode root, RegexCompileOptions options)
     {
-        if (TryCreateAlternationPrefixPrefilter(root, options, out RegexPrefilter? prefilter))
+        if (TryCreateAlternationPrefixPrefilter(root, options, out RegexPrefilter? prefilter) ||
+            TryCreateSequenceAlternationPrefixPrefilter(root, options, out prefilter))
         {
             return prefilter;
         }
@@ -41,7 +45,44 @@ internal sealed class RegexPrefilter
             ahoCorasick: null);
     }
 
+    private static bool TryCreateSequenceAlternationPrefixPrefilter(RegexSyntaxNode root, RegexCompileOptions options, out RegexPrefilter? prefilter)
+    {
+        prefilter = null;
+        if (!TryCollectSequenceAlternationPrefixes(root, options, out byte[][]? prefixes))
+        {
+            return false;
+        }
+
+        RegexPrefixCandidateGate? candidateGate = null;
+        RegexPrefixCandidateGate.TryCreate(root, options, prefixes, out candidateGate);
+        return prefixes is not null &&
+            TryCreatePrefixSetPrefilter(prefixes, candidateGate, out prefilter);
+    }
+
     public int FindCandidate(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        int searchAt = startAt;
+        while (searchAt < haystack.Length)
+        {
+            int candidate = FindRawCandidate(haystack, searchAt);
+            if (candidate < 0)
+            {
+                return -1;
+            }
+
+            if (candidateGate is null ||
+                candidateGate.CanMatch(haystack, candidate, out int resumeAt))
+            {
+                return candidate;
+            }
+
+            searchAt = Math.Clamp(Math.Max(resumeAt, candidate + 1), 0, haystack.Length);
+        }
+
+        return -1;
+    }
+
+    private int FindRawCandidate(ReadOnlySpan<byte> haystack, int startAt)
     {
         if (memmem is not null)
         {
@@ -79,13 +120,25 @@ internal sealed class RegexPrefilter
             prefixes[index] = prefix.ToArray();
         }
 
+        return TryCreatePrefixSetPrefilter(prefixes, candidateGate: null, out prefilter);
+    }
+
+    private static bool TryCreatePrefixSetPrefilter(byte[][] prefixes, RegexPrefixCandidateGate? candidateGate, out RegexPrefilter? prefilter)
+    {
+        prefilter = null;
+        if (prefixes.Length < 2)
+        {
+            return false;
+        }
+
         if (RegexTeddyPrefilter.TryCreate(prefixes, out RegexTeddyPrefilter? teddy))
         {
             prefilter = new RegexPrefilter(
                 RegexPrefilterKind.Teddy,
                 memmem: null,
                 teddy,
-                ahoCorasick: null);
+                ahoCorasick: null,
+                candidateGate);
             return true;
         }
 
@@ -93,8 +146,65 @@ internal sealed class RegexPrefilter
             RegexPrefilterKind.AhoCorasick,
             memmem: null,
             teddy: null,
-            ahoCorasick: AhoCorasickAutomaton.Create(prefixes, AhoCorasickMatchKind.LeftmostFirst));
+            ahoCorasick: AhoCorasickAutomaton.Create(prefixes, AhoCorasickMatchKind.LeftmostFirst),
+            candidateGate);
         return true;
+    }
+
+    private static bool TryCollectSequenceAlternationPrefixes(RegexSyntaxNode node, RegexCompileOptions options, out byte[][]? prefixes)
+    {
+        prefixes = null;
+        node = UnwrapTransparentGroups(node);
+        if (node is RegexAlternationNode alternation)
+        {
+            prefixes = new byte[alternation.Alternatives.Count][];
+            for (int index = 0; index < alternation.Alternatives.Count; index++)
+            {
+                var prefix = new List<byte>();
+                if (!TryAppendRequiredPrefix(alternation.Alternatives[index], options, prefix, out _) ||
+                    prefix.Count == 0)
+                {
+                    prefixes = null;
+                    return false;
+                }
+
+                prefixes[index] = prefix.ToArray();
+            }
+
+            return true;
+        }
+
+        if (node is RegexGroupNode group)
+        {
+            RegexCompileOptions groupOptions = options.Apply(group.EnabledFlags, group.DisabledFlags);
+            return TryCollectSequenceAlternationPrefixes(group.Child, groupOptions, out prefixes);
+        }
+
+        if (node is RegexRepetitionNode repetition)
+        {
+            return repetition.Minimum > 0 &&
+                TryCollectSequenceAlternationPrefixes(repetition.Child, options, out prefixes);
+        }
+
+        if (node is not RegexSequenceNode sequence)
+        {
+            return false;
+        }
+
+        RegexCompileOptions currentOptions = options;
+        for (int index = 0; index < sequence.Nodes.Count; index++)
+        {
+            RegexSyntaxNode child = sequence.Nodes[index];
+            if (child is RegexInlineFlagsNode flags)
+            {
+                currentOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
+                continue;
+            }
+
+            return TryCollectSequenceAlternationPrefixes(child, currentOptions, out prefixes);
+        }
+
+        return false;
     }
 
     private static bool TryAppendRequiredPrefix(

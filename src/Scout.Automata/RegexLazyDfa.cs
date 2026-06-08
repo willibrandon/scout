@@ -27,7 +27,7 @@ internal sealed class RegexLazyDfa
         var budget = new RegexDfaBudget(dfaSizeLimit);
         var states = new Dictionary<RegexDfaStateKey, RegexLazyDfaState>();
         int[] startNfaStates = RegexDfaOperations.Closure(nfa, nfa.StartState);
-        if (!TryIntern(states, ref budget, startNfaStates, out RegexLazyDfaState? startState))
+        if (!TryIntern(nfa, states, ref budget, startNfaStates, out RegexLazyDfaState? startState))
         {
             dfa = null;
             return false;
@@ -43,7 +43,7 @@ internal sealed class RegexLazyDfa
         int deferredAcceptLength = -1;
         for (int position = start; position <= haystack.Length; position++)
         {
-            int acceptIndex = RegexDfaOperations.IndexOfAccept(nfa, current.NfaStates);
+            int acceptIndex = current.AcceptIndex;
             if (acceptIndex >= 0)
             {
                 deferredAcceptLength = position - start;
@@ -64,10 +64,16 @@ internal sealed class RegexLazyDfa
                 return fallback.TryMatchAt(haystack, start, out length);
             }
 
-            if (current.NfaStates.Length == 0 && deferredAcceptLength >= 0)
+            if (current.NfaStates.Length == 0)
             {
-                length = deferredAcceptLength;
-                return true;
+                if (deferredAcceptLength >= 0)
+                {
+                    length = deferredAcceptLength;
+                    return true;
+                }
+
+                length = 0;
+                return false;
             }
         }
 
@@ -90,7 +96,7 @@ internal sealed class RegexLazyDfa
         }
 
         if (!budget.TryReserve(RegexDfaBudget.SparseTransitionBytes) ||
-            !TryIntern(states, ref budget, RegexDfaOperations.Move(nfa, state.NfaStates, value), out RegexLazyDfaState? created))
+            !TryIntern(nfa, states, ref budget, RegexDfaOperations.Move(nfa, state.NfaStates, value), out RegexLazyDfaState? created))
         {
             nextState = state;
             return false;
@@ -102,6 +108,7 @@ internal sealed class RegexLazyDfa
     }
 
     private static bool TryIntern(
+        RegexNfa nfa,
         Dictionary<RegexDfaStateKey, RegexLazyDfaState> states,
         ref RegexDfaBudget budget,
         int[] nfaStates,
@@ -120,7 +127,7 @@ internal sealed class RegexLazyDfa
             return false;
         }
 
-        state = new RegexLazyDfaState(nfaStates);
+        state = new RegexLazyDfaState(nfaStates, RegexDfaOperations.IndexOfAccept(nfa, nfaStates));
         states.Add(key, state);
         return true;
     }

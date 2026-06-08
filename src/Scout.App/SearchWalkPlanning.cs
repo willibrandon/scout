@@ -4,7 +4,7 @@ namespace Scout;
 
 internal static class SearchWalkPlanning
 {
-    private const int MacOsDefaultSearchWalkThreadCount = 5;
+    private const int MacOsDefaultSearchWalkThreadCount = 4;
     private const int MacOsDefaultLargeFileSearchThreadCount = 4;
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
@@ -114,6 +114,7 @@ internal static class SearchWalkPlanning
 
     internal static int GetLargeFileSearchThreadCount(CliLowArgs lowArgs, bool isOneFile = false)
     {
+        // Large-file streaming uses ordered internal segment workers even when the search target is one file.
         ulong resolvedThreads = SearchThreadPlanner.Resolve(lowArgs.Threads, lowArgs.SortMode is not null, isOneFile: false);
         if (resolvedThreads <= 1)
         {

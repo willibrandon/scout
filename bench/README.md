@@ -22,7 +22,9 @@ bench/run-hyperfine.sh --gate
 GitHub's default `CI` workflow runs hosted cross-platform build, test, format,
 fuzz, and native link checks. After `CI` succeeds on `main`, it dispatches the
 `Release Gates` workflow with the exact successful commit SHA; the workflow can
-also be started manually from Actions. Release Gates repeat the native
+also be started manually from Actions. Manual performance-only reruns should set
+`gate=performance` and `checkout_ref` to the commit SHA under test. Release
+Gates repeat the native
 entrypoint and final `scout` executable smoke checks on all six hosted release
 RIDs: `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`, `win-x64`, and
 `win-arm64`. Full pinned test passes currently run on the hosted Unix RIDs with
@@ -45,18 +47,24 @@ manifest. The committed lockfile now contains frozen hashes, so
 `SCOUT_BENCH_OPENSUBTITLES_EN` and `SCOUT_BENCH_LINUX_TREE` can override them.
 
 The script enforces the wall-time gates from `docs/DESIGN.md` with hyperfine's
-median wall time. Median peak RSS is capped at 1.5x rg plus the measured Native
-AOT fixed-image floor recorded in `docs/PARITY.md`: the script first measures an
-rg and `scout-real` tiny `--mmap -n` literal RSS floor and allows the measured
-Scout Native AOT floor in addition to the 1.5x rg limit for every RSS gate.
-Median timing and median per-run peak RSS keep all
-hosted-runner samples while preventing one noisy sample from deciding the release
-gate. Because hyperfine 1.20 runs command groups in input order instead of
-interleaving them, a failed timing gate is rerun with the `scout` and `rg`
-command order reversed before the failure is accepted.
-Peak RSS is judged from the rg-first run so the later rg command cannot inherit an
+median wall time. In gate mode, every workload is measured in both command
+orders (`rg` then `scout`, and `scout` then `rg`); the timing gate uses the
+combined median samples for each binary. This removes command-order bias from
+hosted macOS runners, where hyperfine 1.20 runs each command group in input
+order instead of interleaving individual runs.
+
+The OpenSubtitles large-file workloads pin `--threads 4` so the segmented regex
+path is measured against a stable worker count. The gate also prints and checks
+the line-aligned 128 KiB byte-segment distribution before measuring, which
+catches corpus or chunking changes that would create uneven worker input.
+
+Median peak RSS is capped at 1.5x rg plus the measured Native AOT fixed-image
+floor recorded in `docs/PARITY.md`: the script first measures an rg and
+`scout-real` tiny `--mmap -n` literal RSS floor and allows the measured Scout
+Native AOT floor in addition to the 1.5x rg limit for every RSS gate. Peak RSS
+is judged from the rg-first run so the later rg command cannot inherit an
 earlier scout process peak on macOS.
-In gate mode, the OpenSubtitles workloads use five runs and two warmups, and the
+In gate mode, the OpenSubtitles workloads use five runs and five warmups, and the
 Linux-tree workloads use five runs and five warmups by default because hosted
 macOS filesystem timings are noisier; explicit `--runs` and `--warmup` values
 still override those defaults.

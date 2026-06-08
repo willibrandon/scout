@@ -56,6 +56,26 @@ internal static class RegexByteClass
         bool requiresUtf8ScalarMatch = RequiresUtf8ScalarMatch(kind, expression, utf8, caseInsensitive, unicodeClasses);
         if (requiresUtf8ScalarMatch)
         {
+            if (haystack[position] <= 0x7F &&
+                CanUseAsciiScalarFastPath(kind, expression))
+            {
+                if (!AtomMatches(
+                    haystack[position],
+                    kind,
+                    expression,
+                    caseInsensitive,
+                    multiLine,
+                    dotMatchesNewline,
+                    crlf,
+                    lineTerminator))
+                {
+                    return false;
+                }
+
+                length = 1;
+                return true;
+            }
+
             if (!IsUtf8Boundary(haystack, position) ||
                 !TryDecodeUtf8Scalar(haystack, position, out Rune rune, out length) ||
                 !AtomMatches(
@@ -91,6 +111,49 @@ internal static class RegexByteClass
 
         length = 1;
         return true;
+    }
+
+    private static bool CanUseAsciiScalarFastPath(RegexSyntaxKind kind, ReadOnlySpan<byte> expression)
+    {
+        return kind switch
+        {
+            RegexSyntaxKind.Literal => expression.Length == 1 && expression[0] <= 0x7F,
+            RegexSyntaxKind.CharacterClass => IsAscii(expression) && !ContainsUnicodePropertyClassToken(expression),
+            RegexSyntaxKind.UnicodePropertyClass or RegexSyntaxKind.NotUnicodePropertyClass => false,
+            _ => true,
+        };
+    }
+
+    private static bool IsAscii(ReadOnlySpan<byte> bytes)
+    {
+        for (int index = 0; index < bytes.Length; index++)
+        {
+            if (bytes[index] > 0x7F)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool ContainsUnicodePropertyClassToken(ReadOnlySpan<byte> expression)
+    {
+        int index = IsNegatedClass(expression) ? 1 : 0;
+        while (index < expression.Length)
+        {
+            if (!TryReadClassToken(expression, ref index, out RegexSyntaxKind tokenKind, out _, out _))
+            {
+                return false;
+            }
+
+            if (tokenKind is RegexSyntaxKind.UnicodePropertyClass or RegexSyntaxKind.NotUnicodePropertyClass)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public static bool PredicateMatches(

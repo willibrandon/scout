@@ -4962,7 +4962,7 @@ public static class LiteralLineSearcher
         return !requireMatchColumn && haystack.Slice(nonAscii, matchStart - nonAscii).IndexOf((byte)'\n') < 0;
     }
 
-    private static int Find(ReadOnlySpan<byte> haystack, ReadOnlySpan<byte> needle, bool asciiCaseInsensitive)
+    internal static int Find(ReadOnlySpan<byte> haystack, ReadOnlySpan<byte> needle, bool asciiCaseInsensitive)
     {
         if (!asciiCaseInsensitive)
         {
@@ -5027,7 +5027,7 @@ public static class LiteralLineSearcher
         return false;
     }
 
-    private static bool IsLiteralRegex(ReadOnlySpan<byte> pattern)
+    internal static bool IsLiteralRegex(ReadOnlySpan<byte> pattern)
     {
         for (int index = 0; index < pattern.Length; index++)
         {

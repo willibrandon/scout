@@ -106,16 +106,28 @@ public static class ByteCounter
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
         var needleVector = Vector128.Create(needle);
         Vector128<uint> counts = Vector128<uint>.Zero;
+        Vector128<byte> laneCounts = Vector128<byte>.Zero;
         int offset = 0;
         int vectorLimit = haystack.Length - (haystack.Length % Vector128<byte>.Count);
+        int batchCount = 0;
         while (offset < vectorLimit)
         {
             var block = Vector128.LoadUnsafe(ref reference, (nuint)offset);
             var matches = Vector128.ShiftRightLogical(Vector128.Equals(block, needleVector), 7);
-            Vector128<ushort> pairCounts = AdvSimd.AddPairwiseWidening(matches);
-            Vector128<uint> quadCounts = AdvSimd.AddPairwiseWidening(pairCounts);
-            counts += quadCounts;
+            laneCounts += matches;
+            batchCount++;
             offset += Vector128<byte>.Count;
+            if (batchCount == byte.MaxValue)
+            {
+                counts += WidenAdvSimdLaneCounts(laneCounts);
+                laneCounts = Vector128<byte>.Zero;
+                batchCount = 0;
+            }
+        }
+
+        if (batchCount != 0)
+        {
+            counts += WidenAdvSimdLaneCounts(laneCounts);
         }
 
         long count =
@@ -124,6 +136,12 @@ public static class ByteCounter
             counts.GetElement(2) +
             counts.GetElement(3);
         return count + CountScalar(haystack, needle, offset);
+    }
+
+    private static Vector128<uint> WidenAdvSimdLaneCounts(Vector128<byte> laneCounts)
+    {
+        Vector128<ushort> pairCounts = AdvSimd.AddPairwiseWidening(laneCounts);
+        return AdvSimd.AddPairwiseWidening(pairCounts);
     }
 
     private static long CountScalar(ReadOnlySpan<byte> haystack, byte needle, int start)

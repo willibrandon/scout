@@ -1,10 +1,14 @@
+using System.Buffers;
 using System.Collections.Concurrent;
+using Microsoft.Win32.SafeHandles;
 
 namespace Scout;
 
 internal static class StandardSearchTargetOperations
 {
     private const int ParallelOutputFlushThreshold = 128 * 1024;
+    private const int ParallelDirectOutputFlushThreshold = 16 * 1024;
+    private const int DirectoryEntryLiteralPrecheckBufferLength = 16 * 1024;
 
     internal static bool SearchStandardInput(
         IReadOnlyList<byte[]> pattern,
@@ -314,9 +318,9 @@ internal static class StandardSearchTargetOperations
             SearchPathArgument.CreateDirectoryDisplayPathFormatter(root, fullRoot, defaultRoot, lowArgs.PathSeparator);
         bool interFileContextSeparator = StandardSearchOperations.ShouldWriteInterFileContextSeparator(lowArgs, heading, separators);
         bool wroteContextBody = false;
+        var literalPrecheckState = new DirectoryLiteralPrecheckState();
         foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics, logger))
         {
-            byte[] displayPathBytes = displayPaths.GetBytes(entry);
             if (interFileContextSeparator)
             {
                 using MemoryStream buffer = new();
@@ -325,7 +329,7 @@ internal static class StandardSearchTargetOperations
                 bool fileErrored = false;
                 SearchDirectoryEntryFile(
                     entry,
-                    displayPathBytes,
+                    displayPaths,
                     pattern,
                     lowArgs,
                     writer,
@@ -337,6 +341,7 @@ internal static class StandardSearchTargetOperations
                     asciiCaseInsensitive,
                     lineNumber,
                     heading,
+                    literalPrecheckState,
                     ref wroteHeadingOutput,
                     ref fileMatched,
                     ref fileErrored);
@@ -355,7 +360,7 @@ internal static class StandardSearchTargetOperations
 
             SearchDirectoryEntryFile(
                 entry,
-                displayPathBytes,
+                displayPaths,
                 pattern,
                 lowArgs,
                 output,
@@ -367,6 +372,7 @@ internal static class StandardSearchTargetOperations
                 asciiCaseInsensitive,
                 lineNumber,
                 heading,
+                literalPrecheckState,
                 ref wroteHeadingOutput,
                 ref matched,
                 ref errored);
@@ -403,6 +409,7 @@ internal static class StandardSearchTargetOperations
         bool directOutput = CanWriteParallelOutputDirectly(heading, interFileContextSeparator);
         bool printedContextBody = false;
         object outputLock = new();
+        var literalPrecheckState = new DirectoryLiteralPrecheckState();
         ConcurrentBag<MemoryStream>? directOutputBuffers = directOutput ? [] : null;
         using BlockingCollection<BufferedSearchOutput>? outputs = directOutput ? null : new BlockingCollection<BufferedSearchOutput>();
         using BackgroundWorkItem? printTask = directOutput ? null : BackgroundWorkItem.Queue(() =>
@@ -439,7 +446,9 @@ internal static class StandardSearchTargetOperations
         {
             SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger).Threads(threadCount).BuildParallel().Run(() =>
             {
-                MemoryStream buffer = new();
+                MemoryStream buffer = directOutput
+                    ? new LineFlushingMemoryStream(output, outputLock, GetParallelOutputLineFlushTerminator(separators), ParallelDirectOutputFlushThreshold)
+                    : new MemoryStream();
                 RawByteWriter writer = CreateParallelOutputWriter(buffer);
                 directOutputBuffers?.Add(buffer);
                 return entry =>
@@ -458,10 +467,9 @@ internal static class StandardSearchTargetOperations
                     bool fileWroteHeading = false;
                     bool fileMatched = false;
                     bool fileErrored = false;
-                    byte[] displayPathBytes = displayPaths.GetBytes(entry);
                     SearchDirectoryEntryFile(
                         entry,
-                        displayPathBytes,
+                        displayPaths,
                         pattern,
                         lowArgs,
                         writer,
@@ -473,6 +481,7 @@ internal static class StandardSearchTargetOperations
                         asciiCaseInsensitive,
                         lineNumber,
                         heading,
+                        literalPrecheckState,
                         ref fileWroteHeading,
                         ref fileMatched,
                         ref fileErrored);
@@ -675,7 +684,9 @@ internal static class StandardSearchTargetOperations
         {
             SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger).Threads(threadCount).BuildParallel().Run(() =>
             {
-                MemoryStream buffer = new();
+                MemoryStream buffer = directOutput
+                    ? new LineFlushingMemoryStream(output, outputLock, GetParallelOutputLineFlushTerminator(separators), ParallelDirectOutputFlushThreshold)
+                    : new MemoryStream();
                 RawByteWriter writer = CreateParallelOutputWriter(buffer);
                 directOutputBuffers?.Add(buffer);
                 return entry =>
@@ -826,11 +837,295 @@ internal static class StandardSearchTargetOperations
         WriteBufferedOutputIfAny(output, outputLock, buffer);
         buffer.Position = 0;
         buffer.SetLength(0);
+        if (buffer.Capacity > ParallelOutputFlushThreshold)
+        {
+            buffer.Capacity = 0;
+        }
     }
 
     private static bool CanWriteParallelOutputDirectly(bool heading, bool interFileContextSeparator)
     {
         return !heading && !interFileContextSeparator;
+    }
+
+    private static byte GetParallelOutputLineFlushTerminator(OutputSeparators separators)
+    {
+        return separators.NullData ? (byte)0 : (byte)'\n';
+    }
+
+    private static void SearchDirectoryEntryFile(
+        DirEntry entry,
+        SearchDirectoryDisplayPathFormatter displayPaths,
+        IReadOnlyList<byte[]> pattern,
+        CliLowArgs lowArgs,
+        RawByteWriter output,
+        DiagnosticMessenger diagnostics,
+        DiagnosticLogger logger,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool asciiCaseInsensitive,
+        bool lineNumber,
+        bool heading,
+        DirectoryLiteralPrecheckState literalPrecheckState,
+        ref bool wroteHeadingOutput,
+        ref bool matched,
+        ref bool errored)
+    {
+        if (TrySearchDirectoryEntryFileAfterLiteralPrecheck(
+            entry,
+            displayPaths,
+            pattern,
+            lowArgs,
+            output,
+            diagnostics,
+            logger,
+            separators,
+            lineLimit,
+            color,
+            asciiCaseInsensitive,
+            lineNumber,
+            heading,
+            literalPrecheckState,
+            ref wroteHeadingOutput,
+            ref matched,
+            ref errored))
+        {
+            return;
+        }
+
+        byte[] displayPath = displayPaths.GetBytes(entry);
+        SearchDirectoryEntryFile(
+            entry,
+            displayPath,
+            pattern,
+            lowArgs,
+            output,
+            diagnostics,
+            logger,
+            separators,
+            lineLimit,
+            color,
+            asciiCaseInsensitive,
+            lineNumber,
+            heading,
+            ref wroteHeadingOutput,
+            ref matched,
+            ref errored);
+    }
+
+    private static bool TrySearchDirectoryEntryFileAfterLiteralPrecheck(
+        DirEntry entry,
+        SearchDirectoryDisplayPathFormatter displayPaths,
+        IReadOnlyList<byte[]> pattern,
+        CliLowArgs lowArgs,
+        RawByteWriter output,
+        DiagnosticMessenger diagnostics,
+        DiagnosticLogger logger,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool asciiCaseInsensitive,
+        bool lineNumber,
+        bool heading,
+        DirectoryLiteralPrecheckState literalPrecheckState,
+        ref bool wroteHeadingOutput,
+        ref bool matched,
+        ref bool errored)
+    {
+        if (!literalPrecheckState.Enabled ||
+            !CanUseDirectoryEntryLiteralPrecheck(entry, pattern, lowArgs))
+        {
+            return false;
+        }
+
+        byte[] literal = pattern[0];
+        if (!TryFileContainsLiteralWithoutAllocating(entry.FullPath, literal, asciiCaseInsensitive, lowArgs.EncodingMode, out bool containsLiteral))
+        {
+            return false;
+        }
+
+        literalPrecheckState.Record(containsLiteral);
+        if (!containsLiteral)
+        {
+            return true;
+        }
+
+        if (!SearchFileContentReader.TryRead(entry.FullPath, lowArgs, autoMmapEligible: false, diagnostics, logger, out byte[] bytes, out SearchFileReadKind readKind, entry.Length))
+        {
+            errored = true;
+            return true;
+        }
+
+        SearchDiagnosticLogging.LogTraceSearchPath(logger, entry.FullPath, readKind);
+        byte[] displayPath = displayPaths.GetBytes(entry);
+        OutputPath outputPath = SearchOutputFormatting.CreateDirectoryEntryOutputPath(entry, displayPath, lowArgs, color);
+        OutputPath? prefix = SearchOutputFormatting.GetFileSearchPrefix(lowArgs.SearchMode, autoPrefixPath: true, lowArgs.WithFilename, outputPath);
+        bool memoryMapped = IsMemoryMapped(readKind);
+        bool searchTextMode = lowArgs.TextMode || SearchesBinaryAsText(readKind, lowArgs, lowArgs.SearchMode, bytes, pattern, asciiCaseInsensitive, invertMatch: false, lineRegexp: false, wordRegexp: false);
+        matched |= StandardSearchByteOperations.SearchBytesWithOptionalHeading(
+            bytes,
+            pattern,
+            output,
+            prefix,
+            separators,
+            lineLimit,
+            color,
+            lowArgs.SearchMode,
+            lowArgs.Vimgrep,
+            lineNumber,
+            SearchOutputFormatting.EffectiveColumn(lowArgs),
+            lowArgs.ByteOffset,
+            asciiCaseInsensitive,
+            false,
+            false,
+            false,
+            lowArgs.Multiline,
+            lowArgs.MultilineDotall,
+            lowArgs.OnlyMatching,
+            lowArgs.Replacement,
+            lowArgs.MaxCount,
+            searchTextMode,
+            lowArgs.Quiet,
+            lowArgs.Trim,
+            lowArgs.BeforeContext,
+            lowArgs.AfterContext,
+            lowArgs.Passthru,
+            lowArgs.IncludeZero,
+            lowArgs.NullPathTerminator,
+            lowArgs.StopOnNonmatch,
+            ShouldQuitOnBinary(lowArgs, true, searchTextMode),
+            heading,
+            ref wroteHeadingOutput,
+            memoryMapped);
+        return true;
+    }
+
+    private static bool CanUseDirectoryEntryLiteralPrecheck(
+        DirEntry entry,
+        IReadOnlyList<byte[]> pattern,
+        CliLowArgs lowArgs)
+    {
+        if (entry.IsRawUnixPath)
+        {
+            return false;
+        }
+
+        if (entry.Length is null)
+        {
+            return false;
+        }
+
+        if (lowArgs.SearchMode != CliSearchMode.Standard ||
+            lowArgs.InvertMatch ||
+            lowArgs.LineRegexp ||
+            lowArgs.WordRegexp ||
+            lowArgs.Multiline ||
+            lowArgs.Vimgrep ||
+            lowArgs.OnlyMatching ||
+            lowArgs.Replacement is not null ||
+            lowArgs.BeforeContext != 0 ||
+            lowArgs.AfterContext != 0 ||
+            lowArgs.Passthru ||
+            lowArgs.StopOnNonmatch ||
+            lowArgs.SearchZip ||
+            lowArgs.Preprocessor is not null ||
+            lowArgs.MaxCount == 0 ||
+            pattern.Count != 1)
+        {
+            return false;
+        }
+
+        byte[] literal = pattern[0];
+        return literal.Length != 0 &&
+            !literal.AsSpan().Contains((byte)'\n') &&
+            !literal.AsSpan().Contains((byte)'\r') &&
+            !literal.AsSpan().Contains((byte)0) &&
+            LiteralLineSearcher.IsLiteralRegex(literal);
+    }
+
+    private static bool TryFileContainsLiteralWithoutAllocating(
+        string path,
+        byte[] literal,
+        bool asciiCaseInsensitive,
+        CliEncodingMode encodingMode,
+        out bool containsLiteral)
+    {
+        containsLiteral = false;
+        if (encodingMode is not (CliEncodingMode.Auto or CliEncodingMode.None or CliEncodingMode.Utf8) ||
+            literal.Length > DirectoryEntryLiteralPrecheckBufferLength / 2 ||
+            (asciiCaseInsensitive && literal.AsSpan().IndexOfAnyExceptInRange((byte)0x00, (byte)0x7f) >= 0))
+        {
+            return false;
+        }
+
+        int overlapLength = literal.Length - 1;
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(DirectoryEntryLiteralPrecheckBufferLength + overlapLength);
+        try
+        {
+            using SafeFileHandle handle = File.OpenHandle(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete,
+                FileOptions.SequentialScan);
+            int preserved = 0;
+            long offset = 0;
+            bool firstRead = true;
+            while (true)
+            {
+                int read = RandomAccess.Read(handle, buffer.AsSpan(preserved, DirectoryEntryLiteralPrecheckBufferLength), offset);
+                if (read == 0)
+                {
+                    return true;
+                }
+
+                offset += read;
+                ReadOnlySpan<byte> window = buffer.AsSpan(0, preserved + read);
+                if (firstRead)
+                {
+                    firstRead = false;
+                    if (encodingMode == CliEncodingMode.Auto && HasNonUtf8Bom(window))
+                    {
+                        return false;
+                    }
+                }
+
+                if (LiteralLineSearcher.Find(window, literal, asciiCaseInsensitive) >= 0)
+                {
+                    containsLiteral = true;
+                    return true;
+                }
+
+                preserved = Math.Min(overlapLength, window.Length);
+                if (preserved > 0)
+                {
+                    window[^preserved..].CopyTo(buffer);
+                }
+            }
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    private static bool HasNonUtf8Bom(ReadOnlySpan<byte> bytes)
+    {
+        return (bytes.Length >= 2 &&
+            ((bytes[0] == 0xff && bytes[1] == 0xfe) ||
+            (bytes[0] == 0xfe && bytes[1] == 0xff))) ||
+            (bytes.Length >= 4 &&
+            ((bytes[0] == 0xff && bytes[1] == 0xfe && bytes[2] == 0x00 && bytes[3] == 0x00) ||
+            (bytes[0] == 0x00 && bytes[1] == 0x00 && bytes[2] == 0xfe && bytes[3] == 0xff)));
     }
 
     private static void SearchDirectoryEntryFile(
