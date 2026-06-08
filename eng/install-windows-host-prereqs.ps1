@@ -75,6 +75,33 @@ function Get-Pacman {
     return $null
 }
 
+function Invoke-NativeWithRetry {
+    param(
+        [Parameter(Mandatory = $true)]
+        [scriptblock] $Command,
+        [Parameter(Mandatory = $true)]
+        [string] $Description,
+        [int] $Attempts = 3,
+        [int] $DelaySeconds = 15
+    )
+
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        $global:LASTEXITCODE = 0
+        & $Command
+        $exitCode = $LASTEXITCODE
+        if ($exitCode -eq 0) {
+            return
+        }
+
+        if ($attempt -eq $Attempts) {
+            throw "$Description failed with exit code $exitCode after $Attempts attempt(s)."
+        }
+
+        Write-Warning "$Description failed with exit code $exitCode on attempt $attempt of $Attempts; retrying in $DelaySeconds seconds."
+        Start-Sleep -Seconds $DelaySeconds
+    }
+}
+
 Add-MsysPaths
 Add-PathEntry "C:\ProgramData\chocolatey\bin"
 
@@ -87,23 +114,23 @@ if ($missing.Count -gt 0) {
             throw "Missing MSYS2 pacman and Chocolatey; cannot install Windows host prerequisites."
         }
 
-        & $choco.Source install msys2 --no-progress -y
+        Invoke-NativeWithRetry -Description "Chocolatey MSYS2 install" -Command {
+            & $choco.Source install msys2 --no-progress -y
+        }
         Add-MsysPaths
         $pacman = Get-Pacman
     }
 
     if ($null -ne $pacman) {
-        & $pacman -Sy --noconfirm --needed gzip bzip2 xz lz4 brotli zstd
+        Invoke-NativeWithRetry -Description "MSYS2 prerequisite install" -Command {
+            & $pacman -Sy --noconfirm --needed gzip bzip2 xz lz4 brotli zstd
+        }
         Add-MsysPaths
     }
 }
 
 $missing = @(Get-MissingCommands)
 $chocolateyPackages = @()
-if ($missing -contains "lz4") {
-    $chocolateyPackages += "lz4"
-}
-
 if ($missing -contains "brotli") {
     $chocolateyPackages += "brotli"
 }
@@ -118,7 +145,9 @@ if ($chocolateyPackages.Count -gt 0) {
         throw "Chocolatey is required to install: $($chocolateyPackages -join ', ')"
     }
 
-    & $choco.Source install @chocolateyPackages --no-progress -y
+    Invoke-NativeWithRetry -Description "Chocolatey prerequisite install" -Command {
+        & $choco.Source install @chocolateyPackages --no-progress -y
+    }
     Add-PathEntry "C:\ProgramData\chocolatey\bin"
 }
 

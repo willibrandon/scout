@@ -116,7 +116,7 @@ internal struct ReplacementLineSink : IMatchLineSink
             for (int index = 0; index < replacementColumns.Count; index++)
             {
                 WritePrefix(currentLineNumber + lineNumberOffset, byteOffsetOffset + currentLineByteOffset + replacementColumns[index] - 1, replacementColumns[index]);
-                WriteBody(displayLine, trimOffset);
+                WriteBody(displayLine, trimOffset, index);
             }
         }
         else
@@ -181,13 +181,13 @@ internal struct ReplacementLineSink : IMatchLineSink
         }
     }
 
-    private void WriteBody(ReadOnlySpan<byte> displayLine, int trimOffset)
+    private void WriteBody(ReadOnlySpan<byte> displayLine, int trimOffset, int highlightedReplacementIndex = -1)
     {
         if (lineLimit.IsExceeded(displayLine))
         {
             if (lineLimit.Preview)
             {
-                output.Write(displayLine[..lineLimit.GetPreviewLength(displayLine)]);
+                WriteBodyWithOptionalColor(displayLine[..lineLimit.GetPreviewLength(displayLine)], trimOffset, highlightedReplacementIndex);
                 output.Write(" [... "u8);
                 long remaining = CountMatchesAfterPreview();
                 OutputColor.WriteNumber(output, remaining);
@@ -212,7 +212,7 @@ internal struct ReplacementLineSink : IMatchLineSink
 
         if (color.Enabled)
         {
-            WriteColoredBody(displayLine, trimOffset);
+            WriteColoredBody(displayLine, trimOffset, highlightedReplacementIndex);
         }
         else
         {
@@ -225,11 +225,25 @@ internal struct ReplacementLineSink : IMatchLineSink
         }
     }
 
-    private void WriteColoredBody(ReadOnlySpan<byte> displayLine, int trimOffset)
+    private void WriteBodyWithOptionalColor(ReadOnlySpan<byte> displayLine, int trimOffset, int highlightedReplacementIndex)
+    {
+        if (color.Enabled)
+        {
+            WriteColoredBody(displayLine, trimOffset, highlightedReplacementIndex);
+        }
+        else
+        {
+            output.Write(displayLine);
+        }
+    }
+
+    private void WriteColoredBody(ReadOnlySpan<byte> displayLine, int trimOffset, int highlightedReplacementIndex)
     {
         List<int> displayStarts = [];
         List<int> displayLengths = [];
-        for (int index = 0; index < replacementColumns.Count; index++)
+        int startIndex = highlightedReplacementIndex >= 0 ? highlightedReplacementIndex : 0;
+        int endIndex = highlightedReplacementIndex >= 0 ? highlightedReplacementIndex + 1 : replacementColumns.Count;
+        for (int index = startIndex; index < endIndex; index++)
         {
             int start = (int)replacementColumns[index] - 1 - trimOffset;
             int length = replacementLengths[index];

@@ -18,6 +18,7 @@ internal static class ContextSearchOperations
         bool invertMatch,
         bool lineRegexp,
         bool wordRegexp,
+        bool vimgrep,
         bool onlyMatching,
         ReadOnlyMemory<byte>? replacement,
         ulong? maxCount,
@@ -85,6 +86,7 @@ internal static class ContextSearchOperations
                 separators,
                 lineLimit,
                 color,
+                vimgrep,
                 onlyMatching,
                 replacement,
                 invertMatch,
@@ -261,6 +263,7 @@ internal static class ContextSearchOperations
         OutputSeparators separators,
         OutputLineLimit lineLimit,
         OutputColor color,
+        bool vimgrep,
         bool onlyMatching,
         ReadOnlyMemory<byte>? replacement,
         bool invertMatch,
@@ -294,7 +297,7 @@ internal static class ContextSearchOperations
                     byteOffset,
                     trim,
                     nullPathTerminator,
-                    vimgrep: false,
+                    vimgrep,
                     lineLimit,
                     line.LineNumber - 1,
                     line.Start,
@@ -302,6 +305,13 @@ internal static class ContextSearchOperations
                     separators.LineTerminator);
                 LiteralLineSearcher.SearchMatchLines(lineBytes, pattern, ref replacementLineSink, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf: separators.Crlf, nullData: separators.NullData);
                 replacementLineSink.Flush();
+                return;
+            }
+
+            if (vimgrep && !invertMatch)
+            {
+                var vimgrepSink = new VimgrepSink(output, prefix, separators.FieldMatch, lineNumber, column, byteOffset, onlyMatching: false, trim, nullPathTerminator, lineLimit, pattern, asciiCaseInsensitive, lineRegexp, wordRegexp, separators.Crlf, separators.NullData, color, separators.LineTerminator);
+                LiteralLineSearcher.SearchMatchLines(lineBytes, pattern, ref vimgrepSink, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf: separators.Crlf, nullData: separators.NullData);
                 return;
             }
 

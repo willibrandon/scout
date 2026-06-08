@@ -411,7 +411,7 @@ internal static class StandardSearchByteOperations
 
         if (passthru || beforeContext > 0 || afterContext > 0)
         {
-            return ContextSearchOperations.SearchBytes(bytes, pattern, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, onlyMatching, replacement, maxCount, trim, beforeContext, afterContext, passthru, nullPathTerminator, stopOnNonmatch);
+            return ContextSearchOperations.SearchBytes(bytes, pattern, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, vimgrep, onlyMatching, replacement, maxCount, trim, beforeContext, afterContext, passthru, nullPathTerminator, stopOnNonmatch);
         }
 
         if (replacement is ReadOnlyMemory<byte> replacementValue && !invertMatch)

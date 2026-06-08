@@ -123,6 +123,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("\"uncompress\"", windowsPrereqs, StringComparison.Ordinal);
         Assert.Contains("\"C:\\tools\\msys64\"", windowsPrereqs, StringComparison.Ordinal);
         Assert.DoesNotContain(" ncompress", windowsPrereqs, StringComparison.Ordinal);
+        Assert.Contains("Invoke-NativeWithRetry", windowsPrereqs, StringComparison.Ordinal);
+        Assert.DoesNotContain("chocolateyPackages += \"lz4\"", windowsPrereqs, StringComparison.Ordinal);
         Assert.Contains("full-tests-macos:", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("full-tests-windows:", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("full pinned Linux tests", releaseGateWorkflow, StringComparison.Ordinal);
