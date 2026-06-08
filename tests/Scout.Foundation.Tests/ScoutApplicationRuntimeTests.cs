@@ -1184,6 +1184,24 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
+    /// Verifies explicit large-file thread counts preserve fast literal line-number parity.
+    /// </summary>
+    [Fact]
+    public void LargeFastLiteralLineNumbersWithThreadsMatchPinnedRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllBytes(path, CreateLargeFastLiteralLineNumberInput());
+
+        (int exitCode, byte[] output, string error) = RunScout("--no-mmap", "--binary", "--no-filename", "--threads", "4", "-n", "needle", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-mmap", "--binary", "--no-filename", "--threads", "4", "-n", "needle", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies the large-file fast literal path preserves safe-prefix output before a late NUL.
     /// </summary>
     [Fact]

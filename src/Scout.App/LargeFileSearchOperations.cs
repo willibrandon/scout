@@ -227,8 +227,7 @@ internal static unsafe class LargeFileSearchOperations
             trim,
             nullPathTerminator,
             stopOnNonmatch,
-            quitOnBinary,
-            threadCount))
+            quitOnBinary))
         {
             return SearchFastNoPrefixLiteralLines(
                 path,
@@ -534,8 +533,7 @@ internal static unsafe class LargeFileSearchOperations
         bool trim,
         bool nullPathTerminator,
         bool stopOnNonmatch,
-        bool quitOnBinary,
-        int threadCount)
+        bool quitOnBinary)
     {
         return fastLiteralPattern is not null &&
             prefix is null &&
@@ -553,8 +551,7 @@ internal static unsafe class LargeFileSearchOperations
             !trim &&
             !nullPathTerminator &&
             !stopOnNonmatch &&
-            !quitOnBinary &&
-            threadCount <= 1;
+            !quitOnBinary;
     }
 
     private static bool CanSearchFastLiteralCount(

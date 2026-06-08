@@ -59,21 +59,6 @@ internal struct StandardSearchSink : ILineSink
 
     public void MatchedLine(long lineNumber, long byteOffset, long matchColumn, ReadOnlySpan<byte> line)
     {
-        WriteMatchedLine(lineNumber, byteOffset, matchColumn, line, highlightStarts: null, highlightLengths: null);
-    }
-
-    public void MatchedLine(long lineNumber, long byteOffset, long matchColumn, ReadOnlySpan<byte> line, int highlightMatchStart, int highlightMatchLength)
-    {
-        MatchedLine(lineNumber, byteOffset, matchColumn, line, [highlightMatchStart], [highlightMatchLength]);
-    }
-
-    public void MatchedLine(long lineNumber, long byteOffset, long matchColumn, ReadOnlySpan<byte> line, IReadOnlyList<int> highlightStarts, IReadOnlyList<int> highlightLengths)
-    {
-        WriteMatchedLine(lineNumber, byteOffset, matchColumn, line, highlightStarts, highlightLengths);
-    }
-
-    private void WriteMatchedLine(long lineNumber, long byteOffset, long matchColumn, ReadOnlySpan<byte> line, IReadOnlyList<int>? highlightStarts, IReadOnlyList<int>? highlightLengths)
-    {
         MatchedLines++;
         lineNumber += lineNumberOffset;
         byteOffset += byteOffsetOffset;
@@ -89,8 +74,7 @@ internal struct StandardSearchSink : ILineSink
             return;
         }
 
-        int trimOffset = trim ? GetTrimOffset(line) : 0;
-        ReadOnlySpan<byte> displayLine = line[trimOffset..];
+        ReadOnlySpan<byte> displayLine = trim ? TrimLeadingAsciiWhitespace(line) : line;
         bool linked = false;
         bool hasLineNumber = this.lineNumber;
         bool hasColumn = column && matchColumn > 0;
@@ -144,7 +128,29 @@ internal struct StandardSearchSink : ILineSink
             output.Write(matchSeparator.Span);
         }
 
-        WriteBody(displayLine, context: false, highlightStarts, highlightLengths, -trimOffset);
+        WriteBody(displayLine, context: false);
+    }
+
+    public void MatchedLine(long lineNumber, long byteOffset, long matchColumn, ReadOnlySpan<byte> line, int highlightMatchStart, int highlightMatchLength)
+    {
+        if (!color.Enabled || highlightMatchLength <= 0)
+        {
+            MatchedLine(lineNumber, byteOffset, matchColumn, line);
+            return;
+        }
+
+        WriteHighlightedMatchedLine(lineNumber, byteOffset, matchColumn, line, [highlightMatchStart], [highlightMatchLength]);
+    }
+
+    public void MatchedLine(long lineNumber, long byteOffset, long matchColumn, ReadOnlySpan<byte> line, IReadOnlyList<int> highlightStarts, IReadOnlyList<int> highlightLengths)
+    {
+        if (!color.Enabled || highlightStarts.Count == 0)
+        {
+            MatchedLine(lineNumber, byteOffset, matchColumn, line);
+            return;
+        }
+
+        WriteHighlightedMatchedLine(lineNumber, byteOffset, matchColumn, line, highlightStarts, highlightLengths);
     }
 
     public void ContextLine(long lineNumber, long byteOffset, long contextColumn, ReadOnlySpan<byte> line)
@@ -208,18 +214,83 @@ internal struct StandardSearchSink : ILineSink
         WriteBody(displayLine, context: true);
     }
 
-    private void WriteBody(
-        ReadOnlySpan<byte> displayLine,
-        bool context,
-        IReadOnlyList<int>? highlightStarts = null,
-        IReadOnlyList<int>? highlightLengths = null,
-        int highlightOffset = 0)
+    private void WriteHighlightedMatchedLine(long lineNumber, long byteOffset, long matchColumn, ReadOnlySpan<byte> line, IReadOnlyList<int> highlightStarts, IReadOnlyList<int> highlightLengths)
+    {
+        MatchedLines++;
+        lineNumber += lineNumberOffset;
+        byteOffset += byteOffsetOffset;
+        if (usePlainLineHeader)
+        {
+            WritePlainLineHeader(lineNumber);
+            WriteHighlightedBody(line, highlightStarts, highlightLengths, highlightOffset: 0);
+            return;
+        }
+
+        int trimOffset = trim ? GetTrimOffset(line) : 0;
+        ReadOnlySpan<byte> displayLine = line[trimOffset..];
+        bool linked = false;
+        bool hasLineNumber = this.lineNumber;
+        bool hasColumn = column && matchColumn > 0;
+        bool hasByteOffset = this.byteOffset;
+
+        if (prefix is not null)
+        {
+            linked = prefix.BeginHyperlink(output, lineNumber, matchColumn > 0 ? matchColumn : null);
+            color.WritePath(output, prefix.Display);
+            if (!hasLineNumber && !hasColumn && !hasByteOffset)
+            {
+                OutputPath.EndHyperlink(output, ref linked);
+            }
+
+            if (nullPathTerminator)
+            {
+                output.Write(NullByte);
+            }
+            else
+            {
+                output.Write(matchSeparator.Span);
+            }
+        }
+
+        if (hasLineNumber)
+        {
+            color.WriteLineNumber(output, lineNumber);
+            if (!hasColumn && !hasByteOffset)
+            {
+                OutputPath.EndHyperlink(output, ref linked);
+            }
+
+            output.Write(matchSeparator.Span);
+        }
+
+        if (hasColumn)
+        {
+            color.WriteNumberField(output, matchColumn);
+            if (!hasByteOffset)
+            {
+                OutputPath.EndHyperlink(output, ref linked);
+            }
+
+            output.Write(matchSeparator.Span);
+        }
+
+        if (hasByteOffset)
+        {
+            color.WriteNumberField(output, byteOffset);
+            OutputPath.EndHyperlink(output, ref linked);
+            output.Write(matchSeparator.Span);
+        }
+
+        WriteHighlightedBody(displayLine, highlightStarts, highlightLengths, -trimOffset);
+    }
+
+    private void WriteBody(ReadOnlySpan<byte> displayLine, bool context)
     {
         if (lineLimit.IsExceeded(displayLine))
         {
             if (lineLimit.Preview)
             {
-                WriteBodyWithOptionalHighlights(displayLine[..lineLimit.GetPreviewLength(displayLine)], highlightStarts, highlightLengths, highlightOffset);
+                output.Write(displayLine[..lineLimit.GetPreviewLength(displayLine)]);
                 output.Write(" [... omitted end of long line]"u8);
             }
             else
@@ -231,28 +302,48 @@ internal struct StandardSearchSink : ILineSink
             return;
         }
 
-        WriteBodyWithOptionalHighlights(displayLine, highlightStarts, highlightLengths, highlightOffset);
+        output.Write(displayLine);
         if (!HasInputTerminator(displayLine))
         {
             output.Write(lineTerminator.Span);
         }
     }
 
-    private void WriteBodyWithOptionalHighlights(
+    private void WriteHighlightedBody(
         ReadOnlySpan<byte> displayLine,
-        IReadOnlyList<int>? highlightStarts,
-        IReadOnlyList<int>? highlightLengths,
+        IReadOnlyList<int> highlightStarts,
+        IReadOnlyList<int> highlightLengths,
         int highlightOffset)
     {
-        if (!color.Enabled ||
-            highlightStarts is null ||
-            highlightLengths is null ||
-            highlightStarts.Count == 0)
+        if (lineLimit.IsExceeded(displayLine))
         {
-            output.Write(displayLine);
+            if (lineLimit.Preview)
+            {
+                WriteBodyWithHighlights(displayLine[..lineLimit.GetPreviewLength(displayLine)], highlightStarts, highlightLengths, highlightOffset);
+                output.Write(" [... omitted end of long line]"u8);
+            }
+            else
+            {
+                output.Write("[Omitted long matching line]"u8);
+            }
+
+            output.Write(lineTerminator.Span);
             return;
         }
 
+        WriteBodyWithHighlights(displayLine, highlightStarts, highlightLengths, highlightOffset);
+        if (!HasInputTerminator(displayLine))
+        {
+            output.Write(lineTerminator.Span);
+        }
+    }
+
+    private void WriteBodyWithHighlights(
+        ReadOnlySpan<byte> displayLine,
+        IReadOnlyList<int> highlightStarts,
+        IReadOnlyList<int> highlightLengths,
+        int highlightOffset)
+    {
         int contentLength = GetDisplayContentLength(displayLine);
         List<int> displayStarts = [];
         List<int> displayLengths = [];

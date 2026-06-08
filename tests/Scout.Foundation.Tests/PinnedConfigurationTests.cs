@@ -2851,7 +2851,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("median wall time", readme, StringComparison.Ordinal);
         Assert.Contains("every workload is measured in both command", readme, StringComparison.Ordinal);
         Assert.Contains("combined median samples", readme, StringComparison.Ordinal);
-        Assert.Contains("pin `--threads 4`", readme, StringComparison.Ordinal);
+        Assert.Contains("regex workload pins `--threads 4`", readme, StringComparison.Ordinal);
         Assert.Contains("segment distribution", readme, StringComparison.Ordinal);
         Assert.Contains("for every RSS gate", readme, StringComparison.Ordinal);
         Assert.Contains("script first measures an rg and", readme, StringComparison.Ordinal);

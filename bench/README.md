@@ -53,10 +53,10 @@ combined median samples for each binary. This removes command-order bias from
 hosted macOS runners, where hyperfine 1.20 runs each command group in input
 order instead of interleaving individual runs.
 
-The OpenSubtitles large-file workloads pin `--threads 4` so the segmented regex
-path is measured against a stable worker count. The gate also prints and checks
-the line-aligned 128 KiB byte-segment distribution before measuring, which
-catches corpus or chunking changes that would create uneven worker input.
+The OpenSubtitles regex workload pins `--threads 4` so the segmented regex path
+is measured against a stable worker count. The gate also prints and checks the
+line-aligned 128 KiB byte-segment distribution before measuring, which catches
+corpus or chunking changes that would create uneven worker input.
 
 Median peak RSS is capped at 1.5x rg plus the measured Native AOT fixed-image
 floor recorded in `docs/PARITY.md`: the script first measures an rg and
