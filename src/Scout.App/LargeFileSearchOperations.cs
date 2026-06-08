@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 
@@ -11,6 +12,7 @@ internal static unsafe class LargeFileSearchOperations
     private const int ExplicitRegexStreamingFileBufferLength = StreamingFileBufferLength;
     private const int ExplicitFastLiteralStreamingFileBufferLength = 6 * 1024 * 1024;
     private const int ExplicitParallelLiteralStreamingFileBufferLength = 256 * 1024;
+    private const int FastLiteralLineIndexBlockLength = 32 * 1024;
     private const long ImplicitSearchStreamingFileThreshold = 65_536;
     private const long StreamingFileThreshold = int.MaxValue;
     private const int BinaryDetectionBlockLength = StandardSearchByteOperations.BinaryDetectionBufferLength;
@@ -583,6 +585,7 @@ internal static unsafe class LargeFileSearchOperations
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, StreamingFileStreamBufferLength, FileOptions.SequentialScan);
         using var bufferOwner = new NativeByteBuffer(bufferLength);
         MemoryStream? oversizedLine = null;
+        long oversizedLineOffset = 0;
         long absoluteOffset = 0;
         long carriedOffset = 0;
         int carriedLength = 0;
@@ -600,35 +603,81 @@ internal static unsafe class LargeFileSearchOperations
             }
         }
 
-        void ProcessLiteralSegment(ReadOnlySpan<byte> segment)
+        long ProcessLiteralSegment(ReadOnlySpan<byte> segment, long segmentOffset)
         {
-            int searchOffset = 0;
-            int countedOffset = 0;
-            long currentLineNumber = lineNumberValue;
-            while (searchOffset < segment.Length)
+            if (segment.IsEmpty)
             {
-                int found = segment[searchOffset..].IndexOf(needle);
-                if (found < 0)
-                {
-                    break;
-                }
-
-                int matchIndex = searchOffset + found;
-                int currentLineStart = GetSegmentLineStart(segment, matchIndex, (byte)'\n');
-                currentLineNumber += ByteCounter.Count(segment.Slice(countedOffset, currentLineStart - countedOffset), (byte)'\n');
-                countedOffset = currentLineStart;
-                int currentLineEnd = GetSegmentLineEnd(segment, currentLineStart, (byte)'\n');
-
-                WriteMatchedLine(currentLineNumber, segment.Slice(currentLineStart, currentLineEnd - currentLineStart));
-                matched = true;
-                searchOffset = currentLineEnd;
+                return -1;
             }
 
-            lineNumberValue = currentLineNumber + ByteCounter.Count(segment[countedOffset..], (byte)'\n');
+            int blockCount = (segment.Length + FastLiteralLineIndexBlockLength - 1) / FastLiteralLineIndexBlockLength;
+            int[] rentedLinePrefixes = ArrayPool<int>.Shared.Rent(blockCount + 1);
+            int totalLineCount = 0;
+            int binaryOffset = -1;
+            try
+            {
+                for (int blockIndex = 0; blockIndex < blockCount; blockIndex++)
+                {
+                    rentedLinePrefixes[blockIndex] = totalLineCount;
+                    int blockStart = blockIndex * FastLiteralLineIndexBlockLength;
+                    ReadOnlySpan<byte> block = segment.Slice(blockStart, Math.Min(FastLiteralLineIndexBlockLength, segment.Length - blockStart));
+                    long blockLineCount = ByteCounter.CountAndFindFirst(block, (byte)'\n', (byte)0, out int blockBinaryOffset);
+                    if (blockBinaryOffset >= 0)
+                    {
+                        binaryOffset = blockStart + blockBinaryOffset;
+                        break;
+                    }
+
+                    totalLineCount = checked(totalLineCount + (int)blockLineCount);
+                }
+
+                if (binaryOffset < 0)
+                {
+                    rentedLinePrefixes[blockCount] = totalLineCount;
+                }
+
+                int processLength = segment.Length;
+                if (binaryOffset >= 0)
+                {
+                    long absoluteBinaryOffset = segmentOffset + binaryOffset;
+                    long safeEnd = absoluteBinaryOffset - (absoluteBinaryOffset % BinaryDetectionBlockLength);
+                    int safeLength = (int)Math.Clamp(safeEnd - segmentOffset, 0, segment.Length);
+                    int safeLastTerminator = segment[..safeLength].LastIndexOf((byte)'\n');
+                    processLength = safeLastTerminator < 0 ? 0 : safeLastTerminator + 1;
+                }
+
+                ReadOnlySpan<byte> searchable = segment[..processLength];
+                int searchOffset = 0;
+                while (searchOffset < searchable.Length)
+                {
+                    int found = searchable[searchOffset..].IndexOf(needle);
+                    if (found < 0)
+                    {
+                        break;
+                    }
+
+                    int matchIndex = searchOffset + found;
+                    int currentLineStart = GetSegmentLineStart(searchable, matchIndex, (byte)'\n');
+                    long currentLineNumber = lineNumberValue + GetFastLiteralIndexedLineCountBefore(segment, currentLineStart, rentedLinePrefixes);
+                    int currentLineEnd = GetSegmentLineEnd(searchable, currentLineStart, (byte)'\n');
+
+                    WriteMatchedLine(currentLineNumber, searchable.Slice(currentLineStart, currentLineEnd - currentLineStart));
+                    matched = true;
+                    searchOffset = currentLineEnd;
+                }
+
+                lineNumberValue += GetFastLiteralIndexedLineCountBefore(segment, processLength, rentedLinePrefixes);
+                return binaryOffset < 0 ? -1 : segmentOffset + binaryOffset;
+            }
+            finally
+            {
+                ArrayPool<int>.Shared.Return(rentedLinePrefixes);
+            }
         }
 
-        int ProcessCompleteLines(ReadOnlySpan<byte> segment)
+        int ProcessCompleteLines(ReadOnlySpan<byte> segment, long segmentOffset, out long binaryOffset)
         {
+            binaryOffset = -1;
             int lastTerminator = segment.LastIndexOf((byte)'\n');
             if (lastTerminator < 0)
             {
@@ -636,7 +685,7 @@ internal static unsafe class LargeFileSearchOperations
             }
 
             int completeLength = lastTerminator + 1;
-            ProcessLiteralSegment(segment[..completeLength]);
+            binaryOffset = ProcessLiteralSegment(segment[..completeLength], segmentOffset);
             return completeLength;
         }
 
@@ -681,7 +730,12 @@ internal static unsafe class LargeFileSearchOperations
             Span<byte> buffer = bufferOwner.Span;
             if (carriedLength == buffer.Length)
             {
-                oversizedLine ??= new MemoryStream();
+                if (oversizedLine is null)
+                {
+                    oversizedLine = new MemoryStream();
+                    oversizedLineOffset = carriedOffset;
+                }
+
                 oversizedLine.Write(buffer);
                 carriedLength = 0;
                 carriedOffset = absoluteOffset;
@@ -697,20 +751,6 @@ internal static unsafe class LargeFileSearchOperations
             absoluteOffset += read;
             int combinedLength = carriedLength + read;
             Span<byte> combined = buffer[..combinedLength];
-            int nulOffset = combined.IndexOf((byte)0);
-            if (nulOffset >= 0)
-            {
-                long binaryOffset = combinedOffset + nulOffset;
-                long safeEnd = binaryOffset - (binaryOffset % BinaryDetectionBlockLength);
-                int safeLength = (int)Math.Clamp(safeEnd - combinedOffset, 0, combinedLength);
-                if (oversizedLine is null)
-                {
-                    _ = ProcessCompleteLines(combined[..safeLength]);
-                }
-
-                return FinishBinary(binaryOffset);
-            }
-
             long safeEndOffset = absoluteOffset - (absoluteOffset % BinaryDetectionBlockLength);
             int processLimit = (int)Math.Clamp(safeEndOffset - combinedOffset, 0, combinedLength);
             int processedLength = 0;
@@ -724,8 +764,22 @@ internal static unsafe class LargeFileSearchOperations
                     byte[] line = oversizedLine.ToArray();
                     oversizedLine.Dispose();
                     oversizedLine = null;
-                    ProcessLiteralSegment(line);
-                    processedLength = oversizedLineLength + ProcessCompleteLines(combined[oversizedLineLength..processLimit]);
+                    long binaryOffset = ProcessLiteralSegment(line, oversizedLineOffset);
+                    if (binaryOffset >= 0)
+                    {
+                        return FinishBinary(binaryOffset);
+                    }
+
+                    int processedRemainder = ProcessCompleteLines(
+                        combined[oversizedLineLength..processLimit],
+                        combinedOffset + oversizedLineLength,
+                        out binaryOffset);
+                    if (binaryOffset >= 0)
+                    {
+                        return FinishBinary(binaryOffset);
+                    }
+
+                    processedLength = oversizedLineLength + processedRemainder;
                 }
                 else if (processLimit != 0)
                 {
@@ -735,7 +789,11 @@ internal static unsafe class LargeFileSearchOperations
             }
             else if (processLimit != 0)
             {
-                processedLength = ProcessCompleteLines(combined[..processLimit]);
+                processedLength = ProcessCompleteLines(combined[..processLimit], combinedOffset, out long binaryOffset);
+                if (binaryOffset >= 0)
+                {
+                    return FinishBinary(binaryOffset);
+                }
             }
 
             CarryTail(buffer, processedLength, combinedLength, combinedOffset);
@@ -754,12 +812,20 @@ internal static unsafe class LargeFileSearchOperations
             oversizedLine = null;
             if (line.Length != 0)
             {
-                ProcessLiteralSegment(line);
+                long binaryOffset = ProcessLiteralSegment(line, oversizedLineOffset);
+                if (binaryOffset >= 0)
+                {
+                    return FinishBinary(binaryOffset);
+                }
             }
         }
         else if (carriedLength != 0)
         {
-            ProcessLiteralSegment(bufferOwner.Span[..carriedLength]);
+            long binaryOffset = ProcessLiteralSegment(bufferOwner.Span[..carriedLength], carriedOffset);
+            if (binaryOffset >= 0)
+            {
+                return FinishBinary(binaryOffset);
+            }
         }
 
         return matched;
@@ -2382,6 +2448,13 @@ internal static unsafe class LargeFileSearchOperations
     {
         int terminatorOffset = segment[lineStart..].IndexOf(terminator);
         return terminatorOffset < 0 ? segment.Length : lineStart + terminatorOffset + 1;
+    }
+
+    private static long GetFastLiteralIndexedLineCountBefore(ReadOnlySpan<byte> segment, int offset, int[] linePrefixes)
+    {
+        int blockIndex = offset / FastLiteralLineIndexBlockLength;
+        int blockStart = blockIndex * FastLiteralLineIndexBlockLength;
+        return linePrefixes[blockIndex] + ByteCounter.Count(segment.Slice(blockStart, offset - blockStart), (byte)'\n');
     }
 
     private static int GetSegmentLineStart(ReadOnlySpan<byte> segment, int matchIndex, byte terminator)
