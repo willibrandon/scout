@@ -4225,6 +4225,37 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies color always highlights optimized multiline signature matches.
+    /// </summary>
+    [Fact]
+    public void ColorAlwaysHighlightsMultilineSignatureArityOutput()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.cs");
+        File.WriteAllText(path, """
+            internal static bool SearchQuiet(
+                ReadOnlySpan<byte> bytes,
+                IReadOnlyList<byte[]> pattern,
+                CliSearchMode searchMode,
+                bool asciiCaseInsensitive,
+                bool invertMatch,
+                bool lineRegexp,
+                bool wordRegexp,
+                ulong? maxCount,
+                bool crlf,
+                bool nullData)
+            """);
+
+        const string Pattern = @"(?:public|private|protected|internal)[^;={}]*\([^)]*(?:,[^)]*){8,}\)";
+        (int exitCode, byte[] output, string error) = RunScout("--color=always", "-U", Pattern, path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--color=always", "-U", Pattern, path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies color always highlights only-matching output.
     /// </summary>
     [Fact]

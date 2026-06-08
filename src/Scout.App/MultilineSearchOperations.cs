@@ -537,6 +537,12 @@ internal static class MultilineSearchOperations
         ulong? maxCount,
         RegexMatch firstMatch)
     {
+        if (color.Enabled)
+        {
+            WriteColoredSignatureArityMatchedLines(bytes, accelerator, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, maxCount, firstMatch);
+            return;
+        }
+
         var sink = new StandardSearchSink(output, prefix, separators.FieldMatch, separators.FieldContext, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
         int offset = 0;
         int lastWrittenLineStart = -1;
@@ -551,12 +557,12 @@ internal static class MultilineSearchOperations
             int lastLineStart = GetLineStart(bytes, GetInclusiveMatchEnd(match));
             AdvanceLineNumber(bytes, firstLineStart, ref currentLineStart, ref currentLineNumber);
             long outputLineNumber = currentLineNumber;
-            long matchColumn = match.Start - firstLineStart + 1L;
             for (int lineStart = firstLineStart; lineStart <= lastLineStart;)
             {
                 int lineEnd = GetLineEnd(bytes, lineStart);
                 if (lineStart > lastWrittenLineStart)
                 {
+                    long matchColumn = GetMultilineMatchColumn(match, lineStart);
                     sink.MatchedLine(outputLineNumber, lineStart, matchColumn, bytes[lineStart..lineEnd]);
                     lastWrittenLineStart = lineStart;
                     emitted++;
@@ -575,6 +581,78 @@ internal static class MultilineSearchOperations
             offset = match.Start + match.Length;
             haveMatch = accelerator.TryFindNext(bytes, offset, out match);
         }
+    }
+
+    private static void WriteColoredSignatureArityMatchedLines(
+        ReadOnlySpan<byte> bytes,
+        SignatureArityAccelerator accelerator,
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool trim,
+        bool nullPathTerminator,
+        ulong? maxCount,
+        RegexMatch firstMatch)
+    {
+        var sink = new ColoredSearchSink(output, prefix, separators.FieldMatch, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
+        int offset = 0;
+        int lastWrittenLineStart = -1;
+        int currentLineStart = 0;
+        long currentLineNumber = 1;
+        ulong emitted = 0;
+        RegexMatch match = firstMatch;
+        bool haveMatch = true;
+        while (haveMatch)
+        {
+            int firstLineStart = GetLineStart(bytes, match.Start);
+            int lastLineStart = GetLineStart(bytes, GetInclusiveMatchEnd(match));
+            AdvanceLineNumber(bytes, firstLineStart, ref currentLineStart, ref currentLineNumber);
+            long outputLineNumber = currentLineNumber;
+            for (int lineStart = firstLineStart; lineStart <= lastLineStart;)
+            {
+                int lineEnd = GetLineEnd(bytes, lineStart);
+                bool newLine = lineStart > lastWrittenLineStart;
+                if (newLine || lineStart == lastWrittenLineStart)
+                {
+                    int matchByteOffset = Math.Max(match.Start, lineStart);
+                    int matchEnd = Math.Min(match.Start + match.Length, GetLineContentEnd(bytes, lineStart));
+                    ReadOnlySpan<byte> lineBytes = bytes[lineStart..lineEnd];
+                    ReadOnlySpan<byte> matchedBytes = bytes[matchByteOffset..matchEnd];
+                    long matchColumn = GetMultilineMatchColumn(match, lineStart);
+                    sink.MatchedLine(outputLineNumber, lineStart, matchByteOffset, matchColumn, lineBytes, matchedBytes);
+                    if (newLine)
+                    {
+                        lastWrittenLineStart = lineStart;
+                        emitted++;
+                        if (maxCount is ulong limit && emitted >= limit)
+                        {
+                            sink.Flush();
+                            return;
+                        }
+                    }
+                }
+
+                lineStart = GetNextLineStart(lineEnd, bytes.Length);
+                outputLineNumber++;
+            }
+
+            currentLineStart = Math.Max(currentLineStart, GetNextLineStart(GetLineEnd(bytes, lastLineStart), bytes.Length));
+            currentLineNumber = Math.Max(currentLineNumber, outputLineNumber);
+            offset = match.Start + match.Length;
+            haveMatch = accelerator.TryFindNext(bytes, offset, out match);
+        }
+
+        sink.Flush();
+    }
+
+    private static long GetMultilineMatchColumn(RegexMatch match, int lineStart)
+    {
+        return match.Start >= lineStart ? match.Start - lineStart + 1L : 1;
     }
 
     private static RegexAutomaton[] CompileMultilineAutomata(IReadOnlyList<byte[]> patterns, bool asciiCaseInsensitive, bool multilineDotall)
