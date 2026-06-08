@@ -114,7 +114,7 @@ public static class ByteCounter
         {
             var block = Vector128.LoadUnsafe(ref reference, (nuint)offset);
             var matches = Vector128.ShiftRightLogical(Vector128.Equals(block, needleVector), 7);
-            laneCounts = AdvSimd.Add(laneCounts, matches);
+            laneCounts += matches;
             batchCount++;
             offset += Vector128<byte>.Count;
             if (batchCount == byte.MaxValue)
