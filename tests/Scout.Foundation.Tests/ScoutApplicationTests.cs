@@ -136,10 +136,10 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
-    /// Verifies missing patterns use Scout's diagnostic.
+    /// Verifies no-argument invocation prints short help for installer validation probes.
     /// </summary>
     [Fact]
-    public void MissingPatternWritesScoutDiagnosticError()
+    public void NoArgumentsWritesScoutHelp()
     {
         using MemoryStream output = new();
         using MemoryStream error = new();
@@ -152,9 +152,9 @@ public sealed class ScoutApplicationTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter);
 
-        Assert.Equal(2, exitCode);
-        Assert.Empty(output.ToArray());
-        Assert.Equal("scout: scout requires at least one pattern to execute a search\n"u8.ToArray(), error.ToArray());
+        Assert.Equal(0, exitCode);
+        Assert.Equal(HelpOutput.Short.ToArray(), output.ToArray());
+        Assert.Empty(error.ToArray());
     }
 
     /// <summary>

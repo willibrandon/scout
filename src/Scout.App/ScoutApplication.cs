@@ -78,6 +78,11 @@ internal static class ScoutApplication
         ReadOnlySpan<OsString> parserArguments = expandedArguments is null
             ? arguments[1..]
             : expandedArguments;
+        if (parserArguments.Length == 0)
+        {
+            return RunSpecial(CliSpecialMode.HelpShort, output);
+        }
+
         CliParseResult parseResult = CliParser.Parse(parserArguments);
 
         if (parseResult.Status == CliParseStatus.Error)
