@@ -290,6 +290,25 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
+    /// Verifies standard regex stats count emitted matching lines like ripgrep.
+    /// </summary>
+    [Fact]
+    public void StatsOutputCountsRepeatedCaptureRegexLinesLikeRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.cs");
+        File.WriteAllText(path, "ApplyFlag(enabledFlags[index], enabled: true, ref caseInsensitive, ref swapGreed, ref multiLine, ref dotMatchesNewline, ref crlf, ref utf8, ref unicodeClasses); ApplyFlag(disabledFlags[index], enabled: false, ref caseInsensitive, ref swapGreed, ref multiLine, ref dotMatchesNewline, ref crlf, ref utf8, ref unicodeClasses);\n");
+
+        const string Pattern = @"\w+\s*\([^)]*(,[^)]*){8,}\)";
+        (int exitCode, byte[] output, string error) = RunScout("--stats", Pattern, path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--stats", Pattern, path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(NormalizeStatsTimings(pinnedOutput), NormalizeStatsTimings(output));
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies stats output is printed for no-match searches.
     /// </summary>
     [Fact]
@@ -681,6 +700,28 @@ public sealed class ScoutApplicationRuntimeTests
 
         (int exitCode, byte[] output, string error) = RunScout("--engine", "auto", "--auto-hybrid-regex", "--no-auto-hybrid-regex", "--no-pcre2", "--no-pcre2-unicode", "--pcre2-unicode", "needle", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--engine", "auto", "--auto-hybrid-regex", "--no-auto-hybrid-regex", "--no-pcre2", "--no-pcre2-unicode", "--pcre2-unicode", "needle", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies repeated capturing groups backtrack like ripgrep's default regex engine.
+    /// </summary>
+    [Fact]
+    public void RegexRepeatedCapturingGroupBacktracksLikeRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.cs");
+        File.WriteAllText(path, """
+            ApplyFlag(enabledFlags[index], enabled: true, ref caseInsensitive, ref swapGreed, ref multiLine, ref dotMatchesNewline, ref crlf, ref utf8, ref unicodeClasses);
+            ApplyFlag(enabledFlags[index], enabled: true, ref caseInsensitive);
+            """);
+
+        const string Pattern = @"\w+\s*\([^)]*(,[^)]*){8,}\)";
+        (int exitCode, byte[] output, string error) = RunScout(Pattern, path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(Pattern, path);
 
         Assert.Equal(pinnedExitCode, exitCode);
         Assert.Equal(pinnedOutput, output);
