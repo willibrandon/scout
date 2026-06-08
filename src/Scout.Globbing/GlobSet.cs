@@ -18,14 +18,12 @@ public sealed class GlobSet
     private readonly byte[][] extensionSuffixPatterns;
     private readonly int[] extensionSuffixIndexes;
     private readonly byte[][] requiredExtensionPatterns;
-    private readonly PatternSet requiredExtensionCandidates;
     private readonly int[] requiredExtensionIndexes;
     private readonly AhoCorasickAutomaton? prefixMatcher;
     private readonly int[] prefixIndexes;
     private readonly AhoCorasickAutomaton? suffixMatcher;
     private readonly int[] suffixIndexes;
-    private readonly PatternSet fallbackCandidates;
-    private readonly int[] fallbackIndexes;
+    private readonly int[] alwaysIndexes;
 
     private GlobSet(
         Glob[] globs,
@@ -38,14 +36,12 @@ public sealed class GlobSet
         byte[][] extensionSuffixPatterns,
         int[] extensionSuffixIndexes,
         byte[][] requiredExtensionPatterns,
-        PatternSet requiredExtensionCandidates,
         int[] requiredExtensionIndexes,
         AhoCorasickAutomaton? prefixMatcher,
         int[] prefixIndexes,
         AhoCorasickAutomaton? suffixMatcher,
         int[] suffixIndexes,
-        PatternSet fallbackCandidates,
-        int[] fallbackIndexes)
+        int[] alwaysIndexes)
     {
         this.globs = globs;
         this.literalPatterns = literalPatterns;
@@ -57,14 +53,12 @@ public sealed class GlobSet
         this.extensionSuffixPatterns = extensionSuffixPatterns;
         this.extensionSuffixIndexes = extensionSuffixIndexes;
         this.requiredExtensionPatterns = requiredExtensionPatterns;
-        this.requiredExtensionCandidates = requiredExtensionCandidates;
         this.requiredExtensionIndexes = requiredExtensionIndexes;
         this.prefixMatcher = prefixMatcher;
         this.prefixIndexes = prefixIndexes;
         this.suffixMatcher = suffixMatcher;
         this.suffixIndexes = suffixIndexes;
-        this.fallbackCandidates = fallbackCandidates;
-        this.fallbackIndexes = fallbackIndexes;
+        this.alwaysIndexes = alwaysIndexes;
     }
 
     /// <summary>
@@ -110,14 +104,12 @@ public sealed class GlobSet
         var extensionSuffixPatterns = new List<byte[]>();
         var extensionSuffixIndexes = new List<int>();
         var requiredExtensionPatterns = new List<byte[]>();
-        var requiredExtensionCandidatePatterns = new List<byte[]>();
         var requiredExtensionIndexes = new List<int>();
         var prefixPatterns = new List<byte[]>();
         var prefixIndexes = new List<int>();
         var suffixPatterns = new List<byte[]>();
         var suffixIndexes = new List<int>();
-        var fallbackPatterns = new List<byte[]>();
-        var fallbackIndexes = new List<int>();
+        var alwaysIndexes = new List<int>();
 
         for (int index = 0; index < copy.Length; index++)
         {
@@ -133,14 +125,12 @@ public sealed class GlobSet
                 extensionSuffixPatterns,
                 extensionSuffixIndexes,
                 requiredExtensionPatterns,
-                requiredExtensionCandidatePatterns,
                 requiredExtensionIndexes,
                 prefixPatterns,
                 prefixIndexes,
                 suffixPatterns,
                 suffixIndexes,
-                fallbackPatterns,
-                fallbackIndexes);
+                alwaysIndexes);
         }
 
         return new GlobSet(
@@ -154,14 +144,12 @@ public sealed class GlobSet
             extensionSuffixPatterns.ToArray(),
             extensionSuffixIndexes.ToArray(),
             requiredExtensionPatterns.ToArray(),
-            PatternSet.Compile(requiredExtensionCandidatePatterns),
             requiredExtensionIndexes.ToArray(),
             CreateAhoCorasick(copy, prefixPatterns, prefixIndexes),
             prefixIndexes.ToArray(),
             CreateAhoCorasick(copy, suffixPatterns, suffixIndexes),
             suffixIndexes.ToArray(),
-            PatternSet.Compile(fallbackPatterns),
-            fallbackIndexes.ToArray());
+            alwaysIndexes.ToArray());
     }
 
     /// <summary>
@@ -333,6 +321,37 @@ public sealed class GlobSet
         MatchingCandidateIndexesInto(candidate, candidateArray, indexes);
     }
 
+    /// <summary>
+    /// Returns the last matching glob index, preserving insertion-order precedence.
+    /// </summary>
+    /// <param name="candidate">The prepared candidate path.</param>
+    /// <param name="eligible">Optional per-glob eligibility flags; an empty span treats all globs as eligible.</param>
+    /// <returns>The last matching glob index, or <c>-1</c> when no eligible glob matches.</returns>
+    public int LastMatchingIndex(GlobCandidate candidate, ReadOnlySpan<bool> eligible)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+        if (!eligible.IsEmpty && eligible.Length != globs.Length)
+        {
+            throw new ArgumentException("Eligibility flags must be empty or match the glob count.", nameof(eligible));
+        }
+
+        if (IsEmpty)
+        {
+            return -1;
+        }
+
+        if (globs.Length <= StackCandidateLimit)
+        {
+            Span<bool> candidates = stackalloc bool[globs.Length];
+            CollectCandidates(candidate, candidates);
+            return LastMatchingCandidateIndex(candidate, candidates, eligible);
+        }
+
+        bool[] candidateArray = new bool[globs.Length];
+        CollectCandidates(candidate, candidateArray);
+        return LastMatchingCandidateIndex(candidate, candidateArray, eligible);
+    }
+
     private static void AddCandidateStrategy(
         Glob glob,
         int globIndex,
@@ -345,14 +364,12 @@ public sealed class GlobSet
         List<byte[]> extensionSuffixPatterns,
         List<int> extensionSuffixIndexes,
         List<byte[]> requiredExtensionPatterns,
-        List<byte[]> requiredExtensionCandidatePatterns,
         List<int> requiredExtensionIndexes,
         List<byte[]> prefixPatterns,
         List<int> prefixIndexes,
         List<byte[]> suffixPatterns,
         List<int> suffixIndexes,
-        List<byte[]> fallbackPatterns,
-        List<int> fallbackIndexes)
+        List<int> alwaysIndexes)
     {
         if (glob.TryGetLiteral(out byte[] literal))
         {
@@ -399,7 +416,6 @@ public sealed class GlobSet
         if (!hasExtensionOnly && glob.TryGetRequiredExtension(out byte[] requiredExtension))
         {
             requiredExtensionPatterns.Add(requiredExtension);
-            requiredExtensionCandidatePatterns.Add(glob.ToRegexCandidatePattern());
             requiredExtensionIndexes.Add(globIndex);
             classified = true;
         }
@@ -422,8 +438,7 @@ public sealed class GlobSet
 
         if (!classified)
         {
-            fallbackPatterns.Add(glob.ToRegexCandidatePattern());
-            fallbackIndexes.Add(globIndex);
+            alwaysIndexes.Add(globIndex);
         }
     }
 
@@ -459,7 +474,7 @@ public sealed class GlobSet
         CollectRequiredExtensionCandidates(path, candidates);
         CollectPrefixCandidates(path, candidates);
         CollectSuffixCandidates(path, candidates);
-        CollectFallbackCandidates(path, candidates);
+        CollectAlwaysCandidates(candidates);
     }
 
     private void CollectCandidates(GlobCandidate candidate, Span<bool> candidates)
@@ -471,7 +486,7 @@ public sealed class GlobSet
         CollectRequiredExtensionCandidates(candidate, candidates);
         CollectPrefixCandidates(candidate.Path.Span, candidates);
         CollectSuffixCandidates(candidate.Path.Span, candidates);
-        CollectFallbackCandidates(candidate.Path.Span, candidates);
+        CollectAlwaysCandidates(candidates);
     }
 
     private void CollectLiteralCandidates(ReadOnlySpan<byte> path, Span<bool> candidates)
@@ -562,10 +577,8 @@ public sealed class GlobSet
 
     private void CollectRequiredExtensionCandidates(ReadOnlySpan<byte> path, Span<bool> candidates)
     {
-        IReadOnlyList<int> patternIds = requiredExtensionCandidates.MatchingPatternIds(path);
-        for (int index = 0; index < patternIds.Count; index++)
+        for (int patternId = 0; patternId < requiredExtensionPatterns.Length; patternId++)
         {
-            int patternId = patternIds[index];
             int globIndex = requiredExtensionIndexes[patternId];
             if (globs[globIndex].PathExtensionEquals(path, requiredExtensionPatterns[patternId]))
             {
@@ -576,15 +589,21 @@ public sealed class GlobSet
 
     private void CollectRequiredExtensionCandidates(GlobCandidate candidate, Span<bool> candidates)
     {
-        IReadOnlyList<int> patternIds = requiredExtensionCandidates.MatchingPatternIds(candidate.Path.Span);
-        for (int index = 0; index < patternIds.Count; index++)
+        for (int patternId = 0; patternId < requiredExtensionPatterns.Length; patternId++)
         {
-            int patternId = patternIds[index];
             int globIndex = requiredExtensionIndexes[patternId];
             if (globs[globIndex].BaseNameExtensionEquals(candidate.BaseName.Span, requiredExtensionPatterns[patternId]))
             {
                 candidates[globIndex] = true;
             }
+        }
+    }
+
+    private void CollectAlwaysCandidates(Span<bool> candidates)
+    {
+        for (int index = 0; index < alwaysIndexes.Length; index++)
+        {
+            candidates[alwaysIndexes[index]] = true;
         }
     }
 
@@ -621,15 +640,6 @@ public sealed class GlobSet
             {
                 candidates[suffixIndexes[match.PatternId]] = true;
             }
-        }
-    }
-
-    private void CollectFallbackCandidates(ReadOnlySpan<byte> path, Span<bool> candidates)
-    {
-        IReadOnlyList<int> fallbackPatternIds = fallbackCandidates.MatchingPatternIds(path);
-        for (int index = 0; index < fallbackPatternIds.Count; index++)
-        {
-            candidates[fallbackIndexes[fallbackPatternIds[index]]] = true;
         }
     }
 
@@ -679,5 +689,21 @@ public sealed class GlobSet
                 indexes.Add(index);
             }
         }
+    }
+
+    private int LastMatchingCandidateIndex(GlobCandidate candidate, ReadOnlySpan<bool> candidates, ReadOnlySpan<bool> eligible)
+    {
+        int matchedIndex = -1;
+        for (int index = 0; index < globs.Length; index++)
+        {
+            if (candidates[index] &&
+                (eligible.IsEmpty || eligible[index]) &&
+                globs[index].IsMatch(candidate))
+            {
+                matchedIndex = index;
+            }
+        }
+
+        return matchedIndex;
     }
 }

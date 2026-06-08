@@ -70,6 +70,8 @@ internal sealed class IgnoreRule
 
     internal bool NeedsRelativePath => !basenameOnly;
 
+    internal Glob Glob => glob;
+
     internal IgnoreGlobSetSummary GetGlobSetSummary()
     {
         if (fastKind == FastKindExact)

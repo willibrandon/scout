@@ -91,6 +91,26 @@ public sealed class GlobSetTests
     }
 
     /// <summary>
+    /// Verifies last-match lookup preserves insertion-order precedence and eligibility filters.
+    /// </summary>
+    [Fact]
+    public void LastMatchingIndexPreservesOrderAndEligibility()
+    {
+        var set = GlobSet.Create(
+            [
+                Glob.Parse("src/*.rs"u8.ToArray(), GlobOptions.UnixLiteralSeparator),
+                Glob.Parse("*.rs"u8.ToArray()),
+                Glob.Parse("src/**"u8.ToArray(), GlobOptions.UnixLiteralSeparator),
+            ]);
+        var candidate = GlobCandidate.FromBytes("src/main.rs"u8);
+
+        Assert.Equal(2, set.LastMatchingIndex(candidate, []));
+        Assert.Equal(1, set.LastMatchingIndex(candidate, [true, true, false]));
+        Assert.Equal(-1, set.LastMatchingIndex(candidate, [false, false, false]));
+        Assert.Throws<ArgumentException>(() => set.LastMatchingIndex(candidate, [true]));
+    }
+
+    /// <summary>
     /// Verifies glob sets report matching indexes in insertion order.
     /// </summary>
     [Fact]
@@ -200,6 +220,23 @@ public sealed class GlobSetTests
         Assert.True(set.IsMatch("foo"u8));
         Assert.False(set.IsMatch("baz"u8));
         Assert.Empty(set.MatchingIndexes("baz"u8));
+    }
+
+    /// <summary>
+    /// Verifies broad recursive globs remain eligible for final glob verification.
+    /// </summary>
+    [Fact]
+    public void BroadRecursiveFallbackCandidatesAreVerifiedByGlobMatcher()
+    {
+        var set = GlobSet.Create(
+            [
+                Glob.Parse("**/**/*"u8.ToArray(), GlobOptions.UnixLiteralSeparator),
+                Glob.Parse("**/dir_root_32/*"u8.ToArray(), GlobOptions.UnixLiteralSeparator),
+            ]);
+
+        Assert.Equal([0], set.MatchingIndexes("a/foo.rs"u8));
+        Assert.Equal([0, 1], set.MatchingIndexes("dir_root_32/file"u8));
+        Assert.Equal([0], set.MatchingIndexes("dir_root_32/child/file"u8));
     }
 
     /// <summary>

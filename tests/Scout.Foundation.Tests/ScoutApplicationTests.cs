@@ -5334,6 +5334,30 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies recursive literal search output matches ripgrep after filtering many no-match files.
+    /// </summary>
+    [Fact]
+    public void LiteralSearchRecursesDirectoriesWithManyNoMatchFiles()
+    {
+        string root = CreateTempDirectory();
+        string child = Path.Combine(root, "child");
+        Directory.CreateDirectory(child);
+        for (int index = 0; index < 32; index++)
+        {
+            File.WriteAllText(Path.Combine(root, $"miss-{index:D2}.txt"), "miss\n");
+        }
+
+        File.WriteAllText(Path.Combine(child, "keep.txt"), "miss\nneedle child\n");
+
+        (int exitCode, byte[] output, string error) = RunScout("--threads=2", "--path-separator", "/", "needle", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--threads=2", "--path-separator", "/", "needle", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies directory searches print line numbers after path prefixes.
     /// </summary>
     [Fact]
