@@ -6,17 +6,20 @@ internal sealed class RegexPrefilter
     private readonly MemmemFinder? memmem;
     private readonly RegexTeddyPrefilter? teddy;
     private readonly AhoCorasickAutomaton? ahoCorasick;
+    private readonly RegexPrefixCandidateGate? candidateGate;
 
     private RegexPrefilter(
         RegexPrefilterKind kind,
         MemmemFinder? memmem,
         RegexTeddyPrefilter? teddy,
-        AhoCorasickAutomaton? ahoCorasick)
+        AhoCorasickAutomaton? ahoCorasick,
+        RegexPrefixCandidateGate? candidateGate = null)
     {
         Kind = kind;
         this.memmem = memmem;
         this.teddy = teddy;
         this.ahoCorasick = ahoCorasick;
+        this.candidateGate = candidateGate;
     }
 
     public RegexPrefilterKind Kind { get; }
@@ -50,11 +53,36 @@ internal sealed class RegexPrefilter
             return false;
         }
 
+        RegexPrefixCandidateGate? candidateGate = null;
+        RegexPrefixCandidateGate.TryCreate(root, options, prefixes, out candidateGate);
         return prefixes is not null &&
-            TryCreatePrefixSetPrefilter(prefixes, out prefilter);
+            TryCreatePrefixSetPrefilter(prefixes, candidateGate, out prefilter);
     }
 
     public int FindCandidate(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        int searchAt = startAt;
+        while (searchAt < haystack.Length)
+        {
+            int candidate = FindRawCandidate(haystack, searchAt);
+            if (candidate < 0)
+            {
+                return -1;
+            }
+
+            if (candidateGate is null ||
+                candidateGate.CanMatch(haystack, candidate, out int resumeAt))
+            {
+                return candidate;
+            }
+
+            searchAt = Math.Clamp(Math.Max(resumeAt, candidate + 1), 0, haystack.Length);
+        }
+
+        return -1;
+    }
+
+    private int FindRawCandidate(ReadOnlySpan<byte> haystack, int startAt)
     {
         if (memmem is not null)
         {
@@ -92,10 +120,10 @@ internal sealed class RegexPrefilter
             prefixes[index] = prefix.ToArray();
         }
 
-        return TryCreatePrefixSetPrefilter(prefixes, out prefilter);
+        return TryCreatePrefixSetPrefilter(prefixes, candidateGate: null, out prefilter);
     }
 
-    private static bool TryCreatePrefixSetPrefilter(byte[][] prefixes, out RegexPrefilter? prefilter)
+    private static bool TryCreatePrefixSetPrefilter(byte[][] prefixes, RegexPrefixCandidateGate? candidateGate, out RegexPrefilter? prefilter)
     {
         prefilter = null;
         if (prefixes.Length < 2)
@@ -109,7 +137,8 @@ internal sealed class RegexPrefilter
                 RegexPrefilterKind.Teddy,
                 memmem: null,
                 teddy,
-                ahoCorasick: null);
+                ahoCorasick: null,
+                candidateGate);
             return true;
         }
 
@@ -117,7 +146,8 @@ internal sealed class RegexPrefilter
             RegexPrefilterKind.AhoCorasick,
             memmem: null,
             teddy: null,
-            ahoCorasick: AhoCorasickAutomaton.Create(prefixes, AhoCorasickMatchKind.LeftmostFirst));
+            ahoCorasick: AhoCorasickAutomaton.Create(prefixes, AhoCorasickMatchKind.LeftmostFirst),
+            candidateGate);
         return true;
     }
 

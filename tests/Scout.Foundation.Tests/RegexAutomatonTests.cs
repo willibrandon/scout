@@ -611,6 +611,48 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies impossible sequence-prefix candidates are skipped without hiding a later valid match.
+    /// </summary>
+    [Fact]
+    public void SequenceAlternationPrefixGatePreservesLaterSignatureMatch()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"(?:public|private|protected|internal)[^;={}]*\([^)]*(?:,[^)]*){8,}\)"u8,
+            multiLine: true,
+            dotMatchesNewline: false);
+
+        const string prefix = "public nope;\nprivate nope;\n";
+        const string match = "internal static void M(a,b,c,d,e,f,g,h,i)";
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes(prefix + match + "\n");
+
+        Assert.Equal(
+            new RegexMatch(prefix.Length, match.Length),
+            automaton.Find(haystack));
+    }
+
+    /// <summary>
+    /// Verifies prefix-gate skipping stays conservative when terminators can also start a prefix.
+    /// </summary>
+    [Fact]
+    public void SequenceAlternationPrefixGatePreservesOverlappingTerminatorPrefix()
+    {
+        var automaton = RegexAutomaton.Compile(@"(?:x|y)[^x]*a"u8);
+
+        Assert.Equal(new RegexMatch(1, 2), automaton.Find("xxa"u8));
+    }
+
+    /// <summary>
+    /// Verifies prefix-gate skipping is not applied across inline flag changes.
+    /// </summary>
+    [Fact]
+    public void SequenceAlternationPrefixGateIgnoresInlineFlagShapes()
+    {
+        var automaton = RegexAutomaton.Compile(@"(?:a|b)[^x]*(?i)z"u8);
+
+        Assert.Equal(new RegexMatch(0, 2), automaton.Find("aZ"u8));
+    }
+
+    /// <summary>
     /// Verifies a large lazy-DFA state space fails over before pathological no-match verification stalls.
     /// </summary>
     [Fact(Timeout = 1000)]
