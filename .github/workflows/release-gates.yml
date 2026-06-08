@@ -7,12 +7,20 @@ on:
         description: Commit SHA or ref to test. Defaults to the workflow ref.
         required: false
         type: string
+      gate:
+        description: Gate subset to run.
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - performance
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.checkout_ref || github.ref }}
+  group: ${{ github.workflow }}-${{ inputs.gate || 'all' }}-${{ inputs.checkout_ref || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -26,6 +34,7 @@ env:
 jobs:
   full-tests-linux:
     name: full pinned tests (${{ matrix.rid }})
+    if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
     container:
@@ -104,6 +113,7 @@ jobs:
 
   full-tests-macos:
     name: full pinned tests (${{ matrix.rid }})
+    if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
     strategy:
@@ -145,6 +155,7 @@ jobs:
 
   full-tests-windows:
     name: full pinned tests (${{ matrix.rid }})
+    if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
     strategy:
@@ -188,6 +199,7 @@ jobs:
 
   performance-gate:
     name: hyperfine performance gate
+    if: ${{ inputs.gate == '' || inputs.gate == 'all' || inputs.gate == 'performance' }}
     runs-on: macos-26
     timeout-minutes: 360
     steps:

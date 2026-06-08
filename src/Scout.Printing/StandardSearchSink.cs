@@ -20,8 +20,6 @@ internal struct StandardSearchSink : ILineSink
     private readonly long lineNumberOffset;
     private readonly long byteOffsetOffset;
     private readonly bool usePlainLineHeader;
-    private byte[]? plainLinePrefix;
-    private byte[]? plainLineHeaderBuffer;
 
     public StandardSearchSink(
         RawByteWriter output,
@@ -55,8 +53,6 @@ internal struct StandardSearchSink : ILineSink
         this.lineNumberOffset = lineNumberOffset;
         this.byteOffsetOffset = byteOffsetOffset;
         usePlainLineHeader = CanUsePlainLineHeader(prefix, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color);
-        plainLinePrefix = null;
-        plainLineHeaderBuffer = null;
     }
 
     public ulong MatchedLines { get; private set; }
@@ -259,26 +255,20 @@ internal struct StandardSearchSink : ILineSink
         return true;
     }
 
-    private static byte[] CreatePlainLinePrefix(OutputPath prefix, ReadOnlyMemory<byte> matchSeparator)
-    {
-        byte[] bytes = new byte[prefix.Display.Length + matchSeparator.Length];
-        prefix.Display.CopyTo(bytes, 0);
-        matchSeparator.CopyTo(bytes.AsMemory(prefix.Display.Length));
-        return bytes;
-    }
-
     private void WritePlainLineHeader(long lineNumber)
     {
         ReadOnlySpan<byte> separator = matchSeparator.Span;
-        plainLinePrefix ??= prefix is null ? [] : CreatePlainLinePrefix(prefix, matchSeparator);
         int digitCount = CountDigits(lineNumber);
-        int headerLength = plainLinePrefix!.Length + digitCount + separator.Length;
-        byte[] header = plainLineHeaderBuffer ??= new byte[plainLinePrefix.Length + 20 + separator.Length];
-        plainLinePrefix.CopyTo(header);
-        int numberStart = plainLinePrefix.Length;
-        WriteNumber(header.AsSpan(numberStart, digitCount), lineNumber);
-        separator.CopyTo(header.AsSpan(numberStart + digitCount));
-        output.Write(header.AsSpan(0, headerLength));
+        Span<byte> number = stackalloc byte[digitCount];
+        WriteNumber(number, lineNumber);
+        if (prefix is not null)
+        {
+            output.Write(prefix.Display);
+            output.Write(separator);
+        }
+
+        output.Write(number);
+        output.Write(separator);
     }
 
     private static int CountDigits(long value)

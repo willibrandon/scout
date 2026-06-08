@@ -22,7 +22,9 @@ bench/run-hyperfine.sh --gate
 GitHub's default `CI` workflow runs hosted cross-platform build, test, format,
 fuzz, and native link checks. After `CI` succeeds on `main`, it dispatches the
 `Release Gates` workflow with the exact successful commit SHA; the workflow can
-also be started manually from Actions. Release Gates repeat the native
+also be started manually from Actions. Manual performance-only reruns should set
+`gate=performance` and `checkout_ref` to the commit SHA under test. Release
+Gates repeat the native
 entrypoint and final `scout` executable smoke checks on all six hosted release
 RIDs: `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`, `win-x64`, and
 `win-arm64`. Full pinned test passes currently run on the hosted Unix RIDs with

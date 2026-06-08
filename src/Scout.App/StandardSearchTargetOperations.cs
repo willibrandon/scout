@@ -7,7 +7,8 @@ namespace Scout;
 internal static class StandardSearchTargetOperations
 {
     private const int ParallelOutputFlushThreshold = 128 * 1024;
-    private const int DirectoryEntryLiteralPrecheckBufferLength = 64 * 1024;
+    private const int ParallelDirectOutputFlushThreshold = 16 * 1024;
+    private const int DirectoryEntryLiteralPrecheckBufferLength = 16 * 1024;
 
     internal static bool SearchStandardInput(
         IReadOnlyList<byte[]> pattern,
@@ -317,6 +318,7 @@ internal static class StandardSearchTargetOperations
             SearchPathArgument.CreateDirectoryDisplayPathFormatter(root, fullRoot, defaultRoot, lowArgs.PathSeparator);
         bool interFileContextSeparator = StandardSearchOperations.ShouldWriteInterFileContextSeparator(lowArgs, heading, separators);
         bool wroteContextBody = false;
+        var literalPrecheckState = new DirectoryLiteralPrecheckState();
         foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics, logger))
         {
             if (interFileContextSeparator)
@@ -339,6 +341,7 @@ internal static class StandardSearchTargetOperations
                     asciiCaseInsensitive,
                     lineNumber,
                     heading,
+                    literalPrecheckState,
                     ref wroteHeadingOutput,
                     ref fileMatched,
                     ref fileErrored);
@@ -369,6 +372,7 @@ internal static class StandardSearchTargetOperations
                 asciiCaseInsensitive,
                 lineNumber,
                 heading,
+                literalPrecheckState,
                 ref wroteHeadingOutput,
                 ref matched,
                 ref errored);
@@ -405,6 +409,7 @@ internal static class StandardSearchTargetOperations
         bool directOutput = CanWriteParallelOutputDirectly(heading, interFileContextSeparator);
         bool printedContextBody = false;
         object outputLock = new();
+        var literalPrecheckState = new DirectoryLiteralPrecheckState();
         ConcurrentBag<MemoryStream>? directOutputBuffers = directOutput ? [] : null;
         using BlockingCollection<BufferedSearchOutput>? outputs = directOutput ? null : new BlockingCollection<BufferedSearchOutput>();
         using BackgroundWorkItem? printTask = directOutput ? null : BackgroundWorkItem.Queue(() =>
@@ -441,7 +446,9 @@ internal static class StandardSearchTargetOperations
         {
             SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger).Threads(threadCount).BuildParallel().Run(() =>
             {
-                MemoryStream buffer = new();
+                MemoryStream buffer = directOutput
+                    ? new LineFlushingMemoryStream(output, outputLock, GetParallelOutputLineFlushTerminator(separators), ParallelDirectOutputFlushThreshold)
+                    : new MemoryStream();
                 RawByteWriter writer = CreateParallelOutputWriter(buffer);
                 directOutputBuffers?.Add(buffer);
                 return entry =>
@@ -474,6 +481,7 @@ internal static class StandardSearchTargetOperations
                         asciiCaseInsensitive,
                         lineNumber,
                         heading,
+                        literalPrecheckState,
                         ref fileWroteHeading,
                         ref fileMatched,
                         ref fileErrored);
@@ -676,7 +684,9 @@ internal static class StandardSearchTargetOperations
         {
             SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger).Threads(threadCount).BuildParallel().Run(() =>
             {
-                MemoryStream buffer = new();
+                MemoryStream buffer = directOutput
+                    ? new LineFlushingMemoryStream(output, outputLock, GetParallelOutputLineFlushTerminator(separators), ParallelDirectOutputFlushThreshold)
+                    : new MemoryStream();
                 RawByteWriter writer = CreateParallelOutputWriter(buffer);
                 directOutputBuffers?.Add(buffer);
                 return entry =>
@@ -827,11 +837,20 @@ internal static class StandardSearchTargetOperations
         WriteBufferedOutputIfAny(output, outputLock, buffer);
         buffer.Position = 0;
         buffer.SetLength(0);
+        if (buffer.Capacity > ParallelOutputFlushThreshold)
+        {
+            buffer.Capacity = 0;
+        }
     }
 
     private static bool CanWriteParallelOutputDirectly(bool heading, bool interFileContextSeparator)
     {
         return !heading && !interFileContextSeparator;
+    }
+
+    private static byte GetParallelOutputLineFlushTerminator(OutputSeparators separators)
+    {
+        return separators.NullData ? (byte)0 : (byte)'\n';
     }
 
     private static void SearchDirectoryEntryFile(
@@ -848,6 +867,7 @@ internal static class StandardSearchTargetOperations
         bool asciiCaseInsensitive,
         bool lineNumber,
         bool heading,
+        DirectoryLiteralPrecheckState literalPrecheckState,
         ref bool wroteHeadingOutput,
         ref bool matched,
         ref bool errored)
@@ -866,6 +886,7 @@ internal static class StandardSearchTargetOperations
             asciiCaseInsensitive,
             lineNumber,
             heading,
+            literalPrecheckState,
             ref wroteHeadingOutput,
             ref matched,
             ref errored))
@@ -907,11 +928,13 @@ internal static class StandardSearchTargetOperations
         bool asciiCaseInsensitive,
         bool lineNumber,
         bool heading,
+        DirectoryLiteralPrecheckState literalPrecheckState,
         ref bool wroteHeadingOutput,
         ref bool matched,
         ref bool errored)
     {
-        if (!CanUseDirectoryEntryLiteralPrecheck(entry, pattern, lowArgs))
+        if (!literalPrecheckState.Enabled ||
+            !CanUseDirectoryEntryLiteralPrecheck(entry, pattern, lowArgs))
         {
             return false;
         }
@@ -922,6 +945,7 @@ internal static class StandardSearchTargetOperations
             return false;
         }
 
+        literalPrecheckState.Record(containsLiteral);
         if (!containsLiteral)
         {
             return true;

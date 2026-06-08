@@ -124,22 +124,22 @@ identify `scout`, not ripgrep. Any other difference is a bug, tracked in
 ## Performance
 
 Measured against release-LTO ripgrep with `hyperfine` on the standard benchmark corpora
-(OpenSubtitles, a Linux kernel tree), Scout meets every performance gate and is faster than
-ripgrep on most of them. Wall-time ratio is Scout ÷ ripgrep; below 1.0 is faster than
-ripgrep.
+(OpenSubtitles, a Linux kernel tree), Scout must meet every hosted Release Gate threshold.
+Wall-time ratio is Scout ÷ ripgrep; below 1.0 is faster than ripgrep.
 
-| Workload | Observed ratio | Release gate |
-|---|--:|--:|
-| Literal scan, large file | 0.95× | ≤1.20× |
-| Regex scan, large file | 0.56× | ≤1.20× |
-| Recursive literal, large tree | 0.48× | ≤1.25× |
-| Many small files, parallel | 0.54× | ≤1.30× |
-| Cold start (`--version`) | 0.76× | ≤1.00× |
-| Cold start (tiny search) | 0.57× | ≤1.00× |
+| Workload | Release gate |
+|---|--:|
+| Literal scan, large file | ≤1.20× |
+| Regex scan, large file | ≤1.20× |
+| Recursive literal, large tree | ≤1.25× |
+| Many small files, parallel | ≤1.30× |
+| Cold start (`--version`) | ≤1.00× |
+| Cold start (tiny search) | ≤1.00× |
 
-The release gate measures each workload in both command orders and uses combined median samples
-to avoid hosted-runner order bias. Resident memory carries the managed runtime's fixed image cost
-above ripgrep's; the accounting is documented in `docs/PARITY.md`.
+The hosted Release Gates workflow is the source of truth for observed ratios. It measures
+each workload in both command orders and uses combined median samples to avoid hosted-runner
+order bias. Resident memory carries the managed runtime's fixed image cost above ripgrep's;
+the accounting is documented in `docs/PARITY.md`.
 
 ## License
 
