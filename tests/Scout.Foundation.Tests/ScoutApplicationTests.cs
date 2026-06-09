@@ -4256,6 +4256,85 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies color always highlights optimized multiline signature matches in context output.
+    /// </summary>
+    [Fact]
+    public void ColorAlwaysHighlightsMultilineSignatureArityContextOutput()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.cs");
+        File.WriteAllText(path, """
+            before
+            internal static bool SearchQuiet(
+                ReadOnlySpan<byte> bytes,
+                IReadOnlyList<byte[]> pattern,
+                CliSearchMode searchMode,
+                bool asciiCaseInsensitive,
+                bool invertMatch,
+                bool lineRegexp,
+                bool wordRegexp,
+                ulong? maxCount,
+                bool crlf,
+                bool nullData)
+            after
+            """);
+
+        const string Pattern = @"(?:public|private|protected|internal)[^;={}]*\([^)]*(?:,[^)]*){8,}\)";
+        (int exitCode, byte[] output, string error) = RunScout("--color=always", "-U", "-C1", Pattern, path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--color=always", "-U", "-C1", Pattern, path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies color always highlights generic multiline matches in standard and context output.
+    /// </summary>
+    [Fact]
+    public void ColorAlwaysHighlightsGenericMultilineOutput()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.cs");
+        File.WriteAllText(path, """
+            before
+            internal static bool SearchQuiet(
+                ReadOnlySpan<byte> bytes,
+                IReadOnlyList<byte[]> pattern,
+                CliSearchMode searchMode,
+                bool asciiCaseInsensitive,
+                bool invertMatch,
+                bool lineRegexp,
+                bool wordRegexp,
+                ulong? maxCount,
+                bool crlf,
+                bool nullData)
+            after
+            """);
+
+        const string Pattern = @"SearchQuiet\([\s\S]*?nullData\)";
+        string[][] argumentSets =
+        [
+            ["--color=always", "-U", Pattern, path],
+            ["--color=always", "-U", "-C1", Pattern, path],
+            ["--color=always", "-U", "-A1", Pattern, path],
+            ["--color=always", "-U", "-B1", Pattern, path],
+            ["--color=always", "-U", "--passthru", Pattern, path],
+        ];
+
+        for (int index = 0; index < argumentSets.Length; index++)
+        {
+            string[] arguments = argumentSets[index];
+            (int exitCode, byte[] output, string error) = RunScout(arguments);
+            (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
+
+            Assert.Equal(pinnedExitCode, exitCode);
+            Assert.Equal(pinnedOutput, output);
+            Assert.Equal(pinnedError, error);
+        }
+    }
+
+    /// <summary>
     /// Verifies color always highlights only-matching output.
     /// </summary>
     [Fact]

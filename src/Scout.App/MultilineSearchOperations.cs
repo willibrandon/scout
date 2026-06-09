@@ -498,6 +498,13 @@ internal static class MultilineSearchOperations
             return WriteMultilineVimgrepMatchesForContextLine(bytes, lines, lineIndex, matches, renderedMatchLimit, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, out consumedLineIndex);
         }
 
+        if (color.Enabled &&
+            TryGetMultilineLineHighlights(bytes, line, matches, renderedMatchLimit, out List<int> highlightStarts, out List<int> highlightLengths))
+        {
+            lineSink.MatchedLine(line.LineNumber, line.Start, line.MatchColumn, outputLine, highlightStarts, highlightLengths);
+            return true;
+        }
+
         lineSink.MatchedLine(line.LineNumber, line.Start, line.MatchColumn, outputLine);
         return true;
     }
@@ -621,6 +628,11 @@ internal static class MultilineSearchOperations
                 {
                     int matchByteOffset = Math.Max(match.Start, lineStart);
                     int matchEnd = Math.Min(match.Start + match.Length, GetLineContentEnd(bytes, lineStart));
+                    if (matchEnd < matchByteOffset)
+                    {
+                        matchEnd = matchByteOffset;
+                    }
+
                     ReadOnlySpan<byte> lineBytes = bytes[lineStart..lineEnd];
                     ReadOnlySpan<byte> matchedBytes = bytes[matchByteOffset..matchEnd];
                     long matchColumn = GetMultilineMatchColumn(match, lineStart);
@@ -978,6 +990,12 @@ internal static class MultilineSearchOperations
         bool wordRegexp,
         ulong? maxCount)
     {
+        if (color.Enabled)
+        {
+            WriteColoredMultilineMatchedLines(bytes, automata, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, lineRegexp, wordRegexp, maxCount);
+            return;
+        }
+
         var sink = new StandardSearchSink(output, prefix, separators.FieldMatch, separators.FieldContext, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
         int offset = 0;
         int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
@@ -1014,6 +1032,71 @@ internal static class MultilineSearchOperations
             currentLineNumber = Math.Max(currentLineNumber, outputLineNumber);
             offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
         }
+    }
+
+    private static void WriteColoredMultilineMatchedLines(
+        ReadOnlySpan<byte> bytes,
+        RegexAutomaton[] automata,
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool trim,
+        bool nullPathTerminator,
+        bool lineRegexp,
+        bool wordRegexp,
+        ulong? maxCount)
+    {
+        var sink = new ColoredSearchSink(output, prefix, separators.FieldMatch, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
+        int offset = 0;
+        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
+        int lastWrittenLineStart = -1;
+        int currentLineStart = 0;
+        long currentLineNumber = 1;
+        ulong emitted = 0;
+        while (TryFindNextMultilineMatch(bytes, automata, lineRegexp, wordRegexp, ref offset, ref suppressedEmptyStart, out RegexMatch match))
+        {
+            int firstLineStart = GetLineStart(bytes, match.Start);
+            int lastLineStart = GetLineStart(bytes, GetInclusiveMatchEnd(match));
+            AdvanceLineNumber(bytes, firstLineStart, ref currentLineStart, ref currentLineNumber);
+            long outputLineNumber = currentLineNumber;
+            for (int lineStart = firstLineStart; lineStart <= lastLineStart;)
+            {
+                int lineEnd = GetLineEnd(bytes, lineStart);
+                if (lineStart >= lastWrittenLineStart)
+                {
+                    int matchByteOffset = Math.Max(match.Start, lineStart);
+                    int matchEnd = Math.Min(match.Start + match.Length, GetLineContentEnd(bytes, lineStart));
+                    ReadOnlySpan<byte> lineBytes = bytes[lineStart..lineEnd];
+                    ReadOnlySpan<byte> matchedBytes = bytes[matchByteOffset..matchEnd];
+                    long matchColumn = matchByteOffset - lineStart + 1L;
+                    sink.MatchedLine(outputLineNumber, lineStart, matchByteOffset, matchColumn, lineBytes, matchedBytes);
+                    if (lineStart > lastWrittenLineStart)
+                    {
+                        lastWrittenLineStart = lineStart;
+                        emitted++;
+                        if (maxCount is ulong limit && emitted >= limit)
+                        {
+                            sink.Flush();
+                            return;
+                        }
+                    }
+                }
+
+                lineStart = GetNextLineStart(lineEnd, bytes.Length);
+                outputLineNumber++;
+            }
+
+            currentLineStart = Math.Max(currentLineStart, GetNextLineStart(GetLineEnd(bytes, lastLineStart), bytes.Length));
+            currentLineNumber = Math.Max(currentLineNumber, outputLineNumber);
+            offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
+        }
+
+        sink.Flush();
     }
 
     private static void AdvanceLineNumber(ReadOnlySpan<byte> bytes, int targetLineStart, ref int currentLineStart, ref long currentLineNumber)
@@ -1654,6 +1737,44 @@ internal static class MultilineSearchOperations
         int firstLineStart = GetLineStart(bytes, match.Start);
         int lastLineStart = GetLineStart(bytes, GetInclusiveMatchEnd(match));
         return line.Start >= firstLineStart && line.Start <= lastLineStart;
+    }
+
+    private static bool TryGetMultilineLineHighlights(
+        ReadOnlySpan<byte> bytes,
+        ContextLineInfo line,
+        List<RegexMatch> matches,
+        ulong? renderedMatchLimit,
+        out List<int> starts,
+        out List<int> lengths)
+    {
+        starts = [];
+        lengths = [];
+        int lineContentEnd = GetLineContentEnd(bytes, line.Start);
+        for (int index = 0; index < matches.Count; index++)
+        {
+            if (!IsMultilineContextMatchRendered(index, renderedMatchLimit))
+            {
+                break;
+            }
+
+            RegexMatch match = matches[index];
+            if (!MultilineMatchTouchesLine(bytes, match, line))
+            {
+                continue;
+            }
+
+            int start = Math.Max(match.Start, line.Start);
+            int end = Math.Min(match.Start + match.Length, lineContentEnd);
+            if (end <= start)
+            {
+                continue;
+            }
+
+            starts.Add(start - line.Start);
+            lengths.Add(end - start);
+        }
+
+        return starts.Count > 0;
     }
 
     internal static bool IsMultilineContextMatchRendered(int matchIndex, ulong? renderedMatchLimit)
