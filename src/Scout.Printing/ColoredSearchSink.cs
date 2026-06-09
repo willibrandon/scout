@@ -16,6 +16,8 @@ internal struct ColoredSearchSink : IMatchLineSink
     private readonly OutputLineLimit lineLimit;
     private readonly OutputColor color;
     private readonly ReadOnlyMemory<byte> lineTerminator;
+    private readonly long lineNumberOffset;
+    private readonly long byteOffsetOffset;
     private readonly List<int> starts;
     private readonly List<int> lengths;
     private byte[]? currentLine;
@@ -34,7 +36,9 @@ internal struct ColoredSearchSink : IMatchLineSink
         bool nullPathTerminator,
         OutputLineLimit lineLimit,
         OutputColor color,
-        ReadOnlyMemory<byte> lineTerminator)
+        ReadOnlyMemory<byte> lineTerminator,
+        long lineNumberOffset = 0,
+        long byteOffsetOffset = 0)
     {
         ArgumentNullException.ThrowIfNull(output);
         this.output = output;
@@ -48,6 +52,8 @@ internal struct ColoredSearchSink : IMatchLineSink
         this.lineLimit = lineLimit;
         this.color = color;
         this.lineTerminator = lineTerminator;
+        this.lineNumberOffset = lineNumberOffset;
+        this.byteOffsetOffset = byteOffsetOffset;
         starts = [];
         lengths = [];
         currentLine = null;
@@ -64,7 +70,10 @@ internal struct ColoredSearchSink : IMatchLineSink
         ReadOnlySpan<byte> line,
         ReadOnlySpan<byte> match)
     {
-        if (currentLine is not null && currentLineNumber != lineNumber)
+        long adjustedLineNumber = lineNumber + lineNumberOffset;
+        long adjustedLineByteOffset = lineByteOffset + byteOffsetOffset;
+        long adjustedMatchByteOffset = matchByteOffset + byteOffsetOffset;
+        if (currentLine is not null && currentLineNumber != adjustedLineNumber)
         {
             Flush();
         }
@@ -72,12 +81,12 @@ internal struct ColoredSearchSink : IMatchLineSink
         if (currentLine is null)
         {
             currentLine = line.ToArray();
-            currentLineNumber = lineNumber;
-            currentLineByteOffset = lineByteOffset;
+            currentLineNumber = adjustedLineNumber;
+            currentLineByteOffset = adjustedLineByteOffset;
             currentMatchColumn = matchColumn;
         }
 
-        starts.Add(checked((int)(matchByteOffset - lineByteOffset)));
+        starts.Add(checked((int)(adjustedMatchByteOffset - adjustedLineByteOffset)));
         lengths.Add(match.Length);
     }
 
