@@ -48,4 +48,27 @@ public sealed class ByteCounterTests
 
         Assert.Equal(haystack.Length, ByteCounter.Count(haystack, (byte)'\n'));
     }
+
+    /// <summary>
+    /// Counts one byte while returning the first position of another byte.
+    /// </summary>
+    [Fact]
+    public void CountAndFindFirstScansAcrossVectorBoundaries()
+    {
+        byte[] haystack = new byte[257];
+        Array.Fill(haystack, (byte)'a');
+        haystack[0] = (byte)'\n';
+        haystack[31] = (byte)'\n';
+        haystack[32] = 0;
+        haystack[64] = (byte)'\n';
+        haystack[128] = 0;
+        haystack[256] = (byte)'\n';
+
+        long count = ByteCounter.CountAndFindFirst(haystack, (byte)'\n', 0, out int firstFound);
+
+        Assert.Equal(4, count);
+        Assert.Equal(32, firstFound);
+        Assert.Equal(4, ByteCounter.CountAndFindFirst(haystack, (byte)'\n', (byte)'x', out int missing));
+        Assert.Equal(-1, missing);
+    }
 }
