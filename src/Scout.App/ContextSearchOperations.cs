@@ -310,7 +310,7 @@ internal static class ContextSearchOperations
 
             if (vimgrep && !invertMatch)
             {
-                var vimgrepSink = new VimgrepSink(output, prefix, separators.FieldMatch, lineNumber, column, byteOffset, onlyMatching: false, trim, nullPathTerminator, lineLimit, pattern, asciiCaseInsensitive, lineRegexp, wordRegexp, separators.Crlf, separators.NullData, color, separators.LineTerminator);
+                var vimgrepSink = new VimgrepSink(output, prefix, separators.FieldMatch, lineNumber, column, byteOffset, onlyMatching: false, trim, nullPathTerminator, lineLimit, pattern, asciiCaseInsensitive, lineRegexp, wordRegexp, separators.Crlf, separators.NullData, color, separators.LineTerminator, line.LineNumber - 1, line.Start);
                 LiteralLineSearcher.SearchMatchLines(lineBytes, pattern, ref vimgrepSink, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf: separators.Crlf, nullData: separators.NullData);
                 return;
             }
@@ -328,7 +328,9 @@ internal static class ContextSearchOperations
                     nullPathTerminator,
                     lineLimit,
                     color,
-                    separators.LineTerminator);
+                    separators.LineTerminator,
+                    line.LineNumber - 1,
+                    line.Start);
                 LiteralLineSearcher.SearchMatchLines(lineBytes, pattern, ref coloredSink, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf: separators.Crlf, nullData: separators.NullData);
                 coloredSink.Flush();
                 return;

@@ -23,6 +23,8 @@ internal struct VimgrepSink : IMatchLineSink
     private readonly bool nullData;
     private readonly OutputColor color;
     private readonly ReadOnlyMemory<byte> lineTerminator;
+    private readonly long lineNumberOffset;
+    private readonly long byteOffsetOffset;
 
     public VimgrepSink(
         RawByteWriter output,
@@ -42,7 +44,9 @@ internal struct VimgrepSink : IMatchLineSink
         bool crlf,
         bool nullData,
         OutputColor color,
-        ReadOnlyMemory<byte> lineTerminator)
+        ReadOnlyMemory<byte> lineTerminator,
+        long lineNumberOffset = 0,
+        long byteOffsetOffset = 0)
     {
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(pattern);
@@ -64,6 +68,8 @@ internal struct VimgrepSink : IMatchLineSink
         this.nullData = nullData;
         this.color = color;
         this.lineTerminator = lineTerminator;
+        this.lineNumberOffset = lineNumberOffset;
+        this.byteOffsetOffset = byteOffsetOffset;
     }
 
     public void MatchedLine(
@@ -75,6 +81,8 @@ internal struct VimgrepSink : IMatchLineSink
         ReadOnlySpan<byte> match)
     {
         _ = lineByteOffset;
+        lineNumber += lineNumberOffset;
+        matchByteOffset += byteOffsetOffset;
         ReadOnlySpan<byte> body = onlyMatching ? match : line;
         int trimOffset = trim ? GetTrimOffset(body) : 0;
         ReadOnlySpan<byte> displayBody = body[trimOffset..];

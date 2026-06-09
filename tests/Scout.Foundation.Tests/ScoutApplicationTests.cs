@@ -4225,6 +4225,46 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies colored context output preserves line numbers and byte offsets for sliced match lines.
+    /// </summary>
+    [Fact]
+    public void ColorAlwaysContextOutputPreservesSlicedLineCoordinates()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, """
+            one
+            two
+            three
+            four
+            prefix needle middle needle suffix
+            six
+            seven
+            """);
+
+        string[][] argumentSets =
+        [
+            ["--color=always", "-C1", "-n", "needle", path],
+            ["--color=always", "-A1", "-n", "needle", path],
+            ["--color=always", "-B1", "-n", "needle", path],
+            ["--color=always", "--passthru", "-n", "needle", path],
+            ["--color=always", "-C1", "-n", "--byte-offset", "needle", path],
+            ["--color=always", "-C1", "--vimgrep", "needle", path],
+        ];
+
+        for (int index = 0; index < argumentSets.Length; index++)
+        {
+            string[] arguments = argumentSets[index];
+            (int exitCode, byte[] output, string error) = RunScout(arguments);
+            (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
+
+            Assert.Equal(pinnedExitCode, exitCode);
+            Assert.Equal(pinnedOutput, output);
+            Assert.Equal(pinnedError, error);
+        }
+    }
+
+    /// <summary>
     /// Verifies color always highlights optimized multiline signature matches.
     /// </summary>
     [Fact]
