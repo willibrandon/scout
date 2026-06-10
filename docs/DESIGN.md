@@ -375,7 +375,7 @@ Six layers, all required. **No-skip policy (hard):** a skipped, ignored, or quar
 
 **Decompression tools** for the `-z`/`--pre` matrix — exactly the set upstream invokes, **derived mechanically from the default command table in `crates/cli/src/decompress.rs`** at the pin (not a guessed list): `gzip`, `bzip2`, `xz` (for both `xz` and `lzma` streams), `zstd`, `lz4`, `brotli`, and `uncompress` (`ncompress` on Linux), plus any others present in that table. Each resolves to a single exact version via the pinned snapshot date and is frozen in `PREREQS.lock`.
 
-**Benchmark & differential tooling:** `hyperfine` installed from a checksum-verified release pinned in `PREREQS.lock`; the **reference `rg`** is **built from the pinned upstream commit** (§0) with `--profile release-lto`, and **its binary SHA-256 is recorded** in `PREREQS.lock` (we never download a prebuilt release — we compile the exact pinned source); BenchmarkDotNet pinned via central package management (§5.1).
+**Benchmark & differential tooling:** `hyperfine` installed from a checksum-verified release pinned in `PREREQS.lock`; the **reference `rg`** is **captured from a build of the pinned upstream commit** (§0) with `--profile release-lto`, archived per hosted RID, and recorded in `PREREQS.lock` by both archive SHA-256 and individual binary SHA-256. Release Gates restore those exact archived bytes and fail on any archive or binary hash mismatch; new oracle bytes are produced only by the Oracle Capture workflow, not by Release Gates. BenchmarkDotNet pinned via central package management (§5.1).
 
 **Corpora:** OpenSubtitles `en.txt` (the canonical ripgrep benchmark corpus) and a pinned linux-kernel source snapshot, each **fetched by pinned URL + SHA-256** recorded in `PREREQS.lock` and cached; the Linux tree is verified by a deterministic per-file manifest hash. CI fails on hash mismatch.
 
@@ -465,7 +465,7 @@ Flag tables, help/man text, and shell completions are generated deterministicall
 - **SIMD baseline** = SSE2 + AVX2 (x64) and `AdvSimd`/NEON (arm64) as the shipped baseline; **AVX-512 paths are included and additive**, gated by `Avx512*.IsSupported`, and delivered **before** Release — not deferred past v1.
 - **Dependency dispositions** = every lockfile crate — including `anyhow` (error/stderr parity, §4.10.1) — has a port or explicit replace/none rationale (§3.2.1).
 - **Native entry** = AOT static library + platform C entry driver (runtime self-initializes on first managed call — §4.1.1). **Executed and PASSED locally on osx-arm64 and osx-x64** (0xFF argv byte round-tripped; Appendix A transcript), with the same spike reproduced by GitHub-hosted CI on all six release RIDs before the byte-boundary blocker is treated as closed for the commit under test.
-- **CI prerequisites** = digest-pinned container + `tests/PREREQS.lock` (tool versions + SHA-256), corpora by SHA-256, reference `rg` built from the pinned commit with its binary hash recorded (§8.5).
+- **CI prerequisites** = digest-pinned container + `tests/PREREQS.lock` (tool versions + SHA-256), corpora by SHA-256, reference `rg` archive captured from the pinned commit with archive and binary hashes recorded (§8.5).
 - **Third-party notices** = per-dependency license reproduction in `THIRD-PARTY-NOTICES.md` (decided sufficient; ripgrep's own dual license + each ported crate's license + PCRE2 BSD).
 - **No-skip** = zero skipped/waived tests at Release (§8).
 

@@ -60,6 +60,66 @@ function Get-Sha256 {
     return [System.Convert]::ToHexString($hash).ToLowerInvariant()
 }
 
+function Resolve-RepoRelativePath {
+    param([Parameter(Mandatory = $true)][string] $Path)
+
+    $fullPath = Resolve-RepoPath $Path
+    $rootPrefix = $Root.TrimEnd(@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)) + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $fullPath.StartsWith($rootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Oracle archive members must be under the repository root: $fullPath"
+    }
+
+    return $fullPath.Substring($rootPrefix.Length).Replace("\", "/")
+}
+
+function New-OracleArchive {
+    param(
+        [Parameter(Mandatory = $true)][string] $ArchivePath,
+        [Parameter(Mandatory = $true)][string] $ReferenceEntryName,
+        [Parameter(Mandatory = $true)][string] $ReferencePath,
+        [Parameter(Mandatory = $true)][string] $Pcre2EntryName,
+        [Parameter(Mandatory = $true)][string] $Pcre2Path
+    )
+
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ArchivePath) | Out-Null
+    Remove-Item -LiteralPath $ArchivePath -Force -ErrorAction SilentlyContinue
+
+    $zip = [System.IO.Compression.ZipFile]::Open($ArchivePath, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        Add-OracleArchiveEntry $zip $ReferenceEntryName $ReferencePath
+        Add-OracleArchiveEntry $zip $Pcre2EntryName $Pcre2Path
+    }
+    finally {
+        $zip.Dispose()
+    }
+}
+
+function Add-OracleArchiveEntry {
+    param(
+        [Parameter(Mandatory = $true)][System.IO.Compression.ZipArchive] $Zip,
+        [Parameter(Mandatory = $true)][string] $EntryName,
+        [Parameter(Mandatory = $true)][string] $Path
+    )
+
+    $entry = $Zip.CreateEntry($EntryName, [System.IO.Compression.CompressionLevel]::Optimal)
+    $entry.LastWriteTime = [System.DateTimeOffset]::new(1980, 1, 1, 0, 0, 0, [System.TimeSpan]::Zero)
+    $input = [System.IO.File]::OpenRead($Path)
+    try {
+        $output = $entry.Open()
+        try {
+            $input.CopyTo($output)
+        }
+        finally {
+            $output.Dispose()
+        }
+    }
+    finally {
+        $input.Dispose()
+    }
+}
+
 function Invoke-Checked {
     param(
         [Parameter(Mandatory = $true)][string] $FilePath,
@@ -160,18 +220,31 @@ function Build-Pcre2Ripgrep {
 }
 
 function Write-LockRow {
-    Write-Output "--- tests/PREREQS.lock ripgrep oracle row ---"
-    Write-Output "[[ripgrep_oracle]]"
-    Write-Output "rid = ""$HostRid"""
-    Write-Output "environment = ""$HostOracleEnvironment"""
-    Write-Output "profile = ""$RgProfile"""
-    Write-Output "path = ""$RgPathValue"""
-    Write-Output "sha256 = ""$RgSha256"""
-    Write-Output "pcre2_profile = ""$RgPcre2Profile"""
-    Write-Output "pcre2_features = ""$RgPcre2Features"""
-    Write-Output "pcre2_path = ""$RgPcre2PathValue"""
-    Write-Output "pcre2_sha256 = ""$RgPcre2Sha256"""
-    Write-Output "--- end ripgrep oracle row ---"
+    $rowPathValue = if ([string]::IsNullOrWhiteSpace($env:SCOUT_RIPGREP_ROW_PATH)) {
+        "tests/oracles/ripgrep/$HostRid.lock"
+    } else {
+        $env:SCOUT_RIPGREP_ROW_PATH
+    }
+
+    $rowPath = Resolve-RepoPath $rowPathValue
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $rowPath) | Out-Null
+    $lines = @(
+        "--- tests/PREREQS.lock ripgrep oracle row ---",
+        "[[ripgrep_oracle]]",
+        "rid = ""$HostRid""",
+        "environment = ""$HostOracleEnvironment""",
+        "archive_path = ""$OracleArchiveValue""",
+        "archive_sha256 = ""$OracleArchiveSha256""",
+        "profile = ""$RgProfile""",
+        "path = ""$RgPathValue""",
+        "sha256 = ""$RgSha256""",
+        "pcre2_profile = ""$RgPcre2Profile""",
+        "pcre2_features = ""$RgPcre2Features""",
+        "pcre2_path = ""$RgPcre2PathValue""",
+        "pcre2_sha256 = ""$RgPcre2Sha256""",
+        "--- end ripgrep oracle row ---")
+    [System.IO.File]::WriteAllLines($rowPath, $lines)
+    $lines | ForEach-Object { Write-Output $_ }
 }
 
 $ExpectedRipgrep = Read-LockValue "ripgrep_commit"
@@ -201,8 +274,15 @@ $RgPcre2PathValue = if ([string]::IsNullOrWhiteSpace($env:SCOUT_RIPGREP_PCRE2_RG
     $env:SCOUT_RIPGREP_PCRE2_RG_PATH
 }
 
+$OracleArchiveValue = if ([string]::IsNullOrWhiteSpace($env:SCOUT_RIPGREP_ARCHIVE_PATH)) {
+    "tests/oracles/ripgrep/$HostRid.zip"
+} else {
+    $env:SCOUT_RIPGREP_ARCHIVE_PATH
+}
+
 $RgPath = Resolve-RepoPath $RgPathValue
 $RgPcre2Path = Resolve-RepoPath $RgPcre2PathValue
+$OracleArchive = Resolve-RepoPath $OracleArchiveValue
 
 Ensure-Rustup
 Invoke-Checked rustup toolchain install $RustToolchain --profile minimal
@@ -232,4 +312,11 @@ if (-not (Test-Path $RgPcre2Path)) {
 }
 
 $RgPcre2Sha256 = Get-Sha256 $RgPcre2Path
+New-OracleArchive `
+    -ArchivePath $OracleArchive `
+    -ReferenceEntryName (Resolve-RepoRelativePath $RgPathValue) `
+    -ReferencePath $RgPath `
+    -Pcre2EntryName (Resolve-RepoRelativePath $RgPcre2PathValue) `
+    -Pcre2Path $RgPcre2Path
+$OracleArchiveSha256 = Get-Sha256 $OracleArchive
 Write-LockRow
