@@ -46,7 +46,7 @@ brew install willibrandon/tap/scout
 **Scoop**
 
 ```sh
-scoop bucket add dotsider https://github.com/willibrandon/scoop-bucket
+scoop bucket add willibrandon https://github.com/willibrandon/scoop-bucket
 scoop install scout
 ```
 
