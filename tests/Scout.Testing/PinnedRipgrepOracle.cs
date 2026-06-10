@@ -26,6 +26,8 @@ internal static class PinnedRipgrepOracle
 
     internal static string ReferenceRoot => DeriveReferenceRoot(DefaultExecutablePath);
 
+    internal static bool HasArchive => TryReadHostOracleValue("archive_path", out _);
+
     internal static ProcessStartInfo CreateStartInfo(bool redirectStandardInput = false)
     {
         return new ProcessStartInfo(ExecutablePath)
@@ -120,6 +122,23 @@ internal static class PinnedRipgrepOracle
         }
 
         return ReadPrerequisiteValue(prerequisiteLock, rootKey);
+    }
+
+    internal static bool TryReadHostOracleValue(string tableKey, out string value)
+    {
+        string prerequisiteLock = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "tests", "PREREQS.lock"));
+        if (TryReadHostOracleValue(prerequisiteLock, tableKey, HostOracleEnvironment, out value))
+        {
+            return true;
+        }
+
+        if (TryReadHostOracleValue(prerequisiteLock, tableKey, null, out value))
+        {
+            return true;
+        }
+
+        value = string.Empty;
+        return false;
     }
 
     private static string ResolveAndVerifyDefaultExecutablePath()

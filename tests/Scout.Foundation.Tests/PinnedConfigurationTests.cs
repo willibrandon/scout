@@ -227,11 +227,24 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
-    /// Verifies the local ripgrep reference checkout is at the design pin.
+    /// Verifies the host ripgrep oracle represents the pinned ripgrep revision.
     /// </summary>
     [Fact]
-    public void ReferenceRipgrepCheckoutMatchesPinnedCommit()
+    public void HostRipgrepOracleMatchesPinnedCommit()
     {
+        if (PinnedRipgrepOracle.TryReadHostOracleValue("archive_path", out string archivePath))
+        {
+            string root = FindRepositoryRoot();
+            string archiveFullPath = PinnedRipgrepOracle.ResolveOraclePath(archivePath);
+            string expectedArchiveSha256 = PinnedRipgrepOracle.ReadHostOracleValue("archive_sha256", "ripgrep_oracle_archive_sha256");
+
+            Assert.StartsWith(root, archiveFullPath, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(archiveFullPath), "Missing pinned ripgrep oracle archive: " + archiveFullPath);
+            string actualArchiveSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(archiveFullPath))).ToLowerInvariant();
+            Assert.Equal(expectedArchiveSha256, actualArchiveSha256);
+            return;
+        }
+
         string referenceRipgrepRoot = PinnedRipgrepOracle.ReferenceRoot;
 
         Assert.True(Directory.Exists(referenceRipgrepRoot), "Missing reference checkout: " + referenceRipgrepRoot);
@@ -307,6 +320,12 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("Invoke-Checked cargo \"+$RustToolchain\" build --profile $RgPcre2Profile --features $RgPcre2Features --bin rg", windowsCaptureScript, StringComparison.Ordinal);
         Assert.Contains("SCOUT_HOST_RID", preflight, StringComparison.Ordinal);
         Assert.Contains("SCOUT_ORACLE_ENVIRONMENT", preflight, StringComparison.Ordinal);
+        Assert.Contains("mark_root_safe_for_git", preflight, StringComparison.Ordinal);
+        Assert.Contains("git config --global --add safe.directory \"$ROOT\"", preflight, StringComparison.Ordinal);
+        Assert.Contains("read_oracle_value \"archive_path\" \"ripgrep_oracle_archive_path\"", preflight, StringComparison.Ordinal);
+        Assert.Contains("check_file_hash \"pinned ripgrep oracle archive\"", preflight, StringComparison.Ordinal);
+        Assert.Contains("HAS_RIPGREP_SOURCE_CHECKOUT=0", preflight, StringComparison.Ordinal);
+        Assert.Contains("if [ \"$HAS_RIPGREP_SOURCE_CHECKOUT\" -eq 1 ]; then", preflight, StringComparison.Ordinal);
         Assert.Contains("MINGW*:x86_64", preflight, StringComparison.Ordinal);
         Assert.Contains("MINGW*:aarch64", preflight, StringComparison.Ordinal);
         Assert.Contains("*/target/*/rg.exe", preflight, StringComparison.Ordinal);
@@ -510,15 +529,23 @@ public sealed partial class PinnedConfigurationTests
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
         string defaultExecutablePath = PinnedRipgrepOracle.ReadHostOracleValue("path", "ripgrep_rg_path");
         string expectedSha256 = PinnedRipgrepOracle.ExpectedSha256;
-
-        string oracleBlock = string.Join(
-            "\n",
+        List<string> oracleBlockLines =
+        [
             "[[ripgrep_oracle]]",
             "rid = \"" + PinnedRipgrepOracle.HostRid + "\"",
             "environment = \"" + PinnedRipgrepOracle.HostOracleEnvironment + "\"",
-            "profile = \"release-lto\"",
-            "path = \"" + defaultExecutablePath + "\"",
-            "sha256 = \"" + expectedSha256 + "\"");
+        ];
+        if (PinnedRipgrepOracle.TryReadHostOracleValue("archive_path", out string archivePath))
+        {
+            string expectedArchiveSha256 = PinnedRipgrepOracle.ReadHostOracleValue("archive_sha256", "ripgrep_oracle_archive_sha256");
+            oracleBlockLines.Add("archive_path = \"" + archivePath + "\"");
+            oracleBlockLines.Add("archive_sha256 = \"" + expectedArchiveSha256 + "\"");
+        }
+
+        oracleBlockLines.Add("profile = \"release-lto\"");
+        oracleBlockLines.Add("path = \"" + defaultExecutablePath + "\"");
+        oracleBlockLines.Add("sha256 = \"" + expectedSha256 + "\"");
+        string oracleBlock = string.Join("\n", oracleBlockLines);
         Assert.Contains(oracleBlock, prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("environment = \"github-actions\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("ripgrep_rg_profile = \"release-lto\"", prerequisiteLock, StringComparison.Ordinal);
