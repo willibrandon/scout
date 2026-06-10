@@ -84,8 +84,8 @@ native/build-app-unix.sh osx-arm64     # -> artifacts/bin/osx-arm64/ (scout + sc
 ```
 
 The differential and conformance suites additionally need the pinned ripgrep oracle and benchmark
-corpora; CI provisions these via `eng/setup-ripgrep-oracle.*`, `eng/fetch-corpora.sh --all`, and
-`eng/preflight.sh`.
+corpora; CI restores the captured oracle via `eng/restore-ripgrep-oracle.*`, fetches corpora via
+`eng/fetch-corpora.sh --all`, and verifies the result with `eng/preflight.sh`.
 
 Supported runtimes: `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`, `win-x64`, `win-arm64`.
 

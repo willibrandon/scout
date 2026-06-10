@@ -90,6 +90,34 @@ sha256_file() {
     fi
 }
 
+repo_relative_path() {
+    case "$1" in
+        "$ROOT"/*)
+            printf '%s\n' "${1#"$ROOT"/}"
+            ;;
+        *)
+            fail "Oracle archive members must be under the repository root: $1"
+            ;;
+    esac
+}
+
+create_oracle_archive() {
+    command -v zip >/dev/null 2>&1 || fail "zip is required to capture the ripgrep oracle archive."
+
+    ORACLE_ARCHIVE_VALUE="${SCOUT_RIPGREP_ARCHIVE_PATH:-tests/oracles/ripgrep/$HOST_RID.zip}"
+    ORACLE_ARCHIVE="$(resolve_repo_path "$ORACLE_ARCHIVE_VALUE")"
+    mkdir -p "$(dirname -- "$ORACLE_ARCHIVE")"
+
+    rg_member="$(repo_relative_path "$RG_PATH")"
+    pcre2_member="$(repo_relative_path "$RG_PCRE2_PATH")"
+    rm -f "$ORACLE_ARCHIVE"
+    (
+        cd "$ROOT"
+        zip -X -q "$ORACLE_ARCHIVE" "$rg_member" "$pcre2_member"
+    )
+    ORACLE_ARCHIVE_SHA256="$(sha256_file "$ORACLE_ARCHIVE")"
+}
+
 expect_equal() {
     label="$1"
     expected="$2"
@@ -155,18 +183,25 @@ build_pcre2_ripgrep() {
 }
 
 print_lock_row() {
-    printf '%s\n' '--- tests/PREREQS.lock ripgrep oracle row ---'
-    printf '%s\n' '[[ripgrep_oracle]]'
-    printf 'rid = "%s"\n' "$HOST_RID"
-    printf 'environment = "%s"\n' "$HOST_ORACLE_ENVIRONMENT"
-    printf 'profile = "%s"\n' "$RG_PROFILE"
-    printf 'path = "%s"\n' "$RG_PATH_VALUE"
-    printf 'sha256 = "%s"\n' "$RG_SHA256"
-    printf 'pcre2_profile = "%s"\n' "$RG_PCRE2_PROFILE"
-    printf 'pcre2_features = "%s"\n' "$RG_PCRE2_FEATURES"
-    printf 'pcre2_path = "%s"\n' "$RG_PCRE2_PATH_VALUE"
-    printf 'pcre2_sha256 = "%s"\n' "$RG_PCRE2_SHA256"
-    printf '%s\n' '--- end ripgrep oracle row ---'
+    ROW_PATH_VALUE="${SCOUT_RIPGREP_ROW_PATH:-tests/oracles/ripgrep/$HOST_RID.lock}"
+    ROW_PATH="$(resolve_repo_path "$ROW_PATH_VALUE")"
+    mkdir -p "$(dirname -- "$ROW_PATH")"
+    {
+        printf '%s\n' '--- tests/PREREQS.lock ripgrep oracle row ---'
+        printf '%s\n' '[[ripgrep_oracle]]'
+        printf 'rid = "%s"\n' "$HOST_RID"
+        printf 'environment = "%s"\n' "$HOST_ORACLE_ENVIRONMENT"
+        printf 'archive_path = "%s"\n' "$ORACLE_ARCHIVE_VALUE"
+        printf 'archive_sha256 = "%s"\n' "$ORACLE_ARCHIVE_SHA256"
+        printf 'profile = "%s"\n' "$RG_PROFILE"
+        printf 'path = "%s"\n' "$RG_PATH_VALUE"
+        printf 'sha256 = "%s"\n' "$RG_SHA256"
+        printf 'pcre2_profile = "%s"\n' "$RG_PCRE2_PROFILE"
+        printf 'pcre2_features = "%s"\n' "$RG_PCRE2_FEATURES"
+        printf 'pcre2_path = "%s"\n' "$RG_PCRE2_PATH_VALUE"
+        printf 'pcre2_sha256 = "%s"\n' "$RG_PCRE2_SHA256"
+        printf '%s\n' '--- end ripgrep oracle row ---'
+    } | tee "$ROW_PATH"
 }
 
 EXPECTED_RIPGREP="$(read_lock_value "ripgrep_commit")" || fail "Missing ripgrep_commit in tests/PREREQS.lock."
@@ -201,4 +236,5 @@ build_pcre2_ripgrep
 [ -x "$RG_PCRE2_PATH" ] || fail "Missing built PCRE2 reference rg: $RG_PCRE2_PATH"
 RG_PCRE2_SHA256="$(sha256_file "$RG_PCRE2_PATH")"
 
+create_oracle_archive
 print_lock_row

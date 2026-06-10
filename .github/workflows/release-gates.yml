@@ -91,11 +91,11 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.102
-      - name: Build pinned ripgrep oracle
+      - name: Restore pinned ripgrep oracle archive
         env:
           SCOUT_HOST_RID: ${{ matrix.rid }}
           SCOUT_ORACLE_ENVIRONMENT: github-actions
-        run: eng/setup-ripgrep-oracle.sh
+        run: eng/restore-ripgrep-oracle.sh
       - name: Restore
         run: dotnet restore Scout.slnx
       - name: Fetch pinned corpora
@@ -131,11 +131,11 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.102
-      - name: Build pinned ripgrep oracle
+      - name: Restore pinned ripgrep oracle archive
         env:
           SCOUT_HOST_RID: ${{ matrix.rid }}
           SCOUT_ORACLE_ENVIRONMENT: github-actions
-        run: eng/setup-ripgrep-oracle.sh
+        run: eng/restore-ripgrep-oracle.sh
       - name: Restore
         run: dotnet restore Scout.slnx
       - name: Fetch pinned corpora
@@ -176,12 +176,12 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.102
-      - name: Build pinned ripgrep oracle
+      - name: Restore pinned ripgrep oracle archive
         shell: pwsh
         env:
           SCOUT_HOST_RID: ${{ matrix.rid }}
           SCOUT_ORACLE_ENVIRONMENT: github-actions
-        run: eng/setup-ripgrep-oracle.ps1
+        run: eng/restore-ripgrep-oracle.ps1
       - name: Restore
         run: dotnet restore Scout.slnx
       - name: Fetch pinned corpora
@@ -209,11 +209,11 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.102
-      - name: Build pinned ripgrep oracle
+      - name: Restore pinned ripgrep oracle archive
         env:
           SCOUT_HOST_RID: osx-arm64
           SCOUT_ORACLE_ENVIRONMENT: github-actions
-        run: eng/setup-ripgrep-oracle.sh
+        run: eng/restore-ripgrep-oracle.sh
       - name: Restore
         run: dotnet restore Scout.slnx
       - name: Install pinned hyperfine
@@ -356,12 +356,12 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.102
-      - name: Build pinned ripgrep oracle
+      - name: Restore pinned ripgrep oracle archive
         shell: pwsh
         env:
           SCOUT_HOST_RID: ${{ matrix.rid }}
           SCOUT_ORACLE_ENVIRONMENT: github-actions
-        run: eng/setup-ripgrep-oracle.ps1
+        run: eng/restore-ripgrep-oracle.ps1
       - name: Native executable smoke
         shell: cmd
         run: |

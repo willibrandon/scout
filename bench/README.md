@@ -32,9 +32,9 @@ complete oracle/tool pin support: `linux-x64`, `linux-arm64`, and `osx-arm64`.
 The hyperfine performance gate runs on GitHub-hosted `macos-26` arm64. The
 pinned CI runner labels are `ubuntu-24.04, ubuntu-24.04-arm, macos-26-intel,
 macos-26, windows-2025-vs2026, and windows-11-arm`; those are the only labels
-the configuration allows. The workflow builds the pinned release-LTO `rg` oracle
-from source, installs hyperfine with Homebrew where required, fetches the pinned
-corpora into `artifacts/corpora`, and verifies every frozen hash from
+the configuration allows. The workflow restores the captured release-LTO `rg`
+oracle archive for the hosted RID, installs hyperfine with Homebrew where
+required, fetches the pinned corpora into `artifacts/corpora`, and verifies every frozen hash from
 `tests/PREREQS.lock` before measuring. Cancelled, failed, or stale CI
 completions do not queue release work. It does not require any personal machine,
 privately managed runner, or repository secret.
