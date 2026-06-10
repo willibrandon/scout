@@ -764,6 +764,22 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies Scout's internal source generator is not treated as a versioned analyzer package.
+    /// </summary>
+    [Fact]
+    public void SourceGeneratorDoesNotTrackAnalyzerPackageReleases()
+    {
+        string root = FindRepositoryRoot();
+        string sourceGeneratorDirectory = Path.Combine(root, "src", "Scout.SourceGen");
+        string editorConfig = File.ReadAllText(Path.Combine(root, ".editorconfig"));
+
+        Assert.False(File.Exists(Path.Combine(sourceGeneratorDirectory, "AnalyzerReleases.Shipped.md")));
+        Assert.False(File.Exists(Path.Combine(sourceGeneratorDirectory, "AnalyzerReleases.Unshipped.md")));
+        Assert.Contains("[src/Scout.SourceGen/*.cs]", editorConfig, StringComparison.Ordinal);
+        Assert.Contains("dotnet_diagnostic.RS2008.severity = suggestion", editorConfig, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies Scout config identity is wired as primary with ripgrep compatibility fallback.
     /// </summary>
     [Fact]
