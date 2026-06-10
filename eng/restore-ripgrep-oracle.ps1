@@ -212,6 +212,14 @@ $RgPcre2Path = Resolve-RepoPath (Read-OracleValue "pcre2_path")
 $RgPcre2Sha256 = Read-OracleValue "pcre2_sha256"
 $ArchivePath = Resolve-RepoPath $ArchivePathValue
 
+if (-not $RgPath.EndsWith("rg.exe", [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Windows reference rg path must end with rg.exe: $RgPath"
+}
+
+if (-not $RgPcre2Path.EndsWith("rg.exe", [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Windows PCRE2 reference rg path must end with rg.exe: $RgPcre2Path"
+}
+
 Assert-LowercaseSha256 "ripgrep_oracle.archive_sha256" $ArchiveSha256
 Assert-LowercaseSha256 "ripgrep_oracle.sha256" $RgSha256
 Assert-LowercaseSha256 "ripgrep_oracle.pcre2_sha256" $RgPcre2Sha256
