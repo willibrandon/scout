@@ -340,10 +340,41 @@ internal static class ContextSearchOperations
             return;
         }
 
-        if (onlyMatching && invertMatch && line.OriginalMatch)
+        if (invertMatch && line.OriginalMatch)
         {
-            WriteOnlyMatchesForContextLine(lineBytes, line, output, prefix, lineNumber, column, byteOffset, trim, separators.FieldContext, replacement, pattern, asciiCaseInsensitive, lineRegexp, wordRegexp, nullPathTerminator, color, separators.LineTerminator, separators.Crlf, separators.NullData);
-            return;
+            if (onlyMatching)
+            {
+                WriteOnlyMatchesForContextLine(lineBytes, line, output, prefix, lineNumber, column, byteOffset, trim, separators.FieldContext, replacement, pattern, asciiCaseInsensitive, lineRegexp, wordRegexp, nullPathTerminator, color, separators.LineTerminator, separators.Crlf, separators.NullData);
+                return;
+            }
+
+            if (vimgrep)
+            {
+                var vimgrepSink = new VimgrepSink(output, prefix, separators.FieldContext, lineNumber, column, byteOffset, onlyMatching: false, trim, nullPathTerminator, lineLimit, pattern, asciiCaseInsensitive, lineRegexp, wordRegexp, separators.Crlf, separators.NullData, color, separators.LineTerminator, line.LineNumber - 1, line.Start);
+                LiteralLineSearcher.SearchMatchLines(lineBytes, pattern, ref vimgrepSink, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf: separators.Crlf, nullData: separators.NullData);
+                return;
+            }
+
+            if (color.Enabled)
+            {
+                var coloredSink = new ColoredSearchSink(
+                    output,
+                    prefix,
+                    separators.FieldContext,
+                    lineNumber,
+                    column,
+                    byteOffset,
+                    trim,
+                    nullPathTerminator,
+                    lineLimit,
+                    color,
+                    separators.LineTerminator,
+                    line.LineNumber - 1,
+                    line.Start);
+                LiteralLineSearcher.SearchMatchLines(lineBytes, pattern, ref coloredSink, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf: separators.Crlf, nullData: separators.NullData);
+                coloredSink.Flush();
+                return;
+            }
         }
 
         lineSink.ContextLine(line.LineNumber, line.Start, line.ContextColumn, lineBytes);

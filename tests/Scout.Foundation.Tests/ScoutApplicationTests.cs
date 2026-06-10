@@ -4265,6 +4265,39 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies inverted colored context output highlights original matches printed as context lines.
+    /// </summary>
+    [Fact]
+    public void ColorAlwaysHighlightsInvertedContextOriginalMatches()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, """
+            before
+            <InvariantGlobalization>true</InvariantGlobalization>
+            after
+            """);
+
+        string[][] argumentSets =
+        [
+            ["--color=always", "-C1", "-n", "-v", "InvariantGlobalization", path],
+            ["--color=always", "-C1", "-n", "--column", "--byte-offset", "-v", "InvariantGlobalization", path],
+            ["--color=always", "-C1", "--vimgrep", "-v", "InvariantGlobalization", path],
+        ];
+
+        for (int index = 0; index < argumentSets.Length; index++)
+        {
+            string[] arguments = argumentSets[index];
+            (int exitCode, byte[] output, string error) = RunScout(arguments);
+            (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
+
+            Assert.Equal(pinnedExitCode, exitCode);
+            Assert.Equal(pinnedOutput, output);
+            Assert.Equal(pinnedError, error);
+        }
+    }
+
+    /// <summary>
     /// Verifies color always highlights optimized multiline signature matches.
     /// </summary>
     [Fact]
