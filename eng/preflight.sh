@@ -420,6 +420,12 @@ check_file_hash() {
     expect_equal "$label sha256" "$expected_sha256" "$actual_sha256"
 }
 
+mark_root_safe_for_git() {
+    if command -v git >/dev/null 2>&1; then
+        git config --global --add safe.directory "$ROOT" 2>/dev/null || true
+    fi
+}
+
 check_macos_tool_hash() {
     name="$1"
     path="$(read_lock_macos_tool_value "$name" "path")" || fail "Missing macOS tool path for $name in tests/PREREQS.lock."
@@ -487,6 +493,7 @@ require_literal "$EXPECTED_SDK" "dotnet_sdk"
 ACTUAL_SDK="$(dotnet --version)"
 expect_equal ".NET SDK" "$EXPECTED_SDK" "$ACTUAL_SDK"
 
+mark_root_safe_for_git
 "$ROOT/eng/check-msbuild-warning-gates.sh" "$ROOT/artifacts/preflight/msbuild-warning-gates"
 dotnet format "$ROOT/Scout.slnx" --no-restore --verify-no-changes
 
@@ -500,9 +507,17 @@ expect_equal "ripgrep build profile" "release-lto" "$RG_PROFILE"
 
 RG_PATH="$(resolve_repo_path "$(read_oracle_value "path" "ripgrep_rg_path")")" || fail "Missing ripgrep_oracle.path for $HOST_RID in tests/PREREQS.lock."
 RG_SHA256="$(read_oracle_value "sha256" "ripgrep_rg_sha256")" || fail "Missing ripgrep_oracle.sha256 for $HOST_RID in tests/PREREQS.lock."
-REFERENCE="$(derive_reference_from_oracle_path "$RG_PATH")"
-ACTUAL_RIPGREP="$(git -C "$REFERENCE" rev-parse HEAD)"
-expect_equal "ripgrep commit" "$EXPECTED_RIPGREP" "$ACTUAL_RIPGREP"
+if ARCHIVE_PATH_VALUE="$(read_oracle_value "archive_path" "ripgrep_oracle_archive_path" 2>/dev/null)"; then
+    ARCHIVE_PATH="$(resolve_repo_path "$ARCHIVE_PATH_VALUE")"
+    ARCHIVE_SHA256="$(read_oracle_value "archive_sha256" "ripgrep_oracle_archive_sha256")" || fail "Missing ripgrep_oracle.archive_sha256 for $HOST_RID in tests/PREREQS.lock."
+    check_file_hash "pinned ripgrep oracle archive" "$ARCHIVE_PATH" "$ARCHIVE_SHA256"
+    HAS_RIPGREP_SOURCE_CHECKOUT=0
+else
+    REFERENCE="$(derive_reference_from_oracle_path "$RG_PATH")"
+    ACTUAL_RIPGREP="$(git -C "$REFERENCE" rev-parse HEAD)"
+    expect_equal "ripgrep commit" "$EXPECTED_RIPGREP" "$ACTUAL_RIPGREP"
+    HAS_RIPGREP_SOURCE_CHECKOUT=1
+fi
 check_file_hash "reference rg" "$RG_PATH" "$RG_SHA256"
 
 RG_REV="$(printf '%s' "$EXPECTED_RIPGREP" | cut -c 1-10)"
@@ -555,5 +570,7 @@ fi
 
 check_pinned_path_corpora
 
-compare_pinned_text_file "$REFERENCE/Cargo.lock" "$ROOT/upstream/Cargo.lock" "Pinned Cargo.lock"
+if [ "$HAS_RIPGREP_SOURCE_CHECKOUT" -eq 1 ]; then
+    compare_pinned_text_file "$REFERENCE/Cargo.lock" "$ROOT/upstream/Cargo.lock" "Pinned Cargo.lock"
+fi
 printf 'Scout preflight passed.\n'
