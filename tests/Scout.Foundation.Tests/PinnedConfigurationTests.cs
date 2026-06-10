@@ -1619,6 +1619,20 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies the generated Scoop manifest extracts Windows zips from their top-level archive directories.
+    /// </summary>
+    [Fact]
+    public void ScoopManifestUpdateUsesWindowsArchiveExtractDirs()
+    {
+        string root = FindRepositoryRoot();
+        string releaseWorkflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "release.yml"));
+
+        Assert.Contains("\"bin\": \"scout.exe\"", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("\"extract_dir\": \"scout-win-x64\"", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("\"extract_dir\": \"scout-win-arm64\"", releaseWorkflow, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies NuGet tool packages can resolve repository metadata in GitHub-hosted release containers.
     /// </summary>
     [Fact]

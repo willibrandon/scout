@@ -691,10 +691,12 @@ jobs:
                   "64bit": {
                       "url": f"https://github.com/willibrandon/scout/releases/download/v{version}/scout-win-x64.zip",
                       "hash": "${{ needs.create-release.outputs.sha256_win_x64 }}",
+                      "extract_dir": "scout-win-x64",
                   },
                   "arm64": {
                       "url": f"https://github.com/willibrandon/scout/releases/download/v{version}/scout-win-arm64.zip",
                       "hash": "${{ needs.create-release.outputs.sha256_win_arm64 }}",
+                      "extract_dir": "scout-win-arm64",
                   },
               },
               "bin": "scout.exe",
