@@ -110,6 +110,7 @@ create_oracle_archive() {
 
     rg_member="$(repo_relative_path "$RG_PATH")"
     pcre2_member="$(repo_relative_path "$RG_PCRE2_PATH")"
+    TZ=UTC touch -t 198001010000 "$RG_PATH" "$RG_PCRE2_PATH"
     rm -f "$ORACLE_ARCHIVE"
     (
         cd "$ROOT"
