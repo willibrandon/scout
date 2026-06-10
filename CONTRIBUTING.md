@@ -15,8 +15,9 @@ revision, and make the evidence easy to review.
 
 The full differential and performance suites also need the pinned ripgrep
 oracle, decompression tools, and corpora recorded in `tests/PREREQS.lock`. CI
-provisions them; local setup uses `eng/setup-ripgrep-oracle.*`,
-`eng/fetch-corpora.sh --all`, and `eng/preflight.sh`.
+restores the captured hosted oracle archives; local setup uses
+`eng/setup-ripgrep-oracle.*`, `eng/fetch-corpora.sh --all`, and
+`eng/preflight.sh`.
 
 ## Repository Map
 

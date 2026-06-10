@@ -104,7 +104,7 @@ function Add-OracleArchiveEntry {
     )
 
     $entry = $Zip.CreateEntry($EntryName, [System.IO.Compression.CompressionLevel]::Optimal)
-    $entry.LastWriteTime = [System.DateTimeOffset]::FromUnixTimeSeconds(0)
+    $entry.LastWriteTime = [System.DateTimeOffset]::new(1980, 1, 1, 0, 0, 0, [System.TimeSpan]::Zero)
     $input = [System.IO.File]::OpenRead($Path)
     try {
         $output = $entry.Open()

@@ -137,10 +137,10 @@ Even though current `--help` is served from blobs (so these aren't rendered toda
 
 ## 4. PRESERVE — porting machinery (TIER-3) + tripwires
 
-Anchor: pinned commit `4857d6fa67db69a95cd4b6f2adda5d807d4d0119`. Keep: `upstream/` (Cargo.lock, `ripgrep-4857d6fa/tests/**`, `regex-syntax-0.8.8/unicode_tables/**`, `regex-1.12.2/testdata/**`, `encoding_rs-0.8.35/**`, `ucd/UCD-16.0.0.zip`, `UNICODE-VERSION`); 20 `src/*/UPSTREAM.md`; the pin (`PinnedConfigurationTests.cs:16`, `UPSTREAM-SYNC.md`, `PREREQS.lock`); oracle harness (`PinnedRipgrepOracle.cs`, `DifferentialRunner.cs`, `eng/setup|capture-ripgrep-oracle.*`, `oracle-capture.yml`); ported tests (`PortedRgTests.catalog`, `PortedRgTestSourceGenerator.cs`, `RegexCorpusLoader.cs:8`); preflight HEAD-equals-pin (`eng/preflight.sh:493-505`).
+Anchor: pinned commit `4857d6fa67db69a95cd4b6f2adda5d807d4d0119`. Keep: `upstream/` (Cargo.lock, `ripgrep-4857d6fa/tests/**`, `regex-syntax-0.8.8/unicode_tables/**`, `regex-1.12.2/testdata/**`, `encoding_rs-0.8.35/**`, `ucd/UCD-16.0.0.zip`, `UNICODE-VERSION`); 20 `src/*/UPSTREAM.md`; the pin (`PinnedConfigurationTests.cs:16`, `UPSTREAM-SYNC.md`, `PREREQS.lock`); oracle harness (`PinnedRipgrepOracle.cs`, `DifferentialRunner.cs`, `eng/setup|capture|restore-ripgrep-oracle.*`, `oracle-capture.yml`); ported tests (`PortedRgTests.catalog`, `PortedRgTestSourceGenerator.cs`, `RegexCorpusLoader.cs:8`); preflight HEAD-equals-pin (`eng/preflight.sh:493-505`).
 
 **Tripwires (naive find/replace breaks porting):**
-1. Oracle binary name is `rg` (`setup-ripgrep-oracle.sh:280` `cargo build --bin rg`; `*/target/*/rg` lookups).
+1. Oracle binary name is `rg` (`capture-ripgrep-oracle.sh` builds `--bin rg`; restore and tests keep `*/target/*/rg` lookups).
 2. `crates/.../*.rs` in `--debug` are a **live parity contract** today (byte-compared), not comments — they move only via the §1.4 rewrite that also moves gate #2.
 3. Log targets `rg::`/`grep_regex::`/`grep_searcher::` — same as #2.
 4. `RIPGREP_CONFIG_PATH` is the parity contract; `SCOUT_CONFIG_PATH` is currently **forbidden** by `PinnedConfigurationTests.cs:763` + `DESIGN.md:266` (D1 updates both).
