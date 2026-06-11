@@ -11,7 +11,7 @@ internal sealed class RegexPrefilter
     private const int MaxClassLiteralVariants = 16;
     private const int PreferredPrefixBytes = 2;
     private const int MaxPrefixVariants = 512;
-    private const int MaxPrefixAtomVariants = 64;
+    private const int MaxPrefixAtomVariants = 32;
     private const int LowSelectivityPrefixSetThreshold = 64;
 
     private readonly MemmemFinder? memmem;

@@ -1278,6 +1278,28 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies broad leading classes fall through to selective required-literal prefilters.
+    /// </summary>
+    [Fact]
+    public void SkipsBroadClassPrefixPrefilterWhenRequiredLiteralExists()
+    {
+        byte[] pattern = System.Text.Encoding.ASCII.GetBytes(
+            """(?:["'][A-Za-z0-9+/]{40}["'].*?(?:ASIA|AKIA))""");
+        byte[] haystack = System.Text.Encoding.ASCII.GetBytes(
+            "\"" + new string('a', 40) + "\" trailing AKIA");
+        var automaton = RegexAutomaton.Compile(
+            pattern,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(RegexPrefilterKind.RequiredLiteral, automaton.PrefilterKind);
+        Assert.Equal(new RegexMatch(0, haystack.Length), automaton.Find(haystack));
+    }
+
+    /// <summary>
     /// Verifies Unicode class prefixes include non-ASCII UTF-8 start bytes.
     /// </summary>
     [Fact]
