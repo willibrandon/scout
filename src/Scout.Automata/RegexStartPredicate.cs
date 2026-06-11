@@ -601,6 +601,8 @@ internal sealed class RegexStartPredicate
                 return !options.UnicodeClasses && TryAppendByteSet(allowed, WhitespaceBytes(), out canContinue);
             case RegexSyntaxKind.Sequence:
                 return TryAppendSequence((RegexSequenceNode)node, options, allowed, caseFoldMayNeedUnicodeScalars, out canContinue);
+            case RegexSyntaxKind.Alternation:
+                return TryAppendAlternation((RegexAlternationNode)node, options, allowed, caseFoldMayNeedUnicodeScalars, out canContinue);
             case RegexSyntaxKind.CapturingGroup:
             case RegexSyntaxKind.NonCapturingGroup:
                 var group = (RegexGroupNode)node;
@@ -644,6 +646,93 @@ internal sealed class RegexStartPredicate
             }
         }
 
+        return allowed.Count > originalCount;
+    }
+
+    private static bool TryAppendAlternation(
+        RegexAlternationNode node,
+        RegexCompileOptions options,
+        List<byte[]> allowed,
+        bool caseFoldMayNeedUnicodeScalars,
+        out bool canContinue)
+    {
+        canContinue = false;
+        if (node.Alternatives.Count == 0)
+        {
+            return false;
+        }
+
+        var merged = new List<List<byte>>();
+        bool allAlternativesCanContinue = true;
+        bool allAlternativesSameLength = true;
+        int firstAlternativeLength = -1;
+        int commonLength = int.MaxValue;
+        for (int index = 0; index < node.Alternatives.Count; index++)
+        {
+            var alternativeAllowed = new List<byte[]>();
+            if (!TryAppend(
+                    node.Alternatives[index],
+                    options,
+                    alternativeAllowed,
+                    caseFoldMayNeedUnicodeScalars,
+                    out bool alternativeCanContinue) ||
+                alternativeAllowed.Count == 0)
+            {
+                return false;
+            }
+
+            allAlternativesCanContinue &= alternativeCanContinue;
+            if (index == 0)
+            {
+                firstAlternativeLength = alternativeAllowed.Count;
+            }
+            else
+            {
+                allAlternativesSameLength &= alternativeAllowed.Count == firstAlternativeLength;
+            }
+
+            commonLength = Math.Min(commonLength, alternativeAllowed.Count);
+            if (index == 0)
+            {
+                for (int allowedIndex = 0; allowedIndex < alternativeAllowed.Count; allowedIndex++)
+                {
+                    merged.Add(new List<byte>(alternativeAllowed[allowedIndex]));
+                }
+
+                continue;
+            }
+
+            if (merged.Count > commonLength)
+            {
+                merged.RemoveRange(commonLength, merged.Count - commonLength);
+            }
+
+            for (int allowedIndex = 0; allowedIndex < commonLength; allowedIndex++)
+            {
+                byte[] bytes = alternativeAllowed[allowedIndex];
+                for (int byteIndex = 0; byteIndex < bytes.Length; byteIndex++)
+                {
+                    AddDistinct(merged[allowedIndex], bytes[byteIndex]);
+                }
+            }
+        }
+
+        if (commonLength == 0 || commonLength == int.MaxValue)
+        {
+            return false;
+        }
+
+        int originalCount = allowed.Count;
+        for (int index = 0; index < commonLength; index++)
+        {
+            if (!TryAppendByteSet(allowed, merged[index].ToArray(), out _))
+            {
+                canContinue = false;
+                return allowed.Count > originalCount;
+            }
+        }
+
+        canContinue = allAlternativesCanContinue && allAlternativesSameLength;
         return allowed.Count > originalCount;
     }
 

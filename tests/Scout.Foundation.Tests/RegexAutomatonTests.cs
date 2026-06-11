@@ -958,6 +958,30 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies start predicates merge common alternation positions beyond the first byte.
+    /// </summary>
+    [Fact]
+    public void StartPredicateCollectsMultiByteAlternationPrefixes()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(@"cat|dog|cow"u8);
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.True(RegexStartPredicate.TryCreate(tree.Root, options, out RegexStartPredicate? predicate));
+        Assert.NotNull(predicate);
+        Assert.True(predicate.CanStartAt("cat"u8, 0));
+        Assert.True(predicate.CanStartAt("dog"u8, 0));
+        Assert.True(predicate.CanStartAt("cow"u8, 0));
+        Assert.False(predicate.CanStartAt("can"u8, 0));
+        Assert.False(predicate.CanStartAt("dig"u8, 0));
+    }
+
+    /// <summary>
     /// Verifies Unicode atoms still consume scalars when the search allows invalid UTF-8 haystacks.
     /// </summary>
     [Fact]
