@@ -190,6 +190,25 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies case-insensitive literal alternatives can still use set execution.
+    /// </summary>
+    [Fact]
+    public void AlternationSetSupportsCaseInsensitiveLiteralAlternatives()
+    {
+        string pattern = "(" + string.Join(
+            "|",
+            Enumerable.Range(0, 16).Select(static index => $"token{index}").Append("item[0-9]")) + ")";
+        var automaton = RegexAutomaton.Compile(
+            System.Text.Encoding.ASCII.GetBytes(pattern),
+            caseInsensitive: true,
+            multiLine: false,
+            dotMatchesNewline: false);
+
+        Assert.Equal(RegexEngineKind.AlternationSet, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(3, 6), automaton.Find("xx TOKEN7 token3"u8));
+    }
+
+    /// <summary>
     /// Verifies grouped alternatives inside top-level alternatives are flattened for set execution.
     /// </summary>
     [Fact]

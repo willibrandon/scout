@@ -880,7 +880,7 @@ internal sealed class RegexPrefilter
         return prepared.Length > 0;
     }
 
-    private static bool TryPreparePrefixLiteralSet(
+    internal static bool TryPreparePrefixLiteralSet(
         byte[][] literals,
         RegexCompileOptions options,
         out byte[][] prepared)

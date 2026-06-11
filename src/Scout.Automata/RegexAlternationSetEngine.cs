@@ -40,7 +40,7 @@ internal sealed class RegexAlternationSetEngine
             options.LineTerminator,
             options.Utf8,
             options.UnicodeClasses);
-        if (!patternSet.UsesLiteralAccelerator && !patternSet.RequiredLiteralAcceleratorCoversAll)
+        if (!patternSet.CanAccelerateEveryPattern)
         {
             return false;
         }

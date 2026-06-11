@@ -42,6 +42,8 @@ public sealed class PatternSet
 
     internal bool RequiredLiteralAcceleratorCoversAll => requiredLiteralAccelerator?.CoversAllAutomata == true;
 
+    internal bool CanAccelerateEveryPattern => automata.Length == 0 || RequiredLiteralAcceleratorCoversAll;
+
     /// <summary>
     /// Compiles an ordered set of byte regex patterns.
     /// </summary>
@@ -89,10 +91,16 @@ public sealed class PatternSet
         for (int index = 0; index < patterns.Count; index++)
         {
             byte[] pattern = patterns[index] ?? throw new ArgumentNullException(nameof(patterns));
-            if (!caseInsensitive && TryGetLiteralPattern(pattern, out byte[] literal) && literal.Length != 0)
+            if (TryGetLiteralPattern(pattern, out byte[] literal) &&
+                literal.Length != 0 &&
+                TryPrepareLiteralPatterns(literal, options, out byte[][] preparedLiteralPatterns))
             {
-                literalPatterns.Add(literal);
-                literalPatternIds.Add(index);
+                for (int literalIndex = 0; literalIndex < preparedLiteralPatterns.Length; literalIndex++)
+                {
+                    literalPatterns.Add(preparedLiteralPatterns[literalIndex]);
+                    literalPatternIds.Add(index);
+                }
+
                 continue;
             }
 
@@ -116,7 +124,7 @@ public sealed class PatternSet
 
         PatternSetLiteralAccelerator? literalAccelerator = literalPatterns.Count == 0
             ? null
-            : new PatternSetLiteralAccelerator(literalPatterns, literalPatternIds);
+            : new PatternSetLiteralAccelerator(literalPatterns, literalPatternIds, caseInsensitive);
         PatternSetRequiredLiteralAccelerator? requiredLiteralAccelerator = requiredLiteralEntries.Count == 0
             ? null
             : new PatternSetRequiredLiteralAccelerator(requiredLiteralEntries, automata.Count);
@@ -488,5 +496,16 @@ public sealed class PatternSet
             default:
                 return false;
         }
+    }
+
+    private static bool TryPrepareLiteralPatterns(byte[] literal, RegexCompileOptions options, out byte[][] prepared)
+    {
+        if (!options.CaseInsensitive)
+        {
+            prepared = [literal];
+            return true;
+        }
+
+        return RegexPrefilter.TryPreparePrefixLiteralSet([literal], options, out prepared);
     }
 }

@@ -46,6 +46,30 @@ public sealed class PatternSetTests
     }
 
     /// <summary>
+    /// Verifies literal-only patterns use the multi-regex accelerator in case-insensitive mode.
+    /// </summary>
+    [Fact]
+    public void UsesLiteralAcceleratorForCaseInsensitivePatterns()
+    {
+        var set = PatternSet.Compile(
+        [
+            "Sherlock"u8.ToArray(),
+            "Watson"u8.ToArray(),
+            "k"u8.ToArray(),
+        ],
+            caseInsensitive: true,
+            multiLine: false,
+            dotMatchesNewline: false,
+            unicodeClasses: true);
+        byte[] kelvin = System.Text.Encoding.UTF8.GetBytes("xx\u212A yy");
+
+        Assert.True(set.UsesLiteralAccelerator);
+        Assert.Equal(new PatternSetMatch(0, new RegexMatch(2, 8)), set.Find("xxsherlock yy"u8));
+        Assert.Equal(new PatternSetMatch(1, new RegexMatch(2, 6)), set.Find("xxWATSON yy"u8));
+        Assert.Equal(new PatternSetMatch(2, new RegexMatch(2, 3)), set.Find(kelvin));
+    }
+
+    /// <summary>
     /// Verifies matching pattern identifiers are returned in insertion order.
     /// </summary>
     [Fact]

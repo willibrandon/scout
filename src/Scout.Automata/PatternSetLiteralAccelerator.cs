@@ -6,7 +6,7 @@ internal sealed class PatternSetLiteralAccelerator
     private readonly byte[][] patterns;
     private readonly int[] patternIds;
 
-    public PatternSetLiteralAccelerator(IReadOnlyList<byte[]> patterns, IReadOnlyList<int> patternIds)
+    public PatternSetLiteralAccelerator(IReadOnlyList<byte[]> patterns, IReadOnlyList<int> patternIds, bool asciiCaseInsensitive = false)
     {
         ArgumentNullException.ThrowIfNull(patterns);
         ArgumentNullException.ThrowIfNull(patternIds);
@@ -23,7 +23,7 @@ internal sealed class PatternSetLiteralAccelerator
             this.patternIds[index] = patternIds[index];
         }
 
-        automaton = AhoCorasickAutomaton.Create(patterns);
+        automaton = AhoCorasickAutomaton.Create(patterns, AhoCorasickMatchKind.Standard, asciiCaseInsensitive);
     }
 
     public PatternSetMatch? Find(ReadOnlySpan<byte> haystack)
