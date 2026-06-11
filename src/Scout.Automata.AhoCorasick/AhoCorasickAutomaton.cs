@@ -10,6 +10,7 @@ public sealed class AhoCorasickAutomaton
 
     private readonly AhoCorasickState[] states;
     private readonly int[]? denseTransitions;
+    private readonly int[]?[]? lazyDenseTransitionRows;
     private readonly int[] emptyPatternIds;
     private readonly byte[][] patterns;
     private readonly AhoCorasickMatchKind matchKind;
@@ -27,6 +28,7 @@ public sealed class AhoCorasickAutomaton
     {
         this.states = states;
         this.denseTransitions = denseTransitions;
+        lazyDenseTransitionRows = denseTransitions is null ? new int[states.Length][] : null;
         this.emptyPatternIds = emptyPatternIds;
         this.patterns = patterns;
         this.matchKind = matchKind;
@@ -558,7 +560,31 @@ public sealed class AhoCorasickAutomaton
             return denseTransitions[(state * 256) + value];
         }
 
+        int[]?[]? denseRows = lazyDenseTransitionRows;
+        if (denseRows is not null)
+        {
+            int[]? row = denseRows[state];
+            if (row is null)
+            {
+                row = BuildDenseTransitionRow(state);
+                denseRows[state] = row;
+            }
+
+            return row[value];
+        }
+
         return NextSparseState(states, state, value);
+    }
+
+    private int[] BuildDenseTransitionRow(int state)
+    {
+        int[] transitions = new int[256];
+        for (int value = 0; value <= byte.MaxValue; value++)
+        {
+            transitions[value] = NextSparseState(states, state, (byte)value);
+        }
+
+        return transitions;
     }
 
     private static int[]? TryBuildDenseTransitions(AhoCorasickState[] states)
