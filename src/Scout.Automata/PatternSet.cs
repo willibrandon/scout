@@ -109,7 +109,8 @@ public sealed class PatternSet
                 requiredLiterals.Length > 0 &&
                 RegexPrefilter.TryPrepareRequiredLiteralSet(requiredLiterals, options, out byte[][] preparedLiterals))
             {
-                requiredLiteralEntries.Add(new PatternSetRequiredLiteralEntry(automata.Count, preparedLiterals));
+                int maxLookBehind = TryGetRequiredLiteralLookBehind(tree.Root, options, requiredLiterals);
+                requiredLiteralEntries.Add(new PatternSetRequiredLiteralEntry(automata.Count, preparedLiterals, maxLookBehind));
             }
             else if (RegexPrefilter.TryFindRequiredLiteral(tree.Root, options, out byte[] requiredLiteral) &&
                 requiredLiteral.Length >= 2 &&
@@ -507,5 +508,38 @@ public sealed class PatternSet
         }
 
         return RegexPrefilter.TryPreparePrefixLiteralSet([literal], options, out prepared);
+    }
+
+    private static int TryGetRequiredLiteralLookBehind(
+        RegexSyntaxNode root,
+        RegexCompileOptions options,
+        byte[][] requiredLiterals)
+    {
+        if (options.UnicodeClasses ||
+            !RegexPrefilter.TryCollectRequiredLiteralSetWithLookBehind(root, options, out byte[][] boundedLiterals, out int maxLookBehind) ||
+            !LiteralSetsEqual(requiredLiterals, boundedLiterals))
+        {
+            return RegexPrefilter.RequiredLiteralLookBehind;
+        }
+
+        return Math.Min(maxLookBehind, RegexPrefilter.RequiredLiteralLookBehind);
+    }
+
+    private static bool LiteralSetsEqual(byte[][] left, byte[][] right)
+    {
+        if (left.Length != right.Length)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < left.Length; index++)
+        {
+            if (!left[index].AsSpan().SequenceEqual(right[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

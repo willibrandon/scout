@@ -6,7 +6,10 @@ namespace Scout;
 /// </summary>
 public sealed class AhoCorasickAutomaton
 {
+    private const int MaxDenseTransitionStates = 4096;
+
     private readonly AhoCorasickState[] states;
+    private readonly int[]? denseTransitions;
     private readonly int[] emptyPatternIds;
     private readonly byte[][] patterns;
     private readonly AhoCorasickMatchKind matchKind;
@@ -15,6 +18,7 @@ public sealed class AhoCorasickAutomaton
 
     private AhoCorasickAutomaton(
         AhoCorasickState[] states,
+        int[]? denseTransitions,
         int[] emptyPatternIds,
         byte[][] patterns,
         AhoCorasickMatchKind matchKind,
@@ -22,6 +26,7 @@ public sealed class AhoCorasickAutomaton
         bool asciiCaseInsensitive)
     {
         this.states = states;
+        this.denseTransitions = denseTransitions;
         this.emptyPatternIds = emptyPatternIds;
         this.patterns = patterns;
         this.matchKind = matchKind;
@@ -136,6 +141,7 @@ public sealed class AhoCorasickAutomaton
         SortOutputs(builtStates);
         return new AhoCorasickAutomaton(
             builtStates,
+            TryBuildDenseTransitions(builtStates),
             emptyPatternIds.ToArray(),
             ownedPatterns,
             matchKind,
@@ -547,12 +553,50 @@ public sealed class AhoCorasickAutomaton
     private int NextState(int state, byte value)
     {
         value = FoldInput(value);
-        while (state != 0 && !states[state].Transitions.ContainsKey(value))
+        if (denseTransitions is not null)
         {
-            state = states[state].Failure;
+            return denseTransitions[(state * 256) + value];
         }
 
-        return states[state].Transitions.TryGetValue(value, out int next) ? next : 0;
+        return NextSparseState(states, state, value);
+    }
+
+    private static int[]? TryBuildDenseTransitions(AhoCorasickState[] states)
+    {
+        if (states.Length > MaxDenseTransitionStates)
+        {
+            return null;
+        }
+
+        int[] transitions = new int[states.Length * 256];
+        for (int state = 0; state < states.Length; state++)
+        {
+            int baseIndex = state * 256;
+            for (int value = 0; value <= byte.MaxValue; value++)
+            {
+                transitions[baseIndex + value] = NextSparseState(states, state, (byte)value);
+            }
+        }
+
+        return transitions;
+    }
+
+    private static int NextSparseState(AhoCorasickState[] states, int state, byte value)
+    {
+        while (true)
+        {
+            if (states[state].Transitions.TryGetValue(value, out int next))
+            {
+                return next;
+            }
+
+            if (state == 0)
+            {
+                return 0;
+            }
+
+            state = states[state].Failure;
+        }
     }
 
     private byte FoldInput(byte value)

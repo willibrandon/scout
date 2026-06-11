@@ -141,7 +141,12 @@ internal sealed class RegexPrefilter
     private static bool TryCreateSequenceAlternationPrefixPrefilter(RegexSyntaxNode root, RegexCompileOptions options, out RegexPrefilter? prefilter)
     {
         prefilter = null;
-        if (!TryCollectSequenceAlternationPrefixes(root, options, out byte[][]? prefixes))
+        if (!TryCollectSequenceAlternationPrefixes(
+                root,
+                options,
+                out byte[][]? prefixes,
+                out bool caseInsensitivePrefixes,
+                out bool unicodeCaseInsensitivePrefixes))
         {
             return false;
         }
@@ -149,7 +154,13 @@ internal sealed class RegexPrefilter
         RegexPrefixCandidateGate? candidateGate = null;
         RegexPrefixCandidateGate.TryCreate(root, options, prefixes, out candidateGate);
         return prefixes is not null &&
-            TryCreatePrefixSetPrefilter(prefixes, options, candidateGate, out prefilter);
+            TryCreatePrefixSetPrefilter(
+                prefixes,
+                options,
+                candidateGate,
+                caseInsensitivePrefixes,
+                unicodeCaseInsensitivePrefixes,
+                out prefilter);
     }
 
     public int FindCandidate(ReadOnlySpan<byte> haystack, int startAt)
@@ -241,22 +252,55 @@ internal sealed class RegexPrefilter
         }
 
         var collected = new List<byte[]>();
+        bool caseInsensitivePrefixes = false;
+        bool unicodeCaseInsensitivePrefixes = false;
         for (int index = 0; index < alternation.Alternatives.Count; index++)
         {
-            if (!TryCollectLeadingPrefixSet(alternation.Alternatives[index], options, out byte[][] prefixes) ||
+            if (!TryCollectLeadingPrefixSet(
+                    alternation.Alternatives[index],
+                    options,
+                    out byte[][] prefixes,
+                    out bool alternativeCaseInsensitive,
+                    out bool alternativeUnicodeCaseInsensitive) ||
                 !TryAddPrefixLiterals(collected, prefixes))
             {
                 return false;
             }
+
+            caseInsensitivePrefixes |= alternativeCaseInsensitive;
+            unicodeCaseInsensitivePrefixes |= alternativeUnicodeCaseInsensitive;
         }
 
-        return TryCreatePrefixSetPrefilter(collected.ToArray(), options, candidateGate: null, out prefilter);
+        return TryCreatePrefixSetPrefilter(
+            collected.ToArray(),
+            options,
+            candidateGate: null,
+            caseInsensitivePrefixes,
+            unicodeCaseInsensitivePrefixes,
+            out prefilter);
     }
 
     private static bool TryCreatePrefixSetPrefilter(
         byte[][] prefixes,
         RegexCompileOptions options,
         RegexPrefixCandidateGate? candidateGate,
+        out RegexPrefilter? prefilter)
+    {
+        return TryCreatePrefixSetPrefilter(
+            prefixes,
+            options,
+            candidateGate,
+            options.CaseInsensitive,
+            options.CaseInsensitive && options.UnicodeClasses,
+            out prefilter);
+    }
+
+    private static bool TryCreatePrefixSetPrefilter(
+        byte[][] prefixes,
+        RegexCompileOptions options,
+        RegexPrefixCandidateGate? candidateGate,
+        bool caseInsensitivePrefixes,
+        bool unicodeCaseInsensitivePrefixes,
         out RegexPrefilter? prefilter)
     {
         prefilter = null;
@@ -267,13 +311,26 @@ internal sealed class RegexPrefilter
 
         byte[][] preparedPrefixes = prefixes;
         bool asciiCaseInsensitive = false;
-        if (options.CaseInsensitive)
+        if (unicodeCaseInsensitivePrefixes)
         {
-            if (!TryPreparePrefixLiteralSet(prefixes, options, out preparedPrefixes))
+            var prefixOptions = new RegexCompileOptions(
+                caseInsensitive: true,
+                options.SwapGreed,
+                options.MultiLine,
+                options.DotMatchesNewline,
+                options.Crlf,
+                options.LineTerminator,
+                options.Utf8,
+                unicodeClasses: true);
+            if (!TryPreparePrefixLiteralSet(prefixes, prefixOptions, out preparedPrefixes))
             {
                 return false;
             }
 
+            asciiCaseInsensitive = true;
+        }
+        else if (caseInsensitivePrefixes)
+        {
             asciiCaseInsensitive = true;
         }
 
@@ -325,19 +382,44 @@ internal sealed class RegexPrefilter
 
     private static bool TryCollectSequenceAlternationPrefixes(RegexSyntaxNode node, RegexCompileOptions options, out byte[][]? prefixes)
     {
+        return TryCollectSequenceAlternationPrefixes(
+            node,
+            options,
+            out prefixes,
+            out _,
+            out _);
+    }
+
+    private static bool TryCollectSequenceAlternationPrefixes(
+        RegexSyntaxNode node,
+        RegexCompileOptions options,
+        out byte[][]? prefixes,
+        out bool caseInsensitivePrefixes,
+        out bool unicodeCaseInsensitivePrefixes)
+    {
         prefixes = null;
+        caseInsensitivePrefixes = false;
+        unicodeCaseInsensitivePrefixes = false;
         node = UnwrapTransparentGroups(node);
         if (node is RegexAlternationNode alternation)
         {
             var collected = new List<byte[]>();
             for (int index = 0; index < alternation.Alternatives.Count; index++)
             {
-                if (!TryCollectLeadingPrefixSet(alternation.Alternatives[index], options, out byte[][] alternativePrefixes) ||
+                if (!TryCollectLeadingPrefixSet(
+                        alternation.Alternatives[index],
+                        options,
+                        out byte[][] alternativePrefixes,
+                        out bool alternativeCaseInsensitive,
+                        out bool alternativeUnicodeCaseInsensitive) ||
                     !TryAddPrefixLiterals(collected, alternativePrefixes))
                 {
                     prefixes = null;
                     return false;
                 }
+
+                caseInsensitivePrefixes |= alternativeCaseInsensitive;
+                unicodeCaseInsensitivePrefixes |= alternativeUnicodeCaseInsensitive;
             }
 
             prefixes = collected.ToArray();
@@ -347,13 +429,23 @@ internal sealed class RegexPrefilter
         if (node is RegexGroupNode group)
         {
             RegexCompileOptions groupOptions = options.Apply(group.EnabledFlags, group.DisabledFlags);
-            return TryCollectSequenceAlternationPrefixes(group.Child, groupOptions, out prefixes);
+            return TryCollectSequenceAlternationPrefixes(
+                group.Child,
+                groupOptions,
+                out prefixes,
+                out caseInsensitivePrefixes,
+                out unicodeCaseInsensitivePrefixes);
         }
 
         if (node is RegexRepetitionNode repetition)
         {
             return repetition.Minimum > 0 &&
-                TryCollectSequenceAlternationPrefixes(repetition.Child, options, out prefixes);
+                TryCollectSequenceAlternationPrefixes(
+                    repetition.Child,
+                    options,
+                    out prefixes,
+                    out caseInsensitivePrefixes,
+                    out unicodeCaseInsensitivePrefixes);
         }
 
         if (node is not RegexSequenceNode sequence)
@@ -371,15 +463,27 @@ internal sealed class RegexPrefilter
                 continue;
             }
 
-            return TryCollectSequenceAlternationPrefixes(child, currentOptions, out prefixes);
+            return TryCollectSequenceAlternationPrefixes(
+                child,
+                currentOptions,
+                out prefixes,
+                out caseInsensitivePrefixes,
+                out unicodeCaseInsensitivePrefixes);
         }
 
         return false;
     }
 
-    private static bool TryCollectLeadingPrefixSet(RegexSyntaxNode node, RegexCompileOptions options, out byte[][] prefixes)
+    private static bool TryCollectLeadingPrefixSet(
+        RegexSyntaxNode node,
+        RegexCompileOptions options,
+        out byte[][] prefixes,
+        out bool caseInsensitivePrefixes,
+        out bool unicodeCaseInsensitivePrefixes)
     {
         prefixes = [];
+        caseInsensitivePrefixes = false;
+        unicodeCaseInsensitivePrefixes = false;
         if (!TryCollectLeadingPrefixCandidates(node, options, out List<RegexPrefixCandidate> candidates))
         {
             return false;
@@ -394,6 +498,9 @@ internal sealed class RegexPrefilter
             {
                 return false;
             }
+
+            caseInsensitivePrefixes |= candidates[index].CaseInsensitive;
+            unicodeCaseInsensitivePrefixes |= candidates[index].CaseInsensitive && candidates[index].UnicodeClasses;
         }
 
         prefixes = collected.ToArray();
@@ -424,7 +531,12 @@ internal sealed class RegexPrefilter
                 return true;
             case RegexSyntaxKind.Literal:
                 byte[] literal = ((RegexAtomNode)node).Value.ToArray();
-                candidates.Add(new RegexPrefixCandidate(literal, sealedPrefix: false, PreferredPrefixBytes));
+                candidates.Add(new RegexPrefixCandidate(
+                    literal,
+                    sealedPrefix: false,
+                    PreferredPrefixBytes,
+                    options.CaseInsensitive,
+                    options.UnicodeClasses));
                 return true;
             case RegexSyntaxKind.CharacterClass:
             case RegexSyntaxKind.DigitClass:
@@ -511,7 +623,7 @@ internal sealed class RegexPrefilter
             for (int candidateIndex = 0; candidateIndex < alternativeCandidates.Count; candidateIndex++)
             {
                 RegexPrefixCandidate candidate = alternativeCandidates[candidateIndex];
-                if (!TryAddPrefixCandidate(candidates, candidate.Bytes, candidate.Sealed))
+                if (!TryAddPrefixCandidate(candidates, candidate))
                 {
                     return false;
                 }
@@ -545,7 +657,7 @@ internal sealed class RegexPrefilter
             for (int index = 0; index < repeatedCandidates.Count; index++)
             {
                 RegexPrefixCandidate candidate = repeatedCandidates[index];
-                if (!TryAddPrefixCandidate(optionalCandidates, candidate.Bytes, candidate.Sealed))
+                if (!TryAddPrefixCandidate(optionalCandidates, candidate))
                 {
                     return false;
                 }
@@ -587,7 +699,14 @@ internal sealed class RegexPrefilter
             RegexPrefixCandidate prefix = prefixes[prefixIndex];
             if (prefix.Sealed)
             {
-                if (!TryAddPrefixCandidate(combined, prefix.Bytes, sealedPrefix: true))
+                if (!TryAddPrefixCandidate(
+                    combined,
+                    new RegexPrefixCandidate(
+                        prefix.Bytes,
+                        sealedPrefix: true,
+                        PreferredPrefixBytes,
+                        prefix.CaseInsensitive,
+                        prefix.UnicodeClasses)))
                 {
                     return false;
                 }
@@ -600,7 +719,7 @@ internal sealed class RegexPrefilter
                 RegexPrefixCandidate suffix = suffixes[suffixIndex];
                 if (suffix.Bytes.Length == 0)
                 {
-                    if (!TryAddPrefixCandidate(combined, prefix.Bytes, prefix.Sealed))
+                    if (!TryAddPrefixCandidate(combined, prefix))
                     {
                         return false;
                     }
@@ -611,7 +730,14 @@ internal sealed class RegexPrefilter
                 byte[] bytes = new byte[prefix.Bytes.Length + suffix.Bytes.Length];
                 prefix.Bytes.CopyTo(bytes, 0);
                 suffix.Bytes.CopyTo(bytes, prefix.Bytes.Length);
-                if (!TryAddPrefixCandidate(combined, bytes, suffix.Sealed))
+                if (!TryAddPrefixCandidate(
+                    combined,
+                    new RegexPrefixCandidate(
+                        bytes,
+                        suffix.Sealed,
+                        PreferredPrefixBytes,
+                        prefix.CaseInsensitive || suffix.CaseInsensitive,
+                        prefix.UnicodeClasses || suffix.UnicodeClasses)))
                 {
                     return false;
                 }
@@ -628,7 +754,14 @@ internal sealed class RegexPrefilter
         {
             RegexPrefixCandidate candidate = candidates[index];
             bool sealedPrefix = candidate.Sealed || sealAllNonEmpty && candidate.Bytes.Length > 0;
-            TryAddPrefixCandidate(sealedCandidates, candidate.Bytes, sealedPrefix);
+            TryAddPrefixCandidate(
+                sealedCandidates,
+                new RegexPrefixCandidate(
+                    candidate.Bytes,
+                    sealedPrefix,
+                    PreferredPrefixBytes,
+                    candidate.CaseInsensitive,
+                    candidate.UnicodeClasses));
         }
 
         return sealedCandidates;
@@ -672,16 +805,17 @@ internal sealed class RegexPrefilter
     private static bool TryAddPrefixCandidate(List<RegexPrefixCandidate> target, byte[] bytes, bool sealedPrefix)
     {
         var candidate = new RegexPrefixCandidate(bytes.ToArray(), sealedPrefix, PreferredPrefixBytes);
+        return TryAddPrefixCandidate(target, candidate);
+    }
+
+    private static bool TryAddPrefixCandidate(List<RegexPrefixCandidate> target, RegexPrefixCandidate candidate)
+    {
         for (int index = 0; index < target.Count; index++)
         {
             RegexPrefixCandidate existing = target[index];
             if (existing.Bytes.AsSpan().SequenceEqual(candidate.Bytes))
             {
-                if (candidate.Sealed && !existing.Sealed)
-                {
-                    target[index] = candidate;
-                }
-
+                target[index] = existing.Merge(candidate);
                 return true;
             }
 
@@ -849,6 +983,533 @@ internal sealed class RegexPrefilter
             default:
                 return false;
         }
+    }
+
+    internal static bool TryCollectRequiredLiteralSetWithLookBehind(
+        RegexSyntaxNode node,
+        RegexCompileOptions options,
+        out byte[][] literals,
+        out int maxLookBehind)
+    {
+        literals = [];
+        maxLookBehind = RequiredLiteralLookBehind;
+        if (TryFindRequiredLiteralWithLookBehind(node, options, out byte[] literal, out int literalLookBehind) &&
+            literal.Length >= 3)
+        {
+            literals = [literal];
+            maxLookBehind = literalLookBehind;
+            return true;
+        }
+
+        if (!TryCollectRequiredLiteralSetCandidate(node, options, out RegexRequiredLiteralSetCandidate candidate))
+        {
+            return false;
+        }
+
+        literals = candidate.Literals;
+        maxLookBehind = candidate.MaxLookBehind;
+        return literals.Length > 0;
+    }
+
+    private static bool TryCollectRequiredLiteralSetCandidate(
+        RegexSyntaxNode node,
+        RegexCompileOptions options,
+        out RegexRequiredLiteralSetCandidate candidate)
+    {
+        candidate = default;
+        node = UnwrapTransparentGroups(node);
+        switch (node.Kind)
+        {
+            case RegexSyntaxKind.Sequence:
+                return TryCollectRequiredLiteralSetCandidateInSequence((RegexSequenceNode)node, options, out candidate);
+            case RegexSyntaxKind.Alternation:
+                return TryCollectRequiredLiteralSetCandidateInAlternation((RegexAlternationNode)node, options, out candidate);
+            case RegexSyntaxKind.CapturingGroup:
+            case RegexSyntaxKind.NonCapturingGroup:
+                var group = (RegexGroupNode)node;
+                return TryCollectRequiredLiteralSetCandidate(
+                    group.Child,
+                    options.Apply(group.EnabledFlags, group.DisabledFlags),
+                    out candidate);
+            case RegexSyntaxKind.Repetition:
+                var repetition = (RegexRepetitionNode)node;
+                return repetition.Minimum > 0 &&
+                    TryCollectRequiredLiteralSetCandidate(repetition.Child, options, out candidate);
+            default:
+                return false;
+        }
+    }
+
+    private static bool TryCollectRequiredLiteralSetCandidateInAlternation(
+        RegexAlternationNode node,
+        RegexCompileOptions options,
+        out RegexRequiredLiteralSetCandidate candidate)
+    {
+        candidate = default;
+        var collected = new List<byte[]>();
+        int maxLookBehind = 0;
+        for (int index = 0; index < node.Alternatives.Count; index++)
+        {
+            if (!TryCollectRequiredLiteralSetWithLookBehind(
+                    node.Alternatives[index],
+                    options,
+                    out byte[][] childLiterals,
+                    out int childLookBehind) ||
+                childLiterals.Length == 0)
+            {
+                return false;
+            }
+
+            collected.AddRange(childLiterals);
+            maxLookBehind = Math.Max(maxLookBehind, childLookBehind);
+        }
+
+        if (collected.Count == 0)
+        {
+            return false;
+        }
+
+        candidate = new RegexRequiredLiteralSetCandidate(collected.ToArray(), maxLookBehind);
+        return true;
+    }
+
+    private static bool TryCollectRequiredLiteralSetCandidateInSequence(
+        RegexSequenceNode node,
+        RegexCompileOptions options,
+        out RegexRequiredLiteralSetCandidate candidate)
+    {
+        candidate = default;
+        byte[][] bestLiterals = [];
+        int bestLookBehind = 0;
+        bool hasBest = false;
+        var run = new List<byte[]>();
+        int runLookBehind = 0;
+        bool runHasBound = false;
+        int prefixMax = 0;
+        bool prefixKnown = true;
+        RegexCompileOptions currentOptions = options;
+        for (int index = 0; index < node.Nodes.Count; index++)
+        {
+            RegexSyntaxNode child = node.Nodes[index];
+            if (child is RegexInlineFlagsNode flags)
+            {
+                FlushRequiredLiteralRunWithLookBehind(
+                    run,
+                    runHasBound,
+                    runLookBehind,
+                    ref bestLiterals,
+                    ref bestLookBehind,
+                    ref hasBest);
+                run.Clear();
+                runHasBound = false;
+                currentOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
+                continue;
+            }
+
+            if (TryAppendRequiredLiteralRun(child, currentOptions, run, out bool appended, out bool canContinue))
+            {
+                if (appended)
+                {
+                    if (!runHasBound)
+                    {
+                        runLookBehind = prefixMax;
+                        runHasBound = prefixKnown;
+                    }
+
+                    FlushRequiredLiteralRunWithLookBehind(
+                        run,
+                        runHasBound,
+                        runLookBehind,
+                        ref bestLiterals,
+                        ref bestLookBehind,
+                        ref hasBest);
+                }
+
+                if (!canContinue)
+                {
+                    FlushRequiredLiteralRunWithLookBehind(
+                        run,
+                        runHasBound,
+                        runLookBehind,
+                        ref bestLiterals,
+                        ref bestLookBehind,
+                        ref hasBest);
+                    run.Clear();
+                    runHasBound = false;
+                }
+
+                UpdateKnownPrefixMax(child, currentOptions, ref prefixKnown, ref prefixMax);
+                continue;
+            }
+
+            FlushRequiredLiteralRunWithLookBehind(
+                run,
+                runHasBound,
+                runLookBehind,
+                ref bestLiterals,
+                ref bestLookBehind,
+                ref hasBest);
+            run.Clear();
+            runHasBound = false;
+            if (prefixKnown &&
+                TryCollectRequiredLiteralSetCandidate(child, currentOptions, out RegexRequiredLiteralSetCandidate childCandidate))
+            {
+                int childLookBehind = AddLookBehind(prefixMax, childCandidate.MaxLookBehind);
+                if (IsBetterRequiredLiteralSetCandidate(
+                    childCandidate.Literals,
+                    childLookBehind,
+                    bestLiterals,
+                    bestLookBehind,
+                    hasBest,
+                    preferEqual: true))
+                {
+                    bestLiterals = CopyLiteralSet(childCandidate.Literals);
+                    bestLookBehind = childLookBehind;
+                    hasBest = true;
+                }
+            }
+
+            UpdateKnownPrefixMax(child, currentOptions, ref prefixKnown, ref prefixMax);
+        }
+
+        FlushRequiredLiteralRunWithLookBehind(
+            run,
+            runHasBound,
+            runLookBehind,
+            ref bestLiterals,
+            ref bestLookBehind,
+            ref hasBest);
+        if (!hasBest)
+        {
+            return false;
+        }
+
+        candidate = new RegexRequiredLiteralSetCandidate(bestLiterals, bestLookBehind);
+        return true;
+    }
+
+    private static void FlushRequiredLiteralRunWithLookBehind(
+        List<byte[]> run,
+        bool runHasBound,
+        int runLookBehind,
+        ref byte[][] bestLiterals,
+        ref int bestLookBehind,
+        ref bool hasBest)
+    {
+        if (run.Count == 0 || !runHasBound)
+        {
+            return;
+        }
+
+        byte[][] candidate = CopyLiteralSet(run);
+        if (IsBetterRequiredLiteralSetCandidate(
+            candidate,
+            runLookBehind,
+            bestLiterals,
+            bestLookBehind,
+            hasBest))
+        {
+            bestLiterals = candidate;
+            bestLookBehind = runLookBehind;
+            hasBest = true;
+        }
+    }
+
+    private static bool IsBetterRequiredLiteralSetCandidate(
+        byte[][] candidate,
+        int candidateLookBehind,
+        byte[][] current,
+        int currentLookBehind,
+        bool hasCurrent,
+        bool preferEqual = false)
+    {
+        if (!hasCurrent || current.Length == 0)
+        {
+            return true;
+        }
+
+        int candidateScore = RequiredLiteralSetScore(candidate);
+        int currentScore = RequiredLiteralSetScore(current);
+        if (candidateScore != currentScore)
+        {
+            return preferEqual
+                ? candidateScore >= currentScore
+                : candidateScore > currentScore;
+        }
+
+        return candidateLookBehind < currentLookBehind;
+    }
+
+    private static bool TryFindRequiredLiteralWithLookBehind(
+        RegexSyntaxNode node,
+        RegexCompileOptions options,
+        out byte[] literal,
+        out int maxLookBehind)
+    {
+        literal = [];
+        maxLookBehind = 0;
+        node = UnwrapTransparentGroups(node);
+        switch (node.Kind)
+        {
+            case RegexSyntaxKind.Literal:
+                literal = ((RegexAtomNode)node).Value.ToArray();
+                return literal.Length > 0;
+            case RegexSyntaxKind.Sequence:
+                return TryFindRequiredLiteralWithLookBehindInSequence(
+                    (RegexSequenceNode)node,
+                    options,
+                    out literal,
+                    out maxLookBehind);
+            case RegexSyntaxKind.CapturingGroup:
+            case RegexSyntaxKind.NonCapturingGroup:
+                var group = (RegexGroupNode)node;
+                return TryFindRequiredLiteralWithLookBehind(
+                    group.Child,
+                    options.Apply(group.EnabledFlags, group.DisabledFlags),
+                    out literal,
+                    out maxLookBehind);
+            case RegexSyntaxKind.Repetition:
+                var repetition = (RegexRepetitionNode)node;
+                return repetition.Minimum > 0 &&
+                    TryFindRequiredLiteralWithLookBehind(repetition.Child, options, out literal, out maxLookBehind);
+            default:
+                return false;
+        }
+    }
+
+    private static bool TryFindRequiredLiteralWithLookBehindInSequence(
+        RegexSequenceNode node,
+        RegexCompileOptions options,
+        out byte[] literal,
+        out int maxLookBehind)
+    {
+        literal = [];
+        maxLookBehind = 0;
+        var literalRun = new List<byte>();
+        int runLookBehind = 0;
+        bool runHasBound = false;
+        int prefixMax = 0;
+        bool prefixKnown = true;
+        RegexCompileOptions currentOptions = options;
+        for (int index = 0; index < node.Nodes.Count; index++)
+        {
+            RegexSyntaxNode child = node.Nodes[index];
+            if (child is RegexInlineFlagsNode flags)
+            {
+                FlushLiteralRunWithLookBehind(literalRun, runHasBound, runLookBehind, ref literal, ref maxLookBehind);
+                runHasBound = false;
+                currentOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
+                continue;
+            }
+
+            if (child is RegexAtomNode { Kind: RegexSyntaxKind.Literal } atom)
+            {
+                if (literalRun.Count == 0)
+                {
+                    runLookBehind = prefixMax;
+                    runHasBound = prefixKnown;
+                }
+
+                literalRun.AddRange(atom.Value.ToArray());
+                UpdateKnownPrefixMax(child, currentOptions, ref prefixKnown, ref prefixMax);
+                continue;
+            }
+
+            FlushLiteralRunWithLookBehind(literalRun, runHasBound, runLookBehind, ref literal, ref maxLookBehind);
+            runHasBound = false;
+            if (prefixKnown &&
+                TryFindRequiredLiteralWithLookBehind(child, currentOptions, out byte[] candidate, out int childLookBehind))
+            {
+                int candidateLookBehind = AddLookBehind(prefixMax, childLookBehind);
+                if (candidate.Length > literal.Length ||
+                    candidate.Length == literal.Length && candidateLookBehind < maxLookBehind)
+                {
+                    literal = candidate;
+                    maxLookBehind = candidateLookBehind;
+                }
+            }
+
+            UpdateKnownPrefixMax(child, currentOptions, ref prefixKnown, ref prefixMax);
+        }
+
+        FlushLiteralRunWithLookBehind(literalRun, runHasBound, runLookBehind, ref literal, ref maxLookBehind);
+        return literal.Length > 0;
+    }
+
+    private static void FlushLiteralRunWithLookBehind(
+        List<byte> literalRun,
+        bool runHasBound,
+        int runLookBehind,
+        ref byte[] literal,
+        ref int maxLookBehind)
+    {
+        if (runHasBound &&
+            (literalRun.Count > literal.Length ||
+            literalRun.Count == literal.Length && runLookBehind < maxLookBehind))
+        {
+            literal = literalRun.ToArray();
+            maxLookBehind = runLookBehind;
+        }
+
+        literalRun.Clear();
+    }
+
+    private static void UpdateKnownPrefixMax(
+        RegexSyntaxNode node,
+        RegexCompileOptions options,
+        ref bool prefixKnown,
+        ref int prefixMax)
+    {
+        if (!prefixKnown)
+        {
+            return;
+        }
+
+        if (!TryGetMaximumByteLength(node, options, out int childMax) ||
+            prefixMax > int.MaxValue - childMax)
+        {
+            prefixKnown = false;
+            return;
+        }
+
+        prefixMax += childMax;
+    }
+
+    private static int AddLookBehind(int prefixMax, int childLookBehind)
+    {
+        return prefixMax > int.MaxValue - childLookBehind
+            ? int.MaxValue
+            : prefixMax + childLookBehind;
+    }
+
+    private static bool TryGetMaximumByteLength(
+        RegexSyntaxNode node,
+        RegexCompileOptions options,
+        out int maximum)
+    {
+        maximum = 0;
+        node = UnwrapTransparentGroups(node);
+        switch (node.Kind)
+        {
+            case RegexSyntaxKind.Empty:
+            case RegexSyntaxKind.StartAnchor:
+            case RegexSyntaxKind.EndAnchor:
+            case RegexSyntaxKind.AbsoluteStartAnchor:
+            case RegexSyntaxKind.AbsoluteEndAnchor:
+            case RegexSyntaxKind.WordBoundary:
+            case RegexSyntaxKind.NotWordBoundary:
+            case RegexSyntaxKind.WordStartBoundary:
+            case RegexSyntaxKind.WordEndBoundary:
+            case RegexSyntaxKind.WordStartHalfBoundary:
+            case RegexSyntaxKind.WordEndHalfBoundary:
+            case RegexSyntaxKind.InlineFlags:
+                return true;
+            case RegexSyntaxKind.Literal:
+                maximum = ((RegexAtomNode)node).Value.Length;
+                return true;
+            case RegexSyntaxKind.Dot:
+            case RegexSyntaxKind.AnyClass:
+            case RegexSyntaxKind.CharacterClass:
+            case RegexSyntaxKind.DigitClass:
+            case RegexSyntaxKind.NotDigitClass:
+            case RegexSyntaxKind.WordClass:
+            case RegexSyntaxKind.NotWordClass:
+            case RegexSyntaxKind.WhitespaceClass:
+            case RegexSyntaxKind.NotWhitespaceClass:
+            case RegexSyntaxKind.LetterClass:
+            case RegexSyntaxKind.AlphanumericClass:
+                maximum = options.Utf8 || options.UnicodeClasses ? 4 : 1;
+                return true;
+            case RegexSyntaxKind.UnicodePropertyClass:
+            case RegexSyntaxKind.NotUnicodePropertyClass:
+                maximum = 4;
+                return true;
+            case RegexSyntaxKind.Sequence:
+                return TryGetMaximumSequenceByteLength((RegexSequenceNode)node, options, out maximum);
+            case RegexSyntaxKind.Alternation:
+                return TryGetMaximumAlternationByteLength((RegexAlternationNode)node, options, out maximum);
+            case RegexSyntaxKind.CapturingGroup:
+            case RegexSyntaxKind.NonCapturingGroup:
+                var group = (RegexGroupNode)node;
+                return TryGetMaximumByteLength(
+                    group.Child,
+                    options.Apply(group.EnabledFlags, group.DisabledFlags),
+                    out maximum);
+            case RegexSyntaxKind.Repetition:
+                return TryGetMaximumRepetitionByteLength((RegexRepetitionNode)node, options, out maximum);
+            default:
+                return false;
+        }
+    }
+
+    private static bool TryGetMaximumSequenceByteLength(
+        RegexSequenceNode node,
+        RegexCompileOptions options,
+        out int maximum)
+    {
+        maximum = 0;
+        RegexCompileOptions currentOptions = options;
+        for (int index = 0; index < node.Nodes.Count; index++)
+        {
+            RegexSyntaxNode child = node.Nodes[index];
+            if (child is RegexInlineFlagsNode flags)
+            {
+                currentOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
+                continue;
+            }
+
+            if (!TryGetMaximumByteLength(child, currentOptions, out int childMax) ||
+                maximum > int.MaxValue - childMax)
+            {
+                maximum = 0;
+                return false;
+            }
+
+            maximum += childMax;
+        }
+
+        return true;
+    }
+
+    private static bool TryGetMaximumAlternationByteLength(
+        RegexAlternationNode node,
+        RegexCompileOptions options,
+        out int maximum)
+    {
+        maximum = 0;
+        for (int index = 0; index < node.Alternatives.Count; index++)
+        {
+            if (!TryGetMaximumByteLength(node.Alternatives[index], options, out int childMax))
+            {
+                maximum = 0;
+                return false;
+            }
+
+            maximum = Math.Max(maximum, childMax);
+        }
+
+        return true;
+    }
+
+    private static bool TryGetMaximumRepetitionByteLength(
+        RegexRepetitionNode node,
+        RegexCompileOptions options,
+        out int maximum)
+    {
+        maximum = 0;
+        if (!node.Maximum.HasValue)
+        {
+            return false;
+        }
+
+        if (!TryGetMaximumByteLength(node.Child, options, out int childMax) ||
+            childMax != 0 && node.Maximum.Value > int.MaxValue / childMax)
+        {
+            return false;
+        }
+
+        maximum = childMax * node.Maximum.Value;
+        return true;
     }
 
     internal static bool TryPrepareRequiredLiteralSet(
@@ -1228,6 +1889,17 @@ internal sealed class RegexPrefilter
     {
         byte[][] copy = new byte[literals.Count][];
         for (int index = 0; index < literals.Count; index++)
+        {
+            copy[index] = literals[index].ToArray();
+        }
+
+        return copy;
+    }
+
+    private static byte[][] CopyLiteralSet(byte[][] literals)
+    {
+        byte[][] copy = new byte[literals.Length][];
+        for (int index = 0; index < literals.Length; index++)
         {
             copy[index] = literals[index].ToArray();
         }

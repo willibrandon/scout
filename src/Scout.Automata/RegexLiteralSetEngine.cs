@@ -71,13 +71,14 @@ internal sealed class RegexLiteralSetEngine
         engine = null;
         var literals = new List<byte[]>();
         bool? asciiCaseInsensitive = null;
-        if (!TryCollectLiteralBranches(root, options, literals, ref asciiCaseInsensitive) ||
+        bool? literalUnicodeClasses = null;
+        if (!TryCollectLiteralBranches(root, options, literals, ref asciiCaseInsensitive, ref literalUnicodeClasses) ||
             literals.Count < MinimumLiteralCount)
         {
             return false;
         }
 
-        bool unicodeCaseInsensitive = asciiCaseInsensitive == true && options.UnicodeClasses;
+        bool unicodeCaseInsensitive = asciiCaseInsensitive == true && literalUnicodeClasses == true;
         bool asciiOnlyCaseInsensitive = asciiCaseInsensitive == true && !unicodeCaseInsensitive;
         bool useAho = ShouldUseAho(literals.Count, asciiOnlyCaseInsensitive, unicodeCaseInsensitive);
         if (!TryBuildSearchPatterns(
@@ -318,14 +319,20 @@ internal sealed class RegexLiteralSetEngine
         RegexSyntaxNode node,
         RegexCompileOptions options,
         List<byte[]> literals,
-        ref bool? asciiCaseInsensitive)
+        ref bool? asciiCaseInsensitive,
+        ref bool? literalUnicodeClasses)
     {
         node = UnwrapTransparentGroups(node);
         if (node is RegexAlternationNode alternation)
         {
             for (int index = 0; index < alternation.Alternatives.Count; index++)
             {
-                if (!TryCollectLiteralBranches(alternation.Alternatives[index], options, literals, ref asciiCaseInsensitive))
+                if (!TryCollectLiteralBranches(
+                    alternation.Alternatives[index],
+                    options,
+                    literals,
+                    ref asciiCaseInsensitive,
+                    ref literalUnicodeClasses))
                 {
                     return false;
                 }
@@ -335,7 +342,7 @@ internal sealed class RegexLiteralSetEngine
         }
 
         var literal = new List<byte>();
-        return TryAppendLiteral(node, options, literal, ref asciiCaseInsensitive) &&
+        return TryAppendLiteral(node, options, literal, ref asciiCaseInsensitive, ref literalUnicodeClasses) &&
             literal.Count > 0 &&
             AddLiteral(literals, literal.ToArray());
     }
@@ -344,7 +351,8 @@ internal sealed class RegexLiteralSetEngine
         RegexSyntaxNode node,
         RegexCompileOptions options,
         List<byte> literal,
-        ref bool? asciiCaseInsensitive)
+        ref bool? asciiCaseInsensitive,
+        ref bool? literalUnicodeClasses)
     {
         node = UnwrapTransparentGroups(node);
         switch (node.Kind)
@@ -352,7 +360,7 @@ internal sealed class RegexLiteralSetEngine
             case RegexSyntaxKind.Empty:
                 return true;
             case RegexSyntaxKind.Literal:
-                if (!SetCaseMode(options, ref asciiCaseInsensitive))
+                if (!SetCaseMode(options, ref asciiCaseInsensitive, ref literalUnicodeClasses))
                 {
                     return false;
                 }
@@ -360,7 +368,12 @@ internal sealed class RegexLiteralSetEngine
                 literal.AddRange(((RegexAtomNode)node).Value.ToArray());
                 return true;
             case RegexSyntaxKind.Sequence:
-                return TryAppendLiteralSequence((RegexSequenceNode)node, options, literal, ref asciiCaseInsensitive);
+                return TryAppendLiteralSequence(
+                    (RegexSequenceNode)node,
+                    options,
+                    literal,
+                    ref asciiCaseInsensitive,
+                    ref literalUnicodeClasses);
             case RegexSyntaxKind.CapturingGroup:
             case RegexSyntaxKind.NonCapturingGroup:
                 var group = (RegexGroupNode)node;
@@ -368,9 +381,15 @@ internal sealed class RegexLiteralSetEngine
                     group.Child,
                     options.Apply(group.EnabledFlags, group.DisabledFlags),
                     literal,
-                    ref asciiCaseInsensitive);
+                    ref asciiCaseInsensitive,
+                    ref literalUnicodeClasses);
             case RegexSyntaxKind.Repetition:
-                return TryAppendLiteralRepetition((RegexRepetitionNode)node, options, literal, ref asciiCaseInsensitive);
+                return TryAppendLiteralRepetition(
+                    (RegexRepetitionNode)node,
+                    options,
+                    literal,
+                    ref asciiCaseInsensitive,
+                    ref literalUnicodeClasses);
             default:
                 return false;
         }
@@ -380,7 +399,8 @@ internal sealed class RegexLiteralSetEngine
         RegexSequenceNode node,
         RegexCompileOptions options,
         List<byte> literal,
-        ref bool? asciiCaseInsensitive)
+        ref bool? asciiCaseInsensitive,
+        ref bool? literalUnicodeClasses)
     {
         RegexCompileOptions currentOptions = options;
         for (int index = 0; index < node.Nodes.Count; index++)
@@ -392,7 +412,7 @@ internal sealed class RegexLiteralSetEngine
                 continue;
             }
 
-            if (!TryAppendLiteral(child, currentOptions, literal, ref asciiCaseInsensitive))
+            if (!TryAppendLiteral(child, currentOptions, literal, ref asciiCaseInsensitive, ref literalUnicodeClasses))
             {
                 return false;
             }
@@ -405,7 +425,8 @@ internal sealed class RegexLiteralSetEngine
         RegexRepetitionNode node,
         RegexCompileOptions options,
         List<byte> literal,
-        ref bool? asciiCaseInsensitive)
+        ref bool? asciiCaseInsensitive,
+        ref bool? literalUnicodeClasses)
     {
         if (node.Maximum != node.Minimum)
         {
@@ -414,7 +435,7 @@ internal sealed class RegexLiteralSetEngine
 
         for (int count = 0; count < node.Minimum; count++)
         {
-            if (!TryAppendLiteral(node.Child, options, literal, ref asciiCaseInsensitive))
+            if (!TryAppendLiteral(node.Child, options, literal, ref asciiCaseInsensitive, ref literalUnicodeClasses))
             {
                 return false;
             }
@@ -423,7 +444,10 @@ internal sealed class RegexLiteralSetEngine
         return true;
     }
 
-    private static bool SetCaseMode(RegexCompileOptions options, ref bool? asciiCaseInsensitive)
+    private static bool SetCaseMode(
+        RegexCompileOptions options,
+        ref bool? asciiCaseInsensitive,
+        ref bool? literalUnicodeClasses)
     {
         if (asciiCaseInsensitive.HasValue && asciiCaseInsensitive.Value != options.CaseInsensitive)
         {
@@ -431,6 +455,16 @@ internal sealed class RegexLiteralSetEngine
         }
 
         asciiCaseInsensitive = options.CaseInsensitive;
+        if (options.CaseInsensitive)
+        {
+            if (literalUnicodeClasses.HasValue && literalUnicodeClasses.Value != options.UnicodeClasses)
+            {
+                return false;
+            }
+
+            literalUnicodeClasses = options.UnicodeClasses;
+        }
+
         return true;
     }
 

@@ -178,6 +178,27 @@ public sealed class PatternSetTests
     }
 
     /// <summary>
+    /// Verifies bounded required-literal windows still include the furthest valid match start.
+    /// </summary>
+    [Fact]
+    public void FindsThroughBoundedRequiredLiteralLookBehind()
+    {
+        var set = PatternSet.Compile(
+        [
+            ".{0,3}(?:secret|token)[0-9]+"u8.ToArray(),
+        ],
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.True(set.UsesRequiredLiteralAccelerator);
+        Assert.Equal(new PatternSetMatch(0, new RegexMatch(2, 11)), set.Find("xxabcsecret42"u8));
+        Assert.Equal(2, set.CountMatches("abcsecret1 zztoken22"u8));
+    }
+
+    /// <summary>
     /// Verifies an empty set never matches.
     /// </summary>
     [Fact]

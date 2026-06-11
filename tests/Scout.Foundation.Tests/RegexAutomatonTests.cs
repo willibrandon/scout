@@ -100,6 +100,33 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies inline no-Unicode mode keeps literal-set case folding ASCII-only.
+    /// </summary>
+    [Fact]
+    public void LiteralSetHonorsInlineNoUnicodeCaseMode()
+    {
+        var longS = RegexAutomaton.Compile(
+            "(?-u:s)"u8,
+            caseInsensitive: true,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: true,
+            unicodeClasses: true);
+        var delta = RegexAutomaton.Compile(
+            System.Text.Encoding.UTF8.GetBytes("(?-u:Δ)"),
+            caseInsensitive: true,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: true,
+            unicodeClasses: true);
+
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(longS));
+        Assert.Null(longS.Find(System.Text.Encoding.UTF8.GetBytes("ſ")));
+        Assert.Null(delta.Find(System.Text.Encoding.UTF8.GetBytes("δ")));
+        Assert.Equal(new RegexMatch(0, 2), delta.Find(System.Text.Encoding.UTF8.GetBytes("Δ")));
+    }
+
+    /// <summary>
     /// Verifies line-wide dot-star contains patterns use a linear count/span path.
     /// </summary>
     [Fact]
@@ -351,6 +378,32 @@ public sealed class RegexAutomatonTests
         Assert.True(RegexPrefilter.TryPrepareRequiredLiteralSet(["abc"u8.ToArray()], options, out byte[][] prepared));
         byte[] only = Assert.Single(prepared);
         Assert.Equal("abc"u8.ToArray(), only);
+    }
+
+    /// <summary>
+    /// Verifies required-literal sets retain a proven maximum distance from the match start.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralSetComputesBoundedLookBehind()
+    {
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(".{0,2}(?:secret|token)[0-9]"u8);
+
+        Assert.True(RegexPrefilter.TryCollectRequiredLiteralSetWithLookBehind(
+            tree.Root,
+            options,
+            out byte[][] literals,
+            out int maxLookBehind));
+
+        Assert.Equal(2, maxLookBehind);
+        Assert.Contains(literals, literal => literal.AsSpan().SequenceEqual("secret"u8));
+        Assert.Contains(literals, literal => literal.AsSpan().SequenceEqual("token"u8));
     }
 
     /// <summary>

@@ -3,7 +3,9 @@ namespace Scout;
 internal sealed class PatternSetRequiredLiteralAccelerator
 {
     private readonly AhoCorasickAutomaton automaton;
-    private readonly int[][] automataByLiteral;
+    private readonly PatternSetRequiredAutomaton[][] automataByLiteral;
+    private readonly int[] maxLookBehindByLiteral;
+    private readonly int maxLookBehind;
     private readonly bool[] acceleratedAutomata;
 
     public PatternSetRequiredLiteralAccelerator(IReadOnlyList<PatternSetRequiredLiteralEntry> entries, int automataCount)
@@ -13,7 +15,9 @@ internal sealed class PatternSetRequiredLiteralAccelerator
 
         acceleratedAutomata = new bool[automataCount];
         var literals = new List<byte[]>();
-        var automataByLiteral = new List<List<int>>();
+        var automataByLiteral = new List<List<PatternSetRequiredAutomaton>>();
+        var maxLookBehindByLiteral = new List<int>();
+        int maxLookBehind = 0;
         for (int entryIndex = 0; entryIndex < entries.Count; entryIndex++)
         {
             PatternSetRequiredLiteralEntry entry = entries[entryIndex];
@@ -25,16 +29,21 @@ internal sealed class PatternSetRequiredLiteralAccelerator
             acceleratedAutomata[entry.AutomatonIndex] = true;
             for (int literalIndex = 0; literalIndex < entry.Literals.Length; literalIndex++)
             {
-                byte[] literal = NormalizeAsciiCase(entry.Literals[literalIndex]);
+                PatternSetRequiredLiteral requiredLiteral = entry.Literals[literalIndex];
+                byte[] literal = NormalizeAsciiCase(requiredLiteral.Literal);
+                int lookBehind = Math.Min(requiredLiteral.MaxLookBehind, RegexPrefilter.RequiredLiteralLookBehind);
                 int existing = FindLiteral(literals, literal);
                 if (existing < 0)
                 {
                     existing = literals.Count;
                     literals.Add(literal);
                     automataByLiteral.Add([]);
+                    maxLookBehindByLiteral.Add(0);
                 }
 
-                AddDistinctAutomaton(automataByLiteral[existing], entry.AutomatonIndex);
+                AddDistinctAutomaton(automataByLiteral[existing], entry.AutomatonIndex, lookBehind);
+                maxLookBehindByLiteral[existing] = Math.Max(maxLookBehindByLiteral[existing], lookBehind);
+                maxLookBehind = Math.Max(maxLookBehind, lookBehind);
             }
         }
 
@@ -43,11 +52,14 @@ internal sealed class PatternSetRequiredLiteralAccelerator
             literalArray,
             AhoCorasickMatchKind.Standard,
             asciiCaseInsensitive: true);
-        this.automataByLiteral = new int[automataByLiteral.Count][];
+        this.automataByLiteral = new PatternSetRequiredAutomaton[automataByLiteral.Count][];
         for (int index = 0; index < automataByLiteral.Count; index++)
         {
             this.automataByLiteral[index] = automataByLiteral[index].ToArray();
         }
+
+        this.maxLookBehindByLiteral = maxLookBehindByLiteral.ToArray();
+        this.maxLookBehind = maxLookBehind;
     }
 
     public bool CoversAutomaton(int automatonIndex)
@@ -135,16 +147,23 @@ internal sealed class PatternSetRequiredLiteralAccelerator
             AhoCorasickMatch literal = matches.Current;
             int requiredAt = startOffset + literal.Start;
             if (best.HasValue &&
-                requiredAt - RegexPrefilter.RequiredLiteralLookBehind > best.Value.Match.Start)
+                requiredAt - maxLookBehind > best.Value.Match.Start)
             {
                 break;
             }
 
-            int[] candidateAutomata = automataByLiteral[literal.PatternId];
+            if (best.HasValue &&
+                requiredAt - maxLookBehindByLiteral[literal.PatternId] > best.Value.Match.Start)
+            {
+                continue;
+            }
+
+            PatternSetRequiredAutomaton[] candidateAutomata = automataByLiteral[literal.PatternId];
             for (int index = 0; index < candidateAutomata.Length; index++)
             {
-                int automatonIndex = candidateAutomata[index];
-                int firstStart = Math.Max(startOffset, requiredAt - RegexPrefilter.RequiredLiteralLookBehind);
+                PatternSetRequiredAutomaton candidateAutomaton = candidateAutomata[index];
+                int automatonIndex = candidateAutomaton.AutomatonIndex;
+                int firstStart = Math.Max(startOffset, requiredAt - candidateAutomaton.MaxLookBehind);
                 firstStart = Math.Max(firstStart, nextStartToTry[automatonIndex]);
                 int lastStart = best.HasValue
                     ? Math.Min(requiredAt, best.Value.Match.Start)
@@ -189,12 +208,18 @@ internal sealed class PatternSetRequiredLiteralAccelerator
             AhoCorasickMatch literal = literalHits[hitIndex];
             int requiredAt = searchOffset + literal.Start;
             if (best.HasValue &&
-                requiredAt - RegexPrefilter.RequiredLiteralLookBehind > best.Value.Match.Start)
+                requiredAt - maxLookBehind > best.Value.Match.Start)
             {
                 break;
             }
 
             if (requiredAt < offset)
+            {
+                continue;
+            }
+
+            if (best.HasValue &&
+                requiredAt - maxLookBehindByLiteral[literal.PatternId] > best.Value.Match.Start)
             {
                 continue;
             }
@@ -215,11 +240,12 @@ internal sealed class PatternSetRequiredLiteralAccelerator
         int[] nextStartToTry,
         ref PatternSetMatch? best)
     {
-        int[] candidateAutomata = automataByLiteral[literalPatternId];
+        PatternSetRequiredAutomaton[] candidateAutomata = automataByLiteral[literalPatternId];
         for (int index = 0; index < candidateAutomata.Length; index++)
         {
-            int automatonIndex = candidateAutomata[index];
-            int firstStart = Math.Max(offset, requiredAt - RegexPrefilter.RequiredLiteralLookBehind);
+            PatternSetRequiredAutomaton candidateAutomaton = candidateAutomata[index];
+            int automatonIndex = candidateAutomaton.AutomatonIndex;
+            int firstStart = Math.Max(offset, requiredAt - candidateAutomaton.MaxLookBehind);
             firstStart = Math.Max(firstStart, nextStartToTry[automatonIndex]);
             int lastStart = best.HasValue
                 ? Math.Min(requiredAt, best.Value.Match.Start)
@@ -257,17 +283,20 @@ internal sealed class PatternSetRequiredLiteralAccelerator
         return -1;
     }
 
-    private static void AddDistinctAutomaton(List<int> automata, int automatonIndex)
+    private static void AddDistinctAutomaton(List<PatternSetRequiredAutomaton> automata, int automatonIndex, int maxLookBehind)
     {
         for (int index = 0; index < automata.Count; index++)
         {
-            if (automata[index] == automatonIndex)
+            if (automata[index].AutomatonIndex == automatonIndex)
             {
+                automata[index] = new PatternSetRequiredAutomaton(
+                    automatonIndex,
+                    Math.Max(automata[index].MaxLookBehind, maxLookBehind));
                 return;
             }
         }
 
-        automata.Add(automatonIndex);
+        automata.Add(new PatternSetRequiredAutomaton(automatonIndex, maxLookBehind));
     }
 
     private static byte[] NormalizeAsciiCase(byte[] literal)
