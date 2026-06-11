@@ -1,4 +1,3 @@
-
 namespace Scout;
 
 internal static class RegexDfaOperations
@@ -49,7 +48,13 @@ internal static class RegexDfaOperations
         return next.ToArray();
     }
 
-    public static bool HasEarlierConsumer(RegexNfa nfa, int[] threads, int acceptIndex, ReadOnlySpan<byte> haystack, int position)
+    public static bool HasEarlierConsumer(
+        RegexNfa nfa,
+        int[] threads,
+        int acceptIndex,
+        ReadOnlySpan<byte> haystack,
+        int position,
+        Dictionary<(int State, int Position), bool>? reachabilityCache = null)
     {
         if (position >= haystack.Length)
         {
@@ -72,13 +77,94 @@ internal static class RegexDfaOperations
                     state.LineTerminator,
                     state.Utf8,
                     state.UnicodeClasses,
-                    out _))
+                    out int consume) &&
+                CanReachAccept(nfa, state.Next, haystack, position + consume, reachabilityCache))
             {
                 return true;
             }
         }
 
         return false;
+    }
+
+    public static bool CanReachAccept(
+        RegexNfa nfa,
+        int stateIndex,
+        ReadOnlySpan<byte> haystack,
+        int position,
+        Dictionary<(int State, int Position), bool>? cache = null)
+    {
+        cache ??= [];
+        return CanReachAcceptCore(nfa, stateIndex, haystack, position, cache, []);
+    }
+
+    private static bool CanReachAcceptCore(
+        RegexNfa nfa,
+        int stateIndex,
+        ReadOnlySpan<byte> haystack,
+        int position,
+        Dictionary<(int State, int Position), bool> cache,
+        HashSet<(int State, int Position)> visiting)
+    {
+        if (stateIndex < 0)
+        {
+            return false;
+        }
+
+        (int State, int Position) key = (stateIndex, position);
+        if (cache.TryGetValue(key, out bool cached))
+        {
+            return cached;
+        }
+
+        if (!visiting.Add(key))
+        {
+            return false;
+        }
+
+        RegexNfaState state = nfa.States[stateIndex];
+        bool result = state.Kind switch
+        {
+            RegexNfaStateKind.Accept => true,
+            RegexNfaStateKind.Split
+                or RegexNfaStateKind.GreedyLoopSplit
+                or RegexNfaStateKind.LazyLoopSplit =>
+                CanReachAcceptCore(nfa, state.Next, haystack, position, cache, visiting) ||
+                CanReachAcceptCore(nfa, state.Alternative, haystack, position, cache, visiting),
+            RegexNfaStateKind.Predicate =>
+                RegexByteClass.PredicateMatches(
+                    haystack,
+                    position,
+                    state.AtomKind,
+                    state.MultiLine,
+                    state.Crlf,
+                    state.LineTerminator,
+                    state.Utf8,
+                    state.UnicodeClasses) &&
+                CanReachAcceptCore(nfa, state.Next, haystack, position, cache, visiting),
+            RegexNfaStateKind.CaptureStart or RegexNfaStateKind.CaptureEnd =>
+                CanReachAcceptCore(nfa, state.Next, haystack, position, cache, visiting),
+            RegexNfaStateKind.Atom =>
+                RegexByteClass.TryGetAtomMatchLength(
+                    haystack,
+                    position,
+                    state.AtomKind,
+                    state.Value.Span,
+                    state.CaseInsensitive,
+                    state.MultiLine,
+                    state.DotMatchesNewline,
+                    state.Crlf,
+                    state.LineTerminator,
+                    state.Utf8,
+                    state.UnicodeClasses,
+                    out int consume) &&
+                CanReachAcceptCore(nfa, state.Next, haystack, position + consume, cache, visiting),
+            _ => false,
+        };
+
+        visiting.Remove(key);
+        cache[key] = result;
+        return result;
     }
 
     public static int IndexOfAccept(RegexNfa nfa, int[] threads)

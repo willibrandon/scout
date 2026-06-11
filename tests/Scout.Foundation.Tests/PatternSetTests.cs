@@ -1,4 +1,3 @@
-
 namespace Scout;
 
 /// <summary>
@@ -23,6 +22,27 @@ public sealed class PatternSetTests
         Assert.True(set.IsMatch("zzab"u8));
         Assert.Equal(new PatternSetMatch(0, new RegexMatch(2, 4)), set.Find("zzabcd abc123"u8));
         Assert.Equal([0, 1, 2], set.MatchingPatternIds("zzabcd abc123"u8));
+    }
+
+    /// <summary>
+    /// Verifies multi-regex required-literal acceleration supports Unicode case folding.
+    /// </summary>
+    [Fact]
+    public void UsesRequiredLiteralAcceleratorForUnicodeCaseInsensitivePatterns()
+    {
+        var set = PatternSet.Compile(
+        [
+            System.Text.Encoding.UTF8.GetBytes("Шерлок Холмс"),
+            System.Text.Encoding.UTF8.GetBytes("Джон Уотсон"),
+        ],
+            caseInsensitive: true,
+            multiLine: false,
+            dotMatchesNewline: false,
+            unicodeClasses: true);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("xxджон уотсон yy");
+
+        Assert.True(set.UsesRequiredLiteralAccelerator);
+        Assert.Equal(new PatternSetMatch(1, new RegexMatch(2, System.Text.Encoding.UTF8.GetByteCount("джон уотсон"))), set.Find(haystack));
     }
 
     /// <summary>
@@ -82,6 +102,21 @@ public sealed class PatternSetTests
 
         Assert.Equal(new PatternSetMatch(0, new RegexMatch(1, 2)), first.Find("zab"u8));
         Assert.Equal(new PatternSetMatch(0, new RegexMatch(1, 1)), second.Find("zab"u8));
+    }
+
+    /// <summary>
+    /// Verifies exact-start matches use pattern order before scanning later offsets.
+    /// </summary>
+    [Fact]
+    public void UsesPatternOrderForExactStartMatches()
+    {
+        var set = PatternSet.Compile(
+        [
+            "abc"u8.ToArray(),
+            "."u8.ToArray(),
+        ]);
+
+        Assert.Equal(new PatternSetMatch(0, new RegexMatch(1, 3)), set.Find("zabc"u8, startAt: 1));
     }
 
     /// <summary>

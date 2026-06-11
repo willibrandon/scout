@@ -1,17 +1,26 @@
-
 namespace Scout;
 
 /// <summary>
 /// Executes a byte-oriented regular expression automaton.
 /// </summary>
 public sealed class RegexAutomaton
-{
-    private readonly RegexMetaEngine engine;
-
-    private RegexAutomaton(RegexMetaEngine engine)
     {
-        this.engine = engine;
-    }
+        private readonly RegexMetaEngine engine;
+        private readonly RegexCaptureEngine captureEngine;
+        private readonly RegexDelimitedCaptureEngine? delimitedCaptureEngine;
+        private readonly RegexStartPredicate? startPredicate;
+
+        private RegexAutomaton(
+            RegexMetaEngine engine,
+            RegexCaptureEngine captureEngine,
+            RegexDelimitedCaptureEngine? delimitedCaptureEngine,
+            RegexStartPredicate? startPredicate)
+        {
+            this.engine = engine;
+            this.captureEngine = captureEngine;
+            this.delimitedCaptureEngine = delimitedCaptureEngine;
+            this.startPredicate = startPredicate;
+        }
 
     /// <summary>
     /// Compiles a regex pattern into a meta-selected automaton.
@@ -64,7 +73,19 @@ public sealed class RegexAutomaton
         RegexNfa nfa = RegexNfaCompiler.Compile(
             tree.Root,
             options);
-        return new RegexAutomaton(RegexMetaEngine.Compile(nfa, RegexPrefilter.Compile(tree.Root, options), dfaSizeLimit));
+        RegexNfa captureNfa = RegexNfaCompiler.CompileCaptures(tree.Root, options, tree.CaptureCount);
+        var prefilter = RegexPrefilter.Compile(tree.Root, options);
+        RegexLiteralSetEngine.TryCreate(tree.Root, options, out RegexLiteralSetEngine? literalSet);
+        RegexAlternationSetEngine.TryCreate(pattern, tree.Root, tree.CaptureCount, options, out RegexAlternationSetEngine? alternationSet);
+        RegexSimpleSequenceEngine.TryCreate(tree.Root, options, out RegexSimpleSequenceEngine? simpleSequence);
+        RegexDelimitedCaptureEngine.TryCreate(tree.Root, options, tree.CaptureCount, out RegexDelimitedCaptureEngine? delimitedCaptureEngine);
+        RegexAsciiFastPath.TryCompileNfa(pattern, tree.Root, options, out RegexNfa? asciiFastNfa);
+        RegexStartPredicate.TryCreate(tree.Root, options, out RegexStartPredicate? startPredicate);
+        return new RegexAutomaton(
+            RegexMetaEngine.Compile(nfa, prefilter, dfaSizeLimit, literalSet, alternationSet, simpleSequence, asciiFastNfa),
+            new RegexCaptureEngine(captureNfa, prefilter),
+            delimitedCaptureEngine,
+            startPredicate);
     }
 
     internal RegexPrefilterKind PrefilterKind => engine.PrefilterKind;
@@ -88,6 +109,16 @@ public sealed class RegexAutomaton
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
         return engine.Find(haystack, startAt);
+    }
+
+    internal RegexMatch? MatchAt(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        if (startPredicate is not null && !startPredicate.CanStartAt(haystack, Math.Clamp(startAt, 0, haystack.Length)))
+        {
+            return null;
+        }
+
+        return engine.MatchAt(haystack, startAt);
     }
 
     /// <summary>
@@ -119,5 +150,34 @@ public sealed class RegexAutomaton
     public bool IsMatch(ReadOnlySpan<byte> haystack)
     {
         return Find(haystack).HasValue;
+    }
+
+    /// <summary>
+    /// Finds the first match and its participating capture groups in a haystack at or after a byte offset.
+    /// </summary>
+    /// <param name="haystack">The haystack bytes.</param>
+    /// <param name="startAt">The first byte offset to consider.</param>
+    /// <returns>The first capture result, or <see langword="null" /> when no match exists.</returns>
+    public RegexCaptures? FindCaptures(ReadOnlySpan<byte> haystack, int startAt = 0)
+    {
+        RegexCaptures? delimitedCaptures = delimitedCaptureEngine?.MatchAt(haystack, Math.Clamp(startAt, 0, haystack.Length));
+        if (delimitedCaptures is not null)
+        {
+            return delimitedCaptures;
+        }
+
+        RegexCaptures? syntheticCaptures = engine.FindSyntheticCaptures(haystack, startAt);
+        if (syntheticCaptures is not null)
+        {
+            return syntheticCaptures;
+        }
+
+        RegexMatch? match = engine.Find(haystack, startAt);
+        if (!match.HasValue)
+        {
+            return null;
+        }
+
+        return captureEngine.MatchAt(haystack, match.Value.Start);
     }
 }

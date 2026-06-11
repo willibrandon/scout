@@ -1,4 +1,8 @@
 <Project>
+  <PropertyGroup Condition="$([System.String]::Copy('$(MSBuildProjectName)').EndsWith('.Tests'))">
+    <DefaultAppHostRuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(NETCoreSdkPortableRuntimeIdentifier)' != '' and '$(DefaultAppHostRuntimeIdentifier)' == '$(NETCoreSdkRuntimeIdentifier)'">$(NETCoreSdkPortableRuntimeIdentifier)</DefaultAppHostRuntimeIdentifier>
+  </PropertyGroup>
+
   <ItemGroup Condition="'$(MSBuildProjectName)' != 'Scout.SourceGen' and Exists('$(MSBuildThisFileDirectory)src/Scout.SourceGen/Scout.SourceGen.csproj')">
     <ProjectReference Include="$(MSBuildThisFileDirectory)src/Scout.SourceGen/Scout.SourceGen.csproj"
                       OutputItemType="Analyzer"

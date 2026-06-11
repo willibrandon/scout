@@ -24,11 +24,11 @@ internal static class RegexByteClass
             RegexSyntaxKind.AnyClass => true,
             RegexSyntaxKind.CharacterClass => ClassMatches(value, expression, caseInsensitive, multiLine, crlf, lineTerminator),
             RegexSyntaxKind.DigitClass => IsAsciiDigitByte(value),
-            RegexSyntaxKind.NotDigitClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) && !IsAsciiDigitByte(value),
+            RegexSyntaxKind.NotDigitClass => !IsAsciiDigitByte(value),
             RegexSyntaxKind.WordClass => IsAsciiWordByte(value),
-            RegexSyntaxKind.NotWordClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) && !IsAsciiWordByte(value),
-            RegexSyntaxKind.WhitespaceClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) && IsRegexWhitespaceByte(value),
-            RegexSyntaxKind.NotWhitespaceClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) && !IsRegexWhitespaceByte(value),
+            RegexSyntaxKind.NotWordClass => !IsAsciiWordByte(value),
+            RegexSyntaxKind.WhitespaceClass => IsRegexWhitespaceByte(value),
+            RegexSyntaxKind.NotWhitespaceClass => !IsRegexWhitespaceByte(value),
             _ => false,
         };
     }
@@ -137,7 +137,7 @@ internal static class RegexByteClass
         return true;
     }
 
-    private static bool ContainsUnicodePropertyClassToken(ReadOnlySpan<byte> expression)
+    internal static bool ContainsUnicodePropertyClassToken(ReadOnlySpan<byte> expression)
     {
         int index = IsNegatedClass(expression) ? 1 : 0;
         while (index < expression.Length)
@@ -249,15 +249,13 @@ internal static class RegexByteClass
             RegexSyntaxKind.AnyClass => true,
             RegexSyntaxKind.CharacterClass => ClassMatches(value, expression, caseInsensitive, multiLine, crlf, lineTerminator, unicodeClasses),
             RegexSyntaxKind.DigitClass => IsRegexDigitRune(value, unicodeClasses),
-            RegexSyntaxKind.NotDigitClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) && !IsRegexDigitRune(value, unicodeClasses),
+            RegexSyntaxKind.NotDigitClass => !IsRegexDigitRune(value, unicodeClasses),
             RegexSyntaxKind.WordClass => IsRegexWordRune(value, unicodeClasses),
-            RegexSyntaxKind.NotWordClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) && !IsRegexWordRune(value, unicodeClasses),
-            RegexSyntaxKind.WhitespaceClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) && IsRegexWhitespaceRune(value, unicodeClasses),
-            RegexSyntaxKind.NotWhitespaceClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) && !IsRegexWhitespaceRune(value, unicodeClasses),
+            RegexSyntaxKind.NotWordClass => !IsRegexWordRune(value, unicodeClasses),
+            RegexSyntaxKind.WhitespaceClass => IsRegexWhitespaceRune(value, unicodeClasses),
+            RegexSyntaxKind.NotWhitespaceClass => !IsRegexWhitespaceRune(value, unicodeClasses),
             RegexSyntaxKind.UnicodePropertyClass => unicodeClasses && IsUnicodePropertyRune(value, expression, caseInsensitive),
-            RegexSyntaxKind.NotUnicodePropertyClass => (multiLine || !IsLineTerminator(value, crlf, lineTerminator)) &&
-                unicodeClasses &&
-                !IsUnicodePropertyRune(value, expression, caseInsensitive),
+            RegexSyntaxKind.NotUnicodePropertyClass => unicodeClasses && !IsUnicodePropertyRune(value, expression, caseInsensitive),
             _ => false,
         };
     }
@@ -469,11 +467,6 @@ internal static class RegexByteClass
 
     private static bool ClassMatches(byte value, ReadOnlySpan<byte> expression, bool caseInsensitive, bool multiLine, bool crlf, byte lineTerminator)
     {
-        if (!multiLine && IsLineTerminator(value, crlf, lineTerminator))
-        {
-            return false;
-        }
-
         bool negated = !expression.IsEmpty && expression[0] == (byte)'^';
         int index = negated ? 1 : 0;
         bool matched = false;
@@ -521,11 +514,6 @@ internal static class RegexByteClass
         byte lineTerminator,
         bool unicodeClasses)
     {
-        if (!multiLine && IsLineTerminator(value, crlf, lineTerminator))
-        {
-            return false;
-        }
-
         bool negated = !expression.IsEmpty && expression[0] == (byte)'^';
         int index = negated ? 1 : 0;
         bool matched = false;

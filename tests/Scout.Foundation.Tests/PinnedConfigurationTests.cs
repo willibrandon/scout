@@ -581,11 +581,16 @@ public sealed partial class PinnedConfigurationTests
     {
         string root = FindRepositoryRoot();
         var document = XDocument.Load(Path.Combine(root, "Directory.Build.props"));
+        var targets = XDocument.Load(Path.Combine(root, "Directory.Build.targets"));
         XElement defaults = document.Root!.Elements("PropertyGroup").First(static group => group.Attribute("Condition") is null);
         XElement sourceGenerator = document.Root.Elements("PropertyGroup").Single(
             static group => string.Equals(group.Attribute("Condition")?.Value, "'$(MSBuildProjectName)' == 'Scout.SourceGen'", StringComparison.Ordinal));
         XElement app = document.Root.Elements("PropertyGroup").Single(
             static group => string.Equals(group.Attribute("Condition")?.Value, "'$(MSBuildProjectName)' == 'Scout.App'", StringComparison.Ordinal));
+        XElement tests = targets.Root!.Elements("PropertyGroup").Single(static group => string.Equals(
+            group.Attribute("Condition")?.Value,
+            "$([System.String]::Copy('$(MSBuildProjectName)').EndsWith('.Tests'))",
+            StringComparison.Ordinal));
 
         Assert.Equal("net10.0", defaults.Element("TargetFramework")?.Value);
         Assert.Equal("14.0", defaults.Element("LangVersion")?.Value);
@@ -613,6 +618,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Equal("Library", app.Element("OutputType")?.Value);
         Assert.Equal("Static", app.Element("NativeLib")?.Value);
         Assert.Equal("true", app.Element("PublishAot")?.Value);
+
+        XElement testAppHost = tests.Element("DefaultAppHostRuntimeIdentifier")!;
+        Assert.Contains("NETCoreSdkPortableRuntimeIdentifier", testAppHost.Attribute("Condition")?.Value, StringComparison.Ordinal);
+        Assert.Equal("$(NETCoreSdkPortableRuntimeIdentifier)", testAppHost.Value);
     }
 
     /// <summary>
@@ -2870,6 +2879,7 @@ public sealed partial class PinnedConfigurationTests
         var violations = new List<string>();
 
         Assert.Contains("IsLowercaseSha256(expectedSha256)", oracle, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_ORACLE_ENVIRONMENT", oracle, StringComparison.Ordinal);
         Assert.DoesNotContain("StartsWith(\"resolved@", oracle, StringComparison.Ordinal);
         Assert.NotEmpty(matches);
         foreach (Match match in matches)

@@ -47,6 +47,82 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies pure literal alternations use exact leftmost-first literal-set execution.
+    /// </summary>
+    [Fact]
+    public void UsesLiteralSetEngineForPureLiteralAlternations()
+    {
+        RegexMatch? shorterFirst = RegexAutomaton.Compile("foo|foobar"u8).Find("xxfoobar"u8);
+        RegexMatch? longerFirst = RegexAutomaton.Compile("foobar|foo"u8).Find("xxfoobar"u8);
+        RegexMatch? caseInsensitive = RegexAutomaton.Compile(
+            "Sherlock Holmes|John Watson"u8,
+            caseInsensitive: true,
+            multiLine: false,
+            dotMatchesNewline: false,
+            unicodeClasses: false)
+            .Find("xxjohn watson"u8);
+
+        Assert.Equal(new RegexMatch(2, 3), shorterFirst);
+        Assert.Equal(new RegexMatch(2, 6), longerFirst);
+        Assert.Equal(new RegexMatch(2, 11), caseInsensitive);
+    }
+
+    /// <summary>
+    /// Verifies large whole-branch capture alternations can report captures from the winning branch.
+    /// </summary>
+    [Fact]
+    public void AlternationSetSynthesizesWholeBranchCaptures()
+    {
+        string pattern = string.Join(
+            "|",
+            Enumerable.Range(0, 16).Select(static index => $"(?:(tok{index}[xy]))"));
+        var automaton = RegexAutomaton.Compile(System.Text.Encoding.ASCII.GetBytes(pattern));
+
+        RegexCaptures? captures = automaton.FindCaptures("zz tok7x tok3y"u8);
+
+        Assert.NotNull(captures);
+        Assert.Equal(new RegexMatch(3, 5), captures.Match);
+        Assert.Equal(17, captures.GroupCount);
+        Assert.Equal(2, captures.ParticipatingCount());
+        Assert.Equal(new RegexMatch(3, 5), captures.GetGroup(8));
+    }
+
+    /// <summary>
+    /// Verifies a whole-pattern enclosing group does not hide large top-level alternations from the set engine.
+    /// </summary>
+    [Fact]
+    public void AlternationSetUnwrapsWholePatternGroup()
+    {
+        string pattern = "(" + string.Join(
+            "|",
+            Enumerable.Range(0, 16).Select(static index => $"tok{index}[0-9]")) + ")";
+        var automaton = RegexAutomaton.Compile(System.Text.Encoding.ASCII.GetBytes(pattern));
+
+        Assert.Equal(RegexEngineKind.AlternationSet, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(3, 5), automaton.Find("xx tok73"u8));
+    }
+
+    /// <summary>
+    /// Verifies anchored delimiter-separated capture patterns report field captures.
+    /// </summary>
+    [Fact]
+    public void DelimitedCaptureEngineReportsFieldCaptures()
+    {
+        var automaton = RegexAutomaton.Compile("^([A-Z0-9]+);([^;]*);([YN])$"u8);
+
+        RegexCaptures? captures = automaton.FindCaptures("0041;;Y"u8);
+
+        Assert.NotNull(captures);
+        Assert.Equal(new RegexMatch(0, 7), captures.Match);
+        Assert.Equal(4, captures.GroupCount);
+        Assert.Equal(4, captures.ParticipatingCount());
+        Assert.Equal(new RegexMatch(0, 4), captures.GetGroup(1));
+        Assert.Equal(new RegexMatch(5, 0), captures.GetGroup(2));
+        Assert.Equal(new RegexMatch(6, 1), captures.GetGroup(3));
+        Assert.Null(automaton.FindCaptures("0041;BAD;Z"u8));
+    }
+
+    /// <summary>
     /// Verifies nullable leading expressions do not use a literal prefilter.
     /// </summary>
     [Fact]
@@ -56,6 +132,25 @@ public sealed class RegexAutomatonTests
 
         Assert.Equal(RegexPrefilterKind.None, automaton.PrefilterKind);
         Assert.Equal(new RegexMatch(0, 0), automaton.Find("bbb"u8));
+    }
+
+    /// <summary>
+    /// Verifies Unicode-aware case-insensitive literals can use a required-literal prefilter.
+    /// </summary>
+    [Fact]
+    public void UsesRequiredLiteralPrefilterForUnicodeCaseInsensitiveLiteral()
+    {
+        byte[] pattern = System.Text.Encoding.UTF8.GetBytes("Шерлок Холмс");
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("xxшерлок холмс yy");
+        var automaton = RegexAutomaton.Compile(
+            pattern,
+            caseInsensitive: true,
+            multiLine: false,
+            dotMatchesNewline: false,
+            unicodeClasses: true);
+
+        Assert.Equal(RegexPrefilterKind.RequiredLiteral, automaton.PrefilterKind);
+        Assert.Equal(new RegexMatch(2, pattern.Length), automaton.Find(haystack));
     }
 
     /// <summary>
@@ -180,11 +275,14 @@ public sealed class RegexAutomatonTests
     {
         RegexMatch? longFirst = RegexAutomaton.Compile("ab|a"u8).Find("zab"u8);
         RegexMatch? shortFirst = RegexAutomaton.Compile("a|ab"u8).Find("zab"u8);
+        RegexMatch? deadEarlierBranch = RegexAutomaton.Compile("torsdag|tor|tors"u8).Find("tors"u8);
 
         Assert.True(longFirst.HasValue);
         Assert.True(shortFirst.HasValue);
+        Assert.True(deadEarlierBranch.HasValue);
         Assert.Equal(new RegexMatch(1, 2), longFirst.Value);
         Assert.Equal(new RegexMatch(1, 1), shortFirst.Value);
+        Assert.Equal(new RegexMatch(0, 3), deadEarlierBranch.Value);
     }
 
     /// <summary>
@@ -337,18 +435,17 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
-    /// Verifies Perl and bracket classes honor ripgrep's multiline line-terminator policy.
+    /// Verifies Perl and bracket classes include line terminators according to class membership.
     /// </summary>
     [Fact]
-    public void ClassesHonorMultilineLineTerminatorPolicy()
+    public void ClassesCanMatchLineTerminatorsWithoutMultiline()
     {
-        Assert.Null(RegexAutomaton.Compile(@"\s"u8).Find("\n"u8));
-        Assert.Null(RegexAutomaton.Compile(@"[\s]"u8).Find("\n"u8));
-        Assert.Null(RegexAutomaton.Compile(@"\W"u8).Find("\n"u8));
-
-        Assert.Equal(new RegexMatch(0, 1), RegexAutomaton.Compile(@"\s"u8, multiLine: true, dotMatchesNewline: false).Find("\n"u8));
-        Assert.Equal(new RegexMatch(0, 1), RegexAutomaton.Compile(@"[\s]"u8, multiLine: true, dotMatchesNewline: false).Find("\n"u8));
-        Assert.Equal(new RegexMatch(0, 1), RegexAutomaton.Compile(@"\W"u8, multiLine: true, dotMatchesNewline: false).Find("\n"u8));
+        Assert.Equal(new RegexMatch(0, 1), RegexAutomaton.Compile(@"\s"u8).Find("\n"u8));
+        Assert.Equal(new RegexMatch(0, 1), RegexAutomaton.Compile(@"[\s]"u8).Find("\n"u8));
+        Assert.Equal(new RegexMatch(0, 1), RegexAutomaton.Compile(@"\D"u8).Find("\n"u8));
+        Assert.Equal(new RegexMatch(0, 1), RegexAutomaton.Compile(@"\W"u8).Find("\n"u8));
+        Assert.Equal(new RegexMatch(0, 1), RegexAutomaton.Compile(@"[^a]"u8).Find("\n"u8));
+        Assert.Null(RegexAutomaton.Compile(@"\S"u8).Find("\n"u8));
     }
 
     /// <summary>
@@ -475,6 +572,37 @@ public sealed class RegexAutomatonTests
         Assert.Equal(new RegexMatch(0, 7), RegexAutomaton.Compile("[a-z]+"u8, caseInsensitive: true, multiLine: false, dotMatchesNewline: false, utf8: false).Find("aA\u212AaA"u8));
         Assert.Equal(new RegexMatch(0, 3), RegexAutomaton.Compile("k"u8, caseInsensitive: true, multiLine: false, dotMatchesNewline: false).Find("\u212A"u8));
         Assert.Null(RegexAutomaton.Compile("[a-z]+"u8, caseInsensitive: true, multiLine: false, dotMatchesNewline: false, unicodeClasses: false).Find("\u212A"u8));
+    }
+
+    /// <summary>
+    /// Verifies Unicode PikeVM patterns can use an ASCII DFA mirror without losing Unicode fallback semantics.
+    /// </summary>
+    [Fact]
+    public void UnicodePikeVmAsciiFastPathPreservesFallbackSemantics()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse("[a-z]+0"u8);
+        var options = new RegexCompileOptions(
+            caseInsensitive: true,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false);
+        RegexNfa unicodeNfa = RegexNfaCompiler.Compile(tree.Root, options);
+
+        Assert.False(RegexDfaOperations.CanCompile(unicodeNfa));
+        Assert.True(RegexAsciiFastPath.TryCompileNfa("[a-z]+0"u8, tree.Root, options, out RegexNfa? asciiNfa));
+        Assert.NotNull(asciiNfa);
+        Assert.True(RegexDfaOperations.CanCompile(asciiNfa));
+
+        var automaton = RegexAutomaton.Compile(
+            "[a-z]+0"u8,
+            caseInsensitive: true,
+            multiLine: false,
+            dotMatchesNewline: false);
+        byte[] kelvinHaystack = System.Text.Encoding.UTF8.GetBytes("11\u212A0");
+
+        Assert.Equal(new RegexMatch(2, 2), automaton.Find("11K0"u8));
+        Assert.Equal(new RegexMatch(2, 4), automaton.Find(kelvinHaystack));
+        Assert.Null(automaton.Find("1120"u8));
     }
 
     /// <summary>
@@ -611,6 +739,108 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies leading prefix-set prefilters support case-insensitive literals.
+    /// </summary>
+    [Fact]
+    public void BuildsCaseInsensitivePrefixPrefilterForSequenceLeadingAlternation()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"(?:public|private|protected|internal)[^;={}]*\([^)]*(?:,[^)]*){8,}\)"u8,
+            caseInsensitive: true,
+            multiLine: true,
+            dotMatchesNewline: false);
+
+        Assert.NotEqual(RegexPrefilterKind.None, automaton.PrefilterKind);
+        Assert.Equal(
+            new RegexMatch(7, 41),
+            automaton.Find("ignore\nINTERNAL static void M(a,b,c,d,e,f,g,h,i)\n"u8));
+    }
+
+    /// <summary>
+    /// Verifies Unicode case-fold variants remain visible to case-insensitive prefix prefilters.
+    /// </summary>
+    [Fact]
+    public void CaseInsensitivePrefixPrefilterIncludesUnicodeFoldVariants()
+    {
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("\u212Ailo7");
+        var automaton = RegexAutomaton.Compile(
+            "(?:kilo|mega)[0-9]+"u8,
+            caseInsensitive: true,
+            multiLine: false,
+            dotMatchesNewline: false);
+
+        Assert.Equal(RegexPrefilterKind.AhoCorasick, automaton.PrefilterKind);
+        Assert.Equal(new RegexMatch(0, haystack.Length), automaton.Find(haystack));
+    }
+
+    /// <summary>
+    /// Verifies prefix-set prefilters can derive finite prefixes through leading digit classes.
+    /// </summary>
+    [Fact]
+    public void BuildsPrefixPrefilterFromFiniteLeadingClasses()
+    {
+        var automaton = RegexAutomaton.Compile(
+            "(?:19\\d\\d|20\\d\\d|due)\\n"u8,
+            caseInsensitive: true,
+            multiLine: false,
+            dotMatchesNewline: false);
+
+        Assert.Equal(RegexPrefilterKind.AhoCorasick, automaton.PrefilterKind);
+        Assert.Equal(new RegexMatch(4, 5), automaton.Find("xxx 2012\n"u8));
+    }
+
+    /// <summary>
+    /// Verifies optional leading bytes preserve both optional and consumed prefixes.
+    /// </summary>
+    [Fact]
+    public void BuildsPrefixPrefilterAcrossOptionalLeadingLiteral()
+    {
+        var automaton = RegexAutomaton.Compile(
+            "(?:-?\\d{4}|due)\\n"u8,
+            caseInsensitive: true,
+            multiLine: false,
+            dotMatchesNewline: false);
+
+        Assert.Equal(RegexPrefilterKind.AhoCorasick, automaton.PrefilterKind);
+        Assert.Equal(new RegexMatch(2, 6), automaton.Find("xx-2024\n"u8));
+        Assert.Equal(new RegexMatch(2, 5), automaton.Find("xx2024\n"u8));
+    }
+
+    /// <summary>
+    /// Verifies finite character-class prefixes do not skip adjacent class tokens.
+    /// </summary>
+    [Fact]
+    public void BuildsPrefixPrefilterFromAdjacentCharacterClassTokens()
+    {
+        var automaton = RegexAutomaton.Compile(
+            "(?:[/:\\-,.\\s_+@]+|due)\\n"u8,
+            caseInsensitive: true,
+            multiLine: false,
+            dotMatchesNewline: false);
+
+        Assert.Equal(RegexPrefilterKind.AhoCorasick, automaton.PrefilterKind);
+        Assert.Equal(new RegexMatch(2, 2), automaton.Find("xx,\n"u8));
+    }
+
+    /// <summary>
+    /// Verifies Unicode class prefixes include non-ASCII UTF-8 start bytes.
+    /// </summary>
+    [Fact]
+    public void BuildsPrefixPrefilterFromUnicodeWhitespaceClassToken()
+    {
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("\u2028X");
+        var automaton = RegexAutomaton.Compile(
+            "(?:[\\s,]+|due)X"u8,
+            caseInsensitive: true,
+            multiLine: false,
+            dotMatchesNewline: false,
+            unicodeClasses: true);
+
+        Assert.Equal(RegexPrefilterKind.AhoCorasick, automaton.PrefilterKind);
+        Assert.Equal(new RegexMatch(0, haystack.Length), automaton.Find(haystack));
+    }
+
+    /// <summary>
     /// Verifies impossible sequence-prefix candidates are skipped without hiding a later valid match.
     /// </summary>
     [Fact]
@@ -695,6 +925,71 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies bounded literal context patterns avoid expanded lazy-DFA execution.
+    /// </summary>
+    [Fact]
+    public void UsesSimpleSequenceEngineForBoundedLiteralContext()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"[A-Za-z]{10}\s+[\s\S]{0,100}Result[\s\S]{0,100}\s+[A-Za-z]{10}"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        string match = "ABCDEFGHIJ " +
+            new string('x', 24) +
+            "Result" +
+            new string('y', 20) +
+            " ZYXWVUTSRQ";
+        byte[] haystack = System.Text.Encoding.ASCII.GetBytes("zz " + match + " tail");
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.Equal(RegexPrefilterKind.RequiredLiteral, automaton.PrefilterKind);
+        Assert.Equal(new RegexMatch(3, match.Length), automaton.Find(haystack));
+    }
+
+    /// <summary>
+    /// Verifies the simple sequence engine rejects bounded gaps that exceed their maximum.
+    /// </summary>
+    [Fact]
+    public void SimpleSequenceEngineHonorsBoundedRepeatMaximum()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"A[\s\S]{0,3}Result"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 9), automaton.Find("A12Result"u8));
+        Assert.Null(automaton.Find("A1234Result"u8));
+    }
+
+    /// <summary>
+    /// Verifies repeated simple sub-sequences use direct execution instead of expanded lazy-DFA states.
+    /// </summary>
+    [Fact]
+    public void UsesSimpleSequenceEngineForRepeatedCapitalizedWords()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"(?:[A-Z][a-z]+\s*){3,5}"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        const string match = "One Two Three Four Five ";
+        byte[] haystack = System.Text.Encoding.ASCII.GetBytes("xx " + match + "Six");
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.Equal(RegexPrefilterKind.None, automaton.PrefilterKind);
+        Assert.Equal(new RegexMatch(3, match.Length), automaton.Find(haystack));
+    }
+
+    /// <summary>
     /// Verifies a zero DFA cache limit preserves match semantics through fallback.
     /// </summary>
     [Fact]
@@ -709,6 +1004,14 @@ public sealed class RegexAutomatonTests
 
         Assert.Equal(new RegexMatch(2, 6), automaton.Find("xxneedle yy"u8));
         Assert.Null(automaton.Find("xxhaystack yy"u8));
+    }
+
+    private static RegexEngineKind GetEngineKind(RegexAutomaton automaton)
+    {
+        return ((RegexMetaEngine)typeof(RegexAutomaton)
+            .GetField("engine", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(automaton)!)
+            .Kind;
     }
 
     private static RegexNfa CompileNfa(ReadOnlySpan<byte> pattern)

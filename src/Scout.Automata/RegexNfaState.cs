@@ -1,4 +1,3 @@
-
 namespace Scout;
 
 internal sealed class RegexNfaState
@@ -15,7 +14,8 @@ internal sealed class RegexNfaState
         bool utf8,
         bool unicodeClasses,
         int next,
-        int alternative)
+        int alternative,
+        int captureIndex = 0)
     {
         Kind = kind;
         AtomKind = atomKind;
@@ -29,6 +29,7 @@ internal sealed class RegexNfaState
         UnicodeClasses = unicodeClasses;
         Next = next;
         Alternative = alternative;
+        CaptureIndex = captureIndex;
     }
 
     public RegexNfaStateKind Kind { get; }
@@ -54,4 +55,6 @@ internal sealed class RegexNfaState
     public int Next { get; }
 
     public int Alternative { get; }
+
+    public int CaptureIndex { get; }
 }

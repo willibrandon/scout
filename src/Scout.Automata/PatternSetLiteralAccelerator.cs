@@ -1,9 +1,9 @@
-
 namespace Scout;
 
 internal sealed class PatternSetLiteralAccelerator
 {
     private readonly AhoCorasickAutomaton automaton;
+    private readonly byte[][] patterns;
     private readonly int[] patternIds;
 
     public PatternSetLiteralAccelerator(IReadOnlyList<byte[]> patterns, IReadOnlyList<int> patternIds)
@@ -15,9 +15,11 @@ internal sealed class PatternSetLiteralAccelerator
             throw new ArgumentException("literal pattern and identifier counts must match", nameof(patternIds));
         }
 
+        this.patterns = new byte[patterns.Count][];
         this.patternIds = new int[patternIds.Count];
         for (int index = 0; index < patternIds.Count; index++)
         {
+            this.patterns[index] = patterns[index].ToArray();
             this.patternIds[index] = patternIds[index];
         }
 
@@ -41,6 +43,23 @@ internal sealed class PatternSetLiteralAccelerator
         }
 
         return best;
+    }
+
+    public PatternSetMatch? FindAt(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        for (int index = 0; index < patterns.Length; index++)
+        {
+            byte[] pattern = patterns[index];
+            if (pattern.Length <= haystack.Length - startAt &&
+                haystack.Slice(startAt, pattern.Length).SequenceEqual(pattern))
+            {
+                return new PatternSetMatch(
+                    patternIds[index],
+                    new RegexMatch(startAt, pattern.Length));
+            }
+        }
+
+        return null;
     }
 
     public bool IsMatch(ReadOnlySpan<byte> haystack)

@@ -6,4 +6,5 @@ internal enum RegexPrefilterKind
     Memmem,
     Teddy,
     AhoCorasick,
+    RequiredLiteral,
 }

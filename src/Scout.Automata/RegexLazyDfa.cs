@@ -1,4 +1,3 @@
-
 namespace Scout;
 
 internal sealed class RegexLazyDfa
@@ -41,13 +40,15 @@ internal sealed class RegexLazyDfa
     {
         RegexLazyDfaState current = startState;
         int deferredAcceptLength = -1;
+        Dictionary<(int State, int Position), bool>? reachabilityCache = null;
         for (int position = start; position <= haystack.Length; position++)
         {
             int acceptIndex = current.AcceptIndex;
             if (acceptIndex >= 0)
             {
                 deferredAcceptLength = position - start;
-                if (!RegexDfaOperations.HasEarlierConsumer(nfa, current.NfaStates, acceptIndex, haystack, position))
+                reachabilityCache ??= [];
+                if (!RegexDfaOperations.HasEarlierConsumer(nfa, current.NfaStates, acceptIndex, haystack, position, reachabilityCache))
                 {
                     length = deferredAcceptLength;
                     return true;
@@ -62,6 +63,68 @@ internal sealed class RegexLazyDfa
             if (!TryTransition(current, haystack[position], out current))
             {
                 return fallback.TryMatchAt(haystack, start, out length);
+            }
+
+            if (current.NfaStates.Length == 0)
+            {
+                if (deferredAcceptLength >= 0)
+                {
+                    length = deferredAcceptLength;
+                    return true;
+                }
+
+                length = 0;
+                return false;
+            }
+        }
+
+        if (deferredAcceptLength >= 0)
+        {
+            length = deferredAcceptLength;
+            return true;
+        }
+
+        length = 0;
+        return false;
+    }
+
+    public bool TryMatchAsciiAt(ReadOnlySpan<byte> haystack, int start, out int length, out bool aborted)
+    {
+        aborted = false;
+        RegexLazyDfaState current = startState;
+        int deferredAcceptLength = -1;
+        Dictionary<(int State, int Position), bool>? reachabilityCache = null;
+        for (int position = start; position <= haystack.Length; position++)
+        {
+            int acceptIndex = current.AcceptIndex;
+            if (acceptIndex >= 0)
+            {
+                deferredAcceptLength = position - start;
+                reachabilityCache ??= [];
+                if (!RegexDfaOperations.HasEarlierConsumer(nfa, current.NfaStates, acceptIndex, haystack, position, reachabilityCache))
+                {
+                    length = deferredAcceptLength;
+                    return true;
+                }
+            }
+
+            if (position == haystack.Length)
+            {
+                break;
+            }
+
+            if (haystack[position] > 0x7F)
+            {
+                aborted = true;
+                length = 0;
+                return false;
+            }
+
+            if (!TryTransition(current, haystack[position], out current))
+            {
+                aborted = true;
+                length = 0;
+                return false;
             }
 
             if (current.NfaStates.Length == 0)

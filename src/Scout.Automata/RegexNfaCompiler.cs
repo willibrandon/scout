@@ -1,10 +1,17 @@
-
 namespace Scout;
 
 internal sealed class RegexNfaCompiler
 {
     private readonly List<RegexNfaState> states = [];
+    private readonly bool includeCaptures;
+    private readonly int captureCount;
     private bool sawUtf8Disabled;
+
+    private RegexNfaCompiler(bool includeCaptures = false, int captureCount = 0)
+    {
+        this.includeCaptures = includeCaptures;
+        this.captureCount = captureCount;
+    }
 
     public static RegexNfa Compile(RegexSyntaxNode root)
     {
@@ -19,6 +26,14 @@ internal sealed class RegexNfaCompiler
         int accept = compiler.AddAccept();
         int start = compiler.CompileNode(root, accept, options);
         return new RegexNfa(compiler.states, start, compiler.RequiresUtf8SearchBoundary(options.Utf8));
+    }
+
+    public static RegexNfa CompileCaptures(RegexSyntaxNode root, RegexCompileOptions options, int captureCount)
+    {
+        var compiler = new RegexNfaCompiler(includeCaptures: true, captureCount);
+        int accept = compiler.AddAccept();
+        int start = compiler.CompileNode(root, accept, options);
+        return new RegexNfa(compiler.states, start, compiler.RequiresUtf8SearchBoundary(options.Utf8), captureCount);
     }
 
     private int CompileNode(RegexSyntaxNode node, int next, RegexCompileOptions options)
@@ -80,7 +95,14 @@ internal sealed class RegexNfaCompiler
     {
         RegexCompileOptions groupOptions = options.Apply(node.EnabledFlags, node.DisabledFlags);
         sawUtf8Disabled |= options.Utf8 && !groupOptions.Utf8;
-        return CompileNode(node.Child, next, groupOptions);
+        if (!includeCaptures || node.Kind != RegexSyntaxKind.CapturingGroup)
+        {
+            return CompileNode(node.Child, next, groupOptions);
+        }
+
+        int end = AddCapture(RegexNfaStateKind.CaptureEnd, node.CaptureIndex, next);
+        int child = CompileNode(node.Child, end, groupOptions);
+        return AddCapture(RegexNfaStateKind.CaptureStart, node.CaptureIndex, child);
     }
 
     private int CompileRepetition(RegexRepetitionNode node, int next, RegexCompileOptions options)
@@ -155,6 +177,31 @@ internal sealed class RegexNfaCompiler
     {
         int state = states.Count;
         states.Add(CreateControlState(RegexNfaStateKind.Accept, next: -1, alternative: -1));
+        return state;
+    }
+
+    private int AddCapture(RegexNfaStateKind kind, int captureIndex, int next)
+    {
+        if (captureIndex <= 0 || captureIndex > captureCount)
+        {
+            throw new InvalidOperationException("Capture index is outside the compiled capture range.");
+        }
+
+        int state = states.Count;
+        states.Add(new RegexNfaState(
+            kind,
+            RegexSyntaxKind.Empty,
+            ReadOnlyMemory<byte>.Empty,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            crlf: false,
+            lineTerminator: (byte)'\n',
+            utf8: false,
+            unicodeClasses: false,
+            next,
+            alternative: -1,
+            captureIndex));
         return state;
     }
 

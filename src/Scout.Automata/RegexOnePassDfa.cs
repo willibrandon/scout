@@ -1,4 +1,3 @@
-
 namespace Scout;
 
 internal sealed class RegexOnePassDfa
@@ -41,13 +40,15 @@ internal sealed class RegexOnePassDfa
         current.Clear();
         AddThread(nfa.StartState, haystack, start, current, new bool[nfa.States.Count], new bool[nfa.States.Count]);
         int deferredAcceptLength = -1;
+        Dictionary<(int State, int Position), bool>? reachabilityCache = null;
         for (int position = start; position <= haystack.Length; position++)
         {
             int acceptIndex = IndexOfAccept(current);
             if (acceptIndex >= 0)
             {
                 deferredAcceptLength = position - start;
-                if (!HasEarlierConsumer(current, acceptIndex, haystack, position))
+                reachabilityCache ??= [];
+                if (!HasEarlierConsumer(current, acceptIndex, haystack, position, reachabilityCache))
                 {
                     length = deferredAcceptLength;
                     return true;
@@ -200,7 +201,12 @@ internal sealed class RegexOnePassDfa
         }
     }
 
-    private bool HasEarlierConsumer(List<int> threads, int acceptIndex, ReadOnlySpan<byte> haystack, int position)
+    private bool HasEarlierConsumer(
+        List<int> threads,
+        int acceptIndex,
+        ReadOnlySpan<byte> haystack,
+        int position,
+        Dictionary<(int State, int Position), bool> reachabilityCache)
     {
         if (position >= haystack.Length)
         {
@@ -223,7 +229,8 @@ internal sealed class RegexOnePassDfa
                     state.LineTerminator,
                     state.Utf8,
                     state.UnicodeClasses,
-                    out _))
+                    out int consume) &&
+                RegexDfaOperations.CanReachAccept(nfa, state.Next, haystack, position + consume, reachabilityCache))
             {
                 return true;
             }
