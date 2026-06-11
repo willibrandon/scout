@@ -85,6 +85,23 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies small non-ASCII literal alternations preserve byte-oriented leftmost-first matching.
+    /// </summary>
+    [Fact]
+    public void CountsSmallNonAsciiLiteralAlternations()
+    {
+        var shorterFirstAutomaton = RegexAutomaton.Compile("β|ββ"u8);
+        var longerFirstAutomaton = RegexAutomaton.Compile("ββ|β|δε"u8);
+
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(shorterFirstAutomaton));
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(longerFirstAutomaton));
+        Assert.Equal(new RegexMatch(1, 2), shorterFirstAutomaton.Find("xββ"u8));
+        Assert.Equal(new RegexMatch(1, 4), longerFirstAutomaton.Find("xββδεβ"u8));
+        Assert.Equal(3, longerFirstAutomaton.CountMatches("xββδεβ"u8));
+        Assert.Equal(10, longerFirstAutomaton.SumMatchSpans("xββδεβ"u8));
+    }
+
+    /// <summary>
     /// Verifies single ASCII case-insensitive literals use literal-set count and span semantics.
     /// </summary>
     [Fact]

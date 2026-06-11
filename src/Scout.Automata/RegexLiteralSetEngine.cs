@@ -10,6 +10,7 @@ internal sealed class RegexLiteralSetEngine
     private const int MinimumUnicodePrefixBytes = 4;
     private const int MaxUnicodePrefixVariants = 128;
     private const int LargeLiteralSetThreshold = 32;
+    private const int SmallLiteralFinderSetThreshold = 8;
 
     private readonly AhoCorasickAutomaton? automaton;
     private readonly byte[][] literals;
@@ -20,6 +21,7 @@ internal sealed class RegexLiteralSetEngine
     private readonly MemmemFinder? singleLiteralFinder;
     private readonly RegexAsciiCaseInsensitiveFinder? singleAsciiCaseInsensitiveFinder;
     private readonly RegexAsciiCaseInsensitiveLiteralSetScanner? asciiCaseInsensitiveScanner;
+    private readonly MemmemFinder[]? smallLiteralFinders;
     private readonly RegexLiteralPrefixScanner? prefixScanner;
 
     private RegexLiteralSetEngine(
@@ -64,6 +66,17 @@ internal sealed class RegexLiteralSetEngine
             !unicodeCaseInsensitive)
         {
             asciiCaseInsensitiveScanner = new RegexAsciiCaseInsensitiveLiteralSetScanner(this.literals);
+            return;
+        }
+
+        if (ShouldUseSmallLiteralFinders(this.literals, asciiCaseInsensitive, unicodeCaseInsensitive, useAho))
+        {
+            smallLiteralFinders = new MemmemFinder[this.literals.Length];
+            for (int index = 0; index < this.literals.Length; index++)
+            {
+                smallLiteralFinders[index] = new MemmemFinder(this.literals[index]);
+            }
+
             return;
         }
 
@@ -268,6 +281,11 @@ internal sealed class RegexLiteralSetEngine
             return asciiCaseInsensitiveScanner.Find(haystack, startOffset)?.Match;
         }
 
+        if (smallLiteralFinders is not null)
+        {
+            return FindSmallLiteralSet(haystack, startOffset);
+        }
+
         if (automaton is not null)
         {
             return FindAho(haystack, startOffset);
@@ -364,6 +382,11 @@ internal sealed class RegexLiteralSetEngine
             return CountOrSumAsciiCaseInsensitiveLiteralSet(haystack, startOffset, sumSpans);
         }
 
+        if (smallLiteralFinders is not null)
+        {
+            return CountOrSumSmallLiteralSet(haystack, startOffset, sumSpans);
+        }
+
         if (automaton is not null)
         {
             return CountOrSumAho(haystack, startOffset, sumSpans);
@@ -390,6 +413,83 @@ internal sealed class RegexLiteralSetEngine
         }
 
         return total;
+    }
+
+    private RegexMatch? FindSmallLiteralSet(ReadOnlySpan<byte> haystack, int startOffset)
+    {
+        RegexLiteralSetCandidate? best = null;
+        for (int index = 0; index < smallLiteralFinders!.Length; index++)
+        {
+            int offset = smallLiteralFinders[index].Find(haystack[startOffset..]);
+            if (offset < 0)
+            {
+                continue;
+            }
+
+            var candidate = new RegexLiteralSetCandidate(
+                index,
+                new RegexMatch(startOffset + offset, literals[index].Length));
+            if (IsBetter(candidate, best))
+            {
+                best = candidate;
+            }
+        }
+
+        return best.HasValue ? best.Value.Match : null;
+    }
+
+    private long CountOrSumSmallLiteralSet(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
+    {
+        MemmemFinder[] finders = smallLiteralFinders!;
+        Span<int> nextSearchStarts = stackalloc int[finders.Length];
+        int exhausted = haystack.Length + 1;
+        long total = 0;
+        int nextAllowedStart = startOffset;
+        nextSearchStarts.Fill(-1);
+        while (true)
+        {
+            int bestLiteral = -1;
+            int bestStart = int.MaxValue;
+            for (int index = 0; index < finders.Length; index++)
+            {
+                int start = nextSearchStarts[index];
+                if (start == exhausted)
+                {
+                    continue;
+                }
+
+                if (start < nextAllowedStart)
+                {
+                    int offset = finders[index].Find(haystack[nextAllowedStart..]);
+                    if (offset < 0)
+                    {
+                        nextSearchStarts[index] = exhausted;
+                        continue;
+                    }
+
+                    start = nextAllowedStart + offset;
+                    nextSearchStarts[index] = start;
+                }
+
+                if (start < bestStart ||
+                    start == bestStart && index < bestLiteral)
+                {
+                    bestLiteral = index;
+                    bestStart = start;
+                }
+            }
+
+            if (bestLiteral < 0)
+            {
+                return total;
+            }
+
+            int length = literals[bestLiteral].Length;
+            total += sumSpans ? length : 1;
+            int end = bestStart + length;
+            nextAllowedStart = end;
+            nextSearchStarts[bestLiteral] = -1;
+        }
     }
 
     private RegexMatch? FindAho(ReadOnlySpan<byte> haystack, int startOffset)
@@ -823,6 +923,36 @@ internal sealed class RegexLiteralSetEngine
         return literalCount >= LargeLiteralSetThreshold &&
             !asciiCaseInsensitive &&
             !unicodeCaseInsensitive;
+    }
+
+    private static bool ShouldUseSmallLiteralFinders(
+        byte[][] literals,
+        bool asciiCaseInsensitive,
+        bool unicodeCaseInsensitive,
+        bool useAho)
+    {
+        return !useAho &&
+            !asciiCaseInsensitive &&
+            !unicodeCaseInsensitive &&
+            literals.Length is > 1 and <= SmallLiteralFinderSetThreshold &&
+            ContainsNonAscii(literals);
+    }
+
+    private static bool ContainsNonAscii(byte[][] literals)
+    {
+        for (int literalIndex = 0; literalIndex < literals.Length; literalIndex++)
+        {
+            byte[] literal = literals[literalIndex];
+            for (int byteIndex = 0; byteIndex < literal.Length; byteIndex++)
+            {
+                if (literal[byteIndex] > 0x7F)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private static bool IsBetter(RegexLiteralSetCandidate candidate, RegexLiteralSetCandidate? best)
