@@ -6,7 +6,7 @@ namespace Scout;
 public sealed class RegexAutomaton
     {
         private readonly RegexMetaEngine engine;
-        private readonly RegexCaptureEngine captureEngine;
+        private readonly RegexCaptureEngine? captureEngine;
         private readonly RegexAlternationSetEngine? syntheticCaptureAlternationSet;
         private readonly RegexDelimitedCaptureEngine? delimitedCaptureEngine;
         private readonly RegexStructuredLogCaptureEngine? structuredLogCaptureEngine;
@@ -14,7 +14,7 @@ public sealed class RegexAutomaton
 
         private RegexAutomaton(
             RegexMetaEngine engine,
-            RegexCaptureEngine captureEngine,
+            RegexCaptureEngine? captureEngine,
             RegexAlternationSetEngine? syntheticCaptureAlternationSet,
             RegexDelimitedCaptureEngine? delimitedCaptureEngine,
             RegexStructuredLogCaptureEngine? structuredLogCaptureEngine,
@@ -74,14 +74,37 @@ public sealed class RegexAutomaton
         bool unicodeClasses = true,
         ulong? dfaSizeLimit = null)
     {
-        RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
         var options = new RegexCompileOptions(caseInsensitive, swapGreed: false, multiLine, dotMatchesNewline, crlf, lineTerminator, utf8, unicodeClasses);
+        if (RegexLiteralSetEngine.TryCreateLiteralAlternation(pattern, options, out RegexLiteralSetEngine? literalSet) &&
+            literalSet is not null)
+        {
+            return new RegexAutomaton(
+                RegexMetaEngine.CompileLiteralSet(literalSet, options.Utf8),
+                captureEngine: null,
+                syntheticCaptureAlternationSet: null,
+                delimitedCaptureEngine: null,
+                structuredLogCaptureEngine: null,
+                startPredicate: null);
+        }
+
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
+        RegexLiteralSetEngine.TryCreate(tree.Root, options, out literalSet);
+        if (literalSet is not null && tree.CaptureCount == 0)
+        {
+            return new RegexAutomaton(
+                RegexMetaEngine.CompileLiteralSet(literalSet, options.Utf8),
+                captureEngine: null,
+                syntheticCaptureAlternationSet: null,
+                delimitedCaptureEngine: null,
+                structuredLogCaptureEngine: null,
+                startPredicate: null);
+        }
+
         RegexNfa nfa = RegexNfaCompiler.Compile(
             tree.Root,
             options);
         RegexNfa captureNfa = RegexNfaCompiler.CompileCaptures(tree.Root, options, tree.CaptureCount);
         var prefilter = RegexPrefilter.Compile(tree.Root, options);
-        RegexLiteralSetEngine.TryCreate(tree.Root, options, out RegexLiteralSetEngine? literalSet);
         RegexAlternationSetEngine.TryCreate(pattern, tree.Root, tree.CaptureCount, options, out RegexAlternationSetEngine? alternationSet);
         RegexAlternationSetEngine? syntheticCaptureAlternationSet = alternationSet?.CanSynthesizeCaptures == true
             ? alternationSet
@@ -256,6 +279,11 @@ public sealed class RegexAutomaton
         if (!match.HasValue)
         {
             return null;
+        }
+
+        if (captureEngine is null)
+        {
+            return new RegexCaptures(match.Value, [match.Value]);
         }
 
         return captureEngine.MatchAt(haystack, match.Value.Start);

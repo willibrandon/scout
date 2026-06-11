@@ -24,12 +24,12 @@ internal sealed class RegexMetaEngine
     private readonly RegexDotStarClassFallbackEngine? dotStarClassFallback;
     private readonly RegexScalarRunEngine? scalarRun;
     private readonly RegexPrefilter? prefilter;
-    private readonly RegexNfa nfa;
+    private readonly RegexNfa? nfa;
     private readonly bool utf8;
 
     private RegexMetaEngine(
         RegexEngineKind kind,
-        RegexNfa nfa,
+        RegexNfa? nfa,
         PikeVm? pikeVm,
         RegexBoundedBacktracker? boundedBacktracker,
         RegexOnePassDfa? onePassDfa,
@@ -68,6 +68,26 @@ internal sealed class RegexMetaEngine
     public RegexEngineKind Kind { get; }
 
     public RegexPrefilterKind PrefilterKind => prefilter?.Kind ?? RegexPrefilterKind.None;
+
+    public static RegexMetaEngine CompileLiteralSet(RegexLiteralSetEngine literalSet, bool utf8)
+    {
+        return new RegexMetaEngine(
+            RegexEngineKind.LiteralSet,
+            nfa: null,
+            pikeVm: null,
+            boundedBacktracker: null,
+            onePassDfa: null,
+            denseDfa: null,
+            sparseDfa: null,
+            lazyDfa: null,
+            literalSet,
+            alternationSet: null,
+            simpleSequence: null,
+            lineContains: null,
+            dotStarClassFallback: null,
+            prefilter: null,
+            utf8);
+    }
 
     public static RegexMetaEngine Compile(RegexNfa nfa)
     {
@@ -615,10 +635,16 @@ internal sealed class RegexMetaEngine
     public RegexMatch? FindEarliest(ReadOnlySpan<byte> haystack, int startAt)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
-        var earliestPikeVm = new PikeVm(nfa);
+        if (literalSet is not null)
+        {
+            return literalSet.FindEarliest(haystack, startOffset);
+        }
+
+        RegexNfa activeNfa = nfa!;
+        var earliestPikeVm = new PikeVm(activeNfa);
         for (int start = startOffset; start <= haystack.Length; start++)
         {
-            if (utf8 && !RegexByteClass.IsUtf8Boundary(haystack, start))
+            if (activeNfa.Utf8 && !RegexByteClass.IsUtf8Boundary(haystack, start))
             {
                 continue;
             }
@@ -635,12 +661,18 @@ internal sealed class RegexMetaEngine
     internal RegexMatch? FindAllKindAt(ReadOnlySpan<byte> haystack, int startAt)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
-        if (utf8 && !RegexByteClass.IsUtf8Boundary(haystack, startOffset))
+        if (literalSet is not null)
+        {
+            return literalSet.FindAllKindAt(haystack, startOffset);
+        }
+
+        RegexNfa activeNfa = nfa!;
+        if (activeNfa.Utf8 && !RegexByteClass.IsUtf8Boundary(haystack, startOffset))
         {
             return null;
         }
 
-        var allPikeVm = new PikeVm(nfa);
+        var allPikeVm = new PikeVm(activeNfa);
         return allPikeVm.TryMatchLongestAt(haystack, startOffset, out int length)
             ? new RegexMatch(startOffset, length)
             : null;
@@ -649,13 +681,19 @@ internal sealed class RegexMetaEngine
     internal IReadOnlyList<RegexMatch> FindOverlappingAt(ReadOnlySpan<byte> haystack, int startAt)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
-        if (utf8 && !RegexByteClass.IsUtf8Boundary(haystack, startOffset))
+        if (literalSet is not null)
+        {
+            return literalSet.FindOverlappingAt(haystack, startOffset);
+        }
+
+        RegexNfa activeNfa = nfa!;
+        if (activeNfa.Utf8 && !RegexByteClass.IsUtf8Boundary(haystack, startOffset))
         {
             return [];
         }
 
         var lengths = new List<int>();
-        var overlappingPikeVm = new PikeVm(nfa);
+        var overlappingPikeVm = new PikeVm(activeNfa);
         overlappingPikeVm.AddMatchLengthsAt(haystack, startOffset, lengths);
         var matches = new RegexMatch[lengths.Count];
         for (int index = 0; index < lengths.Count; index++)

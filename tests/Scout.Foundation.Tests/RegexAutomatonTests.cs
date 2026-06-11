@@ -74,6 +74,12 @@ public sealed class RegexAutomatonTests
         Assert.Equal(6, shorterFirstAutomaton.SumMatchSpans("foo foobar"u8));
         Assert.Equal(1, shorterFirstAutomaton.CountMatches("foo foobar"u8, startAt: 4));
         Assert.Equal(3, shorterFirstAutomaton.SumMatchSpans("foo foobar"u8, startAt: 4));
+
+        RegexCaptures? captures = shorterFirstAutomaton.FindCaptures("xxfoo"u8);
+        Assert.NotNull(captures);
+        Assert.Equal(1, captures.GroupCount);
+        Assert.Equal(new RegexMatch(2, 3), captures.Match);
+        Assert.Equal(new RegexMatch(2, 3), captures.GetGroup(0));
     }
 
     /// <summary>
@@ -343,10 +349,10 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
-    /// Verifies Unicode-aware case-insensitive literals can use a required-literal prefilter.
+    /// Verifies Unicode-aware case-insensitive literals use literal-set execution.
     /// </summary>
     [Fact]
-    public void UsesRequiredLiteralPrefilterForUnicodeCaseInsensitiveLiteral()
+    public void UsesLiteralSetForUnicodeCaseInsensitiveLiteral()
     {
         byte[] pattern = System.Text.Encoding.UTF8.GetBytes("Шерлок Холмс");
         byte[] haystack = System.Text.Encoding.UTF8.GetBytes("xxшерлок холмс yy");
@@ -357,7 +363,8 @@ public sealed class RegexAutomatonTests
             dotMatchesNewline: false,
             unicodeClasses: true);
 
-        Assert.Equal(RegexPrefilterKind.RequiredLiteral, automaton.PrefilterKind);
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(automaton));
+        Assert.Equal(RegexPrefilterKind.None, automaton.PrefilterKind);
         Assert.Equal(new RegexMatch(2, pattern.Length), automaton.Find(haystack));
     }
 
@@ -611,9 +618,11 @@ public sealed class RegexAutomatonTests
     {
         IReadOnlyList<RegexMatch> matches = RegexAutomaton.Compile("a+"u8).FindOverlappingAt("aaa"u8, startAt: 0);
         IReadOnlyList<RegexMatch> emptyMatches = RegexAutomaton.Compile("a*"u8).FindOverlappingAt("aaa"u8, startAt: 2);
+        IReadOnlyList<RegexMatch> literalMatches = RegexAutomaton.Compile("a|aa|aaa"u8).FindOverlappingAt("aaa"u8, startAt: 0);
 
         Assert.Equal([new RegexMatch(0, 1), new RegexMatch(0, 2), new RegexMatch(0, 3)], matches);
         Assert.Equal([new RegexMatch(2, 0), new RegexMatch(2, 1)], emptyMatches);
+        Assert.Equal([new RegexMatch(0, 1), new RegexMatch(0, 2), new RegexMatch(0, 3)], literalMatches);
     }
 
     /// <summary>

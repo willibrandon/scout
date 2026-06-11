@@ -78,6 +78,123 @@ internal sealed class RegexLiteralSetEngine
             return false;
         }
 
+        return TryCreateFromLiterals(literals, asciiCaseInsensitive, literalUnicodeClasses, out engine);
+    }
+
+    public static bool TryCreateLiteralAlternation(
+        ReadOnlySpan<byte> pattern,
+        RegexCompileOptions options,
+        out RegexLiteralSetEngine? engine)
+    {
+        engine = null;
+        var literals = new List<byte[]>();
+        int index = 0;
+        while (index < pattern.Length)
+        {
+            bool grouped = index + 2 < pattern.Length &&
+                pattern[index] == (byte)'(' &&
+                pattern[index + 1] == (byte)'?' &&
+                pattern[index + 2] == (byte)':';
+            if (grouped)
+            {
+                index += 3;
+            }
+
+            var literal = new List<byte>();
+            bool closedGroup = false;
+            while (index < pattern.Length)
+            {
+                byte value = pattern[index];
+                if (value == (byte)'\\')
+                {
+                    if (index + 1 >= pattern.Length ||
+                        !TryUnescapeLiteralByte(pattern[index + 1], out byte escaped))
+                    {
+                        return false;
+                    }
+
+                    literal.Add(escaped);
+                    index += 2;
+                    continue;
+                }
+
+                if (grouped && value == (byte)')')
+                {
+                    index++;
+                    closedGroup = true;
+                    break;
+                }
+
+                if (!grouped && value == (byte)'|')
+                {
+                    break;
+                }
+
+                if (IsRegexSyntaxByte(value))
+                {
+                    return false;
+                }
+
+                literal.Add(value);
+                index++;
+            }
+
+            if (grouped && !closedGroup)
+            {
+                return false;
+            }
+
+            if (!AddLiteral(literals, literal.ToArray()))
+            {
+                return false;
+            }
+
+            if (index == pattern.Length)
+            {
+                break;
+            }
+
+            if (pattern[index] != (byte)'|')
+            {
+                return false;
+            }
+
+            index++;
+            if (index == pattern.Length)
+            {
+                return false;
+            }
+        }
+
+        if (literals.Count == 0)
+        {
+            return false;
+        }
+
+        bool? asciiCaseInsensitive = options.CaseInsensitive;
+        bool? literalUnicodeClasses = options.CaseInsensitive ? options.UnicodeClasses : null;
+        return TryCreateFromLiterals(literals, asciiCaseInsensitive, literalUnicodeClasses, out engine);
+    }
+
+    private static bool TryUnescapeLiteralByte(byte escaped, out byte literal)
+    {
+        literal = escaped;
+        return !IsAsciiLetterOrDigit(escaped);
+    }
+
+    private static bool IsAsciiLetterOrDigit(byte value)
+    {
+        return (uint)((value | 0x20) - (byte)'a') <= 25 ||
+            (uint)(value - (byte)'0') <= 9;
+    }
+
+    private static bool TryCreateFromLiterals(
+        List<byte[]> literals,
+        bool? asciiCaseInsensitive,
+        bool? literalUnicodeClasses,
+        out RegexLiteralSetEngine? engine)
+    {
+        engine = null;
         bool unicodeCaseInsensitive = asciiCaseInsensitive == true && literalUnicodeClasses == true;
         bool asciiOnlyCaseInsensitive = asciiCaseInsensitive == true && !unicodeCaseInsensitive;
         bool useAho = ShouldUseAho(literals.Count, asciiOnlyCaseInsensitive, unicodeCaseInsensitive);
@@ -137,6 +254,48 @@ internal sealed class RegexLiteralSetEngine
         return TryFindLiteralAt(haystack, startOffset, out RegexLiteralSetCandidate candidate)
             ? candidate.Match
             : null;
+    }
+
+    public RegexMatch? FindEarliest(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        RegexMatch? first = Find(haystack, startAt);
+        return first.HasValue
+            ? FindShortestAt(haystack, first.Value.Start)
+            : null;
+    }
+
+    public RegexMatch? FindAllKindAt(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        RegexMatch? best = null;
+        for (int index = 0; index < literals.Length; index++)
+        {
+            if (!TryMatchLiteralAt(haystack, startOffset, literals[index], out int length) ||
+                best.HasValue && length <= best.Value.Length)
+            {
+                continue;
+            }
+
+            best = new RegexMatch(startOffset, length);
+        }
+
+        return best;
+    }
+
+    public IReadOnlyList<RegexMatch> FindOverlappingAt(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        var matches = new List<RegexMatch>();
+        for (int index = 0; index < literals.Length; index++)
+        {
+            if (TryMatchLiteralAt(haystack, startOffset, literals[index], out int length))
+            {
+                matches.Add(new RegexMatch(startOffset, length));
+            }
+        }
+
+        matches.Sort(static (left, right) => left.Length.CompareTo(right.Length));
+        return matches;
     }
 
     public long CountMatches(ReadOnlySpan<byte> haystack, int startAt)
@@ -315,6 +474,23 @@ internal sealed class RegexLiteralSetEngine
         return false;
     }
 
+    private RegexMatch? FindShortestAt(ReadOnlySpan<byte> haystack, int start)
+    {
+        RegexMatch? best = null;
+        for (int index = 0; index < literals.Length; index++)
+        {
+            if (!TryMatchLiteralAt(haystack, start, literals[index], out int length) ||
+                best.HasValue && length >= best.Value.Length)
+            {
+                continue;
+            }
+
+            best = new RegexMatch(start, length);
+        }
+
+        return best;
+    }
+
     private static bool TryCollectLiteralBranches(
         RegexSyntaxNode node,
         RegexCompileOptions options,
@@ -477,6 +653,24 @@ internal sealed class RegexLiteralSetEngine
 
         literals.Add(literal);
         return true;
+    }
+
+    private static bool IsRegexSyntaxByte(byte value)
+    {
+        return value is (byte)'\\'
+            or (byte)'|'
+            or (byte)'('
+            or (byte)')'
+            or (byte)'['
+            or (byte)']'
+            or (byte)'{'
+            or (byte)'}'
+            or (byte)'.'
+            or (byte)'*'
+            or (byte)'+'
+            or (byte)'?'
+            or (byte)'^'
+            or (byte)'$';
     }
 
     private static bool TryBuildSearchPatterns(
