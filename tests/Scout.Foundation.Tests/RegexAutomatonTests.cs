@@ -332,6 +332,30 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies fallback NFA APIs work for alternation-set engines after lazy initialization.
+    /// </summary>
+    [Fact]
+    public void AlternationSetLazilyInitializesFallbackNfa()
+    {
+        string pattern = "(" + string.Join(
+            "|",
+            Enumerable.Range(0, 16)
+                .Select(static index => $"tok{index}[0-9]")
+                .Append("tok7[0-9][a-z]")) + ")";
+        var automaton = RegexAutomaton.Compile(System.Text.Encoding.ASCII.GetBytes(pattern));
+
+        RegexMatch? earliest = automaton.FindEarliest("zz tok73a"u8, startAt: 0);
+        RegexMatch? allKind = automaton.FindAllKindAt("tok73a"u8, startAt: 0);
+        IReadOnlyList<RegexMatch> overlapping = automaton.FindOverlappingAt("tok73a"u8, startAt: 0);
+
+        Assert.Equal(RegexEngineKind.AlternationSet, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(3, 5), earliest);
+        Assert.Equal(new RegexMatch(0, 6), allKind);
+        Assert.Contains(new RegexMatch(0, 5), overlapping);
+        Assert.Contains(new RegexMatch(0, 6), overlapping);
+    }
+
+    /// <summary>
     /// Verifies anchored delimiter-separated capture patterns report field captures.
     /// </summary>
     [Fact]

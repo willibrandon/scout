@@ -122,14 +122,27 @@ public sealed class RegexAutomaton
                 captureCount: 0);
         }
 
+        RegexAlternationSetEngine.TryCreate(tree.Pattern.Span, tree.Root, tree.CaptureCount, options, out RegexAlternationSetEngine? alternationSet);
+        if (alternationSet is not null)
+        {
+            return new RegexAutomaton(
+                RegexMetaEngine.CompileAlternationSet(
+                    alternationSet,
+                    options.Utf8,
+                    () => RegexNfaCompiler.Compile(tree.Root, options)),
+                startPredicate: null,
+                alternationSet.CanSynthesizeCaptures ? alternationSet : null,
+                tree.CaptureCount > 0 ? tree.Pattern : default,
+                tree.CaptureCount > 0 ? tree.Root : null,
+                options,
+                capturePrefilter: null,
+                tree.CaptureCount);
+        }
+
         RegexNfa nfa = RegexNfaCompiler.Compile(
             tree.Root,
             options);
         var prefilter = RegexPrefilter.Compile(tree.Root, options);
-        RegexAlternationSetEngine.TryCreate(tree.Pattern.Span, tree.Root, tree.CaptureCount, options, out RegexAlternationSetEngine? alternationSet);
-        RegexAlternationSetEngine? syntheticCaptureAlternationSet = alternationSet?.CanSynthesizeCaptures == true
-            ? alternationSet
-            : null;
 
         RegexSimpleSequenceEngine.TryCreate(tree.Root, options, out RegexSimpleSequenceEngine? simpleSequence);
         RegexLineContainsEngine.TryCreate(tree.Root, options, out RegexLineContainsEngine? lineContains);
@@ -140,9 +153,20 @@ public sealed class RegexAutomaton
         RegexStartPredicate.TryCreate(tree.Root, options, out RegexStartPredicate? startPredicate);
 
         return new RegexAutomaton(
-            RegexMetaEngine.Compile(nfa, prefilter, dfaSizeLimit, literalSet, alternationSet, simpleSequence, lineContains, dotStarClassFallback, asciiFastNfa, scalarRun, asciiWordBoundary),
+            RegexMetaEngine.Compile(
+                nfa,
+                prefilter,
+                dfaSizeLimit,
+                literalSet,
+                alternationSet: null,
+                simpleSequence: simpleSequence,
+                lineContains: lineContains,
+                dotStarClassFallback: dotStarClassFallback,
+                asciiFastNfa: asciiFastNfa,
+                scalarRun: scalarRun,
+                asciiWordBoundary: asciiWordBoundary),
             startPredicate,
-            syntheticCaptureAlternationSet,
+            syntheticCaptureAlternationSet: null,
             tree.CaptureCount > 0 ? tree.Pattern : default,
             tree.CaptureCount > 0 ? tree.Root : null,
             options,
@@ -318,7 +342,8 @@ public sealed class RegexAutomaton
                 if (syntheticCaptureAlternationSet is null)
                 {
                     RegexNfa captureNfa = RegexNfaCompiler.CompileCaptures(captureRoot, captureOptions, captureCount);
-                    captureEngine = new RegexCaptureEngine(captureNfa, capturePrefilter);
+                    RegexPrefilter? effectiveCapturePrefilter = capturePrefilter ?? RegexPrefilter.Compile(captureRoot, captureOptions);
+                    captureEngine = new RegexCaptureEngine(captureNfa, effectiveCapturePrefilter);
                 }
             }
 

@@ -25,7 +25,9 @@ internal sealed class RegexMetaEngine
     private readonly RegexScalarRunEngine? scalarRun;
     private readonly RegexAsciiWordBoundaryEngine? asciiWordBoundary;
     private readonly RegexPrefilter? prefilter;
-    private readonly RegexNfa? nfa;
+    private readonly Func<RegexNfa>? nfaFactory;
+    private readonly object nfaInitializationLock = new();
+    private RegexNfa? nfa;
     private readonly bool utf8;
 
     private RegexMetaEngine(
@@ -46,10 +48,12 @@ internal sealed class RegexMetaEngine
         bool utf8,
         RegexLazyDfa? asciiFastDfa = null,
         RegexScalarRunEngine? scalarRun = null,
-        RegexAsciiWordBoundaryEngine? asciiWordBoundary = null)
+        RegexAsciiWordBoundaryEngine? asciiWordBoundary = null,
+        Func<RegexNfa>? nfaFactory = null)
     {
         Kind = kind;
         this.nfa = nfa;
+        this.nfaFactory = nfaFactory;
         this.pikeVm = pikeVm;
         this.boundedBacktracker = boundedBacktracker;
         this.onePassDfa = onePassDfa;
@@ -90,6 +94,31 @@ internal sealed class RegexMetaEngine
             dotStarClassFallback: null,
             prefilter: null,
             utf8);
+    }
+
+    public static RegexMetaEngine CompileAlternationSet(
+        RegexAlternationSetEngine alternationSet,
+        bool utf8,
+        Func<RegexNfa>? fallbackNfaFactory)
+    {
+        ArgumentNullException.ThrowIfNull(alternationSet);
+        return new RegexMetaEngine(
+            RegexEngineKind.AlternationSet,
+            nfa: null,
+            pikeVm: null,
+            boundedBacktracker: null,
+            onePassDfa: null,
+            denseDfa: null,
+            sparseDfa: null,
+            lazyDfa: null,
+            literalSet: null,
+            alternationSet: alternationSet,
+            simpleSequence: null,
+            lineContains: null,
+            dotStarClassFallback: null,
+            prefilter: null,
+            utf8,
+            nfaFactory: fallbackNfaFactory);
     }
 
     public static RegexMetaEngine Compile(RegexNfa nfa)
@@ -679,6 +708,24 @@ internal sealed class RegexMetaEngine
         return alternationSet?.FindSyntheticCaptures(haystack, Math.Clamp(startAt, 0, haystack.Length));
     }
 
+    private RegexNfa GetNfa()
+    {
+        if (nfa is not null)
+        {
+            return nfa;
+        }
+
+        if (nfaFactory is null)
+        {
+            throw new InvalidOperationException("The selected regex engine does not have a fallback NFA.");
+        }
+
+        lock (nfaInitializationLock)
+        {
+            return nfa ??= nfaFactory();
+        }
+    }
+
     public RegexMatch? FindEarliest(ReadOnlySpan<byte> haystack, int startAt)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
@@ -687,7 +734,7 @@ internal sealed class RegexMetaEngine
             return literalSet.FindEarliest(haystack, startOffset);
         }
 
-        RegexNfa activeNfa = nfa!;
+        RegexNfa activeNfa = GetNfa();
         var earliestPikeVm = new PikeVm(activeNfa);
         for (int start = startOffset; start <= haystack.Length; start++)
         {
@@ -713,7 +760,7 @@ internal sealed class RegexMetaEngine
             return literalSet.FindAllKindAt(haystack, startOffset);
         }
 
-        RegexNfa activeNfa = nfa!;
+        RegexNfa activeNfa = GetNfa();
         if (activeNfa.Utf8 && !RegexByteClass.IsUtf8Boundary(haystack, startOffset))
         {
             return null;
@@ -733,7 +780,7 @@ internal sealed class RegexMetaEngine
             return literalSet.FindOverlappingAt(haystack, startOffset);
         }
 
-        RegexNfa activeNfa = nfa!;
+        RegexNfa activeNfa = GetNfa();
         if (activeNfa.Utf8 && !RegexByteClass.IsUtf8Boundary(haystack, startOffset))
         {
             return [];

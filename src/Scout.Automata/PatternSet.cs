@@ -50,14 +50,14 @@ public sealed class PatternSet
         for (int index = 0; index < patterns.Count; index++)
         {
             byte[] pattern = patterns[index] ?? throw new ArgumentNullException(nameof(patterns));
-            if (TryGetLiteralPattern(pattern, out byte[] literal) &&
+            RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
+            if (TryGetLiteralPattern(tree.Root, out byte[] literal) &&
                 literal.Length != 0 &&
                 TryPrepareLiteralPatterns(literal, options, out _))
             {
                 continue;
             }
 
-            RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
             if (RegexPrefilter.TryCollectRequiredLiteralSet(tree.Root, options, out byte[][] requiredLiterals) &&
                 requiredLiterals.Length > 0 &&
                 RegexPrefilter.TryPrepareRequiredLiteralSet(requiredLiterals, options, out _))
@@ -125,7 +125,8 @@ public sealed class PatternSet
         for (int index = 0; index < patterns.Count; index++)
         {
             byte[] pattern = patterns[index] ?? throw new ArgumentNullException(nameof(patterns));
-            if (TryGetLiteralPattern(pattern, out byte[] literal) &&
+            RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
+            if (TryGetLiteralPattern(tree.Root, out byte[] literal) &&
                 literal.Length != 0 &&
                 TryPrepareLiteralPatterns(literal, options, out byte[][] preparedLiteralPatterns))
             {
@@ -138,7 +139,6 @@ public sealed class PatternSet
                 continue;
             }
 
-            RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
             if (RegexPrefilter.TryCollectRequiredLiteralSet(tree.Root, options, out byte[][] requiredLiterals) &&
                 requiredLiterals.Length > 0 &&
                 RegexPrefilter.TryPrepareRequiredLiteralSet(requiredLiterals, options, out byte[][] preparedLiterals))
@@ -488,11 +488,10 @@ public sealed class PatternSet
         return candidate.PatternId < current.PatternId;
     }
 
-    private static bool TryGetLiteralPattern(byte[] pattern, out byte[] literal)
+    private static bool TryGetLiteralPattern(RegexSyntaxNode root, out byte[] literal)
     {
-        RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
         var bytes = new List<byte>();
-        if (TryAppendLiteralPattern(tree.Root, bytes))
+        if (TryAppendLiteralPattern(root, bytes))
         {
             literal = bytes.ToArray();
             return true;
