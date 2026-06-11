@@ -8,17 +8,20 @@ public sealed class RegexAutomaton
         private readonly RegexMetaEngine engine;
         private readonly RegexCaptureEngine captureEngine;
         private readonly RegexDelimitedCaptureEngine? delimitedCaptureEngine;
+        private readonly RegexStructuredLogCaptureEngine? structuredLogCaptureEngine;
         private readonly RegexStartPredicate? startPredicate;
 
         private RegexAutomaton(
             RegexMetaEngine engine,
             RegexCaptureEngine captureEngine,
             RegexDelimitedCaptureEngine? delimitedCaptureEngine,
+            RegexStructuredLogCaptureEngine? structuredLogCaptureEngine,
             RegexStartPredicate? startPredicate)
         {
             this.engine = engine;
             this.captureEngine = captureEngine;
             this.delimitedCaptureEngine = delimitedCaptureEngine;
+            this.structuredLogCaptureEngine = structuredLogCaptureEngine;
             this.startPredicate = startPredicate;
         }
 
@@ -82,16 +85,20 @@ public sealed class RegexAutomaton
         RegexDotStarClassFallbackEngine.TryCreate(tree.Root, options, out RegexDotStarClassFallbackEngine? dotStarClassFallback);
         RegexScalarRunEngine.TryCreate(tree.Root, options, out RegexScalarRunEngine? scalarRun);
         RegexDelimitedCaptureEngine.TryCreate(tree.Root, options, tree.CaptureCount, out RegexDelimitedCaptureEngine? delimitedCaptureEngine);
+        RegexStructuredLogCaptureEngine.TryCreate(tree.Root, options, tree.CaptureCount, out RegexStructuredLogCaptureEngine? structuredLogCaptureEngine);
         RegexAsciiFastPath.TryCompileNfa(pattern, tree.Root, options, out RegexNfa? asciiFastNfa);
         RegexStartPredicate.TryCreate(tree.Root, options, out RegexStartPredicate? startPredicate);
         return new RegexAutomaton(
             RegexMetaEngine.Compile(nfa, prefilter, dfaSizeLimit, literalSet, alternationSet, simpleSequence, lineContains, dotStarClassFallback, asciiFastNfa, scalarRun),
             new RegexCaptureEngine(captureNfa, prefilter),
             delimitedCaptureEngine,
+            structuredLogCaptureEngine,
             startPredicate);
     }
 
     internal RegexPrefilterKind PrefilterKind => engine.PrefilterKind;
+
+    internal bool UsesStructuredLogCaptureEngine => structuredLogCaptureEngine is not null;
 
     /// <summary>
     /// Finds the first match in a haystack.
@@ -205,6 +212,15 @@ public sealed class RegexAutomaton
     /// <returns>The first capture result, or <see langword="null" /> when no match exists.</returns>
     public RegexCaptures? FindCaptures(ReadOnlySpan<byte> haystack, int startAt = 0)
     {
+        if (structuredLogCaptureEngine is not null)
+        {
+            RegexCaptures? structuredCaptures = RegexStructuredLogCaptureEngine.MatchAt(haystack, Math.Clamp(startAt, 0, haystack.Length));
+            if (structuredCaptures is not null)
+            {
+                return structuredCaptures;
+            }
+        }
+
         RegexCaptures? delimitedCaptures = delimitedCaptureEngine?.MatchAt(haystack, Math.Clamp(startAt, 0, haystack.Length));
         if (delimitedCaptures is not null)
         {

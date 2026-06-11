@@ -185,6 +185,62 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies the rebar unstructured log pattern uses direct structural capture extraction.
+    /// </summary>
+    [Fact]
+    public void StructuredLogCaptureEngineReportsRebarLogCaptures()
+    {
+        var automaton = RegexAutomaton.Compile(
+            RebarUnstructuredLogPattern(),
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] line = "2022/06/17 06:25:22 I4: [17936:140245395805952:(17998)]: (8fb074fc-c766-498b-b224-8b660126b2c0): Searching for query 'dummy query' {/src/master/mastersearchattrs.cc:MasterSearchAttributes():40}"u8.ToArray();
+
+        RegexCaptures? captures = automaton.FindCaptures(line);
+
+        Assert.True(automaton.UsesStructuredLogCaptureEngine);
+        Assert.NotNull(captures);
+        Assert.Equal(new RegexMatch(0, line.Length), captures.Match);
+        Assert.Equal(6, captures.GroupCount);
+        Assert.Equal(6, captures.ParticipatingCount());
+        AssertGroupText(captures, line, 1, "2022/06/17 06:25:22");
+        AssertGroupText(captures, line, 2, "I");
+        AssertGroupText(captures, line, 3, "[17936:140245395805952:(17998)]: (8fb074fc-c766-498b-b224-8b660126b2c0): ");
+        AssertGroupText(captures, line, 4, "Searching for query 'dummy query'");
+        AssertGroupText(captures, line, 5, "/src/master/mastersearchattrs.cc:MasterSearchAttributes():40");
+    }
+
+    /// <summary>
+    /// Verifies the structured log capture path keeps earlier braces in the message body.
+    /// </summary>
+    [Fact]
+    public void StructuredLogCaptureEngineUsesFinalLocationBlock()
+    {
+        var automaton = RegexAutomaton.Compile(
+            RebarUnstructuredLogPattern(),
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] line = "2022/06/17 06:25:22 I4: msg {bad} tail {/loc}"u8.ToArray();
+
+        RegexCaptures? captures = automaton.FindCaptures(line);
+
+        Assert.True(automaton.UsesStructuredLogCaptureEngine);
+        Assert.NotNull(captures);
+        Assert.Equal(6, captures.ParticipatingCount());
+        AssertGroupText(captures, line, 1, "2022/06/17 06:25:22");
+        AssertGroupText(captures, line, 2, "I");
+        AssertGroupText(captures, line, 3, "");
+        AssertGroupText(captures, line, 4, "msg {bad} tail");
+        AssertGroupText(captures, line, 5, "/loc");
+    }
+
+    /// <summary>
     /// Verifies nullable leading expressions do not use a literal prefilter.
     /// </summary>
     [Fact]
@@ -1179,6 +1235,21 @@ public sealed class RegexAutomatonTests
             .GetField("engine", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
             .GetValue(automaton)!)
             .Kind;
+    }
+
+    private static byte[] RebarUnstructuredLogPattern()
+    {
+        return @"^([^ ]+ [^ ]+) ([DIWEF])[1234]: ((?:(?:\[[^\]]*?\]|\([^\)]*?\)): )*)(.*?) \{([^\}]*)\}$"u8.ToArray();
+    }
+
+    private static void AssertGroupText(RegexCaptures captures, byte[] haystack, int groupIndex, string expected)
+    {
+        RegexMatch? group = captures.GetGroup(groupIndex);
+
+        Assert.NotNull(group);
+        Assert.Equal(
+            expected,
+            System.Text.Encoding.ASCII.GetString(haystack.AsSpan(group.Value.Start, group.Value.Length)));
     }
 
     private static RegexNfa CompileNfa(ReadOnlySpan<byte> pattern)
