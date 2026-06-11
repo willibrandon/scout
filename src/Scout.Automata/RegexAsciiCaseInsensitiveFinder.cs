@@ -88,7 +88,7 @@ internal sealed class RegexAsciiCaseInsensitiveFinder
         return normalized;
     }
 
-    private static int SelectAnchorIndex(ReadOnlySpan<byte> value)
+    internal static int SelectAnchorIndex(ReadOnlySpan<byte> value)
     {
         int bestIndex = 0;
         int bestScore = AnchorScore(value[0]);
@@ -147,20 +147,20 @@ internal sealed class RegexAsciiCaseInsensitiveFinder
         };
     }
 
-    private static byte FoldAscii(byte value)
+    internal static byte FoldAscii(byte value)
     {
         return value is >= (byte)'A' and <= (byte)'Z'
             ? (byte)(value + 0x20)
             : value;
     }
 
-    private static bool IsAsciiCased(byte value)
+    internal static bool IsAsciiCased(byte value)
     {
         return value is >= (byte)'A' and <= (byte)'Z'
             or >= (byte)'a' and <= (byte)'z';
     }
 
-    private static byte ToggleAsciiCase(byte value)
+    internal static byte ToggleAsciiCase(byte value)
     {
         return value is >= (byte)'a' and <= (byte)'z'
             ? (byte)(value - 0x20)

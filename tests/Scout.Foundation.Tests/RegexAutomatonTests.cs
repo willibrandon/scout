@@ -74,6 +74,8 @@ public sealed class RegexAutomatonTests
         Assert.Equal(6, shorterFirstAutomaton.SumMatchSpans("foo foobar"u8));
         Assert.Equal(1, shorterFirstAutomaton.CountMatches("foo foobar"u8, startAt: 4));
         Assert.Equal(3, shorterFirstAutomaton.SumMatchSpans("foo foobar"u8, startAt: 4));
+        Assert.Equal(2, caseInsensitiveAutomaton.CountMatches("sherlock holmes JOHN WATSON"u8));
+        Assert.Equal(26, caseInsensitiveAutomaton.SumMatchSpans("sherlock holmes JOHN WATSON"u8));
 
         RegexCaptures? captures = shorterFirstAutomaton.FindCaptures("xxfoo"u8);
         Assert.NotNull(captures);

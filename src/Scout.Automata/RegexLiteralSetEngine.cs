@@ -19,6 +19,7 @@ internal sealed class RegexLiteralSetEngine
     private readonly int maxLiteralLength;
     private readonly MemmemFinder? singleLiteralFinder;
     private readonly RegexAsciiCaseInsensitiveFinder? singleAsciiCaseInsensitiveFinder;
+    private readonly RegexAsciiCaseInsensitiveLiteralSetScanner? asciiCaseInsensitiveScanner;
     private readonly RegexLiteralPrefixScanner? prefixScanner;
 
     private RegexLiteralSetEngine(
@@ -44,7 +45,7 @@ internal sealed class RegexLiteralSetEngine
             this.searchPatternLiteralIds[index] = searchPatternLiteralIds[index];
         }
 
-        if (searchPatterns.Count == 0)
+        if (this.literals.Length == 1 && searchPatterns.Count == 0)
         {
             singleLiteralFinder = new MemmemFinder(this.literals[0]);
             return;
@@ -55,6 +56,14 @@ internal sealed class RegexLiteralSetEngine
             !unicodeCaseInsensitive)
         {
             singleAsciiCaseInsensitiveFinder = new RegexAsciiCaseInsensitiveFinder(this.literals[0]);
+            return;
+        }
+
+        if (this.literals.Length > 1 &&
+            asciiCaseInsensitive &&
+            !unicodeCaseInsensitive)
+        {
+            asciiCaseInsensitiveScanner = new RegexAsciiCaseInsensitiveLiteralSetScanner(this.literals);
             return;
         }
 
@@ -207,13 +216,20 @@ internal sealed class RegexLiteralSetEngine
         bool unicodeCaseInsensitive = asciiCaseInsensitive == true && literalUnicodeClasses == true;
         bool asciiOnlyCaseInsensitive = asciiCaseInsensitive == true && !unicodeCaseInsensitive;
         bool useAho = ShouldUseAho(literals.Count, asciiOnlyCaseInsensitive, unicodeCaseInsensitive);
-        if (!TryBuildSearchPatterns(
-            literals,
-            asciiOnlyCaseInsensitive,
-            unicodeCaseInsensitive,
-            useAho,
-            out byte[][] searchPatterns,
-            out int[] searchPatternLiteralIds))
+        byte[][] searchPatterns;
+        int[] searchPatternLiteralIds;
+        if (asciiOnlyCaseInsensitive && literals.Count > 1)
+        {
+            searchPatterns = [];
+            searchPatternLiteralIds = [];
+        }
+        else if (!TryBuildSearchPatterns(
+                     literals,
+                     asciiOnlyCaseInsensitive,
+                     unicodeCaseInsensitive,
+                     useAho,
+                     out searchPatterns,
+                     out searchPatternLiteralIds))
         {
             return false;
         }
@@ -245,6 +261,11 @@ internal sealed class RegexLiteralSetEngine
             return offset < 0
                 ? null
                 : new RegexMatch(startOffset + offset, literals[0].Length);
+        }
+
+        if (asciiCaseInsensitiveScanner is not null)
+        {
+            return asciiCaseInsensitiveScanner.Find(haystack, startOffset)?.Match;
         }
 
         if (automaton is not null)
@@ -336,6 +357,11 @@ internal sealed class RegexLiteralSetEngine
         if (singleAsciiCaseInsensitiveFinder is not null)
         {
             return CountOrSumSingleAsciiCaseInsensitiveLiteral(haystack, startOffset, sumSpans);
+        }
+
+        if (asciiCaseInsensitiveScanner is not null)
+        {
+            return CountOrSumAsciiCaseInsensitiveLiteralSet(haystack, startOffset, sumSpans);
         }
 
         if (automaton is not null)
@@ -463,6 +489,26 @@ internal sealed class RegexLiteralSetEngine
 
             total += sumSpans ? length : 1;
             position += offset + length;
+        }
+
+        return total;
+    }
+
+    private long CountOrSumAsciiCaseInsensitiveLiteralSet(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
+    {
+        long total = 0;
+        int position = startOffset;
+        while (position <= haystack.Length)
+        {
+            RegexLiteralSetCandidate? candidate = asciiCaseInsensitiveScanner!.Find(haystack, position);
+            if (!candidate.HasValue)
+            {
+                return total;
+            }
+
+            RegexMatch match = candidate.Value.Match;
+            total += sumSpans ? match.Length : 1;
+            position = match.End;
         }
 
         return total;
