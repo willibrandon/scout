@@ -52,19 +52,81 @@ public sealed class RegexAutomatonTests
     [Fact]
     public void UsesLiteralSetEngineForPureLiteralAlternations()
     {
-        RegexMatch? shorterFirst = RegexAutomaton.Compile("foo|foobar"u8).Find("xxfoobar"u8);
-        RegexMatch? longerFirst = RegexAutomaton.Compile("foobar|foo"u8).Find("xxfoobar"u8);
-        RegexMatch? caseInsensitive = RegexAutomaton.Compile(
+        var shorterFirstAutomaton = RegexAutomaton.Compile("foo|foobar"u8);
+        var longerFirstAutomaton = RegexAutomaton.Compile("foobar|foo"u8);
+        var caseInsensitiveAutomaton = RegexAutomaton.Compile(
             "Sherlock Holmes|John Watson"u8,
             caseInsensitive: true,
             multiLine: false,
             dotMatchesNewline: false,
-            unicodeClasses: false)
-            .Find("xxjohn watson"u8);
+            unicodeClasses: false);
+        RegexMatch? shorterFirst = shorterFirstAutomaton.Find("xxfoobar"u8);
+        RegexMatch? longerFirst = longerFirstAutomaton.Find("xxfoobar"u8);
+        RegexMatch? caseInsensitive = caseInsensitiveAutomaton.Find("xxjohn watson"u8);
 
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(shorterFirstAutomaton));
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(longerFirstAutomaton));
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(caseInsensitiveAutomaton));
         Assert.Equal(new RegexMatch(2, 3), shorterFirst);
         Assert.Equal(new RegexMatch(2, 6), longerFirst);
         Assert.Equal(new RegexMatch(2, 11), caseInsensitive);
+        Assert.Equal(2, shorterFirstAutomaton.CountMatches("foo foobar"u8));
+        Assert.Equal(6, shorterFirstAutomaton.SumMatchSpans("foo foobar"u8));
+        Assert.Equal(1, shorterFirstAutomaton.CountMatches("foo foobar"u8, startAt: 4));
+        Assert.Equal(3, shorterFirstAutomaton.SumMatchSpans("foo foobar"u8, startAt: 4));
+    }
+
+    /// <summary>
+    /// Verifies Unicode-aware literal-set execution uses simple case folding while preserving haystack span lengths.
+    /// </summary>
+    [Fact]
+    public void LiteralSetCountsUnicodeCaseInsensitiveLiterals()
+    {
+        var automaton = RegexAutomaton.Compile(
+            "k|Шерлок Холмс"u8,
+            caseInsensitive: true,
+            multiLine: false,
+            dotMatchesNewline: false,
+            unicodeClasses: true);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("xx\u212A yy шерлок холмс");
+
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(2, 3), automaton.Find(haystack));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(26, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
+    /// Verifies line-wide dot-star contains patterns use a linear count/span path.
+    /// </summary>
+    [Fact]
+    public void LineContainsEngineCountsLineSpans()
+    {
+        var automaton = RegexAutomaton.Compile(".*.*=.*"u8);
+        byte[] haystack = "abc\nx=123\nnope\nz=9"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.LineContains, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 2), automaton.Find("=x"u8, startAt: 0));
+        Assert.Equal(new RegexMatch(4, 5), automaton.Find(haystack, startAt: 0));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(8, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
+    /// Verifies dot-star/class fallback alternations avoid quadratic all-match iteration.
+    /// </summary>
+    [Fact]
+    public void DotStarClassFallbackCountsWithoutSuffixRescans()
+    {
+        var automaton = RegexAutomaton.Compile(".*[^A-Z]|[A-Z]"u8);
+
+        Assert.Equal(RegexEngineKind.DotStarClassFallback, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 1), automaton.Find("AAAA"u8));
+        Assert.Equal(4, automaton.CountMatches("AAAA"u8));
+        Assert.Equal(4, automaton.SumMatchSpans("AAAA"u8));
+        Assert.Equal(new RegexMatch(0, 3), automaton.Find("AA-A"u8));
+        Assert.Equal(2, automaton.CountMatches("AA-A"u8));
+        Assert.Equal(4, automaton.SumMatchSpans("AA-A"u8));
     }
 
     /// <summary>

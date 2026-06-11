@@ -5,6 +5,8 @@ internal enum RegexEngineKind
     LiteralSet,
     AlternationSet,
     SimpleSequence,
+    LineContains,
+    DotStarClassFallback,
     PikeVm,
     BoundedBacktracker,
     OnePassDfa,

@@ -20,6 +20,8 @@ internal sealed class RegexMetaEngine
     private readonly RegexLiteralSetEngine? literalSet;
     private readonly RegexAlternationSetEngine? alternationSet;
     private readonly RegexSimpleSequenceEngine? simpleSequence;
+    private readonly RegexLineContainsEngine? lineContains;
+    private readonly RegexDotStarClassFallbackEngine? dotStarClassFallback;
     private readonly RegexScalarRunEngine? scalarRun;
     private readonly RegexPrefilter? prefilter;
     private readonly RegexNfa nfa;
@@ -37,6 +39,8 @@ internal sealed class RegexMetaEngine
         RegexLiteralSetEngine? literalSet,
         RegexAlternationSetEngine? alternationSet,
         RegexSimpleSequenceEngine? simpleSequence,
+        RegexLineContainsEngine? lineContains,
+        RegexDotStarClassFallbackEngine? dotStarClassFallback,
         RegexPrefilter? prefilter,
         bool utf8,
         RegexLazyDfa? asciiFastDfa = null,
@@ -54,6 +58,8 @@ internal sealed class RegexMetaEngine
         this.literalSet = literalSet;
         this.alternationSet = alternationSet;
         this.simpleSequence = simpleSequence;
+        this.lineContains = lineContains;
+        this.dotStarClassFallback = dotStarClassFallback;
         this.scalarRun = scalarRun;
         this.prefilter = prefilter;
         this.utf8 = utf8;
@@ -85,6 +91,8 @@ internal sealed class RegexMetaEngine
         RegexLiteralSetEngine? literalSet,
         RegexAlternationSetEngine? alternationSet,
         RegexSimpleSequenceEngine? simpleSequence = null,
+        RegexLineContainsEngine? lineContains = null,
+        RegexDotStarClassFallbackEngine? dotStarClassFallback = null,
         RegexNfa? asciiFastNfa = null,
         RegexScalarRunEngine? scalarRun = null)
     {
@@ -103,6 +111,8 @@ internal sealed class RegexMetaEngine
                 literalSet,
                 alternationSet: null,
                 simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
                 prefilter,
                 nfa.Utf8);
         }
@@ -121,6 +131,8 @@ internal sealed class RegexMetaEngine
                 literalSet: null,
                 alternationSet,
                 simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
                 prefilter,
                 nfa.Utf8);
         }
@@ -139,6 +151,48 @@ internal sealed class RegexMetaEngine
                 literalSet: null,
                 alternationSet: null,
                 simpleSequence,
+                lineContains: null,
+                dotStarClassFallback: null,
+                prefilter,
+                nfa.Utf8);
+        }
+
+        if (lineContains is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.LineContains,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                simpleSequence: null,
+                lineContains,
+                dotStarClassFallback: null,
+                prefilter,
+                nfa.Utf8);
+        }
+
+        if (dotStarClassFallback is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.DotStarClassFallback,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback,
                 prefilter,
                 nfa.Utf8);
         }
@@ -157,6 +211,8 @@ internal sealed class RegexMetaEngine
                 literalSet: null,
                 alternationSet: null,
                 simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
                 prefilter,
                 nfa.Utf8,
                 asciiFastDfa: null,
@@ -179,6 +235,8 @@ internal sealed class RegexMetaEngine
                     literalSet: null,
                     alternationSet: null,
                     simpleSequence: null,
+                    lineContains: null,
+                    dotStarClassFallback: null,
                     prefilter,
                     nfa.Utf8);
             }
@@ -197,6 +255,8 @@ internal sealed class RegexMetaEngine
                     literalSet: null,
                     alternationSet: null,
                     simpleSequence: null,
+                    lineContains: null,
+                    dotStarClassFallback: null,
                     prefilter,
                     nfa.Utf8);
             }
@@ -214,6 +274,8 @@ internal sealed class RegexMetaEngine
                 literalSet: null,
                 alternationSet: null,
                 simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
                 prefilter,
                 nfa.Utf8,
                 asciiFastDfa);
@@ -234,6 +296,8 @@ internal sealed class RegexMetaEngine
                 literalSet: null,
                 alternationSet: null,
                 simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
                 prefilter,
                 nfa.Utf8);
         }
@@ -253,6 +317,8 @@ internal sealed class RegexMetaEngine
                 literalSet: null,
                 alternationSet: null,
                 simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
                 prefilter,
                 nfa.Utf8);
         }
@@ -271,6 +337,8 @@ internal sealed class RegexMetaEngine
                 literalSet: null,
                 alternationSet: null,
                 simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
                 prefilter,
                 nfa.Utf8);
         }
@@ -287,6 +355,8 @@ internal sealed class RegexMetaEngine
             literalSet,
             alternationSet: null,
             simpleSequence: null,
+            lineContains: null,
+            dotStarClassFallback: null,
             prefilter,
             nfa.Utf8);
     }
@@ -323,6 +393,16 @@ internal sealed class RegexMetaEngine
         if (simpleSequence is not null && prefilter is null)
         {
             return simpleSequence.Find(haystack, startOffset);
+        }
+
+        if (lineContains is not null && prefilter is null)
+        {
+            return lineContains.Find(haystack, startOffset);
+        }
+
+        if (dotStarClassFallback is not null && prefilter is null)
+        {
+            return dotStarClassFallback.Find(haystack, startOffset);
         }
 
         if (scalarRun is not null && prefilter is null)
@@ -387,9 +467,24 @@ internal sealed class RegexMetaEngine
 
     public long CountMatches(ReadOnlySpan<byte> haystack, int startAt, RegexStartPredicate? startPredicate = null)
     {
+        if (literalSet is not null)
+        {
+            return literalSet.CountMatches(haystack, startAt);
+        }
+
         if (alternationSet is not null)
         {
             return alternationSet.CountMatches(haystack, startAt);
+        }
+
+        if (lineContains is not null)
+        {
+            return lineContains.CountMatches(haystack, startAt);
+        }
+
+        if (dotStarClassFallback is not null)
+        {
+            return dotStarClassFallback.CountMatches(haystack, startAt);
         }
 
         if (TryCountNonOverlapping(haystack, startAt, out long count, out _))
@@ -402,9 +497,24 @@ internal sealed class RegexMetaEngine
 
     public long SumMatchSpans(ReadOnlySpan<byte> haystack, int startAt, RegexStartPredicate? startPredicate = null)
     {
+        if (literalSet is not null)
+        {
+            return literalSet.SumMatchSpans(haystack, startAt);
+        }
+
         if (alternationSet is not null)
         {
             return alternationSet.SumMatchSpans(haystack, startAt);
+        }
+
+        if (lineContains is not null)
+        {
+            return lineContains.SumMatchSpans(haystack, startAt);
+        }
+
+        if (dotStarClassFallback is not null)
+        {
+            return dotStarClassFallback.SumMatchSpans(haystack, startAt);
         }
 
         if (TryCountNonOverlapping(haystack, startAt, out _, out long spanSum))
@@ -480,6 +590,16 @@ internal sealed class RegexMetaEngine
         if (alternationSet is not null)
         {
             return alternationSet.MatchAt(haystack, startOffset);
+        }
+
+        if (lineContains is not null)
+        {
+            return lineContains.MatchAt(haystack, startOffset);
+        }
+
+        if (dotStarClassFallback is not null)
+        {
+            return dotStarClassFallback.MatchAt(haystack, startOffset);
         }
 
         return TryMatchAt(haystack, startOffset, out int length)

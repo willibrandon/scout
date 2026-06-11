@@ -67,6 +67,16 @@ internal sealed class PatternSetLiteralAccelerator
         return automaton.Find(haystack).HasValue;
     }
 
+    public long CountMatches(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        return CountOrSumMatches(haystack, startAt, sumSpans: false);
+    }
+
+    public long SumMatchSpans(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        return CountOrSumMatches(haystack, startAt, sumSpans: true);
+    }
+
     public void MarkMatchingPatternIds(ReadOnlySpan<byte> haystack, bool[] matches)
     {
         AhoCorasickOverlappingEnumerator literals = automaton.EnumerateOverlapping(haystack);
@@ -74,5 +84,59 @@ internal sealed class PatternSetLiteralAccelerator
         {
             matches[patternIds[literals.Current.PatternId]] = true;
         }
+    }
+
+    private long CountOrSumMatches(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
+    {
+        var candidates = new List<PatternSetMatch>();
+        AhoCorasickOverlappingEnumerator matches = automaton.EnumerateOverlapping(haystack[startAt..]);
+        while (matches.MoveNext())
+        {
+            AhoCorasickMatch match = matches.Current;
+            AddCandidate(
+                candidates,
+                new PatternSetMatch(
+                    patternIds[match.PatternId],
+                    new RegexMatch(startAt + match.Start, match.Length)));
+        }
+
+        candidates.Sort(static (left, right) =>
+        {
+            int startComparison = left.Match.Start.CompareTo(right.Match.Start);
+            return startComparison != 0
+                ? startComparison
+                : left.PatternId.CompareTo(right.PatternId);
+        });
+
+        long total = 0;
+        int nextAllowedStart = startAt;
+        for (int index = 0; index < candidates.Count; index++)
+        {
+            RegexMatch match = candidates[index].Match;
+            if (match.Start < nextAllowedStart)
+            {
+                continue;
+            }
+
+            total += sumSpans ? match.Length : 1;
+            nextAllowedStart = match.End;
+        }
+
+        return total;
+    }
+
+    private static void AddCandidate(List<PatternSetMatch> candidates, PatternSetMatch candidate)
+    {
+        for (int index = 0; index < candidates.Count; index++)
+        {
+            PatternSetMatch existing = candidates[index];
+            if (existing.PatternId == candidate.PatternId &&
+                existing.Match.Equals(candidate.Match))
+            {
+                return;
+            }
+        }
+
+        candidates.Add(candidate);
     }
 }

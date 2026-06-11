@@ -162,6 +162,11 @@ public sealed class PatternSet
     public long CountMatches(ReadOnlySpan<byte> haystack, int startAt)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        if (literalAccelerator is not null && automata.Length == 0)
+        {
+            return literalAccelerator.CountMatches(haystack, startOffset);
+        }
+
         if (literalAccelerator is null &&
             requiredLiteralAccelerator is not null &&
             requiredLiteralAccelerator.CoversAllAutomata)
@@ -190,6 +195,12 @@ public sealed class PatternSet
     /// <returns>The sum of non-overlapping match lengths.</returns>
     public long SumMatchSpans(ReadOnlySpan<byte> haystack, int startAt)
     {
+        int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        if (literalAccelerator is not null && automata.Length == 0)
+        {
+            return literalAccelerator.SumMatchSpans(haystack, startOffset);
+        }
+
         return IterateNonOverlapping(haystack, startAt, sumSpans: true);
     }
 
