@@ -381,6 +381,19 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies the single required-literal finder preserves ASCII case-insensitive matching.
+    /// </summary>
+    [Fact]
+    public void SingleRequiredLiteralFinderMatchesAsciiCaseInsensitive()
+    {
+        var finder = new RegexAsciiCaseInsensitiveFinder("# noqa"u8);
+
+        Assert.Equal(3, finder.Find("xx # NOQA"u8));
+        Assert.Equal(3, finder.Find("xx # noqa"u8));
+        Assert.Equal(-1, finder.Find("xx # node"u8));
+    }
+
+    /// <summary>
     /// Verifies required-literal sets retain a proven maximum distance from the match start.
     /// </summary>
     [Fact]

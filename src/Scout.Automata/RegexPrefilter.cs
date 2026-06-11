@@ -18,7 +18,7 @@ internal sealed class RegexPrefilter
     private readonly RegexTeddyPrefilter? teddy;
     private readonly AhoCorasickAutomaton? ahoCorasick;
     private readonly RegexPrefixCandidateGate? candidateGate;
-    private readonly MemmemFinder? requiredLiteral;
+    private readonly RegexAsciiCaseInsensitiveFinder? requiredLiteral;
     private readonly AhoCorasickAutomaton? requiredLiterals;
     private readonly RegexTeddyPrefilter? requiredTeddy;
     private readonly RegexStartPredicate? startPredicate;
@@ -29,7 +29,7 @@ internal sealed class RegexPrefilter
         RegexTeddyPrefilter? teddy,
         AhoCorasickAutomaton? ahoCorasick,
         RegexPrefixCandidateGate? candidateGate = null,
-        MemmemFinder? requiredLiteral = null,
+        RegexAsciiCaseInsensitiveFinder? requiredLiteral = null,
         AhoCorasickAutomaton? requiredLiterals = null,
         RegexTeddyPrefilter? requiredTeddy = null,
         RegexStartPredicate? startPredicate = null)
@@ -205,6 +205,17 @@ internal sealed class RegexPrefilter
 
     private static RegexPrefilter CreateRequiredLiteralPrefilter(byte[][] preparedLiterals, RegexStartPredicate? startPredicate)
     {
+        if (preparedLiterals.Length == 1)
+        {
+            return new RegexPrefilter(
+                RegexPrefilterKind.RequiredLiteral,
+                memmem: null,
+                teddy: null,
+                ahoCorasick: null,
+                requiredLiteral: new RegexAsciiCaseInsensitiveFinder(preparedLiterals[0]),
+                startPredicate: startPredicate);
+        }
+
         if (RegexTeddyPrefilter.TryCreate(preparedLiterals, asciiCaseInsensitive: true, out RegexTeddyPrefilter? requiredTeddy))
         {
             return new RegexPrefilter(
