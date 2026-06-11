@@ -44,6 +44,40 @@ public sealed class PatternSet
 
     internal bool CanAccelerateEveryPattern => automata.Length == 0 || RequiredLiteralAcceleratorCoversAll;
 
+    internal static bool CanPreflightAccelerateEveryPattern(IReadOnlyList<byte[]> patterns, RegexCompileOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(patterns);
+        for (int index = 0; index < patterns.Count; index++)
+        {
+            byte[] pattern = patterns[index] ?? throw new ArgumentNullException(nameof(patterns));
+            if (TryGetLiteralPattern(pattern, out byte[] literal) &&
+                literal.Length != 0 &&
+                TryPrepareLiteralPatterns(literal, options, out _))
+            {
+                continue;
+            }
+
+            RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
+            if (RegexPrefilter.TryCollectRequiredLiteralSet(tree.Root, options, out byte[][] requiredLiterals) &&
+                requiredLiterals.Length > 0 &&
+                RegexPrefilter.TryPrepareRequiredLiteralSet(requiredLiterals, options, out _))
+            {
+                continue;
+            }
+
+            if (RegexPrefilter.TryFindRequiredLiteral(tree.Root, options, out byte[] requiredLiteral) &&
+                requiredLiteral.Length >= 2 &&
+                RegexPrefilter.TryPrepareRequiredLiteralSet([requiredLiteral], options, out _))
+            {
+                continue;
+            }
+
+            return false;
+        }
+
+        return true;
+    }
+
     /// <summary>
     /// Compiles an ordered set of byte regex patterns.
     /// </summary>

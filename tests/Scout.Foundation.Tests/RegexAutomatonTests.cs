@@ -298,6 +298,21 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies large alternations with an unaccelerated branch do not use per-branch set execution.
+    /// </summary>
+    [Fact]
+    public void AlternationSetRejectsUnacceleratedBranches()
+    {
+        string pattern = "(" + string.Join(
+            "|",
+            Enumerable.Range(0, 16).Select(static index => $"token{index}[0-9]").Append(@"\d+")) + ")";
+        var automaton = RegexAutomaton.Compile(System.Text.Encoding.ASCII.GetBytes(pattern));
+
+        Assert.NotEqual(RegexEngineKind.AlternationSet, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(3, 3), automaton.Find("xx 123 token3"u8));
+    }
+
+    /// <summary>
     /// Verifies grouped alternatives inside top-level alternatives are flattened for set execution.
     /// </summary>
     [Fact]

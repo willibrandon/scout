@@ -31,6 +31,11 @@ internal sealed class RegexAlternationSetEngine
             return false;
         }
 
+        if (!PatternSet.CanPreflightAccelerateEveryPattern(alternatives, options))
+        {
+            return false;
+        }
+
         var patternSet = PatternSet.Compile(
             alternatives,
             options.CaseInsensitive,

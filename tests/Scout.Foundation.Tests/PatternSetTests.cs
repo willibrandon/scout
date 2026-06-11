@@ -178,6 +178,34 @@ public sealed class PatternSetTests
     }
 
     /// <summary>
+    /// Verifies the alternation preflight accepts only sets that can avoid per-branch fallback search.
+    /// </summary>
+    [Fact]
+    public void PreflightRequiresEveryPatternToHaveAnAccelerator()
+    {
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            crlf: false,
+            lineTerminator: (byte)'\n',
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.True(PatternSet.CanPreflightAccelerateEveryPattern(
+        [
+            "literal"u8.ToArray(),
+            "token[0-9]+"u8.ToArray(),
+        ], options));
+        Assert.False(PatternSet.CanPreflightAccelerateEveryPattern(
+        [
+            "token[0-9]+"u8.ToArray(),
+            @"\d+"u8.ToArray(),
+        ], options));
+    }
+
+    /// <summary>
     /// Verifies bounded required-literal windows still include the furthest valid match start.
     /// </summary>
     [Fact]
