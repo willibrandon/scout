@@ -92,8 +92,11 @@ public sealed class RegexAutomatonTests
 
         Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(automaton));
         Assert.Equal(new RegexMatch(2, 3), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(9, 23), automaton.Find(haystack, startAt: 5));
         Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(1, automaton.CountMatches(haystack, startAt: 5));
         Assert.Equal(26, automaton.SumMatchSpans(haystack));
+        Assert.Equal(23, automaton.SumMatchSpans(haystack, startAt: 5));
     }
 
     /// <summary>
