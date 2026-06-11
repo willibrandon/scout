@@ -58,6 +58,25 @@ internal sealed class RegexStartPredicate
         return true;
     }
 
+    internal bool TryAddFirstBytes(bool[] bytes)
+    {
+        if (allowedBytes.Length == 0)
+        {
+            return false;
+        }
+
+        bool[] first = allowedBytes[0];
+        for (int index = 0; index <= byte.MaxValue; index++)
+        {
+            if (first[index])
+            {
+                bytes[index] = true;
+            }
+        }
+
+        return true;
+    }
+
     private static bool TryCreateFirstByte(RegexSyntaxNode root, RegexCompileOptions options, out RegexStartPredicate? predicate)
     {
         var bytes = new List<byte>();

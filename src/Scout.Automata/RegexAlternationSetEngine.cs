@@ -15,6 +15,8 @@ internal sealed class RegexAlternationSetEngine
         this.captureCount = captureCount;
     }
 
+    public bool CanSynthesizeCaptures => wholeBranchCaptureByPattern is not null;
+
     public static bool TryCreate(
         ReadOnlySpan<byte> pattern,
         RegexSyntaxNode root,
@@ -23,16 +25,13 @@ internal sealed class RegexAlternationSetEngine
         out RegexAlternationSetEngine? engine)
     {
         engine = null;
-        if (!TrySplitTopLevelAlternation(pattern, out byte[][] alternatives) ||
+        if (!TrySplitTopLevelAlternation(pattern, flattenNestedAlternatives: true, out byte[][] alternatives) ||
             alternatives.Length < MinimumAlternativeCount)
         {
             return false;
         }
 
-        int[]? wholeBranchCaptureByPattern = TryCreateWholeBranchCaptureMap(root, alternatives.Length, out int[]? map)
-            ? map
-            : null;
-        engine = new RegexAlternationSetEngine(PatternSet.Compile(
+        var patternSet = PatternSet.Compile(
             alternatives,
             options.CaseInsensitive,
             options.MultiLine,
@@ -40,7 +39,47 @@ internal sealed class RegexAlternationSetEngine
             options.Crlf,
             options.LineTerminator,
             options.Utf8,
-            options.UnicodeClasses),
+            options.UnicodeClasses);
+        if (!patternSet.UsesLiteralAccelerator && !patternSet.RequiredLiteralAcceleratorCoversAll)
+        {
+            return false;
+        }
+
+        int[]? wholeBranchCaptureByPattern = TryCreateWholeBranchCaptureMap(root, alternatives.Length, out int[]? map)
+            ? map
+            : null;
+        engine = new RegexAlternationSetEngine(
+            patternSet,
+            wholeBranchCaptureByPattern,
+            captureCount);
+        return true;
+    }
+
+    public static bool TryCreateSyntheticCaptures(
+        ReadOnlySpan<byte> pattern,
+        RegexSyntaxNode root,
+        int captureCount,
+        RegexCompileOptions options,
+        out RegexAlternationSetEngine? engine)
+    {
+        engine = null;
+        if (!TrySplitTopLevelAlternation(pattern, flattenNestedAlternatives: false, out byte[][] alternatives) ||
+            alternatives.Length < MinimumAlternativeCount ||
+            !TryCreateWholeBranchCaptureMap(root, alternatives.Length, out int[]? wholeBranchCaptureByPattern))
+        {
+            return false;
+        }
+
+        engine = new RegexAlternationSetEngine(
+            PatternSet.Compile(
+                alternatives,
+                options.CaseInsensitive,
+                options.MultiLine,
+                options.DotMatchesNewline,
+                options.Crlf,
+                options.LineTerminator,
+                options.Utf8,
+                options.UnicodeClasses),
             wholeBranchCaptureByPattern,
             captureCount);
         return true;
@@ -88,12 +127,15 @@ internal sealed class RegexAlternationSetEngine
         return new RegexCaptures(match.Value.Match, groups);
     }
 
-    private static bool TrySplitTopLevelAlternation(ReadOnlySpan<byte> pattern, out byte[][] alternatives)
+    private static bool TrySplitTopLevelAlternation(
+        ReadOnlySpan<byte> pattern,
+        bool flattenNestedAlternatives,
+        out byte[][] alternatives)
     {
         alternatives = [];
         if ((TryStripWholeEnclosingGroup(pattern, out ReadOnlySpan<byte> inner) ||
                 TryStripWholeExactOneRepetition(pattern, out inner)) &&
-            TrySplitTopLevelAlternation(inner, out alternatives))
+            TrySplitTopLevelAlternation(inner, flattenNestedAlternatives, out alternatives))
         {
             return true;
         }
@@ -101,6 +143,7 @@ internal sealed class RegexAlternationSetEngine
         var parts = new List<byte[]>();
         int start = 0;
         int depth = 0;
+        bool sawSeparator = false;
         bool inClass = false;
         bool escaped = false;
         for (int index = 0; index < pattern.Length; index++)
@@ -150,17 +193,23 @@ internal sealed class RegexAlternationSetEngine
                     depth--;
                     break;
                 case (byte)'|' when depth == 0:
-                    if (!AddAlternative(pattern[start..index], parts))
+                    if (!AddAlternative(pattern[start..index], parts, flattenNestedAlternatives))
                     {
                         return false;
                     }
 
+                    sawSeparator = true;
                     start = index + 1;
                     break;
             }
         }
 
-        if (depth != 0 || inClass || escaped || !AddAlternative(pattern[start..], parts))
+        if (!sawSeparator)
+        {
+            return false;
+        }
+
+        if (depth != 0 || inClass || escaped || !AddAlternative(pattern[start..], parts, flattenNestedAlternatives))
         {
             return false;
         }
@@ -308,11 +357,21 @@ internal sealed class RegexAlternationSetEngine
         return value is (byte)'i' or (byte)'m' or (byte)'s' or (byte)'U' or (byte)'x';
     }
 
-    private static bool AddAlternative(ReadOnlySpan<byte> alternative, List<byte[]> alternatives)
+    private static bool AddAlternative(
+        ReadOnlySpan<byte> alternative,
+        List<byte[]> alternatives,
+        bool flattenNestedAlternatives)
     {
         if (alternative.IsEmpty)
         {
             return false;
+        }
+
+        if (flattenNestedAlternatives &&
+            TrySplitTopLevelAlternation(alternative, flattenNestedAlternatives, out byte[][] nestedAlternatives))
+        {
+            alternatives.AddRange(nestedAlternatives);
+            return true;
         }
 
         alternatives.Add(alternative.ToArray());

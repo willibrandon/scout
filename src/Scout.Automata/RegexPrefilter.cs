@@ -20,6 +20,7 @@ internal sealed class RegexPrefilter
     private readonly RegexPrefixCandidateGate? candidateGate;
     private readonly MemmemFinder? requiredLiteral;
     private readonly AhoCorasickAutomaton? requiredLiterals;
+    private readonly RegexTeddyPrefilter? requiredTeddy;
     private readonly RegexStartPredicate? startPredicate;
 
     private RegexPrefilter(
@@ -30,6 +31,7 @@ internal sealed class RegexPrefilter
         RegexPrefixCandidateGate? candidateGate = null,
         MemmemFinder? requiredLiteral = null,
         AhoCorasickAutomaton? requiredLiterals = null,
+        RegexTeddyPrefilter? requiredTeddy = null,
         RegexStartPredicate? startPredicate = null)
     {
         Kind = kind;
@@ -39,12 +41,13 @@ internal sealed class RegexPrefilter
         this.candidateGate = candidateGate;
         this.requiredLiteral = requiredLiteral;
         this.requiredLiterals = requiredLiterals;
+        this.requiredTeddy = requiredTeddy;
         this.startPredicate = startPredicate;
     }
 
     public RegexPrefilterKind Kind { get; }
 
-    public bool UsesRequiredLiteralWindow => requiredLiteral is not null || requiredLiterals is not null;
+    public bool UsesRequiredLiteralWindow => requiredLiteral is not null || requiredLiterals is not null || requiredTeddy is not null;
 
     public int RequiredLiteralWindow => UsesRequiredLiteralWindow ? RequiredLiteralLookBehind : 0;
 
@@ -71,25 +74,13 @@ internal sealed class RegexPrefilter
                 requiredLiterals.Length > 0 &&
                 TryPrepareRequiredLiteralSet(requiredLiterals, options, out byte[][] preparedLiterals))
             {
-                return new RegexPrefilter(
-                    RegexPrefilterKind.RequiredLiteral,
-                    memmem: null,
-                    teddy: null,
-                    ahoCorasick: null,
-                    requiredLiterals: AhoCorasickAutomaton.Create(preparedLiterals, AhoCorasickMatchKind.LeftmostFirst, asciiCaseInsensitive: true),
-                    startPredicate: startPredicate);
+                return CreateRequiredLiteralPrefilter(preparedLiterals, startPredicate);
             }
 
             return TryFindRequiredLiteral(root, options, out byte[] required) &&
                 required.Length >= 3 &&
                 TryPrepareRequiredLiteralSet([required], options, out byte[][] preparedRequired)
-                ? new RegexPrefilter(
-                    RegexPrefilterKind.RequiredLiteral,
-                    memmem: null,
-                    teddy: null,
-                    ahoCorasick: null,
-                    requiredLiterals: AhoCorasickAutomaton.Create(preparedRequired, AhoCorasickMatchKind.LeftmostFirst, asciiCaseInsensitive: true),
-                    startPredicate: startPredicate)
+                ? CreateRequiredLiteralPrefilter(preparedRequired, startPredicate)
                 : null;
         }
 
@@ -132,12 +123,7 @@ internal sealed class RegexPrefilter
         {
             if (TryPrepareRequiredLiteralSet([prefix], options, out byte[][] preparedRequired))
             {
-                prefilter = new RegexPrefilter(
-                    RegexPrefilterKind.RequiredLiteral,
-                    memmem: null,
-                    teddy: null,
-                    ahoCorasick: null,
-                    requiredLiterals: AhoCorasickAutomaton.Create(preparedRequired, AhoCorasickMatchKind.LeftmostFirst, asciiCaseInsensitive: true));
+                prefilter = CreateRequiredLiteralPrefilter(preparedRequired, startPredicate: null);
                 return true;
             }
 
@@ -197,8 +183,35 @@ internal sealed class RegexPrefilter
             return offset < 0 ? -1 : startAt + offset;
         }
 
+        if (requiredTeddy is not null)
+        {
+            return requiredTeddy.FindCandidate(haystack, startAt);
+        }
+
         AhoCorasickMatch? match = requiredLiterals!.Find(haystack[startAt..]);
         return match.HasValue ? startAt + match.Value.Start : -1;
+    }
+
+    private static RegexPrefilter CreateRequiredLiteralPrefilter(byte[][] preparedLiterals, RegexStartPredicate? startPredicate)
+    {
+        if (RegexTeddyPrefilter.TryCreate(preparedLiterals, asciiCaseInsensitive: true, out RegexTeddyPrefilter? requiredTeddy))
+        {
+            return new RegexPrefilter(
+                RegexPrefilterKind.RequiredLiteral,
+                memmem: null,
+                teddy: null,
+                ahoCorasick: null,
+                requiredTeddy: requiredTeddy,
+                startPredicate: startPredicate);
+        }
+
+        return new RegexPrefilter(
+            RegexPrefilterKind.RequiredLiteral,
+            memmem: null,
+            teddy: null,
+            ahoCorasick: null,
+            requiredLiterals: AhoCorasickAutomaton.Create(preparedLiterals, AhoCorasickMatchKind.LeftmostFirst, asciiCaseInsensitive: true),
+            startPredicate: startPredicate);
     }
 
     private int FindRawCandidate(ReadOnlySpan<byte> haystack, int startAt)

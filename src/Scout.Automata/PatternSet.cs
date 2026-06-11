@@ -7,6 +7,8 @@ public sealed class PatternSet
 {
     private readonly RegexAutomaton[] automata;
     private readonly int[] automataPatternIds;
+    private readonly int[] allAutomataIndexes;
+    private readonly int[][]? exactAutomataByFirstByte;
     private readonly PatternSetLiteralAccelerator? literalAccelerator;
     private readonly PatternSetRequiredLiteralAccelerator? requiredLiteralAccelerator;
     private readonly int count;
@@ -15,12 +17,16 @@ public sealed class PatternSet
         int count,
         RegexAutomaton[] automata,
         int[] automataPatternIds,
+        int[] allAutomataIndexes,
+        int[][]? exactAutomataByFirstByte,
         PatternSetLiteralAccelerator? literalAccelerator,
         PatternSetRequiredLiteralAccelerator? requiredLiteralAccelerator)
     {
         this.count = count;
         this.automata = automata;
         this.automataPatternIds = automataPatternIds;
+        this.allAutomataIndexes = allAutomataIndexes;
+        this.exactAutomataByFirstByte = exactAutomataByFirstByte;
         this.literalAccelerator = literalAccelerator;
         this.requiredLiteralAccelerator = requiredLiteralAccelerator;
     }
@@ -33,6 +39,8 @@ public sealed class PatternSet
     internal bool UsesLiteralAccelerator => literalAccelerator is not null;
 
     internal bool UsesRequiredLiteralAccelerator => requiredLiteralAccelerator is not null;
+
+    internal bool RequiredLiteralAcceleratorCoversAll => requiredLiteralAccelerator?.CoversAllAutomata == true;
 
     /// <summary>
     /// Compiles an ordered set of byte regex patterns.
@@ -112,10 +120,13 @@ public sealed class PatternSet
         PatternSetRequiredLiteralAccelerator? requiredLiteralAccelerator = requiredLiteralEntries.Count == 0
             ? null
             : new PatternSetRequiredLiteralAccelerator(requiredLiteralEntries, automata.Count);
+        RegexAutomaton[] compiledAutomata = automata.ToArray();
         return new PatternSet(
             patterns.Count,
-            automata.ToArray(),
+            compiledAutomata,
             automataPatternIds.ToArray(),
+            BuildAllAutomataIndexes(compiledAutomata.Length),
+            BuildExactAutomataByFirstByte(compiledAutomata),
             literalAccelerator,
             requiredLiteralAccelerator);
     }
@@ -224,8 +235,10 @@ public sealed class PatternSet
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
         PatternSetMatch? exact = literalAccelerator?.FindAt(haystack, startOffset);
-        for (int index = 0; index < automata.Length; index++)
+        ReadOnlySpan<int> exactAutomata = GetExactAutomataForStart(haystack, startOffset);
+        for (int candidateIndex = 0; candidateIndex < exactAutomata.Length; candidateIndex++)
         {
+            int index = exactAutomata[candidateIndex];
             if (exact.HasValue && automataPatternIds[index] >= exact.Value.PatternId)
             {
                 break;
@@ -283,6 +296,71 @@ public sealed class PatternSet
         }
 
         return best;
+    }
+
+    private ReadOnlySpan<int> GetExactAutomataForStart(ReadOnlySpan<byte> haystack, int startOffset)
+    {
+        if (exactAutomataByFirstByte is null || startOffset >= haystack.Length)
+        {
+            return allAutomataIndexes;
+        }
+
+        return exactAutomataByFirstByte[haystack[startOffset]];
+    }
+
+    private static int[][]? BuildExactAutomataByFirstByte(RegexAutomaton[] automata)
+    {
+        if (automata.Length == 0)
+        {
+            return null;
+        }
+
+        var buckets = new List<int>[256];
+        for (int index = 0; index < buckets.Length; index++)
+        {
+            buckets[index] = [];
+        }
+
+        for (int automatonIndex = 0; automatonIndex < automata.Length; automatonIndex++)
+        {
+            bool[] firstBytes = new bool[256];
+            if (!automata[automatonIndex].TryAddStartBytes(firstBytes))
+            {
+                for (int value = 0; value <= byte.MaxValue; value++)
+                {
+                    buckets[value].Add(automatonIndex);
+                }
+
+                continue;
+            }
+
+            for (int value = 0; value <= byte.MaxValue; value++)
+            {
+                if (firstBytes[value])
+                {
+                    buckets[value].Add(automatonIndex);
+                }
+            }
+        }
+
+        int[][] indexed = new int[256][];
+        for (int index = 0; index < indexed.Length; index++)
+        {
+            indexed[index] = buckets[index].ToArray();
+        }
+
+        return indexed;
+    }
+
+    private static int[] BuildAllAutomataIndexes(int count)
+    {
+        int[] indexes = new int[count];
+        for (int index = 0; index < indexes.Length; index++)
+        {
+            indexes[index] = index;
+        }
+
+        return indexes;
     }
 
     private long IterateNonOverlapping(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)

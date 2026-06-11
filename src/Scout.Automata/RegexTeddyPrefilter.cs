@@ -9,17 +9,33 @@ internal sealed class RegexTeddyPrefilter
 
     private readonly byte[][] needles;
     private readonly bool[] firstBytes = new bool[256];
+    private readonly byte[] distinctFirstBytes;
+    private readonly bool asciiCaseInsensitive;
 
-    private RegexTeddyPrefilter(byte[][] needles)
+    private RegexTeddyPrefilter(byte[][] needles, bool asciiCaseInsensitive)
     {
         this.needles = needles;
+        this.asciiCaseInsensitive = asciiCaseInsensitive;
+        var distinct = new List<byte>();
         for (int index = 0; index < needles.Length; index++)
         {
-            firstBytes[needles[index][0]] = true;
+            byte value = needles[index][0];
+            AddFirstByte(value, distinct);
+            if (asciiCaseInsensitive && IsAsciiCased(value))
+            {
+                AddFirstByte(FoldAscii(value), distinct);
+            }
         }
+
+        distinctFirstBytes = distinct.ToArray();
     }
 
     public static bool TryCreate(byte[][] needles, out RegexTeddyPrefilter? prefilter)
+    {
+        return TryCreate(needles, asciiCaseInsensitive: false, out prefilter);
+    }
+
+    public static bool TryCreate(byte[][] needles, bool asciiCaseInsensitive, out RegexTeddyPrefilter? prefilter)
     {
         if (needles.Length is < MinimumPatternCount or > MaximumPatternCount)
         {
@@ -40,12 +56,22 @@ internal sealed class RegexTeddyPrefilter
             ownedNeedles[index] = needle.ToArray();
         }
 
-        prefilter = new RegexTeddyPrefilter(ownedNeedles);
+        prefilter = new RegexTeddyPrefilter(ownedNeedles, asciiCaseInsensitive);
         return true;
     }
 
     public int FindCandidate(ReadOnlySpan<byte> haystack, int startAt)
     {
+        if (distinctFirstBytes.Length == 1)
+        {
+            return FindCandidateByFirstByte(haystack, startAt, distinctFirstBytes[0]);
+        }
+
+        if (distinctFirstBytes.Length == 2)
+        {
+            return FindCandidateByFirstBytePair(haystack, startAt, distinctFirstBytes[0], distinctFirstBytes[1]);
+        }
+
         for (int position = startAt; position < haystack.Length; position++)
         {
             if (!firstBytes[haystack[position]])
@@ -53,18 +79,115 @@ internal sealed class RegexTeddyPrefilter
                 continue;
             }
 
-            for (int index = 0; index < needles.Length; index++)
+            if (MatchesAt(haystack, position))
             {
-                ReadOnlySpan<byte> needle = needles[index];
-                if (needle.Length <= haystack.Length - position &&
-                    haystack[position + needle.Length - 1] == needle[^1] &&
-                    haystack[position..(position + needle.Length)].SequenceEqual(needle))
-                {
-                    return position;
-                }
+                return position;
             }
         }
 
         return -1;
+    }
+
+    private int FindCandidateByFirstByte(ReadOnlySpan<byte> haystack, int startAt, byte firstByte)
+    {
+        for (int position = startAt; position < haystack.Length;)
+        {
+            int offset = haystack[position..].IndexOf(firstByte);
+            if (offset < 0)
+            {
+                return -1;
+            }
+
+            position += offset;
+            if (MatchesAt(haystack, position))
+            {
+                return position;
+            }
+
+            position++;
+        }
+
+        return -1;
+    }
+
+    private int FindCandidateByFirstBytePair(ReadOnlySpan<byte> haystack, int startAt, byte firstByte, byte secondByte)
+    {
+        for (int position = startAt; position < haystack.Length;)
+        {
+            int offset = haystack[position..].IndexOfAny(firstByte, secondByte);
+            if (offset < 0)
+            {
+                return -1;
+            }
+
+            position += offset;
+            if (MatchesAt(haystack, position))
+            {
+                return position;
+            }
+
+            position++;
+        }
+
+        return -1;
+    }
+
+    private bool MatchesAt(ReadOnlySpan<byte> haystack, int position)
+    {
+        for (int index = 0; index < needles.Length; index++)
+        {
+            ReadOnlySpan<byte> needle = needles[index];
+            if (needle.Length <= haystack.Length - position &&
+                ByteEquals(haystack[position + needle.Length - 1], needle[^1]) &&
+                MatchesNeedle(haystack[position..(position + needle.Length)], needle))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool MatchesNeedle(ReadOnlySpan<byte> haystack, ReadOnlySpan<byte> needle)
+    {
+        for (int index = 0; index < needle.Length; index++)
+        {
+            if (!ByteEquals(haystack[index], needle[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private bool ByteEquals(byte left, byte right)
+    {
+        return left == right ||
+            asciiCaseInsensitive &&
+            IsAsciiCased(left) &&
+            FoldAscii(left) == FoldAscii(right);
+    }
+
+    private void AddFirstByte(byte value, List<byte> distinct)
+    {
+        firstBytes[value] = true;
+        if (!distinct.Contains(value))
+        {
+            distinct.Add(value);
+        }
+    }
+
+    private static bool IsAsciiCased(byte value)
+    {
+        return value is >= (byte)'A' and <= (byte)'Z'
+            or >= (byte)'a' and <= (byte)'z';
+    }
+
+    private static byte FoldAscii(byte value)
+    {
+        return value is >= (byte)'A' and <= (byte)'Z'
+            ? (byte)(value + 32)
+            : value;
     }
 }

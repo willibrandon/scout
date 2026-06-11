@@ -7,6 +7,7 @@ public sealed class RegexAutomaton
     {
         private readonly RegexMetaEngine engine;
         private readonly RegexCaptureEngine captureEngine;
+        private readonly RegexAlternationSetEngine? syntheticCaptureAlternationSet;
         private readonly RegexDelimitedCaptureEngine? delimitedCaptureEngine;
         private readonly RegexStructuredLogCaptureEngine? structuredLogCaptureEngine;
         private readonly RegexStartPredicate? startPredicate;
@@ -14,12 +15,14 @@ public sealed class RegexAutomaton
         private RegexAutomaton(
             RegexMetaEngine engine,
             RegexCaptureEngine captureEngine,
+            RegexAlternationSetEngine? syntheticCaptureAlternationSet,
             RegexDelimitedCaptureEngine? delimitedCaptureEngine,
             RegexStructuredLogCaptureEngine? structuredLogCaptureEngine,
             RegexStartPredicate? startPredicate)
         {
             this.engine = engine;
             this.captureEngine = captureEngine;
+            this.syntheticCaptureAlternationSet = syntheticCaptureAlternationSet;
             this.delimitedCaptureEngine = delimitedCaptureEngine;
             this.structuredLogCaptureEngine = structuredLogCaptureEngine;
             this.startPredicate = startPredicate;
@@ -80,6 +83,14 @@ public sealed class RegexAutomaton
         var prefilter = RegexPrefilter.Compile(tree.Root, options);
         RegexLiteralSetEngine.TryCreate(tree.Root, options, out RegexLiteralSetEngine? literalSet);
         RegexAlternationSetEngine.TryCreate(pattern, tree.Root, tree.CaptureCount, options, out RegexAlternationSetEngine? alternationSet);
+        RegexAlternationSetEngine? syntheticCaptureAlternationSet = alternationSet?.CanSynthesizeCaptures == true
+            ? alternationSet
+            : null;
+        if (syntheticCaptureAlternationSet is null && tree.CaptureCount > 0)
+        {
+            RegexAlternationSetEngine.TryCreateSyntheticCaptures(pattern, tree.Root, tree.CaptureCount, options, out syntheticCaptureAlternationSet);
+        }
+
         RegexSimpleSequenceEngine.TryCreate(tree.Root, options, out RegexSimpleSequenceEngine? simpleSequence);
         RegexLineContainsEngine.TryCreate(tree.Root, options, out RegexLineContainsEngine? lineContains);
         RegexDotStarClassFallbackEngine.TryCreate(tree.Root, options, out RegexDotStarClassFallbackEngine? dotStarClassFallback);
@@ -91,12 +102,15 @@ public sealed class RegexAutomaton
         return new RegexAutomaton(
             RegexMetaEngine.Compile(nfa, prefilter, dfaSizeLimit, literalSet, alternationSet, simpleSequence, lineContains, dotStarClassFallback, asciiFastNfa, scalarRun),
             new RegexCaptureEngine(captureNfa, prefilter),
+            syntheticCaptureAlternationSet,
             delimitedCaptureEngine,
             structuredLogCaptureEngine,
             startPredicate);
     }
 
     internal RegexPrefilterKind PrefilterKind => engine.PrefilterKind;
+
+    internal bool UsesSyntheticCaptureAlternationSet => syntheticCaptureAlternationSet?.CanSynthesizeCaptures == true;
 
     internal bool UsesStructuredLogCaptureEngine => structuredLogCaptureEngine is not null;
 
@@ -129,6 +143,11 @@ public sealed class RegexAutomaton
         }
 
         return engine.MatchAt(haystack, startAt);
+    }
+
+    internal bool TryAddStartBytes(bool[] bytes)
+    {
+        return startPredicate?.TryAddFirstBytes(bytes) == true;
     }
 
     /// <summary>
@@ -227,7 +246,7 @@ public sealed class RegexAutomaton
             return delimitedCaptures;
         }
 
-        RegexCaptures? syntheticCaptures = engine.FindSyntheticCaptures(haystack, startAt);
+        RegexCaptures? syntheticCaptures = syntheticCaptureAlternationSet?.FindSyntheticCaptures(haystack, startAt);
         if (syntheticCaptures is not null)
         {
             return syntheticCaptures;

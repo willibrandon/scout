@@ -150,6 +150,28 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies nested branch flattening for search keeps top-level branch captures intact.
+    /// </summary>
+    [Fact]
+    public void AlternationSetKeepsSyntheticCapturesWhenSearchSetFlattens()
+    {
+        string pattern = string.Join(
+            "|",
+            Enumerable.Range(0, 16).Select(static index => $"(?:((?:tok{index}[xy]|tok{index}z[0-9])))"));
+        var automaton = RegexAutomaton.Compile(System.Text.Encoding.ASCII.GetBytes(pattern));
+
+        RegexCaptures? captures = automaton.FindCaptures("zz tok7y tok3x"u8);
+
+        Assert.Equal(RegexEngineKind.AlternationSet, GetEngineKind(automaton));
+        Assert.True(automaton.UsesSyntheticCaptureAlternationSet);
+        Assert.NotNull(captures);
+        Assert.Equal(new RegexMatch(3, 5), captures.Match);
+        Assert.Equal(17, captures.GroupCount);
+        Assert.Equal(2, captures.ParticipatingCount());
+        Assert.Equal(new RegexMatch(3, 5), captures.GetGroup(8));
+    }
+
+    /// <summary>
     /// Verifies a whole-pattern enclosing group does not hide large top-level alternations from the set engine.
     /// </summary>
     [Fact]
@@ -162,6 +184,25 @@ public sealed class RegexAutomatonTests
 
         Assert.Equal(RegexEngineKind.AlternationSet, GetEngineKind(automaton));
         Assert.Equal(new RegexMatch(3, 5), automaton.Find("xx tok73"u8));
+    }
+
+    /// <summary>
+    /// Verifies grouped alternatives inside top-level alternatives are flattened for set execution.
+    /// </summary>
+    [Fact]
+    public void AlternationSetFlattensNestedGroupedAlternatives()
+    {
+        string left = "(" + string.Join(
+            "|",
+            Enumerable.Range(0, 8).Select(static index => $"left{index}[0-9]")) + ")";
+        string right = "(" + string.Join(
+            "|",
+            Enumerable.Range(0, 8).Select(static index => $"right{index}[0-9]")) + "){1,1}";
+        var automaton = RegexAutomaton.Compile(System.Text.Encoding.ASCII.GetBytes(left + "|" + right));
+
+        Assert.Equal(RegexEngineKind.AlternationSet, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(3, 6), automaton.Find("xx left42 right73"u8));
+        Assert.Equal(new RegexMatch(10, 7), automaton.Find("xx left42 right73"u8, startAt: 9));
     }
 
     /// <summary>
