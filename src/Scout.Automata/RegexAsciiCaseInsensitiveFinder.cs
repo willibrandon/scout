@@ -3,9 +3,10 @@ namespace Scout;
 internal sealed class RegexAsciiCaseInsensitiveFinder
 {
     private readonly byte[] needle;
-    private readonly byte first;
-    private readonly byte firstAlternate;
-    private readonly bool hasFirstAlternate;
+    private readonly int anchorIndex;
+    private readonly byte anchor;
+    private readonly byte anchorAlternate;
+    private readonly bool hasAnchorAlternate;
 
     public RegexAsciiCaseInsensitiveFinder(ReadOnlySpan<byte> needle)
     {
@@ -15,9 +16,10 @@ internal sealed class RegexAsciiCaseInsensitiveFinder
             return;
         }
 
-        first = this.needle[0];
-        hasFirstAlternate = IsAsciiCased(first);
-        firstAlternate = hasFirstAlternate ? ToggleAsciiCase(first) : first;
+        anchorIndex = SelectAnchorIndex(this.needle);
+        anchor = this.needle[anchorIndex];
+        hasAnchorAlternate = IsAsciiCased(anchor);
+        anchorAlternate = hasAnchorAlternate ? ToggleAsciiCase(anchor) : anchor;
     }
 
     public int Find(ReadOnlySpan<byte> haystack)
@@ -32,24 +34,26 @@ internal sealed class RegexAsciiCaseInsensitiveFinder
             return -1;
         }
 
-        int position = 0;
-        while (position <= haystack.Length - needle.Length)
+        int anchorPosition = anchorIndex;
+        int lastAnchorPosition = haystack.Length - (needle.Length - anchorIndex);
+        while (anchorPosition <= lastAnchorPosition)
         {
-            int offset = hasFirstAlternate
-                ? haystack[position..].IndexOfAny(first, firstAlternate)
-                : haystack[position..].IndexOf(first);
+            int offset = hasAnchorAlternate
+                ? haystack[anchorPosition..].IndexOfAny(anchor, anchorAlternate)
+                : haystack[anchorPosition..].IndexOf(anchor);
             if (offset < 0)
             {
                 return -1;
             }
 
-            position += offset;
-            if (MatchesAt(haystack, position))
+            anchorPosition += offset;
+            int matchStart = anchorPosition - anchorIndex;
+            if (MatchesAt(haystack, matchStart))
             {
-                return position;
+                return matchStart;
             }
 
-            position++;
+            anchorPosition++;
         }
 
         return -1;
@@ -62,7 +66,7 @@ internal sealed class RegexAsciiCaseInsensitiveFinder
             return false;
         }
 
-        for (int index = 1; index < needle.Length; index++)
+        for (int index = 0; index < needle.Length; index++)
         {
             if (FoldAscii(haystack[position + index]) != needle[index])
             {
@@ -82,6 +86,65 @@ internal sealed class RegexAsciiCaseInsensitiveFinder
         }
 
         return normalized;
+    }
+
+    private static int SelectAnchorIndex(ReadOnlySpan<byte> value)
+    {
+        int bestIndex = 0;
+        int bestScore = AnchorScore(value[0]);
+        for (int index = 1; index < value.Length; index++)
+        {
+            int score = AnchorScore(value[index]);
+            if (score > bestScore)
+            {
+                bestIndex = index;
+                bestScore = score;
+            }
+        }
+
+        return bestIndex;
+    }
+
+    private static int AnchorScore(byte value)
+    {
+        byte folded = FoldAscii(value);
+        if (folded is >= (byte)'0' and <= (byte)'9')
+        {
+            return 180;
+        }
+
+        if (folded is < (byte)'a' or > (byte)'z')
+        {
+            return folded == (byte)' ' ? 10 : 220;
+        }
+
+        return folded switch
+        {
+            (byte)'q' or (byte)'z' => 260,
+            (byte)'x' or (byte)'j' => 250,
+            (byte)'k' => 240,
+            (byte)'v' => 230,
+            (byte)'b' or (byte)'p' => 220,
+            (byte)'g' => 210,
+            (byte)'w' => 200,
+            (byte)'y' => 190,
+            (byte)'f' => 180,
+            (byte)'m' => 170,
+            (byte)'c' => 160,
+            (byte)'u' => 150,
+            (byte)'l' => 140,
+            (byte)'d' => 130,
+            (byte)'r' => 120,
+            (byte)'h' => 110,
+            (byte)'s' => 100,
+            (byte)'n' => 90,
+            (byte)'i' => 80,
+            (byte)'o' => 70,
+            (byte)'a' => 60,
+            (byte)'t' => 50,
+            (byte)'e' => 40,
+            _ => 30,
+        };
     }
 
     private static byte FoldAscii(byte value)

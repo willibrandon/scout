@@ -83,6 +83,27 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies single ASCII case-insensitive literals use literal-set count and span semantics.
+    /// </summary>
+    [Fact]
+    public void LiteralSetCountsSingleAsciiCaseInsensitiveLiteral()
+    {
+        var automaton = RegexAutomaton.Compile(
+            "Sherlock Holmes"u8,
+            caseInsensitive: true,
+            multiLine: false,
+            dotMatchesNewline: false,
+            unicodeClasses: false);
+
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(2, 15), automaton.Find("xxsherlock holmes yy"u8));
+        Assert.Equal(2, automaton.CountMatches("sherlock holmes SHERLOCK HOLMES"u8));
+        Assert.Equal(30, automaton.SumMatchSpans("sherlock holmes SHERLOCK HOLMES"u8));
+        Assert.Equal(1, automaton.CountMatches("sherlock holmes SHERLOCK HOLMES"u8, startAt: 16));
+        Assert.Equal(15, automaton.SumMatchSpans("sherlock holmes SHERLOCK HOLMES"u8, startAt: 16));
+    }
+
+    /// <summary>
     /// Verifies Unicode-aware literal-set execution uses simple case folding while preserving haystack span lengths.
     /// </summary>
     [Fact]

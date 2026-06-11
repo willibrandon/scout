@@ -18,6 +18,7 @@ internal sealed class RegexLiteralSetEngine
     private readonly bool unicodeCaseInsensitive;
     private readonly int maxLiteralLength;
     private readonly MemmemFinder? singleLiteralFinder;
+    private readonly RegexAsciiCaseInsensitiveFinder? singleAsciiCaseInsensitiveFinder;
     private readonly RegexLiteralPrefixScanner? prefixScanner;
 
     private RegexLiteralSetEngine(
@@ -46,6 +47,14 @@ internal sealed class RegexLiteralSetEngine
         if (searchPatterns.Count == 0)
         {
             singleLiteralFinder = new MemmemFinder(this.literals[0]);
+            return;
+        }
+
+        if (this.literals.Length == 1 &&
+            asciiCaseInsensitive &&
+            !unicodeCaseInsensitive)
+        {
+            singleAsciiCaseInsensitiveFinder = new RegexAsciiCaseInsensitiveFinder(this.literals[0]);
             return;
         }
 
@@ -230,6 +239,14 @@ internal sealed class RegexLiteralSetEngine
                 : new RegexMatch(startOffset + offset, literals[0].Length);
         }
 
+        if (singleAsciiCaseInsensitiveFinder is not null)
+        {
+            int offset = singleAsciiCaseInsensitiveFinder.Find(haystack[startOffset..]);
+            return offset < 0
+                ? null
+                : new RegexMatch(startOffset + offset, literals[0].Length);
+        }
+
         if (automaton is not null)
         {
             return FindAho(haystack, startOffset);
@@ -314,6 +331,11 @@ internal sealed class RegexLiteralSetEngine
         if (singleLiteralFinder is not null)
         {
             return CountOrSumSingleLiteral(haystack, startOffset, sumSpans);
+        }
+
+        if (singleAsciiCaseInsensitiveFinder is not null)
+        {
+            return CountOrSumSingleAsciiCaseInsensitiveLiteral(haystack, startOffset, sumSpans);
         }
 
         if (automaton is not null)
@@ -414,6 +436,26 @@ internal sealed class RegexLiteralSetEngine
         while (position <= haystack.Length)
         {
             int offset = singleLiteralFinder!.Find(haystack[position..]);
+            if (offset < 0)
+            {
+                return total;
+            }
+
+            total += sumSpans ? length : 1;
+            position += offset + length;
+        }
+
+        return total;
+    }
+
+    private long CountOrSumSingleAsciiCaseInsensitiveLiteral(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
+    {
+        long total = 0;
+        int position = startOffset;
+        int length = literals[0].Length;
+        while (position <= haystack.Length)
+        {
+            int offset = singleAsciiCaseInsensitiveFinder!.Find(haystack[position..]);
             if (offset < 0)
             {
                 return total;
