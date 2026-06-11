@@ -120,6 +120,40 @@ public sealed class PatternSetTests
     }
 
     /// <summary>
+    /// Verifies count helpers use the same non-overlapping iteration semantics as repeated find.
+    /// </summary>
+    [Fact]
+    public void CountsNonOverlappingMatchesAndSpans()
+    {
+        var set = PatternSet.Compile(
+        [
+            "ab"u8.ToArray(),
+            "cd"u8.ToArray(),
+        ]);
+
+        Assert.Equal(3, set.CountMatches("zabcd ab"u8));
+        Assert.Equal(6, set.SumMatchSpans("zabcd ab"u8));
+        Assert.Equal(2, set.CountMatches("zabcd ab"u8, startAt: 3));
+        Assert.Equal(4, set.SumMatchSpans("zabcd ab"u8, startAt: 3));
+    }
+
+    /// <summary>
+    /// Verifies count helpers can use the required-literal accelerator for fully covered regex sets.
+    /// </summary>
+    [Fact]
+    public void CountsThroughRequiredLiteralAccelerator()
+    {
+        var set = PatternSet.Compile(
+        [
+            "foo[0-9]+"u8.ToArray(),
+            "bar[0-9]+"u8.ToArray(),
+        ]);
+
+        Assert.True(set.UsesRequiredLiteralAccelerator);
+        Assert.Equal(3, set.CountMatches("xxfoo1 bar22 foo333"u8));
+    }
+
+    /// <summary>
     /// Verifies an empty set never matches.
     /// </summary>
     [Fact]

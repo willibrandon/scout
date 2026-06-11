@@ -59,6 +59,11 @@ internal sealed class RegexSimpleSequenceEngine
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        if (repeatedSegments is null && segments.Length == 1)
+        {
+            return FindSingleSegment(segments[0], haystack, startOffset);
+        }
+
         for (int start = startOffset; start <= haystack.Length; start++)
         {
             if (CanStartAt(haystack, start) &&
@@ -69,6 +74,240 @@ internal sealed class RegexSimpleSequenceEngine
         }
 
         return null;
+    }
+
+    public bool TryCountNonOverlapping(ReadOnlySpan<byte> haystack, int startAt, out long count, out long spanSum)
+    {
+        count = 0;
+        spanSum = 0;
+        if (!TryGetSingleRepeatedAtom(out RegexSimpleSequenceSegment segment, out int minimum, out int? maximum, out bool lazy))
+        {
+            return false;
+        }
+
+        int position = Math.Clamp(startAt, 0, haystack.Length);
+        if (segment.MatcherKind == RegexSimpleSequenceByteMatcherKind.AsciiLetter)
+        {
+            CountAsciiLetterRuns(minimum, maximum, lazy, haystack, position, ref count, ref spanSum);
+            return true;
+        }
+
+        if (segment.MatcherKind == RegexSimpleSequenceByteMatcherKind.AsciiDigit)
+        {
+            CountAsciiDigitRuns(minimum, maximum, lazy, haystack, position, ref count, ref spanSum);
+            return true;
+        }
+
+        if (segment.MatcherKind == RegexSimpleSequenceByteMatcherKind.AsciiWord)
+        {
+            CountAsciiWordRuns(minimum, maximum, lazy, haystack, position, ref count, ref spanSum);
+            return true;
+        }
+
+        int runLength = 0;
+        while (position < haystack.Length)
+        {
+            if (segment.AtomMatches(haystack[position]))
+            {
+                runLength++;
+            }
+            else
+            {
+                AddRun(minimum, maximum, lazy, runLength, ref count, ref spanSum);
+                runLength = 0;
+            }
+
+            position++;
+        }
+
+        AddRun(minimum, maximum, lazy, runLength, ref count, ref spanSum);
+        return true;
+    }
+
+    private bool TryGetSingleRepeatedAtom(
+        out RegexSimpleSequenceSegment segment,
+        out int minimum,
+        out int? maximum,
+        out bool lazy)
+    {
+        if (repeatedSegments is null)
+        {
+            if (segments.Length == 1)
+            {
+                segment = segments[0];
+                minimum = segment.Minimum;
+                maximum = segment.Maximum;
+                lazy = segment.Lazy;
+                return true;
+            }
+        }
+        else if (repeatedSegments.Length == 1 &&
+            repeatedSegments[0].Minimum == 1 &&
+            repeatedSegments[0].Maximum == 1)
+        {
+            segment = repeatedSegments[0];
+            minimum = repeatedMinimum;
+            maximum = repeatedMaximum;
+            lazy = repeatedLazy;
+            return true;
+        }
+
+        segment = default;
+        minimum = 0;
+        maximum = null;
+        lazy = false;
+        return false;
+    }
+
+    private static void CountAsciiLetterRuns(
+        int minimum,
+        int? maximum,
+        bool lazy,
+        ReadOnlySpan<byte> haystack,
+        int position,
+        ref long count,
+        ref long spanSum)
+    {
+        int runLength = 0;
+        while (position < haystack.Length)
+        {
+            if (RegexSimpleSequenceSegment.IsAsciiLetter(haystack[position]))
+            {
+                runLength++;
+            }
+            else
+            {
+                AddRun(minimum, maximum, lazy, runLength, ref count, ref spanSum);
+                runLength = 0;
+            }
+
+            position++;
+        }
+
+        AddRun(minimum, maximum, lazy, runLength, ref count, ref spanSum);
+    }
+
+    private static void CountAsciiDigitRuns(
+        int minimum,
+        int? maximum,
+        bool lazy,
+        ReadOnlySpan<byte> haystack,
+        int position,
+        ref long count,
+        ref long spanSum)
+    {
+        int runLength = 0;
+        while (position < haystack.Length)
+        {
+            if (RegexSimpleSequenceSegment.IsAsciiDigit(haystack[position]))
+            {
+                runLength++;
+            }
+            else
+            {
+                AddRun(minimum, maximum, lazy, runLength, ref count, ref spanSum);
+                runLength = 0;
+            }
+
+            position++;
+        }
+
+        AddRun(minimum, maximum, lazy, runLength, ref count, ref spanSum);
+    }
+
+    private static void CountAsciiWordRuns(
+        int minimum,
+        int? maximum,
+        bool lazy,
+        ReadOnlySpan<byte> haystack,
+        int position,
+        ref long count,
+        ref long spanSum)
+    {
+        int runLength = 0;
+        while (position < haystack.Length)
+        {
+            if (RegexSimpleSequenceSegment.IsAsciiWord(haystack[position]))
+            {
+                runLength++;
+            }
+            else
+            {
+                AddRun(minimum, maximum, lazy, runLength, ref count, ref spanSum);
+                runLength = 0;
+            }
+
+            position++;
+        }
+
+        AddRun(minimum, maximum, lazy, runLength, ref count, ref spanSum);
+    }
+
+    private static RegexMatch? FindSingleSegment(RegexSimpleSequenceSegment segment, ReadOnlySpan<byte> haystack, int startOffset)
+    {
+        int scan = startOffset;
+        while (scan < haystack.Length)
+        {
+            while (scan < haystack.Length && !segment.AtomMatches(haystack[scan]))
+            {
+                scan++;
+            }
+
+            if (scan >= haystack.Length)
+            {
+                return null;
+            }
+
+            int runStart = scan;
+            int maxCount = Math.Min(segment.Maximum ?? haystack.Length - runStart, haystack.Length - runStart);
+            if (maxCount <= 0)
+            {
+                scan++;
+                continue;
+            }
+
+            int matched = 0;
+            while (matched < maxCount && segment.AtomMatches(haystack[runStart + matched]))
+            {
+                matched++;
+            }
+
+            if (matched >= segment.Minimum)
+            {
+                int length = segment.Lazy
+                    ? segment.Minimum
+                    : matched;
+                return new RegexMatch(runStart, length);
+            }
+
+            scan = runStart + matched;
+        }
+
+        return null;
+    }
+
+    private static void AddRun(int minimum, int? maximum, bool lazy, int runLength, ref long count, ref long spanSum)
+    {
+        if (runLength < minimum)
+        {
+            return;
+        }
+
+        if (!lazy && !maximum.HasValue)
+        {
+            count++;
+            spanSum += runLength;
+            return;
+        }
+
+        int matchLength = lazy ? minimum : maximum ?? minimum;
+        while (runLength >= minimum)
+        {
+            int length = Math.Min(matchLength, runLength);
+            count++;
+            spanSum += length;
+            runLength -= length;
+        }
     }
 
     public bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int length)

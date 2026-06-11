@@ -1,8 +1,12 @@
+using System.Buffers;
+using System.Text;
+
 namespace Scout;
 
 internal sealed class RegexStartPredicate
 {
     private const int MaxPredicateLength = 64;
+    private const int MaxFirstByteVariants = 192;
 
     private readonly bool[][] allowedBytes;
 
@@ -29,8 +33,7 @@ internal sealed class RegexStartPredicate
         if (!TryAppend(root, options, allowed, caseFoldMayNeedUnicodeScalars, out _) ||
             allowed.Count == 0)
         {
-            predicate = null;
-            return false;
+            return TryCreateFirstByte(root, options, out predicate);
         }
 
         predicate = new RegexStartPredicate(allowed);
@@ -53,6 +56,489 @@ internal sealed class RegexStartPredicate
         }
 
         return true;
+    }
+
+    private static bool TryCreateFirstByte(RegexSyntaxNode root, RegexCompileOptions options, out RegexStartPredicate? predicate)
+    {
+        var bytes = new List<byte>();
+        if (!TryCollectFirstBytes(root, options, bytes, out bool canMatchEmpty) ||
+            canMatchEmpty ||
+            bytes.Count == 0 ||
+            bytes.Count > MaxFirstByteVariants)
+        {
+            predicate = null;
+            return false;
+        }
+
+        predicate = new RegexStartPredicate([bytes.ToArray()]);
+        return true;
+    }
+
+    private static bool TryCollectFirstBytes(
+        RegexSyntaxNode node,
+        RegexCompileOptions options,
+        List<byte> bytes,
+        out bool canMatchEmpty)
+    {
+        canMatchEmpty = false;
+        node = UnwrapTransparentGroups(node);
+        switch (node.Kind)
+        {
+            case RegexSyntaxKind.Empty:
+            case RegexSyntaxKind.StartAnchor:
+            case RegexSyntaxKind.EndAnchor:
+            case RegexSyntaxKind.AbsoluteStartAnchor:
+            case RegexSyntaxKind.AbsoluteEndAnchor:
+            case RegexSyntaxKind.WordBoundary:
+            case RegexSyntaxKind.NotWordBoundary:
+            case RegexSyntaxKind.WordStartBoundary:
+            case RegexSyntaxKind.WordEndBoundary:
+            case RegexSyntaxKind.WordStartHalfBoundary:
+            case RegexSyntaxKind.WordEndHalfBoundary:
+            case RegexSyntaxKind.InlineFlags:
+                canMatchEmpty = true;
+                return true;
+            case RegexSyntaxKind.Literal:
+                return TryAddLiteralFirstBytes(((RegexAtomNode)node).Value.Span, options, bytes, out canMatchEmpty);
+            case RegexSyntaxKind.CharacterClass:
+                return TryAddCharacterClassFirstBytes(((RegexAtomNode)node).Value.Span, options, bytes, out canMatchEmpty);
+            case RegexSyntaxKind.DigitClass:
+                AddFirstByteVariants(bytes, options.UnicodeClasses
+                    ? UnicodePrefixVariants(RegexUnicodeTables.AddDecimalNumberPrefixBytes)
+                    : ByteRangeVariants((byte)'0', (byte)'9'));
+                return true;
+            case RegexSyntaxKind.WordClass:
+                AddFirstByteVariants(bytes, options.UnicodeClasses
+                    ? UnicodePrefixVariants(RegexUnicodeTables.AddPerlWordPrefixBytes)
+                    : WordByteVariants());
+                return true;
+            case RegexSyntaxKind.WhitespaceClass:
+                AddFirstByteVariants(bytes, options.UnicodeClasses
+                    ? UnicodePrefixVariants(RegexUnicodeTables.AddPerlSpacePrefixBytes)
+                    : WhitespaceByteVariants());
+                return true;
+            case RegexSyntaxKind.LetterClass:
+                AddFirstByteVariants(bytes, options.UnicodeClasses
+                    ? UnicodePrefixVariants(RegexUnicodeTables.AddAlphabeticPrefixBytes)
+                    : LetterByteVariants());
+                return true;
+            case RegexSyntaxKind.AlphanumericClass:
+                if (options.UnicodeClasses)
+                {
+                    List<byte[]> variants = [];
+                    RegexUnicodeTables.AddAlphabeticPrefixBytes(variants);
+                    RegexUnicodeTables.AddDecimalNumberPrefixBytes(variants);
+                    AddFirstByteVariants(bytes, variants.ToArray());
+                }
+                else
+                {
+                    AddFirstByteVariants(bytes, AlphanumericByteVariants());
+                }
+
+                return true;
+            case RegexSyntaxKind.Sequence:
+                return TryCollectSequenceFirstBytes((RegexSequenceNode)node, options, bytes, out canMatchEmpty);
+            case RegexSyntaxKind.Alternation:
+                return TryCollectAlternationFirstBytes((RegexAlternationNode)node, options, bytes, out canMatchEmpty);
+            case RegexSyntaxKind.CapturingGroup:
+            case RegexSyntaxKind.NonCapturingGroup:
+                var group = (RegexGroupNode)node;
+                return TryCollectFirstBytes(
+                    group.Child,
+                    options.Apply(group.EnabledFlags, group.DisabledFlags),
+                    bytes,
+                    out canMatchEmpty);
+            case RegexSyntaxKind.Repetition:
+                return TryCollectRepetitionFirstBytes((RegexRepetitionNode)node, options, bytes, out canMatchEmpty);
+            default:
+                return false;
+        }
+    }
+
+    private static bool TryCollectSequenceFirstBytes(
+        RegexSequenceNode node,
+        RegexCompileOptions options,
+        List<byte> bytes,
+        out bool canMatchEmpty)
+    {
+        canMatchEmpty = true;
+        RegexCompileOptions currentOptions = options;
+        for (int index = 0; index < node.Nodes.Count; index++)
+        {
+            RegexSyntaxNode child = node.Nodes[index];
+            if (child is RegexInlineFlagsNode flags)
+            {
+                currentOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
+                continue;
+            }
+
+            if (!TryCollectFirstBytes(child, currentOptions, bytes, out bool childCanMatchEmpty))
+            {
+                return false;
+            }
+
+            if (!childCanMatchEmpty)
+            {
+                canMatchEmpty = false;
+                return true;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryCollectAlternationFirstBytes(
+        RegexAlternationNode node,
+        RegexCompileOptions options,
+        List<byte> bytes,
+        out bool canMatchEmpty)
+    {
+        canMatchEmpty = false;
+        for (int index = 0; index < node.Alternatives.Count; index++)
+        {
+            if (!TryCollectFirstBytes(node.Alternatives[index], options, bytes, out bool alternativeCanMatchEmpty))
+            {
+                return false;
+            }
+
+            canMatchEmpty |= alternativeCanMatchEmpty;
+        }
+
+        return true;
+    }
+
+    private static bool TryCollectRepetitionFirstBytes(
+        RegexRepetitionNode node,
+        RegexCompileOptions options,
+        List<byte> bytes,
+        out bool canMatchEmpty)
+    {
+        canMatchEmpty = true;
+        if (node.Maximum == 0)
+        {
+            return true;
+        }
+
+        if (!TryCollectFirstBytes(node.Child, options, bytes, out bool childCanMatchEmpty))
+        {
+            return false;
+        }
+
+        canMatchEmpty = node.Minimum == 0 || childCanMatchEmpty;
+        return true;
+    }
+
+    private static bool TryAddLiteralFirstBytes(
+        ReadOnlySpan<byte> literal,
+        RegexCompileOptions options,
+        List<byte> bytes,
+        out bool canMatchEmpty)
+    {
+        canMatchEmpty = literal.Length == 0;
+        if (literal.Length == 0)
+        {
+            return true;
+        }
+
+        if (options.CaseInsensitive && options.UnicodeClasses)
+        {
+            return TryAddUnicodeLiteralFirstBytes(literal, bytes);
+        }
+
+        AddLiteralFirstByte(bytes, literal[0], options.CaseInsensitive);
+        return true;
+    }
+
+    private static bool TryAddUnicodeLiteralFirstBytes(ReadOnlySpan<byte> literal, List<byte> bytes)
+    {
+        OperationStatus status = Rune.DecodeFromUtf8(literal, out Rune rune, out int consumed);
+        if (status != OperationStatus.Done || consumed <= 0)
+        {
+            AddLiteralFirstByte(bytes, literal[0], caseInsensitive: true);
+            return true;
+        }
+
+        List<Rune> equivalents = [];
+        RegexUnicodeTables.AddSimpleCaseFoldEquivalents(rune, equivalents);
+        for (int index = 0; index < equivalents.Count; index++)
+        {
+            AddRuneFirstByte(bytes, equivalents[index]);
+        }
+
+        return true;
+    }
+
+    private static bool TryAddCharacterClassFirstBytes(
+        ReadOnlySpan<byte> expression,
+        RegexCompileOptions options,
+        List<byte> bytes,
+        out bool canMatchEmpty)
+    {
+        canMatchEmpty = false;
+        if (expression.Length == 0 || expression[0] == (byte)'^')
+        {
+            return false;
+        }
+
+        int index = 0;
+        while (index < expression.Length)
+        {
+            if (expression[index] == (byte)'[' &&
+                index + 1 < expression.Length &&
+                expression[index + 1] == (byte)':')
+            {
+                return false;
+            }
+
+            if (!TryReadFirstByteClassToken(
+                    expression,
+                    options,
+                    ref index,
+                    out byte[][] tokenVariants,
+                    out byte? rangeLiteral,
+                    out bool sealedToken))
+            {
+                return false;
+            }
+
+            if (index < expression.Length - 1 && expression[index] == (byte)'-')
+            {
+                if (!rangeLiteral.HasValue || sealedToken)
+                {
+                    return false;
+                }
+
+                index++;
+                if (!TryReadFirstByteClassToken(
+                        expression,
+                        options,
+                        ref index,
+                        out _,
+                        out byte? rangeEnd,
+                        out bool sealedRangeEnd) ||
+                    !rangeEnd.HasValue ||
+                    sealedRangeEnd ||
+                    rangeEnd.Value < rangeLiteral.Value)
+                {
+                    return false;
+                }
+
+                for (int value = rangeLiteral.Value; value <= rangeEnd.Value; value++)
+                {
+                    AddClassLiteralFirstByte(bytes, (byte)value, options);
+                }
+            }
+            else
+            {
+                AddFirstByteVariants(bytes, tokenVariants);
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryReadFirstByteClassToken(
+        ReadOnlySpan<byte> expression,
+        RegexCompileOptions options,
+        ref int index,
+        out byte[][] variants,
+        out byte? rangeLiteral,
+        out bool sealedToken)
+    {
+        variants = [];
+        rangeLiteral = null;
+        sealedToken = false;
+        if (index >= expression.Length)
+        {
+            return false;
+        }
+
+        byte value = expression[index++];
+        if (value != (byte)'\\')
+        {
+            var bytes = new List<byte>();
+            AddClassLiteralFirstByte(bytes, value, options);
+            variants = ToSingleByteVariants(bytes);
+            rangeLiteral = value;
+            return true;
+        }
+
+        if (index >= expression.Length)
+        {
+            return false;
+        }
+
+        byte escaped = expression[index++];
+        switch (escaped)
+        {
+            case (byte)'d':
+                variants = options.UnicodeClasses
+                    ? UnicodePrefixVariants(RegexUnicodeTables.AddDecimalNumberPrefixBytes)
+                    : ByteRangeVariants((byte)'0', (byte)'9');
+                sealedToken = options.UnicodeClasses;
+                return true;
+            case (byte)'w':
+                variants = options.UnicodeClasses
+                    ? UnicodePrefixVariants(RegexUnicodeTables.AddPerlWordPrefixBytes)
+                    : WordByteVariants();
+                sealedToken = options.UnicodeClasses;
+                return true;
+            case (byte)'s':
+                variants = options.UnicodeClasses
+                    ? UnicodePrefixVariants(RegexUnicodeTables.AddPerlSpacePrefixBytes)
+                    : WhitespaceByteVariants();
+                sealedToken = options.UnicodeClasses;
+                return true;
+            case (byte)'n':
+                variants = [[(byte)'\n']];
+                rangeLiteral = (byte)'\n';
+                return true;
+            case (byte)'t':
+                variants = [[(byte)'\t']];
+                rangeLiteral = (byte)'\t';
+                return true;
+            case (byte)'r':
+                variants = [[(byte)'\r']];
+                rangeLiteral = (byte)'\r';
+                return true;
+            case (byte)'f':
+                variants = [[(byte)'\f']];
+                rangeLiteral = (byte)'\f';
+                return true;
+            case (byte)'D':
+            case (byte)'W':
+            case (byte)'S':
+            case (byte)'p':
+            case (byte)'P':
+                return false;
+            default:
+                var bytes = new List<byte>();
+                AddClassLiteralFirstByte(bytes, escaped, options);
+                variants = ToSingleByteVariants(bytes);
+                rangeLiteral = escaped;
+                return true;
+        }
+    }
+
+    private static void AddFirstByteVariants(List<byte> bytes, byte[][] variants)
+    {
+        for (int index = 0; index < variants.Length; index++)
+        {
+            if (variants[index].Length > 0)
+            {
+                AddDistinct(bytes, variants[index][0]);
+            }
+        }
+    }
+
+    private static void AddLiteralFirstByte(List<byte> bytes, byte value, bool caseInsensitive)
+    {
+        AddDistinct(bytes, value);
+        if (caseInsensitive && IsAsciiCased(value))
+        {
+            AddDistinct(bytes, (byte)char.ToLowerInvariant((char)value));
+            AddDistinct(bytes, (byte)char.ToUpperInvariant((char)value));
+        }
+    }
+
+    private static void AddClassLiteralFirstByte(List<byte> bytes, byte value, RegexCompileOptions options)
+    {
+        if (options.CaseInsensitive && options.UnicodeClasses)
+        {
+            Span<byte> literal = [value];
+            TryAddUnicodeLiteralFirstBytes(literal, bytes);
+            return;
+        }
+
+        AddLiteralFirstByte(bytes, value, options.CaseInsensitive);
+    }
+
+    private static void AddRuneFirstByte(List<byte> bytes, Rune rune)
+    {
+        if (rune.IsAscii)
+        {
+            AddDistinct(bytes, (byte)rune.Value);
+            return;
+        }
+
+        Span<byte> encoded = stackalloc byte[4];
+        int written = rune.EncodeToUtf8(encoded);
+        if (written > 0)
+        {
+            AddDistinct(bytes, encoded[0]);
+        }
+    }
+
+    private static byte[][] ToSingleByteVariants(List<byte> bytes)
+    {
+        byte[][] variants = new byte[bytes.Count][];
+        for (int index = 0; index < bytes.Count; index++)
+        {
+            variants[index] = [bytes[index]];
+        }
+
+        return variants;
+    }
+
+    private static byte[][] UnicodePrefixVariants(Action<List<byte[]>> addPrefixes)
+    {
+        List<byte[]> prefixes = [];
+        addPrefixes(prefixes);
+        return prefixes.ToArray();
+    }
+
+    private static byte[][] ByteRangeVariants(byte start, byte end)
+    {
+        byte[][] variants = new byte[end - start + 1][];
+        for (int index = 0; index < variants.Length; index++)
+        {
+            variants[index] = [(byte)(start + index)];
+        }
+
+        return variants;
+    }
+
+    private static byte[][] WordByteVariants()
+    {
+        byte[][] variants = new byte[63][];
+        int index = 0;
+        FillRangeVariants(variants, ref index, (byte)'0', (byte)'9');
+        FillRangeVariants(variants, ref index, (byte)'A', (byte)'Z');
+        FillRangeVariants(variants, ref index, (byte)'a', (byte)'z');
+        variants[index] = [(byte)'_'];
+        return variants;
+    }
+
+    private static byte[][] LetterByteVariants()
+    {
+        byte[][] variants = new byte[52][];
+        int index = 0;
+        FillRangeVariants(variants, ref index, (byte)'A', (byte)'Z');
+        FillRangeVariants(variants, ref index, (byte)'a', (byte)'z');
+        return variants;
+    }
+
+    private static byte[][] AlphanumericByteVariants()
+    {
+        byte[][] variants = new byte[62][];
+        int index = 0;
+        FillRangeVariants(variants, ref index, (byte)'0', (byte)'9');
+        FillRangeVariants(variants, ref index, (byte)'A', (byte)'Z');
+        FillRangeVariants(variants, ref index, (byte)'a', (byte)'z');
+        return variants;
+    }
+
+    private static byte[][] WhitespaceByteVariants()
+    {
+        return [[(byte)' '], [(byte)'\t'], [(byte)'\n'], [(byte)'\r'], [(byte)'\f'], [0x0b]];
+    }
+
+    private static void FillRangeVariants(byte[][] variants, ref int index, byte start, byte end)
+    {
+        for (int value = start; value <= end; value++)
+        {
+            variants[index++] = [(byte)value];
+        }
     }
 
     private static bool TryAppend(
@@ -216,6 +702,13 @@ internal sealed class RegexStartPredicate
         int index = 0;
         while (index < expression.Length)
         {
+            if (expression[index] == (byte)'[' &&
+                index + 1 < expression.Length &&
+                expression[index + 1] == (byte)':')
+            {
+                return false;
+            }
+
             if (!TryReadClassToken(expression, options, ref index, out byte[] tokenBytes, out byte? rangeLiteral))
             {
                 return false;

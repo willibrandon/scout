@@ -154,6 +154,25 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies required-literal prefilters keep the same selectivity floor as single literal prefixes.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralSetRejectsShortLiterals()
+    {
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false);
+
+        Assert.False(RegexPrefilter.TryPrepareRequiredLiteralSet([[(byte)'\n']], options, out _));
+        Assert.True(RegexPrefilter.TryPrepareRequiredLiteralSet(["$2"u8.ToArray()], options, out _));
+        Assert.True(RegexPrefilter.TryPrepareRequiredLiteralSet(["abc"u8.ToArray()], options, out byte[][] prepared));
+        byte[] only = Assert.Single(prepared);
+        Assert.Equal("abc"u8.ToArray(), only);
+    }
+
+    /// <summary>
     /// Verifies the meta engine selects the dense DFA for small position-independent NFAs.
     /// </summary>
     [Fact]
@@ -606,6 +625,44 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies the ASCII mirror can accept ASCII-only matches without losing Unicode extensions at non-ASCII boundaries.
+    /// </summary>
+    [Fact]
+    public void UnicodePikeVmAsciiFastPathFallsBackAtNonAsciiBoundary()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\d+"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false);
+        byte[] extendedArabicIndic = System.Text.Encoding.UTF8.GetBytes("123\u06F4x");
+
+        Assert.Equal(new RegexMatch(0, 3), automaton.Find("123x"u8));
+        Assert.Equal(new RegexMatch(0, 5), automaton.Find(extendedArabicIndic));
+    }
+
+    /// <summary>
+    /// Verifies Unicode-aware start predicates use first-byte fallbacks for case folds and alternations.
+    /// </summary>
+    [Fact]
+    public void UnicodeStartPredicateCollectsCaseFoldedAlternationFirstBytes()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(@"(?:jan|\d+|k)"u8);
+        var options = new RegexCompileOptions(
+            caseInsensitive: true,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false);
+
+        Assert.True(RegexStartPredicate.TryCreate(tree.Root, options, out RegexStartPredicate? predicate));
+        Assert.NotNull(predicate);
+        Assert.True(predicate.CanStartAt("Jan"u8, 0));
+        Assert.True(predicate.CanStartAt("9"u8, 0));
+        Assert.True(predicate.CanStartAt(System.Text.Encoding.UTF8.GetBytes("\u212A"), 0));
+        Assert.False(predicate.CanStartAt("!"u8, 0));
+    }
+
+    /// <summary>
     /// Verifies Unicode atoms still consume scalars when the search allows invalid UTF-8 haystacks.
     /// </summary>
     [Fact]
@@ -947,6 +1004,54 @@ public sealed class RegexAutomatonTests
         Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
         Assert.Equal(RegexPrefilterKind.RequiredLiteral, automaton.PrefilterKind);
         Assert.Equal(new RegexMatch(3, match.Length), automaton.Find(haystack));
+    }
+
+    /// <summary>
+    /// Verifies single bounded byte-class runs use direct simple-sequence scanning.
+    /// </summary>
+    [Fact]
+    public void UsesSimpleSequenceEngineForSingleBoundedByteClassRun()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"[A-Za-z]{2,3}"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 3), automaton.Find("abcdef 1 zz"u8));
+        Assert.Equal(new RegexMatch(3, 3), automaton.Find("abcdef 1 zz"u8, startAt: 3));
+        Assert.Equal(new RegexMatch(9, 2), automaton.Find("abcdef 1 zz"u8, startAt: 6));
+        Assert.Equal(3, automaton.CountMatches("abcdef 1 zz"u8));
+        Assert.Equal(8, automaton.SumMatchSpans("abcdef 1 zz"u8));
+        Assert.Equal(2, automaton.CountMatches("abcdef 1 zz"u8, startAt: 3));
+        Assert.Equal(5, automaton.SumMatchSpans("abcdef 1 zz"u8, startAt: 3));
+    }
+
+    /// <summary>
+    /// Verifies single bounded Unicode scalar runs use direct scalar scanning.
+    /// </summary>
+    [Fact]
+    public void UsesSimpleSequenceEngineForSingleBoundedUnicodePropertyRun()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\p{L}{2,3}"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("абвг 12 де");
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 6), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(12, 4), automaton.Find(haystack, startAt: 6));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(10, automaton.SumMatchSpans(haystack));
+        Assert.Equal(1, automaton.CountMatches(haystack, startAt: 6));
+        Assert.Equal(4, automaton.SumMatchSpans(haystack, startAt: 6));
     }
 
     /// <summary>

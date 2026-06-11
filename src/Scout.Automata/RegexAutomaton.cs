@@ -78,11 +78,12 @@ public sealed class RegexAutomaton
         RegexLiteralSetEngine.TryCreate(tree.Root, options, out RegexLiteralSetEngine? literalSet);
         RegexAlternationSetEngine.TryCreate(pattern, tree.Root, tree.CaptureCount, options, out RegexAlternationSetEngine? alternationSet);
         RegexSimpleSequenceEngine.TryCreate(tree.Root, options, out RegexSimpleSequenceEngine? simpleSequence);
+        RegexScalarRunEngine.TryCreate(tree.Root, options, out RegexScalarRunEngine? scalarRun);
         RegexDelimitedCaptureEngine.TryCreate(tree.Root, options, tree.CaptureCount, out RegexDelimitedCaptureEngine? delimitedCaptureEngine);
         RegexAsciiFastPath.TryCompileNfa(pattern, tree.Root, options, out RegexNfa? asciiFastNfa);
         RegexStartPredicate.TryCreate(tree.Root, options, out RegexStartPredicate? startPredicate);
         return new RegexAutomaton(
-            RegexMetaEngine.Compile(nfa, prefilter, dfaSizeLimit, literalSet, alternationSet, simpleSequence, asciiFastNfa),
+            RegexMetaEngine.Compile(nfa, prefilter, dfaSizeLimit, literalSet, alternationSet, simpleSequence, asciiFastNfa, scalarRun),
             new RegexCaptureEngine(captureNfa, prefilter),
             delimitedCaptureEngine,
             startPredicate);
@@ -108,7 +109,7 @@ public sealed class RegexAutomaton
     /// <returns>The first match, or <see langword="null" /> when no match exists.</returns>
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
-        return engine.Find(haystack, startAt);
+        return engine.Find(haystack, startAt, startPredicate);
     }
 
     internal RegexMatch? MatchAt(ReadOnlySpan<byte> haystack, int startAt)
@@ -153,6 +154,48 @@ public sealed class RegexAutomaton
     }
 
     /// <summary>
+    /// Counts all non-overlapping matches in a haystack.
+    /// </summary>
+    /// <param name="haystack">The haystack bytes.</param>
+    /// <returns>The number of non-overlapping matches.</returns>
+    public long CountMatches(ReadOnlySpan<byte> haystack)
+    {
+        return CountMatches(haystack, startAt: 0);
+    }
+
+    /// <summary>
+    /// Counts all non-overlapping matches in a haystack at or after a byte offset.
+    /// </summary>
+    /// <param name="haystack">The haystack bytes.</param>
+    /// <param name="startAt">The first byte offset to consider.</param>
+    /// <returns>The number of non-overlapping matches.</returns>
+    public long CountMatches(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        return engine.CountMatches(haystack, startAt, startPredicate);
+    }
+
+    /// <summary>
+    /// Sums the byte lengths of all non-overlapping matches in a haystack.
+    /// </summary>
+    /// <param name="haystack">The haystack bytes.</param>
+    /// <returns>The sum of non-overlapping match lengths.</returns>
+    public long SumMatchSpans(ReadOnlySpan<byte> haystack)
+    {
+        return SumMatchSpans(haystack, startAt: 0);
+    }
+
+    /// <summary>
+    /// Sums the byte lengths of all non-overlapping matches in a haystack at or after a byte offset.
+    /// </summary>
+    /// <param name="haystack">The haystack bytes.</param>
+    /// <param name="startAt">The first byte offset to consider.</param>
+    /// <returns>The sum of non-overlapping match lengths.</returns>
+    public long SumMatchSpans(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        return engine.SumMatchSpans(haystack, startAt, startPredicate);
+    }
+
+    /// <summary>
     /// Finds the first match and its participating capture groups in a haystack at or after a byte offset.
     /// </summary>
     /// <param name="haystack">The haystack bytes.</param>
@@ -172,7 +215,7 @@ public sealed class RegexAutomaton
             return syntheticCaptures;
         }
 
-        RegexMatch? match = engine.Find(haystack, startAt);
+        RegexMatch? match = engine.Find(haystack, startAt, startPredicate);
         if (!match.HasValue)
         {
             return null;

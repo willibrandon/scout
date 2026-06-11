@@ -38,15 +38,35 @@ internal sealed class RegexLazyDfa
 
     public bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int length)
     {
+        return TryMatchAt(haystack, start, reachabilityCache: null, out length);
+    }
+
+    public bool TryMatchAt(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        Dictionary<(int State, int Position), bool>? reachabilityCache,
+        out int length)
+    {
         RegexLazyDfaState current = startState;
         int deferredAcceptLength = -1;
-        Dictionary<(int State, int Position), bool>? reachabilityCache = null;
+        bool hasReusableReachabilityCache = reachabilityCache is not null;
+        if (hasReusableReachabilityCache)
+        {
+            reachabilityCache!.Clear();
+        }
+
         for (int position = start; position <= haystack.Length; position++)
         {
             int acceptIndex = current.AcceptIndex;
             if (acceptIndex >= 0)
             {
                 deferredAcceptLength = position - start;
+                if (acceptIndex == 0)
+                {
+                    length = deferredAcceptLength;
+                    return true;
+                }
+
                 reachabilityCache ??= [];
                 if (!RegexDfaOperations.HasEarlierConsumer(nfa, current.NfaStates, acceptIndex, haystack, position, reachabilityCache))
                 {
@@ -100,6 +120,12 @@ internal sealed class RegexLazyDfa
             if (acceptIndex >= 0)
             {
                 deferredAcceptLength = position - start;
+                if (acceptIndex == 0)
+                {
+                    length = deferredAcceptLength;
+                    return true;
+                }
+
                 reachabilityCache ??= [];
                 if (!RegexDfaOperations.HasEarlierConsumer(nfa, current.NfaStates, acceptIndex, haystack, position, reachabilityCache))
                 {

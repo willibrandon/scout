@@ -27,6 +27,13 @@
                               Exclude="$(MSBuildThisFileDirectory)**/bin/**;$(MSBuildThisFileDirectory)**/obj/**" />
   </ItemGroup>
 
+  <Target Name="ScoutNormalizeSdkBaselineNoWarn" BeforeTargets="ScoutValidateWarningPolicy">
+    <CreateProperty Value="$([System.String]::Empty)"
+                    Condition="'$(NoWarn)' == '1701;1702'">
+      <Output TaskParameter="Value" PropertyName="NoWarn" />
+    </CreateProperty>
+  </Target>
+
   <Target Name="ScoutValidateWarningPolicy" BeforeTargets="CoreCompile">
     <Error Condition="'$(TreatWarningsAsErrors)' != 'true'"
            Text="Scout requires TreatWarningsAsErrors=true in every project." />

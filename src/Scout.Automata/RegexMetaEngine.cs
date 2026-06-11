@@ -20,6 +20,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexLiteralSetEngine? literalSet;
     private readonly RegexAlternationSetEngine? alternationSet;
     private readonly RegexSimpleSequenceEngine? simpleSequence;
+    private readonly RegexScalarRunEngine? scalarRun;
     private readonly RegexPrefilter? prefilter;
     private readonly RegexNfa nfa;
     private readonly bool utf8;
@@ -38,7 +39,8 @@ internal sealed class RegexMetaEngine
         RegexSimpleSequenceEngine? simpleSequence,
         RegexPrefilter? prefilter,
         bool utf8,
-        RegexLazyDfa? asciiFastDfa = null)
+        RegexLazyDfa? asciiFastDfa = null,
+        RegexScalarRunEngine? scalarRun = null)
     {
         Kind = kind;
         this.nfa = nfa;
@@ -52,6 +54,7 @@ internal sealed class RegexMetaEngine
         this.literalSet = literalSet;
         this.alternationSet = alternationSet;
         this.simpleSequence = simpleSequence;
+        this.scalarRun = scalarRun;
         this.prefilter = prefilter;
         this.utf8 = utf8;
     }
@@ -82,7 +85,8 @@ internal sealed class RegexMetaEngine
         RegexLiteralSetEngine? literalSet,
         RegexAlternationSetEngine? alternationSet,
         RegexSimpleSequenceEngine? simpleSequence = null,
-        RegexNfa? asciiFastNfa = null)
+        RegexNfa? asciiFastNfa = null,
+        RegexScalarRunEngine? scalarRun = null)
     {
         ulong effectiveDfaSizeLimit = dfaSizeLimit ?? DefaultDfaSizeLimit;
         if (literalSet is not null)
@@ -137,6 +141,26 @@ internal sealed class RegexMetaEngine
                 simpleSequence,
                 prefilter,
                 nfa.Utf8);
+        }
+
+        if (scalarRun is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.SimpleSequence,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                simpleSequence: null,
+                prefilter,
+                nfa.Utf8,
+                asciiFastDfa: null,
+                scalarRun);
         }
 
         if (!RegexDfaOperations.CanCompile(nfa))
@@ -274,7 +298,16 @@ internal sealed class RegexMetaEngine
             : null;
     }
 
-    public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
+    public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt, RegexStartPredicate? startPredicate = null)
+    {
+        return Find(haystack, startAt, startPredicate, reachabilityCache: null);
+    }
+
+    private RegexMatch? Find(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        RegexStartPredicate? startPredicate,
+        Dictionary<(int State, int Position), bool>? reachabilityCache)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
         if (literalSet is not null)
@@ -292,6 +325,11 @@ internal sealed class RegexMetaEngine
             return simpleSequence.Find(haystack, startOffset);
         }
 
+        if (scalarRun is not null && prefilter is null)
+        {
+            return scalarRun.Find(haystack, startOffset);
+        }
+
         if (prefilter?.UsesRequiredLiteralWindow == true)
         {
             int nextStartToTry = startOffset;
@@ -304,7 +342,7 @@ internal sealed class RegexMetaEngine
                 for (int start = firstStart; start <= requiredAt; start++)
                 {
                     if (prefilter.CanStartAt(haystack, start) &&
-                        TryMatchAt(haystack, start, out int length))
+                        TryMatchAt(haystack, start, out int length, reachabilityCache))
                     {
                         return new RegexMatch(start, length);
                     }
@@ -322,7 +360,7 @@ internal sealed class RegexMetaEngine
                  start >= 0;
                  start = prefilter.FindCandidate(haystack, start + 1))
             {
-                if (TryMatchAt(haystack, start, out int length))
+                if (TryMatchAt(haystack, start, out int length, reachabilityCache))
                 {
                     return new RegexMatch(start, length);
                 }
@@ -333,13 +371,102 @@ internal sealed class RegexMetaEngine
 
         for (int start = startOffset; start <= haystack.Length; start++)
         {
-            if (TryMatchAt(haystack, start, out int length))
+            if (startPredicate is not null && !startPredicate.CanStartAt(haystack, start))
+            {
+                continue;
+            }
+
+            if (TryMatchAt(haystack, start, out int length, reachabilityCache))
             {
                 return new RegexMatch(start, length);
             }
         }
 
         return null;
+    }
+
+    public long CountMatches(ReadOnlySpan<byte> haystack, int startAt, RegexStartPredicate? startPredicate = null)
+    {
+        if (alternationSet is not null)
+        {
+            return alternationSet.CountMatches(haystack, startAt);
+        }
+
+        if (TryCountNonOverlapping(haystack, startAt, out long count, out _))
+        {
+            return count;
+        }
+
+        return IterateNonOverlapping(haystack, startAt, startPredicate, sumSpans: false);
+    }
+
+    public long SumMatchSpans(ReadOnlySpan<byte> haystack, int startAt, RegexStartPredicate? startPredicate = null)
+    {
+        if (alternationSet is not null)
+        {
+            return alternationSet.SumMatchSpans(haystack, startAt);
+        }
+
+        if (TryCountNonOverlapping(haystack, startAt, out _, out long spanSum))
+        {
+            return spanSum;
+        }
+
+        return IterateNonOverlapping(haystack, startAt, startPredicate, sumSpans: true);
+    }
+
+    private bool TryCountNonOverlapping(ReadOnlySpan<byte> haystack, int startAt, out long count, out long spanSum)
+    {
+        if (simpleSequence is not null)
+        {
+            return simpleSequence.TryCountNonOverlapping(haystack, startAt, out count, out spanSum);
+        }
+
+        if (scalarRun is not null)
+        {
+            return scalarRun.TryCountNonOverlapping(haystack, startAt, out count, out spanSum);
+        }
+
+        count = 0;
+        spanSum = 0;
+        return false;
+    }
+
+    private long IterateNonOverlapping(ReadOnlySpan<byte> haystack, int startAt, RegexStartPredicate? startPredicate, bool sumSpans)
+    {
+        long total = 0;
+        int offset = Math.Clamp(startAt, 0, haystack.Length);
+        int suppressedEmptyStart = -1;
+        Dictionary<(int State, int Position), bool>? reachabilityCache = lazyDfa is not null ? [] : null;
+        while (offset <= haystack.Length)
+        {
+            RegexMatch? match = Find(haystack, offset, startPredicate, reachabilityCache);
+            if (!match.HasValue)
+            {
+                return total;
+            }
+
+            if (match.Value.Length == 0 && match.Value.Start == suppressedEmptyStart)
+            {
+                offset = Math.Min(match.Value.Start + 1, haystack.Length + 1);
+                suppressedEmptyStart = -1;
+                continue;
+            }
+
+            total += sumSpans ? match.Value.Length : 1;
+            if (match.Value.Length == 0)
+            {
+                suppressedEmptyStart = -1;
+                offset = Math.Min(match.Value.End + 1, haystack.Length + 1);
+            }
+            else
+            {
+                suppressedEmptyStart = Math.Min(match.Value.End, haystack.Length + 1);
+                offset = suppressedEmptyStart;
+            }
+        }
+
+        return total;
     }
 
     internal RegexMatch? MatchAt(ReadOnlySpan<byte> haystack, int startAt)
@@ -419,7 +546,11 @@ internal sealed class RegexMetaEngine
         return matches;
     }
 
-    private bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int length)
+    private bool TryMatchAt(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        out int length,
+        Dictionary<(int State, int Position), bool>? reachabilityCache = null)
     {
         if (utf8 && !RegexByteClass.IsUtf8Boundary(haystack, start))
         {
@@ -432,9 +563,14 @@ internal sealed class RegexMetaEngine
             return simpleSequence.TryMatchAt(haystack, start, out length);
         }
 
+        if (scalarRun is not null)
+        {
+            return scalarRun.TryMatchAt(haystack, start, out length);
+        }
+
         if (lazyDfa is not null)
         {
-            return lazyDfa.TryMatchAt(haystack, start, out length);
+            return lazyDfa.TryMatchAt(haystack, start, reachabilityCache, out length);
         }
 
         if (sparseDfa is not null)
@@ -459,8 +595,15 @@ internal sealed class RegexMetaEngine
 
         if (asciiFastDfa is not null)
         {
-            if (asciiFastDfa.TryMatchAsciiAt(haystack, start, out _, out bool aborted))
+            if (asciiFastDfa.TryMatchAsciiAt(haystack, start, out int asciiLength, out bool aborted))
             {
+                int asciiEnd = start + asciiLength;
+                if (asciiLength > 0 && (asciiEnd >= haystack.Length || haystack[asciiEnd] <= 0x7F))
+                {
+                    length = asciiLength;
+                    return true;
+                }
+
                 return pikeVm!.TryMatchAt(haystack, start, out length);
             }
 

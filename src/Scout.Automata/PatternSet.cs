@@ -95,6 +95,12 @@ public sealed class PatternSet
             {
                 requiredLiteralEntries.Add(new PatternSetRequiredLiteralEntry(automata.Count, preparedLiterals));
             }
+            else if (RegexPrefilter.TryFindRequiredLiteral(tree.Root, options, out byte[] requiredLiteral) &&
+                requiredLiteral.Length >= 2 &&
+                RegexPrefilter.TryPrepareRequiredLiteralSet([requiredLiteral], options, out preparedLiterals))
+            {
+                requiredLiteralEntries.Add(new PatternSetRequiredLiteralEntry(automata.Count, preparedLiterals));
+            }
 
             automata.Add(RegexAutomaton.Compile(pattern, caseInsensitive, multiLine, dotMatchesNewline, crlf, lineTerminator, utf8, unicodeClasses));
             automataPatternIds.Add(index);
@@ -135,6 +141,56 @@ public sealed class PatternSet
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Counts all non-overlapping matches in a haystack.
+    /// </summary>
+    /// <param name="haystack">The haystack bytes.</param>
+    /// <returns>The number of non-overlapping matches.</returns>
+    public long CountMatches(ReadOnlySpan<byte> haystack)
+    {
+        return CountMatches(haystack, startAt: 0);
+    }
+
+    /// <summary>
+    /// Counts all non-overlapping matches in a haystack at or after a byte offset.
+    /// </summary>
+    /// <param name="haystack">The haystack bytes.</param>
+    /// <param name="startAt">The first byte offset to consider.</param>
+    /// <returns>The number of non-overlapping matches.</returns>
+    public long CountMatches(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        if (literalAccelerator is null &&
+            requiredLiteralAccelerator is not null &&
+            requiredLiteralAccelerator.CoversAllAutomata)
+        {
+            return requiredLiteralAccelerator.CountMatches(haystack, startOffset, automata, automataPatternIds);
+        }
+
+        return IterateNonOverlapping(haystack, startAt, sumSpans: false);
+    }
+
+    /// <summary>
+    /// Sums the byte lengths of all non-overlapping matches in a haystack.
+    /// </summary>
+    /// <param name="haystack">The haystack bytes.</param>
+    /// <returns>The sum of non-overlapping match lengths.</returns>
+    public long SumMatchSpans(ReadOnlySpan<byte> haystack)
+    {
+        return SumMatchSpans(haystack, startAt: 0);
+    }
+
+    /// <summary>
+    /// Sums the byte lengths of all non-overlapping matches in a haystack at or after a byte offset.
+    /// </summary>
+    /// <param name="haystack">The haystack bytes.</param>
+    /// <param name="startAt">The first byte offset to consider.</param>
+    /// <returns>The sum of non-overlapping match lengths.</returns>
+    public long SumMatchSpans(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        return IterateNonOverlapping(haystack, startAt, sumSpans: true);
     }
 
     /// <summary>
@@ -216,6 +272,43 @@ public sealed class PatternSet
         }
 
         return best;
+    }
+
+    private long IterateNonOverlapping(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
+    {
+        long total = 0;
+        int offset = Math.Clamp(startAt, 0, haystack.Length);
+        int suppressedEmptyStart = -1;
+        while (offset <= haystack.Length)
+        {
+            PatternSetMatch? match = Find(haystack, offset);
+            if (!match.HasValue)
+            {
+                return total;
+            }
+
+            RegexMatch span = match.Value.Match;
+            if (span.Length == 0 && span.Start == suppressedEmptyStart)
+            {
+                offset = Math.Min(span.Start + 1, haystack.Length + 1);
+                suppressedEmptyStart = -1;
+                continue;
+            }
+
+            total += sumSpans ? span.Length : 1;
+            if (span.Length == 0)
+            {
+                suppressedEmptyStart = -1;
+                offset = Math.Min(span.End + 1, haystack.Length + 1);
+            }
+            else
+            {
+                suppressedEmptyStart = Math.Min(span.End, haystack.Length + 1);
+                offset = suppressedEmptyStart;
+            }
+        }
+
+        return total;
     }
 
     /// <summary>

@@ -705,6 +705,7 @@ public sealed partial class PinnedConfigurationTests
         string root = FindRepositoryRoot();
         string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
         string script = File.ReadAllText(Path.Combine(root, "eng", "check-msbuild-warning-gates.sh"));
+        string targets = File.ReadAllText(Path.Combine(root, "Directory.Build.targets"));
 
         Assert.Contains("artifacts/preflight/msbuild-warning-gates", preflight, StringComparison.Ordinal);
         Assert.Contains("dotnet format \"$ROOT/Scout.slnx\" --no-restore --verify-no-changes", preflight, StringComparison.Ordinal);
@@ -787,6 +788,9 @@ public sealed partial class PinnedConfigurationTests
 
         string responseFile = File.ReadAllText(Path.Combine(root, "Directory.Build.rsp"));
         Assert.Contains("-p:NoWarn=", responseFile, StringComparison.Ordinal);
+        Assert.Contains("ScoutNormalizeSdkBaselineNoWarn", targets, StringComparison.Ordinal);
+        Assert.Contains("PropertyName=\"NoWarn\"", targets, StringComparison.Ordinal);
+        Assert.Contains("'$(NoWarn)' == '1701;1702'", targets, StringComparison.Ordinal);
     }
 
     /// <summary>

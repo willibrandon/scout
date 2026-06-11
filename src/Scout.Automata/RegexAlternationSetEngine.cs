@@ -59,6 +59,16 @@ internal sealed class RegexAlternationSetEngine
             : null;
     }
 
+    public long CountMatches(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        return patternSet.CountMatches(haystack, startAt);
+    }
+
+    public long SumMatchSpans(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        return patternSet.SumMatchSpans(haystack, startAt);
+    }
+
     public RegexCaptures? FindSyntheticCaptures(ReadOnlySpan<byte> haystack, int startAt)
     {
         if (wholeBranchCaptureByPattern is null)
@@ -81,7 +91,8 @@ internal sealed class RegexAlternationSetEngine
     private static bool TrySplitTopLevelAlternation(ReadOnlySpan<byte> pattern, out byte[][] alternatives)
     {
         alternatives = [];
-        if (TryStripWholeEnclosingGroup(pattern, out ReadOnlySpan<byte> inner) &&
+        if ((TryStripWholeEnclosingGroup(pattern, out ReadOnlySpan<byte> inner) ||
+                TryStripWholeExactOneRepetition(pattern, out inner)) &&
             TrySplitTopLevelAlternation(inner, out alternatives))
         {
             return true;
@@ -156,6 +167,14 @@ internal sealed class RegexAlternationSetEngine
 
         alternatives = parts.Count > 1 ? parts.ToArray() : [];
         return alternatives.Length > 0;
+    }
+
+    private static bool TryStripWholeExactOneRepetition(ReadOnlySpan<byte> pattern, out ReadOnlySpan<byte> inner)
+    {
+        inner = [];
+        ReadOnlySpan<byte> suffix = "{1,1}"u8;
+        return pattern.EndsWith(suffix) &&
+            TryStripWholeEnclosingGroup(pattern[..^suffix.Length], out inner);
     }
 
     private static bool TryStripWholeEnclosingGroup(ReadOnlySpan<byte> pattern, out ReadOnlySpan<byte> inner)

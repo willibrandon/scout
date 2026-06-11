@@ -55,6 +55,70 @@ internal sealed class PatternSetRequiredLiteralAccelerator
         return acceleratedAutomata[automatonIndex];
     }
 
+    public bool CoversAllAutomata
+    {
+        get
+        {
+            for (int index = 0; index < acceleratedAutomata.Length; index++)
+            {
+                if (!acceleratedAutomata[index])
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    }
+
+    public long CountMatches(
+        ReadOnlySpan<byte> haystack,
+        int startOffset,
+        RegexAutomaton[] automata,
+        int[] automataPatternIds)
+    {
+        long count = 0;
+        int offset = Math.Clamp(startOffset, 0, haystack.Length);
+        int searchOffset = offset;
+        var literalHits = new List<AhoCorasickMatch>();
+        ReadOnlySpan<byte> search = haystack[searchOffset..];
+        AhoCorasickOverlappingEnumerator matches = automaton.EnumerateOverlapping(search);
+        while (matches.MoveNext())
+        {
+            literalHits.Add(matches.Current);
+        }
+
+        int cursor = 0;
+        while (offset <= haystack.Length)
+        {
+            while (cursor < literalHits.Count && searchOffset + literalHits[cursor].Start < offset)
+            {
+                cursor++;
+            }
+
+            PatternSetMatch? best = FindBestFromLiteralHits(
+                haystack,
+                offset,
+                searchOffset,
+                literalHits,
+                cursor,
+                automata,
+                automataPatternIds);
+            if (!best.HasValue)
+            {
+                break;
+            }
+
+            count++;
+            RegexMatch match = best.Value.Match;
+            offset = match.Length == 0
+                ? Math.Min(match.End + 1, haystack.Length + 1)
+                : match.End;
+        }
+
+        return count;
+    }
+
     public PatternSetMatch? Find(
         ReadOnlySpan<byte> haystack,
         int startOffset,
@@ -106,6 +170,78 @@ internal sealed class PatternSetRequiredLiteralAccelerator
         }
 
         return best;
+    }
+
+    private PatternSetMatch? FindBestFromLiteralHits(
+        ReadOnlySpan<byte> haystack,
+        int offset,
+        int searchOffset,
+        List<AhoCorasickMatch> literalHits,
+        int cursor,
+        RegexAutomaton[] automata,
+        int[] automataPatternIds)
+    {
+        PatternSetMatch? best = null;
+        int[] nextStartToTry = new int[automata.Length];
+        Array.Fill(nextStartToTry, offset);
+        for (int hitIndex = cursor; hitIndex < literalHits.Count; hitIndex++)
+        {
+            AhoCorasickMatch literal = literalHits[hitIndex];
+            int requiredAt = searchOffset + literal.Start;
+            if (best.HasValue &&
+                requiredAt - RegexPrefilter.RequiredLiteralLookBehind > best.Value.Match.Start)
+            {
+                break;
+            }
+
+            if (requiredAt < offset)
+            {
+                continue;
+            }
+
+            TryImproveBest(haystack, offset, requiredAt, literal.PatternId, automata, automataPatternIds, nextStartToTry, ref best);
+        }
+
+        return best;
+    }
+
+    private void TryImproveBest(
+        ReadOnlySpan<byte> haystack,
+        int offset,
+        int requiredAt,
+        int literalPatternId,
+        RegexAutomaton[] automata,
+        int[] automataPatternIds,
+        int[] nextStartToTry,
+        ref PatternSetMatch? best)
+    {
+        int[] candidateAutomata = automataByLiteral[literalPatternId];
+        for (int index = 0; index < candidateAutomata.Length; index++)
+        {
+            int automatonIndex = candidateAutomata[index];
+            int firstStart = Math.Max(offset, requiredAt - RegexPrefilter.RequiredLiteralLookBehind);
+            firstStart = Math.Max(firstStart, nextStartToTry[automatonIndex]);
+            int lastStart = best.HasValue
+                ? Math.Min(requiredAt, best.Value.Match.Start)
+                : requiredAt;
+            for (int start = firstStart; start <= lastStart; start++)
+            {
+                RegexMatch? match = automata[automatonIndex].MatchAt(haystack, start);
+                if (!match.HasValue)
+                {
+                    continue;
+                }
+
+                var candidate = new PatternSetMatch(automataPatternIds[automatonIndex], match.Value);
+                if (PatternSet.IsBetter(candidate, best))
+                {
+                    best = candidate;
+                    lastStart = Math.Min(lastStart, best.Value.Match.Start);
+                }
+            }
+
+            nextStartToTry[automatonIndex] = Math.Max(nextStartToTry[automatonIndex], requiredAt + 1);
+        }
     }
 
     private static int FindLiteral(List<byte[]> literals, byte[] literal)

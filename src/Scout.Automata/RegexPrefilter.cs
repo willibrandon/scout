@@ -858,6 +858,11 @@ internal sealed class RegexPrefilter
             }
         }
 
+        if (HasShortLiteral(collected))
+        {
+            return false;
+        }
+
         prepared = collected.ToArray();
         return prepared.Length > 0;
     }
@@ -1413,6 +1418,19 @@ internal sealed class RegexPrefilter
         return shortest;
     }
 
+    private static bool HasShortLiteral(List<byte[]> literals)
+    {
+        for (int index = 0; index < literals.Count; index++)
+        {
+            if (literals[index].Length < 2)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static bool TryDecodeRunes(byte[] bytes, out Rune[] runes)
     {
         List<Rune> decoded = [];
@@ -1816,7 +1834,7 @@ internal sealed class RegexPrefilter
         return (averageLength * 8) + (longest * 4) + (shortest * 2) - (literals.Length * 6);
     }
 
-    private static bool TryFindRequiredLiteral(RegexSyntaxNode node, RegexCompileOptions options, out byte[] literal)
+    internal static bool TryFindRequiredLiteral(RegexSyntaxNode node, RegexCompileOptions options, out byte[] literal)
     {
         literal = [];
         node = UnwrapTransparentGroups(node);
