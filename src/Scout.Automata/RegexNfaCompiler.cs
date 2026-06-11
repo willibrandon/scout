@@ -28,6 +28,23 @@ internal sealed class RegexNfaCompiler
         return new RegexNfa(compiler.states, start, compiler.RequiresUtf8SearchBoundary(options.Utf8));
     }
 
+    public static RegexNfa CompileUnanchored(RegexSyntaxNode root, RegexCompileOptions options)
+    {
+        var compiler = new RegexNfaCompiler();
+        int accept = compiler.AddAccept();
+        int patternStart = compiler.CompileNode(root, accept, options);
+        int start = compiler.AddUnanchoredPrefix(patternStart);
+        return new RegexNfa(compiler.states, start, compiler.RequiresUtf8SearchBoundary(options.Utf8));
+    }
+
+    public static RegexNfa CompileReversed(RegexSyntaxNode root, RegexCompileOptions options)
+    {
+        var compiler = new RegexNfaCompiler();
+        int accept = compiler.AddAccept();
+        int start = compiler.CompileNodeReversed(root, accept, options);
+        return new RegexNfa(compiler.states, start, compiler.RequiresUtf8SearchBoundary(options.Utf8));
+    }
+
     public static RegexNfa CompileCaptures(RegexSyntaxNode root, RegexCompileOptions options, int captureCount)
     {
         var compiler = new RegexNfaCompiler(includeCaptures: true, captureCount);
@@ -47,6 +64,20 @@ internal sealed class RegexNfaCompiler
             RegexSyntaxKind.Repetition => CompileRepetition((RegexRepetitionNode)node, next, options),
             RegexSyntaxKind.InlineFlags => next,
             _ => CompileAtom((RegexAtomNode)node, next, options),
+        };
+    }
+
+    private int CompileNodeReversed(RegexSyntaxNode node, int next, RegexCompileOptions options)
+    {
+        return node.Kind switch
+        {
+            RegexSyntaxKind.Empty => next,
+            RegexSyntaxKind.Sequence => CompileSequenceReversed((RegexSequenceNode)node, next, options),
+            RegexSyntaxKind.Alternation => CompileAlternationReversed((RegexAlternationNode)node, next, options),
+            RegexSyntaxKind.CapturingGroup or RegexSyntaxKind.NonCapturingGroup => CompileGroupReversed((RegexGroupNode)node, next, options),
+            RegexSyntaxKind.Repetition => CompileRepetitionReversed((RegexRepetitionNode)node, next, options),
+            RegexSyntaxKind.InlineFlags => next,
+            _ => CompileAtomReversed((RegexAtomNode)node, next, options),
         };
     }
 
@@ -79,12 +110,53 @@ internal sealed class RegexNfaCompiler
         return start;
     }
 
+    private int CompileSequenceReversed(RegexSequenceNode node, int next, RegexCompileOptions options)
+    {
+        var nodes = new List<RegexSyntaxNode>();
+        var nodeOptions = new List<RegexCompileOptions>();
+        RegexCompileOptions currentOptions = options;
+        for (int index = 0; index < node.Nodes.Count; index++)
+        {
+            RegexSyntaxNode child = node.Nodes[index];
+            if (child is RegexInlineFlagsNode flags)
+            {
+                RegexCompileOptions nextOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
+                sawUtf8Disabled |= currentOptions.Utf8 && !nextOptions.Utf8;
+                currentOptions = nextOptions;
+                continue;
+            }
+
+            nodes.Add(child);
+            nodeOptions.Add(currentOptions);
+        }
+
+        int start = next;
+        for (int index = 0; index < nodes.Count; index++)
+        {
+            start = CompileNodeReversed(nodes[index], start, nodeOptions[index]);
+        }
+
+        return start;
+    }
+
     private int CompileAlternation(RegexAlternationNode node, int next, RegexCompileOptions options)
     {
         int start = CompileNode(node.Alternatives[^1], next, options);
         for (int index = node.Alternatives.Count - 2; index >= 0; index--)
         {
             int branch = CompileNode(node.Alternatives[index], next, options);
+            start = AddSplit(branch, start);
+        }
+
+        return start;
+    }
+
+    private int CompileAlternationReversed(RegexAlternationNode node, int next, RegexCompileOptions options)
+    {
+        int start = CompileNodeReversed(node.Alternatives[^1], next, options);
+        for (int index = node.Alternatives.Count - 2; index >= 0; index--)
+        {
+            int branch = CompileNodeReversed(node.Alternatives[index], next, options);
             start = AddSplit(branch, start);
         }
 
@@ -103,6 +175,13 @@ internal sealed class RegexNfaCompiler
         int end = AddCapture(RegexNfaStateKind.CaptureEnd, node.CaptureIndex, next);
         int child = CompileNode(node.Child, end, groupOptions);
         return AddCapture(RegexNfaStateKind.CaptureStart, node.CaptureIndex, child);
+    }
+
+    private int CompileGroupReversed(RegexGroupNode node, int next, RegexCompileOptions options)
+    {
+        RegexCompileOptions groupOptions = options.Apply(node.EnabledFlags, node.DisabledFlags);
+        sawUtf8Disabled |= options.Utf8 && !groupOptions.Utf8;
+        return CompileNodeReversed(node.Child, next, groupOptions);
     }
 
     private int CompileRepetition(RegexRepetitionNode node, int next, RegexCompileOptions options)
@@ -129,9 +208,39 @@ internal sealed class RegexNfaCompiler
         return start;
     }
 
+    private int CompileRepetitionReversed(RegexRepetitionNode node, int next, RegexCompileOptions options)
+    {
+        bool lazy = options.SwapGreed ? !node.Lazy : node.Lazy;
+        int start = next;
+        int maximum = node.Maximum ?? int.MaxValue;
+        if (node.Maximum is null)
+        {
+            start = CompileStarReversed(node.Child, start, options, lazy);
+            maximum = node.Minimum;
+        }
+
+        for (int count = maximum; count > node.Minimum; count--)
+        {
+            start = CompileOptionalReversed(node.Child, start, options, lazy);
+        }
+
+        for (int count = 0; count < node.Minimum; count++)
+        {
+            start = CompileNodeReversed(node.Child, start, options);
+        }
+
+        return start;
+    }
+
     private int CompileOptional(RegexSyntaxNode child, int next, RegexCompileOptions options, bool lazy)
     {
         int childStart = CompileNode(child, next, options);
+        return lazy ? AddSplit(next, childStart) : AddSplit(childStart, next);
+    }
+
+    private int CompileOptionalReversed(RegexSyntaxNode child, int next, RegexCompileOptions options, bool lazy)
+    {
+        int childStart = CompileNodeReversed(child, next, options);
         return lazy ? AddSplit(next, childStart) : AddSplit(childStart, next);
     }
 
@@ -140,6 +249,17 @@ internal sealed class RegexNfaCompiler
         int split = states.Count;
         states.Add(CreateControlState(RegexNfaStateKind.Split, next: -1, alternative: -1));
         int childStart = CompileNode(child, split, options);
+        states[split] = lazy
+            ? CreateControlState(RegexNfaStateKind.LazyLoopSplit, next, childStart)
+            : CreateControlState(RegexNfaStateKind.GreedyLoopSplit, childStart, next);
+        return split;
+    }
+
+    private int CompileStarReversed(RegexSyntaxNode child, int next, RegexCompileOptions options, bool lazy)
+    {
+        int split = states.Count;
+        states.Add(CreateControlState(RegexNfaStateKind.Split, next: -1, alternative: -1));
+        int childStart = CompileNodeReversed(child, split, options);
         states[split] = lazy
             ? CreateControlState(RegexNfaStateKind.LazyLoopSplit, next, childStart)
             : CreateControlState(RegexNfaStateKind.GreedyLoopSplit, childStart, next);
@@ -164,6 +284,50 @@ internal sealed class RegexNfaCompiler
             next,
             alternative: -1));
         return state;
+    }
+
+    private int CompileAtomReversed(RegexAtomNode node, int next, RegexCompileOptions options)
+    {
+        RegexSyntaxKind kind = ReverseAtomKind(node.Kind);
+        ReadOnlyMemory<byte> value = kind == RegexSyntaxKind.Literal ? ReverseBytes(node.Value) : node.Value;
+        RegexNfaStateKind stateKind = IsPredicate(kind) ? RegexNfaStateKind.Predicate : RegexNfaStateKind.Atom;
+        int state = states.Count;
+        states.Add(new RegexNfaState(
+            stateKind,
+            kind,
+            value,
+            options.CaseInsensitive,
+            options.MultiLine,
+            options.DotMatchesNewline,
+            options.Crlf,
+            options.LineTerminator,
+            options.Utf8,
+            options.UnicodeClasses,
+            next,
+            alternative: -1));
+        return state;
+    }
+
+    private int AddUnanchoredPrefix(int next)
+    {
+        int split = states.Count;
+        states.Add(CreateControlState(RegexNfaStateKind.Split, next: -1, alternative: -1));
+        int any = states.Count;
+        states.Add(new RegexNfaState(
+            RegexNfaStateKind.Atom,
+            RegexSyntaxKind.AnyClass,
+            ReadOnlyMemory<byte>.Empty,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: true,
+            crlf: false,
+            lineTerminator: (byte)'\n',
+            utf8: false,
+            unicodeClasses: false,
+            split,
+            alternative: -1));
+        states[split] = CreateControlState(RegexNfaStateKind.LazyLoopSplit, next, any);
+        return split;
     }
 
     private int AddSplit(int first, int second)
@@ -258,6 +422,34 @@ internal sealed class RegexNfaCompiler
             or RegexSyntaxKind.WordEndBoundary
             or RegexSyntaxKind.WordStartHalfBoundary
             or RegexSyntaxKind.WordEndHalfBoundary;
+    }
+
+    private static RegexSyntaxKind ReverseAtomKind(RegexSyntaxKind kind)
+    {
+        return kind switch
+        {
+            RegexSyntaxKind.StartAnchor => RegexSyntaxKind.EndAnchor,
+            RegexSyntaxKind.EndAnchor => RegexSyntaxKind.StartAnchor,
+            RegexSyntaxKind.AbsoluteStartAnchor => RegexSyntaxKind.AbsoluteEndAnchor,
+            RegexSyntaxKind.AbsoluteEndAnchor => RegexSyntaxKind.AbsoluteStartAnchor,
+            RegexSyntaxKind.WordStartBoundary => RegexSyntaxKind.WordEndBoundary,
+            RegexSyntaxKind.WordEndBoundary => RegexSyntaxKind.WordStartBoundary,
+            RegexSyntaxKind.WordStartHalfBoundary => RegexSyntaxKind.WordEndHalfBoundary,
+            RegexSyntaxKind.WordEndHalfBoundary => RegexSyntaxKind.WordStartHalfBoundary,
+            _ => kind,
+        };
+    }
+
+    private static ReadOnlyMemory<byte> ReverseBytes(ReadOnlyMemory<byte> value)
+    {
+        if (value.Length <= 1)
+        {
+            return value;
+        }
+
+        byte[] reversed = value.ToArray();
+        Array.Reverse(reversed);
+        return reversed;
     }
 
 }

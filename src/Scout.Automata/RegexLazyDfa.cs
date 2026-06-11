@@ -7,38 +7,164 @@ internal sealed class RegexLazyDfa
     private readonly Dictionary<RegexDfaStateKey, RegexLazyDfaState> states;
     private RegexDfaBudget budget;
     private readonly RegexLazyDfaState startState;
+    private readonly bool leftmostPrune;
 
     private RegexLazyDfa(
         RegexNfa nfa,
         Dictionary<RegexDfaStateKey, RegexLazyDfaState> states,
         RegexLazyDfaState startState,
-        RegexDfaBudget budget)
+        RegexDfaBudget budget,
+        bool leftmostPrune)
     {
         this.nfa = nfa;
         fallback = new PikeVm(nfa);
         this.states = states;
         this.startState = startState;
         this.budget = budget;
+        this.leftmostPrune = leftmostPrune;
     }
 
     public static bool TryCreate(RegexNfa nfa, ulong dfaSizeLimit, out RegexLazyDfa? dfa)
     {
+        return TryCreate(nfa, dfaSizeLimit, leftmostPrune: false, out dfa);
+    }
+
+    public static bool TryCreate(RegexNfa nfa, ulong dfaSizeLimit, bool leftmostPrune, out RegexLazyDfa? dfa)
+    {
         var budget = new RegexDfaBudget(dfaSizeLimit);
         var states = new Dictionary<RegexDfaStateKey, RegexLazyDfaState>();
-        int[] startNfaStates = RegexDfaOperations.Closure(nfa, nfa.StartState);
+        int[] startNfaStates = leftmostPrune
+            ? RegexDfaOperations.ClosureLeftmost(nfa, nfa.StartState)
+            : RegexDfaOperations.Closure(nfa, nfa.StartState);
         if (!TryIntern(nfa, states, ref budget, startNfaStates, out RegexLazyDfaState? startState))
         {
             dfa = null;
             return false;
         }
 
-        dfa = new RegexLazyDfa(nfa, states, startState!, budget);
+        dfa = new RegexLazyDfa(nfa, states, startState!, budget, leftmostPrune);
         return true;
     }
 
     public bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int length)
     {
         return TryMatchAt(haystack, start, reachabilityCache: null, out length);
+    }
+
+    public bool TryFindEnd(ReadOnlySpan<byte> haystack, int start, out int end)
+    {
+        return TryFindEnd(haystack, start, reachabilityCache: null, out end);
+    }
+
+    public bool TryFindEnd(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        Dictionary<(int State, int Position), bool>? reachabilityCache,
+        out int end)
+    {
+        if (leftmostPrune)
+        {
+            return TryFindEndLeftmost(haystack, start, out end);
+        }
+
+        if (TryMatchAt(haystack, start, reachabilityCache, out int length))
+        {
+            end = start + length;
+            return true;
+        }
+
+        end = 0;
+        return false;
+    }
+
+    public bool TryFindStartReverse(ReadOnlySpan<byte> haystack, int start, int end, out int matchStart)
+    {
+        return TryFindStartReverse(haystack, start, end, reachabilityCache: null, out matchStart);
+    }
+
+    public bool TryFindStartReverse(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        int end,
+        Dictionary<(int State, int Position), bool>? reachabilityCache,
+        out int matchStart)
+    {
+        _ = reachabilityCache;
+        if (leftmostPrune)
+        {
+            return TryFindStartReverseLeftmost(haystack, start, end, out matchStart);
+        }
+
+        matchStart = 0;
+        return false;
+    }
+
+    private bool TryFindEndLeftmost(ReadOnlySpan<byte> haystack, int start, out int end)
+    {
+        RegexLazyDfaState current = startState;
+        int lastAcceptEnd = -1;
+        for (int position = start; position <= haystack.Length; position++)
+        {
+            if (current.AcceptIndex >= 0)
+            {
+                lastAcceptEnd = position;
+            }
+
+            if (position == haystack.Length)
+            {
+                break;
+            }
+
+            if (!TryTransition(current, haystack[position], out current))
+            {
+                end = lastAcceptEnd;
+                return lastAcceptEnd >= 0;
+            }
+
+            if (current.NfaStates.Length == 0)
+            {
+                end = lastAcceptEnd;
+                return lastAcceptEnd >= 0;
+            }
+        }
+
+        end = lastAcceptEnd;
+        return lastAcceptEnd >= 0;
+    }
+
+    private bool TryFindStartReverseLeftmost(ReadOnlySpan<byte> haystack, int start, int end, out int matchStart)
+    {
+        RegexLazyDfaState current = startState;
+        int lastAcceptStart = -1;
+        int position = end;
+        while (position >= start)
+        {
+            if (current.AcceptIndex >= 0)
+            {
+                lastAcceptStart = position;
+            }
+
+            if (position == start)
+            {
+                break;
+            }
+
+            if (!TryTransition(current, haystack[position - 1], out current))
+            {
+                matchStart = lastAcceptStart;
+                return lastAcceptStart >= 0;
+            }
+
+            position--;
+            if (current.NfaStates.Length == 0)
+            {
+                matchStart = lastAcceptStart;
+                return lastAcceptStart >= 0;
+            }
+        }
+
+        matchStart = lastAcceptStart;
+        return lastAcceptStart >= 0;
     }
 
     public bool TryMatchAt(
@@ -185,7 +311,7 @@ internal sealed class RegexLazyDfa
         }
 
         if (!budget.TryReserve(RegexDfaBudget.SparseTransitionBytes) ||
-            !TryIntern(nfa, states, ref budget, RegexDfaOperations.Move(nfa, state.NfaStates, value), out RegexLazyDfaState? created))
+            !TryIntern(nfa, states, ref budget, Move(state.NfaStates, value), out RegexLazyDfaState? created))
         {
             nextState = state;
             return false;
@@ -194,6 +320,13 @@ internal sealed class RegexLazyDfa
         nextState = created!;
         state.AddTransition(value, nextState);
         return true;
+    }
+
+    private int[] Move(int[] nfaStates, byte value)
+    {
+        return leftmostPrune
+            ? RegexDfaOperations.MoveLeftmost(nfa, nfaStates, value)
+            : RegexDfaOperations.Move(nfa, nfaStates, value);
     }
 
     private static bool TryIntern(

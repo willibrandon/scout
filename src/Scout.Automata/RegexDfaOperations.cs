@@ -24,6 +24,13 @@ internal static class RegexDfaOperations
         return threads.ToArray();
     }
 
+    public static int[] ClosureLeftmost(RegexNfa nfa, int stateIndex)
+    {
+        var threads = new List<int>();
+        AddThreadLeftmost(nfa, stateIndex, threads, new bool[nfa.States.Count], new bool[nfa.States.Count]);
+        return threads.ToArray();
+    }
+
     public static int[] Move(RegexNfa nfa, int[] nfaStates, byte value)
     {
         var next = new List<int>();
@@ -42,6 +49,31 @@ internal static class RegexDfaOperations
                     nfaState.LineTerminator))
             {
                 AddThread(nfa, nfaState.Next, next, new bool[nfa.States.Count], new bool[nfa.States.Count]);
+            }
+        }
+
+        return next.ToArray();
+    }
+
+    public static int[] MoveLeftmost(RegexNfa nfa, int[] nfaStates, byte value)
+    {
+        var next = new List<int>();
+        for (int index = 0; index < nfaStates.Length; index++)
+        {
+            RegexNfaState nfaState = nfa.States[nfaStates[index]];
+            if (nfaState.Kind == RegexNfaStateKind.Atom &&
+                RegexByteClass.AtomMatches(
+                    value,
+                    nfaState.AtomKind,
+                    nfaState.Value.Span,
+                    nfaState.CaseInsensitive,
+                    nfaState.MultiLine,
+                    nfaState.DotMatchesNewline,
+                    nfaState.Crlf,
+                    nfaState.LineTerminator) &&
+                AddThreadLeftmost(nfa, nfaState.Next, next, new bool[nfa.States.Count], new bool[nfa.States.Count]))
+            {
+                break;
             }
         }
 
@@ -214,6 +246,41 @@ internal static class RegexDfaOperations
         }
     }
 
+    private static bool AddThreadLeftmost(
+        RegexNfa nfa,
+        int stateIndex,
+        List<int> threads,
+        bool[] visited,
+        bool[] closedSplits)
+    {
+        if (stateIndex < 0)
+        {
+            return false;
+        }
+
+        if (visited[stateIndex])
+        {
+            return AddClosedSplitExitLeftmost(nfa, stateIndex, threads, visited, closedSplits);
+        }
+
+        visited[stateIndex] = true;
+        RegexNfaState state = nfa.States[stateIndex];
+        switch (state.Kind)
+        {
+            case RegexNfaStateKind.Accept:
+                threads.Add(stateIndex);
+                return true;
+            case RegexNfaStateKind.Split:
+            case RegexNfaStateKind.GreedyLoopSplit:
+            case RegexNfaStateKind.LazyLoopSplit:
+                return AddThreadLeftmost(nfa, state.Next, threads, visited, closedSplits) ||
+                    AddThreadLeftmost(nfa, state.Alternative, threads, visited, closedSplits);
+            default:
+                threads.Add(stateIndex);
+                return false;
+        }
+    }
+
     private static void AddClosedSplitExit(
         RegexNfa nfa,
         int stateIndex,
@@ -237,5 +304,27 @@ internal static class RegexDfaOperations
                 AddThread(nfa, state.Next, threads, visited, closedSplits);
                 break;
         }
+    }
+
+    private static bool AddClosedSplitExitLeftmost(
+        RegexNfa nfa,
+        int stateIndex,
+        List<int> threads,
+        bool[] visited,
+        bool[] closedSplits)
+    {
+        RegexNfaState state = nfa.States[stateIndex];
+        if (closedSplits[stateIndex])
+        {
+            return false;
+        }
+
+        closedSplits[stateIndex] = true;
+        return state.Kind switch
+        {
+            RegexNfaStateKind.GreedyLoopSplit => AddThreadLeftmost(nfa, state.Alternative, threads, visited, closedSplits),
+            RegexNfaStateKind.LazyLoopSplit => AddThreadLeftmost(nfa, state.Next, threads, visited, closedSplits),
+            _ => false,
+        };
     }
 }

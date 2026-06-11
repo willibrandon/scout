@@ -8,6 +8,7 @@ internal sealed class RegexMetaEngine
     private const int SparseDfaStateLimit = 64;
     private const int OnePassDfaNfaStateLimit = 48;
     private const int BoundedBacktrackerNfaStateLimit = 24;
+    private const int UnanchoredLazyDfaHaystackThreshold = 4096;
     private const ulong DefaultDfaSizeLimit = 2UL * 1024UL * 1024UL;
 
     private readonly PikeVm? pikeVm;
@@ -27,7 +28,12 @@ internal sealed class RegexMetaEngine
     private readonly RegexPrefilter? prefilter;
     private readonly Func<RegexNfa>? nfaFactory;
     private readonly object nfaInitializationLock = new();
+    private readonly Func<RegexUnanchoredLazyDfa?>? unanchoredLazyDfaFactory;
+    private readonly Func<RegexUnanchoredLazyDfa?>? asciiFastUnanchoredDfaFactory;
+    private readonly object unanchoredDfaInitializationLock = new();
     private RegexNfa? nfa;
+    private RegexUnanchoredLazyDfa? unanchoredLazyDfa;
+    private RegexUnanchoredLazyDfa? asciiFastUnanchoredDfa;
     private readonly bool utf8;
 
     private RegexMetaEngine(
@@ -47,9 +53,11 @@ internal sealed class RegexMetaEngine
         RegexPrefilter? prefilter,
         bool utf8,
         RegexLazyDfa? asciiFastDfa = null,
+        Func<RegexUnanchoredLazyDfa?>? asciiFastUnanchoredDfaFactory = null,
         RegexScalarRunEngine? scalarRun = null,
         RegexAsciiWordBoundaryEngine? asciiWordBoundary = null,
-        Func<RegexNfa>? nfaFactory = null)
+        Func<RegexNfa>? nfaFactory = null,
+        Func<RegexUnanchoredLazyDfa?>? unanchoredLazyDfaFactory = null)
     {
         Kind = kind;
         this.nfa = nfa;
@@ -61,6 +69,8 @@ internal sealed class RegexMetaEngine
         this.sparseDfa = sparseDfa;
         this.lazyDfa = lazyDfa;
         this.asciiFastDfa = asciiFastDfa;
+        this.asciiFastUnanchoredDfaFactory = asciiFastUnanchoredDfaFactory;
+        this.unanchoredLazyDfaFactory = unanchoredLazyDfaFactory;
         this.literalSet = literalSet;
         this.alternationSet = alternationSet;
         this.simpleSequence = simpleSequence;
@@ -147,7 +157,9 @@ internal sealed class RegexMetaEngine
         RegexDotStarClassFallbackEngine? dotStarClassFallback = null,
         RegexNfa? asciiFastNfa = null,
         RegexScalarRunEngine? scalarRun = null,
-        RegexAsciiWordBoundaryEngine? asciiWordBoundary = null)
+        RegexAsciiWordBoundaryEngine? asciiWordBoundary = null,
+        RegexSyntaxNode? root = null,
+        RegexCompileOptions? options = null)
     {
         ulong effectiveDfaSizeLimit = dfaSizeLimit ?? DefaultDfaSizeLimit;
         if (literalSet is not null)
@@ -292,7 +304,7 @@ internal sealed class RegexMetaEngine
                 prefilter,
                 nfa.Utf8,
                 asciiFastDfa: null,
-                scalarRun);
+                scalarRun: scalarRun);
         }
 
         if (!RegexDfaOperations.CanCompile(nfa))
@@ -338,6 +350,11 @@ internal sealed class RegexMetaEngine
             }
 
             RegexLazyDfa? asciiFastDfa = TryCreateAsciiFastDfa(asciiFastNfa, effectiveDfaSizeLimit);
+            Func<RegexUnanchoredLazyDfa?>? asciiFastUnanchoredDfaFactory = CreateAsciiFastUnanchoredDfaFactory(
+                asciiFastNfa,
+                root,
+                options,
+                effectiveDfaSizeLimit);
             return new RegexMetaEngine(
                 RegexEngineKind.PikeVm,
                 nfa,
@@ -354,7 +371,8 @@ internal sealed class RegexMetaEngine
                 dotStarClassFallback: null,
                 prefilter,
                 nfa.Utf8,
-                asciiFastDfa);
+                asciiFastDfa: asciiFastDfa,
+                asciiFastUnanchoredDfaFactory: asciiFastUnanchoredDfaFactory);
         }
 
         if (nfa.States.Count <= DenseDfaNfaStateLimit &&
@@ -419,6 +437,12 @@ internal sealed class RegexMetaEngine
                 nfa.Utf8);
         }
 
+        Func<RegexUnanchoredLazyDfa?>? unanchoredLazyDfaFactory = CreateUnanchoredLazyDfaFactory(
+            root,
+            options,
+            prefilter,
+            effectiveDfaSizeLimit);
+
         return new RegexMetaEngine(
             RegexEngineKind.LazyDfa,
             nfa,
@@ -434,7 +458,55 @@ internal sealed class RegexMetaEngine
             lineContains: null,
             dotStarClassFallback: null,
             prefilter,
-            nfa.Utf8);
+            nfa.Utf8,
+            unanchoredLazyDfaFactory: unanchoredLazyDfaFactory);
+    }
+
+    private static Func<RegexUnanchoredLazyDfa?>? CreateUnanchoredLazyDfaFactory(
+        RegexSyntaxNode? root,
+        RegexCompileOptions? options,
+        RegexPrefilter? prefilter,
+        ulong dfaSizeLimit)
+    {
+        if (root is null ||
+            !options.HasValue ||
+            prefilter is not null)
+        {
+            return null;
+        }
+
+        RegexCompileOptions capturedOptions = options.Value;
+        return () => RegexUnanchoredLazyDfa.TryCreate(root, capturedOptions, dfaSizeLimit, out RegexUnanchoredLazyDfa? dfa)
+            ? dfa
+            : null;
+    }
+
+    private static Func<RegexUnanchoredLazyDfa?>? CreateAsciiFastUnanchoredDfaFactory(
+        RegexNfa? asciiFastNfa,
+        RegexSyntaxNode? root,
+        RegexCompileOptions? options,
+        ulong dfaSizeLimit)
+    {
+        if (asciiFastNfa is null ||
+            root is null ||
+            !options.HasValue)
+        {
+            return null;
+        }
+
+        RegexCompileOptions source = options.Value;
+        var asciiOptions = new RegexCompileOptions(
+            source.CaseInsensitive,
+            source.SwapGreed,
+            source.MultiLine,
+            source.DotMatchesNewline,
+            source.Crlf,
+            source.LineTerminator,
+            utf8: false,
+            unicodeClasses: false);
+        return () => RegexUnanchoredLazyDfa.TryCreate(root, asciiOptions, dfaSizeLimit, out RegexUnanchoredLazyDfa? dfa)
+            ? dfa
+            : null;
     }
 
     private static RegexLazyDfa? TryCreateAsciiFastDfa(RegexNfa? asciiFastNfa, ulong dfaSizeLimit)
@@ -489,6 +561,19 @@ internal sealed class RegexMetaEngine
         if (asciiWordBoundary is not null)
         {
             return asciiWordBoundary.Find(haystack, startOffset);
+        }
+
+        RegexUnanchoredLazyDfa? activeUnanchoredLazyDfa = GetUnanchoredLazyDfa(haystack.Length);
+        if (activeUnanchoredLazyDfa is not null &&
+            activeUnanchoredLazyDfa.TryFind(haystack, startOffset, out RegexMatch unanchoredMatch, out bool gaveUp) &&
+            !gaveUp)
+        {
+            return unanchoredMatch;
+        }
+
+        if (TryFindAsciiFastUnanchored(haystack, startOffset, out RegexMatch asciiFastMatch))
+        {
+            return asciiFastMatch;
         }
 
         if (prefilter?.UsesRequiredLiteralWindow == true)
@@ -578,6 +663,18 @@ internal sealed class RegexMetaEngine
             return count;
         }
 
+        RegexUnanchoredLazyDfa? activeUnanchoredLazyDfa = GetUnanchoredLazyDfa(haystack.Length);
+        if (activeUnanchoredLazyDfa is not null &&
+            activeUnanchoredLazyDfa.TryCountMatches(haystack, startAt, out long unanchoredCount))
+        {
+            return unanchoredCount;
+        }
+
+        if (TryIterateAsciiFastUnanchored(haystack, startAt, sumSpans: false, out long asciiFastCount))
+        {
+            return asciiFastCount;
+        }
+
         return IterateNonOverlapping(haystack, startAt, startPredicate, sumSpans: false);
     }
 
@@ -613,6 +710,18 @@ internal sealed class RegexMetaEngine
             return spanSum;
         }
 
+        RegexUnanchoredLazyDfa? activeUnanchoredLazyDfa = GetUnanchoredLazyDfa(haystack.Length);
+        if (activeUnanchoredLazyDfa is not null &&
+            activeUnanchoredLazyDfa.TrySumMatchSpans(haystack, startAt, out long unanchoredSpanSum))
+        {
+            return unanchoredSpanSum;
+        }
+
+        if (TryIterateAsciiFastUnanchored(haystack, startAt, sumSpans: true, out long asciiFastSpanSum))
+        {
+            return asciiFastSpanSum;
+        }
+
         return IterateNonOverlapping(haystack, startAt, startPredicate, sumSpans: true);
     }
 
@@ -631,6 +740,77 @@ internal sealed class RegexMetaEngine
         count = 0;
         spanSum = 0;
         return false;
+    }
+
+    private bool TryFindAsciiFastUnanchored(ReadOnlySpan<byte> haystack, int startAt, out RegexMatch match)
+    {
+        match = default;
+        RegexUnanchoredLazyDfa? activeAsciiFastUnanchoredDfa = GetAsciiFastUnanchoredDfa(haystack.Length);
+        if (activeAsciiFastUnanchoredDfa is null ||
+            !activeAsciiFastUnanchoredDfa.TryFind(haystack, startAt, out match, out bool gaveUp) ||
+            gaveUp)
+        {
+            return false;
+        }
+
+        return CanAcceptAsciiFastUnanchored(haystack, startAt, match);
+    }
+
+    private bool TryIterateAsciiFastUnanchored(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans, out long total)
+    {
+        total = 0;
+        RegexUnanchoredLazyDfa? activeAsciiFastUnanchoredDfa = GetAsciiFastUnanchoredDfa(haystack.Length);
+        if (activeAsciiFastUnanchoredDfa is null)
+        {
+            return false;
+        }
+
+        int offset = Math.Clamp(startAt, 0, haystack.Length);
+        Dictionary<(int State, int Position), bool> forwardReachabilityCache = [];
+        Dictionary<(int State, int Position), bool> reverseReachabilityCache = [];
+        while (offset <= haystack.Length)
+        {
+            if (!activeAsciiFastUnanchoredDfa.TryFind(
+                    haystack,
+                    offset,
+                    forwardReachabilityCache,
+                    reverseReachabilityCache,
+                    out RegexMatch match,
+                    out bool gaveUp))
+            {
+                return !gaveUp && IsAsciiRange(haystack, offset, haystack.Length);
+            }
+
+            if (!CanAcceptAsciiFastUnanchored(haystack, offset, match))
+            {
+                return false;
+            }
+
+            total += sumSpans ? match.Length : 1;
+            offset = match.End;
+        }
+
+        return true;
+    }
+
+    private static bool CanAcceptAsciiFastUnanchored(ReadOnlySpan<byte> haystack, int searchStart, RegexMatch match)
+    {
+        return match.Length > 0 &&
+            IsAsciiRange(haystack, searchStart, match.End) &&
+            (match.End >= haystack.Length || haystack[match.End] <= 0x7F);
+    }
+
+    private static bool IsAsciiRange(ReadOnlySpan<byte> haystack, int start, int end)
+    {
+        for (int index = start; index < end; index++)
+        {
+            if (haystack[index] > 0x7F)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private long IterateNonOverlapping(ReadOnlySpan<byte> haystack, int startAt, RegexStartPredicate? startPredicate, bool sumSpans)
@@ -723,6 +903,44 @@ internal sealed class RegexMetaEngine
         lock (nfaInitializationLock)
         {
             return nfa ??= nfaFactory();
+        }
+    }
+
+    private RegexUnanchoredLazyDfa? GetUnanchoredLazyDfa(int haystackLength)
+    {
+        if (haystackLength < UnanchoredLazyDfaHaystackThreshold ||
+            unanchoredLazyDfaFactory is null)
+        {
+            return null;
+        }
+
+        if (unanchoredLazyDfa is not null)
+        {
+            return unanchoredLazyDfa;
+        }
+
+        lock (unanchoredDfaInitializationLock)
+        {
+            return unanchoredLazyDfa ??= unanchoredLazyDfaFactory();
+        }
+    }
+
+    private RegexUnanchoredLazyDfa? GetAsciiFastUnanchoredDfa(int haystackLength)
+    {
+        if (haystackLength < UnanchoredLazyDfaHaystackThreshold ||
+            asciiFastUnanchoredDfaFactory is null)
+        {
+            return null;
+        }
+
+        if (asciiFastUnanchoredDfa is not null)
+        {
+            return asciiFastUnanchoredDfa;
+        }
+
+        lock (unanchoredDfaInitializationLock)
+        {
+            return asciiFastUnanchoredDfa ??= asciiFastUnanchoredDfaFactory();
         }
     }
 
