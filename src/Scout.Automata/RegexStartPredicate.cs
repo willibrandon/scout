@@ -7,8 +7,13 @@ internal sealed class RegexStartPredicate
 {
     private const int MaxPredicateLength = 64;
     private const int MaxFirstByteVariants = 192;
+    private const int MaxPrefixPredicateCount = 256;
 
     private readonly bool[][] allowedBytes;
+    private readonly byte[][][]? prefixesByFirstByte;
+    private readonly bool[]? singleBytePrefixes;
+    private readonly bool[][]? secondBytesByFirstByte;
+    private readonly bool asciiCaseInsensitivePrefixes;
 
     private RegexStartPredicate(List<byte[]> allowedBytes)
     {
@@ -26,22 +31,56 @@ internal sealed class RegexStartPredicate
         }
     }
 
+    private RegexStartPredicate(byte[][] prefixes, bool asciiCaseInsensitive)
+    {
+        allowedBytes = [];
+        asciiCaseInsensitivePrefixes = asciiCaseInsensitive;
+        singleBytePrefixes = new bool[256];
+        secondBytesByFirstByte = BuildSecondByteBuckets();
+        prefixesByFirstByte = BuildPrefixBuckets(prefixes, asciiCaseInsensitive, singleBytePrefixes, secondBytesByFirstByte);
+    }
+
     public static bool TryCreate(RegexSyntaxNode root, RegexCompileOptions options, out RegexStartPredicate? predicate)
+    {
+        return TryCreate(root, options, prefixSet: null, out predicate);
+    }
+
+    internal static bool TryCreate(
+        RegexSyntaxNode root,
+        RegexCompileOptions options,
+        RegexStartPrefixSet? prefixSet,
+        out RegexStartPredicate? predicate)
     {
         var allowed = new List<byte[]>();
         bool caseFoldMayNeedUnicodeScalars = options.CaseInsensitive && options.UnicodeClasses;
-        if (!TryAppend(root, options, allowed, caseFoldMayNeedUnicodeScalars, out _) ||
-            allowed.Count == 0)
+        bool hasPositionalPredicate = TryAppend(root, options, allowed, caseFoldMayNeedUnicodeScalars, out _) &&
+            allowed.Count != 0;
+        if (hasPositionalPredicate)
         {
-            return TryCreateFirstByte(root, options, out predicate);
+            if (TryCreatePrefixSet(prefixSet, options, minimumUsefulLength: allowed.Count + 1, out predicate))
+            {
+                return true;
+            }
+
+            predicate = new RegexStartPredicate(allowed);
+            return true;
         }
 
-        predicate = new RegexStartPredicate(allowed);
-        return true;
+        if (TryCreatePrefixSet(prefixSet, options, minimumUsefulLength: 2, out predicate))
+        {
+            return true;
+        }
+
+        return TryCreateFirstByte(root, options, out predicate);
     }
 
     public bool CanStartAt(ReadOnlySpan<byte> haystack, int start)
     {
+        if (prefixesByFirstByte is not null)
+        {
+            return CanStartAtPrefix(haystack, start);
+        }
+
         if (start < 0 || start > haystack.Length - allowedBytes.Length)
         {
             return false;
@@ -60,6 +99,21 @@ internal sealed class RegexStartPredicate
 
     internal bool TryAddFirstBytes(bool[] bytes)
     {
+        if (prefixesByFirstByte is not null)
+        {
+            for (int value = 0; value <= byte.MaxValue; value++)
+            {
+                if ((singleBytePrefixes is not null && singleBytePrefixes[value]) ||
+                    (secondBytesByFirstByte is not null && HasAnySecondByte(secondBytesByFirstByte[value])) ||
+                    prefixesByFirstByte[value].Length != 0)
+                {
+                    AddFirstByte(bytes, (byte)value, asciiCaseInsensitivePrefixes);
+                }
+            }
+
+            return true;
+        }
+
         if (allowedBytes.Length == 0)
         {
             return false;
@@ -75,6 +129,221 @@ internal sealed class RegexStartPredicate
         }
 
         return true;
+    }
+
+    private static bool HasAnySecondByte(bool[] bytes)
+    {
+        for (int index = 0; index < bytes.Length; index++)
+        {
+            if (bytes[index])
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void AddFirstByte(bool[] bytes, byte value, bool asciiCaseInsensitive)
+    {
+        bytes[value] = true;
+        if (!asciiCaseInsensitive)
+        {
+            return;
+        }
+
+        if (value is >= (byte)'a' and <= (byte)'z')
+        {
+            bytes[value - 0x20] = true;
+        }
+        else if (value is >= (byte)'A' and <= (byte)'Z')
+        {
+            bytes[value + 0x20] = true;
+        }
+    }
+
+    private static bool TryCreatePrefixSet(
+        RegexStartPrefixSet? prefixSet,
+        RegexCompileOptions options,
+        int minimumUsefulLength,
+        out RegexStartPredicate? predicate)
+    {
+        predicate = null;
+        if (!prefixSet.HasValue ||
+            !prefixSet.Value.CaseInsensitive ||
+            prefixSet.Value.Prefixes is not { } prefixes ||
+            prefixes.Length < 2 ||
+            prefixes.Length > MaxPrefixPredicateCount ||
+            !HasUsefulPrefix(prefixes, minimumUsefulLength))
+        {
+            return false;
+        }
+
+        byte[][] preparedPrefixes = prefixes;
+        bool asciiCaseInsensitive = prefixSet.Value.CaseInsensitive;
+        if (prefixSet.Value.UnicodeCaseInsensitive)
+        {
+            var prefixOptions = new RegexCompileOptions(
+                caseInsensitive: true,
+                options.SwapGreed,
+                options.MultiLine,
+                options.DotMatchesNewline,
+                options.Crlf,
+                options.LineTerminator,
+                options.Utf8,
+                unicodeClasses: true);
+            if (!RegexPrefilter.TryPreparePrefixLiteralSet(prefixes, prefixOptions, out preparedPrefixes))
+            {
+                return false;
+            }
+        }
+        else
+        {
+            var prefixOptions = new RegexCompileOptions(
+                caseInsensitive: true,
+                options.SwapGreed,
+                options.MultiLine,
+                options.DotMatchesNewline,
+                options.Crlf,
+                options.LineTerminator,
+                options.Utf8,
+                unicodeClasses: false);
+            if (!RegexPrefilter.TryPreparePrefixLiteralSet(prefixes, prefixOptions, out preparedPrefixes))
+            {
+                return false;
+            }
+        }
+
+        predicate = new RegexStartPredicate(preparedPrefixes, asciiCaseInsensitive);
+        return true;
+    }
+
+    private bool CanStartAtPrefix(ReadOnlySpan<byte> haystack, int start)
+    {
+        if (start < 0 || start >= haystack.Length || prefixesByFirstByte is null)
+        {
+            return false;
+        }
+
+        byte first = NormalizeAsciiCase(haystack[start], asciiCaseInsensitivePrefixes);
+        if (singleBytePrefixes is not null && singleBytePrefixes[first])
+        {
+            return true;
+        }
+
+        if (secondBytesByFirstByte is not null &&
+            start + 1 < haystack.Length &&
+            secondBytesByFirstByte[first][NormalizeAsciiCase(haystack[start + 1], asciiCaseInsensitivePrefixes)])
+        {
+            return true;
+        }
+
+        byte[][] candidates = prefixesByFirstByte[first];
+        for (int index = 0; index < candidates.Length; index++)
+        {
+            byte[] prefix = candidates[index];
+            if (start + prefix.Length > haystack.Length)
+            {
+                continue;
+            }
+
+            if (PrefixMatches(haystack[start..], prefix, asciiCaseInsensitivePrefixes))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static byte[][][] BuildPrefixBuckets(
+        byte[][] prefixes,
+        bool asciiCaseInsensitive,
+        bool[] singleBytePrefixes,
+        bool[][] secondBytesByFirstByte)
+    {
+        var buckets = new List<byte[]>[256];
+        for (int index = 0; index < buckets.Length; index++)
+        {
+            buckets[index] = [];
+        }
+
+        for (int index = 0; index < prefixes.Length; index++)
+        {
+            byte[] prefix = prefixes[index];
+            if (prefix.Length == 0)
+            {
+                continue;
+            }
+
+            byte first = NormalizeAsciiCase(prefix[0], asciiCaseInsensitive);
+            if (prefix.Length == 1)
+            {
+                singleBytePrefixes[first] = true;
+                continue;
+            }
+
+            if (prefix.Length == 2)
+            {
+                secondBytesByFirstByte[first][NormalizeAsciiCase(prefix[1], asciiCaseInsensitive)] = true;
+                continue;
+            }
+
+            buckets[first].Add(prefix);
+        }
+
+        byte[][][] indexed = new byte[256][][];
+        for (int index = 0; index < indexed.Length; index++)
+        {
+            indexed[index] = buckets[index].ToArray();
+        }
+
+        return indexed;
+    }
+
+    private static bool[][] BuildSecondByteBuckets()
+    {
+        bool[][] buckets = new bool[256][];
+        for (int index = 0; index < buckets.Length; index++)
+        {
+            buckets[index] = new bool[256];
+        }
+
+        return buckets;
+    }
+
+    private static bool HasUsefulPrefix(byte[][] prefixes, int minimumUsefulLength)
+    {
+        for (int index = 0; index < prefixes.Length; index++)
+        {
+            if (prefixes[index].Length >= minimumUsefulLength)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool PrefixMatches(ReadOnlySpan<byte> haystack, byte[] prefix, bool asciiCaseInsensitive)
+    {
+        for (int index = 0; index < prefix.Length; index++)
+        {
+            if (NormalizeAsciiCase(haystack[index], asciiCaseInsensitive) !=
+                NormalizeAsciiCase(prefix[index], asciiCaseInsensitive))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static byte NormalizeAsciiCase(byte value, bool asciiCaseInsensitive)
+    {
+        return asciiCaseInsensitive && value is >= (byte)'A' and <= (byte)'Z'
+            ? (byte)(value + 0x20)
+            : value;
     }
 
     private static bool TryCreateFirstByte(RegexSyntaxNode root, RegexCompileOptions options, out RegexStartPredicate? predicate)

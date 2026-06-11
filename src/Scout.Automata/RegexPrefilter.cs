@@ -58,8 +58,17 @@ internal sealed class RegexPrefilter
 
     public static RegexPrefilter? Compile(RegexSyntaxNode root, RegexCompileOptions options)
     {
+        return Compile(root, options, out _);
+    }
+
+    internal static RegexPrefilter? Compile(
+        RegexSyntaxNode root,
+        RegexCompileOptions options,
+        out RegexStartPrefixSet? startPrefixSet)
+    {
+        startPrefixSet = null;
         if (TryCreateAlternationPrefixPrefilter(root, options, out RegexPrefilter? prefilter) ||
-            TryCreateSequenceAlternationPrefixPrefilter(root, options, out prefilter))
+            TryCreateSequenceAlternationPrefixPrefilter(root, options, out prefilter, out startPrefixSet))
         {
             return prefilter;
         }
@@ -138,9 +147,14 @@ internal sealed class RegexPrefilter
         return true;
     }
 
-    private static bool TryCreateSequenceAlternationPrefixPrefilter(RegexSyntaxNode root, RegexCompileOptions options, out RegexPrefilter? prefilter)
+    private static bool TryCreateSequenceAlternationPrefixPrefilter(
+        RegexSyntaxNode root,
+        RegexCompileOptions options,
+        out RegexPrefilter? prefilter,
+        out RegexStartPrefixSet? startPrefixSet)
     {
         prefilter = null;
+        startPrefixSet = null;
         if (!TryCollectSequenceAlternationPrefixes(
                 root,
                 options,
@@ -153,8 +167,13 @@ internal sealed class RegexPrefilter
 
         RegexPrefixCandidateGate? candidateGate = null;
         RegexPrefixCandidateGate.TryCreate(root, options, prefixes, out candidateGate);
-        return prefixes is not null &&
-            TryCreatePrefixSetPrefilter(
+        if (prefixes is null)
+        {
+            return false;
+        }
+
+        startPrefixSet = new RegexStartPrefixSet(prefixes, caseInsensitivePrefixes, unicodeCaseInsensitivePrefixes);
+        return TryCreatePrefixSetPrefilter(
                 prefixes,
                 options,
                 candidateGate,
@@ -401,7 +420,7 @@ internal sealed class RegexPrefilter
             out _);
     }
 
-    private static bool TryCollectSequenceAlternationPrefixes(
+    internal static bool TryCollectSequenceAlternationPrefixes(
         RegexSyntaxNode node,
         RegexCompileOptions options,
         out byte[][]? prefixes,

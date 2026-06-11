@@ -144,7 +144,7 @@ public sealed class RegexAutomaton
         RegexNfa nfa = RegexNfaCompiler.Compile(
             tree.Root,
             options);
-        var prefilter = RegexPrefilter.Compile(tree.Root, options);
+        var prefilter = RegexPrefilter.Compile(tree.Root, options, out RegexStartPrefixSet? startPrefixSet);
 
         RegexSimpleSequenceEngine.TryCreate(tree.Root, options, out RegexSimpleSequenceEngine? simpleSequence);
         RegexLineContainsEngine.TryCreate(tree.Root, options, out RegexLineContainsEngine? lineContains);
@@ -152,7 +152,7 @@ public sealed class RegexAutomaton
         RegexScalarRunEngine.TryCreate(tree.Root, options, out RegexScalarRunEngine? scalarRun);
         RegexAsciiWordBoundaryEngine.TryCreate(tree.Root, options, out RegexAsciiWordBoundaryEngine? asciiWordBoundary);
         RegexAsciiFastPath.TryCompileNfa(tree.Pattern.Span, tree.Root, options, out RegexNfa? asciiFastNfa);
-        RegexStartPredicate.TryCreate(tree.Root, options, out RegexStartPredicate? startPredicate);
+        RegexStartPredicate.TryCreate(tree.Root, options, startPrefixSet, out RegexStartPredicate? startPredicate);
 
         return new RegexAutomaton(
             RegexMetaEngine.Compile(
