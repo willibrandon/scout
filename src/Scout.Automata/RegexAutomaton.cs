@@ -19,6 +19,7 @@ public sealed class RegexAutomaton
         private RegexDelimitedCaptureEngine? delimitedCaptureEngine;
         private RegexStructuredLogCaptureEngine? structuredLogCaptureEngine;
         private volatile bool captureEnginesInitialized;
+        private volatile bool genericCaptureOnly;
 
         private RegexAutomaton(
             RegexMetaEngine engine,
@@ -39,6 +40,7 @@ public sealed class RegexAutomaton
             this.capturePrefilter = capturePrefilter;
             this.captureCount = captureCount;
             captureEnginesInitialized = captureCount == 0;
+            genericCaptureOnly = captureCount == 0;
         }
 
     /// <summary>
@@ -347,6 +349,9 @@ public sealed class RegexAutomaton
                 }
             }
 
+            genericCaptureOnly = structuredLogCaptureEngine is null &&
+                delimitedCaptureEngine is null &&
+                syntheticCaptureAlternationSet is null;
             captureEnginesInitialized = true;
         }
     }
@@ -359,7 +364,16 @@ public sealed class RegexAutomaton
     /// <returns>The first capture result, or <see langword="null" /> when no match exists.</returns>
     public RegexCaptures? FindCaptures(ReadOnlySpan<byte> haystack, int startAt = 0)
     {
+        if (captureEnginesInitialized && genericCaptureOnly)
+        {
+            return FindGenericCaptures(haystack, startAt);
+        }
+
         EnsureCaptureEngines();
+        if (genericCaptureOnly)
+        {
+            return FindGenericCaptures(haystack, startAt);
+        }
 
         if (structuredLogCaptureEngine is not null)
         {
@@ -382,6 +396,11 @@ public sealed class RegexAutomaton
             return syntheticCaptures;
         }
 
+        return FindGenericCaptures(haystack, startAt);
+    }
+
+    private RegexCaptures? FindGenericCaptures(ReadOnlySpan<byte> haystack, int startAt)
+    {
         RegexMatch? match = engine.Find(haystack, startAt, startPredicate);
         if (!match.HasValue)
         {
