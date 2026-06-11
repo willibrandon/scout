@@ -5,6 +5,8 @@ internal sealed class PatternSetLiteralAccelerator
     private readonly AhoCorasickAutomaton automaton;
     private readonly byte[][] patterns;
     private readonly int[] patternIds;
+    private readonly int[] allPatternIndexes;
+    private readonly int[][]? patternsByFirstByte;
 
     public PatternSetLiteralAccelerator(IReadOnlyList<byte[]> patterns, IReadOnlyList<int> patternIds, bool asciiCaseInsensitive = false)
     {
@@ -17,12 +19,15 @@ internal sealed class PatternSetLiteralAccelerator
 
         this.patterns = new byte[patterns.Count][];
         this.patternIds = new int[patternIds.Count];
+        allPatternIndexes = new int[patternIds.Count];
         for (int index = 0; index < patternIds.Count; index++)
         {
             this.patterns[index] = patterns[index].ToArray();
             this.patternIds[index] = patternIds[index];
+            allPatternIndexes[index] = index;
         }
 
+        patternsByFirstByte = asciiCaseInsensitive ? null : BuildPatternsByFirstByte(this.patterns);
         automaton = AhoCorasickAutomaton.Create(patterns, AhoCorasickMatchKind.Standard, asciiCaseInsensitive);
     }
 
@@ -47,8 +52,10 @@ internal sealed class PatternSetLiteralAccelerator
 
     public PatternSetMatch? FindAt(ReadOnlySpan<byte> haystack, int startAt)
     {
-        for (int index = 0; index < patterns.Length; index++)
+        ReadOnlySpan<int> candidates = GetExactCandidates(haystack, startAt);
+        for (int candidateIndex = 0; candidateIndex < candidates.Length; candidateIndex++)
         {
+            int index = candidates[candidateIndex];
             byte[] pattern = patterns[index];
             if (pattern.Length <= haystack.Length - startAt &&
                 haystack.Slice(startAt, pattern.Length).SequenceEqual(pattern))
@@ -60,6 +67,18 @@ internal sealed class PatternSetLiteralAccelerator
         }
 
         return null;
+    }
+
+    private ReadOnlySpan<int> GetExactCandidates(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        if (patternsByFirstByte is null)
+        {
+            return allPatternIndexes;
+        }
+
+        return startAt < haystack.Length
+            ? patternsByFirstByte[haystack[startAt]]
+            : [];
     }
 
     public bool IsMatch(ReadOnlySpan<byte> haystack)
@@ -138,5 +157,27 @@ internal sealed class PatternSetLiteralAccelerator
         }
 
         candidates.Add(candidate);
+    }
+
+    private static int[][] BuildPatternsByFirstByte(byte[][] patterns)
+    {
+        var buckets = new List<int>[256];
+        for (int index = 0; index < buckets.Length; index++)
+        {
+            buckets[index] = [];
+        }
+
+        for (int index = 0; index < patterns.Length; index++)
+        {
+            buckets[patterns[index][0]].Add(index);
+        }
+
+        int[][] indexed = new int[256][];
+        for (int index = 0; index < indexed.Length; index++)
+        {
+            indexed[index] = buckets[index].ToArray();
+        }
+
+        return indexed;
     }
 }
