@@ -199,6 +199,28 @@ public sealed class PatternSetTests
     }
 
     /// <summary>
+    /// Verifies required-literal windows can skip starts that violate known first-byte predicates.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralLookBehindHonorsStartBytes()
+    {
+        var set = PatternSet.Compile(
+        [
+            "[A-Z].{0,8}password[0-9]+"u8.ToArray(),
+        ],
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.True(set.UsesRequiredLiteralAccelerator);
+        Assert.Equal(new PatternSetMatch(0, new RegexMatch(18, 10)), set.Find("xxxxxxxxpassword1 Apassword2 zzz B---password333"u8));
+        Assert.Equal(2, set.CountMatches("xxxxxxxxpassword1 Apassword2 zzz B---password333"u8));
+        Assert.Equal(25, set.SumMatchSpans("xxxxxxxxpassword1 Apassword2 zzz B---password333"u8));
+    }
+
+    /// <summary>
     /// Verifies an empty set never matches.
     /// </summary>
     [Fact]

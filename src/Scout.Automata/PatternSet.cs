@@ -126,10 +126,10 @@ public sealed class PatternSet
         PatternSetLiteralAccelerator? literalAccelerator = literalPatterns.Count == 0
             ? null
             : new PatternSetLiteralAccelerator(literalPatterns, literalPatternIds, caseInsensitive);
+        RegexAutomaton[] compiledAutomata = automata.ToArray();
         PatternSetRequiredLiteralAccelerator? requiredLiteralAccelerator = requiredLiteralEntries.Count == 0
             ? null
-            : new PatternSetRequiredLiteralAccelerator(requiredLiteralEntries, automata.Count);
-        RegexAutomaton[] compiledAutomata = automata.ToArray();
+            : new PatternSetRequiredLiteralAccelerator(requiredLiteralEntries, compiledAutomata.Length, compiledAutomata);
         return new PatternSet(
             patterns.Count,
             compiledAutomata,

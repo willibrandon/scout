@@ -7,13 +7,18 @@ internal sealed class PatternSetRequiredLiteralAccelerator
     private readonly int[] maxLookBehindByLiteral;
     private readonly int maxLookBehind;
     private readonly bool[] acceleratedAutomata;
+    private readonly bool[]?[]? startBytesByAutomaton;
 
-    public PatternSetRequiredLiteralAccelerator(IReadOnlyList<PatternSetRequiredLiteralEntry> entries, int automataCount)
+    public PatternSetRequiredLiteralAccelerator(
+        IReadOnlyList<PatternSetRequiredLiteralEntry> entries,
+        int automataCount,
+        IReadOnlyList<RegexAutomaton>? automata = null)
     {
         ArgumentNullException.ThrowIfNull(entries);
         ArgumentOutOfRangeException.ThrowIfNegative(automataCount);
 
         acceleratedAutomata = new bool[automataCount];
+        startBytesByAutomaton = BuildStartBytes(automata, automataCount);
         var literals = new List<byte[]>();
         var automataByLiteral = new List<List<PatternSetRequiredAutomaton>>();
         var maxLookBehindByLiteral = new List<int>();
@@ -168,8 +173,15 @@ internal sealed class PatternSetRequiredLiteralAccelerator
                 int lastStart = best.HasValue
                     ? Math.Min(requiredAt, best.Value.Match.Start)
                     : requiredAt;
+                bool[]? startBytes = startBytesByAutomaton?[automatonIndex];
                 for (int start = firstStart; start <= lastStart; start++)
                 {
+                    if (startBytes is not null &&
+                        (start >= haystack.Length || !startBytes[haystack[start]]))
+                    {
+                        continue;
+                    }
+
                     RegexMatch? match = automata[automatonIndex].MatchAt(haystack, start);
                     if (!match.HasValue)
                     {
@@ -250,8 +262,15 @@ internal sealed class PatternSetRequiredLiteralAccelerator
             int lastStart = best.HasValue
                 ? Math.Min(requiredAt, best.Value.Match.Start)
                 : requiredAt;
+            bool[]? startBytes = startBytesByAutomaton?[automatonIndex];
             for (int start = firstStart; start <= lastStart; start++)
             {
+                if (startBytes is not null &&
+                    (start >= haystack.Length || !startBytes[haystack[start]]))
+                {
+                    continue;
+                }
+
                 RegexMatch? match = automata[automatonIndex].MatchAt(haystack, start);
                 if (!match.HasValue)
                 {
@@ -297,6 +316,31 @@ internal sealed class PatternSetRequiredLiteralAccelerator
         }
 
         automata.Add(new PatternSetRequiredAutomaton(automatonIndex, maxLookBehind));
+    }
+
+    private static bool[]?[]? BuildStartBytes(IReadOnlyList<RegexAutomaton>? automata, int automataCount)
+    {
+        if (automata is null)
+        {
+            return null;
+        }
+
+        if (automata.Count != automataCount)
+        {
+            throw new ArgumentException("automata count does not match required-literal entries", nameof(automata));
+        }
+
+        bool[]?[] startBytes = new bool[]?[automataCount];
+        for (int index = 0; index < automata.Count; index++)
+        {
+            bool[] bytes = new bool[256];
+            if (automata[index].TryAddStartBytes(bytes))
+            {
+                startBytes[index] = bytes;
+            }
+        }
+
+        return startBytes;
     }
 
     private static byte[] NormalizeAsciiCase(byte[] literal)
