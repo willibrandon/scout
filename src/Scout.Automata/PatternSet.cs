@@ -153,7 +153,7 @@ public sealed class PatternSet
                 requiredLiteralEntries.Add(new PatternSetRequiredLiteralEntry(automata.Count, preparedLiterals));
             }
 
-            automata.Add(RegexAutomaton.Compile(pattern, caseInsensitive, multiLine, dotMatchesNewline, crlf, lineTerminator, utf8, unicodeClasses));
+            automata.Add(RegexAutomaton.CompileParsed(tree, options));
             automataPatternIds.Add(index);
         }
 

@@ -103,7 +103,12 @@ public sealed class RegexAutomaton
         }
 
         RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
-        RegexLiteralSetEngine.TryCreate(tree.Root, options, out literalSet);
+        return CompileParsed(tree, options, dfaSizeLimit);
+    }
+
+    internal static RegexAutomaton CompileParsed(RegexSyntaxTree tree, RegexCompileOptions options, ulong? dfaSizeLimit = null)
+    {
+        RegexLiteralSetEngine.TryCreate(tree.Root, options, out RegexLiteralSetEngine? literalSet);
         if (literalSet is not null && tree.CaptureCount == 0)
         {
             return new RegexAutomaton(
@@ -121,7 +126,7 @@ public sealed class RegexAutomaton
             tree.Root,
             options);
         var prefilter = RegexPrefilter.Compile(tree.Root, options);
-        RegexAlternationSetEngine.TryCreate(pattern, tree.Root, tree.CaptureCount, options, out RegexAlternationSetEngine? alternationSet);
+        RegexAlternationSetEngine.TryCreate(tree.Pattern.Span, tree.Root, tree.CaptureCount, options, out RegexAlternationSetEngine? alternationSet);
         RegexAlternationSetEngine? syntheticCaptureAlternationSet = alternationSet?.CanSynthesizeCaptures == true
             ? alternationSet
             : null;
@@ -131,7 +136,7 @@ public sealed class RegexAutomaton
         RegexDotStarClassFallbackEngine.TryCreate(tree.Root, options, out RegexDotStarClassFallbackEngine? dotStarClassFallback);
         RegexScalarRunEngine.TryCreate(tree.Root, options, out RegexScalarRunEngine? scalarRun);
         RegexAsciiWordBoundaryEngine.TryCreate(tree.Root, options, out RegexAsciiWordBoundaryEngine? asciiWordBoundary);
-        RegexAsciiFastPath.TryCompileNfa(pattern, tree.Root, options, out RegexNfa? asciiFastNfa);
+        RegexAsciiFastPath.TryCompileNfa(tree.Pattern.Span, tree.Root, options, out RegexNfa? asciiFastNfa);
         RegexStartPredicate.TryCreate(tree.Root, options, out RegexStartPredicate? startPredicate);
 
         return new RegexAutomaton(
