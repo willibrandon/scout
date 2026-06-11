@@ -133,6 +133,22 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies regexes without explicit captures can synthesize the whole-match capture result.
+    /// </summary>
+    [Fact]
+    public void FindCapturesSynthesizesWholeMatchForNoCaptureRegex()
+    {
+        var automaton = RegexAutomaton.Compile("[a-z]+[0-9]+"u8);
+
+        RegexCaptures? captures = automaton.FindCaptures("--abc123"u8);
+
+        Assert.NotNull(captures);
+        Assert.Equal(1, captures.GroupCount);
+        Assert.Equal(new RegexMatch(2, 6), captures.Match);
+        Assert.Equal(new RegexMatch(2, 6), captures.GetGroup(0));
+    }
+
+    /// <summary>
     /// Verifies line-wide dot-star contains patterns use a linear count/span path.
     /// </summary>
     [Fact]

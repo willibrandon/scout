@@ -103,7 +103,6 @@ public sealed class RegexAutomaton
         RegexNfa nfa = RegexNfaCompiler.Compile(
             tree.Root,
             options);
-        RegexNfa captureNfa = RegexNfaCompiler.CompileCaptures(tree.Root, options, tree.CaptureCount);
         var prefilter = RegexPrefilter.Compile(tree.Root, options);
         RegexAlternationSetEngine.TryCreate(pattern, tree.Root, tree.CaptureCount, options, out RegexAlternationSetEngine? alternationSet);
         RegexAlternationSetEngine? syntheticCaptureAlternationSet = alternationSet?.CanSynthesizeCaptures == true
@@ -122,9 +121,16 @@ public sealed class RegexAutomaton
         RegexStructuredLogCaptureEngine.TryCreate(tree.Root, options, tree.CaptureCount, out RegexStructuredLogCaptureEngine? structuredLogCaptureEngine);
         RegexAsciiFastPath.TryCompileNfa(pattern, tree.Root, options, out RegexNfa? asciiFastNfa);
         RegexStartPredicate.TryCreate(tree.Root, options, out RegexStartPredicate? startPredicate);
+        RegexCaptureEngine? captureEngine = null;
+        if (tree.CaptureCount > 0 && syntheticCaptureAlternationSet is null)
+        {
+            RegexNfa captureNfa = RegexNfaCompiler.CompileCaptures(tree.Root, options, tree.CaptureCount);
+            captureEngine = new RegexCaptureEngine(captureNfa, prefilter);
+        }
+
         return new RegexAutomaton(
             RegexMetaEngine.Compile(nfa, prefilter, dfaSizeLimit, literalSet, alternationSet, simpleSequence, lineContains, dotStarClassFallback, asciiFastNfa, scalarRun),
-            new RegexCaptureEngine(captureNfa, prefilter),
+            captureEngine,
             syntheticCaptureAlternationSet,
             delimitedCaptureEngine,
             structuredLogCaptureEngine,
