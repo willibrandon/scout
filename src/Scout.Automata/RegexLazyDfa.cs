@@ -178,9 +178,9 @@ internal sealed class RegexLazyDfa
 
     private bool TryTransition(RegexLazyDfaState state, byte value, out RegexLazyDfaState nextState)
     {
-        if (state.Transitions.TryGetValue(value, out RegexLazyDfaState? existing))
+        if (state.TryGetTransition(value, out RegexLazyDfaState? existing))
         {
-            nextState = existing;
+            nextState = existing!;
             return true;
         }
 
@@ -192,7 +192,7 @@ internal sealed class RegexLazyDfa
         }
 
         nextState = created!;
-        state.Transitions.Add(value, nextState);
+        state.AddTransition(value, nextState);
         return true;
     }
 
