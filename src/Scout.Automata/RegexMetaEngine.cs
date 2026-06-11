@@ -23,6 +23,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexLineContainsEngine? lineContains;
     private readonly RegexDotStarClassFallbackEngine? dotStarClassFallback;
     private readonly RegexScalarRunEngine? scalarRun;
+    private readonly RegexAsciiWordBoundaryEngine? asciiWordBoundary;
     private readonly RegexPrefilter? prefilter;
     private readonly RegexNfa? nfa;
     private readonly bool utf8;
@@ -44,7 +45,8 @@ internal sealed class RegexMetaEngine
         RegexPrefilter? prefilter,
         bool utf8,
         RegexLazyDfa? asciiFastDfa = null,
-        RegexScalarRunEngine? scalarRun = null)
+        RegexScalarRunEngine? scalarRun = null,
+        RegexAsciiWordBoundaryEngine? asciiWordBoundary = null)
     {
         Kind = kind;
         this.nfa = nfa;
@@ -61,6 +63,7 @@ internal sealed class RegexMetaEngine
         this.lineContains = lineContains;
         this.dotStarClassFallback = dotStarClassFallback;
         this.scalarRun = scalarRun;
+        this.asciiWordBoundary = asciiWordBoundary;
         this.prefilter = prefilter;
         this.utf8 = utf8;
     }
@@ -114,7 +117,8 @@ internal sealed class RegexMetaEngine
         RegexLineContainsEngine? lineContains = null,
         RegexDotStarClassFallbackEngine? dotStarClassFallback = null,
         RegexNfa? asciiFastNfa = null,
-        RegexScalarRunEngine? scalarRun = null)
+        RegexScalarRunEngine? scalarRun = null,
+        RegexAsciiWordBoundaryEngine? asciiWordBoundary = null)
     {
         ulong effectiveDfaSizeLimit = dfaSizeLimit ?? DefaultDfaSizeLimit;
         if (literalSet is not null)
@@ -175,6 +179,29 @@ internal sealed class RegexMetaEngine
                 dotStarClassFallback: null,
                 prefilter,
                 nfa.Utf8);
+        }
+
+        if (asciiWordBoundary is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.SimpleSequence,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
+                prefilter,
+                nfa.Utf8,
+                asciiFastDfa: null,
+                scalarRun: null,
+                asciiWordBoundary: asciiWordBoundary);
         }
 
         if (lineContains is not null)
@@ -430,6 +457,11 @@ internal sealed class RegexMetaEngine
             return scalarRun.Find(haystack, startOffset);
         }
 
+        if (asciiWordBoundary is not null)
+        {
+            return asciiWordBoundary.Find(haystack, startOffset);
+        }
+
         if (prefilter?.UsesRequiredLiteralWindow == true)
         {
             int nextStartToTry = startOffset;
@@ -507,6 +539,11 @@ internal sealed class RegexMetaEngine
             return dotStarClassFallback.CountMatches(haystack, startAt);
         }
 
+        if (asciiWordBoundary is not null)
+        {
+            return asciiWordBoundary.CountMatches(haystack, startAt);
+        }
+
         if (TryCountNonOverlapping(haystack, startAt, out long count, out _))
         {
             return count;
@@ -535,6 +572,11 @@ internal sealed class RegexMetaEngine
         if (dotStarClassFallback is not null)
         {
             return dotStarClassFallback.SumMatchSpans(haystack, startAt);
+        }
+
+        if (asciiWordBoundary is not null)
+        {
+            return asciiWordBoundary.SumMatchSpans(haystack, startAt);
         }
 
         if (TryCountNonOverlapping(haystack, startAt, out _, out long spanSum))
@@ -620,6 +662,11 @@ internal sealed class RegexMetaEngine
         if (dotStarClassFallback is not null)
         {
             return dotStarClassFallback.MatchAt(haystack, startOffset);
+        }
+
+        if (asciiWordBoundary is not null)
+        {
+            return asciiWordBoundary.MatchAt(haystack, startOffset);
         }
 
         return TryMatchAt(haystack, startOffset, out int length)
@@ -724,6 +771,11 @@ internal sealed class RegexMetaEngine
         if (scalarRun is not null)
         {
             return scalarRun.TryMatchAt(haystack, start, out length);
+        }
+
+        if (asciiWordBoundary is not null)
+        {
+            return asciiWordBoundary.TryMatchAt(haystack, start, out length);
         }
 
         if (lazyDfa is not null)

@@ -130,11 +130,12 @@ public sealed class RegexAutomaton
         RegexLineContainsEngine.TryCreate(tree.Root, options, out RegexLineContainsEngine? lineContains);
         RegexDotStarClassFallbackEngine.TryCreate(tree.Root, options, out RegexDotStarClassFallbackEngine? dotStarClassFallback);
         RegexScalarRunEngine.TryCreate(tree.Root, options, out RegexScalarRunEngine? scalarRun);
+        RegexAsciiWordBoundaryEngine.TryCreate(tree.Root, options, out RegexAsciiWordBoundaryEngine? asciiWordBoundary);
         RegexAsciiFastPath.TryCompileNfa(pattern, tree.Root, options, out RegexNfa? asciiFastNfa);
         RegexStartPredicate.TryCreate(tree.Root, options, out RegexStartPredicate? startPredicate);
 
         return new RegexAutomaton(
-            RegexMetaEngine.Compile(nfa, prefilter, dfaSizeLimit, literalSet, alternationSet, simpleSequence, lineContains, dotStarClassFallback, asciiFastNfa, scalarRun),
+            RegexMetaEngine.Compile(nfa, prefilter, dfaSizeLimit, literalSet, alternationSet, simpleSequence, lineContains, dotStarClassFallback, asciiFastNfa, scalarRun, asciiWordBoundary),
             startPredicate,
             syntheticCaptureAlternationSet,
             tree.CaptureCount > 0 ? tree.Pattern : default,

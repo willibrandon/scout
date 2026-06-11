@@ -1367,6 +1367,52 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies byte-mode ASCII word-boundary runs use direct simple-sequence scanning.
+    /// </summary>
+    [Fact]
+    public void UsesSimpleSequenceEngineForAsciiWordBoundaryRuns()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\b[0-9A-Za-z_]+\b"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 3), automaton.Find("abc 12_x -- long_word"u8));
+        Assert.Equal(new RegexMatch(4, 3), automaton.Find("abc def"u8, startAt: 1));
+        Assert.Equal(3, automaton.CountMatches("abc 12_x -- long_word"u8));
+        Assert.Equal(16, automaton.SumMatchSpans("abc 12_x -- long_word"u8));
+        Assert.Equal(2, automaton.CountMatches("abc 12_x -- long_word"u8, startAt: 1));
+        Assert.Equal(13, automaton.SumMatchSpans("abc 12_x -- long_word"u8, startAt: 1));
+    }
+
+    /// <summary>
+    /// Verifies byte-mode ASCII word-boundary runs honor minimum repeat lengths.
+    /// </summary>
+    [Fact]
+    public void AsciiWordBoundaryRunsHonorMinimumLength()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\b[0-9A-Za-z_]{4,}\b"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(4, 4), automaton.Find("abc 12_x -- long_word"u8));
+        Assert.Equal(new RegexMatch(12, 9), automaton.Find("abc 12_x -- long_word"u8, startAt: 5));
+        Assert.Equal(2, automaton.CountMatches("abc 12_x -- long_word"u8));
+        Assert.Equal(13, automaton.SumMatchSpans("abc 12_x -- long_word"u8));
+        Assert.Equal(1, automaton.CountMatches("abc 12_x -- long_word"u8, startAt: 5));
+        Assert.Equal(9, automaton.SumMatchSpans("abc 12_x -- long_word"u8, startAt: 5));
+    }
+
+    /// <summary>
     /// Verifies single bounded Unicode scalar runs use direct scalar scanning.
     /// </summary>
     [Fact]
