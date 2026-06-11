@@ -34,6 +34,8 @@ internal static class RegexDfaOperations
     public static int[] Move(RegexNfa nfa, int[] nfaStates, byte value)
     {
         var next = new List<int>();
+        bool[] visited = new bool[nfa.States.Count];
+        bool[] closedSplits = new bool[nfa.States.Count];
         for (int index = 0; index < nfaStates.Length; index++)
         {
             RegexNfaState nfaState = nfa.States[nfaStates[index]];
@@ -48,7 +50,7 @@ internal static class RegexDfaOperations
                     nfaState.Crlf,
                     nfaState.LineTerminator))
             {
-                AddThread(nfa, nfaState.Next, next, new bool[nfa.States.Count], new bool[nfa.States.Count]);
+                AddThread(nfa, nfaState.Next, next, visited, closedSplits);
             }
         }
 
@@ -58,6 +60,8 @@ internal static class RegexDfaOperations
     public static int[] MoveLeftmost(RegexNfa nfa, int[] nfaStates, byte value)
     {
         var next = new List<int>();
+        bool[] visited = new bool[nfa.States.Count];
+        bool[] closedSplits = new bool[nfa.States.Count];
         for (int index = 0; index < nfaStates.Length; index++)
         {
             RegexNfaState nfaState = nfa.States[nfaStates[index]];
@@ -71,7 +75,7 @@ internal static class RegexDfaOperations
                     nfaState.DotMatchesNewline,
                     nfaState.Crlf,
                     nfaState.LineTerminator) &&
-                AddThreadLeftmost(nfa, nfaState.Next, next, new bool[nfa.States.Count], new bool[nfa.States.Count]))
+                AddThreadLeftmost(nfa, nfaState.Next, next, visited, closedSplits))
             {
                 break;
             }
@@ -96,8 +100,8 @@ internal static class RegexDfaOperations
         for (int index = 0; index < acceptIndex; index++)
         {
             RegexNfaState state = nfa.States[threads[index]];
-            if (state.Kind == RegexNfaStateKind.Atom &&
-                RegexByteClass.TryGetAtomMatchLength(
+            if (state.Kind != RegexNfaStateKind.Atom ||
+                !RegexByteClass.TryGetAtomMatchLength(
                     haystack,
                     position,
                     state.AtomKind,
@@ -109,14 +113,46 @@ internal static class RegexDfaOperations
                     state.LineTerminator,
                     state.Utf8,
                     state.UnicodeClasses,
-                    out int consume) &&
-                CanReachAccept(nfa, state.Next, haystack, position + consume, reachabilityCache))
+                    out int consume))
+            {
+                continue;
+            }
+
+            if (consume == 1 && CanReachAcceptWithoutConsuming(nfa, state.Next, new bool[nfa.States.Count]))
+            {
+                return true;
+            }
+
+            if (CanReachAccept(nfa, state.Next, haystack, position + consume, reachabilityCache))
             {
                 return true;
             }
         }
 
         return false;
+    }
+
+    private static bool CanReachAcceptWithoutConsuming(RegexNfa nfa, int stateIndex, bool[] visited)
+    {
+        if (stateIndex < 0 || visited[stateIndex])
+        {
+            return false;
+        }
+
+        visited[stateIndex] = true;
+        RegexNfaState state = nfa.States[stateIndex];
+        return state.Kind switch
+        {
+            RegexNfaStateKind.Accept => true,
+            RegexNfaStateKind.Split
+                or RegexNfaStateKind.GreedyLoopSplit
+                or RegexNfaStateKind.LazyLoopSplit =>
+                CanReachAcceptWithoutConsuming(nfa, state.Next, visited) ||
+                CanReachAcceptWithoutConsuming(nfa, state.Alternative, visited),
+            RegexNfaStateKind.CaptureStart or RegexNfaStateKind.CaptureEnd =>
+                CanReachAcceptWithoutConsuming(nfa, state.Next, visited),
+            _ => false,
+        };
     }
 
     public static bool CanReachAccept(

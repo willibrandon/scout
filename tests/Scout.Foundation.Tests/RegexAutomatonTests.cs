@@ -205,6 +205,29 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies prefixed greedy dot-star tails preserve leftmost spans in lazy DFA execution.
+    /// </summary>
+    [Fact]
+    public void LazyDfaCountsPrefixedDotStarTailSpans()
+    {
+        byte[] pattern = System.Text.Encoding.ASCII.GetBytes(
+            """(?:(?:"|'|\]|\}|\\|\d|(?:nan|infinity|true|false|null|undefined|symbol|math)|`|-|\+)+[)]*;?((?:\s|-|~|!|\{\}|\|\||\+)*.*(?:.*=.*)))""");
+        byte[] haystack = "math x=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"u8.ToArray();
+        var automaton = RegexAutomaton.Compile(
+            pattern,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(RegexEngineKind.LazyDfa, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 107), automaton.Find(haystack));
+        Assert.Equal(1, automaton.CountMatches(haystack));
+        Assert.Equal(107, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies dot-star/class fallback alternations avoid quadratic all-match iteration.
     /// </summary>
     [Fact]

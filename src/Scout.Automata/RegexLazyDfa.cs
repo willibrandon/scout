@@ -2,6 +2,8 @@ namespace Scout;
 
 internal sealed class RegexLazyDfa
 {
+    private const int MaxAcceleratorNeedles = 3;
+
     private readonly RegexNfa nfa;
     private readonly PikeVm fallback;
     private readonly Dictionary<RegexDfaStateKey, RegexLazyDfaState> states;
@@ -199,6 +201,12 @@ internal sealed class RegexLazyDfa
                     length = deferredAcceptLength;
                     return true;
                 }
+
+                if (TryAccelerate(current, haystack, position, out int acceleratedPosition))
+                {
+                    position = acceleratedPosition - 1;
+                    continue;
+                }
             }
 
             if (position == haystack.Length)
@@ -327,6 +335,73 @@ internal sealed class RegexLazyDfa
         return leftmostPrune
             ? RegexDfaOperations.MoveLeftmost(nfa, nfaStates, value)
             : RegexDfaOperations.Move(nfa, nfaStates, value);
+    }
+
+    private bool TryAccelerate(RegexLazyDfaState state, ReadOnlySpan<byte> haystack, int position, out int acceleratedPosition)
+    {
+        acceleratedPosition = position;
+        if (leftmostPrune ||
+            position >= haystack.Length ||
+            !TryGetOrCreateAccelerator(state, out byte[] needles))
+        {
+            return false;
+        }
+
+        int offset = IndexOfAcceleratorNeedle(haystack[position..], needles);
+        acceleratedPosition = offset < 0 ? haystack.Length : position + offset;
+        return acceleratedPosition > position;
+    }
+
+    private bool TryGetOrCreateAccelerator(RegexLazyDfaState state, out byte[] needles)
+    {
+        if (state.AcceleratorComputed)
+        {
+            return state.TryGetAccelerator(out needles);
+        }
+
+        var acceleratorNeedles = new List<byte>(MaxAcceleratorNeedles);
+        bool sawSelfLoop = false;
+        for (int value = 0; value <= byte.MaxValue; value++)
+        {
+            int[] next = Move(state.NfaStates, (byte)value);
+            if (next.AsSpan().SequenceEqual(state.NfaStates))
+            {
+                sawSelfLoop = true;
+                continue;
+            }
+
+            if (acceleratorNeedles.Count == MaxAcceleratorNeedles)
+            {
+                needles = [];
+                state.SetAccelerator(null);
+                return false;
+            }
+
+            acceleratorNeedles.Add((byte)value);
+        }
+
+        if (!sawSelfLoop)
+        {
+            needles = [];
+            state.SetAccelerator(null);
+            return false;
+        }
+
+        needles = acceleratorNeedles.ToArray();
+        state.SetAccelerator(needles);
+        return true;
+    }
+
+    private static int IndexOfAcceleratorNeedle(ReadOnlySpan<byte> haystack, byte[] needles)
+    {
+        return needles.Length switch
+        {
+            0 => -1,
+            1 => haystack.IndexOf(needles[0]),
+            2 => haystack.IndexOfAny(needles[0], needles[1]),
+            3 => haystack.IndexOfAny(needles[0], needles[1], needles[2]),
+            _ => -1,
+        };
     }
 
     private static bool TryIntern(

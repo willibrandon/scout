@@ -7,6 +7,8 @@ internal sealed class RegexLazyDfaState
 
     private Dictionary<byte, RegexLazyDfaState>? sparseTransitions = [];
     private RegexLazyDfaState?[]? denseTransitions;
+    private bool acceleratorComputed;
+    private byte[]? acceleratorNeedles;
 
     public RegexLazyDfaState(int[] nfaStates, int acceptIndex)
     {
@@ -17,6 +19,20 @@ internal sealed class RegexLazyDfaState
     public int[] NfaStates { get; }
 
     public int AcceptIndex { get; }
+
+    public bool TryGetAccelerator(out byte[] needles)
+    {
+        needles = acceleratorNeedles ?? [];
+        return acceleratorComputed && acceleratorNeedles is not null;
+    }
+
+    public void SetAccelerator(byte[]? needles)
+    {
+        acceleratorNeedles = needles;
+        acceleratorComputed = true;
+    }
+
+    public bool AcceleratorComputed => acceleratorComputed;
 
     public bool TryGetTransition(byte value, out RegexLazyDfaState? state)
     {
