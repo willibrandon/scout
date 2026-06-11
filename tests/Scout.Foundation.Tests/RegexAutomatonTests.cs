@@ -1339,6 +1339,28 @@ public sealed class RegexAutomatonTests
         Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
         Assert.Equal(RegexPrefilterKind.None, automaton.PrefilterKind);
         Assert.Equal(new RegexMatch(3, match.Length), automaton.Find(haystack));
+        Assert.Equal(1, automaton.CountMatches(haystack));
+        Assert.Equal(match.Length, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
+    /// Verifies repeated capitalized-word runs preserve non-overlapping count semantics when they exceed the repeat maximum.
+    /// </summary>
+    [Fact]
+    public void CountsRepeatedCapitalizedWordsByBoundedChunks()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"(?:[A-Z][a-z]+\s*){2,3}"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = System.Text.Encoding.ASCII.GetBytes("One Two Three Four Five ");
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(haystack.Length, automaton.SumMatchSpans(haystack));
     }
 
     /// <summary>

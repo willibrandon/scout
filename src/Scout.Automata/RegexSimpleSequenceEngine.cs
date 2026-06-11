@@ -80,6 +80,11 @@ internal sealed class RegexSimpleSequenceEngine
     {
         count = 0;
         spanSum = 0;
+        if (TryCountRepeatedCapitalizedWords(haystack, startAt, ref count, ref spanSum))
+        {
+            return true;
+        }
+
         if (!TryGetSingleRepeatedAtom(out RegexSimpleSequenceSegment segment, out int minimum, out int? maximum, out bool lazy))
         {
             return false;
@@ -121,6 +126,110 @@ internal sealed class RegexSimpleSequenceEngine
         }
 
         AddRun(minimum, maximum, lazy, runLength, ref count, ref spanSum);
+        return true;
+    }
+
+    private bool TryCountRepeatedCapitalizedWords(ReadOnlySpan<byte> haystack, int startAt, ref long count, ref long spanSum)
+    {
+        if (!IsRepeatedCapitalizedWordPattern(out int wordMinimum, out int wordMaximum, out bool lazy))
+        {
+            return false;
+        }
+
+        int position = Math.Clamp(startAt, 0, haystack.Length);
+        int wordsPerMatch = lazy ? wordMinimum : wordMaximum;
+        while (position < haystack.Length)
+        {
+            int runStart = FindNextCapitalizedWordStart(haystack, position);
+            if (runStart < 0)
+            {
+                return true;
+            }
+
+            int wordCount = 0;
+            int runPosition = runStart;
+            while (wordCount < wordsPerMatch &&
+                TryConsumeCapitalizedWord(haystack, runPosition, out int nextPosition))
+            {
+                wordCount++;
+                runPosition = nextPosition;
+            }
+
+            if (wordCount >= wordMinimum)
+            {
+                count++;
+                spanSum += runPosition - runStart;
+                position = runPosition;
+                continue;
+            }
+
+            position = Math.Max(runPosition, runStart + 1);
+        }
+
+        return true;
+    }
+
+    private bool IsRepeatedCapitalizedWordPattern(out int minimum, out int maximum, out bool lazy)
+    {
+        minimum = 0;
+        maximum = 0;
+        lazy = false;
+        if (repeatedSegments is not { Length: 3 } ||
+            repeatedMinimum <= 0 ||
+            repeatedMaximum < repeatedMinimum ||
+            repeatedSegments[0] is not { MatcherKind: RegexSimpleSequenceByteMatcherKind.AsciiUppercase, Minimum: 1, Maximum: 1, Lazy: false } ||
+            repeatedSegments[1] is not { MatcherKind: RegexSimpleSequenceByteMatcherKind.AsciiLowercase, Minimum: 1, Maximum: null, Lazy: false } ||
+            repeatedSegments[2] is not { MatcherKind: RegexSimpleSequenceByteMatcherKind.RegexWhitespace, Minimum: 0, Maximum: null, Lazy: false })
+        {
+            return false;
+        }
+
+        minimum = repeatedMinimum;
+        maximum = repeatedMaximum;
+        lazy = repeatedLazy;
+        return true;
+    }
+
+    private static int FindNextCapitalizedWordStart(ReadOnlySpan<byte> haystack, int position)
+    {
+        while (position + 1 < haystack.Length)
+        {
+            if (RegexSimpleSequenceSegment.IsAsciiUppercase(haystack[position]) &&
+                RegexSimpleSequenceSegment.IsAsciiLowercase(haystack[position + 1]))
+            {
+                return position;
+            }
+
+            position++;
+        }
+
+        return -1;
+    }
+
+    private static bool TryConsumeCapitalizedWord(ReadOnlySpan<byte> haystack, int position, out int nextPosition)
+    {
+        nextPosition = position;
+        if (position + 1 >= haystack.Length ||
+            !RegexSimpleSequenceSegment.IsAsciiUppercase(haystack[position]) ||
+            !RegexSimpleSequenceSegment.IsAsciiLowercase(haystack[position + 1]))
+        {
+            return false;
+        }
+
+        position += 2;
+        while (position < haystack.Length &&
+            RegexSimpleSequenceSegment.IsAsciiLowercase(haystack[position]))
+        {
+            position++;
+        }
+
+        while (position < haystack.Length &&
+            RegexSimpleSequenceSegment.IsRegexWhitespace(haystack[position]))
+        {
+            position++;
+        }
+
+        nextPosition = position;
         return true;
     }
 

@@ -60,6 +60,8 @@ internal readonly struct RegexSimpleSequenceSegment
         return MatcherKind switch
         {
             RegexSimpleSequenceByteMatcherKind.Literal => value == Literal,
+            RegexSimpleSequenceByteMatcherKind.AsciiUppercase => IsAsciiUppercase(value),
+            RegexSimpleSequenceByteMatcherKind.AsciiLowercase => IsAsciiLowercase(value),
             RegexSimpleSequenceByteMatcherKind.AsciiLetter => IsAsciiLetter(value),
             RegexSimpleSequenceByteMatcherKind.AsciiDigit => IsAsciiDigit(value),
             RegexSimpleSequenceByteMatcherKind.AsciiWord => IsAsciiWord(value),
@@ -90,14 +92,50 @@ internal readonly struct RegexSimpleSequenceSegment
                 !multiLine &&
                 !crlf &&
                 lineTerminator == (byte)'\n' &&
+                IsAsciiUppercaseClass(value) => RegexSimpleSequenceByteMatcherKind.AsciiUppercase,
+            RegexSyntaxKind.CharacterClass when !caseInsensitive &&
+                !multiLine &&
+                !crlf &&
+                lineTerminator == (byte)'\n' &&
+                IsAsciiLowercaseClass(value) => RegexSimpleSequenceByteMatcherKind.AsciiLowercase,
+            RegexSyntaxKind.CharacterClass when !caseInsensitive &&
+                !multiLine &&
+                !crlf &&
+                lineTerminator == (byte)'\n' &&
                 IsAsciiLetterClass(value) => RegexSimpleSequenceByteMatcherKind.AsciiLetter,
             _ => RegexSimpleSequenceByteMatcherKind.Lookup,
         };
     }
 
+    private static bool IsAsciiUppercaseClass(ReadOnlySpan<byte> value)
+    {
+        return value.Length == 3 &&
+            value[0] == (byte)'A' &&
+            value[1] == (byte)'-' &&
+            value[2] == (byte)'Z';
+    }
+
+    private static bool IsAsciiLowercaseClass(ReadOnlySpan<byte> value)
+    {
+        return value.Length == 3 &&
+            value[0] == (byte)'a' &&
+            value[1] == (byte)'-' &&
+            value[2] == (byte)'z';
+    }
+
     private static bool IsAsciiLetterClass(ReadOnlySpan<byte> value)
     {
         return value.SequenceEqual("A-Za-z"u8) || value.SequenceEqual("a-zA-Z"u8);
+    }
+
+    public static bool IsAsciiUppercase(byte value)
+    {
+        return (uint)(value - (byte)'A') <= 25;
+    }
+
+    public static bool IsAsciiLowercase(byte value)
+    {
+        return (uint)(value - (byte)'a') <= 25;
     }
 
     public static bool IsAsciiLetter(byte value)
