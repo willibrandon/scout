@@ -7,7 +7,7 @@ internal sealed class RegexNfaCompiler
     private readonly Dictionary<RegexNfaAtomCacheKey, int> atomStateCache = [];
     private readonly Dictionary<RegexNfaByteClassCacheKey, int> byteClassStateCache = [];
     private readonly Dictionary<RegexNfaControlCacheKey, int> controlStateCache = [];
-    private readonly Dictionary<string, int> sparseStateCache = [];
+    private readonly Dictionary<RegexNfaSparseCacheKey, int> sparseStateCache = [];
     private readonly bool includeCaptures;
     private readonly int captureCount;
     private bool cacheStates;
@@ -544,10 +544,11 @@ internal sealed class RegexNfaCompiler
 
     private int AddSparse(ReadOnlySpan<RegexNfaSparseTransition> transitions)
     {
-        string? key = null;
+        RegexNfaSparseTransition[] value = transitions.ToArray();
+        RegexNfaSparseCacheKey key = default;
         if (cacheStates)
         {
-            key = CreateSparseCacheKey(transitions);
+            key = new RegexNfaSparseCacheKey(value);
             if (sparseStateCache.TryGetValue(key, out int existing))
             {
                 return existing;
@@ -568,30 +569,13 @@ internal sealed class RegexNfaCompiler
             unicodeClasses: false,
             next: -1,
             alternative: -1,
-            sparseTransitions: transitions.ToArray()));
+            sparseTransitions: value));
         if (cacheStates)
         {
-            sparseStateCache.Add(key!, state);
+            sparseStateCache.Add(key, state);
         }
 
         return state;
-    }
-
-    private static string CreateSparseCacheKey(ReadOnlySpan<RegexNfaSparseTransition> transitions)
-    {
-        var builder = new System.Text.StringBuilder(transitions.Length * 12);
-        for (int index = 0; index < transitions.Length; index++)
-        {
-            RegexNfaSparseTransition transition = transitions[index];
-            builder.Append(transition.Start);
-            builder.Append('-');
-            builder.Append(transition.End);
-            builder.Append(':');
-            builder.Append(transition.Next);
-            builder.Append(';');
-        }
-
-        return builder.ToString();
     }
 
     private int AddAccept()
