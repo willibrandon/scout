@@ -198,6 +198,8 @@ public sealed class RegexAutomaton
 
     internal RegexPrefilterKind PrefilterKind => engine.PrefilterKind;
 
+    internal int RequiredLiteralWindow => engine.RequiredLiteralWindow;
+
     internal bool UsesSyntheticCaptureAlternationSet
     {
         get

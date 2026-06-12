@@ -92,6 +92,8 @@ internal sealed class RegexMetaEngine
 
     public RegexPrefilterKind PrefilterKind => prefilter?.Kind ?? RegexPrefilterKind.None;
 
+    public int RequiredLiteralWindow => prefilter?.RequiredLiteralWindow ?? 0;
+
     public static RegexMetaEngine CompileLiteralSet(RegexLiteralSetEngine literalSet, bool utf8)
     {
         return new RegexMetaEngine(
@@ -574,6 +576,11 @@ internal sealed class RegexMetaEngine
             return asciiWordBoundary.Find(haystack, startOffset);
         }
 
+        if (ShouldUseRequiredLiteralPrefilterBeforeUnanchoredDfa(haystack.Length))
+        {
+            return FindWithRequiredLiteralPrefilter(haystack, startOffset, reachabilityCache);
+        }
+
         RegexUnanchoredLazyDfa? activeUnanchoredLazyDfa = GetUnanchoredLazyDfa(haystack.Length);
         if (activeUnanchoredLazyDfa is not null &&
             activeUnanchoredLazyDfa.TryFind(haystack, startOffset, out RegexMatch unanchoredMatch, out bool gaveUp) &&
@@ -589,26 +596,7 @@ internal sealed class RegexMetaEngine
 
         if (prefilter?.UsesRequiredLiteralWindow == true)
         {
-            int nextStartToTry = startOffset;
-            for (int requiredAt = prefilter.FindRequiredLiteral(haystack, startOffset);
-                 requiredAt >= 0;
-                 requiredAt = prefilter.FindRequiredLiteral(haystack, requiredAt + 1))
-            {
-                int firstStart = Math.Max(startOffset, requiredAt - prefilter.RequiredLiteralWindow);
-                firstStart = Math.Max(firstStart, nextStartToTry);
-                for (int start = firstStart; start <= requiredAt; start++)
-                {
-                    if (prefilter.CanStartAt(haystack, start) &&
-                        TryMatchAt(haystack, start, out int length, reachabilityCache))
-                    {
-                        return new RegexMatch(start, length);
-                    }
-                }
-
-                nextStartToTry = Math.Max(nextStartToTry, requiredAt + 1);
-            }
-
-            return null;
+            return FindWithRequiredLiteralPrefilter(haystack, startOffset, reachabilityCache);
         }
 
         if (prefilter is not null)
@@ -637,6 +625,40 @@ internal sealed class RegexMetaEngine
             {
                 return new RegexMatch(start, length);
             }
+        }
+
+        return null;
+    }
+
+    private bool ShouldUseRequiredLiteralPrefilterBeforeUnanchoredDfa(int haystackLength)
+    {
+        return prefilter?.UsesRequiredLiteralWindow == true &&
+            (haystackLength < UnanchoredLazyDfaHaystackThreshold ||
+            unanchoredLazyDfaFactory is null && asciiFastUnanchoredDfaFactory is null);
+    }
+
+    private RegexMatch? FindWithRequiredLiteralPrefilter(
+        ReadOnlySpan<byte> haystack,
+        int startOffset,
+        Dictionary<(int State, int Position), bool>? reachabilityCache)
+    {
+        int nextStartToTry = startOffset;
+        for (int requiredAt = prefilter!.FindRequiredLiteral(haystack, startOffset);
+             requiredAt >= 0;
+             requiredAt = prefilter.FindRequiredLiteral(haystack, requiredAt + 1))
+        {
+            int firstStart = Math.Max(startOffset, requiredAt - prefilter.RequiredLiteralWindow);
+            firstStart = Math.Max(firstStart, nextStartToTry);
+            for (int start = firstStart; start <= requiredAt; start++)
+            {
+                if (prefilter.CanStartAt(haystack, start) &&
+                    TryMatchAt(haystack, start, out int length, reachabilityCache))
+                {
+                    return new RegexMatch(start, length);
+                }
+            }
+
+            nextStartToTry = Math.Max(nextStartToTry, requiredAt + 1);
         }
 
         return null;

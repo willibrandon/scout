@@ -545,6 +545,32 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies case-sensitive required-literal prefilters keep exact literal bytes.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralSetPreservesCaseSensitiveLiterals()
+    {
+        var caseSensitive = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false);
+        var caseInsensitive = new RegexCompileOptions(
+            caseInsensitive: true,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.True(RegexPrefilter.TryPrepareRequiredLiteralSet(["AbC"u8.ToArray()], caseSensitive, out byte[][] exact));
+        Assert.Equal("AbC"u8.ToArray(), Assert.Single(exact));
+
+        Assert.True(RegexPrefilter.TryPrepareRequiredLiteralSet(["AbC"u8.ToArray()], caseInsensitive, out byte[][] folded));
+        Assert.Equal("abc"u8.ToArray(), Assert.Single(folded));
+    }
+
+    /// <summary>
     /// Verifies the single required-literal finder preserves ASCII case-insensitive matching.
     /// </summary>
     [Fact]
@@ -581,6 +607,44 @@ public sealed class RegexAutomatonTests
         Assert.Equal(2, maxLookBehind);
         Assert.Contains(literals, literal => literal.AsSpan().SequenceEqual("secret"u8));
         Assert.Contains(literals, literal => literal.AsSpan().SequenceEqual("token"u8));
+    }
+
+    /// <summary>
+    /// Verifies compiled required-literal prefilters use the proven maximum lookbehind.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralPrefilterUsesBoundedLookBehind()
+    {
+        var automaton = RegexAutomaton.Compile(
+            ".{0,2}(?:secret|token)[0-9]"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(RegexPrefilterKind.RequiredLiteral, automaton.PrefilterKind);
+        Assert.Equal(2, automaton.RequiredLiteralWindow);
+        Assert.Equal(new RegexMatch(2, 9), automaton.Find("zzxysecret7"u8));
+    }
+
+    /// <summary>
+    /// Verifies compiled case-sensitive required-literal prefilters do not fold candidates.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralPrefilterPreservesCaseSensitiveMatches()
+    {
+        var automaton = RegexAutomaton.Compile(
+            ".{0,2}ABC[0-9]"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(RegexPrefilterKind.RequiredLiteral, automaton.PrefilterKind);
+        Assert.Equal(new RegexMatch(2, 6), automaton.Find("zzxyABC7"u8));
+        Assert.Null(automaton.Find("zzxyabc7"u8));
     }
 
     /// <summary>
