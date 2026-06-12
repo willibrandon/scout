@@ -14,6 +14,7 @@ internal sealed class RegexLiteralSetEngine
 
     private readonly AhoCorasickAutomaton? automaton;
     private readonly byte[][] literals;
+    private readonly byte[][] searchPatterns;
     private readonly int[] searchPatternLiteralIds;
     private readonly bool asciiCaseInsensitive;
     private readonly bool unicodeCaseInsensitive;
@@ -37,6 +38,12 @@ internal sealed class RegexLiteralSetEngine
         {
             this.literals[index] = literals[index].ToArray();
             maxLiteralLength = Math.Max(maxLiteralLength, this.literals[index].Length);
+        }
+
+        this.searchPatterns = new byte[searchPatterns.Count][];
+        for (int index = 0; index < searchPatterns.Count; index++)
+        {
+            this.searchPatterns[index] = searchPatterns[index].ToArray();
         }
 
         this.asciiCaseInsensitive = asciiCaseInsensitive;
@@ -295,7 +302,7 @@ internal sealed class RegexLiteralSetEngine
              candidateStart >= 0;
              candidateStart = prefixScanner.FindCandidate(haystack, candidateStart + 1))
         {
-            if (TryFindLiteralAt(haystack, candidateStart, out RegexLiteralSetCandidate candidate))
+            if (TryFindLiteralAtSearchPatternCandidate(haystack, candidateStart, out RegexLiteralSetCandidate candidate))
             {
                 return candidate.Match;
             }
@@ -326,7 +333,7 @@ internal sealed class RegexLiteralSetEngine
         RegexMatch? best = null;
         for (int index = 0; index < literals.Length; index++)
         {
-            if (!TryMatchLiteralAt(haystack, startOffset, literals[index], out int length) ||
+            if (!TryMatchLiteralAt(haystack, startOffset, index, out int length) ||
                 best.HasValue && length <= best.Value.Length)
             {
                 continue;
@@ -344,7 +351,7 @@ internal sealed class RegexLiteralSetEngine
         var matches = new List<RegexMatch>();
         for (int index = 0; index < literals.Length; index++)
         {
-            if (TryMatchLiteralAt(haystack, startOffset, literals[index], out int length))
+            if (TryMatchLiteralAt(haystack, startOffset, index, out int length))
             {
                 matches.Add(new RegexMatch(startOffset, length));
             }
@@ -401,7 +408,7 @@ internal sealed class RegexLiteralSetEngine
                 return total;
             }
 
-            if (TryFindLiteralAt(haystack, candidateStart, out RegexLiteralSetCandidate candidate))
+            if (TryFindLiteralAtSearchPatternCandidate(haystack, candidateStart, out RegexLiteralSetCandidate candidate))
             {
                 total += sumSpans ? candidate.Match.Length : 1;
                 searchAt = candidate.Match.End;
@@ -622,7 +629,7 @@ internal sealed class RegexLiteralSetEngine
     {
         int literalId = searchPatternLiteralIds[match.PatternId];
         int start = startOffset + match.Start;
-        if (TryMatchLiteralAt(haystack, start, literals[literalId], out int length))
+        if (TryMatchLiteralAt(haystack, start, literalId, out int length))
         {
             candidate = new RegexLiteralSetCandidate(literalId, new RegexMatch(start, length));
             return true;
@@ -651,7 +658,7 @@ internal sealed class RegexLiteralSetEngine
     {
         for (int index = 0; index < literals.Length; index++)
         {
-            if (TryMatchLiteralAt(haystack, start, literals[index], out int length))
+            if (TryMatchLiteralAt(haystack, start, index, out int length))
             {
                 candidate = new RegexLiteralSetCandidate(index, new RegexMatch(start, length));
                 return true;
@@ -662,12 +669,45 @@ internal sealed class RegexLiteralSetEngine
         return false;
     }
 
+    private bool TryFindLiteralAtSearchPatternCandidate(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        out RegexLiteralSetCandidate candidate)
+    {
+        RegexLiteralSetCandidate? best = null;
+        for (int index = 0; index < searchPatterns.Length; index++)
+        {
+            ReadOnlySpan<byte> searchPattern = searchPatterns[index];
+            if (searchPattern.Length > haystack.Length - start ||
+                haystack[start + searchPattern.Length - 1] != searchPattern[^1] ||
+                !haystack.Slice(start, searchPattern.Length).SequenceEqual(searchPattern))
+            {
+                continue;
+            }
+
+            int literalId = searchPatternLiteralIds[index];
+            if (!TryMatchLiteralAt(haystack, start, literalId, out int length))
+            {
+                continue;
+            }
+
+            var current = new RegexLiteralSetCandidate(literalId, new RegexMatch(start, length));
+            if (IsBetter(current, best))
+            {
+                best = current;
+            }
+        }
+
+        candidate = best.GetValueOrDefault();
+        return best.HasValue;
+    }
+
     private RegexMatch? FindShortestAt(ReadOnlySpan<byte> haystack, int start)
     {
         RegexMatch? best = null;
         for (int index = 0; index < literals.Length; index++)
         {
-            if (!TryMatchLiteralAt(haystack, start, literals[index], out int length) ||
+            if (!TryMatchLiteralAt(haystack, start, index, out int length) ||
                 best.HasValue && length >= best.Value.Length)
             {
                 continue;
@@ -1087,14 +1127,6 @@ internal sealed class RegexLiteralSetEngine
         byte[] pattern,
         int literalId)
     {
-        for (int index = 0; index < searchPatterns.Count; index++)
-        {
-            if (searchPatterns[index].AsSpan().SequenceEqual(pattern))
-            {
-                return;
-            }
-        }
-
         searchPatterns.Add(pattern);
         searchPatternLiteralIds.Add(literalId);
     }
@@ -1111,7 +1143,7 @@ internal sealed class RegexLiteralSetEngine
         return node;
     }
 
-    private bool TryMatchLiteralAt(ReadOnlySpan<byte> haystack, int start, byte[] literal, out int length)
+    private bool TryMatchLiteralAt(ReadOnlySpan<byte> haystack, int start, int literalId, out int length)
     {
         if ((uint)start > (uint)haystack.Length)
         {
@@ -1119,6 +1151,7 @@ internal sealed class RegexLiteralSetEngine
             return false;
         }
 
+        byte[] literal = literals[literalId];
         if (unicodeCaseInsensitive)
         {
             return TryMatchUnicodeCaseInsensitiveLiteralAt(haystack[start..], literal, out length);
