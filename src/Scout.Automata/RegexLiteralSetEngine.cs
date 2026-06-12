@@ -21,6 +21,7 @@ internal sealed class RegexLiteralSetEngine
     private readonly bool asciiCaseInsensitive;
     private readonly bool unicodeCaseInsensitive;
     private readonly int maxLiteralLength;
+    private readonly RegexAnchoredLiteralFinder? singleAnchoredLiteralFinder;
     private readonly MemmemFinder? singleLiteralFinder;
     private readonly RegexAsciiCaseInsensitiveFinder? singleAsciiCaseInsensitiveFinder;
     private readonly RegexAsciiCaseInsensitiveLiteralSetScanner? asciiCaseInsensitiveScanner;
@@ -71,7 +72,11 @@ internal sealed class RegexLiteralSetEngine
 
         if (this.literals.Length == 1 && searchPatterns.Count == 0)
         {
-            singleLiteralFinder = new MemmemFinder(this.literals[0]);
+            if (!RegexAnchoredLiteralFinder.TryCreate(this.literals[0], out singleAnchoredLiteralFinder))
+            {
+                singleLiteralFinder = new MemmemFinder(this.literals[0]);
+            }
+
             return;
         }
 
@@ -322,6 +327,14 @@ internal sealed class RegexLiteralSetEngine
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        if (singleAnchoredLiteralFinder is not null)
+        {
+            int start = singleAnchoredLiteralFinder.Find(haystack, startOffset);
+            return start < 0
+                ? null
+                : new RegexMatch(start, literals[0].Length);
+        }
+
         if (singleLiteralFinder is not null)
         {
             int offset = singleLiteralFinder.Find(haystack[startOffset..]);
@@ -444,6 +457,11 @@ internal sealed class RegexLiteralSetEngine
     private long CountOrSumNonOverlapping(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        if (singleAnchoredLiteralFinder is not null)
+        {
+            return singleAnchoredLiteralFinder.CountOrSum(haystack, startOffset, sumSpans);
+        }
+
         if (singleLiteralFinder is not null)
         {
             return CountOrSumSingleLiteral(haystack, startOffset, sumSpans);

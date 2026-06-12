@@ -197,6 +197,26 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies single non-ASCII literals keep exact byte-oriented count and span semantics.
+    /// </summary>
+    [Fact]
+    public void LiteralSetCountsSingleNonAsciiLiteral()
+    {
+        byte[] literal = System.Text.Encoding.UTF8.GetBytes("Шерлок Холмс");
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("xxШерлок Холмс yy Шерлок Холмс");
+
+        var automaton = RegexAutomaton.Compile(literal);
+
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(2, literal.Length), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(2 + literal.Length + 4, literal.Length), automaton.Find(haystack, startAt: 3));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(1, automaton.CountMatches(haystack, startAt: 3));
+        Assert.Equal(literal.Length * 2, automaton.SumMatchSpans(haystack));
+        Assert.Equal(literal.Length, automaton.SumMatchSpans(haystack, startAt: 3));
+    }
+
+    /// <summary>
     /// Verifies Unicode-aware literal-set execution uses simple case folding while preserving haystack span lengths.
     /// </summary>
     [Fact]
