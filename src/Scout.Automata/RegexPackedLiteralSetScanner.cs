@@ -13,6 +13,8 @@ internal sealed class RegexPackedLiteralSetScanner
     private const int MaximumLiteralCount = 8;
 
     private readonly byte[][] literals;
+    private readonly int[][]? commonFoldedLiterals;
+    private readonly byte[][][]? prefixByteVariants;
     private readonly int[][] buckets;
     private readonly Vector128<byte>[] lowMasks128 = new Vector128<byte>[MaskLength];
     private readonly Vector128<byte>[] highMasks128 = new Vector128<byte>[MaskLength];
@@ -20,7 +22,10 @@ internal sealed class RegexPackedLiteralSetScanner
     private readonly Vector256<byte>[] highMasks256 = new Vector256<byte>[MaskLength];
     private readonly bool useDenseCandidateCount;
 
-    private RegexPackedLiteralSetScanner(IReadOnlyList<byte[]> literals)
+    private RegexPackedLiteralSetScanner(
+        IReadOnlyList<byte[]> literals,
+        int[][]? commonFoldedLiterals = null,
+        byte[][][]? prefixByteVariants = null)
     {
         this.literals = new byte[literals.Count][];
         for (int index = 0; index < literals.Count; index++)
@@ -28,6 +33,8 @@ internal sealed class RegexPackedLiteralSetScanner
             this.literals[index] = literals[index].ToArray();
         }
 
+        this.commonFoldedLiterals = commonFoldedLiterals;
+        this.prefixByteVariants = prefixByteVariants;
         useDenseCandidateCount = ContainsNonAscii(this.literals) && ContainsAsciiOrTwoByteUtf8Only(this.literals);
         buckets = BuildBuckets(this.literals);
         BuildMasks();
@@ -50,6 +57,33 @@ internal sealed class RegexPackedLiteralSetScanner
         }
 
         scanner = new RegexPackedLiteralSetScanner(literals);
+        return true;
+    }
+
+    public static bool TryCreateCommonCyrillicCaseInsensitive(
+        IReadOnlyList<byte[]> literals,
+        out RegexPackedLiteralSetScanner? scanner)
+    {
+        scanner = null;
+        if (literals.Count is < MinimumLiteralCount or > MaximumLiteralCount)
+        {
+            return false;
+        }
+
+        int[][] folded = new int[literals.Count][];
+        byte[][][] prefixVariants = new byte[literals.Count][][];
+        for (int index = 0; index < literals.Count; index++)
+        {
+            byte[] literal = literals[index];
+            if (literal.Length < MaskLength ||
+                !TryBuildCommonFoldedLiteral(literal, out folded[index]) ||
+                !TryBuildCommonCyrillicPrefixByteVariants(literal, out prefixVariants[index]))
+            {
+                return false;
+            }
+        }
+
+        scanner = new RegexPackedLiteralSetScanner(literals, folded, prefixVariants);
         return true;
     }
 
@@ -499,15 +533,25 @@ internal sealed class RegexPackedLiteralSetScanner
             for (int index = 0; index < literalIds.Length; index++)
             {
                 int literalId = literalIds[index];
-                byte[] literal = literals[literalId];
-                if (literal.Length > haystack.Length - start ||
-                    haystack[start + literal.Length - 1] != literal[^1] ||
-                    !haystack.Slice(start, literal.Length).SequenceEqual(literal))
+                int length;
+                if (commonFoldedLiterals is null)
+                {
+                    byte[] literal = literals[literalId];
+                    if (literal.Length > haystack.Length - start ||
+                        haystack[start + literal.Length - 1] != literal[^1] ||
+                        !haystack.Slice(start, literal.Length).SequenceEqual(literal))
+                    {
+                        continue;
+                    }
+
+                    length = literal.Length;
+                }
+                else if (!TryMatchCommonFoldedLiteralAt(haystack[start..], commonFoldedLiterals[literalId], out length))
                 {
                     continue;
                 }
 
-                var current = new RegexLiteralSetCandidate(literalId, new RegexMatch(start, literal.Length));
+                var current = new RegexLiteralSetCandidate(literalId, new RegexMatch(start, length));
                 if (IsBetter(current, best))
                 {
                     best = current;
@@ -551,7 +595,18 @@ internal sealed class RegexPackedLiteralSetScanner
                 int[] literalIds = buckets[bucket];
                 for (int index = 0; index < literalIds.Length; index++)
                 {
-                    AddMaskByte(low, high, bucket, literals[literalIds[index]][byteIndex]);
+                    int literalId = literalIds[index];
+                    if (prefixByteVariants is null)
+                    {
+                        AddMaskByte(low, high, bucket, literals[literalId][byteIndex]);
+                        continue;
+                    }
+
+                    byte[] variants = prefixByteVariants[literalId][byteIndex];
+                    for (int variantIndex = 0; variantIndex < variants.Length; variantIndex++)
+                    {
+                        AddMaskByte(low, high, bucket, variants[variantIndex]);
+                    }
                 }
             }
 
@@ -603,6 +658,263 @@ internal sealed class RegexPackedLiteralSetScanner
         }
 
         return buckets;
+    }
+
+    private static bool TryBuildCommonFoldedLiteral(byte[] literal, out int[] foldedLiteral)
+    {
+        var folded = new List<int>();
+        int index = 0;
+        while (index < literal.Length)
+        {
+            if (!TryReadCommonFoldedScalar(literal, index, out int scalar, out int consumed))
+            {
+                foldedLiteral = [];
+                return false;
+            }
+
+            folded.Add(scalar);
+            index += consumed;
+        }
+
+        foldedLiteral = folded.ToArray();
+        return true;
+    }
+
+    private static bool TryBuildCommonCyrillicPrefixByteVariants(byte[] literal, out byte[][] variants)
+    {
+        variants = new byte[MaskLength][];
+        int sourceIndex = 0;
+        int prefixIndex = 0;
+        while (prefixIndex < MaskLength)
+        {
+            if (!TryReadCommonCyrillicScalarByteVariants(
+                    literal,
+                    sourceIndex,
+                    out byte[][] scalarVariants,
+                    out int consumed))
+            {
+                variants = [];
+                return false;
+            }
+
+            for (int scalarByteIndex = 0; scalarByteIndex < consumed && prefixIndex < MaskLength; scalarByteIndex++)
+            {
+                variants[prefixIndex++] = DistinctVariantBytes(scalarVariants, scalarByteIndex);
+            }
+
+            sourceIndex += consumed;
+        }
+
+        return true;
+    }
+
+    private static byte[] DistinctVariantBytes(byte[][] scalarVariants, int byteIndex)
+    {
+        var bytes = new List<byte>();
+        for (int index = 0; index < scalarVariants.Length; index++)
+        {
+            byte value = scalarVariants[index][byteIndex];
+            if (!bytes.Contains(value))
+            {
+                bytes.Add(value);
+            }
+        }
+
+        return bytes.ToArray();
+    }
+
+    private static bool TryReadCommonCyrillicScalarByteVariants(
+        byte[] bytes,
+        int index,
+        out byte[][] variants,
+        out int consumed)
+    {
+        variants = [];
+        consumed = 0;
+        if ((uint)index >= (uint)bytes.Length)
+        {
+            return false;
+        }
+
+        byte first = bytes[index];
+        if (first <= 0x7F)
+        {
+            if (first is >= (byte)'A' and <= (byte)'Z' or >= (byte)'a' and <= (byte)'z')
+            {
+                return false;
+            }
+
+            variants = [[first]];
+            consumed = 1;
+            return true;
+        }
+
+        if (index + 1 >= bytes.Length)
+        {
+            return false;
+        }
+
+        byte second = bytes[index + 1];
+        if (first == 0xD0)
+        {
+            if (second is >= 0x90 and <= 0x9F)
+            {
+                variants = [[0xD0, second], [0xD0, (byte)(second + 0x20)]];
+                consumed = 2;
+                return true;
+            }
+
+            if (second is >= 0xA0 and <= 0xAF)
+            {
+                variants = [[0xD0, second], [0xD1, (byte)(second - 0x20)]];
+                consumed = 2;
+                return true;
+            }
+
+            if (second is >= 0xB0 and <= 0xBF)
+            {
+                variants = [[0xD0, (byte)(second - 0x20)], [0xD0, second]];
+                consumed = 2;
+                return true;
+            }
+
+            if (second == 0x81)
+            {
+                variants = [[0xD0, 0x81], [0xD1, 0x91]];
+                consumed = 2;
+                return true;
+            }
+        }
+        else if (first == 0xD1)
+        {
+            if (second is >= 0x80 and <= 0x8F)
+            {
+                variants = [[0xD0, (byte)(second + 0x20)], [0xD1, second]];
+                consumed = 2;
+                return true;
+            }
+
+            if (second == 0x91)
+            {
+                variants = [[0xD0, 0x81], [0xD1, 0x91]];
+                consumed = 2;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryMatchCommonFoldedLiteralAt(ReadOnlySpan<byte> haystack, int[] literal, out int length)
+    {
+        length = 0;
+        int haystackIndex = 0;
+        for (int literalIndex = 0; literalIndex < literal.Length; literalIndex++)
+        {
+            if (!TryReadCommonFoldedScalar(haystack, haystackIndex, out int haystackFolded, out int haystackConsumed) ||
+                literal[literalIndex] != haystackFolded)
+            {
+                length = 0;
+                return false;
+            }
+
+            haystackIndex += haystackConsumed;
+            length += haystackConsumed;
+        }
+
+        return true;
+    }
+
+    private static bool TryReadCommonFoldedScalar(
+        ReadOnlySpan<byte> bytes,
+        int index,
+        out int folded,
+        out int consumed)
+    {
+        folded = 0;
+        consumed = 0;
+        if ((uint)index >= (uint)bytes.Length)
+        {
+            return false;
+        }
+
+        byte first = bytes[index];
+        if (first <= 0x7F)
+        {
+            folded = FastSimpleFold(first);
+            consumed = 1;
+            return true;
+        }
+
+        if (index + 1 >= bytes.Length)
+        {
+            return false;
+        }
+
+        byte second = bytes[index + 1];
+        if (first == 0xD0)
+        {
+            if (second is >= 0x90 and <= 0x9F)
+            {
+                folded = 0x0430 + (second - 0x90);
+                consumed = 2;
+                return true;
+            }
+
+            if (second is >= 0xA0 and <= 0xAF)
+            {
+                folded = 0x0440 + (second - 0xA0);
+                consumed = 2;
+                return true;
+            }
+
+            if (second is >= 0xB0 and <= 0xBF)
+            {
+                folded = 0x0430 + (second - 0xB0);
+                consumed = 2;
+                return true;
+            }
+
+            if (second == 0x81)
+            {
+                folded = 0x0451;
+                consumed = 2;
+                return true;
+            }
+        }
+        else if (first == 0xD1)
+        {
+            if (second is >= 0x80 and <= 0x8F)
+            {
+                folded = 0x0440 + (second - 0x80);
+                consumed = 2;
+                return true;
+            }
+
+            if (second == 0x91)
+            {
+                folded = 0x0451;
+                consumed = 2;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static int FastSimpleFold(int scalar)
+    {
+        if ((uint)(scalar - 'A') <= 'Z' - 'A')
+        {
+            return scalar + 32;
+        }
+
+        if ((uint)(scalar - 0x0410) <= 0x042F - 0x0410)
+        {
+            return scalar + 0x20;
+        }
+
+        return scalar == 0x0401 ? 0x0451 : scalar;
     }
 
     private static bool ContainsNonAscii(byte[][] literals)

@@ -92,6 +92,17 @@ internal sealed class RegexLiteralSetEngine
         }
 
         if (this.literals.Length > 1 &&
+            unicodeCaseInsensitive &&
+            !useAho &&
+            RegexPackedLiteralSetScanner.TryCreateCommonCyrillicCaseInsensitive(
+                this.literals,
+                out RegexPackedLiteralSetScanner? commonCyrillic))
+        {
+            packedLiteralScanner = commonCyrillic;
+            return;
+        }
+
+        if (this.literals.Length > 1 &&
             !asciiCaseInsensitive &&
             !unicodeCaseInsensitive &&
             !useAho &&
