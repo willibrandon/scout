@@ -1619,6 +1619,29 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies Unicode word-boundary runs use direct scalar-run scanning.
+    /// </summary>
+    [Fact]
+    public void UsesSimpleSequenceEngineForUnicodeWordBoundaryRuns()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\b\w{3,}\b"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(5, 6), automaton.Find("ββ βββ word_12 ☃abc"u8));
+        Assert.Equal(new RegexMatch(12, 7), automaton.Find("ββ βββ word_12 ☃abc"u8, startAt: 6));
+        Assert.Equal(3, automaton.CountMatches("ββ βββ word_12 ☃abc"u8));
+        Assert.Equal(16, automaton.SumMatchSpans("ββ βββ word_12 ☃abc"u8));
+        Assert.Equal(2, automaton.CountMatches("ββ βββ word_12 ☃abc"u8, startAt: 6));
+        Assert.Equal(10, automaton.SumMatchSpans("ββ βββ word_12 ☃abc"u8, startAt: 6));
+    }
+
+    /// <summary>
     /// Verifies single bounded Unicode scalar runs use direct scalar scanning.
     /// </summary>
     [Fact]
