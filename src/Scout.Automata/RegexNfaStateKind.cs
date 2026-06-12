@@ -9,5 +9,6 @@ internal enum RegexNfaStateKind
     Split,
     GreedyLoopSplit,
     LazyLoopSplit,
+    Sparse,
     Accept,
 }

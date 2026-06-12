@@ -48,24 +48,7 @@ internal sealed class PikeVm
                     continue;
                 }
 
-                RegexNfaState state = nfa.States[stateIndex];
-                if (state.Kind == RegexNfaStateKind.Atom &&
-                    RegexByteClass.TryGetAtomMatchLength(
-                        haystack,
-                        position,
-                        state.AtomKind,
-                        state.Value.Span,
-                        state.CaseInsensitive,
-                        state.MultiLine,
-                        state.DotMatchesNewline,
-                        state.Crlf,
-                        state.LineTerminator,
-                        state.Utf8,
-                        state.UnicodeClasses,
-                        out int consume))
-                {
-                    AddThread(state.Next, haystack, position + consume, next, nextSeen, new bool[nfa.States.Count], new bool[nfa.States.Count]);
-                }
+                AddConsumerThread(nfa.States[stateIndex], haystack, position, next, nextSeen);
             }
 
             (current, next) = (next, current);
@@ -110,24 +93,7 @@ internal sealed class PikeVm
                     continue;
                 }
 
-                RegexNfaState state = nfa.States[stateIndex];
-                if (state.Kind == RegexNfaStateKind.Atom &&
-                    RegexByteClass.TryGetAtomMatchLength(
-                        haystack,
-                        position,
-                        state.AtomKind,
-                        state.Value.Span,
-                        state.CaseInsensitive,
-                        state.MultiLine,
-                        state.DotMatchesNewline,
-                        state.Crlf,
-                        state.LineTerminator,
-                        state.Utf8,
-                        state.UnicodeClasses,
-                        out int consume))
-                {
-                    AddThread(state.Next, haystack, position + consume, next, nextSeen, new bool[nfa.States.Count], new bool[nfa.States.Count]);
-                }
+                AddConsumerThread(nfa.States[stateIndex], haystack, position, next, nextSeen);
             }
 
             (current, next) = (next, current);
@@ -167,24 +133,7 @@ internal sealed class PikeVm
                     continue;
                 }
 
-                RegexNfaState state = nfa.States[stateIndex];
-                if (state.Kind == RegexNfaStateKind.Atom &&
-                    RegexByteClass.TryGetAtomMatchLength(
-                        haystack,
-                        position,
-                        state.AtomKind,
-                        state.Value.Span,
-                        state.CaseInsensitive,
-                        state.MultiLine,
-                        state.DotMatchesNewline,
-                        state.Crlf,
-                        state.LineTerminator,
-                        state.Utf8,
-                        state.UnicodeClasses,
-                        out int consume))
-                {
-                    AddThread(state.Next, haystack, position + consume, next, nextSeen, new bool[nfa.States.Count], new bool[nfa.States.Count]);
-                }
+                AddConsumerThread(nfa.States[stateIndex], haystack, position, next, nextSeen);
             }
 
             (current, next) = (next, current);
@@ -199,6 +148,38 @@ internal sealed class PikeVm
 
         length = 0;
         return false;
+    }
+
+    private void AddConsumerThread(
+        RegexNfaState state,
+        ReadOnlySpan<byte> haystack,
+        int position,
+        List<(int State, int Position)> threads,
+        HashSet<(int State, int Position)> seen)
+    {
+        if (state.Kind == RegexNfaStateKind.Atom &&
+            RegexByteClass.TryGetAtomMatchLength(
+                haystack,
+                position,
+                state.AtomKind,
+                state.Value.Span,
+                state.CaseInsensitive,
+                state.MultiLine,
+                state.DotMatchesNewline,
+                state.Crlf,
+                state.LineTerminator,
+                state.Utf8,
+                state.UnicodeClasses,
+                out int consume))
+        {
+            AddThread(state.Next, haystack, position + consume, threads, seen, new bool[nfa.States.Count], new bool[nfa.States.Count]);
+        }
+        else if (position < haystack.Length &&
+            state.Kind == RegexNfaStateKind.Sparse &&
+            state.TryGetSparseTarget(haystack[position], out int sparseNext))
+        {
+            AddThread(sparseNext, haystack, position + 1, threads, seen, new bool[nfa.States.Count], new bool[nfa.States.Count]);
+        }
     }
 
     private void AddThread(
@@ -318,6 +299,13 @@ internal sealed class PikeVm
                     state.UnicodeClasses,
                     out int consume) &&
                 RegexDfaOperations.CanReachAccept(nfa, state.Next, haystack, position + consume, reachabilityCache))
+            {
+                return true;
+            }
+
+            if (state.Kind == RegexNfaStateKind.Sparse &&
+                state.TryGetSparseTarget(haystack[position], out int sparseNext) &&
+                RegexDfaOperations.CanReachAccept(nfa, sparseNext, haystack, position + 1, reachabilityCache))
             {
                 return true;
             }

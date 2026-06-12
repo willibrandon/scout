@@ -4,8 +4,13 @@ internal sealed class RegexNfaCompiler
 {
     private readonly List<RegexNfaState> states = [];
     private readonly Dictionary<string, RegexUtf8ByteTrie> utf8ByteTrieCache;
+    private readonly Dictionary<RegexNfaAtomCacheKey, int> atomStateCache = [];
+    private readonly Dictionary<RegexNfaByteClassCacheKey, int> byteClassStateCache = [];
+    private readonly Dictionary<RegexNfaControlCacheKey, int> controlStateCache = [];
+    private readonly Dictionary<string, int> sparseStateCache = [];
     private readonly bool includeCaptures;
     private readonly int captureCount;
+    private bool cacheStates;
     private bool sawUtf8Disabled;
 
     private RegexNfaCompiler(
@@ -287,8 +292,7 @@ internal sealed class RegexNfaCompiler
         }
 
         RegexNfaStateKind stateKind = IsPredicate(node.Kind) ? RegexNfaStateKind.Predicate : RegexNfaStateKind.Atom;
-        int state = states.Count;
-        states.Add(new RegexNfaState(
+        return AddAtomState(
             stateKind,
             node.Kind,
             node.Value,
@@ -300,8 +304,7 @@ internal sealed class RegexNfaCompiler
             options.Utf8,
             options.UnicodeClasses,
             next,
-            alternative: -1));
-        return state;
+            alternative: -1);
     }
 
     private int CompileAtomReversed(RegexAtomNode node, int next, RegexCompileOptions options)
@@ -314,8 +317,7 @@ internal sealed class RegexNfaCompiler
 
         ReadOnlyMemory<byte> value = kind == RegexSyntaxKind.Literal ? ReverseBytes(node.Value) : node.Value;
         RegexNfaStateKind stateKind = IsPredicate(kind) ? RegexNfaStateKind.Predicate : RegexNfaStateKind.Atom;
-        int state = states.Count;
-        states.Add(new RegexNfaState(
+        return AddAtomState(
             stateKind,
             kind,
             value,
@@ -327,8 +329,7 @@ internal sealed class RegexNfaCompiler
             options.Utf8,
             options.UnicodeClasses,
             next,
-            alternative: -1));
-        return state;
+            alternative: -1);
     }
 
     private bool TryCompileUtf8ByteAtom(
@@ -348,14 +349,16 @@ internal sealed class RegexNfaCompiler
         int AddSourceByteClass(ReadOnlySpan<byte> ranges, int target) => AddByteClass(ranges, target, options.Utf8);
         if (RegexUtf8ByteCompiler.TryGetSharedTrie(kind, value, options, reversed, out RegexUtf8ByteTrie? sharedTrie))
         {
-            start = sharedTrie!.Compile(next, AddSourceByteClass, AddSplit);
+            cacheStates = !includeCaptures;
+            start = sharedTrie!.Compile(next, AddSplit, AddSparse);
             return true;
         }
 
         string key = RegexUtf8ByteCompiler.CreateCacheKey(kind, value, options, reversed);
         if (utf8ByteTrieCache.TryGetValue(key, out RegexUtf8ByteTrie? trie))
         {
-            start = trie.Compile(next, AddSourceByteClass, AddSplit);
+            cacheStates = !includeCaptures;
+            start = trie.Compile(next, AddSplit, AddSparse);
             return true;
         }
 
@@ -376,7 +379,8 @@ internal sealed class RegexNfaCompiler
         }
 
         utf8ByteTrieCache.Add(key, trie!);
-        start = trie!.Compile(next, AddSourceByteClass, AddSplit);
+        cacheStates = !includeCaptures;
+        start = trie!.Compile(next, AddSplit, AddSparse);
         return true;
     }
 
@@ -404,8 +408,19 @@ internal sealed class RegexNfaCompiler
 
     private int AddSplit(int first, int second)
     {
+        var key = new RegexNfaControlCacheKey(RegexNfaStateKind.Split, first, second);
+        if (cacheStates && controlStateCache.TryGetValue(key, out int existing))
+        {
+            return existing;
+        }
+
         int state = states.Count;
         states.Add(CreateControlState(RegexNfaStateKind.Split, first, second));
+        if (cacheStates)
+        {
+            controlStateCache.Add(key, state);
+        }
+
         return state;
     }
 
@@ -416,11 +431,37 @@ internal sealed class RegexNfaCompiler
 
     private int AddByteClass(ReadOnlySpan<byte> ranges, int next, bool utf8)
     {
-        int state = states.Count;
-        states.Add(new RegexNfaState(
+        if (cacheStates && ranges.Length == 2)
+        {
+            var key = new RegexNfaByteClassCacheKey(ranges[0], ranges[1], utf8, next);
+            if (byteClassStateCache.TryGetValue(key, out int existing))
+            {
+                return existing;
+            }
+
+            int cachedState = states.Count;
+            states.Add(new RegexNfaState(
+                RegexNfaStateKind.Atom,
+                RegexSyntaxKind.ByteClass,
+                new byte[] { ranges[0], ranges[1] },
+                caseInsensitive: false,
+                multiLine: false,
+                dotMatchesNewline: false,
+                crlf: false,
+                lineTerminator: (byte)'\n',
+                utf8: utf8,
+                unicodeClasses: false,
+                next,
+                alternative: -1));
+            byteClassStateCache.Add(key, cachedState);
+            return cachedState;
+        }
+
+        byte[] value = ranges.ToArray();
+        return AddAtomState(
             RegexNfaStateKind.Atom,
             RegexSyntaxKind.ByteClass,
-            ranges.ToArray(),
+            value,
             caseInsensitive: false,
             multiLine: false,
             dotMatchesNewline: false,
@@ -429,8 +470,128 @@ internal sealed class RegexNfaCompiler
             utf8: utf8,
             unicodeClasses: false,
             next,
-            alternative: -1));
+            alternative: -1);
+    }
+
+    private int AddAtomState(
+        RegexNfaStateKind stateKind,
+        RegexSyntaxKind atomKind,
+        ReadOnlyMemory<byte> value,
+        bool caseInsensitive,
+        bool multiLine,
+        bool dotMatchesNewline,
+        bool crlf,
+        byte lineTerminator,
+        bool utf8,
+        bool unicodeClasses,
+        int next,
+        int alternative)
+    {
+        if (cacheStates)
+        {
+            var key = RegexNfaAtomCacheKey.Create(
+                stateKind,
+                atomKind,
+                value.Span,
+                caseInsensitive,
+                multiLine,
+                dotMatchesNewline,
+                crlf,
+                lineTerminator,
+                utf8,
+                unicodeClasses,
+                next,
+                alternative);
+            if (atomStateCache.TryGetValue(key, out int existing))
+            {
+                return existing;
+            }
+
+            int cachedState = states.Count;
+            states.Add(new RegexNfaState(
+                stateKind,
+                atomKind,
+                value,
+                caseInsensitive,
+                multiLine,
+                dotMatchesNewline,
+                crlf,
+                lineTerminator,
+                utf8,
+                unicodeClasses,
+                next,
+                alternative));
+            atomStateCache.Add(key, cachedState);
+            return cachedState;
+        }
+
+        int state = states.Count;
+        states.Add(new RegexNfaState(
+            stateKind,
+            atomKind,
+            value,
+            caseInsensitive,
+            multiLine,
+            dotMatchesNewline,
+            crlf,
+            lineTerminator,
+            utf8,
+            unicodeClasses,
+            next,
+            alternative));
         return state;
+    }
+
+    private int AddSparse(ReadOnlySpan<RegexNfaSparseTransition> transitions)
+    {
+        string? key = null;
+        if (cacheStates)
+        {
+            key = CreateSparseCacheKey(transitions);
+            if (sparseStateCache.TryGetValue(key, out int existing))
+            {
+                return existing;
+            }
+        }
+
+        int state = states.Count;
+        states.Add(new RegexNfaState(
+            RegexNfaStateKind.Sparse,
+            RegexSyntaxKind.Empty,
+            ReadOnlyMemory<byte>.Empty,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            crlf: false,
+            lineTerminator: (byte)'\n',
+            utf8: false,
+            unicodeClasses: false,
+            next: -1,
+            alternative: -1,
+            sparseTransitions: transitions.ToArray()));
+        if (cacheStates)
+        {
+            sparseStateCache.Add(key!, state);
+        }
+
+        return state;
+    }
+
+    private static string CreateSparseCacheKey(ReadOnlySpan<RegexNfaSparseTransition> transitions)
+    {
+        var builder = new System.Text.StringBuilder(transitions.Length * 12);
+        for (int index = 0; index < transitions.Length; index++)
+        {
+            RegexNfaSparseTransition transition = transitions[index];
+            builder.Append(transition.Start);
+            builder.Append('-');
+            builder.Append(transition.End);
+            builder.Append(':');
+            builder.Append(transition.Next);
+            builder.Append(';');
+        }
+
+        return builder.ToString();
     }
 
     private int AddAccept()

@@ -169,6 +169,21 @@ internal sealed class RegexCaptureEngine
                         new bool[nfa.States.Count],
                         new bool[nfa.States.Count]);
                 }
+                else if (position < haystack.Length &&
+                    state.Kind == RegexNfaStateKind.Sparse &&
+                    state.TryGetSparseTarget(haystack[position], out int sparseNext))
+                {
+                    AddThread(
+                        sparseNext,
+                        haystack,
+                        position + 1,
+                        CloneSlots(thread.Starts),
+                        CloneSlots(thread.Ends),
+                        next,
+                        nextSeen,
+                        new bool[nfa.States.Count],
+                        new bool[nfa.States.Count]);
+                }
             }
 
             (current, next) = (next, current);
@@ -319,6 +334,13 @@ internal sealed class RegexCaptureEngine
                     state.UnicodeClasses,
                     out int consume) &&
                 RegexDfaOperations.CanReachAccept(nfa, state.Next, haystack, position + consume, reachabilityCache))
+            {
+                return true;
+            }
+
+            if (state.Kind == RegexNfaStateKind.Sparse &&
+                state.TryGetSparseTarget(haystack[position], out int sparseNext) &&
+                RegexDfaOperations.CanReachAccept(nfa, sparseNext, haystack, position + 1, reachabilityCache))
             {
                 return true;
             }

@@ -52,6 +52,11 @@ internal static class RegexDfaOperations
             {
                 AddThread(nfa, nfaState.Next, next, visited, closedSplits);
             }
+            else if (nfaState.Kind == RegexNfaStateKind.Sparse &&
+                nfaState.TryGetSparseTarget(value, out int sparseNext))
+            {
+                AddThread(nfa, sparseNext, next, visited, closedSplits);
+            }
         }
 
         return next.ToArray();
@@ -76,6 +81,13 @@ internal static class RegexDfaOperations
                     nfaState.Crlf,
                     nfaState.LineTerminator) &&
                 AddThreadLeftmost(nfa, nfaState.Next, next, visited, closedSplits))
+            {
+                break;
+            }
+
+            if (nfaState.Kind == RegexNfaStateKind.Sparse &&
+                nfaState.TryGetSparseTarget(value, out int sparseNext) &&
+                AddThreadLeftmost(nfa, sparseNext, next, visited, closedSplits))
             {
                 break;
             }
@@ -124,6 +136,17 @@ internal static class RegexDfaOperations
             }
 
             if (CanReachAccept(nfa, state.Next, haystack, position + consume, reachabilityCache))
+            {
+                return true;
+            }
+        }
+
+        for (int index = 0; index < acceptIndex; index++)
+        {
+            RegexNfaState state = nfa.States[threads[index]];
+            if (state.Kind == RegexNfaStateKind.Sparse &&
+                state.TryGetSparseTarget(haystack[position], out int sparseNext) &&
+                CanReachAccept(nfa, sparseNext, haystack, position + 1, reachabilityCache))
             {
                 return true;
             }
@@ -227,6 +250,10 @@ internal static class RegexDfaOperations
                     state.UnicodeClasses,
                     out int consume) &&
                 CanReachAcceptCore(nfa, state.Next, haystack, position + consume, cache, visiting),
+            RegexNfaStateKind.Sparse =>
+                position < haystack.Length &&
+                state.TryGetSparseTarget(haystack[position], out int sparseNext) &&
+                CanReachAcceptCore(nfa, sparseNext, haystack, position + 1, cache, visiting),
             _ => false,
         };
 

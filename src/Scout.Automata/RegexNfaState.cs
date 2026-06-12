@@ -15,7 +15,8 @@ internal sealed class RegexNfaState
         bool unicodeClasses,
         int next,
         int alternative,
-        int captureIndex = 0)
+        int captureIndex = 0,
+        RegexNfaSparseTransition[]? sparseTransitions = null)
     {
         Kind = kind;
         AtomKind = atomKind;
@@ -30,6 +31,7 @@ internal sealed class RegexNfaState
         Next = next;
         Alternative = alternative;
         CaptureIndex = captureIndex;
+        SparseTransitions = sparseTransitions ?? [];
     }
 
     public RegexNfaStateKind Kind { get; }
@@ -57,4 +59,22 @@ internal sealed class RegexNfaState
     public int Alternative { get; }
 
     public int CaptureIndex { get; }
+
+    public RegexNfaSparseTransition[] SparseTransitions { get; }
+
+    public bool TryGetSparseTarget(byte value, out int next)
+    {
+        for (int index = 0; index < SparseTransitions.Length; index++)
+        {
+            RegexNfaSparseTransition transition = SparseTransitions[index];
+            if (transition.Start <= value && value <= transition.End)
+            {
+                next = transition.Next;
+                return true;
+            }
+        }
+
+        next = -1;
+        return false;
+    }
 }
