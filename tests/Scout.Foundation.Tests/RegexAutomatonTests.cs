@@ -122,6 +122,41 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies small packed literal alternations preserve leftmost-first and non-overlapping count semantics.
+    /// </summary>
+    [Fact]
+    public void CountsPackedLiteralAlternations()
+    {
+        var longerFirstAutomaton = RegexAutomaton.Compile("abcdzz|abcd|wxyz"u8);
+        var shorterFirstAutomaton = RegexAutomaton.Compile("abcd|abcdzz|wxyz"u8);
+
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(longerFirstAutomaton));
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(shorterFirstAutomaton));
+        Assert.Equal(new RegexMatch(2, 6), longerFirstAutomaton.Find("xxabcdzz abcd wxyz"u8));
+        Assert.Equal(new RegexMatch(2, 4), shorterFirstAutomaton.Find("xxabcdzz abcd wxyz"u8));
+        Assert.Equal(3, longerFirstAutomaton.CountMatches("xxabcdzz abcd wxyz"u8));
+        Assert.Equal(14, longerFirstAutomaton.SumMatchSpans("xxabcdzz abcd wxyz"u8));
+        Assert.Equal(2, longerFirstAutomaton.CountMatches("xxabcdzz abcd wxyz"u8, startAt: 7));
+        Assert.Equal(8, longerFirstAutomaton.SumMatchSpans("xxabcdzz abcd wxyz"u8, startAt: 7));
+    }
+
+    /// <summary>
+    /// Verifies packed literal alternations preserve byte-oriented matching for non-ASCII literals.
+    /// </summary>
+    [Fact]
+    public void CountsPackedNonAsciiLiteralAlternations()
+    {
+        var automaton = RegexAutomaton.Compile("Шерлок|Джон|Ирен"u8);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("xxШерлок Джон Ирен Шерлок");
+
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(2, System.Text.Encoding.UTF8.GetByteCount("Шерлок")), automaton.Find(haystack));
+        Assert.Equal(4, automaton.CountMatches(haystack));
+        Assert.Equal(System.Text.Encoding.UTF8.GetByteCount("ШерлокДжонИренШерлок"), automaton.SumMatchSpans(haystack));
+        Assert.Equal(3, automaton.CountMatches(haystack, startAt: System.Text.Encoding.UTF8.GetByteCount("xxШерлок ")));
+    }
+
+    /// <summary>
     /// Verifies large literal alternations preserve byte-oriented leftmost-first matching.
     /// </summary>
     [Fact]
