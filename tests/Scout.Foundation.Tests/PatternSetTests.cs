@@ -44,6 +44,43 @@ public sealed class PatternSetTests
     }
 
     /// <summary>
+    /// Verifies ASCII word-boundary literals use exact boundary-aware acceleration.
+    /// </summary>
+    [Fact]
+    public void UsesBoundaryLiteralAcceleratorForAsciiKeywordPatterns()
+    {
+        var set = PatternSet.Compile(
+        [
+            @"(\bif\b)"u8.ToArray(),
+            @"([a-zA-Z_][0-9a-zA-Z_]*)"u8.ToArray(),
+            "(.)"u8.ToArray(),
+        ],
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.True(set.UsesBoundaryLiteralAccelerator);
+        Assert.Equal(new PatternSetMatch(0, new RegexMatch(0, 2)), set.Find("if"u8));
+        Assert.Equal(new PatternSetMatch(1, new RegexMatch(0, 8)), set.Find("if_reset"u8));
+        Assert.Equal(11, set.SumMatchSpans("if if_reset"u8));
+
+        var mixedLiteralSet = PatternSet.Compile(
+        [
+            @"(\bif\b)"u8.ToArray(),
+            "else"u8.ToArray(),
+        ],
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(2, mixedLiteralSet.CountMatches("if else"u8));
+    }
+
+    /// <summary>
     /// Verifies multi-regex required-literal acceleration supports Unicode case folding.
     /// </summary>
     [Fact]

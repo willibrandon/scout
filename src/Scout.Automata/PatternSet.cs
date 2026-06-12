@@ -10,6 +10,7 @@ public sealed class PatternSet
     private readonly int[] allAutomataIndexes;
     private readonly int[][]? exactAutomataByFirstByte;
     private readonly PatternSetLiteralAccelerator? literalAccelerator;
+    private readonly PatternSetBoundaryLiteralAccelerator? boundaryLiteralAccelerator;
     private readonly PatternSetRequiredLiteralAccelerator? requiredLiteralAccelerator;
     private readonly int count;
 
@@ -20,6 +21,7 @@ public sealed class PatternSet
         int[] allAutomataIndexes,
         int[][]? exactAutomataByFirstByte,
         PatternSetLiteralAccelerator? literalAccelerator,
+        PatternSetBoundaryLiteralAccelerator? boundaryLiteralAccelerator,
         PatternSetRequiredLiteralAccelerator? requiredLiteralAccelerator)
     {
         this.count = count;
@@ -28,6 +30,7 @@ public sealed class PatternSet
         this.allAutomataIndexes = allAutomataIndexes;
         this.exactAutomataByFirstByte = exactAutomataByFirstByte;
         this.literalAccelerator = literalAccelerator;
+        this.boundaryLiteralAccelerator = boundaryLiteralAccelerator;
         this.requiredLiteralAccelerator = requiredLiteralAccelerator;
     }
 
@@ -37,6 +40,8 @@ public sealed class PatternSet
     public int Count => count;
 
     internal bool UsesLiteralAccelerator => literalAccelerator is not null;
+
+    internal bool UsesBoundaryLiteralAccelerator => boundaryLiteralAccelerator is not null;
 
     internal bool UsesRequiredLiteralAccelerator => requiredLiteralAccelerator is not null;
 
@@ -131,6 +136,8 @@ public sealed class PatternSet
         var automataPatternIds = new List<int>();
         var literalPatterns = new List<byte[]>();
         var literalPatternIds = new List<int>();
+        var boundaryLiteralPatterns = new List<byte[]>();
+        var boundaryLiteralPatternIds = new List<int>();
         var requiredLiteralEntries = new List<PatternSetRequiredLiteralEntry>();
         for (int index = 0; index < plans.Length; index++)
         {
@@ -141,6 +148,17 @@ public sealed class PatternSet
                 {
                     literalPatterns.Add(plan.LiteralPatterns[literalIndex]);
                     literalPatternIds.Add(index);
+                }
+
+                continue;
+            }
+
+            if (plan.BoundaryLiteralPatterns is not null)
+            {
+                for (int literalIndex = 0; literalIndex < plan.BoundaryLiteralPatterns.Length; literalIndex++)
+                {
+                    boundaryLiteralPatterns.Add(plan.BoundaryLiteralPatterns[literalIndex]);
+                    boundaryLiteralPatternIds.Add(index);
                 }
 
                 continue;
@@ -161,6 +179,9 @@ public sealed class PatternSet
         PatternSetLiteralAccelerator? literalAccelerator = literalPatterns.Count == 0
             ? null
             : new PatternSetLiteralAccelerator(literalPatterns, literalPatternIds, options.CaseInsensitive);
+        PatternSetBoundaryLiteralAccelerator? boundaryLiteralAccelerator = boundaryLiteralPatterns.Count == 0
+            ? null
+            : new PatternSetBoundaryLiteralAccelerator(boundaryLiteralPatterns, boundaryLiteralPatternIds);
         RegexAutomaton[] compiledAutomata = automata.ToArray();
         PatternSetRequiredLiteralAccelerator? requiredLiteralAccelerator = requiredLiteralEntries.Count == 0
             ? null
@@ -172,6 +193,7 @@ public sealed class PatternSet
             BuildAllAutomataIndexes(compiledAutomata.Length),
             BuildExactAutomataByFirstByte(compiledAutomata),
             literalAccelerator,
+            boundaryLiteralAccelerator,
             requiredLiteralAccelerator);
         return true;
     }
@@ -195,6 +217,12 @@ public sealed class PatternSet
             TryPrepareLiteralPatterns(literal, options, out byte[][] preparedLiteralPatterns))
         {
             plan = new PatternSetPatternPlan(tree, preparedLiteralPatterns, requiredLiterals: null, requiredLiteralLookBehind: 0);
+            return true;
+        }
+
+        if (TryGetBoundaryLiteralPattern(tree.Root, options, out byte[] boundaryLiteral))
+        {
+            plan = new PatternSetPatternPlan(tree, literalPatterns: null, boundaryLiteralPatterns: [boundaryLiteral], requiredLiterals: null, requiredLiteralLookBehind: 0);
             return true;
         }
 
@@ -241,6 +269,11 @@ public sealed class PatternSet
             return true;
         }
 
+        if (boundaryLiteralAccelerator is not null && boundaryLiteralAccelerator.IsMatch(haystack))
+        {
+            return true;
+        }
+
         if (requiredLiteralAccelerator is not null &&
             requiredLiteralAccelerator.Find(haystack, 0, automata, automataPatternIds, best: null).HasValue)
         {
@@ -282,12 +315,15 @@ public sealed class PatternSet
     public long CountMatches(ReadOnlySpan<byte> haystack, int startAt)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
-        if (literalAccelerator is not null && automata.Length == 0)
+        if (literalAccelerator is not null &&
+            boundaryLiteralAccelerator is null &&
+            automata.Length == 0)
         {
             return literalAccelerator.CountMatches(haystack, startOffset);
         }
 
         if (literalAccelerator is null &&
+            boundaryLiteralAccelerator is null &&
             requiredLiteralAccelerator is not null &&
             requiredLiteralAccelerator.CoversAllAutomata)
         {
@@ -316,7 +352,9 @@ public sealed class PatternSet
     public long SumMatchSpans(ReadOnlySpan<byte> haystack, int startAt)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
-        if (literalAccelerator is not null && automata.Length == 0)
+        if (literalAccelerator is not null &&
+            boundaryLiteralAccelerator is null &&
+            automata.Length == 0)
         {
             return literalAccelerator.SumMatchSpans(haystack, startOffset);
         }
@@ -344,6 +382,12 @@ public sealed class PatternSet
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
         PatternSetMatch? exact = literalAccelerator?.FindAt(haystack, startOffset);
+        PatternSetMatch? boundaryExact = boundaryLiteralAccelerator?.FindAt(haystack, startOffset);
+        if (boundaryExact.HasValue && IsBetter(boundaryExact.Value, exact))
+        {
+            exact = boundaryExact;
+        }
+
         ReadOnlySpan<int> exactAutomata = GetExactAutomataForStart(haystack, startOffset);
         for (int candidateIndex = 0; candidateIndex < exactAutomata.Length; candidateIndex++)
         {
@@ -376,6 +420,23 @@ public sealed class PatternSet
                 best = new PatternSetMatch(
                     literalMatch.Value.PatternId,
                     new RegexMatch(literalMatch.Value.Match.Start + startOffset, literalMatch.Value.Match.Length));
+            }
+        }
+
+        if (boundaryLiteralAccelerator is not null)
+        {
+            PatternSetMatch? boundaryLiteralMatch = boundaryLiteralAccelerator.Find(haystack[startOffset..]);
+            if (boundaryLiteralMatch.HasValue)
+            {
+                var candidate = new PatternSetMatch(
+                    boundaryLiteralMatch.Value.PatternId,
+                    new RegexMatch(
+                        boundaryLiteralMatch.Value.Match.Start + startOffset,
+                        boundaryLiteralMatch.Value.Match.Length));
+                if (IsBetter(candidate, best))
+                {
+                    best = candidate;
+                }
             }
         }
 
@@ -501,6 +562,14 @@ public sealed class PatternSet
             not (byte)'$';
     }
 
+    private static bool IsAsciiWord(byte value)
+    {
+        return value is >= (byte)'A' and <= (byte)'Z'
+            or >= (byte)'a' and <= (byte)'z'
+            or >= (byte)'0' and <= (byte)'9'
+            or (byte)'_';
+    }
+
     private static int[] BuildAllAutomataIndexes(int count)
     {
         int[] indexes = new int[count];
@@ -558,6 +627,7 @@ public sealed class PatternSet
     {
         bool[] matched = new bool[count];
         literalAccelerator?.MarkMatchingPatternIds(haystack, matched);
+        boundaryLiteralAccelerator?.MarkMatchingPatternIds(haystack, matched);
         for (int index = 0; index < automata.Length; index++)
         {
             if (automata[index].IsMatch(haystack))
@@ -605,6 +675,61 @@ public sealed class PatternSet
 
         literal = [];
         return false;
+    }
+
+    private static bool TryGetBoundaryLiteralPattern(RegexSyntaxNode root, RegexCompileOptions options, out byte[] literal)
+    {
+        literal = [];
+        if (options.CaseInsensitive || options.UnicodeClasses)
+        {
+            return false;
+        }
+
+        root = UnwrapTransparentGroup(root);
+        if (root is not RegexSequenceNode sequence ||
+            sequence.Nodes.Count < 3 ||
+            sequence.Nodes[0].Kind != RegexSyntaxKind.WordBoundary ||
+            sequence.Nodes[^1].Kind != RegexSyntaxKind.WordBoundary)
+        {
+            return false;
+        }
+
+        var bytes = new List<byte>();
+        for (int index = 1; index < sequence.Nodes.Count - 1; index++)
+        {
+            if (!TryAppendLiteralPattern(sequence.Nodes[index], bytes))
+            {
+                return false;
+            }
+        }
+
+        if (bytes.Count == 0)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < bytes.Count; index++)
+        {
+            if (!IsAsciiWord(bytes[index]))
+            {
+                return false;
+            }
+        }
+
+        literal = bytes.ToArray();
+        return true;
+    }
+
+    private static RegexSyntaxNode UnwrapTransparentGroup(RegexSyntaxNode node)
+    {
+        while (node is RegexGroupNode group &&
+            string.IsNullOrEmpty(group.EnabledFlags) &&
+            string.IsNullOrEmpty(group.DisabledFlags))
+        {
+            node = group.Child;
+        }
+
+        return node;
     }
 
     private static bool TryAppendLiteralPattern(RegexSyntaxNode node, List<byte> bytes)
