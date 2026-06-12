@@ -1,5 +1,8 @@
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 
 namespace Scout;
 
@@ -415,6 +418,12 @@ internal sealed class RegexSimpleSequenceEngine
         int position,
         ref long count)
     {
+        if (Avx2.IsSupported && haystack.Length - position >= Vector256<byte>.Count)
+        {
+            CountAsciiLetterRunsCountOnlyAvx2(minimum, maximum, lazy, haystack, position, ref count);
+            return;
+        }
+
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
         int length = haystack.Length;
         while (position < length)
@@ -436,6 +445,100 @@ internal sealed class RegexSimpleSequenceEngine
             }
 
             AddRunCountOnly(minimum, maximum, lazy, position - runStart, ref count);
+        }
+    }
+
+    private static void CountAsciiLetterRunsCountOnlyAvx2(
+        int minimum,
+        int? maximum,
+        bool lazy,
+        ReadOnlySpan<byte> haystack,
+        int position,
+        ref long count)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int length = haystack.Length;
+        int vectorEnd = length - Vector256<byte>.Count;
+        int runLength = 0;
+        var caseFold = Vector256.Create((byte)0x20);
+        var beforeA = Vector256.Create((sbyte)('a' - 1));
+        var afterZ = Vector256.Create((sbyte)('z' + 1));
+        while (position <= vectorEnd)
+        {
+            var block = Vector256.LoadUnsafe(ref reference, (nuint)position);
+            Vector256<sbyte> folded = Avx2.Or(block, caseFold).AsSByte();
+            Vector256<byte> matches = Avx2.And(
+                Avx2.CompareGreaterThan(folded, beforeA),
+                Avx2.CompareGreaterThan(afterZ, folded)).AsByte();
+            uint mask = matches.ExtractMostSignificantBits();
+            AccumulateAsciiLetterMask(minimum, maximum, lazy, mask, Vector256<byte>.Count, ref runLength, ref count);
+            position += Vector256<byte>.Count;
+        }
+
+        while (position < length)
+        {
+            if (RegexSimpleSequenceSegment.IsAsciiLetter(Unsafe.Add(ref reference, position)))
+            {
+                runLength++;
+            }
+            else
+            {
+                AddRunCountOnly(minimum, maximum, lazy, runLength, ref count);
+                runLength = 0;
+            }
+
+            position++;
+        }
+
+        AddRunCountOnly(minimum, maximum, lazy, runLength, ref count);
+    }
+
+    private static void AccumulateAsciiLetterMask(
+        int minimum,
+        int? maximum,
+        bool lazy,
+        uint mask,
+        int width,
+        ref int runLength,
+        ref long count)
+    {
+        uint fullMask = width == 32 ? uint.MaxValue : (1u << width) - 1u;
+        mask &= fullMask;
+        if (mask == fullMask)
+        {
+            runLength += width;
+            return;
+        }
+
+        if (mask == 0)
+        {
+            AddRunCountOnly(minimum, maximum, lazy, runLength, ref count);
+            runLength = 0;
+            return;
+        }
+
+        int consumed = 0;
+        while (mask != 0)
+        {
+            int zeros = BitOperations.TrailingZeroCount(mask);
+            if (zeros > 0)
+            {
+                AddRunCountOnly(minimum, maximum, lazy, runLength, ref count);
+                runLength = 0;
+                consumed += zeros;
+                mask >>= zeros;
+            }
+
+            int ones = BitOperations.TrailingZeroCount(~mask);
+            runLength += ones;
+            consumed += ones;
+            mask >>= ones;
+        }
+
+        if (consumed < width)
+        {
+            AddRunCountOnly(minimum, maximum, lazy, runLength, ref count);
+            runLength = 0;
         }
     }
 

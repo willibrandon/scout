@@ -1878,6 +1878,30 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies long ASCII byte-class runs count bounded chunks and trailing remainders correctly.
+    /// </summary>
+    [Fact]
+    public void CountsLongBoundedAsciiLetterRunsByChunks()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"[A-Za-z]{8,13}"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = System.Text.Encoding.ASCII.GetBytes(
+            new string('a', 13) + " " +
+            new string('b', 21) + " " +
+            new string('c', 7) + " " +
+            new string('d', 8));
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.Equal(4, automaton.CountMatches(haystack));
+        Assert.Equal(42, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies byte-mode ASCII word-boundary runs use direct simple-sequence scanning.
     /// </summary>
     [Fact]
