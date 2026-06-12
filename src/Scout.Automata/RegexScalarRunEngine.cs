@@ -1,4 +1,6 @@
 using System.Buffers;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Scout;
@@ -159,9 +161,20 @@ internal sealed class RegexScalarRunEngine
         while (position < haystack.Length)
         {
             int runScalars = 0;
-            while (position < haystack.Length &&
-                TryUnicodeLetterFastPathMatchLength(haystack, position, out int scalarLength))
+            while (position < haystack.Length)
             {
+                int cyrillicScalars = ConsumeFastCyrillicLetterPairs(haystack, ref position);
+                if (cyrillicScalars != 0)
+                {
+                    runScalars += cyrillicScalars;
+                    continue;
+                }
+
+                if (!TryUnicodeLetterFastPathMatchLength(haystack, position, out int scalarLength))
+                {
+                    break;
+                }
+
                 runScalars++;
                 position += scalarLength;
             }
@@ -172,6 +185,53 @@ internal sealed class RegexScalarRunEngine
                 position = AdvanceAfterNonMatch(haystack, position);
             }
         }
+    }
+
+    private static int ConsumeFastCyrillicLetterPairs(ReadOnlySpan<byte> haystack, ref int position)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int length = haystack.Length;
+        int scalars = 0;
+        while (position <= length - 8)
+        {
+            ulong chunk = Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref reference, position));
+            if (!IsFastCyrillicLetterChunk(chunk))
+            {
+                break;
+            }
+
+            position += 8;
+            scalars += 4;
+        }
+
+        while (position + 1 < length &&
+            IsFastCyrillicLetterPair(
+                Unsafe.Add(ref reference, position),
+                Unsafe.Add(ref reference, position + 1)))
+        {
+            position += 2;
+            scalars++;
+        }
+
+        return scalars;
+    }
+
+    private static bool IsFastCyrillicLetterChunk(ulong chunk)
+    {
+        const ulong LeadByteMask = 0x00FF00FF00FF00FFUL;
+        const ulong LeadByteValueMask = 0x00FE00FE00FE00FEUL;
+        const ulong LeadByteExpected = 0x00D000D000D000D0UL;
+        const ulong ContinuationValueMask = 0xC000C000C000C000UL;
+        const ulong ContinuationExpected = 0x8000800080008000UL;
+
+        return (chunk & LeadByteMask & LeadByteValueMask) == LeadByteExpected &&
+            (chunk & ContinuationValueMask) == ContinuationExpected;
+    }
+
+    private static bool IsFastCyrillicLetterPair(byte first, byte second)
+    {
+        return (first == 0xD0 || first == 0xD1) &&
+            second is >= 0x80 and <= 0xBF;
     }
 
     private bool TryUnicodeLetterFastPathMatchLength(ReadOnlySpan<byte> haystack, int position, out int scalarLength)

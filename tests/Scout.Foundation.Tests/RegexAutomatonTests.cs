@@ -2044,6 +2044,11 @@ public sealed class RegexAutomatonTests
         Assert.Equal(new RegexMatch(0, 6), automaton.Find(mixedScript));
         Assert.Equal(2, automaton.CountMatches(mixedScript));
         Assert.Equal(9, automaton.SumMatchSpans(mixedScript));
+
+        byte[] longCyrillic = System.Text.Encoding.UTF8.GetBytes(
+            new string('ж', 11) + " 12 " + new string('я', 2));
+        Assert.Equal(5, automaton.CountMatches(longCyrillic));
+        Assert.Equal(26, automaton.SumMatchSpans(longCyrillic));
     }
 
     /// <summary>
