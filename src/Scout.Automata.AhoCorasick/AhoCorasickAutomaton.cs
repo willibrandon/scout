@@ -6,16 +6,19 @@ namespace Scout;
 /// </summary>
 public sealed class AhoCorasickAutomaton
 {
-    private const int MaxDenseTransitionStates = 512;
+    private const int MaxEagerDenseTransitionStates = 512;
+    private const int MaxPromotedDenseTransitionStates = 32768;
+    private const int LazyDensePromotionRowThreshold = 128;
 
     private readonly AhoCorasickState[] states;
-    private readonly int[]? denseTransitions;
+    private int[]? denseTransitions;
     private readonly int[]?[]? lazyDenseTransitionRows;
     private readonly int[] emptyPatternIds;
     private readonly byte[][] patterns;
     private readonly AhoCorasickMatchKind matchKind;
     private readonly AhoCorasickStartKind startKind;
     private readonly bool asciiCaseInsensitive;
+    private int lazyDenseRowsBuilt;
 
     private AhoCorasickAutomaton(
         AhoCorasickState[] states,
@@ -555,9 +558,10 @@ public sealed class AhoCorasickAutomaton
     private int NextState(int state, byte value)
     {
         value = FoldInput(value);
-        if (denseTransitions is not null)
+        int[]? transitions = System.Threading.Volatile.Read(ref denseTransitions);
+        if (transitions is not null)
         {
-            return denseTransitions[(state * 256) + value];
+            return transitions[(state * 256) + value];
         }
 
         int[]?[]? denseRows = lazyDenseTransitionRows;
@@ -568,6 +572,10 @@ public sealed class AhoCorasickAutomaton
             {
                 row = BuildDenseTransitionRow(state);
                 denseRows[state] = row;
+                if (System.Threading.Interlocked.Increment(ref lazyDenseRowsBuilt) == LazyDensePromotionRowThreshold)
+                {
+                    TryPromoteDenseTransitions();
+                }
             }
 
             return row[value];
@@ -587,13 +595,30 @@ public sealed class AhoCorasickAutomaton
         return transitions;
     }
 
+    private void TryPromoteDenseTransitions()
+    {
+        if (states.Length > MaxPromotedDenseTransitionStates ||
+            System.Threading.Volatile.Read(ref denseTransitions) is not null)
+        {
+            return;
+        }
+
+        int[] transitions = BuildDenseTransitions(states);
+        System.Threading.Volatile.Write(ref denseTransitions, transitions);
+    }
+
     private static int[]? TryBuildDenseTransitions(AhoCorasickState[] states)
     {
-        if (states.Length > MaxDenseTransitionStates)
+        if (states.Length > MaxEagerDenseTransitionStates)
         {
             return null;
         }
 
+        return BuildDenseTransitions(states);
+    }
+
+    private static int[] BuildDenseTransitions(AhoCorasickState[] states)
+    {
         int[] transitions = new int[states.Length * 256];
         for (int state = 0; state < states.Length; state++)
         {
