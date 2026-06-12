@@ -61,13 +61,16 @@ internal sealed class RegexUnanchoredLazyDfa
         out bool gaveUp)
     {
         gaveUp = false;
-        if (!forward.TryFindEnd(haystack, startAt, forwardReachabilityCache, out int end))
+        if (!forward.TryFindEnd(haystack, startAt, forwardReachabilityCache, out int end, out bool forwardGaveUp) ||
+            forwardGaveUp)
         {
+            gaveUp = forwardGaveUp;
             match = default;
             return false;
         }
 
-        if (!reverse.TryFindStartReverse(haystack, startAt, end, reverseReachabilityCache, out int start))
+        if (!reverse.TryFindStartReverse(haystack, startAt, end, reverseReachabilityCache, out int start, out bool reverseGaveUp) ||
+            reverseGaveUp)
         {
             gaveUp = true;
             match = default;

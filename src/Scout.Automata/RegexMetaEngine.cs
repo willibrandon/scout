@@ -9,6 +9,7 @@ internal sealed class RegexMetaEngine
     private const int OnePassDfaNfaStateLimit = 48;
     private const int BoundedBacktrackerNfaStateLimit = 24;
     private const int UnanchoredLazyDfaHaystackThreshold = 4096;
+    private const int AnchoredLeftmostDfaHaystackThreshold = 4096;
     private const ulong DefaultDfaSizeLimit = 2UL * 1024UL * 1024UL;
 
     private readonly PikeVm? pikeVm;
@@ -17,6 +18,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexDenseDfa? denseDfa;
     private readonly RegexSparseDfa? sparseDfa;
     private readonly RegexLazyDfa? lazyDfa;
+    private readonly Func<RegexLazyDfa?>? anchoredLeftmostDfaFactory;
     private readonly RegexLazyDfa? asciiFastDfa;
     private readonly RegexLiteralSetEngine? literalSet;
     private readonly RegexAlternationSetEngine? alternationSet;
@@ -31,9 +33,11 @@ internal sealed class RegexMetaEngine
     private readonly Func<RegexUnanchoredLazyDfa?>? unanchoredLazyDfaFactory;
     private readonly Func<RegexUnanchoredLazyDfa?>? asciiFastUnanchoredDfaFactory;
     private readonly object unanchoredDfaInitializationLock = new();
+    private readonly object anchoredLeftmostDfaInitializationLock = new();
     private RegexNfa? nfa;
     private RegexUnanchoredLazyDfa? unanchoredLazyDfa;
     private RegexUnanchoredLazyDfa? asciiFastUnanchoredDfa;
+    private RegexLazyDfa? anchoredLeftmostDfa;
     private readonly bool utf8;
 
     private RegexMetaEngine(
@@ -57,7 +61,8 @@ internal sealed class RegexMetaEngine
         RegexScalarRunEngine? scalarRun = null,
         RegexAsciiWordBoundaryEngine? asciiWordBoundary = null,
         Func<RegexNfa>? nfaFactory = null,
-        Func<RegexUnanchoredLazyDfa?>? unanchoredLazyDfaFactory = null)
+        Func<RegexUnanchoredLazyDfa?>? unanchoredLazyDfaFactory = null,
+        Func<RegexLazyDfa?>? anchoredLeftmostDfaFactory = null)
     {
         Kind = kind;
         this.nfa = nfa;
@@ -69,6 +74,7 @@ internal sealed class RegexMetaEngine
         this.sparseDfa = sparseDfa;
         this.lazyDfa = lazyDfa;
         this.asciiFastDfa = asciiFastDfa;
+        this.anchoredLeftmostDfaFactory = anchoredLeftmostDfaFactory;
         this.asciiFastUnanchoredDfaFactory = asciiFastUnanchoredDfaFactory;
         this.unanchoredLazyDfaFactory = unanchoredLazyDfaFactory;
         this.literalSet = literalSet;
@@ -442,6 +448,10 @@ internal sealed class RegexMetaEngine
             options,
             prefilter,
             effectiveDfaSizeLimit);
+        Func<RegexLazyDfa?> anchoredLeftmostDfaFactory = () =>
+            RegexLazyDfa.TryCreate(nfa, effectiveDfaSizeLimit, leftmostPrune: true, out RegexLazyDfa? anchoredLeftmostDfa)
+                ? anchoredLeftmostDfa
+                : null;
 
         return new RegexMetaEngine(
             RegexEngineKind.LazyDfa,
@@ -459,7 +469,8 @@ internal sealed class RegexMetaEngine
             dotStarClassFallback: null,
             prefilter,
             nfa.Utf8,
-            unanchoredLazyDfaFactory: unanchoredLazyDfaFactory);
+            unanchoredLazyDfaFactory: unanchoredLazyDfaFactory,
+            anchoredLeftmostDfaFactory: anchoredLeftmostDfaFactory);
     }
 
     private static Func<RegexUnanchoredLazyDfa?>? CreateUnanchoredLazyDfaFactory(
@@ -1001,6 +1012,24 @@ internal sealed class RegexMetaEngine
         }
     }
 
+    private RegexLazyDfa? GetAnchoredLeftmostDfa()
+    {
+        if (anchoredLeftmostDfaFactory is null)
+        {
+            return null;
+        }
+
+        if (anchoredLeftmostDfa is not null)
+        {
+            return anchoredLeftmostDfa;
+        }
+
+        lock (anchoredLeftmostDfaInitializationLock)
+        {
+            return anchoredLeftmostDfa ??= anchoredLeftmostDfaFactory();
+        }
+    }
+
     public RegexMatch? FindEarliest(ReadOnlySpan<byte> haystack, int startAt)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
@@ -1102,6 +1131,24 @@ internal sealed class RegexMetaEngine
 
         if (lazyDfa is not null)
         {
+            if (ShouldUseAnchoredLeftmostDfa(haystack.Length, reachabilityCache) &&
+                GetAnchoredLeftmostDfa() is RegexLazyDfa anchoredLeftmost)
+            {
+                if (anchoredLeftmost.TryFindEnd(haystack, start, out int end, out bool gaveUp))
+                {
+                    if (!gaveUp)
+                    {
+                        length = end - start;
+                        return true;
+                    }
+                }
+                else if (!gaveUp)
+                {
+                    length = 0;
+                    return false;
+                }
+            }
+
             return lazyDfa.TryMatchAt(haystack, start, reachabilityCache, out length);
         }
 
@@ -1147,5 +1194,12 @@ internal sealed class RegexMetaEngine
         }
 
         return pikeVm!.TryMatchAt(haystack, start, out length);
+    }
+
+    private static bool ShouldUseAnchoredLeftmostDfa(
+        int haystackLength,
+        Dictionary<(int State, int Position), bool>? reachabilityCache)
+    {
+        return reachabilityCache is null || haystackLength < AnchoredLeftmostDfaHaystackThreshold;
     }
 }

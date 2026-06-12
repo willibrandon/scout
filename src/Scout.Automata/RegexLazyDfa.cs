@@ -58,17 +58,33 @@ internal sealed class RegexLazyDfa
         return TryFindEnd(haystack, start, reachabilityCache: null, out end);
     }
 
+    public bool TryFindEnd(ReadOnlySpan<byte> haystack, int start, out int end, out bool gaveUp)
+    {
+        return TryFindEnd(haystack, start, reachabilityCache: null, out end, out gaveUp);
+    }
+
     public bool TryFindEnd(
         ReadOnlySpan<byte> haystack,
         int start,
         Dictionary<(int State, int Position), bool>? reachabilityCache,
         out int end)
     {
+        return TryFindEnd(haystack, start, reachabilityCache, out end, out _);
+    }
+
+    public bool TryFindEnd(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        Dictionary<(int State, int Position), bool>? reachabilityCache,
+        out int end,
+        out bool gaveUp)
+    {
         if (leftmostPrune)
         {
-            return TryFindEndLeftmost(haystack, start, out end);
+            return TryFindEndLeftmost(haystack, start, out end, out gaveUp);
         }
 
+        gaveUp = false;
         if (TryMatchAt(haystack, start, reachabilityCache, out int length))
         {
             end = start + length;
@@ -84,6 +100,11 @@ internal sealed class RegexLazyDfa
         return TryFindStartReverse(haystack, start, end, reachabilityCache: null, out matchStart);
     }
 
+    public bool TryFindStartReverse(ReadOnlySpan<byte> haystack, int start, int end, out int matchStart, out bool gaveUp)
+    {
+        return TryFindStartReverse(haystack, start, end, reachabilityCache: null, out matchStart, out gaveUp);
+    }
+
     public bool TryFindStartReverse(
         ReadOnlySpan<byte> haystack,
         int start,
@@ -91,18 +112,31 @@ internal sealed class RegexLazyDfa
         Dictionary<(int State, int Position), bool>? reachabilityCache,
         out int matchStart)
     {
+        return TryFindStartReverse(haystack, start, end, reachabilityCache, out matchStart, out _);
+    }
+
+    public bool TryFindStartReverse(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        int end,
+        Dictionary<(int State, int Position), bool>? reachabilityCache,
+        out int matchStart,
+        out bool gaveUp)
+    {
         _ = reachabilityCache;
         if (leftmostPrune)
         {
-            return TryFindStartReverseLeftmost(haystack, start, end, out matchStart);
+            return TryFindStartReverseLeftmost(haystack, start, end, out matchStart, out gaveUp);
         }
 
+        gaveUp = false;
         matchStart = 0;
         return false;
     }
 
-    private bool TryFindEndLeftmost(ReadOnlySpan<byte> haystack, int start, out int end)
+    private bool TryFindEndLeftmost(ReadOnlySpan<byte> haystack, int start, out int end, out bool gaveUp)
     {
+        gaveUp = false;
         RegexLazyDfaState current = startState;
         int lastAcceptEnd = -1;
         for (int position = start; position <= haystack.Length; position++)
@@ -117,8 +151,20 @@ internal sealed class RegexLazyDfa
                 break;
             }
 
+            if (TryAccelerate(current, haystack, position, allowLeftmost: true, out int acceleratedPosition))
+            {
+                if (current.AcceptIndex >= 0)
+                {
+                    lastAcceptEnd = acceleratedPosition;
+                }
+
+                position = acceleratedPosition - 1;
+                continue;
+            }
+
             if (!TryTransition(current, haystack[position], out current))
             {
+                gaveUp = true;
                 end = lastAcceptEnd;
                 return lastAcceptEnd >= 0;
             }
@@ -134,8 +180,14 @@ internal sealed class RegexLazyDfa
         return lastAcceptEnd >= 0;
     }
 
-    private bool TryFindStartReverseLeftmost(ReadOnlySpan<byte> haystack, int start, int end, out int matchStart)
+    private bool TryFindStartReverseLeftmost(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        int end,
+        out int matchStart,
+        out bool gaveUp)
     {
+        gaveUp = false;
         RegexLazyDfaState current = startState;
         int lastAcceptStart = -1;
         int position = end;
@@ -151,8 +203,20 @@ internal sealed class RegexLazyDfa
                 break;
             }
 
+            if (TryAccelerateReverse(current, haystack, start, position, out int acceleratedPosition))
+            {
+                if (current.AcceptIndex >= 0)
+                {
+                    lastAcceptStart = acceleratedPosition;
+                }
+
+                position = acceleratedPosition;
+                continue;
+            }
+
             if (!TryTransition(current, haystack[position - 1], out current))
             {
+                gaveUp = true;
                 matchStart = lastAcceptStart;
                 return lastAcceptStart >= 0;
             }
@@ -337,10 +401,24 @@ internal sealed class RegexLazyDfa
             : RegexDfaOperations.Move(nfa, nfaStates, value);
     }
 
-    private bool TryAccelerate(RegexLazyDfaState state, ReadOnlySpan<byte> haystack, int position, out int acceleratedPosition)
+    private bool TryAccelerate(
+        RegexLazyDfaState state,
+        ReadOnlySpan<byte> haystack,
+        int position,
+        out int acceleratedPosition)
+    {
+        return TryAccelerate(state, haystack, position, allowLeftmost: false, out acceleratedPosition);
+    }
+
+    private bool TryAccelerate(
+        RegexLazyDfaState state,
+        ReadOnlySpan<byte> haystack,
+        int position,
+        bool allowLeftmost,
+        out int acceleratedPosition)
     {
         acceleratedPosition = position;
-        if (leftmostPrune ||
+        if (!allowLeftmost && leftmostPrune ||
             position >= haystack.Length ||
             !TryGetOrCreateAccelerator(state, out byte[] needles))
         {
@@ -350,6 +428,25 @@ internal sealed class RegexLazyDfa
         int offset = IndexOfAcceleratorNeedle(haystack[position..], needles);
         acceleratedPosition = offset < 0 ? haystack.Length : position + offset;
         return acceleratedPosition > position;
+    }
+
+    private bool TryAccelerateReverse(
+        RegexLazyDfaState state,
+        ReadOnlySpan<byte> haystack,
+        int start,
+        int position,
+        out int acceleratedPosition)
+    {
+        acceleratedPosition = position;
+        if (position <= start ||
+            !TryGetOrCreateAccelerator(state, out byte[] needles))
+        {
+            return false;
+        }
+
+        int offset = LastIndexOfAcceleratorNeedle(haystack[start..position], needles);
+        acceleratedPosition = offset < 0 ? start : start + offset + 1;
+        return acceleratedPosition < position;
     }
 
     private bool TryGetOrCreateAccelerator(RegexLazyDfaState state, out byte[] needles)
@@ -400,6 +497,18 @@ internal sealed class RegexLazyDfa
             1 => haystack.IndexOf(needles[0]),
             2 => haystack.IndexOfAny(needles[0], needles[1]),
             3 => haystack.IndexOfAny(needles[0], needles[1], needles[2]),
+            _ => -1,
+        };
+    }
+
+    private static int LastIndexOfAcceleratorNeedle(ReadOnlySpan<byte> haystack, byte[] needles)
+    {
+        return needles.Length switch
+        {
+            0 => -1,
+            1 => haystack.LastIndexOf(needles[0]),
+            2 => haystack.LastIndexOfAny(needles[0], needles[1]),
+            3 => haystack.LastIndexOfAny(needles[0], needles[1], needles[2]),
             _ => -1,
         };
     }
