@@ -735,6 +735,10 @@ internal static class RegexByteClass
                     literal = (byte)'\t';
                     index += 2;
                     return true;
+                case (byte)'n':
+                    literal = (byte)'\n';
+                    index += 2;
+                    return true;
                 case (byte)'r':
                     literal = (byte)'\r';
                     index += 2;

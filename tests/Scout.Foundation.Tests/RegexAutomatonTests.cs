@@ -945,6 +945,16 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies escaped newlines inside bracket classes are parsed as line feeds, not as the letter n.
+    /// </summary>
+    [Fact]
+    public void CharacterClassesParseEscapedNewline()
+    {
+        Assert.Equal(new RegexMatch(3, 1), RegexAutomaton.Compile(@"[\n]"u8).Find("abc\nxyz"u8));
+        Assert.Equal(new RegexMatch(0, 3), RegexAutomaton.Compile(@"[^\n]+"u8).Find("abc\nxyz"u8));
+    }
+
+    /// <summary>
     /// Verifies CRLF mode treats carriage returns and line feeds as one line terminator family.
     /// </summary>
     [Fact]

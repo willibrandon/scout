@@ -186,80 +186,114 @@ internal static class RegexDfaOperations
         Dictionary<(int State, int Position), bool>? cache = null)
     {
         cache ??= [];
-        return CanReachAcceptCore(nfa, stateIndex, haystack, position, cache, []);
-    }
-
-    private static bool CanReachAcceptCore(
-        RegexNfa nfa,
-        int stateIndex,
-        ReadOnlySpan<byte> haystack,
-        int position,
-        Dictionary<(int State, int Position), bool> cache,
-        HashSet<(int State, int Position)> visiting)
-    {
         if (stateIndex < 0)
         {
             return false;
         }
 
-        (int State, int Position) key = (stateIndex, position);
-        if (cache.TryGetValue(key, out bool cached))
+        (int State, int Position) start = (stateIndex, position);
+        if (cache.TryGetValue(start, out bool cached))
         {
             return cached;
         }
 
-        if (!visiting.Add(key))
+        var visited = new HashSet<(int State, int Position)>();
+        var pending = new Stack<(int State, int Position)>();
+        pending.Push(start);
+
+        while (pending.Count > 0)
         {
-            return false;
+            (int State, int Position) current = pending.Pop();
+            if (current.State < 0 ||
+                !visited.Add(current))
+            {
+                continue;
+            }
+
+            if (cache.TryGetValue(current, out cached))
+            {
+                if (cached)
+                {
+                    cache[start] = true;
+                    return true;
+                }
+
+                continue;
+            }
+
+            RegexNfaState state = nfa.States[current.State];
+            switch (state.Kind)
+            {
+                case RegexNfaStateKind.Accept:
+                    cache[start] = true;
+                    cache[current] = true;
+                    return true;
+
+                case RegexNfaStateKind.Split:
+                case RegexNfaStateKind.GreedyLoopSplit:
+                case RegexNfaStateKind.LazyLoopSplit:
+                    pending.Push((state.Alternative, current.Position));
+                    pending.Push((state.Next, current.Position));
+                    break;
+
+                case RegexNfaStateKind.Predicate:
+                    if (RegexByteClass.PredicateMatches(
+                            haystack,
+                            current.Position,
+                            state.AtomKind,
+                            state.MultiLine,
+                            state.Crlf,
+                            state.LineTerminator,
+                            state.Utf8,
+                            state.UnicodeClasses))
+                    {
+                        pending.Push((state.Next, current.Position));
+                    }
+
+                    break;
+
+                case RegexNfaStateKind.CaptureStart:
+                case RegexNfaStateKind.CaptureEnd:
+                    pending.Push((state.Next, current.Position));
+                    break;
+
+                case RegexNfaStateKind.Atom:
+                    if (RegexByteClass.TryGetAtomMatchLength(
+                            haystack,
+                            current.Position,
+                            state.AtomKind,
+                            state.Value.Span,
+                            state.CaseInsensitive,
+                            state.MultiLine,
+                            state.DotMatchesNewline,
+                            state.Crlf,
+                            state.LineTerminator,
+                            state.Utf8,
+                            state.UnicodeClasses,
+                            out int consume))
+                    {
+                        pending.Push((state.Next, current.Position + consume));
+                    }
+
+                    break;
+
+                case RegexNfaStateKind.Sparse:
+                    if (current.Position < haystack.Length &&
+                        state.TryGetSparseTarget(haystack[current.Position], out int sparseNext))
+                    {
+                        pending.Push((sparseNext, current.Position + 1));
+                    }
+
+                    break;
+            }
         }
 
-        RegexNfaState state = nfa.States[stateIndex];
-        bool result = state.Kind switch
+        foreach ((int State, int Position) current in visited)
         {
-            RegexNfaStateKind.Accept => true,
-            RegexNfaStateKind.Split
-                or RegexNfaStateKind.GreedyLoopSplit
-                or RegexNfaStateKind.LazyLoopSplit =>
-                CanReachAcceptCore(nfa, state.Next, haystack, position, cache, visiting) ||
-                CanReachAcceptCore(nfa, state.Alternative, haystack, position, cache, visiting),
-            RegexNfaStateKind.Predicate =>
-                RegexByteClass.PredicateMatches(
-                    haystack,
-                    position,
-                    state.AtomKind,
-                    state.MultiLine,
-                    state.Crlf,
-                    state.LineTerminator,
-                    state.Utf8,
-                    state.UnicodeClasses) &&
-                CanReachAcceptCore(nfa, state.Next, haystack, position, cache, visiting),
-            RegexNfaStateKind.CaptureStart or RegexNfaStateKind.CaptureEnd =>
-                CanReachAcceptCore(nfa, state.Next, haystack, position, cache, visiting),
-            RegexNfaStateKind.Atom =>
-                RegexByteClass.TryGetAtomMatchLength(
-                    haystack,
-                    position,
-                    state.AtomKind,
-                    state.Value.Span,
-                    state.CaseInsensitive,
-                    state.MultiLine,
-                    state.DotMatchesNewline,
-                    state.Crlf,
-                    state.LineTerminator,
-                    state.Utf8,
-                    state.UnicodeClasses,
-                    out int consume) &&
-                CanReachAcceptCore(nfa, state.Next, haystack, position + consume, cache, visiting),
-            RegexNfaStateKind.Sparse =>
-                position < haystack.Length &&
-                state.TryGetSparseTarget(haystack[position], out int sparseNext) &&
-                CanReachAcceptCore(nfa, sparseNext, haystack, position + 1, cache, visiting),
-            _ => false,
-        };
+            cache[current] = false;
+        }
 
-        visiting.Remove(key);
-        cache[key] = result;
-        return result;
+        return false;
     }
 
     public static int IndexOfAccept(RegexNfa nfa, int[] threads)
