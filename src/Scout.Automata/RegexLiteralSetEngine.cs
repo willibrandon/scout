@@ -11,6 +11,7 @@ internal sealed class RegexLiteralSetEngine
     private const int MaxUnicodePrefixVariants = 128;
     private const int LargeLiteralSetThreshold = 32;
     private const int SmallLiteralFinderSetThreshold = 8;
+    private const int TwoByteSearchPatternBucketThreshold = 8;
 
     private readonly AhoCorasickAutomaton? automaton;
     private readonly byte[][] literals;
@@ -26,6 +27,8 @@ internal sealed class RegexLiteralSetEngine
     private readonly RegexLargeLiteralSetScanner? largeLiteralScanner;
     private readonly MemmemFinder[]? smallLiteralFinders;
     private readonly RegexLiteralPrefixScanner? prefixScanner;
+    private readonly int[][] searchPatternIndexesByFirstByte;
+    private readonly Dictionary<ushort, int[]>? searchPatternIndexesByFirstTwoBytes;
 
     private RegexLiteralSetEngine(
         IReadOnlyList<byte[]> literals,
@@ -55,6 +58,9 @@ internal sealed class RegexLiteralSetEngine
         {
             this.searchPatternLiteralIds[index] = searchPatternLiteralIds[index];
         }
+
+        searchPatternIndexesByFirstByte = BuildSearchPatternBuckets(this.searchPatterns);
+        searchPatternIndexesByFirstTwoBytes = BuildTwoByteSearchPatternBuckets(this.searchPatterns);
 
         if (this.literals.Length == 1 && searchPatterns.Count == 0)
         {
@@ -422,7 +428,7 @@ internal sealed class RegexLiteralSetEngine
 
         if (caseSensitiveScanner is not null)
         {
-            return CountOrSumCaseSensitiveLiteralSet(haystack, startOffset, sumSpans);
+            return caseSensitiveScanner.CountOrSum(haystack, startOffset, sumSpans);
         }
 
         if (smallLiteralFinders is not null)
@@ -664,26 +670,6 @@ internal sealed class RegexLiteralSetEngine
         return total;
     }
 
-    private long CountOrSumCaseSensitiveLiteralSet(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
-    {
-        long total = 0;
-        int position = startOffset;
-        while (position <= haystack.Length)
-        {
-            RegexLiteralSetCandidate? candidate = caseSensitiveScanner!.Find(haystack, position);
-            if (!candidate.HasValue)
-            {
-                return total;
-            }
-
-            RegexMatch match = candidate.Value.Match;
-            total += sumSpans ? match.Length : 1;
-            position = match.End;
-        }
-
-        return total;
-    }
-
     private bool TryResolveAhoCandidate(
         ReadOnlySpan<byte> haystack,
         int startOffset,
@@ -738,6 +724,18 @@ internal sealed class RegexLiteralSetEngine
         out RegexLiteralSetCandidate candidate)
     {
         RegexLiteralSetCandidate? best = null;
+        if ((uint)start >= (uint)haystack.Length)
+        {
+            candidate = default;
+            return false;
+        }
+
+        if (searchPatternIndexesByFirstTwoBytes is not null ||
+            searchPatterns.Length > TwoByteSearchPatternBucketThreshold)
+        {
+            return TryFindLiteralAtBucketedSearchPatternCandidate(haystack, start, out candidate);
+        }
+
         for (int index = 0; index < searchPatterns.Length; index++)
         {
             ReadOnlySpan<byte> searchPattern = searchPatterns[index];
@@ -763,6 +761,120 @@ internal sealed class RegexLiteralSetEngine
 
         candidate = best.GetValueOrDefault();
         return best.HasValue;
+    }
+
+    private bool TryFindLiteralAtBucketedSearchPatternCandidate(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        out RegexLiteralSetCandidate candidate)
+    {
+        RegexLiteralSetCandidate? best = null;
+        int[] candidatePatternIndexes;
+        if (searchPatternIndexesByFirstTwoBytes is not null)
+        {
+            if (start + 1 >= haystack.Length ||
+                !searchPatternIndexesByFirstTwoBytes.TryGetValue(BlockKey(haystack[start..]), out int[]? twoBytePatternIndexes))
+            {
+                candidate = default;
+                return false;
+            }
+
+            candidatePatternIndexes = twoBytePatternIndexes;
+        }
+        else
+        {
+            candidatePatternIndexes = searchPatternIndexesByFirstByte[haystack[start]];
+        }
+
+        for (int bucketIndex = 0; bucketIndex < candidatePatternIndexes.Length; bucketIndex++)
+        {
+            int index = candidatePatternIndexes[bucketIndex];
+            ReadOnlySpan<byte> searchPattern = searchPatterns[index];
+            if (searchPattern.Length > haystack.Length - start ||
+                haystack[start + searchPattern.Length - 1] != searchPattern[^1] ||
+                !haystack.Slice(start, searchPattern.Length).SequenceEqual(searchPattern))
+            {
+                continue;
+            }
+
+            int literalId = searchPatternLiteralIds[index];
+            if (!TryMatchLiteralAt(haystack, start, literalId, out int length))
+            {
+                continue;
+            }
+
+            var current = new RegexLiteralSetCandidate(literalId, new RegexMatch(start, length));
+            if (IsBetter(current, best))
+            {
+                best = current;
+            }
+        }
+
+        candidate = best.GetValueOrDefault();
+        return best.HasValue;
+    }
+
+    private static int[][] BuildSearchPatternBuckets(byte[][] searchPatterns)
+    {
+        var buckets = new List<int>[256];
+        for (int index = 0; index < searchPatterns.Length; index++)
+        {
+            byte[] pattern = searchPatterns[index];
+            if (pattern.Length == 0)
+            {
+                continue;
+            }
+
+            (buckets[pattern[0]] ??= []).Add(index);
+        }
+
+        int[][] indexesByFirstByte = new int[256][];
+        for (int index = 0; index < buckets.Length; index++)
+        {
+            indexesByFirstByte[index] = buckets[index]?.ToArray() ?? [];
+        }
+
+        return indexesByFirstByte;
+    }
+
+    private static Dictionary<ushort, int[]>? BuildTwoByteSearchPatternBuckets(byte[][] searchPatterns)
+    {
+        if (searchPatterns.Length <= TwoByteSearchPatternBucketThreshold)
+        {
+            return null;
+        }
+
+        var buckets = new Dictionary<ushort, List<int>>();
+        for (int index = 0; index < searchPatterns.Length; index++)
+        {
+            byte[] pattern = searchPatterns[index];
+            if (pattern.Length < 2)
+            {
+                return null;
+            }
+
+            ushort key = BlockKey(pattern);
+            if (!buckets.TryGetValue(key, out List<int>? indexes))
+            {
+                indexes = [];
+                buckets.Add(key, indexes);
+            }
+
+            indexes.Add(index);
+        }
+
+        var compact = new Dictionary<ushort, int[]>(buckets.Count);
+        foreach (KeyValuePair<ushort, List<int>> bucket in buckets)
+        {
+            compact.Add(bucket.Key, bucket.Value.ToArray());
+        }
+
+        return compact;
+    }
+
+    private static ushort BlockKey(ReadOnlySpan<byte> value)
+    {
+        return (ushort)(value[0] | (value[1] << 8));
     }
 
     private RegexMatch? FindShortestAt(ReadOnlySpan<byte> haystack, int start)

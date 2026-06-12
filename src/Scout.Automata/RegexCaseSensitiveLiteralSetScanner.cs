@@ -137,6 +137,65 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
         return best;
     }
 
+    public long CountOrSum(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
+    {
+        int nextAllowedStart = Math.Clamp(startAt, 0, haystack.Length);
+        int searchAt = nextAllowedStart;
+        long total = 0;
+        RegexLiteralSetCandidate? best = null;
+        while (searchAt < haystack.Length)
+        {
+            int offset = haystack[searchAt..].IndexOfAny(anchorBytes);
+            if (offset < 0)
+            {
+                break;
+            }
+
+            int anchorPosition = searchAt + offset;
+            if (best.HasValue && anchorPosition - maxAnchorIndex > best.Value.Match.Start)
+            {
+                AddMatch(best.Value.Match, sumSpans, ref total, ref nextAllowedStart);
+                best = null;
+                if (anchorPosition < nextAllowedStart)
+                {
+                    searchAt = nextAllowedStart;
+                    continue;
+                }
+            }
+
+            RegexCaseSensitiveLiteralSetEntry[] entries = entriesByAnchorByte[haystack[anchorPosition]];
+            for (int index = 0; index < entries.Length; index++)
+            {
+                RegexCaseSensitiveLiteralSetEntry entry = entries[index];
+                int start = anchorPosition - entry.AnchorIndex;
+                if (start < nextAllowedStart ||
+                    entry.Literal.Length > haystack.Length - start ||
+                    haystack[start + entry.Literal.Length - 1] != entry.Literal[^1] ||
+                    !haystack.Slice(start, entry.Literal.Length).SequenceEqual(entry.Literal))
+                {
+                    continue;
+                }
+
+                var candidate = new RegexLiteralSetCandidate(
+                    entry.LiteralId,
+                    new RegexMatch(start, entry.Literal.Length));
+                if (IsBetter(candidate, best))
+                {
+                    best = candidate;
+                }
+            }
+
+            searchAt = anchorPosition + 1;
+        }
+
+        if (best.HasValue)
+        {
+            AddMatch(best.Value.Match, sumSpans, ref total, ref nextAllowedStart);
+        }
+
+        return total;
+    }
+
     private static int SelectAnchorIndex(ReadOnlySpan<byte> literal)
     {
         int bestIndex = 0;
@@ -233,5 +292,11 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
         }
 
         return candidate.LiteralId < current.LiteralId;
+    }
+
+    private static void AddMatch(RegexMatch match, bool sumSpans, ref long total, ref int nextAllowedStart)
+    {
+        total += sumSpans ? match.Length : 1;
+        nextAllowedStart = match.End;
     }
 }
