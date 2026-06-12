@@ -1,4 +1,8 @@
 using System.Buffers;
+using System.Numerics;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 using System.Text;
 
 namespace Scout;
@@ -211,6 +215,12 @@ internal sealed class RegexAsciiWordBoundaryEngine
     {
         total = 0;
         int position = SkipPartialAsciiWord(haystack, Math.Clamp(startAt, 0, haystack.Length));
+        if (Avx2.IsSupported && haystack.Length - position >= Vector256<byte>.Count)
+        {
+            CountOrSumAsciiAvx2(haystack, position, sumSpans, ref total);
+            return;
+        }
+
         while (position < haystack.Length)
         {
             while (position < haystack.Length && !IsAsciiWord(haystack[position]))
@@ -229,6 +239,105 @@ internal sealed class RegexAsciiWordBoundaryEngine
             {
                 total += sumSpans ? length : 1;
             }
+        }
+    }
+
+    private void CountOrSumAsciiAvx2(ReadOnlySpan<byte> haystack, int position, bool sumSpans, ref long total)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int length = haystack.Length;
+        int vectorEnd = length - Vector256<byte>.Count;
+        int runLength = 0;
+        var caseFold = Vector256.Create((byte)0x20);
+        var underscore = Vector256.Create((byte)'_');
+        var beforeA = Vector256.Create((sbyte)('a' - 1));
+        var afterZ = Vector256.Create((sbyte)('z' + 1));
+        var beforeZero = Vector256.Create((sbyte)('0' - 1));
+        var afterNine = Vector256.Create((sbyte)('9' + 1));
+        while (position <= vectorEnd)
+        {
+            var block = Vector256.LoadUnsafe(ref reference, (nuint)position);
+            Vector256<sbyte> folded = Avx2.Or(block, caseFold).AsSByte();
+            Vector256<byte> letters = Avx2.And(
+                Avx2.CompareGreaterThan(folded, beforeA),
+                Avx2.CompareGreaterThan(afterZ, folded)).AsByte();
+            Vector256<sbyte> signedBlock = block.AsSByte();
+            Vector256<byte> digits = Avx2.And(
+                Avx2.CompareGreaterThan(signedBlock, beforeZero),
+                Avx2.CompareGreaterThan(afterNine, signedBlock)).AsByte();
+            Vector256<byte> words = Avx2.Or(
+                letters,
+                Avx2.Or(digits, Avx2.CompareEqual(block, underscore)));
+            uint mask = words.ExtractMostSignificantBits();
+            AccumulateAsciiWordMask(mask, Vector256<byte>.Count, sumSpans, ref runLength, ref total);
+            position += Vector256<byte>.Count;
+        }
+
+        while (position < length)
+        {
+            if (IsAsciiWord(haystack[position]))
+            {
+                runLength++;
+            }
+            else
+            {
+                AddAsciiWordRun(runLength, sumSpans, ref total);
+                runLength = 0;
+            }
+
+            position++;
+        }
+
+        AddAsciiWordRun(runLength, sumSpans, ref total);
+    }
+
+    private void AccumulateAsciiWordMask(uint mask, int width, bool sumSpans, ref int runLength, ref long total)
+    {
+        uint fullMask = width == 32 ? uint.MaxValue : (1u << width) - 1u;
+        mask &= fullMask;
+        if (mask == fullMask)
+        {
+            runLength += width;
+            return;
+        }
+
+        if (mask == 0)
+        {
+            AddAsciiWordRun(runLength, sumSpans, ref total);
+            runLength = 0;
+            return;
+        }
+
+        int consumed = 0;
+        while (mask != 0)
+        {
+            int zeros = BitOperations.TrailingZeroCount(mask);
+            if (zeros > 0)
+            {
+                AddAsciiWordRun(runLength, sumSpans, ref total);
+                runLength = 0;
+                consumed += zeros;
+                mask >>= zeros;
+            }
+
+            int ones = BitOperations.TrailingZeroCount(~mask);
+            runLength += ones;
+            consumed += ones;
+            mask >>= ones;
+        }
+
+        if (consumed < width)
+        {
+            AddAsciiWordRun(runLength, sumSpans, ref total);
+            runLength = 0;
+        }
+    }
+
+    private void AddAsciiWordRun(int runLength, bool sumSpans, ref long total)
+    {
+        if (runLength >= minimum)
+        {
+            total += sumSpans ? runLength : 1;
         }
     }
 

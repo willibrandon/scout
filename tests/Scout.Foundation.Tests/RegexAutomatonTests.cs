@@ -1945,6 +1945,13 @@ public sealed class RegexAutomatonTests
         Assert.Equal(13, automaton.SumMatchSpans("abc 12_x -- long_word"u8));
         Assert.Equal(1, automaton.CountMatches("abc 12_x -- long_word"u8, startAt: 5));
         Assert.Equal(9, automaton.SumMatchSpans("abc 12_x -- long_word"u8, startAt: 5));
+
+        byte[] longHaystack = System.Text.Encoding.ASCII.GetBytes(
+            "abc " + new string('a', 40) + " -- bbb " + new string('c', 12));
+        Assert.Equal(2, automaton.CountMatches(longHaystack));
+        Assert.Equal(52, automaton.SumMatchSpans(longHaystack));
+        Assert.Equal(1, automaton.CountMatches(longHaystack, startAt: 5));
+        Assert.Equal(12, automaton.SumMatchSpans(longHaystack, startAt: 5));
     }
 
     /// <summary>
