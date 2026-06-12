@@ -7,43 +7,39 @@ internal sealed class RegexScalarRunEngine
 {
     private const int MaxBoundedRepeat = 1024;
 
-    private readonly RegexSyntaxKind kind;
-    private readonly byte[] value;
+    private readonly RegexScalarRunAtom[] atoms;
     private readonly RegexCompileOptions options;
     private readonly int minimum;
     private readonly int maximum;
     private readonly bool lazy;
-    private readonly bool unicodeLetterFastPath;
 
-    private RegexScalarRunEngine(RegexAtomNode atom, RegexCompileOptions options, int minimum, int maximum, bool lazy)
+    private RegexScalarRunEngine(RegexScalarRunAtom[] atoms, RegexCompileOptions options, int minimum, int maximum, bool lazy)
     {
-        kind = atom.Kind;
-        value = atom.Value.ToArray();
+        this.atoms = atoms;
         this.options = options;
         this.minimum = minimum;
         this.maximum = maximum;
         this.lazy = lazy;
-        unicodeLetterFastPath = atom.Kind == RegexSyntaxKind.UnicodePropertyClass &&
-            atom.Value.Length == 1 &&
-            atom.Value.Span[0] == (byte)RegexUnicodePropertyKind.Letter &&
-            options.UnicodeClasses &&
-            !options.CaseInsensitive;
     }
 
     public static bool TryCreate(RegexSyntaxNode root, RegexCompileOptions options, out RegexScalarRunEngine? engine)
     {
         engine = null;
-        root = UnwrapTransparentGroups(root);
-        if (!options.UnicodeClasses ||
-            root is not RegexRepetitionNode { Minimum: > 0, Maximum: { } maximum } repetition ||
-            maximum > MaxBoundedRepeat ||
-            UnwrapTransparentGroups(repetition.Child) is not RegexAtomNode atom ||
-            !RegexByteClass.RequiresUtf8ScalarMatch(atom.Kind, atom.Value.Span, options.Utf8, options.CaseInsensitive, options.UnicodeClasses))
+        if (!TryExtractScalarRunNode(root, options, out RegexSyntaxNode? scalarRunNode, out RegexCompileOptions effectiveOptions))
         {
             return false;
         }
 
-        engine = new RegexScalarRunEngine(atom, options, repetition.Minimum, maximum, repetition.Lazy);
+        root = UnwrapTransparentGroups(scalarRunNode!);
+        if (!effectiveOptions.UnicodeClasses ||
+            root is not RegexRepetitionNode { Minimum: > 0, Maximum: { } maximum } repetition ||
+            maximum > MaxBoundedRepeat ||
+            !TryCollectScalarAtoms(repetition.Child, effectiveOptions, out RegexScalarRunAtom[] atoms))
+        {
+            return false;
+        }
+
+        engine = new RegexScalarRunEngine(atoms, effectiveOptions, repetition.Minimum, maximum, repetition.Lazy);
         return true;
     }
 
@@ -188,25 +184,40 @@ internal sealed class RegexScalarRunEngine
 
     private bool TryAtomMatchLength(ReadOnlySpan<byte> haystack, int position, out int scalarLength)
     {
-        if (unicodeLetterFastPath &&
-            TryFastUnicodeLetterMatchLength(haystack, position, out bool matched, out scalarLength))
+        for (int index = 0; index < atoms.Length; index++)
         {
-            return matched;
+            RegexScalarRunAtom atom = atoms[index];
+            if (atom.UnicodeLetterFastPath &&
+                TryFastUnicodeLetterMatchLength(haystack, position, out bool matched, out scalarLength))
+            {
+                if (matched)
+                {
+                    return true;
+                }
+
+                continue;
+            }
+
+            if (RegexByteClass.TryGetAtomMatchLength(
+                haystack,
+                position,
+                atom.Kind,
+                atom.Value,
+                options.CaseInsensitive,
+                options.MultiLine,
+                options.DotMatchesNewline,
+                options.Crlf,
+                options.LineTerminator,
+                options.Utf8,
+                options.UnicodeClasses,
+                out scalarLength))
+            {
+                return true;
+            }
         }
 
-        return RegexByteClass.TryGetAtomMatchLength(
-            haystack,
-            position,
-            kind,
-            value,
-            options.CaseInsensitive,
-            options.MultiLine,
-            options.DotMatchesNewline,
-            options.Crlf,
-            options.LineTerminator,
-            options.Utf8,
-            options.UnicodeClasses,
-            out scalarLength);
+        scalarLength = 0;
+        return false;
     }
 
     private static bool TryFastUnicodeLetterMatchLength(
@@ -280,6 +291,98 @@ internal sealed class RegexScalarRunEngine
             Rune.DecodeFromUtf8(haystack[position..], out _, out int length) == OperationStatus.Done
             ? position + length
             : position + 1;
+    }
+
+    private static bool TryExtractScalarRunNode(
+        RegexSyntaxNode root,
+        RegexCompileOptions options,
+        out RegexSyntaxNode? scalarRunNode,
+        out RegexCompileOptions effectiveOptions)
+    {
+        scalarRunNode = null;
+        effectiveOptions = options;
+        root = UnwrapTransparentGroups(root);
+        if (root is not RegexSequenceNode sequence)
+        {
+            scalarRunNode = root;
+            return true;
+        }
+
+        for (int index = 0; index < sequence.Nodes.Count; index++)
+        {
+            RegexSyntaxNode node = sequence.Nodes[index];
+            if (node is RegexInlineFlagsNode flags)
+            {
+                effectiveOptions = effectiveOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
+                continue;
+            }
+
+            if (scalarRunNode is not null)
+            {
+                return false;
+            }
+
+            scalarRunNode = node;
+        }
+
+        return scalarRunNode is not null;
+    }
+
+    private static bool TryCollectScalarAtoms(
+        RegexSyntaxNode node,
+        RegexCompileOptions options,
+        out RegexScalarRunAtom[] atoms)
+    {
+        node = UnwrapTransparentGroups(node);
+        if (node is RegexAtomNode atom)
+        {
+            return TryCreateScalarAtom(atom, options, out _, out atoms);
+        }
+
+        if (node is not RegexAlternationNode alternation || alternation.Alternatives.Count == 0)
+        {
+            atoms = [];
+            return false;
+        }
+
+        var collected = new List<RegexScalarRunAtom>(alternation.Alternatives.Count);
+        for (int index = 0; index < alternation.Alternatives.Count; index++)
+        {
+            if (UnwrapTransparentGroups(alternation.Alternatives[index]) is not RegexAtomNode alternative ||
+                !TryCreateScalarAtom(alternative, options, out RegexScalarRunAtom scalarAtom, out _))
+            {
+                atoms = [];
+                return false;
+            }
+
+            collected.Add(scalarAtom);
+        }
+
+        atoms = [.. collected];
+        return true;
+    }
+
+    internal static bool TryCreateScalarAtom(
+        RegexAtomNode atom,
+        RegexCompileOptions options,
+        out RegexScalarRunAtom scalarAtom,
+        out RegexScalarRunAtom[] atoms)
+    {
+        scalarAtom = default;
+        atoms = [];
+        if (!RegexByteClass.RequiresUtf8ScalarMatch(atom.Kind, atom.Value.Span, options.Utf8, options.CaseInsensitive, options.UnicodeClasses))
+        {
+            return false;
+        }
+
+        bool unicodeLetterFastPath = atom.Kind == RegexSyntaxKind.UnicodePropertyClass &&
+            atom.Value.Length == 1 &&
+            atom.Value.Span[0] == (byte)RegexUnicodePropertyKind.Letter &&
+            options.UnicodeClasses &&
+            !options.CaseInsensitive;
+        scalarAtom = new RegexScalarRunAtom(atom.Kind, atom.Value.ToArray(), unicodeLetterFastPath);
+        atoms = [scalarAtom];
+        return true;
     }
 
     private static RegexSyntaxNode UnwrapTransparentGroups(RegexSyntaxNode node)

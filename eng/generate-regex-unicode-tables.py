@@ -19,15 +19,26 @@ BOOLEAN_PROPERTIES = [
     ("Math", "MATH"),
     ("Emoji", "EMOJI"),
     ("ExtendedPictographic", "EXTENDED_PICTOGRAPHIC"),
+    ("Lowercase", "LOWERCASE"),
+    ("Uppercase", "UPPERCASE"),
 ]
 
 BREAK_PROPERTIES = [
     (
         "grapheme_cluster_break.rs",
         [
+            ("GraphemeClusterBreakCr", "CR"),
+            ("GraphemeClusterBreakLf", "LF"),
+            ("GraphemeClusterBreakControl", "Control"),
+            ("GraphemeClusterBreakExtend", "Extend"),
+            ("GraphemeClusterBreakL", "L"),
+            ("GraphemeClusterBreakLv", "LV"),
             ("GraphemeClusterBreakPrepend", "Prepend"),
             ("GraphemeClusterBreakRegionalIndicator", "Regional_Indicator"),
             ("GraphemeClusterBreakLvt", "LVT"),
+            ("GraphemeClusterBreakSpacingMark", "SpacingMark"),
+            ("GraphemeClusterBreakT", "T"),
+            ("GraphemeClusterBreakV", "V"),
             ("GraphemeClusterBreakZwj", "ZWJ"),
         ],
     ),
@@ -52,10 +63,12 @@ BREAK_PROPERTIES = [
 
 SCRIPT_PROPERTIES = [
     ("ScriptCyrillic", "Cyrillic"),
+    ("ScriptGreek", "Greek"),
 ]
 
 SCRIPT_EXTENSION_PROPERTIES = [
     ("ScriptExtensionCyrillic", "Cyrillic"),
+    ("ScriptExtensionGreek", "Greek"),
 ]
 
 

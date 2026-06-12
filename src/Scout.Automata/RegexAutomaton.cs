@@ -18,6 +18,7 @@ public sealed class RegexAutomaton
         private RegexAlternationSetEngine? syntheticCaptureAlternationSet;
         private RegexDelimitedCaptureEngine? delimitedCaptureEngine;
         private RegexStructuredLogCaptureEngine? structuredLogCaptureEngine;
+        private RegexScalarRunCaptureEngine? scalarRunCaptureEngine;
         private volatile bool captureEnginesInitialized;
         private volatile bool genericCaptureOnly;
 
@@ -363,7 +364,13 @@ public sealed class RegexAutomaton
                     captureOptions,
                     captureCount,
                     out structuredLogCaptureEngine);
-                if (syntheticCaptureAlternationSet is null)
+                RegexScalarRunCaptureEngine.TryCreate(
+                    captureRoot,
+                    captureOptions,
+                    captureCount,
+                    out scalarRunCaptureEngine);
+                if (syntheticCaptureAlternationSet is null &&
+                    scalarRunCaptureEngine is null)
                 {
                     RegexNfa captureNfa = RegexNfaCompiler.CompileCaptures(captureRoot, captureOptions, captureCount);
                     RegexPrefilter? effectiveCapturePrefilter = capturePrefilter ?? RegexPrefilter.Compile(captureRoot, captureOptions);
@@ -373,6 +380,7 @@ public sealed class RegexAutomaton
 
             genericCaptureOnly = structuredLogCaptureEngine is null &&
                 delimitedCaptureEngine is null &&
+                scalarRunCaptureEngine is null &&
                 syntheticCaptureAlternationSet is null;
             captureEnginesInitialized = true;
         }
@@ -416,6 +424,11 @@ public sealed class RegexAutomaton
         if (syntheticCaptures is not null)
         {
             return syntheticCaptures;
+        }
+
+        if (scalarRunCaptureEngine is not null)
+        {
+            return scalarRunCaptureEngine.FindCaptures(haystack, startAt);
         }
 
         return FindGenericCaptures(haystack, startAt);

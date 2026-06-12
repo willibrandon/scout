@@ -228,6 +228,129 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies equivalent capture threads keep nested captures reached through optional repeated suffixes.
+    /// </summary>
+    [Fact]
+    public void FindCapturesKeepsNestedCapturesInOptionalRepeatedSuffix()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"(?P<spaces>\s*)(?P<noqa>(?i:# noqa)(?::\s?(?P<codes>([A-Z]+[0-9]+(?:[,\s]+)?)+))?)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] line = "    value  # noqa: E501"u8.ToArray();
+
+        RegexCaptures? captures = automaton.FindCaptures(line);
+
+        Assert.NotNull(captures);
+        Assert.Equal(5, captures.ParticipatingCount());
+        AssertGroupText(captures, line, 3, "E501");
+        AssertGroupText(captures, line, 4, "E501");
+    }
+
+    /// <summary>
+    /// Verifies repeated alternation captures do not keep stale groups from abandoned parses.
+    /// </summary>
+    [Fact]
+    public void FindCapturesDropsStaleGroupsFromRepeatedAlternatives()
+    {
+        byte[] pattern = System.Text.Encoding.ASCII.GetBytes(
+            @"(?P<Book>(([1234]|I{1,4})[\t\f\pZ]*)?\pL+\.?)[\t\f\pZ]+(?P<Locations>((?P<Chapter>1?[0-9]?[0-9])(-(?P<ChapterEnd>\d+)|,\s*(?P<ChapterNext>\\d+))*(:\s*(?P<Verse>\d+))?(-(?P<VerseEnd>\d+)|,\s*(?P<VerseNext>\d+))*\s?)+)");
+        var automaton = RegexAutomaton.Compile(
+            pattern,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = "Gen 1:1, 2\n3 King 1:3-4\nII Ki. 3:12-14, 25\n"u8.ToArray();
+
+        long total = 0;
+        int matches = 0;
+        int offset = 0;
+        RegexCaptures? last = null;
+        while (offset <= haystack.Length)
+        {
+            RegexCaptures? captures = automaton.FindCaptures(haystack, offset);
+            if (captures is null)
+            {
+                break;
+            }
+
+            matches++;
+            total += captures.ParticipatingCount();
+            last = captures;
+            RegexMatch match = captures.Match;
+            offset = match.Length == 0 ? Math.Min(match.End + 1, haystack.Length + 1) : match.End;
+        }
+
+        Assert.Equal(3, matches);
+        Assert.Equal(30, total);
+        Assert.NotNull(last);
+        Assert.Null(last.GetGroup(7));
+        Assert.Null(last.GetGroup(8));
+        AssertGroupText(last, haystack, 11, "12");
+        AssertGroupText(last, haystack, 13, "14");
+        AssertGroupText(last, haystack, 14, "25");
+    }
+
+    /// <summary>
+    /// Verifies whole-branch captured scalar-run alternatives synthesize capture groups.
+    /// </summary>
+    [Fact]
+    public void FindCapturesSynthesizesScalarRunAlternationCaptures()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"(\p{L}{4})|(\p{L}{3})|(\p{L}{2})"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("абвг деж xy");
+
+        RegexCaptures? first = automaton.FindCaptures(haystack);
+        RegexCaptures? second = automaton.FindCaptures(haystack, first!.Match.End);
+        RegexCaptures? third = automaton.FindCaptures(haystack, second!.Match.End);
+
+        Assert.NotNull(first);
+        Assert.Equal(2, first.ParticipatingCount());
+        Assert.Equal(first.Match, first.GetGroup(1));
+        Assert.Null(first.GetGroup(2));
+        Assert.Null(first.GetGroup(3));
+        Assert.NotNull(second);
+        Assert.Equal(2, second.ParticipatingCount());
+        Assert.Null(second.GetGroup(1));
+        Assert.Equal(second.Match, second.GetGroup(2));
+        Assert.Null(second.GetGroup(3));
+        Assert.NotNull(third);
+        Assert.Equal(2, third.ParticipatingCount());
+        Assert.Null(third.GetGroup(1));
+        Assert.Null(third.GetGroup(2));
+        Assert.Equal(third.Match, third.GetGroup(3));
+    }
+
+    /// <summary>
+    /// Verifies required-literal prefilters do not reject scoped case-insensitive literals.
+    /// </summary>
+    [Fact]
+    public void ScopedCaseInsensitiveLiteralAfterNullablePrefixMatchesMixedCase()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\s*(?i:# noqa)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+
+        Assert.Equal(new RegexMatch(0, 8), automaton.Find("  # NoQA"u8));
+        Assert.Equal(new RegexMatch(1, 8), automaton.Find("x  # NoQA"u8));
+    }
+
+    /// <summary>
     /// Verifies line-wide dot-star contains patterns use a linear count/span path.
     /// </summary>
     [Fact]
@@ -1011,6 +1134,17 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies verbose mode ignores unescaped whitespace inside bracket classes.
+    /// </summary>
+    [Fact]
+    public void ExtendedModeIgnoresWhitespaceInsideCharacterClasses()
+    {
+        Assert.Equal(new RegexMatch(0, 1), RegexAutomaton.Compile(@"(?x)[ a ]"u8).Find("a"u8));
+        Assert.Null(RegexAutomaton.Compile(@"(?x)[ a ]"u8).Find(" "u8));
+        Assert.Equal(new RegexMatch(0, 1), RegexAutomaton.Compile(@"(?x)[\ ]"u8).Find(" "u8));
+    }
+
+    /// <summary>
     /// Verifies the regex-crate any-byte Unicode class matches across line terminators.
     /// </summary>
     [Fact]
@@ -1029,6 +1163,11 @@ public sealed class RegexAutomatonTests
         Assert.Equal(new RegexMatch(0, 10), RegexAutomaton.Compile(@"\p{Lu}+"u8, caseInsensitive: true, multiLine: false, dotMatchesNewline: false).Find("ΛΘΓΔα"u8));
         Assert.Equal(new RegexMatch(0, 10), RegexAutomaton.Compile(@"\pL+"u8).Find("ΛΘΓΔα"u8));
         Assert.Equal(new RegexMatch(8, 2), RegexAutomaton.Compile(@"\p{Ll}+"u8).Find("ΛΘΓΔα"u8));
+        Assert.Equal(new RegexMatch(0, 2), RegexAutomaton.Compile(@"\p{gc=Letter}"u8).Find("δ"u8));
+        Assert.Equal(new RegexMatch(0, 2), RegexAutomaton.Compile(@"\p{gc:Letter}"u8).Find("δ"u8));
+        Assert.Equal(new RegexMatch(0, 2), RegexAutomaton.Compile(@"\p{General_Category=Letter}"u8).Find("δ"u8));
+        Assert.Equal(new RegexMatch(0, 2), RegexAutomaton.Compile(@"\p{Lowercase}"u8).Find("δ"u8));
+        Assert.Equal(new RegexMatch(0, 2), RegexAutomaton.Compile(@"\p{Uppercase}"u8).Find("Λ"u8));
         Assert.Equal(new RegexMatch(0, 2), RegexAutomaton.Compile(@"\P{N}+"u8).Find("abⅠ"u8));
         Assert.Null(RegexAutomaton.Compile(@"\p{Lu}"u8, caseInsensitive: false, multiLine: false, dotMatchesNewline: false, unicodeClasses: false).Find("Λ"u8));
     }
@@ -1042,6 +1181,9 @@ public sealed class RegexAutomatonTests
         Assert.Equal(new RegexMatch(4, 6), RegexAutomaton.Compile(@"\p{Cyrillic}+"u8).Find("abc фоо"u8));
         Assert.Equal(new RegexMatch(4, 6), RegexAutomaton.Compile(@"\p{sc=Cyrillic}+"u8).Find("abc фоо"u8));
         Assert.Equal(new RegexMatch(4, 6), RegexAutomaton.Compile(@"\p{Script:Cyrillic}+"u8).Find("abc фоо"u8));
+        Assert.Equal(new RegexMatch(4, 6), RegexAutomaton.Compile(@"\p{Greek}+"u8).Find("abc δει"u8));
+        Assert.Equal(new RegexMatch(4, 6), RegexAutomaton.Compile(@"\p{sc=Greek}+"u8).Find("abc δει"u8));
+        Assert.Equal(new RegexMatch(4, 6), RegexAutomaton.Compile(@"\p{Script:Grek}+"u8).Find("abc δει"u8));
         Assert.Null(RegexAutomaton.Compile(@"\p{Cyrillic}"u8).Find("\u0301"u8));
         Assert.Equal(new RegexMatch(0, 2), RegexAutomaton.Compile(@"\p{scx=Cyrillic}"u8).Find("\u0301"u8));
     }
@@ -1068,6 +1210,19 @@ public sealed class RegexAutomatonTests
         Assert.Equal(new RegexMatch(0, 4), RegexAutomaton.Compile(@"\p{emoji}"u8).Find("\U0001F21A"u8));
         Assert.Equal(new RegexMatch(0, 4), RegexAutomaton.Compile(@"\p{extendedpictographic}"u8).Find("\U0001FA6E"u8));
         Assert.Equal(new RegexMatch(0, 3), RegexAutomaton.Compile(@"\P{Emoji}+"u8).Find("abc\u23E9"u8));
+    }
+
+    /// <summary>
+    /// Verifies Unicode grapheme-cluster-break classes use pinned regex-syntax tables.
+    /// </summary>
+    [Fact]
+    public void UnicodeGraphemeClusterBreakClassesUsePinnedTables()
+    {
+        Assert.Equal(new RegexMatch(0, 1), RegexAutomaton.Compile(@"\p{gcb=CR}"u8).Find("\r"u8));
+        Assert.Equal(new RegexMatch(0, 1), RegexAutomaton.Compile(@"\p{gcb=LF}"u8).Find("\n"u8));
+        Assert.Equal(new RegexMatch(0, 2), RegexAutomaton.Compile(@"\p{gcb=Extend}"u8).Find("\u0300"u8));
+        Assert.Equal(new RegexMatch(0, 3), RegexAutomaton.Compile(@"\p{gcb=SpacingMark}"u8).Find("\u0903"u8));
+        Assert.Equal(new RegexMatch(0, 5), RegexAutomaton.Compile(@"[\p{gcb=Extend}\p{gcb=ZWJ}]+"u8).Find("\u0300\u200D"u8));
     }
 
     /// <summary>
@@ -1817,6 +1972,27 @@ public sealed class RegexAutomatonTests
         Assert.Equal(10, automaton.SumMatchSpans(haystack));
         Assert.Equal(1, automaton.CountMatches(haystack, startAt: 6));
         Assert.Equal(4, automaton.SumMatchSpans(haystack, startAt: 6));
+    }
+
+    /// <summary>
+    /// Verifies bounded alternations of Unicode scalar classes use direct scalar scanning.
+    /// </summary>
+    [Fact]
+    public void UsesSimpleSequenceEngineForBoundedUnicodePropertyAlternationRun()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"(?x)(?:\p{Lowercase}|\p{Uppercase}|\p{Titlecase_Letter}|\p{Modifier_Letter}|\p{Other_Letter}){2,3}"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("Λδǅ abc");
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 6), automaton.Find(haystack));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(9, automaton.SumMatchSpans(haystack));
     }
 
     /// <summary>

@@ -295,7 +295,69 @@ internal sealed class RegexCaptureEngine
         if (seen.Add((thread.State, thread.Position)))
         {
             threads.Add(thread);
+            return;
         }
+
+        for (int index = 0; index < threads.Count; index++)
+        {
+            CaptureThread existing = threads[index];
+            if (existing.State == thread.State &&
+                existing.Position == thread.Position &&
+                IsStrictCaptureExtension(thread, existing))
+            {
+                threads[index] = thread;
+                return;
+            }
+        }
+    }
+
+    private static bool IsStrictCaptureExtension(CaptureThread candidate, CaptureThread existing)
+    {
+        int candidateCount = 0;
+        int existingCount = 0;
+        for (int index = 0; index < existing.Starts.Length; index++)
+        {
+            bool candidateParticipates = CaptureParticipates(candidate, index);
+            bool existingParticipates = CaptureParticipates(existing, index);
+            if (candidateParticipates)
+            {
+                candidateCount++;
+            }
+
+            if (!existingParticipates)
+            {
+                continue;
+            }
+
+            existingCount++;
+            if (!candidateParticipates ||
+                candidate.Starts[index] != existing.Starts[index] ||
+                candidate.Ends[index] != existing.Ends[index])
+            {
+                return false;
+            }
+        }
+
+        return candidateCount > existingCount;
+    }
+
+    private static bool CaptureParticipates(CaptureThread thread, int index)
+    {
+        return thread.Starts[index] >= 0 && thread.Ends[index] >= thread.Starts[index];
+    }
+
+    private static int ParticipatingCaptureCount(CaptureThread thread)
+    {
+        int count = 0;
+        for (int index = 0; index < thread.Starts.Length; index++)
+        {
+            if (CaptureParticipates(thread, index))
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     private bool HasEarlierConsumer(

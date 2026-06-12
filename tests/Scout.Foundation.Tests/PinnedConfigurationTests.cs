@@ -1863,13 +1863,19 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("private static ReadOnlySpan<int> Alphabetic", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static ReadOnlySpan<int> SimpleCaseFold", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static ReadOnlySpan<int> BreakPropertyGraphemeClusterBreakRegionalIndicator", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static ReadOnlySpan<int> BreakPropertyGraphemeClusterBreakExtend", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static ReadOnlySpan<int> BreakPropertyGraphemeClusterBreakSpacingMark", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static ReadOnlySpan<int> BreakPropertyWordBreakHebrewLetter", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static ReadOnlySpan<int> BreakPropertySentenceBreakSContinue", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static ReadOnlySpan<int> BooleanPropertyMath", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static ReadOnlySpan<int> BooleanPropertyEmoji", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static ReadOnlySpan<int> BooleanPropertyExtendedPictographic", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static ReadOnlySpan<int> BooleanPropertyLowercase", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static ReadOnlySpan<int> BooleanPropertyUppercase", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static ReadOnlySpan<int> ScriptCyrillic", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static ReadOnlySpan<int> ScriptExtensionCyrillic", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static ReadOnlySpan<int> ScriptGreek", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static ReadOnlySpan<int> ScriptExtensionGreek", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static ReadOnlySpan<int> GeneralCategoryUppercaseLetter", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("RegexUnicodeTables.IsDecimalNumber", regexByteClass, StringComparison.Ordinal);
         Assert.Contains("RegexUnicodeTables.IsPerlWord", regexByteClass, StringComparison.Ordinal);
@@ -1891,6 +1897,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("ExtendedPictographic", regexUnicodePropertyKind, StringComparison.Ordinal);
         Assert.Contains("ScriptCyrillic", regexUnicodePropertyKind, StringComparison.Ordinal);
         Assert.Contains("ScriptExtensionCyrillic", regexUnicodePropertyKind, StringComparison.Ordinal);
+        Assert.Contains("ScriptGreek", regexUnicodePropertyKind, StringComparison.Ordinal);
+        Assert.Contains("ScriptExtensionGreek", regexUnicodePropertyKind, StringComparison.Ordinal);
+        Assert.Contains("GraphemeClusterBreakExtend", regexUnicodePropertyKind, StringComparison.Ordinal);
         Assert.DoesNotContain("Rune.GetUnicodeCategory", regexByteClass, StringComparison.Ordinal);
         Assert.DoesNotContain("Rune.IsWhiteSpace", regexByteClass, StringComparison.Ordinal);
         string[] actualTables = Directory.GetFiles(tablesRoot, "*.rs")
