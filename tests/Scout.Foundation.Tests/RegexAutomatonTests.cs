@@ -47,6 +47,26 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies Teddy keeps ASCII case-insensitive matches when the first byte changes case.
+    /// </summary>
+    [Fact]
+    public void TeddyPrefilterMatchesCaseInsensitiveFirstByteVariants()
+    {
+        Assert.True(RegexTeddyPrefilter.TryCreate(
+            [
+                "asia0"u8.ToArray(),
+                "akia0"u8.ToArray(),
+                "aroa0"u8.ToArray(),
+            ],
+            asciiCaseInsensitive: true,
+            out RegexTeddyPrefilter? prefilter));
+
+        Assert.Equal(2, prefilter!.FindCandidate("xxASIA0123"u8, 0));
+        Assert.Equal(2, prefilter.FindCandidate("xxAKIA0123"u8, 0));
+        Assert.Equal(-1, prefilter.FindCandidate("xxASIA0123"u8, 3));
+    }
+
+    /// <summary>
     /// Verifies pure literal alternations use exact leftmost-first literal-set execution.
     /// </summary>
     [Fact]
