@@ -102,6 +102,25 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies large literal alternations preserve byte-oriented leftmost-first matching.
+    /// </summary>
+    [Fact]
+    public void CountsLargeLiteralAlternations()
+    {
+        byte[] longerFirstPattern = BuildLargeLiteralAlternation("abcdzz", "abcd");
+        byte[] shorterFirstPattern = BuildLargeLiteralAlternation("abcd", "abcdzz");
+        var longerFirstAutomaton = RegexAutomaton.Compile(longerFirstPattern);
+        var shorterFirstAutomaton = RegexAutomaton.Compile(shorterFirstPattern);
+
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(longerFirstAutomaton));
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(shorterFirstAutomaton));
+        Assert.Equal(new RegexMatch(2, 6), longerFirstAutomaton.Find("xxabcdzz yy w042token"u8));
+        Assert.Equal(new RegexMatch(2, 4), shorterFirstAutomaton.Find("xxabcdzz yy w042token"u8));
+        Assert.Equal(2, longerFirstAutomaton.CountMatches("xxabcdzz yy w042token"u8));
+        Assert.Equal(15, longerFirstAutomaton.SumMatchSpans("xxabcdzz yy w042token"u8));
+    }
+
+    /// <summary>
     /// Verifies single ASCII case-insensitive literals use literal-set count and span semantics.
     /// </summary>
     [Fact]
@@ -1610,6 +1629,19 @@ public sealed class RegexAutomatonTests
     private static byte[] RebarUnstructuredLogPattern()
     {
         return @"^([^ ]+ [^ ]+) ([DIWEF])[1234]: ((?:(?:\[[^\]]*?\]|\([^\)]*?\)): )*)(.*?) \{([^\}]*)\}$"u8.ToArray();
+    }
+
+    private static byte[] BuildLargeLiteralAlternation(string first, string second)
+    {
+        string[] literals = new string[130];
+        literals[0] = first;
+        literals[1] = second;
+        for (int index = 2; index < literals.Length; index++)
+        {
+            literals[index] = $"w{index:D3}token";
+        }
+
+        return System.Text.Encoding.ASCII.GetBytes(string.Join('|', literals));
     }
 
     private static void AssertGroupText(RegexCaptures captures, byte[] haystack, int groupIndex, string expected)
