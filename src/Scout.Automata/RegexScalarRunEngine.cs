@@ -61,10 +61,20 @@ internal sealed class RegexScalarRunEngine
         return null;
     }
 
-    public bool TryCountNonOverlapping(ReadOnlySpan<byte> haystack, int startAt, out long count, out long spanSum)
+    public bool TryCountNonOverlapping(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        bool sumSpans,
+        out long count,
+        out long spanSum)
     {
         count = 0;
         spanSum = 0;
+        if (!sumSpans)
+        {
+            return TryCountNonOverlappingCountOnly(haystack, startAt, ref count);
+        }
+
         int position = Math.Clamp(startAt, 0, haystack.Length);
         int currentScalars = 0;
         int currentBytes = 0;
@@ -101,6 +111,43 @@ internal sealed class RegexScalarRunEngine
         }
 
         AddTrailingRun(runScalars, runBytes, currentScalars, currentBytes, ref count, ref spanSum);
+        return true;
+    }
+
+    private bool TryCountNonOverlappingCountOnly(ReadOnlySpan<byte> haystack, int startAt, ref long count)
+    {
+        int position = Math.Clamp(startAt, 0, haystack.Length);
+        int currentScalars = 0;
+        int selectedScalars = lazy ? minimum : maximum;
+        while (position < haystack.Length)
+        {
+            if (TryAtomMatchLength(haystack, position, out int scalarLength))
+            {
+                currentScalars++;
+                position += scalarLength;
+                if (currentScalars == selectedScalars)
+                {
+                    count++;
+                    currentScalars = 0;
+                }
+
+                continue;
+            }
+
+            if (currentScalars >= minimum)
+            {
+                count++;
+            }
+
+            currentScalars = 0;
+            position = AdvanceAfterNonMatch(haystack, position);
+        }
+
+        if (currentScalars >= minimum)
+        {
+            count++;
+        }
+
         return true;
     }
 

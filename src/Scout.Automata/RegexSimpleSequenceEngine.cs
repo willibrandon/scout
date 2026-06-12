@@ -76,11 +76,16 @@ internal sealed class RegexSimpleSequenceEngine
         return null;
     }
 
-    public bool TryCountNonOverlapping(ReadOnlySpan<byte> haystack, int startAt, out long count, out long spanSum)
+    public bool TryCountNonOverlapping(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        bool sumSpans,
+        out long count,
+        out long spanSum)
     {
         count = 0;
         spanSum = 0;
-        if (TryCountRepeatedCapitalizedWords(haystack, startAt, ref count, ref spanSum))
+        if (TryCountRepeatedCapitalizedWords(haystack, startAt, sumSpans, ref count, ref spanSum))
         {
             return true;
         }
@@ -93,19 +98,19 @@ internal sealed class RegexSimpleSequenceEngine
         int position = Math.Clamp(startAt, 0, haystack.Length);
         if (segment.MatcherKind == RegexSimpleSequenceByteMatcherKind.AsciiLetter)
         {
-            CountAsciiLetterRuns(minimum, maximum, lazy, haystack, position, ref count, ref spanSum);
+            CountAsciiLetterRuns(minimum, maximum, lazy, haystack, position, sumSpans, ref count, ref spanSum);
             return true;
         }
 
         if (segment.MatcherKind == RegexSimpleSequenceByteMatcherKind.AsciiDigit)
         {
-            CountAsciiDigitRuns(minimum, maximum, lazy, haystack, position, ref count, ref spanSum);
+            CountAsciiDigitRuns(minimum, maximum, lazy, haystack, position, sumSpans, ref count, ref spanSum);
             return true;
         }
 
         if (segment.MatcherKind == RegexSimpleSequenceByteMatcherKind.AsciiWord)
         {
-            CountAsciiWordRuns(minimum, maximum, lazy, haystack, position, ref count, ref spanSum);
+            CountAsciiWordRuns(minimum, maximum, lazy, haystack, position, sumSpans, ref count, ref spanSum);
             return true;
         }
 
@@ -118,18 +123,23 @@ internal sealed class RegexSimpleSequenceEngine
             }
             else
             {
-                AddRun(minimum, maximum, lazy, runLength, ref count, ref spanSum);
+                AddRun(minimum, maximum, lazy, runLength, sumSpans, ref count, ref spanSum);
                 runLength = 0;
             }
 
             position++;
         }
 
-        AddRun(minimum, maximum, lazy, runLength, ref count, ref spanSum);
+        AddRun(minimum, maximum, lazy, runLength, sumSpans, ref count, ref spanSum);
         return true;
     }
 
-    private bool TryCountRepeatedCapitalizedWords(ReadOnlySpan<byte> haystack, int startAt, ref long count, ref long spanSum)
+    private bool TryCountRepeatedCapitalizedWords(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        bool sumSpans,
+        ref long count,
+        ref long spanSum)
     {
         if (!IsRepeatedCapitalizedWordPattern(out int wordMinimum, out int wordMaximum, out bool lazy))
         {
@@ -158,7 +168,11 @@ internal sealed class RegexSimpleSequenceEngine
             if (wordCount >= wordMinimum)
             {
                 count++;
-                spanSum += runPosition - runStart;
+                if (sumSpans)
+                {
+                    spanSum += runPosition - runStart;
+                }
+
                 position = runPosition;
                 continue;
             }
@@ -274,6 +288,7 @@ internal sealed class RegexSimpleSequenceEngine
         bool lazy,
         ReadOnlySpan<byte> haystack,
         int position,
+        bool sumSpans,
         ref long count,
         ref long spanSum)
     {
@@ -286,14 +301,14 @@ internal sealed class RegexSimpleSequenceEngine
             }
             else
             {
-                AddRun(minimum, maximum, lazy, runLength, ref count, ref spanSum);
+                AddRun(minimum, maximum, lazy, runLength, sumSpans, ref count, ref spanSum);
                 runLength = 0;
             }
 
             position++;
         }
 
-        AddRun(minimum, maximum, lazy, runLength, ref count, ref spanSum);
+        AddRun(minimum, maximum, lazy, runLength, sumSpans, ref count, ref spanSum);
     }
 
     private static void CountAsciiDigitRuns(
@@ -302,6 +317,7 @@ internal sealed class RegexSimpleSequenceEngine
         bool lazy,
         ReadOnlySpan<byte> haystack,
         int position,
+        bool sumSpans,
         ref long count,
         ref long spanSum)
     {
@@ -314,14 +330,14 @@ internal sealed class RegexSimpleSequenceEngine
             }
             else
             {
-                AddRun(minimum, maximum, lazy, runLength, ref count, ref spanSum);
+                AddRun(minimum, maximum, lazy, runLength, sumSpans, ref count, ref spanSum);
                 runLength = 0;
             }
 
             position++;
         }
 
-        AddRun(minimum, maximum, lazy, runLength, ref count, ref spanSum);
+        AddRun(minimum, maximum, lazy, runLength, sumSpans, ref count, ref spanSum);
     }
 
     private static void CountAsciiWordRuns(
@@ -330,6 +346,7 @@ internal sealed class RegexSimpleSequenceEngine
         bool lazy,
         ReadOnlySpan<byte> haystack,
         int position,
+        bool sumSpans,
         ref long count,
         ref long spanSum)
     {
@@ -342,14 +359,14 @@ internal sealed class RegexSimpleSequenceEngine
             }
             else
             {
-                AddRun(minimum, maximum, lazy, runLength, ref count, ref spanSum);
+                AddRun(minimum, maximum, lazy, runLength, sumSpans, ref count, ref spanSum);
                 runLength = 0;
             }
 
             position++;
         }
 
-        AddRun(minimum, maximum, lazy, runLength, ref count, ref spanSum);
+        AddRun(minimum, maximum, lazy, runLength, sumSpans, ref count, ref spanSum);
     }
 
     private static RegexMatch? FindSingleSegment(RegexSimpleSequenceSegment segment, ReadOnlySpan<byte> haystack, int startOffset)
@@ -395,7 +412,14 @@ internal sealed class RegexSimpleSequenceEngine
         return null;
     }
 
-    private static void AddRun(int minimum, int? maximum, bool lazy, int runLength, ref long count, ref long spanSum)
+    private static void AddRun(
+        int minimum,
+        int? maximum,
+        bool lazy,
+        int runLength,
+        bool sumSpans,
+        ref long count,
+        ref long spanSum)
     {
         if (runLength < minimum)
         {
@@ -405,17 +429,30 @@ internal sealed class RegexSimpleSequenceEngine
         if (!lazy && !maximum.HasValue)
         {
             count++;
-            spanSum += runLength;
+            if (sumSpans)
+            {
+                spanSum += runLength;
+            }
+
             return;
         }
 
         int matchLength = lazy ? minimum : maximum ?? minimum;
-        while (runLength >= minimum)
+        int fullMatches = runLength / matchLength;
+        int remainder = runLength - fullMatches * matchLength;
+        count += fullMatches;
+        if (sumSpans)
         {
-            int length = Math.Min(matchLength, runLength);
+            spanSum += (long)fullMatches * matchLength;
+        }
+
+        if (remainder >= minimum)
+        {
             count++;
-            spanSum += length;
-            runLength -= length;
+            if (sumSpans)
+            {
+                spanSum += remainder;
+            }
         }
     }
 

@@ -691,7 +691,7 @@ internal sealed class RegexMetaEngine
             return asciiWordBoundary.CountMatches(haystack, startAt);
         }
 
-        if (TryCountNonOverlapping(haystack, startAt, out long count, out _))
+        if (TryCountNonOverlapping(haystack, startAt, sumSpans: false, out long count, out _))
         {
             return count;
         }
@@ -738,7 +738,7 @@ internal sealed class RegexMetaEngine
             return asciiWordBoundary.SumMatchSpans(haystack, startAt);
         }
 
-        if (TryCountNonOverlapping(haystack, startAt, out _, out long spanSum))
+        if (TryCountNonOverlapping(haystack, startAt, sumSpans: true, out _, out long spanSum))
         {
             return spanSum;
         }
@@ -758,16 +758,21 @@ internal sealed class RegexMetaEngine
         return IterateNonOverlapping(haystack, startAt, startPredicate, sumSpans: true);
     }
 
-    private bool TryCountNonOverlapping(ReadOnlySpan<byte> haystack, int startAt, out long count, out long spanSum)
+    private bool TryCountNonOverlapping(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        bool sumSpans,
+        out long count,
+        out long spanSum)
     {
         if (simpleSequence is not null)
         {
-            return simpleSequence.TryCountNonOverlapping(haystack, startAt, out count, out spanSum);
+            return simpleSequence.TryCountNonOverlapping(haystack, startAt, sumSpans, out count, out spanSum);
         }
 
         if (scalarRun is not null)
         {
-            return scalarRun.TryCountNonOverlapping(haystack, startAt, out count, out spanSum);
+            return scalarRun.TryCountNonOverlapping(haystack, startAt, sumSpans, out count, out spanSum);
         }
 
         count = 0;
