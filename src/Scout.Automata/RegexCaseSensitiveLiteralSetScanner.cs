@@ -9,6 +9,7 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
 {
     private const int BlockLength = 2;
     private const int MaxLiteralCount = 8;
+    private const int StartAnchorBonus = 80;
 
     private readonly Dictionary<ushort, RegexCaseSensitiveLiteralSetEntry[]> entriesByBlock;
     private readonly byte[] blockFirstBytes;
@@ -360,6 +361,11 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
             score += 2048;
         }
 
+        if (index == 0)
+        {
+            score += StartAnchorBonus;
+        }
+
         if (first == (byte)' ' || second == (byte)' ')
         {
             score -= 256;
@@ -385,13 +391,17 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
             return 180;
         }
 
-        byte folded = RegexAsciiCaseInsensitiveFinder.FoldAscii(value);
-        if (folded is < (byte)'a' or > (byte)'z')
+        if (value is >= (byte)'A' and <= (byte)'Z')
         {
-            return folded == (byte)' ' ? 10 : 220;
+            return 220;
         }
 
-        return folded switch
+        if (value is < (byte)'a' or > (byte)'z')
+        {
+            return value == (byte)' ' ? 10 : 220;
+        }
+
+        return value switch
         {
             (byte)'q' or (byte)'z' => 260,
             (byte)'x' or (byte)'j' => 250,
