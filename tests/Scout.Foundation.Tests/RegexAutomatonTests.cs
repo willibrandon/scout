@@ -1035,6 +1035,40 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies aggregate scans keep ASCII-fast progress while still using Unicode fallback around non-ASCII digits.
+    /// </summary>
+    [Fact]
+    public void UnicodePikeVmAsciiFastAggregateFallsBackAndResumes()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\d+"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("123 456 \u06F7 89 10");
+
+        Assert.Equal(5, automaton.CountMatches(haystack));
+        Assert.Equal(12, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
+    /// Verifies aggregate scans do not truncate ASCII matches that Unicode case folding can extend.
+    /// </summary>
+    [Fact]
+    public void UnicodePikeVmAsciiFastAggregateDoesNotTruncateCaseFold()
+    {
+        var automaton = RegexAutomaton.Compile(
+            "[a-z]+"u8,
+            caseInsensitive: true,
+            multiLine: false,
+            dotMatchesNewline: false);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("ab\u212A cd");
+
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(7, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies Unicode-aware start predicates use first-byte fallbacks for case folds and alternations.
     /// </summary>
     [Fact]

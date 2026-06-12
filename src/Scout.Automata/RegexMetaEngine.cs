@@ -670,7 +670,7 @@ internal sealed class RegexMetaEngine
             return unanchoredCount;
         }
 
-        if (TryIterateAsciiFastUnanchored(haystack, startAt, sumSpans: false, out long asciiFastCount))
+        if (TryIterateAsciiFastUnanchored(haystack, startAt, startPredicate, sumSpans: false, out long asciiFastCount))
         {
             return asciiFastCount;
         }
@@ -717,7 +717,7 @@ internal sealed class RegexMetaEngine
             return unanchoredSpanSum;
         }
 
-        if (TryIterateAsciiFastUnanchored(haystack, startAt, sumSpans: true, out long asciiFastSpanSum))
+        if (TryIterateAsciiFastUnanchored(haystack, startAt, startPredicate, sumSpans: true, out long asciiFastSpanSum))
         {
             return asciiFastSpanSum;
         }
@@ -756,7 +756,12 @@ internal sealed class RegexMetaEngine
         return CanAcceptAsciiFastUnanchored(haystack, startAt, match);
     }
 
-    private bool TryIterateAsciiFastUnanchored(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans, out long total)
+    private bool TryIterateAsciiFastUnanchored(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        RegexStartPredicate? startPredicate,
+        bool sumSpans,
+        out long total)
     {
         total = 0;
         RegexUnanchoredLazyDfa? activeAsciiFastUnanchoredDfa = GetAsciiFastUnanchoredDfa(haystack.Length);
@@ -778,19 +783,71 @@ internal sealed class RegexMetaEngine
                     out RegexMatch match,
                     out bool gaveUp))
             {
-                return !gaveUp && IsAsciiRange(haystack, offset, haystack.Length);
+                if (!gaveUp && IsAsciiRange(haystack, offset, haystack.Length))
+                {
+                    return true;
+                }
+
+                if (!TryFindByAnchoredScan(haystack, offset, startPredicate, out match))
+                {
+                    return true;
+                }
+
+                total += sumSpans ? match.Length : 1;
+                offset = AdvanceAfterNonOverlappingMatch(match, haystack.Length);
+                continue;
             }
 
             if (!CanAcceptAsciiFastUnanchored(haystack, offset, match))
             {
-                return false;
+                if (!TryFindByAnchoredScan(haystack, offset, startPredicate, out match))
+                {
+                    return true;
+                }
+            }
+            else
+            {
+                total += sumSpans ? match.Length : 1;
+                offset = AdvanceAfterNonOverlappingMatch(match, haystack.Length);
+                continue;
             }
 
             total += sumSpans ? match.Length : 1;
-            offset = match.End;
+            offset = AdvanceAfterNonOverlappingMatch(match, haystack.Length);
         }
 
         return true;
+    }
+
+    private static int AdvanceAfterNonOverlappingMatch(RegexMatch match, int haystackLength)
+    {
+        return match.Length == 0
+            ? Math.Min(match.End + 1, haystackLength + 1)
+            : match.End;
+    }
+
+    private bool TryFindByAnchoredScan(
+        ReadOnlySpan<byte> haystack,
+        int startOffset,
+        RegexStartPredicate? startPredicate,
+        out RegexMatch match)
+    {
+        for (int start = startOffset; start <= haystack.Length; start++)
+        {
+            if (startPredicate is not null && !startPredicate.CanStartAt(haystack, start))
+            {
+                continue;
+            }
+
+            if (TryMatchAt(haystack, start, out int length))
+            {
+                match = new RegexMatch(start, length);
+                return true;
+            }
+        }
+
+        match = default;
+        return false;
     }
 
     private static bool CanAcceptAsciiFastUnanchored(ReadOnlySpan<byte> haystack, int searchStart, RegexMatch match)
