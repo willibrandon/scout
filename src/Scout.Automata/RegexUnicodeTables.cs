@@ -131,6 +131,89 @@ internal static class RegexUnicodeTables
         }
     }
 
+    internal static ReadOnlySpan<int> DecimalNumberRanges => DecimalNumber;
+
+    internal static ReadOnlySpan<int> PerlWordRanges => PerlWord;
+
+    internal static ReadOnlySpan<int> PerlSpaceRanges => PerlSpace;
+
+    internal static ReadOnlySpan<int> AlphabeticRanges => Alphabetic;
+
+    internal static ReadOnlySpan<int> GetGeneralCategoryRanges(RegexUnicodePropertyKind kind)
+    {
+        return kind switch
+        {
+            RegexUnicodePropertyKind.CasedLetter => GeneralCategoryCasedLetter,
+            RegexUnicodePropertyKind.ClosePunctuation => GeneralCategoryClosePunctuation,
+            RegexUnicodePropertyKind.ConnectorPunctuation => GeneralCategoryConnectorPunctuation,
+            RegexUnicodePropertyKind.Control => GeneralCategoryControl,
+            RegexUnicodePropertyKind.CurrencySymbol => GeneralCategoryCurrencySymbol,
+            RegexUnicodePropertyKind.DashPunctuation => GeneralCategoryDashPunctuation,
+            RegexUnicodePropertyKind.DecimalNumber => GeneralCategoryDecimalNumber,
+            RegexUnicodePropertyKind.EnclosingMark => GeneralCategoryEnclosingMark,
+            RegexUnicodePropertyKind.FinalPunctuation => GeneralCategoryFinalPunctuation,
+            RegexUnicodePropertyKind.Format => GeneralCategoryFormat,
+            RegexUnicodePropertyKind.InitialPunctuation => GeneralCategoryInitialPunctuation,
+            RegexUnicodePropertyKind.Letter => GeneralCategoryLetter,
+            RegexUnicodePropertyKind.LetterNumber => GeneralCategoryLetterNumber,
+            RegexUnicodePropertyKind.LineSeparator => GeneralCategoryLineSeparator,
+            RegexUnicodePropertyKind.LowercaseLetter => GeneralCategoryLowercaseLetter,
+            RegexUnicodePropertyKind.Mark => GeneralCategoryMark,
+            RegexUnicodePropertyKind.MathSymbol => GeneralCategoryMathSymbol,
+            RegexUnicodePropertyKind.ModifierLetter => GeneralCategoryModifierLetter,
+            RegexUnicodePropertyKind.ModifierSymbol => GeneralCategoryModifierSymbol,
+            RegexUnicodePropertyKind.NonspacingMark => GeneralCategoryNonspacingMark,
+            RegexUnicodePropertyKind.Number => GeneralCategoryNumber,
+            RegexUnicodePropertyKind.OpenPunctuation => GeneralCategoryOpenPunctuation,
+            RegexUnicodePropertyKind.Other => GeneralCategoryOther,
+            RegexUnicodePropertyKind.OtherLetter => GeneralCategoryOtherLetter,
+            RegexUnicodePropertyKind.OtherNumber => GeneralCategoryOtherNumber,
+            RegexUnicodePropertyKind.OtherPunctuation => GeneralCategoryOtherPunctuation,
+            RegexUnicodePropertyKind.OtherSymbol => GeneralCategoryOtherSymbol,
+            RegexUnicodePropertyKind.ParagraphSeparator => GeneralCategoryParagraphSeparator,
+            RegexUnicodePropertyKind.PrivateUse => GeneralCategoryPrivateUse,
+            RegexUnicodePropertyKind.Punctuation => GeneralCategoryPunctuation,
+            RegexUnicodePropertyKind.Separator => GeneralCategorySeparator,
+            RegexUnicodePropertyKind.SpaceSeparator => GeneralCategorySpaceSeparator,
+            RegexUnicodePropertyKind.SpacingMark => GeneralCategorySpacingMark,
+            RegexUnicodePropertyKind.Symbol => GeneralCategorySymbol,
+            RegexUnicodePropertyKind.TitlecaseLetter => GeneralCategoryTitlecaseLetter,
+            RegexUnicodePropertyKind.Unassigned => GeneralCategoryUnassigned,
+            RegexUnicodePropertyKind.UppercaseLetter => GeneralCategoryUppercaseLetter,
+            _ => [],
+        };
+    }
+
+    internal static ReadOnlySpan<int> GetBooleanPropertyRanges(RegexUnicodePropertyKind kind)
+    {
+        return kind switch
+        {
+            RegexUnicodePropertyKind.Math => BooleanPropertyMath,
+            RegexUnicodePropertyKind.Emoji => BooleanPropertyEmoji,
+            RegexUnicodePropertyKind.ExtendedPictographic => BooleanPropertyExtendedPictographic,
+            _ => [],
+        };
+    }
+
+    internal static ReadOnlySpan<int> GetBreakPropertyRanges(RegexUnicodePropertyKind kind)
+    {
+        return kind switch
+        {
+            RegexUnicodePropertyKind.GraphemeClusterBreakPrepend => BreakPropertyGraphemeClusterBreakPrepend,
+            RegexUnicodePropertyKind.GraphemeClusterBreakRegionalIndicator => BreakPropertyGraphemeClusterBreakRegionalIndicator,
+            RegexUnicodePropertyKind.GraphemeClusterBreakLvt => BreakPropertyGraphemeClusterBreakLvt,
+            RegexUnicodePropertyKind.GraphemeClusterBreakZwj => BreakPropertyGraphemeClusterBreakZwj,
+            RegexUnicodePropertyKind.WordBreakHebrewLetter => BreakPropertyWordBreakHebrewLetter,
+            RegexUnicodePropertyKind.WordBreakExtendNumLet => BreakPropertyWordBreakExtendNumLet,
+            RegexUnicodePropertyKind.WordBreakWSegSpace => BreakPropertyWordBreakWSegSpace,
+            RegexUnicodePropertyKind.WordBreakNumeric => BreakPropertyWordBreakNumeric,
+            RegexUnicodePropertyKind.SentenceBreakLower => BreakPropertySentenceBreakLower,
+            RegexUnicodePropertyKind.SentenceBreakClose => BreakPropertySentenceBreakClose,
+            RegexUnicodePropertyKind.SentenceBreakSContinue => BreakPropertySentenceBreakSContinue,
+            _ => [],
+        };
+    }
+
     internal static void AddDecimalNumberPrefixBytes(List<byte[]> prefixes)
     {
         AddRangePrefixBytes(DecimalNumber, prefixes);

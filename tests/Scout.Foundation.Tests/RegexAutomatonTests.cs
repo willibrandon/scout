@@ -1007,41 +1007,90 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
-    /// Verifies Unicode PikeVM patterns can use an ASCII DFA mirror without losing Unicode fallback semantics.
+    /// Verifies Unicode scalar-sensitive atoms lower to byte-DFA states without losing Unicode semantics.
     /// </summary>
     [Fact]
-    public void UnicodePikeVmAsciiFastPathPreservesFallbackSemantics()
+    public void UnicodeScalarAtomsCompileToByteDfa()
     {
         RegexSyntaxTree tree = RegexSyntaxParser.Parse("[a-z]+0"u8);
         var options = new RegexCompileOptions(
             caseInsensitive: true,
             swapGreed: false,
             multiLine: false,
-            dotMatchesNewline: false);
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
         RegexNfa unicodeNfa = RegexNfaCompiler.Compile(tree.Root, options);
 
-        Assert.False(RegexDfaOperations.CanCompile(unicodeNfa));
-        Assert.True(RegexAsciiFastPath.TryCompileNfa("[a-z]+0"u8, tree.Root, options, out RegexNfa? asciiNfa));
-        Assert.NotNull(asciiNfa);
-        Assert.True(RegexDfaOperations.CanCompile(asciiNfa));
+        Assert.True(RegexDfaOperations.CanCompile(unicodeNfa));
 
         var automaton = RegexAutomaton.Compile(
             "[a-z]+0"u8,
             caseInsensitive: true,
             multiLine: false,
-            dotMatchesNewline: false);
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
         byte[] kelvinHaystack = System.Text.Encoding.UTF8.GetBytes("11\u212A0");
 
+        Assert.NotEqual(RegexEngineKind.PikeVm, GetEngineKind(automaton));
         Assert.Equal(new RegexMatch(2, 2), automaton.Find("11K0"u8));
         Assert.Equal(new RegexMatch(2, 4), automaton.Find(kelvinHaystack));
         Assert.Null(automaton.Find("1120"u8));
     }
 
     /// <summary>
-    /// Verifies the ASCII mirror can accept ASCII-only matches without losing Unicode extensions at non-ASCII boundaries.
+    /// Verifies Unicode byte-DFA lowering preserves Unicode digit, whitespace, negated class and dot semantics.
     /// </summary>
     [Fact]
-    public void UnicodePikeVmAsciiFastPathFallsBackAtNonAsciiBoundary()
+    public void UnicodeByteDfaPreservesScalarClassSemantics()
+    {
+        var digitSpaceDot = RegexAutomaton.Compile(
+            @"\d+\s."u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] digitHaystack = System.Text.Encoding.UTF8.GetBytes("xx\u06F1\u06F2\u00A0k\n");
+        byte[] digitMatchText = System.Text.Encoding.UTF8.GetBytes("\u06F1\u06F2\u00A0k");
+
+        Assert.NotEqual(RegexEngineKind.PikeVm, GetEngineKind(digitSpaceDot));
+        Assert.Equal(new RegexMatch(2, digitMatchText.Length), digitSpaceDot.Find(digitHaystack));
+
+        var notLetters = RegexAutomaton.Compile(
+            "[^A-Za-z]+"u8,
+            caseInsensitive: true,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] notLetterHaystack = System.Text.Encoding.UTF8.GetBytes("abc\u212A \u06F1\u06F2");
+        int notLetterStart = System.Text.Encoding.UTF8.GetByteCount("abc\u212A");
+        int notLetterLength = System.Text.Encoding.UTF8.GetByteCount(" \u06F1\u06F2");
+
+        Assert.NotEqual(RegexEngineKind.PikeVm, GetEngineKind(notLetters));
+        Assert.Equal(new RegexMatch(notLetterStart, notLetterLength), notLetters.Find(notLetterHaystack));
+
+        var dot = RegexAutomaton.Compile(
+            "."u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] emojiThenNewline = System.Text.Encoding.UTF8.GetBytes("\U0001F4A9\n");
+
+        Assert.NotEqual(RegexEngineKind.PikeVm, GetEngineKind(dot));
+        Assert.Equal(new RegexMatch(0, 4), dot.Find(emojiThenNewline));
+        Assert.Null(dot.Find(emojiThenNewline, startAt: 4));
+    }
+
+    /// <summary>
+    /// Verifies Unicode aggregate scans match ASCII and Unicode digits.
+    /// </summary>
+    [Fact]
+    public void UnicodeByteDfaMatchesAsciiAndUnicodeDigits()
     {
         var automaton = RegexAutomaton.Compile(
             @"\d+"u8,
@@ -1055,10 +1104,10 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
-    /// Verifies aggregate scans keep ASCII-fast progress while still using Unicode fallback around non-ASCII digits.
+    /// Verifies aggregate scans keep progress around non-ASCII digits.
     /// </summary>
     [Fact]
-    public void UnicodePikeVmAsciiFastAggregateFallsBackAndResumes()
+    public void UnicodeByteDfaAggregateCountsUnicodeDigits()
     {
         var automaton = RegexAutomaton.Compile(
             @"\d+"u8,
@@ -1075,7 +1124,7 @@ public sealed class RegexAutomatonTests
     /// Verifies aggregate scans do not truncate ASCII matches that Unicode case folding can extend.
     /// </summary>
     [Fact]
-    public void UnicodePikeVmAsciiFastAggregateDoesNotTruncateCaseFold()
+    public void UnicodeByteDfaAggregateDoesNotTruncateCaseFold()
     {
         var automaton = RegexAutomaton.Compile(
             "[a-z]+"u8,

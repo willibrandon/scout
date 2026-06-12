@@ -114,6 +114,16 @@ public sealed class RegexAutomaton
         ulong? dfaSizeLimit = null,
         bool compilePrefilter = true)
     {
+        return CompileParsedWithCache(tree, options, dfaSizeLimit, compilePrefilter, utf8ByteTrieCache: null);
+    }
+
+    internal static RegexAutomaton CompileParsedWithCache(
+        RegexSyntaxTree tree,
+        RegexCompileOptions options,
+        ulong? dfaSizeLimit,
+        bool compilePrefilter,
+        Dictionary<string, RegexUtf8ByteTrie>? utf8ByteTrieCache = null)
+    {
         RegexLiteralSetEngine.TryCreate(tree.Root, options, out RegexLiteralSetEngine? literalSet);
         if (literalSet is not null && tree.CaptureCount == 0)
         {
@@ -135,7 +145,7 @@ public sealed class RegexAutomaton
                 RegexMetaEngine.CompileAlternationSet(
                     alternationSet,
                     options.Utf8,
-                    () => RegexNfaCompiler.Compile(tree.Root, options)),
+                    () => RegexNfaCompiler.Compile(tree.Root, options, utf8ByteTrieCache)),
                 startPredicate: null,
                 alternationSet.CanSynthesizeCaptures ? alternationSet : null,
                 tree.CaptureCount > 0 ? tree.Pattern : default,
@@ -147,7 +157,8 @@ public sealed class RegexAutomaton
 
         RegexNfa nfa = RegexNfaCompiler.Compile(
             tree.Root,
-            options);
+            options,
+            utf8ByteTrieCache);
         RegexStartPrefixSet? startPrefixSet = null;
         RegexPrefilter? prefilter = compilePrefilter
             ? RegexPrefilter.Compile(tree.Root, options, out startPrefixSet)

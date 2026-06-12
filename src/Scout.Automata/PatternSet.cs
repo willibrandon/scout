@@ -139,6 +139,7 @@ public sealed class PatternSet
         var boundaryLiteralPatterns = new List<byte[]>();
         var boundaryLiteralPatternIds = new List<int>();
         var requiredLiteralEntries = new List<PatternSetRequiredLiteralEntry>();
+        var utf8ByteTrieCache = new Dictionary<string, RegexUtf8ByteTrie>();
         for (int index = 0; index < plans.Length; index++)
         {
             PatternSetPatternPlan plan = plans[index];
@@ -172,7 +173,12 @@ public sealed class PatternSet
                     plan.RequiredLiteralLookBehind));
             }
 
-            automata.Add(RegexAutomaton.CompileParsed(plan.Tree!, options, compilePrefilter: plan.RequiredLiterals is null));
+            automata.Add(RegexAutomaton.CompileParsedWithCache(
+                plan.Tree!,
+                options,
+                dfaSizeLimit: null,
+                compilePrefilter: plan.RequiredLiterals is null,
+                utf8ByteTrieCache: utf8ByteTrieCache));
             automataPatternIds.Add(index);
         }
 
