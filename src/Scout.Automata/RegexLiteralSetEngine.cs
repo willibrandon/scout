@@ -17,6 +17,7 @@ internal sealed class RegexLiteralSetEngine
     private readonly byte[][] literals;
     private readonly byte[][] searchPatterns;
     private readonly int[] searchPatternLiteralIds;
+    private readonly int[]?[]? commonFoldedLiterals;
     private readonly bool asciiCaseInsensitive;
     private readonly bool unicodeCaseInsensitive;
     private readonly int maxLiteralLength;
@@ -57,6 +58,11 @@ internal sealed class RegexLiteralSetEngine
         for (int index = 0; index < searchPatternLiteralIds.Count; index++)
         {
             this.searchPatternLiteralIds[index] = searchPatternLiteralIds[index];
+        }
+
+        if (unicodeCaseInsensitive)
+        {
+            commonFoldedLiterals = BuildCommonFoldedLiterals(this.literals);
         }
 
         searchPatternIndexesByFirstByte = BuildSearchPatternBuckets(this.searchPatterns);
@@ -1314,6 +1320,20 @@ internal sealed class RegexLiteralSetEngine
         byte[] literal = literals[literalId];
         if (unicodeCaseInsensitive)
         {
+            if (commonFoldedLiterals?[literalId] is int[] commonFoldedLiteral)
+            {
+                if (TryMatchCommonFoldedLiteralAt(haystack[start..], commonFoldedLiteral, out length, out bool known))
+                {
+                    return true;
+                }
+
+                if (known)
+                {
+                    length = 0;
+                    return false;
+                }
+            }
+
             return TryMatchUnicodeCaseInsensitiveLiteralAt(haystack[start..], literal, out length);
         }
 
@@ -1330,6 +1350,17 @@ internal sealed class RegexLiteralSetEngine
     private static bool TryMatchUnicodeCaseInsensitiveLiteralAt(ReadOnlySpan<byte> haystack, byte[] literal, out int length)
     {
         length = 0;
+        if (TryMatchCommonUtf8CaseInsensitiveLiteralAt(haystack, literal, out length, out bool known))
+        {
+            return true;
+        }
+
+        if (known)
+        {
+            length = 0;
+            return false;
+        }
+
         ReadOnlySpan<byte> remainingHaystack = haystack;
         ReadOnlySpan<byte> remainingLiteral = literal;
         while (!remainingLiteral.IsEmpty)
@@ -1348,6 +1379,177 @@ internal sealed class RegexLiteralSetEngine
         }
 
         return true;
+    }
+
+    private static int[]?[] BuildCommonFoldedLiterals(byte[][] literals)
+    {
+        int[]?[] folded = new int[]?[literals.Length];
+        for (int literalIndex = 0; literalIndex < literals.Length; literalIndex++)
+        {
+            folded[literalIndex] = TryBuildCommonFoldedLiteral(literals[literalIndex]);
+        }
+
+        return folded;
+    }
+
+    private static int[]? TryBuildCommonFoldedLiteral(byte[] literal)
+    {
+        List<int> folded = [];
+        int index = 0;
+        while (index < literal.Length)
+        {
+            if (!TryReadCommonFoldedScalar(literal, index, out int scalar, out int consumed))
+            {
+                return null;
+            }
+
+            folded.Add(scalar);
+            index += consumed;
+        }
+
+        return folded.ToArray();
+    }
+
+    private static bool TryMatchCommonFoldedLiteralAt(
+        ReadOnlySpan<byte> haystack,
+        int[] literal,
+        out int length,
+        out bool known)
+    {
+        length = 0;
+        known = true;
+        int haystackIndex = 0;
+        for (int literalIndex = 0; literalIndex < literal.Length; literalIndex++)
+        {
+            if (!TryReadCommonFoldedScalar(haystack, haystackIndex, out int haystackFolded, out int haystackConsumed))
+            {
+                known = false;
+                length = 0;
+                return false;
+            }
+
+            if (literal[literalIndex] != haystackFolded)
+            {
+                length = 0;
+                return false;
+            }
+
+            haystackIndex += haystackConsumed;
+            length += haystackConsumed;
+        }
+
+        return true;
+    }
+
+    private static bool TryMatchCommonUtf8CaseInsensitiveLiteralAt(
+        ReadOnlySpan<byte> haystack,
+        byte[] literal,
+        out int length,
+        out bool known)
+    {
+        length = 0;
+        known = true;
+        int haystackIndex = 0;
+        int literalIndex = 0;
+        while (literalIndex < literal.Length)
+        {
+            if (!TryReadCommonFoldedScalar(literal, literalIndex, out int literalFolded, out int literalConsumed) ||
+                !TryReadCommonFoldedScalar(haystack, haystackIndex, out int haystackFolded, out int haystackConsumed))
+            {
+                known = false;
+                length = 0;
+                return false;
+            }
+
+            if (literalFolded != haystackFolded)
+            {
+                length = 0;
+                return false;
+            }
+
+            literalIndex += literalConsumed;
+            haystackIndex += haystackConsumed;
+            length += haystackConsumed;
+        }
+
+        return true;
+    }
+
+    private static bool TryReadCommonFoldedScalar(
+        ReadOnlySpan<byte> bytes,
+        int index,
+        out int folded,
+        out int consumed)
+    {
+        folded = 0;
+        consumed = 0;
+        if ((uint)index >= (uint)bytes.Length)
+        {
+            return false;
+        }
+
+        byte first = bytes[index];
+        if (first <= 0x7F)
+        {
+            folded = FastSimpleFold(first);
+            consumed = 1;
+            return true;
+        }
+
+        if (index + 1 >= bytes.Length)
+        {
+            return false;
+        }
+
+        byte second = bytes[index + 1];
+        if (first == 0xD0)
+        {
+            if (second is >= 0x90 and <= 0x9F)
+            {
+                folded = 0x0430 + (second - 0x90);
+                consumed = 2;
+                return true;
+            }
+
+            if (second is >= 0xA0 and <= 0xAF)
+            {
+                folded = 0x0440 + (second - 0xA0);
+                consumed = 2;
+                return true;
+            }
+
+            if (second is >= 0xB0 and <= 0xBF)
+            {
+                folded = 0x0430 + (second - 0xB0);
+                consumed = 2;
+                return true;
+            }
+
+            if (second == 0x81)
+            {
+                folded = 0x0451;
+                consumed = 2;
+                return true;
+            }
+        }
+        else if (first == 0xD1)
+        {
+            if (second is >= 0x80 and <= 0x8F)
+            {
+                folded = 0x0440 + (second - 0x80);
+                consumed = 2;
+                return true;
+            }
+
+            if (second == 0x91)
+            {
+                folded = 0x0451;
+                consumed = 2;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool TryReadUtf8Scalar(ReadOnlySpan<byte> bytes, out int scalar, out int consumed)

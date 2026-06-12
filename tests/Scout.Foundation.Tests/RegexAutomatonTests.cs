@@ -185,6 +185,42 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies common Cyrillic Unicode case folds stay on the literal-set fast path.
+    /// </summary>
+    [Fact]
+    public void LiteralSetCountsCommonCyrillicCaseInsensitiveAlternation()
+    {
+        byte[] pattern = System.Text.Encoding.UTF8.GetBytes(
+            "Шерлок Холмс|Джон Уотсон|Ирен Адлер|инспектор Лестрейд|профессор Мориарти");
+        string[] matches =
+        [
+            "шерлок холмс",
+            "ДЖОН УОТСОН",
+            "ирен адлер",
+            "ИНСПЕКТОР ЛЕСТРЕЙД",
+            "ПРОФЕССОР МОРИАРТИ",
+        ];
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes(string.Join(" / ", matches));
+        var automaton = RegexAutomaton.Compile(
+            pattern,
+            caseInsensitive: true,
+            multiLine: false,
+            dotMatchesNewline: false,
+            unicodeClasses: true);
+
+        long expectedSpanSum = 0;
+        for (int index = 0; index < matches.Length; index++)
+        {
+            expectedSpanSum += System.Text.Encoding.UTF8.GetByteCount(matches[index]);
+        }
+
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, System.Text.Encoding.UTF8.GetByteCount(matches[0])), automaton.Find(haystack));
+        Assert.Equal(matches.Length, automaton.CountMatches(haystack));
+        Assert.Equal(expectedSpanSum, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies inline no-Unicode mode keeps literal-set case folding ASCII-only.
     /// </summary>
     [Fact]
