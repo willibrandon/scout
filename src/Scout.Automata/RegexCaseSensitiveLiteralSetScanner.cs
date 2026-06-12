@@ -1,37 +1,71 @@
-using System.Buffers;
+using System.Numerics;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 
 namespace Scout;
 
 internal sealed class RegexCaseSensitiveLiteralSetScanner
 {
+    private const int BlockLength = 2;
     private const int MaxLiteralCount = 8;
 
-    private readonly RegexCaseSensitiveLiteralSetEntry[][] entriesByAnchorByte;
-    private readonly SearchValues<byte> anchorBytes;
+    private readonly Dictionary<ushort, RegexCaseSensitiveLiteralSetEntry[]> entriesByBlock;
+    private readonly byte[] blockFirstBytes;
+    private readonly byte[] blockSecondBytes;
+    private readonly Vector128<byte>[] blockFirstVectors128;
+    private readonly Vector128<byte>[] blockSecondVectors128;
+    private readonly Vector256<byte>[] blockFirstVectors256;
+    private readonly Vector256<byte>[] blockSecondVectors256;
     private readonly int maxAnchorIndex;
 
     private RegexCaseSensitiveLiteralSetScanner(IReadOnlyList<byte[]> literals)
     {
-        var buckets = new List<RegexCaseSensitiveLiteralSetEntry>[256];
-        var distinctAnchorBytes = new List<byte>();
+        Dictionary<ushort, int> blockFrequencies = BuildBlockFrequencies(literals);
+        int[] byteFrequencies = BuildByteFrequencies(literals);
+        var buckets = new Dictionary<ushort, List<RegexCaseSensitiveLiteralSetEntry>>();
+        var distinctBlocks = new List<ushort>();
         for (int index = 0; index < literals.Count; index++)
         {
             byte[] literal = literals[index].ToArray();
-            int anchorIndex = SelectAnchorIndex(literal);
+            int anchorIndex = SelectAnchorIndex(literal, blockFrequencies, byteFrequencies);
             maxAnchorIndex = Math.Max(maxAnchorIndex, anchorIndex);
 
-            byte anchor = literal[anchorIndex];
-            (buckets[anchor] ??= []).Add(new RegexCaseSensitiveLiteralSetEntry(index, literal, anchorIndex));
-            AddDistinct(distinctAnchorBytes, anchor);
+            ushort block = BlockKey(literal.AsSpan(anchorIndex));
+            if (!buckets.TryGetValue(block, out List<RegexCaseSensitiveLiteralSetEntry>? entries))
+            {
+                entries = [];
+                buckets.Add(block, entries);
+                distinctBlocks.Add(block);
+            }
+
+            entries.Add(new RegexCaseSensitiveLiteralSetEntry(index, literal, anchorIndex));
         }
 
-        entriesByAnchorByte = new RegexCaseSensitiveLiteralSetEntry[256][];
-        for (int index = 0; index < buckets.Length; index++)
+        entriesByBlock = new Dictionary<ushort, RegexCaseSensitiveLiteralSetEntry[]>(buckets.Count);
+        foreach (KeyValuePair<ushort, List<RegexCaseSensitiveLiteralSetEntry>> bucket in buckets)
         {
-            entriesByAnchorByte[index] = buckets[index]?.ToArray() ?? [];
+            entriesByBlock.Add(bucket.Key, bucket.Value.ToArray());
         }
 
-        anchorBytes = SearchValues.Create(distinctAnchorBytes.ToArray());
+        blockFirstBytes = new byte[distinctBlocks.Count];
+        blockSecondBytes = new byte[distinctBlocks.Count];
+        blockFirstVectors128 = new Vector128<byte>[distinctBlocks.Count];
+        blockSecondVectors128 = new Vector128<byte>[distinctBlocks.Count];
+        blockFirstVectors256 = new Vector256<byte>[distinctBlocks.Count];
+        blockSecondVectors256 = new Vector256<byte>[distinctBlocks.Count];
+        for (int index = 0; index < distinctBlocks.Count; index++)
+        {
+            ushort block = distinctBlocks[index];
+            byte first = (byte)block;
+            byte second = (byte)(block >> 8);
+            blockFirstBytes[index] = first;
+            blockSecondBytes[index] = second;
+            blockFirstVectors128[index] = Vector128.Create(first);
+            blockSecondVectors128[index] = Vector128.Create(second);
+            blockFirstVectors256[index] = Vector256.Create(first);
+            blockSecondVectors256[index] = Vector256.Create(second);
+        }
     }
 
     public static bool TryCreate(IReadOnlyList<byte[]> literals, out RegexCaseSensitiveLiteralSetScanner? scanner)
@@ -42,14 +76,14 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
             return false;
         }
 
-        if (!ContainsTwoByteUtf8NonAsciiOnly(literals))
+        if (!ContainsAsciiOrTwoByteUtf8Only(literals))
         {
             return false;
         }
 
         for (int index = 0; index < literals.Count; index++)
         {
-            if (literals[index].Length == 0)
+            if (literals[index].Length < BlockLength)
             {
                 return false;
             }
@@ -59,9 +93,8 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
         return true;
     }
 
-    private static bool ContainsTwoByteUtf8NonAsciiOnly(IReadOnlyList<byte[]> literals)
+    private static bool ContainsAsciiOrTwoByteUtf8Only(IReadOnlyList<byte[]> literals)
     {
-        bool containsNonAscii = false;
         for (int literalIndex = 0; literalIndex < literals.Count; literalIndex++)
         {
             byte[] literal = literals[literalIndex];
@@ -75,7 +108,6 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
                     continue;
                 }
 
-                containsNonAscii = true;
                 if (value is < 0xC2 or > 0xDF ||
                     index + 1 >= literal.Length ||
                     literal[index + 1] is < 0x80 or > 0xBF)
@@ -87,7 +119,7 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
             }
         }
 
-        return containsNonAscii;
+        return true;
     }
 
     public RegexLiteralSetCandidate? Find(ReadOnlySpan<byte> haystack, int startAt)
@@ -95,21 +127,20 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
         int searchAt = startOffset;
         RegexLiteralSetCandidate? best = null;
-        while (searchAt < haystack.Length)
+        while (searchAt <= haystack.Length - BlockLength)
         {
-            int offset = haystack[searchAt..].IndexOfAny(anchorBytes);
-            if (offset < 0)
+            int anchorPosition = FindBlock(haystack, searchAt);
+            if (anchorPosition < 0)
             {
                 break;
             }
 
-            int anchorPosition = searchAt + offset;
             if (best.HasValue && anchorPosition - maxAnchorIndex > best.Value.Match.Start)
             {
                 break;
             }
 
-            RegexCaseSensitiveLiteralSetEntry[] entries = entriesByAnchorByte[haystack[anchorPosition]];
+            RegexCaseSensitiveLiteralSetEntry[] entries = entriesByBlock[BlockKey(haystack[anchorPosition..])];
             for (int index = 0; index < entries.Length; index++)
             {
                 RegexCaseSensitiveLiteralSetEntry entry = entries[index];
@@ -143,16 +174,17 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
         int searchAt = nextAllowedStart;
         long total = 0;
         RegexLiteralSetCandidate? best = null;
-        while (searchAt < haystack.Length)
+        while (searchAt <= haystack.Length - BlockLength)
         {
-            int offset = haystack[searchAt..].IndexOfAny(anchorBytes);
-            if (offset < 0)
+            int anchorPosition = FindBlock(haystack, searchAt);
+            if (anchorPosition < 0)
             {
                 break;
             }
 
-            int anchorPosition = searchAt + offset;
-            if (best.HasValue && anchorPosition - maxAnchorIndex > best.Value.Match.Start)
+            if (best.HasValue &&
+                (anchorPosition >= best.Value.Match.End ||
+                 anchorPosition - maxAnchorIndex > best.Value.Match.Start))
             {
                 AddMatch(best.Value.Match, sumSpans, ref total, ref nextAllowedStart);
                 best = null;
@@ -163,7 +195,7 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
                 }
             }
 
-            RegexCaseSensitiveLiteralSetEntry[] entries = entriesByAnchorByte[haystack[anchorPosition]];
+            RegexCaseSensitiveLiteralSetEntry[] entries = entriesByBlock[BlockKey(haystack[anchorPosition..])];
             for (int index = 0; index < entries.Length; index++)
             {
                 RegexCaseSensitiveLiteralSetEntry entry = entries[index];
@@ -196,13 +228,111 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
         return total;
     }
 
-    private static int SelectAnchorIndex(ReadOnlySpan<byte> literal)
+    private int FindBlock(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        if (startAt > haystack.Length - BlockLength)
+        {
+            return -1;
+        }
+
+        if (Avx2.IsSupported && haystack.Length - startAt > Vector256<byte>.Count)
+        {
+            return FindBlockVector256(haystack, startAt);
+        }
+
+        if (Sse2.IsSupported && haystack.Length - startAt > Vector128<byte>.Count)
+        {
+            return FindBlockVector128(haystack, startAt);
+        }
+
+        return FindBlockScalar(haystack, startAt);
+    }
+
+    private int FindBlockVector256(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int offset = startAt;
+        int vectorEnd = haystack.Length - Vector256<byte>.Count - 1;
+        while (offset <= vectorEnd)
+        {
+            var current = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            var next = Vector256.LoadUnsafe(ref reference, (nuint)(offset + 1));
+            Vector256<byte> matches = Vector256<byte>.Zero;
+            for (int index = 0; index < blockFirstVectors256.Length; index++)
+            {
+                matches = Avx2.Or(
+                    matches,
+                    Avx2.And(
+                        Avx2.CompareEqual(current, blockFirstVectors256[index]),
+                        Avx2.CompareEqual(next, blockSecondVectors256[index])));
+            }
+
+            uint mask = matches.ExtractMostSignificantBits();
+            if (mask != 0)
+            {
+                return offset + BitOperations.TrailingZeroCount(mask);
+            }
+
+            offset += Vector256<byte>.Count;
+        }
+
+        return FindBlockScalar(haystack, offset);
+    }
+
+    private int FindBlockVector128(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int offset = startAt;
+        int vectorEnd = haystack.Length - Vector128<byte>.Count - 1;
+        while (offset <= vectorEnd)
+        {
+            var current = Vector128.LoadUnsafe(ref reference, (nuint)offset);
+            var next = Vector128.LoadUnsafe(ref reference, (nuint)(offset + 1));
+            Vector128<byte> matches = Vector128<byte>.Zero;
+            for (int index = 0; index < blockFirstVectors128.Length; index++)
+            {
+                matches = Sse2.Or(
+                    matches,
+                    Sse2.And(
+                        Sse2.CompareEqual(current, blockFirstVectors128[index]),
+                        Sse2.CompareEqual(next, blockSecondVectors128[index])));
+            }
+
+            uint mask = matches.ExtractMostSignificantBits();
+            if (mask != 0)
+            {
+                return offset + BitOperations.TrailingZeroCount(mask);
+            }
+
+            offset += Vector128<byte>.Count;
+        }
+
+        return FindBlockScalar(haystack, offset);
+    }
+
+    private int FindBlockScalar(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        for (int index = startAt; index <= haystack.Length - BlockLength; index++)
+        {
+            if (entriesByBlock.ContainsKey(BlockKey(haystack[index..])))
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private static int SelectAnchorIndex(
+        ReadOnlySpan<byte> literal,
+        Dictionary<ushort, int> blockFrequencies,
+        int[] byteFrequencies)
     {
         int bestIndex = 0;
-        int bestScore = AnchorScore(literal[0]);
-        for (int index = 1; index < literal.Length; index++)
+        int bestScore = int.MinValue;
+        for (int index = 0; index <= literal.Length - BlockLength; index++)
         {
-            int score = AnchorScore(literal[index]);
+            int score = BlockScore(literal, index, blockFrequencies, byteFrequencies);
             if (score > bestScore)
             {
                 bestIndex = index;
@@ -211,6 +341,31 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
         }
 
         return bestIndex;
+    }
+
+    private static int BlockScore(
+        ReadOnlySpan<byte> literal,
+        int index,
+        Dictionary<ushort, int> blockFrequencies,
+        int[] byteFrequencies)
+    {
+        byte first = literal[index];
+        byte second = literal[index + 1];
+        int score = AnchorScore(first) + AnchorScore(second);
+        score -= blockFrequencies[BlockKey(literal[index..])] * 512;
+        score -= byteFrequencies[first] * 8;
+        score -= byteFrequencies[second] * 8;
+        if (IsUtf8TwoByteScalar(first, second))
+        {
+            score += 2048;
+        }
+
+        if (first == (byte)' ' || second == (byte)' ')
+        {
+            score -= 256;
+        }
+
+        return score;
     }
 
     private static int AnchorScore(byte value)
@@ -265,17 +420,47 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
         };
     }
 
-    private static void AddDistinct(List<byte> bytes, byte value)
+    private static Dictionary<ushort, int> BuildBlockFrequencies(IReadOnlyList<byte[]> literals)
     {
-        for (int index = 0; index < bytes.Count; index++)
+        var frequencies = new Dictionary<ushort, int>();
+        for (int literalIndex = 0; literalIndex < literals.Count; literalIndex++)
         {
-            if (bytes[index] == value)
+            byte[] literal = literals[literalIndex];
+            for (int index = 0; index <= literal.Length - BlockLength; index++)
             {
-                return;
+                ushort block = BlockKey(literal.AsSpan(index));
+                frequencies.TryGetValue(block, out int count);
+                frequencies[block] = count + 1;
             }
         }
 
-        bytes.Add(value);
+        return frequencies;
+    }
+
+    private static int[] BuildByteFrequencies(IReadOnlyList<byte[]> literals)
+    {
+        int[] frequencies = new int[256];
+        for (int literalIndex = 0; literalIndex < literals.Count; literalIndex++)
+        {
+            byte[] literal = literals[literalIndex];
+            for (int index = 0; index < literal.Length; index++)
+            {
+                frequencies[literal[index]]++;
+            }
+        }
+
+        return frequencies;
+    }
+
+    private static bool IsUtf8TwoByteScalar(byte first, byte second)
+    {
+        return first is >= 0xC2 and <= 0xDF &&
+            second is >= 0x80 and <= 0xBF;
+    }
+
+    private static ushort BlockKey(ReadOnlySpan<byte> value)
+    {
+        return (ushort)(value[0] | (value[1] << 8));
     }
 
     private static bool IsBetter(RegexLiteralSetCandidate candidate, RegexLiteralSetCandidate? best)

@@ -652,22 +652,7 @@ internal sealed class RegexLiteralSetEngine
 
     private long CountOrSumAsciiCaseInsensitiveLiteralSet(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
     {
-        long total = 0;
-        int position = startOffset;
-        while (position <= haystack.Length)
-        {
-            RegexLiteralSetCandidate? candidate = asciiCaseInsensitiveScanner!.Find(haystack, position);
-            if (!candidate.HasValue)
-            {
-                return total;
-            }
-
-            RegexMatch match = candidate.Value.Match;
-            total += sumSpans ? match.Length : 1;
-            position = match.End;
-        }
-
-        return total;
+        return asciiCaseInsensitiveScanner!.CountOrSum(haystack, startOffset, sumSpans);
     }
 
     private bool TryResolveAhoCandidate(
