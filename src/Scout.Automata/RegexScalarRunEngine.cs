@@ -157,6 +157,12 @@ internal sealed class RegexScalarRunEngine
 
     private void CountUnicodeLetterFastPath(ReadOnlySpan<byte> haystack, int startAt, ref long count)
     {
+        if (!lazy && minimum == 8 && maximum == 13)
+        {
+            CountUnicodeLetter8To13FastPath(haystack, startAt, ref count);
+            return;
+        }
+
         int position = Math.Clamp(startAt, 0, haystack.Length);
         while (position < haystack.Length)
         {
@@ -184,6 +190,68 @@ internal sealed class RegexScalarRunEngine
             {
                 position = AdvanceAfterNonMatch(haystack, position);
             }
+        }
+    }
+
+    private void CountUnicodeLetter8To13FastPath(ReadOnlySpan<byte> haystack, int startAt, ref long count)
+    {
+        int position = Math.Clamp(startAt, 0, haystack.Length);
+        while (position < haystack.Length)
+        {
+            int runScalars = 0;
+            while (position < haystack.Length)
+            {
+                int cyrillicScalars = ConsumeFastCyrillicLetterPairs(haystack, ref position);
+                if (cyrillicScalars != 0)
+                {
+                    runScalars += cyrillicScalars;
+                    if (position >= haystack.Length)
+                    {
+                        break;
+                    }
+                }
+
+                byte first = haystack[position];
+                if (first <= 0x7F)
+                {
+                    if (!RegexSimpleSequenceSegment.IsAsciiLetter(first))
+                    {
+                        break;
+                    }
+
+                    runScalars++;
+                    position++;
+                    continue;
+                }
+
+                if (!TryUnicodeLetterFastPathMatchLength(haystack, position, out int scalarLength))
+                {
+                    break;
+                }
+
+                runScalars++;
+                position += scalarLength;
+            }
+
+            AddScalarRun8To13CountOnly(runScalars, ref count);
+            if (position < haystack.Length)
+            {
+                position = AdvanceAfterNonMatch(haystack, position);
+            }
+        }
+    }
+
+    private static void AddScalarRun8To13CountOnly(int runLength, ref long count)
+    {
+        if (runLength < 8)
+        {
+            return;
+        }
+
+        count += runLength / 13;
+        if (runLength % 13 >= 8)
+        {
+            count++;
         }
     }
 
