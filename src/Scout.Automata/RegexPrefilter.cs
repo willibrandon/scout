@@ -2456,6 +2456,13 @@ internal sealed class RegexPrefilter
             case (byte)'P':
                 return false;
             default:
+                if (RegexByteClass.TryReadEscapedHexByte(expression, ref index, escaped, out value))
+                {
+                    variants = [[value]];
+                    rangeLiteral = value;
+                    return true;
+                }
+
                 if (!TryGetEscapedClassLiteralByte(escaped, out value))
                 {
                     return false;

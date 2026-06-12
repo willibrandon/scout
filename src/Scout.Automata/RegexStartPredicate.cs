@@ -693,6 +693,18 @@ internal sealed class RegexStartPredicate
                 variants = [[(byte)'\f']];
                 rangeLiteral = (byte)'\f';
                 return true;
+            case (byte)'x':
+            case (byte)'u':
+                if (RegexByteClass.TryReadEscapedHexByte(expression, ref index, escaped, out byte hexLiteral))
+                {
+                    var hexBytes = new List<byte>();
+                    AddClassLiteralFirstByte(hexBytes, hexLiteral, options);
+                    variants = ToSingleByteVariants(hexBytes);
+                    rangeLiteral = hexLiteral;
+                    return true;
+                }
+
+                goto default;
             case (byte)'D':
             case (byte)'W':
             case (byte)'S':
@@ -1189,6 +1201,16 @@ internal sealed class RegexStartPredicate
                 bytes = [(byte)'\f'];
                 rangeLiteral = (byte)'\f';
                 return true;
+            case (byte)'x':
+            case (byte)'u':
+                if (RegexByteClass.TryReadEscapedHexByte(expression, ref index, escaped, out byte hexLiteral))
+                {
+                    bytes = [hexLiteral];
+                    rangeLiteral = hexLiteral;
+                    return true;
+                }
+
+                goto default;
             case (byte)'D':
             case (byte)'W':
             case (byte)'S':

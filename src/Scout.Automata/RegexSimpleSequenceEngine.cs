@@ -12,10 +12,26 @@ internal sealed class RegexSimpleSequenceEngine
     private readonly int repeatedMinimum;
     private readonly int repeatedMaximum;
     private readonly bool repeatedLazy;
+    private readonly bool hasDisjointRunSuffixBoundary;
+    private readonly RegexSimpleSequenceSegment boundaryRunSegment;
+    private readonly RegexSimpleSequenceSegment boundarySuffixSegment;
+    private readonly int boundaryRunMinimum;
+    private readonly RegexCompileOptions boundaryOptions;
+    private readonly bool boundaryStartRequiresUtf8Boundary;
 
     private RegexSimpleSequenceEngine(List<RegexSimpleSequenceSegment> segments)
     {
         this.segments = [.. segments];
+        repeatedSegments = null;
+        repeatedMinimum = 0;
+        repeatedMaximum = 0;
+        repeatedLazy = false;
+        hasDisjointRunSuffixBoundary = false;
+        boundaryRunSegment = default;
+        boundarySuffixSegment = default;
+        boundaryRunMinimum = 0;
+        boundaryOptions = default;
+        boundaryStartRequiresUtf8Boundary = false;
     }
 
     private RegexSimpleSequenceEngine(List<RegexSimpleSequenceSegment> repeatedSegments, int repeatedMinimum, int repeatedMaximum, bool repeatedLazy)
@@ -25,11 +41,42 @@ internal sealed class RegexSimpleSequenceEngine
         this.repeatedMinimum = repeatedMinimum;
         this.repeatedMaximum = repeatedMaximum;
         this.repeatedLazy = repeatedLazy;
+        hasDisjointRunSuffixBoundary = false;
+        boundaryRunSegment = default;
+        boundarySuffixSegment = default;
+        boundaryRunMinimum = 0;
+        boundaryOptions = default;
+        boundaryStartRequiresUtf8Boundary = false;
+    }
+
+    private RegexSimpleSequenceEngine(
+        RegexSimpleSequenceSegment runSegment,
+        RegexSimpleSequenceSegment suffixSegment,
+        int runMinimum,
+        RegexCompileOptions wordBoundaryOptions,
+        bool startRequiresUtf8Boundary)
+    {
+        segments = [];
+        repeatedSegments = null;
+        repeatedMinimum = 0;
+        repeatedMaximum = 0;
+        repeatedLazy = false;
+        hasDisjointRunSuffixBoundary = true;
+        boundaryRunSegment = runSegment;
+        boundarySuffixSegment = suffixSegment;
+        boundaryRunMinimum = runMinimum;
+        boundaryOptions = wordBoundaryOptions;
+        boundaryStartRequiresUtf8Boundary = startRequiresUtf8Boundary;
     }
 
     public static bool TryCreate(RegexSyntaxNode root, RegexCompileOptions options, out RegexSimpleSequenceEngine? engine)
     {
         engine = null;
+        if (TryCreateDisjointRunSuffixBoundary(root, options, out engine))
+        {
+            return true;
+        }
+
         if (options.Utf8 || options.UnicodeClasses)
         {
             return false;
@@ -59,6 +106,11 @@ internal sealed class RegexSimpleSequenceEngine
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        if (hasDisjointRunSuffixBoundary)
+        {
+            return FindDisjointRunSuffixBoundary(haystack, startOffset);
+        }
+
         if (repeatedSegments is null && segments.Length == 1)
         {
             return FindSingleSegment(segments[0], haystack, startOffset);
@@ -85,6 +137,23 @@ internal sealed class RegexSimpleSequenceEngine
     {
         count = 0;
         spanSum = 0;
+        if (hasDisjointRunSuffixBoundary)
+        {
+            int offset = Math.Clamp(startAt, 0, haystack.Length);
+            while (FindDisjointRunSuffixBoundary(haystack, offset) is RegexMatch match)
+            {
+                count++;
+                if (sumSpans)
+                {
+                    spanSum += match.Length;
+                }
+
+                offset = match.End;
+            }
+
+            return true;
+        }
+
         if (TryCountRepeatedCapitalizedWords(haystack, startAt, sumSpans, ref count, ref spanSum))
         {
             return true;
@@ -464,6 +533,11 @@ internal sealed class RegexSimpleSequenceEngine
             return false;
         }
 
+        if (hasDisjointRunSuffixBoundary)
+        {
+            return TryMatchDisjointRunSuffixBoundaryAt(haystack, start, out length);
+        }
+
         if (!CanStartAt(haystack, start))
         {
             length = 0;
@@ -715,6 +789,94 @@ internal sealed class RegexSimpleSequenceEngine
         return TryAppendAtom(atom, options, node.Minimum, node.Maximum, node.Lazy, segments, ref sawVariableRepetition);
     }
 
+    private RegexMatch? FindDisjointRunSuffixBoundary(ReadOnlySpan<byte> haystack, int startOffset)
+    {
+        int position = startOffset;
+        while (position < haystack.Length)
+        {
+            while (position < haystack.Length && !boundaryRunSegment.AtomMatches(haystack[position]))
+            {
+                position++;
+            }
+
+            if (position >= haystack.Length)
+            {
+                return null;
+            }
+
+            int runStart = position;
+            while (position < haystack.Length && boundaryRunSegment.AtomMatches(haystack[position]))
+            {
+                position++;
+            }
+
+            int runEnd = position;
+            if (runEnd - runStart >= boundaryRunMinimum &&
+                runEnd < haystack.Length &&
+                boundarySuffixSegment.AtomMatches(haystack[runEnd]) &&
+                BoundaryMatches(haystack, runEnd + 1))
+            {
+                int matchStart = Math.Max(runStart, startOffset);
+                int latestStart = runEnd - boundaryRunMinimum;
+                if (boundaryStartRequiresUtf8Boundary)
+                {
+                    matchStart = FirstUtf8BoundaryAtOrAfter(haystack, matchStart, latestStart);
+                }
+
+                if (matchStart <= latestStart)
+                {
+                    return new RegexMatch(matchStart, runEnd + 1 - matchStart);
+                }
+            }
+
+            position = runEnd + 1;
+        }
+
+        return null;
+    }
+
+    private bool TryMatchDisjointRunSuffixBoundaryAt(ReadOnlySpan<byte> haystack, int start, out int length)
+    {
+        length = 0;
+        if ((uint)start >= (uint)haystack.Length ||
+            boundaryStartRequiresUtf8Boundary && !RegexByteClass.IsUtf8Boundary(haystack, start) ||
+            !boundaryRunSegment.AtomMatches(haystack[start]))
+        {
+            return false;
+        }
+
+        int position = start + 1;
+        while (position < haystack.Length && boundaryRunSegment.AtomMatches(haystack[position]))
+        {
+            position++;
+        }
+
+        int runLength = position - start;
+        if (runLength < boundaryRunMinimum ||
+            position >= haystack.Length ||
+            !boundarySuffixSegment.AtomMatches(haystack[position]) ||
+            !BoundaryMatches(haystack, position + 1))
+        {
+            return false;
+        }
+
+        length = runLength + 1;
+        return true;
+    }
+
+    private bool BoundaryMatches(ReadOnlySpan<byte> haystack, int position)
+    {
+        return RegexByteClass.PredicateMatches(
+            haystack,
+            position,
+            RegexSyntaxKind.WordBoundary,
+            boundaryOptions.MultiLine,
+            boundaryOptions.Crlf,
+            boundaryOptions.LineTerminator,
+            boundaryOptions.Utf8,
+            boundaryOptions.UnicodeClasses);
+    }
+
     private static bool TryAppendLiteral(
         ReadOnlySpan<byte> literal,
         RegexCompileOptions options,
@@ -823,6 +985,180 @@ internal sealed class RegexSimpleSequenceEngine
 
         engine = new RegexSimpleSequenceEngine(childSegments, repetition.Minimum, repetition.Maximum.Value, repetition.Lazy);
         return true;
+    }
+
+    private static bool TryCreateDisjointRunSuffixBoundary(
+        RegexSyntaxNode root,
+        RegexCompileOptions options,
+        out RegexSimpleSequenceEngine? engine)
+    {
+        engine = null;
+        if (!TryUnwrapWithOptions(root, options, out root, out RegexCompileOptions rootOptions) ||
+            root is not RegexSequenceNode sequence ||
+            !TryCollectSequenceItems(sequence, rootOptions, out List<(RegexSyntaxNode Node, RegexCompileOptions Options)> items) ||
+            items.Count != 3 ||
+            !TryUnwrapWithOptions(items[0].Node, items[0].Options, out RegexSyntaxNode repeatedNode, out RegexCompileOptions repeatedOptions) ||
+            repeatedNode is not RegexRepetitionNode { Minimum: > 0, Maximum: null } repetition ||
+            !TryCreateByteSegment(repetition.Child, repeatedOptions, out RegexSimpleSequenceSegment runSegment, out RegexCompileOptions runOptions) ||
+            !TryCreateByteSegment(items[1].Node, items[1].Options, out RegexSimpleSequenceSegment suffixSegment, out RegexCompileOptions suffixOptions) ||
+            !TryGetWordBoundaryOptions(items[2].Node, items[2].Options, out RegexCompileOptions boundaryOptions) ||
+            !AreDisjoint(runSegment, suffixSegment))
+        {
+            return false;
+        }
+
+        engine = new RegexSimpleSequenceEngine(
+            runSegment,
+            suffixSegment,
+            repetition.Minimum,
+            boundaryOptions,
+            rootOptions.Utf8 && (runOptions.Utf8 || suffixOptions.Utf8 || boundaryOptions.Utf8));
+        return true;
+    }
+
+    private static bool TryCollectSequenceItems(
+        RegexSequenceNode sequence,
+        RegexCompileOptions options,
+        out List<(RegexSyntaxNode Node, RegexCompileOptions Options)> items)
+    {
+        items = [];
+        RegexCompileOptions currentOptions = options;
+        for (int index = 0; index < sequence.Nodes.Count; index++)
+        {
+            RegexSyntaxNode child = sequence.Nodes[index];
+            if (child is RegexInlineFlagsNode flags)
+            {
+                currentOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
+                continue;
+            }
+
+            items.Add((child, currentOptions));
+        }
+
+        return true;
+    }
+
+    private static bool TryGetWordBoundaryOptions(
+        RegexSyntaxNode node,
+        RegexCompileOptions options,
+        out RegexCompileOptions boundaryOptions)
+    {
+        boundaryOptions = default;
+        if (!TryUnwrapWithOptions(node, options, out RegexSyntaxNode unwrapped, out RegexCompileOptions effectiveOptions) ||
+            unwrapped is not RegexAtomNode { Kind: RegexSyntaxKind.WordBoundary })
+        {
+            return false;
+        }
+
+        boundaryOptions = effectiveOptions;
+        return true;
+    }
+
+    private static bool TryCreateByteSegment(
+        RegexSyntaxNode node,
+        RegexCompileOptions options,
+        out RegexSimpleSequenceSegment segment,
+        out RegexCompileOptions effectiveOptions)
+    {
+        segment = default;
+        effectiveOptions = default;
+        if (!TryUnwrapWithOptions(node, options, out RegexSyntaxNode unwrapped, out RegexCompileOptions unwrappedOptions) ||
+            unwrapped is not RegexAtomNode atom ||
+            !IsByteSegmentAtom(atom) ||
+            RegexByteClass.RequiresUtf8ScalarMatch(
+                atom.Kind,
+                atom.Value.Span,
+                unwrappedOptions.Utf8,
+                unwrappedOptions.CaseInsensitive,
+                unwrappedOptions.UnicodeClasses))
+        {
+            return false;
+        }
+
+        effectiveOptions = unwrappedOptions;
+        segment = new RegexSimpleSequenceSegment(
+            atom.Kind,
+            atom.Value.ToArray(),
+            effectiveOptions.CaseInsensitive,
+            effectiveOptions.MultiLine,
+            effectiveOptions.DotMatchesNewline,
+            effectiveOptions.Crlf,
+            effectiveOptions.LineTerminator,
+            minimum: 1,
+            maximum: 1,
+            lazy: false);
+        return !((effectiveOptions.Utf8 || effectiveOptions.UnicodeClasses) && MatchesNonAsciiByte(segment));
+    }
+
+    private static bool TryUnwrapWithOptions(
+        RegexSyntaxNode node,
+        RegexCompileOptions options,
+        out RegexSyntaxNode unwrapped,
+        out RegexCompileOptions effectiveOptions)
+    {
+        while (node is RegexGroupNode group)
+        {
+            options = options.Apply(group.EnabledFlags, group.DisabledFlags);
+            node = group.Child;
+        }
+
+        unwrapped = node;
+        effectiveOptions = options;
+        return true;
+    }
+
+    private static bool IsByteSegmentAtom(RegexAtomNode atom)
+    {
+        if (atom.Kind == RegexSyntaxKind.Literal)
+        {
+            return atom.Value.Length == 1;
+        }
+
+        return atom.Kind is RegexSyntaxKind.Dot
+            or RegexSyntaxKind.AnyClass
+            or RegexSyntaxKind.CharacterClass
+            or RegexSyntaxKind.DigitClass
+            or RegexSyntaxKind.NotDigitClass
+            or RegexSyntaxKind.WordClass
+            or RegexSyntaxKind.NotWordClass
+            or RegexSyntaxKind.WhitespaceClass
+            or RegexSyntaxKind.NotWhitespaceClass;
+    }
+
+    private static bool AreDisjoint(RegexSimpleSequenceSegment left, RegexSimpleSequenceSegment right)
+    {
+        for (int value = 0; value <= byte.MaxValue; value++)
+        {
+            if (left.AtomMatches((byte)value) && right.AtomMatches((byte)value))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool MatchesNonAsciiByte(RegexSimpleSequenceSegment segment)
+    {
+        for (int value = 0x80; value <= byte.MaxValue; value++)
+        {
+            if (segment.AtomMatches((byte)value))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static int FirstUtf8BoundaryAtOrAfter(ReadOnlySpan<byte> haystack, int position, int limit)
+    {
+        while (position <= limit && !RegexByteClass.IsUtf8Boundary(haystack, position))
+        {
+            position++;
+        }
+
+        return position;
     }
 
     private static bool CanRepeatAtom(RegexAtomNode atom, int? maximum, RegexCompileOptions options)

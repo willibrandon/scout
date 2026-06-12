@@ -955,6 +955,33 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies bracket class intersection uses both operands instead of treating ampersands as literals.
+    /// </summary>
+    [Fact]
+    public void CharacterClassesSupportIntersection()
+    {
+        var ascii = RegexAutomaton.Compile(@"[ab&&bc]+"u8, caseInsensitive: false, multiLine: false, dotMatchesNewline: false, unicodeClasses: false);
+        Assert.Equal(new RegexMatch(1, 1), ascii.Find("abc"u8));
+        Assert.Null(RegexAutomaton.Compile(@"[a&&b]"u8, caseInsensitive: false, multiLine: false, dotMatchesNewline: false, unicodeClasses: false).Find("ab"u8));
+
+        var cyrillicWord = RegexAutomaton.Compile(@"[\w&&\p{Cyrillic}]+"u8, caseInsensitive: false, multiLine: false, dotMatchesNewline: false, unicodeClasses: true);
+        Assert.Equal(new RegexMatch(4, 6), cyrillicWord.Find("abc фоо 123 _ &&"u8));
+        Assert.Null(cyrillicWord.Find("abc123_&&"u8));
+    }
+
+    /// <summary>
+    /// Verifies bracket class hexadecimal escapes decode to byte literals before range matching.
+    /// </summary>
+    [Fact]
+    public void CharacterClassesDecodeHexByteEscapes()
+    {
+        var automaton = RegexAutomaton.Compile(@"(?-u:[\x00-\x29]+)"u8);
+
+        Assert.Equal(new RegexMatch(1, 2), automaton.Find([(byte)'x', 0x00, 0x29, (byte)'*']));
+        Assert.Null(automaton.Find("x029"u8));
+    }
+
+    /// <summary>
     /// Verifies CRLF mode treats carriage returns and line feeds as one line terminator family.
     /// </summary>
     [Fact]
@@ -1004,6 +1031,19 @@ public sealed class RegexAutomatonTests
         Assert.Equal(new RegexMatch(8, 2), RegexAutomaton.Compile(@"\p{Ll}+"u8).Find("ΛΘΓΔα"u8));
         Assert.Equal(new RegexMatch(0, 2), RegexAutomaton.Compile(@"\P{N}+"u8).Find("abⅠ"u8));
         Assert.Null(RegexAutomaton.Compile(@"\p{Lu}"u8, caseInsensitive: false, multiLine: false, dotMatchesNewline: false, unicodeClasses: false).Find("Λ"u8));
+    }
+
+    /// <summary>
+    /// Verifies Unicode script classes use pinned regex-syntax tables.
+    /// </summary>
+    [Fact]
+    public void UnicodeScriptPropertyClassesUsePinnedTables()
+    {
+        Assert.Equal(new RegexMatch(4, 6), RegexAutomaton.Compile(@"\p{Cyrillic}+"u8).Find("abc фоо"u8));
+        Assert.Equal(new RegexMatch(4, 6), RegexAutomaton.Compile(@"\p{sc=Cyrillic}+"u8).Find("abc фоо"u8));
+        Assert.Equal(new RegexMatch(4, 6), RegexAutomaton.Compile(@"\p{Script:Cyrillic}+"u8).Find("abc фоо"u8));
+        Assert.Null(RegexAutomaton.Compile(@"\p{Cyrillic}"u8).Find("\u0301"u8));
+        Assert.Equal(new RegexMatch(0, 2), RegexAutomaton.Compile(@"\p{scx=Cyrillic}"u8).Find("\u0301"u8));
     }
 
     /// <summary>
@@ -1690,6 +1730,46 @@ public sealed class RegexAutomatonTests
         Assert.Equal(13, automaton.SumMatchSpans("abc 12_x -- long_word"u8));
         Assert.Equal(1, automaton.CountMatches("abc 12_x -- long_word"u8, startAt: 5));
         Assert.Equal(9, automaton.SumMatchSpans("abc 12_x -- long_word"u8, startAt: 5));
+    }
+
+    /// <summary>
+    /// Verifies disjoint repeated byte runs with a suffix byte and word boundary avoid repeated PikeVM rescans.
+    /// </summary>
+    [Fact]
+    public void UsesSimpleSequenceEngineForDisjointByteRunSuffixBoundary()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"[A-Z]{2,}(?-u:[0-9])\b"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false);
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(3, 3), automaton.Find("xx AB1 CD2 EFG3!"u8));
+        Assert.Equal(new RegexMatch(7, 3), automaton.Find("xx AB1 CD2 EFG3!"u8, startAt: 4));
+        Assert.Equal(3, automaton.CountMatches("xx AB1 CD2 EFG3!"u8));
+        Assert.Equal(10, automaton.SumMatchSpans("xx AB1 CD2 EFG3!"u8));
+    }
+
+    /// <summary>
+    /// Verifies sparse-class no-match runs are rejected with one forward scan instead of retrying each start.
+    /// </summary>
+    [Fact(Timeout = 1000)]
+    public void RejectsDisjointByteRunSuffixBoundaryNoMatchWithoutRescanning()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"[0-24-68-9A-CE-GI-KM-OQ-SU-WY-Za-ce-gi-km-oq-su-wy-z]{100,}(?-u:[\x00-\x29])\b"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes(
+            "💩" +
+            string.Concat(Enumerable.Repeat("01245689ABCEFGIJKMNOQRSUVWYZabcefgijkmnoqrsuvwyz", 2_000)));
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.Null(automaton.Find(haystack));
+        Assert.Equal(0, automaton.CountMatches(haystack));
+        Assert.Equal(0, automaton.SumMatchSpans(haystack));
     }
 
     /// <summary>

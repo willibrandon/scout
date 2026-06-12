@@ -20,6 +20,11 @@ public static class RegexUnicodePropertyNames
             return true;
         }
 
+        if (TryGetNamedScriptPropertyKind(name, out propertyKind))
+        {
+            return true;
+        }
+
         if (NameEquals(name, "lc") || NameEquals(name, "casedletter"))
         {
             propertyKind = RegexUnicodePropertyKind.CasedLetter;
@@ -260,13 +265,58 @@ public static class RegexUnicodePropertyNames
             return true;
         }
 
+        return TryGetBareScriptKind(name, out propertyKind);
+    }
+
+    private static bool TryGetNamedScriptPropertyKind(ReadOnlySpan<byte> name, out RegexUnicodePropertyKind propertyKind)
+    {
+        propertyKind = RegexUnicodePropertyKind.None;
+        int separator = FindPropertySeparator(name);
+        if (separator < 0)
+        {
+            return false;
+        }
+
+        ReadOnlySpan<byte> propertyName = name[..separator];
+        ReadOnlySpan<byte> propertyValue = name[(separator + 1)..];
+        if ((NameEquals(propertyName, "script") || NameEquals(propertyName, "sc")) &&
+            TryGetBareScriptKind(propertyValue, out propertyKind))
+        {
+            return true;
+        }
+
+        return (NameEquals(propertyName, "scriptextensions") || NameEquals(propertyName, "scx")) &&
+            TryGetScriptExtensionKind(propertyValue, out propertyKind);
+    }
+
+    private static bool TryGetBareScriptKind(ReadOnlySpan<byte> value, out RegexUnicodePropertyKind propertyKind)
+    {
+        propertyKind = RegexUnicodePropertyKind.None;
+        if (NameEquals(value, "cyrillic") || NameEquals(value, "cyrl"))
+        {
+            propertyKind = RegexUnicodePropertyKind.ScriptCyrillic;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetScriptExtensionKind(ReadOnlySpan<byte> value, out RegexUnicodePropertyKind propertyKind)
+    {
+        propertyKind = RegexUnicodePropertyKind.None;
+        if (NameEquals(value, "cyrillic") || NameEquals(value, "cyrl"))
+        {
+            propertyKind = RegexUnicodePropertyKind.ScriptExtensionCyrillic;
+            return true;
+        }
+
         return false;
     }
 
     private static bool TryGetBreakPropertyKind(ReadOnlySpan<byte> name, out RegexUnicodePropertyKind propertyKind)
     {
         propertyKind = RegexUnicodePropertyKind.None;
-        int separator = name.IndexOf((byte)'=');
+        int separator = FindPropertySeparator(name);
         if (separator >= 0)
         {
             ReadOnlySpan<byte> propertyName = name[..separator];
@@ -288,6 +338,19 @@ public static class RegexUnicodePropertyNames
         }
 
         return TryGetGraphemeClusterBreakKind(name, out propertyKind);
+    }
+
+    private static int FindPropertySeparator(ReadOnlySpan<byte> name)
+    {
+        for (int index = 0; index < name.Length; index++)
+        {
+            if (name[index] is (byte)'=' or (byte)':')
+            {
+                return index;
+            }
+        }
+
+        return -1;
     }
 
     private static bool TryGetGraphemeClusterBreakKind(ReadOnlySpan<byte> value, out RegexUnicodePropertyKind propertyKind)

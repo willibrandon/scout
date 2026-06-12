@@ -562,8 +562,26 @@ internal static class RegexByteClass
 
     private static bool ClassMatches(byte value, ReadOnlySpan<byte> expression, bool caseInsensitive, bool multiLine, bool crlf, byte lineTerminator)
     {
-        bool negated = !expression.IsEmpty && expression[0] == (byte)'^';
-        int index = negated ? 1 : 0;
+        bool negated = IsNegatedClass(expression);
+        ReadOnlySpan<byte> body = negated ? expression[1..] : expression;
+        bool matched = ClassIntersectionMatches(value, body, caseInsensitive);
+        return negated ? !matched : matched;
+    }
+
+    private static bool ClassIntersectionMatches(byte value, ReadOnlySpan<byte> expression, bool caseInsensitive)
+    {
+        if (!TryFindClassIntersectionOperator(expression, out int operatorIndex))
+        {
+            return ClassUnionMatches(value, expression, caseInsensitive);
+        }
+
+        return ClassUnionMatches(value, expression[..operatorIndex], caseInsensitive) &&
+            ClassIntersectionMatches(value, expression[(operatorIndex + 2)..], caseInsensitive);
+    }
+
+    private static bool ClassUnionMatches(byte value, ReadOnlySpan<byte> expression, bool caseInsensitive)
+    {
+        int index = 0;
         bool matched = false;
         while (index < expression.Length)
         {
@@ -597,7 +615,7 @@ internal static class RegexByteClass
             matched |= ClassTokenMatches(value, tokenKind, literal, tokenNegated, caseInsensitive);
         }
 
-        return negated ? !matched : matched;
+        return matched;
     }
 
     private static bool ClassMatches(
@@ -609,8 +627,26 @@ internal static class RegexByteClass
         byte lineTerminator,
         bool unicodeClasses)
     {
-        bool negated = !expression.IsEmpty && expression[0] == (byte)'^';
-        int index = negated ? 1 : 0;
+        bool negated = IsNegatedClass(expression);
+        ReadOnlySpan<byte> body = negated ? expression[1..] : expression;
+        bool matched = ClassIntersectionMatches(value, body, caseInsensitive, unicodeClasses);
+        return negated ? !matched : matched;
+    }
+
+    private static bool ClassIntersectionMatches(Rune value, ReadOnlySpan<byte> expression, bool caseInsensitive, bool unicodeClasses)
+    {
+        if (!TryFindClassIntersectionOperator(expression, out int operatorIndex))
+        {
+            return ClassUnionMatches(value, expression, caseInsensitive, unicodeClasses);
+        }
+
+        return ClassUnionMatches(value, expression[..operatorIndex], caseInsensitive, unicodeClasses) &&
+            ClassIntersectionMatches(value, expression[(operatorIndex + 2)..], caseInsensitive, unicodeClasses);
+    }
+
+    private static bool ClassUnionMatches(Rune value, ReadOnlySpan<byte> expression, bool caseInsensitive, bool unicodeClasses)
+    {
+        int index = 0;
         bool matched = false;
         while (index < expression.Length)
         {
@@ -641,7 +677,37 @@ internal static class RegexByteClass
             matched |= ClassTokenMatches(value, tokenKind, literal, tokenNegated, caseInsensitive, unicodeClasses);
         }
 
-        return negated ? !matched : matched;
+        return matched;
+    }
+
+    internal static bool TryFindClassIntersectionOperator(ReadOnlySpan<byte> expression, out int operatorIndex)
+    {
+        for (int index = 0; index + 1 < expression.Length; index++)
+        {
+            if (expression[index] == (byte)'\\')
+            {
+                index++;
+                continue;
+            }
+
+            if (TryParsePosixClass(expression, index, out _, out _, out int nextIndex))
+            {
+                index = nextIndex - 1;
+                continue;
+            }
+
+            if (expression[index] == (byte)'&' &&
+                expression[index + 1] == (byte)'&' &&
+                index > 0 &&
+                index + 2 < expression.Length)
+            {
+                operatorIndex = index;
+                return true;
+            }
+        }
+
+        operatorIndex = -1;
+        return false;
     }
 
     internal static bool TryReadClassToken(
@@ -695,6 +761,18 @@ internal static class RegexByteClass
                 case (byte)'S':
                     tokenKind = RegexSyntaxKind.WhitespaceClass;
                     tokenNegated = true;
+                    index += 2;
+                    return true;
+                case (byte)'x':
+                case (byte)'u':
+                    int hexIndex = index + 2;
+                    if (TryReadEscapedHexByte(expression, ref hexIndex, escaped, out literal))
+                    {
+                        index = hexIndex;
+                        return true;
+                    }
+
+                    literal = escaped;
                     index += 2;
                     return true;
                 case (byte)'p':
@@ -759,6 +837,24 @@ internal static class RegexByteClass
         return true;
     }
 
+    internal static bool TryReadEscapedHexByte(ReadOnlySpan<byte> expression, ref int index, byte escaped, out byte value)
+    {
+        value = 0;
+        if (escaped == (byte)'x')
+        {
+            if (index + 1 < expression.Length &&
+                TryReadHexByte(expression[index], expression[index + 1], out value))
+            {
+                index += 2;
+                return true;
+            }
+
+            return TryReadBracedHexByte(expression, ref index, out value);
+        }
+
+        return escaped == (byte)'u' && TryReadBracedHexByte(expression, ref index, out value);
+    }
+
     private static bool ByteClassMatches(byte value, ReadOnlySpan<byte> expression)
     {
         for (int index = 0; index + 1 < expression.Length; index += 2)
@@ -769,6 +865,81 @@ internal static class RegexByteClass
             }
         }
 
+        return false;
+    }
+
+    private static bool TryReadBracedHexByte(ReadOnlySpan<byte> expression, ref int index, out byte value)
+    {
+        value = 0;
+        if (index >= expression.Length || expression[index] != (byte)'{')
+        {
+            return false;
+        }
+
+        int scan = index + 1;
+        int parsed = 0;
+        int digits = 0;
+        while (scan < expression.Length && expression[scan] != (byte)'}')
+        {
+            if (!TryGetHexValue(expression[scan], out int digit))
+            {
+                return false;
+            }
+
+            parsed = (parsed * 16) + digit;
+            if (parsed > byte.MaxValue)
+            {
+                return false;
+            }
+
+            digits++;
+            scan++;
+        }
+
+        if (digits == 0 || scan >= expression.Length || expression[scan] != (byte)'}')
+        {
+            return false;
+        }
+
+        value = (byte)parsed;
+        index = scan + 1;
+        return true;
+    }
+
+    private static bool TryReadHexByte(byte high, byte low, out byte value)
+    {
+        value = 0;
+        if (!TryGetHexValue(high, out int highValue) ||
+            !TryGetHexValue(low, out int lowValue))
+        {
+            return false;
+        }
+
+        value = (byte)((highValue << 4) | lowValue);
+        return true;
+    }
+
+    private static bool TryGetHexValue(byte value, out int digit)
+    {
+        if (value is >= (byte)'0' and <= (byte)'9')
+        {
+            digit = value - (byte)'0';
+            return true;
+        }
+
+        if (value is >= (byte)'A' and <= (byte)'F')
+        {
+            digit = value - (byte)'A' + 10;
+            return true;
+        }
+
+        if (value is >= (byte)'a' and <= (byte)'f')
+        {
+            digit = value - (byte)'a' + 10;
+            return true;
+        }
+
+        digit = 0;
         return false;
     }
 
@@ -1184,7 +1355,9 @@ internal static class RegexByteClass
 
         return RegexUnicodeTables.IsGeneralCategory(kind, value) ||
             RegexUnicodeTables.IsBooleanProperty(kind, value) ||
-            RegexUnicodeTables.IsBreakProperty(kind, value);
+            RegexUnicodeTables.IsBreakProperty(kind, value) ||
+            RegexUnicodeTables.IsScript(kind, value) ||
+            RegexUnicodeTables.IsScriptExtension(kind, value);
     }
 
     private static bool TryFoldUnicodeScalarToAscii(Rune value, out byte folded)

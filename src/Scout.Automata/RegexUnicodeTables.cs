@@ -104,6 +104,24 @@ internal static class RegexUnicodeTables
         };
     }
 
+    internal static bool IsScript(RegexUnicodePropertyKind kind, Rune value)
+    {
+        return kind switch
+        {
+            RegexUnicodePropertyKind.ScriptCyrillic => Contains(ScriptCyrillic, value.Value),
+            _ => false,
+        };
+    }
+
+    internal static bool IsScriptExtension(RegexUnicodePropertyKind kind, Rune value)
+    {
+        return kind switch
+        {
+            RegexUnicodePropertyKind.ScriptExtensionCyrillic => Contains(ScriptExtensionCyrillic, value.Value),
+            _ => false,
+        };
+    }
+
     internal static bool IsSimpleCaseFold(Rune left, Rune right)
     {
         return left.Value == right.Value ||
@@ -210,6 +228,24 @@ internal static class RegexUnicodeTables
             RegexUnicodePropertyKind.SentenceBreakLower => BreakPropertySentenceBreakLower,
             RegexUnicodePropertyKind.SentenceBreakClose => BreakPropertySentenceBreakClose,
             RegexUnicodePropertyKind.SentenceBreakSContinue => BreakPropertySentenceBreakSContinue,
+            _ => [],
+        };
+    }
+
+    internal static ReadOnlySpan<int> GetScriptRanges(RegexUnicodePropertyKind kind)
+    {
+        return kind switch
+        {
+            RegexUnicodePropertyKind.ScriptCyrillic => ScriptCyrillic,
+            _ => [],
+        };
+    }
+
+    internal static ReadOnlySpan<int> GetScriptExtensionRanges(RegexUnicodePropertyKind kind)
+    {
+        return kind switch
+        {
+            RegexUnicodePropertyKind.ScriptExtensionCyrillic => ScriptExtensionCyrillic,
             _ => [],
         };
     }
@@ -6714,6 +6750,42 @@ internal static class RegexUnicodeTables
         0x00FF0C, 0x00FF0D,
         0x00FF1A, 0x00FF1B,
         0x00FF64, 0x00FF64,
+    ];
+
+    private static ReadOnlySpan<int> ScriptCyrillic =>
+    [
+        0x000400, 0x000484,
+        0x000487, 0x00052F,
+        0x001C80, 0x001C8A,
+        0x001D2B, 0x001D2B,
+        0x001D78, 0x001D78,
+        0x002DE0, 0x002DFF,
+        0x00A640, 0x00A69F,
+        0x00FE2E, 0x00FE2F,
+        0x01E030, 0x01E06D,
+        0x01E08F, 0x01E08F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionCyrillic =>
+    [
+        0x0002BC, 0x0002BC,
+        0x000300, 0x000302,
+        0x000304, 0x000304,
+        0x000306, 0x000306,
+        0x000308, 0x000308,
+        0x00030B, 0x00030B,
+        0x000311, 0x000311,
+        0x000400, 0x00052F,
+        0x001C80, 0x001C8A,
+        0x001D2B, 0x001D2B,
+        0x001D78, 0x001D78,
+        0x001DF8, 0x001DF8,
+        0x002DE0, 0x002DFF,
+        0x002E43, 0x002E43,
+        0x00A640, 0x00A69F,
+        0x00FE2E, 0x00FE2F,
+        0x01E030, 0x01E06D,
+        0x01E08F, 0x01E08F,
     ];
 
     private static ReadOnlySpan<int> GeneralCategoryCasedLetter =>

@@ -220,7 +220,70 @@ internal static class RegexUtf8ByteCompiler
         RegexCompileOptions options)
     {
         bool negated = RegexByteClass.IsNegatedClass(expression);
-        int index = negated ? 1 : 0;
+        ReadOnlySpan<byte> body = negated ? expression[1..] : expression;
+        if (!TryAddCharacterClassIntersectionRanges(ranges, body, options))
+        {
+            return false;
+        }
+
+        if (negated)
+        {
+            ComplementInPlace(ranges);
+        }
+
+        return true;
+    }
+
+    private static bool TryAddCharacterClassIntersectionRanges(
+        List<RegexScalarRange> ranges,
+        ReadOnlySpan<byte> expression,
+        RegexCompileOptions options)
+    {
+        if (!RegexByteClass.TryFindClassIntersectionOperator(expression, out int operatorIndex))
+        {
+            return TryAddCharacterClassUnionRanges(ranges, expression, options);
+        }
+
+        if (!TryAddCharacterClassUnionRanges(ranges, expression[..operatorIndex], options))
+        {
+            return false;
+        }
+
+        ReadOnlySpan<byte> remaining = expression[(operatorIndex + 2)..];
+        while (true)
+        {
+            ReadOnlySpan<byte> segment;
+            if (RegexByteClass.TryFindClassIntersectionOperator(remaining, out operatorIndex))
+            {
+                segment = remaining[..operatorIndex];
+                remaining = remaining[(operatorIndex + 2)..];
+            }
+            else
+            {
+                segment = remaining;
+                remaining = [];
+            }
+
+            var segmentRanges = new List<RegexScalarRange>();
+            if (!TryAddCharacterClassUnionRanges(segmentRanges, segment, options))
+            {
+                return false;
+            }
+
+            IntersectInPlace(ranges, segmentRanges);
+            if (remaining.IsEmpty)
+            {
+                return true;
+            }
+        }
+    }
+
+    private static bool TryAddCharacterClassUnionRanges(
+        List<RegexScalarRange> ranges,
+        ReadOnlySpan<byte> expression,
+        RegexCompileOptions options)
+    {
+        int index = 0;
         while (index < expression.Length)
         {
             int tokenStart = index;
@@ -254,11 +317,6 @@ internal static class RegexUtf8ByteCompiler
             {
                 return false;
             }
-        }
-
-        if (negated)
-        {
-            ComplementInPlace(ranges);
         }
 
         return true;
@@ -402,6 +460,8 @@ internal static class RegexUtf8ByteCompiler
             AddTableRanges(ranges, RegexUnicodeTables.GetGeneralCategoryRanges(kind));
             AddTableRanges(ranges, RegexUnicodeTables.GetBooleanPropertyRanges(kind));
             AddTableRanges(ranges, RegexUnicodeTables.GetBreakPropertyRanges(kind));
+            AddTableRanges(ranges, RegexUnicodeTables.GetScriptRanges(kind));
+            AddTableRanges(ranges, RegexUnicodeTables.GetScriptExtensionRanges(kind));
         }
 
         if (negated)
@@ -821,6 +881,38 @@ internal static class RegexUtf8ByteCompiler
         RegexScalarRange[] source = ranges.ToArray();
         ranges.Clear();
         AddComplementAgainst(ranges, source, AllValidScalarRanges());
+    }
+
+    private static void IntersectInPlace(List<RegexScalarRange> ranges, List<RegexScalarRange> other)
+    {
+        Normalize(ranges);
+        Normalize(other);
+        var result = new List<RegexScalarRange>();
+        int leftIndex = 0;
+        int rightIndex = 0;
+        while (leftIndex < ranges.Count && rightIndex < other.Count)
+        {
+            RegexScalarRange left = ranges[leftIndex];
+            RegexScalarRange right = other[rightIndex];
+            int start = Math.Max(left.Start, right.Start);
+            int end = Math.Min(left.End, right.End);
+            if (start <= end)
+            {
+                AddRange(result, start, end);
+            }
+
+            if (left.End < right.End)
+            {
+                leftIndex++;
+            }
+            else
+            {
+                rightIndex++;
+            }
+        }
+
+        ranges.Clear();
+        ranges.AddRange(result);
     }
 
     private static void AddComplementAgainst(

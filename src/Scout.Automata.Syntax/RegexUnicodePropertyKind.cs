@@ -126,6 +126,16 @@ public enum RegexUnicodePropertyKind
     ExtendedPictographic,
 
     /// <summary>
+    /// The Script=Cyrillic property value.
+    /// </summary>
+    ScriptCyrillic,
+
+    /// <summary>
+    /// The Script_Extensions=Cyrillic property value.
+    /// </summary>
+    ScriptExtensionCyrillic,
+
+    /// <summary>
     /// The Grapheme_Cluster_Break=Prepend property value.
     /// </summary>
     GraphemeClusterBreakPrepend,
