@@ -112,6 +112,12 @@ internal sealed class RegexScalarRunEngine
 
     private bool TryCountNonOverlappingCountOnly(ReadOnlySpan<byte> haystack, int startAt, ref long count)
     {
+        if (atoms.Length == 1 && atoms[0].UnicodeLetterFastPath)
+        {
+            CountUnicodeLetterFastPath(haystack, startAt, ref count);
+            return true;
+        }
+
         int position = Math.Clamp(startAt, 0, haystack.Length);
         int currentScalars = 0;
         int selectedScalars = lazy ? minimum : maximum;
@@ -145,6 +151,76 @@ internal sealed class RegexScalarRunEngine
         }
 
         return true;
+    }
+
+    private void CountUnicodeLetterFastPath(ReadOnlySpan<byte> haystack, int startAt, ref long count)
+    {
+        int position = Math.Clamp(startAt, 0, haystack.Length);
+        while (position < haystack.Length)
+        {
+            int runScalars = 0;
+            while (position < haystack.Length &&
+                TryUnicodeLetterFastPathMatchLength(haystack, position, out int scalarLength))
+            {
+                runScalars++;
+                position += scalarLength;
+            }
+
+            AddScalarRunCountOnly(runScalars, ref count);
+            if (position < haystack.Length)
+            {
+                position = AdvanceAfterNonMatch(haystack, position);
+            }
+        }
+    }
+
+    private bool TryUnicodeLetterFastPathMatchLength(ReadOnlySpan<byte> haystack, int position, out int scalarLength)
+    {
+        byte first = haystack[position];
+        if (first <= 0x7F)
+        {
+            scalarLength = RegexSimpleSequenceSegment.IsAsciiLetter(first) ? 1 : 0;
+            return scalarLength != 0;
+        }
+
+        if ((first == 0xD0 || first == 0xD1) &&
+            position + 1 < haystack.Length &&
+            haystack[position + 1] is >= 0x80 and <= 0xBF)
+        {
+            scalarLength = 2;
+            return true;
+        }
+
+        return RegexByteClass.TryGetAtomMatchLength(
+            haystack,
+            position,
+            atoms[0].Kind,
+            atoms[0].Value,
+            options.CaseInsensitive,
+            options.MultiLine,
+            options.DotMatchesNewline,
+            options.Crlf,
+            options.LineTerminator,
+            options.Utf8,
+            options.UnicodeClasses,
+            out scalarLength);
+    }
+
+    private void AddScalarRunCountOnly(int runLength, ref long count)
+    {
+        if (runLength < minimum)
+        {
+            return;
+        }
+
+        int matchLength = lazy ? minimum : maximum;
+        int fullMatches = runLength / matchLength;
+        int remainder = runLength - fullMatches * matchLength;
+        count += fullMatches;
+        if (remainder >= minimum)
+        {
+            count++;
+        }
     }
 
     public bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int length)

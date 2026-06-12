@@ -1,3 +1,6 @@
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+
 namespace Scout;
 
 internal sealed class RegexSimpleSequenceEngine
@@ -167,19 +170,43 @@ internal sealed class RegexSimpleSequenceEngine
         int position = Math.Clamp(startAt, 0, haystack.Length);
         if (segment.MatcherKind == RegexSimpleSequenceByteMatcherKind.AsciiLetter)
         {
-            CountAsciiLetterRuns(minimum, maximum, lazy, haystack, position, sumSpans, ref count, ref spanSum);
+            if (sumSpans)
+            {
+                CountAsciiLetterRuns(minimum, maximum, lazy, haystack, position, sumSpans, ref count, ref spanSum);
+            }
+            else
+            {
+                CountAsciiLetterRunsCountOnly(minimum, maximum, lazy, haystack, position, ref count);
+            }
+
             return true;
         }
 
         if (segment.MatcherKind == RegexSimpleSequenceByteMatcherKind.AsciiDigit)
         {
-            CountAsciiDigitRuns(minimum, maximum, lazy, haystack, position, sumSpans, ref count, ref spanSum);
+            if (sumSpans)
+            {
+                CountAsciiDigitRuns(minimum, maximum, lazy, haystack, position, sumSpans, ref count, ref spanSum);
+            }
+            else
+            {
+                CountAsciiDigitRunsCountOnly(minimum, maximum, lazy, haystack, position, ref count);
+            }
+
             return true;
         }
 
         if (segment.MatcherKind == RegexSimpleSequenceByteMatcherKind.AsciiWord)
         {
-            CountAsciiWordRuns(minimum, maximum, lazy, haystack, position, sumSpans, ref count, ref spanSum);
+            if (sumSpans)
+            {
+                CountAsciiWordRuns(minimum, maximum, lazy, haystack, position, sumSpans, ref count, ref spanSum);
+            }
+            else
+            {
+                CountAsciiWordRunsCountOnly(minimum, maximum, lazy, haystack, position, ref count);
+            }
+
             return true;
         }
 
@@ -380,6 +407,38 @@ internal sealed class RegexSimpleSequenceEngine
         AddRun(minimum, maximum, lazy, runLength, sumSpans, ref count, ref spanSum);
     }
 
+    private static void CountAsciiLetterRunsCountOnly(
+        int minimum,
+        int? maximum,
+        bool lazy,
+        ReadOnlySpan<byte> haystack,
+        int position,
+        ref long count)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int length = haystack.Length;
+        while (position < length)
+        {
+            while (position < length && !RegexSimpleSequenceSegment.IsAsciiLetter(Unsafe.Add(ref reference, position)))
+            {
+                position++;
+            }
+
+            if (position >= length)
+            {
+                break;
+            }
+
+            int runStart = position;
+            while (position < length && RegexSimpleSequenceSegment.IsAsciiLetter(Unsafe.Add(ref reference, position)))
+            {
+                position++;
+            }
+
+            AddRunCountOnly(minimum, maximum, lazy, position - runStart, ref count);
+        }
+    }
+
     private static void CountAsciiDigitRuns(
         int minimum,
         int? maximum,
@@ -409,6 +468,38 @@ internal sealed class RegexSimpleSequenceEngine
         AddRun(minimum, maximum, lazy, runLength, sumSpans, ref count, ref spanSum);
     }
 
+    private static void CountAsciiDigitRunsCountOnly(
+        int minimum,
+        int? maximum,
+        bool lazy,
+        ReadOnlySpan<byte> haystack,
+        int position,
+        ref long count)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int length = haystack.Length;
+        while (position < length)
+        {
+            while (position < length && !RegexSimpleSequenceSegment.IsAsciiDigit(Unsafe.Add(ref reference, position)))
+            {
+                position++;
+            }
+
+            if (position >= length)
+            {
+                break;
+            }
+
+            int runStart = position;
+            while (position < length && RegexSimpleSequenceSegment.IsAsciiDigit(Unsafe.Add(ref reference, position)))
+            {
+                position++;
+            }
+
+            AddRunCountOnly(minimum, maximum, lazy, position - runStart, ref count);
+        }
+    }
+
     private static void CountAsciiWordRuns(
         int minimum,
         int? maximum,
@@ -436,6 +527,38 @@ internal sealed class RegexSimpleSequenceEngine
         }
 
         AddRun(minimum, maximum, lazy, runLength, sumSpans, ref count, ref spanSum);
+    }
+
+    private static void CountAsciiWordRunsCountOnly(
+        int minimum,
+        int? maximum,
+        bool lazy,
+        ReadOnlySpan<byte> haystack,
+        int position,
+        ref long count)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int length = haystack.Length;
+        while (position < length)
+        {
+            while (position < length && !RegexSimpleSequenceSegment.IsAsciiWord(Unsafe.Add(ref reference, position)))
+            {
+                position++;
+            }
+
+            if (position >= length)
+            {
+                break;
+            }
+
+            int runStart = position;
+            while (position < length && RegexSimpleSequenceSegment.IsAsciiWord(Unsafe.Add(ref reference, position)))
+            {
+                position++;
+            }
+
+            AddRunCountOnly(minimum, maximum, lazy, position - runStart, ref count);
+        }
     }
 
     private static RegexMatch? FindSingleSegment(RegexSimpleSequenceSegment segment, ReadOnlySpan<byte> haystack, int startOffset)
@@ -522,6 +645,34 @@ internal sealed class RegexSimpleSequenceEngine
             {
                 spanSum += remainder;
             }
+        }
+    }
+
+    private static void AddRunCountOnly(
+        int minimum,
+        int? maximum,
+        bool lazy,
+        int runLength,
+        ref long count)
+    {
+        if (runLength < minimum)
+        {
+            return;
+        }
+
+        if (!lazy && !maximum.HasValue)
+        {
+            count++;
+            return;
+        }
+
+        int matchLength = lazy ? minimum : maximum ?? minimum;
+        int fullMatches = runLength / matchLength;
+        int remainder = runLength - fullMatches * matchLength;
+        count += fullMatches;
+        if (remainder >= minimum)
+        {
+            count++;
         }
     }
 

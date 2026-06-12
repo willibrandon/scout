@@ -2008,6 +2008,11 @@ public sealed class RegexAutomatonTests
         Assert.Equal(10, automaton.SumMatchSpans(haystack));
         Assert.Equal(1, automaton.CountMatches(haystack, startAt: 6));
         Assert.Equal(4, automaton.SumMatchSpans(haystack, startAt: 6));
+
+        byte[] mixedScript = System.Text.Encoding.UTF8.GetBytes("Λδǅ abc");
+        Assert.Equal(new RegexMatch(0, 6), automaton.Find(mixedScript));
+        Assert.Equal(2, automaton.CountMatches(mixedScript));
+        Assert.Equal(9, automaton.SumMatchSpans(mixedScript));
     }
 
     /// <summary>
