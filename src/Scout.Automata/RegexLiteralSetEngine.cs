@@ -22,6 +22,7 @@ internal sealed class RegexLiteralSetEngine
     private readonly MemmemFinder? singleLiteralFinder;
     private readonly RegexAsciiCaseInsensitiveFinder? singleAsciiCaseInsensitiveFinder;
     private readonly RegexAsciiCaseInsensitiveLiteralSetScanner? asciiCaseInsensitiveScanner;
+    private readonly RegexCaseSensitiveLiteralSetScanner? caseSensitiveScanner;
     private readonly RegexLargeLiteralSetScanner? largeLiteralScanner;
     private readonly MemmemFinder[]? smallLiteralFinders;
     private readonly RegexLiteralPrefixScanner? prefixScanner;
@@ -74,6 +75,16 @@ internal sealed class RegexLiteralSetEngine
             !unicodeCaseInsensitive)
         {
             asciiCaseInsensitiveScanner = new RegexAsciiCaseInsensitiveLiteralSetScanner(this.literals);
+            return;
+        }
+
+        if (this.literals.Length > 1 &&
+            !asciiCaseInsensitive &&
+            !unicodeCaseInsensitive &&
+            !useAho &&
+            RegexCaseSensitiveLiteralSetScanner.TryCreate(this.literals, out RegexCaseSensitiveLiteralSetScanner? caseSensitive))
+        {
+            caseSensitiveScanner = caseSensitive;
             return;
         }
 
@@ -298,6 +309,11 @@ internal sealed class RegexLiteralSetEngine
             return asciiCaseInsensitiveScanner.Find(haystack, startOffset)?.Match;
         }
 
+        if (caseSensitiveScanner is not null)
+        {
+            return caseSensitiveScanner.Find(haystack, startOffset)?.Match;
+        }
+
         if (smallLiteralFinders is not null)
         {
             return FindSmallLiteralSet(haystack, startOffset);
@@ -402,6 +418,11 @@ internal sealed class RegexLiteralSetEngine
         if (asciiCaseInsensitiveScanner is not null)
         {
             return CountOrSumAsciiCaseInsensitiveLiteralSet(haystack, startOffset, sumSpans);
+        }
+
+        if (caseSensitiveScanner is not null)
+        {
+            return CountOrSumCaseSensitiveLiteralSet(haystack, startOffset, sumSpans);
         }
 
         if (smallLiteralFinders is not null)
@@ -630,6 +651,26 @@ internal sealed class RegexLiteralSetEngine
         while (position <= haystack.Length)
         {
             RegexLiteralSetCandidate? candidate = asciiCaseInsensitiveScanner!.Find(haystack, position);
+            if (!candidate.HasValue)
+            {
+                return total;
+            }
+
+            RegexMatch match = candidate.Value.Match;
+            total += sumSpans ? match.Length : 1;
+            position = match.End;
+        }
+
+        return total;
+    }
+
+    private long CountOrSumCaseSensitiveLiteralSet(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
+    {
+        long total = 0;
+        int position = startOffset;
+        while (position <= haystack.Length)
+        {
+            RegexLiteralSetCandidate? candidate = caseSensitiveScanner!.Find(haystack, position);
             if (!candidate.HasValue)
             {
                 return total;
