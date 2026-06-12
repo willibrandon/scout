@@ -1334,13 +1334,9 @@ internal sealed class RegexLiteralSetEngine
         ReadOnlySpan<byte> remainingLiteral = literal;
         while (!remainingLiteral.IsEmpty)
         {
-            OperationStatus literalStatus = Rune.DecodeFromUtf8(remainingLiteral, out Rune literalRune, out int literalConsumed);
-            OperationStatus haystackStatus = Rune.DecodeFromUtf8(remainingHaystack, out Rune haystackRune, out int haystackConsumed);
-            if (literalStatus != OperationStatus.Done ||
-                haystackStatus != OperationStatus.Done ||
-                literalConsumed <= 0 ||
-                haystackConsumed <= 0 ||
-                !RegexUnicodeTables.IsSimpleCaseFold(haystackRune, literalRune))
+            if (!TryReadUtf8Scalar(remainingLiteral, out int literalScalar, out int literalConsumed) ||
+                !TryReadUtf8Scalar(remainingHaystack, out int haystackScalar, out int haystackConsumed) ||
+                !SimpleCaseFoldEquals(haystackScalar, literalScalar))
             {
                 length = 0;
                 return false;
@@ -1352,6 +1348,71 @@ internal sealed class RegexLiteralSetEngine
         }
 
         return true;
+    }
+
+    private static bool TryReadUtf8Scalar(ReadOnlySpan<byte> bytes, out int scalar, out int consumed)
+    {
+        scalar = 0;
+        consumed = 0;
+        if (bytes.IsEmpty)
+        {
+            return false;
+        }
+
+        byte first = bytes[0];
+        if (first <= 0x7F)
+        {
+            scalar = first;
+            consumed = 1;
+            return true;
+        }
+
+        if (first is >= 0xC2 and <= 0xDF &&
+            bytes.Length >= 2 &&
+            bytes[1] is >= 0x80 and <= 0xBF)
+        {
+            scalar = ((first & 0x1F) << 6) | (bytes[1] & 0x3F);
+            consumed = 2;
+            return true;
+        }
+
+        OperationStatus status = Rune.DecodeFromUtf8(bytes, out Rune rune, out consumed);
+        if (status != OperationStatus.Done || consumed <= 0)
+        {
+            scalar = 0;
+            consumed = 0;
+            return false;
+        }
+
+        scalar = rune.Value;
+        return true;
+    }
+
+    private static bool SimpleCaseFoldEquals(int left, int right)
+    {
+        if (left == right || FastSimpleFold(left) == FastSimpleFold(right))
+        {
+            return true;
+        }
+
+        return Rune.IsValid(left) &&
+            Rune.IsValid(right) &&
+            RegexUnicodeTables.IsSimpleCaseFold(new Rune(left), new Rune(right));
+    }
+
+    private static int FastSimpleFold(int scalar)
+    {
+        if ((uint)(scalar - 'A') <= 'Z' - 'A')
+        {
+            return scalar + 32;
+        }
+
+        if ((uint)(scalar - 0x0410) <= 0x042F - 0x0410)
+        {
+            return scalar + 0x20;
+        }
+
+        return scalar == 0x0401 ? 0x0451 : scalar;
     }
 
     private static bool LiteralEquals(ReadOnlySpan<byte> haystack, byte[] literal, bool asciiCaseInsensitive)
