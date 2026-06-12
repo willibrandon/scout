@@ -182,6 +182,13 @@ public sealed class PatternSet
         bool requireAcceleration,
         out PatternSetPatternPlan plan)
     {
+        if (TryGetRawLiteralPattern(pattern, out byte[] rawLiteral) &&
+            TryPrepareLiteralPatterns(rawLiteral, options, out byte[][] rawLiteralPatterns))
+        {
+            plan = new PatternSetPatternPlan(tree: null, rawLiteralPatterns, requiredLiterals: null, requiredLiteralLookBehind: 0);
+            return true;
+        }
+
         RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
         if (TryGetLiteralPattern(tree.Root, out byte[] literal) &&
             literal.Length != 0 &&
@@ -452,6 +459,46 @@ public sealed class PatternSet
         }
 
         return indexed;
+    }
+
+    private static bool TryGetRawLiteralPattern(byte[] pattern, out byte[] literal)
+    {
+        if (pattern.Length == 0)
+        {
+            literal = [];
+            return false;
+        }
+
+        for (int index = 0; index < pattern.Length; index++)
+        {
+            if (!IsRawLiteralByte(pattern[index]))
+            {
+                literal = [];
+                return false;
+            }
+        }
+
+        literal = pattern;
+        return true;
+    }
+
+    private static bool IsRawLiteralByte(byte value)
+    {
+        return value is >= 0x20 and <= 0x7E &&
+            value is not (byte)'\\' and
+            not (byte)'.' and
+            not (byte)'|' and
+            not (byte)'*' and
+            not (byte)'+' and
+            not (byte)'?' and
+            not (byte)'(' and
+            not (byte)')' and
+            not (byte)'[' and
+            not (byte)']' and
+            not (byte)'{' and
+            not (byte)'}' and
+            not (byte)'^' and
+            not (byte)'$';
     }
 
     private static int[] BuildAllAutomataIndexes(int count)

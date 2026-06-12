@@ -25,6 +25,25 @@ public sealed class PatternSetTests
     }
 
     /// <summary>
+    /// Verifies plain ASCII literal patterns can skip syntax-tree planning.
+    /// </summary>
+    [Fact]
+    public void UsesRawLiteralPlanForPlainAsciiPatterns()
+    {
+        var literalSet = PatternSet.Compile(
+        [
+            "absentmindedness"u8.ToArray(),
+            "Zubeneschamali's"u8.ToArray(),
+        ]);
+        var regexSet = PatternSet.Compile(["a.c"u8.ToArray()]);
+
+        Assert.True(literalSet.UsesLiteralAccelerator);
+        Assert.True(literalSet.CanAccelerateEveryPattern);
+        Assert.Equal(2, literalSet.CountMatches("absentmindedness Zubeneschamali's"u8));
+        Assert.True(regexSet.IsMatch("abc"u8));
+    }
+
+    /// <summary>
     /// Verifies multi-regex required-literal acceleration supports Unicode case folding.
     /// </summary>
     [Fact]

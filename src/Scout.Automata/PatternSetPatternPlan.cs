@@ -3,7 +3,7 @@ namespace Scout;
 internal readonly struct PatternSetPatternPlan
 {
     public PatternSetPatternPlan(
-        RegexSyntaxTree tree,
+        RegexSyntaxTree? tree,
         byte[][]? literalPatterns,
         byte[][]? requiredLiterals,
         int requiredLiteralLookBehind)
