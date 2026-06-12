@@ -6,7 +6,7 @@ namespace Scout;
 /// </summary>
 public sealed class AhoCorasickAutomaton
 {
-    private const int MaxDenseTransitionStates = 4096;
+    private const int MaxDenseTransitionStates = 512;
 
     private readonly AhoCorasickState[] states;
     private readonly int[]? denseTransitions;

@@ -31,21 +31,9 @@ internal sealed class RegexAlternationSetEngine
             return false;
         }
 
-        if (!PatternSet.CanPreflightAccelerateEveryPattern(alternatives, options))
-        {
-            return false;
-        }
-
-        var patternSet = PatternSet.Compile(
-            alternatives,
-            options.CaseInsensitive,
-            options.MultiLine,
-            options.DotMatchesNewline,
-            options.Crlf,
-            options.LineTerminator,
-            options.Utf8,
-            options.UnicodeClasses);
-        if (!patternSet.CanAccelerateEveryPattern)
+        if (!PatternSet.TryCompileAccelerated(alternatives, options, out PatternSet? patternSet) ||
+            patternSet is null ||
+            !patternSet.CanAccelerateEveryPattern)
         {
             return false;
         }

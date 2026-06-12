@@ -108,7 +108,11 @@ public sealed class RegexAutomaton
         return CompileParsed(tree, options, dfaSizeLimit);
     }
 
-    internal static RegexAutomaton CompileParsed(RegexSyntaxTree tree, RegexCompileOptions options, ulong? dfaSizeLimit = null)
+    internal static RegexAutomaton CompileParsed(
+        RegexSyntaxTree tree,
+        RegexCompileOptions options,
+        ulong? dfaSizeLimit = null,
+        bool compilePrefilter = true)
     {
         RegexLiteralSetEngine.TryCreate(tree.Root, options, out RegexLiteralSetEngine? literalSet);
         if (literalSet is not null && tree.CaptureCount == 0)
@@ -144,7 +148,10 @@ public sealed class RegexAutomaton
         RegexNfa nfa = RegexNfaCompiler.Compile(
             tree.Root,
             options);
-        var prefilter = RegexPrefilter.Compile(tree.Root, options, out RegexStartPrefixSet? startPrefixSet);
+        RegexStartPrefixSet? startPrefixSet = null;
+        RegexPrefilter? prefilter = compilePrefilter
+            ? RegexPrefilter.Compile(tree.Root, options, out startPrefixSet)
+            : null;
 
         RegexSimpleSequenceEngine.TryCreate(tree.Root, options, out RegexSimpleSequenceEngine? simpleSequence);
         RegexLineContainsEngine.TryCreate(tree.Root, options, out RegexLineContainsEngine? lineContains);

@@ -50,32 +50,21 @@ public sealed class PatternSet
         for (int index = 0; index < patterns.Count; index++)
         {
             byte[] pattern = patterns[index] ?? throw new ArgumentNullException(nameof(patterns));
-            RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
-            if (TryGetLiteralPattern(tree.Root, out byte[] literal) &&
-                literal.Length != 0 &&
-                TryPrepareLiteralPatterns(literal, options, out _))
+            if (!TryCreatePatternPlan(pattern, options, requireAcceleration: true, out _))
             {
-                continue;
+                return false;
             }
-
-            if (RegexPrefilter.TryCollectRequiredLiteralSet(tree.Root, options, out byte[][] requiredLiterals) &&
-                requiredLiterals.Length > 0 &&
-                RegexPrefilter.TryPrepareRequiredLiteralSet(requiredLiterals, options, out _))
-            {
-                continue;
-            }
-
-            if (RegexPrefilter.TryFindRequiredLiteral(tree.Root, options, out byte[] requiredLiteral) &&
-                requiredLiteral.Length >= 2 &&
-                RegexPrefilter.TryPrepareRequiredLiteralSet([requiredLiteral], options, out _))
-            {
-                continue;
-            }
-
-            return false;
         }
 
         return true;
+    }
+
+    internal static bool TryCompileAccelerated(
+        IReadOnlyList<byte[]> patterns,
+        RegexCompileOptions options,
+        out PatternSet? patternSet)
+    {
+        return TryCompile(patterns, options, requireFullAcceleration: true, out patternSet);
     }
 
     /// <summary>
@@ -114,57 +103,69 @@ public sealed class PatternSet
         bool utf8 = true,
         bool unicodeClasses = true)
     {
+        var options = new RegexCompileOptions(caseInsensitive, swapGreed: false, multiLine, dotMatchesNewline, crlf, lineTerminator, utf8, unicodeClasses);
+        TryCompile(patterns, options, requireFullAcceleration: false, out PatternSet? patternSet);
+        return patternSet!;
+    }
+
+    private static bool TryCompile(
+        IReadOnlyList<byte[]> patterns,
+        RegexCompileOptions options,
+        bool requireFullAcceleration,
+        out PatternSet? patternSet)
+    {
         ArgumentNullException.ThrowIfNull(patterns);
+        patternSet = null;
+
+        var plans = new PatternSetPatternPlan[patterns.Count];
+        for (int index = 0; index < patterns.Count; index++)
+        {
+            byte[] pattern = patterns[index] ?? throw new ArgumentNullException(nameof(patterns));
+            if (!TryCreatePatternPlan(pattern, options, requireFullAcceleration, out plans[index]))
+            {
+                return false;
+            }
+        }
 
         var automata = new List<RegexAutomaton>();
         var automataPatternIds = new List<int>();
         var literalPatterns = new List<byte[]>();
         var literalPatternIds = new List<int>();
         var requiredLiteralEntries = new List<PatternSetRequiredLiteralEntry>();
-        var options = new RegexCompileOptions(caseInsensitive, swapGreed: false, multiLine, dotMatchesNewline, crlf, lineTerminator, utf8, unicodeClasses);
-        for (int index = 0; index < patterns.Count; index++)
+        for (int index = 0; index < plans.Length; index++)
         {
-            byte[] pattern = patterns[index] ?? throw new ArgumentNullException(nameof(patterns));
-            RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
-            if (TryGetLiteralPattern(tree.Root, out byte[] literal) &&
-                literal.Length != 0 &&
-                TryPrepareLiteralPatterns(literal, options, out byte[][] preparedLiteralPatterns))
+            PatternSetPatternPlan plan = plans[index];
+            if (plan.LiteralPatterns is not null)
             {
-                for (int literalIndex = 0; literalIndex < preparedLiteralPatterns.Length; literalIndex++)
+                for (int literalIndex = 0; literalIndex < plan.LiteralPatterns.Length; literalIndex++)
                 {
-                    literalPatterns.Add(preparedLiteralPatterns[literalIndex]);
+                    literalPatterns.Add(plan.LiteralPatterns[literalIndex]);
                     literalPatternIds.Add(index);
                 }
 
                 continue;
             }
 
-            if (RegexPrefilter.TryCollectRequiredLiteralSet(tree.Root, options, out byte[][] requiredLiterals) &&
-                requiredLiterals.Length > 0 &&
-                RegexPrefilter.TryPrepareRequiredLiteralSet(requiredLiterals, options, out byte[][] preparedLiterals))
+            if (plan.RequiredLiterals is not null)
             {
-                int maxLookBehind = TryGetRequiredLiteralLookBehind(tree.Root, options, requiredLiterals);
-                requiredLiteralEntries.Add(new PatternSetRequiredLiteralEntry(automata.Count, preparedLiterals, maxLookBehind));
-            }
-            else if (RegexPrefilter.TryFindRequiredLiteral(tree.Root, options, out byte[] requiredLiteral) &&
-                requiredLiteral.Length >= 2 &&
-                RegexPrefilter.TryPrepareRequiredLiteralSet([requiredLiteral], options, out preparedLiterals))
-            {
-                requiredLiteralEntries.Add(new PatternSetRequiredLiteralEntry(automata.Count, preparedLiterals));
+                requiredLiteralEntries.Add(new PatternSetRequiredLiteralEntry(
+                    automata.Count,
+                    plan.RequiredLiterals,
+                    plan.RequiredLiteralLookBehind));
             }
 
-            automata.Add(RegexAutomaton.CompileParsed(tree, options));
+            automata.Add(RegexAutomaton.CompileParsed(plan.Tree!, options, compilePrefilter: plan.RequiredLiterals is null));
             automataPatternIds.Add(index);
         }
 
         PatternSetLiteralAccelerator? literalAccelerator = literalPatterns.Count == 0
             ? null
-            : new PatternSetLiteralAccelerator(literalPatterns, literalPatternIds, caseInsensitive);
+            : new PatternSetLiteralAccelerator(literalPatterns, literalPatternIds, options.CaseInsensitive);
         RegexAutomaton[] compiledAutomata = automata.ToArray();
         PatternSetRequiredLiteralAccelerator? requiredLiteralAccelerator = requiredLiteralEntries.Count == 0
             ? null
             : new PatternSetRequiredLiteralAccelerator(requiredLiteralEntries, compiledAutomata.Length, compiledAutomata);
-        return new PatternSet(
+        patternSet = new PatternSet(
             patterns.Count,
             compiledAutomata,
             automataPatternIds.ToArray(),
@@ -172,6 +173,53 @@ public sealed class PatternSet
             BuildExactAutomataByFirstByte(compiledAutomata),
             literalAccelerator,
             requiredLiteralAccelerator);
+        return true;
+    }
+
+    private static bool TryCreatePatternPlan(
+        byte[] pattern,
+        RegexCompileOptions options,
+        bool requireAcceleration,
+        out PatternSetPatternPlan plan)
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
+        if (TryGetLiteralPattern(tree.Root, out byte[] literal) &&
+            literal.Length != 0 &&
+            TryPrepareLiteralPatterns(literal, options, out byte[][] preparedLiteralPatterns))
+        {
+            plan = new PatternSetPatternPlan(tree, preparedLiteralPatterns, requiredLiterals: null, requiredLiteralLookBehind: 0);
+            return true;
+        }
+
+        if (RegexPrefilter.TryCollectRequiredLiteralSet(tree.Root, options, out byte[][] requiredLiterals) &&
+            requiredLiterals.Length > 0 &&
+            RegexPrefilter.TryPrepareRequiredLiteralSet(requiredLiterals, options, out byte[][] preparedLiterals))
+        {
+            int maxLookBehind = TryGetRequiredLiteralLookBehind(tree.Root, options, requiredLiterals);
+            plan = new PatternSetPatternPlan(tree, literalPatterns: null, preparedLiterals, maxLookBehind);
+            return true;
+        }
+
+        if (RegexPrefilter.TryFindRequiredLiteral(tree.Root, options, out byte[] requiredLiteral) &&
+            requiredLiteral.Length >= 2 &&
+            RegexPrefilter.TryPrepareRequiredLiteralSet([requiredLiteral], options, out preparedLiterals))
+        {
+            plan = new PatternSetPatternPlan(
+                tree,
+                literalPatterns: null,
+                preparedLiterals,
+                RegexPrefilter.RequiredLiteralLookBehind);
+            return true;
+        }
+
+        if (requireAcceleration)
+        {
+            plan = default;
+            return false;
+        }
+
+        plan = new PatternSetPatternPlan(tree, literalPatterns: null, requiredLiterals: null, requiredLiteralLookBehind: 0);
+        return true;
     }
 
     /// <summary>
@@ -186,8 +234,19 @@ public sealed class PatternSet
             return true;
         }
 
+        if (requiredLiteralAccelerator is not null &&
+            requiredLiteralAccelerator.Find(haystack, 0, automata, automataPatternIds, best: null).HasValue)
+        {
+            return true;
+        }
+
         for (int index = 0; index < automata.Length; index++)
         {
+            if (requiredLiteralAccelerator?.CoversAutomaton(index) == true)
+            {
+                continue;
+            }
+
             if (automata[index].IsMatch(haystack))
             {
                 return true;
