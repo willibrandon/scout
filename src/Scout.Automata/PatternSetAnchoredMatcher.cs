@@ -20,9 +20,12 @@ internal sealed class PatternSetAnchoredMatcher
     private bool[]? restAllowed;
     private int minimum;
     private byte separator;
+    private bool multiLine;
     private bool dotMatchesNewline;
     private bool crlf;
     private byte lineTerminator;
+    private bool utf8;
+    private bool unicodeClasses;
 
     private PatternSetAnchoredMatcher(int patternId, int kind)
     {
@@ -59,7 +62,7 @@ internal sealed class PatternSetAnchoredMatcher
 
         if (plan.BoundaryLiteralPatterns is not null)
         {
-            return CreateBoundaryLiteral(patternId, plan.BoundaryLiteralPatterns[0]);
+            return CreateBoundaryLiteral(patternId, plan.BoundaryLiteralPatterns[0], options);
         }
 
         return CreateLiteral(patternId, pattern, options.CaseInsensitive);
@@ -104,11 +107,7 @@ internal sealed class PatternSetAnchoredMatcher
 
                 return;
             case BoundaryLiteralKind:
-                if (literal!.Length > 0)
-                {
-                    bytes[literal[0]] = true;
-                }
-
+                AddLiteralStartBytes(bytes, literal!);
                 return;
             case RepeatedByteSetKind:
             case LeadingByteSetRunKind:
@@ -130,15 +129,14 @@ internal sealed class PatternSetAnchoredMatcher
     {
         matcher = null;
         if (options.CaseInsensitive ||
-            options.Utf8 ||
-            options.UnicodeClasses)
+            options.Utf8)
         {
             return false;
         }
 
         if (plan.BoundaryLiteralPatterns is not null)
         {
-            matcher = CreateBoundaryLiteral(patternId, plan.BoundaryLiteralPatterns[0]);
+            matcher = CreateBoundaryLiteral(patternId, plan.BoundaryLiteralPatterns[0], options);
             return true;
         }
 
@@ -196,11 +194,16 @@ internal sealed class PatternSetAnchoredMatcher
         };
     }
 
-    private static PatternSetAnchoredMatcher CreateBoundaryLiteral(int patternId, byte[] literal)
+    private static PatternSetAnchoredMatcher CreateBoundaryLiteral(int patternId, byte[] literal, RegexCompileOptions options)
     {
         return new PatternSetAnchoredMatcher(patternId, BoundaryLiteralKind)
         {
             literal = literal,
+            multiLine = options.MultiLine,
+            crlf = options.Crlf,
+            lineTerminator = options.LineTerminator,
+            utf8 = options.Utf8,
+            unicodeClasses = options.UnicodeClasses,
         };
     }
 
@@ -211,7 +214,9 @@ internal sealed class PatternSetAnchoredMatcher
         out PatternSetAnchoredMatcher? matcher)
     {
         matcher = null;
-        if (node is not RegexAtomNode { Kind: RegexSyntaxKind.Dot })
+        if (options.Utf8 ||
+            options.UnicodeClasses ||
+            node is not RegexAtomNode { Kind: RegexSyntaxKind.Dot })
         {
             return false;
         }
@@ -452,7 +457,13 @@ internal sealed class PatternSetAnchoredMatcher
                 or RegexSyntaxKind.NotWordClass
                 or RegexSyntaxKind.WhitespaceClass
                 or RegexSyntaxKind.NotWhitespaceClass) ||
-            atom.Kind == RegexSyntaxKind.Literal && atom.Value.Length != 1)
+            atom.Kind == RegexSyntaxKind.Literal && atom.Value.Length != 1 ||
+            RegexByteClass.RequiresUtf8ScalarMatch(
+                atom.Kind,
+                atom.Value.Span,
+                options.Utf8,
+                options.CaseInsensitive,
+                options.UnicodeClasses))
         {
             return false;
         }
@@ -535,7 +546,7 @@ internal sealed class PatternSetAnchoredMatcher
     {
         byte[] candidate = literal!;
         if (candidate.Length > haystack.Length - start ||
-            start > 0 && IsAsciiWord(haystack[start - 1]))
+            !HasWordBoundaryBeforeAsciiLiteral(haystack, start))
         {
             return -1;
         }
@@ -549,9 +560,45 @@ internal sealed class PatternSetAnchoredMatcher
         }
 
         int end = start + candidate.Length;
-        return end < haystack.Length && IsAsciiWord(haystack[end])
-            ? -1
-            : candidate.Length;
+        return HasWordBoundaryAfterAsciiLiteral(haystack, end) ? candidate.Length : -1;
+    }
+
+    private bool HasWordBoundaryBeforeAsciiLiteral(ReadOnlySpan<byte> haystack, int start)
+    {
+        if (start > 0 &&
+            haystack[start - 1] <= 0x7F)
+        {
+            return !IsAsciiWord(haystack[start - 1]);
+        }
+
+        return RegexByteClass.PredicateMatches(
+            haystack,
+            start,
+            RegexSyntaxKind.WordBoundary,
+            multiLine,
+            crlf,
+            lineTerminator,
+            utf8,
+            unicodeClasses);
+    }
+
+    private bool HasWordBoundaryAfterAsciiLiteral(ReadOnlySpan<byte> haystack, int end)
+    {
+        if (end < haystack.Length &&
+            haystack[end] <= 0x7F)
+        {
+            return !IsAsciiWord(haystack[end]);
+        }
+
+        return RegexByteClass.PredicateMatches(
+            haystack,
+            end,
+            RegexSyntaxKind.WordBoundary,
+            multiLine,
+            crlf,
+            lineTerminator,
+            utf8,
+            unicodeClasses);
     }
 
     private int MatchRepeatedByteSet(ReadOnlySpan<byte> haystack, int start)

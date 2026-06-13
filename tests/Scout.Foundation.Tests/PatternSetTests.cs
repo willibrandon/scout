@@ -81,6 +81,28 @@ public sealed class PatternSetTests
     }
 
     /// <summary>
+    /// Verifies Unicode word-boundary literals keep Unicode boundary semantics while using acceleration.
+    /// </summary>
+    [Fact]
+    public void UsesBoundaryLiteralAcceleratorForUnicodeKeywordPatterns()
+    {
+        var set = PatternSet.Compile(
+        [
+            @"(\bif\b)"u8.ToArray(),
+        ],
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("αif if");
+        int expectedStart = System.Text.Encoding.UTF8.GetByteCount("αif ");
+
+        Assert.True(set.UsesBoundaryLiteralAccelerator);
+        Assert.Equal(new PatternSetMatch(0, new RegexMatch(expectedStart, 2)), set.Find(haystack));
+    }
+
+    /// <summary>
     /// Verifies multi-regex required-literal acceleration supports Unicode case folding.
     /// </summary>
     [Fact]
@@ -265,6 +287,36 @@ public sealed class PatternSetTests
             dotMatchesNewline: false,
             utf8: false,
             unicodeClasses: false);
+
+        Assert.True(set.UsesAnchoredMatcherAccelerator);
+        Assert.Equal(new PatternSetMatch(2, new RegexMatch(0, 6)), set.Find("assign x"u8));
+        Assert.Equal(new PatternSetMatch(4, new RegexMatch(0, 8)), set.Find("assign_x"u8));
+        Assert.Equal(new PatternSetMatch(3, new RegexMatch(0, 6)), set.Find("12_345+"u8));
+        Assert.Equal(new PatternSetMatch(5, new RegexMatch(0, 3)), set.Find("<<<x"u8));
+        Assert.Equal(new PatternSetMatch(0, new RegexMatch(0, 2)), set.Find("\r\nx"u8));
+    }
+
+    /// <summary>
+    /// Verifies Unicode mode still uses anchored lexer matchers for byte-local token branches.
+    /// </summary>
+    [Fact]
+    public void AnchoredMatcherFindsAsciiLexerTokensInUnicodeMode()
+    {
+        var set = PatternSet.Compile(
+        [
+            @"(\r\n|\r|\n)"u8.ToArray(),
+            @"([\t\v\f ]+)"u8.ToArray(),
+            @"(\bassign\b)"u8.ToArray(),
+            @"([0-9]+(?:_[0-9]+)*)"u8.ToArray(),
+            @"([a-zA-Z_][0-9a-zA-Z_]*)"u8.ToArray(),
+            @"(<<<|>>>|<<|>>)"u8.ToArray(),
+            "(.)"u8.ToArray(),
+        ],
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
 
         Assert.True(set.UsesAnchoredMatcherAccelerator);
         Assert.Equal(new PatternSetMatch(2, new RegexMatch(0, 6)), set.Find("assign x"u8));

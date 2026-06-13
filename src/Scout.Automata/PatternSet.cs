@@ -197,7 +197,7 @@ public sealed class PatternSet
             : new PatternSetLiteralAccelerator(literalPatterns, literalPatternIds, options.CaseInsensitive);
         PatternSetBoundaryLiteralAccelerator? boundaryLiteralAccelerator = boundaryLiteralPatterns.Count == 0
             ? null
-            : new PatternSetBoundaryLiteralAccelerator(boundaryLiteralPatterns, boundaryLiteralPatternIds);
+            : new PatternSetBoundaryLiteralAccelerator(boundaryLiteralPatterns, boundaryLiteralPatternIds, options);
         RegexAutomaton[] compiledAutomata = automata.ToArray();
         PatternSetRequiredLiteralAccelerator? requiredLiteralAccelerator = requiredLiteralEntries.Count == 0
             ? null
@@ -1036,7 +1036,7 @@ public sealed class PatternSet
     private static bool TryGetBoundaryLiteralPattern(RegexSyntaxNode root, RegexCompileOptions options, out byte[] literal)
     {
         literal = [];
-        if (options.CaseInsensitive || options.UnicodeClasses)
+        if (options.CaseInsensitive)
         {
             return false;
         }

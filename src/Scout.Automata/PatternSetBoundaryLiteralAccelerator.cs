@@ -6,8 +6,12 @@ internal sealed class PatternSetBoundaryLiteralAccelerator
     private readonly byte[][] patterns;
     private readonly int[] patternIds;
     private readonly int[][] patternsByFirstByte;
+    private readonly RegexCompileOptions options;
 
-    public PatternSetBoundaryLiteralAccelerator(IReadOnlyList<byte[]> patterns, IReadOnlyList<int> patternIds)
+    public PatternSetBoundaryLiteralAccelerator(
+        IReadOnlyList<byte[]> patterns,
+        IReadOnlyList<int> patternIds,
+        RegexCompileOptions options)
     {
         ArgumentNullException.ThrowIfNull(patterns);
         ArgumentNullException.ThrowIfNull(patternIds);
@@ -24,6 +28,7 @@ internal sealed class PatternSetBoundaryLiteralAccelerator
             this.patternIds[index] = patternIds[index];
         }
 
+        this.options = options;
         patternsByFirstByte = BuildPatternsByFirstByte(this.patterns);
         automaton = AhoCorasickAutomaton.Create(patterns, AhoCorasickMatchKind.Standard, asciiCaseInsensitive: false);
     }
@@ -35,7 +40,7 @@ internal sealed class PatternSetBoundaryLiteralAccelerator
         while (matches.MoveNext())
         {
             AhoCorasickMatch match = matches.Current;
-            if (!HasAsciiWordBoundaries(haystack, match.Start, match.Length))
+            if (!HasWordBoundaries(haystack, match.Start, match.Length))
             {
                 continue;
             }
@@ -66,7 +71,7 @@ internal sealed class PatternSetBoundaryLiteralAccelerator
             byte[] pattern = patterns[index];
             if (pattern.Length <= haystack.Length - startAt &&
                 haystack.Slice(startAt, pattern.Length).SequenceEqual(pattern) &&
-                HasAsciiWordBoundaries(haystack, startAt, pattern.Length))
+                HasWordBoundaries(haystack, startAt, pattern.Length))
             {
                 return new PatternSetMatch(
                     patternIds[index],
@@ -88,23 +93,63 @@ internal sealed class PatternSetBoundaryLiteralAccelerator
         while (literals.MoveNext())
         {
             AhoCorasickMatch literal = literals.Current;
-            if (HasAsciiWordBoundaries(haystack, literal.Start, literal.Length))
+            if (HasWordBoundaries(haystack, literal.Start, literal.Length))
             {
                 matches[patternIds[literal.PatternId]] = true;
             }
         }
     }
 
-    private static bool HasAsciiWordBoundaries(ReadOnlySpan<byte> haystack, int start, int length)
+    private bool HasWordBoundaries(ReadOnlySpan<byte> haystack, int start, int length)
     {
         int end = start + length;
-        return length > 0 &&
-            start >= 0 &&
-            end <= haystack.Length &&
-            IsAsciiWord(haystack[start]) &&
-            IsAsciiWord(haystack[end - 1]) &&
-            (start == 0 || !IsAsciiWord(haystack[start - 1])) &&
-            (end == haystack.Length || !IsAsciiWord(haystack[end]));
+        if (length <= 0 ||
+            start < 0 ||
+            end > haystack.Length ||
+            !IsAsciiWord(haystack[start]) ||
+            !IsAsciiWord(haystack[end - 1]))
+        {
+            return false;
+        }
+
+        if (!options.Utf8 && !options.UnicodeClasses)
+        {
+            return (start == 0 || !IsAsciiWord(haystack[start - 1])) &&
+                (end == haystack.Length || !IsAsciiWord(haystack[end]));
+        }
+
+        if (start > 0 &&
+            haystack[start - 1] <= 0x7F &&
+            IsAsciiWord(haystack[start - 1]))
+        {
+            return false;
+        }
+
+        if (end < haystack.Length &&
+            haystack[end] <= 0x7F &&
+            IsAsciiWord(haystack[end]))
+        {
+            return false;
+        }
+
+        return RegexByteClass.PredicateMatches(
+                haystack,
+                start,
+                RegexSyntaxKind.WordBoundary,
+                options.MultiLine,
+                options.Crlf,
+                options.LineTerminator,
+                options.Utf8,
+                options.UnicodeClasses) &&
+            RegexByteClass.PredicateMatches(
+                haystack,
+                end,
+                RegexSyntaxKind.WordBoundary,
+                options.MultiLine,
+                options.Crlf,
+                options.LineTerminator,
+                options.Utf8,
+                options.UnicodeClasses);
     }
 
     private static bool IsAsciiWord(byte value)
