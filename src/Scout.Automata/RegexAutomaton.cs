@@ -21,6 +21,7 @@ public sealed class RegexAutomaton
         private RegexStructuredLogCaptureEngine? structuredLogCaptureEngine;
         private RegexScalarRunCaptureEngine? scalarRunCaptureEngine;
         private RegexAnchoredWordCaptureEngine? anchoredWordCaptureEngine;
+        private RegexAnchoredRunBoundaryCaptureEngine? anchoredRunBoundaryCaptureEngine;
         private volatile bool captureEnginesInitialized;
         private volatile bool genericCaptureOnly;
 
@@ -237,6 +238,15 @@ public sealed class RegexAutomaton
         }
     }
 
+    internal bool UsesAnchoredRunBoundaryCaptureEngine
+    {
+        get
+        {
+            EnsureCaptureEngines();
+            return anchoredRunBoundaryCaptureEngine is not null;
+        }
+    }
+
     /// <summary>
     /// Finds the first match in a haystack.
     /// </summary>
@@ -422,6 +432,11 @@ public sealed class RegexAutomaton
                     captureOptions,
                     captureCount,
                     out anchoredWordCaptureEngine);
+                RegexAnchoredRunBoundaryCaptureEngine.TryCreate(
+                    captureRoot,
+                    captureOptions,
+                    captureCount,
+                    out anchoredRunBoundaryCaptureEngine);
                 RegexScalarRunCaptureEngine.TryCreate(
                     captureRoot,
                     captureOptions,
@@ -429,6 +444,7 @@ public sealed class RegexAutomaton
                     out scalarRunCaptureEngine);
                 if (syntheticCaptureAlternationSet is null &&
                     anchoredWordCaptureEngine is null &&
+                    anchoredRunBoundaryCaptureEngine is null &&
                     scalarRunCaptureEngine is null)
                 {
                     RegexNfa captureNfa = RegexNfaCompiler.CompileCaptures(captureRoot, captureOptions, captureCount);
@@ -440,6 +456,7 @@ public sealed class RegexAutomaton
             genericCaptureOnly = structuredLogCaptureEngine is null &&
                 delimitedCaptureEngine is null &&
                 anchoredWordCaptureEngine is null &&
+                anchoredRunBoundaryCaptureEngine is null &&
                 scalarRunCaptureEngine is null &&
                 syntheticCaptureAlternationSet is null;
             captureEnginesInitialized = true;
@@ -494,6 +511,11 @@ public sealed class RegexAutomaton
         if (anchoredWordCaptureEngine is not null)
         {
             return anchoredWordCaptureEngine.MatchAt(haystack, Math.Clamp(startAt, 0, haystack.Length));
+        }
+
+        if (anchoredRunBoundaryCaptureEngine is not null)
+        {
+            return anchoredRunBoundaryCaptureEngine.MatchAt(haystack, Math.Clamp(startAt, 0, haystack.Length));
         }
 
         if (scalarRunCaptureEngine is not null)

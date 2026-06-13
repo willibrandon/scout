@@ -725,6 +725,59 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies anchored fixed-run word-boundary captures use direct extraction.
+    /// </summary>
+    [Fact]
+    public void AnchoredRunBoundaryCaptureEngineReportsAsciiCaptures()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"^(\S{8})(\S)\b"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        RegexCaptures? captures = automaton.FindCaptures("abcdefghi!"u8);
+
+        Assert.True(automaton.UsesAnchoredRunBoundaryCaptureEngine);
+        Assert.NotNull(captures);
+        Assert.Equal(new RegexMatch(0, 9), captures.Match);
+        Assert.Equal(3, captures.ParticipatingCount());
+        AssertGroupText(captures, "abcdefghi!"u8.ToArray(), 1, "abcdefgh");
+        AssertGroupText(captures, "abcdefghi!"u8.ToArray(), 2, "i");
+        Assert.Null(automaton.FindCaptures("abcdefghij"u8));
+        Assert.Null(automaton.FindCaptures("abcdefgh!"u8));
+    }
+
+    /// <summary>
+    /// Verifies anchored fixed-run word-boundary captures count Unicode scalars.
+    /// </summary>
+    [Fact]
+    public void AnchoredRunBoundaryCaptureEngineReportsUnicodeCaptures()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"^(\S{8})(\S)\b"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] line = System.Text.Encoding.UTF8.GetBytes("абвгдежзи ");
+        byte[] noBoundary = System.Text.Encoding.UTF8.GetBytes("абвгдежзий");
+
+        RegexCaptures? captures = automaton.FindCaptures(line);
+
+        Assert.True(automaton.UsesAnchoredRunBoundaryCaptureEngine);
+        Assert.NotNull(captures);
+        Assert.Equal(new RegexMatch(0, System.Text.Encoding.UTF8.GetByteCount("абвгдежзи")), captures.Match);
+        Assert.Equal(3, captures.ParticipatingCount());
+        AssertGroupUtf8Text(captures, line, 1, "абвгдежз");
+        AssertGroupUtf8Text(captures, line, 2, "и");
+        Assert.Null(automaton.FindCaptures(noBoundary));
+    }
+
+    /// <summary>
     /// Verifies the rebar unstructured log pattern uses direct structural capture extraction.
     /// </summary>
     [Fact]
