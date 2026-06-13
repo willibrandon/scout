@@ -277,6 +277,113 @@ internal sealed class RegexMetaEngine
             wordBoundaryLiteralSet: wordBoundaryLiteralSet);
     }
 
+    public static RegexMetaEngine CompileBoundedScalarClassSequence(
+        RegexBoundedScalarClassSequenceEngine boundedScalarClassSequence,
+        bool utf8,
+        Func<RegexNfa>? fallbackNfaFactory)
+    {
+        ArgumentNullException.ThrowIfNull(boundedScalarClassSequence);
+        return new RegexMetaEngine(
+            RegexEngineKind.BoundedScalarClassSequence,
+            nfa: null,
+            pikeVm: null,
+            boundedBacktracker: null,
+            onePassDfa: null,
+            denseDfa: null,
+            sparseDfa: null,
+            lazyDfa: null,
+            literalSet: null,
+            alternationSet: null,
+            delimitedRun: null,
+            simpleSequence: null,
+            lineContains: null,
+            dotStarClassFallback: null,
+            prefilter: null,
+            utf8,
+            boundedScalarClassSequence: boundedScalarClassSequence,
+            nfaFactory: fallbackNfaFactory);
+    }
+
+    public static RegexMetaEngine CompileBoundedByteClassSequence(
+        RegexBoundedByteClassSequenceEngine boundedByteClassSequence,
+        bool utf8,
+        Func<RegexNfa>? fallbackNfaFactory)
+    {
+        ArgumentNullException.ThrowIfNull(boundedByteClassSequence);
+        return new RegexMetaEngine(
+            RegexEngineKind.BoundedByteClassSequence,
+            nfa: null,
+            pikeVm: null,
+            boundedBacktracker: null,
+            onePassDfa: null,
+            denseDfa: null,
+            sparseDfa: null,
+            lazyDfa: null,
+            literalSet: null,
+            alternationSet: null,
+            delimitedRun: null,
+            simpleSequence: null,
+            lineContains: null,
+            dotStarClassFallback: null,
+            prefilter: null,
+            utf8,
+            boundedByteClassSequence: boundedByteClassSequence,
+            nfaFactory: fallbackNfaFactory);
+    }
+
+    public static RegexMetaEngine CompileSimpleSequence(
+        RegexSimpleSequenceEngine simpleSequence,
+        bool utf8,
+        Func<RegexNfa>? fallbackNfaFactory)
+    {
+        ArgumentNullException.ThrowIfNull(simpleSequence);
+        return new RegexMetaEngine(
+            RegexEngineKind.SimpleSequence,
+            nfa: null,
+            pikeVm: null,
+            boundedBacktracker: null,
+            onePassDfa: null,
+            denseDfa: null,
+            sparseDfa: null,
+            lazyDfa: null,
+            literalSet: null,
+            alternationSet: null,
+            delimitedRun: null,
+            simpleSequence: simpleSequence,
+            lineContains: null,
+            dotStarClassFallback: null,
+            prefilter: null,
+            utf8,
+            nfaFactory: fallbackNfaFactory);
+    }
+
+    public static RegexMetaEngine CompileScalarRun(
+        RegexScalarRunEngine scalarRun,
+        bool utf8,
+        Func<RegexNfa>? fallbackNfaFactory)
+    {
+        ArgumentNullException.ThrowIfNull(scalarRun);
+        return new RegexMetaEngine(
+            RegexEngineKind.SimpleSequence,
+            nfa: null,
+            pikeVm: null,
+            boundedBacktracker: null,
+            onePassDfa: null,
+            denseDfa: null,
+            sparseDfa: null,
+            lazyDfa: null,
+            literalSet: null,
+            alternationSet: null,
+            delimitedRun: null,
+            simpleSequence: null,
+            lineContains: null,
+            dotStarClassFallback: null,
+            prefilter: null,
+            utf8,
+            scalarRun: scalarRun,
+            nfaFactory: fallbackNfaFactory);
+    }
+
     public static RegexMetaEngine Compile(RegexNfa nfa)
     {
         return Compile(nfa, prefilter: null, dfaSizeLimit: null);

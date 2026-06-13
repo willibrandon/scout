@@ -136,6 +136,41 @@ internal sealed class RegexSimpleSequenceEngine
         return true;
     }
 
+    public static bool TryCreateSingleRepeatedByteAtom(
+        RegexSyntaxNode root,
+        RegexCompileOptions options,
+        out RegexSimpleSequenceEngine? engine)
+    {
+        engine = null;
+        if (options.Utf8 || options.UnicodeClasses)
+        {
+            return false;
+        }
+
+        root = UnwrapTransparentGroups(root);
+        if (root is not RegexRepetitionNode
+            {
+                Minimum: > 0,
+                Maximum: { } maximum,
+            } repetition ||
+            maximum > MaxBoundedRepeat)
+        {
+            return false;
+        }
+
+        var segments = new List<RegexSimpleSequenceSegment>(capacity: 1);
+        bool sawVariableRepetition = false;
+        if (!TryAppendRepetition(repetition, options, segments, ref sawVariableRepetition) ||
+            segments.Count != 1 ||
+            !HasSelectiveRequiredStart(segments))
+        {
+            return false;
+        }
+
+        engine = new RegexSimpleSequenceEngine(segments);
+        return true;
+    }
+
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);

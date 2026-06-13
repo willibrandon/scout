@@ -1272,6 +1272,9 @@ public sealed class RegexAutomatonTests
         Assert.Null(automaton.MatchAt(haystack, 16));
         Assert.Null(automaton.MatchAt(tooLong, 0));
         Assert.Equal(new RegexMatch(0, 3), automaton.MatchAt("\"!\""u8, 0));
+        Assert.Equal(new RegexMatch(0, 3), automaton.FindEarliest("\"!\""u8, startAt: 0));
+        Assert.Equal(new RegexMatch(0, 3), automaton.FindAllKindAt("\"!\""u8, startAt: 0));
+        Assert.Equal([new RegexMatch(0, 3)], automaton.FindOverlappingAt("\"!\""u8, startAt: 0));
         Assert.Equal(3, automaton.CountMatches(haystack));
         Assert.Equal(16, automaton.SumMatchSpans(haystack));
         Assert.Equal(new RegexMatch(0, 5), greedy.Find("@aabb"u8));
@@ -1300,6 +1303,9 @@ public sealed class RegexAutomatonTests
         Assert.Equal(new RegexMatch(25, 5), automaton.Find(haystack, startAt: 18));
         Assert.Equal(new RegexMatch(9, 6), automaton.MatchAt(haystack, 9));
         Assert.Equal(new RegexMatch(16, 8), automaton.MatchAt(haystack, 16));
+        Assert.Equal(new RegexMatch(0, 5), automaton.FindEarliest("aabcx"u8, startAt: 0));
+        Assert.Equal(new RegexMatch(0, 5), automaton.FindAllKindAt("aabcx"u8, startAt: 0));
+        Assert.Equal([new RegexMatch(0, 5)], automaton.FindOverlappingAt("aabcx"u8, startAt: 0));
         Assert.Null(automaton.MatchAt(haystack, 31));
         Assert.Null(automaton.MatchAt(haystack, 37));
         Assert.Equal(4, automaton.CountMatches(haystack));
@@ -4075,6 +4081,19 @@ public sealed class RegexAutomatonTests
         Assert.Equal(8, automaton.SumMatchSpans("abcdef 1 zz"u8));
         Assert.Equal(2, automaton.CountMatches("abcdef 1 zz"u8, startAt: 3));
         Assert.Equal(5, automaton.SumMatchSpans("abcdef 1 zz"u8, startAt: 3));
+
+        var fixedWidth = RegexAutomaton.Compile(
+            @"[A-Za-z]{3}"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(fixedWidth));
+        Assert.Equal(new RegexMatch(0, 3), fixedWidth.FindEarliest("abcd"u8, startAt: 0));
+        Assert.Equal(new RegexMatch(0, 3), fixedWidth.FindAllKindAt("abcd"u8, startAt: 0));
+        Assert.Equal([new RegexMatch(0, 3)], fixedWidth.FindOverlappingAt("abcd"u8, startAt: 0));
     }
 
     /// <summary>
@@ -4400,6 +4419,19 @@ public sealed class RegexAutomatonTests
             new string('ж', 11) + " 12 " + new string('я', 2));
         Assert.Equal(5, automaton.CountMatches(longCyrillic));
         Assert.Equal(26, automaton.SumMatchSpans(longCyrillic));
+
+        var fixedWidth = RegexAutomaton.Compile(
+            @"\p{L}{3}"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(fixedWidth));
+        Assert.Equal(new RegexMatch(0, 6), fixedWidth.FindEarliest("абвг"u8, startAt: 0));
+        Assert.Equal(new RegexMatch(0, 6), fixedWidth.FindAllKindAt("абвг"u8, startAt: 0));
+        Assert.Equal([new RegexMatch(0, 6)], fixedWidth.FindOverlappingAt("абвг"u8, startAt: 0));
     }
 
     /// <summary>

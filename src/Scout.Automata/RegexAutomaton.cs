@@ -229,6 +229,90 @@ public sealed class RegexAutomaton
                 wholePatternCaptureIndex);
         }
 
+        RegexBoundedScalarClassSequenceEngine.TryCreate(tree.Root, options, out RegexBoundedScalarClassSequenceEngine? earlyBoundedScalarClassSequence);
+        if (earlyBoundedScalarClassSequence is not null)
+        {
+            return new RegexAutomaton(
+                RegexMetaEngine.CompileBoundedScalarClassSequence(
+                    earlyBoundedScalarClassSequence,
+                    options.Utf8,
+                    () => RegexNfaCompiler.Compile(tree.Root, options, utf8ByteTrieCache)),
+                startPredicate: null,
+                lengthGuard: null,
+                requiredByteSetGuard: null,
+                requiredLiteralAnySetGuard: null,
+                syntheticCaptureAlternationSet: null,
+                tree.CaptureCount > 0 ? tree.Pattern : default,
+                tree.CaptureCount > 0 ? tree.Root : null,
+                options,
+                capturePrefilter: null,
+                tree.CaptureCount,
+                wholePatternCaptureIndex);
+        }
+
+        RegexBoundedByteClassSequenceEngine.TryCreate(tree.Root, options, out RegexBoundedByteClassSequenceEngine? earlyBoundedByteClassSequence);
+        if (earlyBoundedByteClassSequence is not null)
+        {
+            return new RegexAutomaton(
+                RegexMetaEngine.CompileBoundedByteClassSequence(
+                    earlyBoundedByteClassSequence,
+                    options.Utf8,
+                    () => RegexNfaCompiler.Compile(tree.Root, options, utf8ByteTrieCache)),
+                startPredicate: null,
+                lengthGuard: null,
+                requiredByteSetGuard: null,
+                requiredLiteralAnySetGuard: null,
+                syntheticCaptureAlternationSet: null,
+                tree.CaptureCount > 0 ? tree.Pattern : default,
+                tree.CaptureCount > 0 ? tree.Root : null,
+                options,
+                capturePrefilter: null,
+                tree.CaptureCount,
+                wholePatternCaptureIndex);
+        }
+
+        RegexScalarRunEngine.TryCreate(tree.Root, options, out RegexScalarRunEngine? earlyScalarRun);
+        if (earlyScalarRun is not null)
+        {
+            return new RegexAutomaton(
+                RegexMetaEngine.CompileScalarRun(
+                    earlyScalarRun,
+                    options.Utf8,
+                    () => RegexNfaCompiler.Compile(tree.Root, options, utf8ByteTrieCache)),
+                startPredicate: null,
+                lengthGuard: null,
+                requiredByteSetGuard: null,
+                requiredLiteralAnySetGuard: null,
+                syntheticCaptureAlternationSet: null,
+                tree.CaptureCount > 0 ? tree.Pattern : default,
+                tree.CaptureCount > 0 ? tree.Root : null,
+                options,
+                capturePrefilter: null,
+                tree.CaptureCount,
+                wholePatternCaptureIndex);
+        }
+
+        RegexSimpleSequenceEngine.TryCreateSingleRepeatedByteAtom(tree.Root, options, out RegexSimpleSequenceEngine? earlySimpleSequence);
+        if (earlySimpleSequence is not null)
+        {
+            return new RegexAutomaton(
+                RegexMetaEngine.CompileSimpleSequence(
+                    earlySimpleSequence,
+                    options.Utf8,
+                    () => RegexNfaCompiler.Compile(tree.Root, options, utf8ByteTrieCache)),
+                startPredicate: null,
+                lengthGuard: null,
+                requiredByteSetGuard: null,
+                requiredLiteralAnySetGuard: null,
+                syntheticCaptureAlternationSet: null,
+                tree.CaptureCount > 0 ? tree.Pattern : default,
+                tree.CaptureCount > 0 ? tree.Root : null,
+                options,
+                capturePrefilter: null,
+                tree.CaptureCount,
+                wholePatternCaptureIndex);
+        }
+
         RegexNfa nfa = RegexNfaCompiler.Compile(
             tree.Root,
             options,
@@ -254,8 +338,8 @@ public sealed class RegexAutomaton
         RegexLiteralPrefixRunEngine.TryCreate(tree.Root, options, out RegexLiteralPrefixRunEngine? literalPrefixRun);
         RegexBoundedLiteralGapEngine.TryCreate(tree.Root, options, out RegexBoundedLiteralGapEngine? boundedLiteralGap);
         RegexBoundedLineLiteralGapEngine.TryCreate(tree.Root, options, out RegexBoundedLineLiteralGapEngine? boundedLineLiteralGap);
-        RegexBoundedScalarClassSequenceEngine.TryCreate(tree.Root, options, out RegexBoundedScalarClassSequenceEngine? boundedScalarClassSequence);
-        RegexBoundedByteClassSequenceEngine.TryCreate(tree.Root, options, out RegexBoundedByteClassSequenceEngine? boundedByteClassSequence);
+        RegexBoundedScalarClassSequenceEngine? boundedScalarClassSequence = earlyBoundedScalarClassSequence;
+        RegexBoundedByteClassSequenceEngine? boundedByteClassSequence = earlyBoundedByteClassSequence;
         RegexRepeatedLazyDotStarLiteralEngine.TryCreate(tree.Root, options, out RegexRepeatedLazyDotStarLiteralEngine? repeatedLazyDotStarLiteral);
         RegexDelimitedSpanEngine.TryCreate(tree.Root, options, out RegexDelimitedSpanEngine? delimitedSpan);
         RegexFixedWidthAlternationEngine.TryCreate(tree.Root, tree.CaptureCount, options, out RegexFixedWidthAlternationEngine? fixedWidthAlternation);
