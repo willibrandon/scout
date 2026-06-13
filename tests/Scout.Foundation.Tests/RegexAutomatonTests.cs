@@ -1483,6 +1483,33 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies a single fixed-width sequence with a literal seed uses direct fixed-width scanning.
+    /// </summary>
+    [Fact]
+    public void FixedWidthAlternationEngineCountsSingleClassSequence()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"tHa[Nt]"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "xx tHaN yy tHat zz tHaa"u8.ToArray();
+        int firstStart = haystack.AsSpan().IndexOf("tHaN"u8);
+        int secondStart = haystack.AsSpan().IndexOf("tHat"u8);
+        int rejectedStart = haystack.AsSpan().IndexOf("tHaa"u8);
+
+        Assert.Equal(RegexEngineKind.FixedWidthAlternation, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(firstStart, 4), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(secondStart, 4), automaton.Find(haystack, firstStart + 1));
+        Assert.Equal(new RegexMatch(secondStart, 4), automaton.MatchAt(haystack, secondStart));
+        Assert.Null(automaton.MatchAt(haystack, rejectedStart));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(8, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies leading ASCII class plus literal suffix patterns scan from suffix candidates.
     /// </summary>
     [Fact]

@@ -56,7 +56,7 @@ internal sealed class RegexFixedWidthAlternationEngine
         }
 
         if (!TryCollectAlternatives(root, options, out RegexFixedWidthAtom[][] compiledAlternatives) ||
-            compiledAlternatives.Length is < MinAlternativeCount or > MaxAlternativeCount)
+            compiledAlternatives.Length > MaxAlternativeCount)
         {
             return false;
         }
@@ -88,6 +88,12 @@ internal sealed class RegexFixedWidthAlternationEngine
         RegexFixedWidthLiteralSeed[]? literalSeeds = TryCreateLiteralSeeds(compiledAlternatives, out RegexFixedWidthLiteralSeed[]? seeds)
             ? seeds
             : null;
+        if (compiledAlternatives.Length < MinAlternativeCount &&
+            (literalSeeds is null || literalSeeds[0].Offset != 0))
+        {
+            return false;
+        }
+
         TryCreateLiteralSeedAccelerators(
             literalSeeds,
             out MemmemFinder[]? literalSeedFinders,
@@ -661,7 +667,7 @@ internal sealed class RegexFixedWidthAlternationEngine
 
     private static bool ShouldUseLiteralSeedFinders(byte[][] literals)
     {
-        if (literals.Length is <= 1 or > 8)
+        if (literals.Length > 8)
         {
             return false;
         }
