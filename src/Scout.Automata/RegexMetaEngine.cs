@@ -23,6 +23,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexLiteralSetEngine? literalSet;
     private readonly RegexAlternationSetEngine? alternationSet;
     private readonly RegexSimpleSequenceEngine? simpleSequence;
+    private readonly RegexEndAnchoredAtomEngine? endAnchoredAtom;
     private readonly RegexLineContainsEngine? lineContains;
     private readonly RegexDotStarClassFallbackEngine? dotStarClassFallback;
     private readonly RegexScalarRunEngine? scalarRun;
@@ -62,7 +63,8 @@ internal sealed class RegexMetaEngine
         RegexAsciiWordBoundaryEngine? asciiWordBoundary = null,
         Func<RegexNfa>? nfaFactory = null,
         Func<RegexUnanchoredLazyDfa?>? unanchoredLazyDfaFactory = null,
-        Func<RegexLazyDfa?>? anchoredLeftmostDfaFactory = null)
+        Func<RegexLazyDfa?>? anchoredLeftmostDfaFactory = null,
+        RegexEndAnchoredAtomEngine? endAnchoredAtom = null)
     {
         Kind = kind;
         this.nfa = nfa;
@@ -80,6 +82,7 @@ internal sealed class RegexMetaEngine
         this.literalSet = literalSet;
         this.alternationSet = alternationSet;
         this.simpleSequence = simpleSequence;
+        this.endAnchoredAtom = endAnchoredAtom;
         this.lineContains = lineContains;
         this.dotStarClassFallback = dotStarClassFallback;
         this.scalarRun = scalarRun;
@@ -161,6 +164,7 @@ internal sealed class RegexMetaEngine
         RegexLiteralSetEngine? literalSet,
         RegexAlternationSetEngine? alternationSet,
         RegexSimpleSequenceEngine? simpleSequence = null,
+        RegexEndAnchoredAtomEngine? endAnchoredAtom = null,
         RegexLineContainsEngine? lineContains = null,
         RegexDotStarClassFallbackEngine? dotStarClassFallback = null,
         RegexNfa? asciiFastNfa = null,
@@ -228,6 +232,27 @@ internal sealed class RegexMetaEngine
                 dotStarClassFallback: null,
                 prefilter,
                 nfa.Utf8);
+        }
+
+        if (endAnchoredAtom is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.SimpleSequence,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
+                prefilter,
+                nfa.Utf8,
+                endAnchoredAtom: endAnchoredAtom);
         }
 
         if (asciiWordBoundary is not null)
@@ -556,6 +581,11 @@ internal sealed class RegexMetaEngine
             return simpleSequence.Find(haystack, startOffset);
         }
 
+        if (endAnchoredAtom is not null)
+        {
+            return endAnchoredAtom.Find(haystack, startOffset);
+        }
+
         if (lineContains is not null && prefilter is null)
         {
             return lineContains.Find(haystack, startOffset);
@@ -676,6 +706,11 @@ internal sealed class RegexMetaEngine
             return alternationSet.CountMatches(haystack, startAt);
         }
 
+        if (endAnchoredAtom is not null)
+        {
+            return endAnchoredAtom.CountMatches(haystack, startAt);
+        }
+
         if (lineContains is not null)
         {
             return lineContains.CountMatches(haystack, startAt);
@@ -721,6 +756,11 @@ internal sealed class RegexMetaEngine
         if (alternationSet is not null)
         {
             return alternationSet.SumMatchSpans(haystack, startAt);
+        }
+
+        if (endAnchoredAtom is not null)
+        {
+            return endAnchoredAtom.SumMatchSpans(haystack, startAt);
         }
 
         if (lineContains is not null)
@@ -958,6 +998,11 @@ internal sealed class RegexMetaEngine
             return alternationSet.MatchAt(haystack, startOffset);
         }
 
+        if (endAnchoredAtom is not null)
+        {
+            return endAnchoredAtom.MatchAt(haystack, startOffset);
+        }
+
         if (lineContains is not null)
         {
             return lineContains.MatchAt(haystack, startOffset);
@@ -1149,6 +1194,11 @@ internal sealed class RegexMetaEngine
         if (scalarRun is not null)
         {
             return scalarRun.TryMatchAt(haystack, start, out length);
+        }
+
+        if (endAnchoredAtom is not null)
+        {
+            return endAnchoredAtom.TryMatchAt(haystack, start, out length);
         }
 
         if (asciiWordBoundary is not null)

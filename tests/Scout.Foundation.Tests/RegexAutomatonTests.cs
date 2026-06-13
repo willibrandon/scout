@@ -2214,6 +2214,42 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies single atoms anchored at the end only test the final possible match.
+    /// </summary>
+    [Fact]
+    public void UsesSimpleSequenceEngineForEndAnchoredAtom()
+    {
+        var ascii = RegexAutomaton.Compile(
+            @"\w$"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var unicode = RegexAutomaton.Compile(
+            @"\w$"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] unicodeHaystack = System.Text.Encoding.UTF8.GetBytes("***Ж");
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(ascii));
+        Assert.Equal(new RegexMatch(3, 1), ascii.Find("***X"u8));
+        Assert.Equal(1, ascii.CountMatches("***X"u8));
+        Assert.Equal(1, ascii.SumMatchSpans("***X"u8));
+        Assert.Equal(0, ascii.CountMatches("***X"u8, startAt: 4));
+        Assert.Null(ascii.Find("***!"u8));
+        Assert.Null(ascii.Find("X\n"u8));
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(unicode));
+        Assert.Equal(new RegexMatch(3, 2), unicode.Find(unicodeHaystack));
+        Assert.Equal(2, unicode.SumMatchSpans(unicodeHaystack));
+        Assert.Null(unicode.MatchAt(unicodeHaystack, 2));
+    }
+
+    /// <summary>
     /// Verifies single bounded Unicode scalar runs use direct scalar scanning.
     /// </summary>
     [Fact]

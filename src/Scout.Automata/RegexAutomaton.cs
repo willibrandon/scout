@@ -174,6 +174,7 @@ public sealed class RegexAutomaton
             : null;
 
         RegexSimpleSequenceEngine.TryCreate(tree.Root, options, out RegexSimpleSequenceEngine? simpleSequence);
+        RegexEndAnchoredAtomEngine.TryCreate(tree.Root, options, out RegexEndAnchoredAtomEngine? endAnchoredAtom);
         RegexLineContainsEngine.TryCreate(tree.Root, options, out RegexLineContainsEngine? lineContains);
         RegexDotStarClassFallbackEngine.TryCreate(tree.Root, options, out RegexDotStarClassFallbackEngine? dotStarClassFallback);
         RegexScalarRunEngine.TryCreate(tree.Root, options, out RegexScalarRunEngine? scalarRun);
@@ -190,6 +191,7 @@ public sealed class RegexAutomaton
                 literalSet,
                 alternationSet: null,
                 simpleSequence: simpleSequence,
+                endAnchoredAtom: endAnchoredAtom,
                 lineContains: lineContains,
                 dotStarClassFallback: dotStarClassFallback,
                 asciiFastNfa: asciiFastNfa,
