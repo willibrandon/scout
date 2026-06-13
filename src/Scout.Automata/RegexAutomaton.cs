@@ -27,6 +27,7 @@ public sealed class RegexAutomaton
         private RegexAnchoredDotStarCaptureEngine? anchoredDotStarCaptureEngine;
         private RegexKeywordWhitespaceCaptureEngine? keywordWhitespaceCaptureEngine;
         private RegexOperatorSpacingCaptureEngine? operatorSpacingCaptureEngine;
+        private RegexBibleReferenceCaptureEngine? bibleReferenceCaptureEngine;
         private volatile bool captureEnginesInitialized;
         private volatile bool genericCaptureOnly;
 
@@ -309,6 +310,15 @@ public sealed class RegexAutomaton
         }
     }
 
+    internal bool UsesBibleReferenceCaptureEngine
+    {
+        get
+        {
+            EnsureCaptureEngines();
+            return bibleReferenceCaptureEngine is not null;
+        }
+    }
+
     /// <summary>
     /// Finds the first match in a haystack.
     /// </summary>
@@ -526,6 +536,11 @@ public sealed class RegexAutomaton
                     captureOptions,
                     captureCount,
                     out operatorSpacingCaptureEngine);
+                RegexBibleReferenceCaptureEngine.TryCreate(
+                    captureRoot,
+                    captureOptions,
+                    captureCount,
+                    out bibleReferenceCaptureEngine);
                 if (syntheticCaptureAlternationSet is null &&
                     anchoredWordCaptureEngine is null &&
                     anchoredRunBoundaryCaptureEngine is null &&
@@ -548,6 +563,7 @@ public sealed class RegexAutomaton
                 scalarRunCaptureEngine is null &&
                 keywordWhitespaceCaptureEngine is null &&
                 operatorSpacingCaptureEngine is null &&
+                bibleReferenceCaptureEngine is null &&
                 syntheticCaptureAlternationSet is null;
             captureEnginesInitialized = true;
         }
@@ -626,6 +642,11 @@ public sealed class RegexAutomaton
         if (operatorSpacingCaptureEngine is not null)
         {
             return operatorSpacingCaptureEngine.FindCaptures(haystack, startAt);
+        }
+
+        if (bibleReferenceCaptureEngine is not null)
+        {
+            return bibleReferenceCaptureEngine.FindCaptures(haystack, startAt);
         }
 
         return FindGenericCaptures(haystack, startAt);

@@ -476,16 +476,16 @@ public sealed class RegexAutomatonTests
     [Fact]
     public void FindCapturesDropsStaleGroupsFromRepeatedAlternatives()
     {
-        byte[] pattern = System.Text.Encoding.ASCII.GetBytes(
-            @"(?P<Book>(([1234]|I{1,4})[\t\f\pZ]*)?\pL+\.?)[\t\f\pZ]+(?P<Locations>((?P<Chapter>1?[0-9]?[0-9])(-(?P<ChapterEnd>\d+)|,\s*(?P<ChapterNext>\\d+))*(:\s*(?P<Verse>\d+))?(-(?P<VerseEnd>\d+)|,\s*(?P<VerseNext>\d+))*\s?)+)");
         var automaton = RegexAutomaton.Compile(
-            pattern,
+            BibleReferencePattern(),
             caseInsensitive: false,
             multiLine: false,
             dotMatchesNewline: false,
             utf8: false,
             unicodeClasses: true);
         byte[] haystack = "Gen 1:1, 2\n3 King 1:3-4\nII Ki. 3:12-14, 25\n"u8.ToArray();
+
+        Assert.True(automaton.UsesBibleReferenceCaptureEngine);
 
         long total = 0;
         int matches = 0;
@@ -514,6 +514,53 @@ public sealed class RegexAutomatonTests
         AssertGroupText(last, haystack, 11, "12");
         AssertGroupText(last, haystack, 13, "14");
         AssertGroupText(last, haystack, 14, "25");
+    }
+
+    /// <summary>
+    /// Verifies the bible-reference capture fast path preserves repeated numeric location captures.
+    /// </summary>
+    [Fact]
+    public void BibleReferenceCaptureEngineReportsRepeatedNumericLocations()
+    {
+        var automaton = RegexAutomaton.Compile(
+            BibleReferencePattern(),
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = "I LM 1957\n"u8.ToArray();
+
+        RegexCaptures? captures = automaton.FindCaptures(haystack);
+
+        Assert.True(automaton.UsesBibleReferenceCaptureEngine);
+        Assert.NotNull(captures);
+        Assert.Equal(new RegexMatch(0, haystack.Length), captures.Match);
+        Assert.Equal(15, captures.GroupCount);
+        Assert.Equal(7, captures.ParticipatingCount());
+        AssertGroupText(captures, haystack, 1, "I LM");
+        AssertGroupText(captures, haystack, 2, "I ");
+        AssertGroupText(captures, haystack, 3, "I");
+        AssertGroupText(captures, haystack, 4, "1957\n");
+        AssertGroupText(captures, haystack, 5, "7\n");
+        AssertGroupText(captures, haystack, 6, "7");
+    }
+
+    /// <summary>
+    /// Verifies the bible-reference capture fast path stays limited to Unicode-class mode.
+    /// </summary>
+    [Fact]
+    public void BibleReferenceCaptureEngineSkipsNonUnicodeClasses()
+    {
+        var automaton = RegexAutomaton.Compile(
+            BibleReferencePattern(),
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.False(automaton.UsesBibleReferenceCaptureEngine);
     }
 
     /// <summary>
@@ -2909,6 +2956,11 @@ public sealed class RegexAutomatonTests
     private static byte[] RebarUnstructuredLogPattern()
     {
         return @"^([^ ]+ [^ ]+) ([DIWEF])[1234]: ((?:(?:\[[^\]]*?\]|\([^\)]*?\)): )*)(.*?) \{([^\}]*)\}$"u8.ToArray();
+    }
+
+    private static byte[] BibleReferencePattern()
+    {
+        return @"(?P<Book>(([1234]|I{1,4})[\t\f\pZ]*)?\pL+\.?)[\t\f\pZ]+(?P<Locations>((?P<Chapter>1?[0-9]?[0-9])(-(?P<ChapterEnd>\d+)|,\s*(?P<ChapterNext>\\d+))*(:\s*(?P<Verse>\d+))?(-(?P<VerseEnd>\d+)|,\s*(?P<VerseNext>\d+))*\s?)+)"u8.ToArray();
     }
 
     private static byte[] BuildLargeLiteralAlternation(string first, string second)
