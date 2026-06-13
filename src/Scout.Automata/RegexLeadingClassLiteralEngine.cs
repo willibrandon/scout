@@ -1,0 +1,554 @@
+namespace Scout;
+
+internal sealed class RegexLeadingClassLiteralEngine
+{
+    private const int MaxLiteralCount = 8;
+    private const int MaxExpandedSearchPatternCount = 16;
+    private const int MaxTrailingSearchBytes = 32;
+
+    private readonly RegexLeadingClassLiteralBranch[] branches;
+    private readonly byte[][] searchPatterns;
+    private readonly RegexCaseSensitiveLiteralSetScanner? scanner;
+    private readonly RegexPackedLiteralSetScanner? packedScanner;
+    private readonly AhoCorasickAutomaton? automaton;
+    private readonly MemmemFinder? singleLiteralFinder;
+    private readonly RegexLeadingClassTrailingAnchorScanner? trailingAnchorScanner;
+    private readonly RegexCompileOptions options;
+
+    private RegexLeadingClassLiteralEngine(
+        RegexLeadingClassLiteralBranch[] branches,
+        byte[][] searchPatterns,
+        RegexCaseSensitiveLiteralSetScanner? scanner,
+        RegexPackedLiteralSetScanner? packedScanner,
+        AhoCorasickAutomaton? automaton,
+        RegexLeadingClassTrailingAnchorScanner? trailingAnchorScanner,
+        RegexCompileOptions options)
+    {
+        this.branches = branches;
+        this.searchPatterns = searchPatterns;
+        this.scanner = scanner;
+        this.packedScanner = packedScanner;
+        this.automaton = automaton;
+        this.trailingAnchorScanner = trailingAnchorScanner;
+        this.options = options;
+        if (searchPatterns.Length == 1)
+        {
+            singleLiteralFinder = new MemmemFinder(searchPatterns[0]);
+        }
+    }
+
+    public static bool TryCreate(
+        RegexSyntaxNode root,
+        RegexCompileOptions options,
+        out RegexLeadingClassLiteralEngine? engine)
+    {
+        engine = null;
+        if (options.CaseInsensitive ||
+            options.Utf8 ||
+            options.UnicodeClasses ||
+            options.SwapGreed)
+        {
+            return false;
+        }
+
+        if (!TrySplitOuterTrailingAtom(root, options, out RegexSyntaxNode branchRoot, out RegexAtomSpec? trailingAtom))
+        {
+            branchRoot = root;
+            trailingAtom = null;
+        }
+
+        branchRoot = UnwrapTransparentGroups(branchRoot);
+        var branches = new List<RegexLeadingClassLiteralBranch>();
+        if (branchRoot is RegexAlternationNode alternation)
+        {
+            if (alternation.Alternatives.Count == 0 || alternation.Alternatives.Count > MaxLiteralCount)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < alternation.Alternatives.Count; index++)
+            {
+                if (!TryGetBranch(alternation.Alternatives[index], trailingAtom, out RegexLeadingClassLiteralBranch branch))
+                {
+                    return false;
+                }
+
+                branches.Add(branch);
+            }
+        }
+        else if (!TryGetBranch(branchRoot, trailingAtom, out RegexLeadingClassLiteralBranch branch))
+        {
+            return false;
+        }
+        else
+        {
+            branches.Add(branch);
+        }
+
+        if (branches.Count == 0)
+        {
+            return false;
+        }
+
+        byte[][] literals = GetLiterals(branches);
+        byte[][]? expandedPatterns = TryBuildTrailingSearchPatterns(branches, options);
+        byte[][] searchPatterns = expandedPatterns ?? literals;
+        bool expandedSearchPatterns = expandedPatterns is not null;
+        RegexCaseSensitiveLiteralSetScanner? scanner = null;
+        RegexPackedLiteralSetScanner? packedScanner = null;
+        AhoCorasickAutomaton? automaton = null;
+        if (searchPatterns.Length > 1)
+        {
+            bool scannerCreated = expandedSearchPatterns &&
+                RegexPackedLiteralSetScanner.TryCreateWithMaxLiteralCount(
+                    searchPatterns,
+                    MaxExpandedSearchPatternCount,
+                    out packedScanner);
+            scannerCreated = scannerCreated || (expandedSearchPatterns
+                ? RegexCaseSensitiveLiteralSetScanner.TryCreateWithMaxLiteralCount(
+                    searchPatterns,
+                    MaxExpandedSearchPatternCount,
+                    out scanner)
+                : RegexCaseSensitiveLiteralSetScanner.TryCreate(searchPatterns, out scanner));
+            if (!scannerCreated)
+            {
+                if (expandedSearchPatterns)
+                {
+                    searchPatterns = literals;
+                    expandedSearchPatterns = false;
+                    packedScanner = null;
+                    scannerCreated = RegexCaseSensitiveLiteralSetScanner.TryCreate(searchPatterns, out scanner);
+                }
+
+                if (!scannerCreated)
+                {
+                    automaton = AhoCorasickAutomaton.Create(searchPatterns, AhoCorasickMatchKind.LeftmostFirst);
+                }
+            }
+        }
+
+        RegexLeadingClassTrailingAnchorScanner? trailingAnchorScanner = null;
+        if (!expandedSearchPatterns)
+        {
+            RegexLeadingClassTrailingAnchorScanner.TryCreate(branches, options, out trailingAnchorScanner);
+        }
+
+        engine = new RegexLeadingClassLiteralEngine(
+            branches.ToArray(),
+            searchPatterns,
+            scanner,
+            packedScanner,
+            automaton,
+            trailingAnchorScanner,
+            options);
+        return true;
+    }
+
+    public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        int lowerBound = Math.Clamp(startAt, 0, haystack.Length);
+        if (trailingAnchorScanner is not null)
+        {
+            return FindByTrailingAnchor(haystack, lowerBound);
+        }
+
+        int searchAt = Math.Min(haystack.Length, lowerBound + 1);
+        while (TryFindLiteral(haystack, searchAt, out RegexLiteralSetCandidate candidate))
+        {
+            int start = candidate.Match.Start - 1;
+            if (start >= lowerBound && TryMatchAt(haystack, start, out int length))
+            {
+                return new RegexMatch(start, length);
+            }
+
+            searchAt = candidate.Match.Start + 1;
+        }
+
+        return null;
+    }
+
+    public RegexMatch? MatchAt(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        int start = Math.Clamp(startAt, 0, haystack.Length);
+        return TryMatchAt(haystack, start, out int length)
+            ? new RegexMatch(start, length)
+            : null;
+    }
+
+    public long CountMatches(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        return CountOrSum(haystack, startAt, sumSpans: false);
+    }
+
+    public long SumMatchSpans(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        return CountOrSum(haystack, startAt, sumSpans: true);
+    }
+
+    public bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int length)
+    {
+        length = 0;
+        if ((uint)start >= (uint)haystack.Length)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < branches.Length; index++)
+        {
+            RegexLeadingClassLiteralBranch branch = branches[index];
+            if (!LeadingByteMatches(haystack[start], branch.LeadingKind) ||
+                branch.Literal.Length > haystack.Length - start - 1 ||
+                !haystack.Slice(start + 1, branch.Literal.Length).SequenceEqual(branch.Literal))
+            {
+                continue;
+            }
+
+            int end = start + 1 + branch.Literal.Length;
+            if (branch.TrailingAtom is { } trailingAtom)
+            {
+                if (end >= haystack.Length || !AtomMatches(haystack[end], trailingAtom, options))
+                {
+                    continue;
+                }
+
+                end++;
+            }
+
+            length = end - start;
+            return true;
+        }
+
+        return false;
+    }
+
+    private long CountOrSum(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
+    {
+        long total = 0;
+        int offset = Math.Clamp(startAt, 0, haystack.Length);
+        while (Find(haystack, offset) is RegexMatch match)
+        {
+            total += sumSpans ? match.Length : 1;
+            offset = match.End;
+        }
+
+        return total;
+    }
+
+    private RegexMatch? FindByTrailingAnchor(ReadOnlySpan<byte> haystack, int lowerBound)
+    {
+        int searchAt = Math.Min(haystack.Length, lowerBound + trailingAnchorScanner!.MinLiteralLength);
+        RegexMatch? best = null;
+        while (true)
+        {
+            int anchor = trailingAnchorScanner.Find(haystack, searchAt);
+            if (anchor < 0)
+            {
+                return best;
+            }
+
+            if (best.HasValue && anchor - trailingAnchorScanner.MaxLiteralLength > best.Value.Start)
+            {
+                return best;
+            }
+
+            for (int index = 0; index < branches.Length; index++)
+            {
+                int start = anchor - branches[index].Literal.Length;
+                if (start < lowerBound ||
+                    (best.HasValue && start >= best.Value.Start))
+                {
+                    continue;
+                }
+
+                if (TryMatchAt(haystack, start, out int length))
+                {
+                    best = new RegexMatch(start, length);
+                }
+            }
+
+            searchAt = anchor + 1;
+        }
+    }
+
+    private bool TryFindLiteral(ReadOnlySpan<byte> haystack, int startAt, out RegexLiteralSetCandidate candidate)
+    {
+        if (scanner is not null)
+        {
+            RegexLiteralSetCandidate? found = scanner.Find(haystack, startAt);
+            candidate = found.GetValueOrDefault();
+            return found.HasValue;
+        }
+
+        if (packedScanner is not null)
+        {
+            RegexLiteralSetCandidate? found = packedScanner.Find(haystack, startAt);
+            candidate = found.GetValueOrDefault();
+            return found.HasValue;
+        }
+
+        if (automaton is not null)
+        {
+            int automatonStart = Math.Clamp(startAt, 0, haystack.Length);
+            AhoCorasickMatch? found = automaton.Find(haystack[automatonStart..]);
+            if (!found.HasValue)
+            {
+                candidate = default;
+                return false;
+            }
+
+            AhoCorasickMatch match = found.Value;
+            candidate = new RegexLiteralSetCandidate(
+                match.PatternId,
+                new RegexMatch(automatonStart + match.Start, match.Length));
+            return true;
+        }
+
+        int start = Math.Clamp(startAt, 0, haystack.Length);
+        int offset = singleLiteralFinder!.Find(haystack[start..]);
+        if (offset < 0)
+        {
+            candidate = default;
+            return false;
+        }
+
+        candidate = new RegexLiteralSetCandidate(0, new RegexMatch(start + offset, searchPatterns[0].Length));
+        return true;
+    }
+
+    private static bool AtomMatches(byte value, RegexAtomSpec atom, RegexCompileOptions options)
+    {
+        return RegexByteClass.AtomMatches(
+            value,
+            atom.Kind,
+            atom.Value,
+            options.CaseInsensitive,
+            options.MultiLine,
+            options.DotMatchesNewline,
+            options.Crlf,
+            options.LineTerminator);
+    }
+
+    private static bool TrySplitOuterTrailingAtom(
+        RegexSyntaxNode root,
+        RegexCompileOptions options,
+        out RegexSyntaxNode branchRoot,
+        out RegexAtomSpec? trailingAtom)
+    {
+        branchRoot = root;
+        trailingAtom = null;
+        root = UnwrapTransparentGroups(root);
+        if (root is not RegexSequenceNode { Nodes.Count: 2 } sequence ||
+            !TryGetAtomSpec(sequence.Nodes[1], options, out RegexAtomSpec candidateTrailing))
+        {
+            return false;
+        }
+
+        branchRoot = sequence.Nodes[0];
+        trailingAtom = candidateTrailing;
+        return true;
+    }
+
+    private static bool TryGetBranch(
+        RegexSyntaxNode node,
+        RegexAtomSpec? trailingAtom,
+        out RegexLeadingClassLiteralBranch branch)
+    {
+        branch = default;
+        node = UnwrapTransparentGroups(node);
+        if (node is not RegexSequenceNode { Nodes.Count: >= 2 } sequence ||
+            !TryGetLeadingKind(sequence.Nodes[0], out RegexLeadingClassLiteralKind leadingKind))
+        {
+            return false;
+        }
+
+        var literal = new List<byte>();
+        for (int index = 1; index < sequence.Nodes.Count; index++)
+        {
+            if (!TryAppendAsciiLiteral(sequence.Nodes[index], literal))
+            {
+                return false;
+            }
+        }
+
+        if (literal.Count == 0)
+        {
+            return false;
+        }
+
+        branch = new RegexLeadingClassLiteralBranch(leadingKind, literal.ToArray(), trailingAtom);
+        return true;
+    }
+
+    private static bool TryAppendAsciiLiteral(RegexSyntaxNode node, List<byte> literal)
+    {
+        node = UnwrapTransparentGroups(node);
+        if (node is not RegexAtomNode { Kind: RegexSyntaxKind.Literal } atom ||
+            atom.Value.Length == 0)
+        {
+            return false;
+        }
+
+        ReadOnlySpan<byte> bytes = atom.Value.Span;
+        for (int index = 0; index < bytes.Length; index++)
+        {
+            if (bytes[index] > 0x7F)
+            {
+                return false;
+            }
+
+            literal.Add(bytes[index]);
+        }
+
+        return true;
+    }
+
+    private static bool TryGetLeadingKind(RegexSyntaxNode node, out RegexLeadingClassLiteralKind leadingKind)
+    {
+        leadingKind = RegexLeadingClassLiteralKind.AsciiLetter;
+        node = UnwrapTransparentGroups(node);
+        if (node is not RegexAtomNode atom)
+        {
+            return false;
+        }
+
+        if (atom.Kind == RegexSyntaxKind.LetterClass)
+        {
+            return true;
+        }
+
+        if (atom.Kind != RegexSyntaxKind.CharacterClass)
+        {
+            return false;
+        }
+
+        ReadOnlySpan<byte> value = atom.Value.Span;
+        if (value.SequenceEqual("a-z"u8))
+        {
+            leadingKind = RegexLeadingClassLiteralKind.AsciiLowercase;
+            return true;
+        }
+
+        if (value.SequenceEqual("A-Z"u8))
+        {
+            leadingKind = RegexLeadingClassLiteralKind.AsciiUppercase;
+            return true;
+        }
+
+        if (value.SequenceEqual("A-Za-z"u8) || value.SequenceEqual("a-zA-Z"u8))
+        {
+            leadingKind = RegexLeadingClassLiteralKind.AsciiLetter;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetAtomSpec(RegexSyntaxNode node, RegexCompileOptions options, out RegexAtomSpec atom)
+    {
+        atom = default;
+        node = UnwrapTransparentGroups(node);
+        if (node is not RegexAtomNode candidate ||
+            RegexByteClass.RequiresUtf8ScalarMatch(
+                candidate.Kind,
+                candidate.Value.Span,
+                options.Utf8,
+                options.CaseInsensitive,
+                options.UnicodeClasses))
+        {
+            return false;
+        }
+
+        atom = new RegexAtomSpec(candidate.Kind, candidate.Value.ToArray());
+        return true;
+    }
+
+    private static bool LeadingByteMatches(byte value, RegexLeadingClassLiteralKind leadingKind)
+    {
+        return leadingKind switch
+        {
+            RegexLeadingClassLiteralKind.AsciiLowercase => RegexSimpleSequenceSegment.IsAsciiLowercase(value),
+            RegexLeadingClassLiteralKind.AsciiUppercase => RegexSimpleSequenceSegment.IsAsciiUppercase(value),
+            _ => RegexSimpleSequenceSegment.IsAsciiLetter(value),
+        };
+    }
+
+    private static byte[][] GetLiterals(List<RegexLeadingClassLiteralBranch> branches)
+    {
+        byte[][] literals = new byte[branches.Count][];
+        for (int index = 0; index < branches.Count; index++)
+        {
+            literals[index] = branches[index].Literal;
+        }
+
+        return literals;
+    }
+
+    private static byte[][]? TryBuildTrailingSearchPatterns(
+        List<RegexLeadingClassLiteralBranch> branches,
+        RegexCompileOptions options)
+    {
+        List<byte[]> patterns = [];
+        for (int branchIndex = 0; branchIndex < branches.Count; branchIndex++)
+        {
+            RegexLeadingClassLiteralBranch branch = branches[branchIndex];
+            if (!branch.TrailingAtom.HasValue ||
+                !TryGetAtomBytes(branch.TrailingAtom.Value, options, out byte[] trailingBytes) ||
+                trailingBytes.Length == 0 ||
+                trailingBytes.Length > MaxTrailingSearchBytes)
+            {
+                return null;
+            }
+
+            for (int byteIndex = 0; byteIndex < trailingBytes.Length; byteIndex++)
+            {
+                byte[] pattern = new byte[branch.Literal.Length + 1];
+                branch.Literal.CopyTo(pattern, 0);
+                pattern[^1] = trailingBytes[byteIndex];
+                patterns.Add(pattern);
+                if (patterns.Count > MaxExpandedSearchPatternCount)
+                {
+                    return null;
+                }
+            }
+        }
+
+        if (patterns.Count == 0)
+        {
+            return null;
+        }
+
+        return patterns.ToArray();
+    }
+
+    private static bool TryGetAtomBytes(RegexAtomSpec atom, RegexCompileOptions options, out byte[] bytes)
+    {
+        List<byte> matches = [];
+        for (int value = 0; value <= 0xFF; value++)
+        {
+            if (AtomMatches((byte)value, atom, options))
+            {
+                matches.Add((byte)value);
+                if (matches.Count > MaxTrailingSearchBytes)
+                {
+                    bytes = [];
+                    return false;
+                }
+            }
+        }
+
+        bytes = matches.ToArray();
+        return true;
+    }
+
+    private static RegexSyntaxNode UnwrapTransparentGroups(RegexSyntaxNode node)
+    {
+        while (node is RegexGroupNode group &&
+            string.IsNullOrEmpty(group.EnabledFlags) &&
+            string.IsNullOrEmpty(group.DisabledFlags))
+        {
+            node = group.Child;
+        }
+
+        return node;
+    }
+}

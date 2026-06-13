@@ -828,6 +828,53 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies leading ASCII class plus literal suffix patterns scan from suffix candidates.
+    /// </summary>
+    [Fact]
+    public void LeadingClassLiteralEngineCountsSuffixSpans()
+    {
+        var alternation = RegexAutomaton.Compile(
+            @"([A-Za-z]awyer|[A-Za-z]inn)\s"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var single = RegexAutomaton.Compile(
+            @"[a-z]shing"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var trailingClass = RegexAutomaton.Compile(
+            @"([A-Z]awyer|[A-Z]inn)[0-9\s]"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(RegexEngineKind.LeadingClassLiteral, GetEngineKind(alternation));
+        Assert.Equal(RegexEngineKind.LeadingClassLiteral, GetEngineKind(single));
+        Assert.Equal(RegexEngineKind.LeadingClassLiteral, GetEngineKind(trailingClass));
+
+        byte[] alternationHaystack = "Sawyer Finn xawyer! Zinn\tbinn "u8.ToArray();
+        Assert.Equal(new RegexMatch(0, 7), alternation.Find(alternationHaystack));
+        Assert.Equal(new RegexMatch(7, 5), alternation.Find(alternationHaystack, startAt: 1));
+        Assert.Equal(new RegexMatch(20, 5), alternation.Find(alternationHaystack, startAt: 13));
+        Assert.Equal(new RegexMatch(0, 7), alternation.MatchAt(alternationHaystack, 0));
+        Assert.Null(alternation.MatchAt(alternationHaystack, 12));
+        Assert.Equal(4, alternation.CountMatches(alternationHaystack));
+        Assert.Equal(22, alternation.SumMatchSpans(alternationHaystack));
+
+        Assert.Equal(2, single.CountMatches("ashing Zshing bshing"u8));
+        Assert.Equal(12, single.SumMatchSpans("ashing Zshing bshing"u8));
+        Assert.Equal(2, trailingClass.CountMatches("Sawyer7 Finn\t sawyer "u8));
+        Assert.Equal(12, trailingClass.SumMatchSpans("Sawyer7 Finn\t sawyer "u8));
+    }
+
+    /// <summary>
     /// Verifies word-boundary literal alternations scan from literal candidates.
     /// </summary>
     [Fact]

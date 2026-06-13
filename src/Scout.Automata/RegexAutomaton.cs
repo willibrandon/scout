@@ -217,6 +217,7 @@ public sealed class RegexAutomaton
         RegexRunLiteralDotStarEngine.TryCreate(tree.Root, options, out RegexRunLiteralDotStarEngine? runLiteralDotStar);
         RegexLiteralPrefixRunEngine.TryCreate(tree.Root, options, out RegexLiteralPrefixRunEngine? literalPrefixRun);
         RegexBoundedLiteralGapEngine.TryCreate(tree.Root, options, out RegexBoundedLiteralGapEngine? boundedLiteralGap);
+        RegexLeadingClassLiteralEngine.TryCreate(tree.Root, options, out RegexLeadingClassLiteralEngine? leadingClassLiteral);
         RegexUnicodeLetterLiteralRunEngine.TryCreate(tree.Root, options, out RegexUnicodeLetterLiteralRunEngine? unicodeLetterLiteralRun);
         RegexWordSuffixLiteralEngine.TryCreate(tree.Root, options, out RegexWordSuffixLiteralEngine? wordSuffixLiteral);
         RegexDelimitedRunEngine.TryCreate(tree.Root, options, out RegexDelimitedRunEngine? delimitedRun);
@@ -250,6 +251,7 @@ public sealed class RegexAutomaton
                 runLiteralDotStar: runLiteralDotStar,
                 literalPrefixRun: literalPrefixRun,
                 boundedLiteralGap: boundedLiteralGap,
+                leadingClassLiteral: leadingClassLiteral,
                 unicodeLetterLiteralRun: unicodeLetterLiteralRun,
                 wordBoundaryLiteralSet: wordBoundaryLiteralSet,
                 wordSuffixLiteral: wordSuffixLiteral,

@@ -42,8 +42,16 @@ internal sealed class RegexPackedLiteralSetScanner
 
     public static bool TryCreate(IReadOnlyList<byte[]> literals, out RegexPackedLiteralSetScanner? scanner)
     {
+        return TryCreateWithMaxLiteralCount(literals, MaximumLiteralCount, out scanner);
+    }
+
+    public static bool TryCreateWithMaxLiteralCount(
+        IReadOnlyList<byte[]> literals,
+        int maxLiteralCount,
+        out RegexPackedLiteralSetScanner? scanner)
+    {
         scanner = null;
-        if (literals.Count is < MinimumLiteralCount or > MaximumLiteralCount)
+        if (literals.Count < MinimumLiteralCount || literals.Count > maxLiteralCount)
         {
             return false;
         }

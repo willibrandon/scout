@@ -71,8 +71,16 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
 
     public static bool TryCreate(IReadOnlyList<byte[]> literals, out RegexCaseSensitiveLiteralSetScanner? scanner)
     {
+        return TryCreateWithMaxLiteralCount(literals, MaxLiteralCount, out scanner);
+    }
+
+    public static bool TryCreateWithMaxLiteralCount(
+        IReadOnlyList<byte[]> literals,
+        int maxLiteralCount,
+        out RegexCaseSensitiveLiteralSetScanner? scanner)
+    {
         scanner = null;
-        if (literals.Count is <= 1 or > MaxLiteralCount)
+        if (literals.Count <= 1 || literals.Count > maxLiteralCount)
         {
             return false;
         }
