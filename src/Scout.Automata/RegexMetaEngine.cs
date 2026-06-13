@@ -29,6 +29,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral;
     private readonly RegexDelimitedRunEngine? delimitedRun;
     private readonly RegexSimpleSequenceEngine? simpleSequence;
+    private readonly RegexEndAnchoredSequenceEngine? endAnchoredSequence;
     private readonly RegexEndAnchoredAtomEngine? endAnchoredAtom;
     private readonly RegexLineContainsEngine? lineContains;
     private readonly RegexDotStarClassFallbackEngine? dotStarClassFallback;
@@ -76,7 +77,8 @@ internal sealed class RegexMetaEngine
         RegexIpv4AddressEngine? ipv4Address = null,
         RegexEmailAddressEngine? emailAddress = null,
         RegexUriEngine? uri = null,
-        RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral = null)
+        RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral = null,
+        RegexEndAnchoredSequenceEngine? endAnchoredSequence = null)
     {
         Kind = kind;
         this.nfa = nfa;
@@ -100,6 +102,7 @@ internal sealed class RegexMetaEngine
         this.wordWhitespaceLiteral = wordWhitespaceLiteral;
         this.delimitedRun = delimitedRun;
         this.simpleSequence = simpleSequence;
+        this.endAnchoredSequence = endAnchoredSequence;
         this.endAnchoredAtom = endAnchoredAtom;
         this.lineContains = lineContains;
         this.dotStarClassFallback = dotStarClassFallback;
@@ -190,6 +193,7 @@ internal sealed class RegexMetaEngine
         RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral = null,
         RegexDelimitedRunEngine? delimitedRun = null,
         RegexSimpleSequenceEngine? simpleSequence = null,
+        RegexEndAnchoredSequenceEngine? endAnchoredSequence = null,
         RegexEndAnchoredAtomEngine? endAnchoredAtom = null,
         RegexLineContainsEngine? lineContains = null,
         RegexDotStarClassFallbackEngine? dotStarClassFallback = null,
@@ -392,6 +396,28 @@ internal sealed class RegexMetaEngine
                 dotStarClassFallback: null,
                 prefilter,
                 nfa.Utf8);
+        }
+
+        if (endAnchoredSequence is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.EndAnchoredSequence,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                delimitedRun: null,
+                simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
+                prefilter,
+                nfa.Utf8,
+                endAnchoredSequence: endAnchoredSequence);
         }
 
         if (endAnchoredAtom is not null)
@@ -783,6 +809,11 @@ internal sealed class RegexMetaEngine
             return simpleSequence.Find(haystack, startOffset);
         }
 
+        if (endAnchoredSequence is not null)
+        {
+            return endAnchoredSequence.Find(haystack, startOffset);
+        }
+
         if (endAnchoredAtom is not null)
         {
             return endAnchoredAtom.Find(haystack, startOffset);
@@ -963,6 +994,11 @@ internal sealed class RegexMetaEngine
             return count;
         }
 
+        if (endAnchoredSequence is not null)
+        {
+            return endAnchoredSequence.CountMatches(haystack, startAt);
+        }
+
         RegexUnanchoredLazyDfa? activeUnanchoredLazyDfa = GetUnanchoredLazyDfa(haystack.Length);
         if (activeUnanchoredLazyDfa is not null &&
             activeUnanchoredLazyDfa.TryCountMatches(haystack, startAt, out long unanchoredCount))
@@ -1043,6 +1079,11 @@ internal sealed class RegexMetaEngine
         if (TryCountNonOverlapping(haystack, startAt, sumSpans: true, out _, out long spanSum))
         {
             return spanSum;
+        }
+
+        if (endAnchoredSequence is not null)
+        {
+            return endAnchoredSequence.SumMatchSpans(haystack, startAt);
         }
 
         RegexUnanchoredLazyDfa? activeUnanchoredLazyDfa = GetUnanchoredLazyDfa(haystack.Length);
@@ -1481,6 +1522,11 @@ internal sealed class RegexMetaEngine
         if (wordWhitespaceLiteral is not null)
         {
             return wordWhitespaceLiteral.TryMatchAt(haystack, start, out length);
+        }
+
+        if (endAnchoredSequence is not null)
+        {
+            return endAnchoredSequence.TryMatchAt(haystack, start, out length);
         }
 
         if (delimitedRun is not null)

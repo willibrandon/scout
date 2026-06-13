@@ -2834,6 +2834,54 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies fixed byte sequences anchored at the end scan from the suffix.
+    /// </summary>
+    [Fact]
+    public void UsesEndAnchoredSequenceEngineForFixedByteSuffixes()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"A[AB]B[BC]C[CD]D[DE]E[EF]F[FG]G[GH]H[HI]I[IJ]J$"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "prefix\nAABCCCDEEEFGGHHHIJJ"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.EndAnchoredSequence, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(7, 19), automaton.Find(haystack));
+        Assert.Equal(1, automaton.CountMatches(haystack));
+        Assert.Equal(19, automaton.SumMatchSpans(haystack));
+        Assert.Null(automaton.Find(haystack, startAt: 8));
+        Assert.Equal(new RegexMatch(7, 19), automaton.MatchAt(haystack, 7));
+        Assert.Null(automaton.MatchAt(haystack, 8));
+    }
+
+    /// <summary>
+    /// Verifies printable byte runs anchored at the end return the leftmost matching run.
+    /// </summary>
+    [Fact]
+    public void UsesEndAnchoredSequenceEngineForPrintableRunSuffixes()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"[ -~]*ABCDEFGHIJKLMNOPQRSTUVWXYZ$"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "noise\nxABCDEFGHIJKLMNOPQRSTUVWXYZ"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.EndAnchoredSequence, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(6, 27), automaton.Find(haystack));
+        Assert.Equal(1, automaton.CountMatches(haystack));
+        Assert.Equal(27, automaton.SumMatchSpans(haystack));
+        Assert.Equal(new RegexMatch(7, 26), automaton.Find(haystack, startAt: 7));
+        Assert.Equal(new RegexMatch(7, 26), automaton.MatchAt(haystack, 7));
+        Assert.Null(automaton.Find(haystack, startAt: haystack.Length));
+    }
+
+    /// <summary>
     /// Verifies delimiter-separated byte runs scan from the delimiter.
     /// </summary>
     [Fact]

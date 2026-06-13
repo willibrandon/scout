@@ -10,6 +10,7 @@ internal enum RegexEngineKind
     Uri,
     WordWhitespaceLiteral,
     SimpleSequence,
+    EndAnchoredSequence,
     LineContains,
     DotStarClassFallback,
     PikeVm,

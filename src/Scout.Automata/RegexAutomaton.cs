@@ -196,6 +196,7 @@ public sealed class RegexAutomaton
         RegexWordWhitespaceLiteralEngine.TryCreate(tree.Root, options, out RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral);
         RegexDelimitedRunEngine.TryCreate(tree.Root, options, out RegexDelimitedRunEngine? delimitedRun);
         RegexSimpleSequenceEngine.TryCreate(tree.Root, options, out RegexSimpleSequenceEngine? simpleSequence);
+        RegexEndAnchoredSequenceEngine.TryCreate(tree.Root, options, out RegexEndAnchoredSequenceEngine? endAnchoredSequence);
         RegexEndAnchoredAtomEngine.TryCreate(tree.Root, options, out RegexEndAnchoredAtomEngine? endAnchoredAtom);
         RegexLineContainsEngine.TryCreate(tree.Root, options, out RegexLineContainsEngine? lineContains);
         RegexDotStarClassFallbackEngine.TryCreate(tree.Root, options, out RegexDotStarClassFallbackEngine? dotStarClassFallback);
@@ -223,6 +224,7 @@ public sealed class RegexAutomaton
                 wordWhitespaceLiteral: wordWhitespaceLiteral,
                 delimitedRun: delimitedRun,
                 simpleSequence: simpleSequence,
+                endAnchoredSequence: endAnchoredSequence,
                 endAnchoredAtom: endAnchoredAtom,
                 lineContains: lineContains,
                 dotStarClassFallback: dotStarClassFallback,
@@ -369,8 +371,17 @@ public sealed class RegexAutomaton
 
     private bool CanSearch(ReadOnlySpan<byte> haystack, int startAt)
     {
-        return (lengthGuard is null || lengthGuard.CanSearch(haystack, startAt)) &&
-            (requiredByteSetGuard is null || requiredByteSetGuard.CanSearch(haystack, startAt)) &&
+        if (lengthGuard is not null && !lengthGuard.CanSearch(haystack, startAt))
+        {
+            return false;
+        }
+
+        if (engine.Kind == RegexEngineKind.EndAnchoredSequence)
+        {
+            return true;
+        }
+
+        return (requiredByteSetGuard is null || requiredByteSetGuard.CanSearch(haystack, startAt)) &&
             (requiredLiteralAnySetGuard is null || requiredLiteralAnySetGuard.CanSearch(haystack, startAt));
     }
 
