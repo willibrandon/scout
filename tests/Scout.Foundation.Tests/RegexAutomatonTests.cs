@@ -65,6 +65,26 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies missing required byte classes reject searches before engine execution.
+    /// </summary>
+    [Fact]
+    public void RejectsMissingRequiredByteSet()
+    {
+        var automaton = RegexAutomaton.Compile(@".efghijklmnopq[a-z]+[A-Z]"u8);
+        byte[] noUppercase = System.Text.Encoding.ASCII.GetBytes(
+            string.Concat(Enumerable.Repeat("bcdefghijklmnopq", 8)));
+        byte[] matching = "xefghijklmnopqzA"u8.ToArray();
+
+        Assert.Null(automaton.Find(noUppercase));
+        Assert.Null(automaton.FindEarliest(noUppercase, startAt: 0));
+        Assert.Equal(0, automaton.CountMatches(noUppercase));
+        Assert.Equal(0, automaton.SumMatchSpans(noUppercase));
+        Assert.Equal(new RegexMatch(0, 16), automaton.Find(matching));
+        Assert.Equal(1, automaton.CountMatches(matching));
+        Assert.Equal(16, automaton.SumMatchSpans(matching));
+    }
+
+    /// <summary>
     /// Verifies top-level literal alternatives use the Aho-Corasick regex prefilter.
     /// </summary>
     [Fact]

@@ -8,6 +8,7 @@ public sealed class RegexAutomaton
         private readonly RegexMetaEngine engine;
         private readonly RegexStartPredicate? startPredicate;
         private readonly RegexLengthGuard? lengthGuard;
+        private readonly RegexRequiredByteSetGuard? requiredByteSetGuard;
         private readonly object captureInitializationLock = new();
         private readonly ReadOnlyMemory<byte> capturePattern;
         private readonly RegexSyntaxNode? captureRoot;
@@ -29,6 +30,7 @@ public sealed class RegexAutomaton
             RegexMetaEngine engine,
             RegexStartPredicate? startPredicate,
             RegexLengthGuard? lengthGuard,
+            RegexRequiredByteSetGuard? requiredByteSetGuard,
             RegexAlternationSetEngine? syntheticCaptureAlternationSet,
             ReadOnlyMemory<byte> capturePattern,
             RegexSyntaxNode? captureRoot,
@@ -39,6 +41,7 @@ public sealed class RegexAutomaton
             this.engine = engine;
             this.startPredicate = startPredicate;
             this.lengthGuard = lengthGuard;
+            this.requiredByteSetGuard = requiredByteSetGuard;
             this.syntheticCaptureAlternationSet = syntheticCaptureAlternationSet;
             this.capturePattern = capturePattern;
             this.captureRoot = captureRoot;
@@ -103,6 +106,7 @@ public sealed class RegexAutomaton
                 RegexMetaEngine.CompileLiteralSet(literalSet, options.Utf8),
                 startPredicate: null,
                 lengthGuard: null,
+                requiredByteSetGuard: null,
                 syntheticCaptureAlternationSet: null,
                 capturePattern: default,
                 captureRoot: null,
@@ -138,6 +142,7 @@ public sealed class RegexAutomaton
                 RegexMetaEngine.CompileLiteralSet(literalSet, options.Utf8),
                 startPredicate: null,
                 lengthGuard: null,
+                requiredByteSetGuard: null,
                 syntheticCaptureAlternationSet: null,
                 capturePattern: default,
                 captureRoot: null,
@@ -156,6 +161,7 @@ public sealed class RegexAutomaton
                     () => RegexNfaCompiler.Compile(tree.Root, options, utf8ByteTrieCache)),
                 startPredicate: null,
                 lengthGuard: null,
+                requiredByteSetGuard: null,
                 alternationSet.CanSynthesizeCaptures ? alternationSet : null,
                 tree.CaptureCount > 0 ? tree.Pattern : default,
                 tree.CaptureCount > 0 ? tree.Root : null,
@@ -183,6 +189,7 @@ public sealed class RegexAutomaton
         RegexAsciiFastPath.TryCompileNfa(tree.Pattern.Span, tree.Root, options, out RegexNfa? asciiFastNfa);
         RegexStartPredicate.TryCreate(tree.Root, options, startPrefixSet, out RegexStartPredicate? startPredicate);
         var lengthGuard = RegexLengthGuard.TryCreate(tree.Root, options);
+        var requiredByteSetGuard = RegexRequiredByteSetGuard.TryCreate(tree.Root, options);
 
         return new RegexAutomaton(
             RegexMetaEngine.Compile(
@@ -203,6 +210,7 @@ public sealed class RegexAutomaton
                 options: options),
             startPredicate,
             lengthGuard,
+            requiredByteSetGuard,
             syntheticCaptureAlternationSet: null,
             tree.CaptureCount > 0 ? tree.Pattern : default,
             tree.CaptureCount > 0 ? tree.Root : null,
@@ -269,7 +277,7 @@ public sealed class RegexAutomaton
     /// <returns>The first match, or <see langword="null" /> when no match exists.</returns>
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
-        if (lengthGuard is not null && !lengthGuard.CanSearch(haystack, startAt))
+        if (!CanSearch(haystack, startAt))
         {
             return null;
         }
@@ -279,7 +287,7 @@ public sealed class RegexAutomaton
 
     internal RegexMatch? MatchAt(ReadOnlySpan<byte> haystack, int startAt)
     {
-        if (lengthGuard is not null && !lengthGuard.CanSearch(haystack, startAt))
+        if (!CanSearch(haystack, startAt))
         {
             return null;
         }
@@ -297,6 +305,12 @@ public sealed class RegexAutomaton
         return startPredicate?.TryAddFirstBytes(bytes) == true;
     }
 
+    private bool CanSearch(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        return (lengthGuard is null || lengthGuard.CanSearch(haystack, startAt)) &&
+            (requiredByteSetGuard is null || requiredByteSetGuard.CanSearch(haystack, startAt));
+    }
+
     /// <summary>
     /// Finds the earliest-ending match in a haystack at or after a byte offset.
     /// </summary>
@@ -305,7 +319,7 @@ public sealed class RegexAutomaton
     /// <returns>The earliest match, or <see langword="null" /> when no match exists.</returns>
     public RegexMatch? FindEarliest(ReadOnlySpan<byte> haystack, int startAt)
     {
-        if (lengthGuard is not null && !lengthGuard.CanSearch(haystack, startAt))
+        if (!CanSearch(haystack, startAt))
         {
             return null;
         }
@@ -315,7 +329,7 @@ public sealed class RegexAutomaton
 
     internal RegexMatch? FindAllKindAt(ReadOnlySpan<byte> haystack, int startAt)
     {
-        if (lengthGuard is not null && !lengthGuard.CanSearch(haystack, startAt))
+        if (!CanSearch(haystack, startAt))
         {
             return null;
         }
@@ -325,7 +339,7 @@ public sealed class RegexAutomaton
 
     internal IReadOnlyList<RegexMatch> FindOverlappingAt(ReadOnlySpan<byte> haystack, int startAt)
     {
-        if (lengthGuard is not null && !lengthGuard.CanSearch(haystack, startAt))
+        if (!CanSearch(haystack, startAt))
         {
             return [];
         }
@@ -361,7 +375,7 @@ public sealed class RegexAutomaton
     /// <returns>The number of non-overlapping matches.</returns>
     public long CountMatches(ReadOnlySpan<byte> haystack, int startAt)
     {
-        if (lengthGuard is not null && !lengthGuard.CanSearch(haystack, startAt))
+        if (!CanSearch(haystack, startAt))
         {
             return 0;
         }
@@ -387,7 +401,7 @@ public sealed class RegexAutomaton
     /// <returns>The sum of non-overlapping match lengths.</returns>
     public long SumMatchSpans(ReadOnlySpan<byte> haystack, int startAt)
     {
-        if (lengthGuard is not null && !lengthGuard.CanSearch(haystack, startAt))
+        if (!CanSearch(haystack, startAt))
         {
             return 0;
         }
@@ -475,7 +489,7 @@ public sealed class RegexAutomaton
     /// <returns>The first capture result, or <see langword="null" /> when no match exists.</returns>
     public RegexCaptures? FindCaptures(ReadOnlySpan<byte> haystack, int startAt = 0)
     {
-        if (lengthGuard is not null && !lengthGuard.CanSearch(haystack, startAt))
+        if (!CanSearch(haystack, startAt))
         {
             return null;
         }
