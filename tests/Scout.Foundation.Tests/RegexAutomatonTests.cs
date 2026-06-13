@@ -2958,6 +2958,41 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies word-run suffix literals scan whole word runs instead of falling back to the NFA.
+    /// </summary>
+    [Fact]
+    public void UsesWordSuffixLiteralEngineForWordEndingLiterals()
+    {
+        var doubleSuffix = RegexAutomaton.Compile(
+            @"\b\w+nn\b"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var singleSuffix = RegexAutomaton.Compile(
+            @"\b\w+n\b"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(RegexEngineKind.WordSuffixLiteral, GetEngineKind(doubleSuffix));
+        Assert.Equal(new RegexMatch(3, 3), doubleSuffix.Find("nn ann annx xnn nnnn"u8));
+        Assert.Equal(new RegexMatch(12, 3), doubleSuffix.Find("nn ann annx xnn nnnn"u8, startAt: 4));
+        Assert.Equal(3, doubleSuffix.CountMatches("nn ann annx xnn nnnn"u8));
+        Assert.Equal(10, doubleSuffix.SumMatchSpans("nn ann annx xnn nnnn"u8));
+        Assert.Equal(new RegexMatch(3, 3), doubleSuffix.MatchAt("nn ann"u8, 3));
+        Assert.Null(doubleSuffix.MatchAt("nn ann"u8, 4));
+
+        Assert.Equal(RegexEngineKind.WordSuffixLiteral, GetEngineKind(singleSuffix));
+        Assert.Equal(new RegexMatch(2, 2), singleSuffix.Find("n an ann annx fin_"u8));
+        Assert.Equal(2, singleSuffix.CountMatches("n an ann annx fin_"u8));
+        Assert.Equal(5, singleSuffix.SumMatchSpans("n an ann annx fin_"u8));
+    }
+
+    /// <summary>
     /// Verifies single atoms anchored at the end only test the final possible match.
     /// </summary>
     [Fact]
@@ -2979,7 +3014,7 @@ public sealed class RegexAutomatonTests
             unicodeClasses: true);
         byte[] unicodeHaystack = System.Text.Encoding.UTF8.GetBytes("***Ж");
 
-        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(ascii));
+        Assert.Equal(RegexEngineKind.EndAnchoredAtom, GetEngineKind(ascii));
         Assert.Equal(new RegexMatch(3, 1), ascii.Find("***X"u8));
         Assert.Equal(1, ascii.CountMatches("***X"u8));
         Assert.Equal(1, ascii.SumMatchSpans("***X"u8));
@@ -2987,7 +3022,7 @@ public sealed class RegexAutomatonTests
         Assert.Null(ascii.Find("***!"u8));
         Assert.Null(ascii.Find("X\n"u8));
 
-        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(unicode));
+        Assert.Equal(RegexEngineKind.EndAnchoredAtom, GetEngineKind(unicode));
         Assert.Equal(new RegexMatch(3, 2), unicode.Find(unicodeHaystack));
         Assert.Equal(2, unicode.SumMatchSpans(unicodeHaystack));
         Assert.Null(unicode.MatchAt(unicodeHaystack, 2));

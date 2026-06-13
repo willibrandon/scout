@@ -30,6 +30,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexRunLiteralDotStarEngine? runLiteralDotStar;
     private readonly RegexUnicodeLetterLiteralRunEngine? unicodeLetterLiteralRun;
     private readonly RegexWordBoundaryLiteralSetEngine? wordBoundaryLiteralSet;
+    private readonly RegexWordSuffixLiteralEngine? wordSuffixLiteral;
     private readonly RegexDelimitedRunEngine? delimitedRun;
     private readonly RegexSimpleSequenceEngine? simpleSequence;
     private readonly RegexEndAnchoredSequenceEngine? endAnchoredSequence;
@@ -84,6 +85,7 @@ internal sealed class RegexMetaEngine
         RegexRunLiteralDotStarEngine? runLiteralDotStar = null,
         RegexUnicodeLetterLiteralRunEngine? unicodeLetterLiteralRun = null,
         RegexWordBoundaryLiteralSetEngine? wordBoundaryLiteralSet = null,
+        RegexWordSuffixLiteralEngine? wordSuffixLiteral = null,
         RegexEndAnchoredSequenceEngine? endAnchoredSequence = null)
     {
         Kind = kind;
@@ -109,6 +111,7 @@ internal sealed class RegexMetaEngine
         this.runLiteralDotStar = runLiteralDotStar;
         this.unicodeLetterLiteralRun = unicodeLetterLiteralRun;
         this.wordBoundaryLiteralSet = wordBoundaryLiteralSet;
+        this.wordSuffixLiteral = wordSuffixLiteral;
         this.delimitedRun = delimitedRun;
         this.simpleSequence = simpleSequence;
         this.endAnchoredSequence = endAnchoredSequence;
@@ -230,6 +233,7 @@ internal sealed class RegexMetaEngine
         RegexRunLiteralDotStarEngine? runLiteralDotStar = null,
         RegexUnicodeLetterLiteralRunEngine? unicodeLetterLiteralRun = null,
         RegexWordBoundaryLiteralSetEngine? wordBoundaryLiteralSet = null,
+        RegexWordSuffixLiteralEngine? wordSuffixLiteral = null,
         RegexDelimitedRunEngine? delimitedRun = null,
         RegexSimpleSequenceEngine? simpleSequence = null,
         RegexEndAnchoredSequenceEngine? endAnchoredSequence = null,
@@ -461,6 +465,28 @@ internal sealed class RegexMetaEngine
                 wordBoundaryLiteralSet: wordBoundaryLiteralSet);
         }
 
+        if (wordSuffixLiteral is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.WordSuffixLiteral,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                delimitedRun: null,
+                simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
+                prefilter,
+                nfa.Utf8,
+                wordSuffixLiteral: wordSuffixLiteral);
+        }
+
         if (delimitedRun is not null)
         {
             return new RegexMetaEngine(
@@ -480,6 +506,28 @@ internal sealed class RegexMetaEngine
                 dotStarClassFallback: null,
                 prefilter,
                 nfa.Utf8);
+        }
+
+        if (endAnchoredAtom is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.EndAnchoredAtom,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                delimitedRun: null,
+                simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
+                prefilter,
+                nfa.Utf8,
+                endAnchoredAtom: endAnchoredAtom);
         }
 
         if (simpleSequence is not null)
@@ -523,28 +571,6 @@ internal sealed class RegexMetaEngine
                 prefilter,
                 nfa.Utf8,
                 endAnchoredSequence: endAnchoredSequence);
-        }
-
-        if (endAnchoredAtom is not null)
-        {
-            return new RegexMetaEngine(
-                RegexEngineKind.SimpleSequence,
-                nfa,
-                pikeVm: null,
-                boundedBacktracker: null,
-                onePassDfa: null,
-                denseDfa: null,
-                sparseDfa: null,
-                lazyDfa: null,
-                literalSet: null,
-                alternationSet: null,
-                delimitedRun: null,
-                simpleSequence: null,
-                lineContains: null,
-                dotStarClassFallback: null,
-                prefilter,
-                nfa.Utf8,
-                endAnchoredAtom: endAnchoredAtom);
         }
 
         if (asciiWordBoundary is not null)
@@ -919,6 +945,11 @@ internal sealed class RegexMetaEngine
             return wordBoundaryLiteralSet.Find(haystack, startOffset);
         }
 
+        if (wordSuffixLiteral is not null)
+        {
+            return wordSuffixLiteral.Find(haystack, startOffset);
+        }
+
         if (delimitedRun is not null)
         {
             return delimitedRun.Find(haystack, startOffset);
@@ -1099,6 +1130,11 @@ internal sealed class RegexMetaEngine
             return wordBoundaryLiteralSet.CountMatches(haystack, startAt);
         }
 
+        if (wordSuffixLiteral is not null)
+        {
+            return wordSuffixLiteral.CountMatches(haystack, startAt);
+        }
+
         if (delimitedRun is not null)
         {
             return delimitedRun.CountMatches(haystack, startAt);
@@ -1199,6 +1235,11 @@ internal sealed class RegexMetaEngine
         if (wordBoundaryLiteralSet is not null)
         {
             return wordBoundaryLiteralSet.SumMatchSpans(haystack, startAt);
+        }
+
+        if (wordSuffixLiteral is not null)
+        {
+            return wordSuffixLiteral.SumMatchSpans(haystack, startAt);
         }
 
         if (delimitedRun is not null)
@@ -1486,6 +1527,11 @@ internal sealed class RegexMetaEngine
             return wordBoundaryLiteralSet.MatchAt(haystack, startOffset);
         }
 
+        if (wordSuffixLiteral is not null)
+        {
+            return wordSuffixLiteral.MatchAt(haystack, startOffset);
+        }
+
         if (delimitedRun is not null)
         {
             return delimitedRun.MatchAt(haystack, startOffset);
@@ -1704,6 +1750,11 @@ internal sealed class RegexMetaEngine
             RegexMatch? match = wordBoundaryLiteralSet.MatchAt(haystack, start);
             length = match?.Length ?? 0;
             return match.HasValue;
+        }
+
+        if (wordSuffixLiteral is not null)
+        {
+            return wordSuffixLiteral.TryMatchAt(haystack, start, out length);
         }
 
         if (endAnchoredSequence is not null)

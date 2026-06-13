@@ -216,6 +216,7 @@ public sealed class RegexAutomaton
         RegexWordWhitespaceLiteralEngine.TryCreate(tree.Root, options, out RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral);
         RegexRunLiteralDotStarEngine.TryCreate(tree.Root, options, out RegexRunLiteralDotStarEngine? runLiteralDotStar);
         RegexUnicodeLetterLiteralRunEngine.TryCreate(tree.Root, options, out RegexUnicodeLetterLiteralRunEngine? unicodeLetterLiteralRun);
+        RegexWordSuffixLiteralEngine.TryCreate(tree.Root, options, out RegexWordSuffixLiteralEngine? wordSuffixLiteral);
         RegexDelimitedRunEngine.TryCreate(tree.Root, options, out RegexDelimitedRunEngine? delimitedRun);
         RegexSimpleSequenceEngine.TryCreate(tree.Root, options, out RegexSimpleSequenceEngine? simpleSequence);
         RegexEndAnchoredSequenceEngine.TryCreate(tree.Root, options, out RegexEndAnchoredSequenceEngine? endAnchoredSequence);
@@ -247,6 +248,7 @@ public sealed class RegexAutomaton
                 runLiteralDotStar: runLiteralDotStar,
                 unicodeLetterLiteralRun: unicodeLetterLiteralRun,
                 wordBoundaryLiteralSet: wordBoundaryLiteralSet,
+                wordSuffixLiteral: wordSuffixLiteral,
                 delimitedRun: delimitedRun,
                 simpleSequence: simpleSequence,
                 endAnchoredSequence: endAnchoredSequence,
@@ -402,6 +404,7 @@ public sealed class RegexAutomaton
         }
 
         if (engine.Kind is RegexEngineKind.EndAnchoredSequence
+            or RegexEngineKind.EndAnchoredAtom
             or RegexEngineKind.RunLiteralDotStar
             or RegexEngineKind.UnicodeLetterLiteralRun
             or RegexEngineKind.WordBoundaryLiteralSet)
