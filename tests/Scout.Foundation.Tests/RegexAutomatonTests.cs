@@ -3948,6 +3948,30 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies a single Unicode property atom uses direct scalar scanning.
+    /// </summary>
+    [Fact]
+    public void UsesSimpleSequenceEngineForSingleUnicodePropertyAtom()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\p{Sm}"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("a+b ∞ c");
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(1, 1), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(4, 3), automaton.Find(haystack, startAt: 2));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(4, automaton.SumMatchSpans(haystack));
+        Assert.Equal(1, automaton.CountMatches(haystack, startAt: 2));
+        Assert.Equal(3, automaton.SumMatchSpans(haystack, startAt: 2));
+    }
+
+    /// <summary>
     /// Verifies bounded alternations of Unicode scalar classes use direct scalar scanning.
     /// </summary>
     [Fact]
