@@ -751,6 +751,41 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies fixed ASCII letter length alternations synthesize captures.
+    /// </summary>
+    [Fact]
+    public void AsciiLetterLengthAlternationCaptureEngineReportsCaptures()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"([A-Za-z]{7})|([A-Za-z]{6})|([A-Za-z]{5})"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "xx abcdefgh yz abcd ABCDE z abcdef"u8.ToArray();
+
+        Assert.True(automaton.UsesAsciiLetterLengthAlternationCaptureEngine);
+        RegexCaptures? first = automaton.FindCaptures(haystack);
+        Assert.NotNull(first);
+        Assert.Equal(new RegexMatch(3, 7), first.Match);
+        Assert.Equal(new RegexMatch(3, 7), first.GetGroup(0));
+        Assert.Equal(new RegexMatch(3, 7), first.GetGroup(1));
+        Assert.Null(first.GetGroup(2));
+        Assert.Null(first.GetGroup(3));
+
+        RegexCaptures? second = automaton.FindCaptures(haystack, first.Match.End);
+        Assert.NotNull(second);
+        Assert.Equal(new RegexMatch(20, 5), second.Match);
+        Assert.Equal(new RegexMatch(20, 5), second.GetGroup(3));
+
+        RegexCaptures? third = automaton.FindCaptures(haystack, second.Match.End);
+        Assert.NotNull(third);
+        Assert.Equal(new RegexMatch(28, 6), third.Match);
+        Assert.Equal(new RegexMatch(28, 6), third.GetGroup(2));
+    }
+
+    /// <summary>
     /// Verifies required-literal prefilters do not reject scoped case-insensitive literals.
     /// </summary>
     [Fact]
