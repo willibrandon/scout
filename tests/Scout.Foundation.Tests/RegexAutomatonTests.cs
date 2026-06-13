@@ -650,6 +650,41 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies literal-prefix word captures synthesize branch captures directly.
+    /// </summary>
+    [Fact]
+    public void LiteralWordCaptureEngineReportsAlternationCaptures()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"fn is_(\w+)|fn as_(\w+)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "fn no_ignored fn is_ready fn as_ref fn is_ fn as_42x!"u8.ToArray();
+
+        RegexCaptures? first = automaton.FindCaptures(haystack);
+        RegexCaptures? second = automaton.FindCaptures(haystack, first!.Match.End);
+        RegexCaptures? third = automaton.FindCaptures(haystack, second!.Match.End);
+
+        Assert.True(automaton.UsesLiteralWordCaptureEngine);
+        Assert.NotNull(first);
+        Assert.Equal(2, first.ParticipatingCount());
+        AssertGroupText(first, haystack, 1, "ready");
+        Assert.Null(first.GetGroup(2));
+        Assert.NotNull(second);
+        Assert.Equal(2, second.ParticipatingCount());
+        Assert.Null(second.GetGroup(1));
+        AssertGroupText(second, haystack, 2, "ref");
+        Assert.NotNull(third);
+        Assert.Equal(2, third.ParticipatingCount());
+        Assert.Null(third.GetGroup(1));
+        AssertGroupText(third, haystack, 2, "42x");
+        Assert.Null(automaton.FindCaptures(haystack, third.Match.End));
+    }
+
+    /// <summary>
     /// Verifies required-literal prefilters do not reject scoped case-insensitive literals.
     /// </summary>
     [Fact]

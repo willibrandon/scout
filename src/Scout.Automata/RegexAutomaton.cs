@@ -27,6 +27,7 @@ public sealed class RegexAutomaton
         private RegexAnchoredDotStarCaptureEngine? anchoredDotStarCaptureEngine;
         private RegexKeywordWhitespaceCaptureEngine? keywordWhitespaceCaptureEngine;
         private RegexOperatorSpacingCaptureEngine? operatorSpacingCaptureEngine;
+        private RegexLiteralWordCaptureEngine? literalWordCaptureEngine;
         private RegexBibleReferenceCaptureEngine? bibleReferenceCaptureEngine;
         private volatile bool captureEnginesInitialized;
         private volatile bool genericCaptureOnly;
@@ -347,6 +348,15 @@ public sealed class RegexAutomaton
         }
     }
 
+    internal bool UsesLiteralWordCaptureEngine
+    {
+        get
+        {
+            EnsureCaptureEngines();
+            return literalWordCaptureEngine is not null;
+        }
+    }
+
     internal bool UsesBibleReferenceCaptureEngine
     {
         get
@@ -586,6 +596,11 @@ public sealed class RegexAutomaton
                     captureOptions,
                     captureCount,
                     out operatorSpacingCaptureEngine);
+                RegexLiteralWordCaptureEngine.TryCreate(
+                    captureRoot,
+                    captureOptions,
+                    captureCount,
+                    out literalWordCaptureEngine);
                 RegexBibleReferenceCaptureEngine.TryCreate(
                     captureRoot,
                     captureOptions,
@@ -597,7 +612,8 @@ public sealed class RegexAutomaton
                     anchoredDotStarCaptureEngine is null &&
                     scalarRunCaptureEngine is null &&
                     keywordWhitespaceCaptureEngine is null &&
-                    operatorSpacingCaptureEngine is null)
+                    operatorSpacingCaptureEngine is null &&
+                    literalWordCaptureEngine is null)
                 {
                     RegexNfa captureNfa = RegexNfaCompiler.CompileCaptures(captureRoot, captureOptions, captureCount);
                     RegexPrefilter? effectiveCapturePrefilter = capturePrefilter ?? RegexPrefilter.Compile(captureRoot, captureOptions);
@@ -613,6 +629,7 @@ public sealed class RegexAutomaton
                 scalarRunCaptureEngine is null &&
                 keywordWhitespaceCaptureEngine is null &&
                 operatorSpacingCaptureEngine is null &&
+                literalWordCaptureEngine is null &&
                 bibleReferenceCaptureEngine is null &&
                 syntheticCaptureAlternationSet is null;
             captureEnginesInitialized = true;
@@ -692,6 +709,11 @@ public sealed class RegexAutomaton
         if (operatorSpacingCaptureEngine is not null)
         {
             return operatorSpacingCaptureEngine.FindCaptures(haystack, startAt);
+        }
+
+        if (literalWordCaptureEngine is not null)
+        {
+            return literalWordCaptureEngine.FindCaptures(haystack, startAt);
         }
 
         if (bibleReferenceCaptureEngine is not null)
