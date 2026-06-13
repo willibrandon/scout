@@ -24,6 +24,9 @@ internal sealed class RegexSimpleSequenceEngine
     private readonly int boundaryRunMinimum;
     private readonly RegexCompileOptions boundaryOptions;
     private readonly bool boundaryStartRequiresUtf8Boundary;
+    private readonly bool hasFixedWidthLiteralSuffix;
+    private readonly int fixedWidthLength;
+    private readonly byte fixedWidthSuffixLiteral;
 
     private RegexSimpleSequenceEngine(List<RegexSimpleSequenceSegment> segments)
     {
@@ -38,6 +41,10 @@ internal sealed class RegexSimpleSequenceEngine
         boundaryRunMinimum = 0;
         boundaryOptions = default;
         boundaryStartRequiresUtf8Boundary = false;
+        hasFixedWidthLiteralSuffix = TryGetFixedWidthLiteralSuffix(
+            this.segments,
+            out fixedWidthLength,
+            out fixedWidthSuffixLiteral);
     }
 
     private RegexSimpleSequenceEngine(List<RegexSimpleSequenceSegment> repeatedSegments, int repeatedMinimum, int repeatedMaximum, bool repeatedLazy)
@@ -53,6 +60,9 @@ internal sealed class RegexSimpleSequenceEngine
         boundaryRunMinimum = 0;
         boundaryOptions = default;
         boundaryStartRequiresUtf8Boundary = false;
+        hasFixedWidthLiteralSuffix = false;
+        fixedWidthLength = 0;
+        fixedWidthSuffixLiteral = 0;
     }
 
     private RegexSimpleSequenceEngine(
@@ -73,6 +83,9 @@ internal sealed class RegexSimpleSequenceEngine
         boundaryRunMinimum = runMinimum;
         boundaryOptions = wordBoundaryOptions;
         boundaryStartRequiresUtf8Boundary = startRequiresUtf8Boundary;
+        hasFixedWidthLiteralSuffix = false;
+        fixedWidthLength = 0;
+        fixedWidthSuffixLiteral = 0;
     }
 
     public static bool TryCreate(RegexSyntaxNode root, RegexCompileOptions options, out RegexSimpleSequenceEngine? engine)
@@ -96,7 +109,8 @@ internal sealed class RegexSimpleSequenceEngine
         var segments = new List<RegexSimpleSequenceSegment>();
         bool sawVariableRepetition = false;
         if (!TryAppend(root, options, segments, ref sawVariableRepetition) ||
-            !sawVariableRepetition ||
+            !sawVariableRepetition &&
+            !TryGetFixedWidthLiteralSuffix(segments, out _, out _) ||
             segments.Count == 0 ||
             segments.Count > MaxSegments ||
             LongestLiteralRun(segments) < MinimumLiteralRunLength &&
@@ -120,6 +134,11 @@ internal sealed class RegexSimpleSequenceEngine
         if (repeatedSegments is null && segments.Length == 1)
         {
             return FindSingleSegment(segments[0], haystack, startOffset);
+        }
+
+        if (hasFixedWidthLiteralSuffix)
+        {
+            return FindFixedWidthLiteralSuffix(haystack, startOffset);
         }
 
         for (int start = startOffset; start <= haystack.Length; start++)
@@ -157,6 +176,11 @@ internal sealed class RegexSimpleSequenceEngine
                 offset = match.End;
             }
 
+            return true;
+        }
+
+        if (TryCountFixedWidthLiteralSuffix(haystack, startAt, sumSpans, ref count, ref spanSum))
+        {
             return true;
         }
 
@@ -705,6 +729,76 @@ internal sealed class RegexSimpleSequenceEngine
         }
 
         return null;
+    }
+
+    private RegexMatch? FindFixedWidthLiteralSuffix(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        int offset = Math.Clamp(startAt, 0, haystack.Length);
+        int suffixOffset = fixedWidthLength - 1;
+        int search = Math.Min(haystack.Length, offset + suffixOffset);
+        while (search < haystack.Length)
+        {
+            int relative = haystack[search..].IndexOf(fixedWidthSuffixLiteral);
+            if (relative < 0)
+            {
+                return null;
+            }
+
+            int suffixAt = search + relative;
+            int start = suffixAt - suffixOffset;
+            if (start >= offset && TryMatchAt(haystack, start, out int length))
+            {
+                return new RegexMatch(start, length);
+            }
+
+            search = suffixAt + 1;
+        }
+
+        return null;
+    }
+
+    private bool TryCountFixedWidthLiteralSuffix(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        bool sumSpans,
+        ref long count,
+        ref long spanSum)
+    {
+        if (!hasFixedWidthLiteralSuffix)
+        {
+            return false;
+        }
+
+        int offset = Math.Clamp(startAt, 0, haystack.Length);
+        int suffixOffset = fixedWidthLength - 1;
+        int search = Math.Min(haystack.Length, offset + suffixOffset);
+        while (search < haystack.Length)
+        {
+            int relative = haystack[search..].IndexOf(fixedWidthSuffixLiteral);
+            if (relative < 0)
+            {
+                return true;
+            }
+
+            int suffixAt = search + relative;
+            int start = suffixAt - suffixOffset;
+            if (start >= offset && TryMatchAt(haystack, start, out int length))
+            {
+                count++;
+                if (sumSpans)
+                {
+                    spanSum += length;
+                }
+
+                offset = start + length;
+                search = Math.Min(haystack.Length, offset + suffixOffset);
+                continue;
+            }
+
+            search = suffixAt + 1;
+        }
+
+        return true;
     }
 
     private static void AddRun(
@@ -1458,6 +1552,43 @@ internal sealed class RegexSimpleSequenceEngine
         }
 
         return best;
+    }
+
+    private static bool TryGetFixedWidthLiteralSuffix(
+        IReadOnlyList<RegexSimpleSequenceSegment> segments,
+        out int width,
+        out byte suffixLiteral)
+    {
+        width = 0;
+        suffixLiteral = 0;
+        if (segments.Count == 0)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < segments.Count; index++)
+        {
+            RegexSimpleSequenceSegment segment = segments[index];
+            if (segment.Maximum != segment.Minimum)
+            {
+                width = 0;
+                return false;
+            }
+
+            width += segment.Minimum;
+        }
+
+        RegexSimpleSequenceSegment suffix = segments[^1];
+        if (width <= 0 ||
+            suffix.Minimum <= 0 ||
+            suffix.MatcherKind != RegexSimpleSequenceByteMatcherKind.Literal)
+        {
+            width = 0;
+            return false;
+        }
+
+        suffixLiteral = suffix.Literal;
+        return true;
     }
 
     private static int CountMatchingBytes(RegexAtomNode atom, RegexCompileOptions options)

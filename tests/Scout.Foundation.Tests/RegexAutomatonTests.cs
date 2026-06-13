@@ -2362,6 +2362,48 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies fixed-width byte class sequences ending in a literal scan from the suffix.
+    /// </summary>
+    [Fact]
+    public void CountsFixedWidthByteClassLiteralSuffixSequences()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"[a-q][^u-z]{3}x"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "zzabcqx yy b123x c111x"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(2, 5), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(11, 5), automaton.Find(haystack, startAt: 3));
+        Assert.Equal(3, automaton.CountMatches(haystack));
+        Assert.Equal(15, automaton.SumMatchSpans(haystack));
+        Assert.Equal(2, automaton.CountMatches(haystack, startAt: 3));
+        Assert.Equal(10, automaton.SumMatchSpans(haystack, startAt: 3));
+    }
+
+    /// <summary>
+    /// Verifies fixed-width suffix scanning preserves non-overlapping count semantics.
+    /// </summary>
+    [Fact]
+    public void CountsFixedWidthLiteralSuffixSequencesNonOverlapping()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"[a-q][^u-z]{3}x"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(2, automaton.CountMatches("a111xb222x"u8));
+        Assert.Equal(10, automaton.SumMatchSpans("a111xb222x"u8));
+    }
+
+    /// <summary>
     /// Verifies single bounded byte-class runs use direct simple-sequence scanning.
     /// </summary>
     [Fact]
