@@ -717,6 +717,26 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies lowercase/uppercase Unicode property scalar runs count non-overlapping matches directly.
+    /// </summary>
+    [Fact]
+    public void ScalarRunCountsLowerOrUpperUnicodeProperties()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"(?:\p{Lowercase}|\p{Uppercase}){3}"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("abC xyz αβΓ Δεζ 123");
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 3), automaton.Find(haystack));
+        Assert.Equal(4, automaton.CountMatches(haystack));
+    }
+
+    /// <summary>
     /// Verifies literal-prefix word captures synthesize branch captures directly.
     /// </summary>
     [Fact]

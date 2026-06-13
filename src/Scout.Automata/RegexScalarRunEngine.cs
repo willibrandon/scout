@@ -8,20 +8,33 @@ namespace Scout;
 internal sealed class RegexScalarRunEngine
 {
     private const int MaxBoundedRepeat = 1024;
+    private static readonly int[] UnicodeLowerOrUpperRanges = RegexUnicodeRangeCursor.MergeRanges(
+        RegexUnicodeTables.GetBooleanPropertyRanges(RegexUnicodePropertyKind.Lowercase),
+        RegexUnicodeTables.GetBooleanPropertyRanges(RegexUnicodePropertyKind.Uppercase));
+    private static readonly byte[] UnicodeLowerOrUpperFirstBytes =
+        RegexUnicodeRangeCursor.CreateFirstByteLookup(UnicodeLowerOrUpperRanges);
 
     private readonly RegexScalarRunAtom[] atoms;
     private readonly RegexCompileOptions options;
     private readonly int minimum;
     private readonly int maximum;
     private readonly bool lazy;
+    private readonly bool unicodeLowerOrUpperFastPath;
 
-    private RegexScalarRunEngine(RegexScalarRunAtom[] atoms, RegexCompileOptions options, int minimum, int maximum, bool lazy)
+    private RegexScalarRunEngine(
+        RegexScalarRunAtom[] atoms,
+        RegexCompileOptions options,
+        int minimum,
+        int maximum,
+        bool lazy,
+        bool unicodeLowerOrUpperFastPath)
     {
         this.atoms = atoms;
         this.options = options;
         this.minimum = minimum;
         this.maximum = maximum;
         this.lazy = lazy;
+        this.unicodeLowerOrUpperFastPath = unicodeLowerOrUpperFastPath;
     }
 
     public static bool TryCreate(RegexSyntaxNode root, RegexCompileOptions options, out RegexScalarRunEngine? engine)
@@ -41,7 +54,14 @@ internal sealed class RegexScalarRunEngine
             return false;
         }
 
-        engine = new RegexScalarRunEngine(atoms, effectiveOptions, repetition.Minimum, maximum, repetition.Lazy);
+        bool unicodeLowerOrUpperFastPath = IsUnicodeLowerOrUpperFastPath(atoms, effectiveOptions);
+        engine = new RegexScalarRunEngine(
+            atoms,
+            effectiveOptions,
+            repetition.Minimum,
+            maximum,
+            repetition.Lazy,
+            unicodeLowerOrUpperFastPath);
         return true;
     }
 
@@ -120,6 +140,12 @@ internal sealed class RegexScalarRunEngine
             return true;
         }
 
+        if (unicodeLowerOrUpperFastPath)
+        {
+            CountUnicodeLowerOrUpperFastPath(haystack, startAt, ref count);
+            return true;
+        }
+
         int position = Math.Clamp(startAt, 0, haystack.Length);
         int currentScalars = 0;
         int selectedScalars = lazy ? minimum : maximum;
@@ -190,6 +216,37 @@ internal sealed class RegexScalarRunEngine
             {
                 position = AdvanceAfterNonMatch(haystack, position);
             }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private void CountUnicodeLowerOrUpperFastPath(ReadOnlySpan<byte> haystack, int startAt, ref long count)
+    {
+        var ranges = new RegexUnicodeRangeCursor(UnicodeLowerOrUpperRanges);
+        int position = Math.Clamp(startAt, 0, haystack.Length);
+        int runScalars = 0;
+        while (position < haystack.Length)
+        {
+            bool matched = TryUnicodeLowerOrUpperFastPathMatchLength(haystack, position, ref ranges, out int scalarLength);
+            if (matched)
+            {
+                runScalars++;
+                position += scalarLength;
+                continue;
+            }
+
+            if (runScalars >= minimum)
+            {
+                AddScalarRunCountOnly(runScalars, ref count);
+            }
+
+            runScalars = 0;
+            position += scalarLength == 0 ? 1 : scalarLength;
+        }
+
+        if (runScalars >= minimum)
+        {
+            AddScalarRunCountOnly(runScalars, ref count);
         }
     }
 
@@ -457,6 +514,186 @@ internal sealed class RegexScalarRunEngine
         return false;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool TryUnicodeLowerOrUpperFastPathMatchLength(
+        ReadOnlySpan<byte> haystack,
+        int position,
+        ref RegexUnicodeRangeCursor ranges,
+        out int scalarLength)
+    {
+        scalarLength = 0;
+        if (position >= haystack.Length)
+        {
+            return false;
+        }
+
+        byte first = haystack[position];
+        if (first <= 0x7F)
+        {
+            scalarLength = RegexSimpleSequenceSegment.IsAsciiLetter(first) ? 1 : 0;
+            return scalarLength != 0;
+        }
+
+        if (UnicodeLowerOrUpperFirstBytes[first] == 0)
+        {
+            if (!TryGetUtf8ScalarLength(haystack, position, out scalarLength))
+            {
+                scalarLength = 0;
+            }
+
+            return false;
+        }
+
+        if (!TryDecodeUtf8Scalar(haystack, position, out int scalar, out scalarLength))
+        {
+            scalarLength = 0;
+            return false;
+        }
+
+        return ranges.Contains(scalar);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool TryDecodeUtf8Scalar(ReadOnlySpan<byte> haystack, int position, out int scalar, out int length)
+    {
+        scalar = 0;
+        length = 0;
+        byte first = haystack[position];
+        if (first <= 0x7F)
+        {
+            scalar = first;
+            length = 1;
+            return true;
+        }
+
+        if ((first & 0xE0) == 0xC0)
+        {
+            if (position + 1 >= haystack.Length ||
+                !IsUtf8Continuation(haystack[position + 1]))
+            {
+                return false;
+            }
+
+            scalar = ((first & 0x1F) << 6) | (haystack[position + 1] & 0x3F);
+            if (scalar < 0x80)
+            {
+                return false;
+            }
+
+            length = 2;
+            return true;
+        }
+
+        if ((first & 0xF0) == 0xE0)
+        {
+            if (position + 2 >= haystack.Length ||
+                !IsUtf8Continuation(haystack[position + 1]) ||
+                !IsUtf8Continuation(haystack[position + 2]))
+            {
+                return false;
+            }
+
+            scalar = ((first & 0x0F) << 12) |
+                ((haystack[position + 1] & 0x3F) << 6) |
+                (haystack[position + 2] & 0x3F);
+            if (scalar < 0x800 || scalar is >= 0xD800 and <= 0xDFFF)
+            {
+                return false;
+            }
+
+            length = 3;
+            return true;
+        }
+
+        if ((first & 0xF8) == 0xF0)
+        {
+            if (position + 3 >= haystack.Length ||
+                !IsUtf8Continuation(haystack[position + 1]) ||
+                !IsUtf8Continuation(haystack[position + 2]) ||
+                !IsUtf8Continuation(haystack[position + 3]))
+            {
+                return false;
+            }
+
+            scalar = ((first & 0x07) << 18) |
+                ((haystack[position + 1] & 0x3F) << 12) |
+                ((haystack[position + 2] & 0x3F) << 6) |
+                (haystack[position + 3] & 0x3F);
+            if (scalar < 0x10000 || scalar > 0x10FFFF)
+            {
+                return false;
+            }
+
+            length = 4;
+            return true;
+        }
+
+        return false;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool TryGetUtf8ScalarLength(ReadOnlySpan<byte> haystack, int position, out int length)
+    {
+        length = 0;
+        byte first = haystack[position];
+        if (first <= 0x7F)
+        {
+            length = 1;
+            return true;
+        }
+
+        if (first is >= 0xC2 and <= 0xDF)
+        {
+            if (position + 1 >= haystack.Length ||
+                !IsUtf8Continuation(haystack[position + 1]))
+            {
+                return false;
+            }
+
+            length = 2;
+            return true;
+        }
+
+        if (first is >= 0xE0 and <= 0xEF)
+        {
+            if (position + 2 >= haystack.Length ||
+                !IsUtf8Continuation(haystack[position + 1]) ||
+                !IsUtf8Continuation(haystack[position + 2]) ||
+                first == 0xE0 && haystack[position + 1] < 0xA0 ||
+                first == 0xED && haystack[position + 1] >= 0xA0)
+            {
+                return false;
+            }
+
+            length = 3;
+            return true;
+        }
+
+        if (first is >= 0xF0 and <= 0xF4)
+        {
+            if (position + 3 >= haystack.Length ||
+                !IsUtf8Continuation(haystack[position + 1]) ||
+                !IsUtf8Continuation(haystack[position + 2]) ||
+                !IsUtf8Continuation(haystack[position + 3]) ||
+                first == 0xF0 && haystack[position + 1] < 0x90 ||
+                first == 0xF4 && haystack[position + 1] >= 0x90)
+            {
+                return false;
+            }
+
+            length = 4;
+            return true;
+        }
+
+        return false;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsUtf8Continuation(byte value)
+    {
+        return (value & 0xC0) == 0x80;
+    }
+
     private void AddTrailingRun(
         int runScalars,
         int runBytes,
@@ -587,6 +824,34 @@ internal sealed class RegexScalarRunEngine
         scalarAtom = new RegexScalarRunAtom(atom.Kind, atom.Value.ToArray(), unicodeLetterFastPath);
         atoms = [scalarAtom];
         return true;
+    }
+
+    private static bool IsUnicodeLowerOrUpperFastPath(RegexScalarRunAtom[] atoms, RegexCompileOptions options)
+    {
+        if (!options.UnicodeClasses ||
+            options.CaseInsensitive ||
+            atoms.Length != 2)
+        {
+            return false;
+        }
+
+        bool hasLowercase = false;
+        bool hasUppercase = false;
+        for (int index = 0; index < atoms.Length; index++)
+        {
+            RegexScalarRunAtom atom = atoms[index];
+            if (atom.Kind != RegexSyntaxKind.UnicodePropertyClass ||
+                atom.Value.Length != 1)
+            {
+                return false;
+            }
+
+            var kind = (RegexUnicodePropertyKind)atom.Value[0];
+            hasLowercase |= kind == RegexUnicodePropertyKind.Lowercase;
+            hasUppercase |= kind == RegexUnicodePropertyKind.Uppercase;
+        }
+
+        return hasLowercase && hasUppercase;
     }
 
     private static RegexSyntaxNode UnwrapTransparentGroups(RegexSyntaxNode node)
