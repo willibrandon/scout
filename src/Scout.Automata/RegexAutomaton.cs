@@ -28,6 +28,7 @@ public sealed class RegexAutomaton
         private RegexKeywordWhitespaceCaptureEngine? keywordWhitespaceCaptureEngine;
         private RegexOperatorSpacingCaptureEngine? operatorSpacingCaptureEngine;
         private RegexLiteralWordCaptureEngine? literalWordCaptureEngine;
+        private RegexPathSemverCaptureEngine? pathSemverCaptureEngine;
         private RegexBibleReferenceCaptureEngine? bibleReferenceCaptureEngine;
         private volatile bool captureEnginesInitialized;
         private volatile bool genericCaptureOnly;
@@ -357,6 +358,15 @@ public sealed class RegexAutomaton
         }
     }
 
+    internal bool UsesPathSemverCaptureEngine
+    {
+        get
+        {
+            EnsureCaptureEngines();
+            return pathSemverCaptureEngine is not null;
+        }
+    }
+
     internal bool UsesBibleReferenceCaptureEngine
     {
         get
@@ -601,6 +611,11 @@ public sealed class RegexAutomaton
                     captureOptions,
                     captureCount,
                     out literalWordCaptureEngine);
+                RegexPathSemverCaptureEngine.TryCreate(
+                    captureRoot,
+                    captureOptions,
+                    captureCount,
+                    out pathSemverCaptureEngine);
                 RegexBibleReferenceCaptureEngine.TryCreate(
                     captureRoot,
                     captureOptions,
@@ -613,7 +628,8 @@ public sealed class RegexAutomaton
                     scalarRunCaptureEngine is null &&
                     keywordWhitespaceCaptureEngine is null &&
                     operatorSpacingCaptureEngine is null &&
-                    literalWordCaptureEngine is null)
+                    literalWordCaptureEngine is null &&
+                    pathSemverCaptureEngine is null)
                 {
                     RegexNfa captureNfa = RegexNfaCompiler.CompileCaptures(captureRoot, captureOptions, captureCount);
                     RegexPrefilter? effectiveCapturePrefilter = capturePrefilter ?? RegexPrefilter.Compile(captureRoot, captureOptions);
@@ -630,6 +646,7 @@ public sealed class RegexAutomaton
                 keywordWhitespaceCaptureEngine is null &&
                 operatorSpacingCaptureEngine is null &&
                 literalWordCaptureEngine is null &&
+                pathSemverCaptureEngine is null &&
                 bibleReferenceCaptureEngine is null &&
                 syntheticCaptureAlternationSet is null;
             captureEnginesInitialized = true;
@@ -714,6 +731,11 @@ public sealed class RegexAutomaton
         if (literalWordCaptureEngine is not null)
         {
             return literalWordCaptureEngine.FindCaptures(haystack, startAt);
+        }
+
+        if (pathSemverCaptureEngine is not null)
+        {
+            return pathSemverCaptureEngine.FindCaptures(haystack, startAt);
         }
 
         if (bibleReferenceCaptureEngine is not null)

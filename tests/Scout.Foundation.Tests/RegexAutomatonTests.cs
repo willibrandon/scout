@@ -685,6 +685,72 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies literal path semver captures synthesize branch-specific captures directly.
+    /// </summary>
+    [Fact]
+    public void PathSemverCaptureEngineReportsAlternationCaptures()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"cargo/registry/src/[^/]+/([0-9A-Za-z_-]+)-([0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z+.-]*)/|cargo\\registry\\src\\[^\\]+\\([0-9A-Za-z_-]+)-([0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z+.-]*)\\"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack =
+            @"bad cargo/registry/src/github.com-hash/broken-1.2/ cargo/registry/src/github.com-hash/serde-1.0.197/ cargo\registry\src\github.com-hash\memchr-2.7.1\"u8.ToArray();
+
+        RegexCaptures? first = automaton.FindCaptures(haystack);
+        RegexCaptures? second = automaton.FindCaptures(haystack, first!.Match.End);
+
+        Assert.True(automaton.UsesPathSemverCaptureEngine);
+        Assert.NotNull(first);
+        Assert.Equal(3, first.ParticipatingCount());
+        AssertGroupText(first, haystack, 1, "serde");
+        AssertGroupText(first, haystack, 2, "1.0.197");
+        Assert.Null(first.GetGroup(3));
+        Assert.Null(first.GetGroup(4));
+        Assert.NotNull(second);
+        Assert.Equal(3, second.ParticipatingCount());
+        Assert.Null(second.GetGroup(1));
+        Assert.Null(second.GetGroup(2));
+        AssertGroupText(second, haystack, 3, "memchr");
+        AssertGroupText(second, haystack, 4, "2.7.1");
+        Assert.Null(automaton.FindCaptures(haystack, second.Match.End));
+    }
+
+    /// <summary>
+    /// Verifies path semver captures support slash character classes.
+    /// </summary>
+    [Fact]
+    public void PathSemverCaptureEngineReportsSeparatorClassCaptures()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"cargo[\\/]registry[\\/]src[\\/][^\\/]+[\\/]([0-9A-Za-z_-]+)-([0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z+.-]*)[\\/]"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack =
+            @"cargo\registry\src\github.com-hash\winapi-0.3.9\ cargo/registry/src/github.com-hash/aho-corasick-1.1.3/"u8.ToArray();
+
+        RegexCaptures? first = automaton.FindCaptures(haystack);
+        RegexCaptures? second = automaton.FindCaptures(haystack, first!.Match.End);
+
+        Assert.True(automaton.UsesPathSemverCaptureEngine);
+        Assert.NotNull(first);
+        Assert.Equal(3, first.ParticipatingCount());
+        AssertGroupText(first, haystack, 1, "winapi");
+        AssertGroupText(first, haystack, 2, "0.3.9");
+        Assert.NotNull(second);
+        Assert.Equal(3, second.ParticipatingCount());
+        AssertGroupText(second, haystack, 1, "aho-corasick");
+        AssertGroupText(second, haystack, 2, "1.1.3");
+        Assert.Null(automaton.FindCaptures(haystack, second.Match.End));
+    }
+
+    /// <summary>
     /// Verifies required-literal prefilters do not reject scoped case-insensitive literals.
     /// </summary>
     [Fact]
