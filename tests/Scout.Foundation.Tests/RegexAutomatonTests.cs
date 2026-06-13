@@ -886,6 +886,54 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies anchored dot-all captures are synthesized from haystack length.
+    /// </summary>
+    [Fact]
+    public void AnchoredDotStarCaptureEngineReportsDeterministicCaptures()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"(?s)^((.*)()()($))"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "abc\nxyz"u8.ToArray();
+
+        RegexCaptures? captures = automaton.FindCaptures(haystack);
+
+        Assert.True(automaton.UsesAnchoredDotStarCaptureEngine);
+        Assert.NotNull(captures);
+        Assert.Equal(new RegexMatch(0, haystack.Length), captures.Match);
+        Assert.Equal(6, captures.GroupCount);
+        Assert.Equal(6, captures.ParticipatingCount());
+        Assert.Equal(new RegexMatch(0, haystack.Length), captures.GetGroup(1));
+        Assert.Equal(new RegexMatch(0, haystack.Length), captures.GetGroup(2));
+        Assert.Equal(new RegexMatch(haystack.Length, 0), captures.GetGroup(3));
+        Assert.Equal(new RegexMatch(haystack.Length, 0), captures.GetGroup(4));
+        Assert.Equal(new RegexMatch(haystack.Length, 0), captures.GetGroup(5));
+        Assert.Null(automaton.FindCaptures(haystack, 1));
+    }
+
+    /// <summary>
+    /// Verifies anchored dot-all capture synthesis stays byte-mode only.
+    /// </summary>
+    [Fact]
+    public void AnchoredDotStarCaptureEngineSkipsUtf8Mode()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"(?s)^((.*)()()($))"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: true,
+            unicodeClasses: true);
+
+        Assert.False(automaton.UsesAnchoredDotStarCaptureEngine);
+        Assert.NotNull(automaton.FindCaptures("abc"u8));
+    }
+
+    /// <summary>
     /// Verifies the rebar unstructured log pattern uses direct structural capture extraction.
     /// </summary>
     [Fact]

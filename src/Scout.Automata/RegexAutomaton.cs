@@ -23,6 +23,7 @@ public sealed class RegexAutomaton
         private RegexScalarRunCaptureEngine? scalarRunCaptureEngine;
         private RegexAnchoredWordCaptureEngine? anchoredWordCaptureEngine;
         private RegexAnchoredRunBoundaryCaptureEngine? anchoredRunBoundaryCaptureEngine;
+        private RegexAnchoredDotStarCaptureEngine? anchoredDotStarCaptureEngine;
         private RegexKeywordWhitespaceCaptureEngine? keywordWhitespaceCaptureEngine;
         private RegexOperatorSpacingCaptureEngine? operatorSpacingCaptureEngine;
         private volatile bool captureEnginesInitialized;
@@ -261,6 +262,15 @@ public sealed class RegexAutomaton
         }
     }
 
+    internal bool UsesAnchoredDotStarCaptureEngine
+    {
+        get
+        {
+            EnsureCaptureEngines();
+            return anchoredDotStarCaptureEngine is not null;
+        }
+    }
+
     internal bool UsesKeywordWhitespaceCaptureEngine
     {
         get
@@ -475,6 +485,11 @@ public sealed class RegexAutomaton
                     captureOptions,
                     captureCount,
                     out anchoredRunBoundaryCaptureEngine);
+                RegexAnchoredDotStarCaptureEngine.TryCreate(
+                    captureRoot,
+                    captureOptions,
+                    captureCount,
+                    out anchoredDotStarCaptureEngine);
                 RegexScalarRunCaptureEngine.TryCreate(
                     captureRoot,
                     captureOptions,
@@ -493,6 +508,7 @@ public sealed class RegexAutomaton
                 if (syntheticCaptureAlternationSet is null &&
                     anchoredWordCaptureEngine is null &&
                     anchoredRunBoundaryCaptureEngine is null &&
+                    anchoredDotStarCaptureEngine is null &&
                     scalarRunCaptureEngine is null &&
                     keywordWhitespaceCaptureEngine is null &&
                     operatorSpacingCaptureEngine is null)
@@ -507,6 +523,7 @@ public sealed class RegexAutomaton
                 delimitedCaptureEngine is null &&
                 anchoredWordCaptureEngine is null &&
                 anchoredRunBoundaryCaptureEngine is null &&
+                anchoredDotStarCaptureEngine is null &&
                 scalarRunCaptureEngine is null &&
                 keywordWhitespaceCaptureEngine is null &&
                 operatorSpacingCaptureEngine is null &&
@@ -568,6 +585,11 @@ public sealed class RegexAutomaton
         if (anchoredRunBoundaryCaptureEngine is not null)
         {
             return anchoredRunBoundaryCaptureEngine.MatchAt(haystack, Math.Clamp(startAt, 0, haystack.Length));
+        }
+
+        if (anchoredDotStarCaptureEngine is not null)
+        {
+            return anchoredDotStarCaptureEngine.MatchAt(haystack, startAt);
         }
 
         if (scalarRunCaptureEngine is not null)
