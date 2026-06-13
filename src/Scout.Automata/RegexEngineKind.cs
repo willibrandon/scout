@@ -11,6 +11,7 @@ internal enum RegexEngineKind
     WordWhitespaceLiteral,
     RunLiteralDotStar,
     UnicodeLetterLiteralRun,
+    WordBoundaryLiteralSet,
     SimpleSequence,
     EndAnchoredSequence,
     LineContains,

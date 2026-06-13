@@ -740,6 +740,110 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies word-boundary literal alternations scan from literal candidates.
+    /// </summary>
+    [Fact]
+    public void WordBoundaryLiteralSetEngineCountsFlatAlternationSpans()
+    {
+        var ascii = RegexAutomaton.Compile(
+            @"\b(foo|foobar|bar)\b"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var unicode = RegexAutomaton.Compile(
+            @"\b(foo|foobar|bar)\b"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: true,
+            unicodeClasses: true);
+        byte[] asciiHaystack = "!!foobar foo xfoo bar_ bar"u8.ToArray();
+        byte[] unicodeHaystack = System.Text.Encoding.UTF8.GetBytes("δfoo foo βbar bar!");
+
+        Assert.Equal(RegexEngineKind.WordBoundaryLiteralSet, GetEngineKind(ascii));
+        Assert.Equal(RegexEngineKind.WordBoundaryLiteralSet, GetEngineKind(unicode));
+        Assert.Equal(new RegexMatch(2, 6), ascii.Find(asciiHaystack));
+        Assert.Equal(new RegexMatch(9, 3), ascii.Find(asciiHaystack, startAt: 3));
+        Assert.Equal(new RegexMatch(2, 6), ascii.MatchAt(asciiHaystack, 2));
+        Assert.Null(ascii.MatchAt(asciiHaystack, 4));
+        Assert.Equal(3, ascii.CountMatches(asciiHaystack));
+        Assert.Equal(12, ascii.SumMatchSpans(asciiHaystack));
+        Assert.Equal(new RegexMatch(6, 3), unicode.Find(unicodeHaystack));
+        Assert.Equal(2, unicode.CountMatches(unicodeHaystack));
+        Assert.Equal(6, unicode.SumMatchSpans(unicodeHaystack));
+    }
+
+    /// <summary>
+    /// Verifies word-boundary literal branches generated from per-line alternation use the same engine.
+    /// </summary>
+    [Fact]
+    public void WordBoundaryLiteralSetEngineCountsGeneratedBoundaryBranches()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"(?:\b(foo)\b)|(?:\b(foobar)\b)|(?:\b(bar)\b)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "!!foobar foo xfoo bar_ bar"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.WordBoundaryLiteralSet, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(2, 6), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(9, 3), automaton.Find(haystack, startAt: 3));
+        Assert.Equal(3, automaton.CountMatches(haystack));
+        Assert.Equal(12, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
+    /// Verifies large generated word-boundary branch alternations bypass the generic alternation set.
+    /// </summary>
+    [Fact]
+    public void WordBoundaryLiteralSetEnginePrecedesLargeAlternationSet()
+    {
+        string pattern = string.Join(
+            "|",
+            Enumerable.Range(0, 64).Select(static index => $@"(?:\b(kw{index})\b)"));
+        var automaton = RegexAutomaton.Compile(
+            System.Text.Encoding.ASCII.GetBytes(pattern),
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(RegexEngineKind.WordBoundaryLiteralSet, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(3, 4), automaton.Find("xx kw42 kw7"u8));
+        Assert.Equal(2, automaton.CountMatches("xx kw42 kw7"u8));
+        Assert.Equal(7, automaton.SumMatchSpans("xx kw42 kw7"u8));
+    }
+
+    /// <summary>
+    /// Verifies finite factored word-boundary literal languages expand in regex order.
+    /// </summary>
+    [Fact]
+    public void WordBoundaryLiteralSetEngineExpandsFactoredKeywordTrie()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\b(i(?:1(?:28|6)|32|64|mpl|size|[8fn])|t(?:r(?:ait|ue|y)|ype(?:(?:of)?))|u(?:ns(?:afe|ized)|s(?:(?:(?:iz)?)e)))\b"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "type typeof typex use usize unsized unsafe if in i128 impl try true trait"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.WordBoundaryLiteralSet, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 4), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(5, 6), automaton.MatchAt(haystack, 5));
+        Assert.Null(automaton.MatchAt(haystack, 12));
+        Assert.Equal(13, automaton.CountMatches(haystack));
+        Assert.Equal(55, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies byte-mode greedy dot-star uses direct line span execution.
     /// </summary>
     [Fact]
