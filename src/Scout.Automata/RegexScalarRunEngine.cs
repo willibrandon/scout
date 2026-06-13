@@ -970,9 +970,18 @@ internal sealed class RegexScalarRunEngine
             atom.Value.Span[0] == (byte)RegexUnicodePropertyKind.Letter &&
             options.UnicodeClasses &&
             !options.CaseInsensitive;
-        scalarAtom = new RegexScalarRunAtom(atom.Kind, atom.Value.ToArray(), unicodeLetterFastPath);
+        bool cyrillicWordFastPath = IsCyrillicWordClass(atom, options);
+        scalarAtom = new RegexScalarRunAtom(atom.Kind, atom.Value.ToArray(), unicodeLetterFastPath, cyrillicWordFastPath);
         atoms = [scalarAtom];
         return true;
+    }
+
+    internal static bool IsCyrillicWordClass(RegexAtomNode atom, RegexCompileOptions options)
+    {
+        return atom.Kind == RegexSyntaxKind.CharacterClass &&
+            options.UnicodeClasses &&
+            !options.CaseInsensitive &&
+            atom.Value.Span.SequenceEqual("\\w&&\\p{Cyrillic}"u8);
     }
 
     private static bool IsUnicodeLowerOrUpperFastPath(RegexScalarRunAtom[] atoms, RegexCompileOptions options)

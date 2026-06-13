@@ -372,6 +372,15 @@ public sealed class RegexAutomaton
         }
     }
 
+    internal bool UsesScalarRunCaptureEngine
+    {
+        get
+        {
+            EnsureCaptureEngines();
+            return scalarRunCaptureEngine is not null;
+        }
+    }
+
     internal bool UsesKeywordWhitespaceCaptureEngine
     {
         get

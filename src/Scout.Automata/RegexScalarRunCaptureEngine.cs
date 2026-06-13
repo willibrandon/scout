@@ -13,19 +13,22 @@ internal sealed class RegexScalarRunCaptureEngine
     private readonly int[] captureIndexes;
     private readonly int captureCount;
     private readonly int maximumLength;
+    private readonly bool requireWordBoundaries;
 
     private RegexScalarRunCaptureEngine(
         RegexScalarRunAtom atom,
         RegexCompileOptions options,
         int[] lengths,
         int[] captureIndexes,
-        int captureCount)
+        int captureCount,
+        bool requireWordBoundaries)
     {
         this.atom = atom;
         this.options = options;
         this.lengths = lengths;
         this.captureIndexes = captureIndexes;
         this.captureCount = captureCount;
+        this.requireWordBoundaries = requireWordBoundaries;
         maximumLength = 0;
         for (int index = 0; index < lengths.Length; index++)
         {
@@ -42,7 +45,7 @@ internal sealed class RegexScalarRunCaptureEngine
         engine = null;
         if (!options.UnicodeClasses ||
             captureCount <= 0 ||
-            UnwrapTransparentNonCapturingGroups(root) is not RegexAlternationNode alternation ||
+            !TryGetAlternation(root, out RegexAlternationNode alternation, out bool requireWordBoundaries) ||
             alternation.Alternatives.Count == 0)
         {
             return false;
@@ -78,7 +81,7 @@ internal sealed class RegexScalarRunCaptureEngine
             return false;
         }
 
-        engine = new RegexScalarRunCaptureEngine(firstAtom.Value, options, lengths, captureIndexes, captureCount);
+        engine = new RegexScalarRunCaptureEngine(firstAtom.Value, options, lengths, captureIndexes, captureCount, requireWordBoundaries);
         return true;
     }
 
@@ -91,10 +94,17 @@ internal sealed class RegexScalarRunCaptureEngine
             int scalarCount = CountScalarRun(haystack, start, ends);
             if (scalarCount > 0)
             {
+                if (requireWordBoundaries && !IsWordBoundary(haystack, start))
+                {
+                    start = ends[scalarCount];
+                    continue;
+                }
+
                 for (int index = 0; index < lengths.Length; index++)
                 {
                     int length = lengths[index];
-                    if (scalarCount >= length)
+                    if (scalarCount >= length &&
+                        (!requireWordBoundaries || IsWordBoundary(haystack, ends[length])))
                     {
                         RegexMatch match = new(start, ends[length] - start);
                         var groups = new RegexMatch?[captureCount + 1];
@@ -104,7 +114,7 @@ internal sealed class RegexScalarRunCaptureEngine
                     }
                 }
 
-                start = ends[1];
+                start = requireWordBoundaries ? ends[scalarCount] : ends[1];
                 continue;
             }
 
@@ -138,6 +148,12 @@ internal sealed class RegexScalarRunCaptureEngine
             return matched;
         }
 
+        if (atom.CyrillicWordFastPath &&
+            TryFastCyrillicWordMatchLength(haystack, position, out matched, out scalarLength))
+        {
+            return matched;
+        }
+
         return RegexByteClass.TryGetAtomMatchLength(
             haystack,
             position,
@@ -151,6 +167,51 @@ internal sealed class RegexScalarRunCaptureEngine
             options.Utf8,
             options.UnicodeClasses,
             out scalarLength);
+    }
+
+    private bool IsWordBoundary(ReadOnlySpan<byte> haystack, int position)
+    {
+        return RegexByteClass.PredicateMatches(
+            haystack,
+            position,
+            RegexSyntaxKind.WordBoundary,
+            options.MultiLine,
+            options.Crlf,
+            options.LineTerminator,
+            options.Utf8,
+            options.UnicodeClasses);
+    }
+
+    private static bool TryGetAlternation(
+        RegexSyntaxNode root,
+        out RegexAlternationNode alternation,
+        out bool requireWordBoundaries)
+    {
+        alternation = null!;
+        requireWordBoundaries = false;
+        root = UnwrapTransparentNonCapturingGroups(root);
+        if (root is RegexAlternationNode plainAlternation)
+        {
+            alternation = plainAlternation;
+            return true;
+        }
+
+        if (root is RegexSequenceNode { Nodes.Count: 3 } sequence &&
+            IsWordBoundary(sequence.Nodes[0]) &&
+            UnwrapTransparentNonCapturingGroups(sequence.Nodes[1]) is RegexAlternationNode boundedAlternation &&
+            IsWordBoundary(sequence.Nodes[2]))
+        {
+            alternation = boundedAlternation;
+            requireWordBoundaries = true;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsWordBoundary(RegexSyntaxNode node)
+    {
+        return UnwrapTransparentNonCapturingGroups(node) is RegexAtomNode { Kind: RegexSyntaxKind.WordBoundary };
     }
 
     private static bool TryGetCapturedFixedScalarRun(
@@ -193,6 +254,7 @@ internal sealed class RegexScalarRunCaptureEngine
     {
         return left.Kind == right.Kind &&
             left.UnicodeLetterFastPath == right.UnicodeLetterFastPath &&
+            left.CyrillicWordFastPath == right.CyrillicWordFastPath &&
             left.Value.AsSpan().SequenceEqual(right.Value);
     }
 
@@ -236,6 +298,40 @@ internal sealed class RegexScalarRunCaptureEngine
         {
             matched = true;
             scalarLength = 2;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryFastCyrillicWordMatchLength(
+        ReadOnlySpan<byte> haystack,
+        int position,
+        out bool matched,
+        out int scalarLength)
+    {
+        matched = false;
+        scalarLength = 0;
+        if (position >= haystack.Length)
+        {
+            return true;
+        }
+
+        byte first = haystack[position];
+        if (first <= 0xCF)
+        {
+            return true;
+        }
+
+        if (first == 0xD0 || first == 0xD1)
+        {
+            if (position + 1 < haystack.Length &&
+                haystack[position + 1] is >= 0x80 and <= 0xBF)
+            {
+                matched = true;
+                scalarLength = 2;
+            }
+
             return true;
         }
 

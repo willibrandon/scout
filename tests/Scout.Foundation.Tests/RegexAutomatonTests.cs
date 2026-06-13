@@ -2228,6 +2228,36 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies fixed Unicode scalar captures wrapped in word boundaries use direct extraction.
+    /// </summary>
+    [Fact]
+    public void ScalarRunCaptureEngineReportsBoundaryWrappedUnicodeWords()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\b(?:([\w&&\p{Cyrillic}]{6})|([\w&&\p{Cyrillic}]{5}))\b"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("xx привет мир слово test");
+
+        RegexCaptures? first = automaton.FindCaptures(haystack);
+        RegexCaptures? second = automaton.FindCaptures(haystack, first!.Match.End);
+
+        Assert.True(automaton.UsesScalarRunCaptureEngine);
+        Assert.NotNull(first);
+        Assert.Equal(2, first.ParticipatingCount());
+        AssertGroupUtf8Text(first, haystack, 1, "привет");
+        Assert.Null(first.GetGroup(2));
+        Assert.NotNull(second);
+        AssertGroupUtf8Text(second, haystack, 2, "слово");
+        Assert.Null(second.GetGroup(1));
+        Assert.Null(automaton.FindCaptures(System.Text.Encoding.UTF8.GetBytes("приветы")));
+        Assert.Null(automaton.FindCaptures(System.Text.Encoding.UTF8.GetBytes("приветx")));
+    }
+
+    /// <summary>
     /// Verifies ASCII word-length alternation captures use direct word-run scanning.
     /// </summary>
     [Fact]
