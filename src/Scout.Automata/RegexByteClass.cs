@@ -361,7 +361,7 @@ internal static class RegexByteClass
         return status == OperationStatus.Done;
     }
 
-    private static bool TryGetUtf8ScalarLength(ReadOnlySpan<byte> bytes, int position, out int length)
+    internal static bool TryGetUtf8ScalarLength(ReadOnlySpan<byte> bytes, int position, out int length)
     {
         length = 0;
         if (position >= bytes.Length)

@@ -2042,7 +2042,7 @@ internal sealed class RegexMetaEngine
 
         if (dotStar is not null)
         {
-            return dotStar.Find(haystack, startOffset);
+            return dotStar.MatchAt(haystack, startOffset);
         }
 
         if (ipv4Address is not null)

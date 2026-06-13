@@ -1500,6 +1500,74 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies Unicode scalar dot-all plus consumes contiguous valid UTF-8 scalar spans directly.
+    /// </summary>
+    [Fact]
+    public void DotStarEngineCountsUnicodeDotAllPlusSpan()
+    {
+        var automaton = RegexAutomaton.Compile(
+            "(?s:.)+"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = [(byte)'a', 0xC3, 0xA9, (byte)'\n', 0xD0, 0x96];
+
+        Assert.Equal(RegexEngineKind.DotStar, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, haystack.Length), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(3, 3), automaton.MatchAt(haystack, startAt: 3));
+        Assert.Null(automaton.Find(ReadOnlySpan<byte>.Empty));
+        Assert.Equal(1, automaton.CountMatches(haystack));
+        Assert.Equal(haystack.Length, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
+    /// Verifies Unicode scalar dot-all plus splits around invalid UTF-8.
+    /// </summary>
+    [Fact]
+    public void DotStarEngineSplitsUnicodeDotAllPlusAtInvalidUtf8()
+    {
+        var automaton = RegexAutomaton.Compile(
+            "(?s:.)+"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = [0xFF, (byte)'a', 0xC3, 0xA9, 0xFF, (byte)'b'];
+
+        Assert.Equal(RegexEngineKind.DotStar, GetEngineKind(automaton));
+        Assert.Null(automaton.MatchAt(haystack, startAt: 0));
+        Assert.Equal(new RegexMatch(1, 3), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(5, 1), automaton.Find(haystack, startAt: 4));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(4, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
+    /// Verifies Unicode scalar dot-star preserves empty matches around invalid UTF-8.
+    /// </summary>
+    [Fact]
+    public void DotStarEngineCountsUnicodeDotAllStarAroundInvalidUtf8()
+    {
+        var automaton = RegexAutomaton.Compile(
+            "(?s).*"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = [0xFF, (byte)'a'];
+
+        Assert.Equal(RegexEngineKind.DotStar, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 0), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(1, 1), automaton.Find(haystack, startAt: 1));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(1, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies byte-mode multiline whole-line patterns use direct line scanning.
     /// </summary>
     [Fact]
@@ -1544,10 +1612,10 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
-    /// Verifies greedy dot-star specialization is skipped when UTF-8 scalar boundaries matter.
+    /// Verifies greedy dot-star specialization preserves UTF-8 scalar boundaries.
     /// </summary>
     [Fact]
-    public void DotStarEngineSkipsUtf8Mode()
+    public void DotStarEngineCountsUtf8DotAllSpan()
     {
         var automaton = RegexAutomaton.Compile("(?s).*"u8);
         var inlineUtf8 = RegexAutomaton.Compile(
@@ -1557,9 +1625,15 @@ public sealed class RegexAutomatonTests
             dotMatchesNewline: false,
             utf8: false,
             unicodeClasses: false);
+        byte[] haystack = [(byte)'a', 0xC3, 0xA9];
 
-        Assert.NotEqual(RegexEngineKind.DotStar, GetEngineKind(automaton));
-        Assert.NotEqual(RegexEngineKind.DotStar, GetEngineKind(inlineUtf8));
+        Assert.Equal(RegexEngineKind.DotStar, GetEngineKind(automaton));
+        Assert.Equal(RegexEngineKind.DotStar, GetEngineKind(inlineUtf8));
+        Assert.Equal(new RegexMatch(0, haystack.Length), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(haystack.Length, 0), automaton.Find(haystack, startAt: 2));
+        Assert.Null(automaton.MatchAt(haystack, startAt: 2));
+        Assert.Equal(1, automaton.CountMatches(haystack));
+        Assert.Equal(haystack.Length, automaton.SumMatchSpans(haystack));
     }
 
     /// <summary>
