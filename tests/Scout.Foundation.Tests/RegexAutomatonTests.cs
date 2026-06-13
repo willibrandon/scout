@@ -2250,6 +2250,34 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies delimiter-separated byte runs scan from the delimiter.
+    /// </summary>
+    [Fact]
+    public void UsesSimpleSequenceEngineForDelimitedByteRuns()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\w+@\w+"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "xx a@b no abc@def! z@9"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(3, 3), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(3, 3), automaton.Find(haystack, startAt: 3));
+        Assert.Equal(new RegexMatch(10, 7), automaton.Find(haystack, startAt: 4));
+        Assert.Equal(new RegexMatch(10, 7), automaton.Find(haystack, startAt: 6));
+        Assert.Equal(3, automaton.CountMatches(haystack));
+        Assert.Equal(13, automaton.SumMatchSpans(haystack));
+        Assert.Equal(2, automaton.CountMatches(haystack, startAt: 6));
+        Assert.Equal(10, automaton.SumMatchSpans(haystack, startAt: 6));
+        Assert.Null(automaton.Find("abc@"u8));
+        Assert.Null(automaton.Find("@abc"u8));
+    }
+
+    /// <summary>
     /// Verifies single bounded Unicode scalar runs use direct scalar scanning.
     /// </summary>
     [Fact]

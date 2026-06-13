@@ -22,6 +22,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexLazyDfa? asciiFastDfa;
     private readonly RegexLiteralSetEngine? literalSet;
     private readonly RegexAlternationSetEngine? alternationSet;
+    private readonly RegexDelimitedRunEngine? delimitedRun;
     private readonly RegexSimpleSequenceEngine? simpleSequence;
     private readonly RegexEndAnchoredAtomEngine? endAnchoredAtom;
     private readonly RegexLineContainsEngine? lineContains;
@@ -52,6 +53,7 @@ internal sealed class RegexMetaEngine
         RegexLazyDfa? lazyDfa,
         RegexLiteralSetEngine? literalSet,
         RegexAlternationSetEngine? alternationSet,
+        RegexDelimitedRunEngine? delimitedRun,
         RegexSimpleSequenceEngine? simpleSequence,
         RegexLineContainsEngine? lineContains,
         RegexDotStarClassFallbackEngine? dotStarClassFallback,
@@ -81,6 +83,7 @@ internal sealed class RegexMetaEngine
         this.unanchoredLazyDfaFactory = unanchoredLazyDfaFactory;
         this.literalSet = literalSet;
         this.alternationSet = alternationSet;
+        this.delimitedRun = delimitedRun;
         this.simpleSequence = simpleSequence;
         this.endAnchoredAtom = endAnchoredAtom;
         this.lineContains = lineContains;
@@ -110,6 +113,7 @@ internal sealed class RegexMetaEngine
             lazyDfa: null,
             literalSet,
             alternationSet: null,
+            delimitedRun: null,
             simpleSequence: null,
             lineContains: null,
             dotStarClassFallback: null,
@@ -134,6 +138,7 @@ internal sealed class RegexMetaEngine
             lazyDfa: null,
             literalSet: null,
             alternationSet: alternationSet,
+            delimitedRun: null,
             simpleSequence: null,
             lineContains: null,
             dotStarClassFallback: null,
@@ -163,6 +168,7 @@ internal sealed class RegexMetaEngine
         ulong? dfaSizeLimit,
         RegexLiteralSetEngine? literalSet,
         RegexAlternationSetEngine? alternationSet,
+        RegexDelimitedRunEngine? delimitedRun = null,
         RegexSimpleSequenceEngine? simpleSequence = null,
         RegexEndAnchoredAtomEngine? endAnchoredAtom = null,
         RegexLineContainsEngine? lineContains = null,
@@ -187,6 +193,7 @@ internal sealed class RegexMetaEngine
                 lazyDfa: null,
                 literalSet,
                 alternationSet: null,
+                delimitedRun: null,
                 simpleSequence: null,
                 lineContains: null,
                 dotStarClassFallback: null,
@@ -207,6 +214,28 @@ internal sealed class RegexMetaEngine
                 lazyDfa: null,
                 literalSet: null,
                 alternationSet,
+                delimitedRun: null,
+                simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
+                prefilter,
+                nfa.Utf8);
+        }
+
+        if (delimitedRun is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.SimpleSequence,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                delimitedRun: delimitedRun,
                 simpleSequence: null,
                 lineContains: null,
                 dotStarClassFallback: null,
@@ -227,6 +256,7 @@ internal sealed class RegexMetaEngine
                 lazyDfa: null,
                 literalSet: null,
                 alternationSet: null,
+                delimitedRun: null,
                 simpleSequence,
                 lineContains: null,
                 dotStarClassFallback: null,
@@ -247,6 +277,7 @@ internal sealed class RegexMetaEngine
                 lazyDfa: null,
                 literalSet: null,
                 alternationSet: null,
+                delimitedRun: null,
                 simpleSequence: null,
                 lineContains: null,
                 dotStarClassFallback: null,
@@ -268,6 +299,7 @@ internal sealed class RegexMetaEngine
                 lazyDfa: null,
                 literalSet: null,
                 alternationSet: null,
+                delimitedRun: null,
                 simpleSequence: null,
                 lineContains: null,
                 dotStarClassFallback: null,
@@ -291,6 +323,7 @@ internal sealed class RegexMetaEngine
                 lazyDfa: null,
                 literalSet: null,
                 alternationSet: null,
+                delimitedRun: null,
                 simpleSequence: null,
                 lineContains,
                 dotStarClassFallback: null,
@@ -311,6 +344,7 @@ internal sealed class RegexMetaEngine
                 lazyDfa: null,
                 literalSet: null,
                 alternationSet: null,
+                delimitedRun: null,
                 simpleSequence: null,
                 lineContains: null,
                 dotStarClassFallback,
@@ -331,6 +365,7 @@ internal sealed class RegexMetaEngine
                 lazyDfa: null,
                 literalSet: null,
                 alternationSet: null,
+                delimitedRun: null,
                 simpleSequence: null,
                 lineContains: null,
                 dotStarClassFallback: null,
@@ -355,6 +390,7 @@ internal sealed class RegexMetaEngine
                     lazyDfa: null,
                     literalSet: null,
                     alternationSet: null,
+                    delimitedRun: null,
                     simpleSequence: null,
                     lineContains: null,
                     dotStarClassFallback: null,
@@ -375,6 +411,7 @@ internal sealed class RegexMetaEngine
                     lazyDfa: null,
                     literalSet: null,
                     alternationSet: null,
+                    delimitedRun: null,
                     simpleSequence: null,
                     lineContains: null,
                     dotStarClassFallback: null,
@@ -399,6 +436,7 @@ internal sealed class RegexMetaEngine
                 lazyDfa: null,
                 literalSet: null,
                 alternationSet: null,
+                delimitedRun: null,
                 simpleSequence: null,
                 lineContains: null,
                 dotStarClassFallback: null,
@@ -422,6 +460,7 @@ internal sealed class RegexMetaEngine
                 lazyDfa: null,
                 literalSet: null,
                 alternationSet: null,
+                delimitedRun: null,
                 simpleSequence: null,
                 lineContains: null,
                 dotStarClassFallback: null,
@@ -443,6 +482,7 @@ internal sealed class RegexMetaEngine
                 lazyDfa: null,
                 literalSet: null,
                 alternationSet: null,
+                delimitedRun: null,
                 simpleSequence: null,
                 lineContains: null,
                 dotStarClassFallback: null,
@@ -463,6 +503,7 @@ internal sealed class RegexMetaEngine
                 lazyDfa: null,
                 literalSet: null,
                 alternationSet: null,
+                delimitedRun: null,
                 simpleSequence: null,
                 lineContains: null,
                 dotStarClassFallback: null,
@@ -491,6 +532,7 @@ internal sealed class RegexMetaEngine
             lazyDfa: lazyDfa,
             literalSet,
             alternationSet: null,
+            delimitedRun: null,
             simpleSequence: null,
             lineContains: null,
             dotStarClassFallback: null,
@@ -574,6 +616,11 @@ internal sealed class RegexMetaEngine
         if (alternationSet is not null)
         {
             return alternationSet.Find(haystack, startOffset);
+        }
+
+        if (delimitedRun is not null)
+        {
+            return delimitedRun.Find(haystack, startOffset);
         }
 
         if (simpleSequence is not null && prefilter is null)
@@ -706,6 +753,11 @@ internal sealed class RegexMetaEngine
             return alternationSet.CountMatches(haystack, startAt);
         }
 
+        if (delimitedRun is not null)
+        {
+            return delimitedRun.CountMatches(haystack, startAt);
+        }
+
         if (endAnchoredAtom is not null)
         {
             return endAnchoredAtom.CountMatches(haystack, startAt);
@@ -756,6 +808,11 @@ internal sealed class RegexMetaEngine
         if (alternationSet is not null)
         {
             return alternationSet.SumMatchSpans(haystack, startAt);
+        }
+
+        if (delimitedRun is not null)
+        {
+            return delimitedRun.SumMatchSpans(haystack, startAt);
         }
 
         if (endAnchoredAtom is not null)
@@ -998,6 +1055,11 @@ internal sealed class RegexMetaEngine
             return alternationSet.MatchAt(haystack, startOffset);
         }
 
+        if (delimitedRun is not null)
+        {
+            return delimitedRun.MatchAt(haystack, startOffset);
+        }
+
         if (endAnchoredAtom is not null)
         {
             return endAnchoredAtom.MatchAt(haystack, startOffset);
@@ -1189,6 +1251,11 @@ internal sealed class RegexMetaEngine
         if (simpleSequence is not null)
         {
             return simpleSequence.TryMatchAt(haystack, start, out length);
+        }
+
+        if (delimitedRun is not null)
+        {
+            return delimitedRun.TryMatchAt(haystack, start, out length);
         }
 
         if (scalarRun is not null)
