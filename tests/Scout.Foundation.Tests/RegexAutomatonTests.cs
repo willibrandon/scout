@@ -793,6 +793,41 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies bounded literal gaps scan from prefix candidates and honor greedy repeats.
+    /// </summary>
+    [Fact]
+    public void BoundedLiteralGapEngineCountsAlternationSpans()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"Holmes.{0,5}Watson|Watson.{0,5}Holmes"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "xx Holmes--Watson HolmesabcdefWatson WatsonHolmes WatsonabcHolmes Holmes\nWatson"u8.ToArray();
+        byte[] greedyHaystack = "HolmesWatsonxxWatson"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.BoundedLiteralGap, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(3, 14), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(11, 13), automaton.Find(haystack, startAt: 4));
+        Assert.Equal(new RegexMatch(37, 12), automaton.Find(haystack, startAt: 17));
+        Assert.Equal(new RegexMatch(43, 13), automaton.Find(haystack, startAt: 40));
+        Assert.Equal(new RegexMatch(3, 14), automaton.MatchAt(haystack, 3));
+        Assert.Null(automaton.MatchAt(haystack, 18));
+        Assert.Null(automaton.MatchAt(haystack, 68));
+        Assert.Equal(3, automaton.CountMatches(haystack));
+        Assert.Equal(41, automaton.SumMatchSpans(haystack));
+        Assert.Equal(new RegexMatch(0, 20), RegexAutomaton.Compile(
+            @"Holmes.{0,10}Watson"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false).Find(greedyHaystack));
+    }
+
+    /// <summary>
     /// Verifies word-boundary literal alternations scan from literal candidates.
     /// </summary>
     [Fact]
