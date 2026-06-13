@@ -9,6 +9,7 @@ internal enum RegexEngineKind
     EmailAddress,
     Uri,
     WordWhitespaceLiteral,
+    RunLiteralDotStar,
     SimpleSequence,
     EndAnchoredSequence,
     LineContains,

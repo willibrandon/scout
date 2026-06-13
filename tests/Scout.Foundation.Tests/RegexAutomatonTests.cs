@@ -684,6 +684,34 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies byte-run literal dot-star patterns scan from the required literal.
+    /// </summary>
+    [Fact]
+    public void RunLiteralDotStarEngineCountsLineSpans()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"[ -~]*ABCDEFGHIJKLMNOPQRSTUVWXYZ.*"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = System.Text.Encoding.ASCII.GetBytes(
+            "bad\n" +
+            "xABCDEFGHIJKLMNOPQRSTUVWXYZ tail\n" +
+            "next ABCDEFGHIJKLMNOPQRSTUVWXYZ!");
+
+        Assert.Equal(RegexEngineKind.RunLiteralDotStar, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(4, 32), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(5, 31), automaton.Find(haystack, startAt: 5));
+        Assert.Equal(new RegexMatch(37, 32), automaton.Find(haystack, startAt: 36));
+        Assert.Null(automaton.MatchAt(haystack, 0));
+        Assert.Equal(new RegexMatch(4, 32), automaton.MatchAt(haystack, 4));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(64, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies byte-mode greedy dot-star uses direct line span execution.
     /// </summary>
     [Fact]

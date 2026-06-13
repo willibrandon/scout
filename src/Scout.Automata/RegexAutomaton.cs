@@ -194,6 +194,7 @@ public sealed class RegexAutomaton
         RegexEmailAddressEngine.TryCreate(tree.Root, options, out RegexEmailAddressEngine? emailAddress);
         RegexUriEngine.TryCreate(tree.Root, options, out RegexUriEngine? uri);
         RegexWordWhitespaceLiteralEngine.TryCreate(tree.Root, options, out RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral);
+        RegexRunLiteralDotStarEngine.TryCreate(tree.Root, options, out RegexRunLiteralDotStarEngine? runLiteralDotStar);
         RegexDelimitedRunEngine.TryCreate(tree.Root, options, out RegexDelimitedRunEngine? delimitedRun);
         RegexSimpleSequenceEngine.TryCreate(tree.Root, options, out RegexSimpleSequenceEngine? simpleSequence);
         RegexEndAnchoredSequenceEngine.TryCreate(tree.Root, options, out RegexEndAnchoredSequenceEngine? endAnchoredSequence);
@@ -222,6 +223,7 @@ public sealed class RegexAutomaton
                 emailAddress: emailAddress,
                 uri: uri,
                 wordWhitespaceLiteral: wordWhitespaceLiteral,
+                runLiteralDotStar: runLiteralDotStar,
                 delimitedRun: delimitedRun,
                 simpleSequence: simpleSequence,
                 endAnchoredSequence: endAnchoredSequence,
@@ -376,7 +378,7 @@ public sealed class RegexAutomaton
             return false;
         }
 
-        if (engine.Kind == RegexEngineKind.EndAnchoredSequence)
+        if (engine.Kind is RegexEngineKind.EndAnchoredSequence or RegexEngineKind.RunLiteralDotStar)
         {
             return true;
         }
