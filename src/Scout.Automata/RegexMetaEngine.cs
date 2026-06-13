@@ -30,6 +30,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexRunLiteralDotStarEngine? runLiteralDotStar;
     private readonly RegexLiteralPrefixRunEngine? literalPrefixRun;
     private readonly RegexBoundedLiteralGapEngine? boundedLiteralGap;
+    private readonly RegexBoundedLineLiteralGapEngine? boundedLineLiteralGap;
     private readonly RegexLeadingClassLiteralEngine? leadingClassLiteral;
     private readonly RegexUnicodeLetterLiteralRunEngine? unicodeLetterLiteralRun;
     private readonly RegexWordBoundaryLiteralSetEngine? wordBoundaryLiteralSet;
@@ -88,6 +89,7 @@ internal sealed class RegexMetaEngine
         RegexRunLiteralDotStarEngine? runLiteralDotStar = null,
         RegexLiteralPrefixRunEngine? literalPrefixRun = null,
         RegexBoundedLiteralGapEngine? boundedLiteralGap = null,
+        RegexBoundedLineLiteralGapEngine? boundedLineLiteralGap = null,
         RegexLeadingClassLiteralEngine? leadingClassLiteral = null,
         RegexUnicodeLetterLiteralRunEngine? unicodeLetterLiteralRun = null,
         RegexWordBoundaryLiteralSetEngine? wordBoundaryLiteralSet = null,
@@ -117,6 +119,7 @@ internal sealed class RegexMetaEngine
         this.runLiteralDotStar = runLiteralDotStar;
         this.literalPrefixRun = literalPrefixRun;
         this.boundedLiteralGap = boundedLiteralGap;
+        this.boundedLineLiteralGap = boundedLineLiteralGap;
         this.leadingClassLiteral = leadingClassLiteral;
         this.unicodeLetterLiteralRun = unicodeLetterLiteralRun;
         this.wordBoundaryLiteralSet = wordBoundaryLiteralSet;
@@ -242,6 +245,7 @@ internal sealed class RegexMetaEngine
         RegexRunLiteralDotStarEngine? runLiteralDotStar = null,
         RegexLiteralPrefixRunEngine? literalPrefixRun = null,
         RegexBoundedLiteralGapEngine? boundedLiteralGap = null,
+        RegexBoundedLineLiteralGapEngine? boundedLineLiteralGap = null,
         RegexLeadingClassLiteralEngine? leadingClassLiteral = null,
         RegexUnicodeLetterLiteralRunEngine? unicodeLetterLiteralRun = null,
         RegexWordBoundaryLiteralSetEngine? wordBoundaryLiteralSet = null,
@@ -475,6 +479,28 @@ internal sealed class RegexMetaEngine
                 prefilter,
                 nfa.Utf8,
                 boundedLiteralGap: boundedLiteralGap);
+        }
+
+        if (boundedLineLiteralGap is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.BoundedLineLiteralGap,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                delimitedRun: null,
+                simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
+                prefilter,
+                nfa.Utf8,
+                boundedLineLiteralGap: boundedLineLiteralGap);
         }
 
         if (leadingClassLiteral is not null)
@@ -1023,6 +1049,11 @@ internal sealed class RegexMetaEngine
             return boundedLiteralGap.Find(haystack, startOffset);
         }
 
+        if (boundedLineLiteralGap is not null)
+        {
+            return boundedLineLiteralGap.Find(haystack, startOffset);
+        }
+
         if (leadingClassLiteral is not null)
         {
             return leadingClassLiteral.Find(haystack, startOffset);
@@ -1223,6 +1254,11 @@ internal sealed class RegexMetaEngine
             return boundedLiteralGap.CountMatches(haystack, startAt);
         }
 
+        if (boundedLineLiteralGap is not null)
+        {
+            return boundedLineLiteralGap.CountMatches(haystack, startAt);
+        }
+
         if (leadingClassLiteral is not null)
         {
             return leadingClassLiteral.CountMatches(haystack, startAt);
@@ -1343,6 +1379,11 @@ internal sealed class RegexMetaEngine
         if (boundedLiteralGap is not null)
         {
             return boundedLiteralGap.SumMatchSpans(haystack, startAt);
+        }
+
+        if (boundedLineLiteralGap is not null)
+        {
+            return boundedLineLiteralGap.SumMatchSpans(haystack, startAt);
         }
 
         if (leadingClassLiteral is not null)
@@ -1648,6 +1689,11 @@ internal sealed class RegexMetaEngine
         if (boundedLiteralGap is not null)
         {
             return boundedLiteralGap.MatchAt(haystack, startOffset);
+        }
+
+        if (boundedLineLiteralGap is not null)
+        {
+            return boundedLineLiteralGap.MatchAt(haystack, startOffset);
         }
 
         if (leadingClassLiteral is not null)

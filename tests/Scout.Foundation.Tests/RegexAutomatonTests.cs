@@ -929,6 +929,46 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies bounded whitespace-dot line gaps count non-empty non-newline runs.
+    /// </summary>
+    [Fact]
+    public void BoundedLineLiteralGapEngineCountsAlternationSpans()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"Holmes(?:\s*.+\s*){0,2}Watson|Watson(?:\s*.+\s*){0,2}Holmes"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        byte[] haystack = "xx Holmes a\n b\nWatson yy Watson z Holmes"u8.ToArray();
+        byte[] immediateHaystack = "HolmesWatson"u8.ToArray();
+        byte[] crlfGap = "Holmes\r\nWatson"u8.ToArray();
+        byte[] lineOnlyGap = "Holmes\nWatson"u8.ToArray();
+        byte[] tooManyRuns = "Holmes a\n b\n cWatson"u8.ToArray();
+        byte[] greedyHaystack = "Holmes a\nWatson xx\nWatson"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.BoundedLineLiteralGap, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(3, 18), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(25, 15), automaton.Find(haystack, startAt: 22));
+        Assert.Equal(new RegexMatch(0, 12), automaton.Find(immediateHaystack));
+        Assert.Equal(new RegexMatch(0, 14), automaton.Find(crlfGap));
+        Assert.Equal(new RegexMatch(3, 18), automaton.MatchAt(haystack, 3));
+        Assert.Null(automaton.MatchAt(lineOnlyGap, 0));
+        Assert.Null(automaton.MatchAt(tooManyRuns, 0));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(33, automaton.SumMatchSpans(haystack));
+        Assert.Equal(new RegexMatch(0, greedyHaystack.Length), RegexAutomaton.Compile(
+            @"Holmes(?:\s*.+\s*){0,2}Watson"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false).Find(greedyHaystack));
+    }
+
+    /// <summary>
     /// Verifies leading ASCII class plus literal suffix patterns scan from suffix candidates.
     /// </summary>
     [Fact]
