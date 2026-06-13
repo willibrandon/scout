@@ -10,7 +10,7 @@ internal sealed class RegexMetaEngine
     private const int BoundedBacktrackerNfaStateLimit = 24;
     private const int UnanchoredLazyDfaHaystackThreshold = 4096;
     private const int AnchoredLeftmostDfaHaystackThreshold = 4096;
-    private const ulong DefaultDfaSizeLimit = 2UL * 1024UL * 1024UL;
+    private const ulong DefaultDfaSizeLimit = 16UL * 1024UL * 1024UL;
 
     private readonly PikeVm? pikeVm;
     private readonly RegexBoundedBacktracker? boundedBacktracker;
