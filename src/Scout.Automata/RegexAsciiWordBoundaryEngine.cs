@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
@@ -9,6 +10,9 @@ namespace Scout;
 
 internal sealed class RegexAsciiWordBoundaryEngine
 {
+    private static readonly SearchValues<byte> AsciiWordBytes = SearchValues.Create(
+        "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"u8);
+
     private readonly int minimum;
     private readonly bool unicodeWord;
 
@@ -53,6 +57,16 @@ internal sealed class RegexAsciiWordBoundaryEngine
         return TryMatchAt(haystack, start, out int length)
             ? new RegexMatch(start, length)
             : null;
+    }
+
+    public bool IsMatch(ReadOnlySpan<byte> haystack)
+    {
+        if (!unicodeWord)
+        {
+            return ContainsAsciiWordRun(haystack);
+        }
+
+        return ContainsUnicodeWordRun(haystack);
     }
 
     public long CountMatches(ReadOnlySpan<byte> haystack, int startAt)
@@ -102,6 +116,11 @@ internal sealed class RegexAsciiWordBoundaryEngine
             return TryFindAscii(haystack, startAt, out match);
         }
 
+        if (IsAllAscii(haystack))
+        {
+            return TryFindAscii(haystack, startAt, out match);
+        }
+
         int position = SkipPartialWord(haystack, startAt);
         while (position < haystack.Length)
         {
@@ -133,6 +152,12 @@ internal sealed class RegexAsciiWordBoundaryEngine
     private void CountOrSum(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans, out long total)
     {
         if (!unicodeWord)
+        {
+            CountOrSumAscii(haystack, startAt, sumSpans, out total);
+            return;
+        }
+
+        if (IsAllAscii(haystack))
         {
             CountOrSumAscii(haystack, startAt, sumSpans, out total);
             return;
@@ -188,26 +213,112 @@ internal sealed class RegexAsciiWordBoundaryEngine
         int position = SkipPartialAsciiWord(haystack, startAt);
         while (position < haystack.Length)
         {
-            while (position < haystack.Length && !IsAsciiWord(haystack[position]))
+            int relativeStart = haystack[position..].IndexOfAny(AsciiWordBytes);
+            if (relativeStart < 0)
             {
-                position++;
+                break;
             }
 
-            int start = position;
-            while (position < haystack.Length && IsAsciiWord(haystack[position]))
-            {
-                position++;
-            }
-
-            int length = position - start;
+            int start = position + relativeStart;
+            int relativeEnd = haystack[start..].IndexOfAnyExcept(AsciiWordBytes);
+            int end = relativeEnd < 0 ? haystack.Length : start + relativeEnd;
+            int length = end - start;
             if (length >= minimum)
             {
                 match = new RegexMatch(start, length);
                 return true;
             }
+
+            position = end;
         }
 
         match = default;
+        return false;
+    }
+
+    private bool ContainsAsciiWordRun(ReadOnlySpan<byte> haystack)
+    {
+        if (haystack.Length < minimum)
+        {
+            return false;
+        }
+
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int runLength = 0;
+        for (int position = 0; position < haystack.Length; position++)
+        {
+            if (IsAsciiWordFast(Unsafe.Add(ref reference, position)))
+            {
+                runLength++;
+                if (runLength >= minimum)
+                {
+                    return true;
+                }
+            }
+            else
+            {
+                runLength = 0;
+            }
+        }
+
+        return false;
+    }
+
+    private bool ContainsUnicodeWordRun(ReadOnlySpan<byte> haystack)
+    {
+        if (haystack.Length < minimum)
+        {
+            return false;
+        }
+
+        int position = 0;
+        int runLength = 0;
+        while (position < haystack.Length)
+        {
+            byte first = haystack[position];
+            if (first <= 0x7F)
+            {
+                if (IsAsciiWordFast(first))
+                {
+                    runLength++;
+                    if (runLength >= minimum)
+                    {
+                        return true;
+                    }
+                }
+                else
+                {
+                    runLength = 0;
+                }
+
+                position++;
+                continue;
+            }
+
+            if (!RegexByteClass.IsUtf8Boundary(haystack, position) ||
+                Rune.DecodeFromUtf8(haystack[position..], out Rune rune, out int scalarLength) != OperationStatus.Done)
+            {
+                runLength = 0;
+                position++;
+                continue;
+            }
+
+            if (RegexUnicodeTables.IsPerlWord(rune))
+            {
+                runLength++;
+                if (runLength >= minimum)
+                {
+                    return true;
+                }
+            }
+            else
+            {
+                runLength = 0;
+            }
+
+            position += scalarLength;
+        }
+
         return false;
     }
 
@@ -440,6 +551,20 @@ internal sealed class RegexAsciiWordBoundaryEngine
     private static bool IsAsciiWord(byte value)
     {
         return RegexSimpleSequenceSegment.IsAsciiWord(value);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsAsciiWordFast(byte value)
+    {
+        byte folded = (byte)(value | 0x20);
+        return (uint)(folded - 'a') <= 'z' - 'a' ||
+            (uint)(value - '0') <= '9' - '0' ||
+            value == (byte)'_';
+    }
+
+    private static bool IsAllAscii(ReadOnlySpan<byte> haystack)
+    {
+        return haystack.IndexOfAnyExceptInRange((byte)0x00, (byte)0x7F) < 0;
     }
 
     private static bool IsWordBefore(ReadOnlySpan<byte> haystack, int position, bool unicodeWord)

@@ -11,6 +11,7 @@ internal enum RegexEngineKind
     Uri,
     Date,
     WordWhitespaceLiteral,
+    BoundedLetterSuffixWhitespace,
     RunLiteralDotStar,
     LiteralPrefixRun,
     BoundedLiteralGap,

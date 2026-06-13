@@ -227,6 +227,7 @@ public sealed class RegexAutomaton
         RegexLh3UriEngine.TryCreate(tree.Root, options, out RegexLh3UriEngine? lh3Uri);
         RegexLh3DateEngine.TryCreate(tree.Root, options, out RegexLh3DateEngine? lh3Date);
         RegexWordWhitespaceLiteralEngine.TryCreate(tree.Root, options, out RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral);
+        RegexBoundedLetterSuffixWhitespaceEngine.TryCreate(tree.Root, options, out RegexBoundedLetterSuffixWhitespaceEngine? boundedLetterSuffixWhitespace);
         RegexRunLiteralDotStarEngine.TryCreate(tree.Root, options, out RegexRunLiteralDotStarEngine? runLiteralDotStar);
         RegexLiteralPrefixRunEngine.TryCreate(tree.Root, options, out RegexLiteralPrefixRunEngine? literalPrefixRun);
         RegexBoundedLiteralGapEngine.TryCreate(tree.Root, options, out RegexBoundedLiteralGapEngine? boundedLiteralGap);
@@ -269,6 +270,7 @@ public sealed class RegexAutomaton
                 lh3Uri: lh3Uri,
                 lh3Date: lh3Date,
                 wordWhitespaceLiteral: wordWhitespaceLiteral,
+                boundedLetterSuffixWhitespace: boundedLetterSuffixWhitespace,
                 runLiteralDotStar: runLiteralDotStar,
                 literalPrefixRun: literalPrefixRun,
                 boundedLiteralGap: boundedLiteralGap,
@@ -530,7 +532,8 @@ public sealed class RegexAutomaton
     /// <returns><see langword="true" /> when a match exists.</returns>
     public bool IsMatch(ReadOnlySpan<byte> haystack)
     {
-        return Find(haystack).HasValue;
+        return CanSearch(haystack, startAt: 0) &&
+            engine.IsMatch(haystack, startPredicate);
     }
 
     /// <summary>

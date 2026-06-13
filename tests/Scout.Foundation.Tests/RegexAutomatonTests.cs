@@ -534,6 +534,37 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies bounded letter suffixes between whitespace use suffix-driven matching.
+    /// </summary>
+    [Fact]
+    public void BoundedLetterSuffixWhitespaceEngineCountsNonOverlappingWords()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\s[a-zA-Z]{0,12}ing\s"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "xx walking  running  tooling  abcdefghijkling abcdefghijklmnoing wing\t"u8.ToArray();
+
+        RegexMatch? first = automaton.Find(haystack);
+        RegexMatch? second = automaton.Find(haystack, first!.Value.End);
+        RegexMatch? third = automaton.Find(haystack, second!.Value.End);
+
+        Assert.Equal(RegexEngineKind.BoundedLetterSuffixWhitespace, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(2, 9), first);
+        Assert.Equal(new RegexMatch(11, 9), second);
+        Assert.Equal(new RegexMatch(20, 9), third);
+        Assert.Equal(new RegexMatch(11, 9), automaton.Find(haystack, startAt: 3));
+        Assert.Equal(new RegexMatch(0, 9), automaton.MatchAt(" walking "u8, 0));
+        Assert.Equal(new RegexMatch(0, 6), automaton.MatchAt(" xing\n"u8, 0));
+        Assert.Null(automaton.MatchAt(" abcdefghijklmnoing "u8, 0));
+        Assert.Equal(5, automaton.CountMatches(haystack));
+        Assert.Equal(50, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies equivalent capture threads keep nested captures reached through optional repeated suffixes.
     /// </summary>
     [Fact]
@@ -3604,6 +3635,8 @@ public sealed class RegexAutomatonTests
             unicodeClasses: false);
 
         Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.True(automaton.IsMatch("abc 12_x -- long_word"u8));
+        Assert.False(automaton.IsMatch("abc 123 -- xyz"u8));
         Assert.Equal(new RegexMatch(4, 4), automaton.Find("abc 12_x -- long_word"u8));
         Assert.Equal(new RegexMatch(12, 9), automaton.Find("abc 12_x -- long_word"u8, startAt: 5));
         Assert.Equal(2, automaton.CountMatches("abc 12_x -- long_word"u8));
@@ -3674,6 +3707,8 @@ public sealed class RegexAutomatonTests
             unicodeClasses: true);
 
         Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.True(automaton.IsMatch("ββ βββ word_12 ☃abc"u8));
+        Assert.False(automaton.IsMatch("ββ xx ☃ab"u8));
         Assert.Equal(new RegexMatch(5, 6), automaton.Find("ββ βββ word_12 ☃abc"u8));
         Assert.Equal(new RegexMatch(12, 7), automaton.Find("ββ βββ word_12 ☃abc"u8, startAt: 6));
         Assert.Equal(3, automaton.CountMatches("ββ βββ word_12 ☃abc"u8));
