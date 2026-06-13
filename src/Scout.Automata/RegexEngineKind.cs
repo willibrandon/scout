@@ -5,6 +5,7 @@ internal enum RegexEngineKind
     LiteralSet,
     AlternationSet,
     DotStar,
+    Ipv4Address,
     SimpleSequence,
     LineContains,
     DotStarClassFallback,

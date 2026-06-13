@@ -651,6 +651,57 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies byte-mode IPv4 address patterns use direct dotted-octet scanning.
+    /// </summary>
+    [Fact]
+    public void Ipv4AddressEngineCountsDottedOctets()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = "x192.168.00.01 y25.25.25.25 z1.2.3.4"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.Ipv4Address, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(1, 13), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(16, 11), automaton.MatchAt(haystack, startAt: 16));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(24, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
+    /// Verifies IPv4 address scanning preserves unanchored starts inside larger digit runs.
+    /// </summary>
+    [Fact]
+    public void Ipv4AddressEngineFindsLaterValidDigitStart()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+
+        Assert.Equal(new RegexMatch(2, 11), automaton.Find("x256.00.00.00"u8));
+    }
+
+    /// <summary>
+    /// Verifies IPv4 address specialization is skipped when UTF-8 scalar boundaries matter.
+    /// </summary>
+    [Fact]
+    public void Ipv4AddressEngineSkipsUtf8Mode()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])"u8);
+
+        Assert.NotEqual(RegexEngineKind.Ipv4Address, GetEngineKind(automaton));
+    }
+
+    /// <summary>
     /// Verifies prefixed greedy dot-star tails preserve leftmost spans in lazy DFA execution.
     /// </summary>
     [Fact]

@@ -23,6 +23,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexLiteralSetEngine? literalSet;
     private readonly RegexAlternationSetEngine? alternationSet;
     private readonly RegexDotStarEngine? dotStar;
+    private readonly RegexIpv4AddressEngine? ipv4Address;
     private readonly RegexDelimitedRunEngine? delimitedRun;
     private readonly RegexSimpleSequenceEngine? simpleSequence;
     private readonly RegexEndAnchoredAtomEngine? endAnchoredAtom;
@@ -68,7 +69,8 @@ internal sealed class RegexMetaEngine
         Func<RegexUnanchoredLazyDfa?>? unanchoredLazyDfaFactory = null,
         Func<RegexLazyDfa?>? anchoredLeftmostDfaFactory = null,
         RegexEndAnchoredAtomEngine? endAnchoredAtom = null,
-        RegexDotStarEngine? dotStar = null)
+        RegexDotStarEngine? dotStar = null,
+        RegexIpv4AddressEngine? ipv4Address = null)
     {
         Kind = kind;
         this.nfa = nfa;
@@ -86,6 +88,7 @@ internal sealed class RegexMetaEngine
         this.literalSet = literalSet;
         this.alternationSet = alternationSet;
         this.dotStar = dotStar;
+        this.ipv4Address = ipv4Address;
         this.delimitedRun = delimitedRun;
         this.simpleSequence = simpleSequence;
         this.endAnchoredAtom = endAnchoredAtom;
@@ -172,6 +175,7 @@ internal sealed class RegexMetaEngine
         RegexLiteralSetEngine? literalSet,
         RegexAlternationSetEngine? alternationSet,
         RegexDotStarEngine? dotStar = null,
+        RegexIpv4AddressEngine? ipv4Address = null,
         RegexDelimitedRunEngine? delimitedRun = null,
         RegexSimpleSequenceEngine? simpleSequence = null,
         RegexEndAnchoredAtomEngine? endAnchoredAtom = null,
@@ -246,6 +250,28 @@ internal sealed class RegexMetaEngine
                 prefilter,
                 nfa.Utf8,
                 dotStar: dotStar);
+        }
+
+        if (ipv4Address is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.Ipv4Address,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                delimitedRun: null,
+                simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
+                prefilter,
+                nfa.Utf8,
+                ipv4Address: ipv4Address);
         }
 
         if (delimitedRun is not null)
@@ -649,6 +675,11 @@ internal sealed class RegexMetaEngine
             return dotStar.Find(haystack, startOffset);
         }
 
+        if (ipv4Address is not null)
+        {
+            return RegexIpv4AddressEngine.Find(haystack, startOffset);
+        }
+
         if (delimitedRun is not null)
         {
             return delimitedRun.Find(haystack, startOffset);
@@ -789,6 +820,11 @@ internal sealed class RegexMetaEngine
             return dotStar.CountMatches(haystack, startAt);
         }
 
+        if (ipv4Address is not null)
+        {
+            return RegexIpv4AddressEngine.CountMatches(haystack, startAt);
+        }
+
         if (delimitedRun is not null)
         {
             return delimitedRun.CountMatches(haystack, startAt);
@@ -849,6 +885,11 @@ internal sealed class RegexMetaEngine
         if (dotStar is not null)
         {
             return dotStar.SumMatchSpans(haystack, startAt);
+        }
+
+        if (ipv4Address is not null)
+        {
+            return RegexIpv4AddressEngine.SumMatchSpans(haystack, startAt);
         }
 
         if (delimitedRun is not null)
@@ -1099,6 +1140,11 @@ internal sealed class RegexMetaEngine
         if (dotStar is not null)
         {
             return dotStar.Find(haystack, startOffset);
+        }
+
+        if (ipv4Address is not null)
+        {
+            return RegexIpv4AddressEngine.MatchAt(haystack, startOffset);
         }
 
         if (delimitedRun is not null)

@@ -189,6 +189,7 @@ public sealed class RegexAutomaton
             : null;
 
         RegexDotStarEngine.TryCreate(tree.Root, options, out RegexDotStarEngine? dotStar);
+        RegexIpv4AddressEngine.TryCreate(tree.Root, options, out RegexIpv4AddressEngine? ipv4Address);
         RegexDelimitedRunEngine.TryCreate(tree.Root, options, out RegexDelimitedRunEngine? delimitedRun);
         RegexSimpleSequenceEngine.TryCreate(tree.Root, options, out RegexSimpleSequenceEngine? simpleSequence);
         RegexEndAnchoredAtomEngine.TryCreate(tree.Root, options, out RegexEndAnchoredAtomEngine? endAnchoredAtom);
@@ -212,6 +213,7 @@ public sealed class RegexAutomaton
                 literalSet,
                 alternationSet: null,
                 dotStar: dotStar,
+                ipv4Address: ipv4Address,
                 delimitedRun: delimitedRun,
                 simpleSequence: simpleSequence,
                 endAnchoredAtom: endAnchoredAtom,
