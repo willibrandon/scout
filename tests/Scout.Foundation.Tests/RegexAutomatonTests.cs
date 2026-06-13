@@ -1118,6 +1118,34 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies bounded scalar-class sequences count UTF-8 scalars while keeping ASCII fast paths.
+    /// </summary>
+    [Fact]
+    public void BoundedScalarClassSequenceEngineCountsUnicodeSpans()
+    {
+        var automaton = RegexAutomaton.Compile(
+            "[a-q][^u-z]{3}x"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("zz aabcx b¢cdx c¢∞dx qabcx rbcdx aabux");
+
+        Assert.Equal(RegexEngineKind.BoundedScalarClassSequence, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(3, 5), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(9, 6), automaton.Find(haystack, startAt: 4));
+        Assert.Equal(new RegexMatch(16, 8), automaton.Find(haystack, startAt: 10));
+        Assert.Equal(new RegexMatch(25, 5), automaton.Find(haystack, startAt: 18));
+        Assert.Equal(new RegexMatch(9, 6), automaton.MatchAt(haystack, 9));
+        Assert.Equal(new RegexMatch(16, 8), automaton.MatchAt(haystack, 16));
+        Assert.Null(automaton.MatchAt(haystack, 31));
+        Assert.Null(automaton.MatchAt(haystack, 37));
+        Assert.Equal(4, automaton.CountMatches(haystack));
+        Assert.Equal(24, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies repeated lazy dot-star delimiter runs scan suffix candidates within one line.
     /// </summary>
     [Fact]

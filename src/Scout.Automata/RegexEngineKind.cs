@@ -16,6 +16,7 @@ internal enum RegexEngineKind
     LiteralPrefixRun,
     BoundedLiteralGap,
     BoundedLineLiteralGap,
+    BoundedScalarClassSequence,
     BoundedByteClassSequence,
     RepeatedLazyDotStarLiteral,
     DelimitedSpan,
