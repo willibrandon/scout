@@ -23,6 +23,8 @@ public sealed class RegexAutomaton
         private RegexScalarRunCaptureEngine? scalarRunCaptureEngine;
         private RegexAnchoredWordCaptureEngine? anchoredWordCaptureEngine;
         private RegexAnchoredRunBoundaryCaptureEngine? anchoredRunBoundaryCaptureEngine;
+        private RegexKeywordWhitespaceCaptureEngine? keywordWhitespaceCaptureEngine;
+        private RegexOperatorSpacingCaptureEngine? operatorSpacingCaptureEngine;
         private volatile bool captureEnginesInitialized;
         private volatile bool genericCaptureOnly;
 
@@ -259,6 +261,24 @@ public sealed class RegexAutomaton
         }
     }
 
+    internal bool UsesKeywordWhitespaceCaptureEngine
+    {
+        get
+        {
+            EnsureCaptureEngines();
+            return keywordWhitespaceCaptureEngine is not null;
+        }
+    }
+
+    internal bool UsesOperatorSpacingCaptureEngine
+    {
+        get
+        {
+            EnsureCaptureEngines();
+            return operatorSpacingCaptureEngine is not null;
+        }
+    }
+
     /// <summary>
     /// Finds the first match in a haystack.
     /// </summary>
@@ -460,10 +480,22 @@ public sealed class RegexAutomaton
                     captureOptions,
                     captureCount,
                     out scalarRunCaptureEngine);
+                RegexKeywordWhitespaceCaptureEngine.TryCreate(
+                    captureRoot,
+                    captureOptions,
+                    captureCount,
+                    out keywordWhitespaceCaptureEngine);
+                RegexOperatorSpacingCaptureEngine.TryCreate(
+                    captureRoot,
+                    captureOptions,
+                    captureCount,
+                    out operatorSpacingCaptureEngine);
                 if (syntheticCaptureAlternationSet is null &&
                     anchoredWordCaptureEngine is null &&
                     anchoredRunBoundaryCaptureEngine is null &&
-                    scalarRunCaptureEngine is null)
+                    scalarRunCaptureEngine is null &&
+                    keywordWhitespaceCaptureEngine is null &&
+                    operatorSpacingCaptureEngine is null)
                 {
                     RegexNfa captureNfa = RegexNfaCompiler.CompileCaptures(captureRoot, captureOptions, captureCount);
                     RegexPrefilter? effectiveCapturePrefilter = capturePrefilter ?? RegexPrefilter.Compile(captureRoot, captureOptions);
@@ -476,6 +508,8 @@ public sealed class RegexAutomaton
                 anchoredWordCaptureEngine is null &&
                 anchoredRunBoundaryCaptureEngine is null &&
                 scalarRunCaptureEngine is null &&
+                keywordWhitespaceCaptureEngine is null &&
+                operatorSpacingCaptureEngine is null &&
                 syntheticCaptureAlternationSet is null;
             captureEnginesInitialized = true;
         }
@@ -539,6 +573,16 @@ public sealed class RegexAutomaton
         if (scalarRunCaptureEngine is not null)
         {
             return scalarRunCaptureEngine.FindCaptures(haystack, startAt);
+        }
+
+        if (keywordWhitespaceCaptureEngine is not null)
+        {
+            return keywordWhitespaceCaptureEngine.FindCaptures(haystack, startAt);
+        }
+
+        if (operatorSpacingCaptureEngine is not null)
+        {
+            return operatorSpacingCaptureEngine.FindCaptures(haystack, startAt);
         }
 
         return FindGenericCaptures(haystack, startAt);

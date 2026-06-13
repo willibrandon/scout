@@ -820,6 +820,72 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies keyword-boundary whitespace captures use direct extraction.
+    /// </summary>
+    [Fact]
+    public void KeywordWhitespaceCaptureEngineReportsRuffKeywordCaptures()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"(\s*)\b(?:False|None|True|and|as|assert|async|await|break|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|nonlocal|not|or|pass|raise|return|try|while|with|yield)\b(\s*)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] line = System.Text.Encoding.UTF8.GetBytes("xx\u00A0if  value and\tmore");
+
+        RegexCaptures? first = automaton.FindCaptures(line);
+
+        Assert.True(automaton.UsesKeywordWhitespaceCaptureEngine);
+        Assert.NotNull(first);
+        Assert.Equal(3, first.ParticipatingCount());
+        Assert.Equal(new RegexMatch(2, System.Text.Encoding.UTF8.GetByteCount("\u00A0if  ")), first.Match);
+        AssertGroupUtf8Text(first, line, 1, "\u00A0");
+        AssertGroupUtf8Text(first, line, 2, "  ");
+
+        RegexCaptures? second = automaton.FindCaptures(line, first.Match.End);
+
+        Assert.NotNull(second);
+        Assert.Equal(3, second.ParticipatingCount());
+        AssertGroupUtf8Text(second, line, 1, " ");
+        AssertGroupUtf8Text(second, line, 2, "\t");
+        Assert.Null(automaton.FindCaptures("diff"u8));
+    }
+
+    /// <summary>
+    /// Verifies operator-spacing whitespace captures use direct extraction.
+    /// </summary>
+    [Fact]
+    public void OperatorSpacingCaptureEngineReportsRuffOperatorCaptures()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"[^,\s](\s*)(?:[-+*/|!<=>%&^]+|:=)(\s*)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] line = System.Text.Encoding.UTF8.GetBytes("π  +=  b c := d");
+
+        RegexCaptures? first = automaton.FindCaptures(line);
+
+        Assert.True(automaton.UsesOperatorSpacingCaptureEngine);
+        Assert.NotNull(first);
+        Assert.Equal(3, first.ParticipatingCount());
+        Assert.Equal(new RegexMatch(0, System.Text.Encoding.UTF8.GetByteCount("π  +=  ")), first.Match);
+        AssertGroupUtf8Text(first, line, 1, "  ");
+        AssertGroupUtf8Text(first, line, 2, "  ");
+
+        RegexCaptures? second = automaton.FindCaptures(line, first.Match.End);
+
+        Assert.NotNull(second);
+        Assert.Equal(3, second.ParticipatingCount());
+        AssertGroupUtf8Text(second, line, 1, " ");
+        AssertGroupUtf8Text(second, line, 2, " ");
+        Assert.Null(automaton.FindCaptures(", + "u8));
+    }
+
+    /// <summary>
     /// Verifies the rebar unstructured log pattern uses direct structural capture extraction.
     /// </summary>
     [Fact]
