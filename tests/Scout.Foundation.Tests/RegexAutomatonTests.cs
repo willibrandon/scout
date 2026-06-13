@@ -222,6 +222,28 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies large Aho literal alternations preserve leftmost-first non-overlapping counts.
+    /// </summary>
+    [Fact]
+    public void CountsLargeAhoLiteralAlternations()
+    {
+        byte[] longerFirstPattern = BuildLargeAhoLiteralAlternation("abcdzz", "a", "abcd");
+        byte[] shorterFirstPattern = BuildLargeAhoLiteralAlternation("a", "abcdzz", "abcd");
+        var longerFirstAutomaton = RegexAutomaton.Compile(longerFirstPattern);
+        var shorterFirstAutomaton = RegexAutomaton.Compile(shorterFirstPattern);
+        byte[] haystack = "xxabcdzz abcdzz"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(longerFirstAutomaton));
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(shorterFirstAutomaton));
+        Assert.Equal(new RegexMatch(2, 6), longerFirstAutomaton.Find(haystack));
+        Assert.Equal(new RegexMatch(2, 1), shorterFirstAutomaton.Find(haystack));
+        Assert.Equal(2, longerFirstAutomaton.CountMatches(haystack));
+        Assert.Equal(12, longerFirstAutomaton.SumMatchSpans(haystack));
+        Assert.Equal(2, shorterFirstAutomaton.CountMatches(haystack));
+        Assert.Equal(2, shorterFirstAutomaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies single ASCII case-insensitive literals use literal-set count and span semantics.
     /// </summary>
     [Fact]
@@ -2432,6 +2454,22 @@ public sealed class RegexAutomatonTests
         for (int index = 2; index < literals.Length; index++)
         {
             literals[index] = $"w{index:D3}token";
+        }
+
+        return System.Text.Encoding.ASCII.GetBytes(string.Join('|', literals));
+    }
+
+    private static byte[] BuildLargeAhoLiteralAlternation(params string[] orderedPrefixes)
+    {
+        string[] literals = new string[130];
+        for (int index = 0; index < orderedPrefixes.Length; index++)
+        {
+            literals[index] = orderedPrefixes[index];
+        }
+
+        for (int index = orderedPrefixes.Length; index < literals.Length; index++)
+        {
+            literals[index] = $"z{index:D3}token";
         }
 
         return System.Text.Encoding.ASCII.GetBytes(string.Join('|', literals));

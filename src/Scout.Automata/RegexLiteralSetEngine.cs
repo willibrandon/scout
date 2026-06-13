@@ -616,8 +616,8 @@ internal sealed class RegexLiteralSetEngine
                 break;
             }
 
-            if (!TryResolveAhoCandidate(haystack, startOffset, match, out RegexLiteralSetCandidate candidate) ||
-                !IsBetter(candidate, best))
+            RegexLiteralSetCandidate candidate = ResolveAhoCandidate(startOffset, match);
+            if (!IsBetter(candidate, best))
             {
                 continue;
             }
@@ -630,40 +630,111 @@ internal sealed class RegexLiteralSetEngine
 
     private long CountOrSumAho(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
     {
-        var candidates = new List<RegexLiteralSetCandidate>();
+        long total = 0;
+        int nextAllowedStart = startOffset;
+        var pending = new List<RegexLiteralSetCandidate>();
         AhoCorasickOverlappingEnumerator matches = automaton!.EnumerateOverlapping(haystack[startOffset..]);
         while (matches.MoveNext())
         {
-            AhoCorasickMatch match = matches.Current;
-            if (TryResolveAhoCandidate(haystack, startOffset, match, out RegexLiteralSetCandidate candidate))
+            AhoCorasickMatch ahoMatch = matches.Current;
+            RegexLiteralSetCandidate candidate = ResolveAhoCandidate(startOffset, ahoMatch);
+            if (candidate.Match.Start >= nextAllowedStart)
             {
-                AddCandidate(candidates, candidate);
+                pending.Add(candidate);
             }
+
+            DrainResolvedAhoCandidates(
+                pending,
+                startOffset + ahoMatch.End,
+                ref nextAllowedStart,
+                sumSpans,
+                ref total);
         }
 
-        candidates.Sort(static (left, right) =>
+        while (pending.Count != 0)
         {
-            int startComparison = left.Match.Start.CompareTo(right.Match.Start);
-            return startComparison != 0
-                ? startComparison
-                : left.LiteralId.CompareTo(right.LiteralId);
-        });
+            AcceptBestAhoCandidate(pending, ref nextAllowedStart, sumSpans, ref total);
+        }
 
-        long total = 0;
-        int nextAllowedStart = startOffset;
-        for (int index = 0; index < candidates.Count; index++)
+        return total;
+    }
+
+    private void DrainResolvedAhoCandidates(
+        List<RegexLiteralSetCandidate> pending,
+        int observedEnd,
+        ref int nextAllowedStart,
+        bool sumSpans,
+        ref long total)
+    {
+        while (pending.Count != 0)
         {
-            RegexMatch match = candidates[index].Match;
-            if (match.Start < nextAllowedStart)
+            int earliestStart = int.MaxValue;
+            for (int index = 0; index < pending.Count; index++)
+            {
+                earliestStart = Math.Min(earliestStart, pending[index].Match.Start);
+            }
+
+            if (observedEnd <= earliestStart + maxLiteralLength)
+            {
+                return;
+            }
+
+            AcceptBestAhoCandidate(pending, ref nextAllowedStart, sumSpans, ref total);
+        }
+    }
+
+    private static void AcceptBestAhoCandidate(
+        List<RegexLiteralSetCandidate> pending,
+        ref int nextAllowedStart,
+        bool sumSpans,
+        ref long total)
+    {
+        int bestIndex = -1;
+        RegexLiteralSetCandidate best = default;
+        for (int index = 0; index < pending.Count; index++)
+        {
+            RegexLiteralSetCandidate candidate = pending[index];
+            if (candidate.Match.Start < nextAllowedStart)
             {
                 continue;
             }
 
-            total += sumSpans ? match.Length : 1;
-            nextAllowedStart = match.End;
+            if (bestIndex < 0 || IsBetter(candidate, best))
+            {
+                bestIndex = index;
+                best = candidate;
+            }
         }
 
-        return total;
+        if (bestIndex < 0)
+        {
+            pending.Clear();
+            return;
+        }
+
+        RegexMatch match = best.Match;
+        total += sumSpans ? match.Length : 1;
+        nextAllowedStart = match.End;
+        RemovePendingBefore(pending, nextAllowedStart);
+    }
+
+    private static void RemovePendingBefore(List<RegexLiteralSetCandidate> pending, int start)
+    {
+        int write = 0;
+        for (int read = 0; read < pending.Count; read++)
+        {
+            RegexLiteralSetCandidate candidate = pending[read];
+            if (candidate.Match.Start >= start)
+            {
+                pending[write] = candidate;
+                write++;
+            }
+        }
+
+        if (write < pending.Count)
+        {
+            pending.RemoveRange(write, pending.Count - write);
+        }
     }
 
     private long CountOrSumSingleLiteral(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
@@ -711,37 +782,11 @@ internal sealed class RegexLiteralSetEngine
         return asciiCaseInsensitiveScanner!.CountOrSum(haystack, startOffset, sumSpans);
     }
 
-    private bool TryResolveAhoCandidate(
-        ReadOnlySpan<byte> haystack,
-        int startOffset,
-        AhoCorasickMatch match,
-        out RegexLiteralSetCandidate candidate)
+    private RegexLiteralSetCandidate ResolveAhoCandidate(int startOffset, AhoCorasickMatch match)
     {
         int literalId = searchPatternLiteralIds[match.PatternId];
         int start = startOffset + match.Start;
-        if (TryMatchLiteralAt(haystack, start, literalId, out int length))
-        {
-            candidate = new RegexLiteralSetCandidate(literalId, new RegexMatch(start, length));
-            return true;
-        }
-
-        candidate = default;
-        return false;
-    }
-
-    private static void AddCandidate(List<RegexLiteralSetCandidate> candidates, RegexLiteralSetCandidate candidate)
-    {
-        for (int index = 0; index < candidates.Count; index++)
-        {
-            RegexLiteralSetCandidate existing = candidates[index];
-            if (existing.LiteralId == candidate.LiteralId &&
-                existing.Match.Equals(candidate.Match))
-            {
-                return;
-            }
-        }
-
-        candidates.Add(candidate);
+        return new RegexLiteralSetCandidate(literalId, new RegexMatch(start, match.Length));
     }
 
     private bool TryFindLiteralAt(ReadOnlySpan<byte> haystack, int start, out RegexLiteralSetCandidate candidate)
