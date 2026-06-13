@@ -702,6 +702,60 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies byte-mode email address patterns scan around the at-sign delimiter.
+    /// </summary>
+    [Fact]
+    public void EmailAddressEngineCountsDottedDomains()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"[\w\.+-]+@[\w\.-]+\.[\w\.-]+"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "x a.b+c-d@example.test nope@nodot good@sub.domain.tld!"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.EmailAddress, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(2, 20), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(34, 19), automaton.Find(haystack, startAt: 22));
+        Assert.Equal(new RegexMatch(2, 20), automaton.MatchAt(haystack, startAt: 2));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(39, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
+    /// Verifies email address scanning can start inside a longer local token.
+    /// </summary>
+    [Fact]
+    public void EmailAddressEngineHonorsStartAtInsideLocalPart()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"[\w\.+-]+@[\w\.-]+\.[\w\.-]+"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(new RegexMatch(4, 7), automaton.Find("xx abc@d.ef"u8, startAt: 4));
+        Assert.Equal(1, automaton.CountMatches("xx abc@d.ef"u8, startAt: 4));
+        Assert.Equal(7, automaton.SumMatchSpans("xx abc@d.ef"u8, startAt: 4));
+        Assert.Null(automaton.Find("name@nodot"u8));
+    }
+
+    /// <summary>
+    /// Verifies email address specialization is skipped when UTF-8 or Unicode class semantics matter.
+    /// </summary>
+    [Fact]
+    public void EmailAddressEngineSkipsUtf8UnicodeMode()
+    {
+        var automaton = RegexAutomaton.Compile(@"[\w\.+-]+@[\w\.-]+\.[\w\.-]+"u8);
+
+        Assert.NotEqual(RegexEngineKind.EmailAddress, GetEngineKind(automaton));
+    }
+
+    /// <summary>
     /// Verifies prefixed greedy dot-star tails preserve leftmost spans in lazy DFA execution.
     /// </summary>
     [Fact]

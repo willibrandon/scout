@@ -6,6 +6,7 @@ internal enum RegexEngineKind
     AlternationSet,
     DotStar,
     Ipv4Address,
+    EmailAddress,
     SimpleSequence,
     LineContains,
     DotStarClassFallback,

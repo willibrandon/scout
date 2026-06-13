@@ -24,6 +24,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexAlternationSetEngine? alternationSet;
     private readonly RegexDotStarEngine? dotStar;
     private readonly RegexIpv4AddressEngine? ipv4Address;
+    private readonly RegexEmailAddressEngine? emailAddress;
     private readonly RegexDelimitedRunEngine? delimitedRun;
     private readonly RegexSimpleSequenceEngine? simpleSequence;
     private readonly RegexEndAnchoredAtomEngine? endAnchoredAtom;
@@ -70,7 +71,8 @@ internal sealed class RegexMetaEngine
         Func<RegexLazyDfa?>? anchoredLeftmostDfaFactory = null,
         RegexEndAnchoredAtomEngine? endAnchoredAtom = null,
         RegexDotStarEngine? dotStar = null,
-        RegexIpv4AddressEngine? ipv4Address = null)
+        RegexIpv4AddressEngine? ipv4Address = null,
+        RegexEmailAddressEngine? emailAddress = null)
     {
         Kind = kind;
         this.nfa = nfa;
@@ -89,6 +91,7 @@ internal sealed class RegexMetaEngine
         this.alternationSet = alternationSet;
         this.dotStar = dotStar;
         this.ipv4Address = ipv4Address;
+        this.emailAddress = emailAddress;
         this.delimitedRun = delimitedRun;
         this.simpleSequence = simpleSequence;
         this.endAnchoredAtom = endAnchoredAtom;
@@ -176,6 +179,7 @@ internal sealed class RegexMetaEngine
         RegexAlternationSetEngine? alternationSet,
         RegexDotStarEngine? dotStar = null,
         RegexIpv4AddressEngine? ipv4Address = null,
+        RegexEmailAddressEngine? emailAddress = null,
         RegexDelimitedRunEngine? delimitedRun = null,
         RegexSimpleSequenceEngine? simpleSequence = null,
         RegexEndAnchoredAtomEngine? endAnchoredAtom = null,
@@ -272,6 +276,28 @@ internal sealed class RegexMetaEngine
                 prefilter,
                 nfa.Utf8,
                 ipv4Address: ipv4Address);
+        }
+
+        if (emailAddress is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.EmailAddress,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                delimitedRun: null,
+                simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
+                prefilter,
+                nfa.Utf8,
+                emailAddress: emailAddress);
         }
 
         if (delimitedRun is not null)
@@ -680,6 +706,11 @@ internal sealed class RegexMetaEngine
             return RegexIpv4AddressEngine.Find(haystack, startOffset);
         }
 
+        if (emailAddress is not null)
+        {
+            return RegexEmailAddressEngine.Find(haystack, startOffset);
+        }
+
         if (delimitedRun is not null)
         {
             return delimitedRun.Find(haystack, startOffset);
@@ -825,6 +856,11 @@ internal sealed class RegexMetaEngine
             return RegexIpv4AddressEngine.CountMatches(haystack, startAt);
         }
 
+        if (emailAddress is not null)
+        {
+            return RegexEmailAddressEngine.CountMatches(haystack, startAt);
+        }
+
         if (delimitedRun is not null)
         {
             return delimitedRun.CountMatches(haystack, startAt);
@@ -890,6 +926,11 @@ internal sealed class RegexMetaEngine
         if (ipv4Address is not null)
         {
             return RegexIpv4AddressEngine.SumMatchSpans(haystack, startAt);
+        }
+
+        if (emailAddress is not null)
+        {
+            return RegexEmailAddressEngine.SumMatchSpans(haystack, startAt);
         }
 
         if (delimitedRun is not null)
@@ -1145,6 +1186,11 @@ internal sealed class RegexMetaEngine
         if (ipv4Address is not null)
         {
             return RegexIpv4AddressEngine.MatchAt(haystack, startOffset);
+        }
+
+        if (emailAddress is not null)
+        {
+            return RegexEmailAddressEngine.MatchAt(haystack, startOffset);
         }
 
         if (delimitedRun is not null)
