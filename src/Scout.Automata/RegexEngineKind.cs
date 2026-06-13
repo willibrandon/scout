@@ -8,6 +8,7 @@ internal enum RegexEngineKind
     Ipv4Address,
     EmailAddress,
     Uri,
+    WordWhitespaceLiteral,
     SimpleSequence,
     LineContains,
     DotStarClassFallback,

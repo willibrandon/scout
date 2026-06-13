@@ -193,6 +193,7 @@ public sealed class RegexAutomaton
         RegexIpv4AddressEngine.TryCreate(tree.Root, options, out RegexIpv4AddressEngine? ipv4Address);
         RegexEmailAddressEngine.TryCreate(tree.Root, options, out RegexEmailAddressEngine? emailAddress);
         RegexUriEngine.TryCreate(tree.Root, options, out RegexUriEngine? uri);
+        RegexWordWhitespaceLiteralEngine.TryCreate(tree.Root, options, out RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral);
         RegexDelimitedRunEngine.TryCreate(tree.Root, options, out RegexDelimitedRunEngine? delimitedRun);
         RegexSimpleSequenceEngine.TryCreate(tree.Root, options, out RegexSimpleSequenceEngine? simpleSequence);
         RegexEndAnchoredAtomEngine.TryCreate(tree.Root, options, out RegexEndAnchoredAtomEngine? endAnchoredAtom);
@@ -219,6 +220,7 @@ public sealed class RegexAutomaton
                 ipv4Address: ipv4Address,
                 emailAddress: emailAddress,
                 uri: uri,
+                wordWhitespaceLiteral: wordWhitespaceLiteral,
                 delimitedRun: delimitedRun,
                 simpleSequence: simpleSequence,
                 endAnchoredAtom: endAnchoredAtom,

@@ -448,6 +448,56 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies word-whitespace-literal suffix patterns use literal-driven matching.
+    /// </summary>
+    [Fact]
+    public void WordWhitespaceLiteralEngineReportsSuffixMatches()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\w+\s+Holmes"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "Sherlock Holmes and Mycroft Holmesian"u8.ToArray();
+
+        RegexMatch? first = automaton.Find(haystack);
+        RegexMatch? second = automaton.Find(haystack, first!.Value.End);
+
+        Assert.Equal(RegexEngineKind.WordWhitespaceLiteral, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 15), first);
+        Assert.Equal(new RegexMatch(20, 14), second);
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(29, automaton.SumMatchSpans(haystack));
+        Assert.Equal(new RegexMatch(3, 12), automaton.Find(haystack, 3));
+    }
+
+    /// <summary>
+    /// Verifies word-whitespace-literal inner patterns honor explicit word boundaries.
+    /// </summary>
+    [Fact]
+    public void WordWhitespaceLiteralEngineReportsBoundaryInnerMatches()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\b\w+\s+Holmes\s+\w+\b"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "Sherlock Holmes said and notHolmes value and Mycroft Holmesian value"u8.ToArray();
+
+        RegexMatch? match = automaton.Find(haystack);
+
+        Assert.Equal(RegexEngineKind.WordWhitespaceLiteral, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 20), match);
+        Assert.Equal(1, automaton.CountMatches(haystack));
+        Assert.Equal(20, automaton.SumMatchSpans(haystack));
+        Assert.Null(automaton.Find("notHolmes value"u8));
+    }
+
+    /// <summary>
     /// Verifies equivalent capture threads keep nested captures reached through optional repeated suffixes.
     /// </summary>
     [Fact]

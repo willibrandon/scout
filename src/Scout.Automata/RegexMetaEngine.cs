@@ -26,6 +26,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexIpv4AddressEngine? ipv4Address;
     private readonly RegexEmailAddressEngine? emailAddress;
     private readonly RegexUriEngine? uri;
+    private readonly RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral;
     private readonly RegexDelimitedRunEngine? delimitedRun;
     private readonly RegexSimpleSequenceEngine? simpleSequence;
     private readonly RegexEndAnchoredAtomEngine? endAnchoredAtom;
@@ -74,7 +75,8 @@ internal sealed class RegexMetaEngine
         RegexDotStarEngine? dotStar = null,
         RegexIpv4AddressEngine? ipv4Address = null,
         RegexEmailAddressEngine? emailAddress = null,
-        RegexUriEngine? uri = null)
+        RegexUriEngine? uri = null,
+        RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral = null)
     {
         Kind = kind;
         this.nfa = nfa;
@@ -95,6 +97,7 @@ internal sealed class RegexMetaEngine
         this.ipv4Address = ipv4Address;
         this.emailAddress = emailAddress;
         this.uri = uri;
+        this.wordWhitespaceLiteral = wordWhitespaceLiteral;
         this.delimitedRun = delimitedRun;
         this.simpleSequence = simpleSequence;
         this.endAnchoredAtom = endAnchoredAtom;
@@ -184,6 +187,7 @@ internal sealed class RegexMetaEngine
         RegexIpv4AddressEngine? ipv4Address = null,
         RegexEmailAddressEngine? emailAddress = null,
         RegexUriEngine? uri = null,
+        RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral = null,
         RegexDelimitedRunEngine? delimitedRun = null,
         RegexSimpleSequenceEngine? simpleSequence = null,
         RegexEndAnchoredAtomEngine? endAnchoredAtom = null,
@@ -324,6 +328,28 @@ internal sealed class RegexMetaEngine
                 prefilter,
                 nfa.Utf8,
                 uri: uri);
+        }
+
+        if (wordWhitespaceLiteral is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.WordWhitespaceLiteral,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                delimitedRun: null,
+                simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
+                prefilter,
+                nfa.Utf8,
+                wordWhitespaceLiteral: wordWhitespaceLiteral);
         }
 
         if (delimitedRun is not null)
@@ -742,6 +768,11 @@ internal sealed class RegexMetaEngine
             return RegexUriEngine.Find(haystack, startOffset);
         }
 
+        if (wordWhitespaceLiteral is not null)
+        {
+            return wordWhitespaceLiteral.Find(haystack, startOffset);
+        }
+
         if (delimitedRun is not null)
         {
             return delimitedRun.Find(haystack, startOffset);
@@ -897,6 +928,11 @@ internal sealed class RegexMetaEngine
             return RegexUriEngine.CountMatches(haystack, startAt);
         }
 
+        if (wordWhitespaceLiteral is not null)
+        {
+            return wordWhitespaceLiteral.CountMatches(haystack, startAt);
+        }
+
         if (delimitedRun is not null)
         {
             return delimitedRun.CountMatches(haystack, startAt);
@@ -972,6 +1008,11 @@ internal sealed class RegexMetaEngine
         if (uri is not null)
         {
             return RegexUriEngine.SumMatchSpans(haystack, startAt);
+        }
+
+        if (wordWhitespaceLiteral is not null)
+        {
+            return wordWhitespaceLiteral.SumMatchSpans(haystack, startAt);
         }
 
         if (delimitedRun is not null)
@@ -1435,6 +1476,11 @@ internal sealed class RegexMetaEngine
         if (simpleSequence is not null)
         {
             return simpleSequence.TryMatchAt(haystack, start, out length);
+        }
+
+        if (wordWhitespaceLiteral is not null)
+        {
+            return wordWhitespaceLiteral.TryMatchAt(haystack, start, out length);
         }
 
         if (delimitedRun is not null)
