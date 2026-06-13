@@ -21,6 +21,7 @@ internal sealed class RegexScalarRunEngine
     private readonly int maximum;
     private readonly bool lazy;
     private readonly bool unicodeLowerOrUpperFastPath;
+    private readonly bool singleDotAllScalarFastPath;
     private readonly int[]? singleUnicodePropertyRanges;
     private readonly byte[]? singleUnicodePropertyFirstBytes;
 
@@ -31,6 +32,7 @@ internal sealed class RegexScalarRunEngine
         int maximum,
         bool lazy,
         bool unicodeLowerOrUpperFastPath,
+        bool singleDotAllScalarFastPath,
         int[]? singleUnicodePropertyRanges,
         byte[]? singleUnicodePropertyFirstBytes)
     {
@@ -40,6 +42,7 @@ internal sealed class RegexScalarRunEngine
         this.maximum = maximum;
         this.lazy = lazy;
         this.unicodeLowerOrUpperFastPath = unicodeLowerOrUpperFastPath;
+        this.singleDotAllScalarFastPath = singleDotAllScalarFastPath;
         this.singleUnicodePropertyRanges = singleUnicodePropertyRanges;
         this.singleUnicodePropertyFirstBytes = singleUnicodePropertyFirstBytes;
     }
@@ -86,7 +89,7 @@ internal sealed class RegexScalarRunEngine
             minimum = repetition.Minimum;
             lazy = repetition.Lazy;
         }
-        else if (TryCollectSingleUnicodePropertyAtom(root, effectiveOptions, out atoms))
+        else if (TryCollectScalarAtoms(root, effectiveOptions, out atoms))
         {
             minimum = 1;
             maximum = 1;
@@ -98,6 +101,7 @@ internal sealed class RegexScalarRunEngine
         }
 
         bool unicodeLowerOrUpperFastPath = IsUnicodeLowerOrUpperFastPath(atoms, effectiveOptions);
+        bool singleDotAllScalarFastPath = IsSingleDotAllScalarFastPath(atoms, effectiveOptions, minimum, maximum, lazy);
         TryCreateSingleUnicodePropertyFastPath(
             atoms,
             effectiveOptions,
@@ -110,6 +114,7 @@ internal sealed class RegexScalarRunEngine
             maximum,
             lazy,
             unicodeLowerOrUpperFastPath,
+            singleDotAllScalarFastPath,
             singleUnicodePropertyRanges,
             singleUnicodePropertyFirstBytes);
         return true;
@@ -145,6 +150,12 @@ internal sealed class RegexScalarRunEngine
     {
         count = 0;
         spanSum = 0;
+        if (singleDotAllScalarFastPath)
+        {
+            CountSingleDotAllScalars(haystack, startAt, sumSpans, ref count, ref spanSum);
+            return true;
+        }
+
         if (singleUnicodePropertyRanges is not null &&
             minimum == 1 &&
             maximum == 1)
@@ -199,6 +210,13 @@ internal sealed class RegexScalarRunEngine
 
     private bool TryCountNonOverlappingCountOnly(ReadOnlySpan<byte> haystack, int startAt, ref long count)
     {
+        if (singleDotAllScalarFastPath)
+        {
+            long ignoredSpanSum = 0;
+            CountSingleDotAllScalars(haystack, startAt, sumSpans: false, ref count, ref ignoredSpanSum);
+            return true;
+        }
+
         if (singleUnicodePropertyRanges is not null)
         {
             CountSingleUnicodePropertyRunFastPath(haystack, startAt, ref count);
@@ -250,6 +268,32 @@ internal sealed class RegexScalarRunEngine
         }
 
         return true;
+    }
+
+    private static void CountSingleDotAllScalars(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        bool sumSpans,
+        ref long count,
+        ref long spanSum)
+    {
+        int position = Math.Clamp(startAt, 0, haystack.Length);
+        while (position < haystack.Length)
+        {
+            if (TryGetUtf8ScalarLength(haystack, position, out int scalarLength))
+            {
+                count++;
+                if (sumSpans)
+                {
+                    spanSum += scalarLength;
+                }
+
+                position += scalarLength;
+                continue;
+            }
+
+            position++;
+        }
     }
 
     private void CountUnicodeLetterFastPath(ReadOnlySpan<byte> haystack, int startAt, ref long count)
@@ -918,6 +962,15 @@ internal sealed class RegexScalarRunEngine
         scalarRunNode = null;
         effectiveOptions = options;
         root = UnwrapTransparentGroups(root);
+        if (root is RegexGroupNode group)
+        {
+            return TryExtractScalarRunNode(
+                group.Child,
+                options.Apply(group.EnabledFlags, group.DisabledFlags),
+                out scalarRunNode,
+                out effectiveOptions);
+        }
+
         if (root is not RegexSequenceNode sequence)
         {
             scalarRunNode = root;
@@ -941,7 +994,8 @@ internal sealed class RegexScalarRunEngine
             scalarRunNode = node;
         }
 
-        return scalarRunNode is not null;
+        return scalarRunNode is not null &&
+            TryExtractScalarRunNode(scalarRunNode, effectiveOptions, out scalarRunNode, out effectiveOptions);
     }
 
     private static bool TryCollectScalarAtoms(
@@ -978,23 +1032,6 @@ internal sealed class RegexScalarRunEngine
         return true;
     }
 
-    private static bool TryCollectSingleUnicodePropertyAtom(
-        RegexSyntaxNode node,
-        RegexCompileOptions options,
-        out RegexScalarRunAtom[] atoms)
-    {
-        atoms = [];
-        node = UnwrapTransparentGroups(node);
-        if (node is not RegexAtomNode { Kind: RegexSyntaxKind.UnicodePropertyClass } atom ||
-            !TryCreateScalarAtom(atom, options, out RegexScalarRunAtom scalarAtom, out _))
-        {
-            return false;
-        }
-
-        atoms = [scalarAtom];
-        return true;
-    }
-
     internal static bool TryCreateScalarAtom(
         RegexAtomNode atom,
         RegexCompileOptions options,
@@ -1017,6 +1054,22 @@ internal sealed class RegexScalarRunEngine
         scalarAtom = new RegexScalarRunAtom(atom.Kind, atom.Value.ToArray(), unicodeLetterFastPath, cyrillicWordFastPath);
         atoms = [scalarAtom];
         return true;
+    }
+
+    private static bool IsSingleDotAllScalarFastPath(
+        RegexScalarRunAtom[] atoms,
+        RegexCompileOptions options,
+        int minimum,
+        int maximum,
+        bool lazy)
+    {
+        return minimum == 1 &&
+            maximum == 1 &&
+            !lazy &&
+            options.DotMatchesNewline &&
+            (options.Utf8 || options.UnicodeClasses) &&
+            atoms.Length == 1 &&
+            atoms[0].Kind == RegexSyntaxKind.Dot;
     }
 
     internal static bool IsCyrillicWordClass(RegexAtomNode atom, RegexCompileOptions options)

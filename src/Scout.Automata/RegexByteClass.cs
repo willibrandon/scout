@@ -725,7 +725,7 @@ internal static class RegexByteClass
         bool matched = false;
         while (index < expression.Length)
         {
-            if (!TryReadClassToken(expression, ref index, out RegexSyntaxKind tokenKind, out byte literal, out bool tokenNegated))
+            if (!TryReadClassScalarToken(expression, ref index, out RegexSyntaxKind tokenKind, out int literal, out bool tokenNegated))
             {
                 break;
             }
@@ -736,7 +736,7 @@ internal static class RegexByteClass
                 expression[index] == (byte)'-')
             {
                 int rangeEndIndex = index + 1;
-                if (!TryReadClassToken(expression, ref rangeEndIndex, out RegexSyntaxKind rangeEndKind, out byte rangeEndLiteral, out bool rangeEndNegated) ||
+                if (!TryReadClassScalarToken(expression, ref rangeEndIndex, out RegexSyntaxKind rangeEndKind, out int rangeEndLiteral, out bool rangeEndNegated) ||
                     rangeEndNegated ||
                     rangeEndKind != RegexSyntaxKind.Literal)
                 {
@@ -905,6 +905,142 @@ internal static class RegexByteClass
                     index += 2;
                     return true;
             }
+        }
+
+        literal = expression[index];
+        index++;
+        return true;
+    }
+
+    private static bool TryReadClassScalarToken(
+        ReadOnlySpan<byte> expression,
+        ref int index,
+        out RegexSyntaxKind tokenKind,
+        out int literal,
+        out bool tokenNegated)
+    {
+        tokenKind = RegexSyntaxKind.Literal;
+        literal = 0;
+        tokenNegated = false;
+        if (index >= expression.Length)
+        {
+            return false;
+        }
+
+        if (TryParsePosixClass(expression, index, out tokenKind, out tokenNegated, out int nextIndex))
+        {
+            index = nextIndex;
+            return true;
+        }
+
+        if (expression[index] == (byte)'\\' && index + 1 < expression.Length)
+        {
+            byte escaped = expression[index + 1];
+            switch (escaped)
+            {
+                case (byte)'d':
+                    tokenKind = RegexSyntaxKind.DigitClass;
+                    index += 2;
+                    return true;
+                case (byte)'D':
+                    tokenKind = RegexSyntaxKind.DigitClass;
+                    tokenNegated = true;
+                    index += 2;
+                    return true;
+                case (byte)'w':
+                    tokenKind = RegexSyntaxKind.WordClass;
+                    index += 2;
+                    return true;
+                case (byte)'W':
+                    tokenKind = RegexSyntaxKind.WordClass;
+                    tokenNegated = true;
+                    index += 2;
+                    return true;
+                case (byte)'s':
+                    tokenKind = RegexSyntaxKind.WhitespaceClass;
+                    index += 2;
+                    return true;
+                case (byte)'S':
+                    tokenKind = RegexSyntaxKind.WhitespaceClass;
+                    tokenNegated = true;
+                    index += 2;
+                    return true;
+                case (byte)'x':
+                case (byte)'u':
+                    if (TryReadScalarEscape(expression, index, out int scalarNextIndex, out int scalar))
+                    {
+                        literal = scalar;
+                        index = scalarNextIndex;
+                        return true;
+                    }
+
+                    literal = escaped;
+                    index += 2;
+                    return true;
+                case (byte)'p':
+                    if (TryReadUnicodePropertyClassToken(
+                        expression,
+                        index + 2,
+                        negated: false,
+                        out tokenKind,
+                        out byte propertyLiteral,
+                        out tokenNegated,
+                        out int propertyNextIndex))
+                    {
+                        literal = propertyLiteral;
+                        index = propertyNextIndex;
+                        return true;
+                    }
+
+                    literal = escaped;
+                    index += 2;
+                    return true;
+                case (byte)'P':
+                    if (TryReadUnicodePropertyClassToken(
+                        expression,
+                        index + 2,
+                        negated: true,
+                        out tokenKind,
+                        out byte negatedPropertyLiteral,
+                        out tokenNegated,
+                        out int negatedPropertyNextIndex))
+                    {
+                        literal = negatedPropertyLiteral;
+                        index = negatedPropertyNextIndex;
+                        return true;
+                    }
+
+                    literal = escaped;
+                    index += 2;
+                    return true;
+                case (byte)'t':
+                    literal = '\t';
+                    index += 2;
+                    return true;
+                case (byte)'n':
+                    literal = '\n';
+                    index += 2;
+                    return true;
+                case (byte)'r':
+                    literal = '\r';
+                    index += 2;
+                    return true;
+                case (byte)'f':
+                    literal = '\f';
+                    index += 2;
+                    return true;
+                default:
+                    literal = escaped;
+                    index += 2;
+                    return true;
+            }
+        }
+
+        if (TryDecodeUtf8Scalar(expression, index, out Rune rune, out int length))
+        {
+            literal = rune.Value;
+            index += length;
+            return true;
         }
 
         literal = expression[index];
@@ -1177,7 +1313,7 @@ internal static class RegexByteClass
     private static bool ClassTokenMatches(
         Rune value,
         RegexSyntaxKind tokenKind,
-        byte literal,
+        int literal,
         bool tokenNegated,
         bool caseInsensitive,
         bool unicodeClasses)
@@ -1197,30 +1333,50 @@ internal static class RegexByteClass
         return tokenNegated ? !matched : matched;
     }
 
-    private static bool ClassRangeMatches(Rune value, byte start, byte end, bool caseInsensitive, bool unicodeClasses)
+    private static bool ClassRangeMatches(Rune value, int start, int end, bool caseInsensitive, bool unicodeClasses)
     {
-        if (value.IsAscii)
+        if (start <= value.Value && value.Value <= end)
         {
-            byte foldedValue = FoldMaybe((byte)value.Value, caseInsensitive);
-            byte foldedStart = FoldMaybe(start, caseInsensitive);
-            byte foldedEnd = FoldMaybe(end, caseInsensitive);
-            return foldedStart <= foldedValue && foldedValue <= foldedEnd;
+            return true;
         }
 
-        if (!caseInsensitive || !unicodeClasses || !TryFoldUnicodeScalarToAscii(value, out byte folded))
+        if (!caseInsensitive || !unicodeClasses)
         {
             return false;
         }
 
-        byte foldedStartUnicode = FoldMaybe(start, caseInsensitive);
-        byte foldedEndUnicode = FoldMaybe(end, caseInsensitive);
-        return foldedStartUnicode <= folded && folded <= foldedEndUnicode;
+        if (start is >= 0 and <= 0x7F &&
+            end is >= 0 and <= 0x7F &&
+            TryFoldUnicodeScalarToAscii(value, out byte folded))
+        {
+            byte foldedStart = FoldMaybe((byte)start, caseInsensitive);
+            byte foldedEnd = FoldMaybe((byte)end, caseInsensitive);
+            return foldedStart <= folded && folded <= foldedEnd;
+        }
+
+        return false;
     }
 
     private static bool RuneEqualsLiteral(Rune value, byte literal, bool caseInsensitive, bool unicodeClasses)
     {
         ReadOnlySpan<byte> literalSpan = stackalloc byte[] { literal };
         return RuneEqualsLiteral(value, literalSpan, caseInsensitive, unicodeClasses);
+    }
+
+    private static bool RuneEqualsLiteral(Rune value, int literal, bool caseInsensitive, bool unicodeClasses)
+    {
+        if (!Rune.IsValid(literal))
+        {
+            return false;
+        }
+
+        var literalRune = new Rune(literal);
+        if (!caseInsensitive || !unicodeClasses)
+        {
+            return value.Value == literalRune.Value;
+        }
+
+        return RegexUnicodeTables.IsSimpleCaseFold(value, literalRune);
     }
 
     private static bool RuneEqualsLiteral(Rune value, ReadOnlySpan<byte> literal, bool caseInsensitive, bool unicodeClasses)

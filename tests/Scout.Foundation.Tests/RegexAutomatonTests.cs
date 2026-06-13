@@ -788,6 +788,32 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies a single Unicode dot-all scalar atom uses the scalar run engine and skips invalid UTF-8.
+    /// </summary>
+    [Fact]
+    public void ScalarRunCountsUnicodeDotAllScalars()
+    {
+        var automaton = RegexAutomaton.Compile(
+            "(?s:.)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = [(byte)'a', 0xC3, 0xA9, (byte)'\n', 0xD0, 0x96, 0xFF, (byte)'b'];
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 1), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(1, 2), automaton.Find(haystack, startAt: 1));
+        Assert.Equal(new RegexMatch(3, 1), automaton.Find(haystack, startAt: 3));
+        Assert.Equal(new RegexMatch(4, 2), automaton.MatchAt(haystack, startAt: 4));
+        Assert.Null(automaton.MatchAt(haystack, startAt: 6));
+        Assert.Equal(new RegexMatch(7, 1), automaton.Find(haystack, startAt: 6));
+        Assert.Equal(5, automaton.CountMatches(haystack));
+        Assert.Equal(7, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies literal-prefix word captures synthesize branch captures directly.
     /// </summary>
     [Fact]
