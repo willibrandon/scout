@@ -698,6 +698,33 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies anchored word-prefix capture patterns use direct capture extraction.
+    /// </summary>
+    [Fact]
+    public void AnchoredWordCaptureEngineReportsPrefixWords()
+    {
+        var automaton = RegexAutomaton.Compile(
+            "^ *(\\w+) +(\\w+) +(\\w+)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] line = System.Text.Encoding.UTF8.GetBytes("  Привет мир test!");
+
+        RegexCaptures? captures = automaton.FindCaptures(line);
+
+        Assert.True(automaton.UsesAnchoredWordCaptureEngine);
+        Assert.NotNull(captures);
+        Assert.Equal(4, captures.ParticipatingCount());
+        Assert.Equal(new RegexMatch(0, System.Text.Encoding.UTF8.GetByteCount("  Привет мир test")), captures.Match);
+        AssertGroupUtf8Text(captures, line, 1, "Привет");
+        AssertGroupUtf8Text(captures, line, 2, "мир");
+        AssertGroupUtf8Text(captures, line, 3, "test");
+        Assert.Null(automaton.FindCaptures(line, captures.Match.End));
+    }
+
+    /// <summary>
     /// Verifies the rebar unstructured log pattern uses direct structural capture extraction.
     /// </summary>
     [Fact]
@@ -2301,6 +2328,16 @@ public sealed class RegexAutomatonTests
         Assert.Equal(
             expected,
             System.Text.Encoding.ASCII.GetString(haystack.AsSpan(group.Value.Start, group.Value.Length)));
+    }
+
+    private static void AssertGroupUtf8Text(RegexCaptures captures, byte[] haystack, int groupIndex, string expected)
+    {
+        RegexMatch? group = captures.GetGroup(groupIndex);
+
+        Assert.NotNull(group);
+        Assert.Equal(
+            expected,
+            System.Text.Encoding.UTF8.GetString(haystack.AsSpan(group.Value.Start, group.Value.Length)));
     }
 
     private static RegexNfa CompileNfa(ReadOnlySpan<byte> pattern)
