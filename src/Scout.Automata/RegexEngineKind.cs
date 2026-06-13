@@ -10,6 +10,7 @@ internal enum RegexEngineKind
     Uri,
     WordWhitespaceLiteral,
     RunLiteralDotStar,
+    UnicodeLetterLiteralRun,
     SimpleSequence,
     EndAnchoredSequence,
     LineContains,

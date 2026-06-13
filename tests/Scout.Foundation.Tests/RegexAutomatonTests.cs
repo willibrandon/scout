@@ -712,6 +712,34 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies Unicode letter-run literal alternations scan from inner literals.
+    /// </summary>
+    [Fact]
+    public void UnicodeLetterLiteralRunEngineCountsWordSpans()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\pL+herloc\pL+|\pL+olme\pL+"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = System.Text.Encoding.ASCII.GetBytes("Sherlock Holmes herlocX XolmeY");
+        byte[] unicodeHaystack = System.Text.Encoding.UTF8.GetBytes("βherlocδ");
+
+        Assert.Equal(RegexEngineKind.UnicodeLetterLiteralRun, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 8), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(9, 6), automaton.Find(haystack, startAt: 1));
+        Assert.Equal(new RegexMatch(24, 6), automaton.Find(haystack, startAt: 16));
+        Assert.Equal(new RegexMatch(0, 8), automaton.MatchAt(haystack, 0));
+        Assert.Null(automaton.MatchAt(haystack, 1));
+        Assert.Equal(new RegexMatch(9, 6), automaton.MatchAt(haystack, 9));
+        Assert.Equal(3, automaton.CountMatches(haystack));
+        Assert.Equal(20, automaton.SumMatchSpans(haystack));
+        Assert.Equal(new RegexMatch(0, 10), automaton.MatchAt(unicodeHaystack, 0));
+    }
+
+    /// <summary>
     /// Verifies byte-mode greedy dot-star uses direct line span execution.
     /// </summary>
     [Fact]

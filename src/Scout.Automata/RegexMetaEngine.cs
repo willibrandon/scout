@@ -28,6 +28,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexUriEngine? uri;
     private readonly RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral;
     private readonly RegexRunLiteralDotStarEngine? runLiteralDotStar;
+    private readonly RegexUnicodeLetterLiteralRunEngine? unicodeLetterLiteralRun;
     private readonly RegexDelimitedRunEngine? delimitedRun;
     private readonly RegexSimpleSequenceEngine? simpleSequence;
     private readonly RegexEndAnchoredSequenceEngine? endAnchoredSequence;
@@ -80,6 +81,7 @@ internal sealed class RegexMetaEngine
         RegexUriEngine? uri = null,
         RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral = null,
         RegexRunLiteralDotStarEngine? runLiteralDotStar = null,
+        RegexUnicodeLetterLiteralRunEngine? unicodeLetterLiteralRun = null,
         RegexEndAnchoredSequenceEngine? endAnchoredSequence = null)
     {
         Kind = kind;
@@ -103,6 +105,7 @@ internal sealed class RegexMetaEngine
         this.uri = uri;
         this.wordWhitespaceLiteral = wordWhitespaceLiteral;
         this.runLiteralDotStar = runLiteralDotStar;
+        this.unicodeLetterLiteralRun = unicodeLetterLiteralRun;
         this.delimitedRun = delimitedRun;
         this.simpleSequence = simpleSequence;
         this.endAnchoredSequence = endAnchoredSequence;
@@ -195,6 +198,7 @@ internal sealed class RegexMetaEngine
         RegexUriEngine? uri = null,
         RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral = null,
         RegexRunLiteralDotStarEngine? runLiteralDotStar = null,
+        RegexUnicodeLetterLiteralRunEngine? unicodeLetterLiteralRun = null,
         RegexDelimitedRunEngine? delimitedRun = null,
         RegexSimpleSequenceEngine? simpleSequence = null,
         RegexEndAnchoredSequenceEngine? endAnchoredSequence = null,
@@ -380,6 +384,28 @@ internal sealed class RegexMetaEngine
                 prefilter,
                 nfa.Utf8,
                 runLiteralDotStar: runLiteralDotStar);
+        }
+
+        if (unicodeLetterLiteralRun is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.UnicodeLetterLiteralRun,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                delimitedRun: null,
+                simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
+                prefilter,
+                nfa.Utf8,
+                unicodeLetterLiteralRun: unicodeLetterLiteralRun);
         }
 
         if (delimitedRun is not null)
@@ -830,6 +856,11 @@ internal sealed class RegexMetaEngine
             return runLiteralDotStar.Find(haystack, startOffset);
         }
 
+        if (unicodeLetterLiteralRun is not null)
+        {
+            return unicodeLetterLiteralRun.Find(haystack, startOffset);
+        }
+
         if (delimitedRun is not null)
         {
             return delimitedRun.Find(haystack, startOffset);
@@ -1000,6 +1031,11 @@ internal sealed class RegexMetaEngine
             return runLiteralDotStar.CountMatches(haystack, startAt);
         }
 
+        if (unicodeLetterLiteralRun is not null)
+        {
+            return unicodeLetterLiteralRun.CountMatches(haystack, startAt);
+        }
+
         if (delimitedRun is not null)
         {
             return delimitedRun.CountMatches(haystack, startAt);
@@ -1090,6 +1126,11 @@ internal sealed class RegexMetaEngine
         if (runLiteralDotStar is not null)
         {
             return runLiteralDotStar.SumMatchSpans(haystack, startAt);
+        }
+
+        if (unicodeLetterLiteralRun is not null)
+        {
+            return unicodeLetterLiteralRun.SumMatchSpans(haystack, startAt);
         }
 
         if (delimitedRun is not null)
@@ -1367,6 +1408,11 @@ internal sealed class RegexMetaEngine
             return runLiteralDotStar.MatchAt(haystack, startOffset);
         }
 
+        if (unicodeLetterLiteralRun is not null)
+        {
+            return unicodeLetterLiteralRun.MatchAt(haystack, startOffset);
+        }
+
         if (delimitedRun is not null)
         {
             return delimitedRun.MatchAt(haystack, startOffset);
@@ -1573,6 +1619,11 @@ internal sealed class RegexMetaEngine
         if (runLiteralDotStar is not null)
         {
             return runLiteralDotStar.TryMatchAt(haystack, start, out length);
+        }
+
+        if (unicodeLetterLiteralRun is not null)
+        {
+            return unicodeLetterLiteralRun.TryMatchAt(haystack, start, out length);
         }
 
         if (endAnchoredSequence is not null)
