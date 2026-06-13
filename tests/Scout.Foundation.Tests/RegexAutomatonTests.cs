@@ -740,6 +740,59 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies literal-prefix ASCII letter runs scan from prefix candidates.
+    /// </summary>
+    [Fact]
+    public void LiteralPrefixRunEngineCountsAlternationSpans()
+    {
+        var lowercase = RegexAutomaton.Compile(
+            @"Sher[a-z]+|Hol[a-z]+"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var caseInsensitive = RegexAutomaton.Compile(
+            @"Sher[a-z]+|Hol[a-z]+"u8,
+            caseInsensitive: true,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var letter = RegexAutomaton.Compile(
+            @"Huck[a-zA-Z]+|Saw[a-zA-Z]+"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(RegexEngineKind.LiteralPrefixRun, GetEngineKind(lowercase));
+        Assert.Equal(RegexEngineKind.LiteralPrefixRun, GetEngineKind(caseInsensitive));
+        Assert.Equal(RegexEngineKind.LiteralPrefixRun, GetEngineKind(letter));
+
+        byte[] lowercaseHaystack = "xx Sherlock Holmes Sher9 Hol_ Sherman Holdup"u8.ToArray();
+        Assert.Equal(new RegexMatch(3, 8), lowercase.Find(lowercaseHaystack));
+        Assert.Equal(new RegexMatch(12, 6), lowercase.Find(lowercaseHaystack, startAt: 4));
+        Assert.Equal(new RegexMatch(3, 8), lowercase.MatchAt(lowercaseHaystack, 3));
+        Assert.Null(lowercase.MatchAt(lowercaseHaystack, 4));
+        Assert.Equal(4, lowercase.CountMatches(lowercaseHaystack));
+        Assert.Equal(27, lowercase.SumMatchSpans(lowercaseHaystack));
+
+        byte[] caseInsensitiveHaystack = "sherLOCK HOLMES Sher9 holdup"u8.ToArray();
+        Assert.Equal(new RegexMatch(0, 8), caseInsensitive.Find(caseInsensitiveHaystack));
+        Assert.Equal(new RegexMatch(9, 6), caseInsensitive.Find(caseInsensitiveHaystack, startAt: 1));
+        Assert.Equal(3, caseInsensitive.CountMatches(caseInsensitiveHaystack));
+        Assert.Equal(20, caseInsensitive.SumMatchSpans(caseInsensitiveHaystack));
+
+        byte[] letterHaystack = "HuckFinn SawX sawlower Huck9 Saw_"u8.ToArray();
+        Assert.Equal(new RegexMatch(0, 8), letter.Find(letterHaystack));
+        Assert.Equal(new RegexMatch(9, 4), letter.Find(letterHaystack, startAt: 1));
+        Assert.Equal(2, letter.CountMatches(letterHaystack));
+        Assert.Equal(12, letter.SumMatchSpans(letterHaystack));
+    }
+
+    /// <summary>
     /// Verifies word-boundary literal alternations scan from literal candidates.
     /// </summary>
     [Fact]

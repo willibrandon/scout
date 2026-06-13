@@ -215,6 +215,7 @@ public sealed class RegexAutomaton
         RegexUriEngine.TryCreate(tree.Root, options, out RegexUriEngine? uri);
         RegexWordWhitespaceLiteralEngine.TryCreate(tree.Root, options, out RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral);
         RegexRunLiteralDotStarEngine.TryCreate(tree.Root, options, out RegexRunLiteralDotStarEngine? runLiteralDotStar);
+        RegexLiteralPrefixRunEngine.TryCreate(tree.Root, options, out RegexLiteralPrefixRunEngine? literalPrefixRun);
         RegexUnicodeLetterLiteralRunEngine.TryCreate(tree.Root, options, out RegexUnicodeLetterLiteralRunEngine? unicodeLetterLiteralRun);
         RegexWordSuffixLiteralEngine.TryCreate(tree.Root, options, out RegexWordSuffixLiteralEngine? wordSuffixLiteral);
         RegexDelimitedRunEngine.TryCreate(tree.Root, options, out RegexDelimitedRunEngine? delimitedRun);
@@ -246,6 +247,7 @@ public sealed class RegexAutomaton
                 uri: uri,
                 wordWhitespaceLiteral: wordWhitespaceLiteral,
                 runLiteralDotStar: runLiteralDotStar,
+                literalPrefixRun: literalPrefixRun,
                 unicodeLetterLiteralRun: unicodeLetterLiteralRun,
                 wordBoundaryLiteralSet: wordBoundaryLiteralSet,
                 wordSuffixLiteral: wordSuffixLiteral,
