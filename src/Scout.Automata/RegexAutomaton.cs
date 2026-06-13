@@ -338,6 +338,7 @@ public sealed class RegexAutomaton
         RegexLiteralPrefixRunEngine.TryCreate(tree.Root, options, out RegexLiteralPrefixRunEngine? literalPrefixRun);
         RegexBoundedLiteralGapEngine.TryCreate(tree.Root, options, out RegexBoundedLiteralGapEngine? boundedLiteralGap);
         RegexBoundedLineLiteralGapEngine.TryCreate(tree.Root, options, out RegexBoundedLineLiteralGapEngine? boundedLineLiteralGap);
+        RegexBoundedPrefixLiteralSetEngine.TryCreate(tree.Root, options, out RegexBoundedPrefixLiteralSetEngine? boundedPrefixLiteralSet);
         RegexBoundedScalarClassSequenceEngine? boundedScalarClassSequence = earlyBoundedScalarClassSequence;
         RegexBoundedByteClassSequenceEngine? boundedByteClassSequence = earlyBoundedByteClassSequence;
         RegexRepeatedLazyDotStarLiteralEngine.TryCreate(tree.Root, options, out RegexRepeatedLazyDotStarLiteralEngine? repeatedLazyDotStarLiteral);
@@ -385,6 +386,7 @@ public sealed class RegexAutomaton
                 literalPrefixRun: literalPrefixRun,
                 boundedLiteralGap: boundedLiteralGap,
                 boundedLineLiteralGap: boundedLineLiteralGap,
+                boundedPrefixLiteralSet: boundedPrefixLiteralSet,
                 boundedScalarClassSequence: boundedScalarClassSequence,
                 boundedByteClassSequence: boundedByteClassSequence,
                 repeatedLazyDotStarLiteral: repeatedLazyDotStarLiteral,

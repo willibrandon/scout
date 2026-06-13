@@ -1232,6 +1232,48 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies bounded dot prefixes before literal alternatives scan from literals while preserving greediness.
+    /// </summary>
+    [Fact]
+    public void BoundedPrefixLiteralSetEngineCountsLiteralAlternatives()
+    {
+        var shortPrefix = RegexAutomaton.Compile(
+            @".{0,2}(Tom|Sawyer|Huckleberry|Finn)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var longPrefix = RegexAutomaton.Compile(
+            @".{2,4}(Tom|Sawyer|Huckleberry|Finn)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "xxTom abSawyer\nxFinn abcdFinn yyHuckleberry"u8.ToArray();
+        byte[] captureHaystack = "xxTom"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.BoundedPrefixLiteralSet, GetEngineKind(shortPrefix));
+        Assert.Equal(RegexEngineKind.BoundedPrefixLiteralSet, GetEngineKind(longPrefix));
+        Assert.Equal(new RegexMatch(0, 5), shortPrefix.Find(captureHaystack));
+        Assert.Equal(new RegexMatch(1, 4), shortPrefix.Find(captureHaystack, startAt: 1));
+        Assert.Equal(new RegexMatch(2, 3), shortPrefix.Find("x\nTom"u8));
+        Assert.Equal(new RegexMatch(0, 5), shortPrefix.MatchAt(captureHaystack, 0));
+        Assert.Equal(5, shortPrefix.CountMatches(haystack));
+        Assert.Equal(37, shortPrefix.SumMatchSpans(haystack));
+
+        RegexCaptures? captures = shortPrefix.FindCaptures(captureHaystack);
+        Assert.NotNull(captures);
+        Assert.Equal(new RegexMatch(0, 5), captures.Match);
+        AssertGroupText(captures, captureHaystack, 1, "Tom");
+
+        Assert.Equal(new RegexMatch(0, 7), longPrefix.Find("abcdTom"u8));
+        Assert.Equal(new RegexMatch(0, 7), longPrefix.MatchAt("abcdTom"u8, 0));
+        Assert.Null(longPrefix.Find("xTom"u8));
+    }
+
+    /// <summary>
     /// Verifies bounded byte-class sequences scan from selective starting bytes and preserve repeat greediness.
     /// </summary>
     [Fact]
