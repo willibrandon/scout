@@ -157,6 +157,43 @@ internal static class RegexUtf8ByteCompiler
         return true;
     }
 
+    public static bool TryGetUtf8ByteLengthRange(
+        RegexSyntaxKind kind,
+        ReadOnlySpan<byte> expression,
+        RegexCompileOptions options,
+        out int minimumBytes,
+        out int maximumBytes)
+    {
+        minimumBytes = 0;
+        maximumBytes = 0;
+        if (!TryBuildScalarRanges(kind, expression, options, out List<RegexScalarRange> ranges))
+        {
+            return false;
+        }
+
+        Normalize(ranges);
+        if (ranges.Count == 0)
+        {
+            return false;
+        }
+
+        int minimum = 5;
+        int maximum = 0;
+        for (int index = 0; index < ranges.Count; index++)
+        {
+            AddUtf8ByteLengthRange(ranges[index], ref minimum, ref maximum);
+        }
+
+        if (maximum == 0)
+        {
+            return false;
+        }
+
+        minimumBytes = minimum;
+        maximumBytes = maximum;
+        return true;
+    }
+
     private static bool TryBuildScalarRanges(
         RegexSyntaxKind kind,
         ReadOnlySpan<byte> expression,
@@ -287,7 +324,7 @@ internal static class RegexUtf8ByteCompiler
         while (index < expression.Length)
         {
             int tokenStart = index;
-            if (!RegexByteClass.TryReadClassToken(expression, ref index, out RegexSyntaxKind tokenKind, out byte literal, out bool tokenNegated))
+            if (!TryReadScalarClassToken(expression, ref index, out RegexSyntaxKind tokenKind, out int literal, out bool tokenNegated))
             {
                 return false;
             }
@@ -298,7 +335,7 @@ internal static class RegexUtf8ByteCompiler
                 expression[index] == (byte)'-')
             {
                 int rangeEndIndex = index + 1;
-                if (RegexByteClass.TryReadClassToken(expression, ref rangeEndIndex, out RegexSyntaxKind rangeEndKind, out byte rangeEndLiteral, out bool rangeEndNegated) &&
+                if (TryReadScalarClassToken(expression, ref rangeEndIndex, out RegexSyntaxKind rangeEndKind, out int rangeEndLiteral, out bool rangeEndNegated) &&
                     !rangeEndNegated &&
                     rangeEndKind == RegexSyntaxKind.Literal)
                 {
@@ -325,7 +362,7 @@ internal static class RegexUtf8ByteCompiler
     private static bool TryAddClassTokenRanges(
         List<RegexScalarRange> ranges,
         RegexSyntaxKind tokenKind,
-        byte literal,
+        int literal,
         bool tokenNegated,
         RegexCompileOptions options)
     {
@@ -339,10 +376,10 @@ internal static class RegexUtf8ByteCompiler
             RegexSyntaxKind.AlphanumericClass => AddAlphanumericRanges(ranges, options.UnicodeClasses),
             RegexSyntaxKind.AnyClass => AddAnyScalarRanges(ranges),
             RegexSyntaxKind.UnicodePropertyClass => options.UnicodeClasses &&
-                TryAddUnicodePropertyRanges(ranges, stackalloc byte[] { literal }, options.CaseInsensitive, negated: false),
+                TryAddUnicodePropertyRanges(ranges, stackalloc byte[] { (byte)literal }, options.CaseInsensitive, negated: false),
             RegexSyntaxKind.NotUnicodePropertyClass => options.UnicodeClasses &&
-                TryAddUnicodePropertyRanges(ranges, stackalloc byte[] { literal }, options.CaseInsensitive, negated: true),
-            RegexSyntaxKind.Literal => TryAddLiteralRanges(ranges, stackalloc byte[] { literal }, options.CaseInsensitive, options.UnicodeClasses),
+                TryAddUnicodePropertyRanges(ranges, stackalloc byte[] { (byte)literal }, options.CaseInsensitive, negated: true),
+            RegexSyntaxKind.Literal => TryAddLiteralScalarRanges(ranges, literal, options.CaseInsensitive, options.UnicodeClasses),
             _ => false,
         };
         if (!result)
@@ -361,6 +398,44 @@ internal static class RegexUtf8ByteCompiler
         return true;
     }
 
+    private static bool TryReadScalarClassToken(
+        ReadOnlySpan<byte> expression,
+        ref int index,
+        out RegexSyntaxKind tokenKind,
+        out int literal,
+        out bool tokenNegated)
+    {
+        tokenKind = RegexSyntaxKind.Literal;
+        literal = 0;
+        tokenNegated = false;
+        if (index >= expression.Length)
+        {
+            return false;
+        }
+
+        if (expression[index] == (byte)'\\' &&
+            index + 1 < expression.Length &&
+            expression[index + 1] is (byte)'x' or (byte)'u')
+        {
+            byte escaped = expression[index + 1];
+            int scalarIndex = index + 2;
+            if (TryReadEscapedHexScalar(expression, ref scalarIndex, escaped, out int scalar))
+            {
+                index = scalarIndex;
+                literal = scalar;
+                return true;
+            }
+        }
+
+        if (!RegexByteClass.TryReadClassToken(expression, ref index, out tokenKind, out byte byteLiteral, out tokenNegated))
+        {
+            return false;
+        }
+
+        literal = byteLiteral;
+        return true;
+    }
+
     private static bool TryAddLiteralRanges(List<RegexScalarRange> ranges, ReadOnlySpan<byte> literal, bool caseInsensitive, bool unicodeClasses)
     {
         if (!TryDecodeLiteralRune(literal, out Rune rune))
@@ -368,14 +443,24 @@ internal static class RegexUtf8ByteCompiler
             return false;
         }
 
+        return TryAddLiteralScalarRanges(ranges, rune.Value, caseInsensitive, unicodeClasses);
+    }
+
+    private static bool TryAddLiteralScalarRanges(List<RegexScalarRange> ranges, int scalar, bool caseInsensitive, bool unicodeClasses)
+    {
+        if (!Rune.IsValid(scalar))
+        {
+            return false;
+        }
+
         if (!caseInsensitive || !unicodeClasses)
         {
-            AddRange(ranges, rune.Value, rune.Value);
+            AddRange(ranges, scalar, scalar);
             return true;
         }
 
         List<Rune> equivalents = [];
-        RegexUnicodeTables.AddSimpleCaseFoldEquivalents(rune, equivalents);
+        RegexUnicodeTables.AddSimpleCaseFoldEquivalents(new Rune(scalar), equivalents);
         for (int index = 0; index < equivalents.Count; index++)
         {
             AddRange(ranges, equivalents[index].Value, equivalents[index].Value);
@@ -398,34 +483,56 @@ internal static class RegexUtf8ByteCompiler
 
     private static void AddClassRangeRanges(
         List<RegexScalarRange> ranges,
-        byte start,
-        byte end,
+        int start,
+        int end,
         bool caseInsensitive,
         bool unicodeClasses)
     {
-        byte foldedStart = FoldMaybe(start, caseInsensitive);
-        byte foldedEnd = FoldMaybe(end, caseInsensitive);
-        for (int value = 0; value <= 0x7F; value++)
+        if (start <= byte.MaxValue && end <= byte.MaxValue)
         {
-            byte foldedValue = FoldMaybe((byte)value, caseInsensitive);
-            if (foldedStart <= foldedValue && foldedValue <= foldedEnd)
+            byte foldedStart = FoldMaybe((byte)start, caseInsensitive);
+            byte foldedEnd = FoldMaybe((byte)end, caseInsensitive);
+            for (int value = 0; value <= 0x7F; value++)
             {
-                AddRange(ranges, value, value);
+                byte foldedValue = FoldMaybe((byte)value, caseInsensitive);
+                if (foldedStart <= foldedValue && foldedValue <= foldedEnd)
+                {
+                    AddRange(ranges, value, value);
+                }
             }
+
+            if (!caseInsensitive || !unicodeClasses)
+            {
+                return;
+            }
+
+            for (byte candidate = (byte)'a'; candidate <= (byte)'z'; candidate++)
+            {
+                if (foldedStart > candidate || candidate > foldedEnd)
+                {
+                    continue;
+                }
+
+                List<Rune> equivalents = [];
+                RegexUnicodeTables.AddSimpleCaseFoldEquivalents(new Rune(candidate), equivalents);
+                for (int index = 0; index < equivalents.Count; index++)
+                {
+                    AddRange(ranges, equivalents[index].Value, equivalents[index].Value);
+                }
+            }
+
+            return;
         }
 
+        AddRange(ranges, start, end);
         if (!caseInsensitive || !unicodeClasses)
         {
             return;
         }
 
-        for (byte candidate = (byte)'a'; candidate <= (byte)'z'; candidate++)
+        int asciiEnd = Math.Min(end, (byte)'z');
+        for (int candidate = Math.Max(start, (byte)'a'); candidate <= asciiEnd; candidate++)
         {
-            if (foldedStart > candidate || candidate > foldedEnd)
-            {
-                continue;
-            }
-
             List<Rune> equivalents = [];
             RegexUnicodeTables.AddSimpleCaseFoldEquivalents(new Rune(candidate), equivalents);
             for (int index = 0; index < equivalents.Count; index++)
@@ -433,6 +540,96 @@ internal static class RegexUtf8ByteCompiler
                 AddRange(ranges, equivalents[index].Value, equivalents[index].Value);
             }
         }
+    }
+
+    private static bool TryReadEscapedHexScalar(ReadOnlySpan<byte> expression, ref int index, byte escaped, out int scalar)
+    {
+        scalar = 0;
+        if (escaped == (byte)'x' &&
+            index + 1 < expression.Length &&
+            TryReadHexByte(expression[index], expression[index + 1], out byte byteValue))
+        {
+            index += 2;
+            scalar = byteValue;
+            return true;
+        }
+
+        return (escaped == (byte)'x' || escaped == (byte)'u') &&
+            TryReadBracedHexScalar(expression, ref index, out scalar);
+    }
+
+    private static bool TryReadBracedHexScalar(ReadOnlySpan<byte> expression, ref int index, out int scalar)
+    {
+        scalar = 0;
+        if (index >= expression.Length || expression[index] != (byte)'{')
+        {
+            return false;
+        }
+
+        int scan = index + 1;
+        int parsed = 0;
+        int digits = 0;
+        while (scan < expression.Length && expression[scan] != (byte)'}')
+        {
+            if (!TryGetHexValue(expression[scan], out int digit))
+            {
+                return false;
+            }
+
+            parsed = (parsed * 16) + digit;
+            if (parsed > MaxScalar)
+            {
+                return false;
+            }
+
+            digits++;
+            scan++;
+        }
+
+        if (digits == 0 || scan >= expression.Length || expression[scan] != (byte)'}' || !Rune.IsValid(parsed))
+        {
+            return false;
+        }
+
+        index = scan + 1;
+        scalar = parsed;
+        return true;
+    }
+
+    private static bool TryReadHexByte(byte high, byte low, out byte value)
+    {
+        value = 0;
+        if (!TryGetHexValue(high, out int highValue) || !TryGetHexValue(low, out int lowValue))
+        {
+            return false;
+        }
+
+        value = (byte)((highValue << 4) | lowValue);
+        return true;
+    }
+
+    private static bool TryGetHexValue(byte value, out int digit)
+    {
+        if (value is >= (byte)'0' and <= (byte)'9')
+        {
+            digit = value - (byte)'0';
+            return true;
+        }
+
+        if (value is >= (byte)'A' and <= (byte)'F')
+        {
+            digit = value - (byte)'A' + 10;
+            return true;
+        }
+
+        if (value is >= (byte)'a' and <= (byte)'f')
+        {
+            digit = value - (byte)'a' + 10;
+            return true;
+        }
+
+        digit = 0;
+        return false;
     }
 
     private static bool TryAddUnicodePropertyRanges(
@@ -788,6 +985,31 @@ internal static class RegexUtf8ByteCompiler
         }
 
         branches.Add(start);
+    }
+
+    private static void AddUtf8ByteLengthRange(RegexScalarRange range, ref int minimum, ref int maximum)
+    {
+        AddUtf8ByteLengthRangeForEncoding(range, 0, 0x7F, length: 1, ref minimum, ref maximum);
+        AddUtf8ByteLengthRangeForEncoding(range, 0x80, 0x7FF, length: 2, ref minimum, ref maximum);
+        AddUtf8ByteLengthRangeForEncoding(range, 0x800, 0xFFFF, length: 3, ref minimum, ref maximum);
+        AddUtf8ByteLengthRangeForEncoding(range, 0x10000, MaxScalar, length: 4, ref minimum, ref maximum);
+    }
+
+    private static void AddUtf8ByteLengthRangeForEncoding(
+        RegexScalarRange range,
+        int start,
+        int end,
+        int length,
+        ref int minimum,
+        ref int maximum)
+    {
+        if (range.Start > end || range.End < start)
+        {
+            return;
+        }
+
+        minimum = Math.Min(minimum, length);
+        maximum = Math.Max(maximum, length);
     }
 
     private static bool ContainsRange(List<RegexScalarRange> ranges, int start, int end)

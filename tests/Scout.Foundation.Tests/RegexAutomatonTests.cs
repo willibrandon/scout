@@ -19,6 +19,52 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies fixed-length impossibility checks reject searches before engine execution.
+    /// </summary>
+    [Fact]
+    public void RejectsImpossibleFixedLengthSearches()
+    {
+        var tooSmallAscii = RegexAutomaton.Compile(
+            "\\w{10,}"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            unicodeClasses: false);
+        var tooBigAscii = RegexAutomaton.Compile(
+            "^\\w{30}$"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            unicodeClasses: false);
+        var tooBigUnicode = RegexAutomaton.Compile(
+            "^\\w{10}$"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            unicodeClasses: true);
+        var goIssue = RegexAutomaton.Compile("^a{2,5}$"u8);
+        var unicodeDot = RegexAutomaton.Compile("^.{249}$"u8);
+        var tooSmallUnicode = RegexAutomaton.Compile("[\\p{math}&&\\u{10000}-\\u{10FFFF}]{10,}"u8);
+        byte[] unicodeHaystack = System.Text.Encoding.UTF8.GetBytes("𝛃𝛃𝛃𝛃𝛃𝛃𝛃𝛃𝛃𝛃𝛃");
+        byte[] shortUnicodeHaystack = System.Text.Encoding.UTF8.GetBytes("𝛃𝛃𝛃𝛃𝛃𝛃𝛃𝛃𝛃");
+        byte[] longAsciiHaystack = new byte[1_000];
+        Array.Fill(longAsciiHaystack, (byte)'a');
+
+        Assert.Null(tooSmallAscii.Find("abcdef"u8));
+        Assert.Equal(0, tooSmallAscii.CountMatches("abcdef"u8));
+        Assert.Equal(0, tooSmallAscii.SumMatchSpans("abcdef"u8));
+        Assert.Null(tooBigAscii.Find("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"u8));
+        Assert.Equal(0, tooBigUnicode.CountMatches(unicodeHaystack));
+        Assert.Equal(0, goIssue.CountMatches(longAsciiHaystack));
+        Assert.Null(goIssue.Find(longAsciiHaystack));
+        Assert.Equal(0, unicodeDot.CountMatches(longAsciiHaystack));
+        Assert.Equal(0, tooSmallUnicode.CountMatches(shortUnicodeHaystack));
+        Assert.Equal(new RegexMatch(0, 3), goIssue.Find("aaa"u8));
+        Assert.Equal(1, goIssue.CountMatches("aaa"u8));
+        Assert.Equal(0, goIssue.CountMatches("aaa"u8, startAt: 1));
+    }
+
+    /// <summary>
     /// Verifies top-level literal alternatives use the Aho-Corasick regex prefilter.
     /// </summary>
     [Fact]
@@ -1181,6 +1227,21 @@ public sealed class RegexAutomatonTests
         var cyrillicWord = RegexAutomaton.Compile(@"[\w&&\p{Cyrillic}]+"u8, caseInsensitive: false, multiLine: false, dotMatchesNewline: false, unicodeClasses: true);
         Assert.Equal(new RegexMatch(4, 6), cyrillicWord.Find("abc фоо 123 _ &&"u8));
         Assert.Null(cyrillicWord.Find("abc123_&&"u8));
+    }
+
+    /// <summary>
+    /// Verifies UTF-8 character classes support high scalar escapes and ranges.
+    /// </summary>
+    [Fact]
+    public void CharacterClassesSupportHighScalarEscapes()
+    {
+        var scalarRange = RegexAutomaton.Compile(@"[\u{10000}-\u{10FFFF}]"u8);
+        var mathIntersection = RegexAutomaton.Compile(@"[\p{math}&&\u{10000}-\u{10FFFF}]"u8);
+        byte[] mathBeta = System.Text.Encoding.UTF8.GetBytes("𝛃");
+
+        Assert.Equal(new RegexMatch(0, 4), scalarRange.Find(mathBeta));
+        Assert.Equal(new RegexMatch(0, 4), mathIntersection.Find(mathBeta));
+        Assert.Null(mathIntersection.Find("+"u8));
     }
 
     /// <summary>

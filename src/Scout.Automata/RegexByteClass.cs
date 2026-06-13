@@ -457,6 +457,17 @@ internal static class RegexByteClass
         int index = IsNegatedClass(expression) ? 1 : 0;
         while (index < expression.Length)
         {
+            if (TryReadScalarEscape(expression, index, out int scalarNextIndex, out int scalar))
+            {
+                if (scalar > 0x7F)
+                {
+                    return true;
+                }
+
+                index = scalarNextIndex;
+                continue;
+            }
+
             if (!TryReadClassToken(expression, ref index, out RegexSyntaxKind tokenKind, out _, out _))
             {
                 return false;
@@ -476,6 +487,70 @@ internal static class RegexByteClass
         }
 
         return false;
+    }
+
+    private static bool TryReadScalarEscape(ReadOnlySpan<byte> expression, int index, out int nextIndex, out int scalar)
+    {
+        nextIndex = index;
+        scalar = 0;
+        if (index + 1 >= expression.Length ||
+            expression[index] != (byte)'\\' ||
+            expression[index + 1] is not ((byte)'x' or (byte)'u'))
+        {
+            return false;
+        }
+
+        byte escaped = expression[index + 1];
+        int scan = index + 2;
+        if (escaped == (byte)'x' &&
+            scan + 1 < expression.Length &&
+            TryReadHexByte(expression[scan], expression[scan + 1], out byte byteValue))
+        {
+            nextIndex = scan + 2;
+            scalar = byteValue;
+            return true;
+        }
+
+        return TryReadBracedHexScalar(expression, ref scan, out scalar, out nextIndex);
+    }
+
+    private static bool TryReadBracedHexScalar(ReadOnlySpan<byte> expression, ref int index, out int scalar, out int nextIndex)
+    {
+        scalar = 0;
+        nextIndex = index;
+        if (index >= expression.Length || expression[index] != (byte)'{')
+        {
+            return false;
+        }
+
+        int scan = index + 1;
+        int parsed = 0;
+        int digits = 0;
+        while (scan < expression.Length && expression[scan] != (byte)'}')
+        {
+            if (!TryGetHexValue(expression[scan], out int digit))
+            {
+                return false;
+            }
+
+            parsed = (parsed * 16) + digit;
+            if (parsed > 0x10FFFF)
+            {
+                return false;
+            }
+
+            digits++;
+            scan++;
+        }
+
+        if (digits == 0 || scan >= expression.Length || expression[scan] != (byte)'}' || !Rune.IsValid(parsed))
+        {
+            return false;
+        }
+
+        nextIndex = scan + 1;
+        scalar = parsed;
+        return true;
     }
 
     private static bool ContainsLiteralClassToken(ReadOnlySpan<byte> expression)
