@@ -25,6 +25,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexDotStarEngine? dotStar;
     private readonly RegexIpv4AddressEngine? ipv4Address;
     private readonly RegexEmailAddressEngine? emailAddress;
+    private readonly RegexUriEngine? uri;
     private readonly RegexDelimitedRunEngine? delimitedRun;
     private readonly RegexSimpleSequenceEngine? simpleSequence;
     private readonly RegexEndAnchoredAtomEngine? endAnchoredAtom;
@@ -72,7 +73,8 @@ internal sealed class RegexMetaEngine
         RegexEndAnchoredAtomEngine? endAnchoredAtom = null,
         RegexDotStarEngine? dotStar = null,
         RegexIpv4AddressEngine? ipv4Address = null,
-        RegexEmailAddressEngine? emailAddress = null)
+        RegexEmailAddressEngine? emailAddress = null,
+        RegexUriEngine? uri = null)
     {
         Kind = kind;
         this.nfa = nfa;
@@ -92,6 +94,7 @@ internal sealed class RegexMetaEngine
         this.dotStar = dotStar;
         this.ipv4Address = ipv4Address;
         this.emailAddress = emailAddress;
+        this.uri = uri;
         this.delimitedRun = delimitedRun;
         this.simpleSequence = simpleSequence;
         this.endAnchoredAtom = endAnchoredAtom;
@@ -180,6 +183,7 @@ internal sealed class RegexMetaEngine
         RegexDotStarEngine? dotStar = null,
         RegexIpv4AddressEngine? ipv4Address = null,
         RegexEmailAddressEngine? emailAddress = null,
+        RegexUriEngine? uri = null,
         RegexDelimitedRunEngine? delimitedRun = null,
         RegexSimpleSequenceEngine? simpleSequence = null,
         RegexEndAnchoredAtomEngine? endAnchoredAtom = null,
@@ -298,6 +302,28 @@ internal sealed class RegexMetaEngine
                 prefilter,
                 nfa.Utf8,
                 emailAddress: emailAddress);
+        }
+
+        if (uri is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.Uri,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                delimitedRun: null,
+                simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
+                prefilter,
+                nfa.Utf8,
+                uri: uri);
         }
 
         if (delimitedRun is not null)
@@ -711,6 +737,11 @@ internal sealed class RegexMetaEngine
             return RegexEmailAddressEngine.Find(haystack, startOffset);
         }
 
+        if (uri is not null)
+        {
+            return RegexUriEngine.Find(haystack, startOffset);
+        }
+
         if (delimitedRun is not null)
         {
             return delimitedRun.Find(haystack, startOffset);
@@ -861,6 +892,11 @@ internal sealed class RegexMetaEngine
             return RegexEmailAddressEngine.CountMatches(haystack, startAt);
         }
 
+        if (uri is not null)
+        {
+            return RegexUriEngine.CountMatches(haystack, startAt);
+        }
+
         if (delimitedRun is not null)
         {
             return delimitedRun.CountMatches(haystack, startAt);
@@ -931,6 +967,11 @@ internal sealed class RegexMetaEngine
         if (emailAddress is not null)
         {
             return RegexEmailAddressEngine.SumMatchSpans(haystack, startAt);
+        }
+
+        if (uri is not null)
+        {
+            return RegexUriEngine.SumMatchSpans(haystack, startAt);
         }
 
         if (delimitedRun is not null)
@@ -1191,6 +1232,11 @@ internal sealed class RegexMetaEngine
         if (emailAddress is not null)
         {
             return RegexEmailAddressEngine.MatchAt(haystack, startOffset);
+        }
+
+        if (uri is not null)
+        {
+            return RegexUriEngine.MatchAt(haystack, startOffset);
         }
 
         if (delimitedRun is not null)

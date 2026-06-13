@@ -756,6 +756,60 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies byte-mode URI patterns scan around the scheme delimiter.
+    /// </summary>
+    [Fact]
+    public void UriEngineCountsDelimitedUris()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"[\w]+://[^/\s?#]+[^\s?#]+(?:\?[^\s#]*)?(?:#[^\s]*)?"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "x http://example.com/path?q=1#frag ftp://a/b no://x? bad ://missing"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.Uri, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(2, 32), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(35, 9), automaton.Find(haystack, startAt: 34));
+        Assert.Equal(new RegexMatch(2, 32), automaton.MatchAt(haystack, startAt: 2));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(41, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
+    /// Verifies URI scanning can start inside a longer scheme token.
+    /// </summary>
+    [Fact]
+    public void UriEngineHonorsStartAtInsideScheme()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"[\w]+://[^/\s?#]+[^\s?#]+(?:\?[^\s#]*)?(?:#[^\s]*)?"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(new RegexMatch(4, 8), automaton.Find("xx http://ab"u8, startAt: 4));
+        Assert.Equal(1, automaton.CountMatches("xx http://ab"u8, startAt: 4));
+        Assert.Equal(8, automaton.SumMatchSpans("xx http://ab"u8, startAt: 4));
+        Assert.Null(automaton.Find("http://a?"u8));
+    }
+
+    /// <summary>
+    /// Verifies URI specialization is skipped when UTF-8 or Unicode class semantics matter.
+    /// </summary>
+    [Fact]
+    public void UriEngineSkipsUtf8UnicodeMode()
+    {
+        var automaton = RegexAutomaton.Compile(@"[\w]+://[^/\s?#]+[^\s?#]+(?:\?[^\s#]*)?(?:#[^\s]*)?"u8);
+
+        Assert.NotEqual(RegexEngineKind.Uri, GetEngineKind(automaton));
+    }
+
+    /// <summary>
     /// Verifies prefixed greedy dot-star tails preserve leftmost spans in lazy DFA execution.
     /// </summary>
     [Fact]
