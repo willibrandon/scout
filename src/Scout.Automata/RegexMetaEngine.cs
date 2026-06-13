@@ -26,10 +26,13 @@ internal sealed class RegexMetaEngine
     private readonly RegexDotStarEngine? dotStar;
     private readonly RegexIpv4AddressEngine? ipv4Address;
     private readonly RegexEmailAddressEngine? emailAddress;
+    private readonly RegexLh3EmailEngine? lh3Email;
     private readonly RegexUriEngine? uri;
     private readonly RegexLh3UriEngine? lh3Uri;
+    private readonly RegexLh3UriOrEmailEngine? lh3UriOrEmail;
     private readonly RegexLh3DateEngine? lh3Date;
     private readonly RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral;
+    private readonly RegexUnicodeWordWhitespaceLiteralEngine? unicodeWordWhitespaceLiteral;
     private readonly RegexBoundedLetterSuffixWhitespaceEngine? boundedLetterSuffixWhitespace;
     private readonly RegexRunLiteralDotStarEngine? runLiteralDotStar;
     private readonly RegexLiteralPrefixRunEngine? literalPrefixRun;
@@ -93,10 +96,13 @@ internal sealed class RegexMetaEngine
         RegexDotStarEngine? dotStar = null,
         RegexIpv4AddressEngine? ipv4Address = null,
         RegexEmailAddressEngine? emailAddress = null,
+        RegexLh3EmailEngine? lh3Email = null,
         RegexUriEngine? uri = null,
         RegexLh3UriEngine? lh3Uri = null,
+        RegexLh3UriOrEmailEngine? lh3UriOrEmail = null,
         RegexLh3DateEngine? lh3Date = null,
         RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral = null,
+        RegexUnicodeWordWhitespaceLiteralEngine? unicodeWordWhitespaceLiteral = null,
         RegexBoundedLetterSuffixWhitespaceEngine? boundedLetterSuffixWhitespace = null,
         RegexRunLiteralDotStarEngine? runLiteralDotStar = null,
         RegexLiteralPrefixRunEngine? literalPrefixRun = null,
@@ -133,10 +139,13 @@ internal sealed class RegexMetaEngine
         this.dotStar = dotStar;
         this.ipv4Address = ipv4Address;
         this.emailAddress = emailAddress;
+        this.lh3Email = lh3Email;
         this.uri = uri;
         this.lh3Uri = lh3Uri;
+        this.lh3UriOrEmail = lh3UriOrEmail;
         this.lh3Date = lh3Date;
         this.wordWhitespaceLiteral = wordWhitespaceLiteral;
+        this.unicodeWordWhitespaceLiteral = unicodeWordWhitespaceLiteral;
         this.boundedLetterSuffixWhitespace = boundedLetterSuffixWhitespace;
         this.runLiteralDotStar = runLiteralDotStar;
         this.literalPrefixRun = literalPrefixRun;
@@ -268,10 +277,13 @@ internal sealed class RegexMetaEngine
         RegexDotStarEngine? dotStar = null,
         RegexIpv4AddressEngine? ipv4Address = null,
         RegexEmailAddressEngine? emailAddress = null,
+        RegexLh3EmailEngine? lh3Email = null,
         RegexUriEngine? uri = null,
         RegexLh3UriEngine? lh3Uri = null,
+        RegexLh3UriOrEmailEngine? lh3UriOrEmail = null,
         RegexLh3DateEngine? lh3Date = null,
         RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral = null,
+        RegexUnicodeWordWhitespaceLiteralEngine? unicodeWordWhitespaceLiteral = null,
         RegexBoundedLetterSuffixWhitespaceEngine? boundedLetterSuffixWhitespace = null,
         RegexRunLiteralDotStarEngine? runLiteralDotStar = null,
         RegexLiteralPrefixRunEngine? literalPrefixRun = null,
@@ -429,6 +441,28 @@ internal sealed class RegexMetaEngine
                 emailAddress: emailAddress);
         }
 
+        if (lh3Email is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.EmailAddress,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                delimitedRun: null,
+                simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
+                prefilter,
+                nfa.Utf8,
+                lh3Email: lh3Email);
+        }
+
         if (uri is not null)
         {
             return new RegexMetaEngine(
@@ -473,6 +507,28 @@ internal sealed class RegexMetaEngine
                 lh3Uri: lh3Uri);
         }
 
+        if (lh3UriOrEmail is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.UriOrEmail,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                delimitedRun: null,
+                simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
+                prefilter,
+                nfa.Utf8,
+                lh3UriOrEmail: lh3UriOrEmail);
+        }
+
         if (lh3Date is not null)
         {
             return new RegexMetaEngine(
@@ -515,6 +571,28 @@ internal sealed class RegexMetaEngine
                 prefilter,
                 nfa.Utf8,
                 wordWhitespaceLiteral: wordWhitespaceLiteral);
+        }
+
+        if (unicodeWordWhitespaceLiteral is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.WordWhitespaceLiteral,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                delimitedRun: null,
+                simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
+                prefilter,
+                nfa.Utf8,
+                unicodeWordWhitespaceLiteral: unicodeWordWhitespaceLiteral);
         }
 
         if (boundedLetterSuffixWhitespace is not null)
@@ -1238,6 +1316,11 @@ internal sealed class RegexMetaEngine
             return fixedWidthAlternation.IsMatch(haystack, startAt: 0);
         }
 
+        if (lh3Uri is not null)
+        {
+            return RegexLh3UriEngine.IsMatch(haystack);
+        }
+
         return Find(haystack, startAt: 0, startPredicate).HasValue;
     }
 
@@ -1278,6 +1361,11 @@ internal sealed class RegexMetaEngine
             return RegexEmailAddressEngine.Find(haystack, startOffset);
         }
 
+        if (lh3Email is not null)
+        {
+            return RegexLh3EmailEngine.Find(haystack, startOffset);
+        }
+
         if (uri is not null)
         {
             return RegexUriEngine.Find(haystack, startOffset);
@@ -1288,6 +1376,11 @@ internal sealed class RegexMetaEngine
             return RegexLh3UriEngine.Find(haystack, startOffset);
         }
 
+        if (lh3UriOrEmail is not null)
+        {
+            return RegexLh3UriOrEmailEngine.Find(haystack, startOffset);
+        }
+
         if (lh3Date is not null)
         {
             return RegexLh3DateEngine.Find(haystack, startOffset);
@@ -1296,6 +1389,11 @@ internal sealed class RegexMetaEngine
         if (wordWhitespaceLiteral is not null)
         {
             return wordWhitespaceLiteral.Find(haystack, startOffset);
+        }
+
+        if (unicodeWordWhitespaceLiteral is not null)
+        {
+            return unicodeWordWhitespaceLiteral.Find(haystack, startOffset);
         }
 
         if (boundedLetterSuffixWhitespace is not null)
@@ -1528,6 +1626,11 @@ internal sealed class RegexMetaEngine
             return RegexEmailAddressEngine.CountMatches(haystack, startAt);
         }
 
+        if (lh3Email is not null)
+        {
+            return RegexLh3EmailEngine.CountMatches(haystack, startAt);
+        }
+
         if (uri is not null)
         {
             return RegexUriEngine.CountMatches(haystack, startAt);
@@ -1538,6 +1641,11 @@ internal sealed class RegexMetaEngine
             return RegexLh3UriEngine.CountMatches(haystack, startAt);
         }
 
+        if (lh3UriOrEmail is not null)
+        {
+            return RegexLh3UriOrEmailEngine.CountMatches(haystack, startAt);
+        }
+
         if (lh3Date is not null)
         {
             return RegexLh3DateEngine.CountMatches(haystack, startAt);
@@ -1546,6 +1654,11 @@ internal sealed class RegexMetaEngine
         if (wordWhitespaceLiteral is not null)
         {
             return wordWhitespaceLiteral.CountMatches(haystack, startAt);
+        }
+
+        if (unicodeWordWhitespaceLiteral is not null)
+        {
+            return unicodeWordWhitespaceLiteral.CountMatches(haystack, startAt);
         }
 
         if (boundedLetterSuffixWhitespace is not null)
@@ -1700,6 +1813,11 @@ internal sealed class RegexMetaEngine
             return RegexEmailAddressEngine.SumMatchSpans(haystack, startAt);
         }
 
+        if (lh3Email is not null)
+        {
+            return RegexLh3EmailEngine.SumMatchSpans(haystack, startAt);
+        }
+
         if (uri is not null)
         {
             return RegexUriEngine.SumMatchSpans(haystack, startAt);
@@ -1710,6 +1828,11 @@ internal sealed class RegexMetaEngine
             return RegexLh3UriEngine.SumMatchSpans(haystack, startAt);
         }
 
+        if (lh3UriOrEmail is not null)
+        {
+            return RegexLh3UriOrEmailEngine.SumMatchSpans(haystack, startAt);
+        }
+
         if (lh3Date is not null)
         {
             return RegexLh3DateEngine.SumMatchSpans(haystack, startAt);
@@ -1718,6 +1841,11 @@ internal sealed class RegexMetaEngine
         if (wordWhitespaceLiteral is not null)
         {
             return wordWhitespaceLiteral.SumMatchSpans(haystack, startAt);
+        }
+
+        if (unicodeWordWhitespaceLiteral is not null)
+        {
+            return unicodeWordWhitespaceLiteral.SumMatchSpans(haystack, startAt);
         }
 
         if (boundedLetterSuffixWhitespace is not null)
@@ -2060,6 +2188,11 @@ internal sealed class RegexMetaEngine
             return RegexEmailAddressEngine.MatchAt(haystack, startOffset);
         }
 
+        if (lh3Email is not null)
+        {
+            return RegexLh3EmailEngine.MatchAt(haystack, startOffset);
+        }
+
         if (uri is not null)
         {
             return RegexUriEngine.MatchAt(haystack, startOffset);
@@ -2070,9 +2203,19 @@ internal sealed class RegexMetaEngine
             return RegexLh3UriEngine.MatchAt(haystack, startOffset);
         }
 
+        if (lh3UriOrEmail is not null)
+        {
+            return RegexLh3UriOrEmailEngine.MatchAt(haystack, startOffset);
+        }
+
         if (lh3Date is not null)
         {
             return RegexLh3DateEngine.MatchAt(haystack, startOffset);
+        }
+
+        if (unicodeWordWhitespaceLiteral is not null)
+        {
+            return unicodeWordWhitespaceLiteral.MatchAt(haystack, startOffset);
         }
 
         if (runLiteralDotStar is not null)
@@ -2336,6 +2479,11 @@ internal sealed class RegexMetaEngine
         if (wordWhitespaceLiteral is not null)
         {
             return wordWhitespaceLiteral.TryMatchAt(haystack, start, out length);
+        }
+
+        if (unicodeWordWhitespaceLiteral is not null)
+        {
+            return unicodeWordWhitespaceLiteral.TryMatchAt(haystack, start, out length);
         }
 
         if (boundedLetterSuffixWhitespace is not null)

@@ -96,6 +96,17 @@ internal sealed class RegexLiteralSetEngine
             return;
         }
 
+        if (ShouldUseSmallLiteralFinders(this.literals, asciiCaseInsensitive, unicodeCaseInsensitive, useAho))
+        {
+            smallLiteralFinders = new MemmemFinder[this.literals.Length];
+            for (int index = 0; index < this.literals.Length; index++)
+            {
+                smallLiteralFinders[index] = new MemmemFinder(this.literals[index]);
+            }
+
+            return;
+        }
+
         if (this.literals.Length > 1 &&
             unicodeCaseInsensitive &&
             !useAho &&
@@ -124,17 +135,6 @@ internal sealed class RegexLiteralSetEngine
             RegexCaseSensitiveLiteralSetScanner.TryCreate(this.literals, out RegexCaseSensitiveLiteralSetScanner? caseSensitive))
         {
             caseSensitiveScanner = caseSensitive;
-            return;
-        }
-
-        if (ShouldUseSmallLiteralFinders(this.literals, asciiCaseInsensitive, unicodeCaseInsensitive, useAho))
-        {
-            smallLiteralFinders = new MemmemFinder[this.literals.Length];
-            for (int index = 0; index < this.literals.Length; index++)
-            {
-                smallLiteralFinders[index] = new MemmemFinder(this.literals[index]);
-            }
-
             return;
         }
 
@@ -1236,14 +1236,16 @@ internal sealed class RegexLiteralSetEngine
             !asciiCaseInsensitive &&
             !unicodeCaseInsensitive &&
             literals.Length is > 1 and <= SmallLiteralFinderSetThreshold &&
-            ContainsNonAscii(literals);
+            ShouldUseMemmemLiteralFinders(literals);
     }
 
-    private static bool ContainsNonAscii(byte[][] literals)
+    private static bool ShouldUseMemmemLiteralFinders(byte[][] literals)
     {
+        int minLength = int.MaxValue;
         for (int literalIndex = 0; literalIndex < literals.Length; literalIndex++)
         {
             byte[] literal = literals[literalIndex];
+            minLength = Math.Min(minLength, literal.Length);
             for (int byteIndex = 0; byteIndex < literal.Length; byteIndex++)
             {
                 if (literal[byteIndex] > 0x7F)
@@ -1253,7 +1255,7 @@ internal sealed class RegexLiteralSetEngine
             }
         }
 
-        return false;
+        return minLength >= 3;
     }
 
     private static bool IsBetter(RegexLiteralSetCandidate candidate, RegexLiteralSetCandidate? best)

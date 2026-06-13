@@ -8,6 +8,7 @@ namespace Scout;
 internal sealed class RegexScalarRunEngine
 {
     private const int MaxBoundedRepeat = 1024;
+    private const int UnboundedMaximum = int.MaxValue;
     private static readonly int[] UnicodeLowerOrUpperRanges = RegexUnicodeRangeCursor.MergeRanges(
         RegexUnicodeTables.GetBooleanPropertyRanges(RegexUnicodePropertyKind.Lowercase),
         RegexUnicodeTables.GetBooleanPropertyRanges(RegexUnicodePropertyKind.Uppercase));
@@ -61,16 +62,28 @@ internal sealed class RegexScalarRunEngine
         int maximum;
         bool lazy;
         RegexScalarRunAtom[] atoms;
-        if (root is RegexRepetitionNode { Minimum: > 0, Maximum: { } boundedMaximum } repetition)
+        if (root is RegexRepetitionNode { Minimum: > 0 } repetition)
         {
-            if (boundedMaximum > MaxBoundedRepeat ||
-                !TryCollectScalarAtoms(repetition.Child, effectiveOptions, out atoms))
+            if (!TryCollectScalarAtoms(repetition.Child, effectiveOptions, out atoms))
             {
                 return false;
             }
 
+            if (repetition.Maximum is { } boundedMaximum)
+            {
+                if (boundedMaximum > MaxBoundedRepeat)
+                {
+                    return false;
+                }
+
+                maximum = boundedMaximum;
+            }
+            else
+            {
+                maximum = UnboundedMaximum;
+            }
+
             minimum = repetition.Minimum;
-            maximum = boundedMaximum;
             lazy = repetition.Lazy;
         }
         else if (TryCollectSingleUnicodePropertyAtom(root, effectiveOptions, out atoms))
@@ -186,6 +199,12 @@ internal sealed class RegexScalarRunEngine
 
     private bool TryCountNonOverlappingCountOnly(ReadOnlySpan<byte> haystack, int startAt, ref long count)
     {
+        if (singleUnicodePropertyRanges is not null)
+        {
+            CountSingleUnicodePropertyRunFastPath(haystack, startAt, ref count);
+            return true;
+        }
+
         if (atoms.Length == 1 && atoms[0].UnicodeLetterFastPath)
         {
             CountUnicodeLetterFastPath(haystack, startAt, ref count);
@@ -298,6 +317,30 @@ internal sealed class RegexScalarRunEngine
 
             position += scalarLength == 0 ? 1 : scalarLength;
         }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private void CountSingleUnicodePropertyRunFastPath(ReadOnlySpan<byte> haystack, int startAt, ref long count)
+    {
+        var ranges = new RegexUnicodeRangeCursor(singleUnicodePropertyRanges);
+        int position = Math.Clamp(startAt, 0, haystack.Length);
+        int runScalars = 0;
+        while (position < haystack.Length)
+        {
+            bool matched = TrySingleUnicodePropertyMatchLength(haystack, position, ref ranges, out int scalarLength);
+            if (matched)
+            {
+                runScalars++;
+                position += scalarLength;
+                continue;
+            }
+
+            AddScalarRunCountOnly(runScalars, ref count);
+            runScalars = 0;
+            position += scalarLength == 0 ? 1 : scalarLength;
+        }
+
+        AddScalarRunCountOnly(runScalars, ref count);
     }
 
     private RegexMatch? FindSingleUnicodeProperty(ReadOnlySpan<byte> haystack, int startAt)

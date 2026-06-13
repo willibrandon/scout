@@ -1,78 +1,57 @@
 namespace Scout;
 
-internal sealed class RegexLh3UriEngine
+internal sealed class RegexLh3UriOrEmailEngine
 {
-    private RegexLh3UriEngine()
+    private RegexLh3UriOrEmailEngine()
     {
     }
 
-    public static bool TryCreate(RegexSyntaxNode root, RegexCompileOptions options, out RegexLh3UriEngine? engine)
+    public static bool TryCreate(RegexSyntaxNode root, RegexCompileOptions options, out RegexLh3UriOrEmailEngine? engine)
     {
         engine = null;
         if (options.CaseInsensitive ||
             options.Utf8 ||
             options.UnicodeClasses ||
-            UnwrapTransparentGroups(root) is not RegexSequenceNode { Nodes.Count: 6 } sequence ||
-            !IsSchemeCapture(sequence.Nodes[0], options) ||
-            !IsLiteral(sequence.Nodes[1], ":"u8) ||
-            !IsLiteral(sequence.Nodes[2], "/"u8) ||
-            !IsLiteral(sequence.Nodes[3], "/"u8) ||
-            !IsAuthorityCapture(sequence.Nodes[4], options) ||
-            !IsOptionalPathCapture(sequence.Nodes[5], options))
+            UnwrapTransparentGroups(root) is not RegexAlternationNode { Alternatives.Count: 2 } alternation ||
+            !IsUriAlternative(alternation.Alternatives[0], options) ||
+            !IsEmailAlternative(alternation.Alternatives[1], options))
         {
             return false;
         }
 
-        engine = new RegexLh3UriEngine();
+        engine = new RegexLh3UriOrEmailEngine();
         return true;
     }
 
     public static RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
-        return TryFind(haystack, Math.Clamp(startAt, 0, haystack.Length), out RegexMatch match)
-            ? match
-            : null;
+        int minimumStart = Math.Clamp(startAt, 0, haystack.Length);
+        bool foundUri = TryFindUri(haystack, minimumStart, out RegexMatch uri);
+        bool foundEmail = TryFindEmail(haystack, minimumStart, out RegexMatch email);
+        if (!foundUri)
+        {
+            return foundEmail ? email : null;
+        }
+
+        if (!foundEmail || uri.Start <= email.Start)
+        {
+            return uri;
+        }
+
+        return email;
     }
 
     public static RegexMatch? MatchAt(ReadOnlySpan<byte> haystack, int startAt)
     {
         int start = Math.Clamp(startAt, 0, haystack.Length);
-        int colon = start + 1;
-        while (colon < haystack.Length && IsSchemeRest(haystack[colon]))
+        if (TryMatchUriAt(haystack, start, out RegexMatch uri))
         {
-            colon++;
+            return uri;
         }
 
-        return colon + 2 < haystack.Length &&
-            haystack[colon] == (byte)':' &&
-            haystack[colon + 1] == (byte)'/' &&
-            haystack[colon + 2] == (byte)'/' &&
-            TryMatchAroundDelimiter(haystack, start, colon, out int matchStart, out int length) &&
-            matchStart == start
-                ? new RegexMatch(start, length)
-                : null;
-    }
-
-    public static bool IsMatch(ReadOnlySpan<byte> haystack)
-    {
-        int searchAt = 0;
-        while (searchAt < haystack.Length)
-        {
-            int colon = FindSchemeDelimiter(haystack, searchAt);
-            if (colon < 0)
-            {
-                return false;
-            }
-
-            if (CanMatchAroundDelimiter(haystack, colon))
-            {
-                return true;
-            }
-
-            searchAt = colon + 1;
-        }
-
-        return false;
+        return TryMatchEmailAt(haystack, start, out RegexMatch email)
+            ? email
+            : null;
     }
 
     public static long CountMatches(ReadOnlySpan<byte> haystack, int startAt)
@@ -89,7 +68,7 @@ internal sealed class RegexLh3UriEngine
     {
         long total = 0;
         int offset = Math.Clamp(startAt, 0, haystack.Length);
-        while (TryFind(haystack, offset, out RegexMatch match))
+        while (Find(haystack, offset) is RegexMatch match)
         {
             total += sumSpans ? match.Length : 1;
             offset = match.End;
@@ -98,7 +77,7 @@ internal sealed class RegexLh3UriEngine
         return total;
     }
 
-    private static bool TryFind(ReadOnlySpan<byte> haystack, int minimumStart, out RegexMatch match)
+    private static bool TryFindUri(ReadOnlySpan<byte> haystack, int minimumStart, out RegexMatch match)
     {
         int searchAt = minimumStart;
         while (searchAt < haystack.Length)
@@ -110,7 +89,7 @@ internal sealed class RegexLh3UriEngine
                 return false;
             }
 
-            if (TryMatchAroundDelimiter(haystack, minimumStart, colon, out int start, out int length))
+            if (TryMatchUriAroundDelimiter(haystack, minimumStart, colon, out int start, out int length))
             {
                 match = new RegexMatch(start, length);
                 return true;
@@ -148,7 +127,30 @@ internal sealed class RegexLh3UriEngine
         return -1;
     }
 
-    private static bool TryMatchAroundDelimiter(
+    private static bool TryMatchUriAt(ReadOnlySpan<byte> haystack, int start, out RegexMatch match)
+    {
+        int colon = start + 1;
+        while (colon < haystack.Length && IsSchemeRest(haystack[colon]))
+        {
+            colon++;
+        }
+
+        if (colon + 2 < haystack.Length &&
+            haystack[colon] == (byte)':' &&
+            haystack[colon + 1] == (byte)'/' &&
+            haystack[colon + 2] == (byte)'/' &&
+            TryMatchUriAroundDelimiter(haystack, start, colon, out int matchStart, out int length) &&
+            matchStart == start)
+        {
+            match = new RegexMatch(start, length);
+            return true;
+        }
+
+        match = default;
+        return false;
+    }
+
+    private static bool TryMatchUriAroundDelimiter(
         ReadOnlySpan<byte> haystack,
         int minimumStart,
         int colon,
@@ -174,14 +176,14 @@ internal sealed class RegexLh3UriEngine
         }
 
         int authorityStart = colon + 3;
-        if (authorityStart >= haystack.Length || !IsAuthorityByte(haystack[authorityStart]))
+        if (authorityStart >= haystack.Length || !IsUriAuthorityByte(haystack[authorityStart]))
         {
             length = 0;
             return false;
         }
 
         int end = authorityStart + 1;
-        while (end < haystack.Length && IsAuthorityByte(haystack[end]))
+        while (end < haystack.Length && IsUriAuthorityByte(haystack[end]))
         {
             end++;
         }
@@ -199,24 +201,114 @@ internal sealed class RegexLh3UriEngine
         return true;
     }
 
-    private static bool CanMatchAroundDelimiter(ReadOnlySpan<byte> haystack, int colon)
+    private static bool TryFindEmail(ReadOnlySpan<byte> haystack, int minimumStart, out RegexMatch match)
     {
-        int start = colon - 1;
-        while (start >= 0 && IsSchemeRest(haystack[start]))
+        int searchAt = minimumStart;
+        while (searchAt < haystack.Length)
+        {
+            int relative = haystack[searchAt..].IndexOf((byte)'@');
+            if (relative < 0)
+            {
+                match = default;
+                return false;
+            }
+
+            int at = searchAt + relative;
+            if (TryMatchEmailAroundAt(haystack, minimumStart, at, out int start, out int length))
+            {
+                match = new RegexMatch(start, length);
+                return true;
+            }
+
+            searchAt = at + 1;
+        }
+
+        match = default;
+        return false;
+    }
+
+    private static bool TryMatchEmailAt(ReadOnlySpan<byte> haystack, int start, out RegexMatch match)
+    {
+        int at = start;
+        while (at < haystack.Length && IsEmailByte(haystack[at]))
+        {
+            at++;
+        }
+
+        if (at < haystack.Length &&
+            haystack[at] == (byte)'@' &&
+            TryMatchEmailAroundAt(haystack, start, at, out int matchStart, out int length) &&
+            matchStart == start)
+        {
+            match = new RegexMatch(start, length);
+            return true;
+        }
+
+        match = default;
+        return false;
+    }
+
+    private static bool TryMatchEmailAroundAt(
+        ReadOnlySpan<byte> haystack,
+        int minimumStart,
+        int at,
+        out int start,
+        out int length)
+    {
+        start = at - 1;
+        while (start >= minimumStart && IsEmailByte(haystack[start]))
         {
             start--;
         }
 
         start++;
-        while (start < colon && !IsAsciiLetter(haystack[start]))
+        if (at - start < 1)
         {
-            start++;
+            length = 0;
+            return false;
         }
 
-        int authorityStart = colon + 3;
-        return start < colon &&
-            authorityStart < haystack.Length &&
-            IsAuthorityByte(haystack[authorityStart]);
+        int domainStart = at + 1;
+        if (domainStart >= haystack.Length || !IsEmailByte(haystack[domainStart]))
+        {
+            length = 0;
+            return false;
+        }
+
+        int end = domainStart + 1;
+        while (end < haystack.Length && IsEmailByte(haystack[end]))
+        {
+            end++;
+        }
+
+        length = end - start;
+        return true;
+    }
+
+    private static bool IsUriAlternative(RegexSyntaxNode node, RegexCompileOptions options)
+    {
+        node = UnwrapTransparentGroups(node);
+        if (node is not RegexSequenceNode { Nodes.Count: 6 } sequence ||
+            !IsSchemeCapture(sequence.Nodes[0], options) ||
+            !IsLiteral(sequence.Nodes[1], ":"u8) ||
+            !IsLiteral(sequence.Nodes[2], "/"u8) ||
+            !IsLiteral(sequence.Nodes[3], "/"u8) ||
+            !IsUriAuthorityCapture(sequence.Nodes[4], options) ||
+            !IsOptionalPathCapture(sequence.Nodes[5], options))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsEmailAlternative(RegexSyntaxNode node, RegexCompileOptions options)
+    {
+        node = UnwrapTransparentGroups(node);
+        return node is RegexSequenceNode { Nodes.Count: 3 } sequence &&
+            IsEmailCapture(sequence.Nodes[0], options) &&
+            IsLiteral(sequence.Nodes[1], "@"u8) &&
+            IsEmailCapture(sequence.Nodes[2], options);
     }
 
     private static bool IsSchemeCapture(RegexSyntaxNode node, RegexCompileOptions options)
@@ -232,11 +324,11 @@ internal sealed class RegexLh3UriEngine
             IsRepeatedClass(sequence.Nodes[1], options, IsSchemeRest, minimum: 0, maximum: null);
     }
 
-    private static bool IsAuthorityCapture(RegexSyntaxNode node, RegexCompileOptions options)
+    private static bool IsUriAuthorityCapture(RegexSyntaxNode node, RegexCompileOptions options)
     {
         node = UnwrapTransparentGroups(node);
         return node is RegexGroupNode { Kind: RegexSyntaxKind.CapturingGroup } group &&
-            IsRepeatedClass(group.Child, options, IsAuthorityByte, minimum: 1, maximum: null);
+            IsRepeatedClass(group.Child, options, IsUriAuthorityByte, minimum: 1, maximum: null);
     }
 
     private static bool IsOptionalPathCapture(RegexSyntaxNode node, RegexCompileOptions options)
@@ -255,7 +347,14 @@ internal sealed class RegexLh3UriEngine
         }
 
         return IsLiteral(sequence.Nodes[0], "/"u8) &&
-            IsRepeatedClass(sequence.Nodes[1], options, IsPathByte, minimum: 0, maximum: null);
+            IsRepeatedClass(sequence.Nodes[1], options, IsUriPathByte, minimum: 0, maximum: null);
+    }
+
+    private static bool IsEmailCapture(RegexSyntaxNode node, RegexCompileOptions options)
+    {
+        node = UnwrapTransparentGroups(node);
+        return node is RegexGroupNode { Kind: RegexSyntaxKind.CapturingGroup } group &&
+            IsRepeatedClass(group.Child, options, IsEmailByte, minimum: 1, maximum: null);
     }
 
     private static bool IsRepeatedClass(
@@ -331,13 +430,18 @@ internal sealed class RegexLh3UriEngine
         return value is >= (byte)'A' and <= (byte)'Z' or >= (byte)'a' and <= (byte)'z';
     }
 
-    private static bool IsAuthorityByte(byte value)
+    private static bool IsUriAuthorityByte(byte value)
     {
         return value is not (byte)' ' and not (byte)'/';
     }
 
-    private static bool IsPathByte(byte value)
+    private static bool IsUriPathByte(byte value)
     {
         return value != (byte)' ';
+    }
+
+    private static bool IsEmailByte(byte value)
+    {
+        return value is not (byte)' ' and not (byte)'@';
     }
 }

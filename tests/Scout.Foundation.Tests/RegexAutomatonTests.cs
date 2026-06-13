@@ -534,6 +534,33 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies Unicode word-whitespace-literal inner patterns use literal-driven matching.
+    /// </summary>
+    [Fact]
+    public void WordWhitespaceLiteralEngineReportsUnicodeBoundaryInnerMatches()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\b\w+\s+Холмс\s+\w+\b"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = "Шерлок Холмс сказал и неХолмс значение и Майкрофт Холмс пришел"u8.ToArray();
+
+        RegexMatch? first = automaton.Find(haystack);
+        RegexMatch? second = automaton.Find(haystack, first!.Value.End);
+
+        Assert.Equal(RegexEngineKind.WordWhitespaceLiteral, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 36), first);
+        Assert.Equal(new RegexMatch(75, 40), second);
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(76, automaton.SumMatchSpans(haystack));
+        Assert.Equal(new RegexMatch(75, 40), automaton.Find(haystack, 4));
+        Assert.Null(automaton.Find("неХолмс значение"u8));
+    }
+
+    /// <summary>
     /// Verifies bounded letter suffixes between whitespace use suffix-driven matching.
     /// </summary>
     [Fact]
@@ -737,6 +764,30 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies unbounded Unicode property scalar runs count non-overlapping spans directly.
+    /// </summary>
+    [Fact]
+    public void ScalarRunCountsUnboundedUnicodePropertyRuns()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\p{Greek}+"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("abc αβγ 123 δε z ηθι");
+        int firstStart = System.Text.Encoding.UTF8.GetByteCount("abc ");
+        int secondStart = System.Text.Encoding.UTF8.GetByteCount("abc αβγ 123 ");
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(firstStart, 6), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(secondStart, 4), automaton.Find(haystack, firstStart + 6));
+        Assert.Equal(3, automaton.CountMatches(haystack));
+        Assert.Equal(16, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies literal-prefix word captures synthesize branch captures directly.
     /// </summary>
     [Fact]
@@ -769,6 +820,47 @@ public sealed class RegexAutomatonTests
         Assert.Null(third.GetGroup(1));
         AssertGroupText(third, haystack, 2, "42x");
         Assert.Null(automaton.FindCaptures(haystack, third.Match.End));
+    }
+
+    /// <summary>
+    /// Verifies literal-run branch captures synthesize the matching branch group directly.
+    /// </summary>
+    [Fact]
+    public void LiteralRunAlternationCaptureEngineReportsBranchCaptures()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"(?:(a+)|(b+)|(c+))"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "xx aaabcc dd ccc"u8.ToArray();
+
+        RegexCaptures? first = automaton.FindCaptures(haystack);
+        RegexCaptures? second = automaton.FindCaptures(haystack, first!.Match.End);
+        RegexCaptures? third = automaton.FindCaptures(haystack, second!.Match.End);
+        RegexCaptures? suffix = automaton.FindCaptures("aaaa"u8, startAt: 2);
+
+        Assert.True(automaton.UsesLiteralRunAlternationCaptureEngine);
+        Assert.NotNull(first);
+        Assert.Equal(2, first.ParticipatingCount());
+        AssertGroupText(first, haystack, 1, "aaa");
+        Assert.Null(first.GetGroup(2));
+        Assert.Null(first.GetGroup(3));
+        Assert.NotNull(second);
+        Assert.Equal(2, second.ParticipatingCount());
+        Assert.Null(second.GetGroup(1));
+        AssertGroupText(second, haystack, 2, "b");
+        Assert.Null(second.GetGroup(3));
+        Assert.NotNull(third);
+        Assert.Equal(2, third.ParticipatingCount());
+        Assert.Null(third.GetGroup(1));
+        Assert.Null(third.GetGroup(2));
+        AssertGroupText(third, haystack, 3, "cc");
+        Assert.NotNull(suffix);
+        Assert.Equal(new RegexMatch(2, 2), suffix.Match);
+        Assert.Null(automaton.FindCaptures(haystack, haystack.Length));
     }
 
     /// <summary>
@@ -1337,6 +1429,34 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies small fixed-width byte alternations with classes keep exact matching semantics.
+    /// </summary>
+    [Fact]
+    public void FixedWidthAlternationEngineCountsShortClassBranches()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"a[NSt]|BY"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "xx aN BY aQ aS BYY at"u8.ToArray();
+        int firstStart = haystack.AsSpan().IndexOf("aN"u8);
+        int secondStart = haystack.AsSpan().IndexOf("BY"u8);
+        int thirdStart = haystack.AsSpan().IndexOf("aS"u8);
+
+        Assert.Equal(RegexEngineKind.FixedWidthAlternation, GetEngineKind(automaton));
+        Assert.True(automaton.IsMatch(haystack));
+        Assert.Equal(new RegexMatch(firstStart, 2), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(secondStart, 2), automaton.Find(haystack, firstStart + 1));
+        Assert.Equal(new RegexMatch(thirdStart, 2), automaton.MatchAt(haystack, thirdStart));
+        Assert.Null(automaton.MatchAt(haystack, thirdStart + 1));
+        Assert.Equal(5, automaton.CountMatches(haystack));
+        Assert.Equal(10, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies leading ASCII class plus literal suffix patterns scan from suffix candidates.
     /// </summary>
     [Fact]
@@ -1775,6 +1895,38 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies the lh3 email shape scans around the at-sign delimiter directly.
+    /// </summary>
+    [Fact]
+    public void EmailAddressEngineCountsLh3CapturedEmails()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"([^ @]+)@([^ @]+)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "x a@b no@ name@domain next@test"u8.ToArray();
+        int firstStart = haystack.AsSpan().IndexOf("a@b"u8);
+        int secondStart = haystack.AsSpan().IndexOf("name@domain"u8);
+        int thirdStart = haystack.AsSpan().IndexOf("next@test"u8);
+
+        RegexCaptures? captures = automaton.FindCaptures(haystack);
+
+        Assert.Equal(RegexEngineKind.EmailAddress, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(firstStart, 3), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(secondStart, 11), automaton.Find(haystack, firstStart + 3));
+        Assert.Equal(new RegexMatch(thirdStart, 9), automaton.MatchAt(haystack, thirdStart));
+        Assert.Equal(3, automaton.CountMatches(haystack));
+        Assert.Equal(23, automaton.SumMatchSpans(haystack));
+        Assert.NotNull(captures);
+        Assert.Equal(new RegexMatch(firstStart, 3), captures.Match);
+        AssertGroupText(captures, haystack, 1, "a");
+        AssertGroupText(captures, haystack, 2, "b");
+    }
+
+    /// <summary>
     /// Verifies byte-mode URI patterns scan around the scheme delimiter.
     /// </summary>
     [Fact]
@@ -1823,6 +1975,8 @@ public sealed class RegexAutomatonTests
         RegexCaptures? captures = automaton.FindCaptures(haystack);
 
         Assert.Equal(RegexEngineKind.Uri, GetEngineKind(automaton));
+        Assert.True(automaton.IsMatch(haystack));
+        Assert.False(automaton.IsMatch("bad ://missing"u8));
         Assert.Equal(new RegexMatch(firstStart, first.Length), automaton.Find(haystack));
         Assert.Equal(new RegexMatch(secondStart, second.Length), automaton.Find(haystack, firstStart + first.Length));
         Assert.Equal(new RegexMatch(thirdStart, third.Length), automaton.MatchAt(haystack, thirdStart));
@@ -1833,6 +1987,53 @@ public sealed class RegexAutomatonTests
         AssertGroupText(captures, haystack, 1, "http");
         AssertGroupText(captures, haystack, 2, "ab");
         Assert.Null(captures.GetGroup(3));
+    }
+
+    /// <summary>
+    /// Verifies the lh3 URI-or-email alternation scans both delimiters directly.
+    /// </summary>
+    [Fact]
+    public void UriOrEmailEngineCountsLh3Alternation()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"([a-zA-Z][a-zA-Z0-9]*)://([^ /]+)(/[^ ]*)?|([^ @]+)@([^ @]+)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "x a@b http://example.com/path?q#frag ftp://a/b z@y http://a@b"u8.ToArray();
+        ReadOnlySpan<byte> first = "a@b"u8;
+        ReadOnlySpan<byte> second = "http://example.com/path?q#frag"u8;
+        ReadOnlySpan<byte> third = "ftp://a/b"u8;
+        ReadOnlySpan<byte> fourth = "z@y"u8;
+        ReadOnlySpan<byte> fifth = "http://a@b"u8;
+        int firstStart = haystack.AsSpan().IndexOf(first);
+        int secondStart = haystack.AsSpan().IndexOf(second);
+        int thirdStart = haystack.AsSpan().IndexOf(third);
+        int fourthStart = haystack.AsSpan().IndexOf(fourth);
+        int fifthStart = haystack.AsSpan().IndexOf(fifth);
+
+        RegexCaptures? emailCaptures = automaton.FindCaptures(haystack);
+        RegexCaptures? uriCaptures = automaton.FindCaptures(haystack, firstStart + first.Length);
+
+        Assert.Equal(RegexEngineKind.UriOrEmail, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(firstStart, first.Length), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(secondStart, second.Length), automaton.Find(haystack, firstStart + first.Length));
+        Assert.Equal(new RegexMatch(thirdStart, third.Length), automaton.MatchAt(haystack, thirdStart));
+        Assert.Equal(new RegexMatch(fifthStart, fifth.Length), automaton.Find(haystack, fourthStart + fourth.Length));
+        Assert.Equal(5, automaton.CountMatches(haystack));
+        Assert.Equal(first.Length + second.Length + third.Length + fourth.Length + fifth.Length, automaton.SumMatchSpans(haystack));
+        Assert.NotNull(emailCaptures);
+        Assert.Equal(new RegexMatch(firstStart, first.Length), emailCaptures.Match);
+        AssertGroupText(emailCaptures, haystack, 4, "a");
+        AssertGroupText(emailCaptures, haystack, 5, "b");
+        Assert.Null(emailCaptures.GetGroup(1));
+        Assert.NotNull(uriCaptures);
+        Assert.Equal(new RegexMatch(secondStart, second.Length), uriCaptures.Match);
+        AssertGroupText(uriCaptures, haystack, 1, "http");
+        AssertGroupText(uriCaptures, haystack, 2, "example.com");
+        AssertGroupText(uriCaptures, haystack, 3, "/path?q#frag");
     }
 
     /// <summary>

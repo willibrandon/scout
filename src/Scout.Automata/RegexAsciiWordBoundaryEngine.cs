@@ -66,6 +66,11 @@ internal sealed class RegexAsciiWordBoundaryEngine
             return ContainsAsciiWordRun(haystack);
         }
 
+        if (IsAllAscii(haystack))
+        {
+            return ContainsAsciiWordRun(haystack);
+        }
+
         return ContainsUnicodeWordRun(haystack);
     }
 
@@ -243,6 +248,11 @@ internal sealed class RegexAsciiWordBoundaryEngine
             return false;
         }
 
+        if (Avx2.IsSupported && haystack.Length >= Vector256<byte>.Count)
+        {
+            return ContainsAsciiWordRunAvx2(haystack);
+        }
+
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
         int runLength = 0;
         for (int position = 0; position < haystack.Length; position++)
@@ -259,6 +269,108 @@ internal sealed class RegexAsciiWordBoundaryEngine
             {
                 runLength = 0;
             }
+        }
+
+        return false;
+    }
+
+    private bool ContainsAsciiWordRunAvx2(ReadOnlySpan<byte> haystack)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int position = 0;
+        int length = haystack.Length;
+        int vectorEnd = length - Vector256<byte>.Count;
+        int runLength = 0;
+        var caseFold = Vector256.Create((byte)0x20);
+        var underscore = Vector256.Create((byte)'_');
+        var beforeA = Vector256.Create((sbyte)('a' - 1));
+        var afterZ = Vector256.Create((sbyte)('z' + 1));
+        var beforeZero = Vector256.Create((sbyte)('0' - 1));
+        var afterNine = Vector256.Create((sbyte)('9' + 1));
+        while (position <= vectorEnd)
+        {
+            var block = Vector256.LoadUnsafe(ref reference, (nuint)position);
+            Vector256<sbyte> folded = Avx2.Or(block, caseFold).AsSByte();
+            Vector256<byte> letters = Avx2.And(
+                Avx2.CompareGreaterThan(folded, beforeA),
+                Avx2.CompareGreaterThan(afterZ, folded)).AsByte();
+            Vector256<sbyte> signedBlock = block.AsSByte();
+            Vector256<byte> digits = Avx2.And(
+                Avx2.CompareGreaterThan(signedBlock, beforeZero),
+                Avx2.CompareGreaterThan(afterNine, signedBlock)).AsByte();
+            Vector256<byte> words = Avx2.Or(
+                letters,
+                Avx2.Or(digits, Avx2.CompareEqual(block, underscore)));
+            if (AccumulateAsciiWordContainsMask(words.ExtractMostSignificantBits(), Vector256<byte>.Count, ref runLength))
+            {
+                return true;
+            }
+
+            position += Vector256<byte>.Count;
+        }
+
+        while (position < length)
+        {
+            if (IsAsciiWord(haystack[position]))
+            {
+                runLength++;
+                if (runLength >= minimum)
+                {
+                    return true;
+                }
+            }
+            else
+            {
+                runLength = 0;
+            }
+
+            position++;
+        }
+
+        return false;
+    }
+
+    private bool AccumulateAsciiWordContainsMask(uint mask, int width, ref int runLength)
+    {
+        uint fullMask = width == 32 ? uint.MaxValue : (1u << width) - 1u;
+        mask &= fullMask;
+        if (mask == fullMask)
+        {
+            runLength += width;
+            return runLength >= minimum;
+        }
+
+        if (mask == 0)
+        {
+            runLength = 0;
+            return false;
+        }
+
+        int consumed = 0;
+        while (mask != 0)
+        {
+            int zeros = BitOperations.TrailingZeroCount(mask);
+            if (zeros > 0)
+            {
+                runLength = 0;
+                consumed += zeros;
+                mask >>= zeros;
+            }
+
+            int ones = BitOperations.TrailingZeroCount(~mask);
+            runLength += ones;
+            if (runLength >= minimum)
+            {
+                return true;
+            }
+
+            consumed += ones;
+            mask >>= ones;
+        }
+
+        if (consumed < width)
+        {
+            runLength = 0;
         }
 
         return false;

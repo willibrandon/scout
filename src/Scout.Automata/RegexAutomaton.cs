@@ -30,6 +30,7 @@ public sealed class RegexAutomaton
         private RegexKeywordWhitespaceCaptureEngine? keywordWhitespaceCaptureEngine;
         private RegexOperatorSpacingCaptureEngine? operatorSpacingCaptureEngine;
         private RegexLiteralWordCaptureEngine? literalWordCaptureEngine;
+        private RegexLiteralRunAlternationCaptureEngine? literalRunAlternationCaptureEngine;
         private RegexPathSemverCaptureEngine? pathSemverCaptureEngine;
         private RegexAsciiLetterLengthAlternationCaptureEngine? asciiLetterLengthAlternationCaptureEngine;
         private RegexAsciiWordLengthAlternationCaptureEngine? asciiWordLengthAlternationCaptureEngine;
@@ -224,10 +225,13 @@ public sealed class RegexAutomaton
         RegexDotStarEngine.TryCreate(tree.Root, options, out RegexDotStarEngine? dotStar);
         RegexIpv4AddressEngine.TryCreate(tree.Root, options, out RegexIpv4AddressEngine? ipv4Address);
         RegexEmailAddressEngine.TryCreate(tree.Root, options, out RegexEmailAddressEngine? emailAddress);
+        RegexLh3EmailEngine.TryCreate(tree.Root, options, out RegexLh3EmailEngine? lh3Email);
         RegexUriEngine.TryCreate(tree.Root, options, out RegexUriEngine? uri);
         RegexLh3UriEngine.TryCreate(tree.Root, options, out RegexLh3UriEngine? lh3Uri);
+        RegexLh3UriOrEmailEngine.TryCreate(tree.Root, options, out RegexLh3UriOrEmailEngine? lh3UriOrEmail);
         RegexLh3DateEngine.TryCreate(tree.Root, options, out RegexLh3DateEngine? lh3Date);
         RegexWordWhitespaceLiteralEngine.TryCreate(tree.Root, options, out RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral);
+        RegexUnicodeWordWhitespaceLiteralEngine.TryCreate(tree.Root, options, out RegexUnicodeWordWhitespaceLiteralEngine? unicodeWordWhitespaceLiteral);
         RegexBoundedLetterSuffixWhitespaceEngine.TryCreate(tree.Root, options, out RegexBoundedLetterSuffixWhitespaceEngine? boundedLetterSuffixWhitespace);
         RegexRunLiteralDotStarEngine.TryCreate(tree.Root, options, out RegexRunLiteralDotStarEngine? runLiteralDotStar);
         RegexLiteralPrefixRunEngine.TryCreate(tree.Root, options, out RegexLiteralPrefixRunEngine? literalPrefixRun);
@@ -268,10 +272,13 @@ public sealed class RegexAutomaton
                 dotStar: dotStar,
                 ipv4Address: ipv4Address,
                 emailAddress: emailAddress,
+                lh3Email: lh3Email,
                 uri: uri,
                 lh3Uri: lh3Uri,
+                lh3UriOrEmail: lh3UriOrEmail,
                 lh3Date: lh3Date,
                 wordWhitespaceLiteral: wordWhitespaceLiteral,
+                unicodeWordWhitespaceLiteral: unicodeWordWhitespaceLiteral,
                 boundedLetterSuffixWhitespace: boundedLetterSuffixWhitespace,
                 runLiteralDotStar: runLiteralDotStar,
                 literalPrefixRun: literalPrefixRun,
@@ -405,6 +412,15 @@ public sealed class RegexAutomaton
         {
             EnsureCaptureEngines();
             return literalWordCaptureEngine is not null;
+        }
+    }
+
+    internal bool UsesLiteralRunAlternationCaptureEngine
+    {
+        get
+        {
+            EnsureCaptureEngines();
+            return literalRunAlternationCaptureEngine is not null;
         }
     }
 
@@ -685,6 +701,11 @@ public sealed class RegexAutomaton
                     captureOptions,
                     captureCount,
                     out literalWordCaptureEngine);
+                RegexLiteralRunAlternationCaptureEngine.TryCreate(
+                    captureRoot,
+                    captureOptions,
+                    captureCount,
+                    out literalRunAlternationCaptureEngine);
                 RegexPathSemverCaptureEngine.TryCreate(
                     captureRoot,
                     captureOptions,
@@ -714,6 +735,7 @@ public sealed class RegexAutomaton
                     keywordWhitespaceCaptureEngine is null &&
                     operatorSpacingCaptureEngine is null &&
                     literalWordCaptureEngine is null &&
+                    literalRunAlternationCaptureEngine is null &&
                     pathSemverCaptureEngine is null &&
                     asciiLetterLengthAlternationCaptureEngine is null &&
                     asciiWordLengthAlternationCaptureEngine is null)
@@ -734,6 +756,7 @@ public sealed class RegexAutomaton
                 keywordWhitespaceCaptureEngine is null &&
                 operatorSpacingCaptureEngine is null &&
                 literalWordCaptureEngine is null &&
+                literalRunAlternationCaptureEngine is null &&
                 pathSemverCaptureEngine is null &&
                 asciiLetterLengthAlternationCaptureEngine is null &&
                 asciiWordLengthAlternationCaptureEngine is null &&
@@ -785,6 +808,11 @@ public sealed class RegexAutomaton
         if (delimitedCaptures is not null)
         {
             return delimitedCaptures;
+        }
+
+        if (literalRunAlternationCaptureEngine is not null)
+        {
+            return literalRunAlternationCaptureEngine.FindCaptures(haystack, startAt);
         }
 
         RegexCaptures? syntheticCaptures = syntheticCaptureAlternationSet?.FindSyntheticCaptures(haystack, startAt);

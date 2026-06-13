@@ -9,6 +9,7 @@ internal enum RegexEngineKind
     Ipv4Address,
     EmailAddress,
     Uri,
+    UriOrEmail,
     Date,
     WordWhitespaceLiteral,
     BoundedLetterSuffixWhitespace,

@@ -1,7 +1,11 @@
+using System.Buffers;
+
 namespace Scout;
 
 internal sealed class RegexOperatorSpacingCaptureEngine
 {
+    private static readonly SearchValues<byte> OperatorCandidateBytes = SearchValues.Create("-+*/|!<=>%&^:"u8);
+
     private readonly RegexCompileOptions options;
     private readonly ReadOnlyMemory<byte> firstClassExpression;
     private readonly int leadingCaptureIndex;
@@ -61,33 +65,119 @@ internal sealed class RegexOperatorSpacingCaptureEngine
 
     public RegexCaptures? FindCaptures(ReadOnlySpan<byte> haystack, int startAt)
     {
-        int start = Math.Clamp(startAt, 0, haystack.Length);
-        while (start < haystack.Length)
+        int minimumStart = Math.Clamp(startAt, 0, haystack.Length);
+        int searchAt = minimumStart;
+        while (searchAt < haystack.Length)
         {
-            if (!TryFirstAtomMatchLength(haystack, start, out int firstLength))
+            int offset = haystack[searchAt..].IndexOfAny(OperatorCandidateBytes);
+            if (offset < 0)
             {
-                start++;
-                continue;
+                return null;
             }
 
-            int leadingStart = start + firstLength;
-            int operatorStart = ConsumeWhitespaceForward(haystack, leadingStart);
+            int operatorStart = searchAt + offset;
             if (!TryConsumeOperator(haystack, operatorStart, out int operatorEnd))
             {
-                start += firstLength;
+                searchAt = operatorStart + 1;
                 continue;
             }
 
-            int trailingEnd = ConsumeWhitespaceForward(haystack, operatorEnd);
-            var match = new RegexMatch(start, trailingEnd - start);
-            var groups = new RegexMatch?[captureCount + 1];
-            groups[0] = match;
-            groups[leadingCaptureIndex] = new RegexMatch(leadingStart, operatorStart - leadingStart);
-            groups[trailingCaptureIndex] = new RegexMatch(operatorEnd, trailingEnd - operatorEnd);
-            return new RegexCaptures(match, groups);
+            int leadingStart = FindLeadingWhitespaceStart(haystack, operatorStart);
+            if (TryPreviousFirstAtomMatchStart(haystack, leadingStart, out int matchStart) &&
+                matchStart >= minimumStart)
+            {
+                int trailingEnd = ConsumeWhitespaceForward(haystack, operatorEnd);
+                var match = new RegexMatch(matchStart, trailingEnd - matchStart);
+                var groups = new RegexMatch?[captureCount + 1];
+                groups[0] = match;
+                groups[leadingCaptureIndex] = new RegexMatch(leadingStart, operatorStart - leadingStart);
+                groups[trailingCaptureIndex] = new RegexMatch(operatorEnd, trailingEnd - operatorEnd);
+                return new RegexCaptures(match, groups);
+            }
+
+            searchAt = operatorStart + 1;
         }
 
         return null;
+    }
+
+    private int FindLeadingWhitespaceStart(ReadOnlySpan<byte> haystack, int operatorStart)
+    {
+        int position = operatorStart;
+        while (TryPreviousWhitespaceMatchStart(haystack, position, out int whitespaceStart))
+        {
+            position = whitespaceStart;
+        }
+
+        return position;
+    }
+
+    private bool TryPreviousWhitespaceMatchStart(ReadOnlySpan<byte> haystack, int end, out int start)
+    {
+        start = 0;
+        if (end <= 0)
+        {
+            return false;
+        }
+
+        byte last = haystack[end - 1];
+        if (last <= 0x7F)
+        {
+            if (!IsAsciiRegexWhitespace(last))
+            {
+                return false;
+            }
+
+            start = end - 1;
+            return true;
+        }
+
+        int firstCandidate = Math.Max(0, end - 4);
+        for (int candidate = end - 1; candidate >= firstCandidate; candidate--)
+        {
+            if (TryWhitespaceMatchLength(haystack, candidate, out int length) &&
+                candidate + length == end)
+            {
+                start = candidate;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool TryPreviousFirstAtomMatchStart(ReadOnlySpan<byte> haystack, int end, out int start)
+    {
+        start = 0;
+        if (end <= 0)
+        {
+            return false;
+        }
+
+        byte last = haystack[end - 1];
+        if (last <= 0x7F)
+        {
+            if (last == (byte)',' || IsAsciiRegexWhitespace(last))
+            {
+                return false;
+            }
+
+            start = end - 1;
+            return true;
+        }
+
+        int firstCandidate = Math.Max(0, end - 4);
+        for (int candidate = end - 1; candidate >= firstCandidate; candidate--)
+        {
+            if (TryFirstAtomMatchLength(haystack, candidate, out int length) &&
+                candidate + length == end)
+            {
+                start = candidate;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private bool TryFirstAtomMatchLength(ReadOnlySpan<byte> haystack, int position, out int length)

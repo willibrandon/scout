@@ -9,6 +9,7 @@ internal sealed class RegexFixedWidthAlternationEngine
 
     private readonly RegexFixedWidthAtom[][] alternatives;
     private readonly RegexFixedWidthLiteralSeed[]? literalSeeds;
+    private readonly MemmemFinder[]? literalSeedFinders;
     private readonly RegexLiteralPrefixScanner? literalSeedScanner;
     private readonly RegexTeddyPrefilter? literalSeedTeddy;
     private readonly bool[] anchorBytes;
@@ -20,6 +21,7 @@ internal sealed class RegexFixedWidthAlternationEngine
     private RegexFixedWidthAlternationEngine(
         RegexFixedWidthAtom[][] alternatives,
         RegexFixedWidthLiteralSeed[]? literalSeeds,
+        MemmemFinder[]? literalSeedFinders,
         RegexLiteralPrefixScanner? literalSeedScanner,
         RegexTeddyPrefilter? literalSeedTeddy,
         bool[] anchorBytes,
@@ -30,6 +32,7 @@ internal sealed class RegexFixedWidthAlternationEngine
     {
         this.alternatives = alternatives;
         this.literalSeeds = literalSeeds;
+        this.literalSeedFinders = literalSeedFinders;
         this.literalSeedScanner = literalSeedScanner;
         this.literalSeedTeddy = literalSeedTeddy;
         this.anchorBytes = anchorBytes;
@@ -87,12 +90,14 @@ internal sealed class RegexFixedWidthAlternationEngine
             : null;
         TryCreateLiteralSeedAccelerators(
             literalSeeds,
+            out MemmemFinder[]? literalSeedFinders,
             out RegexLiteralPrefixScanner? literalSeedScanner,
             out RegexTeddyPrefilter? literalSeedTeddy,
             out int literalSeedOffset);
         engine = new RegexFixedWidthAlternationEngine(
             compiledAlternatives,
             literalSeeds,
+            literalSeedFinders,
             literalSeedScanner,
             literalSeedTeddy,
             anchorBytes!,
@@ -109,6 +114,11 @@ internal sealed class RegexFixedWidthAlternationEngine
         if (literalSeedTeddy is not null)
         {
             return FindWithLiteralSeedTeddy(haystack, start);
+        }
+
+        if (literalSeedFinders is not null)
+        {
+            return FindWithLiteralSeedFinders(haystack, start);
         }
 
         if (literalSeedScanner is not null)
@@ -141,6 +151,28 @@ internal sealed class RegexFixedWidthAlternationEngine
         for (int index = 0; index < seeds.Length; index++)
         {
             if (TryFindSeedMatch(haystack, minimumStart, seeds[index], bestStart, out int candidate) &&
+                candidate < bestStart)
+            {
+                bestStart = candidate;
+            }
+        }
+
+        return bestStart == int.MaxValue ? null : new RegexMatch(bestStart, width);
+    }
+
+    private RegexMatch? FindWithLiteralSeedFinders(ReadOnlySpan<byte> haystack, int minimumStart)
+    {
+        RegexFixedWidthLiteralSeed[] seeds = literalSeeds!;
+        int bestStart = int.MaxValue;
+        for (int index = 0; index < seeds.Length; index++)
+        {
+            if (TryFindSeedMatch(
+                    haystack,
+                    minimumStart,
+                    seeds[index],
+                    literalSeedFinders![index],
+                    bestStart,
+                    out int candidate) &&
                 candidate < bestStart)
             {
                 bestStart = candidate;
@@ -198,6 +230,11 @@ internal sealed class RegexFixedWidthAlternationEngine
         if (literalSeedTeddy is not null)
         {
             return IsMatchWithLiteralSeedTeddy(haystack, start);
+        }
+
+        if (literalSeedFinders is not null)
+        {
+            return FindWithLiteralSeedFinders(haystack, start).HasValue;
         }
 
         if (literalSeedScanner is not null)
@@ -269,6 +306,12 @@ internal sealed class RegexFixedWidthAlternationEngine
 
     private long CountOrSum(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
     {
+        if (literalSeedFinders is not null ||
+            literalSeeds is not null && literalSeedScanner is null && literalSeedTeddy is null)
+        {
+            return CountOrSumWithLiteralSeeds(haystack, startAt, sumSpans);
+        }
+
         long total = 0;
         int offset = Math.Clamp(startAt, 0, haystack.Length);
         while (Find(haystack, offset) is RegexMatch match)
@@ -278,6 +321,63 @@ internal sealed class RegexFixedWidthAlternationEngine
         }
 
         return total;
+    }
+
+    private long CountOrSumWithLiteralSeeds(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
+    {
+        RegexFixedWidthLiteralSeed[] seeds = literalSeeds!;
+        Span<int> nextStarts = stackalloc int[seeds.Length];
+        nextStarts.Fill(-1);
+        long total = 0;
+        int nextAllowedStart = Math.Clamp(startAt, 0, haystack.Length);
+        while (true)
+        {
+            int bestSeed = -1;
+            int bestStart = int.MaxValue;
+            for (int index = 0; index < seeds.Length; index++)
+            {
+                int candidate = nextStarts[index];
+                if (candidate == int.MaxValue)
+                {
+                    continue;
+                }
+
+                if (candidate < nextAllowedStart)
+                {
+                    bool found = literalSeedFinders is not null
+                        ? TryFindSeedMatch(
+                            haystack,
+                            nextAllowedStart,
+                            seeds[index],
+                            literalSeedFinders[index],
+                            int.MaxValue,
+                            out candidate)
+                        : TryFindSeedMatch(haystack, nextAllowedStart, seeds[index], int.MaxValue, out candidate);
+                    if (!found)
+                    {
+                        nextStarts[index] = int.MaxValue;
+                        continue;
+                    }
+
+                    nextStarts[index] = candidate;
+                }
+
+                if (candidate < bestStart)
+                {
+                    bestSeed = index;
+                    bestStart = candidate;
+                }
+            }
+
+            if (bestSeed < 0)
+            {
+                return total;
+            }
+
+            total += sumSpans ? width : 1;
+            nextAllowedStart = bestStart + width;
+            nextStarts[bestSeed] = -1;
+        }
     }
 
     private bool TryFindAnchor(ReadOnlySpan<byte> haystack, int minimumStart, out int candidate)
@@ -318,6 +418,45 @@ internal sealed class RegexFixedWidthAlternationEngine
         while (searchAt <= lastSeedStart && searchAt - seed.Offset < bestStart)
         {
             int offset = haystack[searchAt..].IndexOf(seed.Literal);
+            if (offset < 0)
+            {
+                return false;
+            }
+
+            int seedStart = searchAt + offset;
+            if (seedStart > lastSeedStart)
+            {
+                return false;
+            }
+
+            int matchStart = seedStart - seed.Offset;
+            if (matchStart >= minimumStart &&
+                TryMatchAlternative(seed.AlternativeIndex, haystack, matchStart))
+            {
+                candidate = matchStart;
+                return true;
+            }
+
+            searchAt = seedStart + 1;
+        }
+
+        return false;
+    }
+
+    private bool TryFindSeedMatch(
+        ReadOnlySpan<byte> haystack,
+        int minimumStart,
+        RegexFixedWidthLiteralSeed seed,
+        MemmemFinder finder,
+        int bestStart,
+        out int candidate)
+    {
+        candidate = 0;
+        int searchAt = minimumStart + seed.Offset;
+        int lastSeedStart = haystack.Length - (width - seed.Offset);
+        while (searchAt <= lastSeedStart && searchAt - seed.Offset < bestStart)
+        {
+            int offset = finder.Find(haystack[searchAt..]);
             if (offset < 0)
             {
                 return false;
@@ -435,10 +574,12 @@ internal sealed class RegexFixedWidthAlternationEngine
 
     private static bool TryCreateLiteralSeedAccelerators(
         RegexFixedWidthLiteralSeed[]? seeds,
+        out MemmemFinder[]? finders,
         out RegexLiteralPrefixScanner? scanner,
         out RegexTeddyPrefilter? teddy,
         out int offset)
     {
+        finders = null;
         scanner = null;
         teddy = null;
         offset = 0;
@@ -449,26 +590,59 @@ internal sealed class RegexFixedWidthAlternationEngine
 
         offset = seeds[0].Offset;
         byte[][] literals = new byte[seeds.Length][];
+        bool sameOffset = true;
         for (int index = 0; index < seeds.Length; index++)
         {
             if (seeds[index].Offset != offset)
             {
-                scanner = null;
-                offset = 0;
-                return false;
+                sameOffset = false;
             }
 
             literals[index] = seeds[index].Literal;
         }
 
-        scanner = new RegexLiteralPrefixScanner(literals);
-        if (LiteralsShareFirstByte(literals) &&
-            RegexTeddyPrefilter.TryCreate(literals, out RegexTeddyPrefilter? createdTeddy))
+        if (sameOffset)
         {
-            teddy = createdTeddy;
+            scanner = new RegexLiteralPrefixScanner(literals);
+            if (LiteralsShareFirstByte(literals) &&
+                RegexTeddyPrefilter.TryCreate(literals, out RegexTeddyPrefilter? createdTeddy))
+            {
+                teddy = createdTeddy;
+            }
+        }
+
+        if (teddy is null && ShouldUseLiteralSeedFinders(literals))
+        {
+            finders = new MemmemFinder[literals.Length];
+            for (int index = 0; index < literals.Length; index++)
+            {
+                finders[index] = new MemmemFinder(literals[index]);
+            }
+        }
+
+        if (!sameOffset)
+        {
+            scanner = null;
+            offset = 0;
         }
 
         return true;
+    }
+
+    private static bool ShouldUseLiteralSeedFinders(byte[][] literals)
+    {
+        if (literals.Length is <= 1 or > 8)
+        {
+            return false;
+        }
+
+        int minLength = int.MaxValue;
+        for (int index = 0; index < literals.Length; index++)
+        {
+            minLength = Math.Min(minLength, literals[index].Length);
+        }
+
+        return minLength >= MinLiteralSeedLength;
     }
 
     private static bool LiteralsShareFirstByte(byte[][] literals)
