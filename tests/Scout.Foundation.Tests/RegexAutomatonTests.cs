@@ -2112,6 +2112,7 @@ public sealed class RegexAutomatonTests
         Assert.Equal(3, second.ParticipatingCount());
         AssertGroupUtf8Text(second, line, 1, " ");
         AssertGroupUtf8Text(second, line, 2, "\t");
+        Assert.Null(automaton.FindCaptures(System.Text.Encoding.UTF8.GetBytes("αif")));
         Assert.Null(automaton.FindCaptures("diff"u8));
     }
 

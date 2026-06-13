@@ -1,26 +1,26 @@
-using System.Buffers;
+using System.Runtime.CompilerServices;
 
 namespace Scout;
 
 internal sealed class RegexKeywordWhitespaceCaptureEngine
 {
-    private readonly byte[][] keywords;
-    private readonly SearchValues<byte> firstBytes;
+    private readonly byte[][][] keywordsByFirstByte;
+    private readonly bool[] firstByteLookup;
     private readonly RegexCompileOptions options;
     private readonly int leadingCaptureIndex;
     private readonly int trailingCaptureIndex;
     private readonly int captureCount;
 
     private RegexKeywordWhitespaceCaptureEngine(
-        byte[][] keywords,
-        SearchValues<byte> firstBytes,
+        byte[][][] keywordsByFirstByte,
+        bool[] firstByteLookup,
         RegexCompileOptions options,
         int leadingCaptureIndex,
         int trailingCaptureIndex,
         int captureCount)
     {
-        this.keywords = keywords;
-        this.firstBytes = firstBytes;
+        this.keywordsByFirstByte = keywordsByFirstByte;
+        this.firstByteLookup = firstByteLookup;
         this.options = options;
         this.leadingCaptureIndex = leadingCaptureIndex;
         this.trailingCaptureIndex = trailingCaptureIndex;
@@ -53,14 +53,17 @@ internal sealed class RegexKeywordWhitespaceCaptureEngine
         }
 
         if (keywords.Length == 0 ||
-            !TryCreateFirstBytes(keywords, out SearchValues<byte>? firstBytes))
+            !TryCreateKeywordBuckets(
+                keywords,
+                out byte[][][]? keywordsByFirstByte,
+                out bool[]? firstByteLookup))
         {
             return false;
         }
 
         engine = new RegexKeywordWhitespaceCaptureEngine(
-            keywords,
-            firstBytes!,
+            keywordsByFirstByte!,
+            firstByteLookup!,
             options,
             leadingCaptureIndex,
             trailingCaptureIndex,
@@ -74,13 +77,12 @@ internal sealed class RegexKeywordWhitespaceCaptureEngine
         int search = lowerBound;
         while (search < haystack.Length)
         {
-            int relative = haystack[search..].IndexOfAny(firstBytes);
-            if (relative < 0)
+            int keywordStart = FindKeywordStart(haystack, search);
+            if (keywordStart < 0)
             {
                 return null;
             }
 
-            int keywordStart = search + relative;
             if (TryFindBoundedKeywordEnd(haystack, keywordStart, out int keywordEnd))
             {
                 int leadingStart = ConsumeWhitespaceBackward(haystack, lowerBound, keywordStart);
@@ -102,14 +104,10 @@ internal sealed class RegexKeywordWhitespaceCaptureEngine
     private bool TryFindBoundedKeywordEnd(ReadOnlySpan<byte> haystack, int start, out int end)
     {
         end = 0;
-        if (!IsWordBoundaryBeforeAsciiWord(haystack, start))
+        byte[][] candidates = keywordsByFirstByte[haystack[start]];
+        for (int index = 0; index < candidates.Length; index++)
         {
-            return false;
-        }
-
-        for (int index = 0; index < keywords.Length; index++)
-        {
-            ReadOnlySpan<byte> keyword = keywords[index];
+            ReadOnlySpan<byte> keyword = candidates[index];
             if (keyword.Length > haystack.Length - start ||
                 !haystack.Slice(start, keyword.Length).SequenceEqual(keyword))
             {
@@ -129,12 +127,34 @@ internal sealed class RegexKeywordWhitespaceCaptureEngine
         return false;
     }
 
+    private int FindKeywordStart(ReadOnlySpan<byte> haystack, int start)
+    {
+        for (int position = start; position < haystack.Length; position++)
+        {
+            byte value = haystack[position];
+            if (!firstByteLookup[value] ||
+                !IsWordBoundaryBeforeAsciiWord(haystack, position))
+            {
+                continue;
+            }
+
+            return position;
+        }
+
+        return -1;
+    }
+
     private bool IsWordBoundaryBeforeAsciiWord(ReadOnlySpan<byte> haystack, int position)
     {
-        if (position > 0 &&
-            IsAsciiWord(haystack[position - 1]))
+        if (position == 0)
         {
-            return false;
+            return true;
+        }
+
+        byte previous = haystack[position - 1];
+        if (previous <= 0x7F)
+        {
+            return !IsAsciiWord(previous);
         }
 
         return IsWordBoundary(haystack, position);
@@ -142,10 +162,15 @@ internal sealed class RegexKeywordWhitespaceCaptureEngine
 
     private bool IsWordBoundaryAfterAsciiWord(ReadOnlySpan<byte> haystack, int position)
     {
-        if (position < haystack.Length &&
-            IsAsciiWord(haystack[position]))
+        if (position >= haystack.Length)
         {
-            return false;
+            return true;
+        }
+
+        byte next = haystack[position];
+        if (next <= 0x7F)
+        {
+            return !IsAsciiWord(next);
         }
 
         return IsWordBoundary(haystack, position);
@@ -334,27 +359,21 @@ internal sealed class RegexKeywordWhitespaceCaptureEngine
         return literal.Length != 0;
     }
 
-    private static bool TryCreateFirstBytes(byte[][] keywords, out SearchValues<byte>? firstBytes)
+    private static bool TryCreateKeywordBuckets(
+        byte[][] keywords,
+        out byte[][][]? keywordsByFirstByte,
+        out bool[]? firstByteLookup)
     {
-        firstBytes = null;
-        byte[] values = new byte[keywords.Length];
+        keywordsByFirstByte = null;
+        firstByteLookup = null;
+        var buckets = new List<byte[]>[256];
         int count = 0;
         for (int index = 0; index < keywords.Length; index++)
         {
             byte first = keywords[index][0];
-            bool seen = false;
-            for (int valueIndex = 0; valueIndex < count; valueIndex++)
+            (buckets[first] ??= []).Add(keywords[index]);
+            if (buckets[first]!.Count == 1)
             {
-                if (values[valueIndex] == first)
-                {
-                    seen = true;
-                    break;
-                }
-            }
-
-            if (!seen)
-            {
-                values[count] = first;
                 count++;
             }
         }
@@ -364,7 +383,18 @@ internal sealed class RegexKeywordWhitespaceCaptureEngine
             return false;
         }
 
-        firstBytes = SearchValues.Create(values.AsSpan(0, count).ToArray());
+        keywordsByFirstByte = new byte[256][][];
+        for (int index = 0; index < buckets.Length; index++)
+        {
+            keywordsByFirstByte[index] = buckets[index]?.ToArray() ?? [];
+        }
+
+        firstByteLookup = new bool[256];
+        for (int index = 0; index < buckets.Length; index++)
+        {
+            firstByteLookup[index] = buckets[index] is not null;
+        }
+
         return true;
     }
 
@@ -383,6 +413,7 @@ internal sealed class RegexKeywordWhitespaceCaptureEngine
         return node;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsAsciiWord(byte value)
     {
         return value is >= (byte)'A' and <= (byte)'Z' ||
@@ -391,6 +422,7 @@ internal sealed class RegexKeywordWhitespaceCaptureEngine
             value == (byte)'_';
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsAsciiRegexWhitespace(byte value)
     {
         return value is (byte)' ' or (byte)'\t' or (byte)'\n' or (byte)'\r' or (byte)'\f' or 0x0b;
