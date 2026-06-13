@@ -20,6 +20,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexLazyDfa? lazyDfa;
     private readonly Func<RegexLazyDfa?>? anchoredLeftmostDfaFactory;
     private readonly RegexLazyDfa? asciiFastDfa;
+    private readonly RegexEmptyEngine? empty;
     private readonly RegexLiteralSetEngine? literalSet;
     private readonly RegexAlternationSetEngine? alternationSet;
     private readonly RegexWholeLineEngine? wholeLine;
@@ -118,7 +119,8 @@ internal sealed class RegexMetaEngine
         RegexWordBoundaryLiteralSetEngine? wordBoundaryLiteralSet = null,
         RegexWordSuffixLiteralEngine? wordSuffixLiteral = null,
         RegexEndAnchoredSequenceEngine? endAnchoredSequence = null,
-        RegexWholeLineEngine? wholeLine = null)
+        RegexWholeLineEngine? wholeLine = null,
+        RegexEmptyEngine? empty = null)
     {
         Kind = kind;
         this.nfa = nfa;
@@ -130,6 +132,7 @@ internal sealed class RegexMetaEngine
         this.sparseDfa = sparseDfa;
         this.lazyDfa = lazyDfa;
         this.asciiFastDfa = asciiFastDfa;
+        this.empty = empty;
         this.anchoredLeftmostDfaFactory = anchoredLeftmostDfaFactory;
         this.asciiFastUnanchoredDfaFactory = asciiFastUnanchoredDfaFactory;
         this.unanchoredLazyDfaFactory = unanchoredLazyDfaFactory;
@@ -177,6 +180,28 @@ internal sealed class RegexMetaEngine
     public RegexPrefilterKind PrefilterKind => prefilter?.Kind ?? RegexPrefilterKind.None;
 
     public int RequiredLiteralWindow => prefilter?.RequiredLiteralWindow ?? 0;
+
+    public static RegexMetaEngine CompileEmpty(RegexEmptyEngine empty)
+    {
+        return new RegexMetaEngine(
+            RegexEngineKind.Empty,
+            nfa: null,
+            pikeVm: null,
+            boundedBacktracker: null,
+            onePassDfa: null,
+            denseDfa: null,
+            sparseDfa: null,
+            lazyDfa: null,
+            literalSet: null,
+            alternationSet: null,
+            delimitedRun: null,
+            simpleSequence: null,
+            lineContains: null,
+            dotStarClassFallback: null,
+            prefilter: null,
+            utf8: true,
+            empty: empty);
+    }
 
     public static RegexMetaEngine CompileLiteralSet(RegexLiteralSetEngine literalSet, bool utf8)
     {
@@ -1306,6 +1331,11 @@ internal sealed class RegexMetaEngine
 
     public bool IsMatch(ReadOnlySpan<byte> haystack, RegexStartPredicate? startPredicate = null)
     {
+        if (empty is not null)
+        {
+            return RegexEmptyEngine.IsMatch(haystack);
+        }
+
         if (asciiWordBoundary is not null)
         {
             return asciiWordBoundary.IsMatch(haystack);
@@ -1331,6 +1361,11 @@ internal sealed class RegexMetaEngine
         Dictionary<(int State, int Position), bool>? reachabilityCache)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        if (empty is not null)
+        {
+            return empty.Find(haystack, startOffset);
+        }
+
         if (literalSet is not null)
         {
             return literalSet.Find(haystack, startOffset);
@@ -1596,6 +1631,11 @@ internal sealed class RegexMetaEngine
 
     public long CountMatches(ReadOnlySpan<byte> haystack, int startAt, RegexStartPredicate? startPredicate = null)
     {
+        if (empty is not null)
+        {
+            return empty.CountMatches(haystack, startAt);
+        }
+
         if (literalSet is not null)
         {
             return literalSet.CountMatches(haystack, startAt);
@@ -1783,6 +1823,11 @@ internal sealed class RegexMetaEngine
 
     public long SumMatchSpans(ReadOnlySpan<byte> haystack, int startAt, RegexStartPredicate? startPredicate = null)
     {
+        if (empty is not null)
+        {
+            return RegexEmptyEngine.SumMatchSpans(haystack, startAt);
+        }
+
         if (literalSet is not null)
         {
             return literalSet.SumMatchSpans(haystack, startAt);
@@ -2158,6 +2203,11 @@ internal sealed class RegexMetaEngine
     internal RegexMatch? MatchAt(ReadOnlySpan<byte> haystack, int startAt)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        if (empty is not null)
+        {
+            return empty.MatchAt(haystack, startOffset);
+        }
+
         if (literalSet is not null)
         {
             return literalSet.MatchAt(haystack, startOffset);
@@ -2390,6 +2440,11 @@ internal sealed class RegexMetaEngine
     public RegexMatch? FindEarliest(ReadOnlySpan<byte> haystack, int startAt)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        if (empty is not null)
+        {
+            return empty.FindEarliest(haystack, startOffset);
+        }
+
         if (literalSet is not null)
         {
             return literalSet.FindEarliest(haystack, startOffset);
@@ -2416,6 +2471,11 @@ internal sealed class RegexMetaEngine
     internal RegexMatch? FindAllKindAt(ReadOnlySpan<byte> haystack, int startAt)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        if (empty is not null)
+        {
+            return empty.FindAllKindAt(haystack, startOffset);
+        }
+
         if (literalSet is not null)
         {
             return literalSet.FindAllKindAt(haystack, startOffset);
@@ -2436,6 +2496,11 @@ internal sealed class RegexMetaEngine
     internal IReadOnlyList<RegexMatch> FindOverlappingAt(ReadOnlySpan<byte> haystack, int startAt)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        if (empty is not null)
+        {
+            return empty.FindOverlappingAt(haystack, startOffset);
+        }
+
         if (literalSet is not null)
         {
             return literalSet.FindOverlappingAt(haystack, startOffset);
@@ -2465,6 +2530,13 @@ internal sealed class RegexMetaEngine
         out int length,
         Dictionary<(int State, int Position), bool>? reachabilityCache = null)
     {
+        if (empty is not null)
+        {
+            RegexMatch? match = empty.MatchAt(haystack, start);
+            length = 0;
+            return match.HasValue;
+        }
+
         if (utf8 && !RegexByteClass.IsUtf8Boundary(haystack, start))
         {
             length = 0;

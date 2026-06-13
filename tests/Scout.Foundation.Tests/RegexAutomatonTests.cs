@@ -65,6 +65,29 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies empty patterns use a dedicated zero-length match engine.
+    /// </summary>
+    [Fact]
+    public void UsesEmptyEngineForEmptyPattern()
+    {
+        var automaton = RegexAutomaton.Compile(""u8);
+
+        Assert.Equal(RegexEngineKind.Empty, GetEngineKind(automaton));
+        Assert.True(automaton.IsMatch("abc"u8));
+        Assert.Equal(new RegexMatch(0, 0), automaton.Find("abc"u8));
+        Assert.Equal(new RegexMatch(2, 0), automaton.Find("abc"u8, startAt: 2));
+        Assert.Equal(new RegexMatch(3, 0), automaton.Find("abc"u8, startAt: 99));
+        Assert.Equal(new RegexMatch(2, 0), automaton.MatchAt("abc"u8, startAt: 2));
+        Assert.Equal(new RegexMatch(3, 0), automaton.FindEarliest("abc"u8, startAt: 3));
+        Assert.Equal(new RegexMatch(1, 0), automaton.FindAllKindAt("abc"u8, startAt: 1));
+        Assert.Equal([new RegexMatch(1, 0)], automaton.FindOverlappingAt("abc"u8, startAt: 1));
+        Assert.Equal(4, automaton.CountMatches("abc"u8));
+        Assert.Equal(2, automaton.CountMatches("abc"u8, startAt: 2));
+        Assert.Equal(1, automaton.CountMatches("abc"u8, startAt: 99));
+        Assert.Equal(0, automaton.SumMatchSpans("abc"u8));
+    }
+
+    /// <summary>
     /// Verifies missing required byte classes reject searches before engine execution.
     /// </summary>
     [Fact]
@@ -3608,10 +3631,17 @@ public sealed class RegexAutomatonTests
     {
         byte[] poop = [0xF0, 0x9F, 0x92, 0xA9];
         byte[] delta = [0xCE, 0xB4];
+        var empty = RegexAutomaton.Compile(""u8);
 
         Assert.Equal(new RegexMatch(0, 4), RegexAutomaton.Compile("."u8).Find(poop));
         Assert.Equal(new RegexMatch(0, 4), RegexAutomaton.Compile("[^a]"u8).Find(poop));
-        Assert.Equal(new RegexMatch(4, 0), RegexAutomaton.Compile(""u8).Find(poop, startAt: 1));
+        Assert.Equal(new RegexMatch(4, 0), empty.Find(poop, startAt: 1));
+        Assert.Null(empty.MatchAt(poop, startAt: 1));
+        Assert.Equal(new RegexMatch(4, 0), empty.FindEarliest(poop, startAt: 1));
+        Assert.Null(empty.FindAllKindAt(poop, startAt: 1));
+        Assert.Empty(empty.FindOverlappingAt(poop, startAt: 1));
+        Assert.Equal(2, empty.CountMatches(poop));
+        Assert.Equal(1, empty.CountMatches(poop, startAt: 1));
         Assert.Equal(new RegexMatch(4, 0), RegexAutomaton.Compile(@"(?:(?-u:\B)|(?su:.))+"u8).Find(poop, startAt: 1));
         Assert.Null(RegexAutomaton.Compile(@"\B"u8).Find(delta, startAt: 1));
     }
@@ -3623,9 +3653,13 @@ public sealed class RegexAutomatonTests
     public void ByteModeCanSplitCodepoints()
     {
         byte[] poop = [0xF0, 0x9F, 0x92, 0xA9];
+        var empty = RegexAutomaton.Compile(""u8, caseInsensitive: false, multiLine: false, dotMatchesNewline: false, utf8: false);
 
         Assert.Equal(new RegexMatch(0, 1), RegexAutomaton.Compile("."u8, caseInsensitive: false, multiLine: false, dotMatchesNewline: false, utf8: false, unicodeClasses: false).Find(poop));
-        Assert.Equal(new RegexMatch(1, 0), RegexAutomaton.Compile(""u8, caseInsensitive: false, multiLine: false, dotMatchesNewline: false, utf8: false).Find(poop, startAt: 1));
+        Assert.Equal(new RegexMatch(1, 0), empty.Find(poop, startAt: 1));
+        Assert.Equal(new RegexMatch(1, 0), empty.MatchAt(poop, startAt: 1));
+        Assert.Equal(5, empty.CountMatches(poop));
+        Assert.Equal(4, empty.CountMatches(poop, startAt: 1));
         Assert.Equal(new RegexMatch(1, 1), RegexAutomaton.Compile("(?-u:.)"u8).Find(poop, startAt: 1));
     }
 

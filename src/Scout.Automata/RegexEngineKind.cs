@@ -2,6 +2,7 @@ namespace Scout;
 
 internal enum RegexEngineKind
 {
+    Empty,
     LiteralSet,
     AlternationSet,
     WholeLine,

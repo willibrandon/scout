@@ -152,6 +152,23 @@ public sealed class RegexAutomaton
         bool compilePrefilter,
         Dictionary<string, RegexUtf8ByteTrie>? utf8ByteTrieCache = null)
     {
+        RegexEmptyEngine.TryCreate(tree.Root, options, out RegexEmptyEngine? empty);
+        if (empty is not null && tree.CaptureCount == 0)
+        {
+            return new RegexAutomaton(
+                RegexMetaEngine.CompileEmpty(empty),
+                startPredicate: null,
+                lengthGuard: null,
+                requiredByteSetGuard: null,
+                requiredLiteralAnySetGuard: null,
+                syntheticCaptureAlternationSet: null,
+                capturePattern: default,
+                captureRoot: null,
+                captureOptions: default,
+                capturePrefilter: null,
+                captureCount: 0);
+        }
+
         RegexLiteralSetEngine.TryCreate(tree.Root, options, out RegexLiteralSetEngine? literalSet);
         if (literalSet is not null && tree.CaptureCount == 0)
         {
