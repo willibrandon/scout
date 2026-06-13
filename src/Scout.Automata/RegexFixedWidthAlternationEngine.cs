@@ -417,7 +417,13 @@ internal sealed class RegexFixedWidthAlternationEngine
         int lastSeedStart = haystack.Length - (width - seed.Offset);
         while (searchAt <= lastSeedStart && searchAt - seed.Offset < bestStart)
         {
-            int offset = haystack[searchAt..].IndexOf(seed.Literal);
+            int searchEnd = GetSeedSearchEnd(haystack.Length, seed, lastSeedStart, bestStart);
+            if (searchAt >= searchEnd)
+            {
+                return false;
+            }
+
+            int offset = haystack[searchAt..searchEnd].IndexOf(seed.Literal);
             if (offset < 0)
             {
                 return false;
@@ -456,7 +462,13 @@ internal sealed class RegexFixedWidthAlternationEngine
         int lastSeedStart = haystack.Length - (width - seed.Offset);
         while (searchAt <= lastSeedStart && searchAt - seed.Offset < bestStart)
         {
-            int offset = finder.Find(haystack[searchAt..]);
+            int searchEnd = GetSeedSearchEnd(haystack.Length, seed, lastSeedStart, bestStart);
+            if (searchAt >= searchEnd)
+            {
+                return false;
+            }
+
+            int offset = finder.Find(haystack[searchAt..searchEnd]);
             if (offset < 0)
             {
                 return false;
@@ -480,6 +492,24 @@ internal sealed class RegexFixedWidthAlternationEngine
         }
 
         return false;
+    }
+
+    private static int GetSeedSearchEnd(
+        int haystackLength,
+        RegexFixedWidthLiteralSeed seed,
+        int lastSeedStart,
+        int bestStart)
+    {
+        int maxSeedStart = lastSeedStart;
+        if (bestStart != int.MaxValue)
+        {
+            int bestSeedStart = bestStart > int.MaxValue - seed.Offset
+                ? int.MaxValue
+                : bestStart + seed.Offset;
+            maxSeedStart = Math.Min(maxSeedStart, bestSeedStart - 1);
+        }
+
+        return Math.Min(haystackLength, maxSeedStart + seed.Literal.Length);
     }
 
     private int FindAnchorByte(ReadOnlySpan<byte> haystack, int start, int end)
