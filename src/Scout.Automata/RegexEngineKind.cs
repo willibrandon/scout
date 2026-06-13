@@ -4,6 +4,7 @@ internal enum RegexEngineKind
 {
     LiteralSet,
     AlternationSet,
+    DotStar,
     SimpleSequence,
     LineContains,
     DotStarClassFallback,

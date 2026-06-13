@@ -22,6 +22,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexLazyDfa? asciiFastDfa;
     private readonly RegexLiteralSetEngine? literalSet;
     private readonly RegexAlternationSetEngine? alternationSet;
+    private readonly RegexDotStarEngine? dotStar;
     private readonly RegexDelimitedRunEngine? delimitedRun;
     private readonly RegexSimpleSequenceEngine? simpleSequence;
     private readonly RegexEndAnchoredAtomEngine? endAnchoredAtom;
@@ -66,7 +67,8 @@ internal sealed class RegexMetaEngine
         Func<RegexNfa>? nfaFactory = null,
         Func<RegexUnanchoredLazyDfa?>? unanchoredLazyDfaFactory = null,
         Func<RegexLazyDfa?>? anchoredLeftmostDfaFactory = null,
-        RegexEndAnchoredAtomEngine? endAnchoredAtom = null)
+        RegexEndAnchoredAtomEngine? endAnchoredAtom = null,
+        RegexDotStarEngine? dotStar = null)
     {
         Kind = kind;
         this.nfa = nfa;
@@ -83,6 +85,7 @@ internal sealed class RegexMetaEngine
         this.unanchoredLazyDfaFactory = unanchoredLazyDfaFactory;
         this.literalSet = literalSet;
         this.alternationSet = alternationSet;
+        this.dotStar = dotStar;
         this.delimitedRun = delimitedRun;
         this.simpleSequence = simpleSequence;
         this.endAnchoredAtom = endAnchoredAtom;
@@ -168,6 +171,7 @@ internal sealed class RegexMetaEngine
         ulong? dfaSizeLimit,
         RegexLiteralSetEngine? literalSet,
         RegexAlternationSetEngine? alternationSet,
+        RegexDotStarEngine? dotStar = null,
         RegexDelimitedRunEngine? delimitedRun = null,
         RegexSimpleSequenceEngine? simpleSequence = null,
         RegexEndAnchoredAtomEngine? endAnchoredAtom = null,
@@ -220,6 +224,28 @@ internal sealed class RegexMetaEngine
                 dotStarClassFallback: null,
                 prefilter,
                 nfa.Utf8);
+        }
+
+        if (dotStar is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.DotStar,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                delimitedRun: null,
+                simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
+                prefilter,
+                nfa.Utf8,
+                dotStar: dotStar);
         }
 
         if (delimitedRun is not null)
@@ -618,6 +644,11 @@ internal sealed class RegexMetaEngine
             return alternationSet.Find(haystack, startOffset);
         }
 
+        if (dotStar is not null)
+        {
+            return dotStar.Find(haystack, startOffset);
+        }
+
         if (delimitedRun is not null)
         {
             return delimitedRun.Find(haystack, startOffset);
@@ -753,6 +784,11 @@ internal sealed class RegexMetaEngine
             return alternationSet.CountMatches(haystack, startAt);
         }
 
+        if (dotStar is not null)
+        {
+            return dotStar.CountMatches(haystack, startAt);
+        }
+
         if (delimitedRun is not null)
         {
             return delimitedRun.CountMatches(haystack, startAt);
@@ -808,6 +844,11 @@ internal sealed class RegexMetaEngine
         if (alternationSet is not null)
         {
             return alternationSet.SumMatchSpans(haystack, startAt);
+        }
+
+        if (dotStar is not null)
+        {
+            return dotStar.SumMatchSpans(haystack, startAt);
         }
 
         if (delimitedRun is not null)
@@ -1053,6 +1094,11 @@ internal sealed class RegexMetaEngine
         if (alternationSet is not null)
         {
             return alternationSet.MatchAt(haystack, startOffset);
+        }
+
+        if (dotStar is not null)
+        {
+            return dotStar.Find(haystack, startOffset);
         }
 
         if (delimitedRun is not null)

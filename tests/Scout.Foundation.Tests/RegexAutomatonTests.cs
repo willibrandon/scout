@@ -587,6 +587,70 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies byte-mode greedy dot-star uses direct line span execution.
+    /// </summary>
+    [Fact]
+    public void DotStarEngineCountsLineSpans()
+    {
+        var automaton = RegexAutomaton.Compile(
+            ".*"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "ab\nc\n"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.DotStar, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 2), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(2, 0), automaton.Find(haystack, startAt: 2));
+        Assert.Equal(3, automaton.CountMatches(haystack));
+        Assert.Equal(3, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
+    /// Verifies byte-mode dot-all greedy dot-star consumes the full suffix directly.
+    /// </summary>
+    [Fact]
+    public void DotStarEngineCountsDotAllSpan()
+    {
+        var automaton = RegexAutomaton.Compile(
+            "(?s).*"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "ab\nc"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.DotStar, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 4), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(2, 2), automaton.Find(haystack, startAt: 2));
+        Assert.Equal(new RegexMatch(4, 0), automaton.Find(haystack, startAt: 4));
+        Assert.Equal(1, automaton.CountMatches(haystack));
+        Assert.Equal(4, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
+    /// Verifies greedy dot-star specialization is skipped when UTF-8 scalar boundaries matter.
+    /// </summary>
+    [Fact]
+    public void DotStarEngineSkipsUtf8Mode()
+    {
+        var automaton = RegexAutomaton.Compile("(?s).*"u8);
+        var inlineUtf8 = RegexAutomaton.Compile(
+            "(?u:.*)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.NotEqual(RegexEngineKind.DotStar, GetEngineKind(automaton));
+        Assert.NotEqual(RegexEngineKind.DotStar, GetEngineKind(inlineUtf8));
+    }
+
+    /// <summary>
     /// Verifies prefixed greedy dot-star tails preserve leftmost spans in lazy DFA execution.
     /// </summary>
     [Fact]

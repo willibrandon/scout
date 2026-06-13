@@ -188,6 +188,7 @@ public sealed class RegexAutomaton
             ? RegexPrefilter.Compile(tree.Root, options, out startPrefixSet)
             : null;
 
+        RegexDotStarEngine.TryCreate(tree.Root, options, out RegexDotStarEngine? dotStar);
         RegexDelimitedRunEngine.TryCreate(tree.Root, options, out RegexDelimitedRunEngine? delimitedRun);
         RegexSimpleSequenceEngine.TryCreate(tree.Root, options, out RegexSimpleSequenceEngine? simpleSequence);
         RegexEndAnchoredAtomEngine.TryCreate(tree.Root, options, out RegexEndAnchoredAtomEngine? endAnchoredAtom);
@@ -210,6 +211,7 @@ public sealed class RegexAutomaton
                 dfaSizeLimit,
                 literalSet,
                 alternationSet: null,
+                dotStar: dotStar,
                 delimitedRun: delimitedRun,
                 simpleSequence: simpleSequence,
                 endAnchoredAtom: endAnchoredAtom,
