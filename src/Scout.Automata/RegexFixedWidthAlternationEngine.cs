@@ -9,25 +9,34 @@ internal sealed class RegexFixedWidthAlternationEngine
 
     private readonly RegexFixedWidthAtom[][] alternatives;
     private readonly RegexFixedWidthLiteralSeed[]? literalSeeds;
+    private readonly RegexLiteralPrefixScanner? literalSeedScanner;
+    private readonly RegexTeddyPrefilter? literalSeedTeddy;
     private readonly bool[] anchorBytes;
     private readonly byte[] anchorNeedles;
     private readonly int width;
     private readonly int anchorIndex;
+    private readonly int literalSeedOffset;
 
     private RegexFixedWidthAlternationEngine(
         RegexFixedWidthAtom[][] alternatives,
         RegexFixedWidthLiteralSeed[]? literalSeeds,
+        RegexLiteralPrefixScanner? literalSeedScanner,
+        RegexTeddyPrefilter? literalSeedTeddy,
         bool[] anchorBytes,
         byte[] anchorNeedles,
         int width,
-        int anchorIndex)
+        int anchorIndex,
+        int literalSeedOffset)
     {
         this.alternatives = alternatives;
         this.literalSeeds = literalSeeds;
+        this.literalSeedScanner = literalSeedScanner;
+        this.literalSeedTeddy = literalSeedTeddy;
         this.anchorBytes = anchorBytes;
         this.anchorNeedles = anchorNeedles;
         this.width = width;
         this.anchorIndex = anchorIndex;
+        this.literalSeedOffset = literalSeedOffset;
     }
 
     public static bool TryCreate(
@@ -37,43 +46,35 @@ internal sealed class RegexFixedWidthAlternationEngine
         out RegexFixedWidthAlternationEngine? engine)
     {
         engine = null;
-        if (captureCount != 0 ||
-            options.CaseInsensitive ||
-            options.Utf8 ||
-            options.UnicodeClasses)
+        _ = captureCount;
+        if (options.CaseInsensitive || options.Utf8)
         {
             return false;
         }
 
-        root = UnwrapTransparentNonCapturingGroups(root);
-        if (root is not RegexAlternationNode alternation ||
-            alternation.Alternatives.Count is < MinAlternativeCount or > MaxAlternativeCount)
+        if (!TryCollectAlternatives(root, options, out RegexFixedWidthAtom[][] compiledAlternatives) ||
+            compiledAlternatives.Length is < MinAlternativeCount or > MaxAlternativeCount)
         {
             return false;
         }
 
-        var compiledAlternatives = new RegexFixedWidthAtom[alternation.Alternatives.Count][];
         int width = -1;
-        for (int index = 0; index < alternation.Alternatives.Count; index++)
+        for (int index = 0; index < compiledAlternatives.Length; index++)
         {
-            var atoms = new List<RegexFixedWidthAtom>();
-            if (!TryAppendAtoms(alternation.Alternatives[index], options, atoms) ||
-                atoms.Count == 0 ||
-                atoms.Count > MaxWidth)
+            int alternativeWidth = compiledAlternatives[index].Length;
+            if (alternativeWidth == 0 || alternativeWidth > MaxWidth)
             {
                 return false;
             }
 
             if (width < 0)
             {
-                width = atoms.Count;
+                width = alternativeWidth;
             }
-            else if (atoms.Count != width)
+            else if (alternativeWidth != width)
             {
                 return false;
             }
-
-            compiledAlternatives[index] = [.. atoms];
         }
 
         if (width <= 0 || !TryChooseAnchor(compiledAlternatives, width, out int anchorIndex, out bool[]? anchorBytes, out byte[]? needles))
@@ -81,19 +82,40 @@ internal sealed class RegexFixedWidthAlternationEngine
             return false;
         }
 
+        RegexFixedWidthLiteralSeed[]? literalSeeds = TryCreateLiteralSeeds(compiledAlternatives, out RegexFixedWidthLiteralSeed[]? seeds)
+            ? seeds
+            : null;
+        TryCreateLiteralSeedAccelerators(
+            literalSeeds,
+            out RegexLiteralPrefixScanner? literalSeedScanner,
+            out RegexTeddyPrefilter? literalSeedTeddy,
+            out int literalSeedOffset);
         engine = new RegexFixedWidthAlternationEngine(
             compiledAlternatives,
-            TryCreateLiteralSeeds(compiledAlternatives, out RegexFixedWidthLiteralSeed[]? seeds) ? seeds : null,
+            literalSeeds,
+            literalSeedScanner,
+            literalSeedTeddy,
             anchorBytes!,
             needles!,
             width,
-            anchorIndex);
+            anchorIndex,
+            literalSeedOffset);
         return true;
     }
 
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
         int start = Math.Clamp(startAt, 0, haystack.Length);
+        if (literalSeedTeddy is not null)
+        {
+            return FindWithLiteralSeedTeddy(haystack, start);
+        }
+
+        if (literalSeedScanner is not null)
+        {
+            return FindWithLiteralSeedScanner(haystack, start);
+        }
+
         if (literalSeeds is not null)
         {
             return FindWithLiteralSeeds(haystack, start);
@@ -128,12 +150,111 @@ internal sealed class RegexFixedWidthAlternationEngine
         return bestStart == int.MaxValue ? null : new RegexMatch(bestStart, width);
     }
 
+    private RegexMatch? FindWithLiteralSeedTeddy(ReadOnlySpan<byte> haystack, int minimumStart)
+    {
+        int searchAt = Math.Min(haystack.Length, minimumStart + literalSeedOffset);
+        for (int seedStart = literalSeedTeddy!.FindCandidate(haystack, searchAt);
+             seedStart >= 0;
+             seedStart = literalSeedTeddy.FindCandidate(haystack, seedStart + 1))
+        {
+            int candidate = seedStart - literalSeedOffset;
+            if (candidate >= minimumStart && TryMatchAt(haystack, candidate))
+            {
+                return new RegexMatch(candidate, width);
+            }
+        }
+
+        return null;
+    }
+
+    private RegexMatch? FindWithLiteralSeedScanner(ReadOnlySpan<byte> haystack, int minimumStart)
+    {
+        int searchAt = Math.Min(haystack.Length, minimumStart + literalSeedOffset);
+        for (int seedStart = literalSeedScanner!.FindCandidate(haystack, searchAt);
+             seedStart >= 0;
+             seedStart = literalSeedScanner.FindCandidate(haystack, seedStart + 1))
+        {
+            int candidate = seedStart - literalSeedOffset;
+            if (candidate >= minimumStart && TryMatchAt(haystack, candidate))
+            {
+                return new RegexMatch(candidate, width);
+            }
+        }
+
+        return null;
+    }
+
     public RegexMatch? MatchAt(ReadOnlySpan<byte> haystack, int startAt)
     {
         int start = Math.Clamp(startAt, 0, haystack.Length);
         return TryMatchAt(haystack, start)
             ? new RegexMatch(start, width)
             : null;
+    }
+
+    public bool IsMatch(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        int start = Math.Clamp(startAt, 0, haystack.Length);
+        if (literalSeedTeddy is not null)
+        {
+            return IsMatchWithLiteralSeedTeddy(haystack, start);
+        }
+
+        if (literalSeedScanner is not null)
+        {
+            return IsMatchWithLiteralSeedScanner(haystack, start);
+        }
+
+        if (literalSeeds is not null)
+        {
+            return FindWithLiteralSeeds(haystack, start).HasValue;
+        }
+
+        while (TryFindAnchor(haystack, start, out int candidate))
+        {
+            if (TryMatchAt(haystack, candidate))
+            {
+                return true;
+            }
+
+            start = candidate + 1;
+        }
+
+        return false;
+    }
+
+    private bool IsMatchWithLiteralSeedTeddy(ReadOnlySpan<byte> haystack, int minimumStart)
+    {
+        int searchAt = Math.Min(haystack.Length, minimumStart + literalSeedOffset);
+        for (int seedStart = literalSeedTeddy!.FindCandidate(haystack, searchAt);
+             seedStart >= 0;
+             seedStart = literalSeedTeddy.FindCandidate(haystack, seedStart + 1))
+        {
+            int candidate = seedStart - literalSeedOffset;
+            if (candidate >= minimumStart && TryMatchAt(haystack, candidate))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool IsMatchWithLiteralSeedScanner(ReadOnlySpan<byte> haystack, int minimumStart)
+    {
+        int searchAt = Math.Min(haystack.Length, minimumStart + literalSeedOffset);
+        for (int seedStart = literalSeedScanner!.FindCandidate(haystack, searchAt);
+             seedStart >= 0;
+             seedStart = literalSeedScanner.FindCandidate(haystack, seedStart + 1))
+        {
+            int candidate = seedStart - literalSeedOffset;
+            if (candidate >= minimumStart && TryMatchAt(haystack, candidate))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public long CountMatches(ReadOnlySpan<byte> haystack, int startAt)
@@ -312,6 +433,63 @@ internal sealed class RegexFixedWidthAlternationEngine
         return true;
     }
 
+    private static bool TryCreateLiteralSeedAccelerators(
+        RegexFixedWidthLiteralSeed[]? seeds,
+        out RegexLiteralPrefixScanner? scanner,
+        out RegexTeddyPrefilter? teddy,
+        out int offset)
+    {
+        scanner = null;
+        teddy = null;
+        offset = 0;
+        if (seeds is null || seeds.Length == 0)
+        {
+            return false;
+        }
+
+        offset = seeds[0].Offset;
+        byte[][] literals = new byte[seeds.Length][];
+        for (int index = 0; index < seeds.Length; index++)
+        {
+            if (seeds[index].Offset != offset)
+            {
+                scanner = null;
+                offset = 0;
+                return false;
+            }
+
+            literals[index] = seeds[index].Literal;
+        }
+
+        scanner = new RegexLiteralPrefixScanner(literals);
+        if (LiteralsShareFirstByte(literals) &&
+            RegexTeddyPrefilter.TryCreate(literals, out RegexTeddyPrefilter? createdTeddy))
+        {
+            teddy = createdTeddy;
+        }
+
+        return true;
+    }
+
+    private static bool LiteralsShareFirstByte(byte[][] literals)
+    {
+        if (literals.Length == 0 || literals[0].Length == 0)
+        {
+            return false;
+        }
+
+        byte first = literals[0][0];
+        for (int index = 1; index < literals.Length; index++)
+        {
+            if (literals[index].Length == 0 || literals[index][0] != first)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private static bool TryGetLongestLiteralRun(RegexFixedWidthAtom[] atoms, out int offset, out byte[]? literal)
     {
         offset = 0;
@@ -418,18 +596,57 @@ internal sealed class RegexFixedWidthAlternationEngine
         return needles;
     }
 
+    private static bool TryCollectAlternatives(
+        RegexSyntaxNode node,
+        RegexCompileOptions options,
+        out RegexFixedWidthAtom[][] alternatives)
+    {
+        alternatives = [];
+        var expanded = new List<List<RegexFixedWidthAtom>> { new List<RegexFixedWidthAtom>() };
+        if (!TryAppendAtoms(node, options, expanded))
+        {
+            return false;
+        }
+
+        alternatives = new RegexFixedWidthAtom[expanded.Count][];
+        for (int index = 0; index < expanded.Count; index++)
+        {
+            if (expanded[index].Count == 0 || expanded[index].Count > MaxWidth)
+            {
+                alternatives = [];
+                return false;
+            }
+
+            alternatives[index] = [.. expanded[index]];
+        }
+
+        return true;
+    }
+
     private static bool TryAppendAtoms(
         RegexSyntaxNode node,
         RegexCompileOptions options,
-        List<RegexFixedWidthAtom> atoms)
+        List<List<RegexFixedWidthAtom>> alternatives)
     {
-        node = UnwrapTransparentNonCapturingGroups(node);
         switch (node)
         {
             case RegexSequenceNode sequence:
+                RegexCompileOptions currentOptions = options;
                 for (int index = 0; index < sequence.Nodes.Count; index++)
                 {
-                    if (!TryAppendAtoms(sequence.Nodes[index], options, atoms))
+                    RegexSyntaxNode child = sequence.Nodes[index];
+                    if (child is RegexInlineFlagsNode flags)
+                    {
+                        currentOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
+                        if (currentOptions.CaseInsensitive || currentOptions.Utf8)
+                        {
+                            return false;
+                        }
+
+                        continue;
+                    }
+
+                    if (!TryAppendAtoms(child, currentOptions, alternatives))
                     {
                         return false;
                     }
@@ -437,19 +654,26 @@ internal sealed class RegexFixedWidthAlternationEngine
 
                 return true;
 
+            case RegexAlternationNode alternation:
+                return TryAppendAlternationAtoms(alternation, options, alternatives);
+
+            case RegexGroupNode group:
+                RegexCompileOptions groupOptions = options.Apply(group.EnabledFlags, group.DisabledFlags);
+                return !groupOptions.CaseInsensitive &&
+                    !groupOptions.Utf8 &&
+                    TryAppendAtoms(group.Child, groupOptions, alternatives);
+
+            case RegexRepetitionNode repetition:
+                return TryAppendRepetitionAtoms(repetition, options, alternatives);
+
             case RegexAtomNode { Kind: RegexSyntaxKind.Literal } atom:
                 ReadOnlySpan<byte> literal = atom.Value.Span;
-                if (literal.IsEmpty)
+                if (literal.Length != 1)
                 {
                     return false;
                 }
 
-                for (int index = 0; index < literal.Length; index++)
-                {
-                    atoms.Add(RegexFixedWidthAtom.CreateLiteral(literal[index]));
-                }
-
-                return true;
+                return TryAppendAtomToAll(alternatives, RegexFixedWidthAtom.CreateLiteral(literal[0]));
 
             case RegexAtomNode atom:
                 if (IsPredicate(atom.Kind) ||
@@ -463,12 +687,82 @@ internal sealed class RegexFixedWidthAlternationEngine
                     return false;
                 }
 
-                atoms.Add(RegexFixedWidthAtom.CreateLookup(atom, options));
-                return true;
+                return TryAppendAtomToAll(alternatives, RegexFixedWidthAtom.CreateLookup(atom, options));
 
             default:
                 return false;
         }
+    }
+
+    private static bool TryAppendAlternationAtoms(
+        RegexAlternationNode alternation,
+        RegexCompileOptions options,
+        List<List<RegexFixedWidthAtom>> alternatives)
+    {
+        var expanded = new List<List<RegexFixedWidthAtom>>();
+        for (int existingIndex = 0; existingIndex < alternatives.Count; existingIndex++)
+        {
+            List<RegexFixedWidthAtom> existing = alternatives[existingIndex];
+            for (int branchIndex = 0; branchIndex < alternation.Alternatives.Count; branchIndex++)
+            {
+                var branchAlternatives = new List<List<RegexFixedWidthAtom>> { new List<RegexFixedWidthAtom>(existing) };
+                if (!TryAppendAtoms(alternation.Alternatives[branchIndex], options, branchAlternatives))
+                {
+                    return false;
+                }
+
+                for (int index = 0; index < branchAlternatives.Count; index++)
+                {
+                    expanded.Add(branchAlternatives[index]);
+                    if (expanded.Count > MaxAlternativeCount)
+                    {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        alternatives.Clear();
+        alternatives.AddRange(expanded);
+        return alternatives.Count > 0;
+    }
+
+    private static bool TryAppendRepetitionAtoms(
+        RegexRepetitionNode repetition,
+        RegexCompileOptions options,
+        List<List<RegexFixedWidthAtom>> alternatives)
+    {
+        if (repetition.Maximum != repetition.Minimum || repetition.Minimum < 0)
+        {
+            return false;
+        }
+
+        for (int count = 0; count < repetition.Minimum; count++)
+        {
+            if (!TryAppendAtoms(repetition.Child, options, alternatives))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryAppendAtomToAll(
+        List<List<RegexFixedWidthAtom>> alternatives,
+        RegexFixedWidthAtom atom)
+    {
+        for (int index = 0; index < alternatives.Count; index++)
+        {
+            if (alternatives[index].Count >= MaxWidth)
+            {
+                return false;
+            }
+
+            alternatives[index].Add(atom);
+        }
+
+        return true;
     }
 
     private static bool IsPredicate(RegexSyntaxKind kind)
@@ -485,15 +779,4 @@ internal sealed class RegexFixedWidthAlternationEngine
             or RegexSyntaxKind.WordEndHalfBoundary;
     }
 
-    private static RegexSyntaxNode UnwrapTransparentNonCapturingGroups(RegexSyntaxNode node)
-    {
-        while (node is RegexGroupNode { Kind: RegexSyntaxKind.NonCapturingGroup } group &&
-            string.IsNullOrEmpty(group.EnabledFlags) &&
-            string.IsNullOrEmpty(group.DisabledFlags))
-        {
-            node = group.Child;
-        }
-
-        return node;
-    }
 }

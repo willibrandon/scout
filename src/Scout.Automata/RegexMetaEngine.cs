@@ -1233,6 +1233,11 @@ internal sealed class RegexMetaEngine
             return asciiWordBoundary.IsMatch(haystack);
         }
 
+        if (fixedWidthAlternation is not null)
+        {
+            return fixedWidthAlternation.IsMatch(haystack, startAt: 0);
+        }
+
         return Find(haystack, startAt: 0, startPredicate).HasValue;
     }
 

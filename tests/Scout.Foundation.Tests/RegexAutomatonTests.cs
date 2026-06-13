@@ -1273,6 +1273,7 @@ public sealed class RegexAutomatonTests
         int thirdStart = haystack.AsSpan().IndexOf("tgggtaaa"u8);
 
         Assert.Equal(RegexEngineKind.FixedWidthAlternation, GetEngineKind(automaton));
+        Assert.True(automaton.IsMatch(haystack));
         Assert.Equal(new RegexMatch(firstStart, 8), automaton.Find(haystack));
         Assert.Equal(new RegexMatch(secondStart, 8), automaton.Find(haystack, firstStart + 1));
         Assert.Equal(new RegexMatch(thirdStart, 8), automaton.MatchAt(haystack, thirdStart));
@@ -1282,10 +1283,10 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
-    /// Verifies capturing alternations keep capture-aware execution.
+    /// Verifies fixed-width captured alternations still return capture groups through the generic capture engine.
     /// </summary>
     [Fact]
-    public void FixedWidthAlternationEngineRejectsCaptures()
+    public void FixedWidthAlternationEngineKeepsGenericCaptures()
     {
         var automaton = RegexAutomaton.Compile(
             @"([cgt]gggtaaa)|tttaccc[acg]"u8,
@@ -1298,9 +1299,41 @@ public sealed class RegexAutomatonTests
 
         RegexCaptures? captures = automaton.FindCaptures(haystack);
 
-        Assert.NotEqual(RegexEngineKind.FixedWidthAlternation, GetEngineKind(automaton));
+        Assert.Equal(RegexEngineKind.FixedWidthAlternation, GetEngineKind(automaton));
         Assert.NotNull(captures);
         AssertGroupText(captures, haystack, 1, "cgggtaaa");
+    }
+
+    /// <summary>
+    /// Verifies nested fixed-width alternations with exact repetitions use the fixed-width scanner.
+    /// </summary>
+    [Fact]
+    public void FixedWidthAlternationEngineCountsCapturedAsciiKeyPattern()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"((?:ASIA|AKIA|AROA|AIDA)([A-Z0-7]{16}))"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = "xx ASIAABCDEFGHIJKLMNOP yy AIDA0000000000000000 zz ASIAABCDEFGH12345678"u8.ToArray();
+        int firstStart = haystack.AsSpan().IndexOf("ASIAABCDEFGHIJKLMNOP"u8);
+        int secondStart = haystack.AsSpan().IndexOf("AIDA0000000000000000"u8);
+
+        Assert.Equal(RegexEngineKind.FixedWidthAlternation, GetEngineKind(automaton));
+        Assert.True(automaton.IsMatch(haystack));
+        Assert.False(automaton.IsMatch("xx ASIAABCDEFGH12345678 yy"u8));
+        Assert.Equal(new RegexMatch(firstStart, 20), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(secondStart, 20), automaton.MatchAt(haystack, secondStart));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(40, automaton.SumMatchSpans(haystack));
+
+        RegexCaptures? captures = automaton.FindCaptures(haystack);
+
+        Assert.NotNull(captures);
+        AssertGroupText(captures, haystack, 1, "ASIAABCDEFGHIJKLMNOP");
+        AssertGroupText(captures, haystack, 2, "ABCDEFGHIJKLMNOP");
     }
 
     /// <summary>
