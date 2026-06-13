@@ -2404,6 +2404,31 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies ASCII letter runs with literal suffixes count by scanning each run once.
+    /// </summary>
+    [Fact]
+    public void CountsAsciiLetterRunLiteralSuffixSequences()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"[a-zA-Z]+ing"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "xx singingx bringing thing iing ing"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(3, 7), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(4, 6), automaton.Find(haystack, startAt: 4));
+        Assert.Equal(4, automaton.CountMatches(haystack));
+        Assert.Equal(24, automaton.SumMatchSpans(haystack));
+        Assert.Equal(4, automaton.CountMatches(haystack, startAt: 4));
+        Assert.Equal(23, automaton.SumMatchSpans(haystack, startAt: 4));
+        Assert.Equal(0, automaton.CountMatches("ing"u8));
+    }
+
+    /// <summary>
     /// Verifies single bounded byte-class runs use direct simple-sequence scanning.
     /// </summary>
     [Fact]

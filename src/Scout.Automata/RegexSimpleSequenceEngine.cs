@@ -27,6 +27,9 @@ internal sealed class RegexSimpleSequenceEngine
     private readonly bool hasFixedWidthLiteralSuffix;
     private readonly int fixedWidthLength;
     private readonly byte fixedWidthSuffixLiteral;
+    private readonly bool hasAsciiLetterRunLiteralSuffix;
+    private readonly int asciiLetterRunMinimum;
+    private readonly byte[] asciiLetterRunSuffix;
 
     private RegexSimpleSequenceEngine(List<RegexSimpleSequenceSegment> segments)
     {
@@ -45,6 +48,10 @@ internal sealed class RegexSimpleSequenceEngine
             this.segments,
             out fixedWidthLength,
             out fixedWidthSuffixLiteral);
+        hasAsciiLetterRunLiteralSuffix = TryGetAsciiLetterRunLiteralSuffix(
+            this.segments,
+            out asciiLetterRunMinimum,
+            out asciiLetterRunSuffix);
     }
 
     private RegexSimpleSequenceEngine(List<RegexSimpleSequenceSegment> repeatedSegments, int repeatedMinimum, int repeatedMaximum, bool repeatedLazy)
@@ -63,6 +70,9 @@ internal sealed class RegexSimpleSequenceEngine
         hasFixedWidthLiteralSuffix = false;
         fixedWidthLength = 0;
         fixedWidthSuffixLiteral = 0;
+        hasAsciiLetterRunLiteralSuffix = false;
+        asciiLetterRunMinimum = 0;
+        asciiLetterRunSuffix = [];
     }
 
     private RegexSimpleSequenceEngine(
@@ -86,6 +96,9 @@ internal sealed class RegexSimpleSequenceEngine
         hasFixedWidthLiteralSuffix = false;
         fixedWidthLength = 0;
         fixedWidthSuffixLiteral = 0;
+        hasAsciiLetterRunLiteralSuffix = false;
+        asciiLetterRunMinimum = 0;
+        asciiLetterRunSuffix = [];
     }
 
     public static bool TryCreate(RegexSyntaxNode root, RegexCompileOptions options, out RegexSimpleSequenceEngine? engine)
@@ -141,6 +154,11 @@ internal sealed class RegexSimpleSequenceEngine
             return FindFixedWidthLiteralSuffix(haystack, startOffset);
         }
 
+        if (hasAsciiLetterRunLiteralSuffix)
+        {
+            return FindAsciiLetterRunLiteralSuffix(haystack, startOffset);
+        }
+
         for (int start = startOffset; start <= haystack.Length; start++)
         {
             if (CanStartAt(haystack, start) &&
@@ -180,6 +198,11 @@ internal sealed class RegexSimpleSequenceEngine
         }
 
         if (TryCountFixedWidthLiteralSuffix(haystack, startAt, sumSpans, ref count, ref spanSum))
+        {
+            return true;
+        }
+
+        if (TryCountAsciiLetterRunLiteralSuffix(haystack, startAt, sumSpans, ref count, ref spanSum))
         {
             return true;
         }
@@ -255,6 +278,88 @@ internal sealed class RegexSimpleSequenceEngine
 
         AddRun(minimum, maximum, lazy, runLength, sumSpans, ref count, ref spanSum);
         return true;
+    }
+
+    private RegexMatch? FindAsciiLetterRunLiteralSuffix(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        return TryFindAsciiLetterRunLiteralSuffix(haystack, Math.Clamp(startAt, 0, haystack.Length), out int start, out int end)
+            ? new RegexMatch(start, end - start)
+            : null;
+    }
+
+    private bool TryCountAsciiLetterRunLiteralSuffix(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        bool sumSpans,
+        ref long count,
+        ref long spanSum)
+    {
+        if (!hasAsciiLetterRunLiteralSuffix)
+        {
+            return false;
+        }
+
+        int offset = Math.Clamp(startAt, 0, haystack.Length);
+        while (TryFindAsciiLetterRunLiteralSuffix(haystack, offset, out int start, out int end))
+        {
+            count++;
+            if (sumSpans)
+            {
+                spanSum += end - start;
+            }
+
+            offset = end;
+        }
+
+        return true;
+    }
+
+    private bool TryFindAsciiLetterRunLiteralSuffix(
+        ReadOnlySpan<byte> haystack,
+        int offset,
+        out int start,
+        out int end)
+    {
+        ReadOnlySpan<byte> suffix = asciiLetterRunSuffix;
+        int search = Math.Min(haystack.Length, offset + asciiLetterRunMinimum);
+        while (search <= haystack.Length - suffix.Length)
+        {
+            int relative = haystack[search..].IndexOf(suffix);
+            if (relative < 0)
+            {
+                break;
+            }
+
+            int suffixAt = search + relative;
+            int runStart = suffixAt - 1;
+            while (runStart >= offset && RegexSimpleSequenceSegment.IsAsciiLetter(haystack[runStart]))
+            {
+                runStart--;
+            }
+
+            runStart++;
+            if (suffixAt - runStart < asciiLetterRunMinimum)
+            {
+                search = suffixAt + 1;
+                continue;
+            }
+
+            int runEnd = suffixAt + suffix.Length;
+            while (runEnd < haystack.Length && RegexSimpleSequenceSegment.IsAsciiLetter(haystack[runEnd]))
+            {
+                runEnd++;
+            }
+
+            int firstSuffixStart = runStart + asciiLetterRunMinimum;
+            int lastRelative = haystack[firstSuffixStart..runEnd].LastIndexOf(suffix);
+            start = runStart;
+            end = firstSuffixStart + lastRelative + suffix.Length;
+            return true;
+        }
+
+        start = 0;
+        end = 0;
+        return false;
     }
 
     private bool TryCountRepeatedCapitalizedWords(
@@ -1588,6 +1693,49 @@ internal sealed class RegexSimpleSequenceEngine
         }
 
         suffixLiteral = suffix.Literal;
+        return true;
+    }
+
+    private static bool TryGetAsciiLetterRunLiteralSuffix(
+        RegexSimpleSequenceSegment[] segments,
+        out int runMinimum,
+        out byte[] suffix)
+    {
+        runMinimum = 0;
+        suffix = [];
+        if (segments.Length < 2 ||
+            segments[0] is not
+            {
+                MatcherKind: RegexSimpleSequenceByteMatcherKind.AsciiLetter,
+                Minimum: > 0,
+                Maximum: null,
+                Lazy: false,
+            } run)
+        {
+            return false;
+        }
+
+        byte[] literalSuffix = new byte[segments.Length - 1];
+        for (int index = 1; index < segments.Length; index++)
+        {
+            RegexSimpleSequenceSegment segment = segments[index];
+            if (segment is not
+                {
+                    MatcherKind: RegexSimpleSequenceByteMatcherKind.Literal,
+                    Minimum: 1,
+                    Maximum: 1,
+                    Lazy: false,
+                } ||
+                !RegexSimpleSequenceSegment.IsAsciiLetter(segment.Literal))
+            {
+                return false;
+            }
+
+            literalSuffix[index - 1] = segment.Literal;
+        }
+
+        runMinimum = run.Minimum;
+        suffix = literalSuffix;
         return true;
     }
 
