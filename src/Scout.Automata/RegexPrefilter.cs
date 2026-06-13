@@ -2913,7 +2913,7 @@ internal sealed class RegexPrefilter
         return false;
     }
 
-    private static bool TryFindRequiredLiteralCandidate(
+    internal static bool TryFindRequiredLiteralCandidate(
         RegexSyntaxNode node,
         RegexCompileOptions options,
         out RegexRequiredLiteralSetCandidate candidate)

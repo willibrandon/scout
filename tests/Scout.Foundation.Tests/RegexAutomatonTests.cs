@@ -85,6 +85,47 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies branch-specific required literals reject impossible top-level alternation searches.
+    /// </summary>
+    [Fact]
+    public void RejectsMissingBranchRequiredLiteralSet()
+    {
+        var automaton = RegexAutomaton.Compile(
+            "([a-zA-Z][a-zA-Z0-9]*)://([^ /]+)(/[^ ]*)?|([^ @]+)@([^ @]+)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(RegexPrefilterKind.None, automaton.PrefilterKind);
+        Assert.True(automaton.UsesRequiredLiteralAnySetGuard);
+        Assert.Null(automaton.Find("plain text without either marker"u8));
+        Assert.Equal(0, automaton.CountMatches("plain text without either marker"u8));
+        Assert.Equal(0, automaton.SumMatchSpans("plain text without either marker"u8));
+        Assert.Equal(new RegexMatch(4, 5), automaton.Find("see a://b now"u8));
+        Assert.Equal(new RegexMatch(3, 3), automaton.Find("xx a@b yy"u8));
+    }
+
+    /// <summary>
+    /// Verifies branch-required literal guards are skipped when any alternation branch has no required literal.
+    /// </summary>
+    [Fact]
+    public void SkipsBranchRequiredLiteralSetWhenAlternativeHasNoLiteral()
+    {
+        var automaton = RegexAutomaton.Compile(
+            "([a-z]+)://x|[0-9]+"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.False(automaton.UsesRequiredLiteralAnySetGuard);
+        Assert.Equal(new RegexMatch(0, 3), automaton.Find("123"u8));
+    }
+
+    /// <summary>
     /// Verifies top-level literal alternatives use the Aho-Corasick regex prefilter.
     /// </summary>
     [Fact]

@@ -9,6 +9,7 @@ public sealed class RegexAutomaton
         private readonly RegexStartPredicate? startPredicate;
         private readonly RegexLengthGuard? lengthGuard;
         private readonly RegexRequiredByteSetGuard? requiredByteSetGuard;
+        private readonly RegexRequiredLiteralAnySetGuard? requiredLiteralAnySetGuard;
         private readonly object captureInitializationLock = new();
         private readonly ReadOnlyMemory<byte> capturePattern;
         private readonly RegexSyntaxNode? captureRoot;
@@ -34,6 +35,7 @@ public sealed class RegexAutomaton
             RegexStartPredicate? startPredicate,
             RegexLengthGuard? lengthGuard,
             RegexRequiredByteSetGuard? requiredByteSetGuard,
+            RegexRequiredLiteralAnySetGuard? requiredLiteralAnySetGuard,
             RegexAlternationSetEngine? syntheticCaptureAlternationSet,
             ReadOnlyMemory<byte> capturePattern,
             RegexSyntaxNode? captureRoot,
@@ -45,6 +47,7 @@ public sealed class RegexAutomaton
             this.startPredicate = startPredicate;
             this.lengthGuard = lengthGuard;
             this.requiredByteSetGuard = requiredByteSetGuard;
+            this.requiredLiteralAnySetGuard = requiredLiteralAnySetGuard;
             this.syntheticCaptureAlternationSet = syntheticCaptureAlternationSet;
             this.capturePattern = capturePattern;
             this.captureRoot = captureRoot;
@@ -110,6 +113,7 @@ public sealed class RegexAutomaton
                 startPredicate: null,
                 lengthGuard: null,
                 requiredByteSetGuard: null,
+                requiredLiteralAnySetGuard: null,
                 syntheticCaptureAlternationSet: null,
                 capturePattern: default,
                 captureRoot: null,
@@ -146,6 +150,7 @@ public sealed class RegexAutomaton
                 startPredicate: null,
                 lengthGuard: null,
                 requiredByteSetGuard: null,
+                requiredLiteralAnySetGuard: null,
                 syntheticCaptureAlternationSet: null,
                 capturePattern: default,
                 captureRoot: null,
@@ -165,6 +170,7 @@ public sealed class RegexAutomaton
                 startPredicate: null,
                 lengthGuard: null,
                 requiredByteSetGuard: null,
+                requiredLiteralAnySetGuard: null,
                 alternationSet.CanSynthesizeCaptures ? alternationSet : null,
                 tree.CaptureCount > 0 ? tree.Pattern : default,
                 tree.CaptureCount > 0 ? tree.Root : null,
@@ -193,6 +199,9 @@ public sealed class RegexAutomaton
         RegexStartPredicate.TryCreate(tree.Root, options, startPrefixSet, out RegexStartPredicate? startPredicate);
         var lengthGuard = RegexLengthGuard.TryCreate(tree.Root, options);
         var requiredByteSetGuard = RegexRequiredByteSetGuard.TryCreate(tree.Root, options);
+        RegexRequiredLiteralAnySetGuard? requiredLiteralAnySetGuard = prefilter is null
+            ? RegexRequiredLiteralAnySetGuard.TryCreate(tree.Root, options)
+            : null;
 
         return new RegexAutomaton(
             RegexMetaEngine.Compile(
@@ -214,6 +223,7 @@ public sealed class RegexAutomaton
             startPredicate,
             lengthGuard,
             requiredByteSetGuard,
+            requiredLiteralAnySetGuard,
             syntheticCaptureAlternationSet: null,
             tree.CaptureCount > 0 ? tree.Pattern : default,
             tree.CaptureCount > 0 ? tree.Root : null,
@@ -225,6 +235,8 @@ public sealed class RegexAutomaton
     internal RegexPrefilterKind PrefilterKind => engine.PrefilterKind;
 
     internal int RequiredLiteralWindow => engine.RequiredLiteralWindow;
+
+    internal bool UsesRequiredLiteralAnySetGuard => requiredLiteralAnySetGuard is not null;
 
     internal bool UsesSyntheticCaptureAlternationSet
     {
@@ -338,7 +350,8 @@ public sealed class RegexAutomaton
     private bool CanSearch(ReadOnlySpan<byte> haystack, int startAt)
     {
         return (lengthGuard is null || lengthGuard.CanSearch(haystack, startAt)) &&
-            (requiredByteSetGuard is null || requiredByteSetGuard.CanSearch(haystack, startAt));
+            (requiredByteSetGuard is null || requiredByteSetGuard.CanSearch(haystack, startAt)) &&
+            (requiredLiteralAnySetGuard is null || requiredLiteralAnySetGuard.CanSearch(haystack, startAt));
     }
 
     /// <summary>
