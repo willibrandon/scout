@@ -2198,6 +2198,36 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies anchored quoted-string captures use direct extraction.
+    /// </summary>
+    [Fact]
+    public void AnchoredQuotedStringCaptureEngineReportsRawGroup()
+    {
+        var automaton = RegexAutomaton.Compile(
+            "^(?i)[urb]*['\"](?P<raw>.*)['\"]$"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+
+        RegexCaptures? first = automaton.FindCaptures("Br\"hello\""u8);
+        RegexCaptures? second = automaton.FindCaptures("'raw bytes'"u8);
+
+        Assert.True(automaton.UsesAnchoredQuotedStringCaptureEngine);
+        Assert.NotNull(first);
+        Assert.Equal(new RegexMatch(0, 9), first.Match);
+        Assert.Equal(2, first.ParticipatingCount());
+        Assert.Equal(new RegexMatch(3, 5), first.GetGroup(1));
+        Assert.NotNull(second);
+        Assert.Equal(new RegexMatch(1, 9), second.GetGroup(1));
+        Assert.Null(automaton.FindCaptures("x\"nope\""u8));
+        Assert.Null(automaton.FindCaptures("b\"unterminated"u8));
+        Assert.Null(automaton.FindCaptures("b\"multi\nline\""u8));
+        Assert.Null(automaton.FindCaptures("Br\"hello\""u8, startAt: 1));
+    }
+
+    /// <summary>
     /// Verifies ASCII word-length alternation captures use direct word-run scanning.
     /// </summary>
     [Fact]

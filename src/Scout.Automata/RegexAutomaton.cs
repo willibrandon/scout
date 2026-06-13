@@ -26,6 +26,7 @@ public sealed class RegexAutomaton
         private RegexAnchoredWordCaptureEngine? anchoredWordCaptureEngine;
         private RegexAnchoredRunBoundaryCaptureEngine? anchoredRunBoundaryCaptureEngine;
         private RegexAnchoredDotStarCaptureEngine? anchoredDotStarCaptureEngine;
+        private RegexAnchoredQuotedStringCaptureEngine? anchoredQuotedStringCaptureEngine;
         private RegexKeywordWhitespaceCaptureEngine? keywordWhitespaceCaptureEngine;
         private RegexOperatorSpacingCaptureEngine? operatorSpacingCaptureEngine;
         private RegexLiteralWordCaptureEngine? literalWordCaptureEngine;
@@ -362,6 +363,15 @@ public sealed class RegexAutomaton
         }
     }
 
+    internal bool UsesAnchoredQuotedStringCaptureEngine
+    {
+        get
+        {
+            EnsureCaptureEngines();
+            return anchoredQuotedStringCaptureEngine is not null;
+        }
+    }
+
     internal bool UsesKeywordWhitespaceCaptureEngine
     {
         get
@@ -641,6 +651,11 @@ public sealed class RegexAutomaton
                     captureOptions,
                     captureCount,
                     out anchoredDotStarCaptureEngine);
+                RegexAnchoredQuotedStringCaptureEngine.TryCreate(
+                    captureRoot,
+                    captureOptions,
+                    captureCount,
+                    out anchoredQuotedStringCaptureEngine);
                 RegexScalarRunCaptureEngine.TryCreate(
                     captureRoot,
                     captureOptions,
@@ -685,6 +700,7 @@ public sealed class RegexAutomaton
                     anchoredWordCaptureEngine is null &&
                     anchoredRunBoundaryCaptureEngine is null &&
                     anchoredDotStarCaptureEngine is null &&
+                    anchoredQuotedStringCaptureEngine is null &&
                     scalarRunCaptureEngine is null &&
                     keywordWhitespaceCaptureEngine is null &&
                     operatorSpacingCaptureEngine is null &&
@@ -704,6 +720,7 @@ public sealed class RegexAutomaton
                 anchoredWordCaptureEngine is null &&
                 anchoredRunBoundaryCaptureEngine is null &&
                 anchoredDotStarCaptureEngine is null &&
+                anchoredQuotedStringCaptureEngine is null &&
                 scalarRunCaptureEngine is null &&
                 keywordWhitespaceCaptureEngine is null &&
                 operatorSpacingCaptureEngine is null &&
@@ -780,6 +797,11 @@ public sealed class RegexAutomaton
         if (anchoredDotStarCaptureEngine is not null)
         {
             return anchoredDotStarCaptureEngine.MatchAt(haystack, startAt);
+        }
+
+        if (anchoredQuotedStringCaptureEngine is not null)
+        {
+            return anchoredQuotedStringCaptureEngine.MatchAt(haystack, startAt);
         }
 
         if (scalarRunCaptureEngine is not null)
