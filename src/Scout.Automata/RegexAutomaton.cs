@@ -761,6 +761,48 @@ public sealed class RegexAutomaton
         return engine.SumMatchSpans(haystack, startAt, startPredicate);
     }
 
+    /// <summary>
+    /// Counts all participating captures for non-overlapping matches in a haystack.
+    /// </summary>
+    /// <param name="haystack">The haystack bytes.</param>
+    /// <returns>The participating capture count.</returns>
+    public long CountCaptures(ReadOnlySpan<byte> haystack)
+    {
+        return CountCaptures(haystack, startAt: 0);
+    }
+
+    /// <summary>
+    /// Counts all participating captures for non-overlapping matches in a haystack at or after a byte offset.
+    /// </summary>
+    /// <param name="haystack">The haystack bytes.</param>
+    /// <param name="startAt">The first byte offset to consider.</param>
+    /// <returns>The participating capture count.</returns>
+    public long CountCaptures(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        if (!CanSearch(haystack, startAt))
+        {
+            return 0;
+        }
+
+        if (wholePatternCaptureIndex > 0)
+        {
+            return CountMatches(haystack, startAt) * 2;
+        }
+
+        if (captureEnginesInitialized && genericCaptureOnly)
+        {
+            return CountCapturesWithFind(haystack, startAt);
+        }
+
+        EnsureCaptureEngines();
+        if (keywordWhitespaceCaptureEngine is not null)
+        {
+            return keywordWhitespaceCaptureEngine.CountCaptures(haystack, startAt);
+        }
+
+        return CountCapturesWithFind(haystack, startAt);
+    }
+
     private void EnsureCaptureEngines()
     {
         if (captureEnginesInitialized)
@@ -1030,6 +1072,43 @@ public sealed class RegexAutomaton
         }
 
         return FindGenericCaptures(haystack, startAt);
+    }
+
+    private long CountCapturesWithFind(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        long total = 0;
+        int offset = Math.Clamp(startAt, 0, haystack.Length);
+        int suppressedEmptyStart = -1;
+        while (offset <= haystack.Length)
+        {
+            RegexCaptures? captures = FindCaptures(haystack, offset);
+            if (captures is null)
+            {
+                return total;
+            }
+
+            RegexMatch match = captures.Match;
+            if (match.Length == 0 && match.Start == suppressedEmptyStart)
+            {
+                offset = Math.Min(match.Start + 1, haystack.Length + 1);
+                suppressedEmptyStart = -1;
+                continue;
+            }
+
+            total += captures.ParticipatingCount();
+            if (match.Length == 0)
+            {
+                suppressedEmptyStart = -1;
+                offset = Math.Min(match.End + 1, haystack.Length + 1);
+            }
+            else
+            {
+                suppressedEmptyStart = Math.Min(match.End, haystack.Length + 1);
+                offset = suppressedEmptyStart;
+            }
+        }
+
+        return total;
     }
 
     private RegexCaptures? FindWholePatternCaptures(ReadOnlySpan<byte> haystack, int startAt)

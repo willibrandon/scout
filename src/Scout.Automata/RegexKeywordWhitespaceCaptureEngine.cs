@@ -73,32 +73,85 @@ internal sealed class RegexKeywordWhitespaceCaptureEngine
 
     public RegexCaptures? FindCaptures(ReadOnlySpan<byte> haystack, int startAt)
     {
+        if (!TryFindCaptureSpan(
+            haystack,
+            startAt,
+            out int leadingStart,
+            out int keywordStart,
+            out int keywordEnd,
+            out int trailingEnd))
+        {
+            return null;
+        }
+
+        var match = new RegexMatch(leadingStart, trailingEnd - leadingStart);
+        var groups = new RegexMatch?[captureCount + 1];
+        groups[0] = match;
+        groups[leadingCaptureIndex] = new RegexMatch(leadingStart, keywordStart - leadingStart);
+        groups[trailingCaptureIndex] = new RegexMatch(keywordEnd, trailingEnd - keywordEnd);
+        return new RegexCaptures(match, groups);
+    }
+
+    public long CountCaptures(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        long total = 0;
+        int offset = Math.Clamp(startAt, 0, haystack.Length);
+        while (offset < haystack.Length)
+        {
+            if (!TryFindCaptureSpan(
+                haystack,
+                offset,
+                out _,
+                out _,
+                out _,
+                out int trailingEnd))
+            {
+                return total;
+            }
+
+            total += 3;
+            offset = trailingEnd;
+        }
+
+        return total;
+    }
+
+    private bool TryFindCaptureSpan(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        out int leadingStart,
+        out int keywordStart,
+        out int keywordEnd,
+        out int trailingEnd)
+    {
         int lowerBound = Math.Clamp(startAt, 0, haystack.Length);
         int search = lowerBound;
         while (search < haystack.Length)
         {
-            int keywordStart = FindKeywordStart(haystack, search);
+            keywordStart = FindKeywordStart(haystack, search);
             if (keywordStart < 0)
             {
-                return null;
+                leadingStart = 0;
+                keywordEnd = 0;
+                trailingEnd = 0;
+                return false;
             }
 
-            if (TryFindBoundedKeywordEnd(haystack, keywordStart, out int keywordEnd))
+            if (TryFindBoundedKeywordEnd(haystack, keywordStart, out keywordEnd))
             {
-                int leadingStart = ConsumeWhitespaceBackward(haystack, lowerBound, keywordStart);
-                int trailingEnd = ConsumeWhitespaceForward(haystack, keywordEnd);
-                var match = new RegexMatch(leadingStart, trailingEnd - leadingStart);
-                var groups = new RegexMatch?[captureCount + 1];
-                groups[0] = match;
-                groups[leadingCaptureIndex] = new RegexMatch(leadingStart, keywordStart - leadingStart);
-                groups[trailingCaptureIndex] = new RegexMatch(keywordEnd, trailingEnd - keywordEnd);
-                return new RegexCaptures(match, groups);
+                leadingStart = ConsumeWhitespaceBackward(haystack, lowerBound, keywordStart);
+                trailingEnd = ConsumeWhitespaceForward(haystack, keywordEnd);
+                return true;
             }
 
             search = keywordStart + 1;
         }
 
-        return null;
+        leadingStart = 0;
+        keywordStart = 0;
+        keywordEnd = 0;
+        trailingEnd = 0;
+        return false;
     }
 
     private bool TryFindBoundedKeywordEnd(ReadOnlySpan<byte> haystack, int start, out int end)

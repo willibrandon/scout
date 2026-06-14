@@ -84,6 +84,9 @@ public sealed class RegexAutomatonTests
         Assert.Equal(4, automaton.CountMatches("abc"u8));
         Assert.Equal(2, automaton.CountMatches("abc"u8, startAt: 2));
         Assert.Equal(1, automaton.CountMatches("abc"u8, startAt: 99));
+        Assert.Equal(4, automaton.CountCaptures("abc"u8));
+        Assert.Equal(2, automaton.CountCaptures("abc"u8, startAt: 2));
+        Assert.Equal(1, automaton.CountCaptures("abc"u8, startAt: 99));
         Assert.Equal(0, automaton.SumMatchSpans("abc"u8));
     }
 
@@ -468,6 +471,7 @@ public sealed class RegexAutomatonTests
         Assert.Equal(1, captures.GroupCount);
         Assert.Equal(new RegexMatch(2, 6), captures.Match);
         Assert.Equal(new RegexMatch(2, 6), captures.GetGroup(0));
+        Assert.Equal(1, automaton.CountCaptures("--abc123"u8));
     }
 
     /// <summary>
@@ -487,6 +491,8 @@ public sealed class RegexAutomatonTests
         Assert.Equal(new RegexMatch(2, 6), captures.Match);
         Assert.Equal(new RegexMatch(2, 6), captures.GetGroup(0));
         Assert.Equal(new RegexMatch(2, 6), captures.GetGroup(1));
+        Assert.Equal(2, automaton.CountCaptures("--abc123"u8));
+        Assert.Equal(0, automaton.CountCaptures("--abc123"u8, captures.Match.End));
     }
 
     /// <summary>
@@ -633,6 +639,7 @@ public sealed class RegexAutomatonTests
 
         Assert.NotNull(captures);
         Assert.Equal(5, captures.ParticipatingCount());
+        Assert.Equal(5, automaton.CountCaptures(line));
         AssertGroupText(captures, line, 3, "E501");
         AssertGroupText(captures, line, 4, "E501");
     }
@@ -675,6 +682,7 @@ public sealed class RegexAutomatonTests
 
         Assert.Equal(3, matches);
         Assert.Equal(30, total);
+        Assert.Equal(30, automaton.CountCaptures(haystack));
         Assert.NotNull(last);
         Assert.Null(last.GetGroup(7));
         Assert.Null(last.GetGroup(8));
@@ -2649,6 +2657,10 @@ public sealed class RegexAutomatonTests
         Assert.Equal(3, second.ParticipatingCount());
         AssertGroupUtf8Text(second, line, 1, " ");
         AssertGroupUtf8Text(second, line, 2, "\t");
+        Assert.Equal(6, automaton.CountCaptures(line));
+        Assert.Equal(3, automaton.CountCaptures(line, first.Match.End));
+        Assert.Equal(0, automaton.CountCaptures(System.Text.Encoding.UTF8.GetBytes("αif")));
+        Assert.Equal(0, automaton.CountCaptures("diff"u8));
         Assert.Null(automaton.FindCaptures(System.Text.Encoding.UTF8.GetBytes("αif")));
         Assert.Null(automaton.FindCaptures("diff"u8));
     }
