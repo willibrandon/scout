@@ -1398,7 +1398,7 @@ internal sealed class RegexLiteralSetEngine
     private static bool TryGetSharedNonAsciiFirstByte(byte[][] literals, out byte firstByte)
     {
         firstByte = 0;
-        if (literals.Length == 0 || literals[0].Length == 0 || literals[0][0] <= 0x7F)
+        if (literals.Length != 2 || literals[0].Length == 0 || literals[0][0] < 0xE0)
         {
             return false;
         }
