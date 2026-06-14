@@ -1,3 +1,8 @@
+using System.Numerics;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
+
 namespace Scout;
 
 internal sealed class RegexFixedWordWhitespaceSequenceEngine
@@ -6,6 +11,18 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
     private const int MaxRepeat = 256;
     private const byte WordKind = 0;
     private const byte WhitespaceKind = 1;
+    private static readonly Vector128<byte> SpaceVector128 = Vector128.Create((byte)' ');
+    private static readonly Vector128<byte> TabVector128 = Vector128.Create((byte)'\t');
+    private static readonly Vector128<byte> LineFeedVector128 = Vector128.Create((byte)'\n');
+    private static readonly Vector128<byte> VerticalTabVector128 = Vector128.Create((byte)0x0b);
+    private static readonly Vector128<byte> FormFeedVector128 = Vector128.Create((byte)'\f');
+    private static readonly Vector128<byte> CarriageReturnVector128 = Vector128.Create((byte)'\r');
+    private static readonly Vector256<byte> SpaceVector256 = Vector256.Create((byte)' ');
+    private static readonly Vector256<byte> TabVector256 = Vector256.Create((byte)'\t');
+    private static readonly Vector256<byte> LineFeedVector256 = Vector256.Create((byte)'\n');
+    private static readonly Vector256<byte> VerticalTabVector256 = Vector256.Create((byte)0x0b);
+    private static readonly Vector256<byte> FormFeedVector256 = Vector256.Create((byte)'\f');
+    private static readonly Vector256<byte> CarriageReturnVector256 = Vector256.Create((byte)'\r');
 
     private readonly byte[] tokenKinds;
     private readonly int[] tokenCounts;
@@ -194,6 +211,35 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
         int offset = Math.Clamp(startAt, 0, haystack.Length);
         int search = offset + anchorPrefixLength;
         int lastAnchor = haystack.Length - (fixedAsciiLength - anchorPrefixLength);
+        if (hasThreeWordWhitespaceShape &&
+            firstWhitespaceCount == 1 &&
+            search <= lastAnchor)
+        {
+            if (Avx2.IsSupported && lastAnchor - search + 1 >= Vector256<byte>.Count)
+            {
+                CountOrSumThreeWordWhitespaceAsciiVector256(
+                    haystack,
+                    search,
+                    lastAnchor,
+                    sumSpans,
+                    ref count,
+                    ref spanSum);
+                return;
+            }
+
+            if (Sse2.IsSupported && lastAnchor - search + 1 >= Vector128<byte>.Count)
+            {
+                CountOrSumThreeWordWhitespaceAsciiVector128(
+                    haystack,
+                    search,
+                    lastAnchor,
+                    sumSpans,
+                    ref count,
+                    ref spanSum);
+                return;
+            }
+        }
+
         while (search <= lastAnchor)
         {
             int anchor = FindNextAsciiWhitespace(haystack, search, lastAnchor);
@@ -220,6 +266,154 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
             }
 
             search = anchor + 1;
+        }
+    }
+
+    private void CountOrSumThreeWordWhitespaceAsciiVector256(
+        ReadOnlySpan<byte> haystack,
+        int search,
+        int lastAnchor,
+        bool sumSpans,
+        ref long count,
+        ref long spanSum)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int nextAllowedAnchor = search;
+        int offset = search;
+        int vectorEnd = lastAnchor - Vector256<byte>.Count + 1;
+        while (offset <= vectorEnd)
+        {
+            var block = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            uint mask = WhitespaceMaskVector256(block);
+            CountOrSumThreeWordWhitespaceAsciiMask(
+                haystack,
+                offset,
+                mask,
+                sumSpans,
+                ref count,
+                ref spanSum,
+                ref nextAllowedAnchor);
+            offset += Vector256<byte>.Count;
+        }
+
+        CountOrSumThreeWordWhitespaceAsciiScalar(
+            haystack,
+            offset,
+            lastAnchor,
+            sumSpans,
+            ref count,
+            ref spanSum,
+            ref nextAllowedAnchor);
+    }
+
+    private void CountOrSumThreeWordWhitespaceAsciiVector128(
+        ReadOnlySpan<byte> haystack,
+        int search,
+        int lastAnchor,
+        bool sumSpans,
+        ref long count,
+        ref long spanSum)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int nextAllowedAnchor = search;
+        int offset = search;
+        int vectorEnd = lastAnchor - Vector128<byte>.Count + 1;
+        while (offset <= vectorEnd)
+        {
+            var block = Vector128.LoadUnsafe(ref reference, (nuint)offset);
+            uint mask = WhitespaceMaskVector128(block);
+            CountOrSumThreeWordWhitespaceAsciiMask(
+                haystack,
+                offset,
+                mask,
+                sumSpans,
+                ref count,
+                ref spanSum,
+                ref nextAllowedAnchor);
+            offset += Vector128<byte>.Count;
+        }
+
+        CountOrSumThreeWordWhitespaceAsciiScalar(
+            haystack,
+            offset,
+            lastAnchor,
+            sumSpans,
+            ref count,
+            ref spanSum,
+            ref nextAllowedAnchor);
+    }
+
+    private void CountOrSumThreeWordWhitespaceAsciiMask(
+        ReadOnlySpan<byte> haystack,
+        int blockStart,
+        uint mask,
+        bool sumSpans,
+        ref long count,
+        ref long spanSum,
+        ref int nextAllowedAnchor)
+    {
+        while (mask != 0)
+        {
+            int bit = BitOperations.TrailingZeroCount(mask);
+            mask &= mask - 1;
+            int anchor = blockStart + bit;
+            if (anchor < nextAllowedAnchor)
+            {
+                continue;
+            }
+
+            int start = anchor - anchorPrefixLength;
+            if (!TryMatchThreeWordWhitespaceAsciiAtKnownFirstWhitespace(haystack, start))
+            {
+                continue;
+            }
+
+            count++;
+            if (sumSpans)
+            {
+                spanSum += fixedAsciiLength;
+            }
+
+            nextAllowedAnchor = start + fixedAsciiLength + anchorPrefixLength;
+        }
+    }
+
+    private void CountOrSumThreeWordWhitespaceAsciiScalar(
+        ReadOnlySpan<byte> haystack,
+        int search,
+        int lastAnchor,
+        bool sumSpans,
+        ref long count,
+        ref long spanSum,
+        ref int nextAllowedAnchor)
+    {
+        while (search <= lastAnchor)
+        {
+            int anchor = FindNextAsciiWhitespace(haystack, search, lastAnchor);
+            if (anchor < 0)
+            {
+                return;
+            }
+
+            search = anchor + 1;
+            if (anchor < nextAllowedAnchor)
+            {
+                continue;
+            }
+
+            int start = anchor - anchorPrefixLength;
+            if (!TryMatchThreeWordWhitespaceAsciiAtKnownFirstWhitespace(haystack, start))
+            {
+                continue;
+            }
+
+            count++;
+            if (sumSpans)
+            {
+                spanSum += fixedAsciiLength;
+            }
+
+            nextAllowedAnchor = start + fixedAsciiLength + anchorPrefixLength;
         }
     }
 
@@ -528,6 +722,40 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
     private static bool IsRegexWhitespace(byte value)
     {
         return value is (byte)' ' or (byte)'\t' or (byte)'\n' or (byte)'\r' or (byte)'\f' or 0x0b;
+    }
+
+    private static uint WhitespaceMaskVector256(Vector256<byte> block)
+    {
+        Vector256<byte> matches = Avx2.Or(
+            Avx2.Or(
+                Avx2.CompareEqual(block, SpaceVector256),
+                Avx2.CompareEqual(block, TabVector256)),
+            Avx2.Or(
+                Avx2.CompareEqual(block, LineFeedVector256),
+                Avx2.CompareEqual(block, VerticalTabVector256)));
+        matches = Avx2.Or(
+            matches,
+            Avx2.Or(
+                Avx2.CompareEqual(block, FormFeedVector256),
+                Avx2.CompareEqual(block, CarriageReturnVector256)));
+        return matches.ExtractMostSignificantBits();
+    }
+
+    private static uint WhitespaceMaskVector128(Vector128<byte> block)
+    {
+        Vector128<byte> matches = Sse2.Or(
+            Sse2.Or(
+                Sse2.CompareEqual(block, SpaceVector128),
+                Sse2.CompareEqual(block, TabVector128)),
+            Sse2.Or(
+                Sse2.CompareEqual(block, LineFeedVector128),
+                Sse2.CompareEqual(block, VerticalTabVector128)));
+        matches = Sse2.Or(
+            matches,
+            Sse2.Or(
+                Sse2.CompareEqual(block, FormFeedVector128),
+                Sse2.CompareEqual(block, CarriageReturnVector128)));
+        return matches.ExtractMostSignificantBits();
     }
 
     private static bool AllWord(ReadOnlySpan<byte> haystack, int start, int length)
