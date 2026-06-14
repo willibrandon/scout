@@ -1670,6 +1670,55 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies the lh3 date shape scans around slash delimiters directly.
+    /// </summary>
+    [Fact]
+    public void DateEngineCountsLh3CapturedDates()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"([0-9][0-9]?)/([0-9][0-9]?)/([0-9][0-9]([0-9][0-9])?)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "x 6/7/98 12/31/1999 1/2/345 123x/45/67"u8.ToArray();
+        ReadOnlySpan<byte> first = "6/7/98"u8;
+        ReadOnlySpan<byte> second = "12/31/1999"u8;
+        ReadOnlySpan<byte> third = "1/2/34"u8;
+        int firstStart = haystack.AsSpan().IndexOf(first);
+        int secondStart = haystack.AsSpan().IndexOf(second);
+        int thirdStart = haystack.AsSpan().IndexOf(third);
+
+        RegexCaptures? captures = automaton.FindCaptures(haystack);
+
+        Assert.Equal(RegexEngineKind.Date, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(firstStart, first.Length), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(secondStart, second.Length), automaton.Find(haystack, firstStart + 1));
+        Assert.Equal(new RegexMatch(thirdStart, third.Length), automaton.MatchAt(haystack, thirdStart));
+        Assert.Equal(3, automaton.CountMatches(haystack));
+        Assert.Equal(first.Length + second.Length + third.Length, automaton.SumMatchSpans(haystack));
+        Assert.NotNull(captures);
+        Assert.Equal(new RegexMatch(firstStart, first.Length), captures.Match);
+        AssertGroupText(captures, haystack, 1, "6");
+        AssertGroupText(captures, haystack, 2, "7");
+        AssertGroupText(captures, haystack, 3, "98");
+        Assert.Null(captures.GetGroup(4));
+    }
+
+    /// <summary>
+    /// Verifies date specialization is skipped when UTF-8 or Unicode class semantics matter.
+    /// </summary>
+    [Fact]
+    public void DateEngineSkipsUtf8UnicodeMode()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"([0-9][0-9]?)/([0-9][0-9]?)/([0-9][0-9]([0-9][0-9])?)"u8);
+
+        Assert.NotEqual(RegexEngineKind.Date, GetEngineKind(automaton));
+    }
+
+    /// <summary>
     /// Verifies URI specialization is skipped when UTF-8 or Unicode class semantics matter.
     /// </summary>
     [Fact]

@@ -225,6 +225,7 @@ public sealed class RegexAutomaton
         RegexEmailAddressEngine.TryCreate(tree.Root, options, out RegexEmailAddressEngine? emailAddress);
         RegexUriEngine.TryCreate(tree.Root, options, out RegexUriEngine? uri);
         RegexLh3UriEngine.TryCreate(tree.Root, options, out RegexLh3UriEngine? lh3Uri);
+        RegexLh3DateEngine.TryCreate(tree.Root, options, out RegexLh3DateEngine? lh3Date);
         RegexWordWhitespaceLiteralEngine.TryCreate(tree.Root, options, out RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral);
         RegexRunLiteralDotStarEngine.TryCreate(tree.Root, options, out RegexRunLiteralDotStarEngine? runLiteralDotStar);
         RegexLiteralPrefixRunEngine.TryCreate(tree.Root, options, out RegexLiteralPrefixRunEngine? literalPrefixRun);
@@ -266,6 +267,7 @@ public sealed class RegexAutomaton
                 emailAddress: emailAddress,
                 uri: uri,
                 lh3Uri: lh3Uri,
+                lh3Date: lh3Date,
                 wordWhitespaceLiteral: wordWhitespaceLiteral,
                 runLiteralDotStar: runLiteralDotStar,
                 literalPrefixRun: literalPrefixRun,

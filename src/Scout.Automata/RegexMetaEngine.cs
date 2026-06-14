@@ -28,6 +28,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexEmailAddressEngine? emailAddress;
     private readonly RegexUriEngine? uri;
     private readonly RegexLh3UriEngine? lh3Uri;
+    private readonly RegexLh3DateEngine? lh3Date;
     private readonly RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral;
     private readonly RegexRunLiteralDotStarEngine? runLiteralDotStar;
     private readonly RegexLiteralPrefixRunEngine? literalPrefixRun;
@@ -92,6 +93,7 @@ internal sealed class RegexMetaEngine
         RegexEmailAddressEngine? emailAddress = null,
         RegexUriEngine? uri = null,
         RegexLh3UriEngine? lh3Uri = null,
+        RegexLh3DateEngine? lh3Date = null,
         RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral = null,
         RegexRunLiteralDotStarEngine? runLiteralDotStar = null,
         RegexLiteralPrefixRunEngine? literalPrefixRun = null,
@@ -129,6 +131,7 @@ internal sealed class RegexMetaEngine
         this.emailAddress = emailAddress;
         this.uri = uri;
         this.lh3Uri = lh3Uri;
+        this.lh3Date = lh3Date;
         this.wordWhitespaceLiteral = wordWhitespaceLiteral;
         this.runLiteralDotStar = runLiteralDotStar;
         this.literalPrefixRun = literalPrefixRun;
@@ -261,6 +264,7 @@ internal sealed class RegexMetaEngine
         RegexEmailAddressEngine? emailAddress = null,
         RegexUriEngine? uri = null,
         RegexLh3UriEngine? lh3Uri = null,
+        RegexLh3DateEngine? lh3Date = null,
         RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral = null,
         RegexRunLiteralDotStarEngine? runLiteralDotStar = null,
         RegexLiteralPrefixRunEngine? literalPrefixRun = null,
@@ -459,6 +463,28 @@ internal sealed class RegexMetaEngine
                 prefilter,
                 nfa.Utf8,
                 lh3Uri: lh3Uri);
+        }
+
+        if (lh3Date is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.Date,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                delimitedRun: null,
+                simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
+                prefilter,
+                nfa.Utf8,
+                lh3Date: lh3Date);
         }
 
         if (wordWhitespaceLiteral is not null)
@@ -1195,6 +1221,11 @@ internal sealed class RegexMetaEngine
             return RegexLh3UriEngine.Find(haystack, startOffset);
         }
 
+        if (lh3Date is not null)
+        {
+            return RegexLh3DateEngine.Find(haystack, startOffset);
+        }
+
         if (wordWhitespaceLiteral is not null)
         {
             return wordWhitespaceLiteral.Find(haystack, startOffset);
@@ -1430,6 +1461,11 @@ internal sealed class RegexMetaEngine
             return RegexLh3UriEngine.CountMatches(haystack, startAt);
         }
 
+        if (lh3Date is not null)
+        {
+            return RegexLh3DateEngine.CountMatches(haystack, startAt);
+        }
+
         if (wordWhitespaceLiteral is not null)
         {
             return wordWhitespaceLiteral.CountMatches(haystack, startAt);
@@ -1585,6 +1621,11 @@ internal sealed class RegexMetaEngine
         if (lh3Uri is not null)
         {
             return RegexLh3UriEngine.SumMatchSpans(haystack, startAt);
+        }
+
+        if (lh3Date is not null)
+        {
+            return RegexLh3DateEngine.SumMatchSpans(haystack, startAt);
         }
 
         if (wordWhitespaceLiteral is not null)
@@ -1930,6 +1971,11 @@ internal sealed class RegexMetaEngine
         if (lh3Uri is not null)
         {
             return RegexLh3UriEngine.MatchAt(haystack, startOffset);
+        }
+
+        if (lh3Date is not null)
+        {
+            return RegexLh3DateEngine.MatchAt(haystack, startOffset);
         }
 
         if (runLiteralDotStar is not null)
