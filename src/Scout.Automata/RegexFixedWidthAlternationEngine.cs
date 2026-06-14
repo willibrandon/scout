@@ -196,23 +196,68 @@ internal sealed class RegexFixedWidthAlternationEngine
     private RegexMatch? FindWithLiteralSeedFinders(ReadOnlySpan<byte> haystack, int minimumStart)
     {
         RegexFixedWidthLiteralSeed[] seeds = literalSeeds!;
-        int bestStart = int.MaxValue;
+        MemmemFinder[] finders = literalSeedFinders!;
+        Span<int> seedStarts = stackalloc int[seeds.Length];
+        Span<int> searchStarts = stackalloc int[seeds.Length];
+        seedStarts.Fill(-1);
         for (int index = 0; index < seeds.Length; index++)
         {
-            if (TryFindSeedMatch(
-                    haystack,
-                    minimumStart,
-                    seeds[index],
-                    literalSeedFinders![index],
-                    bestStart,
-                    out int candidate) &&
-                candidate < bestStart)
-            {
-                bestStart = candidate;
-            }
+            searchStarts[index] = minimumStart + seeds[index].Offset;
         }
 
-        return bestStart == int.MaxValue ? null : new RegexMatch(bestStart, width);
+        while (true)
+        {
+            int bestSeed = -1;
+            int bestSeedStart = 0;
+            int bestStart = int.MaxValue;
+            for (int index = 0; index < seeds.Length; index++)
+            {
+                int seedStart = seedStarts[index];
+                if (seedStart == int.MaxValue)
+                {
+                    continue;
+                }
+
+                if (seedStart < 0)
+                {
+                    if (!TryFindNextSeedStart(haystack, seeds[index], finders[index], searchStarts[index], out seedStart))
+                    {
+                        seedStarts[index] = int.MaxValue;
+                        continue;
+                    }
+
+                    seedStarts[index] = seedStart;
+                }
+
+                int candidate = seedStart - seeds[index].Offset;
+                if (candidate < minimumStart)
+                {
+                    searchStarts[index] = seedStart + 1;
+                    seedStarts[index] = -1;
+                    continue;
+                }
+
+                if (candidate < bestStart)
+                {
+                    bestSeed = index;
+                    bestSeedStart = seedStart;
+                    bestStart = candidate;
+                }
+            }
+
+            if (bestSeed < 0)
+            {
+                return null;
+            }
+
+            if (TryMatchAlternative(seeds[bestSeed].AlternativeIndex, haystack, bestStart))
+            {
+                return new RegexMatch(bestStart, width);
+            }
+
+            searchStarts[bestSeed] = bestSeedStart + 1;
+            seedStarts[bestSeed] = -1;
+        }
     }
 
     private RegexMatch? FindWithLiteralSeedTeddy(ReadOnlySpan<byte> haystack, int minimumStart)
@@ -574,6 +619,36 @@ internal sealed class RegexFixedWidthAlternationEngine
         }
 
         return false;
+    }
+
+    private bool TryFindNextSeedStart(
+        ReadOnlySpan<byte> haystack,
+        RegexFixedWidthLiteralSeed seed,
+        MemmemFinder finder,
+        int searchAt,
+        out int seedStart)
+    {
+        seedStart = 0;
+        int lastSeedStart = haystack.Length - (width - seed.Offset);
+        if (searchAt > lastSeedStart)
+        {
+            return false;
+        }
+
+        int searchEnd = GetSeedSearchEnd(haystack.Length, seed, lastSeedStart, int.MaxValue);
+        if (searchAt >= searchEnd)
+        {
+            return false;
+        }
+
+        int offset = finder.Find(haystack[searchAt..searchEnd]);
+        if (offset < 0)
+        {
+            return false;
+        }
+
+        seedStart = searchAt + offset;
+        return seedStart <= lastSeedStart;
     }
 
     private static int GetSeedSearchEnd(
