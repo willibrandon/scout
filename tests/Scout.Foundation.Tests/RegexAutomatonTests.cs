@@ -4353,6 +4353,43 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies literal/whitespace/literal sequences avoid the generic recursive matcher.
+    /// </summary>
+    [Fact]
+    public void CountsLiteralWhitespaceLiteralSequences()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"Sherlock\s+Holmes"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "aa Sherlock Holmes bb Sherlock\tHolmes cc Sherlock  Holmes dd SherlockHolmes ee"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        RegexMatch? first = automaton.Find(haystack);
+        Assert.Equal(new RegexMatch(3, 15), first);
+        Assert.Equal(new RegexMatch(22, 15), automaton.Find(haystack, first!.Value.End));
+        Assert.Equal(3, automaton.CountMatches(haystack));
+        Assert.Equal(46, automaton.SumMatchSpans(haystack));
+        Assert.Equal(2, automaton.CountMatches(haystack, startAt: first.Value.End));
+        Assert.Equal(31, automaton.SumMatchSpans(haystack, startAt: first.Value.End));
+
+        var bounded = RegexAutomaton.Compile(
+            @"Sherlock\s{1,2}Holmes"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] boundedHaystack = "Sherlock Holmes Sherlock   Holmes Sherlock\t\nHolmes"u8.ToArray();
+
+        Assert.Equal(2, bounded.CountMatches(boundedHaystack));
+        Assert.Equal(31, bounded.SumMatchSpans(boundedHaystack));
+    }
+
+    /// <summary>
     /// Verifies fixed word/whitespace sequences scan from their whitespace anchor.
     /// </summary>
     [Fact]

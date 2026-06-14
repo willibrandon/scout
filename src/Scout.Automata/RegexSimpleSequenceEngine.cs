@@ -27,6 +27,11 @@ internal sealed class RegexSimpleSequenceEngine
     private readonly bool hasFixedWidthLiteralSuffix;
     private readonly int fixedWidthLength;
     private readonly byte fixedWidthSuffixLiteral;
+    private readonly bool hasLiteralWhitespaceLiteral;
+    private readonly byte[] literalWhitespacePrefix;
+    private readonly byte[] literalWhitespaceSuffix;
+    private readonly int literalWhitespaceMinimum;
+    private readonly int? literalWhitespaceMaximum;
     private readonly bool hasAsciiLetterRunLiteralSuffix;
     private readonly int asciiLetterRunMinimum;
     private readonly byte[] asciiLetterRunSuffix;
@@ -48,6 +53,12 @@ internal sealed class RegexSimpleSequenceEngine
             this.segments,
             out fixedWidthLength,
             out fixedWidthSuffixLiteral);
+        hasLiteralWhitespaceLiteral = TryGetLiteralWhitespaceLiteral(
+            this.segments,
+            out literalWhitespacePrefix,
+            out literalWhitespaceMinimum,
+            out literalWhitespaceMaximum,
+            out literalWhitespaceSuffix);
         hasAsciiLetterRunLiteralSuffix = TryGetAsciiLetterRunLiteralSuffix(
             this.segments,
             out asciiLetterRunMinimum,
@@ -70,6 +81,11 @@ internal sealed class RegexSimpleSequenceEngine
         hasFixedWidthLiteralSuffix = false;
         fixedWidthLength = 0;
         fixedWidthSuffixLiteral = 0;
+        hasLiteralWhitespaceLiteral = false;
+        literalWhitespacePrefix = [];
+        literalWhitespaceSuffix = [];
+        literalWhitespaceMinimum = 0;
+        literalWhitespaceMaximum = null;
         hasAsciiLetterRunLiteralSuffix = false;
         asciiLetterRunMinimum = 0;
         asciiLetterRunSuffix = [];
@@ -96,6 +112,11 @@ internal sealed class RegexSimpleSequenceEngine
         hasFixedWidthLiteralSuffix = false;
         fixedWidthLength = 0;
         fixedWidthSuffixLiteral = 0;
+        hasLiteralWhitespaceLiteral = false;
+        literalWhitespacePrefix = [];
+        literalWhitespaceSuffix = [];
+        literalWhitespaceMinimum = 0;
+        literalWhitespaceMaximum = null;
         hasAsciiLetterRunLiteralSuffix = false;
         asciiLetterRunMinimum = 0;
         asciiLetterRunSuffix = [];
@@ -189,6 +210,11 @@ internal sealed class RegexSimpleSequenceEngine
             return FindFixedWidthLiteralSuffix(haystack, startOffset);
         }
 
+        if (hasLiteralWhitespaceLiteral)
+        {
+            return FindLiteralWhitespaceLiteral(haystack, startOffset);
+        }
+
         if (hasAsciiLetterRunLiteralSuffix)
         {
             return FindAsciiLetterRunLiteralSuffix(haystack, startOffset);
@@ -233,6 +259,11 @@ internal sealed class RegexSimpleSequenceEngine
         }
 
         if (TryCountFixedWidthLiteralSuffix(haystack, startAt, sumSpans, ref count, ref spanSum))
+        {
+            return true;
+        }
+
+        if (TryCountLiteralWhitespaceLiteral(haystack, startAt, sumSpans, ref count, ref spanSum))
         {
             return true;
         }
@@ -1002,6 +1033,114 @@ internal sealed class RegexSimpleSequenceEngine
         return true;
     }
 
+    private RegexMatch? FindLiteralWhitespaceLiteral(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        return TryFindLiteralWhitespaceLiteral(haystack, Math.Clamp(startAt, 0, haystack.Length), out int start, out int length)
+            ? new RegexMatch(start, length)
+            : null;
+    }
+
+    private bool TryCountLiteralWhitespaceLiteral(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        bool sumSpans,
+        ref long count,
+        ref long spanSum)
+    {
+        if (!hasLiteralWhitespaceLiteral)
+        {
+            return false;
+        }
+
+        int offset = Math.Clamp(startAt, 0, haystack.Length);
+        while (TryFindLiteralWhitespaceLiteral(haystack, offset, out int start, out int length))
+        {
+            count++;
+            if (sumSpans)
+            {
+                spanSum += length;
+            }
+
+            offset = start + length;
+        }
+
+        return true;
+    }
+
+    private bool TryFindLiteralWhitespaceLiteral(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        out int start,
+        out int length)
+    {
+        ReadOnlySpan<byte> prefix = literalWhitespacePrefix;
+        int minimumLength = prefix.Length + literalWhitespaceMinimum + literalWhitespaceSuffix.Length;
+        int search = Math.Clamp(startAt, 0, haystack.Length);
+        int lastStart = haystack.Length - minimumLength;
+        while (search <= lastStart)
+        {
+            int relative = haystack[search..].IndexOf(prefix);
+            if (relative < 0)
+            {
+                break;
+            }
+
+            int candidate = search + relative;
+            if (TryMatchLiteralWhitespaceLiteralAt(haystack, candidate, out length))
+            {
+                start = candidate;
+                return true;
+            }
+
+            search = candidate + 1;
+        }
+
+        start = 0;
+        length = 0;
+        return false;
+    }
+
+    private bool TryMatchLiteralWhitespaceLiteralAt(ReadOnlySpan<byte> haystack, int start, out int length)
+    {
+        length = 0;
+        ReadOnlySpan<byte> prefix = literalWhitespacePrefix;
+        if (!hasLiteralWhitespaceLiteral ||
+            start < 0 ||
+            start > haystack.Length - prefix.Length ||
+            !haystack.Slice(start, prefix.Length).SequenceEqual(prefix))
+        {
+            return false;
+        }
+
+        int gapStart = start + prefix.Length;
+        int available = haystack.Length - gapStart;
+        int maxGap = literalWhitespaceMaximum.HasValue
+            ? Math.Min(literalWhitespaceMaximum.Value, available)
+            : available;
+        int gapLength = 0;
+        while (gapLength < maxGap &&
+            RegexSimpleSequenceSegment.IsRegexWhitespace(haystack[gapStart + gapLength]))
+        {
+            gapLength++;
+        }
+
+        if (gapLength < literalWhitespaceMinimum)
+        {
+            return false;
+        }
+
+        ReadOnlySpan<byte> suffix = literalWhitespaceSuffix;
+        int suffixAt = gapStart + gapLength;
+        if (suffixAt > haystack.Length - suffix.Length ||
+            !haystack.Slice(suffixAt, suffix.Length).SequenceEqual(suffix))
+        {
+            return false;
+        }
+
+        length = prefix.Length + gapLength + suffix.Length;
+        return true;
+    }
+
     private static void AddRun(
         int minimum,
         int? maximum,
@@ -1091,6 +1230,11 @@ internal sealed class RegexSimpleSequenceEngine
         {
             length = 0;
             return false;
+        }
+
+        if (hasLiteralWhitespaceLiteral)
+        {
+            return TryMatchLiteralWhitespaceLiteralAt(haystack, start, out length);
         }
 
         if (repeatedSegments is not null)
@@ -1790,6 +1934,95 @@ internal sealed class RegexSimpleSequenceEngine
 
         suffixLiteral = suffix.Literal;
         return true;
+    }
+
+    private static bool TryGetLiteralWhitespaceLiteral(
+        RegexSimpleSequenceSegment[] segments,
+        out byte[] prefix,
+        out int whitespaceMinimum,
+        out int? whitespaceMaximum,
+        out byte[] suffix)
+    {
+        prefix = [];
+        whitespaceMinimum = 0;
+        whitespaceMaximum = null;
+        suffix = [];
+        int whitespaceIndex = -1;
+        for (int index = 0; index < segments.Length; index++)
+        {
+            RegexSimpleSequenceSegment segment = segments[index];
+            if (segment.MatcherKind != RegexSimpleSequenceByteMatcherKind.RegexWhitespace)
+            {
+                continue;
+            }
+
+            if (whitespaceIndex >= 0 ||
+                segment.Maximum == segment.Minimum ||
+                segment.Minimum < 0 ||
+                segment.Maximum.HasValue && segment.Maximum.Value < segment.Minimum)
+            {
+                return false;
+            }
+
+            whitespaceIndex = index;
+        }
+
+        if (whitespaceIndex <= 0 ||
+            whitespaceIndex >= segments.Length - 1)
+        {
+            return false;
+        }
+
+        byte[] collectedPrefix = new byte[whitespaceIndex];
+        for (int index = 0; index < whitespaceIndex; index++)
+        {
+            if (!IsSingleLiteralSegment(segments[index]))
+            {
+                return false;
+            }
+
+            collectedPrefix[index] = segments[index].Literal;
+        }
+
+        if (collectedPrefix.Length < MinimumLiteralRunLength)
+        {
+            return false;
+        }
+
+        byte[] collectedSuffix = new byte[segments.Length - whitespaceIndex - 1];
+        for (int index = whitespaceIndex + 1; index < segments.Length; index++)
+        {
+            RegexSimpleSequenceSegment segment = segments[index];
+            if (!IsSingleLiteralSegment(segment))
+            {
+                return false;
+            }
+
+            collectedSuffix[index - whitespaceIndex - 1] = segment.Literal;
+        }
+
+        if (RegexSimpleSequenceSegment.IsRegexWhitespace(collectedSuffix[0]))
+        {
+            return false;
+        }
+
+        RegexSimpleSequenceSegment whitespace = segments[whitespaceIndex];
+        prefix = collectedPrefix;
+        whitespaceMinimum = whitespace.Minimum;
+        whitespaceMaximum = whitespace.Maximum;
+        suffix = collectedSuffix;
+        return true;
+    }
+
+    private static bool IsSingleLiteralSegment(RegexSimpleSequenceSegment segment)
+    {
+        return segment is
+        {
+            MatcherKind: RegexSimpleSequenceByteMatcherKind.Literal,
+            Minimum: 1,
+            Maximum: 1,
+            Lazy: false,
+        };
     }
 
     private static bool TryGetAsciiLetterRunLiteralSuffix(
