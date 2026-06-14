@@ -271,6 +271,27 @@ public sealed class RegexAutomaton
                 wholePatternCaptureIndex);
         }
 
+        RegexUnicodeGraphemeClusterEngine.TryCreate(tree.Root, options, out RegexUnicodeGraphemeClusterEngine? unicodeGraphemeCluster);
+        if (unicodeGraphemeCluster is not null)
+        {
+            return new RegexAutomaton(
+                RegexMetaEngine.CompileUnicodeGraphemeCluster(
+                    unicodeGraphemeCluster,
+                    options.Utf8,
+                    () => RegexNfaCompiler.Compile(tree.Root, options, utf8ByteTrieCache)),
+                startPredicate: null,
+                lengthGuard: null,
+                requiredByteSetGuard: null,
+                requiredLiteralAnySetGuard: null,
+                syntheticCaptureAlternationSet: null,
+                tree.CaptureCount > 0 ? tree.Pattern : default,
+                tree.CaptureCount > 0 ? tree.Root : null,
+                options,
+                capturePrefilter: null,
+                tree.CaptureCount,
+                wholePatternCaptureIndex);
+        }
+
         RegexScalarRunEngine.TryCreate(tree.Root, options, out RegexScalarRunEngine? earlyScalarRun);
         if (earlyScalarRun is not null)
         {

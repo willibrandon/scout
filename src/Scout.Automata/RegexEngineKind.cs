@@ -19,6 +19,7 @@ internal enum RegexEngineKind
     BoundedLiteralGap,
     BoundedLineLiteralGap,
     BoundedPrefixLiteralSet,
+    UnicodeGraphemeCluster,
     BoundedScalarClassSequence,
     BoundedByteClassSequence,
     RepeatedLazyDotStarLiteral,

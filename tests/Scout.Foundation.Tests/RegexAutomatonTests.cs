@@ -1274,6 +1274,36 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies the Unicode grapheme cluster engine counts extended cluster-shaped regex matches.
+    /// </summary>
+    [Fact]
+    public void UnicodeGraphemeClusterEngineCountsExtendedClusters()
+    {
+        var automaton = RegexAutomaton.Compile(
+            UnicodeGraphemeClusterPattern(),
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] firstCluster = System.Text.Encoding.UTF8.GetBytes("a\u0301");
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes(
+            "a\u0301\r\n\rX\U0001F469\u200D\U0001F469\u1100\u1161\u11A8\u11A8\U0001F1FA\U0001F1F8");
+        byte[] invalidThenAscii = [0xFF, (byte)'a'];
+
+        Assert.Equal(RegexEngineKind.UnicodeGraphemeCluster, GetEngineKind(automaton));
+        Assert.Equal(7, automaton.CountMatches(haystack));
+        Assert.Equal(haystack.Length, automaton.SumMatchSpans(haystack));
+        Assert.Equal(new RegexMatch(0, firstCluster.Length), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(1, firstCluster.Length - 1), automaton.Find(haystack, startAt: 1));
+        Assert.Equal(new RegexMatch(firstCluster.Length, 2), automaton.Find(haystack, startAt: 2));
+        Assert.Null(automaton.MatchAt(haystack, startAt: 2));
+        Assert.Equal(new RegexMatch(firstCluster.Length, 2), automaton.MatchAt(haystack, firstCluster.Length));
+        Assert.Equal(new RegexMatch(1, 1), automaton.Find(invalidThenAscii));
+        Assert.Equal(1, automaton.CountMatches(invalidThenAscii));
+    }
+
+    /// <summary>
     /// Verifies bounded byte-class sequences scan from selective starting bytes and preserve repeat greediness.
     /// </summary>
     [Fact]
@@ -4616,6 +4646,37 @@ public sealed class RegexAutomatonTests
     private static byte[] BibleReferencePattern()
     {
         return @"(?P<Book>(([1234]|I{1,4})[\t\f\pZ]*)?\pL+\.?)[\t\f\pZ]+(?P<Locations>((?P<Chapter>1?[0-9]?[0-9])(-(?P<ChapterEnd>\d+)|,\s*(?P<ChapterNext>\\d+))*(:\s*(?P<Verse>\d+))?(-(?P<VerseEnd>\d+)|,\s*(?P<VerseNext>\d+))*\s?)+)"u8.ToArray();
+    }
+
+    private static byte[] UnicodeGraphemeClusterPattern()
+    {
+        return System.Text.Encoding.ASCII.GetBytes(
+            """
+            (?x)
+            \p{gcb=CR} \p{gcb=LF}
+            |
+            \p{gcb=Control}
+            |
+            \p{gcb=Prepend}*
+            (
+              (
+                (\p{gcb=L}* (\p{gcb=V}+ | \p{gcb=LV} \p{gcb=V}* | \p{gcb=LVT}) \p{gcb=T}*)
+                |
+                \p{gcb=L}+
+                |
+                \p{gcb=T}+
+              )
+              |
+              \p{gcb=RI} \p{gcb=RI}
+              |
+              \p{Extended_Pictographic} (\p{gcb=Extend}* \p{gcb=ZWJ} \p{Extended_Pictographic})*
+              |
+              [^\p{gcb=Control} \p{gcb=CR} \p{gcb=LF}]
+            )
+            [\p{gcb=Extend} \p{gcb=ZWJ} \p{gcb=SpacingMark}]*
+            |
+            \p{Any}
+            """);
     }
 
     private static byte[] BuildLargeLiteralAlternation(string first, string second)

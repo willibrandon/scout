@@ -40,6 +40,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexBoundedLiteralGapEngine? boundedLiteralGap;
     private readonly RegexBoundedLineLiteralGapEngine? boundedLineLiteralGap;
     private readonly RegexBoundedPrefixLiteralSetEngine? boundedPrefixLiteralSet;
+    private readonly RegexUnicodeGraphemeClusterEngine? unicodeGraphemeCluster;
     private readonly RegexBoundedScalarClassSequenceEngine? boundedScalarClassSequence;
     private readonly RegexBoundedByteClassSequenceEngine? boundedByteClassSequence;
     private readonly RegexRepeatedLazyDotStarLiteralEngine? repeatedLazyDotStarLiteral;
@@ -111,6 +112,7 @@ internal sealed class RegexMetaEngine
         RegexBoundedLiteralGapEngine? boundedLiteralGap = null,
         RegexBoundedLineLiteralGapEngine? boundedLineLiteralGap = null,
         RegexBoundedPrefixLiteralSetEngine? boundedPrefixLiteralSet = null,
+        RegexUnicodeGraphemeClusterEngine? unicodeGraphemeCluster = null,
         RegexBoundedScalarClassSequenceEngine? boundedScalarClassSequence = null,
         RegexBoundedByteClassSequenceEngine? boundedByteClassSequence = null,
         RegexRepeatedLazyDotStarLiteralEngine? repeatedLazyDotStarLiteral = null,
@@ -157,6 +159,7 @@ internal sealed class RegexMetaEngine
         this.boundedLiteralGap = boundedLiteralGap;
         this.boundedLineLiteralGap = boundedLineLiteralGap;
         this.boundedPrefixLiteralSet = boundedPrefixLiteralSet;
+        this.unicodeGraphemeCluster = unicodeGraphemeCluster;
         this.boundedScalarClassSequence = boundedScalarClassSequence;
         this.boundedByteClassSequence = boundedByteClassSequence;
         this.repeatedLazyDotStarLiteral = repeatedLazyDotStarLiteral;
@@ -331,6 +334,33 @@ internal sealed class RegexMetaEngine
             prefilter: null,
             utf8,
             boundedByteClassSequence: boundedByteClassSequence,
+            nfaFactory: fallbackNfaFactory);
+    }
+
+    public static RegexMetaEngine CompileUnicodeGraphemeCluster(
+        RegexUnicodeGraphemeClusterEngine unicodeGraphemeCluster,
+        bool utf8,
+        Func<RegexNfa>? fallbackNfaFactory)
+    {
+        ArgumentNullException.ThrowIfNull(unicodeGraphemeCluster);
+        return new RegexMetaEngine(
+            RegexEngineKind.UnicodeGraphemeCluster,
+            nfa: null,
+            pikeVm: null,
+            boundedBacktracker: null,
+            onePassDfa: null,
+            denseDfa: null,
+            sparseDfa: null,
+            lazyDfa: null,
+            literalSet: null,
+            alternationSet: null,
+            delimitedRun: null,
+            simpleSequence: null,
+            lineContains: null,
+            dotStarClassFallback: null,
+            prefilter: null,
+            utf8,
+            unicodeGraphemeCluster: unicodeGraphemeCluster,
             nfaFactory: fallbackNfaFactory);
     }
 
@@ -1594,6 +1624,11 @@ internal sealed class RegexMetaEngine
             return boundedPrefixLiteralSet.Find(haystack, startOffset);
         }
 
+        if (unicodeGraphemeCluster is not null)
+        {
+            return RegexUnicodeGraphemeClusterEngine.Find(haystack, startOffset);
+        }
+
         if (boundedScalarClassSequence is not null)
         {
             return boundedScalarClassSequence.Find(haystack, startOffset);
@@ -1869,6 +1904,11 @@ internal sealed class RegexMetaEngine
             return boundedPrefixLiteralSet.CountMatches(haystack, startAt);
         }
 
+        if (unicodeGraphemeCluster is not null)
+        {
+            return RegexUnicodeGraphemeClusterEngine.CountMatches(haystack, startAt);
+        }
+
         if (boundedScalarClassSequence is not null)
         {
             return boundedScalarClassSequence.CountMatches(haystack, startAt);
@@ -2064,6 +2104,11 @@ internal sealed class RegexMetaEngine
         if (boundedPrefixLiteralSet is not null)
         {
             return boundedPrefixLiteralSet.SumMatchSpans(haystack, startAt);
+        }
+
+        if (unicodeGraphemeCluster is not null)
+        {
+            return RegexUnicodeGraphemeClusterEngine.SumMatchSpans(haystack, startAt);
         }
 
         if (boundedScalarClassSequence is not null)
@@ -2441,6 +2486,11 @@ internal sealed class RegexMetaEngine
             return boundedPrefixLiteralSet.MatchAt(haystack, startOffset);
         }
 
+        if (unicodeGraphemeCluster is not null)
+        {
+            return RegexUnicodeGraphemeClusterEngine.MatchAt(haystack, startOffset);
+        }
+
         if (boundedByteClassSequence is not null)
         {
             return boundedByteClassSequence.MatchAt(haystack, startOffset);
@@ -2741,6 +2791,11 @@ internal sealed class RegexMetaEngine
         if (boundedPrefixLiteralSet is not null)
         {
             return boundedPrefixLiteralSet.TryMatchAt(haystack, start, out length);
+        }
+
+        if (unicodeGraphemeCluster is not null)
+        {
+            return RegexUnicodeGraphemeClusterEngine.TryMatchAt(haystack, start, out length);
         }
 
         if (boundedScalarClassSequence is not null)
