@@ -714,7 +714,9 @@ public sealed class RegexAutomaton
             return false;
         }
 
-        if (engine.Kind is RegexEngineKind.EndAnchoredSequence
+        if (engine.Kind is RegexEngineKind.Uri
+            or RegexEngineKind.Date
+            or RegexEngineKind.EndAnchoredSequence
             or RegexEngineKind.EndAnchoredAtom
             or RegexEngineKind.RunLiteralDotStar
             or RegexEngineKind.UnicodeLetterLiteralRun
