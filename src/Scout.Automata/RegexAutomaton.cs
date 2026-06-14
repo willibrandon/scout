@@ -524,6 +524,32 @@ public sealed class RegexAutomaton
             wholePatternCaptureIndex);
     }
 
+    internal static RegexAutomaton CompileParsedForPatternSet(
+        RegexSyntaxTree tree,
+        RegexCompileOptions options,
+        ulong? dfaSizeLimit,
+        Dictionary<string, RegexUtf8ByteTrie>? utf8ByteTrieCache = null)
+    {
+        RegexNfa nfa = RegexNfaCompiler.Compile(
+            tree.Root,
+            options,
+            utf8ByteTrieCache);
+        RegexStartPredicate.TryCreate(tree.Root, options, prefixSet: null, out RegexStartPredicate? startPredicate);
+        var lengthGuard = RegexLengthGuard.TryCreate(tree.Root, options);
+        return new RegexAutomaton(
+            RegexMetaEngine.Compile(nfa, prefilter: null, dfaSizeLimit: dfaSizeLimit),
+            startPredicate,
+            lengthGuard,
+            requiredByteSetGuard: null,
+            requiredLiteralAnySetGuard: null,
+            syntheticCaptureAlternationSet: null,
+            capturePattern: default,
+            captureRoot: null,
+            captureOptions: options,
+            capturePrefilter: null,
+            captureCount: 0);
+    }
+
     internal RegexPrefilterKind PrefilterKind => engine.PrefilterKind;
 
     internal int RequiredLiteralWindow => engine.RequiredLiteralWindow;

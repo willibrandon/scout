@@ -31,7 +31,16 @@ internal sealed class RegexAlternationSetEngine
             return false;
         }
 
-        if (!PatternSet.TryCompileAccelerated(alternatives, options, out PatternSet? patternSet) ||
+        bool hasParsedAlternatives = TryCollectParsedAlternatives(
+            root,
+            flattenNestedAlternatives: true,
+            out IReadOnlyList<RegexSyntaxNode> parsedAlternatives) &&
+            parsedAlternatives.Count == alternatives.Length;
+        PatternSet? patternSet;
+        bool compiled = hasParsedAlternatives
+            ? PatternSet.TryCompileAccelerated(alternatives, parsedAlternatives, options, out patternSet)
+            : PatternSet.TryCompileAccelerated(alternatives, options, out patternSet);
+        if (!compiled ||
             patternSet is null ||
             !patternSet.CanAccelerateEveryPattern)
         {
@@ -47,6 +56,78 @@ internal sealed class RegexAlternationSetEngine
             wholeBranchCaptureByPattern,
             captureCount);
         return true;
+    }
+
+    private static bool TryCollectParsedAlternatives(
+        RegexSyntaxNode root,
+        bool flattenNestedAlternatives,
+        out IReadOnlyList<RegexSyntaxNode> alternatives)
+    {
+        var collected = new List<RegexSyntaxNode>();
+        if (!TryCollectParsedAlternatives(root, flattenNestedAlternatives, collected))
+        {
+            alternatives = [];
+            return false;
+        }
+
+        alternatives = collected;
+        return alternatives.Count > 0;
+    }
+
+    private static bool TryCollectParsedAlternatives(
+        RegexSyntaxNode node,
+        bool flattenNestedAlternatives,
+        List<RegexSyntaxNode> alternatives)
+    {
+        node = UnwrapWholeParsedAlternative(node);
+        if (node is not RegexAlternationNode alternation || alternation.Alternatives.Count < 2)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < alternation.Alternatives.Count; index++)
+        {
+            RegexSyntaxNode alternative = alternation.Alternatives[index];
+            if (flattenNestedAlternatives &&
+                TryCollectParsedAlternatives(alternative, flattenNestedAlternatives, alternatives))
+            {
+                continue;
+            }
+
+            alternatives.Add(alternative);
+        }
+
+        return true;
+    }
+
+    private static RegexSyntaxNode UnwrapWholeParsedAlternative(RegexSyntaxNode node)
+    {
+        while (true)
+        {
+            if (node is RegexGroupNode
+                {
+                    Kind: RegexSyntaxKind.NonCapturingGroup,
+                    EnabledFlags: "",
+                    DisabledFlags: ""
+                } group)
+            {
+                node = group.Child;
+                continue;
+            }
+
+            if (node is RegexRepetitionNode
+                {
+                    Lazy: false,
+                    Minimum: 1,
+                    Maximum: 1
+                } repetition)
+            {
+                node = repetition.Child;
+                continue;
+            }
+
+            return node;
+        }
     }
 
     public static bool TryCreateSyntheticCaptures(

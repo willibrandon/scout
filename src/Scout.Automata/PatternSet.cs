@@ -73,7 +73,7 @@ public sealed class PatternSet
         for (int index = 0; index < patterns.Count; index++)
         {
             byte[] pattern = patterns[index] ?? throw new ArgumentNullException(nameof(patterns));
-            if (!TryCreatePatternPlan(pattern, options, requireAcceleration: true, out _))
+            if (!TryCreatePatternPlan(pattern, null, options, true, out _))
             {
                 return false;
             }
@@ -87,7 +87,16 @@ public sealed class PatternSet
         RegexCompileOptions options,
         out PatternSet? patternSet)
     {
-        return TryCompile(patterns, options, requireFullAcceleration: true, out patternSet);
+        return TryCompile(patterns, parsedRoots: null, options, requireFullAcceleration: true, useLeanAutomata: true, out patternSet);
+    }
+
+    internal static bool TryCompileAccelerated(
+        IReadOnlyList<byte[]> patterns,
+        IReadOnlyList<RegexSyntaxNode> parsedRoots,
+        RegexCompileOptions options,
+        out PatternSet? patternSet)
+    {
+        return TryCompile(patterns, parsedRoots, options, requireFullAcceleration: true, useLeanAutomata: true, out patternSet);
     }
 
     /// <summary>
@@ -127,24 +136,35 @@ public sealed class PatternSet
         bool unicodeClasses = true)
     {
         var options = new RegexCompileOptions(caseInsensitive, swapGreed: false, multiLine, dotMatchesNewline, crlf, lineTerminator, utf8, unicodeClasses);
-        TryCompile(patterns, options, requireFullAcceleration: false, out PatternSet? patternSet);
+        TryCompile(patterns, parsedRoots: null, options, requireFullAcceleration: false, useLeanAutomata: false, out PatternSet? patternSet);
         return patternSet!;
     }
 
     private static bool TryCompile(
         IReadOnlyList<byte[]> patterns,
+        IReadOnlyList<RegexSyntaxNode>? parsedRoots,
         RegexCompileOptions options,
         bool requireFullAcceleration,
+        bool useLeanAutomata,
         out PatternSet? patternSet)
     {
         ArgumentNullException.ThrowIfNull(patterns);
         patternSet = null;
+        if (parsedRoots is not null && parsedRoots.Count != patterns.Count)
+        {
+            return false;
+        }
 
         var plans = new PatternSetPatternPlan[patterns.Count];
         for (int index = 0; index < patterns.Count; index++)
         {
             byte[] pattern = patterns[index] ?? throw new ArgumentNullException(nameof(patterns));
-            if (!TryCreatePatternPlan(pattern, options, requireFullAcceleration, out plans[index]))
+            if (!TryCreatePatternPlan(
+                    pattern,
+                    parsedRoots?[index],
+                    options,
+                    requireFullAcceleration,
+                    out plans[index]))
             {
                 return false;
             }
@@ -191,12 +211,19 @@ public sealed class PatternSet
                     plan.RequiredLiteralLookBehind));
             }
 
-            automata.Add(RegexAutomaton.CompileParsedWithCache(
-                plan.Tree!,
-                options,
-                dfaSizeLimit: null,
-                compilePrefilter: plan.RequiredLiterals is null,
-                utf8ByteTrieCache: utf8ByteTrieCache));
+            bool useLeanBranchAutomaton = useLeanAutomata || plan.RequiredLiterals is not null;
+            automata.Add(useLeanBranchAutomaton
+                ? RegexAutomaton.CompileParsedForPatternSet(
+                    plan.Tree!,
+                    options,
+                    dfaSizeLimit: null,
+                    utf8ByteTrieCache: utf8ByteTrieCache)
+                : RegexAutomaton.CompileParsedWithCache(
+                    plan.Tree!,
+                    options,
+                    dfaSizeLimit: null,
+                    compilePrefilter: plan.RequiredLiterals is null,
+                    utf8ByteTrieCache: utf8ByteTrieCache));
             automataPatternIds.Add(index);
         }
 
@@ -231,6 +258,7 @@ public sealed class PatternSet
 
     private static bool TryCreatePatternPlan(
         byte[] pattern,
+        RegexSyntaxNode? parsedRoot,
         RegexCompileOptions options,
         bool requireAcceleration,
         out PatternSetPatternPlan plan)
@@ -242,7 +270,9 @@ public sealed class PatternSet
             return true;
         }
 
-        RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
+        RegexSyntaxTree tree = parsedRoot is null
+            ? RegexSyntaxParser.Parse(pattern)
+            : new RegexSyntaxTree(pattern, parsedRoot, captureCount: 0);
         if (TryGetLiteralPattern(tree.Root, out byte[] literal) &&
             literal.Length != 0 &&
             TryPrepareLiteralPatterns(literal, options, out byte[][] preparedLiteralPatterns))
