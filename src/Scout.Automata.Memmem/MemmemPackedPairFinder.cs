@@ -86,14 +86,6 @@ internal readonly struct MemmemPackedPairFinder
             return MemmemSearch.FindWithoutPackedPair(haystack, needle);
         }
 
-        if (IsAdjacentPair())
-        {
-            if (BitConverter.IsLittleEndian)
-            {
-                return FindAdjacentPairScalar64(haystack, needle);
-            }
-        }
-
         if (Avx2.IsSupported && haystack.Length >= MinimumLengthForVector(Vector256<byte>.Count, needle.Length))
         {
             return FindVector256(haystack, needle);
@@ -112,6 +104,11 @@ internal readonly struct MemmemPackedPairFinder
         if (AdvSimd.IsSupported && haystack.Length >= MinimumLengthForVector(Vector128<byte>.Count, needle.Length))
         {
             return FindAdvSimd(haystack, needle);
+        }
+
+        if (IsAdjacentPair() && BitConverter.IsLittleEndian)
+        {
+            return FindAdjacentPairScalar64(haystack, needle);
         }
 
         return MemmemSearch.FindWithoutPackedPair(haystack, needle);
