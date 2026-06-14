@@ -77,11 +77,10 @@ internal sealed class RegexPrefilter
     {
         startPrefixSet = null;
         bool rejectedLowSelectivityPrefixSet = false;
-        if (TryCreateAlternationPrefixPrefilter(root, options, out RegexPrefilter? prefilter) ||
-            TryCreateSequenceAlternationPrefixPrefilter(
+        if (TryCreateSequenceAlternationPrefixPrefilter(
                 root,
                 options,
-                out prefilter,
+                out RegexPrefilter? prefilter,
                 out startPrefixSet,
                 out rejectedLowSelectivityPrefixSet))
         {
