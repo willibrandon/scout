@@ -1333,6 +1333,45 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies short literal alternatives keep leftmost-first tie semantics.
+    /// </summary>
+    [Fact]
+    public void LiteralSetEngineCountsShortLiteralAlternatives()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"Tom|Sawyer|Huckleberry|Finn"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "xTom SawyerFinn Huckleberry"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(1, 3), automaton.Find(haystack));
+        Assert.Equal(4, automaton.CountMatches(haystack));
+        Assert.Equal(24, automaton.SumMatchSpans(haystack));
+
+        var longFirst = RegexAutomaton.Compile(
+            @"foobar|foo"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var shortFirst = RegexAutomaton.Compile(
+            @"foo|foobar"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(new RegexMatch(0, 6), longFirst.Find("foobar"u8));
+        Assert.Equal(new RegexMatch(0, 3), shortFirst.Find("foobar"u8));
+    }
+
+    /// <summary>
     /// Verifies the Unicode grapheme cluster engine counts extended cluster-shaped regex matches.
     /// </summary>
     [Fact]

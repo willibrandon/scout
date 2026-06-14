@@ -6,6 +6,7 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
 
     private readonly byte[][] literals;
     private readonly RegexPackedLiteralSetScanner? packedScanner;
+    private readonly RegexShortLiteralSetScanner? shortScanner;
     private readonly RegexCaseSensitiveLiteralSetScanner? scanner;
     private readonly MemmemFinder? singleLiteralFinder;
     private readonly int minimum;
@@ -15,6 +16,7 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
     private RegexBoundedPrefixLiteralSetEngine(
         byte[][] literals,
         RegexPackedLiteralSetScanner? packedScanner,
+        RegexShortLiteralSetScanner? shortScanner,
         RegexCaseSensitiveLiteralSetScanner? scanner,
         int minimum,
         int maximum,
@@ -22,6 +24,7 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
     {
         this.literals = literals;
         this.packedScanner = packedScanner;
+        this.shortScanner = shortScanner;
         this.scanner = scanner;
         this.minimum = minimum;
         this.maximum = maximum;
@@ -58,9 +61,11 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
         }
 
         RegexPackedLiteralSetScanner? packedScanner = null;
+        RegexShortLiteralSetScanner? shortScanner = null;
         RegexCaseSensitiveLiteralSetScanner? scanner = null;
         if (literals.Length > 1 &&
             !RegexPackedLiteralSetScanner.TryCreate(literals, out packedScanner) &&
+            !RegexShortLiteralSetScanner.TryCreate(literals, out shortScanner) &&
             !RegexCaseSensitiveLiteralSetScanner.TryCreate(literals, out scanner))
         {
             return false;
@@ -69,6 +74,7 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
         engine = new RegexBoundedPrefixLiteralSetEngine(
             literals,
             packedScanner,
+            shortScanner,
             scanner,
             minimum,
             maximum,
@@ -192,6 +198,11 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
             return packedScanner.CountOrSum(haystack, startAt, sumSpans: false);
         }
 
+        if (shortScanner is not null)
+        {
+            return shortScanner.CountOrSum(haystack, startAt, sumSpans: false);
+        }
+
         long count = 0;
         int searchAt = startAt;
         byte[] literal = literals[0];
@@ -225,6 +236,13 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
         if (packedScanner is not null)
         {
             RegexLiteralSetCandidate? found = packedScanner.Find(haystack, startAt);
+            candidate = found.GetValueOrDefault();
+            return found.HasValue;
+        }
+
+        if (shortScanner is not null)
+        {
+            RegexLiteralSetCandidate? found = shortScanner.Find(haystack, startAt);
             candidate = found.GetValueOrDefault();
             return found.HasValue;
         }

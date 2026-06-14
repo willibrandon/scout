@@ -26,6 +26,7 @@ internal sealed class RegexLiteralSetEngine
     private readonly RegexAsciiCaseInsensitiveFinder? singleAsciiCaseInsensitiveFinder;
     private readonly RegexAsciiCaseInsensitiveLiteralSetScanner? asciiCaseInsensitiveScanner;
     private readonly RegexPackedLiteralSetScanner? packedLiteralScanner;
+    private readonly RegexShortLiteralSetScanner? shortLiteralScanner;
     private readonly RegexCaseSensitiveLiteralSetScanner? caseSensitiveScanner;
     private readonly RegexLargeLiteralTrieScanner? largeLiteralTrieScanner;
     private readonly RegexLargeLiteralSetScanner? largeLiteralScanner;
@@ -121,6 +122,12 @@ internal sealed class RegexLiteralSetEngine
 
         if (ShouldUseSmallLiteralFinders(this.literals, asciiCaseInsensitive, unicodeCaseInsensitive, useAho))
         {
+            if (RegexShortLiteralSetScanner.TryCreate(this.literals, out RegexShortLiteralSetScanner? shortScanner))
+            {
+                shortLiteralScanner = shortScanner;
+                return;
+            }
+
             smallLiteralFinders = new MemmemFinder[this.literals.Length];
             for (int index = 0; index < this.literals.Length; index++)
             {
@@ -387,6 +394,11 @@ internal sealed class RegexLiteralSetEngine
             return packedLiteralScanner.Find(haystack, startOffset)?.Match;
         }
 
+        if (shortLiteralScanner is not null)
+        {
+            return shortLiteralScanner.Find(haystack, startOffset)?.Match;
+        }
+
         if (smallLiteralFinders is not null)
         {
             return FindSmallLiteralSet(haystack, startOffset);
@@ -511,6 +523,11 @@ internal sealed class RegexLiteralSetEngine
         if (packedLiteralScanner is not null)
         {
             return packedLiteralScanner.CountOrSum(haystack, startOffset, sumSpans);
+        }
+
+        if (shortLiteralScanner is not null)
+        {
+            return shortLiteralScanner.CountOrSum(haystack, startOffset, sumSpans);
         }
 
         if (smallLiteralFinders is not null)
