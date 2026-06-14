@@ -8,6 +8,7 @@ internal sealed class RegexNfaCompiler
     private readonly Dictionary<RegexNfaByteClassCacheKey, int> byteClassStateCache = [];
     private readonly Dictionary<RegexNfaControlCacheKey, int> controlStateCache = [];
     private readonly Dictionary<RegexNfaSparseCacheKey, int> sparseStateCache = [];
+    private readonly Dictionary<(RegexUtf8ByteTrie Trie, int Next), int> utf8ByteTrieStateCache = [];
     private readonly bool includeCaptures;
     private readonly int captureCount;
     private bool cacheStates;
@@ -350,7 +351,7 @@ internal sealed class RegexNfaCompiler
         if (RegexUtf8ByteCompiler.TryGetSharedTrie(kind, value, options, reversed, out RegexUtf8ByteTrie? sharedTrie))
         {
             cacheStates = !includeCaptures;
-            start = sharedTrie!.Compile(next, AddSplit, AddSparse);
+            start = CompileUtf8ByteTrie(sharedTrie!, next);
             return true;
         }
 
@@ -358,7 +359,7 @@ internal sealed class RegexNfaCompiler
         if (utf8ByteTrieCache.TryGetValue(key, out RegexUtf8ByteTrie? trie))
         {
             cacheStates = !includeCaptures;
-            start = trie.Compile(next, AddSplit, AddSparse);
+            start = CompileUtf8ByteTrie(trie, next);
             return true;
         }
 
@@ -380,8 +381,24 @@ internal sealed class RegexNfaCompiler
 
         utf8ByteTrieCache.Add(key, trie!);
         cacheStates = !includeCaptures;
-        start = trie!.Compile(next, AddSplit, AddSparse);
+        start = CompileUtf8ByteTrie(trie!, next);
         return true;
+    }
+
+    private int CompileUtf8ByteTrie(RegexUtf8ByteTrie trie, int next)
+    {
+        if (cacheStates && utf8ByteTrieStateCache.TryGetValue((trie, next), out int existing))
+        {
+            return existing;
+        }
+
+        int start = trie.Compile(next, AddSplit, AddSparse);
+        if (cacheStates)
+        {
+            utf8ByteTrieStateCache.Add((trie, next), start);
+        }
+
+        return start;
     }
 
     private int AddUnanchoredPrefix(int next)
