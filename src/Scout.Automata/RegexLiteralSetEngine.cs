@@ -25,6 +25,8 @@ internal sealed class RegexLiteralSetEngine
     private readonly MemmemFinder? singleLiteralFinder;
     private readonly RegexAsciiCaseInsensitiveFinder? singleAsciiCaseInsensitiveFinder;
     private readonly RegexAsciiCaseInsensitiveLiteralSetScanner? asciiCaseInsensitiveScanner;
+    private readonly bool sharedFirstByteScanner;
+    private readonly byte sharedFirstByte;
     private readonly RegexPackedLiteralSetScanner? packedLiteralScanner;
     private readonly RegexShortLiteralSetScanner? shortLiteralScanner;
     private readonly RegexCaseSensitiveLiteralSetScanner? caseSensitiveScanner;
@@ -95,6 +97,16 @@ internal sealed class RegexLiteralSetEngine
             !unicodeCaseInsensitive)
         {
             asciiCaseInsensitiveScanner = new RegexAsciiCaseInsensitiveLiteralSetScanner(this.literals);
+            return;
+        }
+
+        if (this.literals.Length > 1 &&
+            !asciiCaseInsensitive &&
+            !unicodeCaseInsensitive &&
+            !useAho &&
+            TryGetSharedNonAsciiFirstByte(this.literals, out sharedFirstByte))
+        {
+            sharedFirstByteScanner = true;
             return;
         }
 
@@ -384,6 +396,11 @@ internal sealed class RegexLiteralSetEngine
             return asciiCaseInsensitiveScanner.Find(haystack, startOffset)?.Match;
         }
 
+        if (sharedFirstByteScanner)
+        {
+            return FindSharedFirstByteLiteralSet(haystack, startOffset);
+        }
+
         if (caseSensitiveScanner is not null)
         {
             return caseSensitiveScanner.Find(haystack, startOffset)?.Match;
@@ -513,6 +530,11 @@ internal sealed class RegexLiteralSetEngine
         if (asciiCaseInsensitiveScanner is not null)
         {
             return CountOrSumAsciiCaseInsensitiveLiteralSet(haystack, startOffset, sumSpans);
+        }
+
+        if (sharedFirstByteScanner)
+        {
+            return CountOrSumSharedFirstByteLiteralSet(haystack, startOffset, sumSpans);
         }
 
         if (caseSensitiveScanner is not null)
@@ -828,6 +850,56 @@ internal sealed class RegexLiteralSetEngine
     private long CountOrSumAsciiCaseInsensitiveLiteralSet(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
     {
         return asciiCaseInsensitiveScanner!.CountOrSum(haystack, startOffset, sumSpans);
+    }
+
+    private RegexMatch? FindSharedFirstByteLiteralSet(ReadOnlySpan<byte> haystack, int startOffset)
+    {
+        int searchAt = startOffset;
+        while (searchAt < haystack.Length)
+        {
+            int relative = MemchrSearch.Find(haystack[searchAt..], sharedFirstByte);
+            if (relative < 0)
+            {
+                return null;
+            }
+
+            int candidateStart = searchAt + relative;
+            if (TryFindLiteralAt(haystack, candidateStart, out RegexLiteralSetCandidate candidate))
+            {
+                return candidate.Match;
+            }
+
+            searchAt = candidateStart + 1;
+        }
+
+        return null;
+    }
+
+    private long CountOrSumSharedFirstByteLiteralSet(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
+    {
+        long total = 0;
+        int searchAt = startOffset;
+        while (searchAt < haystack.Length)
+        {
+            int relative = MemchrSearch.Find(haystack[searchAt..], sharedFirstByte);
+            if (relative < 0)
+            {
+                return total;
+            }
+
+            int candidateStart = searchAt + relative;
+            if (TryFindLiteralAt(haystack, candidateStart, out RegexLiteralSetCandidate candidate))
+            {
+                RegexMatch match = candidate.Match;
+                total += sumSpans ? match.Length : 1;
+                searchAt = match.End;
+                continue;
+            }
+
+            searchAt = candidateStart + 1;
+        }
+
+        return total;
     }
 
     private RegexLiteralSetCandidate ResolveAhoCandidate(int startOffset, AhoCorasickMatch match)
@@ -1321,6 +1393,27 @@ internal sealed class RegexLiteralSetEngine
         }
 
         return false;
+    }
+
+    private static bool TryGetSharedNonAsciiFirstByte(byte[][] literals, out byte firstByte)
+    {
+        firstByte = 0;
+        if (literals.Length == 0 || literals[0].Length == 0 || literals[0][0] <= 0x7F)
+        {
+            return false;
+        }
+
+        firstByte = literals[0][0];
+        for (int index = 1; index < literals.Length; index++)
+        {
+            if (literals[index].Length == 0 || literals[index][0] != firstByte)
+            {
+                firstByte = 0;
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool IsBetter(RegexLiteralSetCandidate candidate, RegexLiteralSetCandidate? best)
