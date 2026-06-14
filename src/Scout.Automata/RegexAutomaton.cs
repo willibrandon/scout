@@ -35,6 +35,7 @@ public sealed class RegexAutomaton
         private RegexAsciiLetterLengthAlternationCaptureEngine? asciiLetterLengthAlternationCaptureEngine;
         private RegexAsciiWordLengthAlternationCaptureEngine? asciiWordLengthAlternationCaptureEngine;
         private RegexBibleReferenceCaptureEngine? bibleReferenceCaptureEngine;
+        private RegexFnPredicateCaptureEngine? fnPredicateCaptureEngine;
         private volatile bool captureEnginesInitialized;
         private volatile bool genericCaptureOnly;
 
@@ -584,6 +585,15 @@ public sealed class RegexAutomaton
         }
     }
 
+    internal bool UsesFnPredicateCaptureEngine
+    {
+        get
+        {
+            EnsureCaptureEngines();
+            return fnPredicateCaptureEngine is not null;
+        }
+    }
+
     /// <summary>
     /// Finds the first match in a haystack.
     /// </summary>
@@ -850,6 +860,11 @@ public sealed class RegexAutomaton
                     captureOptions,
                     captureCount,
                     out bibleReferenceCaptureEngine);
+                RegexFnPredicateCaptureEngine.TryCreate(
+                    captureRoot,
+                    captureOptions,
+                    captureCount,
+                    out fnPredicateCaptureEngine);
                 if (syntheticCaptureAlternationSet is null &&
                     anchoredWordCaptureEngine is null &&
                     anchoredRunBoundaryCaptureEngine is null &&
@@ -862,7 +877,8 @@ public sealed class RegexAutomaton
                     literalRunAlternationCaptureEngine is null &&
                     pathSemverCaptureEngine is null &&
                     asciiLetterLengthAlternationCaptureEngine is null &&
-                    asciiWordLengthAlternationCaptureEngine is null)
+                    asciiWordLengthAlternationCaptureEngine is null &&
+                    fnPredicateCaptureEngine is null)
                 {
                     RegexNfa captureNfa = RegexNfaCompiler.CompileCaptures(captureRoot, captureOptions, captureCount);
                     RegexPrefilter? effectiveCapturePrefilter = capturePrefilter ?? RegexPrefilter.Compile(captureRoot, captureOptions);
@@ -885,6 +901,7 @@ public sealed class RegexAutomaton
                 asciiLetterLengthAlternationCaptureEngine is null &&
                 asciiWordLengthAlternationCaptureEngine is null &&
                 bibleReferenceCaptureEngine is null &&
+                fnPredicateCaptureEngine is null &&
                 syntheticCaptureAlternationSet is null;
             captureEnginesInitialized = true;
         }
@@ -1003,6 +1020,11 @@ public sealed class RegexAutomaton
         if (bibleReferenceCaptureEngine is not null)
         {
             return bibleReferenceCaptureEngine.FindCaptures(haystack, startAt);
+        }
+
+        if (fnPredicateCaptureEngine is not null)
+        {
+            return RegexFnPredicateCaptureEngine.MatchAt(haystack, startAt);
         }
 
         return FindGenericCaptures(haystack, startAt);

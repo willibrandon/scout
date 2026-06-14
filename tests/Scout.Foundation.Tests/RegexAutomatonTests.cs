@@ -2864,6 +2864,34 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies anchored function predicate signatures synthesize captures without a second generic capture pass.
+    /// </summary>
+    [Fact]
+    public void FnPredicateCaptureEngineReportsSignatureCaptures()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"^\s*fn\s+(is_([^\(]+))\(([^)]+)\) -> bool \{$"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] line = "    fn is_ascii_word(byte: u8) -> bool {"u8.ToArray();
+
+        RegexCaptures? captures = automaton.FindCaptures(line);
+
+        Assert.True(automaton.UsesFnPredicateCaptureEngine);
+        Assert.NotNull(captures);
+        Assert.Equal(new RegexMatch(0, line.Length), captures.Match);
+        AssertGroupText(captures, line, 1, "is_ascii_word");
+        AssertGroupText(captures, line, 2, "ascii_word");
+        AssertGroupText(captures, line, 3, "byte: u8");
+        Assert.Null(automaton.FindCaptures("fn is_empty() -> bool {"u8));
+        Assert.Null(automaton.FindCaptures("fn is_ascii_word(byte: u8) -> bool { trailing"u8));
+        Assert.Null(automaton.FindCaptures(line, 1));
+    }
+
+    /// <summary>
     /// Verifies nullable leading expressions do not use a literal prefilter.
     /// </summary>
     [Fact]
