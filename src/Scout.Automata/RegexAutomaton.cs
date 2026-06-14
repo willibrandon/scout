@@ -31,6 +31,7 @@ public sealed class RegexAutomaton
         private RegexLiteralWordCaptureEngine? literalWordCaptureEngine;
         private RegexPathSemverCaptureEngine? pathSemverCaptureEngine;
         private RegexAsciiLetterLengthAlternationCaptureEngine? asciiLetterLengthAlternationCaptureEngine;
+        private RegexAsciiWordLengthAlternationCaptureEngine? asciiWordLengthAlternationCaptureEngine;
         private RegexBibleReferenceCaptureEngine? bibleReferenceCaptureEngine;
         private volatile bool captureEnginesInitialized;
         private volatile bool genericCaptureOnly;
@@ -394,6 +395,15 @@ public sealed class RegexAutomaton
         }
     }
 
+    internal bool UsesAsciiWordLengthAlternationCaptureEngine
+    {
+        get
+        {
+            EnsureCaptureEngines();
+            return asciiWordLengthAlternationCaptureEngine is not null;
+        }
+    }
+
     internal bool UsesBibleReferenceCaptureEngine
     {
         get
@@ -648,6 +658,11 @@ public sealed class RegexAutomaton
                     captureOptions,
                     captureCount,
                     out asciiLetterLengthAlternationCaptureEngine);
+                RegexAsciiWordLengthAlternationCaptureEngine.TryCreate(
+                    captureRoot,
+                    captureOptions,
+                    captureCount,
+                    out asciiWordLengthAlternationCaptureEngine);
                 RegexBibleReferenceCaptureEngine.TryCreate(
                     captureRoot,
                     captureOptions,
@@ -662,7 +677,8 @@ public sealed class RegexAutomaton
                     operatorSpacingCaptureEngine is null &&
                     literalWordCaptureEngine is null &&
                     pathSemverCaptureEngine is null &&
-                    asciiLetterLengthAlternationCaptureEngine is null)
+                    asciiLetterLengthAlternationCaptureEngine is null &&
+                    asciiWordLengthAlternationCaptureEngine is null)
                 {
                     RegexNfa captureNfa = RegexNfaCompiler.CompileCaptures(captureRoot, captureOptions, captureCount);
                     RegexPrefilter? effectiveCapturePrefilter = capturePrefilter ?? RegexPrefilter.Compile(captureRoot, captureOptions);
@@ -681,6 +697,7 @@ public sealed class RegexAutomaton
                 literalWordCaptureEngine is null &&
                 pathSemverCaptureEngine is null &&
                 asciiLetterLengthAlternationCaptureEngine is null &&
+                asciiWordLengthAlternationCaptureEngine is null &&
                 bibleReferenceCaptureEngine is null &&
                 syntheticCaptureAlternationSet is null;
             captureEnginesInitialized = true;
@@ -780,6 +797,11 @@ public sealed class RegexAutomaton
         if (asciiLetterLengthAlternationCaptureEngine is not null)
         {
             return asciiLetterLengthAlternationCaptureEngine.FindCaptures(haystack, startAt);
+        }
+
+        if (asciiWordLengthAlternationCaptureEngine is not null)
+        {
+            return asciiWordLengthAlternationCaptureEngine.FindCaptures(haystack, startAt);
         }
 
         if (bibleReferenceCaptureEngine is not null)

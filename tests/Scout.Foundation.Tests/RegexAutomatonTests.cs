@@ -1920,6 +1920,68 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies ASCII word-length alternation captures use direct word-run scanning.
+    /// </summary>
+    [Fact]
+    public void AsciiWordLengthAlternationCaptureEngineReportsGroups()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\b(?:(\w{6})|(\w{5}))\b"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "abcd abcde abcdef abcdefg 12345 __123"u8.ToArray();
+
+        RegexCaptures? first = automaton.FindCaptures(haystack);
+        RegexCaptures? second = automaton.FindCaptures(haystack, first!.Match.End);
+        RegexCaptures? third = automaton.FindCaptures(haystack, second!.Match.End);
+        RegexCaptures? fourth = automaton.FindCaptures(haystack, third!.Match.End);
+
+        Assert.True(automaton.UsesAsciiWordLengthAlternationCaptureEngine);
+        Assert.NotNull(first);
+        Assert.Equal(new RegexMatch(5, 5), first.Match);
+        Assert.Null(first.GetGroup(1));
+        Assert.Equal(new RegexMatch(5, 5), first.GetGroup(2));
+        Assert.NotNull(second);
+        Assert.Equal(new RegexMatch(11, 6), second.Match);
+        Assert.Equal(new RegexMatch(11, 6), second.GetGroup(1));
+        Assert.Null(second.GetGroup(2));
+        Assert.NotNull(third);
+        Assert.Equal(new RegexMatch(26, 5), third.Match);
+        Assert.Null(third.GetGroup(1));
+        Assert.Equal(new RegexMatch(26, 5), third.GetGroup(2));
+        Assert.NotNull(fourth);
+        Assert.Equal(new RegexMatch(32, 5), fourth.Match);
+        Assert.Null(fourth.GetGroup(1));
+        Assert.Equal(new RegexMatch(32, 5), fourth.GetGroup(2));
+        Assert.Null(automaton.FindCaptures(haystack, fourth.Match.End));
+    }
+
+    /// <summary>
+    /// Verifies ASCII word-length alternation captures skip partial word starts.
+    /// </summary>
+    [Fact]
+    public void AsciiWordLengthAlternationCaptureEngineSkipsPartialWords()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\b(?:(\w{6})|(\w{5}))\b"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        RegexCaptures? captures = automaton.FindCaptures("abcdef 12345"u8, startAt: 2);
+
+        Assert.True(automaton.UsesAsciiWordLengthAlternationCaptureEngine);
+        Assert.NotNull(captures);
+        Assert.Equal(new RegexMatch(7, 5), captures.Match);
+        Assert.Equal(new RegexMatch(7, 5), captures.GetGroup(2));
+    }
+
+    /// <summary>
     /// Verifies the rebar unstructured log pattern uses direct structural capture extraction.
     /// </summary>
     [Fact]
