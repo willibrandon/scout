@@ -13,6 +13,7 @@ public sealed class PatternSet
     private readonly PatternSetBoundaryLiteralAccelerator? boundaryLiteralAccelerator;
     private readonly PatternSetRequiredLiteralAccelerator? requiredLiteralAccelerator;
     private readonly PatternSetAnchoredMatcher[][]? anchoredMatchersByFirstByte;
+    private readonly int[]? wholePatternCaptureIndexesByPatternId;
     private readonly bool coversEveryByteWithPositiveWidth;
     private readonly int count;
 
@@ -26,6 +27,7 @@ public sealed class PatternSet
         PatternSetBoundaryLiteralAccelerator? boundaryLiteralAccelerator,
         PatternSetRequiredLiteralAccelerator? requiredLiteralAccelerator,
         PatternSetAnchoredMatcher[][]? anchoredMatchersByFirstByte,
+        int[]? wholePatternCaptureIndexesByPatternId,
         bool coversEveryByteWithPositiveWidth)
     {
         this.count = count;
@@ -37,6 +39,7 @@ public sealed class PatternSet
         this.boundaryLiteralAccelerator = boundaryLiteralAccelerator;
         this.requiredLiteralAccelerator = requiredLiteralAccelerator;
         this.anchoredMatchersByFirstByte = anchoredMatchersByFirstByte;
+        this.wholePatternCaptureIndexesByPatternId = wholePatternCaptureIndexesByPatternId;
         this.coversEveryByteWithPositiveWidth = coversEveryByteWithPositiveWidth;
     }
 
@@ -44,6 +47,11 @@ public sealed class PatternSet
     /// Gets the number of patterns in the set.
     /// </summary>
     public int Count => count;
+
+    /// <summary>
+    /// Gets a value indicating whether captures can be synthesized directly from pattern-set matches.
+    /// </summary>
+    public bool CanSynthesizeWholePatternCaptures => wholePatternCaptureIndexesByPatternId is not null;
 
     internal bool UsesLiteralAccelerator => literalAccelerator is not null;
 
@@ -203,6 +211,7 @@ public sealed class PatternSet
             ? null
             : new PatternSetRequiredLiteralAccelerator(requiredLiteralEntries, compiledAutomata.Length, compiledAutomata);
         bool coversEveryByteWithPositiveWidth = DetectEveryBytePositiveWidthCoverage(patterns, plans, options);
+        int[]? wholePatternCaptureIndexesByPatternId = BuildWholePatternCaptureIndexes(plans);
         patternSet = new PatternSet(
             patterns.Count,
             compiledAutomata,
@@ -215,6 +224,7 @@ public sealed class PatternSet
             coversEveryByteWithPositiveWidth
                 ? BuildAnchoredMatchersByFirstByte(patterns, plans, options, compiledAutomata, automataPatternIds)
                 : null,
+            wholePatternCaptureIndexesByPatternId,
             coversEveryByteWithPositiveWidth);
         return true;
     }
@@ -500,6 +510,100 @@ public sealed class PatternSet
         return best;
     }
 
+    /// <summary>
+    /// Finds captures for the leftmost match when every pattern is one whole-pattern capture.
+    /// </summary>
+    /// <param name="haystack">The haystack bytes.</param>
+    /// <returns>The synthesized captures, or <see langword="null" /> when no match exists or synthesis is unavailable.</returns>
+    public RegexCaptures? FindCaptures(ReadOnlySpan<byte> haystack)
+    {
+        return FindCaptures(haystack, startAt: 0);
+    }
+
+    /// <summary>
+    /// Finds captures for the leftmost match when every pattern is one whole-pattern capture.
+    /// </summary>
+    /// <param name="haystack">The haystack bytes.</param>
+    /// <param name="startAt">The first byte offset to consider.</param>
+    /// <returns>The synthesized captures, or <see langword="null" /> when no match exists or synthesis is unavailable.</returns>
+    public RegexCaptures? FindCaptures(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        if (wholePatternCaptureIndexesByPatternId is null)
+        {
+            return null;
+        }
+
+        PatternSetMatch? match = Find(haystack, startAt);
+        if (!match.HasValue)
+        {
+            return null;
+        }
+
+        int captureIndex = wholePatternCaptureIndexesByPatternId[match.Value.PatternId];
+        var groups = new RegexMatch?[captureIndex + 1];
+        groups[0] = match.Value.Match;
+        groups[captureIndex] = match.Value.Match;
+        return new RegexCaptures(match.Value.Match, groups);
+    }
+
+    /// <summary>
+    /// Counts participating captures for non-overlapping matches when every pattern is one whole-pattern capture.
+    /// </summary>
+    /// <param name="haystack">The haystack bytes.</param>
+    /// <returns>The participating capture count.</returns>
+    public long CountCaptures(ReadOnlySpan<byte> haystack)
+    {
+        return CountCaptures(haystack, startAt: 0);
+    }
+
+    /// <summary>
+    /// Counts participating captures for non-overlapping matches when every pattern is one whole-pattern capture.
+    /// </summary>
+    /// <param name="haystack">The haystack bytes.</param>
+    /// <param name="startAt">The first byte offset to consider.</param>
+    /// <returns>The participating capture count.</returns>
+    public long CountCaptures(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        if (wholePatternCaptureIndexesByPatternId is null)
+        {
+            throw new InvalidOperationException("Pattern-set captures can only be counted when every pattern is one whole-pattern capture.");
+        }
+
+        long total = 0;
+        int offset = Math.Clamp(startAt, 0, haystack.Length);
+        int suppressedEmptyStart = -1;
+        while (offset <= haystack.Length)
+        {
+            PatternSetMatch? match = Find(haystack, offset);
+            if (!match.HasValue)
+            {
+                return total;
+            }
+
+            RegexMatch span = match.Value.Match;
+            if (span.Length == 0 && span.Start == suppressedEmptyStart)
+            {
+                offset = Math.Min(span.Start + 1, haystack.Length + 1);
+                suppressedEmptyStart = -1;
+                continue;
+            }
+
+            total += 2;
+            if (span.Length == 0)
+            {
+                suppressedEmptyStart = -1;
+                offset = Math.Min(span.End + 1, haystack.Length + 1);
+            }
+            else
+            {
+                suppressedEmptyStart = Math.Min(span.End, haystack.Length + 1);
+                offset = suppressedEmptyStart;
+            }
+        }
+
+        return total;
+    }
+
     private PatternSetMatch? FindWithAnchoredMatchers(ReadOnlySpan<byte> haystack, int startOffset)
     {
         if (anchoredMatchersByFirstByte is null || startOffset >= haystack.Length)
@@ -620,6 +724,34 @@ public sealed class PatternSet
         }
 
         return indexed;
+    }
+
+    private static int[]? BuildWholePatternCaptureIndexes(PatternSetPatternPlan[] plans)
+    {
+        if (plans.Length == 0)
+        {
+            return null;
+        }
+
+        int[] indexes = new int[plans.Length];
+        for (int index = 0; index < plans.Length; index++)
+        {
+            RegexSyntaxTree? tree = plans[index].Tree;
+            if (tree is null)
+            {
+                return null;
+            }
+
+            int captureIndex = RegexAutomaton.TryGetWholePatternCaptureIndex(tree.Root, tree.CaptureCount);
+            if (captureIndex <= 0)
+            {
+                return null;
+            }
+
+            indexes[index] = captureIndex;
+        }
+
+        return indexes;
     }
 
     private static bool DetectEveryBytePositiveWidthCoverage(

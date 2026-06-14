@@ -327,6 +327,63 @@ public sealed class PatternSetTests
     }
 
     /// <summary>
+    /// Verifies pattern sets whose patterns are whole-pattern captures can synthesize captures from the selected match.
+    /// </summary>
+    [Fact]
+    public void SynthesizesWholePatternCaptures()
+    {
+        var set = PatternSet.Compile(
+        [
+            @"(\bassign\b)"u8.ToArray(),
+            @"([0-9]+(?:_[0-9]+)*)"u8.ToArray(),
+            @"([a-zA-Z_][0-9a-zA-Z_]*)"u8.ToArray(),
+        ],
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "zz assign 123_45 if_reset"u8.ToArray();
+
+        RegexCaptures? first = set.FindCaptures(haystack);
+        RegexCaptures? second = set.FindCaptures(haystack, first!.Match.End);
+
+        Assert.True(set.CanSynthesizeWholePatternCaptures);
+        Assert.NotNull(first);
+        Assert.Equal(2, first.GroupCount);
+        Assert.Equal(2, first.ParticipatingCount());
+        Assert.Equal(new RegexMatch(0, 2), first.Match);
+        Assert.Equal(new RegexMatch(0, 2), first.GetGroup(0));
+        Assert.Equal(new RegexMatch(0, 2), first.GetGroup(1));
+        Assert.NotNull(second);
+        Assert.Equal(new RegexMatch(3, 6), second.Match);
+        Assert.Equal(8, set.CountCaptures(haystack));
+        Assert.Equal(6, set.CountCaptures(haystack, first.Match.End));
+    }
+
+    /// <summary>
+    /// Verifies pattern-set whole-pattern capture synthesis is withheld for nested captures.
+    /// </summary>
+    [Fact]
+    public void SkipsWholePatternCaptureSynthesisForNestedCaptures()
+    {
+        var set = PatternSet.Compile(
+        [
+            @"(([a-z]+))"u8.ToArray(),
+            @"([0-9]+)"u8.ToArray(),
+        ],
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.False(set.CanSynthesizeWholePatternCaptures);
+        Assert.Null(set.FindCaptures("abc"u8));
+        Assert.Throws<InvalidOperationException>(() => set.CountCaptures("abc"u8));
+    }
+
+    /// <summary>
     /// Verifies the byte-coverage shortcut is withheld for gaps and zero-width patterns.
     /// </summary>
     [Fact]

@@ -1060,7 +1060,7 @@ public sealed class RegexAutomaton
         return captureEngine.MatchAt(haystack, match.Value.Start);
     }
 
-    private static int TryGetWholePatternCaptureIndex(RegexSyntaxNode root, int captureCount)
+    internal static int TryGetWholePatternCaptureIndex(RegexSyntaxNode root, int captureCount)
     {
         if (captureCount != 1)
         {
