@@ -1735,6 +1735,51 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies simple start-anchored fixed-width patterns use the direct fixed-width matcher.
+    /// </summary>
+    [Fact]
+    public void FixedWidthAlternationEngineHandlesStartAnchoredSequence()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"^.bc(d|e)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var absolute = RegexAutomaton.Compile(
+            @"\A.bc(d|e)"u8,
+            caseInsensitive: false,
+            multiLine: true,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var multiline = RegexAutomaton.Compile(
+            @"^.bc(d|e)"u8,
+            caseInsensitive: false,
+            multiLine: true,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(RegexEngineKind.FixedWidthAlternation, GetEngineKind(automaton));
+        Assert.Equal(RegexEngineKind.FixedWidthAlternation, GetEngineKind(absolute));
+        Assert.NotEqual(RegexEngineKind.FixedWidthAlternation, GetEngineKind(multiline));
+
+        Assert.Equal(new RegexMatch(0, 4), automaton.Find("abcdefghijklmnopqrstuvwxyz"u8));
+        Assert.Equal(new RegexMatch(0, 4), automaton.MatchAt("abcdefghijklmnopqrstuvwxyz"u8, 0));
+        Assert.True(automaton.IsMatch("abcdefghijklmnopqrstuvwxyz"u8));
+        Assert.Equal(1, automaton.CountMatches("abcdefghijklmnopqrstuvwxyz"u8));
+        Assert.Equal(4, automaton.SumMatchSpans("abcdefghijklmnopqrstuvwxyz"u8));
+
+        Assert.Null(automaton.Find("xabcdefghijklmnopqrstuvwxyz"u8));
+        Assert.Null(automaton.Find("abcdefghijklmnopqrstuvwxyz"u8, startAt: 1));
+        Assert.Null(automaton.MatchAt("abcdefghijklmnopqrstuvwxyz"u8, startAt: 1));
+        Assert.Equal(0, automaton.CountMatches("abcdefghijklmnopqrstuvwxyz"u8, startAt: 1));
+        Assert.Equal(0, automaton.SumMatchSpans("abcdefghijklmnopqrstuvwxyz"u8, startAt: 1));
+    }
+
+    /// <summary>
     /// Verifies leading ASCII class plus literal suffix patterns scan from suffix candidates.
     /// </summary>
     [Fact]
@@ -4713,6 +4758,65 @@ public sealed class RegexAutomatonTests
         Assert.Null(automaton.Find(haystack, startAt: 8));
         Assert.Equal(new RegexMatch(7, 19), automaton.MatchAt(haystack, 7));
         Assert.Null(automaton.MatchAt(haystack, 8));
+    }
+
+    /// <summary>
+    /// Verifies start-and-end anchored byte sequences avoid the generic one-pass DFA.
+    /// </summary>
+    [Fact]
+    public void UsesEndAnchoredSequenceEngineForWholeHaystackByteSequences()
+    {
+        var repeatedAlternation = RegexAutomaton.Compile(
+            @"^.bc(d|e)*$"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var literalPrefix = RegexAutomaton.Compile(
+            @"^abcdefghijklmnopqrstuvwxyz.*$"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(RegexEngineKind.EndAnchoredSequence, GetEngineKind(repeatedAlternation));
+        Assert.Equal(new RegexMatch(0, 17), repeatedAlternation.Find("abcddddddeeeededd"u8));
+        Assert.Equal(new RegexMatch(0, 17), repeatedAlternation.MatchAt("abcddddddeeeededd"u8, 0));
+        Assert.Equal(1, repeatedAlternation.CountMatches("abcddddddeeeededd"u8));
+        Assert.Equal(17, repeatedAlternation.SumMatchSpans("abcddddddeeeededd"u8));
+        Assert.Null(repeatedAlternation.Find("xabcddddddeeeededd"u8));
+        Assert.Null(repeatedAlternation.Find("abcddddddeeeededd"u8, startAt: 1));
+        Assert.Null(repeatedAlternation.MatchAt("abcddddddeeeededd"u8, 1));
+
+        Assert.Equal(RegexEngineKind.EndAnchoredSequence, GetEngineKind(literalPrefix));
+        Assert.Equal(new RegexMatch(0, 29), literalPrefix.Find("abcdefghijklmnopqrstuvwxyzXYZ"u8));
+        Assert.Equal(29, literalPrefix.SumMatchSpans("abcdefghijklmnopqrstuvwxyzXYZ"u8));
+        Assert.Null(literalPrefix.Find("xabcdefghijklmnopqrstuvwxyzXYZ"u8));
+    }
+
+    /// <summary>
+    /// Verifies repeated single-byte alternations can participate in end-anchored sequence scans.
+    /// </summary>
+    [Fact]
+    public void UsesEndAnchoredSequenceEngineForRepeatedByteAlternationSuffixes()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @".bc(d|e)*$"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "xx abcddddddeeeededd"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.EndAnchoredSequence, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(3, 17), automaton.Find(haystack));
+        Assert.Equal(1, automaton.CountMatches(haystack));
+        Assert.Equal(17, automaton.SumMatchSpans(haystack));
+        Assert.Equal(new RegexMatch(3, 17), automaton.MatchAt(haystack, 3));
+        Assert.Null(automaton.MatchAt(haystack, 4));
     }
 
     /// <summary>

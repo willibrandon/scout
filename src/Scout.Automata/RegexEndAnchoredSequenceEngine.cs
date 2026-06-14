@@ -3,11 +3,28 @@ namespace Scout;
 internal sealed class RegexEndAnchoredSequenceEngine
 {
     private const int MaxParts = 256;
+    private const int MinimumAnchoredDotStarLiteralLength = 3;
     private readonly RegexEndAnchoredSequencePart[] parts;
+    private readonly bool anchoredAtStart;
+    private readonly bool hasAnchoredDotStarLiteralPrefix;
+    private readonly RegexSimpleSequenceSegment anchoredDotStarLeadingSegment;
+    private readonly RegexSimpleSequenceSegment anchoredDotStarTailSegment;
+    private readonly byte[] anchoredDotStarLiteralPrefix;
+    private readonly int anchoredDotStarLiteralOffset;
+    private readonly int anchoredDotStarPrefixLength;
 
-    private RegexEndAnchoredSequenceEngine(RegexEndAnchoredSequencePart[] parts)
+    private RegexEndAnchoredSequenceEngine(RegexEndAnchoredSequencePart[] parts, bool anchoredAtStart)
     {
         this.parts = parts;
+        this.anchoredAtStart = anchoredAtStart;
+        hasAnchoredDotStarLiteralPrefix = TryCreateAnchoredDotStarLiteralPrefix(
+            parts,
+            anchoredAtStart,
+            out anchoredDotStarLeadingSegment,
+            out anchoredDotStarTailSegment,
+            out anchoredDotStarLiteralPrefix,
+            out anchoredDotStarLiteralOffset,
+            out anchoredDotStarPrefixLength);
     }
 
     public static bool TryCreate(
@@ -32,9 +49,11 @@ internal sealed class RegexEndAnchoredSequenceEngine
             return false;
         }
 
+        bool anchoredAtStart = IsStartAnchor(sequence.Nodes[0]);
+        int firstConsumingNode = anchoredAtStart ? 1 : 0;
         var parts = new List<RegexEndAnchoredSequencePart>();
         bool sawRequiredLiteral = false;
-        for (int index = 0; index < sequence.Nodes.Count - 1; index++)
+        for (int index = firstConsumingNode; index < sequence.Nodes.Count - 1; index++)
         {
             if (!TryAppendPart(sequence.Nodes[index], options, parts, ref sawRequiredLiteral))
             {
@@ -49,13 +68,20 @@ internal sealed class RegexEndAnchoredSequenceEngine
             return false;
         }
 
-        engine = new RegexEndAnchoredSequenceEngine(parts.ToArray());
+        engine = new RegexEndAnchoredSequenceEngine(parts.ToArray(), anchoredAtStart);
         return true;
     }
 
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
         int lowerBound = Math.Clamp(startAt, 0, haystack.Length);
+        if (anchoredAtStart)
+        {
+            return lowerBound == 0 && TryMatchAt(haystack, 0, out int anchoredLength)
+                ? new RegexMatch(0, anchoredLength)
+                : null;
+        }
+
         if (!TryFindEndingAtHaystackEnd(haystack, out RegexMatch match))
         {
             return null;
@@ -85,12 +111,56 @@ internal sealed class RegexEndAnchoredSequenceEngine
     {
         length = 0;
         if ((uint)start > (uint)haystack.Length ||
-            !TryMatchForward(haystack, partIndex: 0, position: start))
+            anchoredAtStart && start != 0)
+        {
+            return false;
+        }
+
+        if (hasAnchoredDotStarLiteralPrefix && start == 0)
+        {
+            return TryMatchAnchoredDotStarLiteralPrefix(haystack, out length);
+        }
+
+        if (!TryMatchForward(haystack, partIndex: 0, position: start))
         {
             return false;
         }
 
         length = haystack.Length - start;
+        return true;
+    }
+
+    private bool TryMatchAnchoredDotStarLiteralPrefix(ReadOnlySpan<byte> haystack, out int length)
+    {
+        length = 0;
+        if (haystack.Length < anchoredDotStarPrefixLength)
+        {
+            return false;
+        }
+
+        if (anchoredDotStarLiteralOffset != 0 &&
+            !anchoredDotStarLeadingSegment.AtomMatches(haystack[0]))
+        {
+            return false;
+        }
+
+        if (!haystack[anchoredDotStarLiteralOffset..].StartsWith(anchoredDotStarLiteralPrefix))
+        {
+            return false;
+        }
+
+        if (anchoredDotStarTailSegment.MatcherKind != RegexSimpleSequenceByteMatcherKind.Any)
+        {
+            for (int index = anchoredDotStarPrefixLength; index < haystack.Length; index++)
+            {
+                if (!anchoredDotStarTailSegment.AtomMatches(haystack[index]))
+                {
+                    return false;
+                }
+            }
+        }
+
+        length = haystack.Length;
         return true;
     }
 
@@ -215,6 +285,11 @@ internal sealed class RegexEndAnchoredSequenceEngine
     {
         segment = default;
         node = UnwrapTransparentGroups(node);
+        if (node is RegexAlternationNode alternation)
+        {
+            return TryCreateAlternationSegment(alternation, options, out segment);
+        }
+
         if (node is not RegexAtomNode atom ||
             IsPredicate(atom.Kind) ||
             atom.Kind == RegexSyntaxKind.Literal && atom.Value.Length != 1 ||
@@ -242,11 +317,196 @@ internal sealed class RegexEndAnchoredSequenceEngine
         return true;
     }
 
+    private static bool TryCreateAnchoredDotStarLiteralPrefix(
+        RegexEndAnchoredSequencePart[] parts,
+        bool anchoredAtStart,
+        out RegexSimpleSequenceSegment leadingSegment,
+        out RegexSimpleSequenceSegment tailSegment,
+        out byte[] literalPrefix,
+        out int literalOffset,
+        out int prefixLength)
+    {
+        leadingSegment = default;
+        tailSegment = default;
+        literalPrefix = [];
+        literalOffset = 0;
+        prefixLength = 0;
+        if (!anchoredAtStart ||
+            parts.Length < 2 ||
+            parts[^1] is not { Minimum: 0, Maximum: null, Segment.Kind: RegexSyntaxKind.Dot })
+        {
+            return false;
+        }
+
+        tailSegment = parts[^1].Segment;
+        int literalStart = 0;
+        if (!IsFixedLiteralPart(parts[0]))
+        {
+            if (parts.Length < 3 || !IsFixedSingleBytePart(parts[0]))
+            {
+                return false;
+            }
+
+            leadingSegment = parts[0].Segment;
+            literalStart = 1;
+            literalOffset = 1;
+            prefixLength = 1;
+        }
+
+        byte[] bytes = new byte[parts.Length - literalStart - 1];
+        for (int index = literalStart; index < parts.Length - 1; index++)
+        {
+            if (!IsFixedLiteralPart(parts[index]))
+            {
+                return false;
+            }
+
+            bytes[index - literalStart] = parts[index].Segment.Literal;
+            prefixLength++;
+        }
+
+        if (bytes.Length < MinimumAnchoredDotStarLiteralLength)
+        {
+            return false;
+        }
+
+        literalPrefix = bytes;
+        return true;
+    }
+
+    private static bool IsFixedLiteralPart(RegexEndAnchoredSequencePart part)
+    {
+        return IsFixedSingleBytePart(part) &&
+            part.Segment.MatcherKind == RegexSimpleSequenceByteMatcherKind.Literal;
+    }
+
+    private static bool IsFixedSingleBytePart(RegexEndAnchoredSequencePart part)
+    {
+        return part is { Minimum: 1, Maximum: 1 };
+    }
+
+    private static bool TryCreateAlternationSegment(
+        RegexAlternationNode alternation,
+        RegexCompileOptions options,
+        out RegexSimpleSequenceSegment segment)
+    {
+        segment = default;
+        bool[] bytes = new bool[256];
+        int count = 0;
+        for (int index = 0; index < alternation.Alternatives.Count; index++)
+        {
+            RegexSyntaxNode alternative = UnwrapTransparentGroups(alternation.Alternatives[index]);
+            if (alternative is not RegexAtomNode atom ||
+                !TryAddAtomBytes(atom, options, bytes, ref count))
+            {
+                return false;
+            }
+        }
+
+        if (count == 0)
+        {
+            return false;
+        }
+
+        segment = new RegexSimpleSequenceSegment(
+            RegexSyntaxKind.ByteClass,
+            BuildByteRanges(bytes, count),
+            options.CaseInsensitive,
+            options.MultiLine,
+            options.DotMatchesNewline,
+            options.Crlf,
+            options.LineTerminator,
+            minimum: 1,
+            maximum: 1,
+            lazy: false);
+        return true;
+    }
+
+    private static bool TryAddAtomBytes(
+        RegexAtomNode atom,
+        RegexCompileOptions options,
+        bool[] bytes,
+        ref int count)
+    {
+        if (IsPredicate(atom.Kind) ||
+            atom.Kind == RegexSyntaxKind.Literal && atom.Value.Length != 1 ||
+            RegexByteClass.RequiresUtf8ScalarMatch(
+                atom.Kind,
+                atom.Value.Span,
+                options.Utf8,
+                options.CaseInsensitive,
+                options.UnicodeClasses))
+        {
+            return false;
+        }
+
+        for (int value = 0; value <= byte.MaxValue; value++)
+        {
+            if (!bytes[value] &&
+                RegexByteClass.AtomMatches(
+                    (byte)value,
+                    atom.Kind,
+                    atom.Value.Span,
+                    options.CaseInsensitive,
+                    options.MultiLine,
+                    options.DotMatchesNewline,
+                    options.Crlf,
+                    options.LineTerminator))
+            {
+                bytes[value] = true;
+                count++;
+            }
+        }
+
+        return true;
+    }
+
+    private static byte[] BuildByteRanges(bool[] bytes, int count)
+    {
+        byte[] ranges = new byte[count * 2];
+        int write = 0;
+        int value = 0;
+        while (value <= byte.MaxValue)
+        {
+            if (!bytes[value])
+            {
+                value++;
+                continue;
+            }
+
+            int start = value;
+            while (value < byte.MaxValue && bytes[value + 1])
+            {
+                value++;
+            }
+
+            ranges[write++] = (byte)start;
+            ranges[write++] = (byte)value;
+            value++;
+        }
+
+        if (write == ranges.Length)
+        {
+            return ranges;
+        }
+
+        Array.Resize(ref ranges, write);
+        return ranges;
+    }
+
     private static bool IsEndAnchor(RegexSyntaxNode node)
     {
         return UnwrapTransparentGroups(node) is RegexAtomNode
         {
             Kind: RegexSyntaxKind.EndAnchor or RegexSyntaxKind.AbsoluteEndAnchor,
+        };
+    }
+
+    private static bool IsStartAnchor(RegexSyntaxNode node)
+    {
+        return UnwrapTransparentGroups(node) is RegexAtomNode
+        {
+            Kind: RegexSyntaxKind.StartAnchor or RegexSyntaxKind.AbsoluteStartAnchor,
         };
     }
 
