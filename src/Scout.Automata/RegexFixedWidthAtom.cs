@@ -45,4 +45,25 @@ internal readonly struct RegexFixedWidthAtom
         value = literal;
         return lookup is null;
     }
+
+    public void CopyMatchingBytes(Span<byte> destination, out int count)
+    {
+        if (lookup is null)
+        {
+            destination[0] = literal;
+            count = 1;
+            return;
+        }
+
+        int write = 0;
+        for (int value = 0; value <= byte.MaxValue; value++)
+        {
+            if (lookup[value])
+            {
+                destination[write++] = (byte)value;
+            }
+        }
+
+        count = write;
+    }
 }

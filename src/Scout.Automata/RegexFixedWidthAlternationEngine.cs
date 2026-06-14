@@ -12,6 +12,7 @@ internal sealed class RegexFixedWidthAlternationEngine
     private readonly MemmemFinder[]? literalSeedFinders;
     private readonly RegexLiteralPrefixScanner? literalSeedScanner;
     private readonly RegexTeddyPrefilter? literalSeedTeddy;
+    private readonly RegexFixedWidthExactSetMatcher? exactSetMatcher;
     private readonly bool[] anchorBytes;
     private readonly byte[] anchorNeedles;
     private readonly int width;
@@ -24,6 +25,7 @@ internal sealed class RegexFixedWidthAlternationEngine
         MemmemFinder[]? literalSeedFinders,
         RegexLiteralPrefixScanner? literalSeedScanner,
         RegexTeddyPrefilter? literalSeedTeddy,
+        RegexFixedWidthExactSetMatcher? exactSetMatcher,
         bool[] anchorBytes,
         byte[] anchorNeedles,
         int width,
@@ -35,6 +37,7 @@ internal sealed class RegexFixedWidthAlternationEngine
         this.literalSeedFinders = literalSeedFinders;
         this.literalSeedScanner = literalSeedScanner;
         this.literalSeedTeddy = literalSeedTeddy;
+        this.exactSetMatcher = exactSetMatcher;
         this.anchorBytes = anchorBytes;
         this.anchorNeedles = anchorNeedles;
         this.width = width;
@@ -100,12 +103,17 @@ internal sealed class RegexFixedWidthAlternationEngine
             out RegexLiteralPrefixScanner? literalSeedScanner,
             out RegexTeddyPrefilter? literalSeedTeddy,
             out int literalSeedOffset);
+        RegexFixedWidthExactSetMatcher.TryCreate(
+            compiledAlternatives,
+            width,
+            out RegexFixedWidthExactSetMatcher? exactSetMatcher);
         engine = new RegexFixedWidthAlternationEngine(
             compiledAlternatives,
             literalSeeds,
             literalSeedFinders,
             literalSeedScanner,
             literalSeedTeddy,
+            exactSetMatcher,
             anchorBytes!,
             needles!,
             width,
@@ -117,6 +125,14 @@ internal sealed class RegexFixedWidthAlternationEngine
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
         int start = Math.Clamp(startAt, 0, haystack.Length);
+        if (exactSetMatcher is not null &&
+            exactSetMatcher.Width == 2 &&
+            literalSeeds is null)
+        {
+            int candidate = exactSetMatcher.Find(haystack, start);
+            return candidate < 0 ? null : new RegexMatch(candidate, width);
+        }
+
         if (literalSeedTeddy is not null)
         {
             return FindWithLiteralSeedTeddy(haystack, start);
@@ -233,6 +249,13 @@ internal sealed class RegexFixedWidthAlternationEngine
     public bool IsMatch(ReadOnlySpan<byte> haystack, int startAt)
     {
         int start = Math.Clamp(startAt, 0, haystack.Length);
+        if (exactSetMatcher is not null &&
+            exactSetMatcher.Width == 2 &&
+            literalSeeds is null)
+        {
+            return exactSetMatcher.Find(haystack, start) >= 0;
+        }
+
         if (literalSeedTeddy is not null)
         {
             return IsMatchWithLiteralSeedTeddy(haystack, start);
@@ -312,6 +335,13 @@ internal sealed class RegexFixedWidthAlternationEngine
 
     private long CountOrSum(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
     {
+        if (exactSetMatcher is not null &&
+            exactSetMatcher.Width == 2 &&
+            literalSeeds is null)
+        {
+            return CountOrSumWithExactSet(haystack, startAt, sumSpans);
+        }
+
         if (literalSeedFinders is not null ||
             literalSeeds is not null && literalSeedScanner is null && literalSeedTeddy is null)
         {
@@ -383,6 +413,23 @@ internal sealed class RegexFixedWidthAlternationEngine
             total += sumSpans ? width : 1;
             nextAllowedStart = bestStart + width;
             nextStarts[bestSeed] = -1;
+        }
+    }
+
+    private long CountOrSumWithExactSet(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
+    {
+        long total = 0;
+        int nextAllowedStart = Math.Clamp(startAt, 0, haystack.Length);
+        while (true)
+        {
+            int candidate = exactSetMatcher!.Find(haystack, nextAllowedStart);
+            if (candidate < 0)
+            {
+                return total;
+            }
+
+            total += sumSpans ? width : 1;
+            nextAllowedStart = candidate + width;
         }
     }
 
@@ -551,6 +598,11 @@ internal sealed class RegexFixedWidthAlternationEngine
 
     private bool TryMatchAt(ReadOnlySpan<byte> haystack, int start)
     {
+        if (exactSetMatcher is not null)
+        {
+            return exactSetMatcher.Matches(haystack, start);
+        }
+
         if (start > haystack.Length - width)
         {
             return false;

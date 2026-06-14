@@ -1584,6 +1584,32 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies fixed-width exact-set matching preserves branch pairings instead of accepting a per-position cross product.
+    /// </summary>
+    [Fact]
+    public void FixedWidthAlternationEngineExactSetPreservesBranchPairings()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"a[bc]|c[de]"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "xx ad cb ab ce"u8.ToArray();
+        int firstStart = haystack.AsSpan().IndexOf("ab"u8);
+        int secondStart = haystack.AsSpan().IndexOf("ce"u8);
+
+        Assert.Equal(RegexEngineKind.FixedWidthAlternation, GetEngineKind(automaton));
+        Assert.Null(automaton.MatchAt(haystack, haystack.AsSpan().IndexOf("ad"u8)));
+        Assert.Null(automaton.MatchAt(haystack, haystack.AsSpan().IndexOf("cb"u8)));
+        Assert.Equal(new RegexMatch(firstStart, 2), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(secondStart, 2), automaton.Find(haystack, firstStart + 1));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(4, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies a single fixed-width sequence with a literal seed uses direct fixed-width scanning.
     /// </summary>
     [Fact]
