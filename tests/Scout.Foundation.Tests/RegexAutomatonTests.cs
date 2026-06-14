@@ -448,6 +448,42 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies regexes that are one whole-pattern capture can synthesize that capture from the match span.
+    /// </summary>
+    [Fact]
+    public void FindCapturesSynthesizesWholePatternCapture()
+    {
+        var automaton = RegexAutomaton.Compile("([a-z]+[0-9]+)"u8);
+
+        RegexCaptures? captures = automaton.FindCaptures("--abc123"u8);
+
+        Assert.True(automaton.UsesWholePatternCaptureSynthesis);
+        Assert.NotNull(captures);
+        Assert.Equal(2, captures.GroupCount);
+        Assert.Equal(2, captures.ParticipatingCount());
+        Assert.Equal(new RegexMatch(2, 6), captures.Match);
+        Assert.Equal(new RegexMatch(2, 6), captures.GetGroup(0));
+        Assert.Equal(new RegexMatch(2, 6), captures.GetGroup(1));
+    }
+
+    /// <summary>
+    /// Verifies nested captures still use the regular capture engine.
+    /// </summary>
+    [Fact]
+    public void WholePatternCaptureSynthesisSkipsNestedCaptures()
+    {
+        var automaton = RegexAutomaton.Compile("(([a-z]+)[0-9]+)"u8);
+
+        RegexCaptures? captures = automaton.FindCaptures("--abc123"u8);
+
+        Assert.False(automaton.UsesWholePatternCaptureSynthesis);
+        Assert.NotNull(captures);
+        Assert.Equal(3, captures.GroupCount);
+        Assert.Equal(new RegexMatch(2, 6), captures.GetGroup(1));
+        Assert.Equal(new RegexMatch(2, 3), captures.GetGroup(2));
+    }
+
+    /// <summary>
     /// Verifies word-whitespace-literal suffix patterns use literal-driven matching.
     /// </summary>
     [Fact]

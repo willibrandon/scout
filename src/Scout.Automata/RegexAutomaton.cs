@@ -16,6 +16,7 @@ public sealed class RegexAutomaton
         private readonly RegexCompileOptions captureOptions;
         private readonly RegexPrefilter? capturePrefilter;
         private readonly int captureCount;
+        private readonly int wholePatternCaptureIndex;
 
         private RegexCaptureEngine? captureEngine;
         private RegexAlternationSetEngine? syntheticCaptureAlternationSet;
@@ -45,7 +46,8 @@ public sealed class RegexAutomaton
             RegexSyntaxNode? captureRoot,
             RegexCompileOptions captureOptions,
             RegexPrefilter? capturePrefilter,
-            int captureCount)
+            int captureCount,
+            int wholePatternCaptureIndex = 0)
         {
             this.engine = engine;
             this.startPredicate = startPredicate;
@@ -58,6 +60,7 @@ public sealed class RegexAutomaton
             this.captureOptions = captureOptions;
             this.capturePrefilter = capturePrefilter;
             this.captureCount = captureCount;
+            this.wholePatternCaptureIndex = wholePatternCaptureIndex;
             captureEnginesInitialized = captureCount == 0;
             genericCaptureOnly = captureCount == 0;
         }
@@ -164,6 +167,7 @@ public sealed class RegexAutomaton
         }
 
         RegexWordBoundaryLiteralSetEngine.TryCreate(tree.Root, options, out RegexWordBoundaryLiteralSetEngine? wordBoundaryLiteralSet);
+        int wholePatternCaptureIndex = TryGetWholePatternCaptureIndex(tree.Root, tree.CaptureCount);
         if (wordBoundaryLiteralSet is not null)
         {
             return new RegexAutomaton(
@@ -180,7 +184,8 @@ public sealed class RegexAutomaton
                 tree.CaptureCount > 0 ? tree.Root : null,
                 options,
                 capturePrefilter: null,
-                tree.CaptureCount);
+                tree.CaptureCount,
+                wholePatternCaptureIndex);
         }
 
         RegexAlternationSetEngine.TryCreate(tree.Pattern.Span, tree.Root, tree.CaptureCount, options, out RegexAlternationSetEngine? alternationSet);
@@ -200,7 +205,8 @@ public sealed class RegexAutomaton
                 tree.CaptureCount > 0 ? tree.Root : null,
                 options,
                 capturePrefilter: null,
-                tree.CaptureCount);
+                tree.CaptureCount,
+                wholePatternCaptureIndex);
         }
 
         RegexNfa nfa = RegexNfaCompiler.Compile(
@@ -284,7 +290,8 @@ public sealed class RegexAutomaton
             tree.CaptureCount > 0 ? tree.Root : null,
             options,
             prefilter,
-            tree.CaptureCount);
+            tree.CaptureCount,
+            wholePatternCaptureIndex);
     }
 
     internal RegexPrefilterKind PrefilterKind => engine.PrefilterKind;
@@ -301,6 +308,8 @@ public sealed class RegexAutomaton
             return syntheticCaptureAlternationSet?.CanSynthesizeCaptures == true;
         }
     }
+
+    internal bool UsesWholePatternCaptureSynthesis => wholePatternCaptureIndex > 0;
 
     internal bool UsesStructuredLogCaptureEngine
     {
@@ -570,7 +579,7 @@ public sealed class RegexAutomaton
                 return;
             }
 
-            if (captureRoot is not null && captureCount > 0)
+            if (captureRoot is not null && captureCount > 0 && wholePatternCaptureIndex == 0)
             {
                 if (syntheticCaptureAlternationSet is null)
                 {
@@ -694,6 +703,11 @@ public sealed class RegexAutomaton
             return FindGenericCaptures(haystack, startAt);
         }
 
+        if (wholePatternCaptureIndex > 0)
+        {
+            return FindWholePatternCaptures(haystack, startAt);
+        }
+
         EnsureCaptureEngines();
         if (genericCaptureOnly)
         {
@@ -774,6 +788,20 @@ public sealed class RegexAutomaton
         return FindGenericCaptures(haystack, startAt);
     }
 
+    private RegexCaptures? FindWholePatternCaptures(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        RegexMatch? match = engine.Find(haystack, startAt, startPredicate);
+        if (!match.HasValue)
+        {
+            return null;
+        }
+
+        var groups = new RegexMatch?[captureCount + 1];
+        groups[0] = match.Value;
+        groups[wholePatternCaptureIndex] = match.Value;
+        return new RegexCaptures(match.Value, groups);
+    }
+
     private RegexCaptures? FindGenericCaptures(ReadOnlySpan<byte> haystack, int startAt)
     {
         RegexMatch? match = engine.Find(haystack, startAt, startPredicate);
@@ -788,5 +816,67 @@ public sealed class RegexAutomaton
         }
 
         return captureEngine.MatchAt(haystack, match.Value.Start);
+    }
+
+    private static int TryGetWholePatternCaptureIndex(RegexSyntaxNode root, int captureCount)
+    {
+        if (captureCount != 1)
+        {
+            return 0;
+        }
+
+        RegexSyntaxNode node = UnwrapWholePatternNonCapturingGroups(root);
+        return node is RegexGroupNode { Kind: RegexSyntaxKind.CapturingGroup } group &&
+            group.CaptureIndex > 0 &&
+            !HasCapturingGroup(group.Child)
+            ? group.CaptureIndex
+            : 0;
+    }
+
+    private static RegexSyntaxNode UnwrapWholePatternNonCapturingGroups(RegexSyntaxNode node)
+    {
+        while (node is RegexGroupNode { Kind: RegexSyntaxKind.NonCapturingGroup } group)
+        {
+            node = group.Child;
+        }
+
+        return node;
+    }
+
+    private static bool HasCapturingGroup(RegexSyntaxNode node)
+    {
+        switch (node.Kind)
+        {
+            case RegexSyntaxKind.CapturingGroup:
+                return true;
+            case RegexSyntaxKind.NonCapturingGroup:
+                return HasCapturingGroup(((RegexGroupNode)node).Child);
+            case RegexSyntaxKind.Sequence:
+                var sequence = (RegexSequenceNode)node;
+                for (int index = 0; index < sequence.Nodes.Count; index++)
+                {
+                    if (HasCapturingGroup(sequence.Nodes[index]))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            case RegexSyntaxKind.Alternation:
+                var alternation = (RegexAlternationNode)node;
+                for (int index = 0; index < alternation.Alternatives.Count; index++)
+                {
+                    if (HasCapturingGroup(alternation.Alternatives[index]))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            case RegexSyntaxKind.Repetition:
+                return HasCapturingGroup(((RegexRepetitionNode)node).Child);
+            default:
+                return false;
+        }
     }
 }

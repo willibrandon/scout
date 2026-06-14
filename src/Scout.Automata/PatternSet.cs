@@ -12,6 +12,7 @@ public sealed class PatternSet
     private readonly PatternSetLiteralAccelerator? literalAccelerator;
     private readonly PatternSetBoundaryLiteralAccelerator? boundaryLiteralAccelerator;
     private readonly PatternSetRequiredLiteralAccelerator? requiredLiteralAccelerator;
+    private readonly PatternSetAnchoredMatcher[][]? anchoredMatchersByFirstByte;
     private readonly bool coversEveryByteWithPositiveWidth;
     private readonly int count;
 
@@ -24,6 +25,7 @@ public sealed class PatternSet
         PatternSetLiteralAccelerator? literalAccelerator,
         PatternSetBoundaryLiteralAccelerator? boundaryLiteralAccelerator,
         PatternSetRequiredLiteralAccelerator? requiredLiteralAccelerator,
+        PatternSetAnchoredMatcher[][]? anchoredMatchersByFirstByte,
         bool coversEveryByteWithPositiveWidth)
     {
         this.count = count;
@@ -34,6 +36,7 @@ public sealed class PatternSet
         this.literalAccelerator = literalAccelerator;
         this.boundaryLiteralAccelerator = boundaryLiteralAccelerator;
         this.requiredLiteralAccelerator = requiredLiteralAccelerator;
+        this.anchoredMatchersByFirstByte = anchoredMatchersByFirstByte;
         this.coversEveryByteWithPositiveWidth = coversEveryByteWithPositiveWidth;
     }
 
@@ -51,6 +54,8 @@ public sealed class PatternSet
     internal bool RequiredLiteralAcceleratorCoversAll => requiredLiteralAccelerator?.CoversAllAutomata == true;
 
     internal bool CanAccelerateEveryPattern => automata.Length == 0 || RequiredLiteralAcceleratorCoversAll;
+
+    internal bool UsesAnchoredMatcherAccelerator => anchoredMatchersByFirstByte is not null;
 
     internal bool CoversEveryByteWithPositiveWidth => coversEveryByteWithPositiveWidth;
 
@@ -197,6 +202,7 @@ public sealed class PatternSet
         PatternSetRequiredLiteralAccelerator? requiredLiteralAccelerator = requiredLiteralEntries.Count == 0
             ? null
             : new PatternSetRequiredLiteralAccelerator(requiredLiteralEntries, compiledAutomata.Length, compiledAutomata);
+        bool coversEveryByteWithPositiveWidth = DetectEveryBytePositiveWidthCoverage(patterns, plans, options);
         patternSet = new PatternSet(
             patterns.Count,
             compiledAutomata,
@@ -206,7 +212,10 @@ public sealed class PatternSet
             literalAccelerator,
             boundaryLiteralAccelerator,
             requiredLiteralAccelerator,
-            DetectEveryBytePositiveWidthCoverage(patterns, plans, options));
+            coversEveryByteWithPositiveWidth
+                ? BuildAnchoredMatchersByFirstByte(patterns, plans, options, compiledAutomata, automataPatternIds)
+                : null,
+            coversEveryByteWithPositiveWidth);
         return true;
     }
 
@@ -398,6 +407,12 @@ public sealed class PatternSet
     public PatternSetMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        PatternSetMatch? anchoredMatch = FindWithAnchoredMatchers(haystack, startOffset);
+        if (anchoredMatch.HasValue)
+        {
+            return anchoredMatch;
+        }
+
         PatternSetMatch? exact = literalAccelerator?.FindAt(haystack, startOffset);
         PatternSetMatch? boundaryExact = boundaryLiteralAccelerator?.FindAt(haystack, startOffset);
         if (boundaryExact.HasValue && IsBetter(boundaryExact.Value, exact))
@@ -485,6 +500,27 @@ public sealed class PatternSet
         return best;
     }
 
+    private PatternSetMatch? FindWithAnchoredMatchers(ReadOnlySpan<byte> haystack, int startOffset)
+    {
+        if (anchoredMatchersByFirstByte is null || startOffset >= haystack.Length)
+        {
+            return null;
+        }
+
+        PatternSetAnchoredMatcher[] candidates = anchoredMatchersByFirstByte[haystack[startOffset]];
+        for (int index = 0; index < candidates.Length; index++)
+        {
+            PatternSetAnchoredMatcher matcher = candidates[index];
+            int length = matcher.MatchAt(haystack, startOffset);
+            if (length >= 0)
+            {
+                return new PatternSetMatch(matcher.PatternId, new RegexMatch(startOffset, length));
+            }
+        }
+
+        return null;
+    }
+
     private ReadOnlySpan<int> GetExactAutomataForStart(ReadOnlySpan<byte> haystack, int startOffset)
     {
         if (exactAutomataByFirstByte is null || startOffset >= haystack.Length)
@@ -531,6 +567,53 @@ public sealed class PatternSet
         }
 
         int[][] indexed = new int[256][];
+        for (int index = 0; index < indexed.Length; index++)
+        {
+            indexed[index] = buckets[index].ToArray();
+        }
+
+        return indexed;
+    }
+
+    private static PatternSetAnchoredMatcher[][] BuildAnchoredMatchersByFirstByte(
+        IReadOnlyList<byte[]> patterns,
+        PatternSetPatternPlan[] plans,
+        RegexCompileOptions options,
+        RegexAutomaton[] automata,
+        List<int> automataPatternIds)
+    {
+        var automataByPatternId = new RegexAutomaton?[patterns.Count];
+        for (int index = 0; index < automataPatternIds.Count; index++)
+        {
+            automataByPatternId[automataPatternIds[index]] = automata[index];
+        }
+
+        var buckets = new List<PatternSetAnchoredMatcher>[256];
+        for (int index = 0; index < buckets.Length; index++)
+        {
+            buckets[index] = [];
+        }
+
+        for (int patternId = 0; patternId < patterns.Count; patternId++)
+        {
+            var matcher = PatternSetAnchoredMatcher.Create(
+                patternId,
+                patterns[patternId],
+                plans[patternId],
+                options,
+                automataByPatternId[patternId]);
+            bool[] startBytes = new bool[256];
+            matcher.AddStartBytes(startBytes);
+            for (int value = 0; value <= byte.MaxValue; value++)
+            {
+                if (startBytes[value])
+                {
+                    buckets[value].Add(matcher);
+                }
+            }
+        }
+
+        var indexed = new PatternSetAnchoredMatcher[256][];
         for (int index = 0; index < indexed.Length; index++)
         {
             indexed[index] = buckets[index].ToArray();

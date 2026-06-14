@@ -238,9 +238,40 @@ public sealed class PatternSetTests
         ReadOnlySpan<byte> haystack = "abc \n+\r\nzz"u8;
 
         Assert.True(set.CoversEveryByteWithPositiveWidth);
+        Assert.True(set.UsesAnchoredMatcherAccelerator);
         Assert.Equal(haystack.Length, set.SumMatchSpans(haystack));
         Assert.Equal(haystack.Length - 4, set.SumMatchSpans(haystack, startAt: 4));
         Assert.NotEqual(haystack.Length, set.CountMatches(haystack));
+    }
+
+    /// <summary>
+    /// Verifies the byte-covering anchored matcher preserves lexer pattern ordering.
+    /// </summary>
+    [Fact]
+    public void AnchoredMatcherFindsLexerTokensInPatternOrder()
+    {
+        var set = PatternSet.Compile(
+        [
+            @"(\r\n|\r|\n)"u8.ToArray(),
+            @"([\t\v\f ]+)"u8.ToArray(),
+            @"(\bassign\b)"u8.ToArray(),
+            @"([0-9]+(?:_[0-9]+)*)"u8.ToArray(),
+            @"([a-zA-Z_][0-9a-zA-Z_]*)"u8.ToArray(),
+            @"(<<<|>>>|<<|>>)"u8.ToArray(),
+            "(.)"u8.ToArray(),
+        ],
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.True(set.UsesAnchoredMatcherAccelerator);
+        Assert.Equal(new PatternSetMatch(2, new RegexMatch(0, 6)), set.Find("assign x"u8));
+        Assert.Equal(new PatternSetMatch(4, new RegexMatch(0, 8)), set.Find("assign_x"u8));
+        Assert.Equal(new PatternSetMatch(3, new RegexMatch(0, 6)), set.Find("12_345+"u8));
+        Assert.Equal(new PatternSetMatch(5, new RegexMatch(0, 3)), set.Find("<<<x"u8));
+        Assert.Equal(new PatternSetMatch(0, new RegexMatch(0, 2)), set.Find("\r\nx"u8));
     }
 
     /// <summary>
@@ -270,8 +301,10 @@ public sealed class PatternSetTests
             unicodeClasses: false);
 
         Assert.False(missingNewline.CoversEveryByteWithPositiveWidth);
+        Assert.False(missingNewline.UsesAnchoredMatcherAccelerator);
         Assert.Equal(2, missingNewline.SumMatchSpans("a\nb"u8));
         Assert.False(emptyFirst.CoversEveryByteWithPositiveWidth);
+        Assert.False(emptyFirst.UsesAnchoredMatcherAccelerator);
         Assert.Equal(0, emptyFirst.SumMatchSpans("abc"u8));
     }
 
@@ -293,6 +326,7 @@ public sealed class PatternSetTests
         ReadOnlySpan<byte> haystack = "a\nb\r\nc"u8;
 
         Assert.True(set.CoversEveryByteWithPositiveWidth);
+        Assert.True(set.UsesAnchoredMatcherAccelerator);
         Assert.Equal(haystack.Length, set.SumMatchSpans(haystack));
     }
 
