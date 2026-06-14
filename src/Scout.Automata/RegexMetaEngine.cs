@@ -39,6 +39,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexLiteralPrefixRunEngine? literalPrefixRun;
     private readonly RegexBoundedLiteralGapEngine? boundedLiteralGap;
     private readonly RegexBoundedLineLiteralGapEngine? boundedLineLiteralGap;
+    private readonly RegexAnchoredLineLiteralGapEngine? anchoredLineLiteralGap;
     private readonly RegexBoundedPrefixLiteralSetEngine? boundedPrefixLiteralSet;
     private readonly RegexUnicodeGraphemeClusterEngine? unicodeGraphemeCluster;
     private readonly RegexBoundedScalarClassSequenceEngine? boundedScalarClassSequence;
@@ -111,6 +112,7 @@ internal sealed class RegexMetaEngine
         RegexLiteralPrefixRunEngine? literalPrefixRun = null,
         RegexBoundedLiteralGapEngine? boundedLiteralGap = null,
         RegexBoundedLineLiteralGapEngine? boundedLineLiteralGap = null,
+        RegexAnchoredLineLiteralGapEngine? anchoredLineLiteralGap = null,
         RegexBoundedPrefixLiteralSetEngine? boundedPrefixLiteralSet = null,
         RegexUnicodeGraphemeClusterEngine? unicodeGraphemeCluster = null,
         RegexBoundedScalarClassSequenceEngine? boundedScalarClassSequence = null,
@@ -158,6 +160,7 @@ internal sealed class RegexMetaEngine
         this.literalPrefixRun = literalPrefixRun;
         this.boundedLiteralGap = boundedLiteralGap;
         this.boundedLineLiteralGap = boundedLineLiteralGap;
+        this.anchoredLineLiteralGap = anchoredLineLiteralGap;
         this.boundedPrefixLiteralSet = boundedPrefixLiteralSet;
         this.unicodeGraphemeCluster = unicodeGraphemeCluster;
         this.boundedScalarClassSequence = boundedScalarClassSequence;
@@ -454,6 +457,7 @@ internal sealed class RegexMetaEngine
         RegexLiteralPrefixRunEngine? literalPrefixRun = null,
         RegexBoundedLiteralGapEngine? boundedLiteralGap = null,
         RegexBoundedLineLiteralGapEngine? boundedLineLiteralGap = null,
+        RegexAnchoredLineLiteralGapEngine? anchoredLineLiteralGap = null,
         RegexBoundedPrefixLiteralSetEngine? boundedPrefixLiteralSet = null,
         RegexBoundedScalarClassSequenceEngine? boundedScalarClassSequence = null,
         RegexBoundedByteClassSequenceEngine? boundedByteClassSequence = null,
@@ -869,6 +873,28 @@ internal sealed class RegexMetaEngine
                 prefilter,
                 nfa.Utf8,
                 boundedLineLiteralGap: boundedLineLiteralGap);
+        }
+
+        if (anchoredLineLiteralGap is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.AnchoredLineLiteralGap,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                delimitedRun: null,
+                simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
+                prefilter,
+                nfa.Utf8,
+                anchoredLineLiteralGap: anchoredLineLiteralGap);
         }
 
         if (boundedPrefixLiteralSet is not null)
@@ -1514,6 +1540,11 @@ internal sealed class RegexMetaEngine
             return RegexLh3UriEngine.IsMatch(haystack);
         }
 
+        if (anchoredLineLiteralGap is not null)
+        {
+            return anchoredLineLiteralGap.IsMatch(haystack);
+        }
+
         return Find(haystack, startAt: 0, startPredicate).HasValue;
     }
 
@@ -1617,6 +1648,11 @@ internal sealed class RegexMetaEngine
         if (boundedLineLiteralGap is not null)
         {
             return boundedLineLiteralGap.Find(haystack, startOffset);
+        }
+
+        if (anchoredLineLiteralGap is not null)
+        {
+            return anchoredLineLiteralGap.Find(haystack, startOffset);
         }
 
         if (boundedPrefixLiteralSet is not null)
@@ -1899,6 +1935,11 @@ internal sealed class RegexMetaEngine
             return boundedLineLiteralGap.CountMatches(haystack, startAt);
         }
 
+        if (anchoredLineLiteralGap is not null)
+        {
+            return anchoredLineLiteralGap.CountMatches(haystack, startAt);
+        }
+
         if (boundedPrefixLiteralSet is not null)
         {
             return boundedPrefixLiteralSet.CountMatches(haystack, startAt);
@@ -2099,6 +2140,11 @@ internal sealed class RegexMetaEngine
         if (boundedLineLiteralGap is not null)
         {
             return boundedLineLiteralGap.SumMatchSpans(haystack, startAt);
+        }
+
+        if (anchoredLineLiteralGap is not null)
+        {
+            return anchoredLineLiteralGap.SumMatchSpans(haystack, startAt);
         }
 
         if (boundedPrefixLiteralSet is not null)
@@ -2479,6 +2525,11 @@ internal sealed class RegexMetaEngine
         if (boundedLineLiteralGap is not null)
         {
             return boundedLineLiteralGap.MatchAt(haystack, startOffset);
+        }
+
+        if (anchoredLineLiteralGap is not null)
+        {
+            return anchoredLineLiteralGap.MatchAt(haystack, startOffset);
         }
 
         if (boundedPrefixLiteralSet is not null)

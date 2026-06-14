@@ -1232,6 +1232,55 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies anchored line literal gaps scan from the required tail literal while preserving lazy dot-star spans.
+    /// </summary>
+    [Fact]
+    public void AnchoredLineLiteralGapEngineMatchesCodingComments()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"^[ \t\f]*#.*?coding[:=][ \t]*utf-?8"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+
+        Assert.Equal(RegexEngineKind.AnchoredLineLiteralGap, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 21), automaton.Find("  # -*- coding: utf-8 -*-"u8));
+        Assert.Equal(new RegexMatch(0, 13), automaton.Find("# coding=utf8"u8));
+        Assert.Equal(new RegexMatch(0, 19), automaton.Find(" \t\f# coding:   utf8"u8));
+        Assert.True(automaton.IsMatch("# other coding:    utf8"u8));
+        Assert.False(automaton.IsMatch("x # coding: utf-8"u8));
+        Assert.False(automaton.IsMatch("# no coding here"u8));
+        Assert.False(automaton.IsMatch("# coding: ascii"u8));
+    }
+
+    /// <summary>
+    /// Verifies anchored line literal gaps keep non-multiline start-anchor and dot line-boundary semantics.
+    /// </summary>
+    [Fact]
+    public void AnchoredLineLiteralGapEnginePreservesAnchorAndLineBoundarySemantics()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"^[ \t\f]*#.*?coding[:=][ \t]*utf-?8"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+
+        byte[] twoLines = "# coding: utf-8\n# coding: utf-8"u8.ToArray();
+
+        Assert.Equal(new RegexMatch(0, 15), automaton.Find(twoLines));
+        Assert.Null(automaton.Find(twoLines, startAt: 1));
+        Assert.Equal(new RegexMatch(0, 15), automaton.MatchAt(twoLines, 0));
+        Assert.Null(automaton.MatchAt(twoLines, 1));
+        Assert.Equal(1, automaton.CountMatches(twoLines));
+        Assert.Equal(15, automaton.SumMatchSpans(twoLines));
+        Assert.False(automaton.IsMatch("# comment\ncoding: utf-8"u8));
+    }
+
+    /// <summary>
     /// Verifies bounded dot prefixes before literal alternatives scan from literals while preserving greediness.
     /// </summary>
     [Fact]

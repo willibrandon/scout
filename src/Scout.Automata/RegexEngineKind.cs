@@ -18,6 +18,7 @@ internal enum RegexEngineKind
     LiteralPrefixRun,
     BoundedLiteralGap,
     BoundedLineLiteralGap,
+    AnchoredLineLiteralGap,
     BoundedPrefixLiteralSet,
     UnicodeGraphemeCluster,
     BoundedScalarClassSequence,
