@@ -1501,6 +1501,44 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies the lh3 URI shape scans around the scheme delimiter directly.
+    /// </summary>
+    [Fact]
+    public void UriEngineCountsLh3CapturedUris()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"([a-zA-Z][a-zA-Z0-9]*)://([^ /]+)(/[^ ]*)?"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "x 1http://ab http://example.com/path?q#frag ftp://a/b no://x? bad ://missing"u8.ToArray();
+        ReadOnlySpan<byte> first = "http://ab"u8;
+        ReadOnlySpan<byte> second = "http://example.com/path?q#frag"u8;
+        ReadOnlySpan<byte> third = "ftp://a/b"u8;
+        ReadOnlySpan<byte> fourth = "no://x?"u8;
+        int firstStart = haystack.AsSpan().IndexOf(first);
+        int secondStart = haystack.AsSpan().IndexOf(second);
+        int thirdStart = haystack.AsSpan().IndexOf(third);
+        int fourthStart = haystack.AsSpan().IndexOf(fourth);
+
+        RegexCaptures? captures = automaton.FindCaptures(haystack);
+
+        Assert.Equal(RegexEngineKind.Uri, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(firstStart, first.Length), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(secondStart, second.Length), automaton.Find(haystack, firstStart + first.Length));
+        Assert.Equal(new RegexMatch(thirdStart, third.Length), automaton.MatchAt(haystack, thirdStart));
+        Assert.Equal(4, automaton.CountMatches(haystack));
+        Assert.Equal(first.Length + second.Length + third.Length + fourth.Length, automaton.SumMatchSpans(haystack));
+        Assert.NotNull(captures);
+        Assert.Equal(new RegexMatch(firstStart, first.Length), captures.Match);
+        AssertGroupText(captures, haystack, 1, "http");
+        AssertGroupText(captures, haystack, 2, "ab");
+        Assert.Null(captures.GetGroup(3));
+    }
+
+    /// <summary>
     /// Verifies URI scanning can start inside a longer scheme token.
     /// </summary>
     [Fact]
