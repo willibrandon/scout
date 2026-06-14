@@ -1675,6 +1675,9 @@ public sealed class RegexAutomatonTests
         Assert.False(automaton.IsMatch("xx ASIAABCDEFGH12345678 yy"u8));
         Assert.Equal(new RegexMatch(firstStart, 20), automaton.Find(haystack));
         Assert.Equal(new RegexMatch(secondStart, 20), automaton.MatchAt(haystack, secondStart));
+        Assert.Equal(new RegexMatch(firstStart, 20), automaton.FindEarliest(haystack, startAt: 0));
+        Assert.Equal(new RegexMatch(firstStart, 20), automaton.FindAllKindAt(haystack, firstStart));
+        Assert.Equal([new RegexMatch(firstStart, 20)], automaton.FindOverlappingAt(haystack, firstStart));
         Assert.Equal(2, automaton.CountMatches(haystack));
         Assert.Equal(40, automaton.SumMatchSpans(haystack));
 

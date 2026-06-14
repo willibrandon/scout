@@ -38,7 +38,8 @@ internal sealed class RegexAlternationSetEngine
             return false;
         }
 
-        int[]? wholeBranchCaptureByPattern = TryCreateWholeBranchCaptureMap(root, alternatives.Length, out int[]? map)
+        int[]? wholeBranchCaptureByPattern = captureCount == alternatives.Length &&
+            TryCreateWholeBranchCaptureMap(root, alternatives.Length, out int[]? map)
             ? map
             : null;
         engine = new RegexAlternationSetEngine(

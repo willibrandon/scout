@@ -13,6 +13,10 @@ internal static class RegexUtf8ByteCompiler
     private static readonly Lazy<RegexUtf8ByteTrie> ReversedUnicodeDigitTrie = new(() => CreateTableTrie(RegexUnicodeTables.DecimalNumberRanges, reversed: true));
     private static readonly Lazy<RegexUtf8ByteTrie> UnicodeWhitespaceTrie = new(() => CreateTableTrie(RegexUnicodeTables.PerlSpaceRanges, reversed: false));
     private static readonly Lazy<RegexUtf8ByteTrie> ReversedUnicodeWhitespaceTrie = new(() => CreateTableTrie(RegexUnicodeTables.PerlSpaceRanges, reversed: true));
+    private static readonly Lazy<RegexUtf8ByteTrie> UnicodeLetterTrie = new(() => CreateTableTrie(RegexUnicodeTables.GetGeneralCategoryRanges(RegexUnicodePropertyKind.Letter), reversed: false));
+    private static readonly Lazy<RegexUtf8ByteTrie> ReversedUnicodeLetterTrie = new(() => CreateTableTrie(RegexUnicodeTables.GetGeneralCategoryRanges(RegexUnicodePropertyKind.Letter), reversed: true));
+    private static readonly Lazy<RegexUtf8ByteTrie> UnicodeAlphabeticTrie = new(() => CreateTableTrie(RegexUnicodeTables.AlphabeticRanges, reversed: false));
+    private static readonly Lazy<RegexUtf8ByteTrie> ReversedUnicodeAlphabeticTrie = new(() => CreateTableTrie(RegexUnicodeTables.AlphabeticRanges, reversed: true));
 
     public static string CreateCacheKey(
         RegexSyntaxKind kind,
@@ -73,17 +77,28 @@ internal static class RegexUtf8ByteCompiler
         out RegexUtf8ByteTrie? trie)
     {
         trie = null;
-        if (!options.UnicodeClasses || !expression.IsEmpty)
+        if (!options.UnicodeClasses)
         {
             return false;
         }
 
-        trie = kind switch
+        if (expression.IsEmpty)
         {
-            RegexSyntaxKind.DigitClass => reversed ? ReversedUnicodeDigitTrie.Value : UnicodeDigitTrie.Value,
-            RegexSyntaxKind.WhitespaceClass => reversed ? ReversedUnicodeWhitespaceTrie.Value : UnicodeWhitespaceTrie.Value,
-            _ => null,
-        };
+            trie = kind switch
+            {
+                RegexSyntaxKind.DigitClass => reversed ? ReversedUnicodeDigitTrie.Value : UnicodeDigitTrie.Value,
+                RegexSyntaxKind.WhitespaceClass => reversed ? ReversedUnicodeWhitespaceTrie.Value : UnicodeWhitespaceTrie.Value,
+                RegexSyntaxKind.LetterClass => reversed ? ReversedUnicodeAlphabeticTrie.Value : UnicodeAlphabeticTrie.Value,
+                _ => null,
+            };
+            return trie is not null;
+        }
+
+        trie = kind == RegexSyntaxKind.UnicodePropertyClass &&
+            expression.Length == 1 &&
+            expression[0] == (byte)RegexUnicodePropertyKind.Letter
+            ? reversed ? ReversedUnicodeLetterTrie.Value : UnicodeLetterTrie.Value
+            : null;
         return trie is not null;
     }
 

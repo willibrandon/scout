@@ -896,7 +896,8 @@ internal sealed class RegexFixedWidthAlternationEngine
         alternatives = [];
         anchoredAtStart = false;
         var expanded = new List<List<RegexFixedWidthAtom>> { new List<RegexFixedWidthAtom>() };
-        if (!TryAppendRootAtoms(node, options, expanded, out anchoredAtStart))
+        var atomCache = new Dictionary<RegexFixedWidthAtomCacheKey, RegexFixedWidthAtom>();
+        if (!TryAppendRootAtoms(node, options, expanded, atomCache, out anchoredAtStart))
         {
             return false;
         }
@@ -920,6 +921,7 @@ internal sealed class RegexFixedWidthAlternationEngine
         RegexSyntaxNode node,
         RegexCompileOptions options,
         List<List<RegexFixedWidthAtom>> alternatives,
+        Dictionary<RegexFixedWidthAtomCacheKey, RegexFixedWidthAtom> atomCache,
         out bool anchoredAtStart)
     {
         anchoredAtStart = false;
@@ -928,11 +930,11 @@ internal sealed class RegexFixedWidthAlternationEngine
             sequence.Nodes[0] is not RegexAtomNode anchor ||
             !IsStartAnchor(anchor.Kind, options))
         {
-            return TryAppendAtoms(node, options, alternatives);
+            return TryAppendAtoms(node, options, alternatives, atomCache);
         }
 
         anchoredAtStart = true;
-        return TryAppendSequenceAtoms(sequence, options, alternatives, startIndex: 1);
+        return TryAppendSequenceAtoms(sequence, options, alternatives, atomCache, startIndex: 1);
     }
 
     private static bool IsStartAnchor(RegexSyntaxKind kind, RegexCompileOptions options)
@@ -944,24 +946,25 @@ internal sealed class RegexFixedWidthAlternationEngine
     private static bool TryAppendAtoms(
         RegexSyntaxNode node,
         RegexCompileOptions options,
-        List<List<RegexFixedWidthAtom>> alternatives)
+        List<List<RegexFixedWidthAtom>> alternatives,
+        Dictionary<RegexFixedWidthAtomCacheKey, RegexFixedWidthAtom> atomCache)
     {
         switch (node)
         {
             case RegexSequenceNode sequence:
-                return TryAppendSequenceAtoms(sequence, options, alternatives, startIndex: 0);
+                return TryAppendSequenceAtoms(sequence, options, alternatives, atomCache, startIndex: 0);
 
             case RegexAlternationNode alternation:
-                return TryAppendAlternationAtoms(alternation, options, alternatives);
+                return TryAppendAlternationAtoms(alternation, options, alternatives, atomCache);
 
             case RegexGroupNode group:
                 RegexCompileOptions groupOptions = options.Apply(group.EnabledFlags, group.DisabledFlags);
                 return !groupOptions.CaseInsensitive &&
                     !groupOptions.Utf8 &&
-                    TryAppendAtoms(group.Child, groupOptions, alternatives);
+                    TryAppendAtoms(group.Child, groupOptions, alternatives, atomCache);
 
             case RegexRepetitionNode repetition:
-                return TryAppendRepetitionAtoms(repetition, options, alternatives);
+                return TryAppendRepetitionAtoms(repetition, options, alternatives, atomCache);
 
             case RegexAtomNode { Kind: RegexSyntaxKind.Literal } atom:
                 ReadOnlySpan<byte> literal = atom.Value.Span;
@@ -984,7 +987,7 @@ internal sealed class RegexFixedWidthAlternationEngine
                     return false;
                 }
 
-                return TryAppendAtomToAll(alternatives, RegexFixedWidthAtom.CreateLookup(atom, options));
+                return TryAppendAtomToAll(alternatives, GetCachedLookupAtom(atom, options, atomCache));
 
             default:
                 return false;
@@ -995,6 +998,7 @@ internal sealed class RegexFixedWidthAlternationEngine
         RegexSequenceNode sequence,
         RegexCompileOptions options,
         List<List<RegexFixedWidthAtom>> alternatives,
+        Dictionary<RegexFixedWidthAtomCacheKey, RegexFixedWidthAtom> atomCache,
         int startIndex)
     {
         RegexCompileOptions currentOptions = options;
@@ -1012,7 +1016,7 @@ internal sealed class RegexFixedWidthAlternationEngine
                 continue;
             }
 
-            if (!TryAppendAtoms(child, currentOptions, alternatives))
+            if (!TryAppendAtoms(child, currentOptions, alternatives, atomCache))
             {
                 return false;
             }
@@ -1024,7 +1028,8 @@ internal sealed class RegexFixedWidthAlternationEngine
     private static bool TryAppendAlternationAtoms(
         RegexAlternationNode alternation,
         RegexCompileOptions options,
-        List<List<RegexFixedWidthAtom>> alternatives)
+        List<List<RegexFixedWidthAtom>> alternatives,
+        Dictionary<RegexFixedWidthAtomCacheKey, RegexFixedWidthAtom> atomCache)
     {
         var expanded = new List<List<RegexFixedWidthAtom>>();
         for (int existingIndex = 0; existingIndex < alternatives.Count; existingIndex++)
@@ -1033,7 +1038,7 @@ internal sealed class RegexFixedWidthAlternationEngine
             for (int branchIndex = 0; branchIndex < alternation.Alternatives.Count; branchIndex++)
             {
                 var branchAlternatives = new List<List<RegexFixedWidthAtom>> { new List<RegexFixedWidthAtom>(existing) };
-                if (!TryAppendAtoms(alternation.Alternatives[branchIndex], options, branchAlternatives))
+                if (!TryAppendAtoms(alternation.Alternatives[branchIndex], options, branchAlternatives, atomCache))
                 {
                     return false;
                 }
@@ -1057,7 +1062,8 @@ internal sealed class RegexFixedWidthAlternationEngine
     private static bool TryAppendRepetitionAtoms(
         RegexRepetitionNode repetition,
         RegexCompileOptions options,
-        List<List<RegexFixedWidthAtom>> alternatives)
+        List<List<RegexFixedWidthAtom>> alternatives,
+        Dictionary<RegexFixedWidthAtomCacheKey, RegexFixedWidthAtom> atomCache)
     {
         if (repetition.Maximum != repetition.Minimum || repetition.Minimum < 0)
         {
@@ -1066,13 +1072,29 @@ internal sealed class RegexFixedWidthAlternationEngine
 
         for (int count = 0; count < repetition.Minimum; count++)
         {
-            if (!TryAppendAtoms(repetition.Child, options, alternatives))
+            if (!TryAppendAtoms(repetition.Child, options, alternatives, atomCache))
             {
                 return false;
             }
         }
 
         return true;
+    }
+
+    private static RegexFixedWidthAtom GetCachedLookupAtom(
+        RegexAtomNode atom,
+        RegexCompileOptions options,
+        Dictionary<RegexFixedWidthAtomCacheKey, RegexFixedWidthAtom> atomCache)
+    {
+        var key = new RegexFixedWidthAtomCacheKey(atom, options);
+        if (atomCache.TryGetValue(key, out RegexFixedWidthAtom cached))
+        {
+            return cached;
+        }
+
+        var created = RegexFixedWidthAtom.CreateLookup(atom, options);
+        atomCache.Add(key, created);
+        return created;
     }
 
     private static bool TryAppendAtomToAll(
@@ -1105,5 +1127,4 @@ internal sealed class RegexFixedWidthAlternationEngine
             or RegexSyntaxKind.WordStartHalfBoundary
             or RegexSyntaxKind.WordEndHalfBoundary;
     }
-
 }

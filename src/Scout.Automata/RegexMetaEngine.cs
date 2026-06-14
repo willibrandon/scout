@@ -452,6 +452,33 @@ internal sealed class RegexMetaEngine
             repeatedLiteralRunOrEmpty: repeatedLiteralRunOrEmpty);
     }
 
+    public static RegexMetaEngine CompileFixedWidthAlternation(
+        RegexFixedWidthAlternationEngine fixedWidthAlternation,
+        bool utf8,
+        Func<RegexNfa>? fallbackNfaFactory)
+    {
+        ArgumentNullException.ThrowIfNull(fixedWidthAlternation);
+        return new RegexMetaEngine(
+            RegexEngineKind.FixedWidthAlternation,
+            nfa: null,
+            pikeVm: null,
+            boundedBacktracker: null,
+            onePassDfa: null,
+            denseDfa: null,
+            sparseDfa: null,
+            lazyDfa: null,
+            literalSet: null,
+            alternationSet: null,
+            delimitedRun: null,
+            simpleSequence: null,
+            lineContains: null,
+            dotStarClassFallback: null,
+            prefilter: null,
+            utf8,
+            nfaFactory: fallbackNfaFactory,
+            fixedWidthAlternation: fixedWidthAlternation);
+    }
+
     public static RegexMetaEngine CompileScalarRun(
         RegexScalarRunEngine scalarRun,
         bool utf8,

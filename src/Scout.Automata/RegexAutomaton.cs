@@ -382,6 +382,32 @@ public sealed class RegexAutomaton
                 wholePatternCaptureIndex);
         }
 
+        RegexFixedWidthAlternationEngine.TryCreate(
+            tree.Root,
+            tree.CaptureCount,
+            options,
+            out RegexFixedWidthAlternationEngine? earlyFixedWidthAlternation);
+        if (earlyFixedWidthAlternation is not null &&
+            !HasHigherPriorityFixedWidthSpecialization(tree.Root, options))
+        {
+            return new RegexAutomaton(
+                RegexMetaEngine.CompileFixedWidthAlternation(
+                    earlyFixedWidthAlternation,
+                    options.Utf8,
+                    () => RegexNfaCompiler.Compile(tree.Root, options, utf8ByteTrieCache)),
+                startPredicate: null,
+                lengthGuard: null,
+                requiredByteSetGuard: null,
+                requiredLiteralAnySetGuard: null,
+                syntheticCaptureAlternationSet: null,
+                tree.CaptureCount > 0 ? tree.Pattern : default,
+                tree.CaptureCount > 0 ? tree.Root : null,
+                options,
+                capturePrefilter: null,
+                tree.CaptureCount,
+                wholePatternCaptureIndex);
+        }
+
         RegexNfa nfa = RegexNfaCompiler.Compile(
             tree.Root,
             options,
@@ -413,7 +439,7 @@ public sealed class RegexAutomaton
         RegexBoundedByteClassSequenceEngine? boundedByteClassSequence = earlyBoundedByteClassSequence;
         RegexRepeatedLazyDotStarLiteralEngine.TryCreate(tree.Root, options, out RegexRepeatedLazyDotStarLiteralEngine? repeatedLazyDotStarLiteral);
         RegexDelimitedSpanEngine.TryCreate(tree.Root, options, out RegexDelimitedSpanEngine? delimitedSpan);
-        RegexFixedWidthAlternationEngine.TryCreate(tree.Root, tree.CaptureCount, options, out RegexFixedWidthAlternationEngine? fixedWidthAlternation);
+        RegexFixedWidthAlternationEngine? fixedWidthAlternation = earlyFixedWidthAlternation;
         RegexLeadingClassLiteralEngine.TryCreate(tree.Root, options, out RegexLeadingClassLiteralEngine? leadingClassLiteral);
         RegexLineBoundaryLiteralEngine? lineBoundaryLiteral = null;
         if (tree.CaptureCount == 0)
@@ -1223,6 +1249,35 @@ public sealed class RegexAutomaton
         }
 
         return captureEngine.MatchAt(haystack, match.Value.Start);
+    }
+
+    private static bool HasHigherPriorityFixedWidthSpecialization(RegexSyntaxNode root, RegexCompileOptions options)
+    {
+        if (RegexWholeLineEngine.TryCreate(root, options, out _) ||
+            RegexDotStarEngine.TryCreate(root, options, out _) ||
+            RegexIpv4AddressEngine.TryCreate(root, options, out _) ||
+            RegexEmailAddressEngine.TryCreate(root, options, out _) ||
+            RegexLh3EmailEngine.TryCreate(root, options, out _) ||
+            RegexUriEngine.TryCreate(root, options, out _) ||
+            RegexLh3UriEngine.TryCreate(root, options, out _) ||
+            RegexLh3UriOrEmailEngine.TryCreate(root, options, out _) ||
+            RegexLh3DateEngine.TryCreate(root, options, out _) ||
+            RegexWordWhitespaceLiteralEngine.TryCreate(root, options, out _) ||
+            RegexUnicodeWordWhitespaceLiteralEngine.TryCreate(root, options, out _) ||
+            RegexBoundedLetterSuffixWhitespaceEngine.TryCreate(root, options, out _) ||
+            RegexRunLiteralDotStarEngine.TryCreate(root, options, out _) ||
+            RegexLiteralPrefixRunEngine.TryCreate(root, options, out _) ||
+            RegexBoundedLiteralGapEngine.TryCreate(root, options, out _) ||
+            RegexBoundedLineLiteralGapEngine.TryCreate(root, options, out _) ||
+            RegexAnchoredLineLiteralGapEngine.TryCreate(root, options, out _) ||
+            RegexBoundedPrefixLiteralSetEngine.TryCreate(root, options, out _) ||
+            RegexRepeatedLazyDotStarLiteralEngine.TryCreate(root, options, out _) ||
+            RegexDelimitedSpanEngine.TryCreate(root, options, out _))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     internal static int TryGetWholePatternCaptureIndex(RegexSyntaxNode root, int captureCount)
