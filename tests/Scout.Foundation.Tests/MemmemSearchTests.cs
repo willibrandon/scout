@@ -113,6 +113,21 @@ public sealed class MemmemSearchTests
     }
 
     /// <summary>
+    /// Verifies packed-pair substring search confirms candidates and preserves tail matches.
+    /// </summary>
+    [Fact]
+    public void FindHandlesPackedPairFalsePositivesAndTailMatch()
+    {
+        byte[] haystack = new byte[360];
+        haystack.AsSpan().Fill((byte)'x');
+        "aeaeaeaeaf"u8.CopyTo(haystack.AsSpan(260));
+        "aeaeaeaeae"u8.CopyTo(haystack.AsSpan(345));
+
+        Assert.Equal(345, MemmemSearch.Find(haystack, "aeaeaeaeae"u8));
+        Assert.Equal(345, new MemmemFinder("aeaeaeaeae"u8).Find(haystack));
+    }
+
+    /// <summary>
     /// Verifies empty-needle semantics match Rust substring search behavior.
     /// </summary>
     [Fact]

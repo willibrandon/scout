@@ -7,6 +7,7 @@ namespace Scout;
 public sealed class MemmemFinder
 {
     private readonly byte[] needle;
+    private readonly MemmemPackedPairFinder? packedPairFinder;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MemmemFinder" /> class.
@@ -15,6 +16,9 @@ public sealed class MemmemFinder
     public MemmemFinder(ReadOnlySpan<byte> needle)
     {
         this.needle = needle.ToArray();
+        packedPairFinder = MemmemPackedPairFinder.TryCreate(this.needle, out MemmemPackedPairFinder finder)
+            ? finder
+            : null;
     }
 
     /// <summary>
@@ -29,7 +33,9 @@ public sealed class MemmemFinder
     /// <returns>The zero-based index, or <c>-1</c> when the sequence is absent.</returns>
     public int Find(ReadOnlySpan<byte> haystack)
     {
-        return MemmemSearch.Find(haystack, needle);
+        return packedPairFinder is MemmemPackedPairFinder finder
+            ? finder.Find(haystack, needle)
+            : MemmemSearch.FindWithoutPackedPair(haystack, needle);
     }
 
     /// <summary>
