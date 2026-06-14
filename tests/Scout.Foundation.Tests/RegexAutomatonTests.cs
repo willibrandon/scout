@@ -4366,10 +4366,10 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
-    /// Verifies Unicode word classes keep scalar semantics on the general engine.
+    /// Verifies Unicode word classes keep scalar semantics on the fixed word/whitespace engine.
     /// </summary>
     [Fact]
-    public void FixedWordWhitespaceSequencesLeaveUnicodeWordScalarsOnGeneralEngine()
+    public void FixedWordWhitespaceSequencesPreserveUnicodeWordScalars()
     {
         var automaton = RegexAutomaton.Compile(
             @"\w{5}\s\w{6}\s\w{7}"u8,
@@ -4380,7 +4380,7 @@ public sealed class RegexAutomatonTests
             unicodeClasses: true);
         byte[] haystack = System.Text.Encoding.UTF8.GetBytes("xx αβγδε foobar bazquux tail");
 
-        Assert.NotEqual(RegexEngineKind.FixedWordWhitespaceSequence, GetEngineKind(automaton));
+        Assert.Equal(RegexEngineKind.FixedWordWhitespaceSequence, GetEngineKind(automaton));
         RegexMatch expected = new(3, System.Text.Encoding.UTF8.GetByteCount("αβγδε foobar bazquux"));
         Assert.Equal(expected, automaton.Find(haystack));
         Assert.Equal(1, automaton.CountMatches(haystack));

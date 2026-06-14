@@ -9,6 +9,7 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
 {
     private const int MaxTokens = 64;
     private const int MaxRepeat = 256;
+    private const int MaxUtf8ScalarBytes = 4;
     private const byte WordKind = 0;
     private const byte WhitespaceKind = 1;
     private static readonly Vector128<byte> SpaceVector128 = Vector128.Create((byte)' ');
@@ -70,8 +71,7 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
         engine = null;
         if (options.CaseInsensitive ||
             options.SwapGreed ||
-            options.Utf8 ||
-            options.UnicodeClasses)
+            options.Utf8)
         {
             return false;
         }
@@ -110,13 +110,21 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
             return false;
         }
 
+        bool hasThreeWordWhitespaceShape = IsThreeWordWhitespaceShape(collectedKinds, collectedCounts);
+        if (options.UnicodeClasses &&
+            (!hasThreeWordWhitespaceShape ||
+             collectedCounts[1] != 1))
+        {
+            return false;
+        }
+
         engine = new RegexFixedWordWhitespaceSequenceEngine(
             [.. collectedKinds],
             [.. collectedCounts],
             options,
             fixedAsciiLength,
             anchorPrefixLength,
-            IsThreeWordWhitespaceShape(collectedKinds, collectedCounts),
+            hasThreeWordWhitespaceShape,
             collectedCounts[0],
             collectedCounts.Count == 5 ? collectedCounts[1] : 0,
             collectedCounts.Count == 5 ? collectedCounts[2] : 0,
@@ -161,9 +169,17 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
     {
         long count = 0;
         long spanSum = 0;
-        if (CanUseAsciiFastPath(haystack))
+        if (!options.UnicodeClasses)
         {
             CountOrSumAscii(haystack, startAt, sumSpans, ref count, ref spanSum);
+        }
+        else if (!ContainsNonAscii(haystack))
+        {
+            CountOrSumAscii(haystack, startAt, sumSpans, ref count, ref spanSum);
+        }
+        else if (hasThreeWordWhitespaceShape && firstWhitespaceCount == 1)
+        {
+            CountOrSumMostlyAsciiUnicode(haystack, startAt, sumSpans, ref count, ref spanSum);
         }
         else
         {
@@ -171,6 +187,77 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
         }
 
         return sumSpans ? spanSum : count;
+    }
+
+    private void CountOrSumMostlyAsciiUnicode(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        bool sumSpans,
+        ref long count,
+        ref long spanSum)
+    {
+        var guardRanges = new List<Range>();
+        int guardRadius = fixedAsciiLength * MaxUtf8ScalarBytes;
+        int search = 0;
+        while (search < haystack.Length)
+        {
+            int relative = haystack[search..].IndexOfAnyExceptInRange((byte)0, (byte)0x7F);
+            if (relative < 0)
+            {
+                break;
+            }
+
+            int index = search + relative;
+            int start = Math.Max(0, index - guardRadius);
+            int end = Math.Min(haystack.Length, index + guardRadius + 1);
+            if (guardRanges.Count != 0 && start <= guardRanges[^1].End.Value)
+            {
+                Range previous = guardRanges[^1];
+                guardRanges[^1] = previous.Start.Value..Math.Max(previous.End.Value, end);
+                search = index + 1;
+                continue;
+            }
+
+            guardRanges.Add(start..end);
+            search = index + 1;
+        }
+
+        int segmentStart = Math.Clamp(startAt, 0, haystack.Length);
+        for (int index = 0; index < guardRanges.Count; index++)
+        {
+            Range guard = guardRanges[index];
+            int guardStart = Math.Max(segmentStart, guard.Start.Value);
+            int guardEnd = Math.Max(guardStart, guard.End.Value);
+            if (segmentStart < guardStart)
+            {
+                CountOrSumThreeWordWhitespaceAsciiRange(
+                    haystack,
+                    segmentStart,
+                    guardStart,
+                    sumSpans,
+                    ref count,
+                    ref spanSum);
+            }
+
+            segmentStart = CountOrSumGenericRange(
+                haystack,
+                guardStart,
+                guardEnd,
+                sumSpans,
+                ref count,
+                ref spanSum);
+        }
+
+        if (segmentStart < haystack.Length)
+        {
+            CountOrSumThreeWordWhitespaceAsciiRange(
+                haystack,
+                segmentStart,
+                haystack.Length,
+                sumSpans,
+                ref count,
+                ref spanSum);
+        }
     }
 
     private RegexMatch? FindAscii(ReadOnlySpan<byte> haystack, int startAt)
@@ -267,6 +354,92 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
 
             search = anchor + 1;
         }
+    }
+
+    private void CountOrSumThreeWordWhitespaceAsciiRange(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        int end,
+        bool sumSpans,
+        ref long count,
+        ref long spanSum)
+    {
+        if (end - start < fixedAsciiLength)
+        {
+            return;
+        }
+
+        int search = start + anchorPrefixLength;
+        int lastAnchor = end - (fixedAsciiLength - anchorPrefixLength);
+        if (search > lastAnchor)
+        {
+            return;
+        }
+
+        if (Avx2.IsSupported && lastAnchor - search + 1 >= Vector256<byte>.Count)
+        {
+            CountOrSumThreeWordWhitespaceAsciiVector256(
+                haystack,
+                search,
+                lastAnchor,
+                sumSpans,
+                ref count,
+                ref spanSum);
+            return;
+        }
+
+        if (Sse2.IsSupported && lastAnchor - search + 1 >= Vector128<byte>.Count)
+        {
+            CountOrSumThreeWordWhitespaceAsciiVector128(
+                haystack,
+                search,
+                lastAnchor,
+                sumSpans,
+                ref count,
+                ref spanSum);
+            return;
+        }
+
+        int nextAllowedAnchor = search;
+        CountOrSumThreeWordWhitespaceAsciiScalar(
+            haystack,
+            search,
+            lastAnchor,
+            sumSpans,
+            ref count,
+            ref spanSum,
+            ref nextAllowedAnchor);
+    }
+
+    private int CountOrSumGenericRange(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        int end,
+        bool sumSpans,
+        ref long count,
+        ref long spanSum)
+    {
+        int offset = start;
+        int nextSegmentStart = end;
+        while (offset < end && offset < haystack.Length)
+        {
+            if (TryMatchGenericAt(haystack, offset, out int length))
+            {
+                count++;
+                if (sumSpans)
+                {
+                    spanSum += length;
+                }
+
+                offset += length;
+                nextSegmentStart = Math.Max(nextSegmentStart, offset);
+                continue;
+            }
+
+            offset++;
+        }
+
+        return Math.Min(nextSegmentStart, haystack.Length);
     }
 
     private void CountOrSumThreeWordWhitespaceAsciiVector256(
@@ -581,15 +754,7 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
 
     private static bool ContainsNonAscii(ReadOnlySpan<byte> haystack)
     {
-        for (int index = 0; index < haystack.Length; index++)
-        {
-            if (haystack[index] > 0x7F)
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return haystack.IndexOfAnyExceptInRange((byte)0, (byte)0x7F) >= 0;
     }
 
     private static int FindNextAsciiWhitespace(ReadOnlySpan<byte> haystack, int start, int inclusiveEnd)
