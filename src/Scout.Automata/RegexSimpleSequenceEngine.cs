@@ -635,7 +635,7 @@ internal sealed class RegexSimpleSequenceEngine
                 Avx2.CompareGreaterThan(folded, beforeA),
                 Avx2.CompareGreaterThan(afterZ, folded)).AsByte();
             uint mask = matches.ExtractMostSignificantBits();
-            AccumulateAsciiLetterMask(minimum, maximum, lazy, mask, Vector256<byte>.Count, ref runLength, ref count);
+            AccumulateRunMask(minimum, maximum, lazy, mask, Vector256<byte>.Count, ref runLength, ref count);
             position += Vector256<byte>.Count;
         }
 
@@ -657,7 +657,7 @@ internal sealed class RegexSimpleSequenceEngine
         AddRunCountOnly(minimum, maximum, lazy, runLength, ref count);
     }
 
-    private static void AccumulateAsciiLetterMask(
+    private static void AccumulateRunMask(
         int minimum,
         int? maximum,
         bool lazy,
@@ -804,6 +804,12 @@ internal sealed class RegexSimpleSequenceEngine
         int position,
         ref long count)
     {
+        if (Avx2.IsSupported && haystack.Length - position >= Vector256<byte>.Count)
+        {
+            CountAsciiWordRunsCountOnlyAvx2(minimum, maximum, lazy, haystack, position, ref count);
+            return;
+        }
+
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
         int length = haystack.Length;
         while (position < length)
@@ -826,6 +832,61 @@ internal sealed class RegexSimpleSequenceEngine
 
             AddRunCountOnly(minimum, maximum, lazy, position - runStart, ref count);
         }
+    }
+
+    private static void CountAsciiWordRunsCountOnlyAvx2(
+        int minimum,
+        int? maximum,
+        bool lazy,
+        ReadOnlySpan<byte> haystack,
+        int position,
+        ref long count)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int length = haystack.Length;
+        int vectorEnd = length - Vector256<byte>.Count;
+        int runLength = 0;
+        var caseFold = Vector256.Create((byte)0x20);
+        var beforeA = Vector256.Create((sbyte)('a' - 1));
+        var afterZ = Vector256.Create((sbyte)('z' + 1));
+        var beforeZero = Vector256.Create((sbyte)('0' - 1));
+        var afterNine = Vector256.Create((sbyte)('9' + 1));
+        var underscore = Vector256.Create((byte)'_');
+        while (position <= vectorEnd)
+        {
+            var block = Vector256.LoadUnsafe(ref reference, (nuint)position);
+            Vector256<sbyte> signed = block.AsSByte();
+            Vector256<sbyte> folded = Avx2.Or(block, caseFold).AsSByte();
+            Vector256<byte> letterMatches = Avx2.And(
+                Avx2.CompareGreaterThan(folded, beforeA),
+                Avx2.CompareGreaterThan(afterZ, folded)).AsByte();
+            Vector256<byte> digitMatches = Avx2.And(
+                Avx2.CompareGreaterThan(signed, beforeZero),
+                Avx2.CompareGreaterThan(afterNine, signed)).AsByte();
+            Vector256<byte> matches = Avx2.Or(
+                Avx2.Or(letterMatches, digitMatches),
+                Avx2.CompareEqual(block, underscore));
+            uint mask = matches.ExtractMostSignificantBits();
+            AccumulateRunMask(minimum, maximum, lazy, mask, Vector256<byte>.Count, ref runLength, ref count);
+            position += Vector256<byte>.Count;
+        }
+
+        while (position < length)
+        {
+            if (RegexSimpleSequenceSegment.IsAsciiWord(Unsafe.Add(ref reference, position)))
+            {
+                runLength++;
+            }
+            else
+            {
+                AddRunCountOnly(minimum, maximum, lazy, runLength, ref count);
+                runLength = 0;
+            }
+
+            position++;
+        }
+
+        AddRunCountOnly(minimum, maximum, lazy, runLength, ref count);
     }
 
     private static RegexMatch? FindSingleSegment(RegexSimpleSequenceSegment segment, ReadOnlySpan<byte> haystack, int startOffset)
