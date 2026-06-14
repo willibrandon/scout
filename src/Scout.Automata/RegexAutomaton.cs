@@ -273,6 +273,29 @@ public sealed class RegexAutomaton
                 wholePatternCaptureIndex);
         }
 
+        RegexFixedWordWhitespaceSequenceEngine.TryCreate(
+            tree.Root,
+            options,
+            out RegexFixedWordWhitespaceSequenceEngine? fixedWordWhitespaceSequence);
+        if (fixedWordWhitespaceSequence is not null)
+        {
+            return new RegexAutomaton(
+                RegexMetaEngine.CompileFixedWordWhitespaceSequence(
+                    fixedWordWhitespaceSequence,
+                    options.Utf8),
+                startPredicate: null,
+                lengthGuard: null,
+                requiredByteSetGuard: null,
+                requiredLiteralAnySetGuard: null,
+                syntheticCaptureAlternationSet: null,
+                tree.CaptureCount > 0 ? tree.Pattern : default,
+                tree.CaptureCount > 0 ? tree.Root : null,
+                options,
+                capturePrefilter: null,
+                tree.CaptureCount,
+                wholePatternCaptureIndex);
+        }
+
         RegexUnicodeGraphemeClusterEngine.TryCreate(tree.Root, options, out RegexUnicodeGraphemeClusterEngine? unicodeGraphemeCluster);
         if (unicodeGraphemeCluster is not null)
         {

@@ -4267,6 +4267,70 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies fixed word/whitespace sequences scan from their whitespace anchor.
+    /// </summary>
+    [Fact]
+    public void CountsFixedWordWhitespaceSequences()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\w{5}\s\w{6}\s\w{7}"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "xx abcde foobar bazquux tail abcde foobar bazquuxxxx abcde foo_bar seven77"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.FixedWordWhitespaceSequence, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(3, 20), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(29, 20), automaton.Find(haystack, startAt: 4));
+        Assert.Equal(new RegexMatch(29, 20), automaton.FindEarliest(haystack, startAt: 4));
+        Assert.Equal(new RegexMatch(3, 20), automaton.FindAllKindAt(haystack, startAt: 3));
+        Assert.Equal([new RegexMatch(3, 20)], automaton.FindOverlappingAt(haystack, startAt: 3));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(40, automaton.SumMatchSpans(haystack));
+        Assert.Equal(1, automaton.CountMatches(haystack, startAt: 4));
+        Assert.Equal(20, automaton.SumMatchSpans(haystack, startAt: 4));
+        Assert.Null(automaton.FindAllKindAt(haystack, startAt: 4));
+
+        byte[] shortFirstWord = "zz abc defghi jklmnop"u8.ToArray();
+        Assert.Null(automaton.Find(shortFirstWord));
+        Assert.Equal(0, automaton.CountMatches(shortFirstWord));
+        Assert.Equal(0, automaton.SumMatchSpans(shortFirstWord));
+    }
+
+    /// <summary>
+    /// Verifies Unicode word classes keep scalar semantics on the general engine.
+    /// </summary>
+    [Fact]
+    public void FixedWordWhitespaceSequencesLeaveUnicodeWordScalarsOnGeneralEngine()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\w{5}\s\w{6}\s\w{7}"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("xx αβγδε foobar bazquux tail");
+
+        Assert.NotEqual(RegexEngineKind.FixedWordWhitespaceSequence, GetEngineKind(automaton));
+        RegexMatch expected = new(3, System.Text.Encoding.UTF8.GetByteCount("αβγδε foobar bazquux"));
+        Assert.Equal(expected, automaton.Find(haystack));
+        Assert.Equal(1, automaton.CountMatches(haystack));
+        Assert.Equal(expected.Length, automaton.SumMatchSpans(haystack));
+
+        var byteMode = RegexAutomaton.Compile(
+            @"\w{5}\s\w{6}\s\w{7}"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        Assert.Null(byteMode.Find(haystack));
+    }
+
+    /// <summary>
     /// Verifies fixed-width suffix scanning preserves non-overlapping count semantics.
     /// </summary>
     [Fact]

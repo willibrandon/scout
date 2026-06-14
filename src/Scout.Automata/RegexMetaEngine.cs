@@ -47,6 +47,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexRepeatedLazyDotStarLiteralEngine? repeatedLazyDotStarLiteral;
     private readonly RegexDelimitedSpanEngine? delimitedSpan;
     private readonly RegexFixedWidthAlternationEngine? fixedWidthAlternation;
+    private readonly RegexFixedWordWhitespaceSequenceEngine? fixedWordWhitespaceSequence;
     private readonly RegexLeadingClassLiteralEngine? leadingClassLiteral;
     private readonly RegexUnicodeLetterLiteralRunEngine? unicodeLetterLiteralRun;
     private readonly RegexWordBoundaryLiteralSetEngine? wordBoundaryLiteralSet;
@@ -120,6 +121,7 @@ internal sealed class RegexMetaEngine
         RegexRepeatedLazyDotStarLiteralEngine? repeatedLazyDotStarLiteral = null,
         RegexDelimitedSpanEngine? delimitedSpan = null,
         RegexFixedWidthAlternationEngine? fixedWidthAlternation = null,
+        RegexFixedWordWhitespaceSequenceEngine? fixedWordWhitespaceSequence = null,
         RegexLeadingClassLiteralEngine? leadingClassLiteral = null,
         RegexUnicodeLetterLiteralRunEngine? unicodeLetterLiteralRun = null,
         RegexWordBoundaryLiteralSetEngine? wordBoundaryLiteralSet = null,
@@ -168,6 +170,7 @@ internal sealed class RegexMetaEngine
         this.repeatedLazyDotStarLiteral = repeatedLazyDotStarLiteral;
         this.delimitedSpan = delimitedSpan;
         this.fixedWidthAlternation = fixedWidthAlternation;
+        this.fixedWordWhitespaceSequence = fixedWordWhitespaceSequence;
         this.leadingClassLiteral = leadingClassLiteral;
         this.unicodeLetterLiteralRun = unicodeLetterLiteralRun;
         this.wordBoundaryLiteralSet = wordBoundaryLiteralSet;
@@ -391,6 +394,31 @@ internal sealed class RegexMetaEngine
             prefilter: null,
             utf8,
             nfaFactory: fallbackNfaFactory);
+    }
+
+    public static RegexMetaEngine CompileFixedWordWhitespaceSequence(
+        RegexFixedWordWhitespaceSequenceEngine fixedWordWhitespaceSequence,
+        bool utf8)
+    {
+        ArgumentNullException.ThrowIfNull(fixedWordWhitespaceSequence);
+        return new RegexMetaEngine(
+            RegexEngineKind.FixedWordWhitespaceSequence,
+            nfa: null,
+            pikeVm: null,
+            boundedBacktracker: null,
+            onePassDfa: null,
+            denseDfa: null,
+            sparseDfa: null,
+            lazyDfa: null,
+            literalSet: null,
+            alternationSet: null,
+            delimitedRun: null,
+            simpleSequence: null,
+            lineContains: null,
+            dotStarClassFallback: null,
+            prefilter: null,
+            utf8,
+            fixedWordWhitespaceSequence: fixedWordWhitespaceSequence);
     }
 
     public static RegexMetaEngine CompileScalarRun(
@@ -1535,6 +1563,11 @@ internal sealed class RegexMetaEngine
             return fixedWidthAlternation.IsMatch(haystack, startAt: 0);
         }
 
+        if (fixedWordWhitespaceSequence is not null)
+        {
+            return fixedWordWhitespaceSequence.Find(haystack, startAt: 0).HasValue;
+        }
+
         if (lh3Uri is not null)
         {
             return RegexLh3UriEngine.IsMatch(haystack);
@@ -1688,6 +1721,11 @@ internal sealed class RegexMetaEngine
         if (fixedWidthAlternation is not null)
         {
             return fixedWidthAlternation.Find(haystack, startOffset);
+        }
+
+        if (fixedWordWhitespaceSequence is not null)
+        {
+            return fixedWordWhitespaceSequence.Find(haystack, startOffset);
         }
 
         if (leadingClassLiteral is not null)
@@ -1975,6 +2013,11 @@ internal sealed class RegexMetaEngine
             return fixedWidthAlternation.CountMatches(haystack, startAt);
         }
 
+        if (fixedWordWhitespaceSequence is not null)
+        {
+            return fixedWordWhitespaceSequence.CountMatches(haystack, startAt);
+        }
+
         if (leadingClassLiteral is not null)
         {
             return leadingClassLiteral.CountMatches(haystack, startAt);
@@ -2180,6 +2223,11 @@ internal sealed class RegexMetaEngine
         if (fixedWidthAlternation is not null)
         {
             return fixedWidthAlternation.SumMatchSpans(haystack, startAt);
+        }
+
+        if (fixedWordWhitespaceSequence is not null)
+        {
+            return fixedWordWhitespaceSequence.SumMatchSpans(haystack, startAt);
         }
 
         if (leadingClassLiteral is not null)
@@ -2562,6 +2610,11 @@ internal sealed class RegexMetaEngine
             return fixedWidthAlternation.MatchAt(haystack, startOffset);
         }
 
+        if (fixedWordWhitespaceSequence is not null)
+        {
+            return fixedWordWhitespaceSequence.MatchAt(haystack, startOffset);
+        }
+
         if (leadingClassLiteral is not null)
         {
             return leadingClassLiteral.MatchAt(haystack, startOffset);
@@ -2704,6 +2757,11 @@ internal sealed class RegexMetaEngine
             return literalSet.FindEarliest(haystack, startOffset);
         }
 
+        if (fixedWordWhitespaceSequence is not null)
+        {
+            return fixedWordWhitespaceSequence.Find(haystack, startOffset);
+        }
+
         RegexNfa activeNfa = GetNfa();
         var earliestPikeVm = new PikeVm(activeNfa);
         for (int start = startOffset; start <= haystack.Length; start++)
@@ -2735,6 +2793,11 @@ internal sealed class RegexMetaEngine
             return literalSet.FindAllKindAt(haystack, startOffset);
         }
 
+        if (fixedWordWhitespaceSequence is not null)
+        {
+            return fixedWordWhitespaceSequence.MatchAt(haystack, startOffset);
+        }
+
         RegexNfa activeNfa = GetNfa();
         if (activeNfa.Utf8 && !RegexByteClass.IsUtf8Boundary(haystack, startOffset))
         {
@@ -2758,6 +2821,12 @@ internal sealed class RegexMetaEngine
         if (literalSet is not null)
         {
             return literalSet.FindOverlappingAt(haystack, startOffset);
+        }
+
+        if (fixedWordWhitespaceSequence is not null)
+        {
+            RegexMatch? match = fixedWordWhitespaceSequence.MatchAt(haystack, startOffset);
+            return match.HasValue ? [match.Value] : [];
         }
 
         RegexNfa activeNfa = GetNfa();
@@ -2800,6 +2869,11 @@ internal sealed class RegexMetaEngine
         if (simpleSequence is not null)
         {
             return simpleSequence.TryMatchAt(haystack, start, out length);
+        }
+
+        if (fixedWordWhitespaceSequence is not null)
+        {
+            return fixedWordWhitespaceSequence.TryMatchAt(haystack, start, out length);
         }
 
         if (wordWhitespaceLiteral is not null)
