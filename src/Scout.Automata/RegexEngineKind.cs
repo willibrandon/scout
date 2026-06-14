@@ -24,6 +24,7 @@ internal enum RegexEngineKind
     BoundedScalarClassSequence,
     BoundedByteClassSequence,
     RepeatedLazyDotStarLiteral,
+    RepeatedLiteralRunOrEmpty,
     DelimitedSpan,
     FixedWidthAlternation,
     FixedWordWhitespaceSequence,

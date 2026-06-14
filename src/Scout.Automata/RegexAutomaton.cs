@@ -171,6 +171,29 @@ public sealed class RegexAutomaton
                 captureCount: 0);
         }
 
+        RegexRepeatedLiteralRunOrEmptyEngine.TryCreate(
+            tree.Root,
+            options,
+            tree.CaptureCount,
+            out RegexRepeatedLiteralRunOrEmptyEngine? repeatedLiteralRunOrEmpty);
+        if (repeatedLiteralRunOrEmpty is not null)
+        {
+            return new RegexAutomaton(
+                RegexMetaEngine.CompileRepeatedLiteralRunOrEmpty(
+                    repeatedLiteralRunOrEmpty,
+                    options.Utf8),
+                startPredicate: null,
+                lengthGuard: null,
+                requiredByteSetGuard: null,
+                requiredLiteralAnySetGuard: null,
+                syntheticCaptureAlternationSet: null,
+                capturePattern: default,
+                captureRoot: null,
+                captureOptions: default,
+                capturePrefilter: null,
+                captureCount: 0);
+        }
+
         RegexLiteralSetEngine.TryCreate(tree.Root, options, out RegexLiteralSetEngine? literalSet);
         if (literalSet is not null && tree.CaptureCount == 0)
         {

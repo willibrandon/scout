@@ -4302,6 +4302,31 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies repeated literal run alternations with an empty branch count in linear time.
+    /// </summary>
+    [Fact]
+    public void RepeatedLiteralRunOrEmptyCountsEmptyFallbacks()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"(?:A+){4}|"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(RegexEngineKind.RepeatedLiteralRunOrEmpty, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 0), automaton.Find("AAA"u8));
+        Assert.Equal(4, automaton.CountMatches("AAA"u8));
+        Assert.Equal(0, automaton.SumMatchSpans("AAA"u8));
+        Assert.Equal(new RegexMatch(0, 5), automaton.Find("AAAAA"u8));
+        Assert.Equal(2, automaton.CountMatches("AAAAA"u8));
+        Assert.Equal(5, automaton.SumMatchSpans("AAAAA"u8));
+        Assert.Equal(new RegexMatch(1, 4), automaton.Find("xAAAA"u8, startAt: 1));
+        Assert.Equal(2, automaton.CountMatches("xAAAA"u8, startAt: 1));
+    }
+
+    /// <summary>
     /// Verifies Unicode word classes keep scalar semantics on the general engine.
     /// </summary>
     [Fact]
