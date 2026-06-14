@@ -98,19 +98,19 @@ internal sealed class RegexKeywordWhitespaceCaptureEngine
         int offset = Math.Clamp(startAt, 0, haystack.Length);
         while (offset < haystack.Length)
         {
-            if (!TryFindCaptureEnd(haystack, offset, out int trailingEnd))
+            if (!TryFindKeywordEnd(haystack, offset, out int keywordEnd))
             {
                 return total;
             }
 
             total += 3;
-            offset = trailingEnd;
+            offset = keywordEnd;
         }
 
         return total;
     }
 
-    private bool TryFindCaptureEnd(ReadOnlySpan<byte> haystack, int startAt, out int trailingEnd)
+    private bool TryFindKeywordEnd(ReadOnlySpan<byte> haystack, int startAt, out int keywordEnd)
     {
         int lowerBound = Math.Clamp(startAt, 0, haystack.Length);
         int search = lowerBound;
@@ -119,20 +119,19 @@ internal sealed class RegexKeywordWhitespaceCaptureEngine
             int keywordStart = FindKeywordStart(haystack, search);
             if (keywordStart < 0)
             {
-                trailingEnd = 0;
+                keywordEnd = 0;
                 return false;
             }
 
-            if (TryFindBoundedKeywordEnd(haystack, keywordStart, out int keywordEnd))
+            if (TryFindBoundedKeywordEnd(haystack, keywordStart, out keywordEnd))
             {
-                trailingEnd = ConsumeWhitespaceForward(haystack, keywordEnd);
                 return true;
             }
 
             search = keywordStart + 1;
         }
 
-        trailingEnd = 0;
+        keywordEnd = 0;
         return false;
     }
 
