@@ -1,12 +1,32 @@
+using System.Numerics;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
+
 namespace Scout;
 
 internal sealed class RegexAsciiCaseInsensitiveFinder
 {
+    private const int VeryRareAnchorScore = 230;
+
     private readonly byte[] needle;
     private readonly int anchorIndex;
     private readonly byte anchor;
     private readonly byte anchorAlternate;
     private readonly bool hasAnchorAlternate;
+    private readonly int blockAnchorIndex = -1;
+    private readonly byte blockFirst;
+    private readonly byte blockSecond;
+    private readonly bool blockFirstHasAlternate;
+    private readonly bool blockSecondHasAlternate;
+    private readonly Vector128<byte> blockFirstVector128;
+    private readonly Vector128<byte> blockSecondVector128;
+    private readonly Vector128<byte> blockFirstAlternateVector128;
+    private readonly Vector128<byte> blockSecondAlternateVector128;
+    private readonly Vector256<byte> blockFirstVector256;
+    private readonly Vector256<byte> blockSecondVector256;
+    private readonly Vector256<byte> blockFirstAlternateVector256;
+    private readonly Vector256<byte> blockSecondAlternateVector256;
 
     public RegexAsciiCaseInsensitiveFinder(ReadOnlySpan<byte> needle)
     {
@@ -20,6 +40,24 @@ internal sealed class RegexAsciiCaseInsensitiveFinder
         anchor = this.needle[anchorIndex];
         hasAnchorAlternate = IsAsciiCased(anchor);
         anchorAlternate = hasAnchorAlternate ? ToggleAsciiCase(anchor) : anchor;
+        if (this.needle.Length >= 2 && ShouldUseBlockAnchor(this.needle, anchorIndex))
+        {
+            blockAnchorIndex = SelectBlockAnchorIndex(this.needle);
+            blockFirst = this.needle[blockAnchorIndex];
+            blockSecond = this.needle[blockAnchorIndex + 1];
+            blockFirstHasAlternate = IsAsciiCased(blockFirst);
+            blockSecondHasAlternate = IsAsciiCased(blockSecond);
+            byte blockFirstAlternate = blockFirstHasAlternate ? ToggleAsciiCase(blockFirst) : blockFirst;
+            byte blockSecondAlternate = blockSecondHasAlternate ? ToggleAsciiCase(blockSecond) : blockSecond;
+            blockFirstVector128 = Vector128.Create(blockFirst);
+            blockSecondVector128 = Vector128.Create(blockSecond);
+            blockFirstAlternateVector128 = Vector128.Create(blockFirstAlternate);
+            blockSecondAlternateVector128 = Vector128.Create(blockSecondAlternate);
+            blockFirstVector256 = Vector256.Create(blockFirst);
+            blockSecondVector256 = Vector256.Create(blockSecond);
+            blockFirstAlternateVector256 = Vector256.Create(blockFirstAlternate);
+            blockSecondAlternateVector256 = Vector256.Create(blockSecondAlternate);
+        }
     }
 
     public int Find(ReadOnlySpan<byte> haystack)
@@ -32,6 +70,11 @@ internal sealed class RegexAsciiCaseInsensitiveFinder
         if (needle.Length > haystack.Length)
         {
             return -1;
+        }
+
+        if (blockAnchorIndex >= 0)
+        {
+            return FindBlockAnchored(haystack);
         }
 
         int anchorPosition = anchorIndex;
@@ -54,6 +97,130 @@ internal sealed class RegexAsciiCaseInsensitiveFinder
             }
 
             anchorPosition++;
+        }
+
+        return -1;
+    }
+
+    private int FindBlockAnchored(ReadOnlySpan<byte> haystack)
+    {
+        int blockPosition = blockAnchorIndex;
+        int lastBlockPosition = haystack.Length - (needle.Length - blockAnchorIndex);
+        while (blockPosition <= lastBlockPosition)
+        {
+            int found = FindBlockPosition(haystack, blockPosition, lastBlockPosition);
+            if (found < 0)
+            {
+                return -1;
+            }
+
+            int matchStart = found - blockAnchorIndex;
+            if (MatchesAt(haystack, matchStart))
+            {
+                return matchStart;
+            }
+
+            blockPosition = found + 1;
+        }
+
+        return -1;
+    }
+
+    private int FindBlockPosition(ReadOnlySpan<byte> haystack, int startAt, int lastStart)
+    {
+        if (startAt > lastStart)
+        {
+            return -1;
+        }
+
+        if (Avx2.IsSupported && lastStart - startAt + 1 > Vector256<byte>.Count)
+        {
+            return FindBlockVector256(haystack, startAt, lastStart);
+        }
+
+        if (Sse2.IsSupported && lastStart - startAt + 1 > Vector128<byte>.Count)
+        {
+            return FindBlockVector128(haystack, startAt, lastStart);
+        }
+
+        return FindBlockScalar(haystack, startAt, lastStart);
+    }
+
+    private int FindBlockVector256(ReadOnlySpan<byte> haystack, int startAt, int lastStart)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int offset = startAt;
+        int vectorEnd = Math.Min(haystack.Length - Vector256<byte>.Count - 1, lastStart - Vector256<byte>.Count + 1);
+        while (offset <= vectorEnd)
+        {
+            var current = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            var next = Vector256.LoadUnsafe(ref reference, (nuint)(offset + 1));
+            Vector256<byte> firstMatches = Avx2.CompareEqual(current, blockFirstVector256);
+            if (blockFirstHasAlternate)
+            {
+                firstMatches = Avx2.Or(firstMatches, Avx2.CompareEqual(current, blockFirstAlternateVector256));
+            }
+
+            Vector256<byte> secondMatches = Avx2.CompareEqual(next, blockSecondVector256);
+            if (blockSecondHasAlternate)
+            {
+                secondMatches = Avx2.Or(secondMatches, Avx2.CompareEqual(next, blockSecondAlternateVector256));
+            }
+
+            uint mask = Avx2.And(firstMatches, secondMatches).ExtractMostSignificantBits();
+            if (mask != 0)
+            {
+                return offset + BitOperations.TrailingZeroCount(mask);
+            }
+
+            offset += Vector256<byte>.Count;
+        }
+
+        return FindBlockScalar(haystack, offset, lastStart);
+    }
+
+    private int FindBlockVector128(ReadOnlySpan<byte> haystack, int startAt, int lastStart)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int offset = startAt;
+        int vectorEnd = Math.Min(haystack.Length - Vector128<byte>.Count - 1, lastStart - Vector128<byte>.Count + 1);
+        while (offset <= vectorEnd)
+        {
+            var current = Vector128.LoadUnsafe(ref reference, (nuint)offset);
+            var next = Vector128.LoadUnsafe(ref reference, (nuint)(offset + 1));
+            Vector128<byte> firstMatches = Sse2.CompareEqual(current, blockFirstVector128);
+            if (blockFirstHasAlternate)
+            {
+                firstMatches = Sse2.Or(firstMatches, Sse2.CompareEqual(current, blockFirstAlternateVector128));
+            }
+
+            Vector128<byte> secondMatches = Sse2.CompareEqual(next, blockSecondVector128);
+            if (blockSecondHasAlternate)
+            {
+                secondMatches = Sse2.Or(secondMatches, Sse2.CompareEqual(next, blockSecondAlternateVector128));
+            }
+
+            uint mask = Sse2.And(firstMatches, secondMatches).ExtractMostSignificantBits();
+            if (mask != 0)
+            {
+                return offset + BitOperations.TrailingZeroCount(mask);
+            }
+
+            offset += Vector128<byte>.Count;
+        }
+
+        return FindBlockScalar(haystack, offset, lastStart);
+    }
+
+    private int FindBlockScalar(ReadOnlySpan<byte> haystack, int startAt, int lastStart)
+    {
+        for (int index = startAt; index <= lastStart; index++)
+        {
+            if (FoldAscii(haystack[index]) == blockFirst &&
+                FoldAscii(haystack[index + 1]) == blockSecond)
+            {
+                return index;
+            }
         }
 
         return -1;
@@ -103,6 +270,17 @@ internal sealed class RegexAsciiCaseInsensitiveFinder
         }
 
         return bestIndex;
+    }
+
+    private static int SelectBlockAnchorIndex(ReadOnlySpan<byte> value)
+    {
+        int byteAnchorIndex = SelectAnchorIndex(value);
+        return byteAnchorIndex == 0 ? 0 : byteAnchorIndex - 1;
+    }
+
+    private static bool ShouldUseBlockAnchor(ReadOnlySpan<byte> value, int byteAnchorIndex)
+    {
+        return AnchorScore(value[byteAnchorIndex]) < VeryRareAnchorScore;
     }
 
     private static int AnchorScore(byte value)

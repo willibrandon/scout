@@ -2928,6 +2928,21 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies the single required-literal finder keeps leftmost ASCII case-insensitive block matches.
+    /// </summary>
+    [Fact]
+    public void SingleRequiredLiteralFinderMatchesAsciiCaseInsensitiveBlockAnchor()
+    {
+        var finder = new RegexAsciiCaseInsensitiveFinder("Twain"u8);
+
+        Assert.Equal(3, finder.Find("xx tWain yy"u8));
+        Assert.Equal(0, finder.Find("twAIN Twain"u8));
+        Assert.Equal(8, finder.Find("xx wain tWaIn"u8));
+        Assert.Equal(-1, finder.Find("xx tWai"u8));
+        Assert.Equal(-1, finder.Find("xx wain"u8));
+    }
+
+    /// <summary>
     /// Verifies required-literal sets retain a proven maximum distance from the match start.
     /// </summary>
     [Fact]
