@@ -4,6 +4,7 @@ internal sealed class RegexAnchoredLiteralFinder
 {
     private const int MinimumNeedleLength = 4;
     private const int MinimumAnchorAdvantage = 80;
+    private const int MinimumAsciiThreeByteAnchorScore = 250;
 
     private readonly byte[] needle;
     private readonly int anchorIndex;
@@ -19,14 +20,20 @@ internal sealed class RegexAnchoredLiteralFinder
     public static bool TryCreate(ReadOnlySpan<byte> needle, out RegexAnchoredLiteralFinder? finder)
     {
         finder = null;
-        if (needle.Length < MinimumNeedleLength || !ContainsNonAscii(needle) || !ContainsAsciiOrTwoByteUtf8Only(needle))
+        bool containsNonAscii = ContainsNonAscii(needle);
+        bool threeByteAscii = !containsNonAscii && needle.Length == 3;
+        if (containsNonAscii && needle.Length < MinimumNeedleLength ||
+            !containsNonAscii && !threeByteAscii ||
+            !ContainsAsciiOrTwoByteUtf8Only(needle))
         {
             return false;
         }
 
         int anchorIndex = SelectAnchorIndex(needle);
-        if (anchorIndex == 0 ||
-            AnchorScore(needle, anchorIndex) < AnchorScore(needle, 0) + MinimumAnchorAdvantage)
+        bool firstByteAsciiAnchor = threeByteAscii &&
+            AsciiAnchorScore(needle[0]) >= MinimumAsciiThreeByteAnchorScore;
+        if (anchorIndex == 0 && !firstByteAsciiAnchor ||
+            anchorIndex != 0 && AnchorScore(needle, anchorIndex) < AnchorScore(needle, 0) + MinimumAnchorAdvantage)
         {
             return false;
         }

@@ -352,6 +352,38 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies sparse three-byte literals keep exact literal-set semantics.
+    /// </summary>
+    [Fact]
+    public void LiteralSetCountsSparseThreeByteLiterals()
+    {
+        var firstByteAnchor = RegexAutomaton.Compile(
+            "zqj"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var middleByteAnchor = RegexAutomaton.Compile(
+            "aqj"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "aaaa aqx zqj aqj zaqj"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(firstByteAnchor));
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(middleByteAnchor));
+        Assert.Equal(new RegexMatch(9, 3), firstByteAnchor.Find(haystack));
+        Assert.Equal(new RegexMatch(13, 3), middleByteAnchor.Find(haystack));
+        Assert.Equal(1, firstByteAnchor.CountMatches(haystack));
+        Assert.Equal(3, firstByteAnchor.SumMatchSpans(haystack));
+        Assert.Equal(2, middleByteAnchor.CountMatches(haystack));
+        Assert.Equal(6, middleByteAnchor.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies single non-ASCII literals keep exact byte-oriented count and span semantics.
     /// </summary>
     [Fact]
