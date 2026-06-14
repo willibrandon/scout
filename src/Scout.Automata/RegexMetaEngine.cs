@@ -22,6 +22,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexLazyDfa? asciiFastDfa;
     private readonly RegexLiteralSetEngine? literalSet;
     private readonly RegexAlternationSetEngine? alternationSet;
+    private readonly RegexWholeLineEngine? wholeLine;
     private readonly RegexDotStarEngine? dotStar;
     private readonly RegexIpv4AddressEngine? ipv4Address;
     private readonly RegexEmailAddressEngine? emailAddress;
@@ -98,7 +99,8 @@ internal sealed class RegexMetaEngine
         RegexUnicodeLetterLiteralRunEngine? unicodeLetterLiteralRun = null,
         RegexWordBoundaryLiteralSetEngine? wordBoundaryLiteralSet = null,
         RegexWordSuffixLiteralEngine? wordSuffixLiteral = null,
-        RegexEndAnchoredSequenceEngine? endAnchoredSequence = null)
+        RegexEndAnchoredSequenceEngine? endAnchoredSequence = null,
+        RegexWholeLineEngine? wholeLine = null)
     {
         Kind = kind;
         this.nfa = nfa;
@@ -115,6 +117,7 @@ internal sealed class RegexMetaEngine
         this.unanchoredLazyDfaFactory = unanchoredLazyDfaFactory;
         this.literalSet = literalSet;
         this.alternationSet = alternationSet;
+        this.wholeLine = wholeLine;
         this.dotStar = dotStar;
         this.ipv4Address = ipv4Address;
         this.emailAddress = emailAddress;
@@ -243,6 +246,7 @@ internal sealed class RegexMetaEngine
         ulong? dfaSizeLimit,
         RegexLiteralSetEngine? literalSet,
         RegexAlternationSetEngine? alternationSet,
+        RegexWholeLineEngine? wholeLine = null,
         RegexDotStarEngine? dotStar = null,
         RegexIpv4AddressEngine? ipv4Address = null,
         RegexEmailAddressEngine? emailAddress = null,
@@ -311,6 +315,28 @@ internal sealed class RegexMetaEngine
                 dotStarClassFallback: null,
                 prefilter,
                 nfa.Utf8);
+        }
+
+        if (wholeLine is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.WholeLine,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                delimitedRun: null,
+                simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
+                prefilter,
+                nfa.Utf8,
+                wholeLine: wholeLine);
         }
 
         if (dotStar is not null)
@@ -1061,6 +1087,11 @@ internal sealed class RegexMetaEngine
             return alternationSet.Find(haystack, startOffset);
         }
 
+        if (wholeLine is not null)
+        {
+            return wholeLine.Find(haystack, startOffset);
+        }
+
         if (dotStar is not null)
         {
             return dotStar.Find(haystack, startOffset);
@@ -1276,6 +1307,11 @@ internal sealed class RegexMetaEngine
             return alternationSet.CountMatches(haystack, startAt);
         }
 
+        if (wholeLine is not null)
+        {
+            return wholeLine.CountMatches(haystack, startAt);
+        }
+
         if (dotStar is not null)
         {
             return dotStar.CountMatches(haystack, startAt);
@@ -1411,6 +1447,11 @@ internal sealed class RegexMetaEngine
         if (alternationSet is not null)
         {
             return alternationSet.SumMatchSpans(haystack, startAt);
+        }
+
+        if (wholeLine is not null)
+        {
+            return wholeLine.SumMatchSpans(haystack, startAt);
         }
 
         if (dotStar is not null)
@@ -1736,6 +1777,11 @@ internal sealed class RegexMetaEngine
         if (alternationSet is not null)
         {
             return alternationSet.MatchAt(haystack, startOffset);
+        }
+
+        if (wholeLine is not null)
+        {
+            return wholeLine.MatchAt(haystack, startOffset);
         }
 
         if (dotStar is not null)

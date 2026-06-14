@@ -4,6 +4,7 @@ internal enum RegexEngineKind
 {
     LiteralSet,
     AlternationSet,
+    WholeLine,
     DotStar,
     Ipv4Address,
     EmailAddress,

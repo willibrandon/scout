@@ -1310,6 +1310,50 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies byte-mode multiline whole-line patterns use direct line scanning.
+    /// </summary>
+    [Fact]
+    public void WholeLineEngineCountsMultilineDotStarAnchors()
+    {
+        var automaton = RegexAutomaton.Compile(
+            "(?m)^.*$"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "ab\n\nc\n"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.WholeLine, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 2), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(3, 0), automaton.Find(haystack, startAt: 1));
+        Assert.Equal(new RegexMatch(3, 0), automaton.Find(haystack, startAt: 2));
+        Assert.Equal(new RegexMatch(4, 1), automaton.Find(haystack, startAt: 4));
+        Assert.Equal(new RegexMatch(6, 0), automaton.Find(haystack, startAt: 5));
+        Assert.Equal(new RegexMatch(0, 2), automaton.MatchAt(haystack, 0));
+        Assert.Null(automaton.MatchAt(haystack, 1));
+        Assert.Equal(new RegexMatch(3, 0), automaton.MatchAt(haystack, 3));
+        Assert.Equal(new RegexMatch(6, 0), automaton.MatchAt(haystack, 6));
+        Assert.Equal(4, automaton.CountMatches(haystack));
+        Assert.Equal(3, automaton.SumMatchSpans(haystack));
+        Assert.Equal(3, automaton.CountMatches(haystack, startAt: 1));
+        Assert.Equal(1, automaton.SumMatchSpans(haystack, startAt: 1));
+        Assert.Equal(1, automaton.CountMatches(ReadOnlySpan<byte>.Empty));
+        Assert.Equal(0, automaton.SumMatchSpans(ReadOnlySpan<byte>.Empty));
+    }
+
+    /// <summary>
+    /// Verifies multiline whole-line specialization is skipped when UTF-8 scalar boundaries matter.
+    /// </summary>
+    [Fact]
+    public void WholeLineEngineSkipsUtf8Mode()
+    {
+        var automaton = RegexAutomaton.Compile("(?m)^.*$"u8);
+
+        Assert.NotEqual(RegexEngineKind.WholeLine, GetEngineKind(automaton));
+    }
+
+    /// <summary>
     /// Verifies greedy dot-star specialization is skipped when UTF-8 scalar boundaries matter.
     /// </summary>
     [Fact]

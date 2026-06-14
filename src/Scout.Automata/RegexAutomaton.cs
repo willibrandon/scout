@@ -218,6 +218,7 @@ public sealed class RegexAutomaton
             ? RegexPrefilter.Compile(tree.Root, options, out startPrefixSet)
             : null;
 
+        RegexWholeLineEngine.TryCreate(tree.Root, options, out RegexWholeLineEngine? wholeLine);
         RegexDotStarEngine.TryCreate(tree.Root, options, out RegexDotStarEngine? dotStar);
         RegexIpv4AddressEngine.TryCreate(tree.Root, options, out RegexIpv4AddressEngine? ipv4Address);
         RegexEmailAddressEngine.TryCreate(tree.Root, options, out RegexEmailAddressEngine? emailAddress);
@@ -255,6 +256,7 @@ public sealed class RegexAutomaton
                 dfaSizeLimit,
                 literalSet,
                 alternationSet: null,
+                wholeLine: wholeLine,
                 dotStar: dotStar,
                 ipv4Address: ipv4Address,
                 emailAddress: emailAddress,
