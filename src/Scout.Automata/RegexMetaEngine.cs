@@ -35,6 +35,8 @@ internal sealed class RegexMetaEngine
     private readonly RegexBoundedLineLiteralGapEngine? boundedLineLiteralGap;
     private readonly RegexBoundedByteClassSequenceEngine? boundedByteClassSequence;
     private readonly RegexRepeatedLazyDotStarLiteralEngine? repeatedLazyDotStarLiteral;
+    private readonly RegexDelimitedSpanEngine? delimitedSpan;
+    private readonly RegexFixedWidthAlternationEngine? fixedWidthAlternation;
     private readonly RegexLeadingClassLiteralEngine? leadingClassLiteral;
     private readonly RegexUnicodeLetterLiteralRunEngine? unicodeLetterLiteralRun;
     private readonly RegexWordBoundaryLiteralSetEngine? wordBoundaryLiteralSet;
@@ -97,6 +99,8 @@ internal sealed class RegexMetaEngine
         RegexBoundedLineLiteralGapEngine? boundedLineLiteralGap = null,
         RegexBoundedByteClassSequenceEngine? boundedByteClassSequence = null,
         RegexRepeatedLazyDotStarLiteralEngine? repeatedLazyDotStarLiteral = null,
+        RegexDelimitedSpanEngine? delimitedSpan = null,
+        RegexFixedWidthAlternationEngine? fixedWidthAlternation = null,
         RegexLeadingClassLiteralEngine? leadingClassLiteral = null,
         RegexUnicodeLetterLiteralRunEngine? unicodeLetterLiteralRun = null,
         RegexWordBoundaryLiteralSetEngine? wordBoundaryLiteralSet = null,
@@ -132,6 +136,8 @@ internal sealed class RegexMetaEngine
         this.boundedLineLiteralGap = boundedLineLiteralGap;
         this.boundedByteClassSequence = boundedByteClassSequence;
         this.repeatedLazyDotStarLiteral = repeatedLazyDotStarLiteral;
+        this.delimitedSpan = delimitedSpan;
+        this.fixedWidthAlternation = fixedWidthAlternation;
         this.leadingClassLiteral = leadingClassLiteral;
         this.unicodeLetterLiteralRun = unicodeLetterLiteralRun;
         this.wordBoundaryLiteralSet = wordBoundaryLiteralSet;
@@ -262,6 +268,8 @@ internal sealed class RegexMetaEngine
         RegexBoundedLineLiteralGapEngine? boundedLineLiteralGap = null,
         RegexBoundedByteClassSequenceEngine? boundedByteClassSequence = null,
         RegexRepeatedLazyDotStarLiteralEngine? repeatedLazyDotStarLiteral = null,
+        RegexDelimitedSpanEngine? delimitedSpan = null,
+        RegexFixedWidthAlternationEngine? fixedWidthAlternation = null,
         RegexLeadingClassLiteralEngine? leadingClassLiteral = null,
         RegexUnicodeLetterLiteralRunEngine? unicodeLetterLiteralRun = null,
         RegexWordBoundaryLiteralSetEngine? wordBoundaryLiteralSet = null,
@@ -605,6 +613,50 @@ internal sealed class RegexMetaEngine
                 prefilter,
                 nfa.Utf8,
                 repeatedLazyDotStarLiteral: repeatedLazyDotStarLiteral);
+        }
+
+        if (delimitedSpan is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.DelimitedSpan,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                delimitedRun: null,
+                simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
+                prefilter,
+                nfa.Utf8,
+                delimitedSpan: delimitedSpan);
+        }
+
+        if (fixedWidthAlternation is not null)
+        {
+            return new RegexMetaEngine(
+                RegexEngineKind.FixedWidthAlternation,
+                nfa,
+                pikeVm: null,
+                boundedBacktracker: null,
+                onePassDfa: null,
+                denseDfa: null,
+                sparseDfa: null,
+                lazyDfa: null,
+                literalSet: null,
+                alternationSet: null,
+                delimitedRun: null,
+                simpleSequence: null,
+                lineContains: null,
+                dotStarClassFallback: null,
+                prefilter,
+                nfa.Utf8,
+                fixedWidthAlternation: fixedWidthAlternation);
         }
 
         if (leadingClassLiteral is not null)
@@ -1178,6 +1230,16 @@ internal sealed class RegexMetaEngine
             return repeatedLazyDotStarLiteral.Find(haystack, startOffset);
         }
 
+        if (delimitedSpan is not null)
+        {
+            return delimitedSpan.Find(haystack, startOffset);
+        }
+
+        if (fixedWidthAlternation is not null)
+        {
+            return fixedWidthAlternation.Find(haystack, startOffset);
+        }
+
         if (leadingClassLiteral is not null)
         {
             return leadingClassLiteral.Find(haystack, startOffset);
@@ -1403,6 +1465,16 @@ internal sealed class RegexMetaEngine
             return repeatedLazyDotStarLiteral.CountMatches(haystack, startAt);
         }
 
+        if (delimitedSpan is not null)
+        {
+            return delimitedSpan.CountMatches(haystack, startAt);
+        }
+
+        if (fixedWidthAlternation is not null)
+        {
+            return fixedWidthAlternation.CountMatches(haystack, startAt);
+        }
+
         if (leadingClassLiteral is not null)
         {
             return leadingClassLiteral.CountMatches(haystack, startAt);
@@ -1548,6 +1620,16 @@ internal sealed class RegexMetaEngine
         if (repeatedLazyDotStarLiteral is not null)
         {
             return repeatedLazyDotStarLiteral.SumMatchSpans(haystack, startAt);
+        }
+
+        if (delimitedSpan is not null)
+        {
+            return delimitedSpan.SumMatchSpans(haystack, startAt);
+        }
+
+        if (fixedWidthAlternation is not null)
+        {
+            return fixedWidthAlternation.SumMatchSpans(haystack, startAt);
         }
 
         if (leadingClassLiteral is not null)
@@ -1878,6 +1960,16 @@ internal sealed class RegexMetaEngine
         if (repeatedLazyDotStarLiteral is not null)
         {
             return repeatedLazyDotStarLiteral.MatchAt(haystack, startOffset);
+        }
+
+        if (delimitedSpan is not null)
+        {
+            return delimitedSpan.MatchAt(haystack, startOffset);
+        }
+
+        if (fixedWidthAlternation is not null)
+        {
+            return fixedWidthAlternation.MatchAt(haystack, startOffset);
         }
 
         if (leadingClassLiteral is not null)

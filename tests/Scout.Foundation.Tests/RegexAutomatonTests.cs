@@ -1114,6 +1114,117 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies delimiter spans scan from delimiters directly.
+    /// </summary>
+    [Fact]
+    public void DelimitedSpanEngineCountsDelimitedSpans()
+    {
+        var angle = RegexAutomaton.Compile(
+            @"<[^>]*>"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var pipe = RegexAutomaton.Compile(
+            @"\|[^|][^|]*\|"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(RegexEngineKind.DelimitedSpan, GetEngineKind(angle));
+        Assert.Equal(RegexEngineKind.DelimitedSpan, GetEngineKind(pipe));
+        Assert.Equal(new RegexMatch(2, 3), angle.Find("xx<a> <bc>"u8));
+        Assert.Equal(new RegexMatch(6, 4), angle.Find("xx<a> <bc>"u8, startAt: 3));
+        Assert.Equal(new RegexMatch(0, 4), angle.MatchAt("<bc>"u8, 0));
+        Assert.Null(angle.MatchAt("x<bc>"u8, 0));
+        Assert.Equal(2, angle.CountMatches("xx<a> <bc>"u8));
+        Assert.Equal(7, angle.SumMatchSpans("xx<a> <bc>"u8));
+        Assert.Equal(new RegexMatch(3, 3), pipe.Find("xx |a| |bc|"u8));
+        Assert.Null(pipe.Find("||"u8));
+        Assert.Equal(new RegexMatch(1, 3), pipe.Find("||a|"u8));
+        Assert.Equal(2, pipe.CountMatches("xx |a| |bc|"u8));
+        Assert.Equal(7, pipe.SumMatchSpans("xx |a| |bc|"u8));
+    }
+
+    /// <summary>
+    /// Verifies delimiter spans can include a standalone terminator alternative.
+    /// </summary>
+    [Fact]
+    public void DelimitedSpanEngineCountsStandaloneTerminators()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @">[^\n]*\n|\n"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "abc\n>header\nx>mid\nno final"u8.ToArray();
+        int headerStart = haystack.AsSpan().IndexOf(">header\n"u8);
+
+        Assert.Equal(RegexEngineKind.DelimitedSpan, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(3, 1), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(headerStart, 8), automaton.Find(haystack, startAt: 4));
+        Assert.Equal(new RegexMatch(headerStart + 7, 1), automaton.Find(haystack, startAt: headerStart + 1));
+        Assert.Equal(new RegexMatch(0, 4), automaton.MatchAt(">xx\n"u8, 0));
+        Assert.Equal(new RegexMatch(0, 1), automaton.MatchAt("\n"u8, 0));
+        Assert.Equal(3, automaton.CountMatches(haystack));
+        Assert.Equal(14, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
+    /// Verifies fixed-width byte alternations scan from their most selective byte position.
+    /// </summary>
+    [Fact]
+    public void FixedWidthAlternationEngineCountsRegexReduxVariants()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"[cgt]gggtaaa|tttaccc[acg]"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "xx cgggtaaa yy tttaccca zz tttaccct tgggtaaa"u8.ToArray();
+        int firstStart = haystack.AsSpan().IndexOf("cgggtaaa"u8);
+        int secondStart = haystack.AsSpan().IndexOf("tttaccca"u8);
+        int thirdStart = haystack.AsSpan().IndexOf("tgggtaaa"u8);
+
+        Assert.Equal(RegexEngineKind.FixedWidthAlternation, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(firstStart, 8), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(secondStart, 8), automaton.Find(haystack, firstStart + 1));
+        Assert.Equal(new RegexMatch(thirdStart, 8), automaton.MatchAt(haystack, thirdStart));
+        Assert.Null(automaton.MatchAt(haystack, thirdStart + 1));
+        Assert.Equal(3, automaton.CountMatches(haystack));
+        Assert.Equal(24, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
+    /// Verifies capturing alternations keep capture-aware execution.
+    /// </summary>
+    [Fact]
+    public void FixedWidthAlternationEngineRejectsCaptures()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"([cgt]gggtaaa)|tttaccc[acg]"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "xx cgggtaaa yy"u8.ToArray();
+
+        RegexCaptures? captures = automaton.FindCaptures(haystack);
+
+        Assert.NotEqual(RegexEngineKind.FixedWidthAlternation, GetEngineKind(automaton));
+        Assert.NotNull(captures);
+        AssertGroupText(captures, haystack, 1, "cgggtaaa");
+    }
+
+    /// <summary>
     /// Verifies leading ASCII class plus literal suffix patterns scan from suffix candidates.
     /// </summary>
     [Fact]

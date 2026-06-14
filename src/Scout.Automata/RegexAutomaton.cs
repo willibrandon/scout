@@ -232,6 +232,8 @@ public sealed class RegexAutomaton
         RegexBoundedLineLiteralGapEngine.TryCreate(tree.Root, options, out RegexBoundedLineLiteralGapEngine? boundedLineLiteralGap);
         RegexBoundedByteClassSequenceEngine.TryCreate(tree.Root, options, out RegexBoundedByteClassSequenceEngine? boundedByteClassSequence);
         RegexRepeatedLazyDotStarLiteralEngine.TryCreate(tree.Root, options, out RegexRepeatedLazyDotStarLiteralEngine? repeatedLazyDotStarLiteral);
+        RegexDelimitedSpanEngine.TryCreate(tree.Root, options, out RegexDelimitedSpanEngine? delimitedSpan);
+        RegexFixedWidthAlternationEngine.TryCreate(tree.Root, tree.CaptureCount, options, out RegexFixedWidthAlternationEngine? fixedWidthAlternation);
         RegexLeadingClassLiteralEngine.TryCreate(tree.Root, options, out RegexLeadingClassLiteralEngine? leadingClassLiteral);
         RegexUnicodeLetterLiteralRunEngine.TryCreate(tree.Root, options, out RegexUnicodeLetterLiteralRunEngine? unicodeLetterLiteralRun);
         RegexWordSuffixLiteralEngine.TryCreate(tree.Root, options, out RegexWordSuffixLiteralEngine? wordSuffixLiteral);
@@ -271,6 +273,8 @@ public sealed class RegexAutomaton
                 boundedLineLiteralGap: boundedLineLiteralGap,
                 boundedByteClassSequence: boundedByteClassSequence,
                 repeatedLazyDotStarLiteral: repeatedLazyDotStarLiteral,
+                delimitedSpan: delimitedSpan,
+                fixedWidthAlternation: fixedWidthAlternation,
                 leadingClassLiteral: leadingClassLiteral,
                 unicodeLetterLiteralRun: unicodeLetterLiteralRun,
                 wordBoundaryLiteralSet: wordBoundaryLiteralSet,
