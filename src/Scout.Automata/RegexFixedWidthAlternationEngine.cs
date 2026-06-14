@@ -137,8 +137,7 @@ internal sealed class RegexFixedWidthAlternationEngine
         }
 
         if (exactSetMatcher is not null &&
-            exactSetMatcher.Width == 2 &&
-            literalSeeds is null)
+            exactSetMatcher.Width == 2)
         {
             int candidate = exactSetMatcher.Find(haystack, start);
             return candidate < 0 ? null : new RegexMatch(candidate, width);
@@ -316,8 +315,7 @@ internal sealed class RegexFixedWidthAlternationEngine
         }
 
         if (exactSetMatcher is not null &&
-            exactSetMatcher.Width == 2 &&
-            literalSeeds is null)
+            exactSetMatcher.Width == 2)
         {
             return exactSetMatcher.Find(haystack, start) >= 0;
         }
@@ -410,8 +408,7 @@ internal sealed class RegexFixedWidthAlternationEngine
         }
 
         if (exactSetMatcher is not null &&
-            exactSetMatcher.Width == 2 &&
-            literalSeeds is null)
+            exactSetMatcher.Width == 2)
         {
             return CountOrSumWithExactSet(haystack, startAt, sumSpans);
         }
