@@ -12,6 +12,7 @@ internal sealed class RegexLiteralSetEngine
     private const int LargeLiteralSetThreshold = 32;
     private const int SmallLiteralFinderSetThreshold = 8;
     private const int TwoByteSearchPatternBucketThreshold = 8;
+    private const int SingleLiteralIndexOfAnchorScoreThreshold = 250;
 
     private readonly AhoCorasickAutomaton? automaton;
     private readonly byte[][] literals;
@@ -22,6 +23,7 @@ internal sealed class RegexLiteralSetEngine
     private readonly bool unicodeCaseInsensitive;
     private readonly int maxLiteralLength;
     private readonly RegexAnchoredLiteralFinder? singleAnchoredLiteralFinder;
+    private readonly bool singleLiteralIndexOf;
     private readonly MemmemFinder? singleLiteralFinder;
     private readonly RegexAsciiCaseInsensitiveFinder? singleAsciiCaseInsensitiveFinder;
     private readonly RegexAsciiCaseInsensitiveLiteralSetScanner? asciiCaseInsensitiveScanner;
@@ -78,7 +80,14 @@ internal sealed class RegexLiteralSetEngine
         {
             if (!RegexAnchoredLiteralFinder.TryCreate(this.literals[0], out singleAnchoredLiteralFinder))
             {
-                singleLiteralFinder = new MemmemFinder(this.literals[0]);
+                if (ShouldUseSingleLiteralIndexOf(this.literals[0]))
+                {
+                    singleLiteralIndexOf = true;
+                }
+                else
+                {
+                    singleLiteralFinder = new MemmemFinder(this.literals[0]);
+                }
             }
 
             return;
@@ -375,6 +384,14 @@ internal sealed class RegexLiteralSetEngine
                 : new RegexMatch(start, literals[0].Length);
         }
 
+        if (singleLiteralIndexOf)
+        {
+            int offset = haystack[startOffset..].IndexOf(literals[0]);
+            return offset < 0
+                ? null
+                : new RegexMatch(startOffset + offset, literals[0].Length);
+        }
+
         if (singleLiteralFinder is not null)
         {
             int offset = singleLiteralFinder.Find(haystack[startOffset..]);
@@ -515,6 +532,11 @@ internal sealed class RegexLiteralSetEngine
         if (singleAnchoredLiteralFinder is not null)
         {
             return singleAnchoredLiteralFinder.CountOrSum(haystack, startOffset, sumSpans);
+        }
+
+        if (singleLiteralIndexOf)
+        {
+            return CountOrSumSingleLiteralIndexOf(haystack, startOffset, sumSpans);
         }
 
         if (singleLiteralFinder is not null)
@@ -815,6 +837,27 @@ internal sealed class RegexLiteralSetEngine
         while (position <= haystack.Length)
         {
             int offset = singleLiteralFinder!.Find(haystack[position..]);
+            if (offset < 0)
+            {
+                return total;
+            }
+
+            total += sumSpans ? length : 1;
+            position += offset + length;
+        }
+
+        return total;
+    }
+
+    private long CountOrSumSingleLiteralIndexOf(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
+    {
+        long total = 0;
+        int position = startOffset;
+        byte[] literal = literals[0];
+        int length = literal.Length;
+        while (position <= haystack.Length)
+        {
+            int offset = haystack[position..].IndexOf(literal);
             if (offset < 0)
             {
                 return total;
@@ -1344,6 +1387,26 @@ internal sealed class RegexLiteralSetEngine
         return literalCount >= LargeLiteralSetThreshold &&
             !asciiCaseInsensitive &&
             !unicodeCaseInsensitive;
+    }
+
+    private static bool ShouldUseSingleLiteralIndexOf(ReadOnlySpan<byte> literal)
+    {
+        if (literal.Length < 4)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < literal.Length; index++)
+        {
+            byte value = literal[index];
+            if (value <= 0x7F &&
+                RegexAnchoredLiteralFinder.AsciiAnchorScore(value) >= SingleLiteralIndexOfAnchorScoreThreshold)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool ShouldUseSmallLiteralFinders(

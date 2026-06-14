@@ -152,7 +152,7 @@ internal sealed class RegexAnchoredLiteralFinder
         return 420 + ((current * 17) & 0x3F);
     }
 
-    private static int AsciiAnchorScore(byte value)
+    internal static int AsciiAnchorScore(byte value)
     {
         byte folded = RegexAsciiCaseInsensitiveFinder.FoldAscii(value);
         if (folded is >= (byte)'0' and <= (byte)'9')
