@@ -13,6 +13,7 @@ internal enum RegexEngineKind
     LiteralPrefixRun,
     BoundedLiteralGap,
     BoundedLineLiteralGap,
+    BoundedByteClassSequence,
     LeadingClassLiteral,
     UnicodeLetterLiteralRun,
     WordBoundaryLiteralSet,

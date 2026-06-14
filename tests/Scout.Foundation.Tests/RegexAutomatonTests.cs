@@ -1004,6 +1004,53 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies bounded byte-class sequences scan from selective starting bytes and preserve repeat greediness.
+    /// </summary>
+    [Fact]
+    public void BoundedByteClassSequenceEngineCountsQuoteSpans()
+    {
+        var automaton = RegexAutomaton.Compile(
+            """["'][^"']{0,30}[?!\.]["']"""u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var greedy = RegexAutomaton.Compile(
+            "@[ab]{0,3}[ab]b"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var lazy = RegexAutomaton.Compile(
+            "@[ab]{0,3}?[ab]b"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        byte[] haystack = System.Text.Encoding.ASCII.GetBytes("xx \"yes?\" 'ok.' \"no\" \"a?.\"");
+        byte[] tooLong = System.Text.Encoding.ASCII.GetBytes("\"" + new string('a', 31) + "!\"");
+
+        Assert.Equal(RegexEngineKind.BoundedByteClassSequence, GetEngineKind(automaton));
+        Assert.Equal(RegexEngineKind.BoundedByteClassSequence, GetEngineKind(greedy));
+        Assert.Equal(RegexEngineKind.BoundedByteClassSequence, GetEngineKind(lazy));
+        Assert.Equal(new RegexMatch(3, 6), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(10, 5), automaton.Find(haystack, startAt: 4));
+        Assert.Equal(new RegexMatch(21, 5), automaton.Find(haystack, startAt: 15));
+        Assert.Equal(new RegexMatch(3, 6), automaton.MatchAt(haystack, 3));
+        Assert.Null(automaton.MatchAt(haystack, 16));
+        Assert.Null(automaton.MatchAt(tooLong, 0));
+        Assert.Equal(new RegexMatch(0, 3), automaton.MatchAt("\"!\""u8, 0));
+        Assert.Equal(3, automaton.CountMatches(haystack));
+        Assert.Equal(16, automaton.SumMatchSpans(haystack));
+        Assert.Equal(new RegexMatch(0, 5), greedy.Find("@aabb"u8));
+        Assert.Equal(new RegexMatch(0, 4), lazy.Find("@aabb"u8));
+    }
+
+    /// <summary>
     /// Verifies leading ASCII class plus literal suffix patterns scan from suffix candidates.
     /// </summary>
     [Fact]
