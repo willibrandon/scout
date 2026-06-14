@@ -29,6 +29,7 @@ internal enum RegexEngineKind
     FixedWidthAlternation,
     FixedWordWhitespaceSequence,
     LeadingClassLiteral,
+    LineBoundaryLiteral,
     UnicodeLetterLiteralRun,
     WordBoundaryLiteralSet,
     WordSuffixLiteral,

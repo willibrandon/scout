@@ -415,6 +415,12 @@ public sealed class RegexAutomaton
         RegexDelimitedSpanEngine.TryCreate(tree.Root, options, out RegexDelimitedSpanEngine? delimitedSpan);
         RegexFixedWidthAlternationEngine.TryCreate(tree.Root, tree.CaptureCount, options, out RegexFixedWidthAlternationEngine? fixedWidthAlternation);
         RegexLeadingClassLiteralEngine.TryCreate(tree.Root, options, out RegexLeadingClassLiteralEngine? leadingClassLiteral);
+        RegexLineBoundaryLiteralEngine? lineBoundaryLiteral = null;
+        if (tree.CaptureCount == 0)
+        {
+            RegexLineBoundaryLiteralEngine.TryCreate(tree.Root, options, out lineBoundaryLiteral);
+        }
+
         RegexUnicodeLetterLiteralRunEngine.TryCreate(tree.Root, options, out RegexUnicodeLetterLiteralRunEngine? unicodeLetterLiteralRun);
         RegexWordSuffixLiteralEngine.TryCreate(tree.Root, options, out RegexWordSuffixLiteralEngine? wordSuffixLiteral);
         RegexDelimitedRunEngine.TryCreate(tree.Root, options, out RegexDelimitedRunEngine? delimitedRun);
@@ -464,6 +470,7 @@ public sealed class RegexAutomaton
                 delimitedSpan: delimitedSpan,
                 fixedWidthAlternation: fixedWidthAlternation,
                 leadingClassLiteral: leadingClassLiteral,
+                lineBoundaryLiteral: lineBoundaryLiteral,
                 unicodeLetterLiteralRun: unicodeLetterLiteralRun,
                 wordBoundaryLiteralSet: wordBoundaryLiteralSet,
                 wordSuffixLiteral: wordSuffixLiteral,
@@ -651,6 +658,8 @@ public sealed class RegexAutomaton
             return fnPredicateCaptureEngine is not null;
         }
     }
+
+    internal RegexEngineKind EngineKind => engine.Kind;
 
     /// <summary>
     /// Finds the first match in a haystack.
