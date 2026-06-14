@@ -5,16 +5,19 @@ internal sealed class RegexBoundedLiteralGapEngine
     private const int MaxPrefixCount = 8;
 
     private readonly RegexBoundedLiteralGapBranch[] branches;
+    private readonly RegexShortLiteralSetScanner? shortPrefixScanner;
     private readonly RegexCaseSensitiveLiteralSetScanner? prefixScanner;
     private readonly MemmemFinder? singlePrefixFinder;
     private readonly byte lineTerminator;
 
     private RegexBoundedLiteralGapEngine(
         RegexBoundedLiteralGapBranch[] branches,
+        RegexShortLiteralSetScanner? shortPrefixScanner,
         RegexCaseSensitiveLiteralSetScanner? prefixScanner,
         byte lineTerminator)
     {
         this.branches = branches;
+        this.shortPrefixScanner = shortPrefixScanner;
         this.prefixScanner = prefixScanner;
         this.lineTerminator = lineTerminator;
         if (branches.Length == 1)
@@ -72,14 +75,21 @@ internal sealed class RegexBoundedLiteralGapEngine
             return false;
         }
 
+        RegexShortLiteralSetScanner? shortPrefixScanner = null;
         RegexCaseSensitiveLiteralSetScanner? prefixScanner = null;
+        byte[][] prefixes = GetPrefixes(branches);
         if (branches.Count > 1 &&
-            !RegexCaseSensitiveLiteralSetScanner.TryCreate(GetPrefixes(branches), out prefixScanner))
+            !RegexShortLiteralSetScanner.TryCreate(prefixes, out shortPrefixScanner) &&
+            !RegexCaseSensitiveLiteralSetScanner.TryCreate(prefixes, out prefixScanner))
         {
             return false;
         }
 
-        engine = new RegexBoundedLiteralGapEngine(branches.ToArray(), prefixScanner, options.LineTerminator);
+        engine = new RegexBoundedLiteralGapEngine(
+            branches.ToArray(),
+            shortPrefixScanner,
+            prefixScanner,
+            options.LineTerminator);
         return true;
     }
 
@@ -195,6 +205,13 @@ internal sealed class RegexBoundedLiteralGapEngine
 
     private bool TryFindPrefix(ReadOnlySpan<byte> haystack, int startAt, out RegexLiteralSetCandidate candidate)
     {
+        if (shortPrefixScanner is not null)
+        {
+            RegexLiteralSetCandidate? found = shortPrefixScanner.Find(haystack, startAt);
+            candidate = found.GetValueOrDefault();
+            return found.HasValue;
+        }
+
         if (prefixScanner is not null)
         {
             RegexLiteralSetCandidate? found = prefixScanner.Find(haystack, startAt);
