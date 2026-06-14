@@ -14,6 +14,7 @@ internal enum RegexEngineKind
     BoundedLiteralGap,
     BoundedLineLiteralGap,
     BoundedByteClassSequence,
+    RepeatedLazyDotStarLiteral,
     LeadingClassLiteral,
     UnicodeLetterLiteralRun,
     WordBoundaryLiteralSet,

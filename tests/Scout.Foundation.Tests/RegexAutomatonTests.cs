@@ -1051,6 +1051,33 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies repeated lazy dot-star delimiter runs scan suffix candidates within one line.
+    /// </summary>
+    [Fact]
+    public void RepeatedLazyDotStarLiteralEngineCountsDelimiterRuns()
+    {
+        var automaton = RegexAutomaton.Compile(
+            "(.*?,){2}z"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "aa,bb,z tail a,b,xz\ncc,dd,z"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.RepeatedLazyDotStarLiteral, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 7), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(1, 6), automaton.Find(haystack, startAt: 1));
+        Assert.Equal(new RegexMatch(20, 7), automaton.Find(haystack, startAt: 16));
+        Assert.Equal(new RegexMatch(0, 7), automaton.MatchAt(haystack, 0));
+        Assert.Null(automaton.MatchAt(haystack, 3));
+        Assert.Null(automaton.MatchAt("aa,\nbb,z"u8, 0));
+        Assert.Equal(new RegexMatch(0, 3), automaton.Find(",,z"u8));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(14, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies leading ASCII class plus literal suffix patterns scan from suffix candidates.
     /// </summary>
     [Fact]
