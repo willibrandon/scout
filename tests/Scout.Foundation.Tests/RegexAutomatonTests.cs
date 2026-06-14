@@ -1328,6 +1328,8 @@ public sealed class RegexAutomatonTests
         Assert.Equal(new RegexMatch(0, 7), longPrefix.Find("abcdTom"u8));
         Assert.Equal(new RegexMatch(0, 7), longPrefix.MatchAt("abcdTom"u8, 0));
         Assert.Null(longPrefix.Find("xTom"u8));
+        Assert.Equal(4, longPrefix.CountMatches(haystack));
+        Assert.Equal(36, longPrefix.SumMatchSpans(haystack));
     }
 
     /// <summary>

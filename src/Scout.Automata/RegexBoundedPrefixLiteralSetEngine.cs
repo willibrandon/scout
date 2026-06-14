@@ -111,7 +111,7 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
 
     public long CountMatches(ReadOnlySpan<byte> haystack, int startAt)
     {
-        return CountOrSum(haystack, startAt, sumSpans: false);
+        return CountMatchesFast(haystack, startAt);
     }
 
     public long SumMatchSpans(ReadOnlySpan<byte> haystack, int startAt)
@@ -167,6 +167,47 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
         }
 
         return total;
+    }
+
+    private long CountMatchesFast(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        int offset = Math.Clamp(startAt, 0, haystack.Length);
+        if (minimum == 0)
+        {
+            return CountLiteralMatches(haystack, offset);
+        }
+
+        return CountOrSum(haystack, offset, sumSpans: false);
+    }
+
+    private long CountLiteralMatches(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        if (scanner is not null)
+        {
+            return scanner.CountOrSum(haystack, startAt, sumSpans: false);
+        }
+
+        if (packedScanner is not null)
+        {
+            return packedScanner.CountOrSum(haystack, startAt, sumSpans: false);
+        }
+
+        long count = 0;
+        int searchAt = startAt;
+        byte[] literal = literals[0];
+        while (searchAt <= haystack.Length - literal.Length)
+        {
+            int offset = singleLiteralFinder!.Find(haystack[searchAt..]);
+            if (offset < 0)
+            {
+                break;
+            }
+
+            count++;
+            searchAt += offset + literal.Length;
+        }
+
+        return count;
     }
 
     private bool TryFindLiteral(

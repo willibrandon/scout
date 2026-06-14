@@ -97,17 +97,6 @@ internal sealed class RegexLiteralSetEngine
             return;
         }
 
-        if (ShouldUseSmallLiteralFinders(this.literals, asciiCaseInsensitive, unicodeCaseInsensitive, useAho))
-        {
-            smallLiteralFinders = new MemmemFinder[this.literals.Length];
-            for (int index = 0; index < this.literals.Length; index++)
-            {
-                smallLiteralFinders[index] = new MemmemFinder(this.literals[index]);
-            }
-
-            return;
-        }
-
         if (this.literals.Length > 1 &&
             unicodeCaseInsensitive &&
             !useAho &&
@@ -123,7 +112,29 @@ internal sealed class RegexLiteralSetEngine
             !asciiCaseInsensitive &&
             !unicodeCaseInsensitive &&
             !useAho &&
+            ContainsNonAscii(this.literals) &&
             RegexPackedLiteralSetScanner.TryCreate(this.literals, out RegexPackedLiteralSetScanner? packed))
+        {
+            packedLiteralScanner = packed;
+            return;
+        }
+
+        if (ShouldUseSmallLiteralFinders(this.literals, asciiCaseInsensitive, unicodeCaseInsensitive, useAho))
+        {
+            smallLiteralFinders = new MemmemFinder[this.literals.Length];
+            for (int index = 0; index < this.literals.Length; index++)
+            {
+                smallLiteralFinders[index] = new MemmemFinder(this.literals[index]);
+            }
+
+            return;
+        }
+
+        if (this.literals.Length > 1 &&
+            !asciiCaseInsensitive &&
+            !unicodeCaseInsensitive &&
+            !useAho &&
+            RegexPackedLiteralSetScanner.TryCreate(this.literals, out packed))
         {
             packedLiteralScanner = packed;
             return;
@@ -1276,6 +1287,23 @@ internal sealed class RegexLiteralSetEngine
         }
 
         return minLength >= 3;
+    }
+
+    private static bool ContainsNonAscii(byte[][] literals)
+    {
+        for (int literalIndex = 0; literalIndex < literals.Length; literalIndex++)
+        {
+            byte[] literal = literals[literalIndex];
+            for (int byteIndex = 0; byteIndex < literal.Length; byteIndex++)
+            {
+                if (literal[byteIndex] > 0x7F)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private static bool IsBetter(RegexLiteralSetCandidate candidate, RegexLiteralSetCandidate? best)
