@@ -2925,6 +2925,54 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies anchored tab-delimited log captures use direct structural extraction.
+    /// </summary>
+    [Fact]
+    public void TabbedLogCaptureEngineReportsCaddyLogCaptures()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"^([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)\t(\w+)\t(\w+)\t([^\t]+)(?:\t(.+))?$"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] line = "2022-07-27T00:18:48Z\tinfo\ttls\tcleaning storage unit\t{\"description\": \"FileStorage:/root/.local/share/caddy\"}"u8.ToArray();
+        byte[] noDetails = "2022-07-27T00:18:48Z\tinfo\ttls\tcleaning storage unit"u8.ToArray();
+
+        RegexCaptures? captures = automaton.FindCaptures(line);
+        RegexCaptures? noDetailsCaptures = automaton.FindCaptures(noDetails);
+
+        Assert.True(automaton.UsesTabbedLogCaptureEngine);
+        Assert.NotNull(captures);
+        Assert.Equal(new RegexMatch(0, line.Length), captures.Match);
+        Assert.Equal(6, captures.GroupCount);
+        Assert.Equal(6, captures.ParticipatingCount());
+        Assert.Equal(6, automaton.CountCaptures(line));
+        AssertGroupText(captures, line, 1, "2022-07-27T00:18:48Z");
+        AssertGroupText(captures, line, 2, "info");
+        AssertGroupText(captures, line, 3, "tls");
+        AssertGroupText(captures, line, 4, "cleaning storage unit");
+        AssertGroupText(captures, line, 5, "{\"description\": \"FileStorage:/root/.local/share/caddy\"}");
+
+        Assert.NotNull(noDetailsCaptures);
+        Assert.Equal(5, noDetailsCaptures.ParticipatingCount());
+        Assert.Equal(5, automaton.CountCaptures(noDetails));
+        Assert.Null(noDetailsCaptures.GetGroup(5));
+        Assert.Null(automaton.FindCaptures("2022-07-27T00:18:48Z\tinfo\ttls\t"u8));
+        Assert.Equal(0, automaton.CountCaptures("2022-07-27T00:18:48Z\tinfo\ttls\tmessage\t"u8));
+
+        var differentNegatedClass = RegexAutomaton.Compile(
+            @"^([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)\t(\w+)\t(\w+)\t([^\ta]+)(?:\t(.+))?$"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        Assert.False(differentNegatedClass.UsesTabbedLogCaptureEngine);
+    }
+
+    /// <summary>
     /// Verifies anchored function predicate signatures synthesize captures without a second generic capture pass.
     /// </summary>
     [Fact]
