@@ -76,10 +76,21 @@ internal sealed class RegexPrefilter
         out RegexStartPrefixSet? startPrefixSet)
     {
         startPrefixSet = null;
+        bool rejectedLowSelectivityPrefixSet = false;
         if (TryCreateAlternationPrefixPrefilter(root, options, out RegexPrefilter? prefilter) ||
-            TryCreateSequenceAlternationPrefixPrefilter(root, options, out prefilter, out startPrefixSet))
+            TryCreateSequenceAlternationPrefixPrefilter(
+                root,
+                options,
+                out prefilter,
+                out startPrefixSet,
+                out rejectedLowSelectivityPrefixSet))
         {
             return prefilter;
+        }
+
+        if (rejectedLowSelectivityPrefixSet)
+        {
+            return null;
         }
 
         var prefix = new List<byte>();
@@ -87,7 +98,20 @@ internal sealed class RegexPrefilter
         bool prefixUnicodeClasses = false;
         if (!TryAppendRequiredPrefix(root, options, prefix, out _, ref prefixCaseInsensitive, ref prefixUnicodeClasses) || prefix.Count == 0)
         {
-            RegexStartPredicate.TryCreate(root, options, out RegexStartPredicate? startPredicate);
+            RegexStartPredicate? startPredicate = null;
+            bool startPredicateComputed = false;
+
+            RegexStartPredicate? GetStartPredicate()
+            {
+                if (!startPredicateComputed)
+                {
+                    RegexStartPredicate.TryCreate(root, options, out startPredicate);
+                    startPredicateComputed = true;
+                }
+
+                return startPredicate;
+            }
+
             if (TryCollectRequiredLiteralSetWithLookBehind(root, options, out RegexRequiredLiteralSetCandidate requiredCandidate) &&
                 requiredCandidate.Literals.Length > 0 &&
                 TryPrepareRequiredLiteralSet(
@@ -99,7 +123,7 @@ internal sealed class RegexPrefilter
                 return CreateRequiredLiteralPrefilter(
                     preparedLiterals,
                     requiredCandidate.CaseInsensitive,
-                    startPredicate,
+                    GetStartPredicate(),
                     requiredCandidate.MaxLookBehind);
             }
 
@@ -114,7 +138,7 @@ internal sealed class RegexPrefilter
                 return CreateRequiredLiteralPrefilter(
                     preparedLiterals,
                     requiredCandidate.CaseInsensitive,
-                    startPredicate,
+                    GetStartPredicate(),
                     RequiredLiteralLookBehind);
             }
 
@@ -129,7 +153,7 @@ internal sealed class RegexPrefilter
                 ? CreateRequiredLiteralPrefilter(
                     preparedRequired,
                     requiredCandidate.CaseInsensitive,
-                    startPredicate,
+                    GetStartPredicate(),
                     RequiredLiteralLookBehind)
                 : null;
         }
@@ -198,8 +222,24 @@ internal sealed class RegexPrefilter
         out RegexPrefilter? prefilter,
         out RegexStartPrefixSet? startPrefixSet)
     {
+        return TryCreateSequenceAlternationPrefixPrefilter(
+            root,
+            options,
+            out prefilter,
+            out startPrefixSet,
+            out _);
+    }
+
+    private static bool TryCreateSequenceAlternationPrefixPrefilter(
+        RegexSyntaxNode root,
+        RegexCompileOptions options,
+        out RegexPrefilter? prefilter,
+        out RegexStartPrefixSet? startPrefixSet,
+        out bool rejectedLowSelectivityPrefixSet)
+    {
         prefilter = null;
         startPrefixSet = null;
+        rejectedLowSelectivityPrefixSet = false;
         if (!TryCollectSequenceAlternationPrefixes(
                 root,
                 options,
@@ -224,7 +264,8 @@ internal sealed class RegexPrefilter
                 candidateGate,
                 caseInsensitivePrefixes,
                 unicodeCaseInsensitivePrefixes,
-                out prefilter);
+                out prefilter,
+                out rejectedLowSelectivityPrefixSet);
     }
 
     public int FindCandidate(ReadOnlySpan<byte> haystack, int startAt)
@@ -403,7 +444,27 @@ internal sealed class RegexPrefilter
         bool unicodeCaseInsensitivePrefixes,
         out RegexPrefilter? prefilter)
     {
+        return TryCreatePrefixSetPrefilter(
+            prefixes,
+            options,
+            candidateGate,
+            caseInsensitivePrefixes,
+            unicodeCaseInsensitivePrefixes,
+            out prefilter,
+            out _);
+    }
+
+    private static bool TryCreatePrefixSetPrefilter(
+        byte[][] prefixes,
+        RegexCompileOptions options,
+        RegexPrefixCandidateGate? candidateGate,
+        bool caseInsensitivePrefixes,
+        bool unicodeCaseInsensitivePrefixes,
+        out RegexPrefilter? prefilter,
+        out bool rejectedLowSelectivityPrefixSet)
+    {
         prefilter = null;
+        rejectedLowSelectivityPrefixSet = false;
         if (prefixes.Length < 2)
         {
             return false;
@@ -436,6 +497,7 @@ internal sealed class RegexPrefilter
 
         if (IsLowSelectivityPrefixSet(preparedPrefixes))
         {
+            rejectedLowSelectivityPrefixSet = true;
             return false;
         }
 
