@@ -218,6 +218,85 @@ public sealed class PatternSetTests
     }
 
     /// <summary>
+    /// Verifies byte-covering positive-width lexer sets can sum spans without resolving each token.
+    /// </summary>
+    [Fact]
+    public void SumsRemainingBytesForPositiveWidthCoveringSets()
+    {
+        var set = PatternSet.Compile(
+        [
+            @"(\r\n|\r|\n)"u8.ToArray(),
+            @"([\t\v\f ]+)"u8.ToArray(),
+            @"([a-zA-Z_][0-9a-zA-Z_]*)"u8.ToArray(),
+            "(.)"u8.ToArray(),
+        ],
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        ReadOnlySpan<byte> haystack = "abc \n+\r\nzz"u8;
+
+        Assert.True(set.CoversEveryByteWithPositiveWidth);
+        Assert.Equal(haystack.Length, set.SumMatchSpans(haystack));
+        Assert.Equal(haystack.Length - 4, set.SumMatchSpans(haystack, startAt: 4));
+        Assert.NotEqual(haystack.Length, set.CountMatches(haystack));
+    }
+
+    /// <summary>
+    /// Verifies the byte-coverage shortcut is withheld for gaps and zero-width patterns.
+    /// </summary>
+    [Fact]
+    public void DoesNotUseByteCoverageShortcutForGapsOrEmptyPatterns()
+    {
+        var missingNewline = PatternSet.Compile(
+        [
+            "(.)"u8.ToArray(),
+        ],
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var emptyFirst = PatternSet.Compile(
+        [
+            ""u8.ToArray(),
+            "(?s:.)"u8.ToArray(),
+        ],
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.False(missingNewline.CoversEveryByteWithPositiveWidth);
+        Assert.Equal(2, missingNewline.SumMatchSpans("a\nb"u8));
+        Assert.False(emptyFirst.CoversEveryByteWithPositiveWidth);
+        Assert.Equal(0, emptyFirst.SumMatchSpans("abc"u8));
+    }
+
+    /// <summary>
+    /// Verifies an explicit dot-all single-byte fallback covers line terminators.
+    /// </summary>
+    [Fact]
+    public void DotAllFallbackCoversEveryByte()
+    {
+        var set = PatternSet.Compile(
+        [
+            "(?s:.)"u8.ToArray(),
+        ],
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        ReadOnlySpan<byte> haystack = "a\nb\r\nc"u8;
+
+        Assert.True(set.CoversEveryByteWithPositiveWidth);
+        Assert.Equal(haystack.Length, set.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies count helpers can use the required-literal accelerator for fully covered regex sets.
     /// </summary>
     [Fact]

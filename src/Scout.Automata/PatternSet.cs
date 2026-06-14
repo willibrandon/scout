@@ -12,6 +12,7 @@ public sealed class PatternSet
     private readonly PatternSetLiteralAccelerator? literalAccelerator;
     private readonly PatternSetBoundaryLiteralAccelerator? boundaryLiteralAccelerator;
     private readonly PatternSetRequiredLiteralAccelerator? requiredLiteralAccelerator;
+    private readonly bool coversEveryByteWithPositiveWidth;
     private readonly int count;
 
     private PatternSet(
@@ -22,7 +23,8 @@ public sealed class PatternSet
         int[][]? exactAutomataByFirstByte,
         PatternSetLiteralAccelerator? literalAccelerator,
         PatternSetBoundaryLiteralAccelerator? boundaryLiteralAccelerator,
-        PatternSetRequiredLiteralAccelerator? requiredLiteralAccelerator)
+        PatternSetRequiredLiteralAccelerator? requiredLiteralAccelerator,
+        bool coversEveryByteWithPositiveWidth)
     {
         this.count = count;
         this.automata = automata;
@@ -32,6 +34,7 @@ public sealed class PatternSet
         this.literalAccelerator = literalAccelerator;
         this.boundaryLiteralAccelerator = boundaryLiteralAccelerator;
         this.requiredLiteralAccelerator = requiredLiteralAccelerator;
+        this.coversEveryByteWithPositiveWidth = coversEveryByteWithPositiveWidth;
     }
 
     /// <summary>
@@ -48,6 +51,8 @@ public sealed class PatternSet
     internal bool RequiredLiteralAcceleratorCoversAll => requiredLiteralAccelerator?.CoversAllAutomata == true;
 
     internal bool CanAccelerateEveryPattern => automata.Length == 0 || RequiredLiteralAcceleratorCoversAll;
+
+    internal bool CoversEveryByteWithPositiveWidth => coversEveryByteWithPositiveWidth;
 
     internal static bool CanPreflightAccelerateEveryPattern(IReadOnlyList<byte[]> patterns, RegexCompileOptions options)
     {
@@ -200,7 +205,8 @@ public sealed class PatternSet
             BuildExactAutomataByFirstByte(compiledAutomata),
             literalAccelerator,
             boundaryLiteralAccelerator,
-            requiredLiteralAccelerator);
+            requiredLiteralAccelerator,
+            DetectEveryBytePositiveWidthCoverage(patterns, plans, options));
         return true;
     }
 
@@ -358,6 +364,11 @@ public sealed class PatternSet
     public long SumMatchSpans(ReadOnlySpan<byte> haystack, int startAt)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        if (coversEveryByteWithPositiveWidth)
+        {
+            return haystack.Length - startOffset;
+        }
+
         if (literalAccelerator is not null &&
             boundaryLiteralAccelerator is null &&
             automata.Length == 0)
@@ -526,6 +537,262 @@ public sealed class PatternSet
         }
 
         return indexed;
+    }
+
+    private static bool DetectEveryBytePositiveWidthCoverage(
+        IReadOnlyList<byte[]> patterns,
+        PatternSetPatternPlan[] plans,
+        RegexCompileOptions options)
+    {
+        if (options.Utf8 || patterns.Count == 0)
+        {
+            return false;
+        }
+
+        bool coversNonLineBytes = false;
+        bool coversLineFeed = !options.Crlf && options.LineTerminator != (byte)'\n';
+        bool coversCarriageReturn = !options.Crlf && options.LineTerminator != (byte)'\r';
+        bool coversCustomLineTerminator = options.Crlf || options.LineTerminator is (byte)'\n' or (byte)'\r';
+        for (int index = 0; index < patterns.Count; index++)
+        {
+            RegexSyntaxNode? root = plans[index].Tree?.Root;
+            if (root is null)
+            {
+                if (patterns[index].Length == 0)
+                {
+                    return false;
+                }
+
+                continue;
+            }
+
+            if (CanMatchEmpty(root, options))
+            {
+                return false;
+            }
+
+            if (TryGetSingleByteCoveringAtom(root, options, out bool coversLineTerminators))
+            {
+                coversNonLineBytes = true;
+                if (coversLineTerminators)
+                {
+                    coversLineFeed = true;
+                    coversCarriageReturn = true;
+                    coversCustomLineTerminator = true;
+                }
+
+                continue;
+            }
+
+            if (!coversLineFeed && CanMatchByteAtStart(root, options, (byte)'\n'))
+            {
+                coversLineFeed = true;
+            }
+
+            if (!coversCarriageReturn && CanMatchByteAtStart(root, options, (byte)'\r'))
+            {
+                coversCarriageReturn = true;
+            }
+
+            if (!coversCustomLineTerminator && CanMatchByteAtStart(root, options, options.LineTerminator))
+            {
+                coversCustomLineTerminator = true;
+            }
+        }
+
+        return coversNonLineBytes &&
+            coversLineFeed &&
+            coversCarriageReturn &&
+            coversCustomLineTerminator;
+    }
+
+    private static bool TryGetSingleByteCoveringAtom(
+        RegexSyntaxNode node,
+        RegexCompileOptions options,
+        out bool coversLineTerminators)
+    {
+        coversLineTerminators = false;
+        while (true)
+        {
+            switch (node)
+            {
+                case RegexSequenceNode { Nodes.Count: 1 } sequence:
+                    node = sequence.Nodes[0];
+                    continue;
+                case RegexGroupNode group:
+                    options = options.Apply(group.EnabledFlags, group.DisabledFlags);
+                    node = group.Child;
+                    continue;
+                case RegexAtomNode { Kind: RegexSyntaxKind.AnyClass }:
+                    coversLineTerminators = true;
+                    return true;
+                case RegexAtomNode { Kind: RegexSyntaxKind.Dot }:
+                    coversLineTerminators = options.DotMatchesNewline;
+                    return true;
+                default:
+                    return false;
+            }
+        }
+    }
+
+    private static bool CanMatchByteAtStart(RegexSyntaxNode node, RegexCompileOptions options, byte value)
+    {
+        node = UnwrapSingleNodeSequence(node);
+        switch (node.Kind)
+        {
+            case RegexSyntaxKind.Literal:
+                var literal = (RegexAtomNode)node;
+                return literal.Value.Length > 0 &&
+                    RegexByteClass.AtomMatches(
+                        value,
+                        RegexSyntaxKind.Literal,
+                        literal.Value.Span,
+                        options.CaseInsensitive,
+                        options.MultiLine,
+                        options.DotMatchesNewline,
+                        options.Crlf,
+                        options.LineTerminator);
+            case RegexSyntaxKind.Dot:
+            case RegexSyntaxKind.AnyClass:
+            case RegexSyntaxKind.CharacterClass:
+            case RegexSyntaxKind.ByteClass:
+            case RegexSyntaxKind.DigitClass:
+            case RegexSyntaxKind.NotDigitClass:
+            case RegexSyntaxKind.WordClass:
+            case RegexSyntaxKind.NotWordClass:
+            case RegexSyntaxKind.WhitespaceClass:
+            case RegexSyntaxKind.NotWhitespaceClass:
+                var atom = (RegexAtomNode)node;
+                return RegexByteClass.AtomMatches(
+                    value,
+                    atom.Kind,
+                    atom.Value.Span,
+                    options.CaseInsensitive,
+                    options.MultiLine,
+                    options.DotMatchesNewline,
+                    options.Crlf,
+                    options.LineTerminator);
+            case RegexSyntaxKind.Sequence:
+                return CanSequenceMatchByteAtStart((RegexSequenceNode)node, options, value);
+            case RegexSyntaxKind.Alternation:
+                var alternation = (RegexAlternationNode)node;
+                for (int index = 0; index < alternation.Alternatives.Count; index++)
+                {
+                    if (CanMatchByteAtStart(alternation.Alternatives[index], options, value))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            case RegexSyntaxKind.CapturingGroup:
+            case RegexSyntaxKind.NonCapturingGroup:
+                var group = (RegexGroupNode)node;
+                return CanMatchByteAtStart(group.Child, options.Apply(group.EnabledFlags, group.DisabledFlags), value);
+            case RegexSyntaxKind.Repetition:
+                var repetition = (RegexRepetitionNode)node;
+                return repetition.Maximum != 0 && CanMatchByteAtStart(repetition.Child, options, value);
+            default:
+                return false;
+        }
+    }
+
+    private static bool CanSequenceMatchByteAtStart(RegexSequenceNode sequence, RegexCompileOptions options, byte value)
+    {
+        RegexCompileOptions currentOptions = options;
+        for (int index = 0; index < sequence.Nodes.Count; index++)
+        {
+            RegexSyntaxNode child = sequence.Nodes[index];
+            if (CanMatchByteAtStart(child, currentOptions, value))
+            {
+                return true;
+            }
+
+            if (!CanMatchEmpty(child, currentOptions))
+            {
+                return false;
+            }
+
+            if (child is RegexInlineFlagsNode flags)
+            {
+                currentOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
+            }
+        }
+
+        return false;
+    }
+
+    private static bool CanMatchEmpty(RegexSyntaxNode node, RegexCompileOptions options)
+    {
+        node = UnwrapSingleNodeSequence(node);
+        switch (node.Kind)
+        {
+            case RegexSyntaxKind.Empty:
+            case RegexSyntaxKind.StartAnchor:
+            case RegexSyntaxKind.EndAnchor:
+            case RegexSyntaxKind.AbsoluteStartAnchor:
+            case RegexSyntaxKind.AbsoluteEndAnchor:
+            case RegexSyntaxKind.WordBoundary:
+            case RegexSyntaxKind.NotWordBoundary:
+            case RegexSyntaxKind.WordStartBoundary:
+            case RegexSyntaxKind.WordEndBoundary:
+            case RegexSyntaxKind.WordStartHalfBoundary:
+            case RegexSyntaxKind.WordEndHalfBoundary:
+            case RegexSyntaxKind.InlineFlags:
+                return true;
+            case RegexSyntaxKind.Sequence:
+                return CanSequenceMatchEmpty((RegexSequenceNode)node, options);
+            case RegexSyntaxKind.Alternation:
+                var alternation = (RegexAlternationNode)node;
+                for (int index = 0; index < alternation.Alternatives.Count; index++)
+                {
+                    if (CanMatchEmpty(alternation.Alternatives[index], options))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            case RegexSyntaxKind.CapturingGroup:
+            case RegexSyntaxKind.NonCapturingGroup:
+                var group = (RegexGroupNode)node;
+                return CanMatchEmpty(group.Child, options.Apply(group.EnabledFlags, group.DisabledFlags));
+            case RegexSyntaxKind.Repetition:
+                var repetition = (RegexRepetitionNode)node;
+                return repetition.Minimum == 0 || CanMatchEmpty(repetition.Child, options);
+            default:
+                return false;
+        }
+    }
+
+    private static bool CanSequenceMatchEmpty(RegexSequenceNode sequence, RegexCompileOptions options)
+    {
+        RegexCompileOptions currentOptions = options;
+        for (int index = 0; index < sequence.Nodes.Count; index++)
+        {
+            RegexSyntaxNode child = sequence.Nodes[index];
+            if (!CanMatchEmpty(child, currentOptions))
+            {
+                return false;
+            }
+
+            if (child is RegexInlineFlagsNode flags)
+            {
+                currentOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
+            }
+        }
+
+        return true;
+    }
+
+    private static RegexSyntaxNode UnwrapSingleNodeSequence(RegexSyntaxNode node)
+    {
+        while (node is RegexSequenceNode { Nodes.Count: 1 } sequence)
+        {
+            node = sequence.Nodes[0];
+        }
+
+        return node;
     }
 
     private static bool TryGetRawLiteralPattern(byte[] pattern, out byte[] literal)
