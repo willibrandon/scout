@@ -1,9 +1,12 @@
+using System.Buffers;
+
 namespace Scout;
 
 internal sealed class RegexBoundedLineLiteralGapEngine
 {
     private const int MaxPrefixCount = 8;
     private const int MaxRuns = 32;
+    private static readonly SearchValues<byte> RegexWhitespaceBytes = SearchValues.Create(" \t\n\r\f\v"u8);
 
     private readonly RegexBoundedLineLiteralGapBranch[] branches;
     private readonly RegexCaseSensitiveLiteralSetScanner? prefixScanner;
@@ -101,7 +104,7 @@ internal sealed class RegexBoundedLineLiteralGapEngine
         while (TryFindPrefix(haystack, searchAt, out RegexLiteralSetCandidate candidate))
         {
             int start = candidate.Match.Start;
-            if (TryMatchCandidateAt(haystack, start, candidate.LiteralId, out int length))
+            if (TryMatchVerifiedCandidateAt(haystack, start, candidate.LiteralId, out int length))
             {
                 return new RegexMatch(start, length);
             }
@@ -200,13 +203,49 @@ internal sealed class RegexBoundedLineLiteralGapEngine
     {
         long total = 0;
         int offset = Math.Clamp(startAt, 0, haystack.Length);
-        while (Find(haystack, offset) is RegexMatch match)
+        while (TryFindPrefix(haystack, offset, out RegexLiteralSetCandidate candidate))
         {
-            total += sumSpans ? match.Length : 1;
-            offset = match.End;
+            int start = candidate.Match.Start;
+            if (TryMatchVerifiedCandidateAt(haystack, start, candidate.LiteralId, out int length))
+            {
+                total += sumSpans ? length : 1;
+                offset = start + length;
+                continue;
+            }
+
+            offset = start + 1;
         }
 
         return total;
+    }
+
+    private bool TryMatchVerifiedCandidateAt(ReadOnlySpan<byte> haystack, int start, int literalId, out int length)
+    {
+        if ((uint)literalId < (uint)branches.Length)
+        {
+            RegexBoundedLineLiteralGapBranch branch = branches[literalId];
+            if (TryFindGreedySuffix(haystack, start + branch.Prefix.Length, branch, out int suffixStart))
+            {
+                length = suffixStart + branch.Suffix.Length - start;
+                return true;
+            }
+        }
+
+        for (int index = 0; index < branches.Length; index++)
+        {
+            if (index == literalId)
+            {
+                continue;
+            }
+
+            if (TryMatchBranchAt(haystack, start, branches[index], out length))
+            {
+                return true;
+            }
+        }
+
+        length = 0;
+        return false;
     }
 
     private bool TryFindGreedySuffix(
@@ -229,7 +268,7 @@ internal sealed class RegexBoundedLineLiteralGapEngine
         {
             int candidateStart = gapStart + relative;
             if (candidateStart <= maxSuffixStart &&
-                GapCanMatch(haystack, gapStart, candidateStart, branch.MaximumRuns))
+                GapCanMatchWithinBound(haystack, gapStart, candidateStart))
             {
                 suffixStart = candidateStart;
                 return true;
@@ -250,66 +289,41 @@ internal sealed class RegexBoundedLineLiteralGapEngine
     private int GetMaxSuffixStart(ReadOnlySpan<byte> haystack, int gapStart, int maxStart, int maximumRuns)
     {
         int runs = 0;
-        bool countedLine = false;
-        for (int index = gapStart; index <= maxStart; index++)
+        int index = gapStart;
+        while (index <= maxStart)
         {
-            if (haystack[index] == lineTerminator)
+            ReadOnlySpan<byte> remaining = haystack.Slice(index, maxStart - index + 1);
+            int lineTerminatorOffset = remaining.IndexOf(lineTerminator);
+            int lineLength = lineTerminatorOffset < 0 ? remaining.Length : lineTerminatorOffset;
+            int nonWhitespaceOffset = remaining[..lineLength].IndexOfAnyExcept(RegexWhitespaceBytes);
+            if (nonWhitespaceOffset >= 0)
             {
-                countedLine = false;
-                continue;
+                runs++;
+                if (runs > maximumRuns)
+                {
+                    return index + nonWhitespaceOffset;
+                }
             }
 
-            if (IsRegexWhitespaceByte(haystack[index]) || countedLine)
+            if (lineTerminatorOffset < 0)
             {
-                continue;
+                return maxStart;
             }
 
-            runs++;
-            if (runs > maximumRuns)
-            {
-                return index;
-            }
-
-            countedLine = true;
+            index += lineTerminatorOffset + 1;
         }
 
         return maxStart;
     }
 
-    private bool GapCanMatch(ReadOnlySpan<byte> haystack, int gapStart, int suffixStart, int maximumRuns)
+    private bool GapCanMatchWithinBound(ReadOnlySpan<byte> haystack, int gapStart, int suffixStart)
     {
         if (suffixStart == gapStart)
         {
             return true;
         }
 
-        int runs = 0;
-        bool countedLine = false;
-        bool hasDotByte = false;
-        for (int index = gapStart; index < suffixStart; index++)
-        {
-            if (haystack[index] == lineTerminator)
-            {
-                countedLine = false;
-                continue;
-            }
-
-            hasDotByte = true;
-            if (IsRegexWhitespaceByte(haystack[index]) || countedLine)
-            {
-                continue;
-            }
-
-            runs++;
-            if (runs > maximumRuns)
-            {
-                return false;
-            }
-
-            countedLine = true;
-        }
-
-        return runs > 0 || hasDotByte && maximumRuns > 0;
+        return haystack.Slice(gapStart, suffixStart - gapStart).IndexOfAnyExcept(lineTerminator) >= 0;
     }
 
     private bool TryFindPrefix(ReadOnlySpan<byte> haystack, int startAt, out RegexLiteralSetCandidate candidate)
