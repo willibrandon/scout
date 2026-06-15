@@ -8,6 +8,9 @@ internal sealed class RegexLeadingClassLiteralEngine
 
     private readonly RegexLeadingClassLiteralBranch[] branches;
     private readonly byte[][] searchPatterns;
+    private readonly int[] searchPatternBranchIds;
+    private readonly bool searchPatternsIncludeTrailingAtom;
+    private readonly bool searchPatternCandidateBranchesAreUnambiguous;
     private readonly RegexCaseSensitiveLiteralSetScanner? scanner;
     private readonly RegexPackedLiteralSetScanner? packedScanner;
     private readonly AhoCorasickAutomaton? automaton;
@@ -18,6 +21,9 @@ internal sealed class RegexLeadingClassLiteralEngine
     private RegexLeadingClassLiteralEngine(
         RegexLeadingClassLiteralBranch[] branches,
         byte[][] searchPatterns,
+        int[] searchPatternBranchIds,
+        bool searchPatternsIncludeTrailingAtom,
+        bool searchPatternCandidateBranchesAreUnambiguous,
         RegexCaseSensitiveLiteralSetScanner? scanner,
         RegexPackedLiteralSetScanner? packedScanner,
         AhoCorasickAutomaton? automaton,
@@ -26,6 +32,9 @@ internal sealed class RegexLeadingClassLiteralEngine
     {
         this.branches = branches;
         this.searchPatterns = searchPatterns;
+        this.searchPatternBranchIds = searchPatternBranchIds;
+        this.searchPatternsIncludeTrailingAtom = searchPatternsIncludeTrailingAtom;
+        this.searchPatternCandidateBranchesAreUnambiguous = searchPatternCandidateBranchesAreUnambiguous;
         this.scanner = scanner;
         this.packedScanner = packedScanner;
         this.automaton = automaton;
@@ -91,8 +100,10 @@ internal sealed class RegexLeadingClassLiteralEngine
         }
 
         byte[][] literals = GetLiterals(branches);
-        byte[][]? expandedPatterns = TryBuildTrailingSearchPatterns(branches, options);
+        int[] literalBranchIds = BuildBranchIds(literals.Length);
+        byte[][]? expandedPatterns = TryBuildTrailingSearchPatterns(branches, options, out int[]? expandedBranchIds);
         byte[][] searchPatterns = expandedPatterns ?? literals;
+        int[] searchPatternBranchIds = expandedBranchIds ?? literalBranchIds;
         bool expandedSearchPatterns = expandedPatterns is not null;
         RegexCaseSensitiveLiteralSetScanner? scanner = null;
         RegexPackedLiteralSetScanner? packedScanner = null;
@@ -115,6 +126,7 @@ internal sealed class RegexLeadingClassLiteralEngine
                 if (expandedSearchPatterns)
                 {
                     searchPatterns = literals;
+                    searchPatternBranchIds = literalBranchIds;
                     expandedSearchPatterns = false;
                     packedScanner = null;
                     scannerCreated = RegexCaseSensitiveLiteralSetScanner.TryCreate(searchPatterns, out scanner);
@@ -136,6 +148,9 @@ internal sealed class RegexLeadingClassLiteralEngine
         engine = new RegexLeadingClassLiteralEngine(
             branches.ToArray(),
             searchPatterns,
+            searchPatternBranchIds,
+            expandedSearchPatterns,
+            SearchPatternCandidateBranchesAreUnambiguous(searchPatterns),
             scanner,
             packedScanner,
             automaton,
@@ -156,7 +171,12 @@ internal sealed class RegexLeadingClassLiteralEngine
         while (TryFindLiteral(haystack, searchAt, out RegexLiteralSetCandidate candidate))
         {
             int start = candidate.Match.Start - 1;
-            if (start >= lowerBound && TryMatchAt(haystack, start, out int length))
+            int length = 0;
+            bool matched = start >= lowerBound &&
+                (searchPatternCandidateBranchesAreUnambiguous
+                    ? TryMatchCandidateAt(haystack, start, candidate, out length)
+                    : TryMatchAt(haystack, start, out length));
+            if (matched)
             {
                 return new RegexMatch(start, length);
             }
@@ -225,13 +245,63 @@ internal sealed class RegexLeadingClassLiteralEngine
     {
         long total = 0;
         int offset = Math.Clamp(startAt, 0, haystack.Length);
-        while (Find(haystack, offset) is RegexMatch match)
+        int searchAt = Math.Min(haystack.Length, offset + 1);
+        while (TryFindLiteral(haystack, searchAt, out RegexLiteralSetCandidate candidate))
         {
-            total += sumSpans ? match.Length : 1;
-            offset = match.End;
+            int start = candidate.Match.Start - 1;
+            int length = 0;
+            bool matched = start >= offset &&
+                (searchPatternCandidateBranchesAreUnambiguous
+                    ? TryMatchCandidateAt(haystack, start, candidate, out length)
+                    : TryMatchAt(haystack, start, out length));
+            if (matched)
+            {
+                total += sumSpans ? length : 1;
+                offset = start + length;
+                searchAt = Math.Min(haystack.Length, offset + 1);
+            }
+            else
+            {
+                searchAt = candidate.Match.Start + 1;
+            }
         }
 
         return total;
+    }
+
+    private bool TryMatchCandidateAt(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        RegexLiteralSetCandidate candidate,
+        out int length)
+    {
+        length = 0;
+        if ((uint)start >= (uint)haystack.Length ||
+            (uint)candidate.LiteralId >= (uint)searchPatternBranchIds.Length)
+        {
+            return false;
+        }
+
+        RegexLeadingClassLiteralBranch branch = branches[searchPatternBranchIds[candidate.LiteralId]];
+        if (!LeadingByteMatches(haystack[start], branch.LeadingKind))
+        {
+            return false;
+        }
+
+        int end = start + 1 + candidate.Match.Length;
+        if (!searchPatternsIncludeTrailingAtom && branch.TrailingAtom is { } trailingAtom)
+        {
+            end = start + 1 + branch.Literal.Length;
+            if (end >= haystack.Length || !AtomMatches(haystack[end], trailingAtom, options))
+            {
+                return false;
+            }
+
+            end++;
+        }
+
+        length = end - start;
+        return true;
     }
 
     private RegexMatch? FindByTrailingAnchor(ReadOnlySpan<byte> haystack, int lowerBound)
@@ -483,11 +553,24 @@ internal sealed class RegexLeadingClassLiteralEngine
         return literals;
     }
 
+    private static int[] BuildBranchIds(int count)
+    {
+        int[] branchIds = new int[count];
+        for (int index = 0; index < branchIds.Length; index++)
+        {
+            branchIds[index] = index;
+        }
+
+        return branchIds;
+    }
+
     private static byte[][]? TryBuildTrailingSearchPatterns(
         List<RegexLeadingClassLiteralBranch> branches,
-        RegexCompileOptions options)
+        RegexCompileOptions options,
+        out int[]? branchIds)
     {
         List<byte[]> patterns = [];
+        List<int> patternBranchIds = [];
         for (int branchIndex = 0; branchIndex < branches.Count; branchIndex++)
         {
             RegexLeadingClassLiteralBranch branch = branches[branchIndex];
@@ -496,6 +579,7 @@ internal sealed class RegexLeadingClassLiteralEngine
                 trailingBytes.Length == 0 ||
                 trailingBytes.Length > MaxTrailingSearchBytes)
             {
+                branchIds = null;
                 return null;
             }
 
@@ -505,8 +589,10 @@ internal sealed class RegexLeadingClassLiteralEngine
                 branch.Literal.CopyTo(pattern, 0);
                 pattern[^1] = trailingBytes[byteIndex];
                 patterns.Add(pattern);
+                patternBranchIds.Add(branchIndex);
                 if (patterns.Count > MaxExpandedSearchPatternCount)
                 {
+                    branchIds = null;
                     return null;
                 }
             }
@@ -514,10 +600,42 @@ internal sealed class RegexLeadingClassLiteralEngine
 
         if (patterns.Count == 0)
         {
+            branchIds = null;
             return null;
         }
 
+        branchIds = patternBranchIds.ToArray();
         return patterns.ToArray();
+    }
+
+    private static bool SearchPatternCandidateBranchesAreUnambiguous(byte[][] searchPatterns)
+    {
+        for (int left = 0; left < searchPatterns.Length; left++)
+        {
+            for (int right = left + 1; right < searchPatterns.Length; right++)
+            {
+                if (OneSearchPatternCanMatchTheOther(searchPatterns[left], searchPatterns[right]))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private static bool OneSearchPatternCanMatchTheOther(byte[] left, byte[] right)
+    {
+        int length = Math.Min(left.Length, right.Length);
+        for (int index = 0; index < length; index++)
+        {
+            if (left[index] != right[index])
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool TryGetAtomBytes(RegexAtomSpec atom, RegexCompileOptions options, out byte[] bytes)

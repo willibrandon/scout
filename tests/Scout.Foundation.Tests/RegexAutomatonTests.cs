@@ -1197,6 +1197,30 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies literal-prefix run candidates preserve branch fallback when prefixes overlap.
+    /// </summary>
+    [Fact]
+    public void LiteralPrefixRunEngineHandlesOverlappingPrefixes()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"Hu[A-Z]+|Huck[A-Za-z]+"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "xx HuckFinn yy HuABC"u8.ToArray();
+        int firstStart = haystack.AsSpan().IndexOf("HuckFinn"u8);
+        int secondStart = haystack.AsSpan().IndexOf("HuABC"u8);
+
+        Assert.Equal(RegexEngineKind.LiteralPrefixRun, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(firstStart, 8), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(secondStart, 5), automaton.Find(haystack, firstStart + 1));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(13, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies bounded literal gaps scan from prefix candidates and honor greedy repeats.
     /// </summary>
     [Fact]
@@ -1886,6 +1910,30 @@ public sealed class RegexAutomatonTests
         Assert.Equal(12, single.SumMatchSpans("ashing Zshing bshing"u8));
         Assert.Equal(2, trailingClass.CountMatches("Sawyer7 Finn\t sawyer "u8));
         Assert.Equal(12, trailingClass.SumMatchSpans("Sawyer7 Finn\t sawyer "u8));
+    }
+
+    /// <summary>
+    /// Verifies leading-class literal candidates preserve branch fallback when literals overlap.
+    /// </summary>
+    [Fact]
+    public void LeadingClassLiteralEngineHandlesOverlappingLiterals()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"[A-Za-z]in|[A-Za-z]inn"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "xx xinn zinn"u8.ToArray();
+        int firstStart = haystack.AsSpan().IndexOf("xin"u8);
+        int secondStart = haystack.AsSpan().IndexOf("zin"u8);
+
+        Assert.Equal(RegexEngineKind.LeadingClassLiteral, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(firstStart, 3), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(secondStart, 3), automaton.Find(haystack, firstStart + 1));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(6, automaton.SumMatchSpans(haystack));
     }
 
     /// <summary>

@@ -6,6 +6,7 @@ internal sealed class RegexLiteralPrefixRunEngine
 
     private readonly RegexLiteralPrefixRunBranch[] branches;
     private readonly bool asciiCaseInsensitive;
+    private readonly bool prefixCandidateBranchesAreUnambiguous;
     private readonly RegexShortLiteralSetScanner? shortScanner;
     private readonly RegexCaseSensitiveLiteralSetScanner? caseSensitiveScanner;
     private readonly RegexAsciiCaseInsensitiveLiteralSetScanner? asciiCaseInsensitiveScanner;
@@ -15,11 +16,13 @@ internal sealed class RegexLiteralPrefixRunEngine
     private RegexLiteralPrefixRunEngine(
         RegexLiteralPrefixRunBranch[] branches,
         bool asciiCaseInsensitive,
+        bool prefixCandidateBranchesAreUnambiguous,
         RegexShortLiteralSetScanner? shortScanner,
         RegexCaseSensitiveLiteralSetScanner? caseSensitiveScanner)
     {
         this.branches = branches;
         this.asciiCaseInsensitive = asciiCaseInsensitive;
+        this.prefixCandidateBranchesAreUnambiguous = prefixCandidateBranchesAreUnambiguous;
         this.shortScanner = shortScanner;
         this.caseSensitiveScanner = caseSensitiveScanner;
         if (asciiCaseInsensitive)
@@ -99,6 +102,7 @@ internal sealed class RegexLiteralPrefixRunEngine
         engine = new RegexLiteralPrefixRunEngine(
             branches.ToArray(),
             options.CaseInsensitive,
+            PrefixCandidateBranchesAreUnambiguous(prefixes, options.CaseInsensitive),
             shortScanner,
             caseSensitiveScanner);
         return true;
@@ -110,7 +114,10 @@ internal sealed class RegexLiteralPrefixRunEngine
         while (TryFindPrefix(haystack, searchAt, out RegexLiteralSetCandidate candidate))
         {
             int start = candidate.Match.Start;
-            if (TryMatchAt(haystack, start, out int length))
+            bool matched = prefixCandidateBranchesAreUnambiguous
+                ? TryMatchBranchAt(haystack, start, candidate.LiteralId, prefixAlreadyMatched: true, out int length)
+                : TryMatchAt(haystack, start, out length);
+            if (matched)
             {
                 return new RegexMatch(start, length);
             }
@@ -149,26 +156,10 @@ internal sealed class RegexLiteralPrefixRunEngine
 
         for (int index = 0; index < branches.Length; index++)
         {
-            RegexLiteralPrefixRunBranch branch = branches[index];
-            if (!PrefixMatchesAt(haystack, start, branch.Prefix))
+            if (TryMatchBranchAt(haystack, start, index, prefixAlreadyMatched: false, out length))
             {
-                continue;
+                return true;
             }
-
-            int runStart = start + branch.Prefix.Length;
-            if (runStart >= haystack.Length || !RunByteMatches(haystack[runStart], branch.RunKind))
-            {
-                continue;
-            }
-
-            int end = runStart + 1;
-            while (end < haystack.Length && RunByteMatches(haystack[end], branch.RunKind))
-            {
-                end++;
-            }
-
-            length = end - start;
-            return true;
         }
 
         return false;
@@ -178,13 +169,59 @@ internal sealed class RegexLiteralPrefixRunEngine
     {
         long total = 0;
         int offset = Math.Clamp(startAt, 0, haystack.Length);
-        while (Find(haystack, offset) is RegexMatch match)
+        while (TryFindPrefix(haystack, offset, out RegexLiteralSetCandidate candidate))
         {
-            total += sumSpans ? match.Length : 1;
-            offset = match.End;
+            int start = candidate.Match.Start;
+            bool matched = prefixCandidateBranchesAreUnambiguous
+                ? TryMatchBranchAt(haystack, start, candidate.LiteralId, prefixAlreadyMatched: true, out int length)
+                : TryMatchAt(haystack, start, out length);
+            if (matched)
+            {
+                total += sumSpans ? length : 1;
+                offset = start + length;
+            }
+            else
+            {
+                offset = start + 1;
+            }
         }
 
         return total;
+    }
+
+    private bool TryMatchBranchAt(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        int branchIndex,
+        bool prefixAlreadyMatched,
+        out int length)
+    {
+        length = 0;
+        if ((uint)branchIndex >= (uint)branches.Length)
+        {
+            return false;
+        }
+
+        RegexLiteralPrefixRunBranch branch = branches[branchIndex];
+        if (!prefixAlreadyMatched && !PrefixMatchesAt(haystack, start, branch.Prefix))
+        {
+            return false;
+        }
+
+        int runStart = start + branch.Prefix.Length;
+        if (runStart >= haystack.Length || !RunByteMatches(haystack[runStart], branch.RunKind))
+        {
+            return false;
+        }
+
+        int end = runStart + 1;
+        while (end < haystack.Length && RunByteMatches(haystack[end], branch.RunKind))
+        {
+            end++;
+        }
+
+        length = end - start;
+        return true;
     }
 
     private bool TryFindPrefix(ReadOnlySpan<byte> haystack, int startAt, out RegexLiteralSetCandidate candidate)
@@ -407,6 +444,49 @@ internal sealed class RegexLiteralPrefixRunEngine
         }
 
         return prefixes;
+    }
+
+    private static bool PrefixCandidateBranchesAreUnambiguous(
+        byte[][] prefixes,
+        bool asciiCaseInsensitive)
+    {
+        for (int left = 0; left < prefixes.Length; left++)
+        {
+            for (int right = left + 1; right < prefixes.Length; right++)
+            {
+                if (OnePrefixCanMatchTheOther(prefixes[left], prefixes[right], asciiCaseInsensitive))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private static bool OnePrefixCanMatchTheOther(
+        byte[] left,
+        byte[] right,
+        bool asciiCaseInsensitive)
+    {
+        int length = Math.Min(left.Length, right.Length);
+        for (int index = 0; index < length; index++)
+        {
+            byte leftByte = left[index];
+            byte rightByte = right[index];
+            if (asciiCaseInsensitive)
+            {
+                leftByte = RegexAsciiCaseInsensitiveFinder.FoldAscii(leftByte);
+                rightByte = RegexAsciiCaseInsensitiveFinder.FoldAscii(rightByte);
+            }
+
+            if (leftByte != rightByte)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static RegexSyntaxNode UnwrapTransparentGroups(RegexSyntaxNode node)
