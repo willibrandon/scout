@@ -5,6 +5,8 @@ internal sealed class RegexLargeLiteralTrieScanner
     private const int MinimumLiteralCount = 128;
 
     private readonly int[] rootTransitions;
+    private readonly int[] rootImmediateLiteralIds;
+    private readonly bool rootMatchesOnlyImmediateLiterals;
     private readonly byte[][] transitionBytes;
     private readonly int[][] transitionTargets;
     private readonly int[] bestLiteralIds;
@@ -12,12 +14,15 @@ internal sealed class RegexLargeLiteralTrieScanner
 
     private RegexLargeLiteralTrieScanner(
         int[] rootTransitions,
+        int[] rootImmediateLiteralIds,
         byte[][] transitionBytes,
         int[][] transitionTargets,
         int[] bestLiteralIds,
         int[] bestLiteralLengths)
     {
         this.rootTransitions = rootTransitions;
+        this.rootImmediateLiteralIds = rootImmediateLiteralIds;
+        rootMatchesOnlyImmediateLiterals = RootMatchesOnlyImmediateLiterals(rootTransitions, rootImmediateLiteralIds);
         this.transitionBytes = transitionBytes;
         this.transitionTargets = transitionTargets;
         this.bestLiteralIds = bestLiteralIds;
@@ -80,6 +85,7 @@ internal sealed class RegexLargeLiteralTrieScanner
 
         int[] rootTransitions = new int[byte.MaxValue + 1];
         Array.Fill(rootTransitions, -1);
+        int[] rootImmediateLiteralIds = BuildRootImmediateLiteralIds(nodes);
         byte[][] transitionBytes = new byte[nodes.Count][];
         int[][] transitionTargets = new int[nodes.Count][];
         int[] bestLiteralIds = new int[nodes.Count];
@@ -108,6 +114,7 @@ internal sealed class RegexLargeLiteralTrieScanner
 
         scanner = new RegexLargeLiteralTrieScanner(
             rootTransitions,
+            rootImmediateLiteralIds,
             transitionBytes,
             transitionTargets,
             bestLiteralIds,
@@ -117,6 +124,11 @@ internal sealed class RegexLargeLiteralTrieScanner
 
     public RegexLiteralSetCandidate? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
+        if (rootMatchesOnlyImmediateLiterals)
+        {
+            return FindRootImmediateLiteral(haystack, startAt);
+        }
+
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
         for (int start = startOffset; start < haystack.Length; start++)
         {
@@ -131,10 +143,29 @@ internal sealed class RegexLargeLiteralTrieScanner
 
     public long CountOrSum(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
     {
+        if (rootMatchesOnlyImmediateLiterals)
+        {
+            return CountRootImmediateLiterals(haystack, startAt);
+        }
+
         long total = 0;
         int start = Math.Clamp(startAt, 0, haystack.Length);
         while (start < haystack.Length)
         {
+            byte value = haystack[start];
+            if (rootImmediateLiteralIds[value] >= 0)
+            {
+                total++;
+                start++;
+                continue;
+            }
+
+            if (rootTransitions[value] < 0)
+            {
+                start++;
+                continue;
+            }
+
             if (!TryMatchAt(haystack, start, out _, out int length))
             {
                 start++;
@@ -148,6 +179,37 @@ internal sealed class RegexLargeLiteralTrieScanner
         return total;
     }
 
+    private RegexLiteralSetCandidate? FindRootImmediateLiteral(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        for (int start = startOffset; start < haystack.Length; start++)
+        {
+            byte value = haystack[start];
+            int literalId = rootImmediateLiteralIds[value];
+            if (literalId >= 0)
+            {
+                return new RegexLiteralSetCandidate(literalId, new RegexMatch(start, 1));
+            }
+        }
+
+        return null;
+    }
+
+    private long CountRootImmediateLiterals(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        long total = 0;
+        int start = Math.Clamp(startAt, 0, haystack.Length);
+        for (int index = start; index < haystack.Length; index++)
+        {
+            if (rootImmediateLiteralIds[haystack[index]] >= 0)
+            {
+                total++;
+            }
+        }
+
+        return total;
+    }
+
     private bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int literalId, out int length)
     {
         literalId = -1;
@@ -156,6 +218,14 @@ internal sealed class RegexLargeLiteralTrieScanner
         if (state < 0)
         {
             return false;
+        }
+
+        int immediateLiteralId = rootImmediateLiteralIds[haystack[start]];
+        if (immediateLiteralId >= 0)
+        {
+            literalId = immediateLiteralId;
+            length = bestLiteralLengths[state];
+            return true;
         }
 
         int index = start;
@@ -178,6 +248,64 @@ internal sealed class RegexLargeLiteralTrieScanner
         }
 
         return literalId >= 0;
+    }
+
+    private static bool RootMatchesOnlyImmediateLiterals(int[] rootTransitions, int[] rootImmediateLiteralIds)
+    {
+        for (int value = 0; value < rootTransitions.Length; value++)
+        {
+            if (rootTransitions[value] >= 0 && rootImmediateLiteralIds[value] < 0)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static int[] BuildRootImmediateLiteralIds(List<RegexLargeLiteralTrieBuilderNode> nodes)
+    {
+        int[] subtreeBestLiteralIds = new int[nodes.Count];
+        Array.Fill(subtreeBestLiteralIds, -2);
+        int[] rootImmediateLiteralIds = new int[byte.MaxValue + 1];
+        Array.Fill(rootImmediateLiteralIds, -1);
+
+        foreach (KeyValuePair<byte, int> transition in nodes[0].Transitions)
+        {
+            int state = transition.Value;
+            int terminalLiteralId = nodes[state].BestLiteralId;
+            if (terminalLiteralId >= 0 && terminalLiteralId == SubtreeBestLiteralId(nodes, subtreeBestLiteralIds, state))
+            {
+                rootImmediateLiteralIds[transition.Key] = terminalLiteralId;
+            }
+        }
+
+        return rootImmediateLiteralIds;
+    }
+
+    private static int SubtreeBestLiteralId(
+        List<RegexLargeLiteralTrieBuilderNode> nodes,
+        int[] subtreeBestLiteralIds,
+        int state)
+    {
+        int cached = subtreeBestLiteralIds[state];
+        if (cached != -2)
+        {
+            return cached;
+        }
+
+        int best = nodes[state].BestLiteralId;
+        foreach (int target in nodes[state].Transitions.Values)
+        {
+            int childBest = SubtreeBestLiteralId(nodes, subtreeBestLiteralIds, target);
+            if (childBest >= 0 && (best < 0 || childBest < best))
+            {
+                best = childBest;
+            }
+        }
+
+        subtreeBestLiteralIds[state] = best;
+        return best;
     }
 
     private int FindTransition(int state, byte value)
