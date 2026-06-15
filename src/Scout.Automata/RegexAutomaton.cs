@@ -4,71 +4,71 @@ namespace Scout;
 /// Executes a byte-oriented regular expression automaton.
 /// </summary>
 public sealed class RegexAutomaton
+{
+    private readonly RegexMetaEngine engine;
+    private readonly RegexStartPredicate? startPredicate;
+    private readonly RegexLengthGuard? lengthGuard;
+    private readonly RegexRequiredByteSetGuard? requiredByteSetGuard;
+    private readonly RegexRequiredLiteralAnySetGuard? requiredLiteralAnySetGuard;
+    private readonly object captureInitializationLock = new();
+    private readonly ReadOnlyMemory<byte> capturePattern;
+    private readonly RegexSyntaxNode? captureRoot;
+    private readonly RegexCompileOptions captureOptions;
+    private readonly RegexPrefilter? capturePrefilter;
+    private readonly int captureCount;
+    private readonly int wholePatternCaptureIndex;
+
+    private RegexCaptureEngine? captureEngine;
+    private RegexAlternationSetEngine? syntheticCaptureAlternationSet;
+    private RegexDelimitedCaptureEngine? delimitedCaptureEngine;
+    private RegexStructuredLogCaptureEngine? structuredLogCaptureEngine;
+    private RegexTabbedLogCaptureEngine? tabbedLogCaptureEngine;
+    private RegexScalarRunCaptureEngine? scalarRunCaptureEngine;
+    private RegexAnchoredWordCaptureEngine? anchoredWordCaptureEngine;
+    private RegexAnchoredRunBoundaryCaptureEngine? anchoredRunBoundaryCaptureEngine;
+    private RegexAnchoredDotStarCaptureEngine? anchoredDotStarCaptureEngine;
+    private RegexAnchoredQuotedStringCaptureEngine? anchoredQuotedStringCaptureEngine;
+    private RegexKeywordWhitespaceCaptureEngine? keywordWhitespaceCaptureEngine;
+    private RegexOperatorSpacingCaptureEngine? operatorSpacingCaptureEngine;
+    private RegexLiteralWordCaptureEngine? literalWordCaptureEngine;
+    private RegexLiteralRunAlternationCaptureEngine? literalRunAlternationCaptureEngine;
+    private RegexPathSemverCaptureEngine? pathSemverCaptureEngine;
+    private RegexAsciiLetterLengthAlternationCaptureEngine? asciiLetterLengthAlternationCaptureEngine;
+    private RegexAsciiWordLengthAlternationCaptureEngine? asciiWordLengthAlternationCaptureEngine;
+    private RegexBibleReferenceCaptureEngine? bibleReferenceCaptureEngine;
+    private RegexFnPredicateCaptureEngine? fnPredicateCaptureEngine;
+    private volatile bool captureEnginesInitialized;
+    private volatile bool genericCaptureOnly;
+
+    private RegexAutomaton(
+        RegexMetaEngine engine,
+        RegexStartPredicate? startPredicate,
+        RegexLengthGuard? lengthGuard,
+        RegexRequiredByteSetGuard? requiredByteSetGuard,
+        RegexRequiredLiteralAnySetGuard? requiredLiteralAnySetGuard,
+        RegexAlternationSetEngine? syntheticCaptureAlternationSet,
+        ReadOnlyMemory<byte> capturePattern,
+        RegexSyntaxNode? captureRoot,
+        RegexCompileOptions captureOptions,
+        RegexPrefilter? capturePrefilter,
+        int captureCount,
+        int wholePatternCaptureIndex = 0)
     {
-        private readonly RegexMetaEngine engine;
-        private readonly RegexStartPredicate? startPredicate;
-        private readonly RegexLengthGuard? lengthGuard;
-        private readonly RegexRequiredByteSetGuard? requiredByteSetGuard;
-        private readonly RegexRequiredLiteralAnySetGuard? requiredLiteralAnySetGuard;
-        private readonly object captureInitializationLock = new();
-        private readonly ReadOnlyMemory<byte> capturePattern;
-        private readonly RegexSyntaxNode? captureRoot;
-        private readonly RegexCompileOptions captureOptions;
-        private readonly RegexPrefilter? capturePrefilter;
-        private readonly int captureCount;
-        private readonly int wholePatternCaptureIndex;
-
-        private RegexCaptureEngine? captureEngine;
-        private RegexAlternationSetEngine? syntheticCaptureAlternationSet;
-        private RegexDelimitedCaptureEngine? delimitedCaptureEngine;
-        private RegexStructuredLogCaptureEngine? structuredLogCaptureEngine;
-        private RegexTabbedLogCaptureEngine? tabbedLogCaptureEngine;
-        private RegexScalarRunCaptureEngine? scalarRunCaptureEngine;
-        private RegexAnchoredWordCaptureEngine? anchoredWordCaptureEngine;
-        private RegexAnchoredRunBoundaryCaptureEngine? anchoredRunBoundaryCaptureEngine;
-        private RegexAnchoredDotStarCaptureEngine? anchoredDotStarCaptureEngine;
-        private RegexAnchoredQuotedStringCaptureEngine? anchoredQuotedStringCaptureEngine;
-        private RegexKeywordWhitespaceCaptureEngine? keywordWhitespaceCaptureEngine;
-        private RegexOperatorSpacingCaptureEngine? operatorSpacingCaptureEngine;
-        private RegexLiteralWordCaptureEngine? literalWordCaptureEngine;
-        private RegexLiteralRunAlternationCaptureEngine? literalRunAlternationCaptureEngine;
-        private RegexPathSemverCaptureEngine? pathSemverCaptureEngine;
-        private RegexAsciiLetterLengthAlternationCaptureEngine? asciiLetterLengthAlternationCaptureEngine;
-        private RegexAsciiWordLengthAlternationCaptureEngine? asciiWordLengthAlternationCaptureEngine;
-        private RegexBibleReferenceCaptureEngine? bibleReferenceCaptureEngine;
-        private RegexFnPredicateCaptureEngine? fnPredicateCaptureEngine;
-        private volatile bool captureEnginesInitialized;
-        private volatile bool genericCaptureOnly;
-
-        private RegexAutomaton(
-            RegexMetaEngine engine,
-            RegexStartPredicate? startPredicate,
-            RegexLengthGuard? lengthGuard,
-            RegexRequiredByteSetGuard? requiredByteSetGuard,
-            RegexRequiredLiteralAnySetGuard? requiredLiteralAnySetGuard,
-            RegexAlternationSetEngine? syntheticCaptureAlternationSet,
-            ReadOnlyMemory<byte> capturePattern,
-            RegexSyntaxNode? captureRoot,
-            RegexCompileOptions captureOptions,
-            RegexPrefilter? capturePrefilter,
-            int captureCount,
-            int wholePatternCaptureIndex = 0)
-        {
-            this.engine = engine;
-            this.startPredicate = startPredicate;
-            this.lengthGuard = lengthGuard;
-            this.requiredByteSetGuard = requiredByteSetGuard;
-            this.requiredLiteralAnySetGuard = requiredLiteralAnySetGuard;
-            this.syntheticCaptureAlternationSet = syntheticCaptureAlternationSet;
-            this.capturePattern = capturePattern;
-            this.captureRoot = captureRoot;
-            this.captureOptions = captureOptions;
-            this.capturePrefilter = capturePrefilter;
-            this.captureCount = captureCount;
-            this.wholePatternCaptureIndex = wholePatternCaptureIndex;
-            captureEnginesInitialized = captureCount == 0;
-            genericCaptureOnly = captureCount == 0;
-        }
+        this.engine = engine;
+        this.startPredicate = startPredicate;
+        this.lengthGuard = lengthGuard;
+        this.requiredByteSetGuard = requiredByteSetGuard;
+        this.requiredLiteralAnySetGuard = requiredLiteralAnySetGuard;
+        this.syntheticCaptureAlternationSet = syntheticCaptureAlternationSet;
+        this.capturePattern = capturePattern;
+        this.captureRoot = captureRoot;
+        this.captureOptions = captureOptions;
+        this.capturePrefilter = capturePrefilter;
+        this.captureCount = captureCount;
+        this.wholePatternCaptureIndex = wholePatternCaptureIndex;
+        captureEnginesInitialized = captureCount == 0;
+        genericCaptureOnly = captureCount == 0;
+    }
 
     /// <summary>
     /// Compiles a regex pattern into a meta-selected automaton.

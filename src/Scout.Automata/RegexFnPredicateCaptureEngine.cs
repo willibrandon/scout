@@ -177,10 +177,10 @@ internal sealed class RegexFnPredicateCaptureEngine
     {
         node = UnwrapTransparentNonCapturingGroups(node);
         return node is RegexGroupNode
-            {
-                Kind: RegexSyntaxKind.CapturingGroup,
-                CaptureIndex: var actualCaptureIndex,
-            } group &&
+        {
+            Kind: RegexSyntaxKind.CapturingGroup,
+            CaptureIndex: var actualCaptureIndex,
+        } group &&
             actualCaptureIndex == captureIndex &&
             UnwrapTransparentNonCapturingGroups(group.Child) is RegexRepetitionNode
             {

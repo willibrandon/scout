@@ -340,11 +340,11 @@ internal sealed class RegexTabbedLogCaptureEngine
     private static bool IsDigitRepetition(RegexSyntaxNode node, int count)
     {
         return UnwrapTransparentNonCapturingGroups(node) is RegexRepetitionNode
-            {
-                Minimum: var minimum,
-                Maximum: var maximum,
-                Lazy: false,
-            } repetition &&
+        {
+            Minimum: var minimum,
+            Maximum: var maximum,
+            Lazy: false,
+        } repetition &&
             minimum == count &&
             maximum == count &&
             IsDigitAtom(repetition.Child);

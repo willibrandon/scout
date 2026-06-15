@@ -225,11 +225,11 @@ internal sealed class RegexDelimitedSpanEngine
     {
         node = UnwrapTransparentNonCapturingGroups(node);
         return node is RegexRepetitionNode
-            {
-                Minimum: 0,
-                Maximum: null,
-                Lazy: false,
-            } repetition &&
+        {
+            Minimum: 0,
+            Maximum: null,
+            Lazy: false,
+        } repetition &&
             TryGetNegatedByteAtom(repetition.Child, options, excluded);
     }
 

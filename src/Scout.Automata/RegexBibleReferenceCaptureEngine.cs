@@ -763,11 +763,11 @@ internal sealed class RegexBibleReferenceCaptureEngine
     private static bool IsOptionalBookPrefix(RegexSyntaxNode node)
     {
         return UnwrapTransparentNonCapturingGroups(node) is RegexRepetitionNode
-            {
-                Minimum: 0,
-                Maximum: 1,
-                Lazy: false,
-            } repetition &&
+        {
+            Minimum: 0,
+            Maximum: 1,
+            Lazy: false,
+        } repetition &&
             TryGetCapture(repetition.Child, BookPrefixCapture, captureName: null, out RegexGroupNode prefixGroup) &&
             UnwrapTransparentNonCapturingGroups(prefixGroup.Child) is RegexSequenceNode { Nodes.Count: 2 } sequence &&
             TryGetCapture(sequence.Nodes[0], BookPrefixTokenCapture, captureName: null, out RegexGroupNode prefixTokenGroup) &&
@@ -798,11 +798,11 @@ internal sealed class RegexBibleReferenceCaptureEngine
     private static bool IsLocationsExpression(RegexSyntaxNode node)
     {
         return UnwrapTransparentNonCapturingGroups(node) is RegexRepetitionNode
-            {
-                Minimum: 1,
-                Maximum: null,
-                Lazy: false,
-            } repetition &&
+        {
+            Minimum: 1,
+            Maximum: null,
+            Lazy: false,
+        } repetition &&
             TryGetCapture(repetition.Child, LocationCapture, captureName: null, out RegexGroupNode locationGroup) &&
             IsLocationExpression(locationGroup.Child);
     }
@@ -829,11 +829,11 @@ internal sealed class RegexBibleReferenceCaptureEngine
     private static bool IsChapterBranchRepetition(RegexSyntaxNode node)
     {
         return UnwrapTransparentNonCapturingGroups(node) is RegexRepetitionNode
-            {
-                Minimum: 0,
-                Maximum: null,
-                Lazy: false,
-            } repetition &&
+        {
+            Minimum: 0,
+            Maximum: null,
+            Lazy: false,
+        } repetition &&
             TryGetCapture(repetition.Child, ChapterBranchCapture, captureName: null, out RegexGroupNode branchGroup) &&
             IsChapterBranchAlternation(branchGroup.Child);
     }
@@ -861,11 +861,11 @@ internal sealed class RegexBibleReferenceCaptureEngine
     private static bool IsOptionalVerse(RegexSyntaxNode node)
     {
         return UnwrapTransparentNonCapturingGroups(node) is RegexRepetitionNode
-            {
-                Minimum: 0,
-                Maximum: 1,
-                Lazy: false,
-            } repetition &&
+        {
+            Minimum: 0,
+            Maximum: 1,
+            Lazy: false,
+        } repetition &&
             TryGetCapture(repetition.Child, VerseGroupCapture, captureName: null, out RegexGroupNode verseGroup) &&
             UnwrapTransparentNonCapturingGroups(verseGroup.Child) is RegexSequenceNode { Nodes.Count: 3 } sequence &&
             IsLiteral(sequence.Nodes[0], (byte)':') &&
@@ -876,11 +876,11 @@ internal sealed class RegexBibleReferenceCaptureEngine
     private static bool IsVerseBranchRepetition(RegexSyntaxNode node)
     {
         return UnwrapTransparentNonCapturingGroups(node) is RegexRepetitionNode
-            {
-                Minimum: 0,
-                Maximum: null,
-                Lazy: false,
-            } repetition &&
+        {
+            Minimum: 0,
+            Maximum: null,
+            Lazy: false,
+        } repetition &&
             TryGetCapture(repetition.Child, VerseBranchCapture, captureName: null, out RegexGroupNode branchGroup) &&
             IsVerseBranchAlternation(branchGroup.Child);
     }
@@ -945,33 +945,33 @@ internal sealed class RegexBibleReferenceCaptureEngine
     private static bool IsDigitRun(RegexSyntaxNode node)
     {
         return UnwrapTransparentNonCapturingGroups(node) is RegexRepetitionNode
-            {
-                Minimum: 1,
-                Maximum: null,
-                Lazy: false,
-            } repetition &&
+        {
+            Minimum: 1,
+            Maximum: null,
+            Lazy: false,
+        } repetition &&
             UnwrapTransparentNonCapturingGroups(repetition.Child) is RegexAtomNode { Kind: RegexSyntaxKind.DigitClass };
     }
 
     private static bool IsOptionalWhitespace(RegexSyntaxNode node)
     {
         return UnwrapTransparentNonCapturingGroups(node) is RegexRepetitionNode
-            {
-                Minimum: 0,
-                Maximum: 1,
-                Lazy: false,
-            } repetition &&
+        {
+            Minimum: 0,
+            Maximum: 1,
+            Lazy: false,
+        } repetition &&
             UnwrapTransparentNonCapturingGroups(repetition.Child) is RegexAtomNode { Kind: RegexSyntaxKind.WhitespaceClass };
     }
 
     private static bool IsBookSeparatorRun(RegexSyntaxNode node, int minimum)
     {
         return UnwrapTransparentNonCapturingGroups(node) is RegexRepetitionNode
-            {
-                Minimum: var actualMinimum,
-                Maximum: null,
-                Lazy: false,
-            } repetition &&
+        {
+            Minimum: var actualMinimum,
+            Maximum: null,
+            Lazy: false,
+        } repetition &&
             actualMinimum == minimum &&
             IsCharacterClassExpression(repetition.Child, "\\t\\f\\pZ"u8);
     }
@@ -979,11 +979,11 @@ internal sealed class RegexBibleReferenceCaptureEngine
     private static bool IsWhitespaceRun(RegexSyntaxNode node, int minimum)
     {
         return UnwrapTransparentNonCapturingGroups(node) is RegexRepetitionNode
-            {
-                Minimum: var actualMinimum,
-                Maximum: null,
-                Lazy: false,
-            } repetition &&
+        {
+            Minimum: var actualMinimum,
+            Maximum: null,
+            Lazy: false,
+        } repetition &&
             actualMinimum == minimum &&
             UnwrapTransparentNonCapturingGroups(repetition.Child) is RegexAtomNode { Kind: RegexSyntaxKind.WhitespaceClass };
     }
@@ -991,11 +991,11 @@ internal sealed class RegexBibleReferenceCaptureEngine
     private static bool IsOneOrMoreUnicodeProperty(RegexSyntaxNode node, RegexUnicodePropertyKind property)
     {
         return UnwrapTransparentNonCapturingGroups(node) is RegexRepetitionNode
-            {
-                Minimum: 1,
-                Maximum: null,
-                Lazy: false,
-            } repetition &&
+        {
+            Minimum: 1,
+            Maximum: null,
+            Lazy: false,
+        } repetition &&
             IsUnicodeProperty(repetition.Child, property);
     }
 
@@ -1011,22 +1011,22 @@ internal sealed class RegexBibleReferenceCaptureEngine
     private static bool IsOptionalLiteral(RegexSyntaxNode node, byte literal)
     {
         return UnwrapTransparentNonCapturingGroups(node) is RegexRepetitionNode
-            {
-                Minimum: 0,
-                Maximum: 1,
-                Lazy: false,
-            } repetition &&
+        {
+            Minimum: 0,
+            Maximum: 1,
+            Lazy: false,
+        } repetition &&
             IsLiteral(repetition.Child, literal);
     }
 
     private static bool IsLiteralRepetition(RegexSyntaxNode node, byte literal, int minimum, int? maximum)
     {
         return UnwrapTransparentNonCapturingGroups(node) is RegexRepetitionNode
-            {
-                Minimum: var actualMinimum,
-                Maximum: var actualMaximum,
-                Lazy: false,
-            } repetition &&
+        {
+            Minimum: var actualMinimum,
+            Maximum: var actualMaximum,
+            Lazy: false,
+        } repetition &&
             actualMinimum == minimum &&
             actualMaximum == maximum &&
             IsLiteral(repetition.Child, literal);
@@ -1035,11 +1035,11 @@ internal sealed class RegexBibleReferenceCaptureEngine
     private static bool IsOptionalAsciiDigitClass(RegexSyntaxNode node)
     {
         return UnwrapTransparentNonCapturingGroups(node) is RegexRepetitionNode
-            {
-                Minimum: 0,
-                Maximum: 1,
-                Lazy: false,
-            } repetition &&
+        {
+            Minimum: 0,
+            Maximum: 1,
+            Lazy: false,
+        } repetition &&
             IsAsciiDigitClass(repetition.Child);
     }
 

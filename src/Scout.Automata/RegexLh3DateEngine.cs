@@ -212,11 +212,11 @@ internal sealed class RegexLh3DateEngine
     {
         node = UnwrapTransparentGroups(node);
         return node is RegexRepetitionNode
-            {
-                Minimum: 0,
-                Maximum: 1,
-                Lazy: false,
-            } repetition &&
+        {
+            Minimum: 0,
+            Maximum: 1,
+            Lazy: false,
+        } repetition &&
             IsDigitAtom(repetition.Child, options);
     }
 

@@ -579,7 +579,10 @@ internal sealed class RegexPackedLiteralSetScanner
             int[] literalIds = buckets[bucket];
             for (int index = 0; index < literalIds.Length; index++)
             {
-                if (haystack[..MaskLength].SequenceEqual(literals[literalIds[index]].AsSpan(0, MaskLength)))
+                int literalId = literalIds[index];
+                if (prefixByteVariants is null
+                    ? haystack[..MaskLength].SequenceEqual(literals[literalId].AsSpan(0, MaskLength))
+                    : PrefixVariantsMatch(haystack, prefixByteVariants[literalId]))
                 {
                     bits |= (byte)(1 << bucket);
                     break;
@@ -588,6 +591,31 @@ internal sealed class RegexPackedLiteralSetScanner
         }
 
         return bits;
+    }
+
+    private static bool PrefixVariantsMatch(ReadOnlySpan<byte> haystack, byte[][] variants)
+    {
+        for (int byteIndex = 0; byteIndex < MaskLength; byteIndex++)
+        {
+            byte[] byteVariants = variants[byteIndex];
+            byte value = haystack[byteIndex];
+            bool matched = false;
+            for (int variantIndex = 0; variantIndex < byteVariants.Length; variantIndex++)
+            {
+                if (value == byteVariants[variantIndex])
+                {
+                    matched = true;
+                    break;
+                }
+            }
+
+            if (!matched)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private void BuildMasks()

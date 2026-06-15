@@ -478,6 +478,27 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies the common Cyrillic literal-set scalar prefilter honors prefix case folds.
+    /// </summary>
+    [Fact]
+    public void LiteralSetFindsCommonCyrillicCaseInsensitiveAlternationWithScalarPrefilter()
+    {
+        byte[] pattern = System.Text.Encoding.UTF8.GetBytes("Шер|Джо|Ире");
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("шер");
+        var automaton = RegexAutomaton.Compile(
+            pattern,
+            caseInsensitive: true,
+            multiLine: false,
+            dotMatchesNewline: false,
+            unicodeClasses: true);
+
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, haystack.Length), automaton.Find(haystack));
+        Assert.Equal(1, automaton.CountMatches(haystack));
+        Assert.Equal(haystack.Length, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies inline no-Unicode mode keeps literal-set case folding ASCII-only.
     /// </summary>
     [Fact]
