@@ -62,7 +62,7 @@ internal readonly struct MemmemPackedPairFinder
                 firstIndex = index;
                 firstRank = candidateRank;
             }
-            else if (candidate != first && candidateRank < secondRank)
+            else if (candidateRank < secondRank)
             {
                 second = candidate;
                 secondIndex = index;
