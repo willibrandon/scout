@@ -107,6 +107,83 @@ internal sealed class RegexShortLiteralSetScanner
         long total = 0;
         var previous0 = Vector256.Create(byte.MaxValue);
         var previous1 = Vector256.Create(byte.MaxValue);
+        int unrolledEnd = vectorEnd - Vector256<byte>.Count * 3;
+        while (offset <= unrolledEnd)
+        {
+            var firstChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            Vector256<byte> firstCandidates = CandidateVector256(firstChunk, ref previous0, ref previous1);
+            if (Avx2.CompareEqual(firstCandidates, Vector256<byte>.Zero).ExtractMostSignificantBits() != uint.MaxValue)
+            {
+                int baseOffset = offset - MaskLength + 1;
+                for (int lane = 0; lane < 4; lane++)
+                {
+                    CountOrSumCandidateChunk(
+                        haystack,
+                        baseOffset + lane * 8,
+                        firstCandidates.AsUInt64().GetElement(lane),
+                        sumSpans,
+                        ref total,
+                        ref nextAllowedStart);
+                }
+            }
+
+            offset += Vector256<byte>.Count;
+            var secondChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            Vector256<byte> secondCandidates = CandidateVector256(secondChunk, ref previous0, ref previous1);
+            if (Avx2.CompareEqual(secondCandidates, Vector256<byte>.Zero).ExtractMostSignificantBits() != uint.MaxValue)
+            {
+                int baseOffset = offset - MaskLength + 1;
+                for (int lane = 0; lane < 4; lane++)
+                {
+                    CountOrSumCandidateChunk(
+                        haystack,
+                        baseOffset + lane * 8,
+                        secondCandidates.AsUInt64().GetElement(lane),
+                        sumSpans,
+                        ref total,
+                        ref nextAllowedStart);
+                }
+            }
+
+            offset += Vector256<byte>.Count;
+            var thirdChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            Vector256<byte> thirdCandidates = CandidateVector256(thirdChunk, ref previous0, ref previous1);
+            if (Avx2.CompareEqual(thirdCandidates, Vector256<byte>.Zero).ExtractMostSignificantBits() != uint.MaxValue)
+            {
+                int baseOffset = offset - MaskLength + 1;
+                for (int lane = 0; lane < 4; lane++)
+                {
+                    CountOrSumCandidateChunk(
+                        haystack,
+                        baseOffset + lane * 8,
+                        thirdCandidates.AsUInt64().GetElement(lane),
+                        sumSpans,
+                        ref total,
+                        ref nextAllowedStart);
+                }
+            }
+
+            offset += Vector256<byte>.Count;
+            var fourthChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            Vector256<byte> fourthCandidates = CandidateVector256(fourthChunk, ref previous0, ref previous1);
+            if (Avx2.CompareEqual(fourthCandidates, Vector256<byte>.Zero).ExtractMostSignificantBits() != uint.MaxValue)
+            {
+                int baseOffset = offset - MaskLength + 1;
+                for (int lane = 0; lane < 4; lane++)
+                {
+                    CountOrSumCandidateChunk(
+                        haystack,
+                        baseOffset + lane * 8,
+                        fourthCandidates.AsUInt64().GetElement(lane),
+                        sumSpans,
+                        ref total,
+                        ref nextAllowedStart);
+                }
+            }
+
+            offset += Vector256<byte>.Count;
+        }
+
         while (offset <= vectorEnd)
         {
             var chunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
