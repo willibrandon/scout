@@ -14,17 +14,10 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
     private readonly Dictionary<ushort, RegexCaseSensitiveLiteralSetEntry[]> entriesByBlock;
     private readonly byte[] blockFirstBytes;
     private readonly byte[] blockSecondBytes;
-    private readonly bool cartesianBlockMatcher;
-    private readonly bool[]? cartesianBlockFirstByteSet;
-    private readonly bool[]? cartesianBlockSecondByteSet;
     private readonly Vector128<byte>[] blockFirstVectors128;
     private readonly Vector128<byte>[] blockSecondVectors128;
-    private readonly Vector128<byte>[] cartesianBlockFirstVectors128;
-    private readonly Vector128<byte>[] cartesianBlockSecondVectors128;
     private readonly Vector256<byte>[] blockFirstVectors256;
     private readonly Vector256<byte>[] blockSecondVectors256;
-    private readonly Vector256<byte>[] cartesianBlockFirstVectors256;
-    private readonly Vector256<byte>[] cartesianBlockSecondVectors256;
     private readonly int maxAnchorIndex;
 
     private RegexCaseSensitiveLiteralSetScanner(IReadOnlyList<byte[]> literals)
@@ -58,8 +51,6 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
 
         blockFirstBytes = new byte[distinctBlocks.Count];
         blockSecondBytes = new byte[distinctBlocks.Count];
-        var distinctFirstBytes = new List<byte>();
-        var distinctSecondBytes = new List<byte>();
         blockFirstVectors128 = new Vector128<byte>[distinctBlocks.Count];
         blockSecondVectors128 = new Vector128<byte>[distinctBlocks.Count];
         blockFirstVectors256 = new Vector256<byte>[distinctBlocks.Count];
@@ -71,25 +62,11 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
             byte second = (byte)(block >> 8);
             blockFirstBytes[index] = first;
             blockSecondBytes[index] = second;
-            AddDistinct(distinctFirstBytes, first);
-            AddDistinct(distinctSecondBytes, second);
             blockFirstVectors128[index] = Vector128.Create(first);
             blockSecondVectors128[index] = Vector128.Create(second);
             blockFirstVectors256[index] = Vector256.Create(first);
             blockSecondVectors256[index] = Vector256.Create(second);
         }
-
-        cartesianBlockMatcher = distinctBlocks.Count == distinctFirstBytes.Count * distinctSecondBytes.Count;
-        if (cartesianBlockMatcher)
-        {
-            cartesianBlockFirstByteSet = BuildByteSet(distinctFirstBytes);
-            cartesianBlockSecondByteSet = BuildByteSet(distinctSecondBytes);
-        }
-
-        cartesianBlockFirstVectors128 = BuildVector128(distinctFirstBytes);
-        cartesianBlockSecondVectors128 = BuildVector128(distinctSecondBytes);
-        cartesianBlockFirstVectors256 = BuildVector256(distinctFirstBytes);
-        cartesianBlockSecondVectors256 = BuildVector256(distinctSecondBytes);
     }
 
     public static bool TryCreate(IReadOnlyList<byte[]> literals, out RegexCaseSensitiveLiteralSetScanner? scanner)
@@ -289,11 +266,15 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
         {
             var current = Vector256.LoadUnsafe(ref reference, (nuint)offset);
             var next = Vector256.LoadUnsafe(ref reference, (nuint)(offset + 1));
-            Vector256<byte> matches = cartesianBlockMatcher
-                ? Avx2.And(
-                    AnyEqual256(current, cartesianBlockFirstVectors256),
-                    AnyEqual256(next, cartesianBlockSecondVectors256))
-                : ExactBlockMatches256(current, next);
+            Vector256<byte> matches = Vector256<byte>.Zero;
+            for (int index = 0; index < blockFirstVectors256.Length; index++)
+            {
+                matches = Avx2.Or(
+                    matches,
+                    Avx2.And(
+                        Avx2.CompareEqual(current, blockFirstVectors256[index]),
+                        Avx2.CompareEqual(next, blockSecondVectors256[index])));
+            }
 
             uint mask = matches.ExtractMostSignificantBits();
             if (mask != 0)
@@ -316,11 +297,15 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
         {
             var current = Vector128.LoadUnsafe(ref reference, (nuint)offset);
             var next = Vector128.LoadUnsafe(ref reference, (nuint)(offset + 1));
-            Vector128<byte> matches = cartesianBlockMatcher
-                ? Sse2.And(
-                    AnyEqual128(current, cartesianBlockFirstVectors128),
-                    AnyEqual128(next, cartesianBlockSecondVectors128))
-                : ExactBlockMatches128(current, next);
+            Vector128<byte> matches = Vector128<byte>.Zero;
+            for (int index = 0; index < blockFirstVectors128.Length; index++)
+            {
+                matches = Sse2.Or(
+                    matches,
+                    Sse2.And(
+                        Sse2.CompareEqual(current, blockFirstVectors128[index]),
+                        Sse2.CompareEqual(next, blockSecondVectors128[index])));
+            }
 
             uint mask = matches.ExtractMostSignificantBits();
             if (mask != 0)
@@ -338,67 +323,13 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
     {
         for (int index = startAt; index <= haystack.Length - BlockLength; index++)
         {
-            if (cartesianBlockMatcher
-                ? cartesianBlockFirstByteSet![haystack[index]] && cartesianBlockSecondByteSet![haystack[index + 1]]
-                : entriesByBlock.ContainsKey(BlockKey(haystack[index..])))
+            if (entriesByBlock.ContainsKey(BlockKey(haystack[index..])))
             {
                 return index;
             }
         }
 
         return -1;
-    }
-
-    private Vector256<byte> ExactBlockMatches256(Vector256<byte> current, Vector256<byte> next)
-    {
-        Vector256<byte> matches = Vector256<byte>.Zero;
-        for (int index = 0; index < blockFirstVectors256.Length; index++)
-        {
-            matches = Avx2.Or(
-                matches,
-                Avx2.And(
-                    Avx2.CompareEqual(current, blockFirstVectors256[index]),
-                    Avx2.CompareEqual(next, blockSecondVectors256[index])));
-        }
-
-        return matches;
-    }
-
-    private Vector128<byte> ExactBlockMatches128(Vector128<byte> current, Vector128<byte> next)
-    {
-        Vector128<byte> matches = Vector128<byte>.Zero;
-        for (int index = 0; index < blockFirstVectors128.Length; index++)
-        {
-            matches = Sse2.Or(
-                matches,
-                Sse2.And(
-                    Sse2.CompareEqual(current, blockFirstVectors128[index]),
-                    Sse2.CompareEqual(next, blockSecondVectors128[index])));
-        }
-
-        return matches;
-    }
-
-    private static Vector256<byte> AnyEqual256(Vector256<byte> value, Vector256<byte>[] candidates)
-    {
-        Vector256<byte> matches = Vector256<byte>.Zero;
-        for (int index = 0; index < candidates.Length; index++)
-        {
-            matches = Avx2.Or(matches, Avx2.CompareEqual(value, candidates[index]));
-        }
-
-        return matches;
-    }
-
-    private static Vector128<byte> AnyEqual128(Vector128<byte> value, Vector128<byte>[] candidates)
-    {
-        Vector128<byte> matches = Vector128<byte>.Zero;
-        for (int index = 0; index < candidates.Length; index++)
-        {
-            matches = Sse2.Or(matches, Sse2.CompareEqual(value, candidates[index]));
-        }
-
-        return matches;
     }
 
     private static int SelectAnchorIndex(
@@ -537,52 +468,6 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
         }
 
         return frequencies;
-    }
-
-    private static bool[] BuildByteSet(List<byte> bytes)
-    {
-        bool[] set = new bool[256];
-        for (int index = 0; index < bytes.Count; index++)
-        {
-            set[bytes[index]] = true;
-        }
-
-        return set;
-    }
-
-    private static Vector128<byte>[] BuildVector128(List<byte> bytes)
-    {
-        var vectors = new Vector128<byte>[bytes.Count];
-        for (int index = 0; index < bytes.Count; index++)
-        {
-            vectors[index] = Vector128.Create(bytes[index]);
-        }
-
-        return vectors;
-    }
-
-    private static Vector256<byte>[] BuildVector256(List<byte> bytes)
-    {
-        var vectors = new Vector256<byte>[bytes.Count];
-        for (int index = 0; index < bytes.Count; index++)
-        {
-            vectors[index] = Vector256.Create(bytes[index]);
-        }
-
-        return vectors;
-    }
-
-    private static void AddDistinct(List<byte> bytes, byte value)
-    {
-        for (int index = 0; index < bytes.Count; index++)
-        {
-            if (bytes[index] == value)
-            {
-                return;
-            }
-        }
-
-        bytes.Add(value);
     }
 
     private static bool IsUtf8TwoByteScalar(byte first, byte second)
