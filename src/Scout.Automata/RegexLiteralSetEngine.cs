@@ -148,14 +148,6 @@ internal sealed class RegexLiteralSetEngine
                 shortLiteralScanner = shortScanner;
                 return;
             }
-
-            smallLiteralFinders = new MemmemFinder[this.literals.Length];
-            for (int index = 0; index < this.literals.Length; index++)
-            {
-                smallLiteralFinders[index] = new MemmemFinder(this.literals[index]);
-            }
-
-            return;
         }
 
         if (this.literals.Length > 1 &&
@@ -175,6 +167,17 @@ internal sealed class RegexLiteralSetEngine
             RegexCaseSensitiveLiteralSetScanner.TryCreate(this.literals, out RegexCaseSensitiveLiteralSetScanner? caseSensitive))
         {
             caseSensitiveScanner = caseSensitive;
+            return;
+        }
+
+        if (ShouldUseSmallLiteralFinders(this.literals, asciiCaseInsensitive, unicodeCaseInsensitive, useAho))
+        {
+            smallLiteralFinders = new MemmemFinder[this.literals.Length];
+            for (int index = 0; index < this.literals.Length; index++)
+            {
+                smallLiteralFinders[index] = new MemmemFinder(this.literals[index]);
+            }
+
             return;
         }
 
