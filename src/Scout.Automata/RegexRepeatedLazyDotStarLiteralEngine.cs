@@ -152,7 +152,9 @@ internal sealed class RegexRepeatedLazyDotStarLiteralEngine
         delimiterStart = 0;
         if (suffix.Length == 1)
         {
-            int found = FindAdjacentBytes(haystack, searchAt, lineEnd, delimiter, suffixAnchor);
+            int found = ShouldFindAdjacentBytesBySecond(delimiter, suffixAnchor)
+                ? FindAdjacentBytesBySecond(haystack, searchAt, lineEnd, delimiter, suffixAnchor)
+                : FindAdjacentBytes(haystack, searchAt, lineEnd, delimiter, suffixAnchor);
             if (found < 0)
             {
                 return false;
@@ -174,6 +176,43 @@ internal sealed class RegexRepeatedLazyDotStarLiteralEngine
         }
 
         return false;
+    }
+
+    private static bool ShouldFindAdjacentBytesBySecond(byte first, byte second)
+    {
+        int firstScore = RegexAnchoredLiteralFinder.AsciiAnchorScore(first);
+        int secondScore = RegexAnchoredLiteralFinder.AsciiAnchorScore(second);
+        return secondScore >= RegexAnchoredLiteralFinder.AsciiAnchorScore((byte)'k') &&
+            secondScore > firstScore;
+    }
+
+    private static int FindAdjacentBytesBySecond(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        int end,
+        byte first,
+        byte second)
+    {
+        int searchAt = start + 1;
+        while (searchAt < end)
+        {
+            int offset = haystack[searchAt..end].IndexOf(second);
+            if (offset < 0)
+            {
+                return -1;
+            }
+
+            int secondIndex = searchAt + offset;
+            int firstIndex = secondIndex - 1;
+            if (firstIndex >= start && haystack[firstIndex] == first)
+            {
+                return firstIndex;
+            }
+
+            searchAt = secondIndex + 1;
+        }
+
+        return -1;
     }
 
     private bool TryFindSuffix(ReadOnlySpan<byte> haystack, int searchAt, int lineEnd, out int suffixStart)
