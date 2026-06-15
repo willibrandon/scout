@@ -47,13 +47,17 @@ internal sealed class RegexLiteralSetEngine
         bool unicodeCaseInsensitive,
         bool useAho,
         RegexLargeLiteralTrieScanner? prebuiltLargeLiteralTrieScanner = null,
-        RegexLargeLiteralSetScanner? prebuiltLargeLiteralScanner = null)
+        RegexLargeLiteralSetScanner? prebuiltLargeLiteralScanner = null,
+        bool takeLiteralOwnership = false)
     {
         this.literals = new byte[literals.Count][];
         for (int index = 0; index < literals.Count; index++)
         {
-            this.literals[index] = literals[index].ToArray();
-            maxLiteralLength = Math.Max(maxLiteralLength, this.literals[index].Length);
+            byte[] literal = takeLiteralOwnership
+                ? literals[index]
+                : literals[index].ToArray();
+            this.literals[index] = literal;
+            maxLiteralLength = Math.Max(maxLiteralLength, literal.Length);
         }
 
         this.searchPatterns = [];
@@ -248,7 +252,7 @@ internal sealed class RegexLiteralSetEngine
         out RegexLiteralSetEngine? engine)
     {
         engine = null;
-        var literals = new List<byte[]>();
+        var literals = new List<byte[]>(EstimateLiteralAlternationCapacity(pattern));
         int index = 0;
         while (index < pattern.Length)
         {
@@ -355,7 +359,26 @@ internal sealed class RegexLiteralSetEngine
 
         bool? asciiCaseInsensitive = options.CaseInsensitive;
         bool? literalUnicodeClasses = options.CaseInsensitive ? options.UnicodeClasses : null;
-        return TryCreateFromLiterals(literals, asciiCaseInsensitive, literalUnicodeClasses, out engine);
+        return TryCreateFromLiterals(
+            literals,
+            asciiCaseInsensitive,
+            literalUnicodeClasses,
+            out engine,
+            takeLiteralOwnership: true);
+    }
+
+    private static int EstimateLiteralAlternationCapacity(ReadOnlySpan<byte> pattern)
+    {
+        int count = 1;
+        for (int index = 0; index < pattern.Length; index++)
+        {
+            if (pattern[index] == (byte)'|')
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     private static bool TryUnescapeLiteralByte(byte escaped, out byte literal)
@@ -374,7 +397,8 @@ internal sealed class RegexLiteralSetEngine
         List<byte[]> literals,
         bool? asciiCaseInsensitive,
         bool? literalUnicodeClasses,
-        out RegexLiteralSetEngine? engine)
+        out RegexLiteralSetEngine? engine,
+        bool takeLiteralOwnership = false)
     {
         engine = null;
         bool unicodeCaseInsensitive = asciiCaseInsensitive == true && literalUnicodeClasses == true;
@@ -417,7 +441,8 @@ internal sealed class RegexLiteralSetEngine
             unicodeCaseInsensitive,
             useAho,
             largeLiteralTrieScanner,
-            largeLiteralScanner);
+            largeLiteralScanner,
+            takeLiteralOwnership);
         return true;
     }
 
