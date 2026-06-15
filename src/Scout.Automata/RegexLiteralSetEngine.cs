@@ -142,6 +142,12 @@ internal sealed class RegexLiteralSetEngine
             }
         }
 
+        if (ShouldUseEarlySmallLiteralFinders(this.literals, asciiCaseInsensitive, unicodeCaseInsensitive, useAho))
+        {
+            smallLiteralFinders = CreateSmallLiteralFinders(this.literals);
+            return;
+        }
+
         if (this.literals.Length > 1 &&
             !asciiCaseInsensitive &&
             !unicodeCaseInsensitive &&
@@ -164,12 +170,7 @@ internal sealed class RegexLiteralSetEngine
 
         if (ShouldUseSmallLiteralFinders(this.literals, asciiCaseInsensitive, unicodeCaseInsensitive, useAho))
         {
-            smallLiteralFinders = new MemmemFinder[this.literals.Length];
-            for (int index = 0; index < this.literals.Length; index++)
-            {
-                smallLiteralFinders[index] = new MemmemFinder(this.literals[index]);
-            }
-
+            smallLiteralFinders = CreateSmallLiteralFinders(this.literals);
             return;
         }
 
@@ -1489,6 +1490,29 @@ internal sealed class RegexLiteralSetEngine
             !unicodeCaseInsensitive &&
             literals.Length is > 1 and <= SmallLiteralFinderSetThreshold &&
             ShouldUseMemmemLiteralFinders(literals);
+    }
+
+    private static bool ShouldUseEarlySmallLiteralFinders(
+        byte[][] literals,
+        bool asciiCaseInsensitive,
+        bool unicodeCaseInsensitive,
+        bool useAho)
+    {
+        return ShouldUseSmallLiteralFinders(literals, asciiCaseInsensitive, unicodeCaseInsensitive, useAho) &&
+            literals.Length == 2 &&
+            literals[0].Length == literals[1].Length &&
+            literals[0].Length >= 4;
+    }
+
+    private static MemmemFinder[] CreateSmallLiteralFinders(byte[][] literals)
+    {
+        var finders = new MemmemFinder[literals.Length];
+        for (int index = 0; index < literals.Length; index++)
+        {
+            finders[index] = new MemmemFinder(literals[index]);
+        }
+
+        return finders;
     }
 
     private static bool ShouldUseMemmemLiteralFinders(byte[][] literals)
