@@ -13,6 +13,7 @@ internal sealed class RegexPrefilter
     private const int MaxPrefixVariants = 512;
     private const int MaxPrefixAtomVariants = 32;
     private const int LowSelectivityPrefixSetThreshold = 64;
+    private const int LargeCaseInsensitiveAsciiPrefixAnalysisNodeThreshold = 1024;
 
     private readonly MemmemFinder? memmem;
     private readonly RegexTeddyPrefilter? teddy;
@@ -77,7 +78,8 @@ internal sealed class RegexPrefilter
     {
         startPrefixSet = null;
         bool rejectedLowSelectivityPrefixSet = false;
-        if (TryCreateSequenceAlternationPrefixPrefilter(
+        if (!ShouldSkipSequenceAlternationPrefixPrefilter(root, options) &&
+            TryCreateSequenceAlternationPrefixPrefilter(
                 root,
                 options,
                 out RegexPrefilter? prefilter,
@@ -171,6 +173,59 @@ internal sealed class RegexPrefilter
             : null;
     }
 
+    private static bool ShouldSkipSequenceAlternationPrefixPrefilter(RegexSyntaxNode root, RegexCompileOptions options)
+    {
+        if (!options.CaseInsensitive || options.UnicodeClasses)
+        {
+            return false;
+        }
+
+        int remaining = LargeCaseInsensitiveAsciiPrefixAnalysisNodeThreshold;
+        return ExceedsPrefixAnalysisNodeThreshold(root, ref remaining);
+    }
+
+    private static bool ExceedsPrefixAnalysisNodeThreshold(RegexSyntaxNode node, ref int remaining)
+    {
+        if (--remaining < 0)
+        {
+            return true;
+        }
+
+        switch (node)
+        {
+            case RegexSequenceNode sequence:
+                for (int index = 0; index < sequence.Nodes.Count; index++)
+                {
+                    if (ExceedsPrefixAnalysisNodeThreshold(sequence.Nodes[index], ref remaining))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+
+            case RegexAlternationNode alternation:
+                for (int index = 0; index < alternation.Alternatives.Count; index++)
+                {
+                    if (ExceedsPrefixAnalysisNodeThreshold(alternation.Alternatives[index], ref remaining))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+
+            case RegexGroupNode group:
+                return ExceedsPrefixAnalysisNodeThreshold(group.Child, ref remaining);
+
+            case RegexRepetitionNode repetition:
+                return ExceedsPrefixAnalysisNodeThreshold(repetition.Child, ref remaining);
+
+            default:
+                return false;
+        }
+    }
+
     private static bool TryCreateSinglePrefixPrefilter(
         byte[] prefix,
         RegexCompileOptions options,
@@ -249,14 +304,20 @@ internal sealed class RegexPrefilter
             return false;
         }
 
-        RegexPrefixCandidateGate? candidateGate = null;
-        RegexPrefixCandidateGate.TryCreate(root, options, prefixes, out candidateGate);
         if (prefixes is null)
         {
             return false;
         }
 
         startPrefixSet = new RegexStartPrefixSet(prefixes, caseInsensitivePrefixes, unicodeCaseInsensitivePrefixes);
+        if (!unicodeCaseInsensitivePrefixes && IsLowSelectivityPrefixSet(prefixes))
+        {
+            rejectedLowSelectivityPrefixSet = true;
+            return false;
+        }
+
+        RegexPrefixCandidateGate? candidateGate = null;
+        RegexPrefixCandidateGate.TryCreate(root, options, prefixes, out candidateGate);
         return TryCreatePrefixSetPrefilter(
                 prefixes,
                 options,
