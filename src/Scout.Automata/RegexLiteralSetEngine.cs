@@ -45,7 +45,9 @@ internal sealed class RegexLiteralSetEngine
         IReadOnlyList<int> searchPatternLiteralIds,
         bool asciiCaseInsensitive,
         bool unicodeCaseInsensitive,
-        bool useAho)
+        bool useAho,
+        RegexLargeLiteralTrieScanner? prebuiltLargeLiteralTrieScanner = null,
+        RegexLargeLiteralSetScanner? prebuiltLargeLiteralScanner = null)
     {
         this.literals = new byte[literals.Count][];
         for (int index = 0; index < literals.Count; index++)
@@ -54,20 +56,10 @@ internal sealed class RegexLiteralSetEngine
             maxLiteralLength = Math.Max(maxLiteralLength, this.literals[index].Length);
         }
 
-        this.searchPatterns = new byte[searchPatterns.Count][];
-        for (int index = 0; index < searchPatterns.Count; index++)
-        {
-            this.searchPatterns[index] = searchPatterns[index].ToArray();
-        }
-
+        this.searchPatterns = [];
         this.asciiCaseInsensitive = asciiCaseInsensitive;
         this.unicodeCaseInsensitive = unicodeCaseInsensitive;
-        this.searchPatternLiteralIds = new int[searchPatternLiteralIds.Count];
-        for (int index = 0; index < searchPatternLiteralIds.Count; index++)
-        {
-            this.searchPatternLiteralIds[index] = searchPatternLiteralIds[index];
-        }
-
+        this.searchPatternLiteralIds = [];
         searchPatternIndexesByFirstByte = [];
         searchPatternIndexesByFirstTwoBytes = null;
 
@@ -181,6 +173,18 @@ internal sealed class RegexLiteralSetEngine
             return;
         }
 
+        if (prebuiltLargeLiteralTrieScanner is not null)
+        {
+            largeLiteralTrieScanner = prebuiltLargeLiteralTrieScanner;
+            return;
+        }
+
+        if (prebuiltLargeLiteralScanner is not null)
+        {
+            largeLiteralScanner = prebuiltLargeLiteralScanner;
+            return;
+        }
+
         if (useAho &&
             !asciiCaseInsensitive &&
             !unicodeCaseInsensitive &&
@@ -201,18 +205,22 @@ internal sealed class RegexLiteralSetEngine
 
         if (useAho)
         {
+            this.searchPatterns = CopyByteArrays(searchPatterns);
+            this.searchPatternLiteralIds = CopyIntArray(searchPatternLiteralIds);
             automaton = AhoCorasickAutomaton
                 .Builder()
                 .WithMatchKind(AhoCorasickMatchKind.Standard)
                 .WithStartKind(AhoCorasickStartKind.Unanchored)
                 .WithAsciiCaseInsensitive(asciiCaseInsensitive)
-                .Build(searchPatterns);
+                .Build(this.searchPatterns);
             return;
         }
 
+        this.searchPatterns = CopyByteArrays(searchPatterns);
+        this.searchPatternLiteralIds = CopyIntArray(searchPatternLiteralIds);
         searchPatternIndexesByFirstByte = BuildSearchPatternBuckets(this.searchPatterns);
         searchPatternIndexesByFirstTwoBytes = BuildTwoByteSearchPatternBuckets(this.searchPatterns);
-        prefixScanner = new RegexLiteralPrefixScanner(searchPatterns);
+        prefixScanner = new RegexLiteralPrefixScanner(this.searchPatterns);
     }
 
     public static bool TryCreate(
@@ -252,7 +260,9 @@ internal sealed class RegexLiteralSetEngine
                 index += 3;
             }
 
-            var literal = new List<byte>();
+            int literalStart = index;
+            int literalEnd = -1;
+            List<byte>? literal = null;
             bool closedGroup = false;
             while (index < pattern.Length)
             {
@@ -265,6 +275,15 @@ internal sealed class RegexLiteralSetEngine
                         return false;
                     }
 
+                    if (literal is null)
+                    {
+                        literal = new List<byte>(Math.Min(64, pattern.Length - literalStart));
+                        for (int rawIndex = literalStart; rawIndex < index; rawIndex++)
+                        {
+                            literal.Add(pattern[rawIndex]);
+                        }
+                    }
+
                     literal.Add(escaped);
                     index += 2;
                     continue;
@@ -272,6 +291,7 @@ internal sealed class RegexLiteralSetEngine
 
                 if (grouped && value == (byte)')')
                 {
+                    literalEnd = index;
                     index++;
                     closedGroup = true;
                     break;
@@ -279,6 +299,7 @@ internal sealed class RegexLiteralSetEngine
 
                 if (!grouped && value == (byte)'|')
                 {
+                    literalEnd = index;
                     break;
                 }
 
@@ -287,7 +308,7 @@ internal sealed class RegexLiteralSetEngine
                     return false;
                 }
 
-                literal.Add(value);
+                literal?.Add(value);
                 index++;
             }
 
@@ -296,7 +317,15 @@ internal sealed class RegexLiteralSetEngine
                 return false;
             }
 
-            if (!AddLiteral(literals, literal.ToArray()))
+            if (literalEnd < 0)
+            {
+                literalEnd = index;
+            }
+
+            byte[] literalBytes = literal is null
+                ? pattern[literalStart..literalEnd].ToArray()
+                : literal.ToArray();
+            if (!AddLiteral(literals, literalBytes))
             {
                 return false;
             }
@@ -352,7 +381,18 @@ internal sealed class RegexLiteralSetEngine
         bool useAho = ShouldUseAho(literals.Count, asciiOnlyCaseInsensitive, unicodeCaseInsensitive);
         byte[][] searchPatterns;
         int[] searchPatternLiteralIds;
-        if (asciiOnlyCaseInsensitive && literals.Count > 1)
+        RegexLargeLiteralTrieScanner? largeLiteralTrieScanner = null;
+        RegexLargeLiteralSetScanner? largeLiteralScanner = null;
+        if (useAho &&
+            !asciiOnlyCaseInsensitive &&
+            !unicodeCaseInsensitive &&
+            (RegexLargeLiteralTrieScanner.TryCreate(literals, out largeLiteralTrieScanner) ||
+             RegexLargeLiteralSetScanner.TryCreate(literals, out largeLiteralScanner)))
+        {
+            searchPatterns = [];
+            searchPatternLiteralIds = [];
+        }
+        else if (asciiOnlyCaseInsensitive && literals.Count > 1)
         {
             searchPatterns = [];
             searchPatternLiteralIds = [];
@@ -374,7 +414,9 @@ internal sealed class RegexLiteralSetEngine
             searchPatternLiteralIds,
             asciiOnlyCaseInsensitive,
             unicodeCaseInsensitive,
-            useAho);
+            useAho,
+            largeLiteralTrieScanner,
+            largeLiteralScanner);
         return true;
     }
 
@@ -1310,6 +1352,28 @@ internal sealed class RegexLiteralSetEngine
 
         literals.Add(literal);
         return true;
+    }
+
+    private static byte[][] CopyByteArrays(IReadOnlyList<byte[]> values)
+    {
+        byte[][] copy = new byte[values.Count][];
+        for (int index = 0; index < values.Count; index++)
+        {
+            copy[index] = values[index].ToArray();
+        }
+
+        return copy;
+    }
+
+    private static int[] CopyIntArray(IReadOnlyList<int> values)
+    {
+        int[] copy = new int[values.Count];
+        for (int index = 0; index < values.Count; index++)
+        {
+            copy[index] = values[index];
+        }
+
+        return copy;
     }
 
     private static bool IsRegexSyntaxByte(byte value)

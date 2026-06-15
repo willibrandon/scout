@@ -238,6 +238,21 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies grouped pure literal alternations omit the group delimiters from literal-set matches.
+    /// </summary>
+    [Fact]
+    public void LiteralSetEngineCountsGroupedPureLiteralAlternations()
+    {
+        var automaton = RegexAutomaton.Compile("(?:ab)|(?:cd)"u8);
+
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(2, 2), automaton.Find("xxab cd"u8));
+        Assert.Equal(new RegexMatch(0, 2), automaton.MatchAt("cd"u8, 0));
+        Assert.Equal(2, automaton.CountMatches("ab cd"u8));
+        Assert.Equal(4, automaton.SumMatchSpans("ab cd"u8));
+    }
+
+    /// <summary>
     /// Verifies small non-ASCII literal alternations preserve byte-oriented leftmost-first matching.
     /// </summary>
     [Fact]
