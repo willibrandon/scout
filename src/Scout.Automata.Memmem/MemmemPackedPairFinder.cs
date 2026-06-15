@@ -215,33 +215,109 @@ internal readonly struct MemmemPackedPairFinder
         int offset = 0;
         int vectorEnd = haystack.Length - MinimumLengthForVector(Vector256<byte>.Count, needle.Length);
         int lastStart = haystack.Length - needle.Length;
+        int unrolledEnd = vectorEnd - Vector256<byte>.Count * 3;
+        while (offset <= unrolledEnd)
+        {
+            if (TryFindVector256Chunk(
+                    ref reference,
+                    firstVector,
+                    secondVector,
+                    haystack,
+                    needle,
+                    offset,
+                    lastStart,
+                    out int candidate) ||
+                TryFindVector256Chunk(
+                    ref reference,
+                    firstVector,
+                    secondVector,
+                    haystack,
+                    needle,
+                    offset + Vector256<byte>.Count,
+                    lastStart,
+                    out candidate) ||
+                TryFindVector256Chunk(
+                    ref reference,
+                    firstVector,
+                    secondVector,
+                    haystack,
+                    needle,
+                    offset + Vector256<byte>.Count * 2,
+                    lastStart,
+                    out candidate) ||
+                TryFindVector256Chunk(
+                    ref reference,
+                    firstVector,
+                    secondVector,
+                    haystack,
+                    needle,
+                    offset + Vector256<byte>.Count * 3,
+                    lastStart,
+                    out candidate))
+            {
+                return candidate;
+            }
+
+            offset += Vector256<byte>.Count * 4;
+        }
+
         while (offset <= vectorEnd)
         {
-            var firstBlock = Vector256.LoadUnsafe(ref reference, (nuint)(offset + firstIndex));
-            var secondBlock = Vector256.LoadUnsafe(ref reference, (nuint)(offset + secondIndex));
-            uint mask =
-                (Avx2.CompareEqual(firstBlock, firstVector) &
-                 Avx2.CompareEqual(secondBlock, secondVector)).ExtractMostSignificantBits();
-            while (mask != 0)
+            if (TryFindVector256Chunk(
+                    ref reference,
+                    firstVector,
+                    secondVector,
+                    haystack,
+                    needle,
+                    offset,
+                    lastStart,
+                    out int candidate))
             {
-                int candidate = offset + BitOperations.TrailingZeroCount(mask);
-                if (candidate > lastStart)
-                {
-                    return -1;
-                }
-
-                if (haystack.Slice(candidate, needle.Length).SequenceEqual(needle))
-                {
-                    return candidate;
-                }
-
-                mask &= mask - 1;
+                return candidate;
             }
 
             offset += Vector256<byte>.Count;
         }
 
         return FindScalarPair(haystack, needle, offset);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool TryFindVector256Chunk(
+        ref byte reference,
+        Vector256<byte> firstVector,
+        Vector256<byte> secondVector,
+        ReadOnlySpan<byte> haystack,
+        ReadOnlySpan<byte> needle,
+        int offset,
+        int lastStart,
+        out int match)
+    {
+        var firstBlock = Vector256.LoadUnsafe(ref reference, (nuint)(offset + firstIndex));
+        var secondBlock = Vector256.LoadUnsafe(ref reference, (nuint)(offset + secondIndex));
+        uint mask =
+            (Avx2.CompareEqual(firstBlock, firstVector) &
+             Avx2.CompareEqual(secondBlock, secondVector)).ExtractMostSignificantBits();
+        while (mask != 0)
+        {
+            int candidate = offset + BitOperations.TrailingZeroCount(mask);
+            if (candidate > lastStart)
+            {
+                match = -1;
+                return true;
+            }
+
+            if (haystack.Slice(candidate, needle.Length).SequenceEqual(needle))
+            {
+                match = candidate;
+                return true;
+            }
+
+            mask &= mask - 1;
+        }
+
+        match = -1;
+        return false;
     }
 
     private int FindSse2(ReadOnlySpan<byte> haystack, ReadOnlySpan<byte> needle)

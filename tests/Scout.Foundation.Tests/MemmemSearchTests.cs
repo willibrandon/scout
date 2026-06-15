@@ -128,6 +128,23 @@ public sealed class MemmemSearchTests
     }
 
     /// <summary>
+    /// Verifies packed-pair search rejects dense repeated-byte false positives.
+    /// </summary>
+    [Fact]
+    public void FindHandlesRepeatedRarestByteFalsePositives()
+    {
+        byte[] haystack = new byte[512];
+        haystack.AsSpan().Fill((byte)'x');
+        for (int index = 0; index < haystack.Length - 4; index += 4)
+        {
+            "eeee"u8.CopyTo(haystack.AsSpan(index, 4));
+        }
+
+        Assert.Equal(-1, MemmemSearch.Find(haystack, "aeaeaeaeae"u8));
+        Assert.Equal(-1, new MemmemFinder("aeaeaeaeae"u8).Find(haystack));
+    }
+
+    /// <summary>
     /// Verifies empty-needle semantics match Rust substring search behavior.
     /// </summary>
     [Fact]
