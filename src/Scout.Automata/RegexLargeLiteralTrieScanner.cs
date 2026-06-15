@@ -32,8 +32,6 @@ internal sealed class RegexLargeLiteralTrieScanner
             return false;
         }
 
-        bool hasSingleByteLiteral = false;
-        var nodes = new List<RegexLargeLiteralTrieBuilderNode> { new() };
         for (int literalId = 0; literalId < literals.Count; literalId++)
         {
             byte[] literal = literals[literalId];
@@ -42,7 +40,21 @@ internal sealed class RegexLargeLiteralTrieScanner
                 return false;
             }
 
-            hasSingleByteLiteral |= literal.Length == 1;
+            if (literal.Length == 1)
+            {
+                return TryCreateTrie(literals, out scanner);
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryCreateTrie(IReadOnlyList<byte[]> literals, out RegexLargeLiteralTrieScanner? scanner)
+    {
+        var nodes = new List<RegexLargeLiteralTrieBuilderNode> { new() };
+        for (int literalId = 0; literalId < literals.Count; literalId++)
+        {
+            byte[] literal = literals[literalId];
             int state = 0;
             for (int index = 0; index < literal.Length; index++)
             {
@@ -64,11 +76,6 @@ internal sealed class RegexLargeLiteralTrieScanner
                 terminal.BestLiteralId = literalId;
                 terminal.BestLiteralLength = literal.Length;
             }
-        }
-
-        if (!hasSingleByteLiteral)
-        {
-            return false;
         }
 
         int[] rootTransitions = new int[byte.MaxValue + 1];

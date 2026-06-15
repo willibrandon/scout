@@ -68,13 +68,13 @@ internal sealed class RegexLiteralSetEngine
             this.searchPatternLiteralIds[index] = searchPatternLiteralIds[index];
         }
 
+        searchPatternIndexesByFirstByte = [];
+        searchPatternIndexesByFirstTwoBytes = null;
+
         if (unicodeCaseInsensitive)
         {
             commonFoldedLiterals = BuildCommonFoldedLiterals(this.literals);
         }
-
-        searchPatternIndexesByFirstByte = BuildSearchPatternBuckets(this.searchPatterns);
-        searchPatternIndexesByFirstTwoBytes = BuildTwoByteSearchPatternBuckets(this.searchPatterns);
 
         if (this.literals.Length == 1 && searchPatterns.Count == 0)
         {
@@ -207,6 +207,8 @@ internal sealed class RegexLiteralSetEngine
             return;
         }
 
+        searchPatternIndexesByFirstByte = BuildSearchPatternBuckets(this.searchPatterns);
+        searchPatternIndexesByFirstTwoBytes = BuildTwoByteSearchPatternBuckets(this.searchPatterns);
         prefixScanner = new RegexLiteralPrefixScanner(searchPatterns);
     }
 
