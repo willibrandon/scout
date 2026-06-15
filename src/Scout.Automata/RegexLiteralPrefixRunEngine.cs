@@ -12,6 +12,7 @@ internal sealed class RegexLiteralPrefixRunEngine
     private readonly RegexAsciiCaseInsensitiveLiteralSetScanner? asciiCaseInsensitiveScanner;
     private readonly MemmemFinder? singleLiteralFinder;
     private readonly RegexAsciiCaseInsensitiveFinder? singleAsciiCaseInsensitiveFinder;
+    private readonly MemmemFinder[]? prefixFinders;
 
     private RegexLiteralPrefixRunEngine(
         RegexLiteralPrefixRunBranch[] branches,
@@ -39,6 +40,14 @@ internal sealed class RegexLiteralPrefixRunEngine
         else if (branches.Length == 1)
         {
             singleLiteralFinder = new MemmemFinder(branches[0].Prefix);
+        }
+        else if (branches.Length == 2)
+        {
+            prefixFinders = new MemmemFinder[branches.Length];
+            for (int index = 0; index < branches.Length; index++)
+            {
+                prefixFinders[index] = new MemmemFinder(branches[index].Prefix);
+            }
         }
     }
 
@@ -167,6 +176,11 @@ internal sealed class RegexLiteralPrefixRunEngine
 
     private long CountOrSum(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
     {
+        if (prefixFinders is not null)
+        {
+            return CountOrSumWithPrefixFinders(haystack, startAt, sumSpans);
+        }
+
         long total = 0;
         int offset = Math.Clamp(startAt, 0, haystack.Length);
         while (TryFindPrefix(haystack, offset, out RegexLiteralSetCandidate candidate))
@@ -187,6 +201,65 @@ internal sealed class RegexLiteralPrefixRunEngine
         }
 
         return total;
+    }
+
+    private long CountOrSumWithPrefixFinders(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
+    {
+        MemmemFinder[] finders = prefixFinders!;
+        Span<int> starts = stackalloc int[finders.Length];
+        Span<int> searchStarts = stackalloc int[finders.Length];
+        starts.Fill(-1);
+        int nextAllowedStart = Math.Clamp(startAt, 0, haystack.Length);
+        for (int index = 0; index < searchStarts.Length; index++)
+        {
+            searchStarts[index] = nextAllowedStart;
+        }
+
+        long total = 0;
+        while (true)
+        {
+            int bestBranch = -1;
+            int bestStart = int.MaxValue;
+            for (int index = 0; index < finders.Length; index++)
+            {
+                int start = starts[index];
+                if (start < nextAllowedStart)
+                {
+                    int searchAt = Math.Max(searchStarts[index], nextAllowedStart);
+                    int offset = finders[index].Find(haystack[searchAt..]);
+                    if (offset < 0)
+                    {
+                        starts[index] = int.MaxValue;
+                        continue;
+                    }
+
+                    start = searchAt + offset;
+                    starts[index] = start;
+                    searchStarts[index] = start + 1;
+                }
+
+                if (start < bestStart ||
+                    start == bestStart && (bestBranch < 0 || index < bestBranch))
+                {
+                    bestBranch = index;
+                    bestStart = start;
+                }
+            }
+
+            if (bestBranch < 0 || bestStart == int.MaxValue)
+            {
+                return total;
+            }
+
+            starts[bestBranch] = -1;
+            if (!TryMatchBranchAt(haystack, bestStart, bestBranch, prefixAlreadyMatched: true, out int length))
+            {
+                continue;
+            }
+
+            total += sumSpans ? length : 1;
+            nextAllowedStart = bestStart + length;
+        }
     }
 
     private bool TryMatchBranchAt(
