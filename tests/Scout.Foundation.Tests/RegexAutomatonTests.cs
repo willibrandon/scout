@@ -1770,6 +1770,33 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies a single fixed-width byte-class sequence without a literal seed uses direct fixed-width scanning.
+    /// </summary>
+    [Fact]
+    public void FixedWidthAlternationEngineCountsSingleClassSequenceWithoutLiteralSeed()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"[a-z][a-z][a-z][a-z][a-z]"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "xx abcde yy ab12e zz pqrst"u8.ToArray();
+        int firstStart = haystack.AsSpan().IndexOf("abcde"u8);
+        int secondStart = haystack.AsSpan().IndexOf("pqrst"u8);
+        int rejectedStart = haystack.AsSpan().IndexOf("ab12e"u8);
+
+        Assert.Equal(RegexEngineKind.FixedWidthAlternation, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(firstStart, 5), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(secondStart, 5), automaton.Find(haystack, firstStart + 1));
+        Assert.Equal(new RegexMatch(secondStart, 5), automaton.MatchAt(haystack, secondStart));
+        Assert.Null(automaton.MatchAt(haystack, rejectedStart));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(10, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies simple start-anchored fixed-width patterns use the direct fixed-width matcher.
     /// </summary>
     [Fact]

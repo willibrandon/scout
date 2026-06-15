@@ -6,6 +6,7 @@ internal sealed class RegexFixedWidthAlternationEngine
     private const int MaxAlternativeCount = 32;
     private const int MaxWidth = 64;
     private const int MinLiteralSeedLength = 2;
+    private const int MaxSingleAlternativeAnchorBytes = 32;
 
     private readonly RegexFixedWidthAtom[][] alternatives;
     private readonly RegexFixedWidthLiteralSeed[]? literalSeeds;
@@ -95,7 +96,8 @@ internal sealed class RegexFixedWidthAlternationEngine
             ? seeds
             : null;
         if (compiledAlternatives.Length < MinAlternativeCount &&
-            (literalSeeds is null || literalSeeds[0].Offset != 0))
+            (literalSeeds is null || literalSeeds[0].Offset != 0) &&
+            !CanUseSingleAlternativeWithoutLiteralSeed(compiledAlternatives[0], needles!))
         {
             return false;
         }
@@ -106,10 +108,15 @@ internal sealed class RegexFixedWidthAlternationEngine
             out RegexLiteralPrefixScanner? literalSeedScanner,
             out RegexTeddyPrefilter? literalSeedTeddy,
             out int literalSeedOffset);
-        RegexFixedWidthExactSetMatcher.TryCreate(
-            compiledAlternatives,
-            width,
-            out RegexFixedWidthExactSetMatcher? exactSetMatcher);
+        RegexFixedWidthExactSetMatcher? exactSetMatcher = null;
+        if (compiledAlternatives.Length >= MinAlternativeCount)
+        {
+            RegexFixedWidthExactSetMatcher.TryCreate(
+                compiledAlternatives,
+                width,
+                out exactSetMatcher);
+        }
+
         engine = new RegexFixedWidthAlternationEngine(
             compiledAlternatives,
             literalSeeds,
@@ -123,6 +130,26 @@ internal sealed class RegexFixedWidthAlternationEngine
             anchorIndex,
             literalSeedOffset,
             anchoredAtStart);
+        return true;
+    }
+
+    private static bool CanUseSingleAlternativeWithoutLiteralSeed(
+        RegexFixedWidthAtom[] alternative,
+        byte[] anchorNeedles)
+    {
+        if (anchorNeedles.Length > MaxSingleAlternativeAnchorBytes)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < alternative.Length; index++)
+        {
+            if (alternative[index].TryGetLiteral(out _))
+            {
+                return false;
+            }
+        }
+
         return true;
     }
 
