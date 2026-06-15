@@ -1,4 +1,8 @@
 <Project>
+  <PropertyGroup Condition="$([System.String]::Copy('$(MSBuildProjectName)').EndsWith('.Tests'))">
+    <DefaultAppHostRuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(NETCoreSdkPortableRuntimeIdentifier)' != '' and '$(DefaultAppHostRuntimeIdentifier)' == '$(NETCoreSdkRuntimeIdentifier)'">$(NETCoreSdkPortableRuntimeIdentifier)</DefaultAppHostRuntimeIdentifier>
+  </PropertyGroup>
+
   <ItemGroup Condition="'$(MSBuildProjectName)' != 'Scout.SourceGen' and Exists('$(MSBuildThisFileDirectory)src/Scout.SourceGen/Scout.SourceGen.csproj')">
     <ProjectReference Include="$(MSBuildThisFileDirectory)src/Scout.SourceGen/Scout.SourceGen.csproj"
                       OutputItemType="Analyzer"
@@ -22,6 +26,13 @@
     <ScoutSkippedTestScanFile Include="$(MSBuildThisFileDirectory)tests/**/*.cs"
                               Exclude="$(MSBuildThisFileDirectory)**/bin/**;$(MSBuildThisFileDirectory)**/obj/**" />
   </ItemGroup>
+
+  <Target Name="ScoutNormalizeSdkBaselineNoWarn" BeforeTargets="ScoutValidateWarningPolicy">
+    <CreateProperty Value="$([System.String]::Empty)"
+                    Condition="'$(NoWarn)' == '1701;1702'">
+      <Output TaskParameter="Value" PropertyName="NoWarn" />
+    </CreateProperty>
+  </Target>
 
   <Target Name="ScoutValidateWarningPolicy" BeforeTargets="CoreCompile">
     <Error Condition="'$(TreatWarningsAsErrors)' != 'true'"

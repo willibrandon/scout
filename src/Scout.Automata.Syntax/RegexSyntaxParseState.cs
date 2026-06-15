@@ -324,6 +324,61 @@ internal sealed class RegexSyntaxParseState
     private RegexSyntaxNode ParseClass(int position)
     {
         int expressionStart = index;
+        if (extendedMode)
+        {
+            var expression = new List<byte>();
+            while (index < Pattern.Length)
+            {
+                byte value = Pattern[index];
+                if (value == (byte)'\\' && index + 1 < Pattern.Length)
+                {
+                    expression.Add(value);
+                    expression.Add(Pattern[index + 1]);
+                    index += 2;
+                    continue;
+                }
+
+                if (value == (byte)'[' &&
+                    index + 1 < Pattern.Length &&
+                    Pattern[index + 1] == (byte)':' &&
+                    TryFindPosixClassEnd(index + 2, out int posixClassEnd))
+                {
+                    expression.AddRange(Pattern[index..(posixClassEnd + 1)].ToArray());
+                    index = posixClassEnd + 1;
+                    continue;
+                }
+
+                if (value == (byte)']')
+                {
+                    index++;
+                    return new RegexAtomNode(RegexSyntaxKind.CharacterClass, expression.ToArray(), position);
+                }
+
+                if (IsExtendedWhitespaceByte(value))
+                {
+                    index++;
+                    continue;
+                }
+
+                if (value == (byte)'#')
+                {
+                    index++;
+                    while (index < Pattern.Length && Pattern[index] != (byte)'\n')
+                    {
+                        index++;
+                    }
+
+                    continue;
+                }
+
+                expression.Add(value);
+                index++;
+            }
+
+            Throw("unclosed character class");
+            return new RegexEmptyNode(position);
+        }
+
         while (index < Pattern.Length)
         {
             if (Pattern[index] == (byte)'\\')
