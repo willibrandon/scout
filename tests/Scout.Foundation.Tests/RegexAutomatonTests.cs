@@ -4305,6 +4305,96 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies large ASCII case-insensitive patterns still keep a cheap required-prefix prefilter.
+    /// </summary>
+    [Fact]
+    public void LargeCaseInsensitiveAsciiPrefilterKeepsRequiredPrefix()
+    {
+        var pattern = new System.Text.StringBuilder("prefix(?:");
+        for (int index = 0; index < 600; index++)
+        {
+            if (index > 0)
+            {
+                pattern.Append('|');
+            }
+
+            pattern.Append(index.ToString("D3"));
+        }
+
+        pattern.Append(")[0-9]");
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(System.Text.Encoding.ASCII.GetBytes(pattern.ToString()));
+        var options = new RegexCompileOptions(
+            caseInsensitive: true,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        var prefilter = RegexPrefilter.Compile(tree.Root, options);
+
+        Assert.NotNull(prefilter);
+        Assert.Equal(RegexPrefilterKind.AhoCorasick, prefilter.Kind);
+    }
+
+    /// <summary>
+    /// Verifies large ASCII case-insensitive prefix sets without cheap literals skip expensive prefilter construction.
+    /// </summary>
+    [Fact]
+    public void LargeCaseInsensitiveAsciiPrefilterSkipsBroadPrefixSet()
+    {
+        var pattern = new System.Text.StringBuilder("(?:");
+        for (int index = 0; index < 600; index++)
+        {
+            if (index > 0)
+            {
+                pattern.Append('|');
+            }
+
+            switch (index % 4)
+            {
+                case 0:
+                    pattern.Append(@"\d{1,2}:\d{2}");
+                    break;
+                case 1:
+                    pattern.Append(@"\s+[a-z]{3}");
+                    break;
+                case 2:
+                    pattern.Append("jan");
+                    pattern.Append(index.ToString("D3"));
+                    break;
+                default:
+                    pattern.Append("[._-]foo");
+                    pattern.Append(index.ToString("D3"));
+                    break;
+            }
+        }
+
+        pattern.Append(")z");
+        byte[] patternBytes = System.Text.Encoding.ASCII.GetBytes(pattern.ToString());
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(patternBytes);
+        var options = new RegexCompileOptions(
+            caseInsensitive: true,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        var prefilter = RegexPrefilter.Compile(tree.Root, options);
+        var automaton = RegexAutomaton.Compile(
+            patternBytes,
+            caseInsensitive: true,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Null(prefilter);
+        Assert.Equal(new RegexMatch(2, 7), automaton.Find("xxJAN002z"u8));
+    }
+
+    /// <summary>
     /// Verifies broad leading classes fall through to selective required-literal prefilters.
     /// </summary>
     [Fact]

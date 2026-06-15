@@ -77,6 +77,11 @@ internal sealed class RegexPrefilter
         out RegexStartPrefixSet? startPrefixSet)
     {
         startPrefixSet = null;
+        if (ShouldSkipLargeCaseInsensitiveAsciiPrefilter(root, options))
+        {
+            return TryCompileLargeCaseInsensitiveAsciiPrefilter(root, options);
+        }
+
         bool rejectedLowSelectivityPrefixSet = false;
         if (!ShouldSkipSequenceAlternationPrefixPrefilter(root, options) &&
             TryCreateSequenceAlternationPrefixPrefilter(
@@ -173,6 +178,53 @@ internal sealed class RegexPrefilter
             : null;
     }
 
+    private static bool ShouldSkipLargeCaseInsensitiveAsciiPrefilter(RegexSyntaxNode root, RegexCompileOptions options)
+    {
+        return options.CaseInsensitive &&
+            !options.UnicodeClasses &&
+            ExceedsPrefixAnalysisNodeThreshold(root, LargeCaseInsensitiveAsciiPrefixAnalysisNodeThreshold / 2);
+    }
+
+    private static RegexPrefilter? TryCompileLargeCaseInsensitiveAsciiPrefilter(
+        RegexSyntaxNode root,
+        RegexCompileOptions options)
+    {
+        var prefix = new List<byte>();
+        bool prefixCaseInsensitive = false;
+        bool prefixUnicodeClasses = false;
+        if (TryAppendRequiredPrefix(root, options, prefix, out _, ref prefixCaseInsensitive, ref prefixUnicodeClasses) &&
+            prefix.Count > 0)
+        {
+            var prefixOptions = new RegexCompileOptions(
+                prefixCaseInsensitive,
+                options.SwapGreed,
+                options.MultiLine,
+                options.DotMatchesNewline,
+                options.Crlf,
+                options.LineTerminator,
+                options.Utf8,
+                prefixUnicodeClasses);
+            return TryCreateSinglePrefixPrefilter(prefix.ToArray(), prefixOptions, out RegexPrefilter? prefixPrefilter)
+                ? prefixPrefilter
+                : null;
+        }
+
+        return TryFindRequiredLiteralCandidate(root, options, out RegexRequiredLiteralSetCandidate requiredCandidate) &&
+            requiredCandidate.Literals.Length == 1 &&
+            requiredCandidate.Literals[0].Length >= 3 &&
+            TryPrepareRequiredLiteralSet(
+                requiredCandidate.Literals,
+                requiredCandidate.CaseInsensitive,
+                requiredCandidate.UnicodeClasses,
+                out byte[][] preparedRequired)
+            ? CreateRequiredLiteralPrefilter(
+                preparedRequired,
+                requiredCandidate.CaseInsensitive,
+                startPredicate: null,
+                RequiredLiteralLookBehind)
+            : null;
+    }
+
     private static bool ShouldSkipSequenceAlternationPrefixPrefilter(RegexSyntaxNode root, RegexCompileOptions options)
     {
         if (!options.CaseInsensitive || options.UnicodeClasses)
@@ -180,8 +232,13 @@ internal sealed class RegexPrefilter
             return false;
         }
 
-        int remaining = LargeCaseInsensitiveAsciiPrefixAnalysisNodeThreshold;
-        return ExceedsPrefixAnalysisNodeThreshold(root, ref remaining);
+        return ExceedsPrefixAnalysisNodeThreshold(root, LargeCaseInsensitiveAsciiPrefixAnalysisNodeThreshold);
+    }
+
+    private static bool ExceedsPrefixAnalysisNodeThreshold(RegexSyntaxNode node, int threshold)
+    {
+        int remaining = threshold;
+        return ExceedsPrefixAnalysisNodeThreshold(node, ref remaining);
     }
 
     private static bool ExceedsPrefixAnalysisNodeThreshold(RegexSyntaxNode node, ref int remaining)
