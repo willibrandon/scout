@@ -201,19 +201,44 @@ internal sealed class RegexKeywordWhitespaceCaptureEngine
 
     private int FindKeywordStart(ReadOnlySpan<byte> haystack, int start)
     {
-        for (int position = start; position < haystack.Length; position++)
+        int position = start;
+        while (position < haystack.Length)
         {
             byte value = haystack[position];
-            if (!firstByteLookup[value] ||
-                !IsWordBoundaryBeforeAsciiWord(haystack, position))
+            if (value <= 0x7F && IsAsciiWord(value))
             {
+                if (firstByteLookup[value] &&
+                    IsWordBoundaryBeforeAsciiWord(haystack, position))
+                {
+                    return position;
+                }
+
+                position = SkipAsciiWord(haystack, position + 1);
                 continue;
             }
 
-            return position;
+            if (firstByteLookup[value] &&
+                IsWordBoundaryBeforeAsciiWord(haystack, position))
+            {
+                return position;
+            }
+
+            position++;
         }
 
         return -1;
+    }
+
+    private static int SkipAsciiWord(ReadOnlySpan<byte> haystack, int position)
+    {
+        while (position < haystack.Length &&
+            haystack[position] <= 0x7F &&
+            IsAsciiWord(haystack[position]))
+        {
+            position++;
+        }
+
+        return position;
     }
 
     private bool IsWordBoundaryBeforeAsciiWord(ReadOnlySpan<byte> haystack, int position)
