@@ -232,6 +232,25 @@ internal sealed class RegexSimpleSequenceEngine
         return null;
     }
 
+    public bool TryIsMatch(ReadOnlySpan<byte> haystack, out bool isMatch)
+    {
+        isMatch = false;
+        if (!TryGetSingleRepeatedAtom(out RegexSimpleSequenceSegment segment, out int minimum, out int? maximum, out _) ||
+            minimum <= 0 ||
+            maximum is not null)
+        {
+            return false;
+        }
+
+        if (segment.MatcherKind == RegexSimpleSequenceByteMatcherKind.AsciiWord)
+        {
+            isMatch = ContainsAsciiWordRun(minimum, haystack);
+            return true;
+        }
+
+        return false;
+    }
+
     public bool TryCountNonOverlapping(
         ReadOnlySpan<byte> haystack,
         int startAt,
@@ -918,6 +937,141 @@ internal sealed class RegexSimpleSequenceEngine
         }
 
         AddRunCountOnly(minimum, maximum, lazy, runLength, ref count);
+    }
+
+    private static bool ContainsAsciiWordRun(int minimum, ReadOnlySpan<byte> haystack)
+    {
+        if (haystack.Length < minimum)
+        {
+            return false;
+        }
+
+        if (Avx2.IsSupported && haystack.Length >= Vector256<byte>.Count)
+        {
+            return ContainsAsciiWordRunAvx2(minimum, haystack);
+        }
+
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int runLength = 0;
+        for (int position = 0; position < haystack.Length; position++)
+        {
+            if (RegexSimpleSequenceSegment.IsAsciiWord(Unsafe.Add(ref reference, position)))
+            {
+                runLength++;
+                if (runLength >= minimum)
+                {
+                    return true;
+                }
+            }
+            else
+            {
+                runLength = 0;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsAsciiWordRunAvx2(int minimum, ReadOnlySpan<byte> haystack)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int position = 0;
+        int length = haystack.Length;
+        int vectorEnd = length - Vector256<byte>.Count;
+        int runLength = 0;
+        var caseFold = Vector256.Create((byte)0x20);
+        var beforeA = Vector256.Create((sbyte)('a' - 1));
+        var afterZ = Vector256.Create((sbyte)('z' + 1));
+        var beforeZero = Vector256.Create((sbyte)('0' - 1));
+        var afterNine = Vector256.Create((sbyte)('9' + 1));
+        var underscore = Vector256.Create((byte)'_');
+        while (position <= vectorEnd)
+        {
+            var block = Vector256.LoadUnsafe(ref reference, (nuint)position);
+            Vector256<sbyte> signed = block.AsSByte();
+            Vector256<sbyte> folded = Avx2.Or(block, caseFold).AsSByte();
+            Vector256<byte> letterMatches = Avx2.And(
+                Avx2.CompareGreaterThan(folded, beforeA),
+                Avx2.CompareGreaterThan(afterZ, folded)).AsByte();
+            Vector256<byte> digitMatches = Avx2.And(
+                Avx2.CompareGreaterThan(signed, beforeZero),
+                Avx2.CompareGreaterThan(afterNine, signed)).AsByte();
+            Vector256<byte> matches = Avx2.Or(
+                Avx2.Or(letterMatches, digitMatches),
+                Avx2.CompareEqual(block, underscore));
+            if (AccumulateRunContainsMask(minimum, matches.ExtractMostSignificantBits(), Vector256<byte>.Count, ref runLength))
+            {
+                return true;
+            }
+
+            position += Vector256<byte>.Count;
+        }
+
+        while (position < length)
+        {
+            if (RegexSimpleSequenceSegment.IsAsciiWord(Unsafe.Add(ref reference, position)))
+            {
+                runLength++;
+                if (runLength >= minimum)
+                {
+                    return true;
+                }
+            }
+            else
+            {
+                runLength = 0;
+            }
+
+            position++;
+        }
+
+        return false;
+    }
+
+    private static bool AccumulateRunContainsMask(int minimum, uint mask, int width, ref int runLength)
+    {
+        uint fullMask = width == 32 ? uint.MaxValue : (1u << width) - 1u;
+        mask &= fullMask;
+        if (mask == fullMask)
+        {
+            runLength += width;
+            return runLength >= minimum;
+        }
+
+        if (mask == 0)
+        {
+            runLength = 0;
+            return false;
+        }
+
+        int consumed = 0;
+        while (mask != 0)
+        {
+            int zeros = BitOperations.TrailingZeroCount(mask);
+            if (zeros > 0)
+            {
+                runLength = 0;
+                consumed += zeros;
+                mask >>= zeros;
+            }
+
+            int ones = BitOperations.TrailingZeroCount(~mask);
+            runLength += ones;
+            if (runLength >= minimum)
+            {
+                return true;
+            }
+
+            consumed += ones;
+            mask >>= ones;
+        }
+
+        if (consumed < width)
+        {
+            runLength = 0;
+        }
+
+        return false;
     }
 
     private static RegexMatch? FindSingleSegment(RegexSimpleSequenceSegment segment, ReadOnlySpan<byte> haystack, int startOffset)

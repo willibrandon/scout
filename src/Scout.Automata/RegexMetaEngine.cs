@@ -1750,6 +1750,15 @@ internal sealed class RegexMetaEngine
             return anchoredLineLiteralGap.IsMatch(haystack);
         }
 
+        if (Kind == RegexEngineKind.SimpleSequence &&
+            simpleSequence is not null &&
+            prefilter is null &&
+            startPredicate is null &&
+            simpleSequence.TryIsMatch(haystack, out bool simpleSequenceMatch))
+        {
+            return simpleSequenceMatch;
+        }
+
         return Find(haystack, startAt: 0, startPredicate).HasValue;
     }
 
