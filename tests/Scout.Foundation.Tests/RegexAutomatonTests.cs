@@ -3296,6 +3296,59 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies anchored line-prefix captures use direct extraction for shebang-like patterns.
+    /// </summary>
+    [Fact]
+    public void LinePrefixCaptureEngineReportsShebangCaptures()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"^(\s*)#!(.*)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] line = System.Text.Encoding.UTF8.GetBytes("\u00A0\t#!/usr/bin/env python");
+
+        RegexCaptures? captures = automaton.FindCaptures(line);
+
+        Assert.True(automaton.UsesLinePrefixCaptureEngine);
+        Assert.NotNull(captures);
+        Assert.Equal(new RegexMatch(0, line.Length), captures.Match);
+        Assert.Equal(3, captures.ParticipatingCount());
+        Assert.Equal(3, automaton.CountCaptures(line));
+        AssertGroupUtf8Text(captures, line, 1, "\u00A0\t");
+        AssertGroupUtf8Text(captures, line, 2, "/usr/bin/env python");
+        Assert.Equal(0, automaton.CountCaptures("  print()"u8));
+        Assert.Null(automaton.FindCaptures(line, 1));
+    }
+
+    /// <summary>
+    /// Verifies the line-prefix capture path preserves dot newline and empty-capture semantics.
+    /// </summary>
+    [Fact]
+    public void LinePrefixCaptureEngineStopsDotAtLineTerminator()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"^(\s*)#!(.*)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = "#!first\nsecond"u8.ToArray();
+
+        RegexCaptures? captures = automaton.FindCaptures(haystack);
+
+        Assert.True(automaton.UsesLinePrefixCaptureEngine);
+        Assert.NotNull(captures);
+        Assert.Equal(new RegexMatch(0, "#!first"u8.Length), captures.Match);
+        AssertGroupText(captures, haystack, 1, "");
+        AssertGroupText(captures, haystack, 2, "first");
+        Assert.Equal(3, automaton.CountCaptures("#!"u8));
+    }
+
+    /// <summary>
     /// Verifies nullable leading expressions do not use a literal prefilter.
     /// </summary>
     [Fact]
