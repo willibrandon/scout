@@ -102,6 +102,17 @@ internal sealed class RegexNfaCompiler
 
     private int CompileSequence(RegexSequenceNode node, int next, RegexCompileOptions options)
     {
+        if (!HasInlineFlags(node))
+        {
+            int directStart = next;
+            for (int index = node.Nodes.Count - 1; index >= 0; index--)
+            {
+                directStart = CompileNode(node.Nodes[index], directStart, options);
+            }
+
+            return directStart;
+        }
+
         var nodes = new List<RegexSyntaxNode>();
         var nodeOptions = new List<RegexCompileOptions>();
         RegexCompileOptions currentOptions = options;
@@ -131,6 +142,17 @@ internal sealed class RegexNfaCompiler
 
     private int CompileSequenceReversed(RegexSequenceNode node, int next, RegexCompileOptions options)
     {
+        if (!HasInlineFlags(node))
+        {
+            int directStart = next;
+            for (int index = 0; index < node.Nodes.Count; index++)
+            {
+                directStart = CompileNodeReversed(node.Nodes[index], directStart, options);
+            }
+
+            return directStart;
+        }
+
         var nodes = new List<RegexSyntaxNode>();
         var nodeOptions = new List<RegexCompileOptions>();
         RegexCompileOptions currentOptions = options;
@@ -156,6 +178,19 @@ internal sealed class RegexNfaCompiler
         }
 
         return start;
+    }
+
+    private static bool HasInlineFlags(RegexSequenceNode node)
+    {
+        for (int index = 0; index < node.Nodes.Count; index++)
+        {
+            if (node.Nodes[index] is RegexInlineFlagsNode)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private int CompileAlternation(RegexAlternationNode node, int next, RegexCompileOptions options)

@@ -3,6 +3,7 @@ namespace Scout;
 internal sealed class RegexAlternationSetEngine
 {
     private const int MinimumAlternativeCount = 16;
+    private const int MaximumAlternativeCount = 512;
 
     private readonly PatternSet patternSet;
     private readonly int[]? wholeBranchCaptureByPattern;
@@ -25,7 +26,11 @@ internal sealed class RegexAlternationSetEngine
         out RegexAlternationSetEngine? engine)
     {
         engine = null;
-        if (!TrySplitTopLevelAlternation(pattern, flattenNestedAlternatives: true, out byte[][] alternatives) ||
+        if (!TrySplitTopLevelAlternation(
+                pattern,
+                flattenNestedAlternatives: true,
+                maximumAlternatives: MaximumAlternativeCount,
+                out byte[][] alternatives) ||
             alternatives.Length < MinimumAlternativeCount)
         {
             return false;
@@ -138,7 +143,11 @@ internal sealed class RegexAlternationSetEngine
         out RegexAlternationSetEngine? engine)
     {
         engine = null;
-        if (!TrySplitTopLevelAlternation(pattern, flattenNestedAlternatives: false, out byte[][] alternatives) ||
+        if (!TrySplitTopLevelAlternation(
+                pattern,
+                flattenNestedAlternatives: false,
+                maximumAlternatives: int.MaxValue,
+                out byte[][] alternatives) ||
             alternatives.Length < MinimumAlternativeCount ||
             !TryCreateWholeBranchCaptureMap(root, alternatives.Length, out int[]? wholeBranchCaptureByPattern))
         {
@@ -205,12 +214,13 @@ internal sealed class RegexAlternationSetEngine
     private static bool TrySplitTopLevelAlternation(
         ReadOnlySpan<byte> pattern,
         bool flattenNestedAlternatives,
+        int maximumAlternatives,
         out byte[][] alternatives)
     {
         alternatives = [];
         if ((TryStripWholeEnclosingGroup(pattern, out ReadOnlySpan<byte> inner) ||
                 TryStripWholeExactOneRepetition(pattern, out inner)) &&
-            TrySplitTopLevelAlternation(inner, flattenNestedAlternatives, out alternatives))
+            TrySplitTopLevelAlternation(inner, flattenNestedAlternatives, maximumAlternatives, out alternatives))
         {
             return true;
         }
@@ -268,7 +278,7 @@ internal sealed class RegexAlternationSetEngine
                     depth--;
                     break;
                 case (byte)'|' when depth == 0:
-                    if (!AddAlternative(pattern[start..index], parts, flattenNestedAlternatives))
+                    if (!AddAlternative(pattern[start..index], parts, flattenNestedAlternatives, maximumAlternatives))
                     {
                         return false;
                     }
@@ -284,7 +294,7 @@ internal sealed class RegexAlternationSetEngine
             return false;
         }
 
-        if (depth != 0 || inClass || escaped || !AddAlternative(pattern[start..], parts, flattenNestedAlternatives))
+        if (depth != 0 || inClass || escaped || !AddAlternative(pattern[start..], parts, flattenNestedAlternatives, maximumAlternatives))
         {
             return false;
         }
@@ -435,7 +445,8 @@ internal sealed class RegexAlternationSetEngine
     private static bool AddAlternative(
         ReadOnlySpan<byte> alternative,
         List<byte[]> alternatives,
-        bool flattenNestedAlternatives)
+        bool flattenNestedAlternatives,
+        int maximumAlternatives)
     {
         if (alternative.IsEmpty)
         {
@@ -443,10 +454,20 @@ internal sealed class RegexAlternationSetEngine
         }
 
         if (flattenNestedAlternatives &&
-            TrySplitTopLevelAlternation(alternative, flattenNestedAlternatives, out byte[][] nestedAlternatives))
+            TrySplitTopLevelAlternation(alternative, flattenNestedAlternatives, maximumAlternatives, out byte[][] nestedAlternatives))
         {
+            if (alternatives.Count > maximumAlternatives - nestedAlternatives.Length)
+            {
+                return false;
+            }
+
             alternatives.AddRange(nestedAlternatives);
             return true;
+        }
+
+        if (alternatives.Count >= maximumAlternatives)
+        {
+            return false;
         }
 
         alternatives.Add(alternative.ToArray());
