@@ -409,6 +409,30 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies long sparse ASCII literals keep exact literal-set count and span semantics.
+    /// </summary>
+    [Fact]
+    public void LiteralSetCountsLongSparseAsciiLiteral()
+    {
+        var automaton = RegexAutomaton.Compile(
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "xxxxABCDEFGHIJKLMNOPQRSTUVWXYx yyyy ABCDEFGHIJKLMNOPQRSTUVWXYZ zz ABCDEFGHIJKLMNOPQRSTUVWXYZ"u8.ToArray();
+        int firstStart = haystack.AsSpan().IndexOf("ABCDEFGHIJKLMNOPQRSTUVWXYZ"u8);
+        int secondStart = haystack.AsSpan((firstStart + 1)..).IndexOf("ABCDEFGHIJKLMNOPQRSTUVWXYZ"u8) + firstStart + 1;
+
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(firstStart, 26), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(secondStart, 26), automaton.Find(haystack, firstStart + 1));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(52, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies single non-ASCII literals keep exact byte-oriented count and span semantics.
     /// </summary>
     [Fact]

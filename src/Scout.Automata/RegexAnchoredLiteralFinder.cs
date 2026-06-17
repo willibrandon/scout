@@ -3,6 +3,7 @@ namespace Scout;
 internal sealed class RegexAnchoredLiteralFinder
 {
     private const int MinimumNeedleLength = 4;
+    private const int MinimumAsciiNeedleLength = 16;
     private const int MinimumAnchorAdvantage = 80;
     private const int MinimumAsciiThreeByteAnchorScore = 250;
 
@@ -23,7 +24,7 @@ internal sealed class RegexAnchoredLiteralFinder
         bool containsNonAscii = ContainsNonAscii(needle);
         bool threeByteAscii = !containsNonAscii && needle.Length == 3;
         if (containsNonAscii && needle.Length < MinimumNeedleLength ||
-            !containsNonAscii && !threeByteAscii ||
+            !containsNonAscii && !threeByteAscii && needle.Length < MinimumAsciiNeedleLength ||
             !ContainsAsciiOrTwoByteUtf8Only(needle))
         {
             return false;
