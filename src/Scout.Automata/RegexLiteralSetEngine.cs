@@ -140,12 +140,6 @@ internal sealed class RegexLiteralSetEngine
 
         if (ShouldUseSmallLiteralFinders(this.literals, asciiCaseInsensitive, unicodeCaseInsensitive, useAho))
         {
-            if (RegexPackedLiteralSetScanner.TryCreate(this.literals, out RegexPackedLiteralSetScanner? smallPacked))
-            {
-                packedLiteralScanner = smallPacked;
-                return;
-            }
-
             if (RegexShortLiteralSetScanner.TryCreate(this.literals, out RegexShortLiteralSetScanner? shortScanner))
             {
                 shortLiteralScanner = shortScanner;
