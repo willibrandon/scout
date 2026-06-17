@@ -176,7 +176,7 @@ internal sealed class RegexLiteralPrefixRunEngine
 
     private long CountOrSum(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
     {
-        if (prefixFinders is not null)
+        if (prefixFinders is not null && shortScanner is null)
         {
             return CountOrSumWithPrefixFinders(haystack, startAt, sumSpans);
         }
