@@ -408,6 +408,33 @@ internal sealed class RegexMetaEngine
             nfaFactory: fallbackNfaFactory);
     }
 
+    public static RegexMetaEngine CompileDelimitedSpan(
+        RegexDelimitedSpanEngine delimitedSpan,
+        bool utf8,
+        Func<RegexNfa>? fallbackNfaFactory)
+    {
+        ArgumentNullException.ThrowIfNull(delimitedSpan);
+        return new RegexMetaEngine(
+            RegexEngineKind.DelimitedSpan,
+            nfa: null,
+            pikeVm: null,
+            boundedBacktracker: null,
+            onePassDfa: null,
+            denseDfa: null,
+            sparseDfa: null,
+            lazyDfa: null,
+            literalSet: null,
+            alternationSet: null,
+            delimitedRun: null,
+            simpleSequence: null,
+            lineContains: null,
+            dotStarClassFallback: null,
+            prefilter: null,
+            utf8,
+            nfaFactory: fallbackNfaFactory,
+            delimitedSpan: delimitedSpan);
+    }
+
     public static RegexMetaEngine CompileDelimitedCapture(
         RegexDelimitedCaptureEngine delimitedCapture,
         bool utf8,
