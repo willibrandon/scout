@@ -411,8 +411,8 @@ internal sealed class RegexLiteralSetEngine
         if (useAho &&
             !asciiOnlyCaseInsensitive &&
             !unicodeCaseInsensitive &&
-            (RegexLargeLiteralTrieScanner.TryCreate(literals, out largeLiteralTrieScanner) ||
-             RegexLargeLiteralSetScanner.TryCreate(literals, out largeLiteralScanner)))
+            (RegexLargeLiteralSetScanner.TryCreate(literals, out largeLiteralScanner) ||
+             RegexLargeLiteralTrieScanner.TryCreate(literals, out largeLiteralTrieScanner)))
         {
             searchPatterns = [];
             searchPatternLiteralIds = [];

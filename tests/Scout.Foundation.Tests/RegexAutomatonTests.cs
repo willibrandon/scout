@@ -343,6 +343,11 @@ public sealed class RegexAutomatonTests
         Assert.Equal(12, longerFirstAutomaton.SumMatchSpans(haystack));
         Assert.Equal(2, shorterFirstAutomaton.CountMatches(haystack));
         Assert.Equal(2, shorterFirstAutomaton.SumMatchSpans(haystack));
+
+        byte[] separated = "xxa yy abcdzz"u8.ToArray();
+        Assert.Equal(new RegexMatch(2, 1), longerFirstAutomaton.Find(separated));
+        Assert.Equal(2, longerFirstAutomaton.CountMatches(separated));
+        Assert.Equal(7, longerFirstAutomaton.SumMatchSpans(separated));
     }
 
     /// <summary>
