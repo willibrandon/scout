@@ -398,17 +398,23 @@ internal sealed class RegexNfaCompiler
             return true;
         }
 
-        if (RegexUtf8ByteCompiler.TryCompileCompact(kind, value, options, reversed, next, AddSourceByteClass, AddSplit, out start))
+        if (!RegexUtf8ByteCompiler.TryBuildNormalizedScalarRanges(kind, value, options, out List<RegexScalarRange> ranges))
+        {
+            start = -1;
+            return false;
+        }
+
+        if (RegexUtf8ByteCompiler.TryCompileCompactFromRanges(ranges, reversed, next, AddSourceByteClass, AddSplit, out start))
         {
             return true;
         }
 
-        if (RegexUtf8ByteCompiler.TryCompileRangeSequences(kind, value, options, reversed, next, AddSourceByteClass, AddSplit, out start))
+        if (RegexUtf8ByteCompiler.TryCompileRangeSequencesFromRanges(ranges, reversed, next, AddSourceByteClass, AddSplit, out start))
         {
             return true;
         }
 
-        if (!RegexUtf8ByteCompiler.TryCreate(kind, value, options, reversed, out trie))
+        if (!RegexUtf8ByteCompiler.TryCreateFromRanges(ranges, reversed, out trie))
         {
             start = -1;
             return false;

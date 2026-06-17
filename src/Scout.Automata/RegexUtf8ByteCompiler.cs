@@ -41,12 +41,20 @@ internal static class RegexUtf8ByteCompiler
         }
 
         if (!RegexByteClass.RequiresUtf8ScalarMatch(kind, expression, options.Utf8, options.CaseInsensitive, options.UnicodeClasses) ||
-            !TryBuildScalarRanges(kind, expression, options, out List<RegexScalarRange> ranges))
+            !TryBuildNormalizedScalarRanges(kind, expression, options, out List<RegexScalarRange> ranges))
         {
             return false;
         }
 
-        Normalize(ranges);
+        return TryCreateFromRanges(ranges, reversed, out trie);
+    }
+
+    public static bool TryCreateFromRanges(
+        List<RegexScalarRange> ranges,
+        bool reversed,
+        out RegexUtf8ByteTrie? trie)
+    {
+        trie = null;
         if (ranges.Count == 0)
         {
             return false;
@@ -114,12 +122,23 @@ internal static class RegexUtf8ByteCompiler
     {
         start = -1;
         if (!RegexByteClass.RequiresUtf8ScalarMatch(kind, expression, options.Utf8, options.CaseInsensitive, options.UnicodeClasses) ||
-            !TryBuildScalarRanges(kind, expression, options, out List<RegexScalarRange> ranges))
+            !TryBuildNormalizedScalarRanges(kind, expression, options, out List<RegexScalarRange> ranges))
         {
             return false;
         }
 
-        Normalize(ranges);
+        return TryCompileCompactFromRanges(ranges, reversed, next, addByteClass, addSplit, out start);
+    }
+
+    public static bool TryCompileCompactFromRanges(
+        List<RegexScalarRange> ranges,
+        bool reversed,
+        int next,
+        RegexAddByteClassState addByteClass,
+        RegexAddSplitState addSplit,
+        out int start)
+    {
+        start = -1;
         if (!TryGetAsciiRangesWhenAllNonAsciiScalarsMatch(ranges, out byte[] asciiRanges))
         {
             return false;
@@ -141,12 +160,23 @@ internal static class RegexUtf8ByteCompiler
     {
         start = -1;
         if (!RegexByteClass.RequiresUtf8ScalarMatch(kind, expression, options.Utf8, options.CaseInsensitive, options.UnicodeClasses) ||
-            !TryBuildScalarRanges(kind, expression, options, out List<RegexScalarRange> ranges))
+            !TryBuildNormalizedScalarRanges(kind, expression, options, out List<RegexScalarRange> ranges))
         {
             return false;
         }
 
-        Normalize(ranges);
+        return TryCompileRangeSequencesFromRanges(ranges, reversed, next, addByteClass, addSplit, out start);
+    }
+
+    public static bool TryCompileRangeSequencesFromRanges(
+        List<RegexScalarRange> ranges,
+        bool reversed,
+        int next,
+        RegexAddByteClassState addByteClass,
+        RegexAddSplitState addSplit,
+        out int start)
+    {
+        start = -1;
         if (EstimateScalarCount(ranges) <= RangeSequenceScalarThreshold)
         {
             return false;
@@ -172,6 +202,21 @@ internal static class RegexUtf8ByteCompiler
         return true;
     }
 
+    public static bool TryBuildNormalizedScalarRanges(
+        RegexSyntaxKind kind,
+        ReadOnlySpan<byte> expression,
+        RegexCompileOptions options,
+        out List<RegexScalarRange> ranges)
+    {
+        if (!TryBuildScalarRanges(kind, expression, options, out ranges))
+        {
+            return false;
+        }
+
+        Normalize(ranges);
+        return ranges.Count != 0;
+    }
+
     public static bool TryGetUtf8ByteLengthRange(
         RegexSyntaxKind kind,
         ReadOnlySpan<byte> expression,
@@ -181,13 +226,7 @@ internal static class RegexUtf8ByteCompiler
     {
         minimumBytes = 0;
         maximumBytes = 0;
-        if (!TryBuildScalarRanges(kind, expression, options, out List<RegexScalarRange> ranges))
-        {
-            return false;
-        }
-
-        Normalize(ranges);
-        if (ranges.Count == 0)
+        if (!TryBuildNormalizedScalarRanges(kind, expression, options, out List<RegexScalarRange> ranges))
         {
             return false;
         }
