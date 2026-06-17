@@ -13,6 +13,7 @@ internal sealed class RegexLiteralSetEngine
     private const int SmallLiteralFinderSetThreshold = 8;
     private const int TwoByteSearchPatternBucketThreshold = 8;
     private const int SingleLiteralIndexOfAnchorScoreThreshold = 240;
+    private const int ThreeByteSingleLiteralIndexOfAnchorScoreThreshold = 100;
 
     private readonly AhoCorasickAutomaton? automaton;
     private readonly byte[][] literals;
@@ -1513,16 +1514,26 @@ internal sealed class RegexLiteralSetEngine
 
     private static bool ShouldUseSingleLiteralIndexOf(ReadOnlySpan<byte> literal)
     {
+        if (literal.Length == 3)
+        {
+            return ContainsAsciiAnchorAtLeast(literal, ThreeByteSingleLiteralIndexOfAnchorScoreThreshold);
+        }
+
         if (literal.Length < 4)
         {
             return false;
         }
 
+        return ContainsAsciiAnchorAtLeast(literal, SingleLiteralIndexOfAnchorScoreThreshold);
+    }
+
+    private static bool ContainsAsciiAnchorAtLeast(ReadOnlySpan<byte> literal, int threshold)
+    {
         for (int index = 0; index < literal.Length; index++)
         {
             byte value = literal[index];
             if (value <= 0x7F &&
-                RegexAnchoredLiteralFinder.AsciiAnchorScore(value) >= SingleLiteralIndexOfAnchorScoreThreshold)
+                RegexAnchoredLiteralFinder.AsciiAnchorScore(value) >= threshold)
             {
                 return true;
             }
