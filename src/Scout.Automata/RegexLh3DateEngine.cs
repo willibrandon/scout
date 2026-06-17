@@ -58,6 +58,30 @@ internal sealed class RegexLh3DateEngine
             : null;
     }
 
+    public static bool IsMatch(ReadOnlySpan<byte> haystack)
+    {
+        int searchAt = Math.Min(haystack.Length, 1);
+        while (searchAt < haystack.Length)
+        {
+            int slashOffset = haystack[searchAt..].IndexOf((byte)'/');
+            if (slashOffset < 0)
+            {
+                return false;
+            }
+
+            int slash = searchAt + slashOffset;
+            if ((slash >= 2 && TryMatchAt(haystack, slash - 2, out _)) ||
+                TryMatchAt(haystack, slash - 1, out _))
+            {
+                return true;
+            }
+
+            searchAt = slash + 1;
+        }
+
+        return false;
+    }
+
     public static long CountMatches(ReadOnlySpan<byte> haystack, int startAt)
     {
         return CountOrSum(haystack, startAt, sumSpans: false);

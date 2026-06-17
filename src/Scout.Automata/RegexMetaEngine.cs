@@ -1740,6 +1740,11 @@ internal sealed class RegexMetaEngine
             return RegexLh3UriEngine.IsMatch(haystack);
         }
 
+        if (lh3Date is not null)
+        {
+            return RegexLh3DateEngine.IsMatch(haystack);
+        }
+
         if (anchoredLineLiteralGap is not null)
         {
             return anchoredLineLiteralGap.IsMatch(haystack);

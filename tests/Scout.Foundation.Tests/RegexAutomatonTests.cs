@@ -2652,6 +2652,8 @@ public sealed class RegexAutomatonTests
         RegexCaptures? captures = automaton.FindCaptures(haystack);
 
         Assert.Equal(RegexEngineKind.Date, GetEngineKind(automaton));
+        Assert.True(automaton.IsMatch(haystack));
+        Assert.False(automaton.IsMatch("no date here / x"u8));
         Assert.Equal(new RegexMatch(firstStart, first.Length), automaton.Find(haystack));
         Assert.Equal(new RegexMatch(secondStart, second.Length), automaton.Find(haystack, firstStart + 1));
         Assert.Equal(new RegexMatch(thirdStart, third.Length), automaton.MatchAt(haystack, thirdStart));
