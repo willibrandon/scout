@@ -5,7 +5,7 @@ internal sealed class RegexLeadingClassLiteralEngine
     private const int MaxLiteralCount = 8;
     private const int MaxExpandedSearchPatternCount = 16;
     private const int MaxTrailingSearchBytes = 32;
-    private const int TrailingSearchWindowLength = 4;
+    private const int TrailingSearchWindowLength = 5;
 
     private readonly RegexLeadingClassLiteralBranch[] branches;
     private readonly byte[][] searchPatterns;
