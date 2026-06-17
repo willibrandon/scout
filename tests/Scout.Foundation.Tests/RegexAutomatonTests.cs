@@ -44,7 +44,38 @@ public sealed class RegexAutomatonTests
             unicodeClasses: true);
         var goIssue = RegexAutomaton.Compile("^a{2,5}$"u8);
         var unicodeDot = RegexAutomaton.Compile("^.{249}$"u8);
-        var tooSmallUnicode = RegexAutomaton.Compile("[\\p{math}&&\\u{10000}-\\u{10FFFF}]{10,}"u8);
+        ReadOnlySpan<byte> tooSmallUnicodePattern = "[\\p{math}&&\\u{10000}-\\u{10FFFF}]{10,}"u8;
+        var tooSmallUnicode = RegexAutomaton.Compile(
+            tooSmallUnicodePattern,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        RegexSyntaxTree tooSmallUnicodeTree = RegexSyntaxParser.Parse(tooSmallUnicodePattern);
+        RegexRepetitionNode tooSmallUnicodeRepeat = Assert.IsType<RegexRepetitionNode>(tooSmallUnicodeTree.Root);
+        RegexAtomNode tooSmallUnicodeAtom = Assert.IsType<RegexAtomNode>(tooSmallUnicodeRepeat.Child);
+        var unicodeOptions = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        Assert.True(RegexByteClass.RequiresUtf8ScalarMatch(
+            tooSmallUnicodeAtom.Kind,
+            tooSmallUnicodeAtom.Value.Span,
+            utf8: false,
+            caseInsensitive: false,
+            unicodeClasses: true));
+        Assert.True(RegexUtf8ByteCompiler.TryGetUtf8ByteLengthRange(
+            tooSmallUnicodeAtom.Kind,
+            tooSmallUnicodeAtom.Value.Span,
+            unicodeOptions,
+            out int unicodeMinimumBytes,
+            out int unicodeMaximumBytes));
+        Assert.Equal(4, unicodeMinimumBytes);
+        Assert.Equal(4, unicodeMaximumBytes);
         byte[] unicodeHaystack = System.Text.Encoding.UTF8.GetBytes("𝛃𝛃𝛃𝛃𝛃𝛃𝛃𝛃𝛃𝛃𝛃");
         byte[] shortUnicodeHaystack = System.Text.Encoding.UTF8.GetBytes("𝛃𝛃𝛃𝛃𝛃𝛃𝛃𝛃𝛃");
         byte[] longAsciiHaystack = new byte[1_000];
@@ -58,6 +89,7 @@ public sealed class RegexAutomatonTests
         Assert.Equal(0, goIssue.CountMatches(longAsciiHaystack));
         Assert.Null(goIssue.Find(longAsciiHaystack));
         Assert.Equal(0, unicodeDot.CountMatches(longAsciiHaystack));
+        Assert.True(HasLengthGuard(tooSmallUnicode));
         Assert.Equal(0, tooSmallUnicode.CountMatches(shortUnicodeHaystack));
         Assert.Equal(new RegexMatch(0, 3), goIssue.Find("aaa"u8));
         Assert.Equal(1, goIssue.CountMatches("aaa"u8));
@@ -5715,6 +5747,13 @@ public sealed class RegexAutomatonTests
             .GetField("engine", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
             .GetValue(automaton)!)
             .Kind;
+    }
+
+    private static bool HasLengthGuard(RegexAutomaton automaton)
+    {
+        return typeof(RegexAutomaton)
+            .GetField("lengthGuard", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(automaton) is not null;
     }
 
     private static byte[] RebarUnstructuredLogPattern()
