@@ -7,7 +7,7 @@ namespace Scout;
 
 internal sealed class RegexAsciiCaseInsensitiveFinder
 {
-    private const int VeryRareAnchorScore = 230;
+    private const int VeryRareAnchorScore = 250;
 
     private readonly byte[] needle;
     private readonly int anchorIndex;
