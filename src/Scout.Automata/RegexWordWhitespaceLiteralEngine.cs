@@ -3,6 +3,7 @@ namespace Scout;
 internal sealed class RegexWordWhitespaceLiteralEngine
 {
     private readonly byte[] literal;
+    private readonly byte[] searchLiteral;
     private readonly bool hasTrailingWord;
     private readonly bool hasLeadingBoundary;
     private readonly bool hasTrailingBoundary;
@@ -16,6 +17,7 @@ internal sealed class RegexWordWhitespaceLiteralEngine
         RegexCompileOptions options)
     {
         this.literal = literal;
+        searchLiteral = literal.Length > 4 ? literal[..4] : literal;
         this.hasTrailingWord = hasTrailingWord;
         this.hasLeadingBoundary = hasLeadingBoundary;
         this.hasTrailingBoundary = hasTrailingBoundary;
@@ -85,14 +87,15 @@ internal sealed class RegexWordWhitespaceLiteralEngine
         int search = lowerBound;
         while (search < haystack.Length)
         {
-            int relative = haystack[search..].IndexOf(literal);
+            int relative = haystack[search..].IndexOf(searchLiteral);
             if (relative < 0)
             {
                 return null;
             }
 
             int literalStart = search + relative;
-            if (TryMatchAroundLiteral(haystack, lowerBound, literalStart, out RegexMatch match))
+            if (LiteralMatchesAt(haystack, literalStart) &&
+                TryMatchAroundLiteral(haystack, lowerBound, literalStart, out RegexMatch match))
             {
                 return match;
             }
@@ -101,6 +104,13 @@ internal sealed class RegexWordWhitespaceLiteralEngine
         }
 
         return null;
+    }
+
+    private bool LiteralMatchesAt(ReadOnlySpan<byte> haystack, int start)
+    {
+        return searchLiteral.Length == literal.Length ||
+            literal.Length <= haystack.Length - start &&
+            haystack.Slice(start, literal.Length).SequenceEqual(literal);
     }
 
     public long CountMatches(ReadOnlySpan<byte> haystack, int startAt)

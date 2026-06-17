@@ -638,6 +638,11 @@ public sealed class RegexAutomatonTests
         Assert.Equal(1, automaton.CountMatches(haystack));
         Assert.Equal(20, automaton.SumMatchSpans(haystack));
         Assert.Null(automaton.Find("notHolmes value"u8));
+        Assert.Null(automaton.Find("Sherlock Holmium said"u8));
+
+        byte[] prefixCollisionHaystack = "Sherlock Holmium said Sherlock Holmes said"u8.ToArray();
+        int expectedStart = "Sherlock Holmium said "u8.Length;
+        Assert.Equal(new RegexMatch(expectedStart, 20), automaton.Find(prefixCollisionHaystack));
     }
 
     /// <summary>
