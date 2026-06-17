@@ -1730,6 +1730,11 @@ internal sealed class RegexMetaEngine
             return fixedWordWhitespaceSequence.Find(haystack, startAt: 0).HasValue;
         }
 
+        if (lh3Email is not null)
+        {
+            return RegexLh3EmailEngine.IsMatch(haystack);
+        }
+
         if (lh3Uri is not null)
         {
             return RegexLh3UriEngine.IsMatch(haystack);

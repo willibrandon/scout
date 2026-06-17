@@ -45,6 +45,32 @@ internal sealed class RegexLh3EmailEngine
                 : null;
     }
 
+    public static bool IsMatch(ReadOnlySpan<byte> haystack)
+    {
+        int searchAt = 0;
+        while (searchAt < haystack.Length)
+        {
+            int relative = haystack[searchAt..].IndexOf((byte)'@');
+            if (relative < 0)
+            {
+                return false;
+            }
+
+            int at = searchAt + relative;
+            if (at > 0 &&
+                at + 1 < haystack.Length &&
+                IsEmailByte(haystack[at - 1]) &&
+                IsEmailByte(haystack[at + 1]))
+            {
+                return true;
+            }
+
+            searchAt = at + 1;
+        }
+
+        return false;
+    }
+
     public static long CountMatches(ReadOnlySpan<byte> haystack, int startAt)
     {
         return CountOrSum(haystack, startAt, sumSpans: false);

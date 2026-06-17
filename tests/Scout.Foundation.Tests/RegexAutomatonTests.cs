@@ -2476,6 +2476,12 @@ public sealed class RegexAutomatonTests
         RegexCaptures? captures = automaton.FindCaptures(haystack);
 
         Assert.Equal(RegexEngineKind.EmailAddress, GetEngineKind(automaton));
+        Assert.True(automaton.IsMatch(haystack));
+        Assert.False(automaton.IsMatch("no at sign here"u8));
+        Assert.False(automaton.IsMatch("@domain"u8));
+        Assert.False(automaton.IsMatch("name@"u8));
+        Assert.False(automaton.IsMatch("name@ domain"u8));
+        Assert.False(automaton.IsMatch("name @domain"u8));
         Assert.Equal(new RegexMatch(firstStart, 3), automaton.Find(haystack));
         Assert.Equal(new RegexMatch(secondStart, 11), automaton.Find(haystack, firstStart + 3));
         Assert.Equal(new RegexMatch(thirdStart, 9), automaton.MatchAt(haystack, thirdStart));
