@@ -692,11 +692,11 @@ public sealed class RegexAutomaton
     private static RegexSyntaxNode UnwrapTransparentGroups(RegexSyntaxNode node)
     {
         while (node is RegexGroupNode
-               {
-                   Kind: RegexSyntaxKind.NonCapturingGroup,
-                   EnabledFlags.Length: 0,
-                   DisabledFlags.Length: 0,
-               } group)
+            {
+                Kind: RegexSyntaxKind.NonCapturingGroup,
+                EnabledFlags.Length: 0,
+                DisabledFlags.Length: 0,
+            } group)
         {
             node = group.Child;
         }
