@@ -109,7 +109,7 @@ internal sealed class RegexLiteralSetEngine
             !asciiCaseInsensitive &&
             !unicodeCaseInsensitive &&
             !useAho &&
-            TryGetSharedNonAsciiFirstByte(this.literals, out sharedFirstByte))
+            TryGetSharedSelectiveFirstByte(this.literals, out sharedFirstByte))
         {
             sharedFirstByteScanner = true;
             return;
@@ -1552,8 +1552,7 @@ internal sealed class RegexLiteralSetEngine
     {
         return ShouldUseSmallLiteralFinders(literals, asciiCaseInsensitive, unicodeCaseInsensitive, useAho) &&
             literals.Length == 2 &&
-            literals[0].Length == literals[1].Length &&
-            literals[0].Length >= 4;
+            Math.Min(literals[0].Length, literals[1].Length) >= 4;
     }
 
     private static MemmemFinder[] CreateSmallLiteralFinders(byte[][] literals)
@@ -1603,15 +1602,22 @@ internal sealed class RegexLiteralSetEngine
         return false;
     }
 
-    private static bool TryGetSharedNonAsciiFirstByte(byte[][] literals, out byte firstByte)
+    private static bool TryGetSharedSelectiveFirstByte(byte[][] literals, out byte firstByte)
     {
         firstByte = 0;
-        if (literals.Length != 2 || literals[0].Length == 0 || literals[0][0] < 0xE0)
+        if (literals.Length != 2 || literals[0].Length == 0)
         {
             return false;
         }
 
         firstByte = literals[0][0];
+        if (firstByte < 0xE0 &&
+            ExactCaseAnchorScore(firstByte) < 200)
+        {
+            firstByte = 0;
+            return false;
+        }
+
         for (int index = 1; index < literals.Length; index++)
         {
             if (literals[index].Length == 0 || literals[index][0] != firstByte)
@@ -1622,6 +1628,16 @@ internal sealed class RegexLiteralSetEngine
         }
 
         return true;
+    }
+
+    private static int ExactCaseAnchorScore(byte value)
+    {
+        if (value is >= (byte)'A' and <= (byte)'Z')
+        {
+            return 220;
+        }
+
+        return RegexAnchoredLiteralFinder.AsciiAnchorScore(value);
     }
 
     private static bool IsBetter(RegexLiteralSetCandidate candidate, RegexLiteralSetCandidate? best)

@@ -213,6 +213,7 @@ public sealed class RegexAutomatonTests
             multiLine: false,
             dotMatchesNewline: false,
             unicodeClasses: false);
+        var sharedFirstByteAutomaton = RegexAutomaton.Compile("Sherlock|Street"u8);
         RegexMatch? shorterFirst = shorterFirstAutomaton.Find("xxfoobar"u8);
         RegexMatch? longerFirst = longerFirstAutomaton.Find("xxfoobar"u8);
         RegexMatch? caseInsensitive = caseInsensitiveAutomaton.Find("xxjohn watson"u8);
@@ -220,15 +221,19 @@ public sealed class RegexAutomatonTests
         Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(shorterFirstAutomaton));
         Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(longerFirstAutomaton));
         Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(caseInsensitiveAutomaton));
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(sharedFirstByteAutomaton));
         Assert.Equal(new RegexMatch(2, 3), shorterFirst);
         Assert.Equal(new RegexMatch(2, 6), longerFirst);
         Assert.Equal(new RegexMatch(2, 11), caseInsensitive);
+        Assert.Equal(new RegexMatch(3, 6), sharedFirstByteAutomaton.Find("xx Street Sherlock"u8));
         Assert.Equal(2, shorterFirstAutomaton.CountMatches("foo foobar"u8));
         Assert.Equal(6, shorterFirstAutomaton.SumMatchSpans("foo foobar"u8));
         Assert.Equal(1, shorterFirstAutomaton.CountMatches("foo foobar"u8, startAt: 4));
         Assert.Equal(3, shorterFirstAutomaton.SumMatchSpans("foo foobar"u8, startAt: 4));
         Assert.Equal(2, caseInsensitiveAutomaton.CountMatches("sherlock holmes JOHN WATSON"u8));
         Assert.Equal(26, caseInsensitiveAutomaton.SumMatchSpans("sherlock holmes JOHN WATSON"u8));
+        Assert.Equal(2, sharedFirstByteAutomaton.CountMatches("Street Sherlock"u8));
+        Assert.Equal(14, sharedFirstByteAutomaton.SumMatchSpans("Street Sherlock"u8));
 
         RegexCaptures? captures = shorterFirstAutomaton.FindCaptures("xxfoo"u8);
         Assert.NotNull(captures);
