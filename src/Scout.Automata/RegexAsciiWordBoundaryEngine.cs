@@ -346,6 +346,18 @@ internal sealed class RegexAsciiWordBoundaryEngine
             return false;
         }
 
+        int prefixOnes = Math.Min(BitOperations.TrailingZeroCount(~mask), width);
+        if (runLength > 0 && runLength + prefixOnes >= minimum)
+        {
+            return true;
+        }
+
+        if (BitOperations.PopCount(mask) < minimum)
+        {
+            runLength = CountSuffixOneBits(mask, width);
+            return false;
+        }
+
         int consumed = 0;
         while (mask != 0)
         {
@@ -374,6 +386,11 @@ internal sealed class RegexAsciiWordBoundaryEngine
         }
 
         return false;
+    }
+
+    private static int CountSuffixOneBits(uint mask, int width)
+    {
+        return BitOperations.LeadingZeroCount(~(mask << (32 - width)));
     }
 
     private bool ContainsUnicodeWordRun(ReadOnlySpan<byte> haystack)

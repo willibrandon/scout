@@ -5175,6 +5175,32 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies long ASCII word-boundary IsMatch scans carry vector suffix runs across fragmented masks.
+    /// </summary>
+    [Fact]
+    public void AsciiWordBoundaryRunIsMatchHandlesFragmentedVectorMasks()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\b\w{25,}\b"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] fragmented = System.Text.Encoding.ASCII.GetBytes(
+            "abc def ghi jkl mno pqr stu vwx yz " + new string('a', 24));
+        byte[] crossing = System.Text.Encoding.ASCII.GetBytes(
+            "abc def ghi jkl mno pqr stu " + new string('x', 30));
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.False(automaton.IsMatch(fragmented));
+        Assert.True(automaton.IsMatch(crossing));
+        Assert.Equal(new RegexMatch(28, 30), automaton.Find(crossing));
+        Assert.Equal(1, automaton.CountMatches(crossing));
+        Assert.Equal(30, automaton.SumMatchSpans(crossing));
+    }
+
+    /// <summary>
     /// Verifies disjoint repeated byte runs with a suffix byte and word boundary avoid repeated PikeVM rescans.
     /// </summary>
     [Fact]
