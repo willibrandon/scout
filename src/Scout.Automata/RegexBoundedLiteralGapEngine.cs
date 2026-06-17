@@ -7,6 +7,7 @@ internal sealed class RegexBoundedLiteralGapEngine
     private readonly RegexBoundedLiteralGapBranch[] branches;
     private readonly RegexShortLiteralSetScanner? shortPrefixScanner;
     private readonly RegexCaseSensitiveLiteralSetScanner? prefixScanner;
+    private readonly MemmemFinder[]? prefixFinders;
     private readonly MemmemFinder? singlePrefixFinder;
     private readonly byte lineTerminator;
 
@@ -14,11 +15,13 @@ internal sealed class RegexBoundedLiteralGapEngine
         RegexBoundedLiteralGapBranch[] branches,
         RegexShortLiteralSetScanner? shortPrefixScanner,
         RegexCaseSensitiveLiteralSetScanner? prefixScanner,
+        MemmemFinder[]? prefixFinders,
         byte lineTerminator)
     {
         this.branches = branches;
         this.shortPrefixScanner = shortPrefixScanner;
         this.prefixScanner = prefixScanner;
+        this.prefixFinders = prefixFinders;
         this.lineTerminator = lineTerminator;
         if (branches.Length == 1)
         {
@@ -77,8 +80,19 @@ internal sealed class RegexBoundedLiteralGapEngine
 
         RegexShortLiteralSetScanner? shortPrefixScanner = null;
         RegexCaseSensitiveLiteralSetScanner? prefixScanner = null;
+        MemmemFinder[]? prefixFinders = null;
         byte[][] prefixes = GetPrefixes(branches);
-        if (branches.Count > 1 &&
+        if (branches.Count == 2 &&
+            prefixes[0].Length >= 4 &&
+            prefixes[1].Length >= 4)
+        {
+            prefixFinders =
+            [
+                new MemmemFinder(prefixes[0]),
+                new MemmemFinder(prefixes[1]),
+            ];
+        }
+        else if (branches.Count > 1 &&
             !RegexShortLiteralSetScanner.TryCreate(prefixes, out shortPrefixScanner) &&
             !RegexCaseSensitiveLiteralSetScanner.TryCreate(prefixes, out prefixScanner))
         {
@@ -89,6 +103,7 @@ internal sealed class RegexBoundedLiteralGapEngine
             branches.ToArray(),
             shortPrefixScanner,
             prefixScanner,
+            prefixFinders,
             options.LineTerminator);
         return true;
     }
@@ -217,6 +232,40 @@ internal sealed class RegexBoundedLiteralGapEngine
             RegexLiteralSetCandidate? found = prefixScanner.Find(haystack, startAt);
             candidate = found.GetValueOrDefault();
             return found.HasValue;
+        }
+
+        if (prefixFinders is not null)
+        {
+            int finderStart = Math.Clamp(startAt, 0, haystack.Length);
+            int bestLiteralId = -1;
+            int bestStart = int.MaxValue;
+            for (int index = 0; index < prefixFinders.Length; index++)
+            {
+                int finderOffset = prefixFinders[index].Find(haystack[finderStart..]);
+                if (finderOffset < 0)
+                {
+                    continue;
+                }
+
+                int foundStart = finderStart + finderOffset;
+                if (foundStart < bestStart ||
+                    foundStart == bestStart && index < bestLiteralId)
+                {
+                    bestLiteralId = index;
+                    bestStart = foundStart;
+                }
+            }
+
+            if (bestLiteralId >= 0)
+            {
+                candidate = new RegexLiteralSetCandidate(
+                    bestLiteralId,
+                    new RegexMatch(bestStart, branches[bestLiteralId].Prefix.Length));
+                return true;
+            }
+
+            candidate = default;
+            return false;
         }
 
         int start = Math.Clamp(startAt, 0, haystack.Length);
