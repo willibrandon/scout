@@ -12,7 +12,7 @@ internal sealed class RegexLiteralSetEngine
     private const int LargeLiteralSetThreshold = 32;
     private const int SmallLiteralFinderSetThreshold = 8;
     private const int TwoByteSearchPatternBucketThreshold = 8;
-    private const int SingleLiteralIndexOfAnchorScoreThreshold = 250;
+    private const int SingleLiteralIndexOfAnchorScoreThreshold = 240;
 
     private readonly AhoCorasickAutomaton? automaton;
     private readonly byte[][] literals;
