@@ -28,7 +28,9 @@ internal readonly struct RegexSimpleSequenceSegment
         Lazy = lazy;
         MatcherKind = GetMatcherKind(kind, value, caseInsensitive, multiLine, dotMatchesNewline, crlf, lineTerminator);
         Literal = value.Length == 1 ? value[0] : (byte)0;
-        byteLookup = BuildByteLookup(kind, value, caseInsensitive, multiLine, dotMatchesNewline, crlf, lineTerminator);
+        byteLookup = MatcherKind == RegexSimpleSequenceByteMatcherKind.Lookup
+            ? BuildByteLookup(kind, value, caseInsensitive, multiLine, dotMatchesNewline, crlf, lineTerminator)
+            : [];
     }
 
     public RegexSyntaxKind Kind { get; }
