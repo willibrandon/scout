@@ -1811,6 +1811,16 @@ internal sealed class RegexMetaEngine
             return alternationSet.Find(haystack, startOffset);
         }
 
+        if (fixedWidthAlternation is not null)
+        {
+            return fixedWidthAlternation.Find(haystack, startOffset);
+        }
+
+        if (delimitedSpan is not null)
+        {
+            return delimitedSpan.Find(haystack, startOffset);
+        }
+
         if (wholeLine is not null)
         {
             return wholeLine.Find(haystack, startOffset);
@@ -1926,11 +1936,6 @@ internal sealed class RegexMetaEngine
             return repeatedLiteralRunOrEmpty.Find(haystack, startOffset);
         }
 
-        if (delimitedSpan is not null)
-        {
-            return delimitedSpan.Find(haystack, startOffset);
-        }
-
         if (delimitedCapture is not null)
         {
             return delimitedCapture.Find(haystack, startOffset);
@@ -1939,11 +1944,6 @@ internal sealed class RegexMetaEngine
         if (structuredLogCapture is not null)
         {
             return structuredLogCapture.Find(haystack, startOffset);
-        }
-
-        if (fixedWidthAlternation is not null)
-        {
-            return fixedWidthAlternation.Find(haystack, startOffset);
         }
 
         if (fixedWordWhitespaceSequence is not null)
