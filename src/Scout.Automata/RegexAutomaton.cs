@@ -10,6 +10,7 @@ public sealed class RegexAutomaton
     private readonly RegexLengthGuard? lengthGuard;
     private readonly RegexRequiredByteSetGuard? requiredByteSetGuard;
     private readonly RegexRequiredLiteralAnySetGuard? requiredLiteralAnySetGuard;
+    private readonly bool hasSearchGuards;
     private readonly object captureInitializationLock = new();
     private readonly ReadOnlyMemory<byte> capturePattern;
     private readonly RegexSyntaxNode? captureRoot;
@@ -61,6 +62,9 @@ public sealed class RegexAutomaton
         this.lengthGuard = lengthGuard;
         this.requiredByteSetGuard = requiredByteSetGuard;
         this.requiredLiteralAnySetGuard = requiredLiteralAnySetGuard;
+        hasSearchGuards = lengthGuard is not null ||
+            !IgnoresRequiredSearchGuards(engine.Kind) &&
+            (requiredByteSetGuard is not null || requiredLiteralAnySetGuard is not null);
         this.syntheticCaptureAlternationSet = syntheticCaptureAlternationSet;
         this.capturePattern = capturePattern;
         this.captureRoot = captureRoot;
@@ -899,7 +903,7 @@ public sealed class RegexAutomaton
     /// <returns>The first match, or <see langword="null" /> when no match exists.</returns>
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
-        if (!CanSearch(haystack, startAt))
+        if (hasSearchGuards && !CanSearch(haystack, startAt))
         {
             return null;
         }
@@ -929,24 +933,34 @@ public sealed class RegexAutomaton
 
     private bool CanSearch(ReadOnlySpan<byte> haystack, int startAt)
     {
+        if (!hasSearchGuards)
+        {
+            return true;
+        }
+
         if (lengthGuard is not null && !lengthGuard.CanSearch(haystack, startAt))
         {
             return false;
         }
 
-        if (engine.Kind is RegexEngineKind.Uri
-            or RegexEngineKind.Date
-            or RegexEngineKind.EndAnchoredSequence
-            or RegexEngineKind.EndAnchoredAtom
-            or RegexEngineKind.RunLiteralDotStar
-            or RegexEngineKind.UnicodeLetterLiteralRun
-            or RegexEngineKind.WordBoundaryLiteralSet)
+        if (IgnoresRequiredSearchGuards(engine.Kind))
         {
             return true;
         }
 
         return (requiredByteSetGuard is null || requiredByteSetGuard.CanSearch(haystack, startAt)) &&
             (requiredLiteralAnySetGuard is null || requiredLiteralAnySetGuard.CanSearch(haystack, startAt));
+    }
+
+    private static bool IgnoresRequiredSearchGuards(RegexEngineKind kind)
+    {
+        return kind is RegexEngineKind.Uri
+            or RegexEngineKind.Date
+            or RegexEngineKind.EndAnchoredSequence
+            or RegexEngineKind.EndAnchoredAtom
+            or RegexEngineKind.RunLiteralDotStar
+            or RegexEngineKind.UnicodeLetterLiteralRun
+            or RegexEngineKind.WordBoundaryLiteralSet;
     }
 
     /// <summary>
