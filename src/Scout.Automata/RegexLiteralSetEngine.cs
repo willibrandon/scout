@@ -252,6 +252,11 @@ internal sealed class RegexLiteralSetEngine
         out RegexLiteralSetEngine? engine)
     {
         engine = null;
+        if (!CanStartLiteralAlternation(pattern))
+        {
+            return false;
+        }
+
         var literals = new List<byte[]>(EstimateLiteralAlternationCapacity(pattern));
         int index = 0;
         while (index < pattern.Length)
@@ -365,6 +370,28 @@ internal sealed class RegexLiteralSetEngine
             literalUnicodeClasses,
             out engine,
             takeLiteralOwnership: true);
+    }
+
+    private static bool CanStartLiteralAlternation(ReadOnlySpan<byte> pattern)
+    {
+        if (pattern.IsEmpty)
+        {
+            return false;
+        }
+
+        if (pattern[0] == (byte)'\\')
+        {
+            return pattern.Length > 1 && TryUnescapeLiteralByte(pattern[1], out _);
+        }
+
+        if (pattern[0] == (byte)'(')
+        {
+            return pattern.Length > 2 &&
+                pattern[1] == (byte)'?' &&
+                pattern[2] == (byte)':';
+        }
+
+        return !IsRegexSyntaxByte(pattern[0]);
     }
 
     private static int EstimateLiteralAlternationCapacity(ReadOnlySpan<byte> pattern)
