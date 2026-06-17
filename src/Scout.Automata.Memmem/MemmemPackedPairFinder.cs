@@ -86,7 +86,9 @@ internal readonly struct MemmemPackedPairFinder
             return MemmemSearch.FindWithoutPackedPair(haystack, needle);
         }
 
-        if (Avx512BW.IsSupported && haystack.Length >= MinimumLengthForVector(Vector512<byte>.Count, needle.Length))
+        if (!IsAdjacentPair() &&
+            Avx512BW.IsSupported &&
+            haystack.Length >= MinimumLengthForVector(Vector512<byte>.Count, needle.Length))
         {
             return FindVector512(haystack, needle);
         }
