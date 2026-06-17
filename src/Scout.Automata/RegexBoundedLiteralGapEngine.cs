@@ -83,8 +83,8 @@ internal sealed class RegexBoundedLiteralGapEngine
         MemmemFinder[]? prefixFinders = null;
         byte[][] prefixes = GetPrefixes(branches);
         if (branches.Count == 2 &&
-            prefixes[0].Length >= 4 &&
-            prefixes[1].Length >= 4)
+            prefixes[0].Length >= 3 &&
+            prefixes[1].Length >= 3)
         {
             prefixFinders =
             [
@@ -171,6 +171,11 @@ internal sealed class RegexBoundedLiteralGapEngine
     {
         long total = 0;
         int offset = Math.Clamp(startAt, 0, haystack.Length);
+        if (prefixFinders is not null)
+        {
+            return CountOrSumWithPrefixFinders(haystack, offset, sumSpans);
+        }
+
         while (Find(haystack, offset) is RegexMatch match)
         {
             total += sumSpans ? match.Length : 1;
@@ -178,6 +183,71 @@ internal sealed class RegexBoundedLiteralGapEngine
         }
 
         return total;
+    }
+
+    private long CountOrSumWithPrefixFinders(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
+    {
+        MemmemFinder[] finders = prefixFinders!;
+        Span<int> candidateStarts = stackalloc int[finders.Length];
+        Span<int> searchStarts = stackalloc int[finders.Length];
+        candidateStarts.Fill(-1);
+        searchStarts.Fill(startAt);
+
+        long total = 0;
+        int nextAllowedStart = startAt;
+        while (true)
+        {
+            int bestLiteral = -1;
+            int bestStart = int.MaxValue;
+            for (int index = 0; index < finders.Length; index++)
+            {
+                int candidateStart = candidateStarts[index];
+                if (candidateStart < nextAllowedStart)
+                {
+                    int searchStart = Math.Max(searchStarts[index], nextAllowedStart);
+                    int offset = finders[index].Find(haystack[searchStart..]);
+                    if (offset < 0)
+                    {
+                        candidateStarts[index] = int.MaxValue;
+                        continue;
+                    }
+
+                    candidateStart = searchStart + offset;
+                    candidateStarts[index] = candidateStart;
+                    searchStarts[index] = candidateStart + 1;
+                }
+
+                if (candidateStart < bestStart ||
+                    candidateStart == bestStart && index < bestLiteral)
+                {
+                    bestLiteral = index;
+                    bestStart = candidateStart;
+                }
+            }
+
+            if (bestLiteral < 0 || bestStart == int.MaxValue)
+            {
+                return total;
+            }
+
+            if (TryMatchAt(haystack, bestStart, out int length))
+            {
+                total += sumSpans ? length : 1;
+                nextAllowedStart = bestStart + length;
+            }
+            else
+            {
+                candidateStarts[bestLiteral] = -1;
+            }
+
+            for (int index = 0; index < candidateStarts.Length; index++)
+            {
+                if (candidateStarts[index] == bestStart)
+                {
+                    candidateStarts[index] = -1;
+                }
+            }
+        }
     }
 
     private bool TryFindGreedySuffix(

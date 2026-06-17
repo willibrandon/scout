@@ -1386,6 +1386,18 @@ public sealed class RegexAutomatonTests
             dotMatchesNewline: false,
             utf8: false,
             unicodeClasses: false).Find(greedyHaystack));
+
+        var shortPrefix = RegexAutomaton.Compile(
+            @"Tom.{10,25}river|river.{10,25}Tom"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] shortPrefixHaystack = "Tom----------river______________________________river--------------Tom"u8.ToArray();
+        Assert.Equal(RegexEngineKind.BoundedLiteralGap, GetEngineKind(shortPrefix));
+        Assert.Equal(2, shortPrefix.CountMatches(shortPrefixHaystack));
+        Assert.Equal(40, shortPrefix.SumMatchSpans(shortPrefixHaystack));
     }
 
     /// <summary>
