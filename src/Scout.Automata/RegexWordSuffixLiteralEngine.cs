@@ -1,3 +1,8 @@
+using System.Numerics;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
+
 namespace Scout;
 
 internal sealed class RegexWordSuffixLiteralEngine
@@ -98,6 +103,11 @@ internal sealed class RegexWordSuffixLiteralEngine
 
     private long CountOrSum(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
     {
+        if (suffix.Length == 2 && Avx2.IsSupported)
+        {
+            return CountOrSumTwoByteSuffixAvx2(haystack, startAt, sumSpans);
+        }
+
         long total = 0;
         int offset = Math.Clamp(startAt, 0, haystack.Length);
         while (TryFindNext(haystack, offset, out RegexMatch match))
@@ -107,6 +117,88 @@ internal sealed class RegexWordSuffixLiteralEngine
         }
 
         return total;
+    }
+
+    private long CountOrSumTwoByteSuffixAvx2(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
+    {
+        int nextAllowedStart = Math.Clamp(startAt, 0, haystack.Length);
+        int position = nextAllowedStart >= haystack.Length - prefixMinimum
+            ? haystack.Length
+            : nextAllowedStart + prefixMinimum;
+        int lastSuffixStart = haystack.Length - suffix.Length;
+        if (position > lastSuffixStart)
+        {
+            return 0;
+        }
+
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int vectorEnd = haystack.Length - Vector256<byte>.Count - suffix.Length;
+        long total = 0;
+        var first = Vector256.Create(suffix[0]);
+        var second = Vector256.Create(suffix[1]);
+        while (position <= vectorEnd)
+        {
+            var current = Vector256.LoadUnsafe(ref reference, (nuint)position);
+            var next = Vector256.LoadUnsafe(ref reference, (nuint)(position + 1));
+            Vector256<byte> suffixMatches = Avx2.And(
+                Avx2.CompareEqual(current, first),
+                Avx2.CompareEqual(next, second));
+            uint mask = suffixMatches.ExtractMostSignificantBits();
+            while (mask != 0)
+            {
+                int bit = BitOperations.TrailingZeroCount(mask);
+                int suffixStart = position + bit;
+                if (IsWordEnd(haystack, suffixStart + suffix.Length))
+                {
+                    TryAcceptWordEndSuffixCandidate(
+                        haystack,
+                        suffixStart,
+                        sumSpans,
+                        ref total,
+                        ref nextAllowedStart);
+                }
+
+                mask &= mask - 1;
+            }
+
+            position += Vector256<byte>.Count;
+        }
+
+        for (; position <= lastSuffixStart; position++)
+        {
+            if (haystack[position] == suffix[0] &&
+                haystack[position + 1] == suffix[1] &&
+                IsWordEnd(haystack, position + suffix.Length))
+            {
+                TryAcceptWordEndSuffixCandidate(
+                    haystack,
+                    position,
+                    sumSpans,
+                    ref total,
+                    ref nextAllowedStart);
+            }
+        }
+
+        return total;
+    }
+
+    private void TryAcceptWordEndSuffixCandidate(
+        ReadOnlySpan<byte> haystack,
+        int suffixStart,
+        bool sumSpans,
+        ref long total,
+        ref int nextAllowedStart)
+    {
+        if (!TryGetWordStartEndingAt(haystack, suffixStart, out int start) ||
+            start < nextAllowedStart ||
+            suffixStart - start < prefixMinimum)
+        {
+            return;
+        }
+
+        int end = suffixStart + suffix.Length;
+        total += sumSpans ? end - start : 1;
+        nextAllowedStart = end;
     }
 
     private bool TryFindNext(ReadOnlySpan<byte> haystack, int offset, out RegexMatch match)
