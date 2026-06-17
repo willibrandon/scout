@@ -9,7 +9,7 @@ namespace Scout;
 
 internal readonly struct MemmemPackedPairFinder
 {
-    private const int MinimumNeedleLength = 4;
+    private const int MinimumNeedleLength = 3;
     private const int MinimumHaystackLength = 256;
 
     private readonly byte first;
