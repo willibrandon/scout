@@ -17,6 +17,7 @@ internal sealed class RegexLeadingClassLiteralEngine
     private readonly RegexPackedLiteralSetScanner? packedScanner;
     private readonly AhoCorasickAutomaton? automaton;
     private readonly MemmemFinder? singleLiteralFinder;
+    private readonly RegexTwoPrefixLiteralScanner? branchLiteralScanner;
     private readonly RegexLeadingClassTrailingAnchorScanner? trailingAnchorScanner;
     private readonly RegexCompileOptions options;
 
@@ -30,6 +31,7 @@ internal sealed class RegexLeadingClassLiteralEngine
         RegexCaseSensitiveLiteralSetScanner? scanner,
         RegexPackedLiteralSetScanner? packedScanner,
         AhoCorasickAutomaton? automaton,
+        RegexTwoPrefixLiteralScanner? branchLiteralScanner,
         RegexLeadingClassTrailingAnchorScanner? trailingAnchorScanner,
         RegexCompileOptions options)
     {
@@ -42,6 +44,7 @@ internal sealed class RegexLeadingClassLiteralEngine
         this.scanner = scanner;
         this.packedScanner = packedScanner;
         this.automaton = automaton;
+        this.branchLiteralScanner = branchLiteralScanner;
         this.trailingAnchorScanner = trailingAnchorScanner;
         this.options = options;
         if (searchPatterns.Length == 1)
@@ -169,6 +172,12 @@ internal sealed class RegexLeadingClassLiteralEngine
             RegexLeadingClassTrailingAnchorScanner.TryCreate(branches, options, out trailingAnchorScanner);
         }
 
+        RegexTwoPrefixLiteralScanner? branchLiteralScanner = null;
+        if (branches.Count == 2)
+        {
+            RegexTwoPrefixLiteralScanner.TryCreate(literals, out branchLiteralScanner);
+        }
+
         engine = new RegexLeadingClassLiteralEngine(
             branches.ToArray(),
             searchPatterns,
@@ -179,6 +188,7 @@ internal sealed class RegexLeadingClassLiteralEngine
             scanner,
             packedScanner,
             automaton,
+            branchLiteralScanner,
             trailingAnchorScanner,
             options);
         return true;
@@ -187,6 +197,11 @@ internal sealed class RegexLeadingClassLiteralEngine
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
         int lowerBound = Math.Clamp(startAt, 0, haystack.Length);
+        if (branchLiteralScanner is not null)
+        {
+            return FindByBranchLiteralScanner(haystack, lowerBound);
+        }
+
         if (trailingAnchorScanner is not null)
         {
             return FindByTrailingAnchor(haystack, lowerBound);
@@ -268,8 +283,14 @@ internal sealed class RegexLeadingClassLiteralEngine
 
     private long CountOrSum(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
     {
+        int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        if (branchLiteralScanner is not null)
+        {
+            return CountOrSumByBranchLiteralScanner(haystack, startOffset, sumSpans);
+        }
+
         long total = 0;
-        int offset = Math.Clamp(startAt, 0, haystack.Length);
+        int offset = startOffset;
         int searchAt = Math.Min(haystack.Length, offset + 1);
         while (TryFindLiteral(haystack, searchAt, out RegexLiteralSetCandidate candidate))
         {
@@ -364,6 +385,90 @@ internal sealed class RegexLeadingClassLiteralEngine
     private int CandidateMatchStart(RegexLiteralSetCandidate candidate)
     {
         return candidate.Match.Start - searchPatternLiteralOffsets[candidate.LiteralId] - 1;
+    }
+
+    private RegexMatch? FindByBranchLiteralScanner(ReadOnlySpan<byte> haystack, int lowerBound)
+    {
+        int searchAt = Math.Min(haystack.Length, lowerBound + 1);
+        while (true)
+        {
+            RegexLiteralSetCandidate? found = branchLiteralScanner!.Find(haystack, searchAt);
+            if (!found.HasValue)
+            {
+                return null;
+            }
+
+            RegexLiteralSetCandidate candidate = found.Value;
+            int start = candidate.Match.Start - 1;
+            if (start >= lowerBound &&
+                TryMatchBranchAt(haystack, start, candidate.LiteralId, out int length))
+            {
+                return new RegexMatch(start, length);
+            }
+
+            searchAt = candidate.Match.Start + 1;
+        }
+    }
+
+    private long CountOrSumByBranchLiteralScanner(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
+    {
+        long total = 0;
+        int offset = startOffset;
+        int searchAt = Math.Min(haystack.Length, offset + 1);
+        while (true)
+        {
+            RegexLiteralSetCandidate? found = branchLiteralScanner!.Find(haystack, searchAt);
+            if (!found.HasValue)
+            {
+                return total;
+            }
+
+            RegexLiteralSetCandidate candidate = found.Value;
+            int start = candidate.Match.Start - 1;
+            if (start >= offset &&
+                TryMatchBranchAt(haystack, start, candidate.LiteralId, out int length))
+            {
+                total += sumSpans ? length : 1;
+                offset = start + length;
+                searchAt = Math.Min(haystack.Length, offset + 1);
+            }
+            else
+            {
+                searchAt = candidate.Match.Start + 1;
+            }
+        }
+    }
+
+    private bool TryMatchBranchAt(ReadOnlySpan<byte> haystack, int start, int branchId, out int length)
+    {
+        length = 0;
+        if ((uint)start >= (uint)haystack.Length ||
+            (uint)branchId >= (uint)branches.Length)
+        {
+            return false;
+        }
+
+        RegexLeadingClassLiteralBranch branch = branches[branchId];
+        if (!LeadingByteMatches(haystack[start], branch.LeadingKind) ||
+            branch.Literal.Length > haystack.Length - start - 1 ||
+            !haystack.Slice(start + 1, branch.Literal.Length).SequenceEqual(branch.Literal))
+        {
+            return false;
+        }
+
+        int end = start + 1 + branch.Literal.Length;
+        if (branch.TrailingAtom is { } trailingAtom)
+        {
+            if (end >= haystack.Length || !AtomMatches(haystack[end], trailingAtom, options))
+            {
+                return false;
+            }
+
+            end++;
+        }
+
+        length = end - start;
+        return true;
     }
 
     private RegexMatch? FindByTrailingAnchor(ReadOnlySpan<byte> haystack, int lowerBound)
