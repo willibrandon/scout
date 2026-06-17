@@ -95,15 +95,13 @@ internal sealed class RegexUnanchoredLazyDfa
     {
         total = 0;
         int offset = Math.Clamp(startAt, 0, haystack.Length);
-        Dictionary<(int State, int Position), bool> forwardReachabilityCache = [];
-        Dictionary<(int State, int Position), bool> reverseReachabilityCache = [];
         while (offset <= haystack.Length)
         {
             if (!TryFind(
                     haystack,
                     offset,
-                    forwardReachabilityCache,
-                    reverseReachabilityCache,
+                    forwardReachabilityCache: null,
+                    reverseReachabilityCache: null,
                     out RegexMatch match,
                     out bool gaveUp))
             {
