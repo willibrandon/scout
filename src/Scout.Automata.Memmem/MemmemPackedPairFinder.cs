@@ -86,14 +86,14 @@ internal readonly struct MemmemPackedPairFinder
             return MemmemSearch.FindWithoutPackedPair(haystack, needle);
         }
 
-        if (Avx2.IsSupported && haystack.Length >= MinimumLengthForVector(Vector256<byte>.Count, needle.Length))
-        {
-            return FindVector256(haystack, needle);
-        }
-
         if (Avx512BW.IsSupported && haystack.Length >= MinimumLengthForVector(Vector512<byte>.Count, needle.Length))
         {
             return FindVector512(haystack, needle);
+        }
+
+        if (Avx2.IsSupported && haystack.Length >= MinimumLengthForVector(Vector256<byte>.Count, needle.Length))
+        {
+            return FindVector256(haystack, needle);
         }
 
         if (Sse2.IsSupported && haystack.Length >= MinimumLengthForVector(Vector128<byte>.Count, needle.Length))
@@ -178,33 +178,109 @@ internal readonly struct MemmemPackedPairFinder
         int offset = 0;
         int vectorEnd = haystack.Length - MinimumLengthForVector(Vector512<byte>.Count, needle.Length);
         int lastStart = haystack.Length - needle.Length;
+        int unrolledEnd = vectorEnd - Vector512<byte>.Count * 3;
+        while (offset <= unrolledEnd)
+        {
+            if (TryFindVector512Chunk(
+                    ref reference,
+                    firstVector,
+                    secondVector,
+                    haystack,
+                    needle,
+                    offset,
+                    lastStart,
+                    out int candidate) ||
+                TryFindVector512Chunk(
+                    ref reference,
+                    firstVector,
+                    secondVector,
+                    haystack,
+                    needle,
+                    offset + Vector512<byte>.Count,
+                    lastStart,
+                    out candidate) ||
+                TryFindVector512Chunk(
+                    ref reference,
+                    firstVector,
+                    secondVector,
+                    haystack,
+                    needle,
+                    offset + Vector512<byte>.Count * 2,
+                    lastStart,
+                    out candidate) ||
+                TryFindVector512Chunk(
+                    ref reference,
+                    firstVector,
+                    secondVector,
+                    haystack,
+                    needle,
+                    offset + Vector512<byte>.Count * 3,
+                    lastStart,
+                    out candidate))
+            {
+                return candidate;
+            }
+
+            offset += Vector512<byte>.Count * 4;
+        }
+
         while (offset <= vectorEnd)
         {
-            var firstBlock = Vector512.LoadUnsafe(ref reference, (nuint)(offset + firstIndex));
-            var secondBlock = Vector512.LoadUnsafe(ref reference, (nuint)(offset + secondIndex));
-            ulong mask =
-                (Avx512BW.CompareEqual(firstBlock, firstVector) &
-                 Avx512BW.CompareEqual(secondBlock, secondVector)).ExtractMostSignificantBits();
-            while (mask != 0)
+            if (TryFindVector512Chunk(
+                    ref reference,
+                    firstVector,
+                    secondVector,
+                    haystack,
+                    needle,
+                    offset,
+                    lastStart,
+                    out int candidate))
             {
-                int candidate = offset + BitOperations.TrailingZeroCount(mask);
-                if (candidate > lastStart)
-                {
-                    return -1;
-                }
-
-                if (haystack.Slice(candidate, needle.Length).SequenceEqual(needle))
-                {
-                    return candidate;
-                }
-
-                mask &= mask - 1;
+                return candidate;
             }
 
             offset += Vector512<byte>.Count;
         }
 
         return FindScalarPair(haystack, needle, offset);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool TryFindVector512Chunk(
+        ref byte reference,
+        Vector512<byte> firstVector,
+        Vector512<byte> secondVector,
+        ReadOnlySpan<byte> haystack,
+        ReadOnlySpan<byte> needle,
+        int offset,
+        int lastStart,
+        out int match)
+    {
+        var firstBlock = Vector512.LoadUnsafe(ref reference, (nuint)(offset + firstIndex));
+        var secondBlock = Vector512.LoadUnsafe(ref reference, (nuint)(offset + secondIndex));
+        ulong mask =
+            (Avx512BW.CompareEqual(firstBlock, firstVector) &
+             Avx512BW.CompareEqual(secondBlock, secondVector)).ExtractMostSignificantBits();
+        while (mask != 0)
+        {
+            int candidate = offset + BitOperations.TrailingZeroCount(mask);
+            if (candidate > lastStart)
+            {
+                match = -1;
+                return true;
+            }
+
+            if (haystack.Slice(candidate, needle.Length).SequenceEqual(needle))
+            {
+                match = candidate;
+                return true;
+            }
+
+            mask &= mask - 1;
+        }
+
+        match = -1;
+        return false;
     }
 
     private int FindVector256(ReadOnlySpan<byte> haystack, ReadOnlySpan<byte> needle)

@@ -24,6 +24,7 @@ internal sealed class RegexPrefilter
     private readonly AhoCorasickAutomaton? requiredLiterals;
     private readonly RegexTeddyPrefilter? requiredTeddy;
     private readonly RegexStartPredicate? startPredicate;
+    private readonly Lazy<RegexStartPredicate?>? lazyStartPredicate;
     private readonly int requiredLiteralWindow;
 
     private RegexPrefilter(
@@ -37,6 +38,7 @@ internal sealed class RegexPrefilter
         AhoCorasickAutomaton? requiredLiterals = null,
         RegexTeddyPrefilter? requiredTeddy = null,
         RegexStartPredicate? startPredicate = null,
+        Func<RegexStartPredicate?>? startPredicateFactory = null,
         int requiredLiteralWindow = RequiredLiteralLookBehind)
     {
         Kind = kind;
@@ -49,6 +51,9 @@ internal sealed class RegexPrefilter
         this.requiredLiterals = requiredLiterals;
         this.requiredTeddy = requiredTeddy;
         this.startPredicate = startPredicate;
+        lazyStartPredicate = startPredicateFactory is null
+            ? null
+            : new Lazy<RegexStartPredicate?>(startPredicateFactory);
         this.requiredLiteralWindow = Math.Clamp(requiredLiteralWindow, 0, RequiredLiteralLookBehind);
     }
 
@@ -63,7 +68,8 @@ internal sealed class RegexPrefilter
 
     public bool CanStartAt(ReadOnlySpan<byte> haystack, int start)
     {
-        return startPredicate is null || startPredicate.CanStartAt(haystack, start);
+        RegexStartPredicate? predicate = startPredicate ?? lazyStartPredicate?.Value;
+        return predicate is null || predicate.CanStartAt(haystack, start);
     }
 
     public static RegexPrefilter? Compile(RegexSyntaxNode root, RegexCompileOptions options)
@@ -104,18 +110,13 @@ internal sealed class RegexPrefilter
         bool prefixUnicodeClasses = false;
         if (!TryAppendRequiredPrefix(root, options, prefix, out _, ref prefixCaseInsensitive, ref prefixUnicodeClasses) || prefix.Count == 0)
         {
-            RegexStartPredicate? startPredicate = null;
-            bool startPredicateComputed = false;
-
-            RegexStartPredicate? GetStartPredicate()
+            Func<RegexStartPredicate?> CreateStartPredicateFactory()
             {
-                if (!startPredicateComputed)
+                return () =>
                 {
-                    RegexStartPredicate.TryCreate(root, options, out startPredicate);
-                    startPredicateComputed = true;
-                }
-
-                return startPredicate;
+                    RegexStartPredicate.TryCreate(root, options, out RegexStartPredicate? predicate);
+                    return predicate;
+                };
             }
 
             if (TryCollectRequiredLiteralSetWithLookBehind(root, options, out RegexRequiredLiteralSetCandidate requiredCandidate) &&
@@ -129,8 +130,9 @@ internal sealed class RegexPrefilter
                 return CreateRequiredLiteralPrefilter(
                     preparedLiterals,
                     requiredCandidate.CaseInsensitive,
-                    GetStartPredicate(),
-                    requiredCandidate.MaxLookBehind);
+                    startPredicate: null,
+                    maxLookBehind: requiredCandidate.MaxLookBehind,
+                    startPredicateFactory: CreateStartPredicateFactory());
             }
 
             if (TryCollectRequiredLiteralSet(root, options, out requiredCandidate) &&
@@ -144,8 +146,9 @@ internal sealed class RegexPrefilter
                 return CreateRequiredLiteralPrefilter(
                     preparedLiterals,
                     requiredCandidate.CaseInsensitive,
-                    GetStartPredicate(),
-                    RequiredLiteralLookBehind);
+                    startPredicate: null,
+                    maxLookBehind: RequiredLiteralLookBehind,
+                    startPredicateFactory: CreateStartPredicateFactory());
             }
 
             return TryFindRequiredLiteralCandidate(root, options, out requiredCandidate) &&
@@ -159,8 +162,9 @@ internal sealed class RegexPrefilter
                 ? CreateRequiredLiteralPrefilter(
                     preparedRequired,
                     requiredCandidate.CaseInsensitive,
-                    GetStartPredicate(),
-                    RequiredLiteralLookBehind)
+                    startPredicate: null,
+                    maxLookBehind: RequiredLiteralLookBehind,
+                    startPredicateFactory: CreateStartPredicateFactory())
                 : null;
         }
 
@@ -435,7 +439,8 @@ internal sealed class RegexPrefilter
         byte[][] preparedLiterals,
         bool asciiCaseInsensitive,
         RegexStartPredicate? startPredicate,
-        int maxLookBehind)
+        int maxLookBehind,
+        Func<RegexStartPredicate?>? startPredicateFactory = null)
     {
         if (preparedLiterals.Length == 1)
         {
@@ -448,6 +453,7 @@ internal sealed class RegexPrefilter
                     ahoCorasick: null,
                     requiredMemmem: new MemmemFinder(preparedLiterals[0]),
                     startPredicate: startPredicate,
+                    startPredicateFactory: startPredicateFactory,
                     requiredLiteralWindow: maxLookBehind);
             }
 
@@ -458,6 +464,7 @@ internal sealed class RegexPrefilter
                 ahoCorasick: null,
                 requiredLiteral: new RegexAsciiCaseInsensitiveFinder(preparedLiterals[0]),
                 startPredicate: startPredicate,
+                startPredicateFactory: startPredicateFactory,
                 requiredLiteralWindow: maxLookBehind);
         }
 
@@ -470,6 +477,7 @@ internal sealed class RegexPrefilter
                 ahoCorasick: null,
                 requiredTeddy: requiredTeddy,
                 startPredicate: startPredicate,
+                startPredicateFactory: startPredicateFactory,
                 requiredLiteralWindow: maxLookBehind);
         }
 
@@ -480,6 +488,7 @@ internal sealed class RegexPrefilter
             ahoCorasick: null,
             requiredLiterals: AhoCorasickAutomaton.Create(preparedLiterals, AhoCorasickMatchKind.LeftmostFirst, asciiCaseInsensitive),
             startPredicate: startPredicate,
+            startPredicateFactory: startPredicateFactory,
             requiredLiteralWindow: maxLookBehind);
     }
 

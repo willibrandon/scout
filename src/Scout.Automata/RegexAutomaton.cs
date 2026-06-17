@@ -254,6 +254,56 @@ public sealed class RegexAutomaton
                 wholePatternCaptureIndex);
         }
 
+        RegexDelimitedCaptureEngine.TryCreate(
+            tree.Root,
+            options,
+            tree.CaptureCount,
+            out RegexDelimitedCaptureEngine? earlyDelimitedCapture,
+            compactFields: true);
+        if (earlyDelimitedCapture is not null)
+        {
+            return new RegexAutomaton(
+                RegexMetaEngine.CompileDelimitedCapture(
+                    earlyDelimitedCapture,
+                    options.Utf8,
+                    () => RegexNfaCompiler.Compile(tree.Root, options, utf8ByteTrieCache)),
+                startPredicate: null,
+                lengthGuard: null,
+                requiredByteSetGuard: null,
+                requiredLiteralAnySetGuard: null,
+                syntheticCaptureAlternationSet: null,
+                tree.CaptureCount > 0 ? tree.Pattern : default,
+                tree.CaptureCount > 0 ? tree.Root : null,
+                options,
+                capturePrefilter: null,
+                tree.CaptureCount,
+                wholePatternCaptureIndex);
+        }
+
+        RegexStructuredLogCaptureEngine.TryCreate(
+            tree.Root,
+            options,
+            tree.CaptureCount,
+            out RegexStructuredLogCaptureEngine? earlyStructuredLogCapture);
+        if (earlyStructuredLogCapture is not null)
+        {
+            return new RegexAutomaton(
+                RegexMetaEngine.CompileStructuredLogCapture(
+                    earlyStructuredLogCapture,
+                    options.Utf8),
+                startPredicate: null,
+                lengthGuard: null,
+                requiredByteSetGuard: null,
+                requiredLiteralAnySetGuard: null,
+                syntheticCaptureAlternationSet: null,
+                tree.CaptureCount > 0 ? tree.Pattern : default,
+                tree.CaptureCount > 0 ? tree.Root : null,
+                options,
+                capturePrefilter: null,
+                tree.CaptureCount,
+                wholePatternCaptureIndex);
+        }
+
         RegexBoundedScalarClassSequenceEngine.TryCreate(tree.Root, options, out RegexBoundedScalarClassSequenceEngine? earlyBoundedScalarClassSequence);
         if (earlyBoundedScalarClassSequence is not null)
         {
@@ -412,8 +462,9 @@ public sealed class RegexAutomaton
             tree.Root,
             options,
             utf8ByteTrieCache);
+        bool shouldCompilePrefilter = compilePrefilter && !HasHardStartAnchor(tree.Root, options);
         RegexStartPrefixSet? startPrefixSet = null;
-        RegexPrefilter? prefilter = compilePrefilter
+        RegexPrefilter? prefilter = shouldCompilePrefilter
             ? RegexPrefilter.Compile(tree.Root, options, out startPrefixSet)
             : null;
 
@@ -450,67 +501,80 @@ public sealed class RegexAutomaton
         RegexUnicodeLetterLiteralRunEngine.TryCreate(tree.Root, options, out RegexUnicodeLetterLiteralRunEngine? unicodeLetterLiteralRun);
         RegexWordSuffixLiteralEngine.TryCreate(tree.Root, options, out RegexWordSuffixLiteralEngine? wordSuffixLiteral);
         RegexDelimitedRunEngine.TryCreate(tree.Root, options, out RegexDelimitedRunEngine? delimitedRun);
-        RegexSimpleSequenceEngine.TryCreate(tree.Root, options, out RegexSimpleSequenceEngine? simpleSequence);
+        RegexSimpleSequenceEngine? simpleSequence = null;
+        if (boundedLiteralGap is null &&
+            boundedLineLiteralGap is null &&
+            anchoredLineLiteralGap is null &&
+            boundedPrefixLiteralSet is null)
+        {
+            RegexSimpleSequenceEngine.TryCreate(tree.Root, options, out simpleSequence);
+        }
+
         RegexEndAnchoredSequenceEngine.TryCreate(tree.Root, options, out RegexEndAnchoredSequenceEngine? endAnchoredSequence);
         RegexEndAnchoredAtomEngine.TryCreate(tree.Root, options, out RegexEndAnchoredAtomEngine? endAnchoredAtom);
         RegexLineContainsEngine.TryCreate(tree.Root, options, out RegexLineContainsEngine? lineContains);
         RegexDotStarClassFallbackEngine.TryCreate(tree.Root, options, out RegexDotStarClassFallbackEngine? dotStarClassFallback);
         RegexScalarRunEngine.TryCreate(tree.Root, options, out RegexScalarRunEngine? scalarRun);
         RegexAsciiWordBoundaryEngine.TryCreate(tree.Root, options, out RegexAsciiWordBoundaryEngine? asciiWordBoundary);
-        RegexAsciiFastPath.TryCompileNfa(tree.Pattern.Span, tree.Root, options, out RegexNfa? asciiFastNfa);
-        RegexStartPredicate.TryCreate(tree.Root, options, startPrefixSet, out RegexStartPredicate? startPredicate);
         var lengthGuard = RegexLengthGuard.TryCreate(tree.Root, options);
         var requiredByteSetGuard = RegexRequiredByteSetGuard.TryCreate(tree.Root, options);
         RegexRequiredLiteralAnySetGuard? requiredLiteralAnySetGuard = prefilter is null
             ? RegexRequiredLiteralAnySetGuard.TryCreate(tree.Root, options)
             : null;
 
+        var metaEngine = RegexMetaEngine.Compile(
+            nfa,
+            prefilter,
+            dfaSizeLimit,
+            literalSet,
+            alternationSet: null,
+            wholeLine: wholeLine,
+            dotStar: dotStar,
+            ipv4Address: ipv4Address,
+            emailAddress: emailAddress,
+            lh3Email: lh3Email,
+            uri: uri,
+            lh3Uri: lh3Uri,
+            lh3UriOrEmail: lh3UriOrEmail,
+            lh3Date: lh3Date,
+            wordWhitespaceLiteral: wordWhitespaceLiteral,
+            unicodeWordWhitespaceLiteral: unicodeWordWhitespaceLiteral,
+            boundedLetterSuffixWhitespace: boundedLetterSuffixWhitespace,
+            runLiteralDotStar: runLiteralDotStar,
+            literalPrefixRun: literalPrefixRun,
+            boundedLiteralGap: boundedLiteralGap,
+            boundedLineLiteralGap: boundedLineLiteralGap,
+            anchoredLineLiteralGap: anchoredLineLiteralGap,
+            boundedPrefixLiteralSet: boundedPrefixLiteralSet,
+            boundedScalarClassSequence: boundedScalarClassSequence,
+            boundedByteClassSequence: boundedByteClassSequence,
+            repeatedLazyDotStarLiteral: repeatedLazyDotStarLiteral,
+            delimitedSpan: delimitedSpan,
+            fixedWidthAlternation: fixedWidthAlternation,
+            leadingClassLiteral: leadingClassLiteral,
+            lineBoundaryLiteral: lineBoundaryLiteral,
+            unicodeLetterLiteralRun: unicodeLetterLiteralRun,
+            wordBoundaryLiteralSet: wordBoundaryLiteralSet,
+            wordSuffixLiteral: wordSuffixLiteral,
+            delimitedRun: delimitedRun,
+            simpleSequence: simpleSequence,
+            endAnchoredSequence: endAnchoredSequence,
+            endAnchoredAtom: endAnchoredAtom,
+            lineContains: lineContains,
+            dotStarClassFallback: dotStarClassFallback,
+            asciiFastPattern: tree.Pattern,
+            scalarRun: scalarRun,
+            asciiWordBoundary: asciiWordBoundary,
+            root: tree.Root,
+            options: options);
+        RegexStartPredicate? startPredicate = null;
+        if (ShouldCompileStartPredicate(metaEngine.Kind, prefilter))
+        {
+            RegexStartPredicate.TryCreate(tree.Root, options, startPrefixSet, out startPredicate);
+        }
+
         return new RegexAutomaton(
-            RegexMetaEngine.Compile(
-                nfa,
-                prefilter,
-                dfaSizeLimit,
-                literalSet,
-                alternationSet: null,
-                wholeLine: wholeLine,
-                dotStar: dotStar,
-                ipv4Address: ipv4Address,
-                emailAddress: emailAddress,
-                lh3Email: lh3Email,
-                uri: uri,
-                lh3Uri: lh3Uri,
-                lh3UriOrEmail: lh3UriOrEmail,
-                lh3Date: lh3Date,
-                wordWhitespaceLiteral: wordWhitespaceLiteral,
-                unicodeWordWhitespaceLiteral: unicodeWordWhitespaceLiteral,
-                boundedLetterSuffixWhitespace: boundedLetterSuffixWhitespace,
-                runLiteralDotStar: runLiteralDotStar,
-                literalPrefixRun: literalPrefixRun,
-                boundedLiteralGap: boundedLiteralGap,
-                boundedLineLiteralGap: boundedLineLiteralGap,
-                anchoredLineLiteralGap: anchoredLineLiteralGap,
-                boundedPrefixLiteralSet: boundedPrefixLiteralSet,
-                boundedScalarClassSequence: boundedScalarClassSequence,
-                boundedByteClassSequence: boundedByteClassSequence,
-                repeatedLazyDotStarLiteral: repeatedLazyDotStarLiteral,
-                delimitedSpan: delimitedSpan,
-                fixedWidthAlternation: fixedWidthAlternation,
-                leadingClassLiteral: leadingClassLiteral,
-                lineBoundaryLiteral: lineBoundaryLiteral,
-                unicodeLetterLiteralRun: unicodeLetterLiteralRun,
-                wordBoundaryLiteralSet: wordBoundaryLiteralSet,
-                wordSuffixLiteral: wordSuffixLiteral,
-                delimitedRun: delimitedRun,
-                simpleSequence: simpleSequence,
-                endAnchoredSequence: endAnchoredSequence,
-                endAnchoredAtom: endAnchoredAtom,
-                lineContains: lineContains,
-                dotStarClassFallback: dotStarClassFallback,
-                asciiFastNfa: asciiFastNfa,
-                scalarRun: scalarRun,
-                asciiWordBoundary: asciiWordBoundary,
-                root: tree.Root,
-                options: options),
+            metaEngine,
             startPredicate,
             lengthGuard,
             requiredByteSetGuard,
@@ -548,6 +612,68 @@ public sealed class RegexAutomaton
             captureOptions: options,
             capturePrefilter: null,
             captureCount: 0);
+    }
+
+    private static bool ShouldCompileStartPredicate(RegexEngineKind engineKind, RegexPrefilter? prefilter)
+    {
+        if (prefilter is not null)
+        {
+            return false;
+        }
+
+        return engineKind is RegexEngineKind.PikeVm
+            or RegexEngineKind.LazyDfa
+            or RegexEngineKind.DenseDfa
+            or RegexEngineKind.SparseDfa
+            or RegexEngineKind.OnePassDfa
+            or RegexEngineKind.BoundedBacktracker;
+    }
+
+    private static bool HasHardStartAnchor(RegexSyntaxNode root, RegexCompileOptions options)
+    {
+        root = UnwrapTransparentGroups(root);
+        if (root is RegexSequenceNode sequence)
+        {
+            RegexCompileOptions currentOptions = options;
+            for (int index = 0; index < sequence.Nodes.Count; index++)
+            {
+                RegexSyntaxNode node = UnwrapTransparentGroups(sequence.Nodes[index]);
+                if (node is RegexInlineFlagsNode flags)
+                {
+                    currentOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
+                    continue;
+                }
+
+                return IsHardStartAnchor(node, currentOptions);
+            }
+
+            return false;
+        }
+
+        return IsHardStartAnchor(root, options);
+    }
+
+    private static bool IsHardStartAnchor(RegexSyntaxNode node, RegexCompileOptions options)
+    {
+        node = UnwrapTransparentGroups(node);
+        return node is RegexAtomNode atom &&
+            (atom.Kind == RegexSyntaxKind.AbsoluteStartAnchor ||
+            atom.Kind == RegexSyntaxKind.StartAnchor && !options.MultiLine);
+    }
+
+    private static RegexSyntaxNode UnwrapTransparentGroups(RegexSyntaxNode node)
+    {
+        while (node is RegexGroupNode
+               {
+                   Kind: RegexSyntaxKind.NonCapturingGroup,
+                   EnabledFlags.Length: 0,
+                   DisabledFlags.Length: 0,
+               } group)
+        {
+            node = group.Child;
+        }
+
+        return node;
     }
 
     internal RegexPrefilterKind PrefilterKind => engine.PrefilterKind;
@@ -919,6 +1045,16 @@ public sealed class RegexAutomaton
             return keywordWhitespaceCaptureEngine.CountCaptures(haystack, startAt);
         }
 
+        if (delimitedCaptureEngine is not null)
+        {
+            return delimitedCaptureEngine.CountCaptures(haystack, startAt);
+        }
+
+        if (structuredLogCaptureEngine is not null)
+        {
+            return structuredLogCaptureEngine.CountCaptures(haystack, startAt);
+        }
+
         if (tabbedLogCaptureEngine is not null)
         {
             return tabbedLogCaptureEngine.CountCaptures(haystack, startAt);
@@ -1039,6 +1175,8 @@ public sealed class RegexAutomaton
                     captureCount,
                     out fnPredicateCaptureEngine);
                 if (syntheticCaptureAlternationSet is null &&
+                    structuredLogCaptureEngine is null &&
+                    delimitedCaptureEngine is null &&
                     anchoredWordCaptureEngine is null &&
                     anchoredRunBoundaryCaptureEngine is null &&
                     anchoredDotStarCaptureEngine is null &&
@@ -1052,6 +1190,7 @@ public sealed class RegexAutomaton
                     pathSemverCaptureEngine is null &&
                     asciiLetterLengthAlternationCaptureEngine is null &&
                     asciiWordLengthAlternationCaptureEngine is null &&
+                    bibleReferenceCaptureEngine is null &&
                     fnPredicateCaptureEngine is null)
                 {
                     RegexNfa captureNfa = RegexNfaCompiler.CompileCaptures(captureRoot, captureOptions, captureCount);
@@ -1113,7 +1252,9 @@ public sealed class RegexAutomaton
 
         if (structuredLogCaptureEngine is not null)
         {
-            RegexCaptures? structuredCaptures = RegexStructuredLogCaptureEngine.MatchAt(haystack, Math.Clamp(startAt, 0, haystack.Length));
+            RegexCaptures? structuredCaptures = structuredLogCaptureEngine.MatchAt(
+                haystack,
+                Math.Clamp(startAt, 0, haystack.Length));
             if (structuredCaptures is not null)
             {
                 return structuredCaptures;

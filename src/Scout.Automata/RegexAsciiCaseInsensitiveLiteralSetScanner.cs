@@ -158,26 +158,7 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
             }
 
             ushort block = FoldedBlockKey(haystack, anchorPosition);
-            RegexAsciiCaseInsensitiveLiteralSetEntry[] entries = entriesByBlock![block];
-            for (int index = 0; index < entries.Length; index++)
-            {
-                RegexAsciiCaseInsensitiveLiteralSetEntry entry = entries[index];
-                int start = anchorPosition - entry.AnchorIndex;
-                if (start < startOffset ||
-                    entry.Literal.Length > haystack.Length - start ||
-                    !MatchesAt(haystack, start, entry.Literal))
-                {
-                    continue;
-                }
-
-                var candidate = new RegexLiteralSetCandidate(
-                    entry.LiteralId,
-                    new RegexMatch(start, entry.Literal.Length));
-                if (IsBetter(candidate, best))
-                {
-                    best = candidate;
-                }
-            }
+            TryAddBestCandidate(haystack, anchorPosition, startOffset, entriesByBlock![block], ref best);
 
             searchAt = anchorPosition + 1;
         }
@@ -213,26 +194,7 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
             }
 
             ushort block = FoldedBlockKey(haystack, anchorPosition);
-            RegexAsciiCaseInsensitiveLiteralSetEntry[] entries = entriesByBlock![block];
-            for (int index = 0; index < entries.Length; index++)
-            {
-                RegexAsciiCaseInsensitiveLiteralSetEntry entry = entries[index];
-                int start = anchorPosition - entry.AnchorIndex;
-                if (start < nextAllowedStart ||
-                    entry.Literal.Length > haystack.Length - start ||
-                    !MatchesAt(haystack, start, entry.Literal))
-                {
-                    continue;
-                }
-
-                var candidate = new RegexLiteralSetCandidate(
-                    entry.LiteralId,
-                    new RegexMatch(start, entry.Literal.Length));
-                if (IsBetter(candidate, best))
-                {
-                    best = candidate;
-                }
-            }
+            TryAddBestCandidate(haystack, anchorPosition, nextAllowedStart, entriesByBlock![block], ref best);
 
             searchAt = anchorPosition + 1;
         }
@@ -264,26 +226,12 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
                 break;
             }
 
-            RegexAsciiCaseInsensitiveLiteralSetEntry[] entries = entriesByAnchorByte[haystack[anchorPosition]];
-            for (int index = 0; index < entries.Length; index++)
-            {
-                RegexAsciiCaseInsensitiveLiteralSetEntry entry = entries[index];
-                int start = anchorPosition - entry.AnchorIndex;
-                if (start < startOffset ||
-                    entry.Literal.Length > haystack.Length - start ||
-                    !MatchesAt(haystack, start, entry.Literal))
-                {
-                    continue;
-                }
-
-                var candidate = new RegexLiteralSetCandidate(
-                    entry.LiteralId,
-                    new RegexMatch(start, entry.Literal.Length));
-                if (IsBetter(candidate, best))
-                {
-                    best = candidate;
-                }
-            }
+            TryAddBestCandidate(
+                haystack,
+                anchorPosition,
+                startOffset,
+                entriesByAnchorByte[haystack[anchorPosition]],
+                ref best);
 
             searchAt = anchorPosition + 1;
         }
@@ -319,26 +267,12 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
                 }
             }
 
-            RegexAsciiCaseInsensitiveLiteralSetEntry[] entries = entriesByAnchorByte[haystack[anchorPosition]];
-            for (int index = 0; index < entries.Length; index++)
-            {
-                RegexAsciiCaseInsensitiveLiteralSetEntry entry = entries[index];
-                int start = anchorPosition - entry.AnchorIndex;
-                if (start < nextAllowedStart ||
-                    entry.Literal.Length > haystack.Length - start ||
-                    !MatchesAt(haystack, start, entry.Literal))
-                {
-                    continue;
-                }
-
-                var candidate = new RegexLiteralSetCandidate(
-                    entry.LiteralId,
-                    new RegexMatch(start, entry.Literal.Length));
-                if (IsBetter(candidate, best))
-                {
-                    best = candidate;
-                }
-            }
+            TryAddBestCandidate(
+                haystack,
+                anchorPosition,
+                nextAllowedStart,
+                entriesByAnchorByte[haystack[anchorPosition]],
+                ref best);
 
             searchAt = anchorPosition + 1;
         }
@@ -468,6 +402,51 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
         }
 
         return -1;
+    }
+
+    private static void TryAddBestCandidate(
+        ReadOnlySpan<byte> haystack,
+        int anchorPosition,
+        int minimumStart,
+        RegexAsciiCaseInsensitiveLiteralSetEntry[] entries,
+        ref RegexLiteralSetCandidate? best)
+    {
+        if (entries.Length == 1)
+        {
+            TryAddEntryCandidate(haystack, anchorPosition, minimumStart, entries[0], ref best);
+            return;
+        }
+
+        for (int index = 0; index < entries.Length; index++)
+        {
+            TryAddEntryCandidate(haystack, anchorPosition, minimumStart, entries[index], ref best);
+        }
+    }
+
+    private static void TryAddEntryCandidate(
+        ReadOnlySpan<byte> haystack,
+        int anchorPosition,
+        int minimumStart,
+        RegexAsciiCaseInsensitiveLiteralSetEntry entry,
+        ref RegexLiteralSetCandidate? best)
+    {
+        int start = anchorPosition - entry.AnchorIndex;
+        byte[] literal = entry.Literal;
+        if (start < minimumStart ||
+            literal.Length > haystack.Length - start ||
+            RegexAsciiCaseInsensitiveFinder.FoldAscii(haystack[start + literal.Length - 1]) != literal[^1] ||
+            !MatchesAt(haystack, start, literal))
+        {
+            return;
+        }
+
+        var candidate = new RegexLiteralSetCandidate(
+            entry.LiteralId,
+            new RegexMatch(start, literal.Length));
+        if (IsBetter(candidate, best))
+        {
+            best = candidate;
+        }
     }
 
     private static bool MatchesAt(ReadOnlySpan<byte> haystack, int start, byte[] literal)

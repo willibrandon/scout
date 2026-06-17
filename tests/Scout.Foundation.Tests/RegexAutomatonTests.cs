@@ -863,6 +863,27 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies bounded Unicode-letter runs count non-overlapping matches directly.
+    /// </summary>
+    [Fact]
+    public void ScalarRunCountsBoundedUnicodeLetters()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\p{L}{8,13}"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("абвгдеж абвгдежз абвгдежзийклм абвгдежзийклмнопрстуф");
+        int firstStart = System.Text.Encoding.UTF8.GetByteCount("абвгдеж ");
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(firstStart, 16), automaton.Find(haystack));
+        Assert.Equal(4, automaton.CountMatches(haystack));
+    }
+
+    /// <summary>
     /// Verifies unbounded Unicode property scalar runs count non-overlapping spans directly.
     /// </summary>
     [Fact]
@@ -2765,10 +2786,25 @@ public sealed class RegexAutomatonTests
     [Fact]
     public void DelimitedCaptureEngineReportsFieldCaptures()
     {
-        var automaton = RegexAutomaton.Compile("^([A-Z0-9]+);([^;]*);([YN])$"u8);
+        var automaton = RegexAutomaton.Compile(
+            "^([A-Z0-9]+);([^;]*);([YN])$"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
 
         RegexCaptures? captures = automaton.FindCaptures("0041;;Y"u8);
 
+        Assert.Equal(RegexEngineKind.DelimitedCapture, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 7), automaton.Find("0041;;Y"u8));
+        Assert.Equal(1, automaton.CountMatches("0041;;Y"u8));
+        Assert.Equal(7, automaton.SumMatchSpans("0041;;Y"u8));
+        Assert.Equal(4, automaton.CountCaptures("0041;;Y"u8));
+        Assert.Equal(0, automaton.CountMatches("x0041;;Y"u8));
+        Assert.Equal(0, automaton.CountCaptures("x0041;;Y"u8));
+        Assert.Equal(0, automaton.CountMatches("0041;;Y"u8, startAt: 1));
+        Assert.Equal(0, automaton.CountCaptures("0041;;Y"u8, startAt: 1));
         Assert.NotNull(captures);
         Assert.Equal(new RegexMatch(0, 7), captures.Match);
         Assert.Equal(4, captures.GroupCount);
@@ -3117,7 +3153,13 @@ public sealed class RegexAutomatonTests
 
         RegexCaptures? captures = automaton.FindCaptures(line);
 
+        Assert.Equal(RegexEngineKind.StructuredLogCapture, GetEngineKind(automaton));
         Assert.True(automaton.UsesStructuredLogCaptureEngine);
+        Assert.Equal(1, automaton.CountMatches(line));
+        Assert.Equal(line.Length, automaton.SumMatchSpans(line));
+        Assert.Equal(6, automaton.CountCaptures(line));
+        Assert.Equal(0, automaton.CountMatches(line, startAt: 1));
+        Assert.Equal(0, automaton.CountCaptures(line, startAt: 1));
         Assert.NotNull(captures);
         Assert.Equal(new RegexMatch(0, line.Length), captures.Match);
         Assert.Equal(6, captures.GroupCount);
@@ -3154,6 +3196,27 @@ public sealed class RegexAutomatonTests
         AssertGroupText(captures, line, 3, "");
         AssertGroupText(captures, line, 4, "msg {bad} tail");
         AssertGroupText(captures, line, 5, "/loc");
+    }
+
+    /// <summary>
+    /// Verifies the structured log capture path preserves dot newline semantics in the body capture.
+    /// </summary>
+    [Fact]
+    public void StructuredLogCaptureEngineRejectsBodyLineTerminator()
+    {
+        var automaton = RegexAutomaton.Compile(
+            RebarUnstructuredLogPattern(),
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] line = "2022/06/17 06:25:22 I4: first\nsecond {/loc}"u8.ToArray();
+
+        Assert.True(automaton.UsesStructuredLogCaptureEngine);
+        Assert.Null(automaton.FindCaptures(line));
+        Assert.Equal(0, automaton.CountMatches(line));
+        Assert.Equal(0, automaton.CountCaptures(line));
     }
 
     /// <summary>
@@ -4239,6 +4302,43 @@ public sealed class RegexAutomatonTests
         Assert.Equal(
             new RegexMatch(7, 41),
             automaton.Find("ignore\ninternal static void M(a,b,c,d,e,f,g,h,i)\n"u8));
+    }
+
+    /// <summary>
+    /// Verifies hard start anchors skip unhelpful prefilter construction.
+    /// </summary>
+    [Fact]
+    public void SkipsPrefilterForHardStartAnchoredPattern()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"^([A-Z0-9]+);([^;]+);([YN])$"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(RegexPrefilterKind.None, automaton.PrefilterKind);
+        Assert.Equal(new RegexMatch(0, 11), automaton.Find("0041;NAME;Y"u8));
+        Assert.Null(automaton.Find("xx\n0041;NAME;Y"u8));
+    }
+
+    /// <summary>
+    /// Verifies multiline start anchors still build useful prefilters.
+    /// </summary>
+    [Fact]
+    public void BuildsPrefilterForMultilineStartAnchoredPattern()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"(?m)^([A-Z0-9]+);needle$"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.NotEqual(RegexPrefilterKind.None, automaton.PrefilterKind);
+        Assert.Equal(new RegexMatch(3, 9), automaton.Find("xx\nAB;needle\n"u8));
     }
 
     /// <summary>

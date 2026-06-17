@@ -328,6 +328,43 @@ internal sealed class RegexShortLiteralSetScanner
         int vectorEnd = haystack.Length - Vector256<byte>.Count;
         var previous0 = Vector256.Create(byte.MaxValue);
         var previous1 = Vector256.Create(byte.MaxValue);
+        int unrolledEnd = vectorEnd - Vector256<byte>.Count * 3;
+        while (offset <= unrolledEnd)
+        {
+            var firstChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            Vector256<byte> firstCandidates = CandidateVector256(firstChunk, ref previous0, ref previous1);
+            if (TryGetFirstCandidate(firstCandidates, offset - MaskLength + 1, out int candidateStart, out bucketBits))
+            {
+                return candidateStart;
+            }
+
+            offset += Vector256<byte>.Count;
+            var secondChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            Vector256<byte> secondCandidates = CandidateVector256(secondChunk, ref previous0, ref previous1);
+            if (TryGetFirstCandidate(secondCandidates, offset - MaskLength + 1, out candidateStart, out bucketBits))
+            {
+                return candidateStart;
+            }
+
+            offset += Vector256<byte>.Count;
+            var thirdChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            Vector256<byte> thirdCandidates = CandidateVector256(thirdChunk, ref previous0, ref previous1);
+            if (TryGetFirstCandidate(thirdCandidates, offset - MaskLength + 1, out candidateStart, out bucketBits))
+            {
+                return candidateStart;
+            }
+
+            offset += Vector256<byte>.Count;
+            var fourthChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            Vector256<byte> fourthCandidates = CandidateVector256(fourthChunk, ref previous0, ref previous1);
+            if (TryGetFirstCandidate(fourthCandidates, offset - MaskLength + 1, out candidateStart, out bucketBits))
+            {
+                return candidateStart;
+            }
+
+            offset += Vector256<byte>.Count;
+        }
+
         while (offset <= vectorEnd)
         {
             var chunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);

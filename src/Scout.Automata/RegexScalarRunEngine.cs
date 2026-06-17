@@ -217,15 +217,15 @@ internal sealed class RegexScalarRunEngine
             return true;
         }
 
-        if (singleUnicodePropertyRanges is not null)
-        {
-            CountSingleUnicodePropertyRunFastPath(haystack, startAt, ref count);
-            return true;
-        }
-
         if (atoms.Length == 1 && atoms[0].UnicodeLetterFastPath)
         {
             CountUnicodeLetterFastPath(haystack, startAt, ref count);
+            return true;
+        }
+
+        if (singleUnicodePropertyRanges is not null)
+        {
+            CountSingleUnicodePropertyRunFastPath(haystack, startAt, ref count);
             return true;
         }
 
@@ -305,15 +305,37 @@ internal sealed class RegexScalarRunEngine
         }
 
         int position = Math.Clamp(startAt, 0, haystack.Length);
-        while (position < haystack.Length)
+        int length = haystack.Length;
+        while (position < length)
         {
             int runScalars = 0;
-            while (position < haystack.Length)
+            while (position < length)
             {
-                int cyrillicScalars = ConsumeFastCyrillicLetterPairs(haystack, ref position);
-                if (cyrillicScalars != 0)
+                byte first = haystack[position];
+                if (first is 0xD0 or 0xD1)
                 {
-                    runScalars += cyrillicScalars;
+                    int cyrillicScalars = ConsumeFastCyrillicLetterPairs(haystack, ref position);
+                    if (cyrillicScalars != 0)
+                    {
+                        runScalars += cyrillicScalars;
+                        if (position >= length)
+                        {
+                            break;
+                        }
+
+                        first = haystack[position];
+                    }
+                }
+
+                if (first <= 0x7F)
+                {
+                    if (!RegexSimpleSequenceSegment.IsAsciiLetter(first))
+                    {
+                        break;
+                    }
+
+                    runScalars++;
+                    position++;
                     continue;
                 }
 
@@ -327,9 +349,9 @@ internal sealed class RegexScalarRunEngine
             }
 
             AddScalarRunCountOnly(runScalars, ref count);
-            if (position < haystack.Length)
+            if (position < length)
             {
-                position = AdvanceAfterNonMatch(haystack, position);
+                position = AdvanceAfterUnicodeLetterNonMatch(haystack, position);
             }
         }
     }
@@ -439,22 +461,28 @@ internal sealed class RegexScalarRunEngine
     private void CountUnicodeLetter8To13FastPath(ReadOnlySpan<byte> haystack, int startAt, ref long count)
     {
         int position = Math.Clamp(startAt, 0, haystack.Length);
-        while (position < haystack.Length)
+        int length = haystack.Length;
+        while (position < length)
         {
             int runScalars = 0;
-            while (position < haystack.Length)
+            while (position < length)
             {
-                int cyrillicScalars = ConsumeFastCyrillicLetterPairs(haystack, ref position);
-                if (cyrillicScalars != 0)
+                byte first = haystack[position];
+                if (first is 0xD0 or 0xD1)
                 {
-                    runScalars += cyrillicScalars;
-                    if (position >= haystack.Length)
+                    int cyrillicScalars = ConsumeFastCyrillicLetterPairs(haystack, ref position);
+                    if (cyrillicScalars != 0)
                     {
-                        break;
+                        runScalars += cyrillicScalars;
+                        if (position >= length)
+                        {
+                            break;
+                        }
+
+                        first = haystack[position];
                     }
                 }
 
-                byte first = haystack[position];
                 if (first <= 0x7F)
                 {
                     if (!RegexSimpleSequenceSegment.IsAsciiLetter(first))
@@ -477,9 +505,9 @@ internal sealed class RegexScalarRunEngine
             }
 
             AddScalarRun8To13CountOnly(runScalars, ref count);
-            if (position < haystack.Length)
+            if (position < length)
             {
-                position = AdvanceAfterNonMatch(haystack, position);
+                position = AdvanceAfterUnicodeLetterNonMatch(haystack, position);
             }
         }
     }
@@ -491,13 +519,10 @@ internal sealed class RegexScalarRunEngine
             return;
         }
 
-        count += runLength / 13;
-        if (runLength % 13 >= 8)
-        {
-            count++;
-        }
+        count += 1 + (runLength - 8) / 13;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int ConsumeFastCyrillicLetterPairs(ReadOnlySpan<byte> haystack, ref int position)
     {
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
@@ -515,6 +540,18 @@ internal sealed class RegexScalarRunEngine
             scalars += 4;
         }
 
+        while (position <= length - 4)
+        {
+            uint chunk = Unsafe.ReadUnaligned<uint>(ref Unsafe.Add(ref reference, position));
+            if (!IsFastCyrillicLetterDoublePair(chunk))
+            {
+                break;
+            }
+
+            position += 4;
+            scalars += 2;
+        }
+
         while (position + 1 < length &&
             IsFastCyrillicLetterPair(
                 Unsafe.Add(ref reference, position),
@@ -527,6 +564,7 @@ internal sealed class RegexScalarRunEngine
         return scalars;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsFastCyrillicLetterChunk(ulong chunk)
     {
         const ulong LeadByteMask = 0x00FF00FF00FF00FFUL;
@@ -539,6 +577,20 @@ internal sealed class RegexScalarRunEngine
             (chunk & ContinuationValueMask) == ContinuationExpected;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsFastCyrillicLetterDoublePair(uint chunk)
+    {
+        const uint LeadByteMask = 0x00FF00FFU;
+        const uint LeadByteValueMask = 0x00FE00FEU;
+        const uint LeadByteExpected = 0x00D000D0U;
+        const uint ContinuationValueMask = 0xC000C000U;
+        const uint ContinuationExpected = 0x80008000U;
+
+        return (chunk & LeadByteMask & LeadByteValueMask) == LeadByteExpected &&
+            (chunk & ContinuationValueMask) == ContinuationExpected;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsFastCyrillicLetterPair(byte first, byte second)
     {
         return (first == 0xD0 || first == 0xD1) &&
@@ -951,6 +1003,24 @@ internal sealed class RegexScalarRunEngine
             Rune.DecodeFromUtf8(haystack[position..], out _, out int length) == OperationStatus.Done
             ? position + length
             : position + 1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int AdvanceAfterUnicodeLetterNonMatch(ReadOnlySpan<byte> haystack, int position)
+    {
+        position = AdvanceAfterNonMatch(haystack, position);
+        while (position < haystack.Length)
+        {
+            byte value = haystack[position];
+            if (value > 0x7F || RegexSimpleSequenceSegment.IsAsciiLetter(value))
+            {
+                return position;
+            }
+
+            position++;
+        }
+
+        return position;
     }
 
     private static bool TryExtractScalarRunNode(

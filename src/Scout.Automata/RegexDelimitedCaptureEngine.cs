@@ -17,9 +17,15 @@ internal sealed class RegexDelimitedCaptureEngine
         RegexSyntaxNode root,
         RegexCompileOptions options,
         int captureCount,
-        out RegexDelimitedCaptureEngine? engine)
+        out RegexDelimitedCaptureEngine? engine,
+        bool compactFields = false)
     {
         engine = null;
+        if (options.MultiLine)
+        {
+            return false;
+        }
+
         root = UnwrapTransparentNonCapturingGroups(root);
         if (root is not RegexSequenceNode sequence ||
             sequence.Nodes.Count < 5 ||
@@ -34,7 +40,7 @@ internal sealed class RegexDelimitedCaptureEngine
         int index = 1;
         while (index < sequence.Nodes.Count - 1)
         {
-            if (!TryCreateField(sequence.Nodes[index], options, out RegexDelimitedCaptureField? field))
+            if (!TryCreateField(sequence.Nodes[index], options, compactFields, out RegexDelimitedCaptureField? field))
             {
                 return false;
             }
@@ -71,14 +77,61 @@ internal sealed class RegexDelimitedCaptureEngine
         return true;
     }
 
+    public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        return TryMatchAt(haystack, startAt, out int length)
+            ? new RegexMatch(0, length)
+            : null;
+    }
+
+    public long CountMatches(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        return TryMatchAt(haystack, startAt, out _) ? 1 : 0;
+    }
+
+    public long SumMatchSpans(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        return TryMatchAt(haystack, startAt, out int length) ? length : 0;
+    }
+
+    public long CountCaptures(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        return TryMatchAt(haystack, startAt, out _) ? captureCount + 1L : 0;
+    }
+
+    public bool TryMatchAt(ReadOnlySpan<byte> haystack, int startAt, out int length)
+    {
+        length = 0;
+        if (Math.Clamp(startAt, 0, haystack.Length) != 0 ||
+            !TryMatchFields(haystack, groups: null))
+        {
+            return false;
+        }
+
+        length = haystack.Length;
+        return true;
+    }
+
     public RegexCaptures? MatchAt(ReadOnlySpan<byte> haystack, int startAt)
     {
-        if (startAt != 0)
+        if (Math.Clamp(startAt, 0, haystack.Length) != 0)
         {
             return null;
         }
 
         var groups = new RegexMatch?[captureCount + 1];
+        if (!TryMatchFields(haystack, groups))
+        {
+            return null;
+        }
+
+        var match = new RegexMatch(0, haystack.Length);
+        groups[0] = match;
+        return new RegexCaptures(match, groups);
+    }
+
+    private bool TryMatchFields(ReadOnlySpan<byte> haystack, RegexMatch?[]? groups)
+    {
         int position = 0;
         for (int index = 0; index < fields.Length; index++)
         {
@@ -89,7 +142,7 @@ internal sealed class RegexDelimitedCaptureEngine
                 : haystack[position..].IndexOf(delimiter);
             if (fieldEnd < 0)
             {
-                return null;
+                return false;
             }
 
             if (index != fields.Length - 1)
@@ -100,18 +153,22 @@ internal sealed class RegexDelimitedCaptureEngine
             int length = fieldEnd - fieldStart;
             if (length < field.Minimum || field.Maximum.HasValue && length > field.Maximum.Value)
             {
-                return null;
+                return false;
             }
 
             for (int haystackIndex = fieldStart; haystackIndex < fieldEnd; haystackIndex++)
             {
                 if (!field.Matches(haystack[haystackIndex]))
                 {
-                    return null;
+                    return false;
                 }
             }
 
-            groups[field.CaptureIndex] = new RegexMatch(fieldStart, length);
+            if (groups is not null)
+            {
+                groups[field.CaptureIndex] = new RegexMatch(fieldStart, length);
+            }
+
             position = fieldEnd;
             if (index != fields.Length - 1)
             {
@@ -119,19 +176,13 @@ internal sealed class RegexDelimitedCaptureEngine
             }
         }
 
-        if (position != haystack.Length)
-        {
-            return null;
-        }
-
-        var match = new RegexMatch(0, haystack.Length);
-        groups[0] = match;
-        return new RegexCaptures(match, groups);
+        return position == haystack.Length;
     }
 
     private static bool TryCreateField(
         RegexSyntaxNode node,
         RegexCompileOptions options,
+        bool compactFields,
         out RegexDelimitedCaptureField? field)
     {
         field = null;
@@ -158,6 +209,19 @@ internal sealed class RegexDelimitedCaptureEngine
             RegexByteClass.RequiresUtf8ScalarMatch(atom.Kind, atom.Value.Span, options.Utf8, options.CaseInsensitive, options.UnicodeClasses))
         {
             return false;
+        }
+
+        if (compactFields &&
+            RegexDelimitedCaptureField.TryCreateSpecialized(
+                group.CaptureIndex,
+                minimum,
+                maximum,
+                atom.Kind,
+                atom.Value.Span,
+                options,
+                out field))
+        {
+            return true;
         }
 
         bool[] matches = new bool[256];

@@ -47,6 +47,8 @@ internal sealed class RegexMetaEngine
     private readonly RegexRepeatedLazyDotStarLiteralEngine? repeatedLazyDotStarLiteral;
     private readonly RegexRepeatedLiteralRunOrEmptyEngine? repeatedLiteralRunOrEmpty;
     private readonly RegexDelimitedSpanEngine? delimitedSpan;
+    private readonly RegexDelimitedCaptureEngine? delimitedCapture;
+    private readonly RegexStructuredLogCaptureEngine? structuredLogCapture;
     private readonly RegexFixedWidthAlternationEngine? fixedWidthAlternation;
     private readonly RegexFixedWordWhitespaceSequenceEngine? fixedWordWhitespaceSequence;
     private readonly RegexLeadingClassLiteralEngine? leadingClassLiteral;
@@ -132,7 +134,9 @@ internal sealed class RegexMetaEngine
         RegexWordSuffixLiteralEngine? wordSuffixLiteral = null,
         RegexEndAnchoredSequenceEngine? endAnchoredSequence = null,
         RegexWholeLineEngine? wholeLine = null,
-        RegexEmptyEngine? empty = null)
+        RegexEmptyEngine? empty = null,
+        RegexDelimitedCaptureEngine? delimitedCapture = null,
+        RegexStructuredLogCaptureEngine? structuredLogCapture = null)
     {
         Kind = kind;
         this.nfa = nfa;
@@ -174,6 +178,8 @@ internal sealed class RegexMetaEngine
         this.repeatedLazyDotStarLiteral = repeatedLazyDotStarLiteral;
         this.repeatedLiteralRunOrEmpty = repeatedLiteralRunOrEmpty;
         this.delimitedSpan = delimitedSpan;
+        this.delimitedCapture = delimitedCapture;
+        this.structuredLogCapture = structuredLogCapture;
         this.fixedWidthAlternation = fixedWidthAlternation;
         this.fixedWordWhitespaceSequence = fixedWordWhitespaceSequence;
         this.leadingClassLiteral = leadingClassLiteral;
@@ -402,6 +408,58 @@ internal sealed class RegexMetaEngine
             nfaFactory: fallbackNfaFactory);
     }
 
+    public static RegexMetaEngine CompileDelimitedCapture(
+        RegexDelimitedCaptureEngine delimitedCapture,
+        bool utf8,
+        Func<RegexNfa>? fallbackNfaFactory)
+    {
+        ArgumentNullException.ThrowIfNull(delimitedCapture);
+        return new RegexMetaEngine(
+            RegexEngineKind.DelimitedCapture,
+            nfa: null,
+            pikeVm: null,
+            boundedBacktracker: null,
+            onePassDfa: null,
+            denseDfa: null,
+            sparseDfa: null,
+            lazyDfa: null,
+            literalSet: null,
+            alternationSet: null,
+            delimitedRun: null,
+            simpleSequence: null,
+            lineContains: null,
+            dotStarClassFallback: null,
+            prefilter: null,
+            utf8,
+            nfaFactory: fallbackNfaFactory,
+            delimitedCapture: delimitedCapture);
+    }
+
+    public static RegexMetaEngine CompileStructuredLogCapture(
+        RegexStructuredLogCaptureEngine structuredLogCapture,
+        bool utf8)
+    {
+        ArgumentNullException.ThrowIfNull(structuredLogCapture);
+        return new RegexMetaEngine(
+            RegexEngineKind.StructuredLogCapture,
+            nfa: null,
+            pikeVm: null,
+            boundedBacktracker: null,
+            onePassDfa: null,
+            denseDfa: null,
+            sparseDfa: null,
+            lazyDfa: null,
+            literalSet: null,
+            alternationSet: null,
+            delimitedRun: null,
+            simpleSequence: null,
+            lineContains: null,
+            dotStarClassFallback: null,
+            prefilter: null,
+            utf8,
+            structuredLogCapture: structuredLogCapture);
+    }
+
     public static RegexMetaEngine CompileFixedWordWhitespaceSequence(
         RegexFixedWordWhitespaceSequenceEngine fixedWordWhitespaceSequence,
         bool utf8)
@@ -561,7 +619,7 @@ internal sealed class RegexMetaEngine
         RegexEndAnchoredAtomEngine? endAnchoredAtom = null,
         RegexLineContainsEngine? lineContains = null,
         RegexDotStarClassFallbackEngine? dotStarClassFallback = null,
-        RegexNfa? asciiFastNfa = null,
+        ReadOnlyMemory<byte> asciiFastPattern = default,
         RegexScalarRunEngine? scalarRun = null,
         RegexAsciiWordBoundaryEngine? asciiWordBoundary = null,
         RegexSyntaxNode? root = null,
@@ -1445,6 +1503,7 @@ internal sealed class RegexMetaEngine
                     nfa.Utf8);
             }
 
+            RegexNfa? asciiFastNfa = TryCompileAsciiFastNfa(asciiFastPattern, root, options);
             RegexLazyDfa? asciiFastDfa = TryCreateAsciiFastDfa(asciiFastNfa, effectiveDfaSizeLimit);
             Func<RegexUnanchoredLazyDfa?>? asciiFastUnanchoredDfaFactory = CreateAsciiFastUnanchoredDfaFactory(
                 asciiFastNfa,
@@ -1619,6 +1678,23 @@ internal sealed class RegexMetaEngine
     {
         return asciiFastNfa is not null && RegexLazyDfa.TryCreate(asciiFastNfa, dfaSizeLimit, out RegexLazyDfa? asciiFastDfa)
             ? asciiFastDfa
+            : null;
+    }
+
+    private static RegexNfa? TryCompileAsciiFastNfa(
+        ReadOnlyMemory<byte> pattern,
+        RegexSyntaxNode? root,
+        RegexCompileOptions? options)
+    {
+        if (pattern.IsEmpty ||
+            root is null ||
+            !options.HasValue)
+        {
+            return null;
+        }
+
+        return RegexAsciiFastPath.TryCompileNfa(pattern.Span, root, options.Value, out RegexNfa? asciiFastNfa)
+            ? asciiFastNfa
             : null;
     }
 
@@ -1807,6 +1883,16 @@ internal sealed class RegexMetaEngine
         if (delimitedSpan is not null)
         {
             return delimitedSpan.Find(haystack, startOffset);
+        }
+
+        if (delimitedCapture is not null)
+        {
+            return delimitedCapture.Find(haystack, startOffset);
+        }
+
+        if (structuredLogCapture is not null)
+        {
+            return structuredLogCapture.Find(haystack, startOffset);
         }
 
         if (fixedWidthAlternation is not null)
@@ -2109,6 +2195,16 @@ internal sealed class RegexMetaEngine
             return delimitedSpan.CountMatches(haystack, startAt);
         }
 
+        if (delimitedCapture is not null)
+        {
+            return delimitedCapture.CountMatches(haystack, startAt);
+        }
+
+        if (structuredLogCapture is not null)
+        {
+            return structuredLogCapture.CountMatches(haystack, startAt);
+        }
+
         if (fixedWidthAlternation is not null)
         {
             return fixedWidthAlternation.CountMatches(haystack, startAt);
@@ -2329,6 +2425,16 @@ internal sealed class RegexMetaEngine
         if (delimitedSpan is not null)
         {
             return delimitedSpan.SumMatchSpans(haystack, startAt);
+        }
+
+        if (delimitedCapture is not null)
+        {
+            return delimitedCapture.SumMatchSpans(haystack, startAt);
+        }
+
+        if (structuredLogCapture is not null)
+        {
+            return structuredLogCapture.SumMatchSpans(haystack, startAt);
         }
 
         if (fixedWidthAlternation is not null)
@@ -2726,6 +2832,16 @@ internal sealed class RegexMetaEngine
             return delimitedSpan.MatchAt(haystack, startOffset);
         }
 
+        if (delimitedCapture is not null)
+        {
+            return delimitedCapture.Find(haystack, startOffset);
+        }
+
+        if (structuredLogCapture is not null)
+        {
+            return structuredLogCapture.Find(haystack, startOffset);
+        }
+
         if (fixedWidthAlternation is not null)
         {
             return fixedWidthAlternation.MatchAt(haystack, startOffset);
@@ -3092,6 +3208,16 @@ internal sealed class RegexMetaEngine
         if (delimitedRun is not null)
         {
             return delimitedRun.TryMatchAt(haystack, start, out length);
+        }
+
+        if (delimitedCapture is not null)
+        {
+            return delimitedCapture.TryMatchAt(haystack, start, out length);
+        }
+
+        if (structuredLogCapture is not null)
+        {
+            return structuredLogCapture.TryMatchAt(haystack, start, out length);
         }
 
         if (scalarRun is not null)

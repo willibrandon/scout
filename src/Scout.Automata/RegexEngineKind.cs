@@ -26,6 +26,8 @@ internal enum RegexEngineKind
     RepeatedLazyDotStarLiteral,
     RepeatedLiteralRunOrEmpty,
     DelimitedSpan,
+    DelimitedCapture,
+    StructuredLogCapture,
     FixedWidthAlternation,
     FixedWordWhitespaceSequence,
     LeadingClassLiteral,

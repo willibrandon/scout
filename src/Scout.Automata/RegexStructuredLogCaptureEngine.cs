@@ -3,9 +3,13 @@ namespace Scout;
 internal sealed class RegexStructuredLogCaptureEngine
 {
     private const int CaptureCount = 5;
+    private readonly int captureCount;
+    private readonly byte lineTerminator;
 
-    private RegexStructuredLogCaptureEngine()
+    private RegexStructuredLogCaptureEngine(byte lineTerminator)
     {
+        captureCount = CaptureCount;
+        this.lineTerminator = lineTerminator;
     }
 
     public static bool TryCreate(
@@ -44,18 +48,68 @@ internal sealed class RegexStructuredLogCaptureEngine
             return false;
         }
 
-        engine = new RegexStructuredLogCaptureEngine();
+        engine = new RegexStructuredLogCaptureEngine(options.LineTerminator);
         return true;
     }
 
-    public static RegexCaptures? MatchAt(ReadOnlySpan<byte> haystack, int startAt)
+    public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
-        if (startAt != 0 || haystack.IsEmpty)
+        return TryMatchAt(haystack, startAt, out int length)
+            ? new RegexMatch(0, length)
+            : null;
+    }
+
+    public long CountMatches(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        return TryMatchAt(haystack, startAt, out _) ? 1 : 0;
+    }
+
+    public long SumMatchSpans(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        return TryMatchAt(haystack, startAt, out int length) ? length : 0;
+    }
+
+    public long CountCaptures(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        return TryMatchAt(haystack, startAt, out _) ? captureCount + 1L : 0;
+    }
+
+    public bool TryMatchAt(ReadOnlySpan<byte> haystack, int startAt, out int length)
+    {
+        length = 0;
+        RegexCaptures? captures = MatchAtCore(
+            haystack,
+            Math.Clamp(startAt, 0, haystack.Length),
+            captureCount,
+            lineTerminator);
+        if (captures is null)
+        {
+            return false;
+        }
+
+        length = captures.Match.Length;
+        return true;
+    }
+
+    public RegexCaptures? MatchAt(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        return MatchAtCore(haystack, startAt, captureCount, lineTerminator);
+    }
+
+    private static RegexCaptures? MatchAtCore(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        int captureCount,
+        byte lineTerminator)
+    {
+        if (captureCount != CaptureCount ||
+            startAt != 0 ||
+            haystack.IsEmpty)
         {
             return null;
         }
 
-        var groups = new RegexMatch?[CaptureCount + 1];
+        var groups = new RegexMatch?[captureCount + 1];
         int firstSpace = haystack.IndexOf((byte)' ');
         if (firstSpace <= 0)
         {
@@ -101,6 +155,11 @@ internal sealed class RegexStructuredLogCaptureEngine
         int separatorSearchStart = Math.Max(position, lastInnerClose + 1);
         int separator = IndexOfLocationSeparator(haystack, separatorSearchStart, haystack.Length - 1);
         if (separator < 0)
+        {
+            return null;
+        }
+
+        if (haystack.Slice(position, separator - position).Contains(lineTerminator))
         {
             return null;
         }

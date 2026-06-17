@@ -15,7 +15,9 @@ internal sealed class RegexPackedLiteralSetScanner
     private readonly byte[][] literals;
     private readonly int[][]? commonFoldedLiterals;
     private readonly byte[][][]? prefixByteVariants;
+    private readonly int anchorOffset;
     private readonly int[][] buckets;
+    private readonly int[]? singleLiteralBuckets;
     private readonly Vector128<byte>[] lowMasks128 = new Vector128<byte>[MaskLength];
     private readonly Vector128<byte>[] highMasks128 = new Vector128<byte>[MaskLength];
     private readonly Vector256<byte>[] lowMasks256 = new Vector256<byte>[MaskLength];
@@ -35,8 +37,10 @@ internal sealed class RegexPackedLiteralSetScanner
 
         this.commonFoldedLiterals = commonFoldedLiterals;
         this.prefixByteVariants = prefixByteVariants;
+        anchorOffset = prefixByteVariants is null ? SelectAnchorOffset(this.literals) : 0;
         useDenseCandidateCount = ContainsNonAscii(this.literals) && ContainsAsciiOrTwoByteUtf8Only(this.literals);
-        buckets = BuildBuckets(this.literals);
+        buckets = BuildBuckets(this.literals, anchorOffset);
+        singleLiteralBuckets = TryBuildSingleLiteralBuckets(buckets);
         BuildMasks();
     }
 
@@ -98,7 +102,7 @@ internal sealed class RegexPackedLiteralSetScanner
     public RegexLiteralSetCandidate? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
         int searchAt = Math.Clamp(startAt, 0, haystack.Length);
-        while (searchAt <= haystack.Length - MaskLength)
+        while (searchAt <= MaxCandidateStart(haystack.Length))
         {
             int candidateStart = FindCandidate(haystack, searchAt, out byte bucketBits);
             if (candidateStart < 0)
@@ -125,12 +129,12 @@ internal sealed class RegexPackedLiteralSetScanner
             return CountOrSumByFirstCandidate(haystack, startOffset, sumSpans);
         }
 
-        if (Avx2.IsSupported && haystack.Length - startOffset >= Vector256<byte>.Count + MaskLength - 1)
+        if (Avx2.IsSupported && CanUseVector256(haystack.Length, startOffset))
         {
             return CountOrSumVector256(haystack, startOffset, sumSpans);
         }
 
-        if (Ssse3.IsSupported && haystack.Length - startOffset >= Vector128<byte>.Count + MaskLength - 1)
+        if (Ssse3.IsSupported && CanUseVector128(haystack.Length, startOffset))
         {
             return CountOrSumVector128(haystack, startOffset, sumSpans);
         }
@@ -142,7 +146,7 @@ internal sealed class RegexPackedLiteralSetScanner
     {
         int searchAt = startAt;
         long total = 0;
-        while (searchAt <= haystack.Length - MaskLength)
+        while (searchAt <= MaxCandidateStart(haystack.Length))
         {
             int candidateStart = FindCandidate(haystack, searchAt, out byte bucketBits);
             if (candidateStart < 0)
@@ -169,19 +173,96 @@ internal sealed class RegexPackedLiteralSetScanner
     {
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
         int nextAllowedStart = startAt;
-        int offset = startAt + MaskLength - 1;
+        int offset = startAt + anchorOffset + MaskLength - 1;
         int vectorEnd = haystack.Length - Vector256<byte>.Count;
         long total = 0;
         var previous0 = Vector256.Create(byte.MaxValue);
         var previous1 = Vector256.Create(byte.MaxValue);
         var previous2 = Vector256.Create(byte.MaxValue);
+        int unrolledEnd = vectorEnd - Vector256<byte>.Count * 3;
+        while (offset <= unrolledEnd)
+        {
+            var firstChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            Vector256<byte> firstCandidates = CandidateVector256(firstChunk, ref previous0, ref previous1, ref previous2);
+            if (Avx2.CompareEqual(firstCandidates, Vector256<byte>.Zero).ExtractMostSignificantBits() != uint.MaxValue)
+            {
+                int baseOffset = offset - MaskLength + 1 - anchorOffset;
+                for (int lane = 0; lane < 4; lane++)
+                {
+                    CountOrSumCandidateChunk(
+                        haystack,
+                        baseOffset + lane * 8,
+                        firstCandidates.AsUInt64().GetElement(lane),
+                        sumSpans,
+                        ref total,
+                        ref nextAllowedStart);
+                }
+            }
+
+            offset += Vector256<byte>.Count;
+            var secondChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            Vector256<byte> secondCandidates = CandidateVector256(secondChunk, ref previous0, ref previous1, ref previous2);
+            if (Avx2.CompareEqual(secondCandidates, Vector256<byte>.Zero).ExtractMostSignificantBits() != uint.MaxValue)
+            {
+                int baseOffset = offset - MaskLength + 1 - anchorOffset;
+                for (int lane = 0; lane < 4; lane++)
+                {
+                    CountOrSumCandidateChunk(
+                        haystack,
+                        baseOffset + lane * 8,
+                        secondCandidates.AsUInt64().GetElement(lane),
+                        sumSpans,
+                        ref total,
+                        ref nextAllowedStart);
+                }
+            }
+
+            offset += Vector256<byte>.Count;
+            var thirdChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            Vector256<byte> thirdCandidates = CandidateVector256(thirdChunk, ref previous0, ref previous1, ref previous2);
+            if (Avx2.CompareEqual(thirdCandidates, Vector256<byte>.Zero).ExtractMostSignificantBits() != uint.MaxValue)
+            {
+                int baseOffset = offset - MaskLength + 1 - anchorOffset;
+                for (int lane = 0; lane < 4; lane++)
+                {
+                    CountOrSumCandidateChunk(
+                        haystack,
+                        baseOffset + lane * 8,
+                        thirdCandidates.AsUInt64().GetElement(lane),
+                        sumSpans,
+                        ref total,
+                        ref nextAllowedStart);
+                }
+            }
+
+            offset += Vector256<byte>.Count;
+            var fourthChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            Vector256<byte> fourthCandidates = CandidateVector256(fourthChunk, ref previous0, ref previous1, ref previous2);
+            if (Avx2.CompareEqual(fourthCandidates, Vector256<byte>.Zero).ExtractMostSignificantBits() != uint.MaxValue)
+            {
+                int baseOffset = offset - MaskLength + 1 - anchorOffset;
+                for (int lane = 0; lane < 4; lane++)
+                {
+                    CountOrSumCandidateChunk(
+                        haystack,
+                        baseOffset + lane * 8,
+                        fourthCandidates.AsUInt64().GetElement(lane),
+                        sumSpans,
+                        ref total,
+                        ref nextAllowedStart);
+                }
+            }
+
+            offset += Vector256<byte>.Count;
+        }
+
         while (offset <= vectorEnd)
         {
             var chunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
             Vector256<byte> candidates = CandidateVector256(chunk, ref previous0, ref previous1, ref previous2);
             if (Avx2.CompareEqual(candidates, Vector256<byte>.Zero).ExtractMostSignificantBits() != uint.MaxValue)
             {
-                int baseOffset = offset - MaskLength + 1;
+                int baseOffset = offset - MaskLength + 1 - anchorOffset;
                 for (int lane = 0; lane < 4; lane++)
                 {
                     CountOrSumCandidateChunk(
@@ -197,14 +278,14 @@ internal sealed class RegexPackedLiteralSetScanner
             offset += Vector256<byte>.Count;
         }
 
-        return CountOrSumScalar(haystack, Math.Max(nextAllowedStart, offset - MaskLength + 1), sumSpans, total);
+        return CountOrSumScalar(haystack, Math.Max(nextAllowedStart, offset - MaskLength + 1 - anchorOffset), sumSpans, total);
     }
 
     private long CountOrSumVector128(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
     {
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
         int nextAllowedStart = startAt;
-        int offset = startAt + MaskLength - 1;
+        int offset = startAt + anchorOffset + MaskLength - 1;
         int vectorEnd = haystack.Length - Vector128<byte>.Count;
         long total = 0;
         var previous0 = Vector128.Create(byte.MaxValue);
@@ -216,7 +297,7 @@ internal sealed class RegexPackedLiteralSetScanner
             Vector128<byte> candidates = CandidateVector128(chunk, ref previous0, ref previous1, ref previous2);
             if (Sse2.CompareEqual(candidates, Vector128<byte>.Zero).ExtractMostSignificantBits() != 0xFFFF)
             {
-                int baseOffset = offset - MaskLength + 1;
+                int baseOffset = offset - MaskLength + 1 - anchorOffset;
                 for (int lane = 0; lane < 2; lane++)
                 {
                     CountOrSumCandidateChunk(
@@ -232,13 +313,13 @@ internal sealed class RegexPackedLiteralSetScanner
             offset += Vector128<byte>.Count;
         }
 
-        return CountOrSumScalar(haystack, Math.Max(nextAllowedStart, offset - MaskLength + 1), sumSpans, total);
+        return CountOrSumScalar(haystack, Math.Max(nextAllowedStart, offset - MaskLength + 1 - anchorOffset), sumSpans, total);
     }
 
     private long CountOrSumScalar(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans, long total)
     {
         int searchAt = startAt;
-        while (searchAt <= haystack.Length - MaskLength)
+        while (searchAt <= MaxCandidateStart(haystack.Length))
         {
             int candidateStart = FindCandidateScalar(haystack, searchAt, out byte bucketBits);
             if (candidateStart < 0)
@@ -294,18 +375,18 @@ internal sealed class RegexPackedLiteralSetScanner
 
     private int FindCandidate(ReadOnlySpan<byte> haystack, int startAt, out byte bucketBits)
     {
-        if (startAt > haystack.Length - MaskLength)
+        if (startAt > MaxCandidateStart(haystack.Length))
         {
             bucketBits = 0;
             return -1;
         }
 
-        if (Avx2.IsSupported && haystack.Length - startAt >= Vector256<byte>.Count + MaskLength - 1)
+        if (Avx2.IsSupported && CanUseVector256(haystack.Length, startAt))
         {
             return FindCandidateVector256(haystack, startAt, out bucketBits);
         }
 
-        if (Ssse3.IsSupported && haystack.Length - startAt >= Vector128<byte>.Count + MaskLength - 1)
+        if (Ssse3.IsSupported && CanUseVector128(haystack.Length, startAt))
         {
             return FindCandidateVector128(haystack, startAt, out bucketBits);
         }
@@ -316,16 +397,41 @@ internal sealed class RegexPackedLiteralSetScanner
     private int FindCandidateVector256(ReadOnlySpan<byte> haystack, int startAt, out byte bucketBits)
     {
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
-        int offset = startAt + MaskLength - 1;
+        int offset = startAt + anchorOffset + MaskLength - 1;
         int vectorEnd = haystack.Length - Vector256<byte>.Count;
         var previous0 = Vector256.Create(byte.MaxValue);
         var previous1 = Vector256.Create(byte.MaxValue);
         var previous2 = Vector256.Create(byte.MaxValue);
-        while (offset <= vectorEnd)
+        int unrolledEnd = vectorEnd - Vector256<byte>.Count * 3;
+        while (offset <= unrolledEnd)
         {
-            var chunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
-            Vector256<byte> candidates = CandidateVector256(chunk, ref previous0, ref previous1, ref previous2);
-            if (TryGetFirstCandidate(candidates, offset - MaskLength + 1, out int candidateStart, out bucketBits))
+            var firstChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            Vector256<byte> firstCandidates = CandidateVector256(firstChunk, ref previous0, ref previous1, ref previous2);
+            if (TryGetFirstCandidate(firstCandidates, offset - MaskLength + 1 - anchorOffset, out int candidateStart, out bucketBits))
+            {
+                return candidateStart;
+            }
+
+            offset += Vector256<byte>.Count;
+            var secondChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            Vector256<byte> secondCandidates = CandidateVector256(secondChunk, ref previous0, ref previous1, ref previous2);
+            if (TryGetFirstCandidate(secondCandidates, offset - MaskLength + 1 - anchorOffset, out candidateStart, out bucketBits))
+            {
+                return candidateStart;
+            }
+
+            offset += Vector256<byte>.Count;
+            var thirdChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            Vector256<byte> thirdCandidates = CandidateVector256(thirdChunk, ref previous0, ref previous1, ref previous2);
+            if (TryGetFirstCandidate(thirdCandidates, offset - MaskLength + 1 - anchorOffset, out candidateStart, out bucketBits))
+            {
+                return candidateStart;
+            }
+
+            offset += Vector256<byte>.Count;
+            var fourthChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            Vector256<byte> fourthCandidates = CandidateVector256(fourthChunk, ref previous0, ref previous1, ref previous2);
+            if (TryGetFirstCandidate(fourthCandidates, offset - MaskLength + 1 - anchorOffset, out candidateStart, out bucketBits))
             {
                 return candidateStart;
             }
@@ -333,13 +439,25 @@ internal sealed class RegexPackedLiteralSetScanner
             offset += Vector256<byte>.Count;
         }
 
-        return FindCandidateScalar(haystack, Math.Max(startAt, offset - MaskLength + 1), out bucketBits);
+        while (offset <= vectorEnd)
+        {
+            var chunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            Vector256<byte> candidates = CandidateVector256(chunk, ref previous0, ref previous1, ref previous2);
+            if (TryGetFirstCandidate(candidates, offset - MaskLength + 1 - anchorOffset, out int candidateStart, out bucketBits))
+            {
+                return candidateStart;
+            }
+
+            offset += Vector256<byte>.Count;
+        }
+
+        return FindCandidateScalar(haystack, Math.Max(startAt, offset - MaskLength + 1 - anchorOffset), out bucketBits);
     }
 
     private int FindCandidateVector128(ReadOnlySpan<byte> haystack, int startAt, out byte bucketBits)
     {
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
-        int offset = startAt + MaskLength - 1;
+        int offset = startAt + anchorOffset + MaskLength - 1;
         int vectorEnd = haystack.Length - Vector128<byte>.Count;
         var previous0 = Vector128.Create(byte.MaxValue);
         var previous1 = Vector128.Create(byte.MaxValue);
@@ -348,7 +466,7 @@ internal sealed class RegexPackedLiteralSetScanner
         {
             var chunk = Vector128.LoadUnsafe(ref reference, (nuint)offset);
             Vector128<byte> candidates = CandidateVector128(chunk, ref previous0, ref previous1, ref previous2);
-            if (TryGetFirstCandidate(candidates, offset - MaskLength + 1, out int candidateStart, out bucketBits))
+            if (TryGetFirstCandidate(candidates, offset - MaskLength + 1 - anchorOffset, out int candidateStart, out bucketBits))
             {
                 return candidateStart;
             }
@@ -356,14 +474,14 @@ internal sealed class RegexPackedLiteralSetScanner
             offset += Vector128<byte>.Count;
         }
 
-        return FindCandidateScalar(haystack, Math.Max(startAt, offset - MaskLength + 1), out bucketBits);
+        return FindCandidateScalar(haystack, Math.Max(startAt, offset - MaskLength + 1 - anchorOffset), out bucketBits);
     }
 
     private int FindCandidateScalar(ReadOnlySpan<byte> haystack, int startAt, out byte bucketBits)
     {
-        for (int position = startAt; position <= haystack.Length - MaskLength; position++)
+        for (int position = startAt; position <= MaxCandidateStart(haystack.Length); position++)
         {
-            byte bits = ExactPrefixBucketBits(haystack[position..]);
+            byte bits = ExactPrefixBucketBits(haystack[(position + anchorOffset)..]);
             if (bits != 0)
             {
                 bucketBits = bits;
@@ -373,6 +491,23 @@ internal sealed class RegexPackedLiteralSetScanner
 
         bucketBits = 0;
         return -1;
+    }
+
+    private int MaxCandidateStart(int haystackLength)
+    {
+        return haystackLength - MaskLength - anchorOffset;
+    }
+
+    private bool CanUseVector256(int haystackLength, int startAt)
+    {
+        int anchorStart = startAt + anchorOffset;
+        return haystackLength - anchorStart >= Vector256<byte>.Count + MaskLength - 1;
+    }
+
+    private bool CanUseVector128(int haystackLength, int startAt)
+    {
+        int anchorStart = startAt + anchorOffset;
+        return haystackLength - anchorStart >= Vector128<byte>.Count + MaskLength - 1;
     }
 
     private Vector256<byte> CandidateVector256(
@@ -531,6 +666,11 @@ internal sealed class RegexPackedLiteralSetScanner
         byte bucketBits,
         out RegexLiteralSetCandidate candidate)
     {
+        if (commonFoldedLiterals is null && singleLiteralBuckets is not null)
+        {
+            return TryVerifySingleLiteralBucketsAt(haystack, start, bucketBits, out candidate);
+        }
+
         RegexLiteralSetCandidate? best = null;
         uint remainingBuckets = bucketBits;
         while (remainingBuckets != 0)
@@ -571,6 +711,43 @@ internal sealed class RegexPackedLiteralSetScanner
         return best.HasValue;
     }
 
+    private bool TryVerifySingleLiteralBucketsAt(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        byte bucketBits,
+        out RegexLiteralSetCandidate candidate)
+    {
+        RegexLiteralSetCandidate? best = null;
+        uint remainingBuckets = bucketBits;
+        while (remainingBuckets != 0)
+        {
+            int bucket = BitOperations.TrailingZeroCount(remainingBuckets);
+            remainingBuckets &= remainingBuckets - 1;
+            int literalId = singleLiteralBuckets![bucket];
+            if (literalId < 0)
+            {
+                continue;
+            }
+
+            byte[] literal = literals[literalId];
+            if (literal.Length > haystack.Length - start ||
+                haystack[start + literal.Length - 1] != literal[^1] ||
+                !haystack.Slice(start, literal.Length).SequenceEqual(literal))
+            {
+                continue;
+            }
+
+            var current = new RegexLiteralSetCandidate(literalId, new RegexMatch(start, literal.Length));
+            if (IsBetter(current, best))
+            {
+                best = current;
+            }
+        }
+
+        candidate = best.GetValueOrDefault();
+        return best.HasValue;
+    }
+
     private byte ExactPrefixBucketBits(ReadOnlySpan<byte> haystack)
     {
         byte bits = 0;
@@ -581,7 +758,7 @@ internal sealed class RegexPackedLiteralSetScanner
             {
                 int literalId = literalIds[index];
                 if (prefixByteVariants is null
-                    ? haystack[..MaskLength].SequenceEqual(literals[literalId].AsSpan(0, MaskLength))
+                    ? haystack[..MaskLength].SequenceEqual(literals[literalId].AsSpan(anchorOffset, MaskLength))
                     : PrefixVariantsMatch(haystack, prefixByteVariants[literalId]))
                 {
                     bits |= (byte)(1 << bucket);
@@ -634,7 +811,7 @@ internal sealed class RegexPackedLiteralSetScanner
                     int literalId = literalIds[index];
                     if (prefixByteVariants is null)
                     {
-                        AddMaskByte(low, high, bucket, literals[literalId][byteIndex]);
+                        AddMaskByte(low, high, bucket, literals[literalId][anchorOffset + byteIndex]);
                         continue;
                     }
 
@@ -666,7 +843,7 @@ internal sealed class RegexPackedLiteralSetScanner
         high[highNibble + 16] |= bit;
     }
 
-    private static int[][] BuildBuckets(byte[][] literals)
+    private static int[][] BuildBuckets(byte[][] literals, int anchorOffset)
     {
         var bucketLists = new List<int>[BucketCount];
         for (int index = 0; index < bucketLists.Length; index++)
@@ -677,7 +854,7 @@ internal sealed class RegexPackedLiteralSetScanner
         var lowNibbleBuckets = new Dictionary<int, int>();
         for (int literalId = 0; literalId < literals.Length; literalId++)
         {
-            int lowNibblePrefix = LowNibblePrefix(literals[literalId]);
+            int lowNibblePrefix = LowNibblePrefix(literals[literalId], anchorOffset);
             if (!lowNibbleBuckets.TryGetValue(lowNibblePrefix, out int bucket))
             {
                 bucket = BucketCount - 1 - literalId % BucketCount;
@@ -694,6 +871,108 @@ internal sealed class RegexPackedLiteralSetScanner
         }
 
         return buckets;
+    }
+
+    private static int[]? TryBuildSingleLiteralBuckets(int[][] buckets)
+    {
+        int[] singleLiterals = new int[buckets.Length];
+        Array.Fill(singleLiterals, -1);
+        for (int bucket = 0; bucket < buckets.Length; bucket++)
+        {
+            int[] literalIds = buckets[bucket];
+            if (literalIds.Length == 0)
+            {
+                continue;
+            }
+
+            if (literalIds.Length != 1)
+            {
+                return null;
+            }
+
+            singleLiterals[bucket] = literalIds[0];
+        }
+
+        return singleLiterals;
+    }
+
+    private static int SelectAnchorOffset(byte[][] literals)
+    {
+        int maxOffset = MinimumLength(literals) - MaskLength;
+        if (maxOffset <= 0)
+        {
+            return 0;
+        }
+
+        if (ContainsNonAscii(literals))
+        {
+            return ContainsAsciiOrTwoByteUtf8Only(literals) ? maxOffset / 2 : maxOffset;
+        }
+
+        int bestOffset = 0;
+        int bestScore = EstimateAsciiAnchorScore(literals, 0);
+        for (int offset = 1; offset <= maxOffset; offset++)
+        {
+            int score = EstimateAsciiAnchorScore(literals, offset);
+            if (score < bestScore)
+            {
+                bestOffset = offset;
+                bestScore = score;
+            }
+        }
+
+        return bestOffset;
+    }
+
+    private static int MinimumLength(byte[][] literals)
+    {
+        int minimum = int.MaxValue;
+        for (int index = 0; index < literals.Length; index++)
+        {
+            minimum = Math.Min(minimum, literals[index].Length);
+        }
+
+        return minimum;
+    }
+
+    private static int EstimateAsciiAnchorScore(byte[][] literals, int offset)
+    {
+        int score = 0;
+        for (int literalIndex = 0; literalIndex < literals.Length; literalIndex++)
+        {
+            byte[] literal = literals[literalIndex];
+            for (int byteIndex = 0; byteIndex < MaskLength; byteIndex++)
+            {
+                score += EstimatedAsciiByteFrequency(literal[offset + byteIndex]);
+            }
+        }
+
+        return score;
+    }
+
+    private static int EstimatedAsciiByteFrequency(byte value)
+    {
+        if (value == (byte)' ')
+        {
+            return 40;
+        }
+
+        if (value is >= (byte)'a' and <= (byte)'z')
+        {
+            return 25;
+        }
+
+        if (value is >= (byte)'A' and <= (byte)'Z')
+        {
+            return 12;
+        }
+
+        if (value is >= (byte)'0' and <= (byte)'9')
+        {
+            return 16;
+        }
+
+        return value < 0x80 ? 8 : 20;
     }
 
     private static bool TryBuildCommonFoldedLiteral(byte[] literal, out int[] foldedLiteral)
@@ -999,12 +1278,12 @@ internal sealed class RegexPackedLiteralSetScanner
         return true;
     }
 
-    private static int LowNibblePrefix(byte[] literal)
+    private static int LowNibblePrefix(byte[] literal, int offset)
     {
-        return (literal[0] & 0x0F) |
-            ((literal[1] & 0x0F) << 4) |
-            ((literal[2] & 0x0F) << 8) |
-            ((literal[3] & 0x0F) << 12);
+        return (literal[offset] & 0x0F) |
+            ((literal[offset + 1] & 0x0F) << 4) |
+            ((literal[offset + 2] & 0x0F) << 8) |
+            ((literal[offset + 3] & 0x0F) << 12);
     }
 
     private static bool IsBetter(RegexLiteralSetCandidate candidate, RegexLiteralSetCandidate? best)
