@@ -3,12 +3,14 @@ namespace Scout;
 internal sealed class RegexLargeLiteralTrieScanner
 {
     private const int MinimumLiteralCount = 128;
+    private const int DenseTransitionFanoutThreshold = 4;
 
     private readonly int[] rootTransitions;
     private readonly int[] rootImmediateLiteralIds;
     private readonly bool rootMatchesOnlyImmediateLiterals;
     private readonly byte[][] transitionBytes;
     private readonly int[][] transitionTargets;
+    private readonly int[]?[] denseTransitionTargets;
     private readonly int[] bestLiteralIds;
     private readonly int[] bestLiteralLengths;
 
@@ -17,6 +19,7 @@ internal sealed class RegexLargeLiteralTrieScanner
         int[] rootImmediateLiteralIds,
         byte[][] transitionBytes,
         int[][] transitionTargets,
+        int[]?[] denseTransitionTargets,
         int[] bestLiteralIds,
         int[] bestLiteralLengths)
     {
@@ -25,6 +28,7 @@ internal sealed class RegexLargeLiteralTrieScanner
         rootMatchesOnlyImmediateLiterals = RootMatchesOnlyImmediateLiterals(rootTransitions, rootImmediateLiteralIds);
         this.transitionBytes = transitionBytes;
         this.transitionTargets = transitionTargets;
+        this.denseTransitionTargets = denseTransitionTargets;
         this.bestLiteralIds = bestLiteralIds;
         this.bestLiteralLengths = bestLiteralLengths;
     }
@@ -88,6 +92,7 @@ internal sealed class RegexLargeLiteralTrieScanner
         int[] rootImmediateLiteralIds = BuildRootImmediateLiteralIds(nodes);
         byte[][] transitionBytes = new byte[nodes.Count][];
         int[][] transitionTargets = new int[nodes.Count][];
+        int[]?[] denseTransitionTargets = new int[nodes.Count][];
         int[] bestLiteralIds = new int[nodes.Count];
         int[] bestLiteralLengths = new int[nodes.Count];
         for (int state = 0; state < nodes.Count; state++)
@@ -97,12 +102,24 @@ internal sealed class RegexLargeLiteralTrieScanner
             bestLiteralLengths[state] = node.BestLiteralLength;
             transitionBytes[state] = new byte[node.Transitions.Count];
             transitionTargets[state] = new int[node.Transitions.Count];
+            int[]? denseTransitions = null;
+            if (state != 0 && node.Transitions.Count >= DenseTransitionFanoutThreshold)
+            {
+                denseTransitions = new int[byte.MaxValue + 1];
+                Array.Fill(denseTransitions, -1);
+                denseTransitionTargets[state] = denseTransitions;
+            }
 
             int index = 0;
             foreach (KeyValuePair<byte, int> transition in node.Transitions)
             {
                 transitionBytes[state][index] = transition.Key;
                 transitionTargets[state][index] = transition.Value;
+                if (denseTransitions is not null)
+                {
+                    denseTransitions[transition.Key] = transition.Value;
+                }
+
                 if (state == 0)
                 {
                     rootTransitions[transition.Key] = transition.Value;
@@ -117,6 +134,7 @@ internal sealed class RegexLargeLiteralTrieScanner
             rootImmediateLiteralIds,
             transitionBytes,
             transitionTargets,
+            denseTransitionTargets,
             bestLiteralIds,
             bestLiteralLengths);
         return true;
@@ -310,6 +328,12 @@ internal sealed class RegexLargeLiteralTrieScanner
 
     private int FindTransition(int state, byte value)
     {
+        int[]? denseTransitions = denseTransitionTargets[state];
+        if (denseTransitions is not null)
+        {
+            return denseTransitions[value];
+        }
+
         byte[] bytes = transitionBytes[state];
         for (int index = 0; index < bytes.Length; index++)
         {
