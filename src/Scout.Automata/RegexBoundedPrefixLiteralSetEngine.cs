@@ -63,12 +63,16 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
         RegexPackedLiteralSetScanner? packedScanner = null;
         RegexShortLiteralSetScanner? shortScanner = null;
         RegexCaseSensitiveLiteralSetScanner? scanner = null;
-        if (literals.Length > 1 &&
-            !RegexPackedLiteralSetScanner.TryCreate(literals, out packedScanner) &&
-            !RegexShortLiteralSetScanner.TryCreate(literals, out shortScanner) &&
-            !RegexCaseSensitiveLiteralSetScanner.TryCreate(literals, out scanner))
+        if (literals.Length > 1)
         {
-            return false;
+            RegexPackedLiteralSetScanner.TryCreate(literals, out packedScanner);
+            RegexShortLiteralSetScanner.TryCreate(literals, out shortScanner);
+            if (packedScanner is null &&
+                shortScanner is null &&
+                !RegexCaseSensitiveLiteralSetScanner.TryCreate(literals, out scanner))
+            {
+                return false;
+            }
         }
 
         engine = new RegexBoundedPrefixLiteralSetEngine(
@@ -193,14 +197,14 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
             return scanner.CountOrSum(haystack, startAt, sumSpans: false);
         }
 
-        if (packedScanner is not null)
-        {
-            return packedScanner.CountOrSum(haystack, startAt, sumSpans: false);
-        }
-
         if (shortScanner is not null)
         {
             return shortScanner.CountOrSum(haystack, startAt, sumSpans: false);
+        }
+
+        if (packedScanner is not null)
+        {
+            return packedScanner.CountOrSum(haystack, startAt, sumSpans: false);
         }
 
         long count = 0;
