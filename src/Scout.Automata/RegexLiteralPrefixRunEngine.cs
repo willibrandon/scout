@@ -8,6 +8,7 @@ internal sealed class RegexLiteralPrefixRunEngine
     private readonly bool asciiCaseInsensitive;
     private readonly bool prefixCandidateBranchesAreUnambiguous;
     private readonly RegexShortLiteralSetScanner? shortScanner;
+    private readonly RegexTwoPrefixLiteralScanner? twoPrefixScanner;
     private readonly RegexCaseSensitiveLiteralSetScanner? caseSensitiveScanner;
     private readonly RegexAsciiCaseInsensitiveLiteralSetScanner? asciiCaseInsensitiveScanner;
     private readonly MemmemFinder? singleLiteralFinder;
@@ -26,6 +27,11 @@ internal sealed class RegexLiteralPrefixRunEngine
         this.prefixCandidateBranchesAreUnambiguous = prefixCandidateBranchesAreUnambiguous;
         this.shortScanner = shortScanner;
         this.caseSensitiveScanner = caseSensitiveScanner;
+        if (!asciiCaseInsensitive && branches.Length == 2)
+        {
+            RegexTwoPrefixLiteralScanner.TryCreate(GetPrefixes(branches), out twoPrefixScanner);
+        }
+
         if (asciiCaseInsensitive)
         {
             if (branches.Length == 1)
@@ -299,6 +305,13 @@ internal sealed class RegexLiteralPrefixRunEngine
 
     private bool TryFindPrefix(ReadOnlySpan<byte> haystack, int startAt, out RegexLiteralSetCandidate candidate)
     {
+        if (twoPrefixScanner is not null)
+        {
+            RegexLiteralSetCandidate? found = twoPrefixScanner.Find(haystack, startAt);
+            candidate = found.GetValueOrDefault();
+            return found.HasValue;
+        }
+
         if (shortScanner is not null)
         {
             RegexLiteralSetCandidate? found = shortScanner.Find(haystack, startAt);
