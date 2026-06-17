@@ -700,21 +700,87 @@ public sealed class RegexAutomatonTests
     public void FindCapturesKeepsNestedCapturesInOptionalRepeatedSuffix()
     {
         var automaton = RegexAutomaton.Compile(
+            @"(?P<spaces>\s*)(?P<note>(?i:# note)(?::\s?(?P<codes>([A-Z]+[0-9]+(?:[,\s]+)?)+))?)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] line = "    value  # note: E501"u8.ToArray();
+
+        RegexCaptures? captures = automaton.FindCaptures(line);
+
+        Assert.False(automaton.UsesNoqaCaptureEngine);
+        Assert.NotNull(captures);
+        Assert.Equal(5, captures.ParticipatingCount());
+        Assert.Equal(5, automaton.CountCaptures(line));
+        AssertGroupText(captures, line, 3, "E501");
+        AssertGroupText(captures, line, 4, "E501");
+    }
+
+    /// <summary>
+    /// Verifies Ruff noqa captures use the reverse literal capture engine.
+    /// </summary>
+    [Fact]
+    public void NoqaCaptureEngineReportsInlineFlagCaptures()
+    {
+        var automaton = RegexAutomaton.Compile(
             @"(?P<spaces>\s*)(?P<noqa>(?i:# noqa)(?::\s?(?P<codes>([A-Z]+[0-9]+(?:[,\s]+)?)+))?)"u8,
             caseInsensitive: false,
             multiLine: false,
             dotMatchesNewline: false,
             utf8: false,
             unicodeClasses: true);
-        byte[] line = "    value  # noqa: E501"u8.ToArray();
+        byte[] line = "value  # NoQa: E501,W291x"u8.ToArray();
 
         RegexCaptures? captures = automaton.FindCaptures(line);
 
+        Assert.True(automaton.UsesNoqaCaptureEngine);
         Assert.NotNull(captures);
         Assert.Equal(5, captures.ParticipatingCount());
         Assert.Equal(5, automaton.CountCaptures(line));
-        AssertGroupText(captures, line, 3, "E501");
-        AssertGroupText(captures, line, 4, "E501");
+        AssertGroupText(captures, line, 1, "  ");
+        AssertGroupText(captures, line, 2, "# NoQa: E501,W291");
+        AssertGroupText(captures, line, 3, "E501,W291");
+        AssertGroupText(captures, line, 4, "W291");
+
+        byte[] withoutCodes = "  # noqa:"u8.ToArray();
+        RegexCaptures? shortCaptures = automaton.FindCaptures(withoutCodes);
+
+        Assert.NotNull(shortCaptures);
+        Assert.Equal(3, shortCaptures.ParticipatingCount());
+        Assert.Equal(3, automaton.CountCaptures(withoutCodes));
+        AssertGroupText(shortCaptures, withoutCodes, 1, "  ");
+        AssertGroupText(shortCaptures, withoutCodes, 2, "# noqa");
+        Assert.Null(shortCaptures.GetGroup(3));
+        Assert.Null(shortCaptures.GetGroup(4));
+    }
+
+    /// <summary>
+    /// Verifies the expanded Rebar noqa form uses the same capture engine.
+    /// </summary>
+    [Fact]
+    public void NoqaCaptureEngineReportsExpandedClassCaptures()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"(\s*)((?:# [Nn][Oo][Qq][Aa])(?::\s?(([A-Z]+[0-9]+(?:[,\s]+)?)+))?)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] line = System.Text.Encoding.UTF8.GetBytes("\u00A0# nOqA: C901");
+
+        RegexCaptures? captures = automaton.FindCaptures(line);
+
+        Assert.True(automaton.UsesNoqaCaptureEngine);
+        Assert.NotNull(captures);
+        Assert.Equal(5, captures.ParticipatingCount());
+        Assert.Equal(5, automaton.CountCaptures(line));
+        AssertGroupUtf8Text(captures, line, 1, "\u00A0");
+        AssertGroupText(captures, line, 2, "# nOqA: C901");
+        AssertGroupText(captures, line, 3, "C901");
+        AssertGroupText(captures, line, 4, "C901");
     }
 
     /// <summary>

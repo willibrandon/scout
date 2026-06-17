@@ -29,6 +29,7 @@ public sealed class RegexAutomaton
     private RegexAnchoredDotStarCaptureEngine? anchoredDotStarCaptureEngine;
     private RegexAnchoredQuotedStringCaptureEngine? anchoredQuotedStringCaptureEngine;
     private RegexKeywordWhitespaceCaptureEngine? keywordWhitespaceCaptureEngine;
+    private RegexNoqaCaptureEngine? noqaCaptureEngine;
     private RegexLinePrefixCaptureEngine? linePrefixCaptureEngine;
     private RegexOperatorSpacingCaptureEngine? operatorSpacingCaptureEngine;
     private RegexLiteralWordCaptureEngine? literalWordCaptureEngine;
@@ -766,6 +767,15 @@ public sealed class RegexAutomaton
         }
     }
 
+    internal bool UsesNoqaCaptureEngine
+    {
+        get
+        {
+            EnsureCaptureEngines();
+            return noqaCaptureEngine is not null;
+        }
+    }
+
     internal bool UsesLinePrefixCaptureEngine
     {
         get
@@ -1055,6 +1065,11 @@ public sealed class RegexAutomaton
             return keywordWhitespaceCaptureEngine.CountCaptures(haystack, startAt);
         }
 
+        if (noqaCaptureEngine is not null)
+        {
+            return noqaCaptureEngine.CountCaptures(haystack, startAt);
+        }
+
         if (delimitedCaptureEngine is not null)
         {
             return delimitedCaptureEngine.CountCaptures(haystack, startAt);
@@ -1149,6 +1164,11 @@ public sealed class RegexAutomaton
                     captureOptions,
                     captureCount,
                     out keywordWhitespaceCaptureEngine);
+                RegexNoqaCaptureEngine.TryCreate(
+                    captureRoot,
+                    captureOptions,
+                    captureCount,
+                    out noqaCaptureEngine);
                 RegexLinePrefixCaptureEngine.TryCreate(
                     captureRoot,
                     captureOptions,
@@ -1204,6 +1224,7 @@ public sealed class RegexAutomaton
                     tabbedLogCaptureEngine is null &&
                     scalarRunCaptureEngine is null &&
                     keywordWhitespaceCaptureEngine is null &&
+                    noqaCaptureEngine is null &&
                     linePrefixCaptureEngine is null &&
                     operatorSpacingCaptureEngine is null &&
                     literalWordCaptureEngine is null &&
@@ -1229,6 +1250,7 @@ public sealed class RegexAutomaton
                 tabbedLogCaptureEngine is null &&
                 scalarRunCaptureEngine is null &&
                 keywordWhitespaceCaptureEngine is null &&
+                noqaCaptureEngine is null &&
                 linePrefixCaptureEngine is null &&
                 operatorSpacingCaptureEngine is null &&
                 literalWordCaptureEngine is null &&
@@ -1338,6 +1360,11 @@ public sealed class RegexAutomaton
         if (keywordWhitespaceCaptureEngine is not null)
         {
             return keywordWhitespaceCaptureEngine.FindCaptures(haystack, startAt);
+        }
+
+        if (noqaCaptureEngine is not null)
+        {
+            return noqaCaptureEngine.FindCaptures(haystack, startAt);
         }
 
         if (operatorSpacingCaptureEngine is not null)
