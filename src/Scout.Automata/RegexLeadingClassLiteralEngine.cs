@@ -5,10 +5,12 @@ internal sealed class RegexLeadingClassLiteralEngine
     private const int MaxLiteralCount = 8;
     private const int MaxExpandedSearchPatternCount = 16;
     private const int MaxTrailingSearchBytes = 32;
+    private const int TrailingSearchWindowLength = 4;
 
     private readonly RegexLeadingClassLiteralBranch[] branches;
     private readonly byte[][] searchPatterns;
     private readonly int[] searchPatternBranchIds;
+    private readonly int[] searchPatternLiteralOffsets;
     private readonly bool searchPatternsIncludeTrailingAtom;
     private readonly bool searchPatternCandidateBranchesAreUnambiguous;
     private readonly RegexCaseSensitiveLiteralSetScanner? scanner;
@@ -22,6 +24,7 @@ internal sealed class RegexLeadingClassLiteralEngine
         RegexLeadingClassLiteralBranch[] branches,
         byte[][] searchPatterns,
         int[] searchPatternBranchIds,
+        int[] searchPatternLiteralOffsets,
         bool searchPatternsIncludeTrailingAtom,
         bool searchPatternCandidateBranchesAreUnambiguous,
         RegexCaseSensitiveLiteralSetScanner? scanner,
@@ -33,6 +36,7 @@ internal sealed class RegexLeadingClassLiteralEngine
         this.branches = branches;
         this.searchPatterns = searchPatterns;
         this.searchPatternBranchIds = searchPatternBranchIds;
+        this.searchPatternLiteralOffsets = searchPatternLiteralOffsets;
         this.searchPatternsIncludeTrailingAtom = searchPatternsIncludeTrailingAtom;
         this.searchPatternCandidateBranchesAreUnambiguous = searchPatternCandidateBranchesAreUnambiguous;
         this.scanner = scanner;
@@ -101,9 +105,29 @@ internal sealed class RegexLeadingClassLiteralEngine
 
         byte[][] literals = GetLiterals(branches);
         int[] literalBranchIds = BuildBranchIds(literals.Length);
-        byte[][]? expandedPatterns = TryBuildTrailingSearchPatterns(branches, options, out int[]? expandedBranchIds);
+        int[] literalOffsets = new int[literals.Length];
+        byte[][]? expandedPatterns = TryBuildTrailingSearchPatterns(
+            branches,
+            options,
+            preferTrailingWindow: true,
+            out int[]? expandedBranchIds,
+            out int[]? expandedLiteralOffsets);
+        if (expandedPatterns is not null &&
+            expandedLiteralOffsets is not null &&
+            HasNonZeroOffset(expandedLiteralOffsets) &&
+            !SearchPatternCandidateBranchesAreUnambiguous(expandedPatterns))
+        {
+            expandedPatterns = TryBuildTrailingSearchPatterns(
+                branches,
+                options,
+                preferTrailingWindow: false,
+                out expandedBranchIds,
+                out expandedLiteralOffsets);
+        }
+
         byte[][] searchPatterns = expandedPatterns ?? literals;
         int[] searchPatternBranchIds = expandedBranchIds ?? literalBranchIds;
+        int[] searchPatternLiteralOffsets = expandedLiteralOffsets ?? literalOffsets;
         bool expandedSearchPatterns = expandedPatterns is not null;
         RegexCaseSensitiveLiteralSetScanner? scanner = null;
         RegexPackedLiteralSetScanner? packedScanner = null;
@@ -149,6 +173,7 @@ internal sealed class RegexLeadingClassLiteralEngine
             branches.ToArray(),
             searchPatterns,
             searchPatternBranchIds,
+            searchPatternLiteralOffsets,
             expandedSearchPatterns,
             SearchPatternCandidateBranchesAreUnambiguous(searchPatterns),
             scanner,
@@ -170,7 +195,7 @@ internal sealed class RegexLeadingClassLiteralEngine
         int searchAt = Math.Min(haystack.Length, lowerBound + 1);
         while (TryFindLiteral(haystack, searchAt, out RegexLiteralSetCandidate candidate))
         {
-            int start = candidate.Match.Start - 1;
+            int start = CandidateMatchStart(candidate);
             int length = 0;
             bool matched = start >= lowerBound &&
                 (searchPatternCandidateBranchesAreUnambiguous
@@ -248,7 +273,7 @@ internal sealed class RegexLeadingClassLiteralEngine
         int searchAt = Math.Min(haystack.Length, offset + 1);
         while (TryFindLiteral(haystack, searchAt, out RegexLiteralSetCandidate candidate))
         {
-            int start = candidate.Match.Start - 1;
+            int start = CandidateMatchStart(candidate);
             int length = 0;
             bool matched = start >= offset &&
                 (searchPatternCandidateBranchesAreUnambiguous
@@ -288,6 +313,38 @@ internal sealed class RegexLeadingClassLiteralEngine
             return false;
         }
 
+        int literalOffset = searchPatternLiteralOffsets[candidate.LiteralId];
+        if (literalOffset != 0)
+        {
+            int literalStart = start + 1;
+            if (literalOffset > haystack.Length - literalStart ||
+                !haystack.Slice(literalStart, literalOffset).SequenceEqual(branch.Literal.AsSpan(0, literalOffset)))
+            {
+                return false;
+            }
+
+            if (searchPatternsIncludeTrailingAtom)
+            {
+                length = branch.Literal.Length + 2;
+                return true;
+            }
+
+            int adjustedEnd = literalStart + branch.Literal.Length;
+            if (branch.TrailingAtom is { } adjustedTrailingAtom)
+            {
+                if (adjustedEnd >= haystack.Length ||
+                    !AtomMatches(haystack[adjustedEnd], adjustedTrailingAtom, options))
+                {
+                    return false;
+                }
+
+                adjustedEnd++;
+            }
+
+            length = adjustedEnd - start;
+            return true;
+        }
+
         int end = start + 1 + candidate.Match.Length;
         if (!searchPatternsIncludeTrailingAtom && branch.TrailingAtom is { } trailingAtom)
         {
@@ -302,6 +359,11 @@ internal sealed class RegexLeadingClassLiteralEngine
 
         length = end - start;
         return true;
+    }
+
+    private int CandidateMatchStart(RegexLiteralSetCandidate candidate)
+    {
+        return candidate.Match.Start - searchPatternLiteralOffsets[candidate.LiteralId] - 1;
     }
 
     private RegexMatch? FindByTrailingAnchor(ReadOnlySpan<byte> haystack, int lowerBound)
@@ -567,10 +629,13 @@ internal sealed class RegexLeadingClassLiteralEngine
     private static byte[][]? TryBuildTrailingSearchPatterns(
         List<RegexLeadingClassLiteralBranch> branches,
         RegexCompileOptions options,
-        out int[]? branchIds)
+        bool preferTrailingWindow,
+        out int[]? branchIds,
+        out int[]? literalOffsets)
     {
         List<byte[]> patterns = [];
         List<int> patternBranchIds = [];
+        List<int> patternLiteralOffsets = [];
         for (int branchIndex = 0; branchIndex < branches.Count; branchIndex++)
         {
             RegexLeadingClassLiteralBranch branch = branches[branchIndex];
@@ -580,19 +645,33 @@ internal sealed class RegexLeadingClassLiteralEngine
                 trailingBytes.Length > MaxTrailingSearchBytes)
             {
                 branchIds = null;
+                literalOffsets = null;
                 return null;
             }
 
             for (int byteIndex = 0; byteIndex < trailingBytes.Length; byteIndex++)
             {
-                byte[] pattern = new byte[branch.Literal.Length + 1];
-                branch.Literal.CopyTo(pattern, 0);
-                pattern[^1] = trailingBytes[byteIndex];
+                int fullLength = branch.Literal.Length + 1;
+                int patternLength = preferTrailingWindow
+                    ? Math.Min(TrailingSearchWindowLength, fullLength)
+                    : fullLength;
+                int literalOffset = fullLength - patternLength;
+                byte[] pattern = new byte[patternLength];
+                for (int patternIndex = 0; patternIndex < pattern.Length; patternIndex++)
+                {
+                    int sourceIndex = literalOffset + patternIndex;
+                    pattern[patternIndex] = sourceIndex < branch.Literal.Length
+                        ? branch.Literal[sourceIndex]
+                        : trailingBytes[byteIndex];
+                }
+
                 patterns.Add(pattern);
                 patternBranchIds.Add(branchIndex);
+                patternLiteralOffsets.Add(literalOffset);
                 if (patterns.Count > MaxExpandedSearchPatternCount)
                 {
                     branchIds = null;
+                    literalOffsets = null;
                     return null;
                 }
             }
@@ -601,11 +680,26 @@ internal sealed class RegexLeadingClassLiteralEngine
         if (patterns.Count == 0)
         {
             branchIds = null;
+            literalOffsets = null;
             return null;
         }
 
         branchIds = patternBranchIds.ToArray();
+        literalOffsets = patternLiteralOffsets.ToArray();
         return patterns.ToArray();
+    }
+
+    private static bool HasNonZeroOffset(int[] offsets)
+    {
+        for (int index = 0; index < offsets.Length; index++)
+        {
+            if (offsets[index] != 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool SearchPatternCandidateBranchesAreUnambiguous(byte[][] searchPatterns)

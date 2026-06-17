@@ -2030,7 +2030,7 @@ public sealed class RegexAutomatonTests
         Assert.Equal(RegexEngineKind.LeadingClassLiteral, GetEngineKind(single));
         Assert.Equal(RegexEngineKind.LeadingClassLiteral, GetEngineKind(trailingClass));
 
-        byte[] alternationHaystack = "Sawyer Finn xawyer! Zinn\tbinn "u8.ToArray();
+        byte[] alternationHaystack = "Sawyer Finn xawyer! Zinn\tbinn xyer "u8.ToArray();
         Assert.Equal(new RegexMatch(0, 7), alternation.Find(alternationHaystack));
         Assert.Equal(new RegexMatch(7, 5), alternation.Find(alternationHaystack, startAt: 1));
         Assert.Equal(new RegexMatch(20, 5), alternation.Find(alternationHaystack, startAt: 13));
