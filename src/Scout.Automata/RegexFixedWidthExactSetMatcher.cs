@@ -10,20 +10,29 @@ internal sealed class RegexFixedWidthExactSetMatcher
     private const int MaxWidth = 8;
     private const int MaxExpandedValues = 256;
     private const int MaxVectorPairValues = 16;
+    private const int MaxVectorTripleValues = 16;
 
     private readonly ulong[] values;
     private readonly int width;
     private readonly bool useVectorPairs;
+    private readonly bool useVectorTriples;
     private readonly Vector128<byte>[] firstPairVectors128;
     private readonly Vector128<byte>[] secondPairVectors128;
     private readonly Vector256<byte>[] firstPairVectors256;
     private readonly Vector256<byte>[] secondPairVectors256;
+    private readonly Vector128<byte>[] firstTripleVectors128;
+    private readonly Vector128<byte>[] secondTripleVectors128;
+    private readonly Vector128<byte>[] thirdTripleVectors128;
+    private readonly Vector256<byte>[] firstTripleVectors256;
+    private readonly Vector256<byte>[] secondTripleVectors256;
+    private readonly Vector256<byte>[] thirdTripleVectors256;
 
     private RegexFixedWidthExactSetMatcher(ulong[] values, int width)
     {
         this.values = values;
         this.width = width;
         useVectorPairs = width == 2 && values.Length <= MaxVectorPairValues;
+        useVectorTriples = width == 3 && values.Length <= MaxVectorTripleValues;
         if (useVectorPairs)
         {
             firstPairVectors128 = new Vector128<byte>[values.Length];
@@ -39,6 +48,38 @@ internal sealed class RegexFixedWidthExactSetMatcher
                 firstPairVectors256[index] = Vector256.Create(first);
                 secondPairVectors256[index] = Vector256.Create(second);
             }
+
+            firstTripleVectors128 = [];
+            secondTripleVectors128 = [];
+            thirdTripleVectors128 = [];
+            firstTripleVectors256 = [];
+            secondTripleVectors256 = [];
+            thirdTripleVectors256 = [];
+        }
+        else if (useVectorTriples)
+        {
+            firstPairVectors128 = [];
+            secondPairVectors128 = [];
+            firstPairVectors256 = [];
+            secondPairVectors256 = [];
+            firstTripleVectors128 = new Vector128<byte>[values.Length];
+            secondTripleVectors128 = new Vector128<byte>[values.Length];
+            thirdTripleVectors128 = new Vector128<byte>[values.Length];
+            firstTripleVectors256 = new Vector256<byte>[values.Length];
+            secondTripleVectors256 = new Vector256<byte>[values.Length];
+            thirdTripleVectors256 = new Vector256<byte>[values.Length];
+            for (int index = 0; index < values.Length; index++)
+            {
+                byte first = (byte)values[index];
+                byte second = (byte)(values[index] >> 8);
+                byte third = (byte)(values[index] >> 16);
+                firstTripleVectors128[index] = Vector128.Create(first);
+                secondTripleVectors128[index] = Vector128.Create(second);
+                thirdTripleVectors128[index] = Vector128.Create(third);
+                firstTripleVectors256[index] = Vector256.Create(first);
+                secondTripleVectors256[index] = Vector256.Create(second);
+                thirdTripleVectors256[index] = Vector256.Create(third);
+            }
         }
         else
         {
@@ -46,10 +87,18 @@ internal sealed class RegexFixedWidthExactSetMatcher
             secondPairVectors128 = [];
             firstPairVectors256 = [];
             secondPairVectors256 = [];
+            firstTripleVectors128 = [];
+            secondTripleVectors128 = [];
+            thirdTripleVectors128 = [];
+            firstTripleVectors256 = [];
+            secondTripleVectors256 = [];
+            thirdTripleVectors256 = [];
         }
     }
 
     public int Width => width;
+
+    public bool CanFindVectorized => useVectorPairs || useVectorTriples;
 
     public static bool TryCreate(
         RegexFixedWidthAtom[][] alternatives,
@@ -131,6 +180,19 @@ internal sealed class RegexFixedWidthExactSetMatcher
             }
         }
 
+        if (useVectorTriples && start <= haystack.Length - 3)
+        {
+            if (Avx2.IsSupported && haystack.Length - start > Vector256<byte>.Count + 1)
+            {
+                return FindThreeByteVector256(haystack, start);
+            }
+
+            if (Sse2.IsSupported && haystack.Length - start > Vector128<byte>.Count + 1)
+            {
+                return FindThreeByteVector128(haystack, start);
+            }
+        }
+
         return FindScalar(haystack, start);
     }
 
@@ -190,6 +252,50 @@ internal sealed class RegexFixedWidthExactSetMatcher
         return FindScalar(haystack, offset);
     }
 
+    private int FindThreeByteVector256(ReadOnlySpan<byte> haystack, int start)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int offset = start;
+        int vectorEnd = haystack.Length - Vector256<byte>.Count - 2;
+        while (offset <= vectorEnd)
+        {
+            var current = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            var next = Vector256.LoadUnsafe(ref reference, (nuint)(offset + 1));
+            var third = Vector256.LoadUnsafe(ref reference, (nuint)(offset + 2));
+            uint mask = AnyTripleEqual256(current, next, third).ExtractMostSignificantBits();
+            if (mask != 0)
+            {
+                return offset + BitOperations.TrailingZeroCount(mask);
+            }
+
+            offset += Vector256<byte>.Count;
+        }
+
+        return FindScalar(haystack, offset);
+    }
+
+    private int FindThreeByteVector128(ReadOnlySpan<byte> haystack, int start)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int offset = start;
+        int vectorEnd = haystack.Length - Vector128<byte>.Count - 2;
+        while (offset <= vectorEnd)
+        {
+            var current = Vector128.LoadUnsafe(ref reference, (nuint)offset);
+            var next = Vector128.LoadUnsafe(ref reference, (nuint)(offset + 1));
+            var third = Vector128.LoadUnsafe(ref reference, (nuint)(offset + 2));
+            uint mask = AnyTripleEqual128(current, next, third).ExtractMostSignificantBits();
+            if (mask != 0)
+            {
+                return offset + BitOperations.TrailingZeroCount(mask);
+            }
+
+            offset += Vector128<byte>.Count;
+        }
+
+        return FindScalar(haystack, offset);
+    }
+
     private Vector256<byte> AnyPairEqual256(Vector256<byte> current, Vector256<byte> next)
     {
         Vector256<byte> matches = Vector256<byte>.Zero;
@@ -211,6 +317,38 @@ internal sealed class RegexFixedWidthExactSetMatcher
             matches = Sse2.Or(matches, Sse2.And(
                 Sse2.CompareEqual(current, firstPairVectors128[index]),
                 Sse2.CompareEqual(next, secondPairVectors128[index])));
+        }
+
+        return matches;
+    }
+
+    private Vector256<byte> AnyTripleEqual256(Vector256<byte> current, Vector256<byte> next, Vector256<byte> third)
+    {
+        Vector256<byte> matches = Vector256<byte>.Zero;
+        for (int index = 0; index < firstTripleVectors256.Length; index++)
+        {
+            Vector256<byte> firstSecondMatches = Avx2.And(
+                Avx2.CompareEqual(current, firstTripleVectors256[index]),
+                Avx2.CompareEqual(next, secondTripleVectors256[index]));
+            matches = Avx2.Or(matches, Avx2.And(
+                firstSecondMatches,
+                Avx2.CompareEqual(third, thirdTripleVectors256[index])));
+        }
+
+        return matches;
+    }
+
+    private Vector128<byte> AnyTripleEqual128(Vector128<byte> current, Vector128<byte> next, Vector128<byte> third)
+    {
+        Vector128<byte> matches = Vector128<byte>.Zero;
+        for (int index = 0; index < firstTripleVectors128.Length; index++)
+        {
+            Vector128<byte> firstSecondMatches = Sse2.And(
+                Sse2.CompareEqual(current, firstTripleVectors128[index]),
+                Sse2.CompareEqual(next, secondTripleVectors128[index]));
+            matches = Sse2.Or(matches, Sse2.And(
+                firstSecondMatches,
+                Sse2.CompareEqual(third, thirdTripleVectors128[index])));
         }
 
         return matches;

@@ -1903,6 +1903,35 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies small fixed-width three-byte alternations preserve exact branch pairing.
+    /// </summary>
+    [Fact]
+    public void FixedWidthAlternationEngineCountsShortTripleBranches()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"aND|caN|Ha[DS]|WaS"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "xx HaD yy caN zz HaN aa WaS bb aND cc HaS"u8.ToArray();
+        int firstStart = haystack.AsSpan().IndexOf("HaD"u8);
+        int secondStart = haystack.AsSpan().IndexOf("caN"u8);
+        int rejectedStart = haystack.AsSpan().IndexOf("HaN"u8);
+        int lastStart = haystack.AsSpan().IndexOf("HaS"u8);
+
+        Assert.Equal(RegexEngineKind.FixedWidthAlternation, GetEngineKind(automaton));
+        Assert.True(automaton.IsMatch(haystack));
+        Assert.Equal(new RegexMatch(firstStart, 3), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(secondStart, 3), automaton.Find(haystack, firstStart + 1));
+        Assert.Equal(new RegexMatch(lastStart, 3), automaton.MatchAt(haystack, lastStart));
+        Assert.Null(automaton.MatchAt(haystack, rejectedStart));
+        Assert.Equal(5, automaton.CountMatches(haystack));
+        Assert.Equal(15, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies fixed-width exact-set matching preserves branch pairings instead of accepting a per-position cross product.
     /// </summary>
     [Fact]
