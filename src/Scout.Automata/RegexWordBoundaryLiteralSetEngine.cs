@@ -128,7 +128,6 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
         int nextAllowedStart = startOffset;
         long total = 0;
-        var pending = new List<RegexLiteralSetCandidate>();
         AhoCorasickOverlappingEnumerator matches = automaton.EnumerateOverlapping(haystack[startOffset..]);
         while (matches.MoveNext())
         {
@@ -137,101 +136,13 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
             if (candidate.Match.Start >= nextAllowedStart &&
                 HasWordBoundaries(haystack, candidate.Match.Start, candidate.Match.Length))
             {
-                pending.Add(candidate);
+                RegexMatch match = candidate.Match;
+                total += sumSpans ? match.Length : 1;
+                nextAllowedStart = match.End;
             }
-
-            DrainResolvedCandidates(
-                pending,
-                startOffset + ahoMatch.End,
-                ref nextAllowedStart,
-                sumSpans,
-                ref total);
-        }
-
-        while (pending.Count != 0)
-        {
-            AcceptBestCandidate(pending, ref nextAllowedStart, sumSpans, ref total);
         }
 
         return total;
-    }
-
-    private void DrainResolvedCandidates(
-        List<RegexLiteralSetCandidate> pending,
-        int observedEnd,
-        ref int nextAllowedStart,
-        bool sumSpans,
-        ref long total)
-    {
-        while (pending.Count != 0)
-        {
-            int earliestStart = int.MaxValue;
-            for (int index = 0; index < pending.Count; index++)
-            {
-                earliestStart = Math.Min(earliestStart, pending[index].Match.Start);
-            }
-
-            if (observedEnd <= earliestStart + maxLiteralLength)
-            {
-                return;
-            }
-
-            AcceptBestCandidate(pending, ref nextAllowedStart, sumSpans, ref total);
-        }
-    }
-
-    private static void AcceptBestCandidate(
-        List<RegexLiteralSetCandidate> pending,
-        ref int nextAllowedStart,
-        bool sumSpans,
-        ref long total)
-    {
-        int bestIndex = -1;
-        RegexLiteralSetCandidate best = default;
-        for (int index = 0; index < pending.Count; index++)
-        {
-            RegexLiteralSetCandidate candidate = pending[index];
-            if (candidate.Match.Start < nextAllowedStart)
-            {
-                continue;
-            }
-
-            if (bestIndex < 0 || IsBetter(candidate, best))
-            {
-                bestIndex = index;
-                best = candidate;
-            }
-        }
-
-        if (bestIndex < 0)
-        {
-            pending.Clear();
-            return;
-        }
-
-        RegexMatch match = best.Match;
-        total += sumSpans ? match.Length : 1;
-        nextAllowedStart = match.End;
-        RemovePendingBefore(pending, nextAllowedStart);
-    }
-
-    private static void RemovePendingBefore(List<RegexLiteralSetCandidate> pending, int start)
-    {
-        int write = 0;
-        for (int read = 0; read < pending.Count; read++)
-        {
-            RegexLiteralSetCandidate candidate = pending[read];
-            if (candidate.Match.Start >= start)
-            {
-                pending[write] = candidate;
-                write++;
-            }
-        }
-
-        if (write < pending.Count)
-        {
-            pending.RemoveRange(write, pending.Count - write);
-        }
     }
 
     private static RegexLiteralSetCandidate ResolveCandidate(int startOffset, AhoCorasickMatch match)
