@@ -5005,6 +5005,20 @@ public sealed class RegexAutomatonTests
         Assert.Equal(1, automaton.CountMatches(haystack));
         Assert.Equal(expected.Length, automaton.SumMatchSpans(haystack));
 
+        string mixed = "abcdé foobar bazquux xx abcde foobár bazquux yy abcde foobar bazquúx";
+        byte[] mixedHaystack = System.Text.Encoding.UTF8.GetBytes(mixed);
+        int firstLength = System.Text.Encoding.UTF8.GetByteCount("abcdé foobar bazquux");
+        int secondStart = System.Text.Encoding.UTF8.GetByteCount("abcdé foobar bazquux xx ");
+        int secondLength = System.Text.Encoding.UTF8.GetByteCount("abcde foobár bazquux");
+        int thirdStart = System.Text.Encoding.UTF8.GetByteCount("abcdé foobar bazquux xx abcde foobár bazquux yy ");
+        int thirdLength = System.Text.Encoding.UTF8.GetByteCount("abcde foobar bazquúx");
+
+        Assert.Equal(new RegexMatch(0, firstLength), automaton.Find(mixedHaystack));
+        Assert.Equal(new RegexMatch(secondStart, secondLength), automaton.Find(mixedHaystack, firstLength));
+        Assert.Equal(new RegexMatch(thirdStart, thirdLength), automaton.Find(mixedHaystack, secondStart + secondLength));
+        Assert.Equal(3, automaton.CountMatches(mixedHaystack));
+        Assert.Equal(firstLength + secondLength + thirdLength, automaton.SumMatchSpans(mixedHaystack));
+
         var byteMode = RegexAutomaton.Compile(
             @"\w{5}\s\w{6}\s\w{7}"u8,
             caseInsensitive: false,

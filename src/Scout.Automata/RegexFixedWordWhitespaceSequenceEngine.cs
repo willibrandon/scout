@@ -197,7 +197,10 @@ internal sealed class RegexFixedWordWhitespaceSequenceEngine
         ref long spanSum)
     {
         var guardRanges = new List<Range>();
-        int guardRadius = fixedAsciiLength * MaxUtf8ScalarBytes;
+        // A match that needs Unicode scalar semantics must include a non-ASCII scalar.
+        // Guard one fixed pattern width around each such scalar and run the generic
+        // matcher there; pure ASCII spans between guards can keep the vector fast path.
+        int guardRadius = fixedAsciiLength + MaxUtf8ScalarBytes;
         int search = 0;
         while (search < haystack.Length)
         {
