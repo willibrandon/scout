@@ -18,7 +18,7 @@ internal sealed class RegexUnanchoredLazyDfa
         out RegexUnanchoredLazyDfa? dfa)
     {
         dfa = null;
-        if (options.Utf8 || CanMatchEmpty(root) || HasNullableRepetition(root) || HasMultiByteLiteral(root))
+        if (options.Utf8 || CanMatchEmpty(root) || HasNullableRepetition(root))
         {
             return false;
         }
@@ -167,19 +167,6 @@ internal sealed class RegexUnanchoredLazyDfa
         return false;
     }
 
-    private static bool HasMultiByteLiteral(RegexSyntaxNode node)
-    {
-        return node.Kind switch
-        {
-            RegexSyntaxKind.Literal => ((RegexAtomNode)node).Value.Length > 1,
-            RegexSyntaxKind.Sequence => HasMultiByteLiteral((RegexSequenceNode)node),
-            RegexSyntaxKind.Alternation => HasMultiByteLiteral((RegexAlternationNode)node),
-            RegexSyntaxKind.CapturingGroup or RegexSyntaxKind.NonCapturingGroup => HasMultiByteLiteral(((RegexGroupNode)node).Child),
-            RegexSyntaxKind.Repetition => HasMultiByteLiteral(((RegexRepetitionNode)node).Child),
-            _ => false,
-        };
-    }
-
     private static bool HasNullableRepetition(RegexSyntaxNode node)
     {
         return node.Kind switch
@@ -219,29 +206,4 @@ internal sealed class RegexUnanchoredLazyDfa
         return false;
     }
 
-    private static bool HasMultiByteLiteral(RegexSequenceNode node)
-    {
-        for (int index = 0; index < node.Nodes.Count; index++)
-        {
-            if (HasMultiByteLiteral(node.Nodes[index]))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static bool HasMultiByteLiteral(RegexAlternationNode node)
-    {
-        for (int index = 0; index < node.Alternatives.Count; index++)
-        {
-            if (HasMultiByteLiteral(node.Alternatives[index]))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
 }

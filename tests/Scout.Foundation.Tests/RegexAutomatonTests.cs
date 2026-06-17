@@ -2738,6 +2738,40 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies unanchored lazy DFA search can reverse-match branches containing multi-byte literals.
+    /// </summary>
+    [Fact]
+    public void UnanchoredLazyDfaFindsMultiByteLiteralBranches()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(@"(?:abc|ab)\d+"u8);
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.True(RegexUnanchoredLazyDfa.TryCreate(tree.Root, options, dfaSizeLimit: 1024 * 1024, out RegexUnanchoredLazyDfa? dfa));
+        Assert.NotNull(dfa);
+
+        byte[] haystack = "zz abc123 xx ab45"u8.ToArray();
+
+        Assert.True(dfa.TryFind(haystack, startAt: 0, out RegexMatch match, out bool gaveUp));
+        Assert.False(gaveUp);
+        Assert.Equal(new RegexMatch(3, 6), match);
+        Assert.True(dfa.TrySumMatchSpans(haystack, startAt: 0, out long spanSum));
+        Assert.Equal(10, spanSum);
+
+        RegexSyntaxTree priorityTree = RegexSyntaxParser.Parse(@"(?:ab|b)"u8);
+        Assert.True(RegexUnanchoredLazyDfa.TryCreate(priorityTree.Root, options, dfaSizeLimit: 1024 * 1024, out RegexUnanchoredLazyDfa? priorityDfa));
+        Assert.NotNull(priorityDfa);
+        Assert.True(priorityDfa.TryFind("zab"u8, startAt: 0, out RegexMatch priorityMatch, out gaveUp));
+        Assert.False(gaveUp);
+        Assert.Equal(new RegexMatch(1, 2), priorityMatch);
+    }
+
+    /// <summary>
     /// Verifies dot-star/class fallback alternations avoid quadratic all-match iteration.
     /// </summary>
     [Fact]
