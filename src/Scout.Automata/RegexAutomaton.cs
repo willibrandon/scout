@@ -444,7 +444,8 @@ public sealed class RegexAutomaton
             options,
             out RegexFixedWidthAlternationEngine? earlyFixedWidthAlternation);
         if (earlyFixedWidthAlternation is not null &&
-            !HasHigherPriorityFixedWidthSpecialization(tree.Root, options))
+            (CanSkipHigherPriorityFixedWidthGuards(tree.Root, options) ||
+            !HasHigherPriorityFixedWidthSpecialization(tree.Root, options)))
         {
             return new RegexAutomaton(
                 RegexMetaEngine.CompileFixedWidthAlternation(
@@ -1535,6 +1536,44 @@ public sealed class RegexAutomaton
         }
 
         return false;
+    }
+
+    private static bool CanSkipHigherPriorityFixedWidthGuards(RegexSyntaxNode root, RegexCompileOptions options)
+    {
+        root = UnwrapTransparentGroups(root);
+        if (root is not RegexSequenceNode sequence || sequence.Nodes.Count == 0)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < sequence.Nodes.Count; index++)
+        {
+            RegexSyntaxNode node = UnwrapTransparentGroups(sequence.Nodes[index]);
+            if (node is not RegexAtomNode atom ||
+                atom.Kind == RegexSyntaxKind.Literal ||
+                IsPredicateAtom(atom.Kind) ||
+                RegexByteClass.RequiresUtf8ScalarMatch(
+                    atom.Kind,
+                    atom.Value.Span,
+                    options.Utf8,
+                    options.CaseInsensitive,
+                    options.UnicodeClasses))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsPredicateAtom(RegexSyntaxKind kind)
+    {
+        return kind is RegexSyntaxKind.StartAnchor
+            or RegexSyntaxKind.EndAnchor
+            or RegexSyntaxKind.AbsoluteStartAnchor
+            or RegexSyntaxKind.AbsoluteEndAnchor
+            or RegexSyntaxKind.WordBoundary
+            or RegexSyntaxKind.NotWordBoundary;
     }
 
     private static bool HasHigherPriorityDelimitedSpanSpecialization(RegexSyntaxNode root, RegexCompileOptions options)

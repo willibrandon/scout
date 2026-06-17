@@ -1,21 +1,25 @@
-using System.Runtime.CompilerServices;
-
 namespace Scout;
 
 internal readonly struct RegexFixedWidthAtomCacheKey : IEquatable<RegexFixedWidthAtomCacheKey>
 {
-    private readonly RegexAtomNode atom;
+    private readonly RegexSyntaxKind kind;
+    private readonly ReadOnlyMemory<byte> value;
+    private readonly int valueHash;
     private readonly int options;
 
     public RegexFixedWidthAtomCacheKey(RegexAtomNode atom, RegexCompileOptions options)
     {
-        this.atom = atom;
+        kind = atom.Kind;
+        value = atom.Value;
+        valueHash = HashValue(atom.Value.Span);
         this.options = PackOptions(options);
     }
 
     public bool Equals(RegexFixedWidthAtomCacheKey other)
     {
-        return ReferenceEquals(atom, other.atom) && options == other.options;
+        return kind == other.kind &&
+            options == other.options &&
+            value.Span.SequenceEqual(other.value.Span);
     }
 
     public override bool Equals(object? obj)
@@ -25,7 +29,18 @@ internal readonly struct RegexFixedWidthAtomCacheKey : IEquatable<RegexFixedWidt
 
     public override int GetHashCode()
     {
-        return HashCode.Combine(RuntimeHelpers.GetHashCode(atom), options);
+        return HashCode.Combine(kind, valueHash, options);
+    }
+
+    private static int HashValue(ReadOnlySpan<byte> value)
+    {
+        var hash = new HashCode();
+        for (int index = 0; index < value.Length; index++)
+        {
+            hash.Add(value[index]);
+        }
+
+        return hash.ToHashCode();
     }
 
     private static int PackOptions(RegexCompileOptions options)
