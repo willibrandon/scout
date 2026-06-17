@@ -145,6 +145,25 @@ public sealed class MemmemSearchTests
     }
 
     /// <summary>
+    /// Verifies three-byte packed-pair search handles dense non-adjacent false positives.
+    /// </summary>
+    [Fact]
+    public void FindHandlesThreeBytePackedPairFalsePositives()
+    {
+        byte[] haystack = new byte[512];
+        haystack.AsSpan().Fill((byte)'x');
+        for (int index = 0; index < 480; index += 4)
+        {
+            "axi"u8.CopyTo(haystack.AsSpan(index, 3));
+        }
+
+        "aei"u8.CopyTo(haystack.AsSpan(500, 3));
+
+        Assert.Equal(500, MemmemSearch.Find(haystack, "aei"u8));
+        Assert.Equal(500, new MemmemFinder("aei"u8).Find(haystack));
+    }
+
+    /// <summary>
     /// Verifies empty-needle semantics match Rust substring search behavior.
     /// </summary>
     [Fact]
