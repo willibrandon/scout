@@ -556,6 +556,26 @@ internal sealed class RegexShortLiteralSetScanner
         byte bucketBits,
         out RegexLiteralSetCandidate candidate)
     {
+        if (BitOperations.IsPow2(bucketBits))
+        {
+            int[] literalIds = buckets[BitOperations.TrailingZeroCount(bucketBits)];
+            if (literalIds.Length == 1)
+            {
+                int literalId = literalIds[0];
+                byte[] literal = literals[literalId];
+                if (literal.Length <= haystack.Length - start &&
+                    haystack[start + literal.Length - 1] == literal[^1] &&
+                    haystack.Slice(start, literal.Length).SequenceEqual(literal))
+                {
+                    candidate = new RegexLiteralSetCandidate(literalId, new RegexMatch(start, literal.Length));
+                    return true;
+                }
+
+                candidate = default;
+                return false;
+            }
+        }
+
         RegexLiteralSetCandidate? best = null;
         uint remainingBuckets = bucketBits;
         while (remainingBuckets != 0)
