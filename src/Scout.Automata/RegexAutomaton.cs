@@ -539,12 +539,21 @@ public sealed class RegexAutomaton
             RegexSimpleSequenceEngine.TryCreate(tree.Root, options, out simpleSequence);
         }
 
-        RegexEndAnchoredSequenceEngine.TryCreate(tree.Root, options, out RegexEndAnchoredSequenceEngine? endAnchoredSequence);
         RegexEndAnchoredAtomEngine.TryCreate(tree.Root, options, out RegexEndAnchoredAtomEngine? endAnchoredAtom);
-        RegexLineContainsEngine.TryCreate(tree.Root, options, out RegexLineContainsEngine? lineContains);
-        RegexDotStarClassFallbackEngine.TryCreate(tree.Root, options, out RegexDotStarClassFallbackEngine? dotStarClassFallback);
-        RegexScalarRunEngine.TryCreate(tree.Root, options, out RegexScalarRunEngine? scalarRun);
-        RegexAsciiWordBoundaryEngine.TryCreate(tree.Root, options, out RegexAsciiWordBoundaryEngine? asciiWordBoundary);
+        RegexEndAnchoredSequenceEngine? endAnchoredSequence = null;
+        RegexLineContainsEngine? lineContains = null;
+        RegexDotStarClassFallbackEngine? dotStarClassFallback = null;
+        RegexScalarRunEngine? scalarRun = null;
+        RegexAsciiWordBoundaryEngine? asciiWordBoundary = null;
+        if (simpleSequence is null && endAnchoredAtom is null)
+        {
+            RegexEndAnchoredSequenceEngine.TryCreate(tree.Root, options, out endAnchoredSequence);
+            RegexLineContainsEngine.TryCreate(tree.Root, options, out lineContains);
+            RegexDotStarClassFallbackEngine.TryCreate(tree.Root, options, out dotStarClassFallback);
+            RegexScalarRunEngine.TryCreate(tree.Root, options, out scalarRun);
+            RegexAsciiWordBoundaryEngine.TryCreate(tree.Root, options, out asciiWordBoundary);
+        }
+
         var lengthGuard = RegexLengthGuard.TryCreate(tree.Root, options);
         var requiredByteSetGuard = RegexRequiredByteSetGuard.TryCreate(tree.Root, options);
         RegexRequiredLiteralAnySetGuard? requiredLiteralAnySetGuard = prefilter is null
