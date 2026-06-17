@@ -163,10 +163,17 @@ internal sealed class RegexBoundedByteClassSequenceEngine
     {
         long total = 0;
         int offset = Math.Clamp(startAt, 0, haystack.Length);
-        while (Find(haystack, offset) is RegexMatch match)
+        while (TryFindStart(haystack, offset, out int start))
         {
-            total += sumSpans ? match.Length : 1;
-            offset = match.End;
+            if (TryMatchAt(haystack, start, out int length))
+            {
+                total += sumSpans ? length : 1;
+                offset = start + length;
+            }
+            else
+            {
+                offset = start + 1;
+            }
         }
 
         return total;
