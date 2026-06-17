@@ -193,10 +193,54 @@ internal sealed class RegexRepeatedLazyDotStarLiteralEngine
         byte first,
         byte second)
     {
-        int searchAt = start + 1;
+        if (Avx512BW.IsSupported && end - start > Vector512<byte>.Count)
+        {
+            return FindAdjacentBytesBySecondVector512(haystack, start, end, first, second);
+        }
+
+        return FindAdjacentBytesBySecondScalar(haystack, start + 1, end, first, second);
+    }
+
+    private static int FindAdjacentBytesBySecondVector512(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        int end,
+        byte first,
+        byte second)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        var firstVector = Vector512.Create(first);
+        var secondVector = Vector512.Create(second);
+        int offset = start + 1;
+        int vectorEnd = end - Vector512<byte>.Count;
+        while (offset <= vectorEnd)
+        {
+            var previous = Vector512.LoadUnsafe(ref reference, (nuint)(offset - 1));
+            var current = Vector512.LoadUnsafe(ref reference, (nuint)offset);
+            ulong mask =
+                (Avx512BW.CompareEqual(previous, firstVector) &
+                 Avx512BW.CompareEqual(current, secondVector)).ExtractMostSignificantBits();
+            if (mask != 0)
+            {
+                return offset + BitOperations.TrailingZeroCount(mask) - 1;
+            }
+
+            offset += Vector512<byte>.Count;
+        }
+
+        return FindAdjacentBytesBySecondScalar(haystack, offset, end, first, second);
+    }
+
+    private static int FindAdjacentBytesBySecondScalar(
+        ReadOnlySpan<byte> haystack,
+        int searchAt,
+        int end,
+        byte first,
+        byte second)
+    {
         while (searchAt < end)
         {
-            int offset = haystack[searchAt..end].IndexOf(second);
+            int offset = MemchrSearch.Find(haystack[searchAt..end], second);
             if (offset < 0)
             {
                 return -1;
@@ -204,7 +248,7 @@ internal sealed class RegexRepeatedLazyDotStarLiteralEngine
 
             int secondIndex = searchAt + offset;
             int firstIndex = secondIndex - 1;
-            if (firstIndex >= start && haystack[firstIndex] == first)
+            if (haystack[firstIndex] == first)
             {
                 return firstIndex;
             }

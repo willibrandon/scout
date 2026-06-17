@@ -1685,14 +1685,26 @@ public sealed class RegexAutomatonTests
             utf8: false,
             unicodeClasses: false);
         byte[] haystack = "aa,bb,z tail a,b,xz\ncc,dd,z"u8.ToArray();
+        byte[] largeHaystack = new byte[256];
+        Array.Fill(largeHaystack, (byte)'x');
+        largeHaystack[80] = (byte)'\n';
+        "aa,bb,z"u8.CopyTo(largeHaystack.AsSpan(81));
+        byte[] largeNoMatch = new byte[256];
+        Array.Fill(largeNoMatch, (byte)'x');
+        for (int index = 16; index < largeNoMatch.Length; index += 31)
+        {
+            largeNoMatch[index] = (byte)'z';
+        }
 
         Assert.Equal(RegexEngineKind.RepeatedLazyDotStarLiteral, GetEngineKind(automaton));
         Assert.Equal(new RegexMatch(0, 7), automaton.Find(haystack));
         Assert.Equal(new RegexMatch(1, 6), automaton.Find(haystack, startAt: 1));
         Assert.Equal(new RegexMatch(20, 7), automaton.Find(haystack, startAt: 16));
+        Assert.Equal(new RegexMatch(81, 7), automaton.Find(largeHaystack));
         Assert.Equal(new RegexMatch(0, 7), automaton.MatchAt(haystack, 0));
         Assert.Null(automaton.MatchAt(haystack, 3));
         Assert.Null(automaton.MatchAt("aa,\nbb,z"u8, 0));
+        Assert.Null(automaton.Find(largeNoMatch));
         Assert.Equal(new RegexMatch(0, 3), automaton.Find(",,z"u8));
         Assert.Equal(2, automaton.CountMatches(haystack));
         Assert.Equal(14, automaton.SumMatchSpans(haystack));
