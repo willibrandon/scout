@@ -18,6 +18,8 @@ internal sealed class RegexShortLiteralSetScanner
     private readonly Vector128<byte>[] highMasks128 = new Vector128<byte>[MaskLength];
     private readonly Vector256<byte>[] lowMasks256 = new Vector256<byte>[MaskLength];
     private readonly Vector256<byte>[] highMasks256 = new Vector256<byte>[MaskLength];
+    private readonly Vector512<byte>[] lowMasks512 = new Vector512<byte>[MaskLength];
+    private readonly Vector512<byte>[] highMasks512 = new Vector512<byte>[MaskLength];
 
     private RegexShortLiteralSetScanner(IReadOnlyList<byte[]> literals)
     {
@@ -85,6 +87,11 @@ internal sealed class RegexShortLiteralSetScanner
     public long CountOrSum(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        if (Avx512BW.IsSupported && haystack.Length - startOffset >= Vector512<byte>.Count + MaskLength - 1)
+        {
+            return CountOrSumVector512(haystack, startOffset, sumSpans);
+        }
+
         if (Avx2.IsSupported && haystack.Length - startOffset >= Vector256<byte>.Count + MaskLength - 1)
         {
             return CountOrSumVector256(haystack, startOffset, sumSpans);
@@ -96,6 +103,105 @@ internal sealed class RegexShortLiteralSetScanner
         }
 
         return CountOrSumScalar(haystack, startOffset, sumSpans, total: 0);
+    }
+
+    private long CountOrSumVector512(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int nextAllowedStart = startAt;
+        int offset = startAt;
+        int vectorEnd = haystack.Length - Vector512<byte>.Count - MaskLength + 1;
+        long total = 0;
+        int unrolledEnd = vectorEnd - Vector512<byte>.Count * 3;
+        while (offset <= unrolledEnd)
+        {
+            Vector512<byte> firstCandidates = CandidateVector512(ref reference, offset);
+            if (Avx512BW.CompareEqual(firstCandidates, Vector512<byte>.Zero).ExtractMostSignificantBits() != ulong.MaxValue)
+            {
+                for (int lane = 0; lane < 8; lane++)
+                {
+                    CountOrSumCandidateChunk(
+                        haystack,
+                        offset + lane * 8,
+                        firstCandidates.AsUInt64().GetElement(lane),
+                        sumSpans,
+                        ref total,
+                        ref nextAllowedStart);
+                }
+            }
+
+            offset += Vector512<byte>.Count;
+            Vector512<byte> secondCandidates = CandidateVector512(ref reference, offset);
+            if (Avx512BW.CompareEqual(secondCandidates, Vector512<byte>.Zero).ExtractMostSignificantBits() != ulong.MaxValue)
+            {
+                for (int lane = 0; lane < 8; lane++)
+                {
+                    CountOrSumCandidateChunk(
+                        haystack,
+                        offset + lane * 8,
+                        secondCandidates.AsUInt64().GetElement(lane),
+                        sumSpans,
+                        ref total,
+                        ref nextAllowedStart);
+                }
+            }
+
+            offset += Vector512<byte>.Count;
+            Vector512<byte> thirdCandidates = CandidateVector512(ref reference, offset);
+            if (Avx512BW.CompareEqual(thirdCandidates, Vector512<byte>.Zero).ExtractMostSignificantBits() != ulong.MaxValue)
+            {
+                for (int lane = 0; lane < 8; lane++)
+                {
+                    CountOrSumCandidateChunk(
+                        haystack,
+                        offset + lane * 8,
+                        thirdCandidates.AsUInt64().GetElement(lane),
+                        sumSpans,
+                        ref total,
+                        ref nextAllowedStart);
+                }
+            }
+
+            offset += Vector512<byte>.Count;
+            Vector512<byte> fourthCandidates = CandidateVector512(ref reference, offset);
+            if (Avx512BW.CompareEqual(fourthCandidates, Vector512<byte>.Zero).ExtractMostSignificantBits() != ulong.MaxValue)
+            {
+                for (int lane = 0; lane < 8; lane++)
+                {
+                    CountOrSumCandidateChunk(
+                        haystack,
+                        offset + lane * 8,
+                        fourthCandidates.AsUInt64().GetElement(lane),
+                        sumSpans,
+                        ref total,
+                        ref nextAllowedStart);
+                }
+            }
+
+            offset += Vector512<byte>.Count;
+        }
+
+        while (offset <= vectorEnd)
+        {
+            Vector512<byte> candidates = CandidateVector512(ref reference, offset);
+            if (Avx512BW.CompareEqual(candidates, Vector512<byte>.Zero).ExtractMostSignificantBits() != ulong.MaxValue)
+            {
+                for (int lane = 0; lane < 8; lane++)
+                {
+                    CountOrSumCandidateChunk(
+                        haystack,
+                        offset + lane * 8,
+                        candidates.AsUInt64().GetElement(lane),
+                        sumSpans,
+                        ref total,
+                        ref nextAllowedStart);
+                }
+            }
+
+            offset += Vector512<byte>.Count;
+        }
+
+        return CountOrSumScalar(haystack, Math.Max(nextAllowedStart, offset), sumSpans, total);
     }
 
     private long CountOrSumVector256(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
@@ -418,6 +524,30 @@ internal sealed class RegexShortLiteralSetScanner
         return -1;
     }
 
+    private Vector512<byte> CandidateVector512(ref byte reference, int offset)
+    {
+        Vector512<byte> first = CandidateByteVector512(
+            Vector512.LoadUnsafe(ref reference, (nuint)offset),
+            byteIndex: 0);
+        Vector512<byte> second = CandidateByteVector512(
+            Vector512.LoadUnsafe(ref reference, (nuint)(offset + 1)),
+            byteIndex: 1);
+        Vector512<byte> third = CandidateByteVector512(
+            Vector512.LoadUnsafe(ref reference, (nuint)(offset + 2)),
+            byteIndex: 2);
+        return first & second & third;
+    }
+
+    private Vector512<byte> CandidateByteVector512(Vector512<byte> chunk, int byteIndex)
+    {
+        var lowNibbleMask = Vector512.Create((byte)0x0F);
+        Vector512<byte> lowNibbles = chunk & lowNibbleMask;
+        Vector512<byte> highNibbles = Avx512BW.ShiftRightLogical(chunk.AsUInt16(), 4).AsByte() & lowNibbleMask;
+
+        return Avx512BW.Shuffle(lowMasks512[byteIndex], lowNibbles) &
+            Avx512BW.Shuffle(highMasks512[byteIndex], highNibbles);
+    }
+
     private Vector256<byte> CandidateVector256(
         Vector256<byte> chunk,
         ref Vector256<byte> previous0,
@@ -627,8 +757,8 @@ internal sealed class RegexShortLiteralSetScanner
 
     private void BuildMasks()
     {
-        byte[] low = new byte[32];
-        byte[] high = new byte[32];
+        byte[] low = new byte[64];
+        byte[] high = new byte[64];
         for (int byteIndex = 0; byteIndex < MaskLength; byteIndex++)
         {
             Array.Clear(low);
@@ -649,6 +779,8 @@ internal sealed class RegexShortLiteralSetScanner
             highMasks128[byteIndex] = Vector128.LoadUnsafe(ref highReference);
             lowMasks256[byteIndex] = Vector256.LoadUnsafe(ref lowReference);
             highMasks256[byteIndex] = Vector256.LoadUnsafe(ref highReference);
+            lowMasks512[byteIndex] = Vector512.LoadUnsafe(ref lowReference);
+            highMasks512[byteIndex] = Vector512.LoadUnsafe(ref highReference);
         }
     }
 
@@ -659,8 +791,12 @@ internal sealed class RegexShortLiteralSetScanner
         int highNibble = value >> 4;
         low[lowNibble] |= bit;
         low[lowNibble + 16] |= bit;
+        low[lowNibble + 32] |= bit;
+        low[lowNibble + 48] |= bit;
         high[highNibble] |= bit;
         high[highNibble + 16] |= bit;
+        high[highNibble + 32] |= bit;
+        high[highNibble + 48] |= bit;
     }
 
     private static int[][] BuildBuckets(byte[][] literals)
