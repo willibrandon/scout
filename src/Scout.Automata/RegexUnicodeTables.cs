@@ -9,6 +9,8 @@ namespace Scout;
 
 internal static class RegexUnicodeTables
 {
+    private static readonly Lazy<Dictionary<int, int[]>> SimpleCaseFoldEquivalents = new(BuildSimpleCaseFoldEquivalents);
+
     internal static bool IsDecimalNumber(Rune value)
     {
         return Contains(DecimalNumber, value.Value);
@@ -145,20 +147,14 @@ internal static class RegexUnicodeTables
     internal static void AddSimpleCaseFoldEquivalents(Rune value, List<Rune> equivalents)
     {
         AddDistinctRune(equivalents, value);
-        ReadOnlySpan<int> pairs = SimpleCaseFold;
-        for (int index = 0; index < pairs.Length; index += 2)
+        if (!SimpleCaseFoldEquivalents.Value.TryGetValue(value.Value, out int[] scalarEquivalents))
         {
-            int first = pairs[index];
-            int second = pairs[index + 1];
-            if (first == value.Value && Rune.IsValid(second))
-            {
-                AddDistinctRune(equivalents, new Rune(second));
-            }
+            return;
+        }
 
-            if (second == value.Value && Rune.IsValid(first))
-            {
-                AddDistinctRune(equivalents, new Rune(first));
-            }
+        for (int index = 0; index < scalarEquivalents.Length; index++)
+        {
+            AddDistinctRune(equivalents, new Rune(scalarEquivalents[index]));
         }
     }
 
@@ -307,6 +303,51 @@ internal static class RegexUnicodeTables
         }
 
         values.Add(value);
+    }
+
+    private static Dictionary<int, int[]> BuildSimpleCaseFoldEquivalents()
+    {
+        var builders = new Dictionary<int, List<int>>();
+        ReadOnlySpan<int> pairs = SimpleCaseFold;
+        for (int index = 0; index < pairs.Length; index += 2)
+        {
+            int first = pairs[index];
+            int second = pairs[index + 1];
+            AddCaseFoldEquivalent(builders, first, second);
+            AddCaseFoldEquivalent(builders, second, first);
+        }
+
+        var equivalents = new Dictionary<int, int[]>(builders.Count);
+        foreach (KeyValuePair<int, List<int>> builder in builders)
+        {
+            equivalents.Add(builder.Key, builder.Value.ToArray());
+        }
+
+        return equivalents;
+    }
+
+    private static void AddCaseFoldEquivalent(Dictionary<int, List<int>> equivalents, int source, int target)
+    {
+        if (!Rune.IsValid(source) || !Rune.IsValid(target))
+        {
+            return;
+        }
+
+        if (!equivalents.TryGetValue(source, out List<int> targets))
+        {
+            targets = [];
+            equivalents.Add(source, targets);
+        }
+
+        for (int index = 0; index < targets.Count; index++)
+        {
+            if (targets[index] == target)
+            {
+                return;
+            }
+        }
+
+        targets.Add(target);
     }
 
     private static void AddRangePrefixBytes(ReadOnlySpan<int> ranges, List<byte[]> prefixes)
