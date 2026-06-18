@@ -174,7 +174,10 @@ internal sealed class RegexLiteralSetEngine
             !asciiCaseInsensitive &&
             !unicodeCaseInsensitive &&
             !useAho &&
-            RegexCaseSensitiveLiteralSetScanner.TryCreate(this.literals, out RegexCaseSensitiveLiteralSetScanner? caseSensitive))
+            RegexCaseSensitiveLiteralSetScanner.TryCreate(
+                this.literals,
+                out RegexCaseSensitiveLiteralSetScanner? caseSensitive,
+                useChunkedCount: !ContainsNonAscii(this.literals)))
         {
             caseSensitiveScanner = caseSensitive;
             return;
