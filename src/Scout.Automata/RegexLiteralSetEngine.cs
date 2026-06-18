@@ -999,19 +999,7 @@ internal sealed class RegexLiteralSetEngine
         long total = 0;
         for (int index = 0; index < finders.Length; index++)
         {
-            int length = literals[index].Length;
-            int position = startOffset;
-            while (position <= haystack.Length)
-            {
-                int offset = finders[index].Find(haystack[position..]);
-                if (offset < 0)
-                {
-                    break;
-                }
-
-                total += sumSpans ? length : 1;
-                position += offset + length;
-            }
+            total += finders[index].CountOrSum(haystack, startOffset, sumSpans);
         }
 
         return total;
