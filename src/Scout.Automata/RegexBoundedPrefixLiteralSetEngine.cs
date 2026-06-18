@@ -8,6 +8,7 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
     private readonly RegexPackedLiteralSetScanner? packedScanner;
     private readonly RegexShortLiteralSetScanner? shortScanner;
     private readonly RegexCaseSensitiveLiteralSetScanner? scanner;
+    private readonly RegexLiteralSetEngine? literalCountEngine;
     private readonly MemmemFinder? singleLiteralFinder;
     private readonly int minimum;
     private readonly int maximum;
@@ -18,6 +19,7 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
         RegexPackedLiteralSetScanner? packedScanner,
         RegexShortLiteralSetScanner? shortScanner,
         RegexCaseSensitiveLiteralSetScanner? scanner,
+        RegexLiteralSetEngine? literalCountEngine,
         int minimum,
         int maximum,
         byte lineTerminator)
@@ -26,6 +28,7 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
         this.packedScanner = packedScanner;
         this.shortScanner = shortScanner;
         this.scanner = scanner;
+        this.literalCountEngine = literalCountEngine;
         this.minimum = minimum;
         this.maximum = maximum;
         this.lineTerminator = lineTerminator;
@@ -63,6 +66,7 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
         RegexPackedLiteralSetScanner? packedScanner = null;
         RegexShortLiteralSetScanner? shortScanner = null;
         RegexCaseSensitiveLiteralSetScanner? scanner = null;
+        RegexLiteralSetEngine? literalCountEngine = null;
         if (literals.Length > 1)
         {
             RegexPackedLiteralSetScanner.TryCreate(literals, out packedScanner);
@@ -75,11 +79,27 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
             }
         }
 
+        if (minimum == 0)
+        {
+            var literalList = new List<byte[]>(literals.Length);
+            for (int index = 0; index < literals.Length; index++)
+            {
+                literalList.Add(literals[index]);
+            }
+
+            RegexLiteralSetEngine.TryCreateFromLiterals(
+                literalList,
+                asciiCaseInsensitive: false,
+                literalUnicodeClasses: null,
+                out literalCountEngine);
+        }
+
         engine = new RegexBoundedPrefixLiteralSetEngine(
             literals,
             packedScanner,
             shortScanner,
             scanner,
+            literalCountEngine,
             minimum,
             maximum,
             options.LineTerminator);
@@ -184,6 +204,11 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
         int offset = Math.Clamp(startAt, 0, haystack.Length);
         if (minimum == 0)
         {
+            if (literalCountEngine is not null)
+            {
+                return literalCountEngine.CountMatches(haystack, offset);
+            }
+
             return CountLiteralMatches(haystack, offset);
         }
 

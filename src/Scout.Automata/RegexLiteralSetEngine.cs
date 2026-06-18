@@ -421,7 +421,7 @@ internal sealed class RegexLiteralSetEngine
             (uint)(value - (byte)'0') <= 9;
     }
 
-    private static bool TryCreateFromLiterals(
+    internal static bool TryCreateFromLiterals(
         List<byte[]> literals,
         bool? asciiCaseInsensitive,
         bool? literalUnicodeClasses,
