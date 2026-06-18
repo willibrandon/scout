@@ -22,8 +22,8 @@ internal sealed class RegexScalarRunEngine
     private readonly bool lazy;
     private readonly bool unicodeLowerOrUpperFastPath;
     private readonly bool singleDotAllScalarFastPath;
-    private readonly int[]? singleUnicodePropertyRanges;
-    private readonly byte[]? singleUnicodePropertyFirstBytes;
+    private readonly int[]? unicodePropertyRanges;
+    private readonly byte[]? unicodePropertyFirstBytes;
 
     private RegexScalarRunEngine(
         RegexScalarRunAtom[] atoms,
@@ -33,8 +33,8 @@ internal sealed class RegexScalarRunEngine
         bool lazy,
         bool unicodeLowerOrUpperFastPath,
         bool singleDotAllScalarFastPath,
-        int[]? singleUnicodePropertyRanges,
-        byte[]? singleUnicodePropertyFirstBytes)
+        int[]? unicodePropertyRanges,
+        byte[]? unicodePropertyFirstBytes)
     {
         this.atoms = atoms;
         this.options = options;
@@ -43,8 +43,8 @@ internal sealed class RegexScalarRunEngine
         this.lazy = lazy;
         this.unicodeLowerOrUpperFastPath = unicodeLowerOrUpperFastPath;
         this.singleDotAllScalarFastPath = singleDotAllScalarFastPath;
-        this.singleUnicodePropertyRanges = singleUnicodePropertyRanges;
-        this.singleUnicodePropertyFirstBytes = singleUnicodePropertyFirstBytes;
+        this.unicodePropertyRanges = unicodePropertyRanges;
+        this.unicodePropertyFirstBytes = unicodePropertyFirstBytes;
     }
 
     public static bool TryCreate(RegexSyntaxNode root, RegexCompileOptions options, out RegexScalarRunEngine? engine)
@@ -102,11 +102,11 @@ internal sealed class RegexScalarRunEngine
 
         bool unicodeLowerOrUpperFastPath = IsUnicodeLowerOrUpperFastPath(atoms, effectiveOptions);
         bool singleDotAllScalarFastPath = IsSingleDotAllScalarFastPath(atoms, effectiveOptions, minimum, maximum, lazy);
-        TryCreateSingleUnicodePropertyFastPath(
+        TryCreateUnicodePropertyFastPath(
             atoms,
             effectiveOptions,
-            out int[]? singleUnicodePropertyRanges,
-            out byte[]? singleUnicodePropertyFirstBytes);
+            out int[]? unicodePropertyRanges,
+            out byte[]? unicodePropertyFirstBytes);
         engine = new RegexScalarRunEngine(
             atoms,
             effectiveOptions,
@@ -115,14 +115,14 @@ internal sealed class RegexScalarRunEngine
             lazy,
             unicodeLowerOrUpperFastPath,
             singleDotAllScalarFastPath,
-            singleUnicodePropertyRanges,
-            singleUnicodePropertyFirstBytes);
+            unicodePropertyRanges,
+            unicodePropertyFirstBytes);
         return true;
     }
 
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
-        if (singleUnicodePropertyRanges is not null &&
+        if (unicodePropertyRanges is not null &&
             minimum == 1 &&
             maximum == 1)
         {
@@ -156,7 +156,7 @@ internal sealed class RegexScalarRunEngine
             return true;
         }
 
-        if (singleUnicodePropertyRanges is not null &&
+        if (unicodePropertyRanges is not null &&
             minimum == 1 &&
             maximum == 1)
         {
@@ -217,21 +217,25 @@ internal sealed class RegexScalarRunEngine
             return true;
         }
 
-        if (atoms.Length == 1 && atoms[0].UnicodeLetterFastPath)
+        if (atoms.Length == 1 &&
+            atoms[0].UnicodeLetterFastPath &&
+            !lazy &&
+            minimum == 8 &&
+            maximum == 13)
         {
-            CountUnicodeLetterFastPath(haystack, startAt, ref count);
-            return true;
-        }
-
-        if (singleUnicodePropertyRanges is not null)
-        {
-            CountSingleUnicodePropertyRunFastPath(haystack, startAt, ref count);
+            CountUnicodeLetter8To13FastPath(haystack, startAt, ref count);
             return true;
         }
 
         if (unicodeLowerOrUpperFastPath)
         {
             CountUnicodeLowerOrUpperFastPath(haystack, startAt, ref count);
+            return true;
+        }
+
+        if (unicodePropertyRanges is not null)
+        {
+            CountSingleUnicodePropertyRunFastPath(haystack, startAt, ref count);
             return true;
         }
 
@@ -296,66 +300,6 @@ internal sealed class RegexScalarRunEngine
         }
     }
 
-    private void CountUnicodeLetterFastPath(ReadOnlySpan<byte> haystack, int startAt, ref long count)
-    {
-        if (!lazy && minimum == 8 && maximum == 13)
-        {
-            CountUnicodeLetter8To13FastPath(haystack, startAt, ref count);
-            return;
-        }
-
-        int position = Math.Clamp(startAt, 0, haystack.Length);
-        int length = haystack.Length;
-        while (position < length)
-        {
-            int runScalars = 0;
-            while (position < length)
-            {
-                byte first = haystack[position];
-                if (first is 0xD0 or 0xD1)
-                {
-                    int cyrillicScalars = ConsumeFastCyrillicLetterPairs(haystack, ref position);
-                    if (cyrillicScalars != 0)
-                    {
-                        runScalars += cyrillicScalars;
-                        if (position >= length)
-                        {
-                            break;
-                        }
-
-                        first = haystack[position];
-                    }
-                }
-
-                if (first <= 0x7F)
-                {
-                    if (!RegexSimpleSequenceSegment.IsAsciiLetter(first))
-                    {
-                        break;
-                    }
-
-                    runScalars++;
-                    position++;
-                    continue;
-                }
-
-                if (!TryUnicodeLetterFastPathMatchLength(haystack, position, out int scalarLength))
-                {
-                    break;
-                }
-
-                runScalars++;
-                position += scalarLength;
-            }
-
-            AddScalarRunCountOnly(runScalars, ref count);
-            if (position < length)
-            {
-                position = AdvanceAfterUnicodeLetterNonMatch(haystack, position);
-            }
-        }
-    }
-
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void CountSingleUnicodeProperty(
         ReadOnlySpan<byte> haystack,
@@ -364,7 +308,7 @@ internal sealed class RegexScalarRunEngine
         ref long count,
         ref long spanSum)
     {
-        var ranges = new RegexUnicodeRangeCursor(singleUnicodePropertyRanges);
+        var ranges = new RegexUnicodeRangeCursor(unicodePropertyRanges);
         int position = Math.Clamp(startAt, 0, haystack.Length);
         while (position < haystack.Length)
         {
@@ -388,7 +332,7 @@ internal sealed class RegexScalarRunEngine
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void CountSingleUnicodePropertyRunFastPath(ReadOnlySpan<byte> haystack, int startAt, ref long count)
     {
-        var ranges = new RegexUnicodeRangeCursor(singleUnicodePropertyRanges);
+        var ranges = new RegexUnicodeRangeCursor(unicodePropertyRanges);
         int position = Math.Clamp(startAt, 0, haystack.Length);
         int runScalars = 0;
         while (position < haystack.Length)
@@ -411,7 +355,7 @@ internal sealed class RegexScalarRunEngine
 
     private RegexMatch? FindSingleUnicodeProperty(ReadOnlySpan<byte> haystack, int startAt)
     {
-        var ranges = new RegexUnicodeRangeCursor(singleUnicodePropertyRanges);
+        var ranges = new RegexUnicodeRangeCursor(unicodePropertyRanges);
         int position = Math.Clamp(startAt, 0, haystack.Length);
         while (position < haystack.Length)
         {
@@ -460,6 +404,7 @@ internal sealed class RegexScalarRunEngine
 
     private void CountUnicodeLetter8To13FastPath(ReadOnlySpan<byte> haystack, int startAt, ref long count)
     {
+        var ranges = new RegexUnicodeRangeCursor(unicodePropertyRanges);
         int position = Math.Clamp(startAt, 0, haystack.Length);
         int length = haystack.Length;
         while (position < length)
@@ -495,7 +440,7 @@ internal sealed class RegexScalarRunEngine
                     continue;
                 }
 
-                if (!TryUnicodeLetterFastPathMatchLength(haystack, position, out int scalarLength))
+                if (!TrySingleUnicodePropertyMatchLength(haystack, position, ref ranges, out int scalarLength))
                 {
                     break;
                 }
@@ -597,38 +542,6 @@ internal sealed class RegexScalarRunEngine
             second is >= 0x80 and <= 0xBF;
     }
 
-    private bool TryUnicodeLetterFastPathMatchLength(ReadOnlySpan<byte> haystack, int position, out int scalarLength)
-    {
-        byte first = haystack[position];
-        if (first <= 0x7F)
-        {
-            scalarLength = RegexSimpleSequenceSegment.IsAsciiLetter(first) ? 1 : 0;
-            return scalarLength != 0;
-        }
-
-        if ((first == 0xD0 || first == 0xD1) &&
-            position + 1 < haystack.Length &&
-            haystack[position + 1] is >= 0x80 and <= 0xBF)
-        {
-            scalarLength = 2;
-            return true;
-        }
-
-        return RegexByteClass.TryGetAtomMatchLength(
-            haystack,
-            position,
-            atoms[0].Kind,
-            atoms[0].Value,
-            options.CaseInsensitive,
-            options.MultiLine,
-            options.DotMatchesNewline,
-            options.Crlf,
-            options.LineTerminator,
-            options.Utf8,
-            options.UnicodeClasses,
-            out scalarLength);
-    }
-
     private void AddScalarRunCountOnly(int runLength, ref long count)
     {
         if (runLength < minimum)
@@ -683,6 +596,12 @@ internal sealed class RegexScalarRunEngine
 
     private bool TryAtomMatchLength(ReadOnlySpan<byte> haystack, int position, out int scalarLength)
     {
+        if (unicodePropertyRanges is not null && atoms.Length > 1)
+        {
+            var ranges = new RegexUnicodeRangeCursor(unicodePropertyRanges);
+            return TrySingleUnicodePropertyMatchLength(haystack, position, ref ranges, out scalarLength);
+        }
+
         for (int index = 0; index < atoms.Length; index++)
         {
             RegexScalarRunAtom atom = atoms[index];
@@ -805,7 +724,7 @@ internal sealed class RegexScalarRunEngine
         }
 
         byte first = haystack[position];
-        if (singleUnicodePropertyFirstBytes![first] == 0)
+        if (unicodePropertyFirstBytes![first] == 0)
         {
             if (!TryGetUtf8ScalarLength(haystack, position, out scalarLength))
             {
@@ -1178,7 +1097,7 @@ internal sealed class RegexScalarRunEngine
         return hasLowercase && hasUppercase;
     }
 
-    private static bool TryCreateSingleUnicodePropertyFastPath(
+    private static bool TryCreateUnicodePropertyFastPath(
         RegexScalarRunAtom[] atoms,
         RegexCompileOptions options,
         out int[]? ranges,
@@ -1188,43 +1107,60 @@ internal sealed class RegexScalarRunEngine
         firstBytes = null;
         if (!options.UnicodeClasses ||
             options.CaseInsensitive ||
-            atoms.Length != 1 ||
-            atoms[0].Kind != RegexSyntaxKind.UnicodePropertyClass ||
-            atoms[0].Value.Length != 1)
+            atoms.Length == 0)
         {
             return false;
         }
 
-        var kind = (RegexUnicodePropertyKind)atoms[0].Value[0];
-        ReadOnlySpan<int> rangeSpan = RegexUnicodeTables.GetGeneralCategoryRanges(kind);
-        if (rangeSpan.Length == 0)
+        int[]? mergedRanges = null;
+        for (int index = 0; index < atoms.Length; index++)
         {
-            rangeSpan = RegexUnicodeTables.GetBooleanPropertyRanges(kind);
+            RegexScalarRunAtom atom = atoms[index];
+            if (atom.Kind != RegexSyntaxKind.UnicodePropertyClass ||
+                atom.Value.Length != 1)
+            {
+                return false;
+            }
+
+            var kind = (RegexUnicodePropertyKind)atom.Value[0];
+            ReadOnlySpan<int> rangeSpan = GetUnicodePropertyRanges(kind);
+            if (rangeSpan.Length == 0)
+            {
+                return false;
+            }
+
+            mergedRanges = mergedRanges is null
+                ? rangeSpan.ToArray()
+                : RegexUnicodeRangeCursor.MergeRanges(mergedRanges, rangeSpan);
         }
 
-        if (rangeSpan.Length == 0)
-        {
-            rangeSpan = RegexUnicodeTables.GetBreakPropertyRanges(kind);
-        }
-
-        if (rangeSpan.Length == 0)
-        {
-            rangeSpan = RegexUnicodeTables.GetScriptRanges(kind);
-        }
-
-        if (rangeSpan.Length == 0)
-        {
-            rangeSpan = RegexUnicodeTables.GetScriptExtensionRanges(kind);
-        }
-
-        if (rangeSpan.Length == 0)
-        {
-            return false;
-        }
-
-        ranges = rangeSpan.ToArray();
+        ranges = mergedRanges;
         firstBytes = RegexUnicodeRangeCursor.CreateFirstByteLookup(ranges);
         return true;
+    }
+
+    private static ReadOnlySpan<int> GetUnicodePropertyRanges(RegexUnicodePropertyKind kind)
+    {
+        ReadOnlySpan<int> ranges = RegexUnicodeTables.GetGeneralCategoryRanges(kind);
+        if (ranges.Length != 0)
+        {
+            return ranges;
+        }
+
+        ranges = RegexUnicodeTables.GetBooleanPropertyRanges(kind);
+        if (ranges.Length != 0)
+        {
+            return ranges;
+        }
+
+        ranges = RegexUnicodeTables.GetBreakPropertyRanges(kind);
+        if (ranges.Length != 0)
+        {
+            return ranges;
+        }
+
+        ranges = RegexUnicodeTables.GetScriptRanges(kind);
+        return ranges.Length != 0 ? ranges : RegexUnicodeTables.GetScriptExtensionRanges(kind);
     }
 
     private static RegexSyntaxNode UnwrapTransparentGroups(RegexSyntaxNode node)
