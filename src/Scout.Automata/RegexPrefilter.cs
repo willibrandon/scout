@@ -1830,8 +1830,7 @@ internal sealed class RegexPrefilter
             case RegexSyntaxKind.InlineFlags:
                 return true;
             case RegexSyntaxKind.Literal:
-                maximum = ((RegexAtomNode)node).Value.Length;
-                return true;
+                return TryGetMaximumLiteralByteLength(((RegexAtomNode)node).Value.Span, options, out maximum);
             case RegexSyntaxKind.Dot:
             case RegexSyntaxKind.AnyClass:
             case RegexSyntaxKind.CharacterClass:
@@ -1934,6 +1933,45 @@ internal sealed class RegexPrefilter
         }
 
         maximum = childMax * node.Maximum.Value;
+        return true;
+    }
+
+    private static bool TryGetMaximumLiteralByteLength(
+        ReadOnlySpan<byte> literal,
+        RegexCompileOptions options,
+        out int maximum)
+    {
+        maximum = literal.Length;
+        if (!options.CaseInsensitive || !options.UnicodeClasses)
+        {
+            return true;
+        }
+
+        if (!TryDecodeRunes(literal.ToArray(), out Rune[] runes))
+        {
+            maximum = 0;
+            return false;
+        }
+
+        maximum = 0;
+        for (int index = 0; index < runes.Length; index++)
+        {
+            byte[][] equivalents = GetCaseFoldEquivalentBytes(runes[index]);
+            int runeMaximum = 0;
+            for (int equivalentIndex = 0; equivalentIndex < equivalents.Length; equivalentIndex++)
+            {
+                runeMaximum = Math.Max(runeMaximum, equivalents[equivalentIndex].Length);
+            }
+
+            if (maximum > int.MaxValue - runeMaximum)
+            {
+                maximum = 0;
+                return false;
+            }
+
+            maximum += runeMaximum;
+        }
+
         return true;
     }
 

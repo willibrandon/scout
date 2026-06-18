@@ -1297,8 +1297,7 @@ public sealed class PatternSet
         RegexCompileOptions options,
         byte[][] requiredLiterals)
     {
-        if (options.UnicodeClasses ||
-            !RegexPrefilter.TryCollectRequiredLiteralSetWithLookBehind(root, options, out byte[][] boundedLiterals, out int maxLookBehind) ||
+        if (!RegexPrefilter.TryCollectRequiredLiteralSetWithLookBehind(root, options, out byte[][] boundedLiterals, out int maxLookBehind) ||
             !LiteralSetsEqual(requiredLiterals, boundedLiterals))
         {
             return RegexPrefilter.RequiredLiteralLookBehind;

@@ -505,6 +505,28 @@ public sealed class PatternSetTests
     }
 
     /// <summary>
+    /// Verifies Unicode-enabled required-literal windows include case-folded literal byte expansion.
+    /// </summary>
+    [Fact]
+    public void FindsThroughUnicodeCaseFoldedRequiredLiteralLookBehind()
+    {
+        var set = PatternSet.Compile(
+        [
+            "(?i)K.{0,2}secret[0-9]+"u8.ToArray(),
+        ],
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("xx\u212A\U0001F600\U0001F600secret7 Kxsecret8");
+
+        Assert.True(set.UsesRequiredLiteralAccelerator);
+        Assert.Equal(2, set.CountMatches(haystack));
+    }
+
+    /// <summary>
     /// Verifies required-literal windows can skip starts that violate known first-byte predicates.
     /// </summary>
     [Fact]

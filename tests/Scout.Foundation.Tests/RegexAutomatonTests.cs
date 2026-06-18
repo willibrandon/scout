@@ -3754,6 +3754,31 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies Unicode case-fold expansion is included in required-literal lookbehind bounds.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralSetComputesUnicodeCaseFoldedLookBehind()
+    {
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse("(?i)K.{0,2}secret[0-9]"u8);
+
+        Assert.True(RegexPrefilter.TryCollectRequiredLiteralSetWithLookBehind(
+            tree.Root,
+            options,
+            out byte[][] literals,
+            out int maxLookBehind));
+
+        Assert.Equal(11, maxLookBehind);
+        Assert.Contains(literals, literal => literal.AsSpan().SequenceEqual("secret"u8));
+    }
+
+    /// <summary>
     /// Verifies compiled required-literal prefilters use the proven maximum lookbehind.
     /// </summary>
     [Fact]
