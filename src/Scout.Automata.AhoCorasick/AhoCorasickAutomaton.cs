@@ -146,7 +146,7 @@ public sealed class AhoCorasickAutomaton
         SortOutputs(builtStates);
         return new AhoCorasickAutomaton(
             builtStates,
-            TryBuildDenseTransitions(builtStates),
+            TryBuildDenseTransitions(builtStates, asciiCaseInsensitive),
             emptyPatternIds.ToArray(),
             ownedPatterns,
             matchKind,
@@ -557,7 +557,6 @@ public sealed class AhoCorasickAutomaton
 
     private int NextState(int state, byte value)
     {
-        value = FoldInput(value);
         int[]? transitions = System.Threading.Volatile.Read(ref denseTransitions);
         if (transitions is not null)
         {
@@ -589,7 +588,8 @@ public sealed class AhoCorasickAutomaton
         int[] transitions = new int[256];
         for (int value = 0; value <= byte.MaxValue; value++)
         {
-            transitions[value] = NextSparseState(states, state, (byte)value);
+            byte lookup = asciiCaseInsensitive ? FoldAscii((byte)value) : (byte)value;
+            transitions[value] = NextSparseState(states, state, lookup);
         }
 
         return transitions;
@@ -603,21 +603,21 @@ public sealed class AhoCorasickAutomaton
             return;
         }
 
-        int[] transitions = BuildDenseTransitions(states);
+        int[] transitions = BuildDenseTransitions(states, asciiCaseInsensitive);
         System.Threading.Volatile.Write(ref denseTransitions, transitions);
     }
 
-    private static int[]? TryBuildDenseTransitions(AhoCorasickState[] states)
+    private static int[]? TryBuildDenseTransitions(AhoCorasickState[] states, bool asciiCaseInsensitive)
     {
         if (states.Length > MaxEagerDenseTransitionStates)
         {
             return null;
         }
 
-        return BuildDenseTransitions(states);
+        return BuildDenseTransitions(states, asciiCaseInsensitive);
     }
 
-    private static int[] BuildDenseTransitions(AhoCorasickState[] states)
+    private static int[] BuildDenseTransitions(AhoCorasickState[] states, bool asciiCaseInsensitive)
     {
         int[] transitions = new int[states.Length * 256];
         for (int state = 0; state < states.Length; state++)
@@ -625,7 +625,8 @@ public sealed class AhoCorasickAutomaton
             int baseIndex = state * 256;
             for (int value = 0; value <= byte.MaxValue; value++)
             {
-                transitions[baseIndex + value] = NextSparseState(states, state, (byte)value);
+                byte lookup = asciiCaseInsensitive ? FoldAscii((byte)value) : (byte)value;
+                transitions[baseIndex + value] = NextSparseState(states, state, lookup);
             }
         }
 
@@ -648,11 +649,6 @@ public sealed class AhoCorasickAutomaton
 
             state = states[state].Failure;
         }
-    }
-
-    private byte FoldInput(byte value)
-    {
-        return asciiCaseInsensitive ? FoldAscii(value) : value;
     }
 
     private static byte FoldAscii(byte value)
