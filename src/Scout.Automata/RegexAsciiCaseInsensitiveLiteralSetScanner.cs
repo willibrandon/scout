@@ -15,10 +15,15 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
     private readonly Dictionary<ushort, RegexAsciiCaseInsensitiveLiteralSetEntry[]>? entriesByBlock;
     private readonly byte[] blockFirstBytes = [];
     private readonly byte[] blockSecondBytes = [];
+    private readonly RegexAsciiCaseInsensitiveLiteralSetEntry[][] blockEntriesByMaskBit = [];
     private readonly Vector128<byte>[] blockFirstVectors128 = [];
     private readonly Vector128<byte>[] blockSecondVectors128 = [];
     private readonly Vector256<byte>[] blockFirstVectors256 = [];
     private readonly Vector256<byte>[] blockSecondVectors256 = [];
+    private readonly Vector128<byte>[] blockLowMasks128 = [];
+    private readonly Vector128<byte>[] blockHighMasks128 = [];
+    private readonly Vector256<byte>[] blockLowMasks256 = [];
+    private readonly Vector256<byte>[] blockHighMasks256 = [];
     private readonly int maxAnchorIndex;
 
     public RegexAsciiCaseInsensitiveLiteralSetScanner(IReadOnlyList<byte[]> literals)
@@ -55,6 +60,15 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
 
             blockFirstBytes = new byte[distinctBlocks.Count];
             blockSecondBytes = new byte[distinctBlocks.Count];
+            if (distinctBlocks.Count <= 8)
+            {
+                blockEntriesByMaskBit = new RegexAsciiCaseInsensitiveLiteralSetEntry[distinctBlocks.Count][];
+                blockLowMasks128 = new Vector128<byte>[BlockLength];
+                blockHighMasks128 = new Vector128<byte>[BlockLength];
+                blockLowMasks256 = new Vector256<byte>[BlockLength];
+                blockHighMasks256 = new Vector256<byte>[BlockLength];
+            }
+
             blockFirstVectors128 = new Vector128<byte>[distinctBlocks.Count];
             blockSecondVectors128 = new Vector128<byte>[distinctBlocks.Count];
             blockFirstVectors256 = new Vector256<byte>[distinctBlocks.Count];
@@ -66,10 +80,20 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
                 byte second = (byte)(block >> 8);
                 blockFirstBytes[index] = first;
                 blockSecondBytes[index] = second;
+                if (blockEntriesByMaskBit.Length != 0)
+                {
+                    blockEntriesByMaskBit[index] = entriesByBlock[block];
+                }
+
                 blockFirstVectors128[index] = Vector128.Create(first);
                 blockSecondVectors128[index] = Vector128.Create(second);
                 blockFirstVectors256[index] = Vector256.Create(first);
                 blockSecondVectors256[index] = Vector256.Create(second);
+            }
+
+            if (blockEntriesByMaskBit.Length != 0)
+            {
+                BuildBlockMasks();
             }
 
             return;
@@ -164,6 +188,11 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
 
     private long CountOrSumBlockVector256(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
     {
+        if (blockEntriesByMaskBit.Length != 0)
+        {
+            return CountOrSumBlockMaskVector256(haystack, startOffset, sumSpans);
+        }
+
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
         int offset = startOffset;
         int vectorEnd = haystack.Length - Vector256<byte>.Count - 1;
@@ -210,8 +239,55 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
             best);
     }
 
+    private long CountOrSumBlockMaskVector256(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int offset = startOffset;
+        int vectorEnd = haystack.Length - Vector256<byte>.Count - 1;
+        long total = 0;
+        int nextAllowedStart = startOffset;
+        RegexLiteralSetCandidate? best = null;
+        while (offset <= vectorEnd)
+        {
+            Vector256<byte> current = FoldAsciiVector256(Vector256.LoadUnsafe(ref reference, (nuint)offset));
+            Vector256<byte> next = FoldAsciiVector256(Vector256.LoadUnsafe(ref reference, (nuint)(offset + 1)));
+            Vector256<byte> candidates = Avx2.And(
+                BlockMaskVector256(current, byteIndex: 0),
+                BlockMaskVector256(next, byteIndex: 1));
+            if (Avx2.CompareEqual(candidates, Vector256<byte>.Zero).ExtractMostSignificantBits() != uint.MaxValue)
+            {
+                for (int lane = 0; lane < 4; lane++)
+                {
+                    ProcessBlockCandidateChunk(
+                        haystack,
+                        offset + lane * 8,
+                        candidates.AsUInt64().GetElement(lane),
+                        sumSpans,
+                        ref total,
+                        ref nextAllowedStart,
+                        ref best);
+                }
+            }
+
+            offset += Vector256<byte>.Count;
+        }
+
+        return FinishCountOrSumBlockScalar(
+            haystack,
+            offset,
+            sumSpans,
+            total,
+            nextAllowedStart,
+            best);
+    }
+
     private long CountOrSumBlockVector128(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
     {
+        if (blockEntriesByMaskBit.Length != 0 && Ssse3.IsSupported)
+        {
+            return CountOrSumBlockMaskVector128(haystack, startOffset, sumSpans);
+        }
+
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
         int offset = startOffset;
         int vectorEnd = haystack.Length - Vector128<byte>.Count - 1;
@@ -244,6 +320,48 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
                     ref nextAllowedStart,
                     ref best);
                 mask &= mask - 1;
+            }
+
+            offset += Vector128<byte>.Count;
+        }
+
+        return FinishCountOrSumBlockScalar(
+            haystack,
+            offset,
+            sumSpans,
+            total,
+            nextAllowedStart,
+            best);
+    }
+
+    private long CountOrSumBlockMaskVector128(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int offset = startOffset;
+        int vectorEnd = haystack.Length - Vector128<byte>.Count - 1;
+        long total = 0;
+        int nextAllowedStart = startOffset;
+        RegexLiteralSetCandidate? best = null;
+        while (offset <= vectorEnd)
+        {
+            Vector128<byte> current = FoldAsciiVector128(Vector128.LoadUnsafe(ref reference, (nuint)offset));
+            Vector128<byte> next = FoldAsciiVector128(Vector128.LoadUnsafe(ref reference, (nuint)(offset + 1)));
+            Vector128<byte> candidates = Sse2.And(
+                BlockMaskVector128(current, byteIndex: 0),
+                BlockMaskVector128(next, byteIndex: 1));
+            if (Sse2.CompareEqual(candidates, Vector128<byte>.Zero).ExtractMostSignificantBits() != 0xFFFF)
+            {
+                for (int lane = 0; lane < 2; lane++)
+                {
+                    ProcessBlockCandidateChunk(
+                        haystack,
+                        offset + lane * 8,
+                        candidates.AsUInt64().GetElement(lane),
+                        sumSpans,
+                        ref total,
+                        ref nextAllowedStart,
+                        ref best);
+                }
             }
 
             offset += Vector128<byte>.Count;
@@ -345,6 +463,38 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
         }
 
         TryAddBestCandidate(haystack, anchorPosition, nextAllowedStart, entries, ref best);
+    }
+
+    private void ProcessBlockCandidateChunk(
+        ReadOnlySpan<byte> haystack,
+        int baseOffset,
+        ulong chunk,
+        bool sumSpans,
+        ref long total,
+        ref int nextAllowedStart,
+        ref RegexLiteralSetCandidate? best)
+    {
+        while (chunk != 0)
+        {
+            int bit = BitOperations.TrailingZeroCount(chunk);
+            int byteOffset = bit / 8;
+            int anchorPosition = baseOffset + byteOffset;
+            byte blockBits = (byte)(chunk >> (byteOffset * 8));
+            chunk &= ~(0xFFUL << (byteOffset * 8));
+            while (blockBits != 0)
+            {
+                int blockIndex = BitOperations.TrailingZeroCount(blockBits);
+                blockBits &= (byte)(blockBits - 1);
+                ProcessBlockCandidate(
+                    haystack,
+                    anchorPosition,
+                    blockEntriesByMaskBit[blockIndex],
+                    sumSpans,
+                    ref total,
+                    ref nextAllowedStart,
+                    ref best);
+            }
+        }
     }
 
     private RegexLiteralSetCandidate? FindAnchor(ReadOnlySpan<byte> haystack, int startAt)
@@ -533,6 +683,16 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
         return Avx2.Or(value, Avx2.And(uppercase, Vector256.Create((byte)0x20)));
     }
 
+    private Vector256<byte> BlockMaskVector256(Vector256<byte> value, int byteIndex)
+    {
+        var lowNibbleMask = Vector256.Create((byte)0x0F);
+        Vector256<byte> lowNibbles = Avx2.And(value, lowNibbleMask);
+        Vector256<byte> highNibbles = Avx2.And(Avx2.ShiftRightLogical(value.AsUInt16(), 4).AsByte(), lowNibbleMask);
+        return Avx2.And(
+            Avx2.Shuffle(blockLowMasks256[byteIndex], lowNibbles),
+            Avx2.Shuffle(blockHighMasks256[byteIndex], highNibbles));
+    }
+
     private static Vector128<byte> FoldAsciiVector128(Vector128<byte> value)
     {
         Vector128<sbyte> signed = value.AsSByte();
@@ -544,6 +704,16 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
             signed).AsByte();
         Vector128<byte> uppercase = Sse2.And(aboveBeforeA, belowAfterZ);
         return Sse2.Or(value, Sse2.And(uppercase, Vector128.Create((byte)0x20)));
+    }
+
+    private Vector128<byte> BlockMaskVector128(Vector128<byte> value, int byteIndex)
+    {
+        var lowNibbleMask = Vector128.Create((byte)0x0F);
+        Vector128<byte> lowNibbles = Sse2.And(value, lowNibbleMask);
+        Vector128<byte> highNibbles = Sse2.And(Sse2.ShiftRightLogical(value.AsUInt16(), 4).AsByte(), lowNibbleMask);
+        return Sse2.And(
+            Ssse3.Shuffle(blockLowMasks128[byteIndex], lowNibbles),
+            Ssse3.Shuffle(blockHighMasks128[byteIndex], highNibbles));
     }
 
     private static void TryAddBestCandidate(
@@ -637,6 +807,40 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
         }
 
         return normalized;
+    }
+
+    private void BuildBlockMasks()
+    {
+        byte[] low = new byte[32];
+        byte[] high = new byte[32];
+        for (int byteIndex = 0; byteIndex < BlockLength; byteIndex++)
+        {
+            Array.Clear(low);
+            Array.Clear(high);
+            for (int blockIndex = 0; blockIndex < blockEntriesByMaskBit.Length; blockIndex++)
+            {
+                byte value = byteIndex == 0 ? blockFirstBytes[blockIndex] : blockSecondBytes[blockIndex];
+                AddMaskByte(low, high, blockIndex, value);
+            }
+
+            ref byte lowReference = ref MemoryMarshal.GetArrayDataReference(low);
+            ref byte highReference = ref MemoryMarshal.GetArrayDataReference(high);
+            blockLowMasks128[byteIndex] = Vector128.LoadUnsafe(ref lowReference);
+            blockHighMasks128[byteIndex] = Vector128.LoadUnsafe(ref highReference);
+            blockLowMasks256[byteIndex] = Vector256.LoadUnsafe(ref lowReference);
+            blockHighMasks256[byteIndex] = Vector256.LoadUnsafe(ref highReference);
+        }
+    }
+
+    private static void AddMaskByte(Span<byte> low, Span<byte> high, int blockIndex, byte value)
+    {
+        byte bit = (byte)(1 << blockIndex);
+        int lowNibble = value & 0x0F;
+        int highNibble = value >> 4;
+        low[lowNibble] |= bit;
+        low[lowNibble + 16] |= bit;
+        high[highNibble] |= bit;
+        high[highNibble + 16] |= bit;
     }
 
     private static int SelectAnchorIndex(
