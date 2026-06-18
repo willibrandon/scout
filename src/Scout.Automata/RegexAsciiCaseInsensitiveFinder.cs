@@ -102,6 +102,188 @@ internal sealed class RegexAsciiCaseInsensitiveFinder
         return -1;
     }
 
+    public long CountOrSum(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
+    {
+        int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        if (needle.Length == 0 ||
+            needle.Length > haystack.Length - startOffset)
+        {
+            return 0;
+        }
+
+        return blockAnchorIndex >= 0
+            ? CountOrSumBlockAnchored(haystack, startOffset, sumSpans)
+            : CountOrSumByteAnchored(haystack, startOffset, sumSpans);
+    }
+
+    private long CountOrSumByteAnchored(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
+    {
+        long total = 0;
+        int nextAllowedStart = startOffset;
+        int anchorPosition = startOffset + anchorIndex;
+        int lastAnchorPosition = haystack.Length - (needle.Length - anchorIndex);
+        while (anchorPosition <= lastAnchorPosition)
+        {
+            int offset = hasAnchorAlternate
+                ? haystack[anchorPosition..].IndexOfAny(anchor, anchorAlternate)
+                : haystack[anchorPosition..].IndexOf(anchor);
+            if (offset < 0)
+            {
+                return total;
+            }
+
+            anchorPosition += offset;
+            int matchStart = anchorPosition - anchorIndex;
+            if (matchStart >= nextAllowedStart && MatchesAt(haystack, matchStart))
+            {
+                total += sumSpans ? needle.Length : 1;
+                nextAllowedStart = matchStart + needle.Length;
+                anchorPosition = nextAllowedStart + anchorIndex;
+                continue;
+            }
+
+            anchorPosition++;
+        }
+
+        return total;
+    }
+
+    private long CountOrSumBlockAnchored(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
+    {
+        int blockPosition = startOffset + blockAnchorIndex;
+        int lastBlockPosition = haystack.Length - (needle.Length - blockAnchorIndex);
+        if (Avx2.IsSupported && lastBlockPosition - blockPosition + 1 > Vector256<byte>.Count)
+        {
+            return CountOrSumBlockVector256(haystack, blockPosition, lastBlockPosition, startOffset, sumSpans);
+        }
+
+        if (Sse2.IsSupported && lastBlockPosition - blockPosition + 1 > Vector128<byte>.Count)
+        {
+            return CountOrSumBlockVector128(haystack, blockPosition, lastBlockPosition, startOffset, sumSpans);
+        }
+
+        return CountOrSumBlockScalar(haystack, blockPosition, lastBlockPosition, startOffset, sumSpans);
+    }
+
+    private long CountOrSumBlockVector256(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        int lastStart,
+        int nextAllowedStart,
+        bool sumSpans)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int offset = startAt;
+        int vectorEnd = Math.Min(haystack.Length - Vector256<byte>.Count - 1, lastStart - Vector256<byte>.Count + 1);
+        long total = 0;
+        while (offset <= vectorEnd)
+        {
+            var current = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+            var next = Vector256.LoadUnsafe(ref reference, (nuint)(offset + 1));
+            Vector256<byte> firstMatches = Avx2.CompareEqual(current, blockFirstVector256);
+            if (blockFirstHasAlternate)
+            {
+                firstMatches = Avx2.Or(firstMatches, Avx2.CompareEqual(current, blockFirstAlternateVector256));
+            }
+
+            Vector256<byte> secondMatches = Avx2.CompareEqual(next, blockSecondVector256);
+            if (blockSecondHasAlternate)
+            {
+                secondMatches = Avx2.Or(secondMatches, Avx2.CompareEqual(next, blockSecondAlternateVector256));
+            }
+
+            uint mask = Avx2.And(firstMatches, secondMatches).ExtractMostSignificantBits();
+            while (mask != 0)
+            {
+                int bit = BitOperations.TrailingZeroCount(mask);
+                ProcessBlockCandidate(haystack, offset + bit, sumSpans, ref total, ref nextAllowedStart);
+                mask &= mask - 1;
+            }
+
+            offset += Vector256<byte>.Count;
+        }
+
+        return CountOrSumBlockScalar(haystack, offset, lastStart, nextAllowedStart, sumSpans, total);
+    }
+
+    private long CountOrSumBlockVector128(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        int lastStart,
+        int nextAllowedStart,
+        bool sumSpans)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int offset = startAt;
+        int vectorEnd = Math.Min(haystack.Length - Vector128<byte>.Count - 1, lastStart - Vector128<byte>.Count + 1);
+        long total = 0;
+        while (offset <= vectorEnd)
+        {
+            var current = Vector128.LoadUnsafe(ref reference, (nuint)offset);
+            var next = Vector128.LoadUnsafe(ref reference, (nuint)(offset + 1));
+            Vector128<byte> firstMatches = Sse2.CompareEqual(current, blockFirstVector128);
+            if (blockFirstHasAlternate)
+            {
+                firstMatches = Sse2.Or(firstMatches, Sse2.CompareEqual(current, blockFirstAlternateVector128));
+            }
+
+            Vector128<byte> secondMatches = Sse2.CompareEqual(next, blockSecondVector128);
+            if (blockSecondHasAlternate)
+            {
+                secondMatches = Sse2.Or(secondMatches, Sse2.CompareEqual(next, blockSecondAlternateVector128));
+            }
+
+            uint mask = Sse2.And(firstMatches, secondMatches).ExtractMostSignificantBits();
+            while (mask != 0)
+            {
+                int bit = BitOperations.TrailingZeroCount(mask);
+                ProcessBlockCandidate(haystack, offset + bit, sumSpans, ref total, ref nextAllowedStart);
+                mask &= mask - 1;
+            }
+
+            offset += Vector128<byte>.Count;
+        }
+
+        return CountOrSumBlockScalar(haystack, offset, lastStart, nextAllowedStart, sumSpans, total);
+    }
+
+    private long CountOrSumBlockScalar(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        int lastStart,
+        int nextAllowedStart,
+        bool sumSpans,
+        long total = 0)
+    {
+        for (int blockPosition = startAt; blockPosition <= lastStart; blockPosition++)
+        {
+            if (FoldAscii(haystack[blockPosition]) == blockFirst &&
+                FoldAscii(haystack[blockPosition + 1]) == blockSecond)
+            {
+                ProcessBlockCandidate(haystack, blockPosition, sumSpans, ref total, ref nextAllowedStart);
+            }
+        }
+
+        return total;
+    }
+
+    private void ProcessBlockCandidate(
+        ReadOnlySpan<byte> haystack,
+        int blockPosition,
+        bool sumSpans,
+        ref long total,
+        ref int nextAllowedStart)
+    {
+        int matchStart = blockPosition - blockAnchorIndex;
+        if (matchStart < nextAllowedStart || !MatchesAt(haystack, matchStart))
+        {
+            return;
+        }
+
+        total += sumSpans ? needle.Length : 1;
+        nextAllowedStart = matchStart + needle.Length;
+    }
+
     private int FindBlockAnchored(ReadOnlySpan<byte> haystack)
     {
         int blockPosition = blockAnchorIndex;

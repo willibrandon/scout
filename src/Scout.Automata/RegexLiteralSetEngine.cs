@@ -980,22 +980,7 @@ internal sealed class RegexLiteralSetEngine
 
     private long CountOrSumSingleAsciiCaseInsensitiveLiteral(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
     {
-        long total = 0;
-        int position = startOffset;
-        int length = literals[0].Length;
-        while (position <= haystack.Length)
-        {
-            int offset = singleAsciiCaseInsensitiveFinder!.Find(haystack[position..]);
-            if (offset < 0)
-            {
-                return total;
-            }
-
-            total += sumSpans ? length : 1;
-            position += offset + length;
-        }
-
-        return total;
+        return singleAsciiCaseInsensitiveFinder!.CountOrSum(haystack, startOffset, sumSpans);
     }
 
     private long CountOrSumAsciiCaseInsensitiveLiteralSet(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
