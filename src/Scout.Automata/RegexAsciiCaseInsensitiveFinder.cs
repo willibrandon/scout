@@ -541,6 +541,18 @@ internal sealed class RegexAsciiCaseInsensitiveFinder
         int byteAnchorIndex = SelectAnchorIndex(value);
         int preferredIndex = byteAnchorIndex == 0 ? 0 : byteAnchorIndex - 1;
         int preferredScore = BlockAnchorScore(value, preferredIndex);
+        if (byteAnchorIndex > 0 &&
+            byteAnchorIndex < value.Length - 1)
+        {
+            int rightScore = BlockAnchorScore(value, byteAnchorIndex);
+            if (rightScore <= preferredScore &&
+                rightScore >= preferredScore - 32)
+            {
+                preferredIndex = byteAnchorIndex;
+                preferredScore = rightScore;
+            }
+        }
+
         int bestIndex = preferredIndex;
         int bestScore = preferredScore;
         for (int index = 1; index <= value.Length - 2; index++)
