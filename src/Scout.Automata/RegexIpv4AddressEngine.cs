@@ -1,11 +1,7 @@
-using System.Buffers;
-
 namespace Scout;
 
 internal sealed class RegexIpv4AddressEngine
 {
-    private static readonly SearchValues<byte> Digits = SearchValues.Create("0123456789"u8);
-
     private RegexIpv4AddressEngine()
     {
     }
@@ -24,22 +20,23 @@ internal sealed class RegexIpv4AddressEngine
 
     public static RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
-        int searchAt = Math.Clamp(startAt, 0, haystack.Length);
+        int minimumStart = Math.Clamp(startAt, 0, haystack.Length);
+        int searchAt = Math.Min(haystack.Length, minimumStart + 2);
         while (searchAt < haystack.Length)
         {
-            int offset = haystack[searchAt..].IndexOfAny(Digits);
+            int offset = haystack[searchAt..].IndexOf((byte)'.');
             if (offset < 0)
             {
                 return null;
             }
 
-            int start = searchAt + offset;
-            if (TryMatchAt(haystack, start, out int length))
+            int dot = searchAt + offset;
+            if (TryMatchBeforeFirstDot(haystack, minimumStart, dot, out RegexMatch match))
             {
-                return new RegexMatch(start, length);
+                return match;
             }
 
-            searchAt = start + 1;
+            searchAt = dot + 1;
         }
 
         return null;
@@ -66,28 +63,61 @@ internal sealed class RegexIpv4AddressEngine
     private static long CountOrSum(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
     {
         long total = 0;
-        int searchAt = Math.Clamp(startAt, 0, haystack.Length);
+        int minimumStart = Math.Clamp(startAt, 0, haystack.Length);
+        int searchAt = Math.Min(haystack.Length, minimumStart + 2);
         while (searchAt < haystack.Length)
         {
-            int offset = haystack[searchAt..].IndexOfAny(Digits);
+            int offset = haystack[searchAt..].IndexOf((byte)'.');
             if (offset < 0)
             {
                 return total;
             }
 
-            int start = searchAt + offset;
-            if (TryMatchAt(haystack, start, out int length))
+            int dot = searchAt + offset;
+            if (TryMatchBeforeFirstDot(haystack, minimumStart, dot, out RegexMatch match))
             {
-                total += sumSpans ? length : 1;
-                searchAt = start + length;
+                total += sumSpans ? match.Length : 1;
+                minimumStart = match.End;
+                searchAt = Math.Min(haystack.Length, match.End + 2);
             }
             else
             {
-                searchAt = start + 1;
+                searchAt = dot + 1;
             }
         }
 
         return total;
+    }
+
+    private static bool TryMatchBeforeFirstDot(
+        ReadOnlySpan<byte> haystack,
+        int minimumStart,
+        int dot,
+        out RegexMatch match)
+    {
+        int threeDigitStart = dot - 3;
+        if (threeDigitStart >= minimumStart &&
+            IsDigit(haystack[threeDigitStart]) &&
+            IsDigit(haystack[threeDigitStart + 1]) &&
+            IsDigit(haystack[threeDigitStart + 2]) &&
+            TryMatchAt(haystack, threeDigitStart, out int threeDigitLength))
+        {
+            match = new RegexMatch(threeDigitStart, threeDigitLength);
+            return true;
+        }
+
+        int twoDigitStart = dot - 2;
+        if (twoDigitStart >= minimumStart &&
+            IsDigit(haystack[twoDigitStart]) &&
+            IsDigit(haystack[twoDigitStart + 1]) &&
+            TryMatchAt(haystack, twoDigitStart, out int twoDigitLength))
+        {
+            match = new RegexMatch(twoDigitStart, twoDigitLength);
+            return true;
+        }
+
+        match = default;
+        return false;
     }
 
     private static bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int length)
