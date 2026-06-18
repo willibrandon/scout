@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
@@ -8,9 +9,12 @@ namespace Scout;
 internal sealed class RegexLeadingClassTrailingAnchorScanner
 {
     private const int MaxTrailingBytes = 32;
+    private const int PreferTrailingSearchByteThreshold = 8;
 
     private readonly bool[] lastLiteralByteSet;
     private readonly bool[] trailingByteSet;
+    private readonly SearchValues<byte> trailingSearchValues;
+    private readonly bool preferTrailingSearch;
     private readonly Vector128<byte>[] lastLiteralVectors128;
     private readonly Vector128<byte>[] trailingVectors128;
     private readonly Vector256<byte>[] lastLiteralVectors256;
@@ -26,6 +30,9 @@ internal sealed class RegexLeadingClassTrailingAnchorScanner
         MaxLiteralLength = maxLiteralLength;
         lastLiteralByteSet = BuildByteSet(lastLiteralBytes);
         trailingByteSet = BuildByteSet(trailingBytes);
+        trailingSearchValues = SearchValues.Create(trailingBytes);
+        preferTrailingSearch = trailingBytes.Length >= PreferTrailingSearchByteThreshold &&
+            lastLiteralBytes.Length <= 4;
         lastLiteralVectors128 = BuildVector128(lastLiteralBytes);
         trailingVectors128 = BuildVector128(trailingBytes);
         lastLiteralVectors256 = BuildVector256(lastLiteralBytes);
@@ -92,6 +99,11 @@ internal sealed class RegexLeadingClassTrailingAnchorScanner
             return -1;
         }
 
+        if (preferTrailingSearch)
+        {
+            return FindByTrailingByte(haystack, searchAt);
+        }
+
         if (Avx2.IsSupported && haystack.Length - searchAt > Vector256<byte>.Count)
         {
             return FindVector256(haystack, searchAt);
@@ -103,6 +115,30 @@ internal sealed class RegexLeadingClassTrailingAnchorScanner
         }
 
         return FindScalar(haystack, searchAt);
+    }
+
+    private int FindByTrailingByte(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        int searchAt = Math.Max(startAt + 1, 1);
+        while (searchAt < haystack.Length)
+        {
+            int offset = haystack[searchAt..].IndexOfAny(trailingSearchValues);
+            if (offset < 0)
+            {
+                return -1;
+            }
+
+            int trailingPosition = searchAt + offset;
+            int anchor = trailingPosition - 1;
+            if (anchor >= startAt && lastLiteralByteSet[haystack[anchor]])
+            {
+                return anchor;
+            }
+
+            searchAt = trailingPosition + 1;
+        }
+
+        return -1;
     }
 
     private int FindVector256(ReadOnlySpan<byte> haystack, int startAt)
