@@ -3,6 +3,7 @@ namespace Scout;
 internal sealed class PatternSetLiteralAccelerator
 {
     private readonly AhoCorasickAutomaton automaton;
+    private readonly RegexLargeLiteralSetScanner? largeLiteralScanner;
     private readonly byte[][] patterns;
     private readonly int[] patternIds;
     private readonly int[] allPatternIndexes;
@@ -29,10 +30,22 @@ internal sealed class PatternSetLiteralAccelerator
 
         patternsByFirstByte = asciiCaseInsensitive ? null : BuildPatternsByFirstByte(this.patterns);
         automaton = AhoCorasickAutomaton.Create(patterns, AhoCorasickMatchKind.Standard, asciiCaseInsensitive);
+        if (!asciiCaseInsensitive)
+        {
+            RegexLargeLiteralSetScanner.TryCreate(this.patterns, out largeLiteralScanner);
+        }
     }
 
     public PatternSetMatch? Find(ReadOnlySpan<byte> haystack)
     {
+        if (largeLiteralScanner is not null)
+        {
+            RegexLiteralSetCandidate? candidate = largeLiteralScanner.Find(haystack, startAt: 0);
+            return candidate.HasValue
+                ? new PatternSetMatch(patternIds[candidate.Value.LiteralId], candidate.Value.Match)
+                : null;
+        }
+
         PatternSetMatch? best = null;
         AhoCorasickOverlappingEnumerator matches = automaton.EnumerateOverlapping(haystack);
         while (matches.MoveNext())
@@ -83,16 +96,31 @@ internal sealed class PatternSetLiteralAccelerator
 
     public bool IsMatch(ReadOnlySpan<byte> haystack)
     {
+        if (largeLiteralScanner is not null)
+        {
+            return largeLiteralScanner.Find(haystack, startAt: 0).HasValue;
+        }
+
         return automaton.Find(haystack).HasValue;
     }
 
     public long CountMatches(ReadOnlySpan<byte> haystack, int startAt)
     {
+        if (largeLiteralScanner is not null)
+        {
+            return largeLiteralScanner.CountMatches(haystack, startAt);
+        }
+
         return CountOrSumMatches(haystack, startAt, sumSpans: false);
     }
 
     public long SumMatchSpans(ReadOnlySpan<byte> haystack, int startAt)
     {
+        if (largeLiteralScanner is not null)
+        {
+            return largeLiteralScanner.SumMatchSpans(haystack, startAt);
+        }
+
         return CountOrSumMatches(haystack, startAt, sumSpans: true);
     }
 
