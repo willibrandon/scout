@@ -15,16 +15,10 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
     private readonly Dictionary<ushort, RegexAsciiCaseInsensitiveLiteralSetEntry[]>? entriesByBlock;
     private readonly byte[] blockFirstBytes = [];
     private readonly byte[] blockSecondBytes = [];
-    private readonly bool[] blockFirstHasAlternate = [];
-    private readonly bool[] blockSecondHasAlternate = [];
     private readonly Vector128<byte>[] blockFirstVectors128 = [];
     private readonly Vector128<byte>[] blockSecondVectors128 = [];
-    private readonly Vector128<byte>[] blockFirstAlternateVectors128 = [];
-    private readonly Vector128<byte>[] blockSecondAlternateVectors128 = [];
     private readonly Vector256<byte>[] blockFirstVectors256 = [];
     private readonly Vector256<byte>[] blockSecondVectors256 = [];
-    private readonly Vector256<byte>[] blockFirstAlternateVectors256 = [];
-    private readonly Vector256<byte>[] blockSecondAlternateVectors256 = [];
     private readonly int maxAnchorIndex;
 
     public RegexAsciiCaseInsensitiveLiteralSetScanner(IReadOnlyList<byte[]> literals)
@@ -61,35 +55,21 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
 
             blockFirstBytes = new byte[distinctBlocks.Count];
             blockSecondBytes = new byte[distinctBlocks.Count];
-            blockFirstHasAlternate = new bool[distinctBlocks.Count];
-            blockSecondHasAlternate = new bool[distinctBlocks.Count];
             blockFirstVectors128 = new Vector128<byte>[distinctBlocks.Count];
             blockSecondVectors128 = new Vector128<byte>[distinctBlocks.Count];
-            blockFirstAlternateVectors128 = new Vector128<byte>[distinctBlocks.Count];
-            blockSecondAlternateVectors128 = new Vector128<byte>[distinctBlocks.Count];
             blockFirstVectors256 = new Vector256<byte>[distinctBlocks.Count];
             blockSecondVectors256 = new Vector256<byte>[distinctBlocks.Count];
-            blockFirstAlternateVectors256 = new Vector256<byte>[distinctBlocks.Count];
-            blockSecondAlternateVectors256 = new Vector256<byte>[distinctBlocks.Count];
             for (int index = 0; index < distinctBlocks.Count; index++)
             {
                 ushort block = distinctBlocks[index];
                 byte first = (byte)block;
                 byte second = (byte)(block >> 8);
-                byte firstAlternate = RegexAsciiCaseInsensitiveFinder.ToggleAsciiCase(first);
-                byte secondAlternate = RegexAsciiCaseInsensitiveFinder.ToggleAsciiCase(second);
                 blockFirstBytes[index] = first;
                 blockSecondBytes[index] = second;
-                blockFirstHasAlternate[index] = RegexAsciiCaseInsensitiveFinder.IsAsciiCased(first);
-                blockSecondHasAlternate[index] = RegexAsciiCaseInsensitiveFinder.IsAsciiCased(second);
                 blockFirstVectors128[index] = Vector128.Create(first);
                 blockSecondVectors128[index] = Vector128.Create(second);
-                blockFirstAlternateVectors128[index] = Vector128.Create(firstAlternate);
-                blockSecondAlternateVectors128[index] = Vector128.Create(secondAlternate);
                 blockFirstVectors256[index] = Vector256.Create(first);
                 blockSecondVectors256[index] = Vector256.Create(second);
-                blockFirstAlternateVectors256[index] = Vector256.Create(firstAlternate);
-                blockSecondAlternateVectors256[index] = Vector256.Create(secondAlternate);
             }
 
             return;
@@ -312,28 +292,16 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
         int vectorEnd = haystack.Length - Vector256<byte>.Count - 1;
         while (offset <= vectorEnd)
         {
-            var current = Vector256.LoadUnsafe(ref reference, (nuint)offset);
-            var next = Vector256.LoadUnsafe(ref reference, (nuint)(offset + 1));
+            Vector256<byte> current = FoldAsciiVector256(Vector256.LoadUnsafe(ref reference, (nuint)offset));
+            Vector256<byte> next = FoldAsciiVector256(Vector256.LoadUnsafe(ref reference, (nuint)(offset + 1)));
             Vector256<byte> matches = Vector256<byte>.Zero;
             for (int index = 0; index < blockFirstVectors256.Length; index++)
             {
-                Vector256<byte> firstMatches = Avx2.CompareEqual(current, blockFirstVectors256[index]);
-                if (blockFirstHasAlternate[index])
-                {
-                    firstMatches = Avx2.Or(
-                        firstMatches,
-                        Avx2.CompareEqual(current, blockFirstAlternateVectors256[index]));
-                }
-
-                Vector256<byte> secondMatches = Avx2.CompareEqual(next, blockSecondVectors256[index]);
-                if (blockSecondHasAlternate[index])
-                {
-                    secondMatches = Avx2.Or(
-                        secondMatches,
-                        Avx2.CompareEqual(next, blockSecondAlternateVectors256[index]));
-                }
-
-                matches = Avx2.Or(matches, Avx2.And(firstMatches, secondMatches));
+                matches = Avx2.Or(
+                    matches,
+                    Avx2.And(
+                        Avx2.CompareEqual(current, blockFirstVectors256[index]),
+                        Avx2.CompareEqual(next, blockSecondVectors256[index])));
             }
 
             uint mask = matches.ExtractMostSignificantBits();
@@ -355,28 +323,16 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
         int vectorEnd = haystack.Length - Vector128<byte>.Count - 1;
         while (offset <= vectorEnd)
         {
-            var current = Vector128.LoadUnsafe(ref reference, (nuint)offset);
-            var next = Vector128.LoadUnsafe(ref reference, (nuint)(offset + 1));
+            Vector128<byte> current = FoldAsciiVector128(Vector128.LoadUnsafe(ref reference, (nuint)offset));
+            Vector128<byte> next = FoldAsciiVector128(Vector128.LoadUnsafe(ref reference, (nuint)(offset + 1)));
             Vector128<byte> matches = Vector128<byte>.Zero;
             for (int index = 0; index < blockFirstVectors128.Length; index++)
             {
-                Vector128<byte> firstMatches = Sse2.CompareEqual(current, blockFirstVectors128[index]);
-                if (blockFirstHasAlternate[index])
-                {
-                    firstMatches = Sse2.Or(
-                        firstMatches,
-                        Sse2.CompareEqual(current, blockFirstAlternateVectors128[index]));
-                }
-
-                Vector128<byte> secondMatches = Sse2.CompareEqual(next, blockSecondVectors128[index]);
-                if (blockSecondHasAlternate[index])
-                {
-                    secondMatches = Sse2.Or(
-                        secondMatches,
-                        Sse2.CompareEqual(next, blockSecondAlternateVectors128[index]));
-                }
-
-                matches = Sse2.Or(matches, Sse2.And(firstMatches, secondMatches));
+                matches = Sse2.Or(
+                    matches,
+                    Sse2.And(
+                        Sse2.CompareEqual(current, blockFirstVectors128[index]),
+                        Sse2.CompareEqual(next, blockSecondVectors128[index])));
             }
 
             uint mask = matches.ExtractMostSignificantBits();
@@ -402,6 +358,32 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
         }
 
         return -1;
+    }
+
+    private static Vector256<byte> FoldAsciiVector256(Vector256<byte> value)
+    {
+        Vector256<sbyte> signed = value.AsSByte();
+        Vector256<byte> aboveBeforeA = Avx2.CompareGreaterThan(
+            signed,
+            Vector256.Create((sbyte)((byte)'A' - 1))).AsByte();
+        Vector256<byte> belowAfterZ = Avx2.CompareGreaterThan(
+            Vector256.Create((sbyte)((byte)'Z' + 1)),
+            signed).AsByte();
+        Vector256<byte> uppercase = Avx2.And(aboveBeforeA, belowAfterZ);
+        return Avx2.Or(value, Avx2.And(uppercase, Vector256.Create((byte)0x20)));
+    }
+
+    private static Vector128<byte> FoldAsciiVector128(Vector128<byte> value)
+    {
+        Vector128<sbyte> signed = value.AsSByte();
+        Vector128<byte> aboveBeforeA = Sse2.CompareGreaterThan(
+            signed,
+            Vector128.Create((sbyte)((byte)'A' - 1))).AsByte();
+        Vector128<byte> belowAfterZ = Sse2.CompareGreaterThan(
+            Vector128.Create((sbyte)((byte)'Z' + 1)),
+            signed).AsByte();
+        Vector128<byte> uppercase = Sse2.And(aboveBeforeA, belowAfterZ);
+        return Sse2.Or(value, Sse2.And(uppercase, Vector128.Create((byte)0x20)));
     }
 
     private static void TryAddBestCandidate(
