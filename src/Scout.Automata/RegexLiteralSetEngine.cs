@@ -12,6 +12,7 @@ internal sealed class RegexLiteralSetEngine
     private const int LargeLiteralSetThreshold = 32;
     private const int SmallLiteralFinderSetThreshold = 8;
     private const int TwoByteSearchPatternBucketThreshold = 8;
+    private const int IndependentAsciiCaseInsensitiveCountThreshold = 4;
     private const int SingleLiteralIndexOfAnchorScoreThreshold = 240;
     private const int ThreeByteSingleLiteralIndexOfAnchorScoreThreshold = 100;
 
@@ -28,6 +29,7 @@ internal sealed class RegexLiteralSetEngine
     private readonly MemmemFinder? singleLiteralFinder;
     private readonly RegexAsciiCaseInsensitiveFinder? singleAsciiCaseInsensitiveFinder;
     private readonly RegexAsciiCaseInsensitiveLiteralSetScanner? asciiCaseInsensitiveScanner;
+    private readonly RegexAsciiCaseInsensitiveFinder[]? independentAsciiCaseInsensitiveCountFinders;
     private readonly bool sharedFirstByteScanner;
     private readonly byte sharedFirstByte;
     private readonly RegexPackedLiteralSetScanner? packedLiteralScanner;
@@ -103,6 +105,11 @@ internal sealed class RegexLiteralSetEngine
             !unicodeCaseInsensitive)
         {
             asciiCaseInsensitiveScanner = new RegexAsciiCaseInsensitiveLiteralSetScanner(this.literals);
+            if (CanCountAsciiCaseInsensitiveLiteralsIndependently(this.literals))
+            {
+                independentAsciiCaseInsensitiveCountFinders = CreateAsciiCaseInsensitiveFinders(this.literals);
+            }
+
             return;
         }
 
@@ -993,7 +1000,36 @@ internal sealed class RegexLiteralSetEngine
 
     private long CountOrSumAsciiCaseInsensitiveLiteralSet(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
     {
+        if (independentAsciiCaseInsensitiveCountFinders is not null)
+        {
+            return CountOrSumIndependentAsciiCaseInsensitiveLiteralSet(haystack, startOffset, sumSpans);
+        }
+
         return asciiCaseInsensitiveScanner!.CountOrSum(haystack, startOffset, sumSpans);
+    }
+
+    private long CountOrSumIndependentAsciiCaseInsensitiveLiteralSet(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
+    {
+        RegexAsciiCaseInsensitiveFinder[] finders = independentAsciiCaseInsensitiveCountFinders!;
+        long total = 0;
+        for (int index = 0; index < finders.Length; index++)
+        {
+            int length = literals[index].Length;
+            int position = startOffset;
+            while (position <= haystack.Length)
+            {
+                int offset = finders[index].Find(haystack[position..]);
+                if (offset < 0)
+                {
+                    break;
+                }
+
+                total += sumSpans ? length : 1;
+                position += offset + length;
+            }
+        }
+
+        return total;
     }
 
     private RegexMatch? FindSharedFirstByteLiteralSet(ReadOnlySpan<byte> haystack, int startOffset)
@@ -2186,6 +2222,66 @@ internal sealed class RegexLiteralSetEngine
         }
 
         return normalized;
+    }
+
+    private static bool CanCountAsciiCaseInsensitiveLiteralsIndependently(byte[][] literals)
+    {
+        if (literals.Length is <= 1 or > IndependentAsciiCaseInsensitiveCountThreshold)
+        {
+            return false;
+        }
+
+        byte[][] normalized = new byte[literals.Length][];
+        for (int index = 0; index < literals.Length; index++)
+        {
+            if (literals[index].Length == 0)
+            {
+                return false;
+            }
+
+            normalized[index] = NormalizeAsciiCase(literals[index]);
+        }
+
+        for (int left = 0; left < normalized.Length; left++)
+        {
+            for (int right = left + 1; right < normalized.Length; right++)
+            {
+                if (CanOverlap(normalized[left], normalized[right]))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private static bool CanOverlap(ReadOnlySpan<byte> left, ReadOnlySpan<byte> right)
+    {
+        for (int rightStart = 1 - right.Length; rightStart < left.Length; rightStart++)
+        {
+            int leftOffset = Math.Max(0, rightStart);
+            int rightOffset = Math.Max(0, -rightStart);
+            int overlap = Math.Min(left.Length - leftOffset, right.Length - rightOffset);
+            if (overlap > 0 &&
+                left.Slice(leftOffset, overlap).SequenceEqual(right.Slice(rightOffset, overlap)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static RegexAsciiCaseInsensitiveFinder[] CreateAsciiCaseInsensitiveFinders(byte[][] literals)
+    {
+        var finders = new RegexAsciiCaseInsensitiveFinder[literals.Length];
+        for (int index = 0; index < literals.Length; index++)
+        {
+            finders[index] = new RegexAsciiCaseInsensitiveFinder(literals[index]);
+        }
+
+        return finders;
     }
 
     private static void AddDistinctLiteral(List<byte[]> literals, byte[] literal)
