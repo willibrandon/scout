@@ -3230,6 +3230,10 @@ public sealed class RegexAutomatonTests
         Assert.Equal(new RegexMatch(0, System.Text.Encoding.UTF8.GetByteCount("π  +=  ")), first.Match);
         AssertGroupUtf8Text(first, line, 1, "  ");
         AssertGroupUtf8Text(first, line, 2, "  ");
+        Assert.Equal(6, automaton.CountCaptures(line));
+        Assert.Equal(3, automaton.CountCaptures(line, first.Match.End));
+        Assert.Equal(3, automaton.CountCaptures("a+b"u8));
+        Assert.Equal(3, automaton.CountCaptures("a +  + b"u8));
 
         RegexCaptures? second = automaton.FindCaptures(line, first.Match.End);
 
@@ -3238,6 +3242,7 @@ public sealed class RegexAutomatonTests
         AssertGroupUtf8Text(second, line, 1, " ");
         AssertGroupUtf8Text(second, line, 2, " ");
         Assert.Null(automaton.FindCaptures(", + "u8));
+        Assert.Equal(0, automaton.CountCaptures(", + "u8));
     }
 
     /// <summary>

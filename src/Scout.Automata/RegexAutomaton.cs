@@ -1116,6 +1116,11 @@ public sealed class RegexAutomaton
             return noqaCaptureEngine.CountCaptures(haystack, startAt);
         }
 
+        if (operatorSpacingCaptureEngine is not null)
+        {
+            return operatorSpacingCaptureEngine.CountCaptures(haystack, startAt);
+        }
+
         if (delimitedCaptureEngine is not null)
         {
             return delimitedCaptureEngine.CountCaptures(haystack, startAt);

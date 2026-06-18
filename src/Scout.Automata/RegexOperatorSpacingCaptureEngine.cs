@@ -101,6 +101,43 @@ internal sealed class RegexOperatorSpacingCaptureEngine
         return null;
     }
 
+    public long CountCaptures(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        long total = 0;
+        int minimumStart = Math.Clamp(startAt, 0, haystack.Length);
+        int searchAt = minimumStart;
+        while (searchAt < haystack.Length)
+        {
+            int offset = haystack[searchAt..].IndexOfAny(OperatorCandidateBytes);
+            if (offset < 0)
+            {
+                return total;
+            }
+
+            int operatorStart = searchAt + offset;
+            if (!TryConsumeOperator(haystack, operatorStart, out int operatorEnd))
+            {
+                searchAt = operatorStart + 1;
+                continue;
+            }
+
+            int leadingStart = FindLeadingWhitespaceStart(haystack, operatorStart);
+            if (TryPreviousFirstAtomMatchStart(haystack, leadingStart, out int matchStart) &&
+                matchStart >= minimumStart)
+            {
+                int trailingEnd = ConsumeWhitespaceForward(haystack, operatorEnd);
+                total += 3;
+                minimumStart = trailingEnd;
+                searchAt = trailingEnd;
+                continue;
+            }
+
+            searchAt = operatorStart + 1;
+        }
+
+        return total;
+    }
+
     private int FindLeadingWhitespaceStart(ReadOnlySpan<byte> haystack, int operatorStart)
     {
         int position = operatorStart;
