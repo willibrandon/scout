@@ -124,6 +124,43 @@ internal static class StandardSearchByteOperations
         ref SearchStats stats,
         bool memoryMapped = false)
     {
+        if (TrySearchBytesWithStatsFastPath(
+            bytes,
+            pattern,
+            output,
+            prefix,
+            separators,
+            lineLimit,
+            color,
+            searchMode,
+            vimgrep,
+            lineNumber,
+            column,
+            byteOffset,
+            asciiCaseInsensitive,
+            invertMatch,
+            lineRegexp,
+            wordRegexp,
+            multiline,
+            onlyMatching,
+            replacement,
+            maxCount,
+            textMode,
+            quiet,
+            trim,
+            beforeContext,
+            afterContext,
+            passthru,
+            nullPathTerminator,
+            stopOnNonmatch,
+            quitOnBinary,
+            heading,
+            ref stats,
+            out bool fastMatched))
+        {
+            return fastMatched;
+        }
+
         long started = Stopwatch.GetTimestamp();
         using MemoryStream buffer = new();
         var bufferedWriter = new RawByteWriter(buffer);
@@ -136,6 +173,139 @@ internal static class StandardSearchByteOperations
         SearchStats fileStats = CollectSearchStats(bytes, pattern, searchMode, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, separators.Crlf, separators.NullData, maxCount, stopOnNonmatch, searchMode == CliSearchMode.Standard ? (ulong)body.Length : 0, searchElapsed);
         stats.Add(fileStats);
         return matched;
+    }
+
+    private static bool TrySearchBytesWithStatsFastPath(
+        byte[] bytes,
+        IReadOnlyList<byte[]> pattern,
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        CliSearchMode searchMode,
+        bool vimgrep,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool asciiCaseInsensitive,
+        bool invertMatch,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool multiline,
+        bool onlyMatching,
+        ReadOnlyMemory<byte>? replacement,
+        ulong? maxCount,
+        bool textMode,
+        bool quiet,
+        bool trim,
+        ulong beforeContext,
+        ulong afterContext,
+        bool passthru,
+        bool nullPathTerminator,
+        bool stopOnNonmatch,
+        bool quitOnBinary,
+        bool heading,
+        ref SearchStats stats,
+        out bool matched)
+    {
+        matched = false;
+        if (searchMode != CliSearchMode.Standard ||
+            vimgrep ||
+            invertMatch ||
+            lineRegexp ||
+            wordRegexp ||
+            multiline ||
+            onlyMatching ||
+            replacement is not null ||
+            maxCount is not null ||
+            textMode ||
+            quiet ||
+            beforeContext > 0 ||
+            afterContext > 0 ||
+            passthru ||
+            stopOnNonmatch ||
+            heading ||
+            color.Enabled ||
+            separators.Crlf ||
+            separators.NullData)
+        {
+            return false;
+        }
+
+        BinaryDetectionResult binaryDetection = BinaryDetection.Detect(bytes, textMode, separators.NullData, quitOnBinary);
+        if (binaryDetection.IsBinary)
+        {
+            return false;
+        }
+
+        RegexSearchPlan? regexPlan = LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: true);
+        if (regexPlan is null)
+        {
+            return false;
+        }
+
+        long started = Stopwatch.GetTimestamp();
+        using MemoryStream buffer = new();
+        var bufferedWriter = new RawByteWriter(buffer);
+        var sink = new StandardSearchSink(
+            bufferedWriter,
+            prefix,
+            separators.FieldMatch,
+            separators.FieldContext,
+            lineNumber,
+            column,
+            byteOffset,
+            trim,
+            nullPathTerminator,
+            lineLimit,
+            color,
+            separators.LineTerminator);
+        bool requireMatchColumn = column || prefix?.HasHyperlink == true;
+        matched = LiteralLineSearcher.SearchWithRegexPlan(
+            bytes,
+            pattern,
+            regexPlan,
+            ref sink,
+            asciiCaseInsensitive,
+            invertMatch: false,
+            lineRegexp: false,
+            wordRegexp: false,
+            maxMatchingLines: null,
+            crlf: false,
+            nullData: false,
+            requireMatchColumn);
+        bufferedWriter.Flush();
+        byte[] body = buffer.ToArray();
+        ulong matchedLines = sink.MatchedLines;
+        long matches = LiteralLineSearcher.CountMatchesWithRegexPlan(
+            bytes,
+            pattern,
+            regexPlan,
+            asciiCaseInsensitive,
+            invertMatch: false,
+            lineRegexp: false,
+            wordRegexp: false,
+            maxMatchingLines: null,
+            crlf: false,
+            nullData: false);
+        TimeSpan searchElapsed = Stopwatch.GetElapsedTime(started);
+        output.Write(body);
+
+        var fileStats = new SearchStats();
+        fileStats.AddElapsed(searchElapsed);
+        fileStats.AddSearch();
+        fileStats.AddBytesPrinted((ulong)body.Length);
+        fileStats.AddBytesSearched((ulong)bytes.Length);
+        if (matchedLines > 0)
+        {
+            fileStats.AddMatchedLines(matchedLines);
+            fileStats.AddSearchWithMatch();
+        }
+
+        fileStats.AddMatches((ulong)matches);
+        stats.Add(fileStats);
+        return true;
     }
 
     private static SearchStats CollectSearchStats(
