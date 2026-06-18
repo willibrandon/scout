@@ -50,6 +50,11 @@ public ref struct AhoCorasickOverlappingEnumerator
     /// <returns><see langword="true" /> when another match was found.</returns>
     public bool MoveNext()
     {
+        if (!hasEmptyPatterns && denseTransitions is not null)
+        {
+            return MoveNextDenseNoEmpty();
+        }
+
         while (true)
         {
             if (hasEmptyPatterns && emptyIndex < automaton.EmptyPatternCount)
@@ -107,5 +112,44 @@ public ref struct AhoCorasickOverlappingEnumerator
                 }
             }
         }
+    }
+
+    private bool MoveNextDenseNoEmpty()
+    {
+        if (outputIndex >= 0)
+        {
+            if (outputIndex < outputCount)
+            {
+                current = automaton.GetOutputMatch(state, outputIndex, end);
+                outputIndex++;
+                hasCurrent = true;
+                return true;
+            }
+
+            outputIndex = -1;
+            outputCount = 0;
+        }
+
+        int[] transitions = denseTransitions!;
+        while (nextIndex < haystack.Length)
+        {
+            state = transitions[(state * 256) + haystack[nextIndex]];
+            nextIndex++;
+            int count = automaton.GetOutputCount(state);
+            if (count == 0)
+            {
+                continue;
+            }
+
+            end = nextIndex;
+            outputCount = count;
+            outputIndex = 1;
+            current = automaton.GetOutputMatch(state, 0, end);
+            hasCurrent = true;
+            return true;
+        }
+
+        hasCurrent = false;
+        return false;
     }
 }
