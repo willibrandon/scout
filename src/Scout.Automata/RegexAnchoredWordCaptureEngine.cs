@@ -5,6 +5,9 @@ namespace Scout;
 
 internal sealed class RegexAnchoredWordCaptureEngine
 {
+    private static readonly SearchValues<byte> AsciiWordBytes = SearchValues.Create(
+        "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"u8);
+
     private readonly int[] captureIndexes;
     private readonly bool unicodeWord;
     private readonly int captureCount;
@@ -113,6 +116,13 @@ internal sealed class RegexAnchoredWordCaptureEngine
 
     private int ConsumeWordRun(ReadOnlySpan<byte> haystack, int position)
     {
+        if (!unicodeWord)
+        {
+            ReadOnlySpan<byte> remaining = haystack[position..];
+            int offset = remaining.IndexOfAnyExcept(AsciiWordBytes);
+            return offset < 0 ? haystack.Length : position + offset;
+        }
+
         while (TryWordMatchLength(haystack, position, out int length))
         {
             position += length;
