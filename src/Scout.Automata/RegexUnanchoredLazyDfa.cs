@@ -4,11 +4,13 @@ internal sealed class RegexUnanchoredLazyDfa
 {
     private readonly RegexLazyDfa forward;
     private readonly RegexLazyDfa reverse;
+    private readonly RegexLazyDfa? anchored;
 
-    private RegexUnanchoredLazyDfa(RegexLazyDfa forward, RegexLazyDfa reverse)
+    private RegexUnanchoredLazyDfa(RegexLazyDfa forward, RegexLazyDfa reverse, RegexLazyDfa? anchored)
     {
         this.forward = forward;
         this.reverse = reverse;
+        this.anchored = anchored;
     }
 
     public static bool TryCreate(
@@ -37,7 +39,14 @@ internal sealed class RegexUnanchoredLazyDfa
             return false;
         }
 
-        dfa = new RegexUnanchoredLazyDfa(forwardDfa!, reverseDfa!);
+        RegexLazyDfa? anchoredDfa = null;
+        RegexNfa anchoredNfa = RegexNfaCompiler.Compile(root, options);
+        if (RegexDfaOperations.CanCompile(anchoredNfa))
+        {
+            _ = RegexLazyDfa.TryCreate(anchoredNfa, dfaSizeLimit, leftmostPrune: true, out anchoredDfa);
+        }
+
+        dfa = new RegexUnanchoredLazyDfa(forwardDfa!, reverseDfa!, anchoredDfa);
         return true;
     }
 
@@ -97,6 +106,25 @@ internal sealed class RegexUnanchoredLazyDfa
         int offset = Math.Clamp(startAt, 0, haystack.Length);
         while (offset <= haystack.Length)
         {
+            if (!sumSpans)
+            {
+                if (!forward.TryFindEnd(haystack, offset, out int end, out bool forwardGaveUp))
+                {
+                    return !forwardGaveUp;
+                }
+
+                total++;
+                offset = end;
+                continue;
+            }
+
+            if (TryMatchAnchoredAt(haystack, offset, out int length))
+            {
+                total += length;
+                offset += length;
+                continue;
+            }
+
             if (!TryFind(
                     haystack,
                     offset,
@@ -112,6 +140,21 @@ internal sealed class RegexUnanchoredLazyDfa
             offset = match.End;
         }
 
+        return true;
+    }
+
+    private bool TryMatchAnchoredAt(ReadOnlySpan<byte> haystack, int offset, out int length)
+    {
+        length = 0;
+        if (anchored is null ||
+            !anchored.TryFindEnd(haystack, offset, out int end, out bool gaveUp) ||
+            gaveUp ||
+            end <= offset)
+        {
+            return false;
+        }
+
+        length = end - offset;
         return true;
     }
 
