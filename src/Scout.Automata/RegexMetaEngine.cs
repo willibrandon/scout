@@ -1796,6 +1796,11 @@ internal sealed class RegexMetaEngine
             return anchoredLineLiteralGap.CountMatchingLines(haystack);
         }
 
+        if (asciiWordBoundary is not null)
+        {
+            return asciiWordBoundary.CountMatchingLines(haystack);
+        }
+
         long total = 0;
         int position = 0;
         while (position < haystack.Length)

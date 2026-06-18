@@ -86,6 +86,35 @@ internal sealed class RegexAsciiWordBoundaryEngine
         return total;
     }
 
+    public long CountMatchingLines(ReadOnlySpan<byte> haystack)
+    {
+        long total = 0;
+        int position = 0;
+        while (position < haystack.Length)
+        {
+            int lineEnd = FindLineEnd(haystack, position);
+            int contentEnd = lineEnd;
+            if (contentEnd > position && haystack[contentEnd - 1] == (byte)'\r')
+            {
+                contentEnd--;
+            }
+
+            if (LineIsMatch(haystack[position..contentEnd]))
+            {
+                total++;
+            }
+
+            if (lineEnd >= haystack.Length)
+            {
+                return total;
+            }
+
+            position = lineEnd + 1;
+        }
+
+        return total;
+    }
+
     public bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int length)
     {
         length = 0;
@@ -529,6 +558,27 @@ internal sealed class RegexAsciiWordBoundaryEngine
         }
 
         AddAsciiWordRun(runLength, sumSpans, ref total);
+    }
+
+    private bool LineIsMatch(ReadOnlySpan<byte> haystack)
+    {
+        if (!unicodeWord)
+        {
+            return ContainsAsciiWordRun(haystack);
+        }
+
+        if (IsAllAscii(haystack))
+        {
+            return ContainsAsciiWordRun(haystack);
+        }
+
+        return ContainsUnicodeWordRun(haystack);
+    }
+
+    private static int FindLineEnd(ReadOnlySpan<byte> haystack, int start)
+    {
+        int offset = haystack[start..].IndexOf((byte)'\n');
+        return offset < 0 ? haystack.Length : start + offset;
     }
 
     private void AccumulateAsciiWordMask(uint mask, int width, bool sumSpans, ref int runLength, ref long total)

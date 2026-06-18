@@ -1554,6 +1554,35 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies word-boundary run engines count matching lines without per-line fallback.
+    /// </summary>
+    [Fact]
+    public void WordBoundaryRunEngineCountsMatchingLines()
+    {
+        var ascii = RegexAutomaton.Compile(
+            @"\b\w{5,}\b"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var unicode = RegexAutomaton.Compile(
+            @"\b\w{5,}\b"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(ascii));
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(unicode));
+        Assert.Equal(2, ascii.CountMatchingLines("abcd\nabcde\r\nxx 12345\n____"u8));
+
+        byte[] unicodeHaystack = System.Text.Encoding.UTF8.GetBytes("tiny\nalpha\r\nβγδεζ\nabc αβγ\nabcde");
+        Assert.Equal(3, unicode.CountMatchingLines(unicodeHaystack));
+    }
+
+    /// <summary>
     /// Verifies bounded dot prefixes before literal alternatives scan from literals while preserving greediness.
     /// </summary>
     [Fact]
