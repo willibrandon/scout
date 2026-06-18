@@ -1169,7 +1169,8 @@ public sealed class RegexAutomaton
                     captureRoot,
                     captureOptions,
                     captureCount,
-                    out delimitedCaptureEngine);
+                    out delimitedCaptureEngine,
+                    compactFields: true);
                 RegexStructuredLogCaptureEngine.TryCreate(
                     captureRoot,
                     captureOptions,

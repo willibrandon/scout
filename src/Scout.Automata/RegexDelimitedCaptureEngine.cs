@@ -156,12 +156,11 @@ internal sealed class RegexDelimitedCaptureEngine
                 return false;
             }
 
-            for (int haystackIndex = fieldStart; haystackIndex < fieldEnd; haystackIndex++)
+            ReadOnlySpan<byte> content = haystack[fieldStart..fieldEnd];
+            if (!field.MatchesDelimitedContent(content, delimiter, index == fields.Length - 1) &&
+                !FieldContentMatches(content, field))
             {
-                if (!field.Matches(haystack[haystackIndex]))
-                {
-                    return false;
-                }
+                return false;
             }
 
             if (groups is not null)
@@ -177,6 +176,19 @@ internal sealed class RegexDelimitedCaptureEngine
         }
 
         return position == haystack.Length;
+    }
+
+    private static bool FieldContentMatches(ReadOnlySpan<byte> content, RegexDelimitedCaptureField field)
+    {
+        for (int index = 0; index < content.Length; index++)
+        {
+            if (!field.Matches(content[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool TryCreateField(

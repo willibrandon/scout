@@ -65,6 +65,16 @@ internal sealed class RegexDelimitedCaptureField
         };
     }
 
+    public bool MatchesDelimitedContent(ReadOnlySpan<byte> content, byte delimiter, bool isLast)
+    {
+        if (matcherKind != AnyExceptMatcher || first != delimiter)
+        {
+            return false;
+        }
+
+        return !isLast || !content.Contains(delimiter);
+    }
+
     public static bool TryCreateSpecialized(
         int captureIndex,
         int minimum,
