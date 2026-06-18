@@ -24,6 +24,7 @@ internal sealed class RegexScalarRunEngine
     private readonly bool singleDotAllScalarFastPath;
     private readonly int[]? unicodePropertyRanges;
     private readonly byte[]? unicodePropertyFirstBytes;
+    private readonly SearchValues<byte>? unicodePropertyCandidateFirstBytes;
 
     private RegexScalarRunEngine(
         RegexScalarRunAtom[] atoms,
@@ -45,6 +46,7 @@ internal sealed class RegexScalarRunEngine
         this.singleDotAllScalarFastPath = singleDotAllScalarFastPath;
         this.unicodePropertyRanges = unicodePropertyRanges;
         this.unicodePropertyFirstBytes = unicodePropertyFirstBytes;
+        unicodePropertyCandidateFirstBytes = TryCreateCandidateFirstByteSearchValues(unicodePropertyFirstBytes);
     }
 
     public static bool TryCreate(RegexSyntaxNode root, RegexCompileOptions options, out RegexScalarRunEngine? engine)
@@ -312,6 +314,11 @@ internal sealed class RegexScalarRunEngine
         int position = Math.Clamp(startAt, 0, haystack.Length);
         while (position < haystack.Length)
         {
+            if (!TryAdvanceToUnicodePropertyCandidate(haystack, ref position))
+            {
+                break;
+            }
+
             bool matched = TrySingleUnicodePropertyMatchLength(haystack, position, ref ranges, out int scalarLength);
             if (matched)
             {
@@ -337,6 +344,11 @@ internal sealed class RegexScalarRunEngine
         int runScalars = 0;
         while (position < haystack.Length)
         {
+            if (runScalars == 0 && !TryAdvanceToUnicodePropertyCandidate(haystack, ref position))
+            {
+                break;
+            }
+
             bool matched = TrySingleUnicodePropertyMatchLength(haystack, position, ref ranges, out int scalarLength);
             if (matched)
             {
@@ -359,6 +371,11 @@ internal sealed class RegexScalarRunEngine
         int position = Math.Clamp(startAt, 0, haystack.Length);
         while (position < haystack.Length)
         {
+            if (!TryAdvanceToUnicodePropertyCandidate(haystack, ref position))
+            {
+                break;
+            }
+
             bool matched = TrySingleUnicodePropertyMatchLength(haystack, position, ref ranges, out int scalarLength);
             if (matched)
             {
@@ -708,6 +725,24 @@ internal sealed class RegexScalarRunEngine
         }
 
         return ranges.Contains(scalar);
+    }
+
+    private bool TryAdvanceToUnicodePropertyCandidate(ReadOnlySpan<byte> haystack, ref int position)
+    {
+        if (unicodePropertyCandidateFirstBytes is null)
+        {
+            return position < haystack.Length;
+        }
+
+        int offset = haystack[position..].IndexOfAny(unicodePropertyCandidateFirstBytes);
+        if (offset < 0)
+        {
+            position = haystack.Length;
+            return false;
+        }
+
+        position += offset;
+        return true;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1137,6 +1172,27 @@ internal sealed class RegexScalarRunEngine
         ranges = mergedRanges;
         firstBytes = RegexUnicodeRangeCursor.CreateFirstByteLookup(ranges);
         return true;
+    }
+
+    private static SearchValues<byte>? TryCreateCandidateFirstByteSearchValues(byte[]? firstBytes)
+    {
+        if (firstBytes is null)
+        {
+            return null;
+        }
+
+        var candidates = new List<byte>();
+        for (int value = 0; value <= byte.MaxValue; value++)
+        {
+            if (firstBytes[value] != 0)
+            {
+                candidates.Add((byte)value);
+            }
+        }
+
+        return candidates.Count is > 0 and <= 96
+            ? SearchValues.Create(candidates.ToArray())
+            : null;
     }
 
     private static ReadOnlySpan<int> GetUnicodePropertyRanges(RegexUnicodePropertyKind kind)
