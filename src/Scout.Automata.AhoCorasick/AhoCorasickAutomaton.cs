@@ -12,6 +12,7 @@ public sealed class AhoCorasickAutomaton
 
     private readonly AhoCorasickState[] states;
     private int[]? denseTransitions;
+    private ushort[]? compactDenseTransitions;
     private readonly int[]?[]? lazyDenseTransitionRows;
     private readonly int[] emptyPatternIds;
     private readonly int[] outputCounts;
@@ -24,6 +25,7 @@ public sealed class AhoCorasickAutomaton
     private AhoCorasickAutomaton(
         AhoCorasickState[] states,
         int[]? denseTransitions,
+        ushort[]? compactDenseTransitions,
         int[] emptyPatternIds,
         int[] outputCounts,
         byte[][] patterns,
@@ -33,7 +35,8 @@ public sealed class AhoCorasickAutomaton
     {
         this.states = states;
         this.denseTransitions = denseTransitions;
-        lazyDenseTransitionRows = denseTransitions is null ? new int[states.Length][] : null;
+        this.compactDenseTransitions = compactDenseTransitions;
+        lazyDenseTransitionRows = denseTransitions is null && compactDenseTransitions is null ? new int[states.Length][] : null;
         this.emptyPatternIds = emptyPatternIds;
         this.outputCounts = outputCounts;
         this.patterns = patterns;
@@ -150,6 +153,7 @@ public sealed class AhoCorasickAutomaton
         return new AhoCorasickAutomaton(
             builtStates,
             TryBuildDenseTransitions(builtStates, asciiCaseInsensitive),
+            TryBuildCompactDenseTransitions(builtStates, asciiCaseInsensitive),
             emptyPatternIds.ToArray(),
             BuildOutputCounts(builtStates),
             ownedPatterns,
@@ -320,6 +324,11 @@ public sealed class AhoCorasickAutomaton
     internal int[]? GetDenseTransitionsForEnumerator()
     {
         return System.Threading.Volatile.Read(ref denseTransitions);
+    }
+
+    internal ushort[]? GetCompactDenseTransitionsForEnumerator()
+    {
+        return System.Threading.Volatile.Read(ref compactDenseTransitions);
     }
 
     private static void ValidateMatchKind(AhoCorasickMatchKind matchKind)
@@ -577,6 +586,12 @@ public sealed class AhoCorasickAutomaton
 
     private int NextState(int state, byte value)
     {
+        ushort[]? compactTransitions = System.Threading.Volatile.Read(ref compactDenseTransitions);
+        if (compactTransitions is not null)
+        {
+            return compactTransitions[(state * 256) + value];
+        }
+
         int[]? transitions = System.Threading.Volatile.Read(ref denseTransitions);
         if (transitions is not null)
         {
@@ -618,23 +633,49 @@ public sealed class AhoCorasickAutomaton
     private void TryPromoteDenseTransitions()
     {
         if (states.Length > MaxPromotedDenseTransitionStates ||
+            System.Threading.Volatile.Read(ref compactDenseTransitions) is not null ||
             System.Threading.Volatile.Read(ref denseTransitions) is not null)
         {
             return;
         }
 
-        int[] transitions = BuildDenseTransitions(states, asciiCaseInsensitive);
-        System.Threading.Volatile.Write(ref denseTransitions, transitions);
+        if (CanUseCompactDenseTransitions(states))
+        {
+            ushort[] transitions = BuildCompactDenseTransitions(states, asciiCaseInsensitive);
+            System.Threading.Volatile.Write(ref compactDenseTransitions, transitions);
+        }
+        else
+        {
+            int[] transitions = BuildDenseTransitions(states, asciiCaseInsensitive);
+            System.Threading.Volatile.Write(ref denseTransitions, transitions);
+        }
     }
 
     private static int[]? TryBuildDenseTransitions(AhoCorasickState[] states, bool asciiCaseInsensitive)
     {
-        if (states.Length > MaxEagerDenseTransitionStates)
+        if (states.Length > MaxEagerDenseTransitionStates ||
+            CanUseCompactDenseTransitions(states))
         {
             return null;
         }
 
         return BuildDenseTransitions(states, asciiCaseInsensitive);
+    }
+
+    private static ushort[]? TryBuildCompactDenseTransitions(AhoCorasickState[] states, bool asciiCaseInsensitive)
+    {
+        if (states.Length > MaxEagerDenseTransitionStates ||
+            !CanUseCompactDenseTransitions(states))
+        {
+            return null;
+        }
+
+        return BuildCompactDenseTransitions(states, asciiCaseInsensitive);
+    }
+
+    private static bool CanUseCompactDenseTransitions(AhoCorasickState[] states)
+    {
+        return states.Length <= ushort.MaxValue;
     }
 
     private static int[] BuildDenseTransitions(AhoCorasickState[] states, bool asciiCaseInsensitive)
@@ -647,6 +688,22 @@ public sealed class AhoCorasickAutomaton
             {
                 byte lookup = asciiCaseInsensitive ? FoldAscii((byte)value) : (byte)value;
                 transitions[baseIndex + value] = NextSparseState(states, state, lookup);
+            }
+        }
+
+        return transitions;
+    }
+
+    private static ushort[] BuildCompactDenseTransitions(AhoCorasickState[] states, bool asciiCaseInsensitive)
+    {
+        ushort[] transitions = new ushort[states.Length * 256];
+        for (int state = 0; state < states.Length; state++)
+        {
+            int baseIndex = state * 256;
+            for (int value = 0; value <= byte.MaxValue; value++)
+            {
+                byte lookup = asciiCaseInsensitive ? FoldAscii((byte)value) : (byte)value;
+                transitions[baseIndex + value] = (ushort)NextSparseState(states, state, lookup);
             }
         }
 

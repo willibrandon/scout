@@ -479,7 +479,7 @@ public sealed class AhoCorasickTests
             .ToArray();
         AhoCorasickAutomaton automaton = Build(patterns);
 
-        Assert.Null(GetDenseTransitions(automaton));
+        Assert.Null(GetAnyDenseTransitions(automaton));
         AssertMatches(
             automaton.FindAll("xx needle-0699 yy needle-0007"u8),
             [(699, 3, 14), (7, 18, 29)]);
@@ -503,16 +503,20 @@ public sealed class AhoCorasickTests
             haystack[(index * 4) + 3] = (byte)' ';
         }
 
-        Assert.Null(GetDenseTransitions(automaton));
+        Assert.Null(GetAnyDenseTransitions(automaton));
         Assert.Equal(700, automaton.FindAll(haystack).Count);
-        Assert.NotNull(GetDenseTransitions(automaton));
+        Assert.NotNull(GetAnyDenseTransitions(automaton));
     }
 
-    private static object? GetDenseTransitions(AhoCorasickAutomaton automaton)
+    private static object? GetAnyDenseTransitions(AhoCorasickAutomaton automaton)
     {
-        return typeof(AhoCorasickAutomaton)
+        Type type = typeof(AhoCorasickAutomaton);
+        return type
             .GetField("denseTransitions", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
-            .GetValue(automaton);
+            .GetValue(automaton) ??
+            type
+                .GetField("compactDenseTransitions", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .GetValue(automaton);
     }
 
     private static AhoCorasickAutomaton Build(params byte[][] patterns)

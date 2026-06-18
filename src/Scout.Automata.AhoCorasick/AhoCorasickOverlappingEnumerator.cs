@@ -9,6 +9,7 @@ public ref struct AhoCorasickOverlappingEnumerator
     private readonly AhoCorasickAutomaton automaton;
     private readonly ReadOnlySpan<byte> haystack;
     private readonly int[]? denseTransitions;
+    private readonly ushort[]? compactDenseTransitions;
     private readonly bool hasEmptyPatterns;
     private int state;
     private int nextIndex;
@@ -24,7 +25,10 @@ public ref struct AhoCorasickOverlappingEnumerator
     {
         this.automaton = automaton;
         this.haystack = haystack;
-        denseTransitions = automaton.GetDenseTransitionsForEnumerator();
+        compactDenseTransitions = automaton.GetCompactDenseTransitionsForEnumerator();
+        denseTransitions = compactDenseTransitions is null
+            ? automaton.GetDenseTransitionsForEnumerator()
+            : null;
         hasEmptyPatterns = automaton.EmptyPatternCount != 0;
         state = 0;
         nextIndex = 0;
@@ -50,6 +54,11 @@ public ref struct AhoCorasickOverlappingEnumerator
     /// <returns><see langword="true" /> when another match was found.</returns>
     public bool MoveNext()
     {
+        if (!hasEmptyPatterns && compactDenseTransitions is not null)
+        {
+            return MoveNextCompactDenseNoEmpty();
+        }
+
         if (!hasEmptyPatterns && denseTransitions is not null)
         {
             return MoveNextDenseNoEmpty();
@@ -93,7 +102,9 @@ public ref struct AhoCorasickOverlappingEnumerator
             }
 
             byte value = haystack[nextIndex];
-            state = denseTransitions is not null
+            state = compactDenseTransitions is not null
+                ? compactDenseTransitions[(state * 256) + value]
+                : denseTransitions is not null
                 ? denseTransitions[(state * 256) + value]
                 : automaton.NextStateForEnumerator(state, value);
             nextIndex++;
@@ -112,6 +123,45 @@ public ref struct AhoCorasickOverlappingEnumerator
                 }
             }
         }
+    }
+
+    private bool MoveNextCompactDenseNoEmpty()
+    {
+        if (outputIndex >= 0)
+        {
+            if (outputIndex < outputCount)
+            {
+                current = automaton.GetOutputMatch(state, outputIndex, end);
+                outputIndex++;
+                hasCurrent = true;
+                return true;
+            }
+
+            outputIndex = -1;
+            outputCount = 0;
+        }
+
+        ushort[] transitions = compactDenseTransitions!;
+        while (nextIndex < haystack.Length)
+        {
+            state = transitions[(state * 256) + haystack[nextIndex]];
+            nextIndex++;
+            int count = automaton.GetOutputCount(state);
+            if (count == 0)
+            {
+                continue;
+            }
+
+            end = nextIndex;
+            outputCount = count;
+            outputIndex = 1;
+            current = automaton.GetOutputMatch(state, 0, end);
+            hasCurrent = true;
+            return true;
+        }
+
+        hasCurrent = false;
+        return false;
     }
 
     private bool MoveNextDenseNoEmpty()
