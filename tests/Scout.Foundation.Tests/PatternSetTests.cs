@@ -571,6 +571,54 @@ public sealed class PatternSetTests
     }
 
     /// <summary>
+    /// Verifies required-literal candidates can be rejected by anchored byte-pattern guards before automaton validation.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralAcceleratorUsesAnchoredGuards()
+    {
+        var set = PatternSet.Compile(
+        [
+            @"\bcio[a-zA-Z0-9]{32}\b"u8.ToArray(),
+            @"(?i)client.?secret.{0,10}\b([a-z0-9_-]{24})(?:[^a-z0-9_-]|$)"u8.ToArray(),
+            @"(?:(machine\s+[^\s]+)|default)\s+login\s+([^\s]+)\s+password\s+([^\s]+)"u8.ToArray(),
+        ],
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.True(set.UsesRequiredLiteralAccelerator);
+        Assert.True(set.UsesRequiredLiteralGuards);
+        Assert.Equal(3, set.CountMatches(
+            "noise cio0123456789abcdefghijklmnopqrstuv CLIENT-secret = abcdefghijklmnopqrstuvwx; default login alice password sesame"u8));
+        Assert.Equal(0, set.CountMatches(
+            "scio0123456789abcdefghijklmnopqrstuv client nosecret default login alice pass sesame"u8));
+    }
+
+    /// <summary>
+    /// Verifies anchored required-literal guards can keep a mandatory prefix when a later optional sequence is too broad to model.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralGuardKeepsSafePrefixBeforeUnsupportedTail()
+    {
+        var set = PatternSet.Compile(
+        [
+            @"(?:username|USERNAME|user|USER)[ \t]*=[ \t]*[""']([a-zA-Z0-9.@_\-+]{3,30})[""']\s*[,;]?\s*(?:\s*(?:\#|//)[^\n\r]*[\n\r])*(?:password|pass|PASSWORD|PASS)[ \t]*=[ \t]*[""']([^""']{5,30})[""']"u8.ToArray(),
+        ],
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.True(set.UsesRequiredLiteralAccelerator);
+        Assert.True(set.UsesRequiredLiteralGuards);
+        Assert.Equal(1, set.CountMatches("user = \"alice\" // keep this assignment\npassword = \"sesame\""u8));
+        Assert.Equal(0, set.CountMatches("user profile password hint"u8));
+    }
+
+    /// <summary>
     /// Verifies an empty set never matches.
     /// </summary>
     [Fact]

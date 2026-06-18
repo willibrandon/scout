@@ -5,6 +5,8 @@ namespace Scout;
 /// </summary>
 public sealed class PatternSet
 {
+    private const int MaxGuardRequiredLiteralLength = 4;
+
     private readonly RegexAutomaton[] automata;
     private readonly int[] automataPatternIds;
     private readonly int[] allAutomataIndexes;
@@ -58,6 +60,8 @@ public sealed class PatternSet
     internal bool UsesBoundaryLiteralAccelerator => boundaryLiteralAccelerator is not null;
 
     internal bool UsesRequiredLiteralAccelerator => requiredLiteralAccelerator is not null;
+
+    internal bool UsesRequiredLiteralGuards => requiredLiteralAccelerator?.UsesGuards == true;
 
     internal bool RequiredLiteralAcceleratorCoversAll => requiredLiteralAccelerator?.CoversAllAutomata == true;
 
@@ -177,6 +181,7 @@ public sealed class PatternSet
         var boundaryLiteralPatterns = new List<byte[]>();
         var boundaryLiteralPatternIds = new List<int>();
         var requiredLiteralEntries = new List<PatternSetRequiredLiteralEntry>();
+        var requiredLiteralGuards = new List<PatternSetRequiredLiteralGuard?>();
         var utf8ByteTrieCache = new Dictionary<string, RegexUtf8ByteTrie>();
         for (int index = 0; index < plans.Length; index++)
         {
@@ -211,6 +216,11 @@ public sealed class PatternSet
                     plan.RequiredLiteralLookBehind));
             }
 
+            requiredLiteralGuards.Add(plan.RequiredLiterals is not null &&
+                plan.Tree is not null &&
+                ShouldBuildRequiredLiteralGuard(plan.RequiredLiterals)
+                ? PatternSetRequiredLiteralGuard.TryCreate(plan.Tree.Root, options)
+                : null);
             bool useLeanBranchAutomaton = useLeanAutomata || plan.RequiredLiterals is not null;
             automata.Add(useLeanBranchAutomaton
                 ? RegexAutomaton.CompileParsedForPatternSet(
@@ -236,7 +246,11 @@ public sealed class PatternSet
         RegexAutomaton[] compiledAutomata = automata.ToArray();
         PatternSetRequiredLiteralAccelerator? requiredLiteralAccelerator = requiredLiteralEntries.Count == 0
             ? null
-            : new PatternSetRequiredLiteralAccelerator(requiredLiteralEntries, compiledAutomata.Length, compiledAutomata);
+            : new PatternSetRequiredLiteralAccelerator(
+                requiredLiteralEntries,
+                compiledAutomata.Length,
+                compiledAutomata,
+                requiredLiteralGuards);
         bool coversEveryByteWithPositiveWidth = DetectEveryBytePositiveWidthCoverage(patterns, plans, options);
         int[]? wholePatternCaptureIndexesByPatternId = BuildWholePatternCaptureIndexes(plans);
         patternSet = new PatternSet(
@@ -782,6 +796,19 @@ public sealed class PatternSet
         }
 
         return indexes;
+    }
+
+    private static bool ShouldBuildRequiredLiteralGuard(byte[][] requiredLiterals)
+    {
+        for (int index = 0; index < requiredLiterals.Length; index++)
+        {
+            if (requiredLiterals[index].Length <= MaxGuardRequiredLiteralLength)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool DetectEveryBytePositiveWidthCoverage(

@@ -8,17 +8,20 @@ internal sealed class PatternSetRequiredLiteralAccelerator
     private readonly int maxLookBehind;
     private readonly bool[] acceleratedAutomata;
     private readonly bool[]?[]? startBytesByAutomaton;
+    private readonly PatternSetRequiredLiteralGuard?[]? guardsByAutomaton;
 
     public PatternSetRequiredLiteralAccelerator(
         IReadOnlyList<PatternSetRequiredLiteralEntry> entries,
         int automataCount,
-        IReadOnlyList<RegexAutomaton>? automata = null)
+        IReadOnlyList<RegexAutomaton>? automata = null,
+        IReadOnlyList<PatternSetRequiredLiteralGuard?>? guards = null)
     {
         ArgumentNullException.ThrowIfNull(entries);
         ArgumentOutOfRangeException.ThrowIfNegative(automataCount);
 
         acceleratedAutomata = new bool[automataCount];
         startBytesByAutomaton = BuildStartBytes(automata, automataCount);
+        guardsByAutomaton = BuildGuards(guards, automataCount);
         var literals = new List<byte[]>();
         var automataByLiteral = new List<List<PatternSetRequiredAutomaton>>();
         var maxLookBehindByLiteral = new List<int>();
@@ -65,6 +68,27 @@ internal sealed class PatternSetRequiredLiteralAccelerator
 
         this.maxLookBehindByLiteral = maxLookBehindByLiteral.ToArray();
         this.maxLookBehind = maxLookBehind;
+    }
+
+    public bool UsesGuards
+    {
+        get
+        {
+            if (guardsByAutomaton is null)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < guardsByAutomaton.Length; index++)
+            {
+                if (guardsByAutomaton[index] is not null)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
 
     public bool CoversAutomaton(int automatonIndex)
@@ -237,6 +261,12 @@ internal sealed class PatternSetRequiredLiteralAccelerator
                         continue;
                     }
 
+                    PatternSetRequiredLiteralGuard? guard = guardsByAutomaton?[automatonIndex];
+                    if (guard is not null && !guard.CanMatchAt(haystack, start))
+                    {
+                        continue;
+                    }
+
                     RegexMatch? match = automata[automatonIndex].MatchAt(haystack, start);
                     if (!match.HasValue)
                     {
@@ -283,6 +313,12 @@ internal sealed class PatternSetRequiredLiteralAccelerator
             {
                 if (startBytes is not null &&
                     (start >= haystack.Length || !startBytes[haystack[start]]))
+                {
+                    continue;
+                }
+
+                PatternSetRequiredLiteralGuard? guard = guardsByAutomaton?[automatonIndex];
+                if (guard is not null && !guard.CanMatchAt(haystack, start))
                 {
                     continue;
                 }
@@ -357,6 +393,30 @@ internal sealed class PatternSetRequiredLiteralAccelerator
         }
 
         return startBytes;
+    }
+
+    private static PatternSetRequiredLiteralGuard?[]? BuildGuards(IReadOnlyList<PatternSetRequiredLiteralGuard?>? guards, int automataCount)
+    {
+        if (guards is null)
+        {
+            return null;
+        }
+
+        if (guards.Count != automataCount)
+        {
+            throw new ArgumentException("guard count does not match automata count", nameof(guards));
+        }
+
+        var copied = new PatternSetRequiredLiteralGuard?[automataCount];
+        bool any = false;
+        for (int index = 0; index < guards.Count; index++)
+        {
+            PatternSetRequiredLiteralGuard? guard = guards[index];
+            copied[index] = guard;
+            any |= guard is not null;
+        }
+
+        return any ? copied : null;
     }
 
     private static byte[] NormalizeAsciiCase(byte[] literal)
