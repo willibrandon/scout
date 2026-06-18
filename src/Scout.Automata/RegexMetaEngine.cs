@@ -1789,6 +1789,46 @@ internal sealed class RegexMetaEngine
         return Find(haystack, startAt: 0, startPredicate).HasValue;
     }
 
+    public long CountMatchingLines(ReadOnlySpan<byte> haystack, RegexStartPredicate? startPredicate = null)
+    {
+        if (anchoredLineLiteralGap is not null)
+        {
+            return anchoredLineLiteralGap.CountMatchingLines(haystack);
+        }
+
+        long total = 0;
+        int position = 0;
+        while (position < haystack.Length)
+        {
+            int lineEnd = FindLineEnd(haystack, position);
+            int contentEnd = lineEnd;
+            if (contentEnd > position && haystack[contentEnd - 1] == (byte)'\r')
+            {
+                contentEnd--;
+            }
+
+            if (IsMatch(haystack[position..contentEnd], startPredicate))
+            {
+                total++;
+            }
+
+            if (lineEnd >= haystack.Length)
+            {
+                return total;
+            }
+
+            position = lineEnd + 1;
+        }
+
+        return total;
+    }
+
+    private static int FindLineEnd(ReadOnlySpan<byte> haystack, int start)
+    {
+        int offset = haystack[start..].IndexOf((byte)'\n');
+        return offset < 0 ? haystack.Length : start + offset;
+    }
+
     private RegexMatch? Find(
         ReadOnlySpan<byte> haystack,
         int startAt,

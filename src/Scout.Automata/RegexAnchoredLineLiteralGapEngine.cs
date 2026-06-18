@@ -131,26 +131,59 @@ internal sealed class RegexAnchoredLineLiteralGapEngine
             : 0;
     }
 
+    public long CountMatchingLines(ReadOnlySpan<byte> haystack)
+    {
+        long total = 0;
+        int lineStart = 0;
+        while (lineStart < haystack.Length)
+        {
+            int lineEnd = FindLineEnd(haystack, lineStart);
+            int contentEnd = lineEnd;
+            if (contentEnd > lineStart && haystack[contentEnd - 1] == (byte)'\r')
+            {
+                contentEnd--;
+            }
+
+            if (TryMatchAtLineStart(haystack, lineStart, contentEnd, out _))
+            {
+                total++;
+            }
+
+            if (lineEnd >= haystack.Length)
+            {
+                return total;
+            }
+
+            lineStart = lineEnd + 1;
+        }
+
+        return total;
+    }
+
     private bool TryMatchAtAbsoluteStart(ReadOnlySpan<byte> haystack, out int length)
     {
+        return TryMatchAtLineStart(haystack, start: 0, FindLineEnd(haystack, start: 0), out length);
+    }
+
+    private bool TryMatchAtLineStart(ReadOnlySpan<byte> haystack, int start, int lineEnd, out int length)
+    {
         length = 0;
-        int position = 0;
+        int position = start;
         if (leadingBytes is not null)
         {
-            while (position < haystack.Length && leadingBytes[haystack[position]])
+            while (position < lineEnd && leadingBytes[haystack[position]])
             {
                 position++;
             }
         }
 
-        if (prefix.Length > haystack.Length - position ||
+        if (prefix.Length > lineEnd - position ||
             !haystack.Slice(position, prefix.Length).SequenceEqual(prefix))
         {
             return false;
         }
 
         position += prefix.Length;
-        int lineEnd = FindLineEnd(haystack, position);
         int lastAnchorStart = lineEnd - tailAnchor.Length;
         int searchAt = position;
         while (searchAt <= lastAnchorStart)
@@ -164,7 +197,7 @@ internal sealed class RegexAnchoredLineLiteralGapEngine
             int candidate = searchAt + offset;
             if (TryMatchTail(haystack, partIndex: 0, candidate, lineEnd, out int end))
             {
-                length = end;
+                length = end - start;
                 return true;
             }
 

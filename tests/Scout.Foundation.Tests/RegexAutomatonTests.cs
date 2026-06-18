@@ -1523,6 +1523,8 @@ public sealed class RegexAutomatonTests
         Assert.False(automaton.IsMatch("x # coding: utf-8"u8));
         Assert.False(automaton.IsMatch("# no coding here"u8));
         Assert.False(automaton.IsMatch("# coding: ascii"u8));
+        Assert.Equal(3, automaton.CountMatchingLines(
+            "  # -*- coding: utf-8 -*-\n# coding=utf8\r\nx # coding: utf-8\n \t\f# coding:   utf8"u8));
     }
 
     /// <summary>
@@ -1547,6 +1549,7 @@ public sealed class RegexAutomatonTests
         Assert.Null(automaton.MatchAt(twoLines, 1));
         Assert.Equal(1, automaton.CountMatches(twoLines));
         Assert.Equal(15, automaton.SumMatchSpans(twoLines));
+        Assert.Equal(2, automaton.CountMatchingLines(twoLines));
         Assert.False(automaton.IsMatch("# comment\ncoding: utf-8"u8));
     }
 

@@ -1021,6 +1021,16 @@ public sealed class RegexAutomaton
     }
 
     /// <summary>
+    /// Counts lines whose content matches the regex.
+    /// </summary>
+    /// <param name="haystack">The haystack bytes.</param>
+    /// <returns>The number of matching lines.</returns>
+    public long CountMatchingLines(ReadOnlySpan<byte> haystack)
+    {
+        return engine.CountMatchingLines(haystack, startPredicate);
+    }
+
+    /// <summary>
     /// Counts all non-overlapping matches in a haystack.
     /// </summary>
     /// <param name="haystack">The haystack bytes.</param>
