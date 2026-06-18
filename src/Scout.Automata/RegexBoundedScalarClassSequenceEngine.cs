@@ -13,7 +13,14 @@ internal sealed class RegexBoundedScalarClassSequenceEngine
     private readonly byte gapClassEnd;
     private readonly bool gapClassNegated;
     private readonly int repeatCount;
-    private readonly byte suffix;
+    private readonly RegexSyntaxKind suffixKind;
+    private readonly byte[] suffixValue;
+    private readonly byte asciiSuffix;
+    private readonly bool searchByAsciiSuffix;
+    private readonly byte[] suffixFirstBytes;
+    private readonly SearchValues<byte>? suffixFirstByteValues;
+    private readonly SearchValues<byte> startSearchValues;
+    private readonly RegexCompileOptions options;
 
     private RegexBoundedScalarClassSequenceEngine(
         byte startClassStart,
@@ -22,7 +29,13 @@ internal sealed class RegexBoundedScalarClassSequenceEngine
         byte gapClassEnd,
         bool gapClassNegated,
         int repeatCount,
-        byte suffix)
+        RegexSyntaxKind suffixKind,
+        byte[] suffixValue,
+        byte asciiSuffix,
+        bool searchByAsciiSuffix,
+        byte[] suffixFirstBytes,
+        SearchValues<byte>? suffixFirstByteValues,
+        RegexCompileOptions options)
     {
         this.startClassStart = startClassStart;
         this.startClassEnd = startClassEnd;
@@ -30,7 +43,14 @@ internal sealed class RegexBoundedScalarClassSequenceEngine
         this.gapClassEnd = gapClassEnd;
         this.gapClassNegated = gapClassNegated;
         this.repeatCount = repeatCount;
-        this.suffix = suffix;
+        this.suffixKind = suffixKind;
+        this.suffixValue = suffixValue;
+        this.asciiSuffix = asciiSuffix;
+        this.searchByAsciiSuffix = searchByAsciiSuffix;
+        this.suffixFirstBytes = suffixFirstBytes;
+        this.suffixFirstByteValues = suffixFirstByteValues;
+        startSearchValues = SearchValues.Create(BuildRangeNeedles(startClassStart, startClassEnd));
+        this.options = options;
     }
 
     public static bool TryCreate(
@@ -50,11 +70,14 @@ internal sealed class RegexBoundedScalarClassSequenceEngine
         if (root is not RegexSequenceNode { Nodes.Count: 3 } sequence ||
             !TryGetAsciiRangeClass(sequence.Nodes[0], allowNegated: false, out byte startClassStart, out byte startClassEnd, out _) ||
             !TryGetExactScalarRepetition(sequence.Nodes[1], out byte gapClassStart, out byte gapClassEnd, out bool gapClassNegated, out int repeatCount) ||
-            !TryGetAsciiLiteral(sequence.Nodes[2], out byte suffix))
+            !TryGetSuffixAtom(sequence.Nodes[2], out RegexSyntaxKind suffixKind, out byte[]? suffixValue, out byte asciiSuffix, out bool searchByAsciiSuffix, out byte[]? suffixFirstBytes))
         {
             return false;
         }
 
+        SearchValues<byte>? suffixFirstByteValues = !searchByAsciiSuffix && suffixFirstBytes.Length > 3
+            ? SearchValues.Create(suffixFirstBytes)
+            : null;
         engine = new RegexBoundedScalarClassSequenceEngine(
             startClassStart,
             startClassEnd,
@@ -62,11 +85,32 @@ internal sealed class RegexBoundedScalarClassSequenceEngine
             gapClassEnd,
             gapClassNegated,
             repeatCount,
-            suffix);
+            suffixKind,
+            suffixValue,
+            asciiSuffix,
+            searchByAsciiSuffix,
+            suffixFirstBytes,
+            suffixFirstByteValues,
+            options);
         return true;
     }
 
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        if (searchByAsciiSuffix)
+        {
+            return FindByAsciiSuffix(haystack, startAt);
+        }
+
+        if (suffixFirstBytes.Length > 0)
+        {
+            return FindBySuffixFirstByte(haystack, startAt);
+        }
+
+        return FindFromStart(haystack, startAt);
+    }
+
+    private RegexMatch? FindByAsciiSuffix(ReadOnlySpan<byte> haystack, int startAt)
     {
         int lowerBound = Math.Clamp(startAt, 0, haystack.Length);
         int minPrefixBytes = repeatCount + 1;
@@ -75,13 +119,41 @@ internal sealed class RegexBoundedScalarClassSequenceEngine
         RegexMatch? best = null;
         while (searchAt < haystack.Length)
         {
-            int offset = haystack[searchAt..].IndexOf(suffix);
+            int offset = haystack[searchAt..].IndexOf(asciiSuffix);
             if (offset < 0)
             {
                 return best;
             }
 
             int suffixAt = searchAt + offset;
+            if (best.HasValue && suffixAt - maxPrefixBytes > best.Value.Start)
+            {
+                return best;
+            }
+
+            if (TryGetStartBeforeSuffix(haystack, suffixAt, out int start) &&
+                start >= lowerBound &&
+                (!best.HasValue || start < best.Value.Start) &&
+                TryMatchAt(haystack, start, out int length))
+            {
+                best = new RegexMatch(start, length);
+            }
+
+            searchAt = suffixAt + 1;
+        }
+
+        return best;
+    }
+
+    private RegexMatch? FindBySuffixFirstByte(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        int lowerBound = Math.Clamp(startAt, 0, haystack.Length);
+        int minPrefixBytes = repeatCount + 1;
+        int maxPrefixBytes = (repeatCount * 4) + 1;
+        int searchAt = Math.Min(haystack.Length, lowerBound + minPrefixBytes);
+        RegexMatch? best = null;
+        while (TryFindSuffixFirstByte(haystack, searchAt, out int suffixAt))
+        {
             if (best.HasValue && suffixAt - maxPrefixBytes > best.Value.Start)
             {
                 return best;
@@ -182,12 +254,12 @@ internal sealed class RegexBoundedScalarClassSequenceEngine
 
         int suffixAt = gapStart + repeatCount;
         completed = true;
-        if (haystack[suffixAt] != suffix)
+        if (!TryMatchSuffix(haystack, suffixAt, out int suffixLength))
         {
             return false;
         }
 
-        length = suffixAt + 1 - start;
+        length = suffixAt + suffixLength - start;
         return true;
     }
 
@@ -223,13 +295,118 @@ internal sealed class RegexBoundedScalarClassSequenceEngine
             position += scalarLength;
         }
 
-        if (position >= haystack.Length || haystack[position] != suffix)
+        if (!TryMatchSuffix(haystack, position, out int suffixLength))
         {
             return false;
         }
 
-        length = position + 1 - start;
+        length = position + suffixLength - start;
         return true;
+    }
+
+    private RegexMatch? FindFromStart(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        int searchAt = Math.Clamp(startAt, 0, haystack.Length);
+        while (searchAt < haystack.Length)
+        {
+            int offset = haystack[searchAt..].IndexOfAny(startSearchValues);
+            if (offset < 0)
+            {
+                return null;
+            }
+
+            int start = searchAt + offset;
+            if (TryMatchAt(haystack, start, out int length))
+            {
+                return new RegexMatch(start, length);
+            }
+
+            searchAt = start + 1;
+        }
+
+        return null;
+    }
+
+    private bool TryFindSuffixFirstByte(ReadOnlySpan<byte> haystack, int startAt, out int suffixAt)
+    {
+        suffixAt = Math.Clamp(startAt, 0, haystack.Length);
+        if (suffixAt >= haystack.Length)
+        {
+            suffixAt = 0;
+            return false;
+        }
+
+        if (suffixFirstBytes.Length == 1)
+        {
+            int offset = haystack[suffixAt..].IndexOf(suffixFirstBytes[0]);
+            if (offset >= 0)
+            {
+                suffixAt += offset;
+                return true;
+            }
+
+            suffixAt = 0;
+            return false;
+        }
+
+        if (suffixFirstBytes.Length == 2)
+        {
+            int offset = haystack[suffixAt..].IndexOfAny(suffixFirstBytes[0], suffixFirstBytes[1]);
+            if (offset >= 0)
+            {
+                suffixAt += offset;
+                return true;
+            }
+
+            suffixAt = 0;
+            return false;
+        }
+
+        if (suffixFirstBytes.Length == 3)
+        {
+            int offset = haystack[suffixAt..].IndexOfAny(suffixFirstBytes[0], suffixFirstBytes[1], suffixFirstBytes[2]);
+            if (offset >= 0)
+            {
+                suffixAt += offset;
+                return true;
+            }
+
+            suffixAt = 0;
+            return false;
+        }
+
+        if (suffixFirstByteValues is not null)
+        {
+            int offset = haystack[suffixAt..].IndexOfAny(suffixFirstByteValues);
+            if (offset >= 0)
+            {
+                suffixAt += offset;
+                return true;
+            }
+
+            suffixAt = 0;
+            return false;
+        }
+
+        suffixAt = 0;
+        return false;
+    }
+
+    private bool TryMatchSuffix(ReadOnlySpan<byte> haystack, int position, out int length)
+    {
+        return RegexByteClass.TryGetAtomMatchLength(
+            haystack,
+            position,
+            suffixKind,
+            suffixValue,
+            caseInsensitive: false,
+            options.MultiLine,
+            options.DotMatchesNewline,
+            options.Crlf,
+            options.LineTerminator,
+            options.Utf8,
+            options.UnicodeClasses,
+            out length);
     }
 
     private static bool TryGetExactScalarRepetition(
@@ -301,18 +478,43 @@ internal sealed class RegexBoundedScalarClassSequenceEngine
         return true;
     }
 
-    private static bool TryGetAsciiLiteral(RegexSyntaxNode node, out byte literal)
+    private static bool TryGetSuffixAtom(
+        RegexSyntaxNode node,
+        out RegexSyntaxKind suffixKind,
+        out byte[] suffixValue,
+        out byte asciiSuffix,
+        out bool searchByAsciiSuffix,
+        out byte[] suffixFirstBytes)
     {
-        literal = 0;
+        suffixKind = RegexSyntaxKind.Literal;
+        suffixValue = [];
+        asciiSuffix = 0;
+        searchByAsciiSuffix = false;
+        suffixFirstBytes = [];
         node = UnwrapTransparentGroups(node);
-        if (node is not RegexAtomNode { Kind: RegexSyntaxKind.Literal } atom ||
-            atom.Value.Length != 1 ||
-            atom.Value.Span[0] > 0x7F)
+        if (node is not RegexAtomNode atom)
         {
             return false;
         }
 
-        literal = atom.Value.Span[0];
+        if (atom.Kind == RegexSyntaxKind.Literal)
+        {
+            suffixKind = atom.Kind;
+            suffixValue = atom.Value.ToArray();
+            searchByAsciiSuffix = suffixValue.Length == 1 && suffixValue[0] <= 0x7F;
+            asciiSuffix = searchByAsciiSuffix ? suffixValue[0] : (byte)0;
+            suffixFirstBytes = suffixValue.Length > 0 ? [suffixValue[0]] : [];
+            return suffixValue.Length > 0;
+        }
+
+        if (atom.Kind != RegexSyntaxKind.CharacterClass ||
+            !TryGetSimpleLatin1ScalarClassFirstBytes(atom.Value.Span, out suffixFirstBytes))
+        {
+            return false;
+        }
+
+        suffixKind = atom.Kind;
+        suffixValue = atom.Value.ToArray();
         return true;
     }
 
@@ -332,6 +534,121 @@ internal sealed class RegexBoundedScalarClassSequenceEngine
     {
         bool inRange = start <= value && value <= end;
         return negated ? !inRange : inRange;
+    }
+
+    private static byte[] BuildRangeNeedles(byte start, byte end)
+    {
+        byte[] needles = new byte[end - start + 1];
+        for (int value = start; value <= end; value++)
+        {
+            needles[value - start] = (byte)value;
+        }
+
+        return needles;
+    }
+
+    private static bool TryGetSimpleLatin1ScalarClassFirstBytes(ReadOnlySpan<byte> expression, out byte[] firstBytes)
+    {
+        firstBytes = [];
+        if (expression.IsEmpty ||
+            RegexByteClass.IsNegatedClass(expression) ||
+            RegexByteClass.TryFindClassIntersectionOperator(expression, out _) ||
+            !IsAscii(expression))
+        {
+            return false;
+        }
+
+        int index = 0;
+        bool[] candidates = new bool[256];
+        while (index < expression.Length)
+        {
+            if (!RegexByteClass.TryReadClassToken(expression, ref index, out RegexSyntaxKind tokenKind, out byte literal, out bool tokenNegated) ||
+                tokenKind != RegexSyntaxKind.Literal ||
+                tokenNegated)
+            {
+                return false;
+            }
+
+            if (index + 1 < expression.Length && expression[index] == (byte)'-')
+            {
+                int rangeEndIndex = index + 1;
+                if (!RegexByteClass.TryReadClassToken(expression, ref rangeEndIndex, out RegexSyntaxKind rangeEndKind, out byte rangeEnd, out bool rangeEndNegated) ||
+                    rangeEndKind != RegexSyntaxKind.Literal ||
+                    rangeEndNegated)
+                {
+                    return false;
+                }
+
+                if (literal > rangeEnd)
+                {
+                    return false;
+                }
+
+                AddLatin1ScalarFirstBytes(candidates, literal, rangeEnd);
+                index = rangeEndIndex;
+                continue;
+            }
+
+            AddLatin1ScalarFirstBytes(candidates, literal, literal);
+        }
+
+        firstBytes = BuildNeedles(candidates);
+        return firstBytes.Length > 0;
+    }
+
+    private static bool IsAscii(ReadOnlySpan<byte> bytes)
+    {
+        for (int index = 0; index < bytes.Length; index++)
+        {
+            if (bytes[index] > 0x7F)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static void AddLatin1ScalarFirstBytes(bool[] firstBytes, byte start, byte end)
+    {
+        for (int scalar = start; scalar <= end; scalar++)
+        {
+            firstBytes[GetUtf8FirstByte(scalar)] = true;
+        }
+    }
+
+    private static byte GetUtf8FirstByte(int scalar)
+    {
+        if (scalar <= 0x7F)
+        {
+            return (byte)scalar;
+        }
+
+        return (byte)(0xC0 | (scalar >> 6));
+    }
+
+    private static byte[] BuildNeedles(bool[] bytes)
+    {
+        int count = 0;
+        for (int value = 0; value <= byte.MaxValue; value++)
+        {
+            if (bytes[value])
+            {
+                count++;
+            }
+        }
+
+        byte[] needles = new byte[count];
+        int write = 0;
+        for (int value = 0; value <= byte.MaxValue; value++)
+        {
+            if (bytes[value])
+            {
+                needles[write++] = (byte)value;
+            }
+        }
+
+        return needles;
     }
 
     private bool TryGetStartBeforeSuffix(ReadOnlySpan<byte> haystack, int suffixAt, out int start)

@@ -3060,6 +3060,11 @@ internal sealed class RegexMetaEngine
             return RegexRepeatedLiteralRunOrEmptyEngine.FindEarliest(haystack, startOffset);
         }
 
+        if (boundedScalarClassSequence is not null)
+        {
+            return boundedScalarClassSequence.Find(haystack, startOffset);
+        }
+
         RegexNfa activeNfa = GetNfa();
         var earliestPikeVm = new PikeVm(activeNfa);
         for (int start = startOffset; start <= haystack.Length; start++)
@@ -3106,6 +3111,11 @@ internal sealed class RegexMetaEngine
             return repeatedLiteralRunOrEmpty.FindAllKindAt(haystack, startOffset);
         }
 
+        if (boundedScalarClassSequence is not null)
+        {
+            return boundedScalarClassSequence.MatchAt(haystack, startOffset);
+        }
+
         RegexNfa activeNfa = GetNfa();
         if (activeNfa.Utf8 && !RegexByteClass.IsUtf8Boundary(haystack, startOffset))
         {
@@ -3140,6 +3150,12 @@ internal sealed class RegexMetaEngine
         if (repeatedLiteralRunOrEmpty is not null)
         {
             return repeatedLiteralRunOrEmpty.FindOverlappingAt(haystack, startOffset);
+        }
+
+        if (boundedScalarClassSequence is not null)
+        {
+            RegexMatch? match = boundedScalarClassSequence.MatchAt(haystack, startOffset);
+            return match.HasValue ? [match.Value] : [];
         }
 
         RegexNfa activeNfa = GetNfa();

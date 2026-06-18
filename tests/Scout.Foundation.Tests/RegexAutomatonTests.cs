@@ -1690,13 +1690,27 @@ public sealed class RegexAutomatonTests
             dotMatchesNewline: false,
             utf8: false,
             unicodeClasses: false);
+        var suffixClass = RegexAutomaton.Compile(
+            @"[a-q][^u-z]{3}[x\xE0-\xFF]"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
 
         byte[] haystack = System.Text.Encoding.ASCII.GetBytes("xx \"yes?\" 'ok.' \"no\" \"a?.\"");
         byte[] tooLong = System.Text.Encoding.ASCII.GetBytes("\"" + new string('a', 31) + "!\"");
+        byte[] classHaystack =
+        [
+            (byte)'z', (byte)' ', (byte)'a', (byte)'b', (byte)'c', (byte)'d', (byte)'x', (byte)' ',
+            (byte)'b', (byte)'c', (byte)'d', (byte)'e', 0xE0, (byte)' ',
+            (byte)'c', (byte)'u', (byte)'d', (byte)'e', (byte)'x',
+        ];
 
         Assert.Equal(RegexEngineKind.BoundedByteClassSequence, GetEngineKind(automaton));
         Assert.Equal(RegexEngineKind.BoundedByteClassSequence, GetEngineKind(greedy));
         Assert.Equal(RegexEngineKind.BoundedByteClassSequence, GetEngineKind(lazy));
+        Assert.Equal(RegexEngineKind.BoundedByteClassSequence, GetEngineKind(suffixClass));
         Assert.Equal(new RegexMatch(3, 6), automaton.Find(haystack));
         Assert.Equal(new RegexMatch(10, 5), automaton.Find(haystack, startAt: 4));
         Assert.Equal(new RegexMatch(21, 5), automaton.Find(haystack, startAt: 15));
@@ -1711,6 +1725,12 @@ public sealed class RegexAutomatonTests
         Assert.Equal(16, automaton.SumMatchSpans(haystack));
         Assert.Equal(new RegexMatch(0, 5), greedy.Find("@aabb"u8));
         Assert.Equal(new RegexMatch(0, 4), lazy.Find("@aabb"u8));
+        Assert.Equal(new RegexMatch(2, 5), suffixClass.Find(classHaystack));
+        Assert.Equal(new RegexMatch(8, 5), suffixClass.Find(classHaystack, startAt: 3));
+        Assert.Equal(new RegexMatch(8, 5), suffixClass.MatchAt(classHaystack, 8));
+        Assert.Null(suffixClass.MatchAt(classHaystack, 14));
+        Assert.Equal(2, suffixClass.CountMatches(classHaystack));
+        Assert.Equal(10, suffixClass.SumMatchSpans(classHaystack));
     }
 
     /// <summary>
@@ -1726,9 +1746,18 @@ public sealed class RegexAutomatonTests
             dotMatchesNewline: false,
             utf8: false,
             unicodeClasses: true);
+        var suffixClass = RegexAutomaton.Compile(
+            @"[a-q][^u-z]{3}[x\xE0-\xFF]"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
         byte[] haystack = System.Text.Encoding.UTF8.GetBytes("zz aabcx b¢cdx c¢∞dx qabcx rbcdx aabux");
+        byte[] classHaystack = System.Text.Encoding.UTF8.GetBytes("zz aabcx bcdeà cdefÿ dabu x");
 
         Assert.Equal(RegexEngineKind.BoundedScalarClassSequence, GetEngineKind(automaton));
+        Assert.Equal(RegexEngineKind.BoundedScalarClassSequence, GetEngineKind(suffixClass));
         Assert.Equal(new RegexMatch(3, 5), automaton.Find(haystack));
         Assert.Equal(new RegexMatch(9, 6), automaton.Find(haystack, startAt: 4));
         Assert.Equal(new RegexMatch(16, 8), automaton.Find(haystack, startAt: 10));
@@ -1742,6 +1771,16 @@ public sealed class RegexAutomatonTests
         Assert.Null(automaton.MatchAt(haystack, 37));
         Assert.Equal(4, automaton.CountMatches(haystack));
         Assert.Equal(24, automaton.SumMatchSpans(haystack));
+        Assert.Equal(new RegexMatch(3, 5), suffixClass.Find(classHaystack));
+        Assert.Equal(new RegexMatch(9, 6), suffixClass.Find(classHaystack, startAt: 4));
+        Assert.Equal(new RegexMatch(16, 6), suffixClass.Find(classHaystack, startAt: 10));
+        Assert.Equal(new RegexMatch(9, 6), suffixClass.MatchAt(classHaystack, 9));
+        Assert.Null(suffixClass.MatchAt(classHaystack, 23));
+        Assert.Equal(new RegexMatch(0, 6), suffixClass.FindEarliest(System.Text.Encoding.UTF8.GetBytes("abcdà"), startAt: 0));
+        Assert.Equal(new RegexMatch(0, 6), suffixClass.FindAllKindAt(System.Text.Encoding.UTF8.GetBytes("abcdà"), startAt: 0));
+        Assert.Equal([new RegexMatch(0, 6)], suffixClass.FindOverlappingAt(System.Text.Encoding.UTF8.GetBytes("abcdà"), startAt: 0));
+        Assert.Equal(3, suffixClass.CountMatches(classHaystack));
+        Assert.Equal(17, suffixClass.SumMatchSpans(classHaystack));
     }
 
     /// <summary>
