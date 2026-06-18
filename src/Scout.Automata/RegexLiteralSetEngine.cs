@@ -29,6 +29,7 @@ internal sealed class RegexLiteralSetEngine
     private readonly MemmemFinder? singleLiteralFinder;
     private readonly RegexAsciiCaseInsensitiveFinder? singleAsciiCaseInsensitiveFinder;
     private readonly RegexAsciiCaseInsensitiveLiteralSetScanner? asciiCaseInsensitiveScanner;
+    private readonly RegexAsciiCaseInsensitiveTripleLiteralSetScanner? asciiCaseInsensitiveTripleScanner;
     private readonly RegexAsciiCaseInsensitiveFinder[]? independentAsciiCaseInsensitiveCountFinders;
     private readonly bool sharedFirstByteScanner;
     private readonly byte sharedFirstByte;
@@ -105,6 +106,9 @@ internal sealed class RegexLiteralSetEngine
             !unicodeCaseInsensitive)
         {
             asciiCaseInsensitiveScanner = new RegexAsciiCaseInsensitiveLiteralSetScanner(this.literals);
+            RegexAsciiCaseInsensitiveTripleLiteralSetScanner.TryCreate(
+                this.literals,
+                out asciiCaseInsensitiveTripleScanner);
             if (CanCountAsciiCaseInsensitiveLiteralsIndependently(this.literals))
             {
                 independentAsciiCaseInsensitiveCountFinders = CreateAsciiCaseInsensitiveFinders(this.literals);
@@ -988,6 +992,11 @@ internal sealed class RegexLiteralSetEngine
 
     private long CountOrSumAsciiCaseInsensitiveLiteralSet(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
     {
+        if (asciiCaseInsensitiveTripleScanner is not null)
+        {
+            return asciiCaseInsensitiveTripleScanner.CountOrSum(haystack, startOffset, sumSpans);
+        }
+
         if (independentAsciiCaseInsensitiveCountFinders is not null)
         {
             return CountOrSumIndependentAsciiCaseInsensitiveLiteralSet(haystack, startOffset, sumSpans);
