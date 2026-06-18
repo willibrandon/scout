@@ -17,6 +17,7 @@ internal sealed class RegexAsciiCaseInsensitiveFinder
     private readonly int blockAnchorIndex = -1;
     private readonly byte blockFirst;
     private readonly byte blockSecond;
+    private readonly bool blockBytesAreAsciiLetters;
     private readonly bool blockFirstHasAlternate;
     private readonly bool blockSecondHasAlternate;
     private readonly Vector128<byte> blockFirstVector128;
@@ -45,6 +46,7 @@ internal sealed class RegexAsciiCaseInsensitiveFinder
             blockAnchorIndex = SelectBlockAnchorIndex(this.needle);
             blockFirst = this.needle[blockAnchorIndex];
             blockSecond = this.needle[blockAnchorIndex + 1];
+            blockBytesAreAsciiLetters = IsAsciiLowercaseLetter(blockFirst) && IsAsciiLowercaseLetter(blockSecond);
             blockFirstHasAlternate = IsAsciiCased(blockFirst);
             blockSecondHasAlternate = IsAsciiCased(blockSecond);
             byte blockFirstAlternate = blockFirstHasAlternate ? ToggleAsciiCase(blockFirst) : blockFirst;
@@ -176,20 +178,33 @@ internal sealed class RegexAsciiCaseInsensitiveFinder
         int offset = startAt;
         int vectorEnd = Math.Min(haystack.Length - Vector256<byte>.Count - 1, lastStart - Vector256<byte>.Count + 1);
         long total = 0;
+        var asciiCaseMask = Vector256.Create((byte)0x20);
         while (offset <= vectorEnd)
         {
             var current = Vector256.LoadUnsafe(ref reference, (nuint)offset);
             var next = Vector256.LoadUnsafe(ref reference, (nuint)(offset + 1));
-            Vector256<byte> firstMatches = Avx2.CompareEqual(current, blockFirstVector256);
-            if (blockFirstHasAlternate)
+            Vector256<byte> firstMatches;
+            Vector256<byte> secondMatches;
+            if (blockBytesAreAsciiLetters)
             {
-                firstMatches = Avx2.Or(firstMatches, Avx2.CompareEqual(current, blockFirstAlternateVector256));
+                current = Avx2.Or(current, asciiCaseMask);
+                next = Avx2.Or(next, asciiCaseMask);
+                firstMatches = Avx2.CompareEqual(current, blockFirstVector256);
+                secondMatches = Avx2.CompareEqual(next, blockSecondVector256);
             }
-
-            Vector256<byte> secondMatches = Avx2.CompareEqual(next, blockSecondVector256);
-            if (blockSecondHasAlternate)
+            else
             {
-                secondMatches = Avx2.Or(secondMatches, Avx2.CompareEqual(next, blockSecondAlternateVector256));
+                firstMatches = Avx2.CompareEqual(current, blockFirstVector256);
+                if (blockFirstHasAlternate)
+                {
+                    firstMatches = Avx2.Or(firstMatches, Avx2.CompareEqual(current, blockFirstAlternateVector256));
+                }
+
+                secondMatches = Avx2.CompareEqual(next, blockSecondVector256);
+                if (blockSecondHasAlternate)
+                {
+                    secondMatches = Avx2.Or(secondMatches, Avx2.CompareEqual(next, blockSecondAlternateVector256));
+                }
             }
 
             uint mask = Avx2.And(firstMatches, secondMatches).ExtractMostSignificantBits();
@@ -217,20 +232,33 @@ internal sealed class RegexAsciiCaseInsensitiveFinder
         int offset = startAt;
         int vectorEnd = Math.Min(haystack.Length - Vector128<byte>.Count - 1, lastStart - Vector128<byte>.Count + 1);
         long total = 0;
+        var asciiCaseMask = Vector128.Create((byte)0x20);
         while (offset <= vectorEnd)
         {
             var current = Vector128.LoadUnsafe(ref reference, (nuint)offset);
             var next = Vector128.LoadUnsafe(ref reference, (nuint)(offset + 1));
-            Vector128<byte> firstMatches = Sse2.CompareEqual(current, blockFirstVector128);
-            if (blockFirstHasAlternate)
+            Vector128<byte> firstMatches;
+            Vector128<byte> secondMatches;
+            if (blockBytesAreAsciiLetters)
             {
-                firstMatches = Sse2.Or(firstMatches, Sse2.CompareEqual(current, blockFirstAlternateVector128));
+                current = Sse2.Or(current, asciiCaseMask);
+                next = Sse2.Or(next, asciiCaseMask);
+                firstMatches = Sse2.CompareEqual(current, blockFirstVector128);
+                secondMatches = Sse2.CompareEqual(next, blockSecondVector128);
             }
-
-            Vector128<byte> secondMatches = Sse2.CompareEqual(next, blockSecondVector128);
-            if (blockSecondHasAlternate)
+            else
             {
-                secondMatches = Sse2.Or(secondMatches, Sse2.CompareEqual(next, blockSecondAlternateVector128));
+                firstMatches = Sse2.CompareEqual(current, blockFirstVector128);
+                if (blockFirstHasAlternate)
+                {
+                    firstMatches = Sse2.Or(firstMatches, Sse2.CompareEqual(current, blockFirstAlternateVector128));
+                }
+
+                secondMatches = Sse2.CompareEqual(next, blockSecondVector128);
+                if (blockSecondHasAlternate)
+                {
+                    secondMatches = Sse2.Or(secondMatches, Sse2.CompareEqual(next, blockSecondAlternateVector128));
+                }
             }
 
             uint mask = Sse2.And(firstMatches, secondMatches).ExtractMostSignificantBits();
@@ -255,12 +283,26 @@ internal sealed class RegexAsciiCaseInsensitiveFinder
         bool sumSpans,
         long total = 0)
     {
-        for (int blockPosition = startAt; blockPosition <= lastStart; blockPosition++)
+        if (blockBytesAreAsciiLetters)
         {
-            if (FoldAscii(haystack[blockPosition]) == blockFirst &&
-                FoldAscii(haystack[blockPosition + 1]) == blockSecond)
+            for (int blockPosition = startAt; blockPosition <= lastStart; blockPosition++)
             {
-                ProcessBlockCandidate(haystack, blockPosition, sumSpans, ref total, ref nextAllowedStart);
+                if ((haystack[blockPosition] | 0x20) == blockFirst &&
+                    (haystack[blockPosition + 1] | 0x20) == blockSecond)
+                {
+                    ProcessBlockCandidate(haystack, blockPosition, sumSpans, ref total, ref nextAllowedStart);
+                }
+            }
+        }
+        else
+        {
+            for (int blockPosition = startAt; blockPosition <= lastStart; blockPosition++)
+            {
+                if (FoldAscii(haystack[blockPosition]) == blockFirst &&
+                    FoldAscii(haystack[blockPosition + 1]) == blockSecond)
+                {
+                    ProcessBlockCandidate(haystack, blockPosition, sumSpans, ref total, ref nextAllowedStart);
+                }
             }
         }
 
@@ -333,20 +375,33 @@ internal sealed class RegexAsciiCaseInsensitiveFinder
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
         int offset = startAt;
         int vectorEnd = Math.Min(haystack.Length - Vector256<byte>.Count - 1, lastStart - Vector256<byte>.Count + 1);
+        var asciiCaseMask = Vector256.Create((byte)0x20);
         while (offset <= vectorEnd)
         {
             var current = Vector256.LoadUnsafe(ref reference, (nuint)offset);
             var next = Vector256.LoadUnsafe(ref reference, (nuint)(offset + 1));
-            Vector256<byte> firstMatches = Avx2.CompareEqual(current, blockFirstVector256);
-            if (blockFirstHasAlternate)
+            Vector256<byte> firstMatches;
+            Vector256<byte> secondMatches;
+            if (blockBytesAreAsciiLetters)
             {
-                firstMatches = Avx2.Or(firstMatches, Avx2.CompareEqual(current, blockFirstAlternateVector256));
+                current = Avx2.Or(current, asciiCaseMask);
+                next = Avx2.Or(next, asciiCaseMask);
+                firstMatches = Avx2.CompareEqual(current, blockFirstVector256);
+                secondMatches = Avx2.CompareEqual(next, blockSecondVector256);
             }
-
-            Vector256<byte> secondMatches = Avx2.CompareEqual(next, blockSecondVector256);
-            if (blockSecondHasAlternate)
+            else
             {
-                secondMatches = Avx2.Or(secondMatches, Avx2.CompareEqual(next, blockSecondAlternateVector256));
+                firstMatches = Avx2.CompareEqual(current, blockFirstVector256);
+                if (blockFirstHasAlternate)
+                {
+                    firstMatches = Avx2.Or(firstMatches, Avx2.CompareEqual(current, blockFirstAlternateVector256));
+                }
+
+                secondMatches = Avx2.CompareEqual(next, blockSecondVector256);
+                if (blockSecondHasAlternate)
+                {
+                    secondMatches = Avx2.Or(secondMatches, Avx2.CompareEqual(next, blockSecondAlternateVector256));
+                }
             }
 
             uint mask = Avx2.And(firstMatches, secondMatches).ExtractMostSignificantBits();
@@ -366,20 +421,33 @@ internal sealed class RegexAsciiCaseInsensitiveFinder
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
         int offset = startAt;
         int vectorEnd = Math.Min(haystack.Length - Vector128<byte>.Count - 1, lastStart - Vector128<byte>.Count + 1);
+        var asciiCaseMask = Vector128.Create((byte)0x20);
         while (offset <= vectorEnd)
         {
             var current = Vector128.LoadUnsafe(ref reference, (nuint)offset);
             var next = Vector128.LoadUnsafe(ref reference, (nuint)(offset + 1));
-            Vector128<byte> firstMatches = Sse2.CompareEqual(current, blockFirstVector128);
-            if (blockFirstHasAlternate)
+            Vector128<byte> firstMatches;
+            Vector128<byte> secondMatches;
+            if (blockBytesAreAsciiLetters)
             {
-                firstMatches = Sse2.Or(firstMatches, Sse2.CompareEqual(current, blockFirstAlternateVector128));
+                current = Sse2.Or(current, asciiCaseMask);
+                next = Sse2.Or(next, asciiCaseMask);
+                firstMatches = Sse2.CompareEqual(current, blockFirstVector128);
+                secondMatches = Sse2.CompareEqual(next, blockSecondVector128);
             }
-
-            Vector128<byte> secondMatches = Sse2.CompareEqual(next, blockSecondVector128);
-            if (blockSecondHasAlternate)
+            else
             {
-                secondMatches = Sse2.Or(secondMatches, Sse2.CompareEqual(next, blockSecondAlternateVector128));
+                firstMatches = Sse2.CompareEqual(current, blockFirstVector128);
+                if (blockFirstHasAlternate)
+                {
+                    firstMatches = Sse2.Or(firstMatches, Sse2.CompareEqual(current, blockFirstAlternateVector128));
+                }
+
+                secondMatches = Sse2.CompareEqual(next, blockSecondVector128);
+                if (blockSecondHasAlternate)
+                {
+                    secondMatches = Sse2.Or(secondMatches, Sse2.CompareEqual(next, blockSecondAlternateVector128));
+                }
             }
 
             uint mask = Sse2.And(firstMatches, secondMatches).ExtractMostSignificantBits();
@@ -396,12 +464,26 @@ internal sealed class RegexAsciiCaseInsensitiveFinder
 
     private int FindBlockScalar(ReadOnlySpan<byte> haystack, int startAt, int lastStart)
     {
-        for (int index = startAt; index <= lastStart; index++)
+        if (blockBytesAreAsciiLetters)
         {
-            if (FoldAscii(haystack[index]) == blockFirst &&
-                FoldAscii(haystack[index + 1]) == blockSecond)
+            for (int index = startAt; index <= lastStart; index++)
             {
-                return index;
+                if ((haystack[index] | 0x20) == blockFirst &&
+                    (haystack[index + 1] | 0x20) == blockSecond)
+                {
+                    return index;
+                }
+            }
+        }
+        else
+        {
+            for (int index = startAt; index <= lastStart; index++)
+            {
+                if (FoldAscii(haystack[index]) == blockFirst &&
+                    FoldAscii(haystack[index + 1]) == blockSecond)
+                {
+                    return index;
+                }
             }
         }
 
@@ -543,6 +625,11 @@ internal sealed class RegexAsciiCaseInsensitiveFinder
     {
         return value is >= (byte)'A' and <= (byte)'Z'
             or >= (byte)'a' and <= (byte)'z';
+    }
+
+    private static bool IsAsciiLowercaseLetter(byte value)
+    {
+        return value is >= (byte)'a' and <= (byte)'z';
     }
 
     internal static byte ToggleAsciiCase(byte value)

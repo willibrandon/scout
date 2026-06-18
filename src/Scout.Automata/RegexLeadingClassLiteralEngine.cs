@@ -1,3 +1,5 @@
+using System.Buffers;
+
 namespace Scout;
 
 internal sealed class RegexLeadingClassLiteralEngine
@@ -6,6 +8,7 @@ internal sealed class RegexLeadingClassLiteralEngine
     private const int MaxExpandedSearchPatternCount = 16;
     private const int MaxTrailingSearchBytes = 32;
     private const int TrailingSearchWindowLength = 5;
+    private static readonly SearchValues<byte> UppercaseBytes = SearchValues.Create("ABCDEFGHIJKLMNOPQRSTUVWXYZ"u8);
 
     private readonly RegexLeadingClassLiteralBranch[] branches;
     private readonly byte[][] searchPatterns;
@@ -19,6 +22,7 @@ internal sealed class RegexLeadingClassLiteralEngine
     private readonly MemmemFinder? singleLiteralFinder;
     private readonly RegexTwoPrefixLiteralScanner? branchLiteralScanner;
     private readonly RegexLeadingClassTrailingAnchorScanner? trailingAnchorScanner;
+    private readonly RegexLeadingClassLiteralKind? leadingScannerKind;
     private readonly RegexCompileOptions options;
 
     private RegexLeadingClassLiteralEngine(
@@ -33,6 +37,7 @@ internal sealed class RegexLeadingClassLiteralEngine
         AhoCorasickAutomaton? automaton,
         RegexTwoPrefixLiteralScanner? branchLiteralScanner,
         RegexLeadingClassTrailingAnchorScanner? trailingAnchorScanner,
+        RegexLeadingClassLiteralKind? leadingScannerKind,
         RegexCompileOptions options)
     {
         this.branches = branches;
@@ -46,6 +51,7 @@ internal sealed class RegexLeadingClassLiteralEngine
         this.automaton = automaton;
         this.branchLiteralScanner = branchLiteralScanner;
         this.trailingAnchorScanner = trailingAnchorScanner;
+        this.leadingScannerKind = leadingScannerKind;
         this.options = options;
         if (searchPatterns.Length == 1)
         {
@@ -178,6 +184,7 @@ internal sealed class RegexLeadingClassLiteralEngine
             RegexTwoPrefixLiteralScanner.TryCreate(literals, out branchLiteralScanner);
         }
 
+        RegexLeadingClassLiteralKind? leadingScannerKind = TryGetSelectiveLeadingScannerKind(branches);
         engine = new RegexLeadingClassLiteralEngine(
             branches.ToArray(),
             searchPatterns,
@@ -190,6 +197,7 @@ internal sealed class RegexLeadingClassLiteralEngine
             automaton,
             branchLiteralScanner,
             trailingAnchorScanner,
+            leadingScannerKind,
             options);
         return true;
     }
@@ -200,6 +208,11 @@ internal sealed class RegexLeadingClassLiteralEngine
         if (trailingAnchorScanner is not null)
         {
             return FindByTrailingAnchor(haystack, lowerBound);
+        }
+
+        if (leadingScannerKind.HasValue)
+        {
+            return FindByLeadingClass(haystack, lowerBound);
         }
 
         if (branchLiteralScanner is not null)
@@ -287,6 +300,11 @@ internal sealed class RegexLeadingClassLiteralEngine
         if (trailingAnchorScanner is not null)
         {
             return CountOrSumByTrailingAnchor(haystack, startOffset, sumSpans);
+        }
+
+        if (leadingScannerKind.HasValue)
+        {
+            return CountOrSumByLeadingClass(haystack, startOffset, sumSpans);
         }
 
         if (branchLiteralScanner is not null)
@@ -490,6 +508,53 @@ internal sealed class RegexLeadingClassLiteralEngine
         }
 
         return total;
+    }
+
+    private RegexMatch? FindByLeadingClass(ReadOnlySpan<byte> haystack, int lowerBound)
+    {
+        for (int start = FindLeadingByte(haystack, lowerBound);
+             start >= 0;
+             start = FindLeadingByte(haystack, start + 1))
+        {
+            if (TryMatchAt(haystack, start, out int length))
+            {
+                return new RegexMatch(start, length);
+            }
+        }
+
+        return null;
+    }
+
+    private long CountOrSumByLeadingClass(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
+    {
+        long total = 0;
+        int nextAllowedStart = startOffset;
+        for (int start = FindLeadingByte(haystack, nextAllowedStart);
+             start >= 0;
+             start = FindLeadingByte(haystack, start + 1))
+        {
+            if (start < nextAllowedStart || !TryMatchAt(haystack, start, out int length))
+            {
+                continue;
+            }
+
+            total += sumSpans ? length : 1;
+            nextAllowedStart = start + length;
+            start = nextAllowedStart - 1;
+        }
+
+        return total;
+    }
+
+    private int FindLeadingByte(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        int start = Math.Clamp(startAt, 0, haystack.Length);
+        int offset = leadingScannerKind switch
+        {
+            RegexLeadingClassLiteralKind.AsciiUppercase => haystack[start..].IndexOfAny(UppercaseBytes),
+            _ => -1,
+        };
+        return offset < 0 ? -1 : start + offset;
     }
 
     private static void AddMatch(RegexMatch match, bool sumSpans, ref long total, ref int nextAllowedStart)
@@ -766,6 +831,26 @@ internal sealed class RegexLeadingClassLiteralEngine
             RegexLeadingClassLiteralKind.AsciiUppercase => RegexSimpleSequenceSegment.IsAsciiUppercase(value),
             _ => RegexSimpleSequenceSegment.IsAsciiLetter(value),
         };
+    }
+
+    private static RegexLeadingClassLiteralKind? TryGetSelectiveLeadingScannerKind(
+        List<RegexLeadingClassLiteralBranch> branches)
+    {
+        RegexLeadingClassLiteralKind leadingKind = branches[0].LeadingKind;
+        if (leadingKind != RegexLeadingClassLiteralKind.AsciiUppercase)
+        {
+            return null;
+        }
+
+        for (int index = 1; index < branches.Count; index++)
+        {
+            if (branches[index].LeadingKind != leadingKind)
+            {
+                return null;
+            }
+        }
+
+        return leadingKind;
     }
 
     private static byte[][] GetLiterals(List<RegexLeadingClassLiteralBranch> branches)

@@ -3766,6 +3766,7 @@ public sealed class RegexAutomatonTests
         Assert.Equal(8, finder.Find("xx wain tWaIn"u8));
         Assert.Equal(-1, finder.Find("xx tWai"u8));
         Assert.Equal(-1, finder.Find("xx wain"u8));
+        Assert.Equal(-1, finder.Find("xx T[ain"u8));
     }
 
     /// <summary>

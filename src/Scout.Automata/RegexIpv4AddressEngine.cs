@@ -69,12 +69,61 @@ internal sealed class RegexIpv4AddressEngine
     {
         int minimumStart = Math.Clamp(startAt, 0, haystack.Length);
         int searchAt = Math.Min(haystack.Length, minimumStart + 2);
+        if (Avx512BW.IsSupported && haystack.Length - searchAt > Vector512<byte>.Count)
+        {
+            return CountOrSumVector512(haystack, minimumStart, searchAt, sumSpans);
+        }
+
         if (Avx2.IsSupported && haystack.Length - searchAt > Vector256<byte>.Count)
         {
             return CountOrSumVector256(haystack, minimumStart, searchAt, sumSpans);
         }
 
         return CountOrSumScalar(haystack, minimumStart, searchAt, sumSpans, total: 0);
+    }
+
+    private static long CountOrSumVector512(
+        ReadOnlySpan<byte> haystack,
+        int minimumStart,
+        int searchAt,
+        bool sumSpans)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        var dotVector = Vector512.Create((byte)'.');
+        var digitLowerBoundVector = Vector512.Create((sbyte)((byte)'0' - 1));
+        var digitUpperBoundVector = Vector512.Create((sbyte)((byte)'9' + 1));
+        long total = 0;
+        int vectorEnd = haystack.Length - Vector512<byte>.Count;
+        while (searchAt <= vectorEnd)
+        {
+            ulong mask = CandidateDotMaskVector512(
+                ref reference,
+                searchAt,
+                dotVector,
+                digitLowerBoundVector,
+                digitUpperBoundVector);
+            while (mask != 0)
+            {
+                int bit = BitOperations.TrailingZeroCount(mask);
+                int dot = searchAt + bit;
+                if (TryMatchBeforeFirstDot(haystack, minimumStart, dot, out int matchStart, out int matchLength))
+                {
+                    total += sumSpans ? matchLength : 1;
+                    int matchEnd = matchStart + matchLength;
+                    minimumStart = matchEnd;
+                    searchAt = Math.Min(haystack.Length, matchEnd + 2);
+                    goto NextVector;
+                }
+
+                mask &= mask - 1;
+            }
+
+            searchAt += Vector512<byte>.Count;
+        NextVector:
+            ;
+        }
+
+        return CountOrSumScalar(haystack, minimumStart, searchAt, sumSpans, total);
     }
 
     private static long CountOrSumVector256(
@@ -85,12 +134,18 @@ internal sealed class RegexIpv4AddressEngine
     {
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
         var dotVector = Vector256.Create((byte)'.');
+        var digitLowerBoundVector = Vector256.Create((sbyte)((byte)'0' - 1));
+        var digitUpperBoundVector = Vector256.Create((sbyte)((byte)'9' + 1));
         long total = 0;
         int vectorEnd = haystack.Length - Vector256<byte>.Count;
         while (searchAt <= vectorEnd)
         {
-            var values = Vector256.LoadUnsafe(ref reference, (nuint)searchAt);
-            uint mask = Avx2.CompareEqual(values, dotVector).ExtractMostSignificantBits();
+            uint mask = CandidateDotMaskVector256(
+                ref reference,
+                searchAt,
+                dotVector,
+                digitLowerBoundVector,
+                digitUpperBoundVector);
             while (mask != 0)
             {
                 int bit = BitOperations.TrailingZeroCount(mask);
@@ -113,6 +168,70 @@ internal sealed class RegexIpv4AddressEngine
         }
 
         return CountOrSumScalar(haystack, minimumStart, searchAt, sumSpans, total);
+    }
+
+    private static ulong CandidateDotMaskVector512(
+        ref byte reference,
+        int offset,
+        Vector512<byte> dotVector,
+        Vector512<sbyte> digitLowerBoundVector,
+        Vector512<sbyte> digitUpperBoundVector)
+    {
+        var current = Vector512.LoadUnsafe(ref reference, (nuint)offset);
+        Vector512<byte> dots = Avx512BW.CompareEqual(current, dotVector);
+        Vector512<byte> previous = DigitMaskVector512(
+            Vector512.LoadUnsafe(ref reference, (nuint)(offset - 1)),
+            digitLowerBoundVector,
+            digitUpperBoundVector);
+        Vector512<byte> previousPrevious = DigitMaskVector512(
+            Vector512.LoadUnsafe(ref reference, (nuint)(offset - 2)),
+            digitLowerBoundVector,
+            digitUpperBoundVector);
+
+        return (dots & previous & previousPrevious).ExtractMostSignificantBits();
+    }
+
+    private static uint CandidateDotMaskVector256(
+        ref byte reference,
+        int offset,
+        Vector256<byte> dotVector,
+        Vector256<sbyte> digitLowerBoundVector,
+        Vector256<sbyte> digitUpperBoundVector)
+    {
+        var current = Vector256.LoadUnsafe(ref reference, (nuint)offset);
+        Vector256<byte> dots = Avx2.CompareEqual(current, dotVector);
+        Vector256<byte> previous = DigitMaskVector256(
+            Vector256.LoadUnsafe(ref reference, (nuint)(offset - 1)),
+            digitLowerBoundVector,
+            digitUpperBoundVector);
+        Vector256<byte> previousPrevious = DigitMaskVector256(
+            Vector256.LoadUnsafe(ref reference, (nuint)(offset - 2)),
+            digitLowerBoundVector,
+            digitUpperBoundVector);
+
+        return Avx2.And(Avx2.And(dots, previous), previousPrevious).ExtractMostSignificantBits();
+    }
+
+    private static Vector512<byte> DigitMaskVector512(
+        Vector512<byte> values,
+        Vector512<sbyte> digitLowerBoundVector,
+        Vector512<sbyte> digitUpperBoundVector)
+    {
+        Vector512<sbyte> signedValues = values.AsSByte();
+        Vector512<byte> aboveLowerBound = Avx512BW.CompareGreaterThan(signedValues, digitLowerBoundVector).AsByte();
+        Vector512<byte> belowUpperBound = Avx512BW.CompareGreaterThan(digitUpperBoundVector, signedValues).AsByte();
+        return aboveLowerBound & belowUpperBound;
+    }
+
+    private static Vector256<byte> DigitMaskVector256(
+        Vector256<byte> values,
+        Vector256<sbyte> digitLowerBoundVector,
+        Vector256<sbyte> digitUpperBoundVector)
+    {
+        Vector256<sbyte> signedValues = values.AsSByte();
+        Vector256<byte> aboveLowerBound = Avx2.CompareGreaterThan(signedValues, digitLowerBoundVector).AsByte();
+        Vector256<byte> belowUpperBound = Avx2.CompareGreaterThan(digitUpperBoundVector, signedValues).AsByte();
+        return Avx2.And(aboveLowerBound, belowUpperBound);
     }
 
     private static long CountOrSumScalar(
