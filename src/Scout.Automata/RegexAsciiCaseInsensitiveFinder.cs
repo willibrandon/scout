@@ -457,12 +457,37 @@ internal sealed class RegexAsciiCaseInsensitiveFinder
     private static int SelectBlockAnchorIndex(ReadOnlySpan<byte> value)
     {
         int byteAnchorIndex = SelectAnchorIndex(value);
-        return byteAnchorIndex == 0 ? 0 : byteAnchorIndex - 1;
+        int preferredIndex = byteAnchorIndex == 0 ? 0 : byteAnchorIndex - 1;
+        int preferredScore = BlockAnchorScore(value, preferredIndex);
+        int bestIndex = preferredIndex;
+        int bestScore = preferredScore;
+        for (int index = 1; index <= value.Length - 2; index++)
+        {
+            int score = BlockAnchorScore(value, index);
+            if (score > bestScore)
+            {
+                bestIndex = index;
+                bestScore = score;
+            }
+        }
+
+        return bestScore >= preferredScore + 64 ? bestIndex : preferredIndex;
     }
 
     private static bool ShouldUseBlockAnchor(ReadOnlySpan<byte> value, int byteAnchorIndex)
     {
         return AnchorScore(value[byteAnchorIndex]) < VeryRareAnchorScore;
+    }
+
+    private static int BlockAnchorScore(ReadOnlySpan<byte> value, int index)
+    {
+        int score = AnchorScore(value[index]) + AnchorScore(value[index + 1]);
+        if (value[index] == (byte)' ' || value[index + 1] == (byte)' ')
+        {
+            score -= 256;
+        }
+
+        return score;
     }
 
     private static int AnchorScore(byte value)
