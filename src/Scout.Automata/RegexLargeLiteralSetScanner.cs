@@ -3,7 +3,8 @@ namespace Scout;
 internal sealed class RegexLargeLiteralSetScanner
 {
     private const int BlockLength = 2;
-    private const int WideBlockLength = 4;
+    private const int PreferredWideBlockLength = 6;
+    private const int FallbackWideBlockLength = 4;
     private const int MinimumLiteralCount = 128;
     private const int SingletonTrieObservedByteThreshold = 4096;
 
@@ -11,7 +12,7 @@ internal sealed class RegexLargeLiteralSetScanner
     private readonly int[] singleByteLiteralIds;
     private readonly int[] shifts;
     private readonly int[]?[] buckets;
-    private readonly Dictionary<uint, int[]>? wideBuckets;
+    private readonly Dictionary<ulong, int[]>? wideBuckets;
     private readonly int minLiteralLength;
     private readonly int suffixOffset;
     private readonly int wideSuffixBacktrack;
@@ -25,8 +26,9 @@ internal sealed class RegexLargeLiteralSetScanner
         int[] singleByteLiteralIds,
         int[] shifts,
         int[]?[] buckets,
-        Dictionary<uint, int[]>? wideBuckets,
-        int minLiteralLength)
+        Dictionary<ulong, int[]>? wideBuckets,
+        int minLiteralLength,
+        int wideBlockLength)
     {
         this.literals = literals;
         this.singleByteLiteralIds = singleByteLiteralIds;
@@ -35,7 +37,7 @@ internal sealed class RegexLargeLiteralSetScanner
         this.wideBuckets = wideBuckets;
         this.minLiteralLength = minLiteralLength;
         suffixOffset = minLiteralLength - BlockLength;
-        wideSuffixBacktrack = WideBlockLength - BlockLength;
+        wideSuffixBacktrack = Math.Max(0, wideBlockLength - BlockLength);
     }
 
     public static bool TryCreate(IReadOnlyList<byte[]> literals, out RegexLargeLiteralSetScanner? scanner)
@@ -109,14 +111,24 @@ internal sealed class RegexLargeLiteralSetScanner
             buckets[index] = bucketLists[index]?.ToArray() ?? [];
         }
 
-        Dictionary<uint, int[]>? wideBuckets = BuildWideSuffixBuckets(ownedLiterals, minLength);
+        Dictionary<ulong, int[]>? wideBuckets = BuildWideSuffixBuckets(
+            ownedLiterals,
+            minLength,
+            PreferredWideBlockLength,
+            out int wideBlockLength);
+        wideBuckets ??= BuildWideSuffixBuckets(
+            ownedLiterals,
+            minLength,
+            FallbackWideBlockLength,
+            out wideBlockLength);
         scanner = new RegexLargeLiteralSetScanner(
             ownedLiterals,
             singleByteLiteralIds ?? [],
             shifts,
             buckets,
             wideBuckets,
-            minLength);
+            minLength,
+            wideBlockLength);
         return true;
     }
 
@@ -172,7 +184,7 @@ internal sealed class RegexLargeLiteralSetScanner
             int[] literalIds;
             if (wideBuckets is not null)
             {
-                uint wideKey = WideBlockKey(haystack[(position - wideSuffixBacktrack)..]);
+                ulong wideKey = WideBlockKey(haystack[(position - wideSuffixBacktrack)..], wideSuffixBacktrack + BlockLength);
                 if (!wideBuckets.TryGetValue(wideKey, out literalIds!))
                 {
                     position++;
@@ -336,15 +348,20 @@ internal sealed class RegexLargeLiteralSetScanner
         return (ushort)(value[0] | (value[1] << 8));
     }
 
-    private static Dictionary<uint, int[]>? BuildWideSuffixBuckets(byte[][] literals, int minLength)
+    private static Dictionary<ulong, int[]>? BuildWideSuffixBuckets(
+        byte[][] literals,
+        int minLength,
+        int blockLength,
+        out int actualBlockLength)
     {
-        if (minLength < WideBlockLength)
+        actualBlockLength = 0;
+        if (minLength < blockLength)
         {
             return null;
         }
 
-        var bucketLists = new Dictionary<uint, List<int>>();
-        int suffixOffset = minLength - WideBlockLength;
+        var bucketLists = new Dictionary<ulong, List<int>>();
+        int suffixOffset = minLength - blockLength;
         for (int index = 0; index < literals.Length; index++)
         {
             if (literals[index].Length < minLength)
@@ -352,7 +369,7 @@ internal sealed class RegexLargeLiteralSetScanner
                 continue;
             }
 
-            uint key = WideBlockKey(literals[index].AsSpan(suffixOffset));
+            ulong key = WideBlockKey(literals[index].AsSpan(suffixOffset), blockLength);
             if (!bucketLists.TryGetValue(key, out List<int>? bucket))
             {
                 bucket = [];
@@ -362,20 +379,24 @@ internal sealed class RegexLargeLiteralSetScanner
             bucket.Add(index);
         }
 
-        var buckets = new Dictionary<uint, int[]>(bucketLists.Count);
-        foreach (KeyValuePair<uint, List<int>> bucket in bucketLists)
+        var buckets = new Dictionary<ulong, int[]>(bucketLists.Count);
+        foreach (KeyValuePair<ulong, List<int>> bucket in bucketLists)
         {
             buckets.Add(bucket.Key, bucket.Value.ToArray());
         }
 
+        actualBlockLength = blockLength;
         return buckets;
     }
 
-    private static uint WideBlockKey(ReadOnlySpan<byte> value)
+    private static ulong WideBlockKey(ReadOnlySpan<byte> value, int length)
     {
-        return value[0] |
-            ((uint)value[1] << 8) |
-            ((uint)value[2] << 16) |
-            ((uint)value[3] << 24);
+        ulong key = 0;
+        for (int index = 0; index < length; index++)
+        {
+            key |= (ulong)value[index] << (index * 8);
+        }
+
+        return key;
     }
 }

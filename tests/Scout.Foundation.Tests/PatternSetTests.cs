@@ -44,6 +44,28 @@ public sealed class PatternSetTests
     }
 
     /// <summary>
+    /// Verifies large literal-only sets preserve ordered pattern-set matching semantics.
+    /// </summary>
+    [Fact]
+    public void LargeLiteralSetCountsNonOverlappingMatches()
+    {
+        byte[][] patterns = new byte[130][];
+        for (int index = 0; index < patterns.Length; index++)
+        {
+            patterns[index] = System.Text.Encoding.ASCII.GetBytes($"dictionary{index:D3}literal");
+        }
+
+        var set = PatternSet.Compile(patterns);
+        byte[] haystack = System.Text.Encoding.ASCII.GetBytes(
+            "xx dictionary005literal yy dictionary129literal dictionary010literal");
+
+        Assert.True(set.UsesLiteralAccelerator);
+        Assert.Equal(new PatternSetMatch(5, new RegexMatch(3, patterns[5].Length)), set.Find(haystack));
+        Assert.Equal(3, set.CountMatches(haystack));
+        Assert.Equal(patterns[5].Length + patterns[129].Length + patterns[10].Length, set.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies ASCII word-boundary literals use exact boundary-aware acceleration.
     /// </summary>
     [Fact]
