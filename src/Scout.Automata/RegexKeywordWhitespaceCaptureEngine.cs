@@ -95,16 +95,26 @@ internal sealed class RegexKeywordWhitespaceCaptureEngine
     public long CountCaptures(ReadOnlySpan<byte> haystack, int startAt)
     {
         long total = 0;
-        int offset = Math.Clamp(startAt, 0, haystack.Length);
-        while (offset < haystack.Length)
+        int position = Math.Clamp(startAt, 0, haystack.Length);
+        while (position < haystack.Length)
         {
-            if (!TryFindKeywordEnd(haystack, offset, out int keywordEnd))
+            byte value = haystack[position];
+            if (value > 0x7F || !IsAsciiWord(value))
             {
-                return total;
+                position++;
+                continue;
             }
 
-            total += 3;
-            offset = keywordEnd;
+            int wordStart = position;
+            bool candidate = firstByteLookup[value];
+            position = SkipAsciiWord(haystack, position + 1);
+            if (candidate &&
+                IsKeyword(haystack[wordStart..position]) &&
+                IsWordBoundaryBeforeAsciiWord(haystack, wordStart) &&
+                IsWordBoundaryAfterAsciiWord(haystack, position))
+            {
+                total += 3;
+            }
         }
 
         return total;
@@ -493,6 +503,49 @@ internal sealed class RegexKeywordWhitespaceCaptureEngine
         }
 
         return true;
+    }
+
+    private static bool IsKeyword(ReadOnlySpan<byte> word)
+    {
+        return word.Length switch
+        {
+            2 => word.SequenceEqual("as"u8) ||
+                word.SequenceEqual("if"u8) ||
+                word.SequenceEqual("in"u8) ||
+                word.SequenceEqual("is"u8) ||
+                word.SequenceEqual("or"u8),
+            3 => word.SequenceEqual("and"u8) ||
+                word.SequenceEqual("def"u8) ||
+                word.SequenceEqual("del"u8) ||
+                word.SequenceEqual("for"u8) ||
+                word.SequenceEqual("not"u8) ||
+                word.SequenceEqual("try"u8),
+            4 => word.SequenceEqual("None"u8) ||
+                word.SequenceEqual("True"u8) ||
+                word.SequenceEqual("elif"u8) ||
+                word.SequenceEqual("else"u8) ||
+                word.SequenceEqual("from"u8) ||
+                word.SequenceEqual("pass"u8) ||
+                word.SequenceEqual("with"u8),
+            5 => word.SequenceEqual("False"u8) ||
+                word.SequenceEqual("async"u8) ||
+                word.SequenceEqual("await"u8) ||
+                word.SequenceEqual("break"u8) ||
+                word.SequenceEqual("class"u8) ||
+                word.SequenceEqual("raise"u8) ||
+                word.SequenceEqual("while"u8) ||
+                word.SequenceEqual("yield"u8),
+            6 => word.SequenceEqual("assert"u8) ||
+                word.SequenceEqual("except"u8) ||
+                word.SequenceEqual("global"u8) ||
+                word.SequenceEqual("import"u8) ||
+                word.SequenceEqual("lambda"u8) ||
+                word.SequenceEqual("return"u8),
+            7 => word.SequenceEqual("finally"u8),
+            8 => word.SequenceEqual("continue"u8) ||
+                word.SequenceEqual("nonlocal"u8),
+            _ => false,
+        };
     }
 
     private static RegexSyntaxNode UnwrapTransparentNonCapturingGroups(RegexSyntaxNode node)

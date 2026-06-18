@@ -3200,8 +3200,10 @@ public sealed class RegexAutomatonTests
         Assert.Equal(3, automaton.CountCaptures(line, first.Match.End));
         Assert.Equal(3, automaton.CountCaptures("diff if"u8));
         Assert.Equal(0, automaton.CountCaptures(System.Text.Encoding.UTF8.GetBytes("αif")));
+        Assert.Equal(0, automaton.CountCaptures(System.Text.Encoding.UTF8.GetBytes("ifα")));
         Assert.Equal(0, automaton.CountCaptures("diff"u8));
         Assert.Null(automaton.FindCaptures(System.Text.Encoding.UTF8.GetBytes("αif")));
+        Assert.Null(automaton.FindCaptures(System.Text.Encoding.UTF8.GetBytes("ifα")));
         Assert.Null(automaton.FindCaptures("diff"u8));
     }
 
