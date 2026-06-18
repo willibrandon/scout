@@ -97,30 +97,66 @@ internal sealed class PatternSetRequiredLiteralAccelerator
         long count = 0;
         int offset = Math.Clamp(startOffset, 0, haystack.Length);
         int searchOffset = offset;
-        var literalHits = new List<AhoCorasickMatch>();
         ReadOnlySpan<byte> search = haystack[searchOffset..];
         AhoCorasickOverlappingEnumerator matches = automaton.EnumerateOverlapping(search);
-        while (matches.MoveNext())
-        {
-            literalHits.Add(matches.Current);
-        }
-
-        int cursor = 0;
+        var deferredHits = new List<AhoCorasickMatch>();
+        int[] nextStartToTry = new int[automata.Length];
         while (offset <= haystack.Length)
         {
-            while (cursor < literalHits.Count && searchOffset + literalHits[cursor].Start < offset)
+            DropDeferredHitsBefore(deferredHits, searchOffset, offset);
+            PatternSetMatch? best = null;
+            Array.Fill(nextStartToTry, offset);
+            int deferredIndex = 0;
+            while (true)
             {
-                cursor++;
+                AhoCorasickMatch literal;
+                bool fromDeferred;
+                if (deferredIndex < deferredHits.Count)
+                {
+                    literal = deferredHits[deferredIndex++];
+                    fromDeferred = true;
+                }
+                else if (matches.MoveNext())
+                {
+                    literal = matches.Current;
+                    fromDeferred = false;
+                }
+                else
+                {
+                    break;
+                }
+
+                int requiredAt = searchOffset + literal.Start;
+                if (requiredAt < offset)
+                {
+                    continue;
+                }
+
+                if (best.HasValue &&
+                    requiredAt - maxLookBehind > best.Value.Match.Start)
+                {
+                    if (!fromDeferred)
+                    {
+                        deferredHits.Add(literal);
+                    }
+
+                    break;
+                }
+
+                if (best.HasValue && !fromDeferred)
+                {
+                    deferredHits.Add(literal);
+                }
+
+                if (best.HasValue &&
+                    requiredAt - maxLookBehindByLiteral[literal.PatternId] > best.Value.Match.Start)
+                {
+                    continue;
+                }
+
+                TryImproveBest(haystack, offset, requiredAt, literal.PatternId, automata, automataPatternIds, nextStartToTry, ref best);
             }
 
-            PatternSetMatch? best = FindBestFromLiteralHits(
-                haystack,
-                offset,
-                searchOffset,
-                literalHits,
-                cursor,
-                automata,
-                automataPatternIds);
             if (!best.HasValue)
             {
                 break;
@@ -134,6 +170,21 @@ internal sealed class PatternSetRequiredLiteralAccelerator
         }
 
         return count;
+    }
+
+    private static void DropDeferredHitsBefore(List<AhoCorasickMatch> deferredHits, int searchOffset, int offset)
+    {
+        int dropCount = 0;
+        while (dropCount < deferredHits.Count &&
+            searchOffset + deferredHits[dropCount].Start < offset)
+        {
+            dropCount++;
+        }
+
+        if (dropCount != 0)
+        {
+            deferredHits.RemoveRange(0, dropCount);
+        }
     }
 
     public PatternSetMatch? Find(
@@ -198,45 +249,6 @@ internal sealed class PatternSetRequiredLiteralAccelerator
 
                 nextStartToTry[automatonIndex] = Math.Max(nextStartToTry[automatonIndex], requiredAt + 1);
             }
-        }
-
-        return best;
-    }
-
-    private PatternSetMatch? FindBestFromLiteralHits(
-        ReadOnlySpan<byte> haystack,
-        int offset,
-        int searchOffset,
-        List<AhoCorasickMatch> literalHits,
-        int cursor,
-        RegexAutomaton[] automata,
-        int[] automataPatternIds)
-    {
-        PatternSetMatch? best = null;
-        int[] nextStartToTry = new int[automata.Length];
-        Array.Fill(nextStartToTry, offset);
-        for (int hitIndex = cursor; hitIndex < literalHits.Count; hitIndex++)
-        {
-            AhoCorasickMatch literal = literalHits[hitIndex];
-            int requiredAt = searchOffset + literal.Start;
-            if (best.HasValue &&
-                requiredAt - maxLookBehind > best.Value.Match.Start)
-            {
-                break;
-            }
-
-            if (requiredAt < offset)
-            {
-                continue;
-            }
-
-            if (best.HasValue &&
-                requiredAt - maxLookBehindByLiteral[literal.PatternId] > best.Value.Match.Start)
-            {
-                continue;
-            }
-
-            TryImproveBest(haystack, offset, requiredAt, literal.PatternId, automata, automataPatternIds, nextStartToTry, ref best);
         }
 
         return best;

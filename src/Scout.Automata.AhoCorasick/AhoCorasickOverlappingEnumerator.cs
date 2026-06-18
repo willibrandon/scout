@@ -8,6 +8,7 @@ public ref struct AhoCorasickOverlappingEnumerator
 {
     private readonly AhoCorasickAutomaton automaton;
     private readonly ReadOnlySpan<byte> haystack;
+    private readonly bool hasEmptyPatterns;
     private int state;
     private int nextIndex;
     private int boundaryOffset;
@@ -21,6 +22,7 @@ public ref struct AhoCorasickOverlappingEnumerator
     {
         this.automaton = automaton;
         this.haystack = haystack;
+        hasEmptyPatterns = automaton.EmptyPatternCount != 0;
         state = 0;
         nextIndex = 0;
         boundaryOffset = 0;
@@ -46,7 +48,7 @@ public ref struct AhoCorasickOverlappingEnumerator
     {
         while (true)
         {
-            if (emptyIndex < automaton.EmptyPatternCount)
+            if (hasEmptyPatterns && emptyIndex < automaton.EmptyPatternCount)
             {
                 current = automaton.GetEmptyPatternMatch(emptyIndex, boundaryOffset);
                 emptyIndex++;
@@ -65,8 +67,12 @@ public ref struct AhoCorasickOverlappingEnumerator
                 }
 
                 outputIndex = -1;
-                boundaryOffset = end;
-                emptyIndex = 0;
+                if (hasEmptyPatterns)
+                {
+                    boundaryOffset = end;
+                    emptyIndex = 0;
+                }
+
                 continue;
             }
 
@@ -79,7 +85,18 @@ public ref struct AhoCorasickOverlappingEnumerator
             state = automaton.NextStateForEnumerator(state, haystack[nextIndex]);
             nextIndex++;
             end = nextIndex;
-            outputIndex = 0;
+            if (automaton.GetOutputCount(state) != 0)
+            {
+                outputIndex = 0;
+            }
+            else
+            {
+                if (hasEmptyPatterns)
+                {
+                    boundaryOffset = end;
+                    emptyIndex = 0;
+                }
+            }
         }
     }
 }
