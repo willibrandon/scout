@@ -8,11 +8,13 @@ public ref struct AhoCorasickOverlappingEnumerator
 {
     private readonly AhoCorasickAutomaton automaton;
     private readonly ReadOnlySpan<byte> haystack;
+    private readonly int[]? denseTransitions;
     private readonly bool hasEmptyPatterns;
     private int state;
     private int nextIndex;
     private int boundaryOffset;
     private int end;
+    private int outputCount;
     private int outputIndex;
     private int emptyIndex;
     private AhoCorasickMatch current;
@@ -22,11 +24,13 @@ public ref struct AhoCorasickOverlappingEnumerator
     {
         this.automaton = automaton;
         this.haystack = haystack;
+        denseTransitions = automaton.GetDenseTransitionsForEnumerator();
         hasEmptyPatterns = automaton.EmptyPatternCount != 0;
         state = 0;
         nextIndex = 0;
         boundaryOffset = 0;
         end = 0;
+        outputCount = 0;
         outputIndex = -1;
         emptyIndex = 0;
         current = default;
@@ -58,7 +62,7 @@ public ref struct AhoCorasickOverlappingEnumerator
 
             if (outputIndex >= 0)
             {
-                if (outputIndex < automaton.GetOutputCount(state))
+                if (outputIndex < outputCount)
                 {
                     current = automaton.GetOutputMatch(state, outputIndex, end);
                     outputIndex++;
@@ -67,6 +71,7 @@ public ref struct AhoCorasickOverlappingEnumerator
                 }
 
                 outputIndex = -1;
+                outputCount = 0;
                 if (hasEmptyPatterns)
                 {
                     boundaryOffset = end;
@@ -82,10 +87,14 @@ public ref struct AhoCorasickOverlappingEnumerator
                 return false;
             }
 
-            state = automaton.NextStateForEnumerator(state, haystack[nextIndex]);
+            byte value = haystack[nextIndex];
+            state = denseTransitions is not null
+                ? denseTransitions[(state * 256) + value]
+                : automaton.NextStateForEnumerator(state, value);
             nextIndex++;
             end = nextIndex;
-            if (automaton.GetOutputCount(state) != 0)
+            outputCount = automaton.GetOutputCount(state);
+            if (outputCount != 0)
             {
                 outputIndex = 0;
             }

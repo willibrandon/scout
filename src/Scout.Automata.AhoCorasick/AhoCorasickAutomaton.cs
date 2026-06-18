@@ -14,6 +14,7 @@ public sealed class AhoCorasickAutomaton
     private int[]? denseTransitions;
     private readonly int[]?[]? lazyDenseTransitionRows;
     private readonly int[] emptyPatternIds;
+    private readonly int[] outputCounts;
     private readonly byte[][] patterns;
     private readonly AhoCorasickMatchKind matchKind;
     private readonly AhoCorasickStartKind startKind;
@@ -24,6 +25,7 @@ public sealed class AhoCorasickAutomaton
         AhoCorasickState[] states,
         int[]? denseTransitions,
         int[] emptyPatternIds,
+        int[] outputCounts,
         byte[][] patterns,
         AhoCorasickMatchKind matchKind,
         AhoCorasickStartKind startKind,
@@ -33,6 +35,7 @@ public sealed class AhoCorasickAutomaton
         this.denseTransitions = denseTransitions;
         lazyDenseTransitionRows = denseTransitions is null ? new int[states.Length][] : null;
         this.emptyPatternIds = emptyPatternIds;
+        this.outputCounts = outputCounts;
         this.patterns = patterns;
         this.matchKind = matchKind;
         this.startKind = startKind;
@@ -148,6 +151,7 @@ public sealed class AhoCorasickAutomaton
             builtStates,
             TryBuildDenseTransitions(builtStates, asciiCaseInsensitive),
             emptyPatternIds.ToArray(),
+            BuildOutputCounts(builtStates),
             ownedPatterns,
             matchKind,
             startKind,
@@ -299,7 +303,7 @@ public sealed class AhoCorasickAutomaton
 
     internal int GetOutputCount(int state)
     {
-        return states[state].Outputs.Count;
+        return outputCounts[state];
     }
 
     internal AhoCorasickMatch GetOutputMatch(int state, int outputIndex, int end)
@@ -311,6 +315,11 @@ public sealed class AhoCorasickAutomaton
     internal int NextStateForEnumerator(int state, byte value)
     {
         return NextState(state, value);
+    }
+
+    internal int[]? GetDenseTransitionsForEnumerator()
+    {
+        return System.Threading.Volatile.Read(ref denseTransitions);
     }
 
     private static void ValidateMatchKind(AhoCorasickMatchKind matchKind)
@@ -427,6 +436,17 @@ public sealed class AhoCorasickAutomaton
         {
             state.Outputs.Sort(CompareOutputs);
         }
+    }
+
+    private static int[] BuildOutputCounts(AhoCorasickState[] states)
+    {
+        int[] counts = new int[states.Length];
+        for (int state = 0; state < states.Length; state++)
+        {
+            counts[state] = states[state].Outputs.Count;
+        }
+
+        return counts;
     }
 
     private static int CompareOutputs(AhoCorasickOutput left, AhoCorasickOutput right)
