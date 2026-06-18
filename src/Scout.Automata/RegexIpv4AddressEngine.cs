@@ -31,9 +31,9 @@ internal sealed class RegexIpv4AddressEngine
             }
 
             int dot = searchAt + offset;
-            if (TryMatchBeforeFirstDot(haystack, minimumStart, dot, out RegexMatch match))
+            if (TryMatchBeforeFirstDot(haystack, minimumStart, dot, out int matchStart, out int matchLength))
             {
-                return match;
+                return new RegexMatch(matchStart, matchLength);
             }
 
             searchAt = dot + 1;
@@ -74,11 +74,12 @@ internal sealed class RegexIpv4AddressEngine
             }
 
             int dot = searchAt + offset;
-            if (TryMatchBeforeFirstDot(haystack, minimumStart, dot, out RegexMatch match))
+            if (TryMatchBeforeFirstDot(haystack, minimumStart, dot, out int matchStart, out int matchLength))
             {
-                total += sumSpans ? match.Length : 1;
-                minimumStart = match.End;
-                searchAt = Math.Min(haystack.Length, match.End + 2);
+                total += sumSpans ? matchLength : 1;
+                int matchEnd = matchStart + matchLength;
+                minimumStart = matchEnd;
+                searchAt = Math.Min(haystack.Length, matchEnd + 2);
             }
             else
             {
@@ -93,7 +94,8 @@ internal sealed class RegexIpv4AddressEngine
         ReadOnlySpan<byte> haystack,
         int minimumStart,
         int dot,
-        out RegexMatch match)
+        out int start,
+        out int length)
     {
         int threeDigitStart = dot - 3;
         if (threeDigitStart >= minimumStart &&
@@ -102,7 +104,8 @@ internal sealed class RegexIpv4AddressEngine
             IsDigit(haystack[threeDigitStart + 2]) &&
             TryMatchAt(haystack, threeDigitStart, out int threeDigitLength))
         {
-            match = new RegexMatch(threeDigitStart, threeDigitLength);
+            start = threeDigitStart;
+            length = threeDigitLength;
             return true;
         }
 
@@ -112,43 +115,68 @@ internal sealed class RegexIpv4AddressEngine
             IsDigit(haystack[twoDigitStart + 1]) &&
             TryMatchAt(haystack, twoDigitStart, out int twoDigitLength))
         {
-            match = new RegexMatch(twoDigitStart, twoDigitLength);
+            start = twoDigitStart;
+            length = twoDigitLength;
             return true;
         }
 
-        match = default;
+        start = 0;
+        length = 0;
         return false;
     }
 
     private static bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int length)
     {
-        int position = start;
-        for (int octet = 0; octet < 4; octet++)
+        if (!TryReadOctet(haystack, start, out int firstLength))
         {
-            if (!TryReadOctet(haystack, position, out int octetLength))
-            {
-                length = 0;
-                return false;
-            }
-
-            position += octetLength;
-            if (octet == 3)
-            {
-                length = position - start;
-                return true;
-            }
-
-            if (position >= haystack.Length || haystack[position] != (byte)'.')
-            {
-                length = 0;
-                return false;
-            }
-
-            position++;
+            length = 0;
+            return false;
         }
 
-        length = 0;
-        return false;
+        int position = start + firstLength;
+        if (position >= haystack.Length || haystack[position] != (byte)'.')
+        {
+            length = 0;
+            return false;
+        }
+
+        position++;
+        if (!TryReadOctet(haystack, position, out int secondLength))
+        {
+            length = 0;
+            return false;
+        }
+
+        position += secondLength;
+        if (position >= haystack.Length || haystack[position] != (byte)'.')
+        {
+            length = 0;
+            return false;
+        }
+
+        position++;
+        if (!TryReadOctet(haystack, position, out int thirdLength))
+        {
+            length = 0;
+            return false;
+        }
+
+        position += thirdLength;
+        if (position >= haystack.Length || haystack[position] != (byte)'.')
+        {
+            length = 0;
+            return false;
+        }
+
+        position++;
+        if (!TryReadOctet(haystack, position, out int fourthLength))
+        {
+            length = 0;
+            return false;
+        }
+
+        length = position + fourthLength - start;
+        return true;
     }
 
     private static bool TryReadOctet(ReadOnlySpan<byte> haystack, int position, out int length)
