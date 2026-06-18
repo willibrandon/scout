@@ -137,6 +137,30 @@ internal sealed class RegexUnicodeGraphemeClusterEngine
         int position = Math.Clamp(startAt, 0, haystack.Length);
         while (position < haystack.Length)
         {
+            if (haystack[position] <= 0x7F)
+            {
+                int asciiEnd = position + 1;
+                while (asciiEnd < haystack.Length && haystack[asciiEnd] <= 0x7F)
+                {
+                    asciiEnd++;
+                }
+
+                int bulkEnd = asciiEnd;
+                if (asciiEnd < haystack.Length &&
+                    IsAsciiExtendableGrapheme(haystack[asciiEnd - 1]))
+                {
+                    bulkEnd--;
+                }
+
+                if (bulkEnd > position)
+                {
+                    ReadOnlySpan<byte> asciiRun = haystack[position..bulkEnd];
+                    total += sumSpans ? asciiRun.Length : CountAsciiGraphemeClusters(asciiRun);
+                    position = bulkEnd;
+                    continue;
+                }
+            }
+
             if (!TryMatchAt(haystack, position, out int length))
             {
                 position++;
@@ -148,6 +172,38 @@ internal sealed class RegexUnicodeGraphemeClusterEngine
         }
 
         return total;
+    }
+
+    private static long CountAsciiGraphemeClusters(ReadOnlySpan<byte> ascii)
+    {
+        long count = ascii.Length;
+        int search = 0;
+        while (search < ascii.Length)
+        {
+            int relative = ascii[search..].IndexOf((byte)'\r');
+            if (relative < 0)
+            {
+                return count;
+            }
+
+            int cr = search + relative;
+            if (cr + 1 < ascii.Length && ascii[cr + 1] == (byte)'\n')
+            {
+                count--;
+                search = cr + 2;
+                continue;
+            }
+
+            search = cr + 1;
+        }
+
+        return count;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsAsciiExtendableGrapheme(byte value)
+    {
+        return value is > 0x1F and not 0x7F;
     }
 
     private static int MatchCore(
