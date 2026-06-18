@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -12,6 +13,8 @@ internal sealed class RegexSimpleSequenceEngine
     private const int MaxSegments = 512;
     private const int MaxBoundedRepeat = 1024;
     private const int MaxSelectiveStartBytes = 64;
+
+    private static readonly SearchValues<byte> AsciiUppercaseBytes = SearchValues.Create("ABCDEFGHIJKLMNOPQRSTUVWXYZ"u8);
 
     private readonly RegexSimpleSequenceSegment[] segments;
     private readonly RegexSimpleSequenceSegment[]? repeatedSegments;
@@ -521,8 +524,14 @@ internal sealed class RegexSimpleSequenceEngine
     {
         while (position + 1 < haystack.Length)
         {
-            if (RegexSimpleSequenceSegment.IsAsciiUppercase(haystack[position]) &&
-                RegexSimpleSequenceSegment.IsAsciiLowercase(haystack[position + 1]))
+            int relative = haystack[position..^1].IndexOfAny(AsciiUppercaseBytes);
+            if (relative < 0)
+            {
+                return -1;
+            }
+
+            position += relative;
+            if (RegexSimpleSequenceSegment.IsAsciiLowercase(haystack[position + 1]))
             {
                 return position;
             }
