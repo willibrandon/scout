@@ -1,3 +1,8 @@
+using System.Numerics;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
+
 namespace Scout;
 
 internal sealed class RegexIpv4AddressEngine
@@ -62,9 +67,62 @@ internal sealed class RegexIpv4AddressEngine
 
     private static long CountOrSum(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
     {
-        long total = 0;
         int minimumStart = Math.Clamp(startAt, 0, haystack.Length);
         int searchAt = Math.Min(haystack.Length, minimumStart + 2);
+        if (Avx2.IsSupported && haystack.Length - searchAt > Vector256<byte>.Count)
+        {
+            return CountOrSumVector256(haystack, minimumStart, searchAt, sumSpans);
+        }
+
+        return CountOrSumScalar(haystack, minimumStart, searchAt, sumSpans, total: 0);
+    }
+
+    private static long CountOrSumVector256(
+        ReadOnlySpan<byte> haystack,
+        int minimumStart,
+        int searchAt,
+        bool sumSpans)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        var dotVector = Vector256.Create((byte)'.');
+        long total = 0;
+        int vectorEnd = haystack.Length - Vector256<byte>.Count;
+        while (searchAt <= vectorEnd)
+        {
+            var values = Vector256.LoadUnsafe(ref reference, (nuint)searchAt);
+            uint mask = Avx2.CompareEqual(values, dotVector).ExtractMostSignificantBits();
+            while (mask != 0)
+            {
+                int bit = BitOperations.TrailingZeroCount(mask);
+                int dot = searchAt + bit;
+                if (TryMatchBeforeFirstDot(haystack, minimumStart, dot, out int matchStart, out int matchLength))
+                {
+                    total += sumSpans ? matchLength : 1;
+                    int matchEnd = matchStart + matchLength;
+                    minimumStart = matchEnd;
+                    searchAt = Math.Min(haystack.Length, matchEnd + 2);
+                    goto NextVector;
+                }
+
+                mask &= mask - 1;
+            }
+
+            searchAt += Vector256<byte>.Count;
+        NextVector:
+            ;
+        }
+
+        return CountOrSumScalar(haystack, minimumStart, searchAt, sumSpans, total);
+    }
+
+    private static long CountOrSumScalar(
+        ReadOnlySpan<byte> haystack,
+        int minimumStart,
+        int searchAt,
+        bool sumSpans,
+        long total)
+    {
+        searchAt = Math.Min(haystack.Length, Math.Max(searchAt, minimumStart + 2));
         while (searchAt < haystack.Length)
         {
             int offset = haystack[searchAt..].IndexOf((byte)'.');
