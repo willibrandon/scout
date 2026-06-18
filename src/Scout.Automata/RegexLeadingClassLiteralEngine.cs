@@ -197,14 +197,14 @@ internal sealed class RegexLeadingClassLiteralEngine
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
         int lowerBound = Math.Clamp(startAt, 0, haystack.Length);
-        if (branchLiteralScanner is not null)
-        {
-            return FindByBranchLiteralScanner(haystack, lowerBound);
-        }
-
         if (trailingAnchorScanner is not null)
         {
             return FindByTrailingAnchor(haystack, lowerBound);
+        }
+
+        if (branchLiteralScanner is not null)
+        {
+            return FindByBranchLiteralScanner(haystack, lowerBound);
         }
 
         int searchAt = Math.Min(haystack.Length, lowerBound + 1);
@@ -284,6 +284,11 @@ internal sealed class RegexLeadingClassLiteralEngine
     private long CountOrSum(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        if (trailingAnchorScanner is not null)
+        {
+            return CountOrSumByTrailingAnchor(haystack, startOffset, sumSpans);
+        }
+
         if (branchLiteralScanner is not null)
         {
             return CountOrSumByBranchLiteralScanner(haystack, startOffset, sumSpans);
@@ -437,6 +442,60 @@ internal sealed class RegexLeadingClassLiteralEngine
                 searchAt = candidate.Match.Start + 1;
             }
         }
+    }
+
+    private long CountOrSumByTrailingAnchor(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
+    {
+        long total = 0;
+        int nextAllowedStart = startOffset;
+        int searchAt = Math.Min(haystack.Length, nextAllowedStart + trailingAnchorScanner!.MinLiteralLength);
+        RegexMatch? best = null;
+        while (true)
+        {
+            int anchor = trailingAnchorScanner.Find(haystack, searchAt);
+            if (anchor < 0)
+            {
+                break;
+            }
+
+            if (best.HasValue && anchor - trailingAnchorScanner.MaxLiteralLength > best.Value.Start)
+            {
+                AddMatch(best.Value, sumSpans, ref total, ref nextAllowedStart);
+                best = null;
+                searchAt = Math.Min(haystack.Length, nextAllowedStart + trailingAnchorScanner.MinLiteralLength);
+                continue;
+            }
+
+            for (int index = 0; index < branches.Length; index++)
+            {
+                int start = anchor - branches[index].Literal.Length;
+                if (start < nextAllowedStart ||
+                    (best.HasValue && start >= best.Value.Start))
+                {
+                    continue;
+                }
+
+                if (TryMatchAt(haystack, start, out int length))
+                {
+                    best = new RegexMatch(start, length);
+                }
+            }
+
+            searchAt = anchor + 1;
+        }
+
+        if (best.HasValue)
+        {
+            AddMatch(best.Value, sumSpans, ref total, ref nextAllowedStart);
+        }
+
+        return total;
+    }
+
+    private static void AddMatch(RegexMatch match, bool sumSpans, ref long total, ref int nextAllowedStart)
+    {
+        total += sumSpans ? match.Length : 1;
+        nextAllowedStart = match.End;
     }
 
     private bool TryMatchBranchAt(ReadOnlySpan<byte> haystack, int start, int branchId, out int length)

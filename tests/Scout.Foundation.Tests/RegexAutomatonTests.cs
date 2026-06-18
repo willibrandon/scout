@@ -2196,6 +2196,8 @@ public sealed class RegexAutomatonTests
         Assert.Equal(12, single.SumMatchSpans("ashing Zshing bshing"u8));
         Assert.Equal(2, trailingClass.CountMatches("Sawyer7 Finn\t sawyer "u8));
         Assert.Equal(12, trailingClass.SumMatchSpans("Sawyer7 Finn\t sawyer "u8));
+        Assert.Equal(1, trailingClass.CountMatches("awyerinnawyerinnSawyer\n"u8));
+        Assert.Equal(7, trailingClass.SumMatchSpans("awyerinnawyerinnSawyer\n"u8));
     }
 
     /// <summary>
