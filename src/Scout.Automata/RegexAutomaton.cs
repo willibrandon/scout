@@ -1106,6 +1106,11 @@ public sealed class RegexAutomaton
         }
 
         EnsureCaptureEngines();
+        if (anchoredWordCaptureEngine is not null)
+        {
+            return anchoredWordCaptureEngine.CountCaptures(haystack, startAt);
+        }
+
         if (keywordWhitespaceCaptureEngine is not null)
         {
             return keywordWhitespaceCaptureEngine.CountCaptures(haystack, startAt);

@@ -3105,6 +3105,8 @@ public sealed class RegexAutomatonTests
 
         Assert.True(automaton.UsesAnchoredWordCaptureEngine);
         Assert.NotNull(captures);
+        Assert.Equal(4, automaton.CountCaptures(line));
+        Assert.Equal(0, automaton.CountCaptures(line, captures.Match.End));
         Assert.Equal(4, captures.ParticipatingCount());
         Assert.Equal(new RegexMatch(0, System.Text.Encoding.UTF8.GetByteCount("  Привет мир test")), captures.Match);
         AssertGroupUtf8Text(captures, line, 1, "Привет");

@@ -114,6 +114,39 @@ internal sealed class RegexAnchoredWordCaptureEngine
         return new RegexCaptures(match, groups);
     }
 
+    public long CountCaptures(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        if (startAt != 0)
+        {
+            return 0;
+        }
+
+        int position = ConsumeSpaces(haystack, 0);
+        for (int index = 0; index < captureIndexes.Length; index++)
+        {
+            int captureStart = position;
+            position = ConsumeWordRun(haystack, position);
+            if (position == captureStart)
+            {
+                return 0;
+            }
+
+            if (index == captureIndexes.Length - 1)
+            {
+                break;
+            }
+
+            int spaceStart = position;
+            position = ConsumeSpaces(haystack, position);
+            if (position == spaceStart)
+            {
+                return 0;
+            }
+        }
+
+        return captureIndexes.Length + 1;
+    }
+
     private int ConsumeWordRun(ReadOnlySpan<byte> haystack, int position)
     {
         if (!unicodeWord)
