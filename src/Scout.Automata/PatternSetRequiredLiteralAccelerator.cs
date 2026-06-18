@@ -100,12 +100,14 @@ internal sealed class PatternSetRequiredLiteralAccelerator
         ReadOnlySpan<byte> search = haystack[searchOffset..];
         AhoCorasickOverlappingEnumerator matches = automaton.EnumerateOverlapping(search);
         var deferredHits = new List<AhoCorasickMatch>();
-        int[] nextStartToTry = new int[automata.Length];
+        Span<int> nextStartToTry = automata.Length <= 256
+            ? stackalloc int[automata.Length]
+            : new int[automata.Length];
         while (offset <= haystack.Length)
         {
             DropDeferredHitsBefore(deferredHits, searchOffset, offset);
             PatternSetMatch? best = null;
-            Array.Fill(nextStartToTry, offset);
+            nextStartToTry.Fill(offset);
             int deferredIndex = 0;
             while (true)
             {
@@ -194,8 +196,10 @@ internal sealed class PatternSetRequiredLiteralAccelerator
         int[] automataPatternIds,
         PatternSetMatch? best)
     {
-        int[] nextStartToTry = new int[automata.Length];
-        Array.Fill(nextStartToTry, startOffset);
+        Span<int> nextStartToTry = automata.Length <= 256
+            ? stackalloc int[automata.Length]
+            : new int[automata.Length];
+        nextStartToTry.Fill(startOffset);
         ReadOnlySpan<byte> search = haystack[startOffset..];
         AhoCorasickOverlappingEnumerator matches = automaton.EnumerateOverlapping(search);
         while (matches.MoveNext())
@@ -261,7 +265,7 @@ internal sealed class PatternSetRequiredLiteralAccelerator
         int literalPatternId,
         RegexAutomaton[] automata,
         int[] automataPatternIds,
-        int[] nextStartToTry,
+        Span<int> nextStartToTry,
         ref PatternSetMatch? best)
     {
         PatternSetRequiredAutomaton[] candidateAutomata = automataByLiteral[literalPatternId];
