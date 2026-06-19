@@ -17,12 +17,15 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
     private RegexWordBoundaryLiteralSetEngine(
         IReadOnlyList<byte[]> literals,
         RegexCompileOptions leadingBoundaryOptions,
-        RegexCompileOptions trailingBoundaryOptions)
+        RegexCompileOptions trailingBoundaryOptions,
+        bool takeLiteralOwnership)
     {
         this.literals = new byte[literals.Count][];
         for (int index = 0; index < literals.Count; index++)
         {
-            this.literals[index] = literals[index].ToArray();
+            this.literals[index] = takeLiteralOwnership
+                ? literals[index]
+                : literals[index].ToArray();
             maxLiteralLength = Math.Max(maxLiteralLength, this.literals[index].Length);
         }
 
@@ -58,7 +61,11 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
             return false;
         }
 
-        engine = new RegexWordBoundaryLiteralSetEngine(literals, leadingBoundaryOptions, trailingBoundaryOptions);
+        engine = new RegexWordBoundaryLiteralSetEngine(
+            literals,
+            leadingBoundaryOptions,
+            trailingBoundaryOptions,
+            takeLiteralOwnership: true);
         return true;
     }
 
