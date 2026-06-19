@@ -1597,24 +1597,79 @@ public sealed class RegexAutomaton
 
     private static bool CanSkipHigherPriorityFixedWidthGuards(RegexSyntaxNode root, RegexCompileOptions options)
     {
+        return IsSimpleFixedWidthAtomTree(root, options);
+    }
+
+    private static bool IsSimpleFixedWidthAtomTree(RegexSyntaxNode root, RegexCompileOptions options)
+    {
         root = UnwrapTransparentGroups(root);
-        if (root is not RegexSequenceNode sequence || sequence.Nodes.Count == 0)
+        switch (root)
+        {
+            case RegexSequenceNode sequence:
+                return IsSimpleFixedWidthAtomSequence(sequence, options);
+
+            case RegexAlternationNode alternation:
+                if (alternation.Alternatives.Count == 0)
+                {
+                    return false;
+                }
+
+                for (int index = 0; index < alternation.Alternatives.Count; index++)
+                {
+                    if (!IsSimpleFixedWidthAtomTree(alternation.Alternatives[index], options))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+
+            case RegexGroupNode group:
+                RegexCompileOptions groupOptions = options.Apply(group.EnabledFlags, group.DisabledFlags);
+                return !groupOptions.CaseInsensitive &&
+                    !groupOptions.Utf8 &&
+                    IsSimpleFixedWidthAtomTree(group.Child, groupOptions);
+
+            case RegexAtomNode { Kind: RegexSyntaxKind.Literal } atom:
+                return atom.Value.Length == 1;
+
+            case RegexAtomNode atom:
+                return !IsPredicateAtom(atom.Kind) &&
+                    !RegexByteClass.RequiresUtf8ScalarMatch(
+                        atom.Kind,
+                        atom.Value.Span,
+                        options.Utf8,
+                        options.CaseInsensitive,
+                        options.UnicodeClasses);
+
+            default:
+                return false;
+        }
+    }
+
+    private static bool IsSimpleFixedWidthAtomSequence(RegexSequenceNode sequence, RegexCompileOptions options)
+    {
+        if (sequence.Nodes.Count == 0)
         {
             return false;
         }
 
+        RegexCompileOptions currentOptions = options;
         for (int index = 0; index < sequence.Nodes.Count; index++)
         {
-            RegexSyntaxNode node = UnwrapTransparentGroups(sequence.Nodes[index]);
-            if (node is not RegexAtomNode atom ||
-                atom.Kind == RegexSyntaxKind.Literal ||
-                IsPredicateAtom(atom.Kind) ||
-                RegexByteClass.RequiresUtf8ScalarMatch(
-                    atom.Kind,
-                    atom.Value.Span,
-                    options.Utf8,
-                    options.CaseInsensitive,
-                    options.UnicodeClasses))
+            RegexSyntaxNode node = sequence.Nodes[index];
+            if (node is RegexInlineFlagsNode flags)
+            {
+                currentOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
+                if (currentOptions.CaseInsensitive || currentOptions.Utf8)
+                {
+                    return false;
+                }
+
+                continue;
+            }
+
+            if (!IsSimpleFixedWidthAtomTree(node, currentOptions))
             {
                 return false;
             }
