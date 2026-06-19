@@ -1,3 +1,5 @@
+using System.Buffers.Binary;
+
 namespace Scout;
 
 internal sealed class RegexLargeLiteralSetScanner
@@ -519,6 +521,17 @@ internal sealed class RegexLargeLiteralSetScanner
 
     private static ulong WideBlockKey(ReadOnlySpan<byte> value, int length)
     {
+        if (length == PreferredWideBlockLength)
+        {
+            return BinaryPrimitives.ReadUInt32LittleEndian(value) |
+                ((ulong)BinaryPrimitives.ReadUInt16LittleEndian(value[4..]) << 32);
+        }
+
+        if (length == FallbackWideBlockLength)
+        {
+            return BinaryPrimitives.ReadUInt32LittleEndian(value);
+        }
+
         ulong key = 0;
         for (int index = 0; index < length; index++)
         {
