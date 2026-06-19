@@ -2294,6 +2294,43 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies leading dot plus literal suffix patterns scan from suffix candidates.
+    /// </summary>
+    [Fact]
+    public void LeadingClassLiteralEngineCountsDotSuffixSpans()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @".y"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var dotAll = RegexAutomaton.Compile(
+            @".y"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: true,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(RegexEngineKind.LeadingClassLiteral, GetEngineKind(automaton));
+        Assert.Equal(RegexEngineKind.LeadingClassLiteral, GetEngineKind(dotAll));
+
+        byte[] haystack = "xy\nya ay"u8.ToArray();
+        Assert.Equal(new RegexMatch(0, 2), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(6, 2), automaton.Find(haystack, startAt: 1));
+        Assert.Equal(new RegexMatch(0, 2), automaton.MatchAt(haystack, 0));
+        Assert.Null(automaton.MatchAt(haystack, 2));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(4, automaton.SumMatchSpans(haystack));
+
+        Assert.Equal(new RegexMatch(0, 2), dotAll.Find("\ny"u8));
+        Assert.Equal(1, dotAll.CountMatches("\ny"u8));
+        Assert.Equal(2, dotAll.SumMatchSpans("\ny"u8));
+    }
+
+    /// <summary>
     /// Verifies leading-class literal candidates preserve branch fallback when literals overlap.
     /// </summary>
     [Fact]

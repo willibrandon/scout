@@ -269,7 +269,7 @@ internal sealed class RegexLeadingClassLiteralEngine
         for (int index = 0; index < branches.Length; index++)
         {
             RegexLeadingClassLiteralBranch branch = branches[index];
-            if (!LeadingByteMatches(haystack[start], branch.LeadingKind) ||
+            if (!LeadingByteMatches(haystack[start], branch.LeadingKind, options) ||
                 branch.Literal.Length > haystack.Length - start - 1 ||
                 !haystack.Slice(start + 1, branch.Literal.Length).SequenceEqual(branch.Literal))
             {
@@ -352,7 +352,7 @@ internal sealed class RegexLeadingClassLiteralEngine
         }
 
         RegexLeadingClassLiteralBranch branch = branches[searchPatternBranchIds[candidate.LiteralId]];
-        if (!LeadingByteMatches(haystack[start], branch.LeadingKind))
+        if (!LeadingByteMatches(haystack[start], branch.LeadingKind, options))
         {
             return false;
         }
@@ -573,7 +573,7 @@ internal sealed class RegexLeadingClassLiteralEngine
         }
 
         RegexLeadingClassLiteralBranch branch = branches[branchId];
-        if (!LeadingByteMatches(haystack[start], branch.LeadingKind) ||
+        if (!LeadingByteMatches(haystack[start], branch.LeadingKind, options) ||
             branch.Literal.Length > haystack.Length - start - 1 ||
             !haystack.Slice(start + 1, branch.Literal.Length).SequenceEqual(branch.Literal))
         {
@@ -704,7 +704,15 @@ internal sealed class RegexLeadingClassLiteralEngine
             return false;
         }
 
-        branchRoot = sequence.Nodes[0];
+        RegexSyntaxNode candidateBranchRoot = sequence.Nodes[0];
+        RegexSyntaxNode unwrappedBranchRoot = UnwrapTransparentGroups(candidateBranchRoot);
+        if (unwrappedBranchRoot is not RegexSequenceNode &&
+            unwrappedBranchRoot is not RegexAlternationNode)
+        {
+            return false;
+        }
+
+        branchRoot = candidateBranchRoot;
         trailingAtom = candidateTrailing;
         return true;
     }
@@ -777,6 +785,12 @@ internal sealed class RegexLeadingClassLiteralEngine
             return true;
         }
 
+        if (atom.Kind == RegexSyntaxKind.Dot)
+        {
+            leadingKind = RegexLeadingClassLiteralKind.Dot;
+            return true;
+        }
+
         if (atom.Kind != RegexSyntaxKind.CharacterClass)
         {
             return false;
@@ -823,12 +837,21 @@ internal sealed class RegexLeadingClassLiteralEngine
         return true;
     }
 
-    private static bool LeadingByteMatches(byte value, RegexLeadingClassLiteralKind leadingKind)
+    private static bool LeadingByteMatches(byte value, RegexLeadingClassLiteralKind leadingKind, RegexCompileOptions options)
     {
         return leadingKind switch
         {
             RegexLeadingClassLiteralKind.AsciiLowercase => RegexSimpleSequenceSegment.IsAsciiLowercase(value),
             RegexLeadingClassLiteralKind.AsciiUppercase => RegexSimpleSequenceSegment.IsAsciiUppercase(value),
+            RegexLeadingClassLiteralKind.Dot => RegexByteClass.AtomMatches(
+                value,
+                RegexSyntaxKind.Dot,
+                ReadOnlySpan<byte>.Empty,
+                options.CaseInsensitive,
+                options.MultiLine,
+                options.DotMatchesNewline,
+                options.Crlf,
+                options.LineTerminator),
             _ => RegexSimpleSequenceSegment.IsAsciiLetter(value),
         };
     }
