@@ -310,6 +310,11 @@ public sealed class AhoCorasickAutomaton
         return outputCounts[state];
     }
 
+    internal int[] GetOutputCountsForEnumerator()
+    {
+        return outputCounts;
+    }
+
     internal AhoCorasickMatch GetOutputMatch(int state, int outputIndex, int end)
     {
         AhoCorasickOutput output = states[state].Outputs[outputIndex];

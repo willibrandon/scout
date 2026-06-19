@@ -8,6 +8,7 @@ public ref struct AhoCorasickOverlappingEnumerator
 {
     private readonly AhoCorasickAutomaton automaton;
     private readonly ReadOnlySpan<byte> haystack;
+    private readonly int[] outputCounts;
     private readonly int[]? denseTransitions;
     private readonly ushort[]? compactDenseTransitions;
     private readonly bool hasEmptyPatterns;
@@ -25,6 +26,7 @@ public ref struct AhoCorasickOverlappingEnumerator
     {
         this.automaton = automaton;
         this.haystack = haystack;
+        outputCounts = automaton.GetOutputCountsForEnumerator();
         compactDenseTransitions = automaton.GetCompactDenseTransitionsForEnumerator();
         denseTransitions = compactDenseTransitions is null
             ? automaton.GetDenseTransitionsForEnumerator()
@@ -109,7 +111,7 @@ public ref struct AhoCorasickOverlappingEnumerator
                 : automaton.NextStateForEnumerator(state, value);
             nextIndex++;
             end = nextIndex;
-            outputCount = automaton.GetOutputCount(state);
+            outputCount = outputCounts[state];
             if (outputCount != 0)
             {
                 outputIndex = 0;
@@ -146,7 +148,7 @@ public ref struct AhoCorasickOverlappingEnumerator
         {
             state = transitions[(state * 256) + haystack[nextIndex]];
             nextIndex++;
-            int count = automaton.GetOutputCount(state);
+            int count = outputCounts[state];
             if (count == 0)
             {
                 continue;
@@ -185,7 +187,7 @@ public ref struct AhoCorasickOverlappingEnumerator
         {
             state = transitions[(state * 256) + haystack[nextIndex]];
             nextIndex++;
-            int count = automaton.GetOutputCount(state);
+            int count = outputCounts[state];
             if (count == 0)
             {
                 continue;

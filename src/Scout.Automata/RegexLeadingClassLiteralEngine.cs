@@ -493,7 +493,7 @@ internal sealed class RegexLeadingClassLiteralEngine
                     continue;
                 }
 
-                if (TryMatchAt(haystack, start, out int length))
+                if (TryMatchBranchAt(haystack, start, index, out int length))
                 {
                     best = new RegexMatch(start, length);
                 }
@@ -621,7 +621,7 @@ internal sealed class RegexLeadingClassLiteralEngine
                     continue;
                 }
 
-                if (TryMatchAt(haystack, start, out int length))
+                if (TryMatchBranchAt(haystack, start, index, out int length))
                 {
                     best = new RegexMatch(start, length);
                 }

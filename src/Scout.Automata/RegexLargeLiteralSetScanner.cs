@@ -9,7 +9,7 @@ internal sealed class RegexLargeLiteralSetScanner
     private const int PreferredWideBlockLength = 6;
     private const int FallbackWideBlockLength = 4;
     private const int MinimumLiteralCount = 128;
-    private const int TripleShiftMinimumLiteralCount = 1024;
+    private const int TripleShiftMinimumLiteralCount = 64 * 1024;
     private const int TripleShiftTableLength = 1 << 24;
     private const int SingletonTrieObservedByteThreshold = 4096;
 
