@@ -114,13 +114,31 @@ internal sealed class RegexDelimitedSpanEngine
                 return null;
             }
 
-            int endOffset = haystack[contentStart..].IndexOf(endByte);
+            if (haystack[contentStart] == endByte)
+            {
+                return new RegexMatch(start, 2);
+            }
+
+            int secondContent = contentStart + 1;
+            if (secondContent >= haystack.Length)
+            {
+                return null;
+            }
+
+            if (haystack[secondContent] == endByte)
+            {
+                return new RegexMatch(start, 3);
+            }
+
+            int endSearchStart = secondContent + 1;
+            int endOffset = haystack[endSearchStart..].IndexOf(endByte);
             if (endOffset < 0)
             {
                 return null;
             }
 
-            return new RegexMatch(start, endOffset + 2);
+            int end = endSearchStart + endOffset;
+            return new RegexMatch(start, end + 1 - start);
         }
 
         return null;
