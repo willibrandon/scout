@@ -61,6 +61,18 @@ internal sealed class RegexDelimitedSpanEngine
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
         int searchAt = Math.Clamp(startAt, 0, haystack.Length);
+        if (minimumContentLength == 0)
+        {
+            return includeStandaloneEnd
+                ? FindDelimitedSpanOrStandaloneEnd(haystack, searchAt)
+                : FindDelimitedSpan(haystack, searchAt);
+        }
+
+        if (!includeStandaloneEnd && minimumContentLength == 1 && startByte == endByte)
+        {
+            return FindNonEmptySameDelimiterSpan(haystack, searchAt);
+        }
+
         while (searchAt < haystack.Length)
         {
             int found = FindNextCandidate(haystack, searchAt);
@@ -80,6 +92,110 @@ internal sealed class RegexDelimitedSpanEngine
             }
 
             searchAt = found + 1;
+        }
+
+        return null;
+    }
+
+    private RegexMatch? FindDelimitedSpan(ReadOnlySpan<byte> haystack, int searchAt)
+    {
+        while (searchAt < haystack.Length)
+        {
+            int startOffset = haystack[searchAt..].IndexOf(startByte);
+            if (startOffset < 0)
+            {
+                return null;
+            }
+
+            int start = searchAt + startOffset;
+            int contentStart = start + 1;
+            if (contentStart >= haystack.Length)
+            {
+                return null;
+            }
+
+            int endOffset = haystack[contentStart..].IndexOf(endByte);
+            if (endOffset < 0)
+            {
+                return null;
+            }
+
+            return new RegexMatch(start, endOffset + 2);
+        }
+
+        return null;
+    }
+
+    private RegexMatch? FindDelimitedSpanOrStandaloneEnd(ReadOnlySpan<byte> haystack, int searchAt)
+    {
+        while (searchAt < haystack.Length)
+        {
+            int foundOffset = haystack[searchAt..].IndexOfAny(startByte, endByte);
+            if (foundOffset < 0)
+            {
+                return null;
+            }
+
+            int found = searchAt + foundOffset;
+            if (haystack[found] == endByte)
+            {
+                return new RegexMatch(found, 1);
+            }
+
+            int contentStart = found + 1;
+            if (contentStart >= haystack.Length)
+            {
+                return null;
+            }
+
+            int endOffset = haystack[contentStart..].IndexOf(endByte);
+            if (endOffset < 0)
+            {
+                return null;
+            }
+
+            return new RegexMatch(found, endOffset + 2);
+        }
+
+        return null;
+    }
+
+    private RegexMatch? FindNonEmptySameDelimiterSpan(ReadOnlySpan<byte> haystack, int searchAt)
+    {
+        while (searchAt < haystack.Length)
+        {
+            int startOffset = haystack[searchAt..].IndexOf(startByte);
+            if (startOffset < 0)
+            {
+                return null;
+            }
+
+            int start = searchAt + startOffset;
+            int contentStart = start + 1;
+            if (contentStart >= haystack.Length)
+            {
+                return null;
+            }
+
+            if (haystack[contentStart] == endByte)
+            {
+                searchAt = contentStart;
+                continue;
+            }
+
+            int endSearchStart = contentStart + 1;
+            if (endSearchStart >= haystack.Length)
+            {
+                return null;
+            }
+
+            int endOffset = haystack[endSearchStart..].IndexOf(endByte);
+            if (endOffset < 0)
+            {
+                return null;
+            }
+
+            return new RegexMatch(start, endOffset + 3);
         }
 
         return null;
