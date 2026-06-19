@@ -262,11 +262,13 @@ internal static class StandardSearchByteOperations
             color,
             separators.LineTerminator);
         bool requireMatchColumn = column || prefix?.HasHyperlink == true;
-        matched = LiteralLineSearcher.SearchWithRegexPlan(
+        matched = LiteralLineSearcher.SearchWithRegexPlanAndCountMatches(
             bytes,
             pattern,
             regexPlan,
             ref sink,
+            out ulong matchedLines,
+            out long matches,
             asciiCaseInsensitive,
             invertMatch: false,
             lineRegexp: false,
@@ -277,18 +279,6 @@ internal static class StandardSearchByteOperations
             requireMatchColumn);
         bufferedWriter.Flush();
         byte[] body = buffer.ToArray();
-        ulong matchedLines = sink.MatchedLines;
-        long matches = LiteralLineSearcher.CountMatchesWithRegexPlan(
-            bytes,
-            pattern,
-            regexPlan,
-            asciiCaseInsensitive,
-            invertMatch: false,
-            lineRegexp: false,
-            wordRegexp: false,
-            maxMatchingLines: null,
-            crlf: false,
-            nullData: false);
         TimeSpan searchElapsed = Stopwatch.GetElapsedTime(started);
         output.Write(body);
 
