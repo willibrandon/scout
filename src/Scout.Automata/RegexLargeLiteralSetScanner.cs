@@ -9,8 +9,9 @@ internal sealed class RegexLargeLiteralSetScanner
     private const int PreferredWideBlockLength = 6;
     private const int FallbackWideBlockLength = 4;
     private const int MinimumLiteralCount = 128;
-    private const int TripleShiftMinimumLiteralCount = 64 * 1024;
-    private const int TripleShiftTableLength = 1 << 24;
+    private const int TripleShiftMinimumLiteralCount = 1024;
+    private const int TripleShiftPageLength = 1 << 16;
+    private const int MaxTripleShiftPages = 64;
     private const int SingletonTrieObservedByteThreshold = 4096;
 
     private readonly byte[][] literals;
@@ -22,11 +23,12 @@ internal sealed class RegexLargeLiteralSetScanner
     private readonly int minLiteralLength;
     private readonly int suffixOffset;
     private readonly int tripleSuffixOffset;
+    private readonly int tripleMaxShift;
     private readonly int wideSuffixBacktrack;
     private readonly int tripleWideSuffixBacktrack;
     private readonly object tripleShiftInitializationLock = new();
     private readonly object singletonTrieInitializationLock = new();
-    private byte[]? tripleShifts;
+    private byte[][]? tripleShiftPages;
     private volatile bool tripleShiftsInitialized;
     private RegexLargeLiteralTrieScanner? singletonTrieScanner;
     private int singletonTrieObservedBytes;
@@ -51,6 +53,7 @@ internal sealed class RegexLargeLiteralSetScanner
         this.minLiteralLength = minLiteralLength;
         suffixOffset = minLiteralLength - BlockLength;
         tripleSuffixOffset = minLiteralLength - TripleBlockLength;
+        tripleMaxShift = tripleSuffixOffset + 1;
         wideSuffixBacktrack = Math.Max(0, wideBlockLength - BlockLength);
         tripleWideSuffixBacktrack = Math.Max(0, wideBlockLength - TripleBlockLength);
     }
@@ -136,7 +139,8 @@ internal sealed class RegexLargeLiteralSetScanner
             minLength,
             FallbackWideBlockLength,
             out wideBlockLength);
-        bool useTripleShifts = wideBuckets is not null && ShouldUseTripleShifts(minLength, longLiteralCount);
+        bool useTripleShifts = wideBuckets is not null &&
+            ShouldUseTripleShifts(ownedLiterals, minLength, longLiteralCount);
         scanner = new RegexLargeLiteralSetScanner(
             ownedLiterals,
             singleByteLiteralIds ?? [],
@@ -235,13 +239,13 @@ internal sealed class RegexLargeLiteralSetScanner
         return null;
     }
 
-    private RegexLiteralSetCandidate? FindLongLiteralTripleShift(ReadOnlySpan<byte> haystack, int startAt, byte[] tripleShifts)
+    private RegexLiteralSetCandidate? FindLongLiteralTripleShift(ReadOnlySpan<byte> haystack, int startAt, byte[][] tripleShiftPages)
     {
         int start = Math.Clamp(startAt, 0, haystack.Length);
         int position = start + tripleSuffixOffset;
         while (position <= haystack.Length - TripleBlockLength)
         {
-            int shift = tripleShifts[TripleBlockKey(haystack[position..])];
+            int shift = TripleShift(tripleShiftPages, haystack[position..]);
             if (shift != 0)
             {
                 position += shift;
@@ -275,7 +279,7 @@ internal sealed class RegexLargeLiteralSetScanner
         return null;
     }
 
-    private byte[] GetTripleShifts()
+    private byte[][] GetTripleShifts()
     {
         if (!tripleShiftsInitialized)
         {
@@ -283,13 +287,13 @@ internal sealed class RegexLargeLiteralSetScanner
             {
                 if (!tripleShiftsInitialized)
                 {
-                    tripleShifts = BuildTripleShifts(literals, minLiteralLength);
+                    tripleShiftPages = BuildTripleShifts(literals, minLiteralLength);
                     tripleShiftsInitialized = true;
                 }
             }
         }
 
-        return tripleShifts!;
+        return tripleShiftPages!;
     }
 
     public long CountMatches(ReadOnlySpan<byte> haystack, int startAt)
@@ -427,12 +431,15 @@ internal sealed class RegexLargeLiteralSetScanner
         return (ushort)(value[0] | (value[1] << 8));
     }
 
-    private static int TripleBlockKey(ReadOnlySpan<byte> value)
+    private int TripleShift(byte[][] pages, ReadOnlySpan<byte> value)
     {
-        return value[0] | (value[1] << 8) | (value[2] << 16);
+        byte[]? page = pages[value[2]];
+        return page is null
+            ? tripleMaxShift
+            : page[value[0] | (value[1] << 8)];
     }
 
-    private static bool ShouldUseTripleShifts(int minLength, int longLiteralCount)
+    private static bool ShouldUseTripleShifts(byte[][] literals, int minLength, int longLiteralCount)
     {
         if (longLiteralCount < TripleShiftMinimumLiteralCount ||
             minLength < TripleBlockLength)
@@ -447,15 +454,8 @@ internal sealed class RegexLargeLiteralSetScanner
             return false;
         }
 
-        return true;
-    }
-
-    private static byte[] BuildTripleShifts(byte[][] literals, int minLength)
-    {
-        int suffixOffset = minLength - TripleBlockLength;
-        int maxShift = suffixOffset + 1;
-        byte[] shifts = new byte[TripleShiftTableLength];
-        Array.Fill(shifts, (byte)maxShift);
+        bool[] pages = new bool[byte.MaxValue + 1];
+        int pageCount = 0;
         for (int literalIndex = 0; literalIndex < literals.Length; literalIndex++)
         {
             byte[] literal = literals[literalIndex];
@@ -466,16 +466,58 @@ internal sealed class RegexLargeLiteralSetScanner
 
             for (int offset = 0; offset <= suffixOffset; offset++)
             {
-                int key = TripleBlockKey(literal.AsSpan(offset));
-                byte shift = (byte)(suffixOffset - offset);
-                if (shift < shifts[key])
+                byte page = literal[offset + 2];
+                if (pages[page])
                 {
-                    shifts[key] = shift;
+                    continue;
+                }
+
+                pages[page] = true;
+                pageCount++;
+                if (pageCount > MaxTripleShiftPages)
+                {
+                    return false;
                 }
             }
         }
 
-        return shifts;
+        return pageCount != 0;
+    }
+
+    private static byte[][] BuildTripleShifts(byte[][] literals, int minLength)
+    {
+        int suffixOffset = minLength - TripleBlockLength;
+        int maxShift = suffixOffset + 1;
+        byte[][] pages = new byte[byte.MaxValue + 1][];
+        for (int literalIndex = 0; literalIndex < literals.Length; literalIndex++)
+        {
+            byte[] literal = literals[literalIndex];
+            if (literal.Length < TripleBlockLength)
+            {
+                continue;
+            }
+
+            for (int offset = 0; offset <= suffixOffset; offset++)
+            {
+                byte pageIndex = literal[offset + 2];
+                byte[] page = pages[pageIndex];
+                if (page is null)
+                {
+                    page = new byte[TripleShiftPageLength];
+                    Array.Fill(page, (byte)maxShift);
+                    pages[pageIndex] = page;
+                }
+
+                int key = literal[offset] | (literal[offset + 1] << 8);
+                byte shift = (byte)(suffixOffset - offset);
+                if (shift < page[key])
+                {
+                    page[key] = shift;
+                }
+            }
+        }
+
+        return pages;
     }
 
     private static Dictionary<ulong, int[]>? BuildWideSuffixBuckets(
