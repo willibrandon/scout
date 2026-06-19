@@ -233,7 +233,7 @@ internal readonly struct MemmemPackedPairFinder
         int offset = 0;
         int vectorEnd = haystack.Length - MinimumLengthForVector(Vector512<byte>.Count, needle.Length);
         int lastStart = haystack.Length - needle.Length;
-        int unrolledEnd = vectorEnd - Vector512<byte>.Count * 3;
+        int unrolledEnd = vectorEnd - Vector512<byte>.Count;
         while (offset <= unrolledEnd)
         {
             if (TryFindVector512Chunk(
@@ -253,30 +253,12 @@ internal readonly struct MemmemPackedPairFinder
                     needle,
                     offset + Vector512<byte>.Count,
                     lastStart,
-                    out candidate) ||
-                TryFindVector512Chunk(
-                    ref reference,
-                    firstVector,
-                    secondVector,
-                    haystack,
-                    needle,
-                    offset + Vector512<byte>.Count * 2,
-                    lastStart,
-                    out candidate) ||
-                TryFindVector512Chunk(
-                    ref reference,
-                    firstVector,
-                    secondVector,
-                    haystack,
-                    needle,
-                    offset + Vector512<byte>.Count * 3,
-                    lastStart,
                     out candidate))
             {
                 return candidate;
             }
 
-            offset += Vector512<byte>.Count * 4;
+            offset += Vector512<byte>.Count * 2;
         }
 
         while (offset <= vectorEnd)
