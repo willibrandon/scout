@@ -1471,6 +1471,38 @@ public static class LiteralLineSearcher
         }
 
         var regexPlan = RegexSearchPlan.Create(needles, asciiCaseInsensitive, compileAutomata: true);
+        return SearchMatchLinesWithRegexPlan(
+            haystack,
+            needles,
+            regexPlan,
+            ref sink,
+            asciiCaseInsensitive,
+            lineRegexp,
+            wordRegexp,
+            maxMatchingLines,
+            crlf,
+            nullData);
+    }
+
+    internal static bool SearchMatchLinesWithRegexPlan<TSink>(
+        ReadOnlySpan<byte> haystack,
+        IReadOnlyList<byte[]> needles,
+        RegexSearchPlan? regexPlan,
+        ref TSink sink,
+        bool asciiCaseInsensitive = false,
+        bool lineRegexp = false,
+        bool wordRegexp = false,
+        ulong? maxMatchingLines = null,
+        bool crlf = false,
+        bool nullData = false)
+        where TSink : struct, IMatchLineSink
+    {
+        ArgumentNullException.ThrowIfNull(needles);
+        if (maxMatchingLines == 0)
+        {
+            return false;
+        }
+
         bool matched = false;
         ulong matchedLines = 0;
         int lineStart = 0;

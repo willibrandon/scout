@@ -290,6 +290,24 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
+    /// Verifies colored stats output matches pinned ripgrep after normalizing runtime-only timing fields.
+    /// </summary>
+    [Fact]
+    public void StatsColorAlwaysMatchesPinnedRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "needle needle\nmiss\nxx needle yy\n");
+
+        (int exitCode, byte[] output, string error) = RunScout("--stats", "--color=always", "-n", "needle", path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--stats", "--color=always", "-n", "needle", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(NormalizeStatsTimings(pinnedOutput), NormalizeStatsTimings(output));
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies standard regex stats count emitted matching lines like ripgrep.
     /// </summary>
     [Fact]

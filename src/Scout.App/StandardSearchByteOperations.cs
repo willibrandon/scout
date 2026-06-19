@@ -170,7 +170,7 @@ internal static class StandardSearchByteOperations
         TimeSpan searchElapsed = Stopwatch.GetElapsedTime(started);
         output.Write(body);
 
-        SearchStats fileStats = CollectSearchStats(bytes, pattern, searchMode, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, separators.Crlf, separators.NullData, maxCount, stopOnNonmatch, searchMode == CliSearchMode.Standard ? (ulong)body.Length : 0, searchElapsed);
+        SearchStats fileStats = CollectSearchStats(bytes, pattern, searchMode, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, separators.Crlf, separators.NullData, maxCount, stopOnNonmatch, searchMode == CliSearchMode.Standard ? CountPrintedBodyBytesForStats(body, color) : 0, searchElapsed);
         stats.Add(fileStats);
         return matched;
     }
@@ -226,7 +226,6 @@ internal static class StandardSearchByteOperations
             passthru ||
             stopOnNonmatch ||
             heading ||
-            color.Enabled ||
             separators.Crlf ||
             separators.NullData)
         {
@@ -248,35 +247,72 @@ internal static class StandardSearchByteOperations
         long started = Stopwatch.GetTimestamp();
         using MemoryStream buffer = new();
         var bufferedWriter = new RawByteWriter(buffer);
-        var sink = new StandardSearchSink(
-            bufferedWriter,
-            prefix,
-            separators.FieldMatch,
-            separators.FieldContext,
-            lineNumber,
-            column,
-            byteOffset,
-            trim,
-            nullPathTerminator,
-            lineLimit,
-            color,
-            separators.LineTerminator);
-        bool requireMatchColumn = column || prefix?.HasHyperlink == true;
-        matched = LiteralLineSearcher.SearchWithRegexPlanAndCountMatches(
-            bytes,
-            pattern,
-            regexPlan,
-            ref sink,
-            out ulong matchedLines,
-            out long matches,
-            asciiCaseInsensitive,
-            invertMatch: false,
-            lineRegexp: false,
-            wordRegexp: false,
-            maxMatchingLines: null,
-            crlf: false,
-            nullData: false,
-            requireMatchColumn);
+        ulong matchedLines;
+        long matches;
+        if (color.Enabled)
+        {
+            var coloredSink = new ColoredSearchSink(
+                bufferedWriter,
+                prefix,
+                separators.FieldMatch,
+                lineNumber,
+                column,
+                byteOffset,
+                trim,
+                nullPathTerminator,
+                lineLimit,
+                color,
+                separators.LineTerminator);
+            var countingSink = new RegexPlanCountingMatchLineSink<ColoredSearchSink>(coloredSink);
+            matched = LiteralLineSearcher.SearchMatchLinesWithRegexPlan(
+                bytes,
+                pattern,
+                regexPlan,
+                ref countingSink,
+                asciiCaseInsensitive,
+                lineRegexp: false,
+                wordRegexp: false,
+                maxMatchingLines: null,
+                crlf: false,
+                nullData: false);
+            coloredSink = countingSink.Inner;
+            coloredSink.Flush();
+            matchedLines = countingSink.MatchedLines;
+            matches = countingSink.Matches;
+        }
+        else
+        {
+            var sink = new StandardSearchSink(
+                bufferedWriter,
+                prefix,
+                separators.FieldMatch,
+                separators.FieldContext,
+                lineNumber,
+                column,
+                byteOffset,
+                trim,
+                nullPathTerminator,
+                lineLimit,
+                color,
+                separators.LineTerminator);
+            bool requireMatchColumn = column || prefix?.HasHyperlink == true;
+            matched = LiteralLineSearcher.SearchWithRegexPlanAndCountMatches(
+                bytes,
+                pattern,
+                regexPlan,
+                ref sink,
+                out matchedLines,
+                out matches,
+                asciiCaseInsensitive,
+                invertMatch: false,
+                lineRegexp: false,
+                wordRegexp: false,
+                maxMatchingLines: null,
+                crlf: false,
+                nullData: false,
+                requireMatchColumn);
+        }
+
         bufferedWriter.Flush();
         byte[] body = buffer.ToArray();
         TimeSpan searchElapsed = Stopwatch.GetElapsedTime(started);
@@ -285,7 +321,7 @@ internal static class StandardSearchByteOperations
         var fileStats = new SearchStats();
         fileStats.AddElapsed(searchElapsed);
         fileStats.AddSearch();
-        fileStats.AddBytesPrinted((ulong)body.Length);
+        fileStats.AddBytesPrinted(CountPrintedBodyBytesForStats(body, color));
         fileStats.AddBytesSearched((ulong)bytes.Length);
         if (matchedLines > 0)
         {
@@ -296,6 +332,79 @@ internal static class StandardSearchByteOperations
         fileStats.AddMatches((ulong)matches);
         stats.Add(fileStats);
         return true;
+    }
+
+    private static ulong CountPrintedBodyBytesForStats(byte[] body, OutputColor color)
+    {
+        if (!color.Enabled)
+        {
+            return (ulong)body.Length;
+        }
+
+        ulong count = 0;
+        int index = 0;
+        while (index < body.Length)
+        {
+            if (TrySkipAnsiSequence(body, index, out int nextIndex))
+            {
+                index = nextIndex;
+                continue;
+            }
+
+            count++;
+            index++;
+        }
+
+        return count;
+    }
+
+    private static bool TrySkipAnsiSequence(ReadOnlySpan<byte> bytes, int start, out int nextIndex)
+    {
+        nextIndex = start;
+        if (start + 1 >= bytes.Length ||
+            bytes[start] != 0x1B)
+        {
+            return false;
+        }
+
+        byte introducer = bytes[start + 1];
+        if (introducer == (byte)'[')
+        {
+            for (int index = start + 2; index < bytes.Length; index++)
+            {
+                byte value = bytes[index];
+                if (value is >= 0x40 and <= 0x7E)
+                {
+                    nextIndex = index + 1;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        if (introducer == (byte)']')
+        {
+            for (int index = start + 2; index < bytes.Length; index++)
+            {
+                byte value = bytes[index];
+                if (value == 0x07)
+                {
+                    nextIndex = index + 1;
+                    return true;
+                }
+
+                if (value == 0x1B &&
+                    index + 1 < bytes.Length &&
+                    bytes[index + 1] == (byte)'\\')
+                {
+                    nextIndex = index + 2;
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private static SearchStats CollectSearchStats(
