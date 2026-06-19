@@ -11,7 +11,6 @@ internal readonly struct MemmemPackedPairFinder
 {
     private const int MinimumNeedleLength = 3;
     private const int MinimumHaystackLength = 256;
-    private const int AdjacentPairRankSlack = 8;
 
     private readonly byte first;
     private readonly byte second;
@@ -69,22 +68,6 @@ internal readonly struct MemmemPackedPairFinder
                 secondIndex = index;
                 secondRank = candidateRank;
             }
-        }
-
-        if (needle.Length == 3 &&
-            !AreAdjacentPair(firstIndex, secondIndex) &&
-            TrySelectAdjacentPair(
-                needle[..length],
-                firstRank + secondRank + AdjacentPairRankSlack,
-                out byte adjacentFirst,
-                out byte adjacentSecond,
-                out int adjacentFirstIndex,
-                out int adjacentSecondIndex))
-        {
-            first = adjacentFirst;
-            second = adjacentSecond;
-            firstIndex = adjacentFirstIndex;
-            secondIndex = adjacentSecondIndex;
         }
 
         finder = new MemmemPackedPairFinder(first, second, firstIndex, secondIndex);
@@ -146,37 +129,6 @@ internal readonly struct MemmemPackedPairFinder
     private static bool AreAdjacentPair(int left, int right)
     {
         return Math.Abs(left - right) == 1;
-    }
-
-    private static bool TrySelectAdjacentPair(
-        ReadOnlySpan<byte> needle,
-        int maximumRank,
-        out byte first,
-        out byte second,
-        out int firstIndex,
-        out int secondIndex)
-    {
-        first = 0;
-        second = 0;
-        firstIndex = -1;
-        secondIndex = -1;
-        int bestRank = int.MaxValue;
-        for (int index = 0; index < needle.Length - 1; index++)
-        {
-            int rank = Rank(needle[index]) + Rank(needle[index + 1]);
-            if (rank >= bestRank)
-            {
-                continue;
-            }
-
-            bestRank = rank;
-            first = needle[index];
-            second = needle[index + 1];
-            firstIndex = index;
-            secondIndex = index + 1;
-        }
-
-        return bestRank <= maximumRank;
     }
 
     private int FindAdjacentPairScalar64(ReadOnlySpan<byte> haystack, ReadOnlySpan<byte> needle)
