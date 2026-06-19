@@ -1583,8 +1583,10 @@ internal sealed class RegexLiteralSetEngine
         bool useAho)
     {
         return ShouldUseSmallLiteralFinders(literals, asciiCaseInsensitive, unicodeCaseInsensitive, useAho) &&
-            literals.Length == 2 &&
-            Math.Min(literals[0].Length, literals[1].Length) >= 4;
+            (literals.Length == 2 &&
+                Math.Min(literals[0].Length, literals[1].Length) >= 4 ||
+            literals.Length == 3 &&
+                Math.Min(Math.Min(literals[0].Length, literals[1].Length), literals[2].Length) >= 4);
     }
 
     private static MemmemFinder[] CreateSmallLiteralFinders(byte[][] literals)
