@@ -15,6 +15,7 @@ internal sealed class RegexLiteralSetEngine
     private const int IndependentAsciiCaseInsensitiveCountThreshold = 4;
     private const int SingleLiteralIndexOfAnchorScoreThreshold = 240;
     private const int ThreeByteSingleLiteralIndexOfAnchorScoreThreshold = 100;
+    private const int SingleLiteralMemmemProbeLength = 512;
 
     private readonly AhoCorasickAutomaton? automaton;
     private readonly byte[][] literals;
@@ -80,13 +81,10 @@ internal sealed class RegexLiteralSetEngine
         {
             if (!RegexAnchoredLiteralFinder.TryCreate(this.literals[0], out singleAnchoredLiteralFinder))
             {
+                singleLiteralFinder = new MemmemFinder(this.literals[0]);
                 if (ShouldUseSingleLiteralIndexOf(this.literals[0]))
                 {
                     singleLiteralIndexOf = true;
-                }
-                else
-                {
-                    singleLiteralFinder = new MemmemFinder(this.literals[0]);
                 }
             }
 
@@ -501,6 +499,14 @@ internal sealed class RegexLiteralSetEngine
 
         if (singleLiteralIndexOf)
         {
+            if (ShouldUseSingleLiteralMemmem(haystack, startOffset))
+            {
+                int memmemOffset = singleLiteralFinder!.Find(haystack[startOffset..]);
+                return memmemOffset < 0
+                    ? null
+                    : new RegexMatch(startOffset + memmemOffset, literals[0].Length);
+            }
+
             int offset = haystack[startOffset..].IndexOf(literals[0]);
             return offset < 0
                 ? null
@@ -651,6 +657,11 @@ internal sealed class RegexLiteralSetEngine
 
         if (singleLiteralIndexOf)
         {
+            if (ShouldUseSingleLiteralMemmem(haystack, startOffset))
+            {
+                return CountOrSumSingleLiteral(haystack, startOffset, sumSpans);
+            }
+
             return CountOrSumSingleLiteralIndexOf(haystack, startOffset, sumSpans);
         }
 
@@ -983,6 +994,25 @@ internal sealed class RegexLiteralSetEngine
         }
 
         return total;
+    }
+
+    private bool ShouldUseSingleLiteralMemmem(ReadOnlySpan<byte> haystack, int startOffset)
+    {
+        byte[] literal = literals[0];
+        if (singleLiteralFinder is null ||
+            literal.Length < 4 ||
+            startOffset > haystack.Length - literal.Length)
+        {
+            return false;
+        }
+
+        int probeLength = Math.Min(SingleLiteralMemmemProbeLength, haystack.Length - startOffset);
+        if (probeLength < literal.Length)
+        {
+            return false;
+        }
+
+        return singleLiteralFinder.Find(haystack.Slice(startOffset, probeLength)) >= 0;
     }
 
     private long CountOrSumSingleAsciiCaseInsensitiveLiteral(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
