@@ -90,7 +90,9 @@ internal readonly struct MemmemPackedPairFinder
             Avx512BW.IsSupported &&
             haystack.Length >= MinimumLengthForVector(Vector512<byte>.Count, needle.Length))
         {
-            return FindVector512(haystack, needle);
+            return needle.Length == 3
+                ? FindVector512ThreeByte(haystack, needle)
+                : FindVector512(haystack, needle);
         }
 
         if (Avx2.IsSupported && haystack.Length >= MinimumLengthForVector(Vector256<byte>.Count, needle.Length))
@@ -260,6 +262,107 @@ internal readonly struct MemmemPackedPairFinder
             }
 
             if (haystack.Slice(candidate, needle.Length).SequenceEqual(needle))
+            {
+                match = candidate;
+                return true;
+            }
+
+            mask &= mask - 1;
+        }
+
+        match = -1;
+        return false;
+    }
+
+    private int FindVector512ThreeByte(ReadOnlySpan<byte> haystack, ReadOnlySpan<byte> needle)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        var firstVector = Vector512.Create(first);
+        var secondVector = Vector512.Create(second);
+        int remainingIndex = 3 - firstIndex - secondIndex;
+        byte remaining = needle[remainingIndex];
+        int offset = 0;
+        int vectorEnd = haystack.Length - MinimumLengthForVector(Vector512<byte>.Count, needle.Length);
+        int lastStart = haystack.Length - needle.Length;
+        int unrolledEnd = vectorEnd - Vector512<byte>.Count;
+        while (offset <= unrolledEnd)
+        {
+            if (TryFindVector512ThreeByteChunk(
+                    ref reference,
+                    firstVector,
+                    secondVector,
+                    haystack,
+                    offset,
+                    lastStart,
+                    remainingIndex,
+                    remaining,
+                    out int candidate) ||
+                TryFindVector512ThreeByteChunk(
+                    ref reference,
+                    firstVector,
+                    secondVector,
+                    haystack,
+                    offset + Vector512<byte>.Count,
+                    lastStart,
+                    remainingIndex,
+                    remaining,
+                    out candidate))
+            {
+                return candidate;
+            }
+
+            offset += Vector512<byte>.Count * 2;
+        }
+
+        while (offset <= vectorEnd)
+        {
+            if (TryFindVector512ThreeByteChunk(
+                    ref reference,
+                    firstVector,
+                    secondVector,
+                    haystack,
+                    offset,
+                    lastStart,
+                    remainingIndex,
+                    remaining,
+                    out int candidate))
+            {
+                return candidate;
+            }
+
+            offset += Vector512<byte>.Count;
+        }
+
+        return FindScalarPair(haystack, needle, offset);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool TryFindVector512ThreeByteChunk(
+        ref byte reference,
+        Vector512<byte> firstVector,
+        Vector512<byte> secondVector,
+        ReadOnlySpan<byte> haystack,
+        int offset,
+        int lastStart,
+        int remainingIndex,
+        byte remaining,
+        out int match)
+    {
+        var firstBlock = Vector512.LoadUnsafe(ref reference, (nuint)(offset + firstIndex));
+        var secondBlock = Vector512.LoadUnsafe(ref reference, (nuint)(offset + secondIndex));
+        ulong mask =
+            (Avx512BW.CompareEqual(firstBlock, firstVector) &
+             Avx512BW.CompareEqual(secondBlock, secondVector)).ExtractMostSignificantBits();
+        while (mask != 0)
+        {
+            int candidate = offset + BitOperations.TrailingZeroCount(mask);
+            if (candidate > lastStart)
+            {
+                match = -1;
+                return true;
+            }
+
+            if (haystack[candidate + remainingIndex] == remaining)
             {
                 match = candidate;
                 return true;
