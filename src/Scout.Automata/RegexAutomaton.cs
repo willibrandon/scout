@@ -33,6 +33,7 @@ public sealed class RegexAutomaton
     private RegexNoqaCaptureEngine? noqaCaptureEngine;
     private RegexLinePrefixCaptureEngine? linePrefixCaptureEngine;
     private RegexOperatorSpacingCaptureEngine? operatorSpacingCaptureEngine;
+    private RegexFixedByteSequenceCaptureEngine? fixedByteSequenceCaptureEngine;
     private RegexLiteralWordCaptureEngine? literalWordCaptureEngine;
     private RegexLiteralRunAlternationCaptureEngine? literalRunAlternationCaptureEngine;
     private RegexPathSemverCaptureEngine? pathSemverCaptureEngine;
@@ -830,6 +831,15 @@ public sealed class RegexAutomaton
         }
     }
 
+    internal bool UsesFixedByteSequenceCaptureEngine
+    {
+        get
+        {
+            EnsureCaptureEngines();
+            return fixedByteSequenceCaptureEngine is not null;
+        }
+    }
+
     internal bool UsesLiteralWordCaptureEngine
     {
         get
@@ -1136,6 +1146,11 @@ public sealed class RegexAutomaton
             return operatorSpacingCaptureEngine.CountCaptures(haystack, startAt);
         }
 
+        if (fixedByteSequenceCaptureEngine is not null)
+        {
+            return fixedByteSequenceCaptureEngine.CountCaptures(haystack, startAt);
+        }
+
         if (delimitedCaptureEngine is not null)
         {
             return delimitedCaptureEngine.CountCaptures(haystack, startAt);
@@ -1246,6 +1261,11 @@ public sealed class RegexAutomaton
                     captureOptions,
                     captureCount,
                     out operatorSpacingCaptureEngine);
+                RegexFixedByteSequenceCaptureEngine.TryCreate(
+                    captureRoot,
+                    captureOptions,
+                    captureCount,
+                    out fixedByteSequenceCaptureEngine);
                 RegexLiteralWordCaptureEngine.TryCreate(
                     captureRoot,
                     captureOptions,
@@ -1294,6 +1314,7 @@ public sealed class RegexAutomaton
                     noqaCaptureEngine is null &&
                     linePrefixCaptureEngine is null &&
                     operatorSpacingCaptureEngine is null &&
+                    fixedByteSequenceCaptureEngine is null &&
                     literalWordCaptureEngine is null &&
                     literalRunAlternationCaptureEngine is null &&
                     pathSemverCaptureEngine is null &&
@@ -1320,6 +1341,7 @@ public sealed class RegexAutomaton
                 noqaCaptureEngine is null &&
                 linePrefixCaptureEngine is null &&
                 operatorSpacingCaptureEngine is null &&
+                fixedByteSequenceCaptureEngine is null &&
                 literalWordCaptureEngine is null &&
                 literalRunAlternationCaptureEngine is null &&
                 pathSemverCaptureEngine is null &&
@@ -1437,6 +1459,11 @@ public sealed class RegexAutomaton
         if (operatorSpacingCaptureEngine is not null)
         {
             return operatorSpacingCaptureEngine.FindCaptures(haystack, startAt);
+        }
+
+        if (fixedByteSequenceCaptureEngine is not null)
+        {
+            return fixedByteSequenceCaptureEngine.FindCaptures(haystack, startAt);
         }
 
         if (literalWordCaptureEngine is not null)

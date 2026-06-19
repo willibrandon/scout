@@ -1248,6 +1248,67 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies fixed byte-class capture sequences use direct capture extraction.
+    /// </summary>
+    [Fact]
+    public void FixedByteSequenceCaptureEngineReportsClassCaptures()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"([a-z][a-z][a-z])([a-z][a-z])([a-z])?"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = "then as it was, then again it will be"u8.ToArray();
+
+        RegexCaptures? captures = automaton.FindCaptures(haystack);
+
+        Assert.True(automaton.UsesFixedByteSequenceCaptureEngine);
+        Assert.NotNull(captures);
+        Assert.Equal(3, captures.ParticipatingCount());
+        Assert.Equal(new RegexMatch(21, 5), captures.Match);
+        AssertGroupText(captures, haystack, 1, "aga");
+        AssertGroupText(captures, haystack, 2, "in");
+        Assert.Null(captures.GetGroup(3));
+        Assert.Equal(3, automaton.CountCaptures(haystack));
+        Assert.Equal(0, automaton.CountCaptures(haystack, captures.Match.End));
+    }
+
+    /// <summary>
+    /// Verifies fixed byte-class capture sequences include greedy optional suffix captures.
+    /// </summary>
+    [Fact]
+    public void FixedByteSequenceCaptureEngineReportsOptionalSuffixCaptures()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"([a-z][a-z])([a-z])([\r\n])?"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = "xx foo\r\nfoo"u8.ToArray();
+
+        RegexCaptures? first = automaton.FindCaptures(haystack);
+        RegexCaptures? second = automaton.FindCaptures(haystack, first!.Match.End);
+
+        Assert.True(automaton.UsesFixedByteSequenceCaptureEngine);
+        Assert.NotNull(first);
+        Assert.Equal(4, first.ParticipatingCount());
+        Assert.Equal(new RegexMatch(3, 4), first.Match);
+        AssertGroupText(first, haystack, 1, "fo");
+        AssertGroupText(first, haystack, 2, "o");
+        AssertGroupText(first, haystack, 3, "\r");
+        Assert.NotNull(second);
+        Assert.Equal(3, second.ParticipatingCount());
+        Assert.Equal(new RegexMatch(8, 3), second.Match);
+        Assert.Null(second.GetGroup(3));
+        Assert.Equal(7, automaton.CountCaptures(haystack));
+        Assert.Equal(3, automaton.CountCaptures(haystack, first.Match.End));
+    }
+
+    /// <summary>
     /// Verifies required-literal prefilters do not reject scoped case-insensitive literals.
     /// </summary>
     [Fact]
