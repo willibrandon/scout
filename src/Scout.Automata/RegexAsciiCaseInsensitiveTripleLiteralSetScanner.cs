@@ -15,6 +15,8 @@ internal sealed class RegexAsciiCaseInsensitiveTripleLiteralSetScanner
 
     private readonly Dictionary<uint, RegexAsciiCaseInsensitiveLiteralSetEntry[]> entriesByBlock;
     private readonly RegexAsciiCaseInsensitiveLiteralSetEntry[][] blockEntriesByMaskBit;
+    private readonly Vector512<byte>[] blockLowMasks512 = new Vector512<byte>[BlockLength];
+    private readonly Vector512<byte>[] blockHighMasks512 = new Vector512<byte>[BlockLength];
     private readonly Vector256<byte>[] blockLowMasks256 = new Vector256<byte>[BlockLength];
     private readonly Vector256<byte>[] blockHighMasks256 = new Vector256<byte>[BlockLength];
     private readonly bool blockBytesAreAsciiLetters;
@@ -94,6 +96,12 @@ internal sealed class RegexAsciiCaseInsensitiveTripleLiteralSetScanner
     public long CountOrSum(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
     {
         int nextAllowedStart = Math.Clamp(startAt, 0, haystack.Length);
+        if (Avx512BW.IsSupported &&
+            haystack.Length - nextAllowedStart > Vector512<byte>.Count + BlockLength - 1)
+        {
+            return CountOrSumBlockMaskVector512(haystack, nextAllowedStart, sumSpans);
+        }
+
         if (Avx2.IsSupported &&
             haystack.Length - nextAllowedStart > Vector256<byte>.Count + BlockLength - 1)
         {
@@ -107,6 +115,60 @@ internal sealed class RegexAsciiCaseInsensitiveTripleLiteralSetScanner
             total: 0,
             nextAllowedStart,
             best: null);
+    }
+
+    private long CountOrSumBlockMaskVector512(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int offset = startOffset;
+        int vectorEnd = haystack.Length - Vector512<byte>.Count - (BlockLength - 1);
+        long total = 0;
+        int nextAllowedStart = startOffset;
+        RegexLiteralSetCandidate? best = null;
+        var asciiCaseMask = Vector512.Create((byte)0x20);
+        while (offset <= vectorEnd)
+        {
+            var rawCurrent = Vector512.LoadUnsafe(ref reference, (nuint)offset);
+            var rawNext = Vector512.LoadUnsafe(ref reference, (nuint)(offset + 1));
+            var rawThird = Vector512.LoadUnsafe(ref reference, (nuint)(offset + 2));
+            Vector512<byte> current = blockBytesAreAsciiLetters
+                ? rawCurrent | asciiCaseMask
+                : FoldAsciiVector512(rawCurrent);
+            Vector512<byte> next = blockBytesAreAsciiLetters
+                ? rawNext | asciiCaseMask
+                : FoldAsciiVector512(rawNext);
+            Vector512<byte> third = blockBytesAreAsciiLetters
+                ? rawThird | asciiCaseMask
+                : FoldAsciiVector512(rawThird);
+            Vector512<byte> candidates =
+                BlockMaskVector512(current, byteIndex: 0) &
+                BlockMaskVector512(next, byteIndex: 1) &
+                BlockMaskVector512(third, byteIndex: 2);
+            if (Avx512BW.CompareEqual(candidates, Vector512<byte>.Zero).ExtractMostSignificantBits() != ulong.MaxValue)
+            {
+                for (int lane = 0; lane < 8; lane++)
+                {
+                    ProcessBlockCandidateChunk(
+                        haystack,
+                        offset + lane * 8,
+                        candidates.AsUInt64().GetElement(lane),
+                        sumSpans,
+                        ref total,
+                        ref nextAllowedStart,
+                        ref best);
+                }
+            }
+
+            offset += Vector512<byte>.Count;
+        }
+
+        return FinishCountOrSumBlockScalar(
+            haystack,
+            offset,
+            sumSpans,
+            total,
+            nextAllowedStart,
+            best);
     }
 
     private long CountOrSumBlockMaskVector256(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
@@ -313,6 +375,15 @@ internal sealed class RegexAsciiCaseInsensitiveTripleLiteralSetScanner
         return true;
     }
 
+    private Vector512<byte> BlockMaskVector512(Vector512<byte> value, int byteIndex)
+    {
+        var lowNibbleMask = Vector512.Create((byte)0x0F);
+        Vector512<byte> lowNibbles = value & lowNibbleMask;
+        Vector512<byte> highNibbles = Avx512BW.ShiftRightLogical(value.AsUInt16(), 4).AsByte() & lowNibbleMask;
+        return Avx512BW.Shuffle(blockLowMasks512[byteIndex], lowNibbles) &
+            Avx512BW.Shuffle(blockHighMasks512[byteIndex], highNibbles);
+    }
+
     private Vector256<byte> BlockMaskVector256(Vector256<byte> value, int byteIndex)
     {
         var lowNibbleMask = Vector256.Create((byte)0x0F);
@@ -325,8 +396,8 @@ internal sealed class RegexAsciiCaseInsensitiveTripleLiteralSetScanner
 
     private void BuildBlockMasks(List<uint> blocks)
     {
-        byte[] low = new byte[32];
-        byte[] high = new byte[32];
+        byte[] low = new byte[64];
+        byte[] high = new byte[64];
         for (int byteIndex = 0; byteIndex < BlockLength; byteIndex++)
         {
             Array.Clear(low);
@@ -341,6 +412,8 @@ internal sealed class RegexAsciiCaseInsensitiveTripleLiteralSetScanner
             ref byte highReference = ref MemoryMarshal.GetArrayDataReference(high);
             blockLowMasks256[byteIndex] = Vector256.LoadUnsafe(ref lowReference);
             blockHighMasks256[byteIndex] = Vector256.LoadUnsafe(ref highReference);
+            blockLowMasks512[byteIndex] = Vector512.LoadUnsafe(ref lowReference);
+            blockHighMasks512[byteIndex] = Vector512.LoadUnsafe(ref highReference);
         }
     }
 
@@ -351,8 +424,12 @@ internal sealed class RegexAsciiCaseInsensitiveTripleLiteralSetScanner
         int highNibble = value >> 4;
         low[lowNibble] |= bit;
         low[lowNibble + 16] |= bit;
+        low[lowNibble + 32] |= bit;
+        low[lowNibble + 48] |= bit;
         high[highNibble] |= bit;
         high[highNibble + 16] |= bit;
+        high[highNibble + 32] |= bit;
+        high[highNibble + 48] |= bit;
     }
 
     private uint FoldedBlockKey(ReadOnlySpan<byte> haystack, int index)
@@ -520,6 +597,19 @@ internal sealed class RegexAsciiCaseInsensitiveTripleLiteralSetScanner
             signed).AsByte();
         Vector256<byte> uppercase = Avx2.And(aboveBeforeA, belowAfterZ);
         return Avx2.Or(value, Avx2.And(uppercase, Vector256.Create((byte)0x20)));
+    }
+
+    private static Vector512<byte> FoldAsciiVector512(Vector512<byte> value)
+    {
+        Vector512<sbyte> signed = value.AsSByte();
+        Vector512<byte> aboveBeforeA = Avx512BW.CompareGreaterThan(
+            signed,
+            Vector512.Create((sbyte)((byte)'A' - 1))).AsByte();
+        Vector512<byte> belowAfterZ = Avx512BW.CompareGreaterThan(
+            Vector512.Create((sbyte)((byte)'Z' + 1)),
+            signed).AsByte();
+        Vector512<byte> uppercase = aboveBeforeA & belowAfterZ;
+        return value | (uppercase & Vector512.Create((byte)0x20));
     }
 
     private static uint BlockKey(ReadOnlySpan<byte> value)
