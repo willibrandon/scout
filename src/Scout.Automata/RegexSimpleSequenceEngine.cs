@@ -522,6 +522,11 @@ internal sealed class RegexSimpleSequenceEngine
 
     private static int FindNextCapitalizedWordStart(ReadOnlySpan<byte> haystack, int position)
     {
+        if (Avx2.IsSupported && haystack.Length - position > Vector256<byte>.Count)
+        {
+            return FindNextCapitalizedWordStartAvx2(haystack, position);
+        }
+
         while (position + 1 < haystack.Length)
         {
             int relative = haystack[position..^1].IndexOfAny(AsciiUppercaseBytes);
@@ -532,6 +537,48 @@ internal sealed class RegexSimpleSequenceEngine
 
             position += relative;
             if (RegexSimpleSequenceSegment.IsAsciiLowercase(haystack[position + 1]))
+            {
+                return position;
+            }
+
+            position++;
+        }
+
+        return -1;
+    }
+
+    private static int FindNextCapitalizedWordStartAvx2(ReadOnlySpan<byte> haystack, int position)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int length = haystack.Length;
+        int vectorEnd = length - Vector256<byte>.Count - 1;
+        var beforeUpperA = Vector256.Create((sbyte)('A' - 1));
+        var afterUpperZ = Vector256.Create((sbyte)('Z' + 1));
+        var beforeLowerA = Vector256.Create((sbyte)('a' - 1));
+        var afterLowerZ = Vector256.Create((sbyte)('z' + 1));
+        while (position <= vectorEnd)
+        {
+            Vector256<sbyte> current = Vector256.LoadUnsafe(ref reference, (nuint)position).AsSByte();
+            Vector256<sbyte> next = Vector256.LoadUnsafe(ref reference, (nuint)(position + 1)).AsSByte();
+            Vector256<byte> upper = Avx2.And(
+                Avx2.CompareGreaterThan(current, beforeUpperA),
+                Avx2.CompareGreaterThan(afterUpperZ, current)).AsByte();
+            Vector256<byte> lower = Avx2.And(
+                Avx2.CompareGreaterThan(next, beforeLowerA),
+                Avx2.CompareGreaterThan(afterLowerZ, next)).AsByte();
+            uint mask = Avx2.And(upper, lower).ExtractMostSignificantBits();
+            if (mask != 0)
+            {
+                return position + BitOperations.TrailingZeroCount(mask);
+            }
+
+            position += Vector256<byte>.Count;
+        }
+
+        while (position + 1 < length)
+        {
+            if (RegexSimpleSequenceSegment.IsAsciiUppercase(Unsafe.Add(ref reference, position)) &&
+                RegexSimpleSequenceSegment.IsAsciiLowercase(Unsafe.Add(ref reference, position + 1)))
             {
                 return position;
             }

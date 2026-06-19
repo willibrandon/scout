@@ -5810,6 +5810,11 @@ public sealed class RegexAutomatonTests
         Assert.Equal(new RegexMatch(3, match.Length), automaton.Find(haystack));
         Assert.Equal(1, automaton.CountMatches(haystack));
         Assert.Equal(match.Length, automaton.SumMatchSpans(haystack));
+
+        byte[] vectorBoundaryHaystack = System.Text.Encoding.ASCII.GetBytes(
+            new string('x', 31) + match);
+        Assert.Equal(new RegexMatch(31, match.Length), automaton.Find(vectorBoundaryHaystack));
+        Assert.Equal(1, automaton.CountMatches(vectorBoundaryHaystack));
     }
 
     /// <summary>
