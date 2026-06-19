@@ -38,7 +38,7 @@ internal sealed class RegexPackedLiteralSetScanner
         this.commonFoldedLiterals = commonFoldedLiterals;
         this.prefixByteVariants = prefixByteVariants;
         anchorOffset = prefixByteVariants is null ? SelectAnchorOffset(this.literals) : 0;
-        useDenseCandidateCount = ContainsNonAscii(this.literals) && ContainsAsciiOrTwoByteUtf8Only(this.literals);
+        useDenseCandidateCount = !ContainsNonAscii(this.literals) || ContainsAsciiOrTwoByteUtf8Only(this.literals);
         buckets = BuildBuckets(this.literals, anchorOffset);
         singleLiteralBuckets = TryBuildSingleLiteralBuckets(buckets);
         BuildMasks();
