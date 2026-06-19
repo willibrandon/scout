@@ -53,7 +53,7 @@ internal sealed class RegexShortLiteralSetScanner
             hasShortLiteral |= length == MaskLength;
         }
 
-        if (!hasShortLiteral)
+        if (!hasShortLiteral && literals.Count < 4)
         {
             return false;
         }
