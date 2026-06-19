@@ -76,6 +76,7 @@ internal sealed class RegexMetaEngine
     private RegexUnanchoredLazyDfa? asciiFastUnanchoredDfa;
     private RegexLazyDfa? anchoredLeftmostDfa;
     private readonly bool utf8;
+    private readonly RegexUnguardedFindDelegate? unguardedFind;
 
     private RegexMetaEngine(
         RegexEngineKind kind,
@@ -197,6 +198,7 @@ internal sealed class RegexMetaEngine
         this.asciiWordBoundary = asciiWordBoundary;
         this.prefilter = prefilter;
         this.utf8 = utf8;
+        unguardedFind = prefilter is null ? CreateUnguardedFind() : null;
     }
 
     public RegexEngineKind Kind { get; }
@@ -1727,7 +1729,38 @@ internal sealed class RegexMetaEngine
 
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt, RegexStartPredicate? startPredicate = null)
     {
+        if (startPredicate is null &&
+            unguardedFind is not null)
+        {
+            return unguardedFind(haystack, Math.Clamp(startAt, 0, haystack.Length));
+        }
+
         return Find(haystack, startAt, startPredicate, reachabilityCache: null);
+    }
+
+    private RegexUnguardedFindDelegate? CreateUnguardedFind()
+    {
+        if (literalSet is not null)
+        {
+            return literalSet.Find;
+        }
+
+        if (alternationSet is not null)
+        {
+            return alternationSet.Find;
+        }
+
+        if (fixedWidthAlternation is not null)
+        {
+            return fixedWidthAlternation.Find;
+        }
+
+        if (delimitedSpan is not null)
+        {
+            return delimitedSpan.Find;
+        }
+
+        return null;
     }
 
     public bool IsMatch(ReadOnlySpan<byte> haystack, RegexStartPredicate? startPredicate = null)
