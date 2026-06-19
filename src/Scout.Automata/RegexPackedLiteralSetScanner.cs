@@ -160,7 +160,7 @@ internal sealed class RegexPackedLiteralSetScanner
         while (offset <= unrolledEnd)
         {
             Vector512<byte> firstCandidates = CandidateVector512(ref reference, offset);
-            if (Avx512BW.CompareEqual(firstCandidates, Vector512<byte>.Zero).ExtractMostSignificantBits() != ulong.MaxValue)
+            if (!AllZero(firstCandidates, sumSpans))
             {
                 int baseOffset = offset - anchorOffset;
                 for (int lane = 0; lane < 8; lane++)
@@ -177,7 +177,7 @@ internal sealed class RegexPackedLiteralSetScanner
 
             offset += Vector512<byte>.Count;
             Vector512<byte> secondCandidates = CandidateVector512(ref reference, offset);
-            if (Avx512BW.CompareEqual(secondCandidates, Vector512<byte>.Zero).ExtractMostSignificantBits() != ulong.MaxValue)
+            if (!AllZero(secondCandidates, sumSpans))
             {
                 int baseOffset = offset - anchorOffset;
                 for (int lane = 0; lane < 8; lane++)
@@ -194,7 +194,7 @@ internal sealed class RegexPackedLiteralSetScanner
 
             offset += Vector512<byte>.Count;
             Vector512<byte> thirdCandidates = CandidateVector512(ref reference, offset);
-            if (Avx512BW.CompareEqual(thirdCandidates, Vector512<byte>.Zero).ExtractMostSignificantBits() != ulong.MaxValue)
+            if (!AllZero(thirdCandidates, sumSpans))
             {
                 int baseOffset = offset - anchorOffset;
                 for (int lane = 0; lane < 8; lane++)
@@ -211,7 +211,7 @@ internal sealed class RegexPackedLiteralSetScanner
 
             offset += Vector512<byte>.Count;
             Vector512<byte> fourthCandidates = CandidateVector512(ref reference, offset);
-            if (Avx512BW.CompareEqual(fourthCandidates, Vector512<byte>.Zero).ExtractMostSignificantBits() != ulong.MaxValue)
+            if (!AllZero(fourthCandidates, sumSpans))
             {
                 int baseOffset = offset - anchorOffset;
                 for (int lane = 0; lane < 8; lane++)
@@ -232,7 +232,7 @@ internal sealed class RegexPackedLiteralSetScanner
         while (offset <= vectorEnd)
         {
             Vector512<byte> candidates = CandidateVector512(ref reference, offset);
-            if (Avx512BW.CompareEqual(candidates, Vector512<byte>.Zero).ExtractMostSignificantBits() != ulong.MaxValue)
+            if (!AllZero(candidates, sumSpans))
             {
                 int baseOffset = offset - anchorOffset;
                 for (int lane = 0; lane < 8; lane++)
@@ -295,7 +295,7 @@ internal sealed class RegexPackedLiteralSetScanner
         {
             var firstChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
             Vector256<byte> firstCandidates = CandidateVector256(firstChunk, ref previous0, ref previous1, ref previous2);
-            if (Avx2.CompareEqual(firstCandidates, Vector256<byte>.Zero).ExtractMostSignificantBits() != uint.MaxValue)
+            if (!AllZero(firstCandidates, sumSpans))
             {
                 int baseOffset = offset - MaskLength + 1 - anchorOffset;
                 for (int lane = 0; lane < 4; lane++)
@@ -313,7 +313,7 @@ internal sealed class RegexPackedLiteralSetScanner
             offset += Vector256<byte>.Count;
             var secondChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
             Vector256<byte> secondCandidates = CandidateVector256(secondChunk, ref previous0, ref previous1, ref previous2);
-            if (Avx2.CompareEqual(secondCandidates, Vector256<byte>.Zero).ExtractMostSignificantBits() != uint.MaxValue)
+            if (!AllZero(secondCandidates, sumSpans))
             {
                 int baseOffset = offset - MaskLength + 1 - anchorOffset;
                 for (int lane = 0; lane < 4; lane++)
@@ -331,7 +331,7 @@ internal sealed class RegexPackedLiteralSetScanner
             offset += Vector256<byte>.Count;
             var thirdChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
             Vector256<byte> thirdCandidates = CandidateVector256(thirdChunk, ref previous0, ref previous1, ref previous2);
-            if (Avx2.CompareEqual(thirdCandidates, Vector256<byte>.Zero).ExtractMostSignificantBits() != uint.MaxValue)
+            if (!AllZero(thirdCandidates, sumSpans))
             {
                 int baseOffset = offset - MaskLength + 1 - anchorOffset;
                 for (int lane = 0; lane < 4; lane++)
@@ -349,7 +349,7 @@ internal sealed class RegexPackedLiteralSetScanner
             offset += Vector256<byte>.Count;
             var fourthChunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
             Vector256<byte> fourthCandidates = CandidateVector256(fourthChunk, ref previous0, ref previous1, ref previous2);
-            if (Avx2.CompareEqual(fourthCandidates, Vector256<byte>.Zero).ExtractMostSignificantBits() != uint.MaxValue)
+            if (!AllZero(fourthCandidates, sumSpans))
             {
                 int baseOffset = offset - MaskLength + 1 - anchorOffset;
                 for (int lane = 0; lane < 4; lane++)
@@ -371,7 +371,7 @@ internal sealed class RegexPackedLiteralSetScanner
         {
             var chunk = Vector256.LoadUnsafe(ref reference, (nuint)offset);
             Vector256<byte> candidates = CandidateVector256(chunk, ref previous0, ref previous1, ref previous2);
-            if (Avx2.CompareEqual(candidates, Vector256<byte>.Zero).ExtractMostSignificantBits() != uint.MaxValue)
+            if (!AllZero(candidates, sumSpans))
             {
                 int baseOffset = offset - MaskLength + 1 - anchorOffset;
                 for (int lane = 0; lane < 4; lane++)
@@ -406,7 +406,7 @@ internal sealed class RegexPackedLiteralSetScanner
         {
             var chunk = Vector128.LoadUnsafe(ref reference, (nuint)offset);
             Vector128<byte> candidates = CandidateVector128(chunk, ref previous0, ref previous1, ref previous2);
-            if (Sse2.CompareEqual(candidates, Vector128<byte>.Zero).ExtractMostSignificantBits() != 0xFFFF)
+            if (!AllZero(candidates, sumSpans))
             {
                 int baseOffset = offset - MaskLength + 1 - anchorOffset;
                 for (int lane = 0; lane < 2; lane++)
@@ -425,6 +425,27 @@ internal sealed class RegexPackedLiteralSetScanner
         }
 
         return CountOrSumScalar(haystack, Math.Max(nextAllowedStart, offset - MaskLength + 1 - anchorOffset), sumSpans, total);
+    }
+
+    private static bool AllZero(Vector512<byte> candidates, bool sumSpans)
+    {
+        return sumSpans
+            ? Vector512.EqualsAll(candidates, Vector512<byte>.Zero)
+            : Avx512BW.CompareEqual(candidates, Vector512<byte>.Zero).ExtractMostSignificantBits() == ulong.MaxValue;
+    }
+
+    private static bool AllZero(Vector256<byte> candidates, bool sumSpans)
+    {
+        return sumSpans
+            ? Vector256.EqualsAll(candidates, Vector256<byte>.Zero)
+            : Avx2.CompareEqual(candidates, Vector256<byte>.Zero).ExtractMostSignificantBits() == uint.MaxValue;
+    }
+
+    private static bool AllZero(Vector128<byte> candidates, bool sumSpans)
+    {
+        return sumSpans
+            ? Vector128.EqualsAll(candidates, Vector128<byte>.Zero)
+            : Sse2.CompareEqual(candidates, Vector128<byte>.Zero).ExtractMostSignificantBits() == 0xFFFF;
     }
 
     private long CountOrSumScalar(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans, long total)
