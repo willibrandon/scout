@@ -468,6 +468,24 @@ public sealed class AhoCorasickTests
     }
 
     /// <summary>
+    /// Verifies small automatons still use eager dense transition tables.
+    /// </summary>
+    [Fact]
+    public void SmallAutomatonsUseEagerDenseTransitions()
+    {
+        byte[][] patterns = Enumerable
+            .Range(0, 16)
+            .Select(index => System.Text.Encoding.ASCII.GetBytes($"needle-{index:D2}"))
+            .ToArray();
+        AhoCorasickAutomaton automaton = Build(patterns);
+
+        Assert.NotNull(GetAnyDenseTransitions(automaton));
+        AssertMatches(
+            automaton.FindAll("xx needle-15 yy needle-07"u8),
+            [(15, 3, 12), (7, 16, 25)]);
+    }
+
+    /// <summary>
     /// Verifies larger automatons use lazy dense transition rows and still search correctly.
     /// </summary>
     [Fact]

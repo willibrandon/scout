@@ -6,9 +6,9 @@ namespace Scout;
 /// </summary>
 public sealed class AhoCorasickAutomaton
 {
-    private const int MaxEagerDenseTransitionStates = 512;
     private const int MaxPromotedDenseTransitionStates = 32768;
     private const int LazyDensePromotionRowThreshold = 128;
+    private const int MaxEagerDenseTransitionStates = LazyDensePromotionRowThreshold;
 
     private readonly AhoCorasickState[] states;
     private int[]? denseTransitions;

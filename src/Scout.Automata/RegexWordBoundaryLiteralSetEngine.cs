@@ -650,20 +650,15 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
     private static int[][] BuildLiteralBuckets(byte[][] literals)
     {
         var buckets = new List<int>[256];
-        for (int index = 0; index < buckets.Length; index++)
-        {
-            buckets[index] = [];
-        }
-
         for (int index = 0; index < literals.Length; index++)
         {
-            buckets[literals[index][0]].Add(index);
+            (buckets[literals[index][0]] ??= []).Add(index);
         }
 
         int[][] indexed = new int[256][];
         for (int index = 0; index < indexed.Length; index++)
         {
-            indexed[index] = buckets[index].ToArray();
+            indexed[index] = buckets[index]?.ToArray() ?? [];
         }
 
         return indexed;
