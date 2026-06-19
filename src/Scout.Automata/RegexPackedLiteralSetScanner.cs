@@ -461,6 +461,17 @@ internal sealed class RegexPackedLiteralSetScanner
         ref long total,
         ref int nextAllowedStart)
     {
+        if (!sumSpans && commonFoldedLiterals is null && singleLiteralBuckets is not null)
+        {
+            CountSingleLiteralCandidateChunk(
+                haystack,
+                baseOffset,
+                chunk,
+                ref total,
+                ref nextAllowedStart);
+            return;
+        }
+
         while (chunk != 0)
         {
             int bit = BitOperations.TrailingZeroCount(chunk);
@@ -482,6 +493,94 @@ internal sealed class RegexPackedLiteralSetScanner
             total += sumSpans ? match.Length : 1;
             nextAllowedStart = match.End;
         }
+    }
+
+    private void CountSingleLiteralCandidateChunk(
+        ReadOnlySpan<byte> haystack,
+        int baseOffset,
+        ulong chunk,
+        ref long total,
+        ref int nextAllowedStart)
+    {
+        while (chunk != 0)
+        {
+            int bit = BitOperations.TrailingZeroCount(chunk);
+            int byteOffset = bit / BucketCount;
+            int candidateStart = baseOffset + byteOffset;
+            byte bucketBits = (byte)(chunk >> (byteOffset * BucketCount));
+            chunk &= ~(0xFFUL << (byteOffset * BucketCount));
+            if (candidateStart < nextAllowedStart ||
+                !TryGetSingleLiteralMatchLengthAt(haystack, candidateStart, bucketBits, out int length))
+            {
+                continue;
+            }
+
+            total++;
+            nextAllowedStart = candidateStart + length;
+        }
+    }
+
+    private bool TryGetSingleLiteralMatchLengthAt(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        byte bucketBits,
+        out int length)
+    {
+        if (BitOperations.IsPow2(bucketBits))
+        {
+            int literalId = singleLiteralBuckets![BitOperations.TrailingZeroCount(bucketBits)];
+            if (literalId >= 0 && SingleLiteralMatchesAt(haystack, start, literalId))
+            {
+                length = literals[literalId].Length;
+                return true;
+            }
+
+            length = 0;
+            return false;
+        }
+
+        int bestLiteralId = int.MaxValue;
+        int bestLength = 0;
+        uint remainingBuckets = bucketBits;
+        while (remainingBuckets != 0)
+        {
+            int bucket = BitOperations.TrailingZeroCount(remainingBuckets);
+            remainingBuckets &= remainingBuckets - 1;
+            int literalId = singleLiteralBuckets![bucket];
+            if (literalId < 0 ||
+                literalId >= bestLiteralId ||
+                !SingleLiteralMatchesAt(haystack, start, literalId))
+            {
+                continue;
+            }
+
+            bestLiteralId = literalId;
+            bestLength = literals[literalId].Length;
+        }
+
+        length = bestLength;
+        return bestLiteralId != int.MaxValue;
+    }
+
+    private bool SingleLiteralMatchesAt(ReadOnlySpan<byte> haystack, int start, int literalId)
+    {
+        byte[] literal = literals[literalId];
+        if (literal.Length > haystack.Length - start ||
+            haystack[start + literal.Length - 1] != literal[^1])
+        {
+            return false;
+        }
+
+        if (anchorOffset > 0 &&
+            !haystack.Slice(start, anchorOffset).SequenceEqual(literal.AsSpan(0, anchorOffset)))
+        {
+            return false;
+        }
+
+        int suffixStart = anchorOffset + MaskLength;
+        int suffixLength = literal.Length - suffixStart;
+        return suffixLength <= 0 ||
+            haystack.Slice(start + suffixStart, suffixLength).SequenceEqual(literal.AsSpan(suffixStart));
     }
 
     private int FindCandidate(ReadOnlySpan<byte> haystack, int startAt, out byte bucketBits)
