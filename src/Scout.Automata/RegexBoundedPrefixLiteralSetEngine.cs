@@ -344,16 +344,16 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
             return found.HasValue;
         }
 
-        if (packedScanner is not null)
+        if (shortScanner is not null)
         {
-            RegexLiteralSetCandidate? found = packedScanner.Find(haystack, startAt);
+            RegexLiteralSetCandidate? found = shortScanner.Find(haystack, startAt);
             candidate = found.GetValueOrDefault();
             return found.HasValue;
         }
 
-        if (shortScanner is not null)
+        if (packedScanner is not null)
         {
-            RegexLiteralSetCandidate? found = shortScanner.Find(haystack, startAt);
+            RegexLiteralSetCandidate? found = packedScanner.Find(haystack, startAt);
             candidate = found.GetValueOrDefault();
             return found.HasValue;
         }
