@@ -1,3 +1,5 @@
+using System.Buffers;
+
 namespace Scout;
 
 internal sealed class PatternSetRequiredLiteralAccelerator
@@ -10,6 +12,8 @@ internal sealed class PatternSetRequiredLiteralAccelerator
     private readonly int maxLookBehind;
     private readonly bool[] acceleratedAutomata;
     private readonly bool[]?[]? startBytesByAutomaton;
+    private readonly byte[]?[]? startNeedlesByAutomaton;
+    private readonly SearchValues<byte>?[]? startSearchValuesByAutomaton;
     private readonly PatternSetRequiredLiteralGuard?[]? guardsByAutomaton;
 
     public PatternSetRequiredLiteralAccelerator(
@@ -23,6 +27,8 @@ internal sealed class PatternSetRequiredLiteralAccelerator
 
         acceleratedAutomata = new bool[automataCount];
         startBytesByAutomaton = BuildStartBytes(automata, automataCount);
+        startNeedlesByAutomaton = BuildStartNeedles(startBytesByAutomaton);
+        startSearchValuesByAutomaton = BuildStartSearchValues(startNeedlesByAutomaton);
         guardsByAutomaton = BuildGuards(guards, automataCount);
         var literals = new List<byte[]>();
         var automataByLiteral = new List<List<PatternSetRequiredAutomaton>>();
@@ -255,13 +261,12 @@ internal sealed class PatternSetRequiredLiteralAccelerator
                 int lastStart = best.HasValue
                     ? Math.Min(requiredAt, best.Value.Match.Start)
                     : requiredAt;
-                bool[]? startBytes = startBytesByAutomaton?[automatonIndex];
                 for (int start = firstStart; start <= lastStart; start++)
                 {
-                    if (startBytes is not null &&
-                        (start >= haystack.Length || !startBytes[haystack[start]]))
+                    start = FindNextStartWithStartBytes(haystack, start, lastStart, automatonIndex);
+                    if (start > lastStart)
                     {
-                        continue;
+                        break;
                     }
 
                     PatternSetRequiredLiteralGuard? guard = guardsByAutomaton?[automatonIndex];
@@ -311,13 +316,12 @@ internal sealed class PatternSetRequiredLiteralAccelerator
             int lastStart = best.HasValue
                 ? Math.Min(requiredAt, best.Value.Match.Start)
                 : requiredAt;
-            bool[]? startBytes = startBytesByAutomaton?[automatonIndex];
             for (int start = firstStart; start <= lastStart; start++)
             {
-                if (startBytes is not null &&
-                    (start >= haystack.Length || !startBytes[haystack[start]]))
+                start = FindNextStartWithStartBytes(haystack, start, lastStart, automatonIndex);
+                if (start > lastStart)
                 {
-                    continue;
+                    break;
                 }
 
                 PatternSetRequiredLiteralGuard? guard = guardsByAutomaton?[automatonIndex];
@@ -342,6 +346,37 @@ internal sealed class PatternSetRequiredLiteralAccelerator
 
             nextStartToTry[automatonIndex] = Math.Max(nextStartToTry[automatonIndex], requiredAt + 1);
         }
+    }
+
+    private int FindNextStartWithStartBytes(ReadOnlySpan<byte> haystack, int start, int lastStart, int automatonIndex)
+    {
+        byte[]? needles = startNeedlesByAutomaton?[automatonIndex];
+        if (needles is null)
+        {
+            return start;
+        }
+
+        if ((uint)start >= (uint)haystack.Length)
+        {
+            return lastStart + 1;
+        }
+
+        int end = Math.Min(lastStart, haystack.Length - 1);
+        if (start > end)
+        {
+            return lastStart + 1;
+        }
+
+        ReadOnlySpan<byte> window = haystack.Slice(start, end - start + 1);
+        int relative = needles.Length switch
+        {
+            1 => window.IndexOf(needles[0]),
+            2 => window.IndexOfAny(needles[0], needles[1]),
+            3 => window.IndexOfAny(needles[0], needles[1], needles[2]),
+            _ => window.IndexOfAny(startSearchValuesByAutomaton![automatonIndex]!),
+        };
+
+        return relative < 0 ? lastStart + 1 : start + relative;
     }
 
     private static int FindLiteral(List<byte[]> literals, byte[] literal)
@@ -396,6 +431,66 @@ internal sealed class PatternSetRequiredLiteralAccelerator
         }
 
         return startBytes;
+    }
+
+    private static byte[]?[]? BuildStartNeedles(bool[]?[]? startBytesByAutomaton)
+    {
+        if (startBytesByAutomaton is null)
+        {
+            return null;
+        }
+
+        byte[]?[] needlesByAutomaton = new byte[]?[startBytesByAutomaton.Length];
+        bool any = false;
+        for (int index = 0; index < startBytesByAutomaton.Length; index++)
+        {
+            bool[]? startBytes = startBytesByAutomaton[index];
+            if (startBytes is null)
+            {
+                continue;
+            }
+
+            List<byte> needles = [];
+            for (int value = 0; value < startBytes.Length; value++)
+            {
+                if (startBytes[value])
+                {
+                    needles.Add((byte)value);
+                }
+            }
+
+            if (needles.Count is 0 or 256)
+            {
+                continue;
+            }
+
+            needlesByAutomaton[index] = needles.ToArray();
+            any = true;
+        }
+
+        return any ? needlesByAutomaton : null;
+    }
+
+    private static SearchValues<byte>?[]? BuildStartSearchValues(byte[]?[]? startNeedlesByAutomaton)
+    {
+        if (startNeedlesByAutomaton is null)
+        {
+            return null;
+        }
+
+        var searchValues = new SearchValues<byte>?[startNeedlesByAutomaton.Length];
+        bool any = false;
+        for (int index = 0; index < startNeedlesByAutomaton.Length; index++)
+        {
+            byte[]? needles = startNeedlesByAutomaton[index];
+            if (needles is not null && needles.Length > 3)
+            {
+                searchValues[index] = SearchValues.Create(needles);
+                any = true;
+            }
+        }
+
+        return any ? searchValues : null;
     }
 
     private static PatternSetRequiredLiteralGuard?[]? BuildGuards(IReadOnlyList<PatternSetRequiredLiteralGuard?>? guards, int automataCount)
