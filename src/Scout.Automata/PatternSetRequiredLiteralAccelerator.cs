@@ -2,6 +2,8 @@ namespace Scout;
 
 internal sealed class PatternSetRequiredLiteralAccelerator
 {
+    private const int MaxEagerDenseRequiredLiteralStates = 2048;
+
     private readonly AhoCorasickAutomaton automaton;
     private readonly PatternSetRequiredAutomaton[][] automataByLiteral;
     private readonly int[] maxLookBehindByLiteral;
@@ -60,6 +62,7 @@ internal sealed class PatternSetRequiredLiteralAccelerator
             literalArray,
             AhoCorasickMatchKind.Standard,
             asciiCaseInsensitive: true);
+        automaton.EnsureDenseTransitions(MaxEagerDenseRequiredLiteralStates);
         this.automataByLiteral = new PatternSetRequiredAutomaton[automataByLiteral.Count][];
         for (int index = 0; index < automataByLiteral.Count; index++)
         {

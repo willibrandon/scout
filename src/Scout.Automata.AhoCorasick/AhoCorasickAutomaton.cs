@@ -336,6 +336,18 @@ public sealed class AhoCorasickAutomaton
         return System.Threading.Volatile.Read(ref compactDenseTransitions);
     }
 
+    internal void EnsureDenseTransitions(int maxStates)
+    {
+        if (states.Length > maxStates ||
+            System.Threading.Volatile.Read(ref compactDenseTransitions) is not null ||
+            System.Threading.Volatile.Read(ref denseTransitions) is not null)
+        {
+            return;
+        }
+
+        TryPromoteDenseTransitions();
+    }
+
     private static void ValidateMatchKind(AhoCorasickMatchKind matchKind)
     {
         if (matchKind is not (

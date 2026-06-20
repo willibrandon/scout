@@ -526,6 +526,27 @@ public sealed class AhoCorasickTests
         Assert.NotNull(GetAnyDenseTransitions(automaton));
     }
 
+    /// <summary>
+    /// Verifies larger automatons can be promoted before a long scan starts.
+    /// </summary>
+    [Fact]
+    public void CanEagerlyPromoteLargeAutomatonToDenseTransitions()
+    {
+        byte[][] patterns = Enumerable
+            .Range(0, 700)
+            .Select(index => System.Text.Encoding.ASCII.GetBytes($"needle-{index:D4}"))
+            .ToArray();
+        AhoCorasickAutomaton automaton = Build(patterns);
+
+        Assert.Null(GetAnyDenseTransitions(automaton));
+        automaton.EnsureDenseTransitions(maxStates: 4096);
+
+        Assert.NotNull(GetAnyDenseTransitions(automaton));
+        AssertMatches(
+            automaton.FindAll("xx needle-0699 yy needle-0007"u8),
+            [(699, 3, 14), (7, 18, 29)]);
+    }
+
     private static object? GetAnyDenseTransitions(AhoCorasickAutomaton automaton)
     {
         Type type = typeof(AhoCorasickAutomaton);
