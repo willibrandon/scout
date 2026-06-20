@@ -597,6 +597,28 @@ public sealed class PatternSetTests
     }
 
     /// <summary>
+    /// Verifies anchored guards are built for moderately long required literals that are common enough to need cheap rejection.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralAcceleratorGuardsModeratelyLongLiterals()
+    {
+        var set = PatternSet.Compile(
+        [
+            @"(?i)client.?secret.{0,10}\b([a-z0-9_-]{24})(?:[^a-z0-9_-]|$)"u8.ToArray(),
+        ],
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.True(set.UsesRequiredLiteralAccelerator);
+        Assert.True(set.UsesRequiredLiteralGuards);
+        Assert.Equal(1, set.CountMatches("CLIENT-secret abcdefghijklmnopqrstuvwx;"u8));
+        Assert.Equal(0, set.CountMatches("client profile without a secret token"u8));
+    }
+
+    /// <summary>
     /// Verifies anchored required-literal guards can keep a mandatory prefix when a later optional sequence is too broad to model.
     /// </summary>
     [Fact]

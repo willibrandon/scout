@@ -5,7 +5,7 @@ namespace Scout;
 /// </summary>
 public sealed class PatternSet
 {
-    private const int MaxGuardRequiredLiteralLength = 4;
+    private const int MaxGuardRequiredLiteralLength = 8;
 
     private readonly RegexAutomaton[] automata;
     private readonly int[] automataPatternIds;
