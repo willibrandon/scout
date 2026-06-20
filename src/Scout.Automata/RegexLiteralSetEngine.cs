@@ -143,6 +143,14 @@ internal sealed class RegexLiteralSetEngine
             return;
         }
 
+        if (ShouldUseSmallLiteralFinders(this.literals, asciiCaseInsensitive, unicodeCaseInsensitive, useAho) &&
+            this.literals.Length <= 5 &&
+            !ContainsUtf8ScalarsLongerThanTwoBytes(this.literals))
+        {
+            smallLiteralFinders = CreateSmallLiteralFinders(this.literals);
+            return;
+        }
+
         if (this.literals.Length > 1 &&
             !asciiCaseInsensitive &&
             !unicodeCaseInsensitive &&
