@@ -637,7 +637,7 @@ public sealed class RegexAutomaton
             tree.Root,
             options,
             utf8ByteTrieCache);
-        RegexStartPredicate.TryCreate(tree.Root, options, prefixSet: null, out RegexStartPredicate? startPredicate);
+        RegexStartPredicate.TryCreateFirstByteOnly(tree.Root, options, out RegexStartPredicate? startPredicate);
         var lengthGuard = RegexLengthGuard.TryCreate(tree.Root, options);
         return new RegexAutomaton(
             RegexMetaEngine.Compile(nfa, prefilter: null, dfaSizeLimit: dfaSizeLimit),

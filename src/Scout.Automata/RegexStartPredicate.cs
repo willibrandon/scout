@@ -45,6 +45,14 @@ internal sealed class RegexStartPredicate
         return TryCreate(root, options, prefixSet: null, out predicate);
     }
 
+    internal static bool TryCreateFirstByteOnly(
+        RegexSyntaxNode root,
+        RegexCompileOptions options,
+        out RegexStartPredicate? predicate)
+    {
+        return TryCreateFirstByte(root, options, out predicate);
+    }
+
     internal static bool TryCreate(
         RegexSyntaxNode root,
         RegexCompileOptions options,
