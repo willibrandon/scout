@@ -1519,6 +1519,11 @@ internal sealed class RegexPrefilter
                 }
 
                 UpdateKnownPrefixMax(child, currentOptions, ref prefixKnown, ref prefixMax);
+                if (!prefixKnown)
+                {
+                    break;
+                }
+
                 continue;
             }
 
@@ -1558,6 +1563,10 @@ internal sealed class RegexPrefilter
             }
 
             UpdateKnownPrefixMax(child, currentOptions, ref prefixKnown, ref prefixMax);
+            if (!prefixKnown)
+            {
+                break;
+            }
         }
 
         FlushRequiredLiteralRunWithLookBehind(
@@ -1735,6 +1744,11 @@ internal sealed class RegexPrefilter
                 runCaseInsensitive |= currentOptions.CaseInsensitive;
                 runUnicodeClasses |= currentOptions.UnicodeClasses;
                 UpdateKnownPrefixMax(child, currentOptions, ref prefixKnown, ref prefixMax);
+                if (!prefixKnown)
+                {
+                    break;
+                }
+
                 continue;
             }
 
@@ -1770,6 +1784,10 @@ internal sealed class RegexPrefilter
             }
 
             UpdateKnownPrefixMax(child, currentOptions, ref prefixKnown, ref prefixMax);
+            if (!prefixKnown)
+            {
+                break;
+            }
         }
 
         FlushLiteralRunWithLookBehind(
