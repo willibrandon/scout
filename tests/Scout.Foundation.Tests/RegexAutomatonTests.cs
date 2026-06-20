@@ -5106,7 +5106,7 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
-    /// Verifies large ASCII case-insensitive prefix sets without cheap literals skip expensive prefilter construction.
+    /// Verifies large ASCII case-insensitive prefix sets without cheap literals skip expensive prefix construction.
     /// </summary>
     [Fact]
     public void LargeCaseInsensitiveAsciiPrefilterSkipsBroadPrefixSet()
@@ -5159,7 +5159,7 @@ public sealed class RegexAutomatonTests
             unicodeClasses: false);
 
         Assert.Null(prefilter);
-        Assert.NotNull(prefixSet);
+        Assert.Null(prefixSet);
         Assert.Equal(new RegexMatch(2, 7), automaton.Find("xxJAN002z"u8));
     }
 

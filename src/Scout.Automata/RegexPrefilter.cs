@@ -98,11 +98,6 @@ internal sealed class RegexPrefilter
             return prefilter;
         }
 
-        if (skipSequenceAlternationPrefixPrefilter)
-        {
-            TryCreateSequenceAlternationStartPrefixSet(root, options, out startPrefixSet);
-        }
-
         if (skipLargeCaseInsensitiveAsciiPrefilter)
         {
             return TryCompileLargeCaseInsensitiveAsciiPrefilter(root, options);
