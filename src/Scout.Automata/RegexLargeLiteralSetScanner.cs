@@ -6,7 +6,7 @@ internal sealed class RegexLargeLiteralSetScanner
 {
     private const int BlockLength = 2;
     private const int TripleBlockLength = 3;
-    private const int PreferredWideBlockLength = 6;
+    private const int PreferredWideBlockLength = 8;
     private const int FallbackWideBlockLength = 4;
     private const int MinimumLiteralCount = 128;
     private const int TripleShiftMinimumLiteralCount = 1024;
@@ -564,6 +564,11 @@ internal sealed class RegexLargeLiteralSetScanner
     private static ulong WideBlockKey(ReadOnlySpan<byte> value, int length)
     {
         if (length == PreferredWideBlockLength)
+        {
+            return BinaryPrimitives.ReadUInt64LittleEndian(value);
+        }
+
+        if (length == 6)
         {
             return BinaryPrimitives.ReadUInt32LittleEndian(value) |
                 ((ulong)BinaryPrimitives.ReadUInt16LittleEndian(value[4..]) << 32);
