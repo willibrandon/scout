@@ -4781,6 +4781,33 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies exact prefix-set start predicates keep case-sensitive byte semantics.
+    /// </summary>
+    [Fact]
+    public void StartPredicateUsesExactCaseSensitivePrefixSet()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(@"Abc|Def"u8);
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var prefixSet = new RegexStartPrefixSet(
+            ["Ab"u8.ToArray(), "De"u8.ToArray()],
+            caseInsensitive: false,
+            unicodeCaseInsensitive: false);
+
+        Assert.True(RegexStartPredicate.TryCreate(tree.Root, options, prefixSet, out RegexStartPredicate? predicate));
+        Assert.NotNull(predicate);
+        Assert.True(predicate.CanStartAt("Abc"u8, 0));
+        Assert.True(predicate.CanStartAt("Def"u8, 0));
+        Assert.False(predicate.CanStartAt("abc"u8, 0));
+        Assert.False(predicate.CanStartAt("Axx"u8, 0));
+    }
+
+    /// <summary>
     /// Verifies Unicode atoms still consume scalars when the search allows invalid UTF-8 haystacks.
     /// </summary>
     [Fact]
@@ -5122,7 +5149,7 @@ public sealed class RegexAutomatonTests
             utf8: false,
             unicodeClasses: false);
 
-        var prefilter = RegexPrefilter.Compile(tree.Root, options);
+        var prefilter = RegexPrefilter.Compile(tree.Root, options, out RegexStartPrefixSet? prefixSet);
         var automaton = RegexAutomaton.Compile(
             patternBytes,
             caseInsensitive: true,
@@ -5132,6 +5159,7 @@ public sealed class RegexAutomatonTests
             unicodeClasses: false);
 
         Assert.Null(prefilter);
+        Assert.NotNull(prefixSet);
         Assert.Equal(new RegexMatch(2, 7), automaton.Find("xxJAN002z"u8));
     }
 
