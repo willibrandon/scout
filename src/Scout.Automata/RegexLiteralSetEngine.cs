@@ -15,6 +15,7 @@ internal sealed class RegexLiteralSetEngine
     private const int IndependentAsciiCaseInsensitiveCountThreshold = 4;
     private const int SingleLiteralIndexOfAnchorScoreThreshold = 240;
     private const int ThreeByteSingleLiteralIndexOfAnchorScoreThreshold = 100;
+    private const int SingleLiteralFirstByteAnchorScoreThreshold = 250;
     private const int SingleLiteralMemmemProbeLength = 512;
 
     private readonly AhoCorasickAutomaton? automaton;
@@ -27,6 +28,7 @@ internal sealed class RegexLiteralSetEngine
     private readonly int maxLiteralLength;
     private readonly RegexAnchoredLiteralFinder? singleAnchoredLiteralFinder;
     private readonly bool singleLiteralIndexOf;
+    private readonly bool singleLiteralFirstByte;
     private readonly MemmemFinder? singleLiteralFinder;
     private readonly RegexAsciiCaseInsensitiveFinder? singleAsciiCaseInsensitiveFinder;
     private readonly RegexAsciiCaseInsensitiveLiteralSetScanner? asciiCaseInsensitiveScanner;
@@ -82,6 +84,11 @@ internal sealed class RegexLiteralSetEngine
             if (!RegexAnchoredLiteralFinder.TryCreate(this.literals[0], out singleAnchoredLiteralFinder))
             {
                 singleLiteralFinder = new MemmemFinder(this.literals[0]);
+                if (ShouldUseSingleLiteralFirstByte(this.literals[0]))
+                {
+                    singleLiteralFirstByte = true;
+                }
+
                 if (ShouldUseSingleLiteralIndexOf(this.literals[0]))
                 {
                     singleLiteralIndexOf = true;
@@ -507,6 +514,14 @@ internal sealed class RegexLiteralSetEngine
                     : new RegexMatch(startOffset + memmemOffset, literals[0].Length);
             }
 
+            if (singleLiteralFirstByte)
+            {
+                int firstByteOffset = FindSingleLiteralByFirstByte(haystack, startOffset);
+                return firstByteOffset < 0
+                    ? null
+                    : new RegexMatch(firstByteOffset, literals[0].Length);
+            }
+
             int offset = haystack[startOffset..].IndexOf(literals[0]);
             return offset < 0
                 ? null
@@ -660,6 +675,11 @@ internal sealed class RegexLiteralSetEngine
             if (ShouldUseSingleLiteralMemmem(haystack, startOffset))
             {
                 return CountOrSumSingleLiteral(haystack, startOffset, sumSpans);
+            }
+
+            if (singleLiteralFirstByte)
+            {
+                return CountOrSumSingleLiteralFirstByte(haystack, startOffset, sumSpans);
             }
 
             return CountOrSumSingleLiteralIndexOf(haystack, startOffset, sumSpans);
@@ -994,6 +1014,74 @@ internal sealed class RegexLiteralSetEngine
         }
 
         return total;
+    }
+
+    private long CountOrSumSingleLiteralFirstByte(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
+    {
+        long total = 0;
+        int position = startOffset;
+        byte[] literal = literals[0];
+        int length = literal.Length;
+        int lastStart = haystack.Length - length;
+        byte first = literal[0];
+        while (position <= lastStart)
+        {
+            int offset = haystack[position..].IndexOf(first);
+            if (offset < 0)
+            {
+                return total;
+            }
+
+            int start = position + offset;
+            if (start > lastStart)
+            {
+                return total;
+            }
+
+            if (haystack.Slice(start, length).SequenceEqual(literal))
+            {
+                total += sumSpans ? length : 1;
+                position = start + length;
+            }
+            else
+            {
+                position = start + 1;
+            }
+        }
+
+        return total;
+    }
+
+    private int FindSingleLiteralByFirstByte(ReadOnlySpan<byte> haystack, int startOffset)
+    {
+        byte[] literal = literals[0];
+        int length = literal.Length;
+        int position = startOffset;
+        int lastStart = haystack.Length - length;
+        byte first = literal[0];
+        while (position <= lastStart)
+        {
+            int offset = haystack[position..].IndexOf(first);
+            if (offset < 0)
+            {
+                return -1;
+            }
+
+            int start = position + offset;
+            if (start > lastStart)
+            {
+                return -1;
+            }
+
+            if (haystack.Slice(start, length).SequenceEqual(literal))
+            {
+                return start;
+            }
+
+            position = start + 1;
+        }
+
+        return -1;
     }
 
     private bool ShouldUseSingleLiteralMemmem(ReadOnlySpan<byte> haystack, int startOffset)
@@ -1576,6 +1664,13 @@ internal sealed class RegexLiteralSetEngine
         }
 
         return ContainsAsciiAnchorAtLeast(literal, SingleLiteralIndexOfAnchorScoreThreshold);
+    }
+
+    private static bool ShouldUseSingleLiteralFirstByte(ReadOnlySpan<byte> literal)
+    {
+        return literal.Length >= 4 &&
+            literal[0] <= 0x7F &&
+            RegexAnchoredLiteralFinder.AsciiAnchorScore(literal[0]) >= SingleLiteralFirstByteAnchorScoreThreshold;
     }
 
     private static bool ContainsAsciiAnchorAtLeast(ReadOnlySpan<byte> literal, int threshold)

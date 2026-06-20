@@ -465,6 +465,40 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies rare first-byte literals can scan by first byte while preserving exact match semantics.
+    /// </summary>
+    [Fact]
+    public void LiteralSetCountsRareFirstByteAsciiLiteral()
+    {
+        var rareFirstByte = RegexAutomaton.Compile(
+            "ZQZQZQZQZQ"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var frequentFirstByte = RegexAutomaton.Compile(
+            "aeaeaeaeae"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "xxxx ZQZQYQZQZQ zzz ZQZQZQZQZQ ZQZQZQZQZQ"u8.ToArray();
+        int firstStart = haystack.AsSpan().IndexOf("ZQZQZQZQZQ"u8);
+        int secondStart = haystack.AsSpan((firstStart + 1)..).IndexOf("ZQZQZQZQZQ"u8) + firstStart + 1;
+
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(rareFirstByte));
+        Assert.True(UsesSingleLiteralFirstByte(rareFirstByte));
+        Assert.False(UsesSingleLiteralFirstByte(frequentFirstByte));
+        Assert.Equal(new RegexMatch(firstStart, 10), rareFirstByte.Find(haystack));
+        Assert.Equal(new RegexMatch(secondStart, 10), rareFirstByte.Find(haystack, firstStart + 1));
+        Assert.Equal(2, rareFirstByte.CountMatches(haystack));
+        Assert.Equal(20, rareFirstByte.SumMatchSpans(haystack));
+        Assert.Equal(0, frequentFirstByte.CountMatches(haystack));
+    }
+
+    /// <summary>
     /// Verifies single non-ASCII literals keep exact byte-oriented count and span semantics.
     /// </summary>
     [Fact]
@@ -5983,6 +6017,23 @@ public sealed class RegexAutomatonTests
         return typeof(RegexAutomaton)
             .GetField("lengthGuard", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
             .GetValue(automaton) is not null;
+    }
+
+    private static bool UsesSingleLiteralFirstByte(RegexAutomaton automaton)
+    {
+        object engine = typeof(RegexAutomaton)
+            .GetField("engine", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(automaton)!;
+        object? literalSet = engine
+            .GetType()
+            .GetField("literalSet", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(engine);
+
+        return literalSet is not null &&
+            (bool)literalSet
+                .GetType()
+                .GetField("singleLiteralFirstByte", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .GetValue(literalSet)!;
     }
 
     private static byte[] RebarUnstructuredLogPattern()
