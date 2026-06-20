@@ -11,7 +11,6 @@ internal sealed class RegexAsciiCaseInsensitiveTripleLiteralSetScanner
     private const int MinimumLiteralCount = 4;
     private const int MaximumLiteralCount = 8;
     private const int MaximumDistinctBlocks = 8;
-    private const int ShortLiteralLengthThreshold = 4;
 
     private readonly Dictionary<uint, RegexAsciiCaseInsensitiveLiteralSetEntry[]> entriesByBlock;
     private readonly RegexAsciiCaseInsensitiveLiteralSetEntry[][] blockEntriesByMaskBit;
@@ -650,18 +649,15 @@ internal sealed class RegexAsciiCaseInsensitiveTripleLiteralSetScanner
             return false;
         }
 
-        bool hasShortLiteral = false;
         for (int index = 0; index < literals.Count; index++)
         {
             if (literals[index].Length < BlockLength)
             {
                 return false;
             }
-
-            hasShortLiteral |= literals[index].Length <= ShortLiteralLengthThreshold;
         }
 
-        return hasShortLiteral;
+        return true;
     }
 
     private static bool IsBetter(RegexLiteralSetCandidate candidate, RegexLiteralSetCandidate? best)
