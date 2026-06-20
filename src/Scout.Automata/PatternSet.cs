@@ -305,8 +305,15 @@ public sealed class PatternSet
             requiredLiterals.Length > 0 &&
             RegexPrefilter.TryPrepareRequiredLiteralSet(requiredLiterals, options, out byte[][] preparedLiterals))
         {
-            int maxLookBehind = TryGetRequiredLiteralLookBehind(tree.Root, options, requiredLiterals);
-            if (RegexPrefilter.TryCollectRequiredLiteralSetWithLookBehind(tree.Root, options, out byte[][] boundedLiterals, out int boundedLookBehind) &&
+            bool hasBoundedLiterals = RegexPrefilter.TryCollectRequiredLiteralSetWithLookBehind(
+                tree.Root,
+                options,
+                out byte[][] boundedLiterals,
+                out int boundedLookBehind);
+            int maxLookBehind = hasBoundedLiterals && LiteralSetsEqual(requiredLiterals, boundedLiterals)
+                ? Math.Min(boundedLookBehind, RegexPrefilter.RequiredLiteralLookBehind)
+                : RegexPrefilter.RequiredLiteralLookBehind;
+            if (hasBoundedLiterals &&
                 boundedLookBehind <= RegexPrefilter.MaxSelectiveRequiredLiteralLookBehind &&
                 RegexPrefilter.IsRequiredLiteralSetAtLeastAsSelective(boundedLiterals, requiredLiterals) &&
                 RegexPrefilter.TryPrepareRequiredLiteralSet(boundedLiterals, options, out byte[][] boundedPreparedLiterals))
@@ -1326,20 +1333,6 @@ public sealed class PatternSet
         }
 
         return RegexPrefilter.TryPreparePrefixLiteralSet([literal], options, out prepared);
-    }
-
-    private static int TryGetRequiredLiteralLookBehind(
-        RegexSyntaxNode root,
-        RegexCompileOptions options,
-        byte[][] requiredLiterals)
-    {
-        if (!RegexPrefilter.TryCollectRequiredLiteralSetWithLookBehind(root, options, out byte[][] boundedLiterals, out int maxLookBehind) ||
-            !LiteralSetsEqual(requiredLiterals, boundedLiterals))
-        {
-            return RegexPrefilter.RequiredLiteralLookBehind;
-        }
-
-        return Math.Min(maxLookBehind, RegexPrefilter.RequiredLiteralLookBehind);
     }
 
     private static bool LiteralSetsEqual(byte[][] left, byte[][] right)
