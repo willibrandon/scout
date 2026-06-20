@@ -175,6 +175,11 @@ internal sealed class RegexFixedWidthAlternationEngine
             return FindWithLiteralSeedTeddy(haystack, start);
         }
 
+        if (literalSeedScanner is not null && exactSetMatcher is not null)
+        {
+            return FindWithLiteralSeedScanner(haystack, start);
+        }
+
         if (literalSeedFinders is not null)
         {
             return FindWithLiteralSeedFinders(haystack, start);
@@ -350,6 +355,11 @@ internal sealed class RegexFixedWidthAlternationEngine
         if (literalSeedTeddy is not null)
         {
             return IsMatchWithLiteralSeedTeddy(haystack, start);
+        }
+
+        if (literalSeedScanner is not null && exactSetMatcher is not null)
+        {
+            return IsMatchWithLiteralSeedScanner(haystack, start);
         }
 
         if (literalSeedFinders is not null)
