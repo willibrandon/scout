@@ -306,6 +306,15 @@ public sealed class PatternSet
             RegexPrefilter.TryPrepareRequiredLiteralSet(requiredLiterals, options, out byte[][] preparedLiterals))
         {
             int maxLookBehind = TryGetRequiredLiteralLookBehind(tree.Root, options, requiredLiterals);
+            if (RegexPrefilter.TryCollectRequiredLiteralSetWithLookBehind(tree.Root, options, out byte[][] boundedLiterals, out int boundedLookBehind) &&
+                boundedLookBehind <= RegexPrefilter.MaxSelectiveRequiredLiteralLookBehind &&
+                RegexPrefilter.IsRequiredLiteralSetAtLeastAsSelective(boundedLiterals, requiredLiterals) &&
+                RegexPrefilter.TryPrepareRequiredLiteralSet(boundedLiterals, options, out byte[][] boundedPreparedLiterals))
+            {
+                plan = new PatternSetPatternPlan(tree, literalPatterns: null, boundedPreparedLiterals, boundedLookBehind);
+                return true;
+            }
+
             plan = new PatternSetPatternPlan(tree, literalPatterns: null, preparedLiterals, maxLookBehind);
             return true;
         }

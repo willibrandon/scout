@@ -3980,6 +3980,48 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies an equally selective later required literal can be chosen when its lookbehind is small and proven.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralSetPrefersEquallySelectiveBoundedLaterLiteral()
+    {
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(
+            @"(?i)client.?secret.{0,10}\b([a-z0-9_-]{24})(?:[^a-z0-9_-]|$)"u8);
+
+        Assert.True(RegexPrefilter.TryCollectRequiredLiteralSetWithLookBehind(
+            tree.Root,
+            options,
+            out byte[][] literals,
+            out int maxLookBehind));
+
+        Assert.Equal(7, maxLookBehind);
+        Assert.Collection(
+            literals,
+            literal => Assert.True(literal.AsSpan().SequenceEqual("secret"u8)));
+    }
+
+    /// <summary>
+    /// Verifies bounded pattern-set selection does not replace a stronger required literal with a noisier one.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralSetRejectsLessSelectiveBoundedLiteral()
+    {
+        Assert.False(RegexPrefilter.IsRequiredLiteralSetAtLeastAsSelective(
+            ["ey"u8.ToArray()],
+            ["password"u8.ToArray()]));
+        Assert.True(RegexPrefilter.IsRequiredLiteralSetAtLeastAsSelective(
+            ["secret"u8.ToArray()],
+            ["client"u8.ToArray()]));
+    }
+
+    /// <summary>
     /// Verifies Unicode case-fold expansion is included in required-literal lookbehind bounds.
     /// </summary>
     [Fact]

@@ -6,6 +6,7 @@ namespace Scout;
 internal sealed class RegexPrefilter
 {
     internal const int RequiredLiteralLookBehind = 512;
+    internal const int MaxSelectiveRequiredLiteralLookBehind = 8;
     private const int MaxRequiredLiteralVariants = 128;
     private const int MaxExpandedRequiredLiteralVariants = 1024;
     private const int MaxClassLiteralVariants = 16;
@@ -1312,6 +1313,12 @@ internal sealed class RegexPrefilter
         RegexCompileOptions options,
         out RegexRequiredLiteralSetCandidate candidate)
     {
+        if (TryCollectRequiredLiteralSetCandidate(node, options, out candidate) &&
+            candidate.Literals.Length > 0)
+        {
+            return true;
+        }
+
         if (TryFindRequiredLiteralWithLookBehind(node, options, out candidate) &&
             candidate.Literals.Length == 1 &&
             candidate.Literals[0].Length >= 3)
@@ -1319,12 +1326,7 @@ internal sealed class RegexPrefilter
             return true;
         }
 
-        if (!TryCollectRequiredLiteralSetCandidate(node, options, out candidate))
-        {
-            return false;
-        }
-
-        return candidate.Literals.Length > 0;
+        return false;
     }
 
     private static bool TryCollectRequiredLiteralSetCandidate(
@@ -1577,7 +1579,8 @@ internal sealed class RegexPrefilter
             runLookBehind,
             bestLiterals,
             bestLookBehind,
-            hasBest))
+            hasBest,
+            preferEqual: true))
         {
             bestLiterals = candidate;
             bestLookBehind = runLookBehind;
@@ -1607,6 +1610,13 @@ internal sealed class RegexPrefilter
             return preferEqual
                 ? candidateScore >= currentScore
                 : candidateScore > currentScore;
+        }
+
+        if (preferEqual &&
+            candidateLookBehind > currentLookBehind &&
+            candidateLookBehind <= MaxSelectiveRequiredLiteralLookBehind)
+        {
+            return true;
         }
 
         return candidateLookBehind < currentLookBehind;
@@ -1981,6 +1991,11 @@ internal sealed class RegexPrefilter
         out byte[][] prepared)
     {
         return TryPrepareRequiredLiteralSet(literals, options.CaseInsensitive, options.UnicodeClasses, out prepared);
+    }
+
+    internal static bool IsRequiredLiteralSetAtLeastAsSelective(byte[][] candidate, byte[][] current)
+    {
+        return IsBetterRequiredLiteralSet(candidate, current, preferEqual: true);
     }
 
     private static bool TryPrepareRequiredLiteralSet(
