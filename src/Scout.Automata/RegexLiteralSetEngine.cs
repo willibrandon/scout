@@ -143,6 +143,16 @@ internal sealed class RegexLiteralSetEngine
             this.literals.Length <= 5 &&
             !ContainsUtf8ScalarsLongerThanTwoBytes(this.literals))
         {
+            if (!asciiCaseInsensitive &&
+                !unicodeCaseInsensitive &&
+                !useAho &&
+                !ContainsNonAscii(this.literals) &&
+                RegexShortLiteralSetScanner.TryCreate(this.literals, out RegexShortLiteralSetScanner? shortScanner))
+            {
+                shortLiteralScanner = shortScanner;
+                return;
+            }
+
             smallLiteralFinders = CreateSmallLiteralFinders(this.literals);
             return;
         }
