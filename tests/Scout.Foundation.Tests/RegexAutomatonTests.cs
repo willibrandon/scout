@@ -519,6 +519,40 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies three-byte UTF-8 literal alternatives use the short literal-set scanner.
+    /// </summary>
+    [Fact]
+    public void LiteralSetCountsThreeByteUtf8LiteralAlternativesWithShortScanner()
+    {
+        byte[] first = System.Text.Encoding.UTF8.GetBytes("约翰华生");
+        byte[] second = System.Text.Encoding.UTF8.GetBytes("阿德勒");
+        byte[] third = System.Text.Encoding.UTF8.GetBytes("莫里亚蒂教授");
+        byte[] fourth = System.Text.Encoding.UTF8.GetBytes("夏洛克·福尔摩斯");
+        var automaton = RegexAutomaton.Compile(
+            System.Text.Encoding.UTF8.GetBytes("夏洛克·福尔摩斯|约翰华生|阿德勒|雷斯垂德|莫里亚蒂教授"),
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes(
+            "xx约翰华生 yy 阿德勒 zz 莫里亚蒂教授 夏洛克·福尔摩斯");
+        int firstStart = haystack.AsSpan().IndexOf(first);
+        int secondStart = haystack.AsSpan().IndexOf(second);
+        int thirdStart = haystack.AsSpan().IndexOf(third);
+        int fourthStart = haystack.AsSpan().IndexOf(fourth);
+
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(automaton));
+        Assert.True(UsesShortLiteralScanner(automaton));
+        Assert.Equal(new RegexMatch(firstStart, first.Length), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(secondStart, second.Length), automaton.Find(haystack, firstStart + 1));
+        Assert.Equal(new RegexMatch(thirdStart, third.Length), automaton.Find(haystack, secondStart + 1));
+        Assert.Equal(new RegexMatch(fourthStart, fourth.Length), automaton.Find(haystack, thirdStart + 1));
+        Assert.Equal(4, automaton.CountMatches(haystack));
+        Assert.Equal(first.Length + second.Length + third.Length + fourth.Length, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies Unicode-aware literal-set execution uses simple case folding while preserving haystack span lengths.
     /// </summary>
     [Fact]
@@ -6021,19 +6055,35 @@ public sealed class RegexAutomatonTests
 
     private static bool UsesSingleLiteralFirstByte(RegexAutomaton automaton)
     {
-        object engine = typeof(RegexAutomaton)
-            .GetField("engine", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
-            .GetValue(automaton)!;
-        object? literalSet = engine
-            .GetType()
-            .GetField("literalSet", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
-            .GetValue(engine);
+        object? literalSet = GetLiteralSetEngine(automaton);
 
         return literalSet is not null &&
             (bool)literalSet
                 .GetType()
                 .GetField("singleLiteralFirstByte", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
                 .GetValue(literalSet)!;
+    }
+
+    private static bool UsesShortLiteralScanner(RegexAutomaton automaton)
+    {
+        object? literalSet = GetLiteralSetEngine(automaton);
+
+        return literalSet is not null &&
+            literalSet
+                .GetType()
+                .GetField("shortLiteralScanner", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .GetValue(literalSet) is not null;
+    }
+
+    private static object? GetLiteralSetEngine(RegexAutomaton automaton)
+    {
+        object engine = typeof(RegexAutomaton)
+            .GetField("engine", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(automaton)!;
+        return engine
+            .GetType()
+            .GetField("literalSet", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(engine);
     }
 
     private static byte[] RebarUnstructuredLogPattern()

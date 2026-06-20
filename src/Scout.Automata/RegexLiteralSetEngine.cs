@@ -147,6 +147,17 @@ internal sealed class RegexLiteralSetEngine
             !asciiCaseInsensitive &&
             !unicodeCaseInsensitive &&
             !useAho &&
+            ContainsUtf8ScalarsLongerThanTwoBytes(this.literals) &&
+            RegexShortLiteralSetScanner.TryCreate(this.literals, out RegexShortLiteralSetScanner? nonAsciiShortScanner))
+        {
+            shortLiteralScanner = nonAsciiShortScanner;
+            return;
+        }
+
+        if (this.literals.Length > 1 &&
+            !asciiCaseInsensitive &&
+            !unicodeCaseInsensitive &&
+            !useAho &&
             ContainsNonAscii(this.literals) &&
             RegexPackedLiteralSetScanner.TryCreate(this.literals, out RegexPackedLiteralSetScanner? packed))
         {
@@ -1752,6 +1763,23 @@ internal sealed class RegexLiteralSetEngine
             for (int byteIndex = 0; byteIndex < literal.Length; byteIndex++)
             {
                 if (literal[byteIndex] > 0x7F)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsUtf8ScalarsLongerThanTwoBytes(byte[][] literals)
+    {
+        for (int literalIndex = 0; literalIndex < literals.Length; literalIndex++)
+        {
+            byte[] literal = literals[literalIndex];
+            for (int byteIndex = 0; byteIndex < literal.Length; byteIndex++)
+            {
+                if (literal[byteIndex] >= 0xE0)
                 {
                     return true;
                 }
