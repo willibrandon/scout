@@ -9,8 +9,8 @@ public ref struct AhoCorasickOverlappingEnumerator
     private readonly AhoCorasickAutomaton automaton;
     private readonly ReadOnlySpan<byte> haystack;
     private readonly int[] outputCounts;
-    private readonly int[]? denseTransitions;
-    private readonly ushort[]? compactDenseTransitions;
+    private int[]? denseTransitions;
+    private ushort[]? compactDenseTransitions;
     private readonly bool hasEmptyPatterns;
     private int state;
     private int nextIndex;
@@ -56,6 +56,7 @@ public ref struct AhoCorasickOverlappingEnumerator
     /// <returns><see langword="true" /> when another match was found.</returns>
     public bool MoveNext()
     {
+        RefreshDenseTransitions();
         if (!hasEmptyPatterns && compactDenseTransitions is not null)
         {
             return MoveNextCompactDenseNoEmpty();
@@ -124,6 +125,22 @@ public ref struct AhoCorasickOverlappingEnumerator
                     emptyIndex = 0;
                 }
             }
+        }
+    }
+
+    private void RefreshDenseTransitions()
+    {
+        if (hasEmptyPatterns ||
+            compactDenseTransitions is not null ||
+            denseTransitions is not null)
+        {
+            return;
+        }
+
+        compactDenseTransitions = automaton.GetCompactDenseTransitionsForEnumerator();
+        if (compactDenseTransitions is null)
+        {
+            denseTransitions = automaton.GetDenseTransitionsForEnumerator();
         }
     }
 
