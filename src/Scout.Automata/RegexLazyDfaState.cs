@@ -3,7 +3,7 @@ namespace Scout;
 
 internal sealed class RegexLazyDfaState
 {
-    private const int DenseTransitionThreshold = 4;
+    private const int DenseTransitionThreshold = 2;
 
     private Dictionary<byte, RegexLazyDfaState>? sparseTransitions = [];
     private RegexLazyDfaState?[]? denseTransitions;
