@@ -84,13 +84,10 @@ internal sealed class RegexPrefilter
         out RegexStartPrefixSet? startPrefixSet)
     {
         startPrefixSet = null;
-        if (ShouldSkipLargeCaseInsensitiveAsciiPrefilter(root, options))
-        {
-            return TryCompileLargeCaseInsensitiveAsciiPrefilter(root, options);
-        }
-
+        bool skipLargeCaseInsensitiveAsciiPrefilter = ShouldSkipLargeCaseInsensitiveAsciiPrefilter(root, options);
+        bool skipSequenceAlternationPrefixPrefilter = ShouldSkipSequenceAlternationPrefixPrefilter(root, options);
         bool rejectedLowSelectivityPrefixSet = false;
-        if (!ShouldSkipSequenceAlternationPrefixPrefilter(root, options) &&
+        if (!skipSequenceAlternationPrefixPrefilter &&
             TryCreateSequenceAlternationPrefixPrefilter(
                 root,
                 options,
@@ -99,6 +96,16 @@ internal sealed class RegexPrefilter
                 out rejectedLowSelectivityPrefixSet))
         {
             return prefilter;
+        }
+
+        if (skipSequenceAlternationPrefixPrefilter)
+        {
+            TryCreateSequenceAlternationStartPrefixSet(root, options, out startPrefixSet);
+        }
+
+        if (skipLargeCaseInsensitiveAsciiPrefilter)
+        {
+            return TryCompileLargeCaseInsensitiveAsciiPrefilter(root, options);
         }
 
         if (rejectedLowSelectivityPrefixSet)
@@ -238,6 +245,27 @@ internal sealed class RegexPrefilter
         }
 
         return ExceedsPrefixAnalysisNodeThreshold(root, LargeCaseInsensitiveAsciiPrefixAnalysisNodeThreshold);
+    }
+
+    private static bool TryCreateSequenceAlternationStartPrefixSet(
+        RegexSyntaxNode root,
+        RegexCompileOptions options,
+        out RegexStartPrefixSet? startPrefixSet)
+    {
+        startPrefixSet = null;
+        if (!TryCollectSequenceAlternationPrefixes(
+                root,
+                options,
+                out byte[][]? prefixes,
+                out bool caseInsensitivePrefixes,
+                out bool unicodeCaseInsensitivePrefixes) ||
+            prefixes is null)
+        {
+            return false;
+        }
+
+        startPrefixSet = new RegexStartPrefixSet(prefixes, caseInsensitivePrefixes, unicodeCaseInsensitivePrefixes);
+        return true;
     }
 
     private static bool ExceedsPrefixAnalysisNodeThreshold(RegexSyntaxNode node, int threshold)

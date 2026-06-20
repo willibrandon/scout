@@ -170,7 +170,6 @@ internal sealed class RegexStartPredicate
     {
         predicate = null;
         if (!prefixSet.HasValue ||
-            !prefixSet.Value.CaseInsensitive ||
             prefixSet.Value.Prefixes is not { } prefixes ||
             prefixes.Length < 2 ||
             prefixes.Length > MaxPrefixPredicateCount ||
@@ -197,7 +196,7 @@ internal sealed class RegexStartPredicate
                 return false;
             }
         }
-        else
+        else if (asciiCaseInsensitive)
         {
             var prefixOptions = new RegexCompileOptions(
                 caseInsensitive: true,
