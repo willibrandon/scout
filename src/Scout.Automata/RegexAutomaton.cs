@@ -633,7 +633,7 @@ public sealed class RegexAutomaton
         ulong? dfaSizeLimit,
         Dictionary<string, RegexUtf8ByteTrie>? utf8ByteTrieCache = null)
     {
-        RegexNfa nfa = RegexNfaCompiler.Compile(
+        RegexNfa nfa = RegexNfaCompiler.CompileWithCompactScalarAtoms(
             tree.Root,
             options,
             utf8ByteTrieCache);

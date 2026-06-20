@@ -549,6 +549,29 @@ public sealed class PatternSetTests
     }
 
     /// <summary>
+    /// Verifies required-literal verification preserves Unicode scalar class semantics.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralAcceleratorVerifiesUnicodeScalarAtoms()
+    {
+        var set = PatternSet.Compile(
+        [
+            @"foo\s+bar"u8.ToArray(),
+        ],
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("xxfoo\u2003bar fooXbar");
+        int expectedLength = System.Text.Encoding.UTF8.GetByteCount("foo\u2003bar");
+
+        Assert.True(set.UsesRequiredLiteralAccelerator);
+        Assert.Equal(new PatternSetMatch(0, new RegexMatch(2, expectedLength)), set.Find(haystack));
+        Assert.Equal(1, set.CountMatches(haystack));
+    }
+
+    /// <summary>
     /// Verifies required-literal windows can skip starts that violate known first-byte predicates.
     /// </summary>
     [Fact]

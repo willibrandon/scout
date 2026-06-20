@@ -11,17 +11,20 @@ internal sealed class RegexNfaCompiler
     private readonly Dictionary<(RegexUtf8ByteTrie Trie, int Next), int> utf8ByteTrieStateCache = [];
     private readonly bool includeCaptures;
     private readonly int captureCount;
+    private readonly bool expandUtf8Atoms;
     private bool cacheStates;
     private bool sawUtf8Disabled;
 
     private RegexNfaCompiler(
         bool includeCaptures = false,
         int captureCount = 0,
-        Dictionary<string, RegexUtf8ByteTrie>? utf8ByteTrieCache = null)
+        Dictionary<string, RegexUtf8ByteTrie>? utf8ByteTrieCache = null,
+        bool expandUtf8Atoms = true)
     {
         this.includeCaptures = includeCaptures;
         this.captureCount = captureCount;
         this.utf8ByteTrieCache = utf8ByteTrieCache ?? [];
+        this.expandUtf8Atoms = expandUtf8Atoms;
     }
 
     public static RegexNfa Compile(RegexSyntaxNode root)
@@ -42,6 +45,17 @@ internal sealed class RegexNfaCompiler
         Dictionary<string, RegexUtf8ByteTrie>? utf8ByteTrieCache)
     {
         var compiler = new RegexNfaCompiler(utf8ByteTrieCache: utf8ByteTrieCache);
+        int accept = compiler.AddAccept();
+        int start = compiler.CompileNode(root, accept, options);
+        return new RegexNfa(compiler.states, start, compiler.RequiresUtf8SearchBoundary(options.Utf8));
+    }
+
+    public static RegexNfa CompileWithCompactScalarAtoms(
+        RegexSyntaxNode root,
+        RegexCompileOptions options,
+        Dictionary<string, RegexUtf8ByteTrie>? utf8ByteTrieCache)
+    {
+        var compiler = new RegexNfaCompiler(utf8ByteTrieCache: utf8ByteTrieCache, expandUtf8Atoms: false);
         int accept = compiler.AddAccept();
         int start = compiler.CompileNode(root, accept, options);
         return new RegexNfa(compiler.states, start, compiler.RequiresUtf8SearchBoundary(options.Utf8));
@@ -376,6 +390,12 @@ internal sealed class RegexNfaCompiler
         bool reversed,
         out int start)
     {
+        if (!expandUtf8Atoms)
+        {
+            start = -1;
+            return false;
+        }
+
         if (!RegexByteClass.RequiresUtf8ScalarMatch(kind, value, options.Utf8, options.CaseInsensitive, options.UnicodeClasses))
         {
             start = -1;
