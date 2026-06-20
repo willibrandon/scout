@@ -4,7 +4,9 @@ namespace Scout;
 
 internal sealed class PatternSetRequiredLiteralAccelerator
 {
-    private const int MaxEagerDenseRequiredLiteralStates = 2048;
+    // AhoCorasickAutomaton.Create already eagerly densifies automata up to this size.
+    // Larger required-literal sets stay lazy to avoid compile-time transition table costs.
+    private const int MaxEagerDenseRequiredLiteralStates = 128;
 
     private readonly AhoCorasickAutomaton automaton;
     private readonly PatternSetRequiredAutomaton[][] automataByLiteral;
