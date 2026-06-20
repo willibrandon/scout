@@ -1113,7 +1113,7 @@ internal sealed class RegexLiteralSetEngine
     {
         byte[] literal = literals[0];
         if (singleLiteralFinder is null ||
-            literal.Length < 4 ||
+            literal.Length < 3 ||
             startOffset > haystack.Length - literal.Length)
         {
             return false;
