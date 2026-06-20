@@ -1685,6 +1685,24 @@ public sealed class RegexAutomatonTests
         Assert.Null(longPrefix.Find("xTom"u8));
         Assert.Equal(4, longPrefix.CountMatches(haystack));
         Assert.Equal(36, longPrefix.SumMatchSpans(haystack));
+
+        var defaultShortPrefix = RegexAutomaton.Compile(
+            @".{0,2}(Tom|Sawyer|Huckleberry|Finn)"u8);
+        var defaultLongPrefix = RegexAutomaton.Compile(
+            @".{2,4}(Tom|Sawyer|Huckleberry|Finn)"u8);
+        byte[] betaTom = System.Text.Encoding.UTF8.GetBytes("βTom");
+        byte[] aBetaTom = System.Text.Encoding.UTF8.GetBytes("aβTom");
+        byte[] unicodeHaystack = System.Text.Encoding.UTF8.GetBytes("βTom xFinn");
+
+        Assert.Equal(RegexEngineKind.BoundedPrefixLiteralSet, GetEngineKind(defaultShortPrefix));
+        Assert.Equal(RegexEngineKind.BoundedPrefixLiteralSet, GetEngineKind(defaultLongPrefix));
+        Assert.Equal(new RegexMatch(0, betaTom.Length), defaultShortPrefix.Find(betaTom));
+        Assert.Equal(new RegexMatch(0, aBetaTom.Length), defaultLongPrefix.Find(aBetaTom));
+        Assert.Null(defaultShortPrefix.MatchAt(betaTom, 1));
+        Assert.Null(defaultLongPrefix.Find(betaTom));
+        Assert.Equal(new RegexMatch(2, 3), defaultShortPrefix.Find("x\nTom"u8));
+        Assert.Equal(2, defaultShortPrefix.CountMatches(unicodeHaystack));
+        Assert.Equal(11, defaultShortPrefix.SumMatchSpans(unicodeHaystack));
     }
 
     /// <summary>

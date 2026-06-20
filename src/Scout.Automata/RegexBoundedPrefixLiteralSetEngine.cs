@@ -13,6 +13,7 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
     private readonly int minimum;
     private readonly int maximum;
     private readonly byte lineTerminator;
+    private readonly bool useUtf8ScalarPrefix;
 
     private RegexBoundedPrefixLiteralSetEngine(
         byte[][] literals,
@@ -22,7 +23,8 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
         RegexLiteralSetEngine? literalCountEngine,
         int minimum,
         int maximum,
-        byte lineTerminator)
+        byte lineTerminator,
+        bool useUtf8ScalarPrefix)
     {
         this.literals = literals;
         this.packedScanner = packedScanner;
@@ -32,6 +34,7 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
         this.minimum = minimum;
         this.maximum = maximum;
         this.lineTerminator = lineTerminator;
+        this.useUtf8ScalarPrefix = useUtf8ScalarPrefix;
         if (literals.Length == 1)
         {
             singleLiteralFinder = new MemmemFinder(literals[0]);
@@ -45,8 +48,6 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
     {
         engine = null;
         if (options.CaseInsensitive ||
-            options.Utf8 ||
-            options.UnicodeClasses ||
             options.DotMatchesNewline ||
             options.Crlf ||
             options.SwapGreed)
@@ -102,7 +103,8 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
             literalCountEngine,
             minimum,
             maximum,
-            options.LineTerminator);
+            options.LineTerminator,
+            options.Utf8 || options.UnicodeClasses);
         return true;
     }
 
@@ -114,7 +116,8 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
         while (TryFindLiteral(haystack, literalSearchAt, out RegexLiteralSetCandidate candidate))
         {
             int literalStart = candidate.Match.Start;
-            int firstStart = Math.Max(nextStartToTry, literalStart - maximum);
+            int maxLookBehind = MaxLookBehind(haystack, literalStart);
+            int firstStart = Math.Max(nextStartToTry, literalStart - maxLookBehind);
             int lastStart = Math.Min(literalStart - minimum, haystack.Length);
             for (int start = firstStart; start <= lastStart; start++)
             {
@@ -151,6 +154,13 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
 
     public bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int length)
     {
+        return useUtf8ScalarPrefix
+            ? TryMatchAtUtf8(haystack, start, out length)
+            : TryMatchAtBytePrefix(haystack, start, out length);
+    }
+
+    private bool TryMatchAtBytePrefix(ReadOnlySpan<byte> haystack, int start, out int length)
+    {
         length = 0;
         if ((uint)start > (uint)haystack.Length)
         {
@@ -184,6 +194,78 @@ internal sealed class RegexBoundedPrefixLiteralSetEngine
         }
 
         return false;
+    }
+
+    private bool TryMatchAtUtf8(ReadOnlySpan<byte> haystack, int start, out int length)
+    {
+        length = 0;
+        if ((uint)start > (uint)haystack.Length ||
+            !RegexByteClass.IsUtf8Boundary(haystack, start))
+        {
+            return false;
+        }
+
+        int maxPrefixBytes = Math.Min(maximum, haystack.Length - start);
+        if (haystack.Slice(start, maxPrefixBytes).IndexOfAnyExceptInRange((byte)0x00, (byte)0x7F) < 0)
+        {
+            return TryMatchAtBytePrefix(haystack, start, out length);
+        }
+
+        Span<int> gapEnds = stackalloc int[MaxPrefix + 1];
+        int gapEndCount = 0;
+        int position = start;
+        for (int gap = 0; ; gap++)
+        {
+            if (gap >= minimum)
+            {
+                gapEnds[gapEndCount++] = position;
+            }
+
+            if (gap == maximum ||
+                position >= haystack.Length ||
+                haystack[position] == lineTerminator ||
+                !RegexByteClass.TryGetUtf8ScalarLength(haystack, position, out int scalarLength))
+            {
+                break;
+            }
+
+            position += scalarLength;
+        }
+
+        for (int index = gapEndCount - 1; index >= 0; index--)
+        {
+            int literalStart = gapEnds[index];
+            for (int literalIndex = 0; literalIndex < literals.Length; literalIndex++)
+            {
+                byte[] literal = literals[literalIndex];
+                if (LiteralMatchesAt(haystack, literalStart, literal))
+                {
+                    length = literalStart - start + literal.Length;
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private int MaxLookBehind(ReadOnlySpan<byte> haystack, int literalStart)
+    {
+        if (!useUtf8ScalarPrefix)
+        {
+            return maximum;
+        }
+
+        int scalarLookBehind = maximum * 4;
+        int earliestScalarStart = Math.Max(0, literalStart - scalarLookBehind);
+        int earliestByteStart = Math.Max(0, literalStart - maximum);
+        if (earliestScalarStart == earliestByteStart ||
+            haystack.Slice(earliestScalarStart, literalStart - earliestScalarStart).IndexOfAnyExceptInRange((byte)0x00, (byte)0x7F) < 0)
+        {
+            return maximum;
+        }
+
+        return scalarLookBehind;
     }
 
     private long CountOrSum(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
