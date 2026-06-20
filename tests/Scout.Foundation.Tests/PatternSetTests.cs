@@ -572,6 +572,30 @@ public sealed class PatternSetTests
     }
 
     /// <summary>
+    /// Verifies large pattern sets still use required-literal verification when bounded look-behind analysis is skipped.
+    /// </summary>
+    [Fact]
+    public void LargeRequiredLiteralAcceleratorVerifiesUnicodeScalarAtoms()
+    {
+        byte[][] patterns = Enumerable.Range(0, 32)
+            .Select(index => System.Text.Encoding.UTF8.GetBytes($@"p{index:00}foo\s+bar"))
+            .ToArray();
+        var set = PatternSet.Compile(
+            patterns,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes("xxp31foo\u2003bar p31fooXbar");
+        int expectedLength = System.Text.Encoding.UTF8.GetByteCount("p31foo\u2003bar");
+
+        Assert.True(set.UsesRequiredLiteralAccelerator);
+        Assert.Equal(new PatternSetMatch(31, new RegexMatch(2, expectedLength)), set.Find(haystack));
+        Assert.Equal(1, set.CountMatches(haystack));
+    }
+
+    /// <summary>
     /// Verifies required-literal windows can skip starts that violate known first-byte predicates.
     /// </summary>
     [Fact]

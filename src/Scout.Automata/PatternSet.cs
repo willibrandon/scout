@@ -6,6 +6,7 @@ namespace Scout;
 public sealed class PatternSet
 {
     private const int MaxGuardRequiredLiteralLength = 8;
+    private const int LargePatternSetBoundedLookBehindThreshold = 32;
 
     private readonly RegexAutomaton[] automata;
     private readonly int[] automataPatternIds;
@@ -77,7 +78,7 @@ public sealed class PatternSet
         for (int index = 0; index < patterns.Count; index++)
         {
             byte[] pattern = patterns[index] ?? throw new ArgumentNullException(nameof(patterns));
-            if (!TryCreatePatternPlan(pattern, null, options, true, out _))
+            if (!TryCreatePatternPlan(pattern, null, options, true, useBoundedRequiredLiteralLookBehind: true, out _))
             {
                 return false;
             }
@@ -168,6 +169,7 @@ public sealed class PatternSet
                     parsedRoots?[index],
                     options,
                     requireFullAcceleration,
+                    useBoundedRequiredLiteralLookBehind: patterns.Count < LargePatternSetBoundedLookBehindThreshold,
                     out plans[index]))
             {
                 return false;
@@ -275,6 +277,7 @@ public sealed class PatternSet
         RegexSyntaxNode? parsedRoot,
         RegexCompileOptions options,
         bool requireAcceleration,
+        bool useBoundedRequiredLiteralLookBehind,
         out PatternSetPatternPlan plan)
     {
         if (TryGetRawLiteralPattern(pattern, out byte[] rawLiteral) &&
@@ -305,11 +308,14 @@ public sealed class PatternSet
             requiredLiterals.Length > 0 &&
             RegexPrefilter.TryPrepareRequiredLiteralSet(requiredLiterals, options, out byte[][] preparedLiterals))
         {
-            bool hasBoundedLiterals = RegexPrefilter.TryCollectRequiredLiteralSetWithLookBehind(
-                tree.Root,
-                options,
-                out byte[][] boundedLiterals,
-                out int boundedLookBehind);
+            byte[][] boundedLiterals = [];
+            int boundedLookBehind = RegexPrefilter.RequiredLiteralLookBehind;
+            bool hasBoundedLiterals = useBoundedRequiredLiteralLookBehind &&
+                RegexPrefilter.TryCollectRequiredLiteralSetWithLookBehind(
+                    tree.Root,
+                    options,
+                    out boundedLiterals,
+                    out boundedLookBehind);
             int maxLookBehind = hasBoundedLiterals && LiteralSetsEqual(requiredLiterals, boundedLiterals)
                 ? Math.Min(boundedLookBehind, RegexPrefilter.RequiredLiteralLookBehind)
                 : RegexPrefilter.RequiredLiteralLookBehind;
