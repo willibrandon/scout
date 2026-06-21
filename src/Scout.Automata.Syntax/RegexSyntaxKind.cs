@@ -41,6 +41,11 @@ public enum RegexSyntaxKind
     CharacterClass,
 
     /// <summary>
+    /// Matches an internal byte range class.
+    /// </summary>
+    ByteClass,
+
+    /// <summary>
     /// Matches an ASCII decimal digit.
     /// </summary>
     DigitClass,

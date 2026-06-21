@@ -6,23 +6,39 @@ namespace Scout;
 /// </summary>
 public sealed class AhoCorasickAutomaton
 {
+    private const int MaxPromotedDenseTransitionStates = 32768;
+    private const int LazyDensePromotionRowThreshold = 128;
+    private const int MaxEagerDenseTransitionStates = LazyDensePromotionRowThreshold;
+
     private readonly AhoCorasickState[] states;
+    private int[]? denseTransitions;
+    private ushort[]? compactDenseTransitions;
+    private readonly int[]?[]? lazyDenseTransitionRows;
     private readonly int[] emptyPatternIds;
+    private readonly int[] outputCounts;
     private readonly byte[][] patterns;
     private readonly AhoCorasickMatchKind matchKind;
     private readonly AhoCorasickStartKind startKind;
     private readonly bool asciiCaseInsensitive;
+    private int lazyDenseRowsBuilt;
 
     private AhoCorasickAutomaton(
         AhoCorasickState[] states,
+        int[]? denseTransitions,
+        ushort[]? compactDenseTransitions,
         int[] emptyPatternIds,
+        int[] outputCounts,
         byte[][] patterns,
         AhoCorasickMatchKind matchKind,
         AhoCorasickStartKind startKind,
         bool asciiCaseInsensitive)
     {
         this.states = states;
+        this.denseTransitions = denseTransitions;
+        this.compactDenseTransitions = compactDenseTransitions;
+        lazyDenseTransitionRows = denseTransitions is null && compactDenseTransitions is null ? new int[states.Length][] : null;
         this.emptyPatternIds = emptyPatternIds;
+        this.outputCounts = outputCounts;
         this.patterns = patterns;
         this.matchKind = matchKind;
         this.startKind = startKind;
@@ -136,7 +152,10 @@ public sealed class AhoCorasickAutomaton
         SortOutputs(builtStates);
         return new AhoCorasickAutomaton(
             builtStates,
+            TryBuildDenseTransitions(builtStates, asciiCaseInsensitive),
+            TryBuildCompactDenseTransitions(builtStates, asciiCaseInsensitive),
             emptyPatternIds.ToArray(),
+            BuildOutputCounts(builtStates),
             ownedPatterns,
             matchKind,
             startKind,
@@ -288,7 +307,12 @@ public sealed class AhoCorasickAutomaton
 
     internal int GetOutputCount(int state)
     {
-        return states[state].Outputs.Count;
+        return outputCounts[state];
+    }
+
+    internal int[] GetOutputCountsForEnumerator()
+    {
+        return outputCounts;
     }
 
     internal AhoCorasickMatch GetOutputMatch(int state, int outputIndex, int end)
@@ -300,6 +324,28 @@ public sealed class AhoCorasickAutomaton
     internal int NextStateForEnumerator(int state, byte value)
     {
         return NextState(state, value);
+    }
+
+    internal int[]? GetDenseTransitionsForEnumerator()
+    {
+        return System.Threading.Volatile.Read(ref denseTransitions);
+    }
+
+    internal ushort[]? GetCompactDenseTransitionsForEnumerator()
+    {
+        return System.Threading.Volatile.Read(ref compactDenseTransitions);
+    }
+
+    internal void EnsureDenseTransitions(int maxStates)
+    {
+        if (states.Length > maxStates ||
+            System.Threading.Volatile.Read(ref compactDenseTransitions) is not null ||
+            System.Threading.Volatile.Read(ref denseTransitions) is not null)
+        {
+            return;
+        }
+
+        TryPromoteDenseTransitions();
     }
 
     private static void ValidateMatchKind(AhoCorasickMatchKind matchKind)
@@ -416,6 +462,17 @@ public sealed class AhoCorasickAutomaton
         {
             state.Outputs.Sort(CompareOutputs);
         }
+    }
+
+    private static int[] BuildOutputCounts(AhoCorasickState[] states)
+    {
+        int[] counts = new int[states.Length];
+        for (int state = 0; state < states.Length; state++)
+        {
+            counts[state] = states[state].Outputs.Count;
+        }
+
+        return counts;
     }
 
     private static int CompareOutputs(AhoCorasickOutput left, AhoCorasickOutput right)
@@ -546,18 +603,146 @@ public sealed class AhoCorasickAutomaton
 
     private int NextState(int state, byte value)
     {
-        value = FoldInput(value);
-        while (state != 0 && !states[state].Transitions.ContainsKey(value))
+        ushort[]? compactTransitions = System.Threading.Volatile.Read(ref compactDenseTransitions);
+        if (compactTransitions is not null)
         {
-            state = states[state].Failure;
+            return compactTransitions[(state * 256) + value];
         }
 
-        return states[state].Transitions.TryGetValue(value, out int next) ? next : 0;
+        int[]? transitions = System.Threading.Volatile.Read(ref denseTransitions);
+        if (transitions is not null)
+        {
+            return transitions[(state * 256) + value];
+        }
+
+        int[]?[]? denseRows = lazyDenseTransitionRows;
+        if (denseRows is not null)
+        {
+            int[]? row = denseRows[state];
+            if (row is null)
+            {
+                row = BuildDenseTransitionRow(state);
+                denseRows[state] = row;
+                if (System.Threading.Interlocked.Increment(ref lazyDenseRowsBuilt) == LazyDensePromotionRowThreshold)
+                {
+                    TryPromoteDenseTransitions();
+                }
+            }
+
+            return row[value];
+        }
+
+        return NextSparseState(states, state, value);
     }
 
-    private byte FoldInput(byte value)
+    private int[] BuildDenseTransitionRow(int state)
     {
-        return asciiCaseInsensitive ? FoldAscii(value) : value;
+        int[] transitions = new int[256];
+        for (int value = 0; value <= byte.MaxValue; value++)
+        {
+            byte lookup = asciiCaseInsensitive ? FoldAscii((byte)value) : (byte)value;
+            transitions[value] = NextSparseState(states, state, lookup);
+        }
+
+        return transitions;
+    }
+
+    private void TryPromoteDenseTransitions()
+    {
+        if (states.Length > MaxPromotedDenseTransitionStates ||
+            System.Threading.Volatile.Read(ref compactDenseTransitions) is not null ||
+            System.Threading.Volatile.Read(ref denseTransitions) is not null)
+        {
+            return;
+        }
+
+        if (CanUseCompactDenseTransitions(states))
+        {
+            ushort[] transitions = BuildCompactDenseTransitions(states, asciiCaseInsensitive);
+            System.Threading.Volatile.Write(ref compactDenseTransitions, transitions);
+        }
+        else
+        {
+            int[] transitions = BuildDenseTransitions(states, asciiCaseInsensitive);
+            System.Threading.Volatile.Write(ref denseTransitions, transitions);
+        }
+    }
+
+    private static int[]? TryBuildDenseTransitions(AhoCorasickState[] states, bool asciiCaseInsensitive)
+    {
+        if (states.Length > MaxEagerDenseTransitionStates ||
+            CanUseCompactDenseTransitions(states))
+        {
+            return null;
+        }
+
+        return BuildDenseTransitions(states, asciiCaseInsensitive);
+    }
+
+    private static ushort[]? TryBuildCompactDenseTransitions(AhoCorasickState[] states, bool asciiCaseInsensitive)
+    {
+        if (states.Length > MaxEagerDenseTransitionStates ||
+            !CanUseCompactDenseTransitions(states))
+        {
+            return null;
+        }
+
+        return BuildCompactDenseTransitions(states, asciiCaseInsensitive);
+    }
+
+    private static bool CanUseCompactDenseTransitions(AhoCorasickState[] states)
+    {
+        return states.Length <= ushort.MaxValue;
+    }
+
+    private static int[] BuildDenseTransitions(AhoCorasickState[] states, bool asciiCaseInsensitive)
+    {
+        int[] transitions = new int[states.Length * 256];
+        for (int state = 0; state < states.Length; state++)
+        {
+            int baseIndex = state * 256;
+            for (int value = 0; value <= byte.MaxValue; value++)
+            {
+                byte lookup = asciiCaseInsensitive ? FoldAscii((byte)value) : (byte)value;
+                transitions[baseIndex + value] = NextSparseState(states, state, lookup);
+            }
+        }
+
+        return transitions;
+    }
+
+    private static ushort[] BuildCompactDenseTransitions(AhoCorasickState[] states, bool asciiCaseInsensitive)
+    {
+        ushort[] transitions = new ushort[states.Length * 256];
+        for (int state = 0; state < states.Length; state++)
+        {
+            int baseIndex = state * 256;
+            for (int value = 0; value <= byte.MaxValue; value++)
+            {
+                byte lookup = asciiCaseInsensitive ? FoldAscii((byte)value) : (byte)value;
+                transitions[baseIndex + value] = (ushort)NextSparseState(states, state, lookup);
+            }
+        }
+
+        return transitions;
+    }
+
+    private static int NextSparseState(AhoCorasickState[] states, int state, byte value)
+    {
+        while (true)
+        {
+            if (states[state].Transitions.TryGetValue(value, out int next))
+            {
+                return next;
+            }
+
+            if (state == 0)
+            {
+                return 0;
+            }
+
+            state = states[state].Failure;
+        }
     }
 
     private static byte FoldAscii(byte value)

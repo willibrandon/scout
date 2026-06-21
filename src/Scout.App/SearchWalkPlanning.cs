@@ -4,7 +4,7 @@ namespace Scout;
 
 internal static class SearchWalkPlanning
 {
-    private const int MacOsDefaultSearchWalkThreadCount = 4;
+    private const int MacOsDefaultSearchWalkThreadCount = 3;
     private const int MacOsDefaultLargeFileSearchThreadCount = 4;
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
@@ -137,7 +137,7 @@ internal static class SearchWalkPlanning
             return 1;
         }
 
-        return MacOsDefaultSearchWalkThreadCount;
+        return Math.Min(threadCount, MacOsDefaultSearchWalkThreadCount);
     }
 
     internal static int GetMacOsDefaultLargeFileSearchThreadCount(int threadCount)

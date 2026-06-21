@@ -4,8 +4,11 @@ internal enum RegexNfaStateKind
 {
     Atom,
     Predicate,
+    CaptureStart,
+    CaptureEnd,
     Split,
     GreedyLoopSplit,
     LazyLoopSplit,
+    Sparse,
     Accept,
 }

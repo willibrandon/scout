@@ -1,4 +1,3 @@
-
 namespace Scout;
 
 internal sealed class RegexDenseDfa
@@ -30,13 +29,14 @@ internal sealed class RegexDenseDfa
     {
         int current = 0;
         int deferredAcceptLength = -1;
+        Dictionary<(int State, int Position), bool> reachabilityCache = [];
         for (int position = start; position <= haystack.Length; position++)
         {
             RegexDenseDfaState state = states[current];
             if (state.AcceptIndex >= 0)
             {
                 deferredAcceptLength = position - start;
-                if (!RegexDfaOperations.HasEarlierConsumer(nfa, state.NfaStates, state.AcceptIndex, haystack, position))
+                if (!RegexDfaOperations.HasEarlierConsumer(nfa, state.NfaStates, state.AcceptIndex, haystack, position, reachabilityCache))
                 {
                     length = deferredAcceptLength;
                     return true;

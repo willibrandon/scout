@@ -181,6 +181,16 @@ internal static class PinnedRipgrepOracle
 
     private static string ComputeHostOracleEnvironment()
     {
+        string? configuredEnvironment = Environment.GetEnvironmentVariable("SCOUT_ORACLE_ENVIRONMENT");
+        if (!string.IsNullOrWhiteSpace(configuredEnvironment))
+        {
+            return configuredEnvironment switch
+            {
+                "github-actions" or "local" => configuredEnvironment,
+                _ => throw new InvalidOperationException("Unsupported SCOUT_ORACLE_ENVIRONMENT: " + configuredEnvironment),
+            };
+        }
+
         return string.Equals(Environment.GetEnvironmentVariable("GITHUB_ACTIONS"), "true", StringComparison.OrdinalIgnoreCase)
             ? "github-actions"
             : "local";

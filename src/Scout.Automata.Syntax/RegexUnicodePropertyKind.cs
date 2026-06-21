@@ -126,6 +126,16 @@ public enum RegexUnicodePropertyKind
     ExtendedPictographic,
 
     /// <summary>
+    /// The Script=Cyrillic property value.
+    /// </summary>
+    ScriptCyrillic,
+
+    /// <summary>
+    /// The Script_Extensions=Cyrillic property value.
+    /// </summary>
+    ScriptExtensionCyrillic,
+
+    /// <summary>
     /// The Grapheme_Cluster_Break=Prepend property value.
     /// </summary>
     GraphemeClusterBreakPrepend,
@@ -264,4 +274,69 @@ public enum RegexUnicodePropertyKind
     /// The Uppercase_Letter general category.
     /// </summary>
     UppercaseLetter,
+
+    /// <summary>
+    /// The Lowercase binary property.
+    /// </summary>
+    Lowercase,
+
+    /// <summary>
+    /// The Uppercase binary property.
+    /// </summary>
+    Uppercase,
+
+    /// <summary>
+    /// The Script=Greek property value.
+    /// </summary>
+    ScriptGreek,
+
+    /// <summary>
+    /// The Script_Extensions=Greek property value.
+    /// </summary>
+    ScriptExtensionGreek,
+
+    /// <summary>
+    /// The Grapheme_Cluster_Break=CR property value.
+    /// </summary>
+    GraphemeClusterBreakCr,
+
+    /// <summary>
+    /// The Grapheme_Cluster_Break=LF property value.
+    /// </summary>
+    GraphemeClusterBreakLf,
+
+    /// <summary>
+    /// The Grapheme_Cluster_Break=Control property value.
+    /// </summary>
+    GraphemeClusterBreakControl,
+
+    /// <summary>
+    /// The Grapheme_Cluster_Break=Extend property value.
+    /// </summary>
+    GraphemeClusterBreakExtend,
+
+    /// <summary>
+    /// The Grapheme_Cluster_Break=L property value.
+    /// </summary>
+    GraphemeClusterBreakL,
+
+    /// <summary>
+    /// The Grapheme_Cluster_Break=LV property value.
+    /// </summary>
+    GraphemeClusterBreakLv,
+
+    /// <summary>
+    /// The Grapheme_Cluster_Break=SpacingMark property value.
+    /// </summary>
+    GraphemeClusterBreakSpacingMark,
+
+    /// <summary>
+    /// The Grapheme_Cluster_Break=T property value.
+    /// </summary>
+    GraphemeClusterBreakT,
+
+    /// <summary>
+    /// The Grapheme_Cluster_Break=V property value.
+    /// </summary>
+    GraphemeClusterBreakV,
 }

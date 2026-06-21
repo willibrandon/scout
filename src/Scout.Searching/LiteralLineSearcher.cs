@@ -207,6 +207,18 @@ public static class LiteralLineSearcher
             return false;
         }
 
+        if (TryGetWholeHaystackLiteralSetRegexPlan(needles, regexPlan, invertMatch, lineRegexp, wordRegexp, crlf, nullData, out RegexLiteralSetEngine literalSetEngine))
+        {
+            return SearchLiteralSetRegexLines(
+                haystack,
+                literalSetEngine,
+                ref sink,
+                out _,
+                countSearchedLines: false,
+                maxMatchingLines,
+                requireMatchColumn);
+        }
+
         if (!invertMatch &&
             !lineRegexp &&
             !wordRegexp &&
@@ -245,6 +257,53 @@ public static class LiteralLineSearcher
         return matched;
     }
 
+    internal static bool SearchWithRegexPlanAndCountMatches<TSink>(
+        ReadOnlySpan<byte> haystack,
+        IReadOnlyList<byte[]> needles,
+        RegexSearchPlan? regexPlan,
+        ref TSink sink,
+        out ulong matchedLines,
+        out long matches,
+        bool asciiCaseInsensitive = false,
+        bool invertMatch = false,
+        bool lineRegexp = false,
+        bool wordRegexp = false,
+        ulong? maxMatchingLines = null,
+        bool crlf = false,
+        bool nullData = false,
+        bool requireMatchColumn = true)
+        where TSink : struct, ILineSink
+    {
+        var countingSink = new RegexPlanCountingLineSink<TSink>(
+            sink,
+            needles,
+            regexPlan,
+            asciiCaseInsensitive,
+            lineRegexp,
+            wordRegexp,
+            crlf,
+            nullData,
+            countMatches: !invertMatch);
+        bool matched = SearchWithRegexPlan(
+            haystack,
+            needles,
+            regexPlan,
+            ref countingSink,
+            asciiCaseInsensitive,
+            invertMatch,
+            lineRegexp,
+            wordRegexp,
+            maxMatchingLines,
+            crlf,
+            nullData,
+            requireMatchColumn);
+
+        sink = countingSink.Inner;
+        matchedLines = countingSink.MatchedLines;
+        matches = countingSink.Matches;
+        return matched;
+    }
+
     internal static bool SearchWithRegexPlanAndCountLines<TSink>(
         ReadOnlySpan<byte> haystack,
         IReadOnlyList<byte[]> needles,
@@ -266,6 +325,18 @@ public static class LiteralLineSearcher
         if (maxMatchingLines == 0)
         {
             return false;
+        }
+
+        if (TryGetWholeHaystackLiteralSetRegexPlan(needles, regexPlan, invertMatch, lineRegexp, wordRegexp, crlf, nullData, out RegexLiteralSetEngine literalSetEngine))
+        {
+            return SearchLiteralSetRegexLines(
+                haystack,
+                literalSetEngine,
+                ref sink,
+                out searchedLines,
+                countSearchedLines: true,
+                maxMatchingLines,
+                requireMatchColumn);
         }
 
         if (!invertMatch &&
@@ -331,6 +402,11 @@ public static class LiteralLineSearcher
         bool nullData = false)
     {
         var sink = new CountingLineSink();
+        if (TryGetWholeHaystackLiteralSetRegexPlan(needles, regexPlan, invertMatch, lineRegexp, wordRegexp, crlf, nullData, out RegexLiteralSetEngine literalSetEngine))
+        {
+            return CountMatchingLinesWithLiteralSetRegex(haystack, literalSetEngine, maxMatchingLines);
+        }
+
         _ = SearchWithRegexPlan(
             haystack,
             needles,
@@ -704,6 +780,110 @@ public static class LiteralLineSearcher
         return matched;
     }
 
+    private static bool SearchLiteralSetRegexLines<TSink>(
+        ReadOnlySpan<byte> haystack,
+        RegexLiteralSetEngine literalSetEngine,
+        ref TSink sink,
+        out long searchedLines,
+        bool countSearchedLines,
+        ulong? maxMatchingLines,
+        bool requireMatchColumn)
+        where TSink : struct, ILineSink
+    {
+        searchedLines = 0;
+        bool matched = false;
+        ulong matchedLines = 0;
+        int searchOffset = 0;
+        int lineStart = 0;
+        long lineNumber = 1;
+        while (searchOffset < haystack.Length)
+        {
+            RegexMatch? match = literalSetEngine.Find(haystack, searchOffset);
+            if (!match.HasValue)
+            {
+                if (countSearchedLines)
+                {
+                    searchedLines = lineNumber - 1 + CountSearchLines(haystack[lineStart..]);
+                }
+
+                return matched;
+            }
+
+            int matchStart = match.Value.Start;
+            ReadOnlySpan<byte> skipped = haystack.Slice(lineStart, matchStart - lineStart);
+            int previousTerminator = skipped.LastIndexOf((byte)'\n');
+            if (previousTerminator >= 0)
+            {
+                lineNumber += ByteCounter.Count(skipped, (byte)'\n');
+                lineStart += previousTerminator + 1;
+            }
+
+            int lineLength = GetLineLength(haystack[lineStart..], nullData: false);
+            int matchColumn = requireMatchColumn ? matchStart - lineStart + 1 : 0;
+            sink.MatchedLine(lineNumber, lineStart, matchColumn, haystack.Slice(lineStart, lineLength));
+            matched = true;
+            matchedLines++;
+            if (maxMatchingLines is ulong limit && matchedLines >= limit)
+            {
+                if (countSearchedLines)
+                {
+                    searchedLines = lineNumber;
+                }
+
+                return true;
+            }
+
+            searchOffset = lineStart + lineLength;
+            lineStart = searchOffset;
+            lineNumber++;
+        }
+
+        if (countSearchedLines)
+        {
+            searchedLines = lineNumber - 1;
+        }
+
+        return matched;
+    }
+
+    private static long CountMatchingLinesWithLiteralSetRegex(
+        ReadOnlySpan<byte> haystack,
+        RegexLiteralSetEngine literalSetEngine,
+        ulong? maxMatchingLines)
+    {
+        long count = 0;
+        int searchOffset = 0;
+        int lineStart = 0;
+        while (searchOffset < haystack.Length)
+        {
+            RegexMatch? match = literalSetEngine.Find(haystack, searchOffset);
+            if (!match.HasValue)
+            {
+                return count;
+            }
+
+            int matchStart = match.Value.Start;
+            ReadOnlySpan<byte> skipped = haystack.Slice(lineStart, matchStart - lineStart);
+            int previousTerminator = skipped.LastIndexOf((byte)'\n');
+            if (previousTerminator >= 0)
+            {
+                lineStart += previousTerminator + 1;
+            }
+
+            count++;
+            if (maxMatchingLines is ulong limit && (ulong)count >= limit)
+            {
+                return count;
+            }
+
+            int lineLength = GetLineLength(haystack[lineStart..], nullData: false);
+            searchOffset = lineStart + lineLength;
+            lineStart = searchOffset;
+        }
+
+        return count;
+    }
+
     private static bool SearchLiteralRegexLines<TSink>(
         ReadOnlySpan<byte> haystack,
         ReadOnlySpan<byte> needle,
@@ -840,6 +1020,11 @@ public static class LiteralLineSearcher
         if (maxMatchingLines == 0)
         {
             return false;
+        }
+
+        if (TryGetWholeHaystackLiteralSetRegexPlan(needles, regexPlan, invertMatch, lineRegexp, wordRegexp, crlf, nullData, out RegexLiteralSetEngine literalSetEngine))
+        {
+            return literalSetEngine.Find(haystack, startAt: 0).HasValue;
         }
 
         int lineStart = 0;
@@ -1069,6 +1254,14 @@ public static class LiteralLineSearcher
             return CountMatchingLinesWithRegexPlan(haystack, needles, regexPlan, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxMatchingLines, crlf, nullData);
         }
 
+        if (!wordRegexp &&
+            TryGetWholeHaystackLiteralSetRegexPlan(needles, regexPlan, invertMatch, lineRegexp, wordRegexp, crlf, nullData, out RegexLiteralSetEngine literalSetEngine))
+        {
+            return maxMatchingLines.HasValue
+                ? CountLiteralSetMatchesByLine(haystack, literalSetEngine, maxMatchingLines.Value)
+                : literalSetEngine.CountMatches(haystack, startAt: 0);
+        }
+
         return CountPatternMatchesByLine(haystack, needles, regexPlan, asciiCaseInsensitive, wordRegexp, maxMatchingLines, crlf, nullData);
     }
 
@@ -1278,6 +1471,38 @@ public static class LiteralLineSearcher
         }
 
         var regexPlan = RegexSearchPlan.Create(needles, asciiCaseInsensitive, compileAutomata: true);
+        return SearchMatchLinesWithRegexPlan(
+            haystack,
+            needles,
+            regexPlan,
+            ref sink,
+            asciiCaseInsensitive,
+            lineRegexp,
+            wordRegexp,
+            maxMatchingLines,
+            crlf,
+            nullData);
+    }
+
+    internal static bool SearchMatchLinesWithRegexPlan<TSink>(
+        ReadOnlySpan<byte> haystack,
+        IReadOnlyList<byte[]> needles,
+        RegexSearchPlan? regexPlan,
+        ref TSink sink,
+        bool asciiCaseInsensitive = false,
+        bool lineRegexp = false,
+        bool wordRegexp = false,
+        ulong? maxMatchingLines = null,
+        bool crlf = false,
+        bool nullData = false)
+        where TSink : struct, IMatchLineSink
+    {
+        ArgumentNullException.ThrowIfNull(needles);
+        if (maxMatchingLines == 0)
+        {
+            return false;
+        }
+
         bool matched = false;
         ulong matchedLines = 0;
         int lineStart = 0;
@@ -1422,6 +1647,35 @@ public static class LiteralLineSearcher
 
         ReadOnlySpan<byte> haystack = PatternContent(line, wordRegexp, crlf, nullData);
         return CountPatternMatchesAfterColumn(haystack, needles, column, asciiCaseInsensitive, wordRegexp);
+    }
+
+    internal static long CountLineMatchesWithRegexPlan(
+        ReadOnlySpan<byte> line,
+        IReadOnlyList<byte[]> needles,
+        RegexSearchPlan? regexPlan,
+        bool asciiCaseInsensitive,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool crlf,
+        bool nullData)
+    {
+        if (lineRegexp)
+        {
+            return TryFindPatternMatch(line, needles, offset: 0, asciiCaseInsensitive, lineRegexp: true, wordRegexp: false, crlf, nullData, regexPlan, out _, out _)
+                ? 1
+                : 0;
+        }
+
+        ReadOnlySpan<byte> haystack = PatternContent(line, wordRegexp, crlf, nullData);
+        if (!wordRegexp &&
+            !crlf &&
+            !nullData &&
+            TryGetWholeHaystackLiteralSetRegexPlan(needles, regexPlan, invertMatch: false, lineRegexp: false, wordRegexp: false, crlf: false, nullData: false, out RegexLiteralSetEngine literalSetEngine))
+        {
+            return literalSetEngine.CountMatches(haystack, startAt: 0);
+        }
+
+        return CountPatternMatches(haystack, needles, regexPlan, asciiCaseInsensitive, wordRegexp);
     }
 
     private static bool HasMatchingLine(
@@ -2287,6 +2541,35 @@ public static class LiteralLineSearcher
         return matches;
     }
 
+    private static long CountLiteralSetMatchesByLine(
+        ReadOnlySpan<byte> haystack,
+        RegexLiteralSetEngine literalSetEngine,
+        ulong maxMatchingLines)
+    {
+        long count = 0;
+        ulong matchedLines = 0;
+        int lineStart = 0;
+        while (lineStart < haystack.Length)
+        {
+            ReadOnlySpan<byte> remaining = haystack[lineStart..];
+            int lineLength = GetLineLength(remaining, nullData: false);
+            long lineMatches = literalSetEngine.CountMatches(remaining[..lineLength], startAt: 0);
+            if (lineMatches > 0)
+            {
+                count += lineMatches;
+                matchedLines++;
+                if (matchedLines >= maxMatchingLines)
+                {
+                    return count;
+                }
+            }
+
+            lineStart += lineLength;
+        }
+
+        return count;
+    }
+
     private static long CountPatternMatchesByLine(
         ReadOnlySpan<byte> haystack,
         IReadOnlyList<byte[]> needles,
@@ -2478,6 +2761,7 @@ public static class LiteralLineSearcher
                 offset,
                 asciiCaseInsensitive,
                 wordRegexp,
+                regexPlan?.GetLiteralSetEngine(index),
                 regexPlan?.GetAutomaton(index),
                 regexPlan?.GetAccelerator(index),
                 regexPlan?.GetLeadingLiteralCandidateAccelerator(index),
@@ -2512,6 +2796,7 @@ public static class LiteralLineSearcher
         int offset,
         bool asciiCaseInsensitive,
         bool wordRegexp,
+        RegexLiteralSetEngine? literalSetEngine,
         RegexAutomaton? automaton,
         RegexClassSequenceAccelerator? accelerator,
         RegexLeadingLiteralCandidateAccelerator? leadingLiteralCandidateAccelerator,
@@ -2550,6 +2835,19 @@ public static class LiteralLineSearcher
             }
 
             return false;
+        }
+
+        if (literalSetEngine is not null && !wordRegexp)
+        {
+            RegexMatch? match = literalSetEngine.Find(haystack, offset);
+            if (!match.HasValue)
+            {
+                return false;
+            }
+
+            matchStart = match.Value.Start;
+            matchLength = match.Value.Length;
+            return true;
         }
 
         if (accelerator is not null && !ContainsNonAscii(haystack))
@@ -4886,6 +5184,38 @@ public static class LiteralLineSearcher
     private static bool IsRegexWhitespaceByte(byte value)
     {
         return value is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\f' or 0x0b;
+    }
+
+    private static bool TryGetWholeHaystackLiteralSetRegexPlan(
+        IReadOnlyList<byte[]> needles,
+        RegexSearchPlan? regexPlan,
+        bool invertMatch,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool crlf,
+        bool nullData,
+        out RegexLiteralSetEngine literalSetEngine)
+    {
+        literalSetEngine = null!;
+        if (invertMatch ||
+            lineRegexp ||
+            wordRegexp ||
+            crlf ||
+            nullData ||
+            needles.Count != 1 ||
+            PatternContainsLineTerminator(needles[0], nullData) ||
+            regexPlan?.GetLiteralSetEngine(0) is not RegexLiteralSetEngine engine)
+        {
+            return false;
+        }
+
+        literalSetEngine = engine;
+        return true;
+    }
+
+    private static bool PatternContainsLineTerminator(ReadOnlySpan<byte> pattern, bool nullData)
+    {
+        return pattern.Contains(GetLineTerminator(nullData));
     }
 
     private static ReadOnlySpan<byte> LineContent(ReadOnlySpan<byte> line, bool crlf, bool nullData)

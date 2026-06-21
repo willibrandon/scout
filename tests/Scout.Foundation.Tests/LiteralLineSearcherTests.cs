@@ -93,6 +93,56 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
+    /// Verifies pure literal alternations use the literal-set regex path for line search.
+    /// </summary>
+    [Fact]
+    public void SearchUsesLiteralSetRegexFastPathForLiteralAlternation()
+    {
+        var sink = new CapturingLineSink();
+        byte[][] patterns = ["alpha|Sherlock Holmes|omega"u8.ToArray()];
+
+        bool matched = LiteralLineSearcher.Search(
+            "start\nSherlock Holmes here\nnone\nomega\n"u8,
+            patterns,
+            ref sink);
+
+        Assert.True(matched);
+        Assert.Equal(2UL, sink.MatchedLines);
+        Assert.Equal(4, sink.LineNumber);
+        Assert.Equal(1, sink.MatchColumn);
+        Assert.Equal("omega\n"u8.ToArray(), sink.Line.ToArray());
+    }
+
+    /// <summary>
+    /// Verifies literal-set regex line counting honors max-count as matching lines, not matches.
+    /// </summary>
+    [Fact]
+    public void CountMatchingLinesUsesLiteralSetRegexFastPathForLiteralAlternation()
+    {
+        byte[][] patterns = ["foo|bar"u8.ToArray()];
+
+        long count = LiteralLineSearcher.CountMatchingLines(
+            "foo foo\nnone\nbar bar\nfoo\n"u8,
+            patterns,
+            maxMatchingLines: 2);
+
+        Assert.Equal(2, count);
+    }
+
+    /// <summary>
+    /// Verifies literal-set regex match counting preserves leftmost-first alternation priority.
+    /// </summary>
+    [Fact]
+    public void CountMatchesUsesLiteralSetRegexFastPathForLiteralAlternation()
+    {
+        byte[][] patterns = ["foo|foobar|bar"u8.ToArray()];
+
+        long count = LiteralLineSearcher.CountMatches("foobar foo bar\n"u8, patterns);
+
+        Assert.Equal(4, count);
+    }
+
+    /// <summary>
     /// Verifies multi-pattern match-line search reports literal regex match offsets late in a line.
     /// </summary>
     [Fact]

@@ -20,6 +20,18 @@ public static class MemmemSearch
             return 0;
         }
 
+        return MemmemPackedPairFinder.TryCreate(needle, out MemmemPackedPairFinder finder)
+            ? finder.Find(haystack, needle)
+            : FindWithoutPackedPair(haystack, needle);
+    }
+
+    internal static int FindWithoutPackedPair(ReadOnlySpan<byte> haystack, ReadOnlySpan<byte> needle)
+    {
+        if (needle.IsEmpty)
+        {
+            return 0;
+        }
+
         return haystack.IndexOf(needle);
     }
 

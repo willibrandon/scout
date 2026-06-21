@@ -97,6 +97,10 @@ internal sealed class RegexBoundedBacktracker
                             state.UnicodeClasses,
                             out int consume) &&
                         TryMatchState(state.Next, start, position + consume, haystack, visiting, out end);
+                case RegexNfaStateKind.Sparse:
+                    return position < haystack.Length &&
+                        state.TryGetSparseTarget(haystack[position], out int sparseNext) &&
+                        TryMatchState(sparseNext, start, position + 1, haystack, visiting, out end);
                 case RegexNfaStateKind.Predicate:
                     return RegexByteClass.PredicateMatches(
                             haystack,

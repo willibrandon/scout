@@ -8,10 +8,15 @@ public ref struct AhoCorasickOverlappingEnumerator
 {
     private readonly AhoCorasickAutomaton automaton;
     private readonly ReadOnlySpan<byte> haystack;
+    private readonly int[] outputCounts;
+    private int[]? denseTransitions;
+    private ushort[]? compactDenseTransitions;
+    private readonly bool hasEmptyPatterns;
     private int state;
     private int nextIndex;
     private int boundaryOffset;
     private int end;
+    private int outputCount;
     private int outputIndex;
     private int emptyIndex;
     private AhoCorasickMatch current;
@@ -21,10 +26,17 @@ public ref struct AhoCorasickOverlappingEnumerator
     {
         this.automaton = automaton;
         this.haystack = haystack;
+        outputCounts = automaton.GetOutputCountsForEnumerator();
+        compactDenseTransitions = automaton.GetCompactDenseTransitionsForEnumerator();
+        denseTransitions = compactDenseTransitions is null
+            ? automaton.GetDenseTransitionsForEnumerator()
+            : null;
+        hasEmptyPatterns = automaton.EmptyPatternCount != 0;
         state = 0;
         nextIndex = 0;
         boundaryOffset = 0;
         end = 0;
+        outputCount = 0;
         outputIndex = -1;
         emptyIndex = 0;
         current = default;
@@ -44,9 +56,20 @@ public ref struct AhoCorasickOverlappingEnumerator
     /// <returns><see langword="true" /> when another match was found.</returns>
     public bool MoveNext()
     {
+        RefreshDenseTransitions();
+        if (!hasEmptyPatterns && compactDenseTransitions is not null)
+        {
+            return MoveNextCompactDenseNoEmpty();
+        }
+
+        if (!hasEmptyPatterns && denseTransitions is not null)
+        {
+            return MoveNextDenseNoEmpty();
+        }
+
         while (true)
         {
-            if (emptyIndex < automaton.EmptyPatternCount)
+            if (hasEmptyPatterns && emptyIndex < automaton.EmptyPatternCount)
             {
                 current = automaton.GetEmptyPatternMatch(emptyIndex, boundaryOffset);
                 emptyIndex++;
@@ -56,7 +79,7 @@ public ref struct AhoCorasickOverlappingEnumerator
 
             if (outputIndex >= 0)
             {
-                if (outputIndex < automaton.GetOutputCount(state))
+                if (outputIndex < outputCount)
                 {
                     current = automaton.GetOutputMatch(state, outputIndex, end);
                     outputIndex++;
@@ -65,8 +88,13 @@ public ref struct AhoCorasickOverlappingEnumerator
                 }
 
                 outputIndex = -1;
-                boundaryOffset = end;
-                emptyIndex = 0;
+                outputCount = 0;
+                if (hasEmptyPatterns)
+                {
+                    boundaryOffset = end;
+                    emptyIndex = 0;
+                }
+
                 continue;
             }
 
@@ -76,10 +104,121 @@ public ref struct AhoCorasickOverlappingEnumerator
                 return false;
             }
 
-            state = automaton.NextStateForEnumerator(state, haystack[nextIndex]);
+            byte value = haystack[nextIndex];
+            state = compactDenseTransitions is not null
+                ? compactDenseTransitions[(state * 256) + value]
+                : denseTransitions is not null
+                ? denseTransitions[(state * 256) + value]
+                : automaton.NextStateForEnumerator(state, value);
             nextIndex++;
             end = nextIndex;
-            outputIndex = 0;
+            outputCount = outputCounts[state];
+            if (outputCount != 0)
+            {
+                outputIndex = 0;
+            }
+            else
+            {
+                if (hasEmptyPatterns)
+                {
+                    boundaryOffset = end;
+                    emptyIndex = 0;
+                }
+            }
         }
+    }
+
+    private void RefreshDenseTransitions()
+    {
+        if (hasEmptyPatterns ||
+            compactDenseTransitions is not null ||
+            denseTransitions is not null)
+        {
+            return;
+        }
+
+        compactDenseTransitions = automaton.GetCompactDenseTransitionsForEnumerator();
+        if (compactDenseTransitions is null)
+        {
+            denseTransitions = automaton.GetDenseTransitionsForEnumerator();
+        }
+    }
+
+    private bool MoveNextCompactDenseNoEmpty()
+    {
+        if (outputIndex >= 0)
+        {
+            if (outputIndex < outputCount)
+            {
+                current = automaton.GetOutputMatch(state, outputIndex, end);
+                outputIndex++;
+                hasCurrent = true;
+                return true;
+            }
+
+            outputIndex = -1;
+            outputCount = 0;
+        }
+
+        ushort[] transitions = compactDenseTransitions!;
+        while (nextIndex < haystack.Length)
+        {
+            state = transitions[(state * 256) + haystack[nextIndex]];
+            nextIndex++;
+            int count = outputCounts[state];
+            if (count == 0)
+            {
+                continue;
+            }
+
+            end = nextIndex;
+            outputCount = count;
+            outputIndex = 1;
+            current = automaton.GetOutputMatch(state, 0, end);
+            hasCurrent = true;
+            return true;
+        }
+
+        hasCurrent = false;
+        return false;
+    }
+
+    private bool MoveNextDenseNoEmpty()
+    {
+        if (outputIndex >= 0)
+        {
+            if (outputIndex < outputCount)
+            {
+                current = automaton.GetOutputMatch(state, outputIndex, end);
+                outputIndex++;
+                hasCurrent = true;
+                return true;
+            }
+
+            outputIndex = -1;
+            outputCount = 0;
+        }
+
+        int[] transitions = denseTransitions!;
+        while (nextIndex < haystack.Length)
+        {
+            state = transitions[(state * 256) + haystack[nextIndex]];
+            nextIndex++;
+            int count = outputCounts[state];
+            if (count == 0)
+            {
+                continue;
+            }
+
+            end = nextIndex;
+            outputCount = count;
+            outputIndex = 1;
+            current = automaton.GetOutputMatch(state, 0, end);
+            hasCurrent = true;
+            return true;
+        }
+
+        hasCurrent = false;
+        return false;
     }
 }

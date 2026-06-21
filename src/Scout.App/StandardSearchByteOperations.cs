@@ -124,6 +124,43 @@ internal static class StandardSearchByteOperations
         ref SearchStats stats,
         bool memoryMapped = false)
     {
+        if (TrySearchBytesWithStatsFastPath(
+            bytes,
+            pattern,
+            output,
+            prefix,
+            separators,
+            lineLimit,
+            color,
+            searchMode,
+            vimgrep,
+            lineNumber,
+            column,
+            byteOffset,
+            asciiCaseInsensitive,
+            invertMatch,
+            lineRegexp,
+            wordRegexp,
+            multiline,
+            onlyMatching,
+            replacement,
+            maxCount,
+            textMode,
+            quiet,
+            trim,
+            beforeContext,
+            afterContext,
+            passthru,
+            nullPathTerminator,
+            stopOnNonmatch,
+            quitOnBinary,
+            heading,
+            ref stats,
+            out bool fastMatched))
+        {
+            return fastMatched;
+        }
+
         long started = Stopwatch.GetTimestamp();
         using MemoryStream buffer = new();
         var bufferedWriter = new RawByteWriter(buffer);
@@ -133,9 +170,241 @@ internal static class StandardSearchByteOperations
         TimeSpan searchElapsed = Stopwatch.GetElapsedTime(started);
         output.Write(body);
 
-        SearchStats fileStats = CollectSearchStats(bytes, pattern, searchMode, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, separators.Crlf, separators.NullData, maxCount, stopOnNonmatch, searchMode == CliSearchMode.Standard ? (ulong)body.Length : 0, searchElapsed);
+        SearchStats fileStats = CollectSearchStats(bytes, pattern, searchMode, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, separators.Crlf, separators.NullData, maxCount, stopOnNonmatch, searchMode == CliSearchMode.Standard ? CountPrintedBodyBytesForStats(body, color) : 0, searchElapsed);
         stats.Add(fileStats);
         return matched;
+    }
+
+    private static bool TrySearchBytesWithStatsFastPath(
+        byte[] bytes,
+        IReadOnlyList<byte[]> pattern,
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        CliSearchMode searchMode,
+        bool vimgrep,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool asciiCaseInsensitive,
+        bool invertMatch,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool multiline,
+        bool onlyMatching,
+        ReadOnlyMemory<byte>? replacement,
+        ulong? maxCount,
+        bool textMode,
+        bool quiet,
+        bool trim,
+        ulong beforeContext,
+        ulong afterContext,
+        bool passthru,
+        bool nullPathTerminator,
+        bool stopOnNonmatch,
+        bool quitOnBinary,
+        bool heading,
+        ref SearchStats stats,
+        out bool matched)
+    {
+        matched = false;
+        if (searchMode != CliSearchMode.Standard ||
+            vimgrep ||
+            invertMatch ||
+            lineRegexp ||
+            wordRegexp ||
+            multiline ||
+            onlyMatching ||
+            replacement is not null ||
+            maxCount is not null ||
+            textMode ||
+            quiet ||
+            beforeContext > 0 ||
+            afterContext > 0 ||
+            passthru ||
+            stopOnNonmatch ||
+            heading ||
+            separators.Crlf ||
+            separators.NullData)
+        {
+            return false;
+        }
+
+        BinaryDetectionResult binaryDetection = BinaryDetection.Detect(bytes, textMode, separators.NullData, quitOnBinary);
+        if (binaryDetection.IsBinary)
+        {
+            return false;
+        }
+
+        RegexSearchPlan? regexPlan = LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: true);
+        if (regexPlan is null)
+        {
+            return false;
+        }
+
+        long started = Stopwatch.GetTimestamp();
+        using MemoryStream buffer = new();
+        var bufferedWriter = new RawByteWriter(buffer);
+        ulong matchedLines;
+        long matches;
+        if (color.Enabled)
+        {
+            var coloredSink = new ColoredSearchSink(
+                bufferedWriter,
+                prefix,
+                separators.FieldMatch,
+                lineNumber,
+                column,
+                byteOffset,
+                trim,
+                nullPathTerminator,
+                lineLimit,
+                color,
+                separators.LineTerminator);
+            var countingSink = new RegexPlanCountingMatchLineSink<ColoredSearchSink>(coloredSink);
+            matched = LiteralLineSearcher.SearchMatchLinesWithRegexPlan(
+                bytes,
+                pattern,
+                regexPlan,
+                ref countingSink,
+                asciiCaseInsensitive,
+                lineRegexp: false,
+                wordRegexp: false,
+                maxMatchingLines: null,
+                crlf: false,
+                nullData: false);
+            coloredSink = countingSink.Inner;
+            coloredSink.Flush();
+            matchedLines = countingSink.MatchedLines;
+            matches = countingSink.Matches;
+        }
+        else
+        {
+            var sink = new StandardSearchSink(
+                bufferedWriter,
+                prefix,
+                separators.FieldMatch,
+                separators.FieldContext,
+                lineNumber,
+                column,
+                byteOffset,
+                trim,
+                nullPathTerminator,
+                lineLimit,
+                color,
+                separators.LineTerminator);
+            bool requireMatchColumn = column || prefix?.HasHyperlink == true;
+            matched = LiteralLineSearcher.SearchWithRegexPlanAndCountMatches(
+                bytes,
+                pattern,
+                regexPlan,
+                ref sink,
+                out matchedLines,
+                out matches,
+                asciiCaseInsensitive,
+                invertMatch: false,
+                lineRegexp: false,
+                wordRegexp: false,
+                maxMatchingLines: null,
+                crlf: false,
+                nullData: false,
+                requireMatchColumn);
+        }
+
+        bufferedWriter.Flush();
+        byte[] body = buffer.ToArray();
+        TimeSpan searchElapsed = Stopwatch.GetElapsedTime(started);
+        output.Write(body);
+
+        var fileStats = new SearchStats();
+        fileStats.AddElapsed(searchElapsed);
+        fileStats.AddSearch();
+        fileStats.AddBytesPrinted(CountPrintedBodyBytesForStats(body, color));
+        fileStats.AddBytesSearched((ulong)bytes.Length);
+        if (matchedLines > 0)
+        {
+            fileStats.AddMatchedLines(matchedLines);
+            fileStats.AddSearchWithMatch();
+        }
+
+        fileStats.AddMatches((ulong)matches);
+        stats.Add(fileStats);
+        return true;
+    }
+
+    private static ulong CountPrintedBodyBytesForStats(byte[] body, OutputColor color)
+    {
+        if (!color.Enabled)
+        {
+            return (ulong)body.Length;
+        }
+
+        ulong count = 0;
+        int index = 0;
+        while (index < body.Length)
+        {
+            if (TrySkipAnsiSequence(body, index, out int nextIndex))
+            {
+                index = nextIndex;
+                continue;
+            }
+
+            count++;
+            index++;
+        }
+
+        return count;
+    }
+
+    private static bool TrySkipAnsiSequence(ReadOnlySpan<byte> bytes, int start, out int nextIndex)
+    {
+        nextIndex = start;
+        if (start + 1 >= bytes.Length ||
+            bytes[start] != 0x1B)
+        {
+            return false;
+        }
+
+        byte introducer = bytes[start + 1];
+        if (introducer == (byte)'[')
+        {
+            for (int index = start + 2; index < bytes.Length; index++)
+            {
+                byte value = bytes[index];
+                if (value is >= 0x40 and <= 0x7E)
+                {
+                    nextIndex = index + 1;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        if (introducer == (byte)']')
+        {
+            for (int index = start + 2; index < bytes.Length; index++)
+            {
+                byte value = bytes[index];
+                if (value == 0x07)
+                {
+                    nextIndex = index + 1;
+                    return true;
+                }
+
+                if (value == 0x1B &&
+                    index + 1 < bytes.Length &&
+                    bytes[index + 1] == (byte)'\\')
+                {
+                    nextIndex = index + 2;
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private static SearchStats CollectSearchStats(

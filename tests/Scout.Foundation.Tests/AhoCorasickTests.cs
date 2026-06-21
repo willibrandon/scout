@@ -467,6 +467,97 @@ public sealed class AhoCorasickTests
             [(1, 0, 4)]);
     }
 
+    /// <summary>
+    /// Verifies small automatons still use eager dense transition tables.
+    /// </summary>
+    [Fact]
+    public void SmallAutomatonsUseEagerDenseTransitions()
+    {
+        byte[][] patterns = Enumerable
+            .Range(0, 16)
+            .Select(index => System.Text.Encoding.ASCII.GetBytes($"needle-{index:D2}"))
+            .ToArray();
+        AhoCorasickAutomaton automaton = Build(patterns);
+
+        Assert.NotNull(GetAnyDenseTransitions(automaton));
+        AssertMatches(
+            automaton.FindAll("xx needle-15 yy needle-07"u8),
+            [(15, 3, 12), (7, 16, 25)]);
+    }
+
+    /// <summary>
+    /// Verifies larger automatons use lazy dense transition rows and still search correctly.
+    /// </summary>
+    [Fact]
+    public void SearchesWithLazyDenseTransitionRows()
+    {
+        byte[][] patterns = Enumerable
+            .Range(0, 700)
+            .Select(index => System.Text.Encoding.ASCII.GetBytes($"needle-{index:D4}"))
+            .ToArray();
+        AhoCorasickAutomaton automaton = Build(patterns);
+
+        Assert.Null(GetAnyDenseTransitions(automaton));
+        AssertMatches(
+            automaton.FindAll("xx needle-0699 yy needle-0007"u8),
+            [(699, 3, 14), (7, 18, 29)]);
+    }
+
+    /// <summary>
+    /// Verifies hot lazy automatons promote to contiguous dense transitions.
+    /// </summary>
+    [Fact]
+    public void PromotesHotLazyRowsToDenseTransitions()
+    {
+        byte[][] patterns = Enumerable
+            .Range(0, 700)
+            .Select(index => new[] { (byte)(index >> 8), (byte)index, (byte)'x' })
+            .ToArray();
+        AhoCorasickAutomaton automaton = Build(patterns);
+        byte[] haystack = new byte[patterns.Length * 4];
+        for (int index = 0; index < patterns.Length; index++)
+        {
+            patterns[index].CopyTo(haystack.AsSpan(index * 4, 3));
+            haystack[(index * 4) + 3] = (byte)' ';
+        }
+
+        Assert.Null(GetAnyDenseTransitions(automaton));
+        Assert.Equal(700, automaton.FindAll(haystack).Count);
+        Assert.NotNull(GetAnyDenseTransitions(automaton));
+    }
+
+    /// <summary>
+    /// Verifies larger automatons can be promoted before a long scan starts.
+    /// </summary>
+    [Fact]
+    public void CanEagerlyPromoteLargeAutomatonToDenseTransitions()
+    {
+        byte[][] patterns = Enumerable
+            .Range(0, 700)
+            .Select(index => System.Text.Encoding.ASCII.GetBytes($"needle-{index:D4}"))
+            .ToArray();
+        AhoCorasickAutomaton automaton = Build(patterns);
+
+        Assert.Null(GetAnyDenseTransitions(automaton));
+        automaton.EnsureDenseTransitions(maxStates: 4096);
+
+        Assert.NotNull(GetAnyDenseTransitions(automaton));
+        AssertMatches(
+            automaton.FindAll("xx needle-0699 yy needle-0007"u8),
+            [(699, 3, 14), (7, 18, 29)]);
+    }
+
+    private static object? GetAnyDenseTransitions(AhoCorasickAutomaton automaton)
+    {
+        Type type = typeof(AhoCorasickAutomaton);
+        return type
+            .GetField("denseTransitions", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(automaton) ??
+            type
+                .GetField("compactDenseTransitions", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .GetValue(automaton);
+    }
+
     private static AhoCorasickAutomaton Build(params byte[][] patterns)
     {
         return AhoCorasickAutomaton.Create(patterns);

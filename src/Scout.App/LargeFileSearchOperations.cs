@@ -8,7 +8,7 @@ internal static unsafe class LargeFileSearchOperations
 {
     private const int StreamingFileBufferLength = 131_072;
     private const int StreamingFileStreamBufferLength = 1;
-    private const int ImplicitSearchStreamingFileBufferLength = 262_144;
+    private const int ImplicitSearchStreamingFileBufferLength = 64 * 1024;
     private const int ExplicitRegexStreamingFileBufferLength = StreamingFileBufferLength;
     private const int ExplicitFastLiteralStreamingFileBufferLength = 6 * 1024 * 1024;
     private const int ExplicitParallelLiteralStreamingFileBufferLength = 256 * 1024;

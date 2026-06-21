@@ -581,11 +581,16 @@ public sealed partial class PinnedConfigurationTests
     {
         string root = FindRepositoryRoot();
         var document = XDocument.Load(Path.Combine(root, "Directory.Build.props"));
+        var targets = XDocument.Load(Path.Combine(root, "Directory.Build.targets"));
         XElement defaults = document.Root!.Elements("PropertyGroup").First(static group => group.Attribute("Condition") is null);
         XElement sourceGenerator = document.Root.Elements("PropertyGroup").Single(
             static group => string.Equals(group.Attribute("Condition")?.Value, "'$(MSBuildProjectName)' == 'Scout.SourceGen'", StringComparison.Ordinal));
         XElement app = document.Root.Elements("PropertyGroup").Single(
             static group => string.Equals(group.Attribute("Condition")?.Value, "'$(MSBuildProjectName)' == 'Scout.App'", StringComparison.Ordinal));
+        XElement tests = targets.Root!.Elements("PropertyGroup").Single(static group => string.Equals(
+            group.Attribute("Condition")?.Value,
+            "$([System.String]::Copy('$(MSBuildProjectName)').EndsWith('.Tests'))",
+            StringComparison.Ordinal));
 
         Assert.Equal("net10.0", defaults.Element("TargetFramework")?.Value);
         Assert.Equal("14.0", defaults.Element("LangVersion")?.Value);
@@ -613,6 +618,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Equal("Library", app.Element("OutputType")?.Value);
         Assert.Equal("Static", app.Element("NativeLib")?.Value);
         Assert.Equal("true", app.Element("PublishAot")?.Value);
+
+        XElement testAppHost = tests.Element("DefaultAppHostRuntimeIdentifier")!;
+        Assert.Contains("NETCoreSdkPortableRuntimeIdentifier", testAppHost.Attribute("Condition")?.Value, StringComparison.Ordinal);
+        Assert.Equal("$(NETCoreSdkPortableRuntimeIdentifier)", testAppHost.Value);
     }
 
     /// <summary>
@@ -696,6 +705,7 @@ public sealed partial class PinnedConfigurationTests
         string root = FindRepositoryRoot();
         string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
         string script = File.ReadAllText(Path.Combine(root, "eng", "check-msbuild-warning-gates.sh"));
+        string targets = File.ReadAllText(Path.Combine(root, "Directory.Build.targets"));
 
         Assert.Contains("artifacts/preflight/msbuild-warning-gates", preflight, StringComparison.Ordinal);
         Assert.Contains("dotnet format \"$ROOT/Scout.slnx\" --no-restore --verify-no-changes", preflight, StringComparison.Ordinal);
@@ -778,6 +788,9 @@ public sealed partial class PinnedConfigurationTests
 
         string responseFile = File.ReadAllText(Path.Combine(root, "Directory.Build.rsp"));
         Assert.Contains("-p:NoWarn=", responseFile, StringComparison.Ordinal);
+        Assert.Contains("ScoutNormalizeSdkBaselineNoWarn", targets, StringComparison.Ordinal);
+        Assert.Contains("PropertyName=\"NoWarn\"", targets, StringComparison.Ordinal);
+        Assert.Contains("'$(NoWarn)' == '1701;1702'", targets, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1841,6 +1854,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("internal static bool IsGeneralCategory(RegexUnicodePropertyKind kind, Rune value)", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("internal static bool IsBooleanProperty(RegexUnicodePropertyKind kind, Rune value)", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("internal static bool IsBreakProperty(RegexUnicodePropertyKind kind, Rune value)", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("internal static bool IsScript(RegexUnicodePropertyKind kind, Rune value)", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("internal static bool IsScriptExtension(RegexUnicodePropertyKind kind, Rune value)", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("internal static bool IsSimpleCaseFold(Rune left, Rune right)", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static ReadOnlySpan<int> DecimalNumber", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static ReadOnlySpan<int> PerlWord", regexUnicodeTables, StringComparison.Ordinal);
@@ -1848,11 +1863,19 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("private static ReadOnlySpan<int> Alphabetic", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static ReadOnlySpan<int> SimpleCaseFold", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static ReadOnlySpan<int> BreakPropertyGraphemeClusterBreakRegionalIndicator", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static ReadOnlySpan<int> BreakPropertyGraphemeClusterBreakExtend", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static ReadOnlySpan<int> BreakPropertyGraphemeClusterBreakSpacingMark", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static ReadOnlySpan<int> BreakPropertyWordBreakHebrewLetter", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static ReadOnlySpan<int> BreakPropertySentenceBreakSContinue", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static ReadOnlySpan<int> BooleanPropertyMath", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static ReadOnlySpan<int> BooleanPropertyEmoji", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static ReadOnlySpan<int> BooleanPropertyExtendedPictographic", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static ReadOnlySpan<int> BooleanPropertyLowercase", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static ReadOnlySpan<int> BooleanPropertyUppercase", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static ReadOnlySpan<int> ScriptCyrillic", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static ReadOnlySpan<int> ScriptExtensionCyrillic", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static ReadOnlySpan<int> ScriptGreek", regexUnicodeTables, StringComparison.Ordinal);
+        Assert.Contains("private static ReadOnlySpan<int> ScriptExtensionGreek", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("private static ReadOnlySpan<int> GeneralCategoryUppercaseLetter", regexUnicodeTables, StringComparison.Ordinal);
         Assert.Contains("RegexUnicodeTables.IsDecimalNumber", regexByteClass, StringComparison.Ordinal);
         Assert.Contains("RegexUnicodeTables.IsPerlWord", regexByteClass, StringComparison.Ordinal);
@@ -1861,6 +1884,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("RegexUnicodeTables.IsGeneralCategory", regexByteClass, StringComparison.Ordinal);
         Assert.Contains("RegexUnicodeTables.IsBooleanProperty", regexByteClass, StringComparison.Ordinal);
         Assert.Contains("RegexUnicodeTables.IsBreakProperty", regexByteClass, StringComparison.Ordinal);
+        Assert.Contains("RegexUnicodeTables.IsScript", regexByteClass, StringComparison.Ordinal);
+        Assert.Contains("RegexUnicodeTables.IsScriptExtension", regexByteClass, StringComparison.Ordinal);
         Assert.Contains("RegexUnicodeTables.IsSimpleCaseFold", regexByteClass, StringComparison.Ordinal);
         Assert.Contains("TryParseUnicodePropertyClass", regexSyntaxParseState, StringComparison.Ordinal);
         Assert.Contains("public static bool TryGetKind", regexUnicodePropertyNames, StringComparison.Ordinal);
@@ -1870,6 +1895,11 @@ public sealed partial class PinnedConfigurationTests
         Assert.DoesNotContain("TryParseUnicodeAnyClass", regexSyntaxParseState, StringComparison.Ordinal);
         Assert.Contains("UppercaseLetter", regexUnicodePropertyKind, StringComparison.Ordinal);
         Assert.Contains("ExtendedPictographic", regexUnicodePropertyKind, StringComparison.Ordinal);
+        Assert.Contains("ScriptCyrillic", regexUnicodePropertyKind, StringComparison.Ordinal);
+        Assert.Contains("ScriptExtensionCyrillic", regexUnicodePropertyKind, StringComparison.Ordinal);
+        Assert.Contains("ScriptGreek", regexUnicodePropertyKind, StringComparison.Ordinal);
+        Assert.Contains("ScriptExtensionGreek", regexUnicodePropertyKind, StringComparison.Ordinal);
+        Assert.Contains("GraphemeClusterBreakExtend", regexUnicodePropertyKind, StringComparison.Ordinal);
         Assert.DoesNotContain("Rune.GetUnicodeCategory", regexByteClass, StringComparison.Ordinal);
         Assert.DoesNotContain("Rune.IsWhiteSpace", regexByteClass, StringComparison.Ordinal);
         string[] actualTables = Directory.GetFiles(tablesRoot, "*.rs")
@@ -2870,6 +2900,7 @@ public sealed partial class PinnedConfigurationTests
         var violations = new List<string>();
 
         Assert.Contains("IsLowercaseSha256(expectedSha256)", oracle, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_ORACLE_ENVIRONMENT", oracle, StringComparison.Ordinal);
         Assert.DoesNotContain("StartsWith(\"resolved@", oracle, StringComparison.Ordinal);
         Assert.NotEmpty(matches);
         foreach (Match match in matches)
