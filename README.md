@@ -9,8 +9,8 @@ reimplementation, not a wrapper: the regex engine, the directory walker, the glo
 logic, and the PCRE2 integration are all ported, so Scout *behaves like* ripgrep rather than
 calling it.
 
-> **Status:** v0.1.3, tracking ripgrep 15.1.0 (commit `4857d6fa67`). Functional and fully
-> tested — 3,230 tests pass on all six supported platforms. The release workflow publishes native
+> **Status:** v0.2.0, tracking ripgrep 15.1.0 (commit `4857d6fa67`). Functional and fully
+> tested — 3,473 tests pass on all six supported platforms. The release workflow publishes native
 > binaries, .NET tool packages, Homebrew, Scoop, and winget.
 
 ## Example
@@ -111,7 +111,7 @@ The source tree maps recognizably onto ripgrep's crates. The pieces worth knowin
 
 Scout's contract is *behavioral parity* with ripgrep, checked continuously. A differential suite
 runs Scout and the pinned `rg` over a large corpus and compares exit codes and output; ripgrep's
-own integration tests and the regex and encoding conformance corpora run alongside it — 3,230
+own integration tests and the regex and encoding conformance corpora run alongside it — 3,473
 tests, zero skipped, on every supported platform.
 
 Exit codes and deterministic search output match ripgrep exactly. The differential harness
