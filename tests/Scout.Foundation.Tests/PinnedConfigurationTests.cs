@@ -2269,6 +2269,22 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies PCRE2 invalid-UTF support uses the vendored header constant.
+    /// </summary>
+    [Fact]
+    public void Pcre2InvalidUtfOptionMatchesVendoredHeader()
+    {
+        string root = FindRepositoryRoot();
+        string header = File.ReadAllText(Path.Combine(root, "native", "pcre2", "pcre2-10.46", "include", "pcre2.h"));
+        string pcre2CompileOptions = File.ReadAllText(Path.Combine(root, "src", "Scout.Pcre2", "Pcre2CompileOptions.cs"));
+        string pcre2SearchOperations = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "Pcre2SearchOperations.cs"));
+
+        Assert.Contains("#define PCRE2_MATCH_INVALID_UTF   0x04000000u", header, StringComparison.Ordinal);
+        Assert.Contains("MatchInvalidUtf = 0x04000000", pcre2CompileOptions, StringComparison.Ordinal);
+        Assert.Contains("Pcre2CompileOptions.MatchInvalidUtf", pcre2SearchOperations, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies PCRE2 provenance is recorded and matches the vendored <c>pcre2-sys</c> header.
     /// </summary>
     [Fact]

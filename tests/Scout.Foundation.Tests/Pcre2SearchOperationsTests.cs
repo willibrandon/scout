@@ -119,6 +119,27 @@ public sealed class Pcre2SearchOperationsTests
         Assert.True(Pcre2SearchOperations.CanRun(ParseLowArgs("--pcre2", "--json", "--stats", "needle", "haystack.txt")));
     }
 
+    /// <summary>
+    /// Verifies Unicode PCRE2 searches tolerate invalid UTF-8 subject bytes like ripgrep.
+    /// </summary>
+    [Fact]
+    public void UnicodeCompileOptionsAllowInvalidUtf8Subjects()
+    {
+        Pcre2CompileOptions unicodeOptions = Pcre2SearchOperations.GetPcre2CompileOptions(
+            ParseLowArgs("--pcre2", "needle", "haystack.txt"),
+            ["needle"u8.ToArray()]);
+        Pcre2CompileOptions byteOptions = Pcre2SearchOperations.GetPcre2CompileOptions(
+            ParseLowArgs("--pcre2", "--no-pcre2-unicode", "needle", "haystack.txt"),
+            ["needle"u8.ToArray()]);
+
+        Assert.True((unicodeOptions & Pcre2CompileOptions.Utf) != 0);
+        Assert.True((unicodeOptions & Pcre2CompileOptions.UnicodeProperties) != 0);
+        Assert.True((unicodeOptions & Pcre2CompileOptions.MatchInvalidUtf) != 0);
+        Assert.False((byteOptions & Pcre2CompileOptions.Utf) != 0);
+        Assert.False((byteOptions & Pcre2CompileOptions.UnicodeProperties) != 0);
+        Assert.False((byteOptions & Pcre2CompileOptions.MatchInvalidUtf) != 0);
+    }
+
     private static CliLowArgs ParseLowArgs(params string[] arguments)
     {
         var osArguments = new OsString[arguments.Length];
