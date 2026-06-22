@@ -170,9 +170,41 @@ internal static class StandardSearchByteOperations
         TimeSpan searchElapsed = Stopwatch.GetElapsedTime(started);
         output.Write(body);
 
-        SearchStats fileStats = CollectSearchStats(bytes, pattern, searchMode, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, separators.Crlf, separators.NullData, maxCount, stopOnNonmatch, searchMode == CliSearchMode.Standard ? CountPrintedBodyBytesForStats(body, color) : 0, searchElapsed);
+        byte[] statsBytes = GetStatsSearchBytes(bytes, textMode, separators.NullData, quitOnBinary, multiline, memoryMapped);
+        SearchStats fileStats = CollectSearchStats(statsBytes, pattern, searchMode, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, separators.Crlf, separators.NullData, maxCount, stopOnNonmatch, searchMode == CliSearchMode.Standard ? CountPrintedBodyBytesForStats(body, color) : 0, searchElapsed);
         stats.Add(fileStats);
         return matched;
+    }
+
+    private static byte[] GetStatsSearchBytes(byte[] bytes, bool textMode, bool nullData, bool quitOnBinary, bool multiline, bool memoryMapped)
+    {
+        BinaryDetectionResult binaryDetection = BinaryDetection.Detect(bytes, textMode, nullData, quitOnBinary);
+        if (!binaryDetection.IsBinary)
+        {
+            return bytes;
+        }
+
+        if (memoryMapped && binaryDetection.Kind == BinaryDetectionKind.Convert)
+        {
+            return bytes.AsSpan(0, binaryDetection.Offset).ToArray();
+        }
+
+        if (binaryDetection.Kind != BinaryDetectionKind.Quit)
+        {
+            return bytes;
+        }
+
+        if (multiline || memoryMapped)
+        {
+            return binaryDetection.Offset < BinaryDetectionBufferLength
+                ? []
+                : bytes;
+        }
+
+        int safeLength = GetBinarySafePrefixLength(bytes, binaryDetection.Offset);
+        return safeLength == bytes.Length
+            ? bytes
+            : bytes.AsSpan(0, safeLength).ToArray();
     }
 
     private static bool TrySearchBytesWithStatsFastPath(
