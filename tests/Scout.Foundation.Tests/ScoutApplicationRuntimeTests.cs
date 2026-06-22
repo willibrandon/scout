@@ -357,6 +357,66 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
+    /// Verifies default recursive stats use the binary-safe search prefix, not the full file buffer.
+    /// </summary>
+    [Fact]
+    public void StatsImplicitBinaryStandardSearchUsesBinarySafePrefix()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        File.WriteAllBytes(path, Encoding.UTF8.GetBytes("alpha\n\0server { after }\n"));
+
+        (int exitCode, byte[] output, string error) = RunScout("--stats", "alpha", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--stats", "alpha", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(NormalizeStatsTimings(pinnedOutput), NormalizeStatsTimings(output));
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies multiline regex stats stop at the same binary-safe prefix as ripgrep.
+    /// </summary>
+    [Fact]
+    public void StatsImplicitBinaryMultilineSearchUsesBinarySafePrefix()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        File.WriteAllBytes(path, Encoding.UTF8.GetBytes("alpha\n\0server { after }\n"));
+
+        const string Pattern = @"server \{(?s:.*?)\}";
+        (int exitCode, byte[] output, string error) = RunScout("--stats", "-U", Pattern, root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--stats", "-U", Pattern, root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(NormalizeStatsTimings(pinnedOutput), NormalizeStatsTimings(output));
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies multiline regex stats keep searching when binary data appears after the initial scan window.
+    /// </summary>
+    [Fact]
+    public void StatsImplicitBinaryMultilineSearchCountsLateBinaryLikeRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        byte[] bytes = new byte[70_007];
+        Array.Fill(bytes, (byte)'a');
+        bytes[70_000] = 0;
+        bytes[^1] = (byte)'\n';
+        File.WriteAllBytes(path, bytes);
+
+        const string Pattern = @"server \{(?s:.*?)\}";
+        (int exitCode, byte[] output, string error) = RunScout("--stats", "-U", Pattern, root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--stats", "-U", Pattern, root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(NormalizeStatsTimings(pinnedOutput), NormalizeStatsTimings(output));
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies multiline signature arity counts match ripgrep.
     /// </summary>
     [Fact]
