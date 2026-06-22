@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.9.0.schema.json
 PackageIdentifier: willibrandon.scout
-PackageVersion: 0.2.0
+PackageVersion: 0.2.1
 Platform:
   - Windows.Desktop
 MinimumOSVersion: 10.0.18362.0
@@ -13,11 +13,11 @@ InstallModes:
 UpgradeBehavior: install
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/willibrandon/scout/releases/download/v0.2.0/scout-win-x64.msi
+    InstallerUrl: https://github.com/willibrandon/scout/releases/download/v0.2.1/scout-win-x64.msi
     InstallerSha256: PLACEHOLDER_SHA256_X64
     ProductCode: "{PLACEHOLDER_PRODUCT_CODE_X64}"
   - Architecture: arm64
-    InstallerUrl: https://github.com/willibrandon/scout/releases/download/v0.2.0/scout-win-arm64.msi
+    InstallerUrl: https://github.com/willibrandon/scout/releases/download/v0.2.1/scout-win-arm64.msi
     InstallerSha256: PLACEHOLDER_SHA256_ARM64
     ProductCode: "{PLACEHOLDER_PRODUCT_CODE_ARM64}"
 ManifestType: installer
