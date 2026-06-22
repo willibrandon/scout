@@ -35,5 +35,10 @@ public enum Pcre2CompileOptions
     /// <summary>
     /// Enables UTF-8 pattern and subject handling.
     /// </summary>
-    Utf = 0x00080000
+    Utf = 0x00080000,
+
+    /// <summary>
+    /// Allows matching UTF-8 mode patterns against subjects that contain invalid UTF-8 bytes.
+    /// </summary>
+    MatchInvalidUtf = 0x04000000
 }
