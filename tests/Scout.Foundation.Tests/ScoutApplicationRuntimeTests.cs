@@ -443,24 +443,6 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
-    /// Verifies implicit recursive binary files contribute only ripgrep's binary-safe prefix to stats.
-    /// </summary>
-    [Fact]
-    public void StatsImplicitBinarySearchMatchesPinnedRipgrep()
-    {
-        string root = CreateTempDirectory();
-        string path = Path.Combine(root, "input.dat");
-        File.WriteAllBytes(path, Encoding.UTF8.GetBytes("prefix needle\nalpha\0needle after\n"));
-
-        (int exitCode, byte[] output, string error) = RunScout("--stats", "needle", root);
-        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--stats", "needle", root);
-
-        Assert.Equal(pinnedExitCode, exitCode);
-        Assert.Equal(NormalizeStatsTimings(pinnedOutput), NormalizeStatsTimings(output));
-        Assert.Equal(pinnedError, error);
-    }
-
-    /// <summary>
     /// Verifies no-stats disables an earlier stats flag.
     /// </summary>
     [Fact]

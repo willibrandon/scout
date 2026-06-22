@@ -170,24 +170,9 @@ internal static class StandardSearchByteOperations
         TimeSpan searchElapsed = Stopwatch.GetElapsedTime(started);
         output.Write(body);
 
-        byte[] statsBytes = GetStatsSearchBytes(bytes, textMode, separators.NullData, quitOnBinary);
-        SearchStats fileStats = CollectSearchStats(statsBytes, pattern, searchMode, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, separators.Crlf, separators.NullData, maxCount, stopOnNonmatch, searchMode == CliSearchMode.Standard ? CountPrintedBodyBytesForStats(body, color) : 0, searchElapsed);
+        SearchStats fileStats = CollectSearchStats(bytes, pattern, searchMode, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, separators.Crlf, separators.NullData, maxCount, stopOnNonmatch, searchMode == CliSearchMode.Standard ? CountPrintedBodyBytesForStats(body, color) : 0, searchElapsed);
         stats.Add(fileStats);
         return matched;
-    }
-
-    private static byte[] GetStatsSearchBytes(byte[] bytes, bool textMode, bool nullData, bool quitOnBinary)
-    {
-        BinaryDetectionResult binaryDetection = BinaryDetection.Detect(bytes, textMode, nullData, quitOnBinary);
-        if (binaryDetection.Kind != BinaryDetectionKind.Quit)
-        {
-            return bytes;
-        }
-
-        int safeLength = GetBinarySafePrefixLength(bytes, binaryDetection.Offset);
-        return safeLength == bytes.Length
-            ? bytes
-            : bytes.AsSpan(0, safeLength).ToArray();
     }
 
     private static bool TrySearchBytesWithStatsFastPath(
