@@ -366,7 +366,7 @@ internal static class StandardSearchByteOperations
         return true;
     }
 
-    private static ulong CountPrintedBodyBytesForStats(byte[] body, OutputColor color)
+    internal static ulong CountPrintedBodyBytesForStats(byte[] body, OutputColor color)
     {
         if (!color.Enabled)
         {
