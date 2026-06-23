@@ -308,6 +308,25 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
+    /// Verifies colored PCRE2 stats count logical printed bytes like ripgrep, not ANSI escape bytes.
+    /// </summary>
+    [Fact]
+    public void StatsPcre2ColorAlwaysMatchesPinnedRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "foo bar\nfoo baz\nbar only\n");
+
+        const string Pattern = @"(?=.*foo).*bar";
+        (int exitCode, byte[] output, string error) = RunScout("--stats", "--color=always", "-P", Pattern, path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--stats", "--color=always", "-P", Pattern, path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(NormalizeStatsTimings(pinnedOutput), NormalizeStatsTimings(output));
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies standard regex stats count emitted matching lines like ripgrep.
     /// </summary>
     [Fact]
