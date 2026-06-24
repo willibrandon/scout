@@ -5040,6 +5040,27 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies zero-width leading assertions do not hide a following prefix-set prefilter.
+    /// </summary>
+    [Fact]
+    public void BuildsPrefixPrefilterAfterLeadingWordBoundary()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            specializationMode: RegexSpecializationMode.General);
+
+        Assert.True(
+            automaton.PrefilterKind is RegexPrefilterKind.Teddy or RegexPrefilterKind.AhoCorasick,
+            "Expected a prefix-set prefilter, got " + automaton.PrefilterKind + ".");
+        Assert.Equal(0, automaton.RequiredLiteralWindow);
+        Assert.Equal(new RegexMatch(4, 11), automaton.Find("xxx struct file;"u8));
+        Assert.Null(automaton.Find("destructor file;"u8));
+    }
+
+    /// <summary>
     /// Verifies hard start anchors skip unhelpful prefilter construction.
     /// </summary>
     [Fact]
