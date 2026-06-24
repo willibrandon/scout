@@ -93,6 +93,19 @@ pcre2_path = "artifacts/ripgrep-oracle/win-arm64/ripgrep/target/pcre2/release-lt
 pcre2_sha256 = "a5891179d4c8aa2dc61a337f27d27cbea0349f760c696acb0d6abf4aa1f05329"
 
 [[ripgrep_oracle]]
+rid = "win-x64"
+environment = "local"
+archive_path = "tests/oracles/ripgrep/win-x64.zip"
+archive_sha256 = "d197b5a2bfe174d90d2fddf167cc65d4b2272e158cf8f6ac16b9902d613e2993"
+profile = "release-lto"
+path = "artifacts/ripgrep-oracle/win-x64/ripgrep/target/release-lto/rg.exe"
+sha256 = "fe41d3c694b071f1c2b02f6bcd5e290032d13003ec303a1deab9cdf8b47353ba"
+pcre2_profile = "release-lto"
+pcre2_features = "pcre2"
+pcre2_path = "artifacts/ripgrep-oracle/win-x64/ripgrep/target/pcre2/release-lto/rg.exe"
+pcre2_sha256 = "57153890221954c2ded22c9176f4233975cf1f10f83966539c2dcdf0ff4bc339"
+
+[[ripgrep_oracle]]
 rid = "osx-arm64"
 environment = "local"
 profile = "release-lto"

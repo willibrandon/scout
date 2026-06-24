@@ -111,6 +111,7 @@ public sealed class RegexAutomaton
     /// <param name="utf8">Whether empty and scalar-consuming matches must respect UTF-8 code point boundaries.</param>
     /// <param name="unicodeClasses">Whether Perl classes and word-boundary assertions use Unicode word definitions.</param>
     /// <param name="dfaSizeLimit">The maximum DFA cache size in bytes, or <see langword="null" /> for the default.</param>
+    /// <param name="specializationMode">The specialization mode to use, or <see langword="null" /> for Scout's current default.</param>
     /// <returns>The compiled automaton.</returns>
     public static RegexAutomaton Compile(
         ReadOnlySpan<byte> pattern,
@@ -121,10 +122,12 @@ public sealed class RegexAutomaton
         byte lineTerminator = (byte)'\n',
         bool utf8 = true,
         bool unicodeClasses = true,
-        ulong? dfaSizeLimit = null)
+        ulong? dfaSizeLimit = null,
+        RegexSpecializationMode? specializationMode = null)
     {
-        var options = new RegexCompileOptions(caseInsensitive, swapGreed: false, multiLine, dotMatchesNewline, crlf, lineTerminator, utf8, unicodeClasses);
-        if (RegexLiteralSetEngine.TryCreateLiteralAlternation(pattern, options, out RegexLiteralSetEngine? literalSet) &&
+        var options = new RegexCompileOptions(caseInsensitive, swapGreed: false, multiLine, dotMatchesNewline, crlf, lineTerminator, utf8, unicodeClasses, specializationMode);
+        if (options.SpecializationMode != RegexSpecializationMode.Fallback &&
+            RegexLiteralSetEngine.TryCreateLiteralAlternation(pattern, options, out RegexLiteralSetEngine? literalSet) &&
             literalSet is not null)
         {
             return new RegexAutomaton(
@@ -161,6 +164,11 @@ public sealed class RegexAutomaton
         bool compilePrefilter,
         Dictionary<string, RegexUtf8ByteTrie>? utf8ByteTrieCache = null)
     {
+        if (options.SpecializationMode == RegexSpecializationMode.Fallback)
+        {
+            return CompileParsedFallback(tree, options, dfaSizeLimit, utf8ByteTrieCache);
+        }
+
         RegexEmptyEngine.TryCreate(tree.Root, options, out RegexEmptyEngine? empty);
         if (empty is not null && tree.CaptureCount == 0)
         {
@@ -502,11 +510,22 @@ public sealed class RegexAutomaton
         RegexDotStarEngine.TryCreate(tree.Root, options, out RegexDotStarEngine? dotStar);
         RegexIpv4AddressEngine.TryCreate(tree.Root, options, out RegexIpv4AddressEngine? ipv4Address);
         RegexEmailAddressEngine.TryCreate(tree.Root, options, out RegexEmailAddressEngine? emailAddress);
-        RegexLh3EmailEngine.TryCreate(tree.Root, options, out RegexLh3EmailEngine? lh3Email);
+        RegexLh3EmailEngine? lh3Email = null;
+        if (options.SpecializationMode == RegexSpecializationMode.Default)
+        {
+            RegexLh3EmailEngine.TryCreate(tree.Root, options, out lh3Email);
+        }
+
         RegexUriEngine.TryCreate(tree.Root, options, out RegexUriEngine? uri);
-        RegexLh3UriEngine.TryCreate(tree.Root, options, out RegexLh3UriEngine? lh3Uri);
-        RegexLh3UriOrEmailEngine.TryCreate(tree.Root, options, out RegexLh3UriOrEmailEngine? lh3UriOrEmail);
-        RegexLh3DateEngine.TryCreate(tree.Root, options, out RegexLh3DateEngine? lh3Date);
+        RegexLh3UriEngine? lh3Uri = null;
+        RegexLh3UriOrEmailEngine? lh3UriOrEmail = null;
+        if (options.SpecializationMode == RegexSpecializationMode.Default)
+        {
+            RegexLh3UriEngine.TryCreate(tree.Root, options, out lh3Uri);
+            RegexLh3UriOrEmailEngine.TryCreate(tree.Root, options, out lh3UriOrEmail);
+        }
+
+        RegexBoundedDigitDelimiterEngine.TryCreate(tree.Root, options, out RegexBoundedDigitDelimiterEngine? boundedDigitDelimiter);
         RegexWordWhitespaceLiteralEngine.TryCreate(tree.Root, options, out RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral);
         RegexUnicodeWordWhitespaceLiteralEngine.TryCreate(tree.Root, options, out RegexUnicodeWordWhitespaceLiteralEngine? unicodeWordWhitespaceLiteral);
         RegexBoundedLetterSuffixWhitespaceEngine.TryCreate(tree.Root, options, out RegexBoundedLetterSuffixWhitespaceEngine? boundedLetterSuffixWhitespace);
@@ -575,7 +594,7 @@ public sealed class RegexAutomaton
             uri: uri,
             lh3Uri: lh3Uri,
             lh3UriOrEmail: lh3UriOrEmail,
-            lh3Date: lh3Date,
+            boundedDigitDelimiter: boundedDigitDelimiter,
             wordWhitespaceLiteral: wordWhitespaceLiteral,
             unicodeWordWhitespaceLiteral: unicodeWordWhitespaceLiteral,
             boundedLetterSuffixWhitespace: boundedLetterSuffixWhitespace,
@@ -623,6 +642,32 @@ public sealed class RegexAutomaton
             tree.CaptureCount > 0 ? tree.Root : null,
             options,
             prefilter,
+            tree.CaptureCount,
+            wholePatternCaptureIndex);
+    }
+
+    private static RegexAutomaton CompileParsedFallback(
+        RegexSyntaxTree tree,
+        RegexCompileOptions options,
+        ulong? dfaSizeLimit,
+        Dictionary<string, RegexUtf8ByteTrie>? utf8ByteTrieCache)
+    {
+        RegexNfa nfa = RegexNfaCompiler.Compile(
+            tree.Root,
+            options,
+            utf8ByteTrieCache);
+        int wholePatternCaptureIndex = TryGetWholePatternCaptureIndex(tree.Root, tree.CaptureCount);
+        return new RegexAutomaton(
+            RegexMetaEngine.Compile(nfa, prefilter: null, dfaSizeLimit: dfaSizeLimit),
+            startPredicate: null,
+            lengthGuard: null,
+            requiredByteSetGuard: null,
+            requiredLiteralAnySetGuard: null,
+            syntheticCaptureAlternationSet: null,
+            tree.CaptureCount > 0 ? tree.Pattern : default,
+            tree.CaptureCount > 0 ? tree.Root : null,
+            options,
+            capturePrefilter: null,
             tree.CaptureCount,
             wholePatternCaptureIndex);
     }
@@ -975,7 +1020,7 @@ public sealed class RegexAutomaton
     private static bool IgnoresRequiredSearchGuards(RegexEngineKind kind)
     {
         return kind is RegexEngineKind.Uri
-            or RegexEngineKind.Date
+            or RegexEngineKind.BoundedDigitDelimiter
             or RegexEngineKind.EndAnchoredSequence
             or RegexEngineKind.EndAnchoredAtom
             or RegexEngineKind.RunLiteralDotStar
@@ -1185,6 +1230,19 @@ public sealed class RegexAutomaton
         {
             if (captureEnginesInitialized)
             {
+                return;
+            }
+
+            if (captureOptions.SpecializationMode == RegexSpecializationMode.Fallback)
+            {
+                if (captureRoot is not null && captureCount > 0 && wholePatternCaptureIndex == 0)
+                {
+                    RegexNfa captureNfa = RegexNfaCompiler.CompileCaptures(captureRoot, captureOptions, captureCount);
+                    captureEngine = new RegexCaptureEngine(captureNfa, prefilter: null);
+                }
+
+                genericCaptureOnly = true;
+                captureEnginesInitialized = true;
                 return;
             }
 
@@ -1572,11 +1630,14 @@ public sealed class RegexAutomaton
             RegexDotStarEngine.TryCreate(root, options, out _) ||
             RegexIpv4AddressEngine.TryCreate(root, options, out _) ||
             RegexEmailAddressEngine.TryCreate(root, options, out _) ||
+            options.SpecializationMode == RegexSpecializationMode.Default &&
             RegexLh3EmailEngine.TryCreate(root, options, out _) ||
             RegexUriEngine.TryCreate(root, options, out _) ||
+            options.SpecializationMode == RegexSpecializationMode.Default &&
             RegexLh3UriEngine.TryCreate(root, options, out _) ||
+            options.SpecializationMode == RegexSpecializationMode.Default &&
             RegexLh3UriOrEmailEngine.TryCreate(root, options, out _) ||
-            RegexLh3DateEngine.TryCreate(root, options, out _) ||
+            RegexBoundedDigitDelimiterEngine.TryCreate(root, options, out _) ||
             RegexWordWhitespaceLiteralEngine.TryCreate(root, options, out _) ||
             RegexUnicodeWordWhitespaceLiteralEngine.TryCreate(root, options, out _) ||
             RegexBoundedLetterSuffixWhitespaceEngine.TryCreate(root, options, out _) ||
@@ -1694,11 +1755,14 @@ public sealed class RegexAutomaton
             RegexDotStarEngine.TryCreate(root, options, out _) ||
             RegexIpv4AddressEngine.TryCreate(root, options, out _) ||
             RegexEmailAddressEngine.TryCreate(root, options, out _) ||
+            options.SpecializationMode == RegexSpecializationMode.Default &&
             RegexLh3EmailEngine.TryCreate(root, options, out _) ||
             RegexUriEngine.TryCreate(root, options, out _) ||
+            options.SpecializationMode == RegexSpecializationMode.Default &&
             RegexLh3UriEngine.TryCreate(root, options, out _) ||
+            options.SpecializationMode == RegexSpecializationMode.Default &&
             RegexLh3UriOrEmailEngine.TryCreate(root, options, out _) ||
-            RegexLh3DateEngine.TryCreate(root, options, out _) ||
+            RegexBoundedDigitDelimiterEngine.TryCreate(root, options, out _) ||
             RegexWordWhitespaceLiteralEngine.TryCreate(root, options, out _) ||
             RegexUnicodeWordWhitespaceLiteralEngine.TryCreate(root, options, out _) ||
             RegexBoundedLetterSuffixWhitespaceEngine.TryCreate(root, options, out _) ||

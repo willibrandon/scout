@@ -163,6 +163,13 @@ internal static class ScoutApplication
         bool standardInputIsReadable,
         bool standardOutputIsTerminal)
     {
+        if (!RegexSpecializationModeEnvironment.TryResolve(out RegexSpecializationMode specializationMode, out ScoutError? specializationModeError))
+        {
+            diagnostics.ErrorMessage(specializationModeError!.WithContext(ScoutErrorContext.ProgramContext()));
+            return ExitCode.Error;
+        }
+
+        using RegexSpecializationModeScope specializationScope = RegexSpecializationModeDefaults.Use(specializationMode);
         output.SetBufferMode(OutputBuffering.Resolve(lowArgs.BufferMode, standardOutputIsTerminal));
         lowArgs.SetColorMode(TerminalColor.Resolve(lowArgs.ColorMode, standardOutputIsTerminal));
         DiagnosticLogger logger = new(diagnostics, lowArgs.LoggingMode);

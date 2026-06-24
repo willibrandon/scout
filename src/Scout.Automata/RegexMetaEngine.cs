@@ -31,7 +31,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexUriEngine? uri;
     private readonly RegexLh3UriEngine? lh3Uri;
     private readonly RegexLh3UriOrEmailEngine? lh3UriOrEmail;
-    private readonly RegexLh3DateEngine? lh3Date;
+    private readonly RegexBoundedDigitDelimiterEngine? boundedDigitDelimiter;
     private readonly RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral;
     private readonly RegexUnicodeWordWhitespaceLiteralEngine? unicodeWordWhitespaceLiteral;
     private readonly RegexBoundedLetterSuffixWhitespaceEngine? boundedLetterSuffixWhitespace;
@@ -110,7 +110,7 @@ internal sealed class RegexMetaEngine
         RegexUriEngine? uri = null,
         RegexLh3UriEngine? lh3Uri = null,
         RegexLh3UriOrEmailEngine? lh3UriOrEmail = null,
-        RegexLh3DateEngine? lh3Date = null,
+        RegexBoundedDigitDelimiterEngine? boundedDigitDelimiter = null,
         RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral = null,
         RegexUnicodeWordWhitespaceLiteralEngine? unicodeWordWhitespaceLiteral = null,
         RegexBoundedLetterSuffixWhitespaceEngine? boundedLetterSuffixWhitespace = null,
@@ -163,7 +163,7 @@ internal sealed class RegexMetaEngine
         this.uri = uri;
         this.lh3Uri = lh3Uri;
         this.lh3UriOrEmail = lh3UriOrEmail;
-        this.lh3Date = lh3Date;
+        this.boundedDigitDelimiter = boundedDigitDelimiter;
         this.wordWhitespaceLiteral = wordWhitespaceLiteral;
         this.unicodeWordWhitespaceLiteral = unicodeWordWhitespaceLiteral;
         this.boundedLetterSuffixWhitespace = boundedLetterSuffixWhitespace;
@@ -622,7 +622,7 @@ internal sealed class RegexMetaEngine
         RegexUriEngine? uri = null,
         RegexLh3UriEngine? lh3Uri = null,
         RegexLh3UriOrEmailEngine? lh3UriOrEmail = null,
-        RegexLh3DateEngine? lh3Date = null,
+        RegexBoundedDigitDelimiterEngine? boundedDigitDelimiter = null,
         RegexWordWhitespaceLiteralEngine? wordWhitespaceLiteral = null,
         RegexUnicodeWordWhitespaceLiteralEngine? unicodeWordWhitespaceLiteral = null,
         RegexBoundedLetterSuffixWhitespaceEngine? boundedLetterSuffixWhitespace = null,
@@ -873,10 +873,10 @@ internal sealed class RegexMetaEngine
                 lh3UriOrEmail: lh3UriOrEmail);
         }
 
-        if (lh3Date is not null)
+        if (boundedDigitDelimiter is not null)
         {
             return new RegexMetaEngine(
-                RegexEngineKind.Date,
+                RegexEngineKind.BoundedDigitDelimiter,
                 nfa,
                 pikeVm: null,
                 boundedBacktracker: null,
@@ -892,7 +892,7 @@ internal sealed class RegexMetaEngine
                 dotStarClassFallback: null,
                 prefilter,
                 nfa.Utf8,
-                lh3Date: lh3Date);
+                boundedDigitDelimiter: boundedDigitDelimiter);
         }
 
         if (wordWhitespaceLiteral is not null)
@@ -1800,9 +1800,9 @@ internal sealed class RegexMetaEngine
             return RegexLh3UriEngine.IsMatch(haystack);
         }
 
-        if (lh3Date is not null)
+        if (boundedDigitDelimiter is not null)
         {
-            return RegexLh3DateEngine.IsMatch(haystack);
+            return boundedDigitDelimiter.IsMatch(haystack);
         }
 
         if (anchoredLineLiteralGap is not null)
@@ -1939,9 +1939,9 @@ internal sealed class RegexMetaEngine
             return RegexLh3UriOrEmailEngine.Find(haystack, startOffset);
         }
 
-        if (lh3Date is not null)
+        if (boundedDigitDelimiter is not null)
         {
-            return RegexLh3DateEngine.Find(haystack, startOffset);
+            return boundedDigitDelimiter.Find(haystack, startOffset);
         }
 
         if (wordWhitespaceLiteral is not null)
@@ -2239,9 +2239,9 @@ internal sealed class RegexMetaEngine
             return RegexLh3UriOrEmailEngine.CountMatches(haystack, startAt);
         }
 
-        if (lh3Date is not null)
+        if (boundedDigitDelimiter is not null)
         {
-            return RegexLh3DateEngine.CountMatches(haystack, startAt);
+            return boundedDigitDelimiter.CountMatches(haystack, startAt);
         }
 
         if (wordWhitespaceLiteral is not null)
@@ -2471,9 +2471,9 @@ internal sealed class RegexMetaEngine
             return RegexLh3UriOrEmailEngine.SumMatchSpans(haystack, startAt);
         }
 
-        if (lh3Date is not null)
+        if (boundedDigitDelimiter is not null)
         {
-            return RegexLh3DateEngine.SumMatchSpans(haystack, startAt);
+            return boundedDigitDelimiter.SumMatchSpans(haystack, startAt);
         }
 
         if (wordWhitespaceLiteral is not null)
@@ -2891,9 +2891,9 @@ internal sealed class RegexMetaEngine
             return RegexLh3UriOrEmailEngine.MatchAt(haystack, startOffset);
         }
 
-        if (lh3Date is not null)
+        if (boundedDigitDelimiter is not null)
         {
-            return RegexLh3DateEngine.MatchAt(haystack, startOffset);
+            return boundedDigitDelimiter.MatchAt(haystack, startOffset);
         }
 
         if (unicodeWordWhitespaceLiteral is not null)

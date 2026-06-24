@@ -6795,6 +6795,31 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies the internal regex specialization switch rejects unsupported values before searching.
+    /// </summary>
+    [Fact]
+    public void RegexSpecializationModeEnvironmentRejectsInvalidValue()
+    {
+        string? oldValue = Environment.GetEnvironmentVariable(RegexSpecializationModeEnvironment.VariableName);
+        try
+        {
+            ProcessEnvironment.UseCurrentProcessEnvironment();
+            Environment.SetEnvironmentVariable(RegexSpecializationModeEnvironment.VariableName, "benchmark");
+
+            (int exitCode, byte[] output, string error) = RunScoutFromEnvironment("needle");
+
+            Assert.Equal(2, exitCode);
+            Assert.Empty(output);
+            Assert.Contains("SCOUT_REGEX_SPECIALIZATION_MODE must be one of: default, general, fallback", error, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(RegexSpecializationModeEnvironment.VariableName, oldValue);
+            ProcessEnvironment.UseCurrentProcessEnvironment();
+        }
+    }
+
+    /// <summary>
     /// Verifies Scout does not fall back to ripgrep's config path after Scout's native config path is selected.
     /// </summary>
     [Fact]

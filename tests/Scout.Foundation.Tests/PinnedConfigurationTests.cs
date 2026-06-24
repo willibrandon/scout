@@ -535,7 +535,8 @@ public sealed partial class PinnedConfigurationTests
             "rid = \"" + PinnedRipgrepOracle.HostRid + "\"",
             "environment = \"" + PinnedRipgrepOracle.HostOracleEnvironment + "\"",
         ];
-        if (PinnedRipgrepOracle.TryReadHostOracleValue("archive_path", out string archivePath))
+        bool hasHostArchive = PinnedRipgrepOracle.TryReadHostOracleValue("archive_path", out string archivePath);
+        if (hasHostArchive)
         {
             string expectedArchiveSha256 = PinnedRipgrepOracle.ReadHostOracleValue("archive_sha256", "ripgrep_oracle_archive_sha256");
             oracleBlockLines.Add("archive_path = \"" + archivePath + "\"");
@@ -549,7 +550,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains(oracleBlock, prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("environment = \"github-actions\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("ripgrep_rg_profile = \"release-lto\"", prerequisiteLock, StringComparison.Ordinal);
-        if (string.Equals(PinnedRipgrepOracle.HostOracleEnvironment, "local", StringComparison.Ordinal))
+        if (string.Equals(PinnedRipgrepOracle.HostOracleEnvironment, "local", StringComparison.Ordinal) && !hasHostArchive)
         {
             Assert.Contains("ripgrep_rg_path = \"" + defaultExecutablePath + "\"", prerequisiteLock, StringComparison.Ordinal);
             Assert.Contains("ripgrep_rg_sha256 = \"" + expectedSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
@@ -2310,6 +2311,7 @@ public sealed partial class PinnedConfigurationTests
         string defaultPcre2RipgrepPath = PinnedRipgrepOracle.ReadHostOracleValue("pcre2_path", "ripgrep_pcre2_rg_path");
         string expectedPcre2RipgrepSha256 = PinnedPcre2RipgrepOracle.ExpectedSha256;
         string expectedPcre2ReportedVersion = PinnedPcre2RipgrepOracle.ReportedVersion;
+        bool hasHostArchive = PinnedRipgrepOracle.TryReadHostOracleValue("archive_path", out _);
 
         Assert.True(File.Exists(headerPath), "Missing vendored pcre2.h: " + headerPath);
         Assert.True(File.Exists(pinnedPcre2RipgrepBinaryPath), "Missing pinned PCRE2 ripgrep binary: " + pinnedPcre2RipgrepBinaryPath);
@@ -2428,7 +2430,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("pcre2_sha256 = \"" + expectedPcre2RipgrepSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("ripgrep_pcre2_rg_profile = \"release-lto\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("ripgrep_pcre2_rg_features = \"pcre2\"", prerequisiteLock, StringComparison.Ordinal);
-        if (string.Equals(PinnedRipgrepOracle.HostOracleEnvironment, "local", StringComparison.Ordinal))
+        if (string.Equals(PinnedRipgrepOracle.HostOracleEnvironment, "local", StringComparison.Ordinal) && !hasHostArchive)
         {
             Assert.Contains("ripgrep_pcre2_rg_path = \"" + defaultPcre2RipgrepPath + "\"", prerequisiteLock, StringComparison.Ordinal);
             Assert.Contains("ripgrep_pcre2_rg_sha256 = \"" + expectedPcre2RipgrepSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
@@ -2950,6 +2952,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("subtitles_en_literal", script, StringComparison.Ordinal);
         Assert.Contains("subtitles_en_regex", script, StringComparison.Ordinal);
         Assert.Contains("linux_recursive_literal", script, StringComparison.Ordinal);
+        Assert.Contains("linux_heldout_regex_general", script, StringComparison.Ordinal);
         Assert.Contains("linux_many_small_parallel", script, StringComparison.Ordinal);
         Assert.Contains("cold_version", script, StringComparison.Ordinal);
         Assert.Contains("cold_tiny_search", script, StringComparison.Ordinal);
@@ -2989,6 +2992,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("GATE_TREE_WARMUP=\"5\"", script, StringComparison.Ordinal);
         Assert.Contains("gate_tree_runs", script, StringComparison.Ordinal);
         Assert.Contains("gate_tree_warmup", script, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_REGEX_SPECIALIZATION_MODE=general", script, StringComparison.Ordinal);
+        Assert.Contains(@"\\b(?:struct|enum|union)\\s+[A-Za-z_][A-Za-z0-9_]*", script, StringComparison.Ordinal);
         Assert.Contains("median ratio", script, StringComparison.Ordinal);
         Assert.Contains("combined median ratio", script, StringComparison.Ordinal);
         Assert.Contains("running reversed command order for combined timing gate", script, StringComparison.Ordinal);
@@ -2997,13 +3002,19 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("median wall time", readme, StringComparison.Ordinal);
         Assert.Contains("every workload is measured in both command", readme, StringComparison.Ordinal);
         Assert.Contains("combined median samples", readme, StringComparison.Ordinal);
-        Assert.Contains("regex workload pins `--threads 4`", readme, StringComparison.Ordinal);
-        Assert.Contains("segment distribution", readme, StringComparison.Ordinal);
+        Assert.Contains("It pins", readme, StringComparison.Ordinal);
+        Assert.Contains("OpenSubtitles regex workload is a public benchmark workload", readme, StringComparison.Ordinal);
+        Assert.Contains("Linux held-out regex workload runs Scout with", readme, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_REGEX_SPECIALIZATION_MODE=general", readme, StringComparison.Ordinal);
+        Assert.Contains("byte-segment", readme, StringComparison.Ordinal);
         Assert.Contains("for every RSS gate", readme, StringComparison.Ordinal);
         Assert.Contains("script first measures an rg and", readme, StringComparison.Ordinal);
         Assert.Contains("`scout-real` tiny", readme, StringComparison.Ordinal);
         Assert.Contains("`--mmap -n` literal RSS floor", readme, StringComparison.Ordinal);
         Assert.Contains("Native AOT fixed RSS floor for release RSS gates", parity, StringComparison.Ordinal);
+        Assert.Contains("Regex specialization ablation modes", parity, StringComparison.Ordinal);
+        Assert.Contains("linux_heldout_regex_general", parity, StringComparison.Ordinal);
+        Assert.Contains("benchmark-family recognizers disabled", parity, StringComparison.Ordinal);
         Assert.Contains("accepted explicit gate change under `docs/DESIGN.md` §9", parity, StringComparison.Ordinal);
         Assert.Contains("tiny `--mmap -n` literal search", parity, StringComparison.Ordinal);
         Assert.Contains("fixed runtime/image floor is measured per run", parity, StringComparison.Ordinal);

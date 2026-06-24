@@ -3000,10 +3000,10 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
-    /// Verifies the lh3 date shape scans around slash delimiters directly.
+    /// Verifies bounded digit groups scan around fixed delimiters directly.
     /// </summary>
     [Fact]
-    public void DateEngineCountsLh3CapturedDates()
+    public void BoundedDigitDelimiterEngineCountsCapturedDates()
     {
         var automaton = RegexAutomaton.Compile(
             @"([0-9][0-9]?)/([0-9][0-9]?)/([0-9][0-9]([0-9][0-9])?)"u8,
@@ -3022,7 +3022,7 @@ public sealed class RegexAutomatonTests
 
         RegexCaptures? captures = automaton.FindCaptures(haystack);
 
-        Assert.Equal(RegexEngineKind.Date, GetEngineKind(automaton));
+        Assert.Equal(RegexEngineKind.BoundedDigitDelimiter, GetEngineKind(automaton));
         Assert.True(automaton.IsMatch(haystack));
         Assert.False(automaton.IsMatch("no date here / x"u8));
         Assert.Equal(new RegexMatch(firstStart, first.Length), automaton.Find(haystack));
@@ -3039,15 +3039,103 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
-    /// Verifies date specialization is skipped when UTF-8 or Unicode class semantics matter.
+    /// Verifies bounded digit delimiters cover fixed-width delimiter families beyond the LH3 date shape.
     /// </summary>
     [Fact]
-    public void DateEngineSkipsUtf8UnicodeMode()
+    public void BoundedDigitDelimiterEngineCountsIsoLikeDates()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"([0-9]{4})-([0-9]{2})-([0-9]{2})"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "released 2026-06-23 and 1999-12-31"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.BoundedDigitDelimiter, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(9, 10), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(24, 10), automaton.Find(haystack, startAt: 19));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(20, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
+    /// Verifies the general specialization mode keeps structural engines and disables narrow benchmark-family engines.
+    /// </summary>
+    [Fact]
+    public void RegexSpecializationGeneralModeSkipsBenchmarkFamilyEngines()
+    {
+        var emailDefault = RegexAutomaton.Compile(
+            @"([^ @]+)@([^ @]+)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var emailGeneral = RegexAutomaton.Compile(
+            @"([^ @]+)@([^ @]+)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false,
+            specializationMode: RegexSpecializationMode.General);
+        var dateGeneral = RegexAutomaton.Compile(
+            @"([0-9]{4})-([0-9]{2})-([0-9]{2})"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false,
+            specializationMode: RegexSpecializationMode.General);
+
+        Assert.Equal(RegexEngineKind.EmailAddress, GetEngineKind(emailDefault));
+        Assert.NotEqual(RegexEngineKind.EmailAddress, GetEngineKind(emailGeneral));
+        Assert.Equal(new RegexMatch(0, 3), emailGeneral.Find("a@b"u8));
+        Assert.Equal(RegexEngineKind.BoundedDigitDelimiter, GetEngineKind(dateGeneral));
+        Assert.Equal(new RegexMatch(0, 10), dateGeneral.Find("2026-06-23"u8));
+    }
+
+    /// <summary>
+    /// Verifies fallback mode disables recognizer engines while preserving regex semantics.
+    /// </summary>
+    [Fact]
+    public void RegexSpecializationFallbackModeUsesCoreAutomata()
+    {
+        var defaultAutomaton = RegexAutomaton.Compile("foo|bar"u8);
+        var fallbackAutomaton = RegexAutomaton.Compile(
+            "foo|bar"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            specializationMode: RegexSpecializationMode.Fallback);
+        var dateFallback = RegexAutomaton.Compile(
+            @"([0-9]{4})-([0-9]{2})-([0-9]{2})"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false,
+            specializationMode: RegexSpecializationMode.Fallback);
+
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(defaultAutomaton));
+        Assert.NotEqual(RegexEngineKind.LiteralSet, GetEngineKind(fallbackAutomaton));
+        Assert.NotEqual(RegexEngineKind.BoundedDigitDelimiter, GetEngineKind(dateFallback));
+        Assert.Equal(new RegexMatch(3, 3), fallbackAutomaton.Find("xx bar"u8));
+        Assert.Equal(new RegexMatch(0, 10), dateFallback.Find("2026-06-23"u8));
+    }
+
+    /// <summary>
+    /// Verifies bounded digit delimiter specialization is skipped when UTF-8 or Unicode class semantics matter.
+    /// </summary>
+    [Fact]
+    public void BoundedDigitDelimiterEngineSkipsUtf8UnicodeMode()
     {
         var automaton = RegexAutomaton.Compile(
             @"([0-9][0-9]?)/([0-9][0-9]?)/([0-9][0-9]([0-9][0-9])?)"u8);
 
-        Assert.NotEqual(RegexEngineKind.Date, GetEngineKind(automaton));
+        Assert.NotEqual(RegexEngineKind.BoundedDigitDelimiter, GetEngineKind(automaton));
     }
 
     /// <summary>

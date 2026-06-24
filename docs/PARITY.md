@@ -35,6 +35,35 @@ None.
 
 ## Performance Gate Escalations
 
+### Regex specialization ablation modes
+
+Status: active release-gate control.
+
+Scope: Scout's default regex engine dispatch.
+
+Scout has three internal regex specialization modes, selected for the CLI by
+`SCOUT_REGEX_SPECIALIZATION_MODE`: `default`, `general`, and `fallback`.
+`default` is normal release behavior. `general` keeps broad structural
+specializations, including bounded digit groups separated by fixed delimiters,
+but disables narrow benchmark-family recognizers such as the LH3 email and URI
+shapes. `fallback` disables recognizer fast paths, prefilters, start
+predicates, and required-search guards, leaving only the core NFA/DFA engine
+selection.
+
+The OpenSubtitles regex workload remains a public benchmark workload. The
+release gate also includes `linux_heldout_regex_general`, a Linux-tree regex
+workload that runs Scout with `SCOUT_REGEX_SPECIALIZATION_MODE=general` and
+compares it against the pinned `rg`. That held-out gate is the regex
+performance check that is independent of benchmark-specific fast paths.
+
+Current ablation collection:
+
+| Mode | Gate coverage |
+| --- | --- |
+| `default` | Existing release workloads, including `subtitles_en_regex`. |
+| `general` | `linux_heldout_regex_general` with benchmark-family recognizers disabled. |
+| `fallback` | Local diagnostic mode for spot-checking core automata behavior without recognizer or guard acceleration. |
+
 ### Native AOT fixed RSS floor for release RSS gates
 
 Status: accepted explicit gate change under `docs/DESIGN.md` §9.

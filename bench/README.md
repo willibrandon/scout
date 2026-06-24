@@ -53,10 +53,17 @@ combined median samples for each binary. This removes command-order bias from
 hosted macOS runners, where hyperfine 1.20 runs each command group in input
 order instead of interleaving individual runs.
 
-The OpenSubtitles regex workload pins `--threads 4` so the segmented regex path
-is measured against a stable worker count. The gate also prints and checks the
-line-aligned 128 KiB byte-segment distribution before measuring, which catches
-corpus or chunking changes that would create uneven worker input.
+The OpenSubtitles regex workload is a public benchmark workload. It pins
+`--threads 4` so the segmented regex path is measured against a stable worker
+count. The gate also prints and checks the line-aligned 128 KiB byte-segment
+distribution before measuring, which catches corpus or chunking changes that
+would create uneven worker input.
+
+The Linux held-out regex workload runs Scout with
+`SCOUT_REGEX_SPECIALIZATION_MODE=general`. That mode keeps structural regex
+specializations but disables narrow benchmark-family recognizers, so the gate
+continues to measure regex performance that is independent of the public
+OpenSubtitles pattern family.
 
 Median peak RSS is capped at 1.5x rg plus the measured Native AOT fixed-image
 floor recorded in `docs/PARITY.md`: the script first measures an rg and
