@@ -1695,6 +1695,9 @@ internal static unsafe class LargeFileSearchOperations
         RegexSearchPlan? regexPlan = fastLiteralPattern is null
             ? LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: !searchSegmentsInParallel)
             : null;
+        using ThreadLocal<RegexSearchPlan?>? parallelRegexPlans = searchSegmentsInParallel && fastLiteralPattern is null
+            ? new ThreadLocal<RegexSearchPlan?>(() => LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: true))
+            : null;
         int effectiveBufferLength = searchSegmentsInParallel
             ? Math.Max(bufferLength, fastLiteralPattern is null ? ExplicitRegexStreamingFileBufferLength : ExplicitParallelLiteralStreamingFileBufferLength)
             : bufferLength;
@@ -1906,10 +1909,11 @@ internal static unsafe class LargeFileSearchOperations
                     sink.Matches);
             }
 
+            RegexSearchPlan? segmentRegexPlan = parallelRegexPlans?.Value ?? regexPlan;
             bool segmentMatched = LiteralLineSearcher.SearchWithRegexPlan(
                 segment,
                 pattern,
-                regexPlan,
+                segmentRegexPlan,
                 ref sink,
                 asciiCaseInsensitive,
                 invertMatch: false,
