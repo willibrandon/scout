@@ -287,6 +287,29 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
+    /// Verifies candidate-line scanning can skip exact match-column work when the sink does not need it.
+    /// </summary>
+    [Fact]
+    public void SearchCandidateLineAcceleratorCanSkipMatchColumn()
+    {
+        var sink = new CapturingLineSink();
+        byte[][] patterns = [@"\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*"u8.ToArray()];
+
+        bool matched = LiteralLineSearcher.Search(
+            "destructor struct file;\n"u8,
+            patterns,
+            ref sink,
+            requireMatchColumn: false);
+
+        Assert.True(matched);
+        Assert.Equal(1UL, sink.MatchedLines);
+        Assert.Equal(1, sink.LineNumber);
+        Assert.Equal(0, sink.ByteOffset);
+        Assert.Equal(0, sink.MatchColumn);
+        Assert.Equal("destructor struct file;\n"u8.ToArray(), sink.Line.ToArray());
+    }
+
+    /// <summary>
     /// Verifies class-sequence regex acceleration falls back to Unicode-aware matching when needed.
     /// </summary>
     [Fact]

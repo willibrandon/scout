@@ -54,12 +54,18 @@ internal sealed class RegexCandidateLineAccelerator
 
     public int FindCandidate(ReadOnlySpan<byte> haystack, int startAt)
     {
+        if (verifier?.TryFindCandidate(haystack, startAt, out int candidate) == true)
+        {
+            return candidate;
+        }
+
         return prefilter.FindCandidate(haystack, startAt);
     }
 
-    public bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int length)
+    public bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int length, out bool completed)
     {
         length = 0;
-        return verifier?.TryMatchAt(haystack, start, out length) == true;
+        completed = verifier is null;
+        return verifier?.TryMatchAt(haystack, start, out length, out completed) == true;
     }
 }
