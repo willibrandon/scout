@@ -225,6 +225,68 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
+    /// Verifies leading literal regex candidates can search whole haystacks while preserving line output.
+    /// </summary>
+    [Fact]
+    public void SearchUsesCandidateLineAcceleratorForLeadingAlternation()
+    {
+        var sink = new CapturingLineSink();
+        byte[][] patterns = [@"\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*"u8.ToArray()];
+
+        bool matched = LiteralLineSearcher.Search(
+            "destructor file;\nstruct file;\n"u8,
+            patterns,
+            ref sink);
+
+        Assert.True(matched);
+        Assert.Equal(1UL, sink.MatchedLines);
+        Assert.Equal(2, sink.LineNumber);
+        Assert.Equal(17, sink.ByteOffset);
+        Assert.Equal(1, sink.MatchColumn);
+        Assert.Equal("struct file;\n"u8.ToArray(), sink.Line.ToArray());
+    }
+
+    /// <summary>
+    /// Verifies whole-haystack regex candidate scanning still preserves line-oriented matching.
+    /// </summary>
+    [Fact]
+    public void SearchCandidateLineAcceleratorDoesNotMatchAcrossLines()
+    {
+        var sink = new CapturingLineSink();
+        byte[][] patterns = [@"\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*"u8.ToArray()];
+
+        bool matched = LiteralLineSearcher.Search(
+            "struct\nfile\n"u8,
+            patterns,
+            ref sink);
+
+        Assert.False(matched);
+        Assert.Equal(0UL, sink.MatchedLines);
+    }
+
+    /// <summary>
+    /// Verifies candidate-line scanning keeps looking within a line after a false prefix.
+    /// </summary>
+    [Fact]
+    public void SearchCandidateLineAcceleratorContinuesAfterFalsePrefix()
+    {
+        var sink = new CapturingLineSink();
+        byte[][] patterns = [@"\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*"u8.ToArray()];
+
+        bool matched = LiteralLineSearcher.Search(
+            "destructor struct file;\n"u8,
+            patterns,
+            ref sink);
+
+        Assert.True(matched);
+        Assert.Equal(1UL, sink.MatchedLines);
+        Assert.Equal(1, sink.LineNumber);
+        Assert.Equal(0, sink.ByteOffset);
+        Assert.Equal(12, sink.MatchColumn);
+        Assert.Equal("destructor struct file;\n"u8.ToArray(), sink.Line.ToArray());
+    }
+
+    /// <summary>
     /// Verifies class-sequence regex acceleration falls back to Unicode-aware matching when needed.
     /// </summary>
     [Fact]

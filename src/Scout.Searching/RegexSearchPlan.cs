@@ -5,17 +5,20 @@ internal sealed class RegexSearchPlan
 {
     private readonly RegexAutomaton?[] automata;
     private readonly RegexClassSequenceAccelerator?[] accelerators;
+    private readonly RegexCandidateLineAccelerator?[] candidateLineAccelerators;
     private readonly RegexLeadingLiteralCandidateAccelerator?[] leadingLiteralCandidateAccelerators;
     private readonly RegexLiteralSetEngine?[] literalSetEngines;
 
     private RegexSearchPlan(
         RegexAutomaton?[] automata,
         RegexClassSequenceAccelerator?[] accelerators,
+        RegexCandidateLineAccelerator?[] candidateLineAccelerators,
         RegexLeadingLiteralCandidateAccelerator?[] leadingLiteralCandidateAccelerators,
         RegexLiteralSetEngine?[] literalSetEngines)
     {
         this.automata = automata;
         this.accelerators = accelerators;
+        this.candidateLineAccelerators = candidateLineAccelerators;
         this.leadingLiteralCandidateAccelerators = leadingLiteralCandidateAccelerators;
         this.literalSetEngines = literalSetEngines;
     }
@@ -29,6 +32,7 @@ internal sealed class RegexSearchPlan
     {
         RegexAutomaton?[]? automata = null;
         RegexClassSequenceAccelerator?[]? accelerators = null;
+        RegexCandidateLineAccelerator?[]? candidateLineAccelerators = null;
         RegexLeadingLiteralCandidateAccelerator?[]? leadingLiteralCandidateAccelerators = null;
         RegexLiteralSetEngine?[]? literalSetEngines = null;
         var literalSetOptions = new RegexCompileOptions(
@@ -72,14 +76,21 @@ internal sealed class RegexSearchPlan
             }
 
             automata ??= new RegexAutomaton?[needles.Count];
-            automata[index] = RegexAutomaton.Compile(needle, asciiCaseInsensitive, multiLine: false, dotMatchesNewline: false);
+            var automaton = RegexAutomaton.Compile(needle, asciiCaseInsensitive, multiLine: false, dotMatchesNewline: false);
+            automata[index] = automaton;
+            if (RegexCandidateLineAccelerator.TryCompile(needle, asciiCaseInsensitive, out RegexCandidateLineAccelerator? candidateLineAccelerator))
+            {
+                candidateLineAccelerators ??= new RegexCandidateLineAccelerator?[needles.Count];
+                candidateLineAccelerators[index] = candidateLineAccelerator;
+            }
         }
 
-        return automata is null && accelerators is null && leadingLiteralCandidateAccelerators is null && literalSetEngines is null
+        return automata is null && accelerators is null && candidateLineAccelerators is null && leadingLiteralCandidateAccelerators is null && literalSetEngines is null
             ? null
             : new RegexSearchPlan(
                 automata ?? new RegexAutomaton?[needles.Count],
                 accelerators ?? new RegexClassSequenceAccelerator?[needles.Count],
+                candidateLineAccelerators ?? new RegexCandidateLineAccelerator?[needles.Count],
                 leadingLiteralCandidateAccelerators ?? new RegexLeadingLiteralCandidateAccelerator?[needles.Count],
                 literalSetEngines ?? new RegexLiteralSetEngine?[needles.Count]);
     }
@@ -92,6 +103,11 @@ internal sealed class RegexSearchPlan
     public RegexClassSequenceAccelerator? GetAccelerator(int patternIndex)
     {
         return accelerators[patternIndex];
+    }
+
+    public RegexCandidateLineAccelerator? GetCandidateLineAccelerator(int patternIndex)
+    {
+        return candidateLineAccelerators[patternIndex];
     }
 
     public RegexLeadingLiteralCandidateAccelerator? GetLeadingLiteralCandidateAccelerator(int patternIndex)
