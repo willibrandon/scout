@@ -7,7 +7,7 @@ namespace Scout;
 internal static class StandardSearchTargetOperations
 {
     private const int ParallelOutputFlushThreshold = 128 * 1024;
-    private const int ParallelDirectOutputFlushThreshold = 128 * 1024;
+    private const int ParallelDirectOutputFlushThreshold = 16 * 1024;
     private const int DirectoryEntryLiteralPrecheckBufferLength = 16 * 1024;
 
     internal static bool SearchStandardInput(
@@ -860,6 +860,14 @@ internal static class StandardSearchTargetOperations
         bool asciiCaseInsensitive)
     {
         if (!CanReuseDirectoryRegexSearchPlan(pattern, lowArgs, color))
+        {
+            return null;
+        }
+
+        if (lowArgs.SearchMode == CliSearchMode.Standard &&
+            pattern.Count == 1 &&
+            pattern[0].Length != 0 &&
+            LiteralLineSearcher.IsLiteralRegex(pattern[0]))
         {
             return null;
         }
