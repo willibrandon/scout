@@ -8,6 +8,7 @@ namespace Scout;
 /// <summary>
 /// Verifies initial application dispatch behavior.
 /// </summary>
+[Collection(ApplicationProcessStateGroup.Name)]
 public sealed class ScoutApplicationTests
 {
     /// <summary>

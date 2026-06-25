@@ -8,6 +8,7 @@ namespace Scout;
 /// <summary>
 /// Verifies runtime search modes and parity-heavy application behavior.
 /// </summary>
+[Collection(ApplicationProcessStateGroup.Name)]
 public sealed class ScoutApplicationRuntimeTests
 {
     /// <summary>

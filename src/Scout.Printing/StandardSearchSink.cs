@@ -20,7 +20,7 @@ internal struct StandardSearchSink : ILineSink
     private readonly long lineNumberOffset;
     private readonly long byteOffsetOffset;
     private readonly bool usePlainLineHeader;
-    private readonly byte[] plainPathPrefix;
+    private byte[]? plainPathPrefix;
 
     public StandardSearchSink(
         RawByteWriter output,
@@ -54,9 +54,7 @@ internal struct StandardSearchSink : ILineSink
         this.lineNumberOffset = lineNumberOffset;
         this.byteOffsetOffset = byteOffsetOffset;
         usePlainLineHeader = CanUsePlainLineHeader(prefix, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color);
-        plainPathPrefix = usePlainLineHeader && prefix is not null
-            ? BuildPlainPathPrefix(prefix.Display.AsSpan(), matchSeparator.Span)
-            : [];
+        plainPathPrefix = null;
     }
 
     public ulong MatchedLines { get; private set; }
@@ -441,8 +439,9 @@ internal struct StandardSearchSink : ILineSink
     {
         ReadOnlySpan<byte> separator = matchSeparator.Span;
         int digitCount = CountDigits(lineNumber);
-        if (plainPathPrefix.Length != 0)
+        if (prefix is not null)
         {
+            plainPathPrefix ??= BuildPlainPathPrefix(prefix.Display.AsSpan(), separator);
             output.Write(plainPathPrefix);
         }
 
