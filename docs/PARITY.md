@@ -43,26 +43,31 @@ Scope: Scout's default regex engine dispatch.
 
 Scout has three internal regex specialization modes, selected for the CLI by
 `SCOUT_REGEX_SPECIALIZATION_MODE`: `default`, `general`, and `fallback`.
-`default` is normal release behavior. `general` keeps broad structural
-specializations, including bounded digit groups separated by fixed delimiters,
-but disables narrow benchmark-family recognizers such as the LH3 email and URI
-shapes. `fallback` disables recognizer fast paths, prefilters, start
-predicates, and required-search guards, leaving only the core NFA/DFA engine
-selection.
+`default` is normal release behavior. `general` keeps structural fast paths,
+including literal sets, bounded digit/delimiter families, fixed-width and
+delimited-sequence engines, and structural capture extractors. It disables
+domain, benchmark-family, and corpus-specific recognizers, including
+IP/email/URI, LH3 email/URI, noqa, keyword/operator spacing, path-semver,
+Bible-reference, and Rust predicate capture recognizers. `fallback` disables
+recognizer fast paths, prefilters, start predicates, and required-search
+guards, leaving only the core NFA/DFA engine selection.
 
 The OpenSubtitles regex workload remains a public benchmark workload. The
 release gate also includes `linux_heldout_regex_general`, a Linux-tree regex
-workload that runs Scout with `SCOUT_REGEX_SPECIALIZATION_MODE=general` and
-compares it against the pinned `rg`. That held-out gate is the regex
-performance check that is independent of benchmark-specific fast paths.
+workload that runs Scout with `SCOUT_REGEX_SPECIALIZATION_MODE=general`, and
+`linux_heldout_capture_general`, a replacement workload over the same held-out
+pattern family that exercises capture output. Those held-out gates compare
+Scout against the pinned `rg` and are independent of benchmark-specific fast
+paths.
 
 Current ablation collection:
 
-| Mode | Gate coverage |
-| --- | --- |
-| `default` | Existing release workloads, including `subtitles_en_regex`. |
-| `general` | `linux_heldout_regex_general` with benchmark-family recognizers disabled. |
-| `fallback` | Local diagnostic mode for spot-checking core automata behavior without recognizer or guard acceleration. |
+| Mode | Workload | Recorded ratio | Gate | Coverage |
+| --- | --- | --- | --- | --- |
+| `default` | `subtitles_en_regex` | `0.805x` release gate | `<= 1.20x` | Public benchmark workload under normal release behavior. |
+| `general` | `linux_heldout_regex_general` | `1.236x` release gate | `<= 1.50x` | Held-out Linux-tree regex with domain, benchmark-family, and corpus-specific recognizers disabled. |
+| `general` | `linux_heldout_capture_general` | Pending release-gate result. | `<= 1.75x` | Held-out Linux-tree replacement workload through capture output with the same recognizers disabled. |
+| `fallback` | Local diagnostic control. | Not release-gated. | N/A | Spot-checks core automata behavior without recognizer or guard acceleration; it is not used for a release-speed claim. |
 
 ### Native AOT fixed RSS floor for release RSS gates
 

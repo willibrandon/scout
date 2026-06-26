@@ -7,6 +7,9 @@ namespace Scout;
 /// </summary>
 public static partial class RawStandardStreams
 {
+    private const int UnixBrokenPipe = 32;
+    private const int WindowsBrokenPipe = 109;
+    private const int WindowsPipeNotConnected = 232;
     private const int StandardInputFileDescriptor = 0;
     private const int StandardOutputFileDescriptor = 1;
     private const int StandardErrorFileDescriptor = 2;
@@ -39,6 +42,25 @@ public static partial class RawStandardStreams
     public static RawByteWriter OpenError()
     {
         return new RawByteWriter(Open(StandardErrorFileDescriptor, StandardErrorHandle, FileAccess.Write));
+    }
+
+    /// <summary>
+    /// Determines whether an IO failure represents a downstream pipe that has closed.
+    /// </summary>
+    /// <param name="exception">The IO exception to inspect.</param>
+    /// <returns><see langword="true" /> when the exception is a broken-pipe write failure.</returns>
+    public static bool IsBrokenPipe(IOException exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        int error = exception.HResult & 0xffff;
+        return OperatingSystem.IsWindows()
+            ? error is WindowsBrokenPipe or WindowsPipeNotConnected
+            : error == UnixBrokenPipe;
+    }
+
+    internal static int GetIoErrorHResult(int error)
+    {
+        return unchecked((int)(0x80070000 | (uint)error));
     }
 
     private static RawStandardStream Open(int unixFileDescriptor, int windowsHandle, FileAccess access)

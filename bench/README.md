@@ -59,11 +59,13 @@ count. The gate also prints and checks the line-aligned 128 KiB byte-segment
 distribution before measuring, which catches corpus or chunking changes that
 would create uneven worker input.
 
-The Linux held-out regex workload runs Scout with
+The Linux held-out regex workloads run Scout with
 `SCOUT_REGEX_SPECIALIZATION_MODE=general`. That mode keeps structural regex
-specializations but disables narrow benchmark-family recognizers, so the gate
-continues to measure regex performance that is independent of the public
-OpenSubtitles pattern family.
+specializations but disables domain, benchmark-family, and corpus-specific
+recognizers, so the gate continues to measure regex performance that is
+independent of the public OpenSubtitles pattern family. The non-capturing
+workload measures general alternation and prefilter behavior, and the
+replacement workload measures the same class of search through capture output.
 
 Median peak RSS is capped at 1.5x rg plus the measured Native AOT fixed-image
 floor recorded in `docs/PARITY.md`: the script first measures an rg and

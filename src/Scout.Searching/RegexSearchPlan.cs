@@ -45,7 +45,9 @@ internal sealed class RegexSearchPlan
             byte[] needle = needles[index];
             ArgumentNullException.ThrowIfNull(needle);
             bool hasAccelerator = false;
-            if (RegexLiteralSetEngine.TryCreateLiteralAlternation(needle, literalSetOptions, out RegexLiteralSetEngine? literalSetEngine) &&
+            bool requiresAutomatonMatchSpans = LiteralLineSearcher.RequiresAutomatonMatchSpans(needle);
+            if (!requiresAutomatonMatchSpans &&
+                RegexLiteralSetEngine.TryCreateLiteralAlternation(needle, literalSetOptions, out RegexLiteralSetEngine? literalSetEngine) &&
                 literalSetEngine is not null)
             {
                 literalSetEngines ??= new RegexLiteralSetEngine?[needles.Count];
@@ -53,14 +55,16 @@ internal sealed class RegexSearchPlan
                 hasAccelerator = true;
             }
 
-            if (RegexClassSequenceAccelerator.TryCompile(needle, out RegexClassSequenceAccelerator? accelerator))
+            if (!requiresAutomatonMatchSpans &&
+                RegexClassSequenceAccelerator.TryCompile(needle, out RegexClassSequenceAccelerator? accelerator))
             {
                 accelerators ??= new RegexClassSequenceAccelerator?[needles.Count];
                 accelerators[index] = accelerator;
                 hasAccelerator = true;
             }
 
-            if (!hasAccelerator &&
+            if (!requiresAutomatonMatchSpans &&
+                !hasAccelerator &&
                 RegexLeadingLiteralCandidateAccelerator.TryCompile(needle, asciiCaseInsensitive, out RegexLeadingLiteralCandidateAccelerator? leadingLiteralCandidateAccelerator))
             {
                 leadingLiteralCandidateAccelerators ??= new RegexLeadingLiteralCandidateAccelerator?[needles.Count];
@@ -68,9 +72,10 @@ internal sealed class RegexSearchPlan
                 hasAccelerator = true;
             }
 
+            bool shouldPrecompileAutomaton = LiteralLineSearcher.ShouldPrecompileRegexAutomaton(needle, asciiCaseInsensitive);
             if (hasAccelerator ||
                 !compileAutomata ||
-                !LiteralLineSearcher.ShouldPrecompileRegexAutomaton(needle, asciiCaseInsensitive))
+                !shouldPrecompileAutomaton)
             {
                 continue;
             }
@@ -78,7 +83,8 @@ internal sealed class RegexSearchPlan
             automata ??= new RegexAutomaton?[needles.Count];
             var automaton = RegexAutomaton.Compile(needle, asciiCaseInsensitive, multiLine: false, dotMatchesNewline: false);
             automata[index] = automaton;
-            if (RegexCandidateLineAccelerator.TryCompile(needle, asciiCaseInsensitive, out RegexCandidateLineAccelerator? candidateLineAccelerator))
+            if (!requiresAutomatonMatchSpans &&
+                RegexCandidateLineAccelerator.TryCompile(needle, asciiCaseInsensitive, out RegexCandidateLineAccelerator? candidateLineAccelerator))
             {
                 candidateLineAccelerators ??= new RegexCandidateLineAccelerator?[needles.Count];
                 candidateLineAccelerators[index] = candidateLineAccelerator;

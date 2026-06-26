@@ -203,6 +203,30 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
+    /// Verifies match search preserves scoped ungreedy repetition spans.
+    /// </summary>
+    [Fact]
+    public void SearchMatchesHonorsScopedUngreedyRegexSpans()
+    {
+        var sink = new CapturingMatchSink();
+        byte[][] patterns = [@"(?U:ab+)"u8.ToArray()];
+
+        bool matched = LiteralLineSearcher.SearchMatches(
+            "abbbbc\nab\n"u8,
+            patterns,
+            ref sink);
+
+        Assert.True(matched);
+        Assert.Equal(2UL, sink.Matches);
+        Assert.Equal(0, sink.FirstByteOffset);
+        Assert.Equal("ab"u8.ToArray(), sink.FirstMatch);
+        Assert.Equal(2, sink.LineNumber);
+        Assert.Equal(7, sink.ByteOffset);
+        Assert.Equal(1, sink.MatchColumn);
+        Assert.Equal("ab"u8.ToArray(), sink.Match);
+    }
+
+    /// <summary>
     /// Verifies class-sequence regex acceleration reports line metadata for ASCII matches.
     /// </summary>
     [Fact]

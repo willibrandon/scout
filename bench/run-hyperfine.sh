@@ -873,6 +873,7 @@ list_workloads() {
         'subtitles_en_regex           OpenSubtitles regex scan, gate <= 1.20x' \
         'linux_recursive_literal      Linux tree recursive walk, gate <= 1.25x' \
         'linux_heldout_regex_general  Linux tree held-out regex scan with Scout general-only mode, gate <= 1.50x' \
+        'linux_heldout_capture_general Linux tree held-out replacement/capture scan with Scout general-only mode, gate <= 1.75x' \
         'linux_many_small_parallel    Linux tree many-small-files search, gate <= 1.30x' \
         'cold_version                 cold start, gate <= 1.00x' \
         'cold_tiny_search             cold tiny search, gate <= 1.00x' \
@@ -1021,6 +1022,13 @@ run_pair \
     "1.50" \
     "$Q_RG --no-config -n '\\b(?:struct|enum|union)\\s+[A-Za-z_][A-Za-z0-9_]*' $Q_LINUX" \
     "env SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config -n '\\b(?:struct|enum|union)\\s+[A-Za-z_][A-Za-z0-9_]*' $Q_LINUX" \
+    "$TREE_RUNS" \
+    "$TREE_WARMUP"
+run_pair \
+    "linux_heldout_capture_general" \
+    "1.75" \
+    "$Q_RG --no-config -n --replace '\$1 \$2' '\\b(struct|enum|union)\\s+([A-Za-z_][A-Za-z0-9_]*)' $Q_LINUX" \
+    "env SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config -n --replace '\$1 \$2' '\\b(struct|enum|union)\\s+([A-Za-z_][A-Za-z0-9_]*)' $Q_LINUX" \
     "$TREE_RUNS" \
     "$TREE_WARMUP"
 run_pair \

@@ -2953,6 +2953,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("subtitles_en_regex", script, StringComparison.Ordinal);
         Assert.Contains("linux_recursive_literal", script, StringComparison.Ordinal);
         Assert.Contains("linux_heldout_regex_general", script, StringComparison.Ordinal);
+        Assert.Contains("linux_heldout_capture_general", script, StringComparison.Ordinal);
         Assert.Contains("linux_many_small_parallel", script, StringComparison.Ordinal);
         Assert.Contains("cold_version", script, StringComparison.Ordinal);
         Assert.Contains("cold_tiny_search", script, StringComparison.Ordinal);
@@ -2994,6 +2995,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("gate_tree_warmup", script, StringComparison.Ordinal);
         Assert.Contains("SCOUT_REGEX_SPECIALIZATION_MODE=general", script, StringComparison.Ordinal);
         Assert.Contains(@"\\b(?:struct|enum|union)\\s+[A-Za-z_][A-Za-z0-9_]*", script, StringComparison.Ordinal);
+        Assert.Contains(@"\\b(struct|enum|union)\\s+([A-Za-z_][A-Za-z0-9_]*)", script, StringComparison.Ordinal);
+        Assert.Contains(@"--replace '\$1 \$2'", script, StringComparison.Ordinal);
         Assert.Contains("median ratio", script, StringComparison.Ordinal);
         Assert.Contains("combined median ratio", script, StringComparison.Ordinal);
         Assert.Contains("running reversed command order for combined timing gate", script, StringComparison.Ordinal);
@@ -3004,8 +3007,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("combined median samples", readme, StringComparison.Ordinal);
         Assert.Contains("It pins", readme, StringComparison.Ordinal);
         Assert.Contains("OpenSubtitles regex workload is a public benchmark workload", readme, StringComparison.Ordinal);
-        Assert.Contains("Linux held-out regex workload runs Scout with", readme, StringComparison.Ordinal);
+        Assert.Contains("Linux held-out regex workloads run Scout with", readme, StringComparison.Ordinal);
         Assert.Contains("SCOUT_REGEX_SPECIALIZATION_MODE=general", readme, StringComparison.Ordinal);
+        Assert.Contains("domain, benchmark-family, and corpus-specific", readme, StringComparison.Ordinal);
+        Assert.Contains("replacement workload measures", readme, StringComparison.Ordinal);
         Assert.Contains("byte-segment", readme, StringComparison.Ordinal);
         Assert.Contains("for every RSS gate", readme, StringComparison.Ordinal);
         Assert.Contains("script first measures an rg and", readme, StringComparison.Ordinal);
@@ -3014,7 +3019,11 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("Native AOT fixed RSS floor for release RSS gates", parity, StringComparison.Ordinal);
         Assert.Contains("Regex specialization ablation modes", parity, StringComparison.Ordinal);
         Assert.Contains("linux_heldout_regex_general", parity, StringComparison.Ordinal);
-        Assert.Contains("benchmark-family recognizers disabled", parity, StringComparison.Ordinal);
+        Assert.Contains("linux_heldout_capture_general", parity, StringComparison.Ordinal);
+        Assert.Contains("domain, benchmark-family, and corpus-specific recognizers", parity, StringComparison.Ordinal);
+        Assert.Contains("0.805x", parity, StringComparison.Ordinal);
+        Assert.Contains("1.236x", parity, StringComparison.Ordinal);
+        Assert.Contains("Not release-gated", parity, StringComparison.Ordinal);
         Assert.Contains("accepted explicit gate change under `docs/DESIGN.md` §9", parity, StringComparison.Ordinal);
         Assert.Contains("tiny `--mmap -n` literal search", parity, StringComparison.Ordinal);
         Assert.Contains("fixed runtime/image floor is measured per run", parity, StringComparison.Ordinal);

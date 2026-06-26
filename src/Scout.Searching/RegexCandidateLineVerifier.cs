@@ -254,7 +254,15 @@ internal sealed class RegexCandidateLineVerifier
             return true;
         }
 
-        RegexCompileOptions currentOptions = effectiveOptions;
+        return TryAppendSequenceItems(sequence, effectiveOptions, items);
+    }
+
+    private static bool TryAppendSequenceItems(
+        RegexSequenceNode sequence,
+        RegexCompileOptions options,
+        List<(RegexSyntaxNode Node, RegexCompileOptions Options)> items)
+    {
+        RegexCompileOptions currentOptions = options;
         for (int index = 0; index < sequence.Nodes.Count; index++)
         {
             RegexSyntaxNode child = sequence.Nodes[index];
@@ -264,7 +272,22 @@ internal sealed class RegexCandidateLineVerifier
                 continue;
             }
 
-            items.Add((child, currentOptions));
+            if (!TryUnwrapWithOptions(child, currentOptions, out RegexSyntaxNode unwrapped, out RegexCompileOptions childOptions))
+            {
+                return false;
+            }
+
+            if (unwrapped is RegexSequenceNode childSequence)
+            {
+                if (!TryAppendSequenceItems(childSequence, childOptions, items))
+                {
+                    return false;
+                }
+
+                continue;
+            }
+
+            items.Add((unwrapped, childOptions));
         }
 
         return true;

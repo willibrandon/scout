@@ -10,6 +10,11 @@ internal struct ReplacementLineSink : IMatchLineSink
     private readonly ReadOnlyMemory<byte> fieldSeparator;
     private readonly ReadOnlyMemory<byte> replacement;
     private readonly IReadOnlyList<byte[]> patterns;
+    private readonly ReplacementCapturePlan? capturePlan;
+    private readonly ReplacementTemplate template;
+    private readonly int[] captureStartsBuffer;
+    private readonly int[] captureLengthsBuffer;
+    private readonly Dictionary<string, int>? captureNamesBuffer;
     private readonly bool asciiCaseInsensitive;
     private readonly bool lineNumber;
     private readonly bool column;
@@ -47,7 +52,8 @@ internal struct ReplacementLineSink : IMatchLineSink
         long lineNumberOffset = 0,
         long byteOffsetOffset = 0,
         OutputColor color = default,
-        ReadOnlyMemory<byte> lineTerminator = default)
+        ReadOnlyMemory<byte> lineTerminator = default,
+        ReplacementCapturePlan? capturePlan = null)
     {
         ArgumentNullException.ThrowIfNull(output);
         this.output = output;
@@ -55,6 +61,13 @@ internal struct ReplacementLineSink : IMatchLineSink
         this.fieldSeparator = fieldSeparator;
         this.replacement = replacement;
         this.patterns = patterns;
+        this.capturePlan = capturePlan;
+        template = ReplacementTemplate.Create(replacement.Span, patterns);
+        captureStartsBuffer = new int[Math.Max(1, template.HighestCapture + 1)];
+        captureLengthsBuffer = new int[Math.Max(1, template.HighestCapture + 1)];
+        captureNamesBuffer = template.UsesNamedCaptureReferences
+            ? new Dictionary<string, int>(StringComparer.Ordinal)
+            : null;
         this.asciiCaseInsensitive = asciiCaseInsensitive;
         this.lineNumber = lineNumber;
         this.column = column;
@@ -108,7 +121,20 @@ internal struct ReplacementLineSink : IMatchLineSink
             return;
         }
 
-        byte[] replacedLine = ReplacementFormatter.ReplaceLine(currentLine, starts, lengths, replacement.Span, patterns, asciiCaseInsensitive, replacementColumns, replacementLengths);
+        byte[] replacedLine = ReplacementFormatter.ReplaceLine(
+            currentLine,
+            starts,
+            lengths,
+            replacement.Span,
+            patterns,
+            asciiCaseInsensitive,
+            replacementColumns,
+            replacementLengths,
+            capturePlan,
+            template,
+            captureStartsBuffer,
+            captureLengthsBuffer,
+            captureNamesBuffer);
         int trimOffset = trim ? GetTrimOffset(replacedLine) : 0;
         ReadOnlySpan<byte> displayLine = replacedLine.AsSpan(trimOffset);
         if (vimgrep)

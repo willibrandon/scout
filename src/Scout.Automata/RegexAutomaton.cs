@@ -506,20 +506,32 @@ public sealed class RegexAutomaton
             ? RegexPrefilter.Compile(tree.Root, options, out startPrefixSet)
             : null;
 
+        bool allowDomainRecognizers = AllowsDomainRecognizers(options);
         RegexWholeLineEngine.TryCreate(tree.Root, options, out RegexWholeLineEngine? wholeLine);
         RegexDotStarEngine.TryCreate(tree.Root, options, out RegexDotStarEngine? dotStar);
-        RegexIpv4AddressEngine.TryCreate(tree.Root, options, out RegexIpv4AddressEngine? ipv4Address);
-        RegexEmailAddressEngine.TryCreate(tree.Root, options, out RegexEmailAddressEngine? emailAddress);
+        RegexIpv4AddressEngine? ipv4Address = null;
+        RegexEmailAddressEngine? emailAddress = null;
+        if (allowDomainRecognizers)
+        {
+            RegexIpv4AddressEngine.TryCreate(tree.Root, options, out ipv4Address);
+            RegexEmailAddressEngine.TryCreate(tree.Root, options, out emailAddress);
+        }
+
         RegexLh3EmailEngine? lh3Email = null;
-        if (options.SpecializationMode == RegexSpecializationMode.Default)
+        if (AllowsBenchmarkFamilyRecognizers(options))
         {
             RegexLh3EmailEngine.TryCreate(tree.Root, options, out lh3Email);
         }
 
-        RegexUriEngine.TryCreate(tree.Root, options, out RegexUriEngine? uri);
+        RegexUriEngine? uri = null;
+        if (allowDomainRecognizers)
+        {
+            RegexUriEngine.TryCreate(tree.Root, options, out uri);
+        }
+
         RegexLh3UriEngine? lh3Uri = null;
         RegexLh3UriOrEmailEngine? lh3UriOrEmail = null;
-        if (options.SpecializationMode == RegexSpecializationMode.Default)
+        if (AllowsBenchmarkFamilyRecognizers(options))
         {
             RegexLh3UriEngine.TryCreate(tree.Root, options, out lh3Uri);
             RegexLh3UriOrEmailEngine.TryCreate(tree.Root, options, out lh3UriOrEmail);
@@ -1299,26 +1311,35 @@ public sealed class RegexAutomaton
                     captureOptions,
                     captureCount,
                     out scalarRunCaptureEngine);
-                RegexKeywordWhitespaceCaptureEngine.TryCreate(
-                    captureRoot,
-                    captureOptions,
-                    captureCount,
-                    out keywordWhitespaceCaptureEngine);
-                RegexNoqaCaptureEngine.TryCreate(
-                    captureRoot,
-                    captureOptions,
-                    captureCount,
-                    out noqaCaptureEngine);
+                bool allowCorpusSpecificCaptureRecognizers = AllowsCorpusSpecificCaptureRecognizers(captureOptions);
+                if (allowCorpusSpecificCaptureRecognizers)
+                {
+                    RegexKeywordWhitespaceCaptureEngine.TryCreate(
+                        captureRoot,
+                        captureOptions,
+                        captureCount,
+                        out keywordWhitespaceCaptureEngine);
+                    RegexNoqaCaptureEngine.TryCreate(
+                        captureRoot,
+                        captureOptions,
+                        captureCount,
+                        out noqaCaptureEngine);
+                }
+
                 RegexLinePrefixCaptureEngine.TryCreate(
                     captureRoot,
                     captureOptions,
                     captureCount,
                     out linePrefixCaptureEngine);
-                RegexOperatorSpacingCaptureEngine.TryCreate(
-                    captureRoot,
-                    captureOptions,
-                    captureCount,
-                    out operatorSpacingCaptureEngine);
+                if (allowCorpusSpecificCaptureRecognizers)
+                {
+                    RegexOperatorSpacingCaptureEngine.TryCreate(
+                        captureRoot,
+                        captureOptions,
+                        captureCount,
+                        out operatorSpacingCaptureEngine);
+                }
+
                 RegexFixedByteSequenceCaptureEngine.TryCreate(
                     captureRoot,
                     captureOptions,
@@ -1334,11 +1355,15 @@ public sealed class RegexAutomaton
                     captureOptions,
                     captureCount,
                     out literalRunAlternationCaptureEngine);
-                RegexPathSemverCaptureEngine.TryCreate(
-                    captureRoot,
-                    captureOptions,
-                    captureCount,
-                    out pathSemverCaptureEngine);
+                if (allowCorpusSpecificCaptureRecognizers)
+                {
+                    RegexPathSemverCaptureEngine.TryCreate(
+                        captureRoot,
+                        captureOptions,
+                        captureCount,
+                        out pathSemverCaptureEngine);
+                }
+
                 RegexAsciiLetterLengthAlternationCaptureEngine.TryCreate(
                     captureRoot,
                     captureOptions,
@@ -1349,16 +1374,20 @@ public sealed class RegexAutomaton
                     captureOptions,
                     captureCount,
                     out asciiWordLengthAlternationCaptureEngine);
-                RegexBibleReferenceCaptureEngine.TryCreate(
-                    captureRoot,
-                    captureOptions,
-                    captureCount,
-                    out bibleReferenceCaptureEngine);
-                RegexFnPredicateCaptureEngine.TryCreate(
-                    captureRoot,
-                    captureOptions,
-                    captureCount,
-                    out fnPredicateCaptureEngine);
+                if (allowCorpusSpecificCaptureRecognizers)
+                {
+                    RegexBibleReferenceCaptureEngine.TryCreate(
+                        captureRoot,
+                        captureOptions,
+                        captureCount,
+                        out bibleReferenceCaptureEngine);
+                    RegexFnPredicateCaptureEngine.TryCreate(
+                        captureRoot,
+                        captureOptions,
+                        captureCount,
+                        out fnPredicateCaptureEngine);
+                }
+
                 if (syntheticCaptureAlternationSet is null &&
                     structuredLogCaptureEngine is null &&
                     delimitedCaptureEngine is null &&
@@ -1594,6 +1623,21 @@ public sealed class RegexAutomaton
         return total;
     }
 
+    private static bool AllowsDomainRecognizers(RegexCompileOptions options)
+    {
+        return options.SpecializationMode == RegexSpecializationMode.Default;
+    }
+
+    private static bool AllowsBenchmarkFamilyRecognizers(RegexCompileOptions options)
+    {
+        return options.SpecializationMode == RegexSpecializationMode.Default;
+    }
+
+    private static bool AllowsCorpusSpecificCaptureRecognizers(RegexCompileOptions options)
+    {
+        return options.SpecializationMode == RegexSpecializationMode.Default;
+    }
+
     private RegexCaptures? FindWholePatternCaptures(ReadOnlySpan<byte> haystack, int startAt)
     {
         RegexMatch? match = engine.Find(haystack, startAt, startPredicate);
@@ -1626,17 +1670,16 @@ public sealed class RegexAutomaton
 
     private static bool HasHigherPriorityFixedWidthSpecialization(RegexSyntaxNode root, RegexCompileOptions options)
     {
+        bool allowDomainRecognizers = AllowsDomainRecognizers(options);
+        bool allowBenchmarkFamilyRecognizers = AllowsBenchmarkFamilyRecognizers(options);
         if (RegexWholeLineEngine.TryCreate(root, options, out _) ||
             RegexDotStarEngine.TryCreate(root, options, out _) ||
-            RegexIpv4AddressEngine.TryCreate(root, options, out _) ||
-            RegexEmailAddressEngine.TryCreate(root, options, out _) ||
-            options.SpecializationMode == RegexSpecializationMode.Default &&
-            RegexLh3EmailEngine.TryCreate(root, options, out _) ||
-            RegexUriEngine.TryCreate(root, options, out _) ||
-            options.SpecializationMode == RegexSpecializationMode.Default &&
-            RegexLh3UriEngine.TryCreate(root, options, out _) ||
-            options.SpecializationMode == RegexSpecializationMode.Default &&
-            RegexLh3UriOrEmailEngine.TryCreate(root, options, out _) ||
+            allowDomainRecognizers && RegexIpv4AddressEngine.TryCreate(root, options, out _) ||
+            allowDomainRecognizers && RegexEmailAddressEngine.TryCreate(root, options, out _) ||
+            allowBenchmarkFamilyRecognizers && RegexLh3EmailEngine.TryCreate(root, options, out _) ||
+            allowDomainRecognizers && RegexUriEngine.TryCreate(root, options, out _) ||
+            allowBenchmarkFamilyRecognizers && RegexLh3UriEngine.TryCreate(root, options, out _) ||
+            allowBenchmarkFamilyRecognizers && RegexLh3UriOrEmailEngine.TryCreate(root, options, out _) ||
             RegexBoundedDigitDelimiterEngine.TryCreate(root, options, out _) ||
             RegexWordWhitespaceLiteralEngine.TryCreate(root, options, out _) ||
             RegexUnicodeWordWhitespaceLiteralEngine.TryCreate(root, options, out _) ||
@@ -1751,17 +1794,16 @@ public sealed class RegexAutomaton
 
     private static bool HasHigherPriorityDelimitedSpanSpecialization(RegexSyntaxNode root, RegexCompileOptions options)
     {
+        bool allowDomainRecognizers = AllowsDomainRecognizers(options);
+        bool allowBenchmarkFamilyRecognizers = AllowsBenchmarkFamilyRecognizers(options);
         if (RegexWholeLineEngine.TryCreate(root, options, out _) ||
             RegexDotStarEngine.TryCreate(root, options, out _) ||
-            RegexIpv4AddressEngine.TryCreate(root, options, out _) ||
-            RegexEmailAddressEngine.TryCreate(root, options, out _) ||
-            options.SpecializationMode == RegexSpecializationMode.Default &&
-            RegexLh3EmailEngine.TryCreate(root, options, out _) ||
-            RegexUriEngine.TryCreate(root, options, out _) ||
-            options.SpecializationMode == RegexSpecializationMode.Default &&
-            RegexLh3UriEngine.TryCreate(root, options, out _) ||
-            options.SpecializationMode == RegexSpecializationMode.Default &&
-            RegexLh3UriOrEmailEngine.TryCreate(root, options, out _) ||
+            allowDomainRecognizers && RegexIpv4AddressEngine.TryCreate(root, options, out _) ||
+            allowDomainRecognizers && RegexEmailAddressEngine.TryCreate(root, options, out _) ||
+            allowBenchmarkFamilyRecognizers && RegexLh3EmailEngine.TryCreate(root, options, out _) ||
+            allowDomainRecognizers && RegexUriEngine.TryCreate(root, options, out _) ||
+            allowBenchmarkFamilyRecognizers && RegexLh3UriEngine.TryCreate(root, options, out _) ||
+            allowBenchmarkFamilyRecognizers && RegexLh3UriOrEmailEngine.TryCreate(root, options, out _) ||
             RegexBoundedDigitDelimiterEngine.TryCreate(root, options, out _) ||
             RegexWordWhitespaceLiteralEngine.TryCreate(root, options, out _) ||
             RegexUnicodeWordWhitespaceLiteralEngine.TryCreate(root, options, out _) ||

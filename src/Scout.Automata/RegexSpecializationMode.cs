@@ -11,7 +11,7 @@ public enum RegexSpecializationMode
     Default,
 
     /// <summary>
-    /// Uses general structural specializations but skips narrow benchmark-family recognizers.
+    /// Disables domain, benchmark-family, and corpus-specific recognizers while keeping structural fast paths.
     /// </summary>
     General,
 

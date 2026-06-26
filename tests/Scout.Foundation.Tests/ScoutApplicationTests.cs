@@ -114,6 +114,30 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies a closed downstream pipe exits quietly after the consumer stops reading.
+    /// </summary>
+    [Fact]
+    public void BrokenOutputPipeExitsSuccessfully()
+    {
+        using MemoryStream input = new("alpha\nbeta\n"u8.ToArray());
+        using var output = new BrokenPipeWriteStream();
+        using MemoryStream error = new();
+        var outputWriter = new RawByteWriter(output);
+        var errorWriter = new RawByteWriter(error);
+        OsString[] arguments =
+        [
+            OsString.FromUnixBytes("scout"u8),
+            OsString.FromUnixBytes("alpha"u8),
+            OsString.FromUnixBytes("-"u8),
+        ];
+
+        int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter, input);
+
+        Assert.Equal(ExitCode.Success, exitCode);
+        Assert.Empty(error.ToArray());
+    }
+
+    /// <summary>
     /// Verifies parser errors are rendered with Scout's top-level prefix.
     /// </summary>
     [Fact]
@@ -3990,12 +4014,14 @@ public sealed class ScoutApplicationTests
     {
         string root = CreateTempDirectory();
         string path = Path.Combine(root, "input.txt");
-        File.WriteAllText(path, "abc123\nabc456\n");
+        File.WriteAllText(path, "abc123\nabc456\nstruct Foo\nenum Bar\nunion _baz\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "-r", "$2-$1", "([a-z]+)([0-9]+)", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-r", "$2-$1", "([a-z]+)([0-9]+)", path);
         (int onlyExitCode, byte[] onlyOutput, string onlyError) = RunScout("-o", "-r", "${2}-${1}", "([a-z]+)([0-9]+)", path);
         (int pinnedOnlyExitCode, byte[] pinnedOnlyOutput, string pinnedOnlyError) = RunPinnedRipgrep("-o", "-r", "${2}-${1}", "([a-z]+)([0-9]+)", path);
+        (int heldoutExitCode, byte[] heldoutOutput, string heldoutError) = RunScout("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", path);
+        (int pinnedHeldoutExitCode, byte[] pinnedHeldoutOutput, string pinnedHeldoutError) = RunPinnedRipgrep("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", path);
 
         Assert.Equal(pinnedExitCode, exitCode);
         Assert.Equal(pinnedOutput, output);
@@ -4003,6 +4029,26 @@ public sealed class ScoutApplicationTests
         Assert.Equal(pinnedOnlyExitCode, onlyExitCode);
         Assert.Equal(pinnedOnlyOutput, onlyOutput);
         Assert.Equal(pinnedOnlyError, onlyError);
+        Assert.Equal(pinnedHeldoutExitCode, heldoutExitCode);
+        Assert.Equal(pinnedHeldoutOutput, heldoutOutput);
+        Assert.Equal(pinnedHeldoutError, heldoutError);
+    }
+
+    /// <summary>
+    /// Verifies replacement capture extraction handles held-out structural captures without generic rematching.
+    /// </summary>
+    [Fact]
+    public void ReplacementCapturePlanCollectsHeldoutStructuralCaptures()
+    {
+        byte[][] patterns = [@"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)"u8.ToArray()];
+        var plan = ReplacementCapturePlan.TryCreate(patterns, asciiCaseInsensitive: false);
+        int[] captureStarts = new int[3];
+        int[] captureLengths = new int[3];
+
+        Assert.NotNull(plan);
+        Assert.True(plan.TryCollectNumericCaptures("struct Foo"u8, captureStarts, captureLengths));
+        Assert.Equal([0, 0, 7], captureStarts);
+        Assert.Equal([10, 6, 3], captureLengths);
     }
 
     /// <summary>
@@ -7400,4 +7446,5 @@ public sealed class ScoutApplicationTests
         normalized = normalized.Replace("this build of ripgrep", "this build of scout", StringComparison.Ordinal);
         return normalized;
     }
+
 }

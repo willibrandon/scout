@@ -1677,11 +1677,12 @@ internal sealed class RegexSimpleSequenceEngine
 
         sawVariableRepetition |= node.Maximum != node.Minimum;
         RegexSyntaxNode child = UnwrapTransparentGroups(node.Child);
+        bool lazy = options.SwapGreed ? !node.Lazy : node.Lazy;
         if (child.Kind == RegexSyntaxKind.Literal)
         {
             ReadOnlySpan<byte> literal = ((RegexAtomNode)child).Value.Span;
             return literal.Length == 1 &&
-                TryAppendLiteral(literal, options, node.Minimum, node.Maximum, node.Lazy, segments);
+                TryAppendLiteral(literal, options, node.Minimum, node.Maximum, lazy, segments);
         }
 
         if (child is not RegexAtomNode atom || !CanRepeatAtom(atom, node.Maximum, options))
@@ -1689,7 +1690,7 @@ internal sealed class RegexSimpleSequenceEngine
             return false;
         }
 
-        return TryAppendAtom(atom, options, node.Minimum, node.Maximum, node.Lazy, segments, ref sawVariableRepetition);
+        return TryAppendAtom(atom, options, node.Minimum, node.Maximum, lazy, segments, ref sawVariableRepetition);
     }
 
     private RegexMatch? FindDisjointRunSuffixBoundary(ReadOnlySpan<byte> haystack, int startOffset)
@@ -1886,7 +1887,8 @@ internal sealed class RegexSimpleSequenceEngine
             return false;
         }
 
-        engine = new RegexSimpleSequenceEngine(childSegments, repetition.Minimum, repetition.Maximum.Value, repetition.Lazy);
+        bool lazy = options.SwapGreed ? !repetition.Lazy : repetition.Lazy;
+        engine = new RegexSimpleSequenceEngine(childSegments, repetition.Minimum, repetition.Maximum.Value, lazy);
         return true;
     }
 

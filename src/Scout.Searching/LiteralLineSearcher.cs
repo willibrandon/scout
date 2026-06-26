@@ -2971,6 +2971,7 @@ public static class LiteralLineSearcher
                 regexPlan?.GetLiteralSetEngine(index),
                 regexPlan?.GetAutomaton(index),
                 regexPlan?.GetAccelerator(index),
+                regexPlan?.GetCandidateLineAccelerator(index),
                 regexPlan?.GetLeadingLiteralCandidateAccelerator(index),
                 out int start,
                 out int length))
@@ -3006,6 +3007,7 @@ public static class LiteralLineSearcher
         RegexLiteralSetEngine? literalSetEngine,
         RegexAutomaton? automaton,
         RegexClassSequenceAccelerator? accelerator,
+        RegexCandidateLineAccelerator? candidateLineAccelerator,
         RegexLeadingLiteralCandidateAccelerator? leadingLiteralCandidateAccelerator,
         out int matchStart,
         out int matchLength)
@@ -3062,6 +3064,17 @@ public static class LiteralLineSearcher
             return TryFindAcceleratedPattern(haystack, accelerator, offset, wordRegexp, out matchStart, out matchLength);
         }
 
+        if (candidateLineAccelerator is { HasVerifier: true } && !ContainsNonAscii(haystack))
+        {
+            return TryFindCandidateLinePattern(
+                haystack,
+                candidateLineAccelerator,
+                offset,
+                wordRegexp,
+                out matchStart,
+                out matchLength);
+        }
+
         if (leadingLiteralCandidateAccelerator is not null && !ContainsNonAscii(haystack))
         {
             return TryFindLeadingLiteralCandidatePattern(
@@ -3094,6 +3107,50 @@ public static class LiteralLineSearcher
             searchOffset = start + 1;
         }
 
+        return false;
+    }
+
+    private static bool TryFindCandidateLinePattern(
+        ReadOnlySpan<byte> haystack,
+        RegexCandidateLineAccelerator accelerator,
+        int offset,
+        bool wordRegexp,
+        out int matchStart,
+        out int matchLength)
+    {
+        int searchOffset = offset;
+        while (searchOffset <= haystack.Length)
+        {
+            int candidate = accelerator.FindCandidate(haystack, searchOffset);
+            if (candidate < 0)
+            {
+                matchStart = -1;
+                matchLength = 0;
+                return false;
+            }
+
+            if (accelerator.TryMatchAt(haystack, candidate, out int length, out bool completed))
+            {
+                int end = candidate + length;
+                if (!wordRegexp || IsWordBoundary(haystack, candidate, end))
+                {
+                    matchStart = candidate;
+                    matchLength = length;
+                    return true;
+                }
+            }
+            else if (!completed)
+            {
+                matchStart = -1;
+                matchLength = 0;
+                return false;
+            }
+
+            searchOffset = candidate + 1;
+        }
+
+        matchStart = -1;
+        matchLength = 0;
         return false;
     }
 
@@ -3300,6 +3357,28 @@ public static class LiteralLineSearcher
         return needle.Length != 0 &&
             !IsLiteralRegex(needle) &&
             (ContainsAutomatonOnlyRegexSyntax(needle) || MayRequireAutomatonRegex(needle, asciiCaseInsensitive));
+    }
+
+    internal static bool RequiresAutomatonMatchSpans(ReadOnlySpan<byte> pattern)
+    {
+        for (int index = 0; index < pattern.Length; index++)
+        {
+            if (pattern[index] == (byte)'[' && TryFindClassEnd(pattern, index, out int classEnd))
+            {
+                index = classEnd;
+                continue;
+            }
+
+            if (pattern[index] == (byte)'(' &&
+                index + 2 < pattern.Length &&
+                pattern[index + 1] == (byte)'?' &&
+                IsScopedInlineFlagGroup(pattern, index + 2))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool ClassContainsUnicodeSensitiveEscape(ReadOnlySpan<byte> expression)

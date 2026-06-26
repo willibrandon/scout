@@ -6,6 +6,7 @@ internal sealed class RegexCaptureEngine
     private readonly RegexPrefilter? prefilter;
     private List<CaptureThread> current = [];
     private List<CaptureThread> next = [];
+    private List<(int StateIndex, int[] Starts, int[] Ends)> closureStack = [];
     private HashSet<(int State, int Position)> currentSeen = [];
     private HashSet<(int State, int Position)> nextSeen = [];
 
@@ -212,78 +213,92 @@ internal sealed class RegexCaptureEngine
         bool[] visited,
         bool[] closedSplits)
     {
-        if (stateIndex < 0)
+        closureStack.Clear();
+        PushClosureFrame(stateIndex, starts, ends);
+        while (closureStack.Count > 0)
         {
-            return;
+            int frameIndex = closureStack.Count - 1;
+            (int frameStateIndex, int[] frameStarts, int[] frameEnds) = closureStack[frameIndex];
+            closureStack.RemoveAt(frameIndex);
+            stateIndex = frameStateIndex;
+            starts = frameStarts;
+            ends = frameEnds;
+            if (stateIndex < 0)
+            {
+                continue;
+            }
+
+            RegexNfaState state = nfa.States[stateIndex];
+            if (visited[stateIndex])
+            {
+                PushClosedSplitExit(stateIndex, state, starts, ends, closedSplits);
+                continue;
+            }
+
+            visited[stateIndex] = true;
+            switch (state.Kind)
+            {
+                case RegexNfaStateKind.Split:
+                case RegexNfaStateKind.GreedyLoopSplit:
+                case RegexNfaStateKind.LazyLoopSplit:
+                    PushClosureFrame(state.Alternative, CloneSlots(starts), CloneSlots(ends));
+                    PushClosureFrame(state.Next, CloneSlots(starts), CloneSlots(ends));
+                    break;
+                case RegexNfaStateKind.CaptureStart:
+                    starts = CloneSlots(starts);
+                    starts[state.CaptureIndex] = position;
+                    ends = CloneSlots(ends);
+                    ends[state.CaptureIndex] = -1;
+                    PushClosureFrame(state.Next, starts, ends);
+                    break;
+                case RegexNfaStateKind.CaptureEnd:
+                    ends = CloneSlots(ends);
+                    ends[state.CaptureIndex] = position;
+                    PushClosureFrame(state.Next, starts, ends);
+                    break;
+                case RegexNfaStateKind.Predicate:
+                    if (RegexByteClass.PredicateMatches(haystack, position, state.AtomKind, state.MultiLine, state.Crlf, state.LineTerminator, state.Utf8, state.UnicodeClasses))
+                    {
+                        PushClosureFrame(state.Next, starts, ends);
+                    }
+
+                    break;
+                default:
+                    AddThreadEntry(new CaptureThread(stateIndex, position, starts, ends), threads, seen);
+                    break;
+            }
         }
 
-        if (visited[stateIndex])
+        void PushClosureFrame(int nextState, int[] frameStarts, int[] frameEnds)
         {
-            AddClosedSplitExit(stateIndex, haystack, position, starts, ends, threads, seen, visited, closedSplits);
-            return;
+            if (nextState >= 0)
+            {
+                closureStack.Add((nextState, frameStarts, frameEnds));
+            }
         }
 
-        visited[stateIndex] = true;
-        RegexNfaState state = nfa.States[stateIndex];
-        switch (state.Kind)
+        void PushClosedSplitExit(
+            int loopStateIndex,
+            RegexNfaState loopState,
+            int[] frameStarts,
+            int[] frameEnds,
+            bool[] closed)
         {
-            case RegexNfaStateKind.Split:
-            case RegexNfaStateKind.GreedyLoopSplit:
-            case RegexNfaStateKind.LazyLoopSplit:
-                AddThread(state.Next, haystack, position, CloneSlots(starts), CloneSlots(ends), threads, seen, visited, closedSplits);
-                AddThread(state.Alternative, haystack, position, CloneSlots(starts), CloneSlots(ends), threads, seen, visited, closedSplits);
-                break;
-            case RegexNfaStateKind.CaptureStart:
-                starts = CloneSlots(starts);
-                starts[state.CaptureIndex] = position;
-                ends = CloneSlots(ends);
-                ends[state.CaptureIndex] = -1;
-                AddThread(state.Next, haystack, position, starts, ends, threads, seen, visited, closedSplits);
-                break;
-            case RegexNfaStateKind.CaptureEnd:
-                ends = CloneSlots(ends);
-                ends[state.CaptureIndex] = position;
-                AddThread(state.Next, haystack, position, starts, ends, threads, seen, visited, closedSplits);
-                break;
-            case RegexNfaStateKind.Predicate:
-                if (RegexByteClass.PredicateMatches(haystack, position, state.AtomKind, state.MultiLine, state.Crlf, state.LineTerminator, state.Utf8, state.UnicodeClasses))
-                {
-                    AddThread(state.Next, haystack, position, starts, ends, threads, seen, visited, closedSplits);
-                }
+            if (closed[loopStateIndex])
+            {
+                return;
+            }
 
-                break;
-            default:
-                AddThreadEntry(new CaptureThread(stateIndex, position, starts, ends), threads, seen);
-                break;
-        }
-    }
-
-    private void AddClosedSplitExit(
-        int stateIndex,
-        ReadOnlySpan<byte> haystack,
-        int position,
-        int[] starts,
-        int[] ends,
-        List<CaptureThread> threads,
-        HashSet<(int State, int Position)> seen,
-        bool[] visited,
-        bool[] closedSplits)
-    {
-        RegexNfaState state = nfa.States[stateIndex];
-        if (closedSplits[stateIndex])
-        {
-            return;
-        }
-
-        closedSplits[stateIndex] = true;
-        switch (state.Kind)
-        {
-            case RegexNfaStateKind.GreedyLoopSplit:
-                AddThread(state.Alternative, haystack, position, starts, ends, threads, seen, visited, closedSplits);
-                break;
-            case RegexNfaStateKind.LazyLoopSplit:
-                AddThread(state.Next, haystack, position, starts, ends, threads, seen, visited, closedSplits);
-                break;
+            closed[loopStateIndex] = true;
+            switch (loopState.Kind)
+            {
+                case RegexNfaStateKind.GreedyLoopSplit:
+                    PushClosureFrame(loopState.Alternative, frameStarts, frameEnds);
+                    break;
+                case RegexNfaStateKind.LazyLoopSplit:
+                    PushClosureFrame(loopState.Next, frameStarts, frameEnds);
+                    break;
+            }
         }
     }
 
