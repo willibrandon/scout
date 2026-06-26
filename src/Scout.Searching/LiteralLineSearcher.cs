@@ -1710,6 +1710,23 @@ public static class LiteralLineSearcher
             return false;
         }
 
+        if (!lineRegexp &&
+            !wordRegexp &&
+            !crlf &&
+            !nullData &&
+            needles.Count == 1 &&
+            regexPlan?.GetCandidateLineAccelerator(0) is { HasVerifier: true } candidateLineAccelerator)
+        {
+            return SearchCandidateRegexMatchLines(
+                haystack,
+                needles,
+                regexPlan,
+                candidateLineAccelerator,
+                ref sink,
+                asciiCaseInsensitive,
+                maxMatchingLines);
+        }
+
         bool matched = false;
         ulong matchedLines = 0;
         int lineStart = 0;
@@ -1731,6 +1748,127 @@ public static class LiteralLineSearcher
 
             lineStart += lineLength;
             lineNumber++;
+        }
+
+        return matched;
+    }
+
+    private static bool SearchCandidateRegexMatchLines<TSink>(
+        ReadOnlySpan<byte> haystack,
+        IReadOnlyList<byte[]> needles,
+        RegexSearchPlan regexPlan,
+        RegexCandidateLineAccelerator accelerator,
+        ref TSink sink,
+        bool asciiCaseInsensitive,
+        ulong? maxMatchingLines)
+        where TSink : struct, IMatchLineSink
+    {
+        bool matched = false;
+        ulong matchedLines = 0;
+        long lastMatchedLineNumber = 0;
+        bool reachedLineLimit = false;
+        int searchOffset = 0;
+        int lineStart = 0;
+        int lineEnd = haystack.IsEmpty ? 0 : GetLineLength(haystack, nullData: false);
+        long lineNumber = 1;
+        while (searchOffset < haystack.Length)
+        {
+            int candidate = accelerator.FindCandidate(haystack, searchOffset);
+            if (candidate < 0)
+            {
+                return matched;
+            }
+
+            if (candidate >= lineEnd)
+            {
+                ReadOnlySpan<byte> skipped = haystack[lineStart..candidate];
+                int previousTerminator = skipped.LastIndexOf((byte)'\n');
+                if (previousTerminator >= 0)
+                {
+                    lineNumber += CountLineTerminators(skipped);
+                    lineStart += previousTerminator + 1;
+                    lineEnd = lineStart + GetLineLength(haystack[lineStart..], nullData: false);
+                }
+            }
+
+            if (reachedLineLimit && lineNumber != lastMatchedLineNumber)
+            {
+                return matched;
+            }
+
+            ReadOnlySpan<byte> line = haystack[lineStart..lineEnd];
+            int lineOffset = candidate - lineStart;
+            if (lineOffset < 0 || lineOffset > line.Length)
+            {
+                searchOffset = Math.Max(candidate + 1, lineStart);
+                continue;
+            }
+
+            int matchStart = -1;
+            int matchLength = 0;
+            bool lineMatched = false;
+            if (accelerator.TryMatchAt(line, lineOffset, out int candidateLength, out bool completed))
+            {
+                matchStart = lineOffset;
+                matchLength = candidateLength;
+                lineMatched = true;
+            }
+            else if (!completed &&
+                TryFindPatternMatch(
+                    line,
+                    needles,
+                    lineOffset,
+                    asciiCaseInsensitive,
+                    lineRegexp: false,
+                    wordRegexp: false,
+                    crlf: false,
+                    nullData: false,
+                    regexPlan,
+                    out matchStart,
+                    out matchLength))
+            {
+                lineMatched = true;
+            }
+
+            if (!lineMatched)
+            {
+                searchOffset = candidate + 1;
+                continue;
+            }
+
+            var match = new MatcherMatch(matchStart, matchLength);
+            if (!HasAnyEmptyPattern(needles) && IsLineEndEmptyMatch(line, matchStart, matchLength))
+            {
+                searchOffset = lineEnd;
+                continue;
+            }
+
+            if (lineNumber != lastMatchedLineNumber)
+            {
+                matchedLines++;
+                lastMatchedLineNumber = lineNumber;
+                if (maxMatchingLines is ulong limit && matchedLines >= limit)
+                {
+                    reachedLineLimit = true;
+                }
+            }
+
+            sink.MatchedLine(
+                lineNumber,
+                lineStart,
+                lineStart + matchStart,
+                matchStart + 1,
+                line,
+                line.Slice(matchStart, matchLength));
+            matched = true;
+
+            int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
+            int nextLineOffset = MatchIterator.AdvanceAfterReported(match, line.Length, ref suppressedEmptyStart);
+            searchOffset = lineStart + nextLineOffset;
+            if (searchOffset <= candidate)
+            {
+                searchOffset = candidate + 1;
+            }
         }
 
         return matched;

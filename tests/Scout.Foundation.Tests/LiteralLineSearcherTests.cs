@@ -290,6 +290,25 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
+    /// Verifies Scout's prepared capture wrapper still allows candidate-line acceleration.
+    /// </summary>
+    [Fact]
+    public void RegexSearchPlanUsesCandidateLineAcceleratorForPreparedCaptureLeadingAlternation()
+    {
+        byte[][] patterns = [@"(?-u:\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*))"u8.ToArray()];
+        object? plan = typeof(LiteralLineSearcher)
+            .GetMethod("CreateRegexSearchPlan", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, [patterns, false, true]);
+
+        object? accelerator = plan!
+            .GetType()
+            .GetMethod("GetCandidateLineAccelerator")!
+            .Invoke(plan, [0]);
+
+        Assert.NotNull(accelerator);
+    }
+
+    /// <summary>
     /// Verifies scoped flags that change match spans still use automaton spans.
     /// </summary>
     [Fact]
@@ -346,6 +365,28 @@ public sealed class LiteralLineSearcherTests
         Assert.Equal(0, sink.ByteOffset);
         Assert.Equal(12, sink.MatchColumn);
         Assert.Equal("destructor struct file;\n"u8.ToArray(), sink.Line.ToArray());
+    }
+
+    /// <summary>
+    /// Verifies candidate-line scanning emits match-line records for prepared captures.
+    /// </summary>
+    [Fact]
+    public void SearchMatchLinesUsesCandidateLineAcceleratorForPreparedCaptures()
+    {
+        var sink = new CapturingMatchLineSink();
+        byte[][] patterns = [@"(?-u:\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*))"u8.ToArray()];
+
+        bool matched = LiteralLineSearcher.SearchMatchLines(
+            "struct file; enum mode;\nstruct\nfile\n"u8,
+            patterns,
+            ref sink);
+
+        Assert.True(matched);
+        Assert.Equal(2UL, sink.Matches);
+        Assert.Equal(1, sink.LineNumber);
+        Assert.Equal(13, sink.MatchByteOffset);
+        Assert.Equal(14, sink.MatchColumn);
+        Assert.Equal("enum mode"u8.ToArray(), sink.Match);
     }
 
     /// <summary>
