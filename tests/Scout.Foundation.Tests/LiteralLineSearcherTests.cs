@@ -271,6 +271,44 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
+    /// Verifies Scout's prepared no-Unicode wrapper still allows candidate-line acceleration.
+    /// </summary>
+    [Fact]
+    public void RegexSearchPlanUsesCandidateLineAcceleratorForPreparedLeadingAlternation()
+    {
+        byte[][] patterns = [@"(?-u:\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*)"u8.ToArray()];
+        object? plan = typeof(LiteralLineSearcher)
+            .GetMethod("CreateRegexSearchPlan", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, [patterns, false, true]);
+
+        object? accelerator = plan!
+            .GetType()
+            .GetMethod("GetCandidateLineAccelerator")!
+            .Invoke(plan, [0]);
+
+        Assert.NotNull(accelerator);
+    }
+
+    /// <summary>
+    /// Verifies scoped flags that change match spans still use automaton spans.
+    /// </summary>
+    [Fact]
+    public void RegexSearchPlanKeepsScopedUngreedySpansOnAutomatonPath()
+    {
+        byte[][] patterns = [@"(?U:ab+)"u8.ToArray()];
+        object? plan = typeof(LiteralLineSearcher)
+            .GetMethod("CreateRegexSearchPlan", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, [patterns, false, true]);
+
+        object? accelerator = plan!
+            .GetType()
+            .GetMethod("GetCandidateLineAccelerator")!
+            .Invoke(plan, [0]);
+
+        Assert.Null(accelerator);
+    }
+
+    /// <summary>
     /// Verifies whole-haystack regex candidate scanning still preserves line-oriented matching.
     /// </summary>
     [Fact]

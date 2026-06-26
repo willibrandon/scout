@@ -3372,7 +3372,7 @@ public static class LiteralLineSearcher
             if (pattern[index] == (byte)'(' &&
                 index + 2 < pattern.Length &&
                 pattern[index + 1] == (byte)'?' &&
-                IsScopedInlineFlagGroup(pattern, index + 2))
+                IsScopedInlineFlagGroupRequiringAutomatonMatchSpans(pattern, index + 2))
             {
                 return true;
             }
@@ -3494,6 +3494,48 @@ public static class LiteralLineSearcher
             }
 
             sawFlag = true;
+            index++;
+        }
+
+        return false;
+    }
+
+    private static bool IsScopedInlineFlagGroupRequiringAutomatonMatchSpans(ReadOnlySpan<byte> pattern, int index)
+    {
+        bool sawFlag = false;
+        bool disablingFlags = false;
+        bool onlyDisablesUnicode = true;
+        while (index < pattern.Length)
+        {
+            byte value = pattern[index];
+            if (value == (byte)':')
+            {
+                return sawFlag && !onlyDisablesUnicode;
+            }
+
+            if (value == (byte)')')
+            {
+                return false;
+            }
+
+            if (value == (byte)'-')
+            {
+                disablingFlags = true;
+                index++;
+                continue;
+            }
+
+            if (!IsRegexFlagByte(value))
+            {
+                return false;
+            }
+
+            sawFlag = true;
+            if (!disablingFlags || value != (byte)'u')
+            {
+                onlyDisablesUnicode = false;
+            }
+
             index++;
         }
 
