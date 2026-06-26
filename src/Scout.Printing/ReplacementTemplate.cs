@@ -164,6 +164,70 @@ internal sealed class ReplacementTemplate
         }
     }
 
+    public void AddExpanded(
+        List<byte> bytes,
+        ReadOnlySpan<byte> matched,
+        int firstCaptureIndex,
+        int firstCaptureStart,
+        int firstCaptureLength,
+        int secondCaptureIndex,
+        int secondCaptureStart,
+        int secondCaptureLength)
+    {
+        for (int index = 0; index < parts.Length; index++)
+        {
+            ReplacementTemplatePart part = parts[index];
+            if (part.IsLiteral)
+            {
+                Add(bytes, part.Literal);
+            }
+            else if (part.CaptureIndex == 0)
+            {
+                Add(bytes, matched);
+            }
+            else if (part.CaptureIndex == firstCaptureIndex)
+            {
+                Add(bytes, matched.Slice(firstCaptureStart, firstCaptureLength));
+            }
+            else if (part.CaptureIndex == secondCaptureIndex)
+            {
+                Add(bytes, matched.Slice(secondCaptureStart, secondCaptureLength));
+            }
+        }
+    }
+
+    public void WriteExpanded(
+        RawByteWriter output,
+        ReadOnlySpan<byte> matched,
+        int firstCaptureIndex,
+        int firstCaptureStart,
+        int firstCaptureLength,
+        int secondCaptureIndex,
+        int secondCaptureStart,
+        int secondCaptureLength)
+    {
+        for (int index = 0; index < parts.Length; index++)
+        {
+            ReplacementTemplatePart part = parts[index];
+            if (part.IsLiteral)
+            {
+                output.Write(part.Literal);
+            }
+            else if (part.CaptureIndex == 0)
+            {
+                output.Write(matched);
+            }
+            else if (part.CaptureIndex == firstCaptureIndex)
+            {
+                output.Write(matched.Slice(firstCaptureStart, firstCaptureLength));
+            }
+            else if (part.CaptureIndex == secondCaptureIndex)
+            {
+                output.Write(matched.Slice(secondCaptureStart, secondCaptureLength));
+            }
+        }
+    }
+
     private static int CountHighestCaptureIndex(IReadOnlyList<byte[]> patterns)
     {
         int highest = 0;

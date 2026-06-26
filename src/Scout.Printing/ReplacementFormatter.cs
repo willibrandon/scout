@@ -97,6 +97,43 @@ internal static class ReplacementFormatter
         return bytes.ToArray();
     }
 
+    public static void WriteReplacedLine(
+        RawByteWriter output,
+        ReadOnlySpan<byte> line,
+        IReadOnlyList<int> starts,
+        IReadOnlyList<int> lengths,
+        ReadOnlySpan<byte> replacement,
+        IReadOnlyList<byte[]> patterns,
+        bool asciiCaseInsensitive,
+        ReplacementCapturePlan? capturePlan = null,
+        ReplacementTemplate? template = null,
+        int[]? captureStartsBuffer = null,
+        int[]? captureLengthsBuffer = null,
+        Dictionary<string, int>? captureNamesBuffer = null)
+    {
+        template ??= ReplacementTemplate.Create(replacement, patterns);
+        int previous = 0;
+        for (int index = 0; index < starts.Count; index++)
+        {
+            int start = starts[index];
+            output.Write(line[previous..start]);
+            WriteExpanded(
+                output,
+                replacement,
+                line.Slice(start, lengths[index]),
+                patterns,
+                asciiCaseInsensitive,
+                capturePlan,
+                template,
+                captureStartsBuffer,
+                captureLengthsBuffer,
+                captureNamesBuffer);
+            previous = start + lengths[index];
+        }
+
+        output.Write(line[previous..]);
+    }
+
     private static void AddExpanded(
         List<byte> bytes,
         ReadOnlySpan<byte> replacement,
@@ -110,6 +147,11 @@ internal static class ReplacementFormatter
         Dictionary<string, int>? captureNamesBuffer)
     {
         template ??= ReplacementTemplate.Create(replacement, patterns);
+        if (capturePlan?.TryAddExpandedNumericReplacement(bytes, matched, template) == true)
+        {
+            return;
+        }
+
         int[] captureStarts = captureStartsBuffer ?? CreateCaptureArray(template.HighestCapture);
         int[] captureLengths = captureLengthsBuffer ?? CreateCaptureArray(template.HighestCapture);
         Dictionary<string, int>? captureNames = template.UsesNamedCaptureReferences
@@ -125,6 +167,36 @@ internal static class ReplacementFormatter
         }
 
         template.AddExpanded(bytes, matched, captureStarts, captureLengths, captureNames);
+    }
+
+    private static void WriteExpanded(
+        RawByteWriter output,
+        ReadOnlySpan<byte> replacement,
+        ReadOnlySpan<byte> matched,
+        IReadOnlyList<byte[]> patterns,
+        bool asciiCaseInsensitive,
+        ReplacementCapturePlan? capturePlan,
+        ReplacementTemplate? template,
+        int[]? captureStartsBuffer,
+        int[]? captureLengthsBuffer,
+        Dictionary<string, int>? captureNamesBuffer)
+    {
+        template ??= ReplacementTemplate.Create(replacement, patterns);
+        if (capturePlan?.TryWriteExpandedNumericReplacement(output, matched, template) == true)
+        {
+            return;
+        }
+
+        output.Write(Expand(
+            replacement,
+            matched,
+            patterns,
+            asciiCaseInsensitive,
+            capturePlan,
+            template,
+            captureStartsBuffer,
+            captureLengthsBuffer,
+            captureNamesBuffer));
     }
 
     internal static int CountCapturingGroups(ReadOnlySpan<byte> pattern)

@@ -112,4 +112,46 @@ internal sealed class ReplacementCapturePlan
 
         return false;
     }
+
+    public bool TryAddExpandedNumericReplacement(
+        List<byte> bytes,
+        ReadOnlySpan<byte> matched,
+        ReplacementTemplate template)
+    {
+        if (template.UsesNamedCaptureReferences)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < simplePlans.Length; index++)
+        {
+            if (simplePlans[index]?.TryAddExpandedNumericReplacement(bytes, matched, template) == true)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public bool TryWriteExpandedNumericReplacement(
+        RawByteWriter output,
+        ReadOnlySpan<byte> matched,
+        ReplacementTemplate template)
+    {
+        if (template.UsesNamedCaptureReferences)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < simplePlans.Length; index++)
+        {
+            if (simplePlans[index]?.TryWriteExpandedNumericReplacement(output, matched, template) == true)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

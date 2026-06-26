@@ -57,6 +57,72 @@ internal sealed class SimpleReplacementCapturePlan
         int[] captureStarts,
         int[] captureLengths)
     {
+        if (!TryMatch(matched, out int prefixLength, out int suffixStart, out int suffixLength))
+        {
+            return false;
+        }
+
+        Array.Fill(captureStarts, -1);
+        Array.Fill(captureLengths, -1);
+        SetCapture(captureStarts, captureLengths, 0, 0, matched.Length);
+        SetCapture(captureStarts, captureLengths, prefixCaptureIndex, 0, prefixLength);
+        SetCapture(captureStarts, captureLengths, suffixCaptureIndex, suffixStart, suffixLength);
+        return true;
+    }
+
+    public bool TryAddExpandedNumericReplacement(
+        List<byte> bytes,
+        ReadOnlySpan<byte> matched,
+        ReplacementTemplate template)
+    {
+        if (!TryMatch(matched, out int prefixLength, out int suffixStart, out int suffixLength))
+        {
+            return false;
+        }
+
+        template.AddExpanded(
+            bytes,
+            matched,
+            prefixCaptureIndex,
+            0,
+            prefixLength,
+            suffixCaptureIndex,
+            suffixStart,
+            suffixLength);
+        return true;
+    }
+
+    public bool TryWriteExpandedNumericReplacement(
+        RawByteWriter output,
+        ReadOnlySpan<byte> matched,
+        ReplacementTemplate template)
+    {
+        if (!TryMatch(matched, out int prefixLength, out int suffixStart, out int suffixLength))
+        {
+            return false;
+        }
+
+        template.WriteExpanded(
+            output,
+            matched,
+            prefixCaptureIndex,
+            0,
+            prefixLength,
+            suffixCaptureIndex,
+            suffixStart,
+            suffixLength);
+        return true;
+    }
+
+    private bool TryMatch(
+        ReadOnlySpan<byte> matched,
+        out int prefixLength,
+        out int suffixStart,
+        out int suffixLength)
+    {
+        prefixLength = 0;
+        suffixStart = 0;
+        suffixLength = 0;
         for (int prefixIndex = 0; prefixIndex < prefixes.Length; prefixIndex++)
         {
             ReadOnlySpan<byte> prefix = prefixes[prefixIndex];
@@ -66,20 +132,20 @@ internal sealed class SimpleReplacementCapturePlan
             }
 
             int whitespaceStart = prefix.Length;
-            int suffixStart = whitespaceStart;
-            while (suffixStart < matched.Length && IsRegexWhitespaceByte(matched[suffixStart]))
+            int candidateSuffixStart = whitespaceStart;
+            while (candidateSuffixStart < matched.Length && IsRegexWhitespaceByte(matched[candidateSuffixStart]))
             {
-                suffixStart++;
+                candidateSuffixStart++;
             }
 
-            if (suffixStart == whitespaceStart ||
-                suffixStart >= matched.Length ||
-                !suffixFirstBytes[matched[suffixStart]])
+            if (candidateSuffixStart == whitespaceStart ||
+                candidateSuffixStart >= matched.Length ||
+                !suffixFirstBytes[matched[candidateSuffixStart]])
             {
                 continue;
             }
 
-            int suffixEnd = suffixStart + 1;
+            int suffixEnd = candidateSuffixStart + 1;
             while (suffixEnd < matched.Length && suffixRestBytes[matched[suffixEnd]])
             {
                 suffixEnd++;
@@ -90,11 +156,9 @@ internal sealed class SimpleReplacementCapturePlan
                 continue;
             }
 
-            Array.Fill(captureStarts, -1);
-            Array.Fill(captureLengths, -1);
-            SetCapture(captureStarts, captureLengths, 0, 0, matched.Length);
-            SetCapture(captureStarts, captureLengths, prefixCaptureIndex, 0, prefix.Length);
-            SetCapture(captureStarts, captureLengths, suffixCaptureIndex, suffixStart, suffixEnd - suffixStart);
+            prefixLength = prefix.Length;
+            suffixStart = candidateSuffixStart;
+            suffixLength = suffixEnd - candidateSuffixStart;
             return true;
         }
 
@@ -382,14 +446,19 @@ internal sealed class SimpleReplacementCapturePlan
         while (node is RegexGroupNode
             {
                 Kind: RegexSyntaxKind.NonCapturingGroup,
-                EnabledFlags.Length: 0,
-                DisabledFlags.Length: 0,
-            } group)
+            } group &&
+            IsTransparentNonCapturingGroup(group))
         {
             node = group.Child;
         }
 
         return node;
+    }
+
+    private static bool IsTransparentNonCapturingGroup(RegexGroupNode group)
+    {
+        return group.EnabledFlags.Length == 0 &&
+            (group.DisabledFlags.Length == 0 || group.DisabledFlags == "u");
     }
 
     private static void SetCapture(

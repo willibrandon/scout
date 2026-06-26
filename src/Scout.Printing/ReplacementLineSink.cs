@@ -121,6 +121,31 @@ internal struct ReplacementLineSink : IMatchLineSink
             return;
         }
 
+        if (CanWritePlainBodyDirectly())
+        {
+            WritePrefix(currentLineNumber + lineNumberOffset, byteOffsetOffset + currentLineByteOffset, starts.Count > 0 ? starts[0] + 1L : 1L);
+            ReplacementFormatter.WriteReplacedLine(
+                output,
+                currentLine,
+                starts,
+                lengths,
+                replacement.Span,
+                patterns,
+                asciiCaseInsensitive,
+                capturePlan,
+                template,
+                captureStartsBuffer,
+                captureLengthsBuffer,
+                captureNamesBuffer);
+            if (!HasInputTerminator(currentLine))
+            {
+                output.Write(lineTerminator.Span);
+            }
+
+            ResetLineState();
+            return;
+        }
+
         byte[] replacedLine = ReplacementFormatter.ReplaceLine(
             currentLine,
             starts,
@@ -151,11 +176,15 @@ internal struct ReplacementLineSink : IMatchLineSink
             WriteBody(displayLine, trimOffset);
         }
 
-        currentLine = null;
-        starts.Clear();
-        lengths.Clear();
-        replacementColumns.Clear();
-        replacementLengths.Clear();
+        ResetLineState();
+    }
+
+    private bool CanWritePlainBodyDirectly()
+    {
+        return !trim &&
+            !vimgrep &&
+            !color.Enabled &&
+            !lineLimit.IsEnabled;
     }
 
     private void WritePrefix(long outputLineNumber, long outputByteOffset, long outputColumn)
@@ -340,4 +369,12 @@ internal struct ReplacementLineSink : IMatchLineSink
         return value is (byte)' ' or (byte)'\t' or (byte)'\n' or (byte)'\v' or (byte)'\f' or (byte)'\r';
     }
 
+    private void ResetLineState()
+    {
+        currentLine = null;
+        starts.Clear();
+        lengths.Clear();
+        replacementColumns.Clear();
+        replacementLengths.Clear();
+    }
 }

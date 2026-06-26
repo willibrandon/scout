@@ -4052,6 +4052,25 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies replacement capture extraction recognizes Scout's prepared no-Unicode wrapper.
+    /// </summary>
+    [Fact]
+    public void ReplacementCapturePlanCollectsHeldoutStructuralCapturesFromPreparedPattern()
+    {
+        byte[][] patterns = [@"(?-u:\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*))"u8.ToArray()];
+        var plan = ReplacementCapturePlan.TryCreate(patterns, asciiCaseInsensitive: false);
+        byte[] replacement = ReplacementFormatter.Expand(
+            "$1 $2"u8,
+            "struct Foo"u8,
+            patterns,
+            asciiCaseInsensitive: false,
+            plan);
+
+        Assert.NotNull(plan);
+        Assert.Equal("struct Foo"u8.ToArray(), replacement);
+    }
+
+    /// <summary>
     /// Verifies replacement expansion uses named captures from regex groups.
     /// </summary>
     [Fact]
