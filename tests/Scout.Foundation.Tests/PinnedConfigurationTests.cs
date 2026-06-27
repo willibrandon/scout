@@ -3000,11 +3000,16 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("median ratio", script, StringComparison.Ordinal);
         Assert.Contains("combined median ratio", script, StringComparison.Ordinal);
         Assert.Contains("running reversed command order for combined timing gate", script, StringComparison.Ordinal);
-        Assert.Contains("check_time_gate_combined \"$name\" \"$gate\" \"$json\" \"$reverse_json\"", script, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_GATE_RETRY_FAILED_WORKLOADS", script, StringComparison.Ordinal);
+        Assert.Contains("check_combined_gate_pair", script, StringComparison.Ordinal);
+        Assert.Contains("retrying failed gate workload once", script, StringComparison.Ordinal);
+        Assert.Contains("exceeded the performance gate after retry", script, StringComparison.Ordinal);
         Assert.Contains("exceeded the peak RSS gate", script, StringComparison.Ordinal);
         Assert.Contains("median wall time", readme, StringComparison.Ordinal);
         Assert.Contains("every workload is measured in both command", readme, StringComparison.Ordinal);
         Assert.Contains("combined median samples", readme, StringComparison.Ordinal);
+        Assert.Contains("repeats only that workload once", readme, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_GATE_RETRY_FAILED_WORKLOADS=0", readme, StringComparison.Ordinal);
         Assert.Contains("It pins", readme, StringComparison.Ordinal);
         Assert.Contains("OpenSubtitles regex workload is a public benchmark workload", readme, StringComparison.Ordinal);
         Assert.Contains("Linux held-out regex workloads run Scout with", readme, StringComparison.Ordinal);

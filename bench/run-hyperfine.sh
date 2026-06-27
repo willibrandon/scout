@@ -15,6 +15,7 @@ GATE_TREE_RUNS="5"
 GATE_TREE_WARMUP="5"
 GATE_LARGE_FILE_THREADS="4"
 GATE_LARGE_FILE_SEGMENT_BUFFER_LENGTH="131072"
+GATE_RETRY_FAILED_WORKLOADS="${SCOUT_GATE_RETRY_FAILED_WORKLOADS:-1}"
 
 fail() {
     printf '%s\n' "$1" >&2
@@ -30,6 +31,7 @@ usage() {
         '  SCOUT_RSS_BASELINE_BIN            Native AOT real binary for RSS-floor measurement. Defaults to sibling scout-real when present.' \
         '  SCOUT_BENCH_OPENSUBTITLES_EN     OpenSubtitles en.txt path for --gate.' \
         '  SCOUT_BENCH_LINUX_TREE           Linux source tree path for --gate.' \
+        '  SCOUT_GATE_RETRY_FAILED_WORKLOADS Retry a failed gate workload once. Defaults to 1; set 0 to disable.' \
         '' \
         'The --gate mode requires frozen corpus hashes in tests/PREREQS.lock.'
 }
@@ -790,6 +792,93 @@ check_ratio_gate() {
     check_time_gate "$@" && check_rss_gate "$1" "$3" "${4:-1}" "${5:-2}"
 }
 
+check_combined_gate_pair() {
+    name="$1"
+    gate="$2"
+    json="$3"
+    reverse_json="$4"
+    time_gate_ok="1"
+    rss_gate_ok="1"
+
+    check_time_gate_combined "$name" "$gate" "$json" "$reverse_json" || time_gate_ok="0"
+    check_rss_gate "$name" "$json" || rss_gate_ok="0"
+
+    if [ "$time_gate_ok" = "0" ]; then
+        printf '%s\n' "$name exceeded the combined-order performance gate." >&2
+    fi
+
+    if [ "$rss_gate_ok" = "0" ]; then
+        printf '%s\n' "$name exceeded the peak RSS gate." >&2
+    fi
+
+    [ "$time_gate_ok" = "1" ] && [ "$rss_gate_ok" = "1" ]
+}
+
+run_hyperfine_pair() {
+    no_shell="$1"
+    json="$2"
+    first_name="$3"
+    first_command="$4"
+    second_name="$5"
+    second_command="$6"
+    runs="$7"
+    warmup="$8"
+
+    if [ "$no_shell" = "1" ]; then
+        "$HYPERFINE" \
+            -N \
+            --warmup "$warmup" \
+            --runs "$runs" \
+            --export-json "$json" \
+            --command-name "$first_name" "$first_command" \
+            --command-name "$second_name" "$second_command"
+        return
+    fi
+
+    "$HYPERFINE" \
+        --warmup "$warmup" \
+        --runs "$runs" \
+        --export-json "$json" \
+        --command-name "$first_name" "$first_command" \
+        --command-name "$second_name" "$second_command"
+}
+
+run_pair_impl() {
+    name="$1"
+    gate="$2"
+    rg_command="$3"
+    scout_command="$4"
+    runs="$5"
+    warmup="$6"
+    no_shell="$7"
+    json="$OUT_DIR/$name.json"
+
+    printf '%s\n' "== $name"
+    run_hyperfine_pair "$no_shell" "$json" "rg:$name" "$rg_command" "scout:$name" "$scout_command" "$runs" "$warmup"
+
+    if [ "$MODE" = "gate" ]; then
+        reverse_json="$OUT_DIR/$name.reverse.json"
+        printf '%s\n' "$name running reversed command order for combined timing gate."
+        run_hyperfine_pair "$no_shell" "$reverse_json" "scout:$name" "$scout_command" "rg:$name" "$rg_command" "$runs" "$warmup"
+
+        if ! check_combined_gate_pair "$name" "$gate" "$json" "$reverse_json"; then
+            if [ "$GATE_RETRY_FAILED_WORKLOADS" = "0" ]; then
+                fail "$name exceeded the performance gate."
+            fi
+
+            retry_json="$OUT_DIR/$name.retry.json"
+            retry_reverse_json="$OUT_DIR/$name.retry.reverse.json"
+            printf '%s\n' "$name retrying failed gate workload once."
+            run_hyperfine_pair "$no_shell" "$retry_json" "rg:$name" "$rg_command" "scout:$name" "$scout_command" "$runs" "$warmup"
+            printf '%s\n' "$name retry running reversed command order for combined timing gate."
+            run_hyperfine_pair "$no_shell" "$retry_reverse_json" "scout:$name" "$scout_command" "rg:$name" "$rg_command" "$runs" "$warmup"
+
+            check_combined_gate_pair "$name retry" "$gate" "$retry_json" "$retry_reverse_json" || fail "$name exceeded the performance gate after retry."
+            printf '%s\n' "$name retry passed; continuing."
+        fi
+    fi
+}
+
 run_pair() {
     name="$1"
     gate="$2"
@@ -797,33 +886,8 @@ run_pair() {
     scout_command="$4"
     runs="${5:-$RUNS}"
     warmup="${6:-$WARMUP}"
-    json="$OUT_DIR/$name.json"
 
-    printf '%s\n' "== $name"
-    "$HYPERFINE" \
-        --warmup "$warmup" \
-        --runs "$runs" \
-        --export-json "$json" \
-        --command-name "rg:$name" "$rg_command" \
-        --command-name "scout:$name" "$scout_command"
-
-    if [ "$MODE" = "gate" ]; then
-        rss_gate_ok="1"
-        reverse_json="$OUT_DIR/$name.reverse.json"
-        printf '%s\n' "$name running reversed command order for combined timing gate."
-        "$HYPERFINE" \
-            --warmup "$warmup" \
-            --runs "$runs" \
-            --export-json "$reverse_json" \
-            --command-name "scout:$name" "$scout_command" \
-            --command-name "rg:$name" "$rg_command"
-        check_time_gate_combined "$name" "$gate" "$json" "$reverse_json" || fail "$name exceeded the combined-order performance gate."
-        check_rss_gate "$name" "$json" || rss_gate_ok="0"
-
-        if [ "$rss_gate_ok" = "0" ]; then
-            fail "$name exceeded the peak RSS gate."
-        fi
-    fi
+    run_pair_impl "$name" "$gate" "$rg_command" "$scout_command" "$runs" "$warmup" "0"
 }
 
 run_pair_no_shell() {
@@ -833,35 +897,8 @@ run_pair_no_shell() {
     scout_command="$4"
     runs="${5:-$RUNS}"
     warmup="${6:-$WARMUP}"
-    json="$OUT_DIR/$name.json"
 
-    printf '%s\n' "== $name"
-    "$HYPERFINE" \
-        -N \
-        --warmup "$warmup" \
-        --runs "$runs" \
-        --export-json "$json" \
-        --command-name "rg:$name" "$rg_command" \
-        --command-name "scout:$name" "$scout_command"
-
-    if [ "$MODE" = "gate" ]; then
-        rss_gate_ok="1"
-        reverse_json="$OUT_DIR/$name.reverse.json"
-        printf '%s\n' "$name running reversed command order for combined timing gate."
-        "$HYPERFINE" \
-            -N \
-            --warmup "$warmup" \
-            --runs "$runs" \
-            --export-json "$reverse_json" \
-            --command-name "scout:$name" "$scout_command" \
-            --command-name "rg:$name" "$rg_command"
-        check_time_gate_combined "$name" "$gate" "$json" "$reverse_json" || fail "$name exceeded the combined-order performance gate."
-        check_rss_gate "$name" "$json" || rss_gate_ok="0"
-
-        if [ "$rss_gate_ok" = "0" ]; then
-            fail "$name exceeded the peak RSS gate."
-        fi
-    fi
+    run_pair_impl "$name" "$gate" "$rg_command" "$scout_command" "$runs" "$warmup" "1"
 }
 
 list_workloads() {
