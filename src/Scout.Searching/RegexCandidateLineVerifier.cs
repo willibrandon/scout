@@ -1,5 +1,3 @@
-using System.Buffers;
-
 namespace Scout;
 
 internal sealed class RegexCandidateLineVerifier
@@ -9,10 +7,8 @@ internal sealed class RegexCandidateLineVerifier
 
     private readonly byte[][] prefixes;
     private readonly int[][] prefixIndexesByFirstByte;
-    private readonly SearchValues<byte>? candidateFirstBytes;
     private readonly RegexCandidateLineVerifierSegment[] segments;
     private readonly bool leadingWordBoundary;
-    private readonly bool canFindCandidates;
 
     private RegexCandidateLineVerifier(
         byte[][] prefixes,
@@ -23,7 +19,6 @@ internal sealed class RegexCandidateLineVerifier
         this.segments = segments;
         this.leadingWordBoundary = leadingWordBoundary;
         prefixIndexesByFirstByte = BuildPrefixBuckets(prefixes);
-        canFindCandidates = TryBuildCandidateFirstBytes(prefixes, out candidateFirstBytes);
     }
 
     public static bool TryCompile(
@@ -116,36 +111,6 @@ internal sealed class RegexCandidateLineVerifier
         return false;
     }
 
-    public bool TryFindCandidate(ReadOnlySpan<byte> haystack, int startAt, out int candidate)
-    {
-        candidate = -1;
-        if (!canFindCandidates)
-        {
-            return false;
-        }
-
-        int searchAt = Math.Clamp(startAt, 0, haystack.Length);
-        while (searchAt < haystack.Length)
-        {
-            int offset = haystack[searchAt..].IndexOfAny(candidateFirstBytes!);
-            if (offset < 0)
-            {
-                return true;
-            }
-
-            int found = searchAt + offset;
-            if (PrefixMatchesAt(haystack, found))
-            {
-                candidate = found;
-                return true;
-            }
-
-            searchAt = found + 1;
-        }
-
-        return true;
-    }
-
     private bool TryMatchSegments(ReadOnlySpan<byte> haystack, int position, out int end, out bool completed)
     {
         completed = true;
@@ -205,21 +170,6 @@ internal sealed class RegexCandidateLineVerifier
         bool rightIsWord = position < haystack.Length && RegexSimpleSequenceSegment.IsAsciiWord(right);
         matches = leftIsWord != rightIsWord;
         return true;
-    }
-
-    private bool PrefixMatchesAt(ReadOnlySpan<byte> haystack, int start)
-    {
-        ReadOnlySpan<int> prefixIndexes = prefixIndexesByFirstByte[haystack[start]];
-        for (int index = 0; index < prefixIndexes.Length; index++)
-        {
-            byte[] prefix = prefixes[prefixIndexes[index]];
-            if (PrefixMatches(haystack, start, prefix))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private static bool PrefixMatches(ReadOnlySpan<byte> haystack, int start, byte[] prefix)
@@ -539,29 +489,4 @@ internal sealed class RegexCandidateLineVerifier
         return result;
     }
 
-    private static bool TryBuildCandidateFirstBytes(byte[][] prefixes, out SearchValues<byte>? firstBytes)
-    {
-        firstBytes = null;
-        if (prefixes.Length < 2)
-        {
-            return false;
-        }
-
-        Span<bool> seen = stackalloc bool[256];
-        byte[] distinct = new byte[prefixes.Length];
-        for (int index = 0; index < prefixes.Length; index++)
-        {
-            byte[] prefix = prefixes[index];
-            if (prefix.Length < 2 || seen[prefix[0]])
-            {
-                return false;
-            }
-
-            seen[prefix[0]] = true;
-            distinct[index] = prefix[0];
-        }
-
-        firstBytes = SearchValues.Create(distinct);
-        return true;
-    }
 }

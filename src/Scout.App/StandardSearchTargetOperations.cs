@@ -7,7 +7,7 @@ namespace Scout;
 internal static class StandardSearchTargetOperations
 {
     private const int ParallelOutputFlushThreshold = 128 * 1024;
-    private const int ParallelDirectOutputFlushThreshold = 16 * 1024;
+    private const int ParallelDirectOutputFlushThreshold = ParallelOutputFlushThreshold;
     private const int DirectoryEntryLiteralPrecheckBufferLength = 16 * 1024;
 
     internal static bool SearchStandardInput(
@@ -490,8 +490,6 @@ internal static class StandardSearchTargetOperations
                         ref fileMatched,
                         ref fileErrored,
                         regexPlan);
-                    writer.Flush();
-
                     if (fileMatched)
                     {
                         Interlocked.Exchange(ref matchedFlag, 1);
@@ -508,6 +506,7 @@ internal static class StandardSearchTargetOperations
                     }
                     else
                     {
+                        writer.Flush();
                         AddBufferedOutputIfAny(outputs, ref buffer, ref writer);
                     }
 
@@ -730,7 +729,6 @@ internal static class StandardSearchTargetOperations
                         ref fileMatched,
                         ref fileErrored,
                         ref fileStats);
-                    writer.Flush();
                     if (fileMatched)
                     {
                         Interlocked.Exchange(ref matchedFlag, 1);
@@ -752,6 +750,7 @@ internal static class StandardSearchTargetOperations
                     }
                     else
                     {
+                        writer.Flush();
                         AddBufferedOutputIfAny(outputs, ref buffer, ref writer);
                     }
 

@@ -54,11 +54,6 @@ internal sealed class RegexCandidateLineAccelerator
 
     public int FindCandidate(ReadOnlySpan<byte> haystack, int startAt)
     {
-        if (verifier?.TryFindCandidate(haystack, startAt, out int candidate) == true)
-        {
-            return candidate;
-        }
-
         return prefilter.FindCandidate(haystack, startAt);
     }
 
