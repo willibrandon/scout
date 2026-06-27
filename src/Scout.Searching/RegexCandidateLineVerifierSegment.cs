@@ -8,7 +8,30 @@ internal readonly struct RegexCandidateLineVerifierSegment(
 
     public int? Maximum => simple.Maximum;
 
+    public bool Lazy => simple.Lazy;
+
+    public bool HasVariableLength => Maximum is null || Maximum.Value != Minimum;
+
     public bool RequiresUtf8ScalarFallback => requiresUtf8ScalarFallback;
+
+    public bool IsAsciiDisjointFrom(RegexCandidateLineVerifierSegment other)
+    {
+        if (requiresUtf8ScalarFallback || other.RequiresUtf8ScalarFallback)
+        {
+            return false;
+        }
+
+        for (int value = 0; value <= 0x7F; value++)
+        {
+            byte byteValue = (byte)value;
+            if (AtomMatches(byteValue) && other.AtomMatches(byteValue))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     public bool AtomMatches(byte value)
     {

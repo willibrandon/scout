@@ -65,7 +65,8 @@ internal sealed class RegexCandidateLineVerifier
             index++;
         }
 
-        if (segments.Count == 0)
+        if (segments.Count == 0 ||
+            !CanVerifySegmentsWithoutBacktracking(segments))
         {
             return false;
         }
@@ -176,6 +177,27 @@ internal sealed class RegexCandidateLineVerifier
         }
 
         end = position;
+        return true;
+    }
+
+    private static bool CanVerifySegmentsWithoutBacktracking(List<RegexCandidateLineVerifierSegment> segments)
+    {
+        for (int index = 0; index < segments.Count; index++)
+        {
+            RegexCandidateLineVerifierSegment segment = segments[index];
+            if (segment.Lazy)
+            {
+                return false;
+            }
+
+            if (segment.HasVariableLength &&
+                index + 1 < segments.Count &&
+                !segment.IsAsciiDisjointFrom(segments[index + 1]))
+            {
+                return false;
+            }
+        }
+
         return true;
     }
 
@@ -402,6 +424,7 @@ internal sealed class RegexCandidateLineVerifier
         segment = default;
         if (!TryUnwrapWithOptions(node, options, out RegexSyntaxNode unwrapped, out RegexCompileOptions effectiveOptions) ||
             effectiveOptions.CaseInsensitive ||
+            effectiveOptions.SwapGreed ||
             effectiveOptions.Crlf ||
             effectiveOptions.DotMatchesNewline)
         {
