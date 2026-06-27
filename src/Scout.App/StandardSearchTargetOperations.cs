@@ -883,7 +883,6 @@ internal static class StandardSearchTargetOperations
             lowArgs.Multiline ||
             lowArgs.Vimgrep ||
             lowArgs.OnlyMatching ||
-            lowArgs.Replacement is not null ||
             lowArgs.Quiet ||
             lowArgs.BeforeContext != 0 ||
             lowArgs.AfterContext != 0 ||
