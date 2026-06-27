@@ -9,7 +9,7 @@ internal static class StandardSearchTargetOperations
     private const int ParallelOutputFlushThreshold = 128 * 1024;
     private const int ParallelDirectOutputFlushThreshold = ParallelOutputFlushThreshold;
     private const int DirectoryEntryLiteralPrecheckBufferLength = 16 * 1024;
-    private const long DirectoryEntryRegexCandidatePrecheckMinLength = 2 * 1024 * 1024;
+    private const long DirectoryEntryRegexCandidatePrecheckMinLength = 0;
     private const int PooledRawFileReadMaxLength = 2 * 1024 * 1024;
     internal static bool SearchStandardInput(
         IReadOnlyList<byte[]> pattern,
@@ -925,6 +925,25 @@ internal static class StandardSearchTargetOperations
         ref bool errored,
         RegexSearchPlan? regexPlan = null)
     {
+        if (TrySearchDirectoryEntryFileWithStreamingRegexReplacement(
+            entry,
+            displayPaths,
+            pattern,
+            lowArgs,
+            output,
+            logger,
+            separators,
+            lineLimit,
+            color,
+            asciiCaseInsensitive,
+            lineNumber,
+            heading,
+            ref matched,
+            regexPlan))
+        {
+            return;
+        }
+
         if (TrySearchDirectoryEntryFileAfterLiteralPrecheck(
             entry,
             displayPaths,
@@ -1011,7 +1030,7 @@ internal static class StandardSearchTargetOperations
         else if (CanUseDirectoryEntryRegexCandidatePrecheck(entry, pattern, lowArgs, regexPlan, out RegexCandidateLineAccelerator? candidateLineAccelerator) &&
             candidateLineAccelerator is not null)
         {
-            if (!TryFileContainsRegexCandidateWithoutAllocating(entry.FullPath, pattern[0], candidateLineAccelerator, lowArgs.EncodingMode, out containsLiteral))
+            if (!TryFileContainsRegexCandidateWithoutAllocating(entry.FullPath, pattern[0], candidateLineAccelerator, lowArgs.EncodingMode, rejectBinary: false, out containsLiteral))
             {
                 return false;
             }
@@ -1076,6 +1095,413 @@ internal static class StandardSearchTargetOperations
             memoryMapped,
             regexPlan);
         return true;
+    }
+
+    private static bool TrySearchDirectoryEntryFileWithStreamingRegexReplacement(
+        DirEntry entry,
+        SearchDirectoryDisplayPathFormatter displayPaths,
+        IReadOnlyList<byte[]> pattern,
+        CliLowArgs lowArgs,
+        RawByteWriter output,
+        DiagnosticLogger logger,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool asciiCaseInsensitive,
+        bool lineNumber,
+        bool heading,
+        ref bool matched,
+        RegexSearchPlan? regexPlan)
+    {
+        if (!CanUseStreamingRegexReplacement(
+            entry,
+            pattern,
+            lowArgs,
+            separators,
+            lineLimit,
+            color,
+            heading,
+            regexPlan,
+            out RegexCandidateLineAccelerator? accelerator,
+            out ReadOnlyMemory<byte> replacement))
+        {
+            return false;
+        }
+
+        if (!TryFileContainsRegexCandidateWithoutAllocating(
+            entry.FullPath,
+            pattern[0],
+            accelerator!,
+            lowArgs.EncodingMode,
+            rejectBinary: true,
+            out bool containsCandidate))
+        {
+            return false;
+        }
+
+        if (!containsCandidate)
+        {
+            return true;
+        }
+
+        SearchDiagnosticLogging.LogTraceSearchPath(logger, entry.FullPath, SearchFileReadKind.Buffered);
+        byte[] displayPath = displayPaths.GetBytes(entry);
+        OutputPath outputPath = SearchOutputFormatting.CreateDirectoryEntryOutputPath(entry, displayPath, lowArgs, color);
+        OutputPath? prefix = SearchOutputFormatting.GetFileSearchPrefix(lowArgs.SearchMode, autoPrefixPath: true, lowArgs.WithFilename, outputPath);
+        var capturePlan = ReplacementCapturePlan.TryCreate(pattern, asciiCaseInsensitive);
+        var replacementTemplate = ReplacementTemplate.Create(replacement.Span, pattern);
+        int[] captureStarts = new int[Math.Max(1, replacementTemplate.HighestCapture + 1)];
+        int[] captureLengths = new int[Math.Max(1, replacementTemplate.HighestCapture + 1)];
+        bool streamMatched = SearchStreamingRegexReplacementFile(
+            entry.FullPath,
+            pattern,
+            accelerator!,
+            output,
+            prefix,
+            separators,
+            replacement,
+            asciiCaseInsensitive,
+            lineNumber,
+            capturePlan,
+            replacementTemplate,
+            captureStarts,
+            captureLengths,
+            out bool streamCompleted);
+        if (!streamCompleted)
+        {
+            return false;
+        }
+
+        matched |= streamMatched;
+        return true;
+    }
+
+    private static bool CanUseStreamingRegexReplacement(
+        DirEntry entry,
+        IReadOnlyList<byte[]> pattern,
+        CliLowArgs lowArgs,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool heading,
+        RegexSearchPlan? regexPlan,
+        out RegexCandidateLineAccelerator? accelerator,
+        out ReadOnlyMemory<byte> replacement)
+    {
+        accelerator = null;
+        replacement = default;
+        if (entry.IsRawUnixPath ||
+            entry.Length is null ||
+            heading ||
+            color.Enabled ||
+            lineLimit.IsEnabled ||
+            lowArgs.SearchMode != CliSearchMode.Standard ||
+            lowArgs.InvertMatch ||
+            lowArgs.LineRegexp ||
+            lowArgs.WordRegexp ||
+            lowArgs.Multiline ||
+            lowArgs.MultilineDotall ||
+            lowArgs.Vimgrep ||
+            lowArgs.OnlyMatching ||
+            lowArgs.ByteOffset ||
+            SearchOutputFormatting.EffectiveColumn(lowArgs) ||
+            lowArgs.Quiet ||
+            lowArgs.Trim ||
+            lowArgs.BeforeContext != 0 ||
+            lowArgs.AfterContext != 0 ||
+            lowArgs.Passthru ||
+            lowArgs.IncludeZero ||
+            lowArgs.NullPathTerminator ||
+            lowArgs.StopOnNonmatch ||
+            lowArgs.SearchZip ||
+            lowArgs.Preprocessor is not null ||
+            lowArgs.MaxCount is not null ||
+            separators.NullData ||
+            lowArgs.EncodingMode is not (CliEncodingMode.Auto or CliEncodingMode.None or CliEncodingMode.Utf8) ||
+            pattern.Count != 1 ||
+            pattern[0].Length == 0 ||
+            lowArgs.Replacement is not ReadOnlyMemory<byte> replacementValue)
+        {
+            return false;
+        }
+
+        accelerator = regexPlan?.GetCandidateLineAccelerator(0);
+        replacement = replacementValue;
+        return accelerator is { HasVerifier: true };
+    }
+
+    private static bool SearchStreamingRegexReplacementFile(
+        string path,
+        IReadOnlyList<byte[]> pattern,
+        RegexCandidateLineAccelerator accelerator,
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        ReadOnlyMemory<byte> replacement,
+        bool asciiCaseInsensitive,
+        bool lineNumber,
+        ReplacementCapturePlan? capturePlan,
+        ReplacementTemplate replacementTemplate,
+        int[] captureStarts,
+        int[] captureLengths,
+        out bool completed)
+    {
+        const int ReadBufferLength = 64 * 1024;
+        byte[] readBuffer = ArrayPool<byte>.Shared.Rent(ReadBufferLength);
+        byte[] lineBuffer = ArrayPool<byte>.Shared.Rent(8 * 1024);
+        int bufferedLineLength = 0;
+        long lineStartOffset = 0;
+        long lineNumberValue = 1;
+        bool matched = false;
+        completed = false;
+
+        try
+        {
+            using SafeFileHandle handle = File.OpenHandle(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete,
+                FileOptions.SequentialScan);
+            long fileOffset = 0;
+            while (true)
+            {
+                int read = RandomAccess.Read(handle, readBuffer.AsSpan(0, ReadBufferLength), fileOffset);
+                if (read == 0)
+                {
+                    break;
+                }
+
+                ReadOnlySpan<byte> chunk = readBuffer.AsSpan(0, read);
+                int chunkOffset = 0;
+                while (chunkOffset < chunk.Length)
+                {
+                    int terminatorOffset = chunk[chunkOffset..].IndexOf((byte)'\n');
+                    int segmentLength = terminatorOffset < 0
+                        ? chunk.Length - chunkOffset
+                        : terminatorOffset + 1;
+                    ReadOnlySpan<byte> segment = chunk.Slice(chunkOffset, segmentLength);
+                    bool completeLine = terminatorOffset >= 0;
+
+                    if (bufferedLineLength == 0 && completeLine)
+                    {
+                        matched |= WriteStreamingRegexReplacementLine(segment, lineNumberValue, lineStartOffset, pattern, accelerator, output, prefix, separators, replacement, asciiCaseInsensitive, lineNumber, capturePlan, replacementTemplate, captureStarts, captureLengths);
+                    }
+                    else
+                    {
+                        EnsureLineBufferCapacity(ref lineBuffer, bufferedLineLength + segment.Length);
+                        segment.CopyTo(lineBuffer.AsSpan(bufferedLineLength));
+                        bufferedLineLength += segment.Length;
+                        if (completeLine)
+                        {
+                            matched |= WriteStreamingRegexReplacementLine(lineBuffer.AsSpan(0, bufferedLineLength), lineNumberValue, lineStartOffset, pattern, accelerator, output, prefix, separators, replacement, asciiCaseInsensitive, lineNumber, capturePlan, replacementTemplate, captureStarts, captureLengths);
+                            bufferedLineLength = 0;
+                        }
+                    }
+
+                    chunkOffset += segmentLength;
+                    if (completeLine)
+                    {
+                        lineNumberValue++;
+                        lineStartOffset = fileOffset + chunkOffset;
+                    }
+                }
+
+                fileOffset += read;
+            }
+
+            if (bufferedLineLength > 0)
+            {
+                matched |= WriteStreamingRegexReplacementLine(lineBuffer.AsSpan(0, bufferedLineLength), lineNumberValue, lineStartOffset, pattern, accelerator, output, prefix, separators, replacement, asciiCaseInsensitive, lineNumber, capturePlan, replacementTemplate, captureStarts, captureLengths);
+            }
+
+            completed = true;
+        }
+        catch (IOException)
+        {
+            completed = matched;
+            return matched;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            completed = matched;
+            return matched;
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(readBuffer);
+            ArrayPool<byte>.Shared.Return(lineBuffer);
+        }
+
+        return matched;
+    }
+
+    private static void EnsureLineBufferCapacity(ref byte[] buffer, int requiredLength)
+    {
+        if (requiredLength <= buffer.Length)
+        {
+            return;
+        }
+
+        int newLength = buffer.Length;
+        while (newLength < requiredLength)
+        {
+            newLength *= 2;
+        }
+
+        byte[] resized = ArrayPool<byte>.Shared.Rent(newLength);
+        buffer.AsSpan().CopyTo(resized);
+        ArrayPool<byte>.Shared.Return(buffer);
+        buffer = resized;
+    }
+
+    private static bool WriteStreamingRegexReplacementLine(
+        ReadOnlySpan<byte> line,
+        long lineNumber,
+        long lineByteOffset,
+        IReadOnlyList<byte[]> pattern,
+        RegexCandidateLineAccelerator accelerator,
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        ReadOnlyMemory<byte> replacement,
+        bool asciiCaseInsensitive,
+        bool lineNumberEnabled,
+        ReplacementCapturePlan? capturePlan,
+        ReplacementTemplate replacementTemplate,
+        int[] captureStarts,
+        int[] captureLengths)
+    {
+        int searchOffset = 0;
+        int writtenUntil = 0;
+        bool matched = false;
+        while (searchOffset < line.Length)
+        {
+            int candidate = accelerator.FindCandidate(line, searchOffset);
+            if (candidate < 0)
+            {
+                break;
+            }
+
+            if (!accelerator.TryMatchAt(line, candidate, out int matchLength, out bool completed))
+            {
+                if (!completed && !matched)
+                {
+                    return WriteFallbackStreamingReplacementLine(
+                        line,
+                        lineNumber,
+                        lineByteOffset,
+                        pattern,
+                        output,
+                        prefix,
+                        separators,
+                        replacement,
+                        asciiCaseInsensitive,
+                        lineNumberEnabled,
+                        capturePlan);
+                }
+
+                searchOffset = candidate + 1;
+                continue;
+            }
+
+            if (matchLength <= 0)
+            {
+                searchOffset = candidate + 1;
+                continue;
+            }
+
+            if (!matched)
+            {
+                WriteStreamingReplacementPrefix(output, prefix, separators, lineNumberEnabled, lineNumber);
+                matched = true;
+            }
+
+            if (candidate > writtenUntil)
+            {
+                output.Write(line.Slice(writtenUntil, candidate - writtenUntil));
+            }
+
+            ReplacementFormatter.WriteExpanded(output, replacement.Span, line.Slice(candidate, matchLength), pattern, asciiCaseInsensitive, capturePlan, replacementTemplate, captureStarts, captureLengths, captureNamesBuffer: null);
+            writtenUntil = candidate + matchLength;
+            searchOffset = writtenUntil;
+        }
+
+        if (!matched)
+        {
+            return false;
+        }
+
+        output.Write(line[writtenUntil..]);
+        if (!HasInputTerminator(line))
+        {
+            output.Write(separators.LineTerminator.Span);
+        }
+
+        return true;
+    }
+
+    private static bool WriteFallbackStreamingReplacementLine(
+        ReadOnlySpan<byte> line,
+        long lineNumber,
+        long lineByteOffset,
+        IReadOnlyList<byte[]> pattern,
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        ReadOnlyMemory<byte> replacement,
+        bool asciiCaseInsensitive,
+        bool lineNumberEnabled,
+        ReplacementCapturePlan? capturePlan)
+    {
+        var sink = new ReplacementLineSink(
+            output,
+            prefix,
+            separators.FieldMatch,
+            replacement,
+            pattern,
+            asciiCaseInsensitive,
+            lineNumberEnabled,
+            column: false,
+            byteOffset: false,
+            trim: false,
+            nullPathTerminator: false,
+            vimgrep: false,
+            default,
+            lineNumberOffset: lineNumber - 1,
+            byteOffsetOffset: lineByteOffset,
+            color: default,
+            separators.LineTerminator,
+            capturePlan,
+            streamPlainBodyDirectly: true);
+        bool matched = LiteralLineSearcher.SearchMatchLines(line, pattern, ref sink, asciiCaseInsensitive);
+        sink.Flush();
+        return matched;
+    }
+
+    private static void WriteStreamingReplacementPrefix(
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        bool lineNumber,
+        long outputLineNumber)
+    {
+        if (prefix is not null)
+        {
+            output.Write(prefix.Display);
+            output.Write(separators.FieldMatch.Span);
+        }
+
+        if (lineNumber)
+        {
+            OutputColor.WriteNumber(output, outputLineNumber);
+            output.Write(separators.FieldMatch.Span);
+        }
+    }
+
+    private static bool HasInputTerminator(ReadOnlySpan<byte> line)
+    {
+        return !line.IsEmpty && line[^1] == (byte)'\n';
     }
 
     private static bool CanUseDirectoryEntryLiteralPrecheck(
@@ -1236,6 +1662,7 @@ internal static class StandardSearchTargetOperations
         byte[] pattern,
         RegexCandidateLineAccelerator accelerator,
         CliEncodingMode encodingMode,
+        bool rejectBinary,
         out bool containsCandidate)
     {
         containsCandidate = false;
@@ -1276,10 +1703,18 @@ internal static class StandardSearchTargetOperations
                     }
                 }
 
+                if (rejectBinary && window.Contains((byte)0))
+                {
+                    return false;
+                }
+
                 if (accelerator.FindCandidate(window, 0) >= 0)
                 {
                     containsCandidate = true;
-                    return true;
+                    if (!rejectBinary)
+                    {
+                        return true;
+                    }
                 }
 
                 preserved = Math.Min(overlapLength, window.Length);

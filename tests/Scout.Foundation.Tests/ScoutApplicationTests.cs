@@ -4035,6 +4035,42 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies recursive replacement uses candidate-verified capture output without changing rg behavior.
+    /// </summary>
+    [Fact]
+    public void DirectoryReplacementExpandsCandidateVerifiedCaptures()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "abc123\n中文 struct Foo\nstruct Bar\nno match\n", Encoding.UTF8);
+
+        (int exitCode, byte[] output, string error) = RunScout("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies recursive replacement preserves binary-file handling when candidate streaming is available.
+    /// </summary>
+    [Fact]
+    public void DirectoryReplacementCandidateStreamingFallsBackForBinaryFiles()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.bin");
+        File.WriteAllBytes(path, "struct Foo\0struct Bar\n"u8.ToArray());
+
+        (int exitCode, byte[] output, string error) = RunScout("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies replacement capture extraction handles held-out structural captures without generic rematching.
     /// </summary>
     [Fact]
