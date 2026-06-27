@@ -169,7 +169,7 @@ internal static class ReplacementFormatter
         template.AddExpanded(bytes, matched, captureStarts, captureLengths, captureNames);
     }
 
-    public static void WriteExpanded(
+    private static void WriteExpanded(
         RawByteWriter output,
         ReadOnlySpan<byte> replacement,
         ReadOnlySpan<byte> matched,

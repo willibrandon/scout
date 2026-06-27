@@ -34,8 +34,6 @@ internal struct ReplacementLineSink : IMatchLineSink
     private byte[]? currentLine;
     private long currentLineNumber;
     private long currentLineByteOffset;
-    private int currentLineWrittenUntil;
-    private bool streamingPlainLine;
 
     public ReplacementLineSink(
         RawByteWriter output,
@@ -89,8 +87,6 @@ internal struct ReplacementLineSink : IMatchLineSink
         currentLine = null;
         currentLineNumber = 0;
         currentLineByteOffset = 0;
-        currentLineWrittenUntil = 0;
-        streamingPlainLine = false;
     }
 
     public void MatchedLine(
@@ -105,12 +101,6 @@ internal struct ReplacementLineSink : IMatchLineSink
         if (currentLine is not null && currentLineNumber != lineNumber)
         {
             Flush();
-        }
-
-        if (CanWritePlainBodyDirectly())
-        {
-            StreamPlainMatchedLine(lineNumber, lineByteOffset, matchColumn, line, match);
-            return;
         }
 
         if (currentLine is null)
@@ -128,18 +118,6 @@ internal struct ReplacementLineSink : IMatchLineSink
     {
         if (currentLine is null)
         {
-            return;
-        }
-
-        if (streamingPlainLine)
-        {
-            output.Write(currentLine.AsSpan(currentLineWrittenUntil));
-            if (!HasInputTerminator(currentLine))
-            {
-                output.Write(lineTerminator.Span);
-            }
-
-            ResetLineState();
             return;
         }
 
@@ -207,50 +185,6 @@ internal struct ReplacementLineSink : IMatchLineSink
             !vimgrep &&
             !color.Enabled &&
             !lineLimit.IsEnabled;
-    }
-
-    private void StreamPlainMatchedLine(
-        long lineNumber,
-        long lineByteOffset,
-        long matchColumn,
-        ReadOnlySpan<byte> line,
-        ReadOnlySpan<byte> match)
-    {
-        int matchStart = checked((int)matchColumn - 1);
-        if (currentLine is null)
-        {
-            currentLine = line.ToArray();
-            currentLineNumber = lineNumber;
-            currentLineByteOffset = lineByteOffset;
-            currentLineWrittenUntil = 0;
-            streamingPlainLine = true;
-            WritePrefix(currentLineNumber + lineNumberOffset, byteOffsetOffset + currentLineByteOffset, matchColumn);
-        }
-
-        if ((uint)matchStart > (uint)line.Length ||
-            match.Length > line.Length - matchStart)
-        {
-            return;
-        }
-
-        int gapLength = matchStart - currentLineWrittenUntil;
-        if (gapLength > 0)
-        {
-            output.Write(line.Slice(currentLineWrittenUntil, gapLength));
-        }
-
-        ReplacementFormatter.WriteExpanded(
-            output,
-            replacement.Span,
-            match,
-            patterns,
-            asciiCaseInsensitive,
-            capturePlan,
-            template,
-            captureStartsBuffer,
-            captureLengthsBuffer,
-            captureNamesBuffer);
-        currentLineWrittenUntil = matchStart + match.Length;
     }
 
     private void WritePrefix(long outputLineNumber, long outputByteOffset, long outputColumn)
@@ -442,7 +376,5 @@ internal struct ReplacementLineSink : IMatchLineSink
         lengths.Clear();
         replacementColumns.Clear();
         replacementLengths.Clear();
-        currentLineWrittenUntil = 0;
-        streamingPlainLine = false;
     }
 }
