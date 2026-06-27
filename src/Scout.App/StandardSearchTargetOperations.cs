@@ -1554,7 +1554,8 @@ internal static class StandardSearchTargetOperations
         ref bool matched,
         RegexSearchPlan? regexPlan)
     {
-        if (!CanUsePooledRawFileRead(knownLength, lowArgs, autoMmapEligible))
+        if (regexPlan is null ||
+            !CanUsePooledRawFileRead(knownLength, lowArgs, autoMmapEligible))
         {
             return false;
         }
