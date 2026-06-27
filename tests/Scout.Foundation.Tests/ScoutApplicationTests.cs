@@ -4046,6 +4046,7 @@ public sealed class ScoutApplicationTests
         int[] captureLengths = new int[3];
 
         Assert.NotNull(plan);
+        AssertReplacementCapturePlanAvoidsAutomata(plan);
         Assert.True(plan.TryCollectNumericCaptures("struct Foo"u8, captureStarts, captureLengths));
         Assert.Equal([0, 0, 7], captureStarts);
         Assert.Equal([10, 6, 3], captureLengths);
@@ -4067,7 +4068,16 @@ public sealed class ScoutApplicationTests
             plan);
 
         Assert.NotNull(plan);
+        AssertReplacementCapturePlanAvoidsAutomata(plan);
         Assert.Equal("struct Foo"u8.ToArray(), replacement);
+    }
+
+    private static void AssertReplacementCapturePlanAvoidsAutomata(ReplacementCapturePlan plan)
+    {
+        var automata = (RegexAutomaton?[])typeof(ReplacementCapturePlan)
+            .GetField("automata", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(plan)!;
+        Assert.All(automata, Assert.Null);
     }
 
     /// <summary>

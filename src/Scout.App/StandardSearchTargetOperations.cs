@@ -9,7 +9,8 @@ internal static class StandardSearchTargetOperations
     private const int ParallelOutputFlushThreshold = 128 * 1024;
     private const int ParallelDirectOutputFlushThreshold = ParallelOutputFlushThreshold;
     private const int DirectoryEntryLiteralPrecheckBufferLength = 16 * 1024;
-
+    private const long DirectoryEntryRegexCandidatePrecheckMinLength = 2 * 1024 * 1024;
+    private const int PooledRawFileReadMaxLength = 2 * 1024 * 1024;
     internal static bool SearchStandardInput(
         IReadOnlyList<byte[]> pattern,
         Stream standardInput,
@@ -938,7 +939,8 @@ internal static class StandardSearchTargetOperations
             literalPrecheckState,
             ref wroteHeadingOutput,
             ref matched,
-            ref errored))
+            ref errored,
+            regexPlan))
         {
             return;
         }
@@ -981,16 +983,37 @@ internal static class StandardSearchTargetOperations
         DirectoryLiteralPrecheckState literalPrecheckState,
         ref bool wroteHeadingOutput,
         ref bool matched,
-        ref bool errored)
+        ref bool errored,
+        RegexSearchPlan? regexPlan)
     {
-        if (!literalPrecheckState.Enabled ||
-            !CanUseDirectoryEntryLiteralPrecheck(entry, pattern, lowArgs))
+        if (lowArgs.MaxCount == 0)
+        {
+            return true;
+        }
+
+        if (!literalPrecheckState.Enabled)
         {
             return false;
         }
 
-        byte[] literal = pattern[0];
-        if (!TryFileContainsLiteralWithoutAllocating(entry.FullPath, literal, asciiCaseInsensitive, lowArgs.EncodingMode, out bool containsLiteral))
+        bool containsLiteral;
+        if (CanUseDirectoryEntryLiteralPrecheck(entry, pattern, lowArgs))
+        {
+            byte[] literal = pattern[0];
+            if (!TryFileContainsLiteralWithoutAllocating(entry.FullPath, literal, asciiCaseInsensitive, lowArgs.EncodingMode, out containsLiteral))
+            {
+                return false;
+            }
+        }
+        else if (CanUseDirectoryEntryRegexCandidatePrecheck(entry, pattern, lowArgs, regexPlan, out RegexCandidateLineAccelerator? candidateLineAccelerator) &&
+            candidateLineAccelerator is not null)
+        {
+            if (!TryFileContainsRegexCandidateWithoutAllocating(entry.FullPath, pattern[0], candidateLineAccelerator, lowArgs.EncodingMode, out containsLiteral))
+            {
+                return false;
+            }
+        }
+        else
         {
             return false;
         }
@@ -1047,7 +1070,8 @@ internal static class StandardSearchTargetOperations
             ShouldQuitOnBinary(lowArgs, true, searchTextMode),
             heading,
             ref wroteHeadingOutput,
-            memoryMapped);
+            memoryMapped,
+            regexPlan);
         return true;
     }
 
@@ -1073,14 +1097,12 @@ internal static class StandardSearchTargetOperations
             lowArgs.Multiline ||
             lowArgs.Vimgrep ||
             lowArgs.OnlyMatching ||
-            lowArgs.Replacement is not null ||
             lowArgs.BeforeContext != 0 ||
             lowArgs.AfterContext != 0 ||
             lowArgs.Passthru ||
             lowArgs.StopOnNonmatch ||
             lowArgs.SearchZip ||
             lowArgs.Preprocessor is not null ||
-            lowArgs.MaxCount == 0 ||
             pattern.Count != 1)
         {
             return false;
@@ -1092,6 +1114,44 @@ internal static class StandardSearchTargetOperations
             !literal.AsSpan().Contains((byte)'\r') &&
             !literal.AsSpan().Contains((byte)0) &&
             LiteralLineSearcher.IsLiteralRegex(literal);
+    }
+
+    private static bool CanUseDirectoryEntryRegexCandidatePrecheck(
+        DirEntry entry,
+        IReadOnlyList<byte[]> pattern,
+        CliLowArgs lowArgs,
+        RegexSearchPlan? regexPlan,
+        out RegexCandidateLineAccelerator? accelerator)
+    {
+        accelerator = null;
+        if (entry.IsRawUnixPath ||
+            entry.Length is null ||
+            entry.Length < DirectoryEntryRegexCandidatePrecheckMinLength ||
+            lowArgs.SearchMode != CliSearchMode.Standard ||
+            lowArgs.InvertMatch ||
+            lowArgs.LineRegexp ||
+            lowArgs.WordRegexp ||
+            lowArgs.Multiline ||
+            lowArgs.Vimgrep ||
+            lowArgs.OnlyMatching ||
+            lowArgs.BeforeContext != 0 ||
+            lowArgs.AfterContext != 0 ||
+            lowArgs.Passthru ||
+            lowArgs.StopOnNonmatch ||
+            lowArgs.SearchZip ||
+            lowArgs.Preprocessor is not null ||
+            pattern.Count != 1 ||
+            pattern[0].Length == 0 ||
+            pattern[0].Length > DirectoryEntryLiteralPrecheckBufferLength ||
+            pattern[0].AsSpan().Contains((byte)'\n') ||
+            pattern[0].AsSpan().Contains((byte)'\r') ||
+            pattern[0].AsSpan().Contains((byte)0))
+        {
+            return false;
+        }
+
+        accelerator = regexPlan?.GetCandidateLineAccelerator(0);
+        return accelerator is not null;
     }
 
     private static bool TryFileContainsLiteralWithoutAllocating(
@@ -1168,6 +1228,78 @@ internal static class StandardSearchTargetOperations
         }
     }
 
+    private static bool TryFileContainsRegexCandidateWithoutAllocating(
+        string path,
+        byte[] pattern,
+        RegexCandidateLineAccelerator accelerator,
+        CliEncodingMode encodingMode,
+        out bool containsCandidate)
+    {
+        containsCandidate = false;
+        if (encodingMode is not (CliEncodingMode.Auto or CliEncodingMode.None or CliEncodingMode.Utf8))
+        {
+            return false;
+        }
+
+        int overlapLength = Math.Max(0, pattern.Length - 1);
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(DirectoryEntryLiteralPrecheckBufferLength + overlapLength);
+        try
+        {
+            using SafeFileHandle handle = File.OpenHandle(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete,
+                FileOptions.SequentialScan);
+            int preserved = 0;
+            long offset = 0;
+            bool firstRead = true;
+            while (true)
+            {
+                int read = RandomAccess.Read(handle, buffer.AsSpan(preserved, DirectoryEntryLiteralPrecheckBufferLength), offset);
+                if (read == 0)
+                {
+                    return true;
+                }
+
+                offset += read;
+                ReadOnlySpan<byte> window = buffer.AsSpan(0, preserved + read);
+                if (firstRead)
+                {
+                    firstRead = false;
+                    if (encodingMode == CliEncodingMode.Auto && HasNonUtf8Bom(window))
+                    {
+                        return false;
+                    }
+                }
+
+                if (accelerator.FindCandidate(window, 0) >= 0)
+                {
+                    containsCandidate = true;
+                    return true;
+                }
+
+                preserved = Math.Min(overlapLength, window.Length);
+                if (preserved > 0)
+                {
+                    window[^preserved..].CopyTo(buffer);
+                }
+            }
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
     private static bool HasNonUtf8Bom(ReadOnlySpan<byte> bytes)
     {
         return (bytes.Length >= 2 &&
@@ -1176,6 +1308,15 @@ internal static class StandardSearchTargetOperations
             (bytes.Length >= 4 &&
             ((bytes[0] == 0xff && bytes[1] == 0xfe && bytes[2] == 0x00 && bytes[3] == 0x00) ||
             (bytes[0] == 0x00 && bytes[1] == 0x00 && bytes[2] == 0xfe && bytes[3] == 0xff)));
+    }
+
+    private static bool HasSearchEncodingBom(ReadOnlySpan<byte> bytes)
+    {
+        return (bytes.Length >= 3 &&
+            bytes[0] == 0xef &&
+            bytes[1] == 0xbb &&
+            bytes[2] == 0xbf) ||
+            HasNonUtf8Bom(bytes);
     }
 
     private static void SearchDirectoryEntryFile(
@@ -1322,6 +1463,47 @@ internal static class StandardSearchTargetOperations
             return;
         }
 
+        if (TrySearchFileWithPooledRawRead(
+            path,
+            knownLength,
+            pattern,
+            lowArgs,
+            implicitSearch,
+            autoMmapEligible,
+            output,
+            logger,
+            prefix,
+            separators,
+            lineLimit,
+            color,
+            searchMode,
+            vimgrep,
+            lineNumber,
+            column,
+            byteOffset,
+            asciiCaseInsensitive,
+            invertMatch,
+            lineRegexp,
+            wordRegexp,
+            onlyMatching,
+            replacement,
+            maxCount,
+            textMode,
+            quiet,
+            trim,
+            beforeContext,
+            afterContext,
+            passthru,
+            includeZero,
+            nullPathTerminator,
+            heading,
+            ref wroteHeadingOutput,
+            ref matched,
+            regexPlan))
+        {
+            return;
+        }
+
         if (!SearchFileContentReader.TryRead(path, lowArgs, autoMmapEligible, diagnostics, logger, out byte[] bytes, out SearchFileReadKind readKind, knownLength))
         {
             errored = true;
@@ -1332,6 +1514,174 @@ internal static class StandardSearchTargetOperations
         bool memoryMapped = IsMemoryMapped(readKind);
         bool searchTextMode = textMode || SearchesBinaryAsText(readKind, lowArgs, searchMode, bytes, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp);
         matched |= StandardSearchByteOperations.SearchBytesWithOptionalHeading(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, searchTextMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, ShouldQuitOnBinary(lowArgs, implicitSearch, searchTextMode), heading, ref wroteHeadingOutput, memoryMapped, regexPlan);
+    }
+
+    private static bool TrySearchFileWithPooledRawRead(
+        string path,
+        long? knownLength,
+        IReadOnlyList<byte[]> pattern,
+        CliLowArgs lowArgs,
+        bool implicitSearch,
+        bool autoMmapEligible,
+        RawByteWriter output,
+        DiagnosticLogger logger,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        CliSearchMode searchMode,
+        bool vimgrep,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool asciiCaseInsensitive,
+        bool invertMatch,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool onlyMatching,
+        ReadOnlyMemory<byte>? replacement,
+        ulong? maxCount,
+        bool textMode,
+        bool quiet,
+        bool trim,
+        ulong beforeContext,
+        ulong afterContext,
+        bool passthru,
+        bool includeZero,
+        bool nullPathTerminator,
+        bool heading,
+        ref bool wroteHeadingOutput,
+        ref bool matched,
+        RegexSearchPlan? regexPlan)
+    {
+        if (!CanUsePooledRawFileRead(knownLength, lowArgs, autoMmapEligible))
+        {
+            return false;
+        }
+
+        if (!TryReadPooledRawFile(path, checked((int)knownLength.GetValueOrDefault()), lowArgs.EncodingMode, out byte[] rentedBytes, out int byteLength))
+        {
+            return false;
+        }
+
+        try
+        {
+            SearchDiagnosticLogging.LogTraceSearchPath(logger, path, SearchFileReadKind.Buffered);
+            bool searchTextMode = textMode;
+            matched |= StandardSearchByteOperations.SearchBytesWithOptionalHeading(
+                rentedBytes,
+                byteLength,
+                pattern,
+                output,
+                prefix,
+                separators,
+                lineLimit,
+                color,
+                searchMode,
+                vimgrep,
+                lineNumber,
+                column,
+                byteOffset,
+                asciiCaseInsensitive,
+                invertMatch,
+                lineRegexp,
+                wordRegexp,
+                lowArgs.Multiline,
+                lowArgs.MultilineDotall,
+                onlyMatching,
+                replacement,
+                maxCount,
+                searchTextMode,
+                quiet,
+                trim,
+                beforeContext,
+                afterContext,
+                passthru,
+                includeZero,
+                nullPathTerminator,
+                lowArgs.StopOnNonmatch,
+                ShouldQuitOnBinary(lowArgs, implicitSearch, searchTextMode),
+                heading,
+                ref wroteHeadingOutput,
+                memoryMapped: false,
+                regexPlan);
+            return true;
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(rentedBytes);
+        }
+    }
+
+    private static bool CanUsePooledRawFileRead(
+        long? knownLength,
+        CliLowArgs lowArgs,
+        bool autoMmapEligible)
+    {
+        return knownLength is >= 0 and <= PooledRawFileReadMaxLength &&
+            !autoMmapEligible &&
+            lowArgs.MmapMode != CliMmapMode.AlwaysTryMmap &&
+            lowArgs.Preprocessor is null &&
+            !lowArgs.SearchZip &&
+            lowArgs.EncodingMode is CliEncodingMode.Auto or CliEncodingMode.None;
+    }
+
+    private static bool TryReadPooledRawFile(
+        string path,
+        int length,
+        CliEncodingMode encodingMode,
+        out byte[] bytes,
+        out int byteLength)
+    {
+        bytes = [];
+        byteLength = 0;
+        byte[]? rented = null;
+        try
+        {
+            rented = ArrayPool<byte>.Shared.Rent(Math.Max(1, length));
+            using SafeFileHandle handle = File.OpenHandle(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete,
+                FileOptions.SequentialScan);
+            int totalRead = 0;
+            while (totalRead < length)
+            {
+                int read = RandomAccess.Read(handle, rented.AsSpan(totalRead, length - totalRead), totalRead);
+                if (read == 0)
+                {
+                    break;
+                }
+
+                totalRead += read;
+            }
+
+            if (encodingMode == CliEncodingMode.Auto && HasSearchEncodingBom(rented.AsSpan(0, totalRead)))
+            {
+                return false;
+            }
+
+            bytes = rented;
+            byteLength = totalRead;
+            rented = null;
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+        finally
+        {
+            if (rented is not null)
+            {
+                ArrayPool<byte>.Shared.Return(rented);
+            }
+        }
     }
 
     private static void SearchRawUnixFile(

@@ -46,6 +46,7 @@ internal sealed class RegexSearchPlan
             ArgumentNullException.ThrowIfNull(needle);
             bool hasAccelerator = false;
             bool requiresAutomatonMatchSpans = LiteralLineSearcher.RequiresAutomatonMatchSpans(needle);
+            RegexCandidateLineAccelerator? candidateLineAccelerator = null;
             if (!requiresAutomatonMatchSpans &&
                 RegexLiteralSetEngine.TryCreateLiteralAlternation(needle, literalSetOptions, out RegexLiteralSetEngine? literalSetEngine) &&
                 literalSetEngine is not null)
@@ -72,6 +73,16 @@ internal sealed class RegexSearchPlan
                 hasAccelerator = true;
             }
 
+            if (!requiresAutomatonMatchSpans &&
+                !hasAccelerator &&
+                RegexCandidateLineAccelerator.TryCompile(needle, asciiCaseInsensitive, out candidateLineAccelerator) &&
+                candidateLineAccelerator is { HasVerifier: true })
+            {
+                candidateLineAccelerators ??= new RegexCandidateLineAccelerator?[needles.Count];
+                candidateLineAccelerators[index] = candidateLineAccelerator;
+                hasAccelerator = true;
+            }
+
             bool shouldPrecompileAutomaton = LiteralLineSearcher.ShouldPrecompileRegexAutomaton(needle, asciiCaseInsensitive);
             if (hasAccelerator ||
                 !compileAutomata ||
@@ -84,7 +95,8 @@ internal sealed class RegexSearchPlan
             var automaton = RegexAutomaton.Compile(needle, asciiCaseInsensitive, multiLine: false, dotMatchesNewline: false);
             automata[index] = automaton;
             if (!requiresAutomatonMatchSpans &&
-                RegexCandidateLineAccelerator.TryCompile(needle, asciiCaseInsensitive, out RegexCandidateLineAccelerator? candidateLineAccelerator))
+                (candidateLineAccelerator is not null ||
+                    RegexCandidateLineAccelerator.TryCompile(needle, asciiCaseInsensitive, out candidateLineAccelerator)))
             {
                 candidateLineAccelerators ??= new RegexCandidateLineAccelerator?[needles.Count];
                 candidateLineAccelerators[index] = candidateLineAccelerator;

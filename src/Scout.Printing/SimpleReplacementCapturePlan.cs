@@ -202,9 +202,12 @@ internal sealed class SimpleReplacementCapturePlan
             {
                 Kind: RegexSyntaxKind.CapturingGroup,
                 CaptureIndex: > 0,
-                EnabledFlags.Length: 0,
-                DisabledFlags.Length: 0,
             } group)
+        {
+            return false;
+        }
+
+        if (!HasTransparentCaptureFlags(group))
         {
             return false;
         }
@@ -273,9 +276,12 @@ internal sealed class SimpleReplacementCapturePlan
             {
                 Kind: RegexSyntaxKind.CapturingGroup,
                 CaptureIndex: > 0,
-                EnabledFlags.Length: 0,
-                DisabledFlags.Length: 0,
             } group)
+        {
+            return false;
+        }
+
+        if (!HasTransparentCaptureFlags(group))
         {
             return false;
         }
@@ -456,6 +462,12 @@ internal sealed class SimpleReplacementCapturePlan
     }
 
     private static bool IsTransparentNonCapturingGroup(RegexGroupNode group)
+    {
+        return group.EnabledFlags.Length == 0 &&
+            (group.DisabledFlags.Length == 0 || group.DisabledFlags == "u");
+    }
+
+    private static bool HasTransparentCaptureFlags(RegexGroupNode group)
     {
         return group.EnabledFlags.Length == 0 &&
             (group.DisabledFlags.Length == 0 || group.DisabledFlags == "u");

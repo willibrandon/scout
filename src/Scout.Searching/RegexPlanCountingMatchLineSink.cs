@@ -36,4 +36,9 @@ internal struct RegexPlanCountingMatchLineSink<TSink> : IMatchLineSink
             lastMatchedLineNumber = lineNumber;
         }
     }
+
+    public void FinishLine(long lineNumber, long lineByteOffset, ReadOnlySpan<byte> line)
+    {
+        inner.FinishLine(lineNumber, lineByteOffset, line);
+    }
 }

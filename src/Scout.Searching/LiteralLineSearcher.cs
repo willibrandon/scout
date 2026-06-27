@@ -1630,6 +1630,7 @@ public static class LiteralLineSearcher
             ReadOnlySpan<byte> line = remaining[..lineLength];
             if (SearchLineMatchLines(line, lineStart, lineNumber, needle, ref sink, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf, nullData))
             {
+                sink.FinishLine(lineNumber, lineStart, line);
                 matched = true;
                 matchedLines++;
                 if (maxMatchingLines is ulong limit && matchedLines >= limit)
@@ -1738,6 +1739,7 @@ public static class LiteralLineSearcher
             ReadOnlySpan<byte> line = remaining[..lineLength];
             if (SearchLineMatchLines(line, lineStart, lineNumber, needles, regexPlan, ref sink, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf, nullData))
             {
+                sink.FinishLine(lineNumber, lineStart, line);
                 matched = true;
                 matchedLines++;
                 if (maxMatchingLines is ulong limit && matchedLines >= limit)
@@ -1766,6 +1768,7 @@ public static class LiteralLineSearcher
         bool matched = false;
         ulong matchedLines = 0;
         long lastMatchedLineNumber = 0;
+        long finishedLineNumber = 0;
         bool reachedLineLimit = false;
         int searchOffset = 0;
         int lineStart = 0;
@@ -1776,11 +1779,22 @@ public static class LiteralLineSearcher
             int candidate = accelerator.FindCandidate(haystack, searchOffset);
             if (candidate < 0)
             {
+                if (lastMatchedLineNumber == lineNumber && finishedLineNumber != lineNumber)
+                {
+                    sink.FinishLine(lineNumber, lineStart, haystack[lineStart..lineEnd]);
+                }
+
                 return matched;
             }
 
             if (candidate >= lineEnd)
             {
+                if (lastMatchedLineNumber == lineNumber && finishedLineNumber != lineNumber)
+                {
+                    sink.FinishLine(lineNumber, lineStart, haystack[lineStart..lineEnd]);
+                    finishedLineNumber = lineNumber;
+                }
+
                 ReadOnlySpan<byte> skipped = haystack[lineStart..candidate];
                 int previousTerminator = skipped.LastIndexOf((byte)'\n');
                 if (previousTerminator >= 0)
@@ -1868,6 +1882,12 @@ public static class LiteralLineSearcher
             if (searchOffset <= candidate)
             {
                 searchOffset = candidate + 1;
+            }
+
+            if (searchOffset >= lineEnd && finishedLineNumber != lineNumber)
+            {
+                sink.FinishLine(lineNumber, lineStart, line);
+                finishedLineNumber = lineNumber;
             }
         }
 

@@ -118,6 +118,32 @@ internal sealed class RegexCandidateLineVerifier
         {
             RegexCandidateLineVerifierSegment segment = segments[index];
             int count = 0;
+            if (!segment.RequiresUtf8ScalarFallback)
+            {
+                while (count < segment.Minimum)
+                {
+                    if (position >= haystack.Length || !segment.AtomMatches(haystack[position]))
+                    {
+                        end = 0;
+                        return false;
+                    }
+
+                    position++;
+                    count++;
+                }
+
+                int asciiMaximum = segment.Maximum ?? int.MaxValue;
+                while (count < asciiMaximum &&
+                    position < haystack.Length &&
+                    segment.AtomMatches(haystack[position]))
+                {
+                    position++;
+                    count++;
+                }
+
+                continue;
+            }
+
             while (count < segment.Minimum)
             {
                 if (position >= haystack.Length ||

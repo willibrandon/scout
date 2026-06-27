@@ -287,6 +287,7 @@ public sealed class LiteralLineSearcherTests
             .Invoke(plan, [0]);
 
         Assert.NotNull(accelerator);
+        AssertRegexSearchPlanAvoidsAutomata(plan);
     }
 
     /// <summary>
@@ -306,6 +307,16 @@ public sealed class LiteralLineSearcherTests
             .Invoke(plan, [0]);
 
         Assert.NotNull(accelerator);
+        AssertRegexSearchPlanAvoidsAutomata(plan);
+    }
+
+    private static void AssertRegexSearchPlanAvoidsAutomata(object plan)
+    {
+        var automata = (RegexAutomaton?[])plan
+            .GetType()
+            .GetField("automata", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(plan)!;
+        Assert.All(automata, Assert.Null);
     }
 
     /// <summary>

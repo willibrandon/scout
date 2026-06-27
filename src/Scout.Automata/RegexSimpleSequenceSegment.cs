@@ -66,6 +66,8 @@ internal readonly struct RegexSimpleSequenceSegment
             RegexSimpleSequenceByteMatcherKind.AsciiLowercase => IsAsciiLowercase(value),
             RegexSimpleSequenceByteMatcherKind.AsciiLetter => IsAsciiLetter(value),
             RegexSimpleSequenceByteMatcherKind.AsciiDigit => IsAsciiDigit(value),
+            RegexSimpleSequenceByteMatcherKind.AsciiIdentifierStart => IsAsciiIdentifierStart(value),
+            RegexSimpleSequenceByteMatcherKind.AsciiAlphanumeric => IsAsciiAlphanumeric(value),
             RegexSimpleSequenceByteMatcherKind.AsciiWord => IsAsciiWord(value),
             RegexSimpleSequenceByteMatcherKind.RegexWhitespace => IsRegexWhitespace(value),
             RegexSimpleSequenceByteMatcherKind.Any => true,
@@ -105,6 +107,21 @@ internal readonly struct RegexSimpleSequenceSegment
                 !crlf &&
                 lineTerminator == (byte)'\n' &&
                 IsAsciiLetterClass(value) => RegexSimpleSequenceByteMatcherKind.AsciiLetter,
+            RegexSyntaxKind.CharacterClass when !caseInsensitive &&
+                !multiLine &&
+                !crlf &&
+                lineTerminator == (byte)'\n' &&
+                IsAsciiIdentifierStartClass(value) => RegexSimpleSequenceByteMatcherKind.AsciiIdentifierStart,
+            RegexSyntaxKind.CharacterClass when !caseInsensitive &&
+                !multiLine &&
+                !crlf &&
+                lineTerminator == (byte)'\n' &&
+                IsAsciiAlphanumericClass(value) => RegexSimpleSequenceByteMatcherKind.AsciiAlphanumeric,
+            RegexSyntaxKind.CharacterClass when !caseInsensitive &&
+                !multiLine &&
+                !crlf &&
+                lineTerminator == (byte)'\n' &&
+                IsAsciiWordClass(value) => RegexSimpleSequenceByteMatcherKind.AsciiWord,
             _ => RegexSimpleSequenceByteMatcherKind.Lookup,
         };
     }
@@ -130,6 +147,21 @@ internal readonly struct RegexSimpleSequenceSegment
         return value.SequenceEqual("A-Za-z"u8) || value.SequenceEqual("a-zA-Z"u8);
     }
 
+    private static bool IsAsciiIdentifierStartClass(ReadOnlySpan<byte> value)
+    {
+        return CharacterClassMatchesExactly(value, IsAsciiIdentifierStart);
+    }
+
+    private static bool IsAsciiAlphanumericClass(ReadOnlySpan<byte> value)
+    {
+        return CharacterClassMatchesExactly(value, IsAsciiAlphanumeric);
+    }
+
+    private static bool IsAsciiWordClass(ReadOnlySpan<byte> value)
+    {
+        return CharacterClassMatchesExactly(value, IsAsciiWord);
+    }
+
     public static bool IsAsciiUppercase(byte value)
     {
         return (uint)(value - (byte)'A') <= 25;
@@ -150,9 +182,19 @@ internal readonly struct RegexSimpleSequenceSegment
         return (uint)(value - (byte)'0') <= 9;
     }
 
+    public static bool IsAsciiIdentifierStart(byte value)
+    {
+        return IsAsciiLetter(value) || value == (byte)'_';
+    }
+
+    public static bool IsAsciiAlphanumeric(byte value)
+    {
+        return IsAsciiLetter(value) || IsAsciiDigit(value);
+    }
+
     public static bool IsAsciiWord(byte value)
     {
-        return IsAsciiLetter(value) || IsAsciiDigit(value) || value == (byte)'_';
+        return IsAsciiAlphanumeric(value) || value == (byte)'_';
     }
 
     public static bool IsRegexWhitespace(byte value)
@@ -184,5 +226,66 @@ internal readonly struct RegexSimpleSequenceSegment
         }
 
         return lookup;
+    }
+
+    private static bool CharacterClassMatchesExactly(ReadOnlySpan<byte> expression, Func<byte, bool> predicate)
+    {
+        Span<bool> classMatches = stackalloc bool[256];
+        if (!TryBuildSimpleAsciiClass(expression, classMatches))
+        {
+            return false;
+        }
+
+        for (int candidate = 0; candidate <= 0xFF; candidate++)
+        {
+            byte value = (byte)candidate;
+            if (classMatches[value] != predicate(value))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryBuildSimpleAsciiClass(ReadOnlySpan<byte> expression, Span<bool> matches)
+    {
+        if (expression.IsEmpty || expression[0] == (byte)'^')
+        {
+            return false;
+        }
+
+        for (int index = 0; index < expression.Length; index++)
+        {
+            byte start = expression[index];
+            if (start is (byte)'\\' or (byte)'[' or (byte)']' || start > 0x7F)
+            {
+                return false;
+            }
+
+            if (index + 2 < expression.Length &&
+                expression[index + 1] == (byte)'-' &&
+                expression[index + 2] is not ((byte)'\\' or (byte)'[' or (byte)']') &&
+                expression[index + 2] <= 0x7F)
+            {
+                byte end = expression[index + 2];
+                if (start > end)
+                {
+                    return false;
+                }
+
+                for (int value = start; value <= end; value++)
+                {
+                    matches[value] = true;
+                }
+
+                index += 2;
+                continue;
+            }
+
+            matches[start] = true;
+        }
+
+        return true;
     }
 }

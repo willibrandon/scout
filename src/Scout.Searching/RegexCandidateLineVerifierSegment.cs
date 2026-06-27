@@ -8,6 +8,13 @@ internal readonly struct RegexCandidateLineVerifierSegment(
 
     public int? Maximum => simple.Maximum;
 
+    public bool RequiresUtf8ScalarFallback => requiresUtf8ScalarFallback;
+
+    public bool AtomMatches(byte value)
+    {
+        return simple.AtomMatches(value);
+    }
+
     public bool TryAtomMatches(byte value, out bool matches, out bool completed)
     {
         if (requiresUtf8ScalarFallback && value > 0x7F)
