@@ -16,11 +16,6 @@ internal readonly struct RegexCandidateLineVerifierSegment(
 
     public bool IsAsciiDisjointFrom(RegexCandidateLineVerifierSegment other)
     {
-        if (requiresUtf8ScalarFallback || other.RequiresUtf8ScalarFallback)
-        {
-            return false;
-        }
-
         for (int value = 0; value <= 0x7F; value++)
         {
             byte byteValue = (byte)value;

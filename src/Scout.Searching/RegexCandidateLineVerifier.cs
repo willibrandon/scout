@@ -84,8 +84,7 @@ internal sealed class RegexCandidateLineVerifier
             return false;
         }
 
-        if (leadingWordBoundary &&
-            (!TryAsciiWordBoundary(haystack, start, out bool boundaryMatches, out completed) || !boundaryMatches))
+        if (!CanStartAt(haystack, start, out completed))
         {
             return false;
         }
@@ -110,6 +109,13 @@ internal sealed class RegexCandidateLineVerifier
         }
 
         return false;
+    }
+
+    public bool CanStartAt(ReadOnlySpan<byte> haystack, int start, out bool completed)
+    {
+        completed = true;
+        return !leadingWordBoundary ||
+            (TryAsciiWordBoundary(haystack, start, out bool boundaryMatches, out completed) && boundaryMatches);
     }
 
     private bool TryMatchSegments(ReadOnlySpan<byte> haystack, int position, out int end, out bool completed)

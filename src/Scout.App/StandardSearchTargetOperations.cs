@@ -894,7 +894,10 @@ internal static class StandardSearchTargetOperations
             return false;
         }
 
-        return lowArgs.SearchMode is CliSearchMode.Standard or CliSearchMode.Count;
+        return lowArgs.SearchMode is CliSearchMode.Standard
+            or CliSearchMode.Count
+            or CliSearchMode.FilesWithMatches
+            or CliSearchMode.FilesWithoutMatch;
     }
 
     private static byte GetParallelOutputLineFlushTerminator(OutputSeparators separators)

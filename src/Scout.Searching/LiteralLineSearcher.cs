@@ -1234,21 +1234,20 @@ public static class LiteralLineSearcher
             return literalSetEngine.Find(haystack, startAt: 0).HasValue;
         }
 
-        int lineStart = 0;
-        while (lineStart < haystack.Length)
-        {
-            ReadOnlySpan<byte> remaining = haystack[lineStart..];
-            int lineLength = GetLineLength(remaining, nullData);
-            ReadOnlySpan<byte> line = remaining[..lineLength];
-            if (TryMatchLine(line, needles, regexPlan, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, crlf, nullData, out _))
-            {
-                return true;
-            }
-
-            lineStart += lineLength;
-        }
-
-        return false;
+        var sink = new CountingLineSink();
+        return SearchWithRegexPlan(
+            haystack,
+            needles,
+            regexPlan,
+            ref sink,
+            asciiCaseInsensitive,
+            invertMatch,
+            lineRegexp,
+            wordRegexp,
+            maxMatchingLines: 1,
+            crlf,
+            nullData,
+            requireMatchColumn: false);
     }
 
     /// <summary>

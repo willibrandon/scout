@@ -860,12 +860,16 @@ internal static class StandardSearchByteOperations
 
         if (searchMode == CliSearchMode.FilesWithMatches)
         {
-            return SearchOutputFormatting.WritePathIf(output, prefix, color, LiteralLineSearcher.HasMatch(searchSpan, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData), nullPathTerminator, separators.LineTerminator);
+            RegexSearchPlan? effectiveRegexPlan = regexPlan ?? LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: true);
+            bool hasMatch = LiteralLineSearcher.HasMatchWithRegexPlan(searchSpan, pattern, effectiveRegexPlan, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
+            return SearchOutputFormatting.WritePathIf(output, prefix, color, hasMatch, nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.FilesWithoutMatch)
         {
-            return SearchOutputFormatting.WritePathIf(output, prefix, color, !LiteralLineSearcher.HasMatch(searchSpan, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData), nullPathTerminator, separators.LineTerminator);
+            RegexSearchPlan? effectiveRegexPlan = regexPlan ?? LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: true);
+            bool hasMatch = LiteralLineSearcher.HasMatchWithRegexPlan(searchSpan, pattern, effectiveRegexPlan, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
+            return SearchOutputFormatting.WritePathIf(output, prefix, color, !hasMatch, nullPathTerminator, separators.LineTerminator);
         }
 
         if (passthru || beforeContext > 0 || afterContext > 0)

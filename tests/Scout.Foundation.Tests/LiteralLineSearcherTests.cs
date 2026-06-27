@@ -291,6 +291,28 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
+    /// Verifies the CLI's neutral regex wrapper still allows general-mode candidate-line acceleration.
+    /// </summary>
+    [Fact]
+    public void RegexSearchPlanUsesCandidateLineAcceleratorForCliWrappedLeadingAlternationInGeneralMode()
+    {
+        using RegexSpecializationModeScope scope = RegexSpecializationModeDefaults.Use(RegexSpecializationMode.General);
+        byte[][] patterns = [@"(?:\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*)"u8.ToArray()];
+        object? plan = typeof(LiteralLineSearcher)
+            .GetMethod("CreateRegexSearchPlan", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, [patterns, false, true]);
+
+        object? accelerator = plan!
+            .GetType()
+            .GetMethod("GetCandidateLineAccelerator")!
+            .Invoke(plan, [0]);
+
+        Assert.NotNull(accelerator);
+        Assert.True((bool)accelerator.GetType().GetProperty("HasVerifier")!.GetValue(accelerator)!);
+        AssertRegexSearchPlanAvoidsAutomata(plan);
+    }
+
+    /// <summary>
     /// Verifies Scout's prepared capture wrapper still allows candidate-line acceleration.
     /// </summary>
     [Fact]
