@@ -1192,6 +1192,7 @@ internal static class StandardSearchTargetOperations
         replacement = default;
         if (entry.IsRawUnixPath ||
             entry.Length is null ||
+            entry.Length <= PooledRawFileReadMaxLength ||
             heading ||
             color.Enabled ||
             lineLimit.IsEnabled ||

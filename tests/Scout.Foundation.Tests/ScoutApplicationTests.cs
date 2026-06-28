@@ -4060,7 +4060,9 @@ public sealed class ScoutApplicationTests
     {
         string root = CreateTempDirectory();
         string path = Path.Combine(root, "input.bin");
-        File.WriteAllBytes(path, "struct Foo\0struct Bar\n"u8.ToArray());
+        byte[] bytes = new byte[(2 * 1024 * 1024) + 32];
+        "struct Foo\0struct Bar\n"u8.CopyTo(bytes);
+        File.WriteAllBytes(path, bytes);
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", root);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", root);
