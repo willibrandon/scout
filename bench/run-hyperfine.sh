@@ -816,7 +816,7 @@ check_combined_gate_pair() {
 
 run_hyperfine_pair() {
     no_shell="$1"
-    json="$2"
+    pair_json="$2"
     first_name="$3"
     first_command="$4"
     second_name="$5"
@@ -829,7 +829,7 @@ run_hyperfine_pair() {
             -N \
             --warmup "$warmup" \
             --runs "$runs" \
-            --export-json "$json" \
+            --export-json "$pair_json" \
             --command-name "$first_name" "$first_command" \
             --command-name "$second_name" "$second_command"
         return
@@ -838,7 +838,7 @@ run_hyperfine_pair() {
     "$HYPERFINE" \
         --warmup "$warmup" \
         --runs "$runs" \
-        --export-json "$json" \
+        --export-json "$pair_json" \
         --command-name "$first_name" "$first_command" \
         --command-name "$second_name" "$second_command"
 }
