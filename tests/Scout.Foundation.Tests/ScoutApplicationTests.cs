@@ -4073,6 +4073,31 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies streaming replacement stops at a later binary block without printing unsafe suffix bytes.
+    /// </summary>
+    [Fact]
+    public void DirectoryReplacementCandidateStreamingStopsAtLaterBinaryBlock()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.bin");
+        using (FileStream stream = File.Create(path))
+        {
+            stream.Write("struct Foo\n"u8);
+            byte[] padding = new byte[70_000];
+            Array.Fill(padding, (byte)'a');
+            stream.Write(padding);
+            stream.Write("\0struct Bar\n"u8);
+        }
+
+        (int exitCode, byte[] output, string error) = RunScout("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies replacement capture extraction handles held-out structural captures without generic rematching.
     /// </summary>
     [Fact]

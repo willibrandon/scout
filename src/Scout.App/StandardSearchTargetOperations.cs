@@ -1128,22 +1128,6 @@ internal static class StandardSearchTargetOperations
             return false;
         }
 
-        if (!TryFileContainsRegexCandidateWithoutAllocating(
-            entry.FullPath,
-            pattern[0],
-            accelerator!,
-            lowArgs.EncodingMode,
-            rejectBinary: true,
-            out bool containsCandidate))
-        {
-            return false;
-        }
-
-        if (!containsCandidate)
-        {
-            return true;
-        }
-
         SearchDiagnosticLogging.LogTraceSearchPath(logger, entry.FullPath, SearchFileReadKind.Buffered);
         byte[] displayPath = displayPaths.GetBytes(entry);
         OutputPath outputPath = SearchOutputFormatting.CreateDirectoryEntryOutputPath(entry, displayPath, lowArgs, color);
@@ -1161,6 +1145,7 @@ internal static class StandardSearchTargetOperations
             separators,
             replacement,
             asciiCaseInsensitive,
+            lowArgs.EncodingMode,
             lineNumber,
             capturePlan,
             replacementTemplate,
@@ -1192,7 +1177,6 @@ internal static class StandardSearchTargetOperations
         replacement = default;
         if (entry.IsRawUnixPath ||
             entry.Length is null ||
-            entry.Length <= PooledRawFileReadMaxLength ||
             heading ||
             color.Enabled ||
             lineLimit.IsEnabled ||
@@ -1240,6 +1224,7 @@ internal static class StandardSearchTargetOperations
         OutputSeparators separators,
         ReadOnlyMemory<byte> replacement,
         bool asciiCaseInsensitive,
+        CliEncodingMode encodingMode,
         bool lineNumber,
         ReplacementCapturePlan? capturePlan,
         ReplacementTemplate replacementTemplate,
@@ -1265,6 +1250,7 @@ internal static class StandardSearchTargetOperations
                 FileShare.ReadWrite | FileShare.Delete,
                 FileOptions.SequentialScan);
             long fileOffset = 0;
+            bool firstRead = true;
             while (true)
             {
                 int read = RandomAccess.Read(handle, readBuffer.AsSpan(0, ReadBufferLength), fileOffset);
@@ -1274,6 +1260,28 @@ internal static class StandardSearchTargetOperations
                 }
 
                 ReadOnlySpan<byte> chunk = readBuffer.AsSpan(0, read);
+                if (firstRead)
+                {
+                    firstRead = false;
+                    if (encodingMode == CliEncodingMode.Auto && HasNonUtf8Bom(chunk))
+                    {
+                        return false;
+                    }
+                }
+
+                int binaryOffset = chunk.IndexOf((byte)0);
+                if (binaryOffset >= 0)
+                {
+                    if (matched)
+                    {
+                        StandardSearchByteOperations.WriteBinaryFileStoppedWarning(output, prefix, default, fileOffset + binaryOffset);
+                        completed = true;
+                        return true;
+                    }
+
+                    return false;
+                }
+
                 int chunkOffset = 0;
                 while (chunkOffset < chunk.Length)
                 {
