@@ -307,7 +307,7 @@ internal static class StandardSearchTargetOperations
         ref bool matched,
         ref bool errored)
     {
-        int threadCount = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
+        int threadCount = GetStandardSearchDirectoryThreadCount(lowArgs, pattern);
         if (threadCount > 1)
         {
             SearchDirectoryParallel(root, pattern, defaultRoot, lowArgs, separators, lineLimit, color, fileTypes, output, diagnostics, logger, asciiCaseInsensitive, lineNumber, heading, threadCount, ref wroteHeadingOutput, ref matched, ref errored);
@@ -547,7 +547,7 @@ internal static class StandardSearchTargetOperations
         ref bool errored,
         ref SearchStats stats)
     {
-        int threadCount = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
+        int threadCount = GetStandardSearchDirectoryThreadCount(lowArgs, pattern);
         if (threadCount > 1)
         {
             SearchDirectoryParallelWithStats(root, pattern, defaultRoot, lowArgs, separators, lineLimit, color, fileTypes, output, diagnostics, logger, asciiCaseInsensitive, lineNumber, heading, threadCount, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
@@ -903,6 +903,24 @@ internal static class StandardSearchTargetOperations
     private static byte GetParallelOutputLineFlushTerminator(OutputSeparators separators)
     {
         return separators.NullData ? (byte)0 : (byte)'\n';
+    }
+
+    internal static int GetStandardSearchDirectoryThreadCount(CliLowArgs lowArgs, IReadOnlyList<byte[]> pattern)
+    {
+        int threadCount = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
+        if (threadCount <= 2 ||
+            lowArgs.Threads is not null ||
+            !OperatingSystem.IsMacOS() ||
+            lowArgs.SearchMode != CliSearchMode.Standard ||
+            lowArgs.Replacement.HasValue ||
+            pattern.Count != 1 ||
+            pattern[0].Length == 0 ||
+            !LiteralLineSearcher.IsLiteralRegex(pattern[0]))
+        {
+            return threadCount;
+        }
+
+        return 2;
     }
 
     private static void SearchDirectoryEntryFile(

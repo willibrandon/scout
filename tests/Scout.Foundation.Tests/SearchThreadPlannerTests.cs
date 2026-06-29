@@ -180,6 +180,52 @@ public sealed class SearchThreadPlannerTests
     }
 
     /// <summary>
+    /// Verifies default standard literal directory searches can use a lower macOS fan-out.
+    /// </summary>
+    [Fact]
+    public void StandardSearchDirectoryThreadCountCapsDefaultMacOsLiteralSearches()
+    {
+        var lowArgs = new CliLowArgs();
+        int plannedThreads = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
+        int expectedThreads = OperatingSystem.IsMacOS() && plannedThreads > 2 ? 2 : plannedThreads;
+        byte[][] pattern = ["struct"u8.ToArray()];
+
+        int threads = StandardSearchTargetOperations.GetStandardSearchDirectoryThreadCount(lowArgs, pattern);
+
+        Assert.Equal(expectedThreads, threads);
+    }
+
+    /// <summary>
+    /// Verifies explicit standard literal directory search thread counts bypass the macOS literal cap.
+    /// </summary>
+    [Fact]
+    public void StandardSearchDirectoryThreadCountHonorsExplicitLiteralThreads()
+    {
+        var lowArgs = new CliLowArgs();
+        lowArgs.SetThreads(12);
+        byte[][] pattern = ["struct"u8.ToArray()];
+
+        int threads = StandardSearchTargetOperations.GetStandardSearchDirectoryThreadCount(lowArgs, pattern);
+
+        Assert.Equal(12, threads);
+    }
+
+    /// <summary>
+    /// Verifies regex-shaped standard directory searches keep the regular search walk fan-out.
+    /// </summary>
+    [Fact]
+    public void StandardSearchDirectoryThreadCountKeepsRegexSearchThreads()
+    {
+        var lowArgs = new CliLowArgs();
+        int expectedThreads = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
+        byte[][] pattern = ["\\bstruct\\b"u8.ToArray()];
+
+        int threads = StandardSearchTargetOperations.GetStandardSearchDirectoryThreadCount(lowArgs, pattern);
+
+        Assert.Equal(expectedThreads, threads);
+    }
+
+    /// <summary>
     /// Verifies invalid available parallelism is rejected.
     /// </summary>
     [Fact]
