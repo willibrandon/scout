@@ -568,6 +568,7 @@ public sealed partial class PinnedConfigurationTests
 
         AssertPackageVersion(document, "Microsoft.DotNet.ILCompiler", "10.0.2");
         AssertPackageVersion(document, "Microsoft.CodeAnalysis.NetAnalyzers", "10.0.102");
+        AssertPackageVersion(document, "Microsoft.SourceLink.GitHub", "10.0.102");
         AssertPackageVersion(document, "Microsoft.VisualStudio.Threading.Analyzers", "17.14.15");
         AssertPackageVersion(document, "BenchmarkDotNet", "0.15.8");
         AssertPackageVersion(document, "SharpFuzz", "2.2.0");
@@ -601,10 +602,18 @@ public sealed partial class PinnedConfigurationTests
         Assert.Equal("false", defaults.Element("TrimmerSingleWarn")?.Value);
         Assert.Equal("false", defaults.Element("SuppressTrimAnalysisWarnings")?.Value);
         Assert.Equal("true", defaults.Element("_TrimmerShowRedundantSuppressions")?.Value);
-        Assert.Equal("10.0.2", defaults.Element("RuntimeFrameworkVersion")?.Value);
+        Assert.Null(defaults.Element("RuntimeFrameworkVersion"));
+        Assert.Contains(
+            document.Root.Elements("PropertyGroup"),
+            static group => string.Equals(group.Attribute("Condition")?.Value, "'$(TargetFramework)' == 'net10.0'", StringComparison.Ordinal) &&
+                string.Equals(group.Element("RuntimeFrameworkVersion")?.Value, "10.0.2", StringComparison.Ordinal));
         Assert.Contains(
             document.Root.Elements("ItemGroup").Elements("PackageReference"),
             static reference => string.Equals(reference.Attribute("Include")?.Value, "Microsoft.CodeAnalysis.NetAnalyzers", StringComparison.Ordinal) &&
+                string.Equals(reference.Attribute("PrivateAssets")?.Value, "all", StringComparison.Ordinal));
+        Assert.Contains(
+            document.Root.Elements("ItemGroup").Elements("PackageReference"),
+            static reference => string.Equals(reference.Attribute("Include")?.Value, "Microsoft.SourceLink.GitHub", StringComparison.Ordinal) &&
                 string.Equals(reference.Attribute("PrivateAssets")?.Value, "all", StringComparison.Ordinal));
         Assert.Contains(
             document.Root.Elements("ItemGroup").Elements("PackageReference"),
@@ -623,6 +632,42 @@ public sealed partial class PinnedConfigurationTests
         XElement testAppHost = tests.Element("DefaultAppHostRuntimeIdentifier")!;
         Assert.Contains("NETCoreSdkPortableRuntimeIdentifier", testAppHost.Attribute("Condition")?.Value, StringComparison.Ordinal);
         Assert.Equal("$(NETCoreSdkPortableRuntimeIdentifier)", testAppHost.Value);
+    }
+
+    /// <summary>
+    /// Verifies Scout's supported library package surface is explicit.
+    /// </summary>
+    [Fact]
+    public void LibraryPackageSurfaceIsPinned()
+    {
+        string root = FindRepositoryRoot();
+        var regex = XDocument.Load(Path.Combine(root, "src", "Scout.Regex", "Scout.Regex.csproj"));
+        var globbing = XDocument.Load(Path.Combine(root, "src", "Scout.Globbing", "Scout.Globbing.csproj"));
+        var ignore = XDocument.Load(Path.Combine(root, "src", "Scout.Ignore", "Scout.Ignore.csproj"));
+        var build = XDocument.Load(Path.Combine(root, "Directory.Build.props"));
+        var targets = XDocument.Load(Path.Combine(root, "Directory.Build.targets"));
+        XElement defaults = build.Root!.Elements("PropertyGroup").First(static group => group.Attribute("Condition") is null);
+        string readme = File.ReadAllText(Path.Combine(root, "README.md"));
+        string libraries = File.ReadAllText(Path.Combine(root, "docs", "LIBRARIES.md"));
+        string defaultPackageReadme = File.ReadAllText(Path.Combine(root, "PACKAGE.md"));
+
+        AssertPackage(regex, "Scout.Text.Regex", "net9.0;net10.0");
+        AssertPackage(globbing, "Scout.IO.Globbing", "net9.0;net10.0");
+        AssertPackage(ignore, "Scout.IO.Ignore", "net9.0;net10.0");
+        Assert.Equal("willibrandon", defaults.Element("Authors")?.Value);
+        Assert.Equal("https://github.com/willibrandon/scout", defaults.Element("RepositoryUrl")?.Value);
+        Assert.Equal("git", defaults.Element("RepositoryType")?.Value);
+        Assert.Equal("true", defaults.Element("PublishRepositoryUrl")?.Value);
+        Assert.Equal("true", defaults.Element("EmbedUntrackedSources")?.Value);
+        Assert.Contains("Byte-oriented regex and ripgrep-compatible search libraries for .NET Native AOT.", readme, StringComparison.Ordinal);
+        Assert.Contains("Scout.Text.Regex", libraries, StringComparison.Ordinal);
+        Assert.Contains("Scout.IO.Globbing", libraries, StringComparison.Ordinal);
+        Assert.Contains("Scout.IO.Ignore", libraries, StringComparison.Ordinal);
+        Assert.Contains("FileWalker", libraries, StringComparison.Ordinal);
+        Assert.Contains("FileWalkerOptions", libraries, StringComparison.Ordinal);
+        Assert.Contains("FileWalkEntry", libraries, StringComparison.Ordinal);
+        Assert.Contains("Scout implementation packages", defaultPackageReadme, StringComparison.Ordinal);
+        Assert.Contains("<ScoutUsesDefaultPackageReadme>true</ScoutUsesDefaultPackageReadme>", targets.ToString(SaveOptions.DisableFormatting), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1066,7 +1111,7 @@ public sealed partial class PinnedConfigurationTests
     public void UnixOsLayerReadsLinkTargetsAsBytes()
     {
         string root = FindRepositoryRoot();
-        string metadataPath = Path.Combine(root, "src", "Scout.Ignore", "NativeFileSystemMetadata.cs");
+        string metadataPath = Path.Combine(root, "src", "Scout.Ignore", "IO", "Ignore", "NativeFileSystemMetadata.cs");
         string metadata = File.ReadAllText(metadataPath);
 
         Assert.Contains("TryReadRawUnixLinkTarget(ReadOnlySpan<byte> path, out byte[] target)", metadata, StringComparison.Ordinal);
@@ -1630,6 +1675,31 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("GH_REPO: ${{ github.repository }}", releaseWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("""-d SourceDir=artifacts\packages\stage\scout-$rid""", releaseWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("""& "$installPath\scout.exe" -V""", releaseWorkflow, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Verifies tagged releases publish the supported library packages as well as the CLI tool packages.
+    /// </summary>
+    [Fact]
+    public void ReleaseWorkflowPacksAndPublishesLibraryPackages()
+    {
+        string root = FindRepositoryRoot();
+        string releaseWorkflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "release.yml"));
+
+        Assert.Contains("pack-library-packages:", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("name: pack library packages", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("9.0.x", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("10.0.102", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("src/Scout.Regex/Scout.Regex.csproj", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("src/Scout.Globbing/Scout.Globbing.csproj", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("src/Scout.Ignore/Scout.Ignore.csproj", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("Scout.Text.Regex", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("Scout.IO.Globbing", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("Scout.IO.Ignore", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("Verify library install and AOT publish", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("name: scout-library-packages", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("- pack-library-packages", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("Push Scout dependency packages", releaseWorkflow, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -3299,6 +3369,14 @@ public sealed partial class PinnedConfigurationTests
         }
 
         throw new InvalidOperationException($"Package '{packageId}' was not found.");
+    }
+
+    private static void AssertPackage(XDocument document, string packageId, string targetFrameworks)
+    {
+        XElement propertyGroup = document.Root!.Elements("PropertyGroup").Single(static group => group.Element("PackageId") is not null);
+        Assert.Equal(packageId, propertyGroup.Element("PackageId")?.Value);
+        Assert.Equal(targetFrameworks, propertyGroup.Element("TargetFrameworks")?.Value);
+        Assert.Equal("PACKAGE.md", propertyGroup.Element("PackageReadmeFile")?.Value);
     }
 
     private static (int ExitCode, string Output, string Error) RunProcess(string fileName, IReadOnlyList<string> arguments)

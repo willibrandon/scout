@@ -584,11 +584,11 @@ public sealed class ScoutApplicationRuntimeTests
 
         Assert.Equal(pinnedExitCode, exitCode);
         Assert.Equal(pinnedOutput, output);
-        Assert.Contains($"scout: DEBUG|Scout.Ignore|{ScoutSource("src/Scout.Ignore/IgnoreStack.cs")}:", error, StringComparison.Ordinal);
+        Assert.Contains($"scout: DEBUG|Scout.Ignore|{ScoutSource("src/Scout.Ignore/IO/Ignore/IgnoreStack.cs")}:", error, StringComparison.Ordinal);
         Assert.Contains($"opened ignore file: {ignoreFile}", error, StringComparison.Ordinal);
-        Assert.Contains($"scout: DEBUG|Scout.Globbing|{ScoutSource("src/Scout.Ignore/IgnoreStack.cs")}:", error, StringComparison.Ordinal);
+        Assert.Contains($"scout: DEBUG|Scout.Globbing|{ScoutSource("src/Scout.Ignore/IO/Ignore/IgnoreStack.cs")}:", error, StringComparison.Ordinal);
         Assert.Contains("built glob set;", error, StringComparison.Ordinal);
-        Assert.Contains($"scout: DEBUG|Scout.Ignore|{ScoutSource("src/Scout.Ignore/Walk.cs")}:", error, StringComparison.Ordinal);
+        Assert.Contains($"scout: DEBUG|Scout.Ignore|{ScoutSource("src/Scout.Ignore/IO/Ignore/Walk.cs")}:", error, StringComparison.Ordinal);
         Assert.Contains($"matched ignore rule from {ignoreFile}: \"ignored/\" -> \"ignored\", directory-only", error, StringComparison.Ordinal);
         Assert.DoesNotContain("rg::", error, StringComparison.Ordinal);
         Assert.DoesNotContain("crates/", error, StringComparison.Ordinal);

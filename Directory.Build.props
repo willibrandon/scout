@@ -20,12 +20,11 @@
     <TrimmerSingleWarn>false</TrimmerSingleWarn>
     <SuppressTrimAnalysisWarnings>false</SuppressTrimAnalysisWarnings>
     <_TrimmerShowRedundantSuppressions>true</_TrimmerShowRedundantSuppressions>
-    <RuntimeFrameworkVersion>10.0.2</RuntimeFrameworkVersion>
     <RootNamespace>Scout</RootNamespace>
-    <VersionPrefix>0.3.0</VersionPrefix>
+    <VersionPrefix>0.4.0</VersionPrefix>
     <Version>$(VersionPrefix)</Version>
-    <AssemblyVersion>0.3.0.0</AssemblyVersion>
-    <FileVersion>0.3.0.0</FileVersion>
+    <AssemblyVersion>0.4.0.0</AssemblyVersion>
+    <FileVersion>0.4.0.0</FileVersion>
     <ScoutRipgrepVersion>15.1.0</ScoutRipgrepVersion>
     <ScoutRipgrepRevision>4857d6fa67db69a95cd4b6f2adda5d807d4d0119</ScoutRipgrepRevision>
     <ScoutRipgrepRevisionShort>4857d6fa67</ScoutRipgrepRevisionShort>
@@ -33,10 +32,19 @@
     <Product>Scout</Product>
     <Company>willibrandon</Company>
     <Authors>willibrandon</Authors>
-    <Description>Scout - a feature-complete port of ripgrep to .NET Native AOT</Description>
+    <Description>Scout - byte-oriented regex and ripgrep-compatible search libraries for .NET Native AOT</Description>
     <RepositoryUrl>https://github.com/willibrandon/scout</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
     <PackageId>$(MSBuildProjectName)</PackageId>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>regex;search;ripgrep;glob;gitignore;nativeaot;aot;bytes</PackageTags>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <RuntimeFrameworkVersion>10.0.2</RuntimeFrameworkVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Scout.SourceGen'">
@@ -90,6 +98,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="all" />
     <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" PrivateAssets="all" />
   </ItemGroup>
 </Project>

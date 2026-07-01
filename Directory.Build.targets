@@ -10,6 +10,17 @@
                       PrivateAssets="all" />
   </ItemGroup>
 
+  <PropertyGroup Condition="'$(PackageReadmeFile)' == ''">
+    <PackageReadmeFile>PACKAGE.md</PackageReadmeFile>
+    <ScoutUsesDefaultPackageReadme>true</ScoutUsesDefaultPackageReadme>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(ScoutUsesDefaultPackageReadme)' == 'true' and Exists('$(MSBuildThisFileDirectory)PACKAGE.md')">
+    <None Include="$(MSBuildThisFileDirectory)PACKAGE.md"
+          Pack="true"
+          PackagePath="\" />
+  </ItemGroup>
+
   <ItemGroup>
     <ScoutSuppressionScanFile Include="$(MSBuildThisFileDirectory)**/*.cs"
                               Exclude="$(MSBuildThisFileDirectory)**/bin/**" />

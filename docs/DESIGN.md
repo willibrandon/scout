@@ -2,9 +2,9 @@
 
 **A full, feature-complete port of ripgrep to C# / .NET Native AOT.**
 
-- **Status:** Draft for review (v0.2 — incorporates Codex review round 1)
+- **Status:** Implementation design (v0.4 — library package surface added)
 - **Date:** 2026-05-28
-- **Target runtime:** .NET 10 (LTS), Native AOT, `net10.0`
+- **Target runtime:** `scout` CLI on .NET 10 Native AOT (`net10.0`); reusable libraries target `net9.0` and `net10.0`
 - **Binary name:** `scout`
 - **Root namespace:** `Scout`
 - **This document:** `docs/DESIGN.md` in the Scout repository (`/Users/brandon/src/scout`).
@@ -73,7 +73,6 @@ A C# / .NET Native AOT implementation of ripgrep that is **feature-complete**, *
 - **Behavioral parity is the contract.** Any intentional deviation from upstream is documented in `PARITY.md` with justification and a guarding test. Silent deviation is a defect.
 
 ### 2.3 Non-goals
-- No stable public NuGet API surface promised in v1 (libraries are `internal`-leaning but cleanly layered so a curated API can follow).
 - No bug-for-bug replication of upstream *bugs* unless a ported test depends on the behavior; such cases are documented.
 
 ---
@@ -84,15 +83,15 @@ ripgrep is nine workspace crates plus the `rg` binary — **but the port scope i
 
 ### 3.1 Workspace crates → Scout projects
 
-| Rust crate | C# project |
-|------------|------------|
+| Rust crate | C# project / public package |
+|------------|----------------------------|
 | `grep-matcher` | `Scout.Matching` |
-| `grep-regex` | `Scout.Regex` |
+| `grep-regex` | `Scout.Regex` / `Scout.Text.Regex` |
 | `grep-pcre2` | `Scout.Pcre2` |
 | `grep-searcher` | `Scout.Searching` |
 | `grep-printer` | `Scout.Printing` |
-| `globset` | `Scout.Globbing` |
-| `ignore` | `Scout.Ignore` |
+| `globset` | `Scout.Globbing` / `Scout.IO.Globbing` |
+| `ignore` | `Scout.Ignore` / `Scout.IO.Ignore` |
 | `grep-cli` | `Scout.Cli` |
 | `grep` (facade) | *(folded into references)* |
 | `crates/core` (`rg`) | `Scout.App` (produces `scout`) |
@@ -205,6 +204,8 @@ Rationale unchanged and reaffirmed: the BCL engine is UTF-16/`char`/`string`-bas
 
 SIMD via `System.Runtime.Intrinsics`: shipped baseline is SSE2 + AVX2 (x64) and `AdvSimd`/NEON (arm64); AVX-512 paths are additive and `Avx512*.IsSupported`-gated, delivered before Release. Scalar fallback always present.
 
+**`Scout.Text.Regex`** (public package): the supported .NET-facing facade over the byte regex engine. It exposes `ByteRegex` and `ByteRegexSet` APIs that accept `ReadOnlySpan<byte>` haystacks, return byte offsets, preserve capture spans, and allow callers to choose optimized, general, or automata-only engine modes without depending on CLI internals. The package is Native-AOT-safe and targets `net9.0` and `net10.0`.
+
 ### 4.2.1 Matcher callback ABI (made concrete, per Codex)
 The internal-iteration model is realized **without** `Func<...>` (which boxes/allocates and can't carry `ref struct`/span state cleanly). Instead:
 - The matcher hot path is **generic over a `where TSink : struct, ISink` value type** so the AOT compiler monomorphizes and inlines, eliminating virtual dispatch and allocation. The `ISink` interface uses `static`/instance methods taking `ReadOnlySpan<byte>` and `Match` by value.
@@ -230,13 +231,15 @@ Hedging ("`System.Text.Encoding` first, port tables where they diverge") is remo
 #### 4.5.1 JSON — explicit byte writer, not `JsonSerializer` (revised per Codex)
 Because output must be **byte-identical** to ripgrep's `serde_json`-produced JSON Lines, and `System.Text.Json` does **not** guarantee serde-compatible escaping/ordering across runtime versions, the JSON printer is a **hand-written, allocation-free byte writer** with **pinned escaping rules** matching serde_json exactly (control-char escaping, `\uXXXX` forms, no superfluous escapes, field order fixed by us, `bytes` fields base64 when non-UTF-8 per the documented schema). It emits `begin`/`match`/`context`/`end`/`summary` records. Verified byte-for-byte against `tests/json.rs`. `System.Text.Json` is not on this path.
 
-### 4.6 Globbing (`Scout.Globbing`)
+### 4.6 Globbing (`Scout.Globbing` / `Scout.IO.Globbing`)
 `Glob`/`GlobSet` multi-strategy matcher (literal map, basename, extension, prefix/suffix via `AhoCorasick`, regex-set fallback via `PatternSet`); full glob syntax incl. `**`, `{...}`, `[...]`, `literal_separator`, platform-aware escaping.
+
+The public package is `Scout.IO.Globbing`; its namespace matches the package ID and contains the supported glob API surface.
 
 ### 4.7 CLI utilities (`Scout.Cli`)
 Stdin readability heuristics (Unix `fstat`, Windows `GetFileType`); output buffering (line on tty, block when redirected); pattern-file loading with precise UTF-8 error location; `escape`/`unescape`; human-size parsing; **decompression** (`-z`, `--pre`) by spawning external tools (we shell out, matching upstream — see §8.5 for the tool matrix); terminal-color layer (port of `termcolor`).
 
-### 4.8 Ignore / walker (`Scout.Ignore`)
+### 4.8 Ignore / walker (`Scout.Ignore` / `Scout.IO.Ignore`)
 
 #### 4.8.1 Parallelism semantics (corrected & specified, per Codex)
 Exact replication of upstream:
@@ -246,6 +249,8 @@ Exact replication of upstream:
 
 #### 4.8.2 Rules & types
 `.gitignore`/`.ignore`/`.rgignore`/`.scoutignore` per-directory rule stacks, global gitignore, `--no-ignore*` family, `Match<T>` (None/Ignore/Whitelist), negation precedence; `.scoutignore` is read after `.rgignore` so Scout-native rules win on conflict, and both are controlled by `--no-ignore-dot`; built-in file-type table (incl. the `container` type at the pin), `--type`/`-T`/`--type-add`/`--type-list`; overrides (`-g`/`--iglob`); `--hidden`; symlink follow (`-L`) with loop detection via device+inode (Unix) / file-id (Windows); `--max-depth`, sorting.
+
+The public package is `Scout.IO.Ignore`; its namespace matches the package ID and contains the supported ignore-rule, file-type, and recursive walker API surface. The primary package-facing walker API is `FileWalker`, configured by `FileWalkerOptions`, and yields `FileWalkEntry` values. The lower-level `WalkBuilder`, `Walk`, and `WalkParallel` types remain public and documented because the CLI and advanced consumers need their ripgrep-style visitor controls.
 
 ### 4.9 OS / filesystem layer (deepened, per Codex)
 Standard `System.IO` string APIs are insufficient for byte-preserving parity. `Scout.Os` provides a thin, byte-honest syscall layer:
@@ -291,7 +296,8 @@ This is the only accepted runtime carve-out from byte-identical output: no accep
 ### 5.1 Globalization & language pinning (specified, per Codex)
 - **`InvariantGlobalization=true`** is set **explicitly** (not "where it doesn't change behavior"). All casing relevant to matching uses Scout's **own Unicode tables** (§11.1), independent of ICU, for determinism vs the Rust `regex` crate. Culture-sensitive `string` casing/sorting/formatting is banned on behavior paths; a test suite asserts identical results under several `LANG`/`LC_ALL` settings.
 - **Reproducible compilation — exact pinned values (per Codex):**
-  - **`TargetFramework`** = `net10.0`.
+  - **Default `TargetFramework`** = `net10.0` for the CLI and internal app/test projects.
+  - **Library `TargetFrameworks`** = `net9.0;net10.0` for the supported reusable package stack.
   - **`LangVersion`** = `14.0` (the C# version shipping with .NET 10; never `latest`/`preview`).
   - **SDK** pinned in `global.json` to **`10.0.102`** with `"rollForward": "disable"` so only that exact SDK builds the repo. This is the SDK that actually built the verified spikes (§4.1.1); CI fails if the installed SDK differs. (Bumped only via the documented sync policy.)
   - **Runtime / ILCompiler pack** pinned to **`10.0.2`** (`RuntimeFrameworkVersion` = `10.0.2`; `Microsoft.DotNet.ILCompiler` = `10.0.2`; the NativeAOT runtime pack `microsoft.netcore.app.runtime.nativeaot.<rid>` = `10.0.2`) in `Directory.Packages.props` — the exact pack the spikes linked against (Appendix A/B).
@@ -299,7 +305,7 @@ This is the only accepted runtime carve-out from byte-identical output: no accep
 
   These literal values live in `global.json`/`Directory.Build.props`/`Directory.Packages.props`; future SDKs cannot silently change compilation semantics.
 
-Each library: `net10.0`, `IsAotCompatible=true`. Only `Scout.App`: `PublishAot=true`.
+Supported reusable libraries: `net9.0;net10.0`, `IsAotCompatible=true`. Only `Scout.App`: `PublishAot=true`.
 
 ---
 
@@ -318,10 +324,10 @@ scout/
     Scout.Bytes/  Scout.Os/  Scout.Diagnostics/
     Scout.Matching/
     Scout.Automata.Syntax/  Scout.Automata/        # + Memmem, AhoCorasick, Teddy
-    Scout.Regex/  Scout.Pcre2/
+    Scout.Regex/  Scout.Pcre2/       # Scout.Text.Regex public package
     Scout.Encoding/  Scout.Encoding.Io/
     Scout.Searching/  Scout.Printing/
-    Scout.Globbing/  Scout.Ignore/  Scout.Cli/
+    Scout.Globbing/  Scout.Ignore/  Scout.Cli/ # Scout.IO.Globbing / Scout.IO.Ignore packages
     Scout.App/                  # produces `scout`
     Scout.SourceGen/            # Unicode/flag/help/man/completion generators + analyzers
   tests/   (mirror of src + Integration + Conformance + Encoding conformance)
@@ -459,7 +465,7 @@ Flag tables, help/man text, and shell completions are generated deterministicall
 - **Performance** = hard release gates (§9).
 - **Milestones** = internal gates; only v1.0 ships (§10).
 - **Globalization** = `InvariantGlobalization=true`, own Unicode tables (§5.1).
-- **Toolchain pins** = `net10.0`, C# `14.0`, SDK `10.0.102` (`rollForward: disable`), runtime/ILCompiler `10.0.2`, deterministic build (§5.1) — the exact versions the verified spikes used.
+- **Toolchain pins** = CLI/default `net10.0`, library `net9.0;net10.0`, C# `14.0`, SDK `10.0.102` (`rollForward: disable`), runtime/ILCompiler `10.0.2` for `net10.0`, deterministic build (§5.1) — the exact versions the verified spikes used.
 - **PCRE2** = `pcre2` 0.2.11 / `pcre2-sys` 0.2.10, bundled **PCRE2 10.46**, static-linked per RID (§4.3).
 - **Unix `argv`** = a single statically-linked **C entry shim** across all Unix; no `/proc` dependency (§4.1).
 - **SIMD baseline** = SSE2 + AVX2 (x64) and `AdvSimd`/NEON (arm64) as the shipped baseline; **AVX-512 paths are included and additive**, gated by `Avx512*.IsSupported`, and delivered **before** Release — not deferred past v1.
