@@ -64,9 +64,9 @@ Current ablation collection:
 
 | Mode | Workload | Recorded ratio | Gate | Coverage |
 | --- | --- | --- | --- | --- |
-| `default` | `subtitles_en_regex` | `0.805x` release gate | `<= 1.20x` | Public benchmark workload under normal release behavior. |
-| `general` | `linux_heldout_regex_general` | `1.236x` release gate | `<= 1.50x` | Held-out Linux-tree regex with domain, benchmark-family, and corpus-specific recognizers disabled. |
-| `general` | `linux_heldout_capture_general` | Pending release-gate result. | `<= 1.75x` | Held-out Linux-tree replacement workload through capture output with the same recognizers disabled. |
+| `default` | `subtitles_en_regex` | `0.797x` release gate | `<= 1.20x` | Public benchmark workload under normal release behavior. |
+| `general` | `linux_heldout_regex_general` | `1.458x` release-gate retry | `<= 1.50x` | Held-out Linux-tree regex with domain, benchmark-family, and corpus-specific recognizers disabled. |
+| `general` | `linux_heldout_capture_general` | `1.520x` release gate | `<= 1.75x` | Held-out Linux-tree replacement workload through capture output with the same recognizers disabled. |
 | `fallback` | Local diagnostic control. | Not release-gated. | N/A | Spot-checks core automata behavior without recognizer or guard acceleration; it is not used for a release-speed claim. |
 
 ### Native AOT fixed RSS floor for release RSS gates

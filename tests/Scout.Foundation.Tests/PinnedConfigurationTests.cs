@@ -3026,8 +3026,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("linux_heldout_regex_general", parity, StringComparison.Ordinal);
         Assert.Contains("linux_heldout_capture_general", parity, StringComparison.Ordinal);
         Assert.Contains("domain, benchmark-family, and corpus-specific recognizers", parity, StringComparison.Ordinal);
-        Assert.Contains("0.805x", parity, StringComparison.Ordinal);
-        Assert.Contains("1.236x", parity, StringComparison.Ordinal);
+        Assert.Contains("0.797x", parity, StringComparison.Ordinal);
+        Assert.Contains("1.458x", parity, StringComparison.Ordinal);
+        Assert.Contains("1.520x", parity, StringComparison.Ordinal);
+        Assert.Contains("release-gate retry", parity, StringComparison.Ordinal);
         Assert.Contains("Not release-gated", parity, StringComparison.Ordinal);
         Assert.Contains("accepted explicit gate change under `docs/DESIGN.md` §9", parity, StringComparison.Ordinal);
         Assert.Contains("tiny `--mmap -n` literal search", parity, StringComparison.Ordinal);
