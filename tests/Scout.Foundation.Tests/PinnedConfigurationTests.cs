@@ -604,9 +604,14 @@ public sealed partial class PinnedConfigurationTests
         Assert.Equal("true", defaults.Element("_TrimmerShowRedundantSuppressions")?.Value);
         Assert.Null(defaults.Element("RuntimeFrameworkVersion"));
         Assert.Contains(
-            document.Root.Elements("PropertyGroup"),
+            targets.Root!.Elements("PropertyGroup"),
             static group => string.Equals(group.Attribute("Condition")?.Value, "'$(TargetFramework)' == 'net10.0'", StringComparison.Ordinal) &&
                 string.Equals(group.Element("RuntimeFrameworkVersion")?.Value, "10.0.2", StringComparison.Ordinal));
+        Assert.Contains(
+            targets.Root.Elements("PropertyGroup"),
+            static group => string.Equals(group.Attribute("Condition")?.Value, "'$(IsAotCompatible)' == 'true'", StringComparison.Ordinal) &&
+                string.Equals(group.Element("EnableTrimAnalyzer")?.Value, "true", StringComparison.Ordinal) &&
+                string.Equals(group.Element("EnableAotAnalyzer")?.Value, "true", StringComparison.Ordinal));
         Assert.Contains(
             document.Root.Elements("ItemGroup").Elements("PackageReference"),
             static reference => string.Equals(reference.Attribute("Include")?.Value, "Microsoft.CodeAnalysis.NetAnalyzers", StringComparison.Ordinal) &&

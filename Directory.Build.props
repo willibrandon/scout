@@ -43,10 +43,6 @@
     <PackageTags>regex;search;ripgrep;glob;gitignore;nativeaot;aot;bytes</PackageTags>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
-    <RuntimeFrameworkVersion>10.0.2</RuntimeFrameworkVersion>
-  </PropertyGroup>
-
   <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Scout.SourceGen'">
     <TargetFramework>netstandard2.0</TargetFramework>
     <ImplicitUsings>disable</ImplicitUsings>
