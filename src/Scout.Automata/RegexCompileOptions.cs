@@ -10,7 +10,8 @@ internal readonly struct RegexCompileOptions
         bool crlf = false,
         byte lineTerminator = (byte)'\n',
         bool utf8 = true,
-        bool unicodeClasses = true)
+        bool unicodeClasses = true,
+        RegexSpecializationMode? specializationMode = null)
     {
         CaseInsensitive = caseInsensitive;
         SwapGreed = swapGreed;
@@ -20,6 +21,7 @@ internal readonly struct RegexCompileOptions
         LineTerminator = lineTerminator;
         Utf8 = utf8;
         UnicodeClasses = unicodeClasses;
+        SpecializationMode = specializationMode ?? RegexSpecializationModeDefaults.Current;
     }
 
     public bool CaseInsensitive { get; }
@@ -37,6 +39,8 @@ internal readonly struct RegexCompileOptions
     public bool Utf8 { get; }
 
     public bool UnicodeClasses { get; }
+
+    public RegexSpecializationMode SpecializationMode { get; }
 
     public RegexCompileOptions Apply(string enabledFlags, string disabledFlags)
     {
@@ -57,7 +61,7 @@ internal readonly struct RegexCompileOptions
             ApplyFlag(disabledFlags[index], enabled: false, ref caseInsensitive, ref swapGreed, ref multiLine, ref dotMatchesNewline, ref crlf, ref utf8, ref unicodeClasses);
         }
 
-        return new RegexCompileOptions(caseInsensitive, swapGreed, multiLine, dotMatchesNewline, crlf, LineTerminator, utf8, unicodeClasses);
+        return new RegexCompileOptions(caseInsensitive, swapGreed, multiLine, dotMatchesNewline, crlf, LineTerminator, utf8, unicodeClasses, SpecializationMode);
     }
 
     private static void ApplyFlag(

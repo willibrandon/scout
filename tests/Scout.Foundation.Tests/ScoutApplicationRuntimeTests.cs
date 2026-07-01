@@ -8,6 +8,7 @@ namespace Scout;
 /// <summary>
 /// Verifies runtime search modes and parity-heavy application behavior.
 /// </summary>
+[Collection(ApplicationProcessStateGroup.Name)]
 public sealed class ScoutApplicationRuntimeTests
 {
     /// <summary>
@@ -737,6 +738,33 @@ public sealed class ScoutApplicationRuntimeTests
 
         (int exitCode, byte[] output, string error) = RunScout("--no-config", "--threads", "2", "-n", "needle", root);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-config", "--threads", "2", "-n", "needle", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies implicit parallel streaming reuses planned automata for regex patterns.
+    /// </summary>
+    [Fact]
+    public void LargeImplicitDirectoryRegexSearchesLikeRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "large.txt");
+        using (var writer = new StreamWriter(path, append: false, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
+        {
+            for (int index = 0; index < 80_000; index++)
+            {
+                writer.WriteLine("destructor file;");
+            }
+
+            writer.WriteLine("struct file;");
+        }
+
+        string pattern = @"\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*";
+        (int exitCode, byte[] output, string error) = RunScout("--no-config", "--threads", "2", "-n", pattern, root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-config", "--threads", "2", "-n", pattern, root);
 
         Assert.Equal(pinnedExitCode, exitCode);
         Assert.Equal(pinnedOutput, output);

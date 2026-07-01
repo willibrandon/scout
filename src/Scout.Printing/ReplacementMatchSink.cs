@@ -10,6 +10,11 @@ internal struct ReplacementMatchSink : IMatchSink
     private readonly ReadOnlyMemory<byte> fieldSeparator;
     private readonly ReadOnlyMemory<byte> replacement;
     private readonly IReadOnlyList<byte[]> patterns;
+    private readonly ReplacementCapturePlan? capturePlan;
+    private readonly ReplacementTemplate template;
+    private readonly int[] captureStarts;
+    private readonly int[] captureLengths;
+    private readonly Dictionary<string, int>? captureNames;
     private readonly bool asciiCaseInsensitive;
     private readonly bool lineNumber;
     private readonly bool column;
@@ -36,7 +41,8 @@ internal struct ReplacementMatchSink : IMatchSink
         long lineNumberOffset = 0,
         long byteOffsetOffset = 0,
         OutputColor color = default,
-        ReadOnlyMemory<byte> lineTerminator = default)
+        ReadOnlyMemory<byte> lineTerminator = default,
+        ReplacementCapturePlan? capturePlan = null)
     {
         ArgumentNullException.ThrowIfNull(output);
         this.output = output;
@@ -44,6 +50,13 @@ internal struct ReplacementMatchSink : IMatchSink
         this.fieldSeparator = fieldSeparator;
         this.replacement = replacement;
         this.patterns = patterns;
+        this.capturePlan = capturePlan;
+        template = ReplacementTemplate.Create(replacement.Span, patterns);
+        captureStarts = new int[Math.Max(1, template.HighestCapture + 1)];
+        captureLengths = new int[Math.Max(1, template.HighestCapture + 1)];
+        captureNames = template.UsesNamedCaptureReferences
+            ? new Dictionary<string, int>(StringComparer.Ordinal)
+            : null;
         this.asciiCaseInsensitive = asciiCaseInsensitive;
         this.lineNumber = lineNumber;
         this.column = column;
@@ -65,7 +78,16 @@ internal struct ReplacementMatchSink : IMatchSink
             cumulativeDelta = 0;
         }
 
-        byte[] body = ReplacementFormatter.Expand(replacement.Span, match, patterns, asciiCaseInsensitive);
+        byte[] body = ReplacementFormatter.Expand(
+            replacement.Span,
+            match,
+            patterns,
+            asciiCaseInsensitive,
+            capturePlan,
+            template,
+            captureStarts,
+            captureLengths,
+            captureNames);
         long adjustedColumn = matchColumn + cumulativeDelta;
         long lineStart = byteOffset - (matchColumn - 1);
         long adjustedByteOffset = byteOffsetOffset + lineStart + adjustedColumn - 1;

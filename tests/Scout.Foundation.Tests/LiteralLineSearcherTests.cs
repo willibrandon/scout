@@ -203,6 +203,30 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
+    /// Verifies match search preserves scoped ungreedy repetition spans.
+    /// </summary>
+    [Fact]
+    public void SearchMatchesHonorsScopedUngreedyRegexSpans()
+    {
+        var sink = new CapturingMatchSink();
+        byte[][] patterns = [@"(?U:ab+)"u8.ToArray()];
+
+        bool matched = LiteralLineSearcher.SearchMatches(
+            "abbbbc\nab\n"u8,
+            patterns,
+            ref sink);
+
+        Assert.True(matched);
+        Assert.Equal(2UL, sink.Matches);
+        Assert.Equal(0, sink.FirstByteOffset);
+        Assert.Equal("ab"u8.ToArray(), sink.FirstMatch);
+        Assert.Equal(2, sink.LineNumber);
+        Assert.Equal(7, sink.ByteOffset);
+        Assert.Equal(1, sink.MatchColumn);
+        Assert.Equal("ab"u8.ToArray(), sink.Match);
+    }
+
+    /// <summary>
     /// Verifies class-sequence regex acceleration reports line metadata for ASCII matches.
     /// </summary>
     [Fact]
@@ -222,6 +246,203 @@ public sealed class LiteralLineSearcherTests
         Assert.Equal(5, sink.ByteOffset);
         Assert.Equal(1, sink.MatchColumn);
         Assert.Equal("abcde fghij klmno\n"u8.ToArray(), sink.Line.ToArray());
+    }
+
+    /// <summary>
+    /// Verifies leading literal regex candidates can search whole haystacks while preserving line output.
+    /// </summary>
+    [Fact]
+    public void SearchUsesCandidateLineAcceleratorForLeadingAlternation()
+    {
+        var sink = new CapturingLineSink();
+        byte[][] patterns = [@"\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*"u8.ToArray()];
+
+        bool matched = LiteralLineSearcher.Search(
+            "destructor file;\nstruct file;\n"u8,
+            patterns,
+            ref sink);
+
+        Assert.True(matched);
+        Assert.Equal(1UL, sink.MatchedLines);
+        Assert.Equal(2, sink.LineNumber);
+        Assert.Equal(17, sink.ByteOffset);
+        Assert.Equal(1, sink.MatchColumn);
+        Assert.Equal("struct file;\n"u8.ToArray(), sink.Line.ToArray());
+    }
+
+    /// <summary>
+    /// Verifies Scout's prepared no-Unicode wrapper still allows candidate-line acceleration.
+    /// </summary>
+    [Fact]
+    public void RegexSearchPlanUsesCandidateLineAcceleratorForPreparedLeadingAlternation()
+    {
+        byte[][] patterns = [@"(?-u:\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*)"u8.ToArray()];
+        object? plan = typeof(LiteralLineSearcher)
+            .GetMethod("CreateRegexSearchPlan", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, [patterns, false, true]);
+
+        object? accelerator = plan!
+            .GetType()
+            .GetMethod("GetCandidateLineAccelerator")!
+            .Invoke(plan, [0]);
+
+        Assert.NotNull(accelerator);
+        AssertRegexSearchPlanAvoidsAutomata(plan);
+    }
+
+    /// <summary>
+    /// Verifies the CLI's neutral regex wrapper still allows general-mode candidate-line acceleration.
+    /// </summary>
+    [Fact]
+    public void RegexSearchPlanUsesCandidateLineAcceleratorForCliWrappedLeadingAlternationInGeneralMode()
+    {
+        using RegexSpecializationModeScope scope = RegexSpecializationModeDefaults.Use(RegexSpecializationMode.General);
+        byte[][] patterns = [@"(?:\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*)"u8.ToArray()];
+        object? plan = typeof(LiteralLineSearcher)
+            .GetMethod("CreateRegexSearchPlan", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, [patterns, false, true]);
+
+        object? accelerator = plan!
+            .GetType()
+            .GetMethod("GetCandidateLineAccelerator")!
+            .Invoke(plan, [0]);
+
+        Assert.NotNull(accelerator);
+        Assert.True((bool)accelerator.GetType().GetProperty("HasVerifier")!.GetValue(accelerator)!);
+        AssertRegexSearchPlanAvoidsAutomata(plan);
+    }
+
+    /// <summary>
+    /// Verifies Scout's prepared capture wrapper still allows candidate-line acceleration.
+    /// </summary>
+    [Fact]
+    public void RegexSearchPlanUsesCandidateLineAcceleratorForPreparedCaptureLeadingAlternation()
+    {
+        byte[][] patterns = [@"(?-u:\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*))"u8.ToArray()];
+        object? plan = typeof(LiteralLineSearcher)
+            .GetMethod("CreateRegexSearchPlan", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, [patterns, false, true]);
+
+        object? accelerator = plan!
+            .GetType()
+            .GetMethod("GetCandidateLineAccelerator")!
+            .Invoke(plan, [0]);
+
+        Assert.NotNull(accelerator);
+        AssertRegexSearchPlanAvoidsAutomata(plan);
+    }
+
+    private static void AssertRegexSearchPlanAvoidsAutomata(object plan)
+    {
+        var automata = (RegexAutomaton?[])plan
+            .GetType()
+            .GetField("automata", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(plan)!;
+        Assert.All(automata, Assert.Null);
+    }
+
+    /// <summary>
+    /// Verifies scoped flags that change match spans still use automaton spans.
+    /// </summary>
+    [Fact]
+    public void RegexSearchPlanKeepsScopedUngreedySpansOnAutomatonPath()
+    {
+        byte[][] patterns = [@"(?U:ab+)"u8.ToArray()];
+        object? plan = typeof(LiteralLineSearcher)
+            .GetMethod("CreateRegexSearchPlan", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, [patterns, false, true]);
+
+        object? accelerator = plan!
+            .GetType()
+            .GetMethod("GetCandidateLineAccelerator")!
+            .Invoke(plan, [0]);
+
+        Assert.Null(accelerator);
+    }
+
+    /// <summary>
+    /// Verifies whole-haystack regex candidate scanning still preserves line-oriented matching.
+    /// </summary>
+    [Fact]
+    public void SearchCandidateLineAcceleratorDoesNotMatchAcrossLines()
+    {
+        var sink = new CapturingLineSink();
+        byte[][] patterns = [@"\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*"u8.ToArray()];
+
+        bool matched = LiteralLineSearcher.Search(
+            "struct\nfile\n"u8,
+            patterns,
+            ref sink);
+
+        Assert.False(matched);
+        Assert.Equal(0UL, sink.MatchedLines);
+    }
+
+    /// <summary>
+    /// Verifies candidate-line scanning keeps looking within a line after a false prefix.
+    /// </summary>
+    [Fact]
+    public void SearchCandidateLineAcceleratorContinuesAfterFalsePrefix()
+    {
+        var sink = new CapturingLineSink();
+        byte[][] patterns = [@"\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*"u8.ToArray()];
+
+        bool matched = LiteralLineSearcher.Search(
+            "destructor struct file;\n"u8,
+            patterns,
+            ref sink);
+
+        Assert.True(matched);
+        Assert.Equal(1UL, sink.MatchedLines);
+        Assert.Equal(1, sink.LineNumber);
+        Assert.Equal(0, sink.ByteOffset);
+        Assert.Equal(12, sink.MatchColumn);
+        Assert.Equal("destructor struct file;\n"u8.ToArray(), sink.Line.ToArray());
+    }
+
+    /// <summary>
+    /// Verifies candidate-line scanning emits match-line records for prepared captures.
+    /// </summary>
+    [Fact]
+    public void SearchMatchLinesUsesCandidateLineAcceleratorForPreparedCaptures()
+    {
+        var sink = new CapturingMatchLineSink();
+        byte[][] patterns = [@"(?-u:\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*))"u8.ToArray()];
+
+        bool matched = LiteralLineSearcher.SearchMatchLines(
+            "struct file; enum mode;\nstruct\nfile\n"u8,
+            patterns,
+            ref sink);
+
+        Assert.True(matched);
+        Assert.Equal(2UL, sink.Matches);
+        Assert.Equal(1, sink.LineNumber);
+        Assert.Equal(13, sink.MatchByteOffset);
+        Assert.Equal(14, sink.MatchColumn);
+        Assert.Equal("enum mode"u8.ToArray(), sink.Match);
+    }
+
+    /// <summary>
+    /// Verifies candidate-line scanning can skip exact match-column work when the sink does not need it.
+    /// </summary>
+    [Fact]
+    public void SearchCandidateLineAcceleratorCanSkipMatchColumn()
+    {
+        var sink = new CapturingLineSink();
+        byte[][] patterns = [@"\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*"u8.ToArray()];
+
+        bool matched = LiteralLineSearcher.Search(
+            "destructor struct file;\n"u8,
+            patterns,
+            ref sink,
+            requireMatchColumn: false);
+
+        Assert.True(matched);
+        Assert.Equal(1UL, sink.MatchedLines);
+        Assert.Equal(1, sink.LineNumber);
+        Assert.Equal(0, sink.ByteOffset);
+        Assert.Equal(0, sink.MatchColumn);
+        Assert.Equal("destructor struct file;\n"u8.ToArray(), sink.Line.ToArray());
     }
 
     /// <summary>

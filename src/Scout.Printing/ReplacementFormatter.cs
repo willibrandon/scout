@@ -33,8 +33,14 @@ internal static class ReplacementFormatter
         IReadOnlyList<byte[]> patterns,
         bool asciiCaseInsensitive,
         List<long> replacementColumns,
-        List<int>? replacementLengths = null)
+        List<int>? replacementLengths = null,
+        ReplacementCapturePlan? capturePlan = null,
+        ReplacementTemplate? template = null,
+        int[]? captureStartsBuffer = null,
+        int[]? captureLengthsBuffer = null,
+        Dictionary<string, int>? captureNamesBuffer = null)
     {
+        template ??= ReplacementTemplate.Create(replacement, patterns);
         replacementColumns.Clear();
         replacementLengths?.Clear();
         var bytes = new List<byte>(line.Length);
@@ -45,7 +51,17 @@ internal static class ReplacementFormatter
             Add(bytes, line[previous..start]);
             replacementColumns.Add(bytes.Count + 1L);
             int replacementStart = bytes.Count;
-            AddExpanded(bytes, replacement, line.Slice(start, lengths[index]), patterns, asciiCaseInsensitive);
+            AddExpanded(
+                bytes,
+                replacement,
+                line.Slice(start, lengths[index]),
+                patterns,
+                asciiCaseInsensitive,
+                capturePlan,
+                template,
+                captureStartsBuffer,
+                captureLengthsBuffer,
+                captureNamesBuffer);
             replacementLengths?.Add(bytes.Count - replacementStart);
             previous = start + lengths[index];
         }
@@ -58,11 +74,64 @@ internal static class ReplacementFormatter
         ReadOnlySpan<byte> replacement,
         ReadOnlySpan<byte> matched,
         IReadOnlyList<byte[]> patterns,
-        bool asciiCaseInsensitive)
+        bool asciiCaseInsensitive,
+        ReplacementCapturePlan? capturePlan = null,
+        ReplacementTemplate? template = null,
+        int[]? captureStartsBuffer = null,
+        int[]? captureLengthsBuffer = null,
+        Dictionary<string, int>? captureNamesBuffer = null)
     {
-        var bytes = new List<byte>(replacement.Length + matched.Length);
-        AddExpanded(bytes, replacement, matched, patterns, asciiCaseInsensitive);
+        template ??= ReplacementTemplate.Create(replacement, patterns);
+        var bytes = new List<byte>(template.LiteralLength + matched.Length);
+        AddExpanded(
+            bytes,
+            replacement,
+            matched,
+            patterns,
+            asciiCaseInsensitive,
+            capturePlan,
+            template,
+            captureStartsBuffer,
+            captureLengthsBuffer,
+            captureNamesBuffer);
         return bytes.ToArray();
+    }
+
+    public static void WriteReplacedLine(
+        RawByteWriter output,
+        ReadOnlySpan<byte> line,
+        IReadOnlyList<int> starts,
+        IReadOnlyList<int> lengths,
+        ReadOnlySpan<byte> replacement,
+        IReadOnlyList<byte[]> patterns,
+        bool asciiCaseInsensitive,
+        ReplacementCapturePlan? capturePlan = null,
+        ReplacementTemplate? template = null,
+        int[]? captureStartsBuffer = null,
+        int[]? captureLengthsBuffer = null,
+        Dictionary<string, int>? captureNamesBuffer = null)
+    {
+        template ??= ReplacementTemplate.Create(replacement, patterns);
+        int previous = 0;
+        for (int index = 0; index < starts.Count; index++)
+        {
+            int start = starts[index];
+            output.Write(line[previous..start]);
+            WriteExpanded(
+                output,
+                replacement,
+                line.Slice(start, lengths[index]),
+                patterns,
+                asciiCaseInsensitive,
+                capturePlan,
+                template,
+                captureStartsBuffer,
+                captureLengthsBuffer,
+                captureNamesBuffer);
+            previous = start + lengths[index];
+        }
+
+        output.Write(line[previous..]);
     }
 
     private static void AddExpanded(
@@ -70,159 +139,67 @@ internal static class ReplacementFormatter
         ReadOnlySpan<byte> replacement,
         ReadOnlySpan<byte> matched,
         IReadOnlyList<byte[]> patterns,
-        bool asciiCaseInsensitive)
+        bool asciiCaseInsensitive,
+        ReplacementCapturePlan? capturePlan,
+        ReplacementTemplate? template,
+        int[]? captureStartsBuffer,
+        int[]? captureLengthsBuffer,
+        Dictionary<string, int>? captureNamesBuffer)
     {
-        int highestCapture = Math.Max(GetHighestNumericCapture(replacement), CountHighestCaptureIndex(patterns));
-        int[] captureStarts = CreateCaptureArray(highestCapture);
-        int[] captureLengths = CreateCaptureArray(highestCapture);
-        var captureNames = new Dictionary<string, int>(StringComparer.Ordinal);
-        CollectCaptures(patterns, matched, asciiCaseInsensitive, captureStarts, captureLengths, captureNames);
-        for (int index = 0; index < replacement.Length; index++)
+        template ??= ReplacementTemplate.Create(replacement, patterns);
+        if (capturePlan?.TryAddExpandedNumericReplacement(bytes, matched, template) == true)
         {
-            byte value = replacement[index];
-            if (value != (byte)'$')
-            {
-                bytes.Add(value);
-                continue;
-            }
-
-            if (index + 1 >= replacement.Length)
-            {
-                bytes.Add(value);
-                continue;
-            }
-
-            byte next = replacement[index + 1];
-            if (next == (byte)'$')
-            {
-                bytes.Add((byte)'$');
-                index++;
-                continue;
-            }
-
-            if (next == (byte)'{')
-            {
-                int close = replacement[(index + 2)..].IndexOf((byte)'}');
-                if (close < 0)
-                {
-                    bytes.Add(value);
-                    continue;
-                }
-
-                ReadOnlySpan<byte> capture = replacement.Slice(index + 2, close);
-                if (capture.Length == 0)
-                {
-                    Add(bytes, replacement.Slice(index, close + 3));
-                }
-                else if (TryReadCaptureIndex(capture, out int captureIndex))
-                {
-                    AddCapture(bytes, matched, captureStarts, captureLengths, captureIndex);
-                }
-                else if (IsCaptureName(capture) && captureNames.TryGetValue(Encoding.ASCII.GetString(capture), out int namedCaptureIndex))
-                {
-                    AddCapture(bytes, matched, captureStarts, captureLengths, namedCaptureIndex);
-                }
-
-                index += close + 2;
-                continue;
-            }
-
-            if (IsAsciiDigit(next))
-            {
-                int end = index + 1;
-                while (end < replacement.Length && IsAsciiDigit(replacement[end]))
-                {
-                    end++;
-                }
-
-                if (TryReadCaptureIndex(replacement[(index + 1)..end], out int captureIndex))
-                {
-                    AddCapture(bytes, matched, captureStarts, captureLengths, captureIndex);
-                }
-
-                index = end - 1;
-                continue;
-            }
-
-            if (IsCaptureNameByte(next))
-            {
-                int end = index + 1;
-                while (end < replacement.Length && IsCaptureNameByte(replacement[end]))
-                {
-                    end++;
-                }
-
-                ReadOnlySpan<byte> capture = replacement[(index + 1)..end];
-                if (captureNames.TryGetValue(Encoding.ASCII.GetString(capture), out int namedCaptureIndex))
-                {
-                    AddCapture(bytes, matched, captureStarts, captureLengths, namedCaptureIndex);
-                }
-
-                index = end - 1;
-                continue;
-            }
-
-            bytes.Add(value);
-        }
-    }
-
-    private static int GetHighestNumericCapture(ReadOnlySpan<byte> replacement)
-    {
-        int highest = 0;
-        for (int index = 0; index < replacement.Length; index++)
-        {
-            if (replacement[index] != (byte)'$' || index + 1 >= replacement.Length)
-            {
-                continue;
-            }
-
-            byte next = replacement[index + 1];
-            if (next == (byte)'{')
-            {
-                int close = replacement[(index + 2)..].IndexOf((byte)'}');
-                if (close >= 0 &&
-                    TryReadCaptureIndex(replacement.Slice(index + 2, close), out int bracedCapture) &&
-                    bracedCapture > highest)
-                {
-                    highest = bracedCapture;
-                }
-
-                index += close < 0 ? 1 : close + 2;
-                continue;
-            }
-
-            if (IsAsciiDigit(next))
-            {
-                int end = index + 1;
-                while (end < replacement.Length && IsAsciiDigit(replacement[end]))
-                {
-                    end++;
-                }
-
-                if (TryReadCaptureIndex(replacement[(index + 1)..end], out int capture) && capture > highest)
-                {
-                    highest = capture;
-                }
-
-                index = end - 1;
-            }
+            return;
         }
 
-        return highest;
-    }
-
-    private static int CountHighestCaptureIndex(IReadOnlyList<byte[]> patterns)
-    {
-        int highest = 0;
-        for (int index = 0; index < patterns.Count; index++)
+        int[] captureStarts = captureStartsBuffer ?? CreateCaptureArray(template.HighestCapture);
+        int[] captureLengths = captureLengthsBuffer ?? CreateCaptureArray(template.HighestCapture);
+        Dictionary<string, int>? captureNames = template.UsesNamedCaptureReferences
+            ? captureNamesBuffer ?? new Dictionary<string, int>(StringComparer.Ordinal)
+            : captureNamesBuffer;
+        captureNames?.Clear();
+        if (capturePlan is null ||
+            template.UsesNamedCaptureReferences ||
+            !capturePlan.TryCollectNumericCaptures(matched, captureStarts, captureLengths))
         {
-            highest = Math.Max(highest, CountCapturingGroups(patterns[index]));
+            captureNames ??= new Dictionary<string, int>(StringComparer.Ordinal);
+            CollectCaptures(patterns, matched, asciiCaseInsensitive, captureStarts, captureLengths, captureNames);
         }
 
-        return highest;
+        template.AddExpanded(bytes, matched, captureStarts, captureLengths, captureNames);
     }
 
-    private static int CountCapturingGroups(ReadOnlySpan<byte> pattern)
+    internal static void WriteExpanded(
+        RawByteWriter output,
+        ReadOnlySpan<byte> replacement,
+        ReadOnlySpan<byte> matched,
+        IReadOnlyList<byte[]> patterns,
+        bool asciiCaseInsensitive,
+        ReplacementCapturePlan? capturePlan,
+        ReplacementTemplate? template,
+        int[]? captureStartsBuffer,
+        int[]? captureLengthsBuffer,
+        Dictionary<string, int>? captureNamesBuffer)
+    {
+        template ??= ReplacementTemplate.Create(replacement, patterns);
+        if (capturePlan?.TryWriteExpandedNumericReplacement(output, matched, template) == true)
+        {
+            return;
+        }
+
+        output.Write(Expand(
+            replacement,
+            matched,
+            patterns,
+            asciiCaseInsensitive,
+            capturePlan,
+            template,
+            captureStartsBuffer,
+            captureLengthsBuffer,
+            captureNamesBuffer));
+    }
+
+    internal static int CountCapturingGroups(ReadOnlySpan<byte> pattern)
     {
         int count = 0;
         int patternIndex = 0;

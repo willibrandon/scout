@@ -8,6 +8,8 @@ internal enum RegexSimpleSequenceByteMatcherKind
     AsciiLowercase,
     AsciiLetter,
     AsciiDigit,
+    AsciiIdentifierStart,
+    AsciiAlphanumeric,
     AsciiWord,
     RegexWhitespace,
     Any,

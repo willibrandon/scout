@@ -22,4 +22,14 @@ public interface IMatchLineSink
         long matchColumn,
         ReadOnlySpan<byte> line,
         ReadOnlySpan<byte> match);
+
+    /// <summary>
+    /// Receives notification that no more matches will be emitted for the current line.
+    /// </summary>
+    /// <param name="lineNumber">The one-based line number.</param>
+    /// <param name="lineByteOffset">The zero-based byte offset of the line within the searched bytes.</param>
+    /// <param name="line">The containing line bytes, including a trailing line-feed byte when present.</param>
+    void FinishLine(long lineNumber, long lineByteOffset, ReadOnlySpan<byte> line)
+    {
+    }
 }

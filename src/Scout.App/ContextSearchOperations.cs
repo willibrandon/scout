@@ -155,11 +155,32 @@ internal static class ContextSearchOperations
         bool crlf,
         bool nullData)
     {
+        return GetStopOnNonmatchLength(
+            bytes.AsSpan(),
+            pattern,
+            asciiCaseInsensitive,
+            invertMatch,
+            lineRegexp,
+            wordRegexp,
+            crlf,
+            nullData);
+    }
+
+    internal static int GetStopOnNonmatchLength(
+        ReadOnlySpan<byte> bytes,
+        IReadOnlyList<byte[]> pattern,
+        bool asciiCaseInsensitive,
+        bool invertMatch,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool crlf,
+        bool nullData)
+    {
         bool hasSelectedMatch = false;
         int lineStart = 0;
         while (lineStart < bytes.Length)
         {
-            ReadOnlySpan<byte> remaining = bytes.AsSpan(lineStart);
+            ReadOnlySpan<byte> remaining = bytes[lineStart..];
             int lineLength = GetLineLength(remaining, nullData);
             ReadOnlySpan<byte> line = remaining[..lineLength];
             bool selectedMatch = TryFindLineMatch(line, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, crlf, nullData, out _);
@@ -285,6 +306,7 @@ internal static class ContextSearchOperations
 
             if (replacement is ReadOnlyMemory<byte> replacementValue && !invertMatch)
             {
+                var replacementCapturePlan = ReplacementCapturePlan.TryCreate(pattern, asciiCaseInsensitive);
                 var replacementLineSink = new ReplacementLineSink(
                     output,
                     prefix,
@@ -302,7 +324,8 @@ internal static class ContextSearchOperations
                     line.LineNumber - 1,
                     line.Start,
                     color,
-                    separators.LineTerminator);
+                    separators.LineTerminator,
+                    replacementCapturePlan);
                 LiteralLineSearcher.SearchMatchLines(lineBytes, pattern, ref replacementLineSink, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf: separators.Crlf, nullData: separators.NullData);
                 replacementLineSink.Flush();
                 return;
@@ -403,6 +426,7 @@ internal static class ContextSearchOperations
     {
         if (replacement is ReadOnlyMemory<byte> replacementValue)
         {
+            var replacementCapturePlan = ReplacementCapturePlan.TryCreate(pattern, asciiCaseInsensitive);
             var replacementMatchSink = new ReplacementMatchSink(
                 output,
                 prefix,
@@ -417,7 +441,8 @@ internal static class ContextSearchOperations
                 line.LineNumber - 1,
                 line.Start,
                 color,
-                lineTerminator);
+                lineTerminator,
+                replacementCapturePlan);
             LiteralLineSearcher.SearchMatches(lineBytes, pattern, ref replacementMatchSink, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf: crlf, nullData: nullData);
         }
         else

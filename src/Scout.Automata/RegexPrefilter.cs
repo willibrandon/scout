@@ -775,6 +775,11 @@ internal sealed class RegexPrefilter
                 continue;
             }
 
+            if (IsZeroWidthPrefixTransparent(child, currentOptions))
+            {
+                continue;
+            }
+
             return TryCollectSequenceAlternationPrefixes(
                 child,
                 currentOptions,
@@ -784,6 +789,11 @@ internal sealed class RegexPrefilter
         }
 
         return false;
+    }
+
+    private static bool IsZeroWidthPrefixTransparent(RegexSyntaxNode node, RegexCompileOptions options)
+    {
+        return TryGetMaximumByteLength(node, options, out int maximum) && maximum == 0;
     }
 
     private static bool TryCollectLeadingPrefixSet(

@@ -89,7 +89,7 @@ internal sealed class RegexScalarRunEngine
             }
 
             minimum = repetition.Minimum;
-            lazy = repetition.Lazy;
+            lazy = effectiveOptions.SwapGreed ? !repetition.Lazy : repetition.Lazy;
         }
         else if (TryCollectScalarAtoms(root, effectiveOptions, out atoms))
         {

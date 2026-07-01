@@ -8,6 +8,7 @@ namespace Scout;
 /// <summary>
 /// Verifies initial application dispatch behavior.
 /// </summary>
+[Collection(ApplicationProcessStateGroup.Name)]
 public sealed class ScoutApplicationTests
 {
     /// <summary>
@@ -110,6 +111,30 @@ public sealed class ScoutApplicationTests
     {
         AssertGeneratedArtifact(HelpOutput.Short.ToArray(), GeneratedShortHelpArtifact.CompressedBase64);
         AssertGeneratedArtifact(HelpOutput.Long.ToArray(), GeneratedLongHelpArtifact.CompressedBase64);
+    }
+
+    /// <summary>
+    /// Verifies a closed downstream pipe exits quietly after the consumer stops reading.
+    /// </summary>
+    [Fact]
+    public void BrokenOutputPipeExitsSuccessfully()
+    {
+        using MemoryStream input = new("alpha\nbeta\n"u8.ToArray());
+        using var output = new BrokenPipeWriteStream();
+        using MemoryStream error = new();
+        var outputWriter = new RawByteWriter(output);
+        var errorWriter = new RawByteWriter(error);
+        OsString[] arguments =
+        [
+            OsString.FromUnixBytes("scout"u8),
+            OsString.FromUnixBytes("alpha"u8),
+            OsString.FromUnixBytes("-"u8),
+        ];
+
+        int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter, input);
+
+        Assert.Equal(ExitCode.Success, exitCode);
+        Assert.Empty(error.ToArray());
     }
 
     /// <summary>
@@ -3989,12 +4014,14 @@ public sealed class ScoutApplicationTests
     {
         string root = CreateTempDirectory();
         string path = Path.Combine(root, "input.txt");
-        File.WriteAllText(path, "abc123\nabc456\n");
+        File.WriteAllText(path, "abc123\nabc456\nstruct Foo\nenum Bar\nunion _baz\n");
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "-r", "$2-$1", "([a-z]+)([0-9]+)", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-r", "$2-$1", "([a-z]+)([0-9]+)", path);
         (int onlyExitCode, byte[] onlyOutput, string onlyError) = RunScout("-o", "-r", "${2}-${1}", "([a-z]+)([0-9]+)", path);
         (int pinnedOnlyExitCode, byte[] pinnedOnlyOutput, string pinnedOnlyError) = RunPinnedRipgrep("-o", "-r", "${2}-${1}", "([a-z]+)([0-9]+)", path);
+        (int heldoutExitCode, byte[] heldoutOutput, string heldoutError) = RunScout("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", path);
+        (int pinnedHeldoutExitCode, byte[] pinnedHeldoutOutput, string pinnedHeldoutError) = RunPinnedRipgrep("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", path);
 
         Assert.Equal(pinnedExitCode, exitCode);
         Assert.Equal(pinnedOutput, output);
@@ -4002,6 +4029,118 @@ public sealed class ScoutApplicationTests
         Assert.Equal(pinnedOnlyExitCode, onlyExitCode);
         Assert.Equal(pinnedOnlyOutput, onlyOutput);
         Assert.Equal(pinnedOnlyError, onlyError);
+        Assert.Equal(pinnedHeldoutExitCode, heldoutExitCode);
+        Assert.Equal(pinnedHeldoutOutput, heldoutOutput);
+        Assert.Equal(pinnedHeldoutError, heldoutError);
+    }
+
+    /// <summary>
+    /// Verifies recursive replacement uses candidate-verified capture output without changing rg behavior.
+    /// </summary>
+    [Fact]
+    public void DirectoryReplacementExpandsCandidateVerifiedCaptures()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "abc123\n中文 struct Foo\nstruct Bar\nno match\n", Encoding.UTF8);
+
+        (int exitCode, byte[] output, string error) = RunScout("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies recursive replacement preserves binary-file handling when candidate streaming is available.
+    /// </summary>
+    [Fact]
+    public void DirectoryReplacementCandidateStreamingFallsBackForBinaryFiles()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.bin");
+        byte[] bytes = new byte[(2 * 1024 * 1024) + 32];
+        "struct Foo\0struct Bar\n"u8.CopyTo(bytes);
+        File.WriteAllBytes(path, bytes);
+
+        (int exitCode, byte[] output, string error) = RunScout("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies streaming replacement stops at a later binary block without printing unsafe suffix bytes.
+    /// </summary>
+    [Fact]
+    public void DirectoryReplacementCandidateStreamingStopsAtLaterBinaryBlock()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.bin");
+        using (FileStream stream = File.Create(path))
+        {
+            stream.Write("struct Foo\n"u8);
+            byte[] padding = new byte[70_000];
+            Array.Fill(padding, (byte)'a');
+            stream.Write(padding);
+            stream.Write("\0struct Bar\n"u8);
+        }
+
+        (int exitCode, byte[] output, string error) = RunScout("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-r", "$1 $2", @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies replacement capture extraction handles held-out structural captures without generic rematching.
+    /// </summary>
+    [Fact]
+    public void ReplacementCapturePlanCollectsHeldoutStructuralCaptures()
+    {
+        byte[][] patterns = [@"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)"u8.ToArray()];
+        var plan = ReplacementCapturePlan.TryCreate(patterns, asciiCaseInsensitive: false);
+        int[] captureStarts = new int[3];
+        int[] captureLengths = new int[3];
+
+        Assert.NotNull(plan);
+        AssertReplacementCapturePlanAvoidsAutomata(plan);
+        Assert.True(plan.TryCollectNumericCaptures("struct Foo"u8, captureStarts, captureLengths));
+        Assert.Equal([0, 0, 7], captureStarts);
+        Assert.Equal([10, 6, 3], captureLengths);
+    }
+
+    /// <summary>
+    /// Verifies replacement capture extraction recognizes Scout's prepared no-Unicode wrapper.
+    /// </summary>
+    [Fact]
+    public void ReplacementCapturePlanCollectsHeldoutStructuralCapturesFromPreparedPattern()
+    {
+        byte[][] patterns = [@"(?-u:\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*))"u8.ToArray()];
+        var plan = ReplacementCapturePlan.TryCreate(patterns, asciiCaseInsensitive: false);
+        byte[] replacement = ReplacementFormatter.Expand(
+            "$1 $2"u8,
+            "struct Foo"u8,
+            patterns,
+            asciiCaseInsensitive: false,
+            plan);
+
+        Assert.NotNull(plan);
+        AssertReplacementCapturePlanAvoidsAutomata(plan);
+        Assert.Equal("struct Foo"u8.ToArray(), replacement);
+    }
+
+    private static void AssertReplacementCapturePlanAvoidsAutomata(ReplacementCapturePlan plan)
+    {
+        var automata = (RegexAutomaton?[])typeof(ReplacementCapturePlan)
+            .GetField("automata", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(plan)!;
+        Assert.All(automata, Assert.Null);
     }
 
     /// <summary>
@@ -6795,6 +6934,31 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies the internal regex specialization switch rejects unsupported values before searching.
+    /// </summary>
+    [Fact]
+    public void RegexSpecializationModeEnvironmentRejectsInvalidValue()
+    {
+        string? oldValue = Environment.GetEnvironmentVariable(RegexSpecializationModeEnvironment.VariableName);
+        try
+        {
+            ProcessEnvironment.UseCurrentProcessEnvironment();
+            Environment.SetEnvironmentVariable(RegexSpecializationModeEnvironment.VariableName, "benchmark");
+
+            (int exitCode, byte[] output, string error) = RunScoutFromEnvironment("needle");
+
+            Assert.Equal(2, exitCode);
+            Assert.Empty(output);
+            Assert.Contains("SCOUT_REGEX_SPECIALIZATION_MODE must be one of: default, general, fallback", error, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(RegexSpecializationModeEnvironment.VariableName, oldValue);
+            ProcessEnvironment.UseCurrentProcessEnvironment();
+        }
+    }
+
+    /// <summary>
     /// Verifies Scout does not fall back to ripgrep's config path after Scout's native config path is selected.
     /// </summary>
     [Fact]
@@ -7374,4 +7538,5 @@ public sealed class ScoutApplicationTests
         normalized = normalized.Replace("this build of ripgrep", "this build of scout", StringComparison.Ordinal);
         return normalized;
     }
+
 }

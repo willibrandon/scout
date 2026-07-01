@@ -68,6 +68,34 @@ internal static class ScoutApplication
         string? configPathOverride,
         bool useConfigPathOverride)
     {
+        try
+        {
+            return RunCore(
+                arguments,
+                output,
+                error,
+                standardInput,
+                standardInputIsReadable,
+                standardOutputIsTerminal,
+                configPathOverride,
+                useConfigPathOverride);
+        }
+        catch (IOException exception) when (RawStandardStreams.IsBrokenPipe(exception))
+        {
+            return ExitCode.Success;
+        }
+    }
+
+    private static int RunCore(
+        ReadOnlySpan<OsString> arguments,
+        RawByteWriter output,
+        RawByteWriter error,
+        Stream standardInput,
+        bool standardInputIsReadable,
+        bool standardOutputIsTerminal,
+        string? configPathOverride,
+        bool useConfigPathOverride)
+    {
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(error);
         ArgumentNullException.ThrowIfNull(standardInput);
@@ -163,6 +191,13 @@ internal static class ScoutApplication
         bool standardInputIsReadable,
         bool standardOutputIsTerminal)
     {
+        if (!RegexSpecializationModeEnvironment.TryResolve(out RegexSpecializationMode specializationMode, out ScoutError? specializationModeError))
+        {
+            diagnostics.ErrorMessage(specializationModeError!.WithContext(ScoutErrorContext.ProgramContext()));
+            return ExitCode.Error;
+        }
+
+        using RegexSpecializationModeScope specializationScope = RegexSpecializationModeDefaults.Use(specializationMode);
         output.SetBufferMode(OutputBuffering.Resolve(lowArgs.BufferMode, standardOutputIsTerminal));
         lowArgs.SetColorMode(TerminalColor.Resolve(lowArgs.ColorMode, standardOutputIsTerminal));
         DiagnosticLogger logger = new(diagnostics, lowArgs.LoggingMode);

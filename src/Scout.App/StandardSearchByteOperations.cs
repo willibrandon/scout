@@ -44,26 +44,106 @@ internal static class StandardSearchByteOperations
         bool quitOnBinary,
         bool heading,
         ref bool wroteHeadingOutput,
-        bool memoryMapped = false)
+        bool memoryMapped = false,
+        RegexSearchPlan? regexPlan = null)
+    {
+        return SearchBytesWithOptionalHeading(
+            bytes,
+            bytes.Length,
+            pattern,
+            output,
+            prefix,
+            separators,
+            lineLimit,
+            color,
+            searchMode,
+            vimgrep,
+            lineNumber,
+            column,
+            byteOffset,
+            asciiCaseInsensitive,
+            invertMatch,
+            lineRegexp,
+            wordRegexp,
+            multiline,
+            multilineDotall,
+            onlyMatching,
+            replacement,
+            maxCount,
+            textMode,
+            quiet,
+            trim,
+            beforeContext,
+            afterContext,
+            passthru,
+            includeZero,
+            nullPathTerminator,
+            stopOnNonmatch,
+            quitOnBinary,
+            heading,
+            ref wroteHeadingOutput,
+            memoryMapped,
+            regexPlan);
+    }
+
+    internal static bool SearchBytesWithOptionalHeading(
+        byte[] bytes,
+        int byteLength,
+        IReadOnlyList<byte[]> pattern,
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        CliSearchMode searchMode,
+        bool vimgrep,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool asciiCaseInsensitive,
+        bool invertMatch,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool multiline,
+        bool multilineDotall,
+        bool onlyMatching,
+        ReadOnlyMemory<byte>? replacement,
+        ulong? maxCount,
+        bool textMode,
+        bool quiet,
+        bool trim,
+        ulong beforeContext,
+        ulong afterContext,
+        bool passthru,
+        bool includeZero,
+        bool nullPathTerminator,
+        bool stopOnNonmatch,
+        bool quitOnBinary,
+        bool heading,
+        ref bool wroteHeadingOutput,
+        bool memoryMapped = false,
+        RegexSearchPlan? regexPlan = null)
     {
         if (maxCount == 0)
         {
             return false;
         }
 
+        ArgumentOutOfRangeException.ThrowIfNegative(byteLength);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(byteLength, bytes.Length);
         if (!heading)
         {
-            return SearchBytes(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary, memoryMapped);
+            return SearchBytes(bytes, byteLength, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary, memoryMapped, regexPlan);
         }
 
-        if (TrySearchBinarySuppressed(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary, memoryMapped, out bool binaryMatched, out _))
+        if (TrySearchBinarySuppressed(bytes, byteLength, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary, memoryMapped, out bool binaryMatched, out _))
         {
             return binaryMatched;
         }
 
         using MemoryStream bufferedOutput = new();
         var bufferedWriter = new RawByteWriter(bufferedOutput);
-        bool matched = SearchBytes(bytes, pattern, bufferedWriter, prefix: null, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary, memoryMapped);
+        bool matched = SearchBytes(bytes, byteLength, pattern, bufferedWriter, prefix: null, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary, memoryMapped, regexPlan);
         bufferedWriter.Flush();
         byte[] body = bufferedOutput.ToArray();
         if (body.Length == 0)
@@ -616,26 +696,104 @@ internal static class StandardSearchByteOperations
         bool nullPathTerminator,
         bool stopOnNonmatch,
         bool quitOnBinary,
-        bool memoryMapped = false)
+        bool memoryMapped = false,
+        RegexSearchPlan? regexPlan = null)
+    {
+        return SearchBytes(
+            bytes,
+            bytes.Length,
+            pattern,
+            output,
+            prefix,
+            separators,
+            lineLimit,
+            color,
+            searchMode,
+            vimgrep,
+            lineNumber,
+            column,
+            byteOffset,
+            asciiCaseInsensitive,
+            invertMatch,
+            lineRegexp,
+            wordRegexp,
+            multiline,
+            multilineDotall,
+            onlyMatching,
+            replacement,
+            maxCount,
+            textMode,
+            quiet,
+            trim,
+            beforeContext,
+            afterContext,
+            passthru,
+            includeZero,
+            nullPathTerminator,
+            stopOnNonmatch,
+            quitOnBinary,
+            memoryMapped,
+            regexPlan);
+    }
+
+    private static bool SearchBytes(
+        byte[] bytes,
+        int byteLength,
+        IReadOnlyList<byte[]> pattern,
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        CliSearchMode searchMode,
+        bool vimgrep,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool asciiCaseInsensitive,
+        bool invertMatch,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool multiline,
+        bool multilineDotall,
+        bool onlyMatching,
+        ReadOnlyMemory<byte>? replacement,
+        ulong? maxCount,
+        bool textMode,
+        bool quiet,
+        bool trim,
+        ulong beforeContext,
+        ulong afterContext,
+        bool passthru,
+        bool includeZero,
+        bool nullPathTerminator,
+        bool stopOnNonmatch,
+        bool quitOnBinary,
+        bool memoryMapped = false,
+        RegexSearchPlan? regexPlan = null)
     {
         if (maxCount == 0)
         {
             return false;
         }
 
-        if (TrySearchBinarySuppressed(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary, memoryMapped, out bool binaryMatched, out bool convertBinaryNuls))
+        ArgumentOutOfRangeException.ThrowIfNegative(byteLength);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(byteLength, bytes.Length);
+        if (TrySearchBinarySuppressed(bytes, byteLength, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary, memoryMapped, out bool binaryMatched, out bool convertBinaryNuls))
         {
             return binaryMatched;
         }
 
-        byte[] searchBytes = convertBinaryNuls ? BinaryDetection.ConvertNulToLineFeed(bytes) : bytes;
+        ReadOnlySpan<byte> inputSpan = bytes.AsSpan(0, byteLength);
+        byte[]? convertedBytes = convertBinaryNuls ? BinaryDetection.ConvertNulToLineFeed(inputSpan) : null;
+        ReadOnlySpan<byte> activeSpan = convertedBytes is null ? inputSpan : convertedBytes;
         int stopLength = stopOnNonmatch
-            ? ContextSearchOperations.GetStopOnNonmatchLength(searchBytes, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, separators.Crlf, separators.NullData)
-            : searchBytes.Length;
-        ReadOnlySpan<byte> searchSpan = searchBytes.AsSpan(0, stopLength);
-        ReadOnlySpan<byte> outputSpan = ReferenceEquals(bytes, searchBytes)
+            ? ContextSearchOperations.GetStopOnNonmatchLength(activeSpan, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, separators.Crlf, separators.NullData)
+            : activeSpan.Length;
+        ReadOnlySpan<byte> searchSpan = activeSpan[..stopLength];
+        ReadOnlySpan<byte> outputSpan = convertedBytes is null
             ? searchSpan
-            : bytes.AsSpan(0, stopLength);
+            : inputSpan[..stopLength];
 
         if (multiline &&
             PatternPreparation.ShouldUseMultilineRegex(pattern, multilineDotall) &&
@@ -687,8 +845,8 @@ internal static class StandardSearchByteOperations
             }
             else
             {
-                RegexSearchPlan? regexPlan = LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: true);
-                count = LiteralLineSearcher.CountMatchingLinesWithRegexPlan(searchSpan, pattern, regexPlan, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
+                RegexSearchPlan? effectiveRegexPlan = regexPlan ?? LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: true);
+                count = LiteralLineSearcher.CountMatchingLinesWithRegexPlan(searchSpan, pattern, effectiveRegexPlan, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
             }
 
             return SearchOutputFormatting.WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, separators.LineTerminator);
@@ -702,29 +860,36 @@ internal static class StandardSearchByteOperations
 
         if (searchMode == CliSearchMode.FilesWithMatches)
         {
-            return SearchOutputFormatting.WritePathIf(output, prefix, color, LiteralLineSearcher.HasMatch(searchSpan, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData), nullPathTerminator, separators.LineTerminator);
+            RegexSearchPlan? effectiveRegexPlan = regexPlan ?? LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: true);
+            bool hasMatch = LiteralLineSearcher.HasMatchWithRegexPlan(searchSpan, pattern, effectiveRegexPlan, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
+            return SearchOutputFormatting.WritePathIf(output, prefix, color, hasMatch, nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.FilesWithoutMatch)
         {
-            return SearchOutputFormatting.WritePathIf(output, prefix, color, !LiteralLineSearcher.HasMatch(searchSpan, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData), nullPathTerminator, separators.LineTerminator);
+            RegexSearchPlan? effectiveRegexPlan = regexPlan ?? LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: true);
+            bool hasMatch = LiteralLineSearcher.HasMatchWithRegexPlan(searchSpan, pattern, effectiveRegexPlan, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
+            return SearchOutputFormatting.WritePathIf(output, prefix, color, !hasMatch, nullPathTerminator, separators.LineTerminator);
         }
 
         if (passthru || beforeContext > 0 || afterContext > 0)
         {
-            return ContextSearchOperations.SearchBytes(bytes, pattern, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, vimgrep, onlyMatching, replacement, maxCount, trim, beforeContext, afterContext, passthru, nullPathTerminator, stopOnNonmatch);
+            byte[] contextBytes = byteLength == bytes.Length ? bytes : inputSpan.ToArray();
+            return ContextSearchOperations.SearchBytes(contextBytes, pattern, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, vimgrep, onlyMatching, replacement, maxCount, trim, beforeContext, afterContext, passthru, nullPathTerminator, stopOnNonmatch);
         }
 
         if (replacement is ReadOnlyMemory<byte> replacementValue && !invertMatch)
         {
+            var replacementCapturePlan = ReplacementCapturePlan.TryCreate(pattern, asciiCaseInsensitive);
             if (onlyMatching)
             {
-                var replacementMatchSink = new ReplacementMatchSink(output, prefix, separators.FieldMatch, replacementValue, pattern, asciiCaseInsensitive, lineNumber, column, byteOffset, nullPathTerminator, color: color, lineTerminator: separators.LineTerminator);
+                var replacementMatchSink = new ReplacementMatchSink(output, prefix, separators.FieldMatch, replacementValue, pattern, asciiCaseInsensitive, lineNumber, column, byteOffset, nullPathTerminator, color: color, lineTerminator: separators.LineTerminator, capturePlan: replacementCapturePlan);
                 return LiteralLineSearcher.SearchMatches(outputSpan, pattern, ref replacementMatchSink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
             }
 
-            var replacementLineSink = new ReplacementLineSink(output, prefix, separators.FieldMatch, replacementValue, pattern, asciiCaseInsensitive, lineNumber, column, byteOffset, trim, nullPathTerminator, vimgrep, lineLimit, color: color, lineTerminator: separators.LineTerminator);
-            bool matched = LiteralLineSearcher.SearchMatchLines(outputSpan, pattern, ref replacementLineSink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
+            RegexSearchPlan? effectiveRegexPlan = regexPlan ?? LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: true);
+            var replacementLineSink = new ReplacementLineSink(output, prefix, separators.FieldMatch, replacementValue, pattern, asciiCaseInsensitive, lineNumber, column, byteOffset, trim, nullPathTerminator, vimgrep, lineLimit, color: color, lineTerminator: separators.LineTerminator, capturePlan: replacementCapturePlan, streamPlainBodyDirectly: true);
+            bool matched = LiteralLineSearcher.SearchMatchLinesWithRegexPlan(outputSpan, pattern, effectiveRegexPlan, ref replacementLineSink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
             replacementLineSink.Flush();
             return matched;
         }
@@ -751,11 +916,17 @@ internal static class StandardSearchByteOperations
 
         var sink = new StandardSearchSink(output, prefix, separators.FieldMatch, separators.FieldContext, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
         bool requireMatchColumn = column || prefix?.HasHyperlink == true;
+        if (regexPlan is not null)
+        {
+            return LiteralLineSearcher.SearchWithRegexPlan(outputSpan, pattern, regexPlan, ref sink, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData, requireMatchColumn);
+        }
+
         return LiteralLineSearcher.Search(outputSpan, pattern, ref sink, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData, requireMatchColumn);
     }
 
     private static bool TrySearchBinarySuppressed(
         byte[] bytes,
+        int byteLength,
         IReadOnlyList<byte[]> pattern,
         RawByteWriter output,
         OutputPath? prefix,
@@ -792,7 +963,8 @@ internal static class StandardSearchByteOperations
     {
         matched = false;
         convertBinaryNuls = false;
-        BinaryDetectionResult binaryDetection = BinaryDetection.Detect(bytes, textMode, separators.NullData, quitOnBinary);
+        ReadOnlySpan<byte> inputSpan = bytes.AsSpan(0, byteLength);
+        BinaryDetectionResult binaryDetection = BinaryDetection.Detect(inputSpan, textMode, separators.NullData, quitOnBinary);
         if (!binaryDetection.IsBinary)
         {
             return false;
@@ -802,7 +974,7 @@ internal static class StandardSearchByteOperations
         {
             if (quiet)
             {
-                matched = HasBinarySafePrefixMatch(bytes, binaryDetection.Offset, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf);
+                matched = HasBinarySafePrefixMatch(inputSpan, binaryDetection.Offset, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf);
                 return true;
             }
 
@@ -817,7 +989,7 @@ internal static class StandardSearchByteOperations
                 return true;
             }
 
-            matched = SearchBinarySafePrefix(bytes, binaryDetection.Offset, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch);
+            matched = SearchBinarySafePrefix(inputSpan, binaryDetection.Offset, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch);
             if (matched && searchMode == CliSearchMode.Standard)
             {
                 WriteBinaryFileStoppedWarning(output, prefix, color, binaryDetection.Offset);
@@ -828,7 +1000,7 @@ internal static class StandardSearchByteOperations
 
         if (quiet)
         {
-            byte[] convertedBytes = BinaryDetection.ConvertNulToLineFeed(bytes);
+            byte[] convertedBytes = BinaryDetection.ConvertNulToLineFeed(inputSpan);
             matched = LiteralLineSearcher.HasMatch(convertedBytes, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf);
             return true;
         }
@@ -843,17 +1015,17 @@ internal static class StandardSearchByteOperations
         {
             if (memoryMapped)
             {
-                byte[] convertedBytes = BinaryDetection.ConvertNulToLineFeed(bytes);
+                byte[] convertedBytes = BinaryDetection.ConvertNulToLineFeed(inputSpan);
                 matched = LiteralLineSearcher.HasMatch(convertedBytes, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf);
             }
             else
             {
-                matched = LiteralLineSearcher.HasMatch(bytes.AsSpan(0, binaryDetection.Offset), pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf);
+                matched = LiteralLineSearcher.HasMatch(inputSpan[..binaryDetection.Offset], pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf);
             }
         }
         else
         {
-            byte[] convertedBytes = BinaryDetection.ConvertNulToLineFeed(bytes);
+            byte[] convertedBytes = BinaryDetection.ConvertNulToLineFeed(inputSpan);
             matched = LiteralLineSearcher.HasMatch(convertedBytes, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf);
         }
 
@@ -861,7 +1033,7 @@ internal static class StandardSearchByteOperations
         {
             if (!passthru && beforeContext == 0 && afterContext == 0)
             {
-                SearchBinarySafePrefix(bytes, binaryDetection.Offset, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch);
+                SearchBinarySafePrefix(inputSpan, binaryDetection.Offset, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch);
             }
 
             WriteBinaryFileMatches(output, prefix, color, binaryDetection.Offset);
@@ -871,7 +1043,7 @@ internal static class StandardSearchByteOperations
     }
 
     private static bool HasBinarySafePrefixMatch(
-        byte[] bytes,
+        ReadOnlySpan<byte> bytes,
         int binaryOffset,
         IReadOnlyList<byte[]> pattern,
         bool asciiCaseInsensitive,
@@ -883,11 +1055,11 @@ internal static class StandardSearchByteOperations
     {
         int safeLength = GetBinarySafePrefixLength(bytes, binaryOffset);
         return safeLength > 0 &&
-            LiteralLineSearcher.HasMatch(bytes.AsSpan(0, safeLength), pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, crlf);
+            LiteralLineSearcher.HasMatch(bytes[..safeLength], pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, crlf);
     }
 
     private static bool SearchBinarySafePrefix(
-        byte[] bytes,
+        ReadOnlySpan<byte> bytes,
         int binaryOffset,
         IReadOnlyList<byte[]> pattern,
         RawByteWriter output,
@@ -924,11 +1096,16 @@ internal static class StandardSearchByteOperations
             return false;
         }
 
-        byte[] safeBytes = bytes.AsSpan(0, safeLength).ToArray();
+        byte[] safeBytes = bytes[..safeLength].ToArray();
         return SearchBytes(safeBytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode: true, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary: false);
     }
 
     internal static int GetBinarySafePrefixLength(byte[] bytes, int binaryOffset)
+    {
+        return GetBinarySafePrefixLength(bytes.AsSpan(), binaryOffset);
+    }
+
+    private static int GetBinarySafePrefixLength(ReadOnlySpan<byte> bytes, int binaryOffset)
     {
         int length = binaryOffset - (binaryOffset % BinaryDetectionBufferLength);
         if (length <= 0)
@@ -937,7 +1114,7 @@ internal static class StandardSearchByteOperations
         }
 
         length = Math.Min(length, bytes.Length);
-        int lastLineFeed = bytes.AsSpan(0, length).LastIndexOf((byte)'\n');
+        int lastLineFeed = bytes[..length].LastIndexOf((byte)'\n');
         return lastLineFeed < 0 ? 0 : lastLineFeed + 1;
     }
 

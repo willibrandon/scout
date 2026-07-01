@@ -20,6 +20,7 @@ internal struct StandardSearchSink : ILineSink
     private readonly long lineNumberOffset;
     private readonly long byteOffsetOffset;
     private readonly bool usePlainLineHeader;
+    private byte[]? plainPathPrefix;
 
     public StandardSearchSink(
         RawByteWriter output,
@@ -53,6 +54,7 @@ internal struct StandardSearchSink : ILineSink
         this.lineNumberOffset = lineNumberOffset;
         this.byteOffsetOffset = byteOffsetOffset;
         usePlainLineHeader = CanUsePlainLineHeader(prefix, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color);
+        plainPathPrefix = null;
     }
 
     public ulong MatchedLines { get; private set; }
@@ -437,16 +439,24 @@ internal struct StandardSearchSink : ILineSink
     {
         ReadOnlySpan<byte> separator = matchSeparator.Span;
         int digitCount = CountDigits(lineNumber);
-        Span<byte> number = stackalloc byte[digitCount];
-        WriteNumber(number, lineNumber);
         if (prefix is not null)
         {
-            output.Write(prefix.Display);
-            output.Write(separator);
+            plainPathPrefix ??= BuildPlainPathPrefix(prefix.Display.AsSpan(), separator);
+            output.Write(plainPathPrefix);
         }
 
+        Span<byte> number = stackalloc byte[digitCount + separator.Length];
+        WriteNumber(number[..digitCount], lineNumber);
+        separator.CopyTo(number[digitCount..]);
         output.Write(number);
-        output.Write(separator);
+    }
+
+    private static byte[] BuildPlainPathPrefix(ReadOnlySpan<byte> path, ReadOnlySpan<byte> separator)
+    {
+        byte[] result = new byte[path.Length + separator.Length];
+        path.CopyTo(result);
+        separator.CopyTo(result.AsSpan(path.Length));
+        return result;
     }
 
     private static int CountDigits(long value)

@@ -172,7 +172,7 @@ internal sealed unsafe partial class RawStandardStream : Stream
     private static void ThrowLastIoException()
     {
         int error = Marshal.GetLastPInvokeError();
-        throw new IOException(new Win32Exception(error).Message);
+        throw new IOException(new Win32Exception(error).Message, RawStandardStreams.GetIoErrorHResult(error));
     }
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]

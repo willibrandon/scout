@@ -820,7 +820,10 @@ internal static class JsonSearchOperations
         bool crlf,
         bool nullData)
     {
-        var collector = new JsonMatchCollector(matches, replacement, pattern, asciiCaseInsensitive);
+        ReplacementCapturePlan? replacementCapturePlan = replacement.HasValue
+            ? ReplacementCapturePlan.TryCreate(pattern, asciiCaseInsensitive)
+            : null;
+        var collector = new JsonMatchCollector(matches, replacement, pattern, asciiCaseInsensitive, replacementCapturePlan);
         LiteralLineSearcher.SearchMatchLines(line, pattern, ref collector, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf: crlf, nullData: nullData);
     }
 }

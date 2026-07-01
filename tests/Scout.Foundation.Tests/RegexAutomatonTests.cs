@@ -715,6 +715,30 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies capture closure expansion is stack-safe for capture-heavy alternation.
+    /// </summary>
+    [Fact]
+    public void FindCapturesUsesStackSafeClosureForCaptureAlternation()
+    {
+        var automaton = RegexAutomaton.Compile(@"([[:alpha:]]+)(\d+)|(\w+)"u8);
+
+        RegexCaptures? first = automaton.FindCaptures("abc123"u8);
+        RegexCaptures? second = automaton.FindCaptures("name_1"u8);
+
+        Assert.NotNull(first);
+        Assert.Equal(new RegexMatch(0, 6), first.Match);
+        Assert.Equal(new RegexMatch(0, 3), first.GetGroup(1));
+        Assert.Equal(new RegexMatch(3, 3), first.GetGroup(2));
+        Assert.Null(first.GetGroup(3));
+
+        Assert.NotNull(second);
+        Assert.Equal(new RegexMatch(0, 6), second.Match);
+        Assert.Null(second.GetGroup(1));
+        Assert.Null(second.GetGroup(2));
+        Assert.Equal(new RegexMatch(0, 6), second.GetGroup(3));
+    }
+
+    /// <summary>
     /// Verifies word-whitespace-literal suffix patterns use literal-driven matching.
     /// </summary>
     [Fact]
@@ -3000,10 +3024,10 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
-    /// Verifies the lh3 date shape scans around slash delimiters directly.
+    /// Verifies bounded digit groups scan around fixed delimiters directly.
     /// </summary>
     [Fact]
-    public void DateEngineCountsLh3CapturedDates()
+    public void BoundedDigitDelimiterEngineCountsCapturedDates()
     {
         var automaton = RegexAutomaton.Compile(
             @"([0-9][0-9]?)/([0-9][0-9]?)/([0-9][0-9]([0-9][0-9])?)"u8,
@@ -3022,7 +3046,7 @@ public sealed class RegexAutomatonTests
 
         RegexCaptures? captures = automaton.FindCaptures(haystack);
 
-        Assert.Equal(RegexEngineKind.Date, GetEngineKind(automaton));
+        Assert.Equal(RegexEngineKind.BoundedDigitDelimiter, GetEngineKind(automaton));
         Assert.True(automaton.IsMatch(haystack));
         Assert.False(automaton.IsMatch("no date here / x"u8));
         Assert.Equal(new RegexMatch(firstStart, first.Length), automaton.Find(haystack));
@@ -3039,15 +3063,275 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
-    /// Verifies date specialization is skipped when UTF-8 or Unicode class semantics matter.
+    /// Verifies bounded digit delimiters cover fixed-width delimiter families beyond the LH3 date shape.
     /// </summary>
     [Fact]
-    public void DateEngineSkipsUtf8UnicodeMode()
+    public void BoundedDigitDelimiterEngineCountsIsoLikeDates()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"([0-9]{4})-([0-9]{2})-([0-9]{2})"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "released 2026-06-23 and 1999-12-31"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.BoundedDigitDelimiter, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(9, 10), automaton.Find(haystack));
+        Assert.Equal(new RegexMatch(24, 10), automaton.Find(haystack, startAt: 19));
+        Assert.Equal(2, automaton.CountMatches(haystack));
+        Assert.Equal(20, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
+    /// Verifies the general specialization mode keeps structural engines and disables narrow benchmark-family engines.
+    /// </summary>
+    [Fact]
+    public void RegexSpecializationGeneralModeSkipsBenchmarkFamilyEngines()
+    {
+        var uriOrEmailDefault = RegexAutomaton.Compile(
+            @"([a-zA-Z][a-zA-Z0-9]*)://([^ /]+)(/[^ ]*)?|([^ @]+)@([^ @]+)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var uriOrEmailGeneral = RegexAutomaton.Compile(
+            @"([a-zA-Z][a-zA-Z0-9]*)://([^ /]+)(/[^ ]*)?|([^ @]+)@([^ @]+)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false,
+            specializationMode: RegexSpecializationMode.General);
+        var dateGeneral = RegexAutomaton.Compile(
+            @"([0-9]{4})-([0-9]{2})-([0-9]{2})"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false,
+            specializationMode: RegexSpecializationMode.General);
+
+        Assert.Equal(RegexEngineKind.UriOrEmail, GetEngineKind(uriOrEmailDefault));
+        Assert.NotEqual(RegexEngineKind.UriOrEmail, GetEngineKind(uriOrEmailGeneral));
+        Assert.Equal(new RegexMatch(0, 3), uriOrEmailGeneral.Find("a@b"u8));
+        Assert.Equal(RegexEngineKind.BoundedDigitDelimiter, GetEngineKind(dateGeneral));
+        Assert.Equal(new RegexMatch(0, 10), dateGeneral.Find("2026-06-23"u8));
+    }
+
+    /// <summary>
+    /// Verifies the general specialization mode disables domain and corpus-shaped recognizers.
+    /// </summary>
+    [Fact]
+    public void RegexSpecializationGeneralModeSkipsDomainAndCorpusRecognizers()
+    {
+        var ipv4Default = RegexAutomaton.Compile(
+            @"(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        var ipv4General = RegexAutomaton.Compile(
+            @"(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true,
+            specializationMode: RegexSpecializationMode.General);
+        var uriDefault = RegexAutomaton.Compile(
+            @"[\w]+://[^/\s?#]+[^\s?#]+(?:\?[^\s#]*)?(?:#[^\s]*)?"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var uriGeneral = RegexAutomaton.Compile(
+            @"[\w]+://[^/\s?#]+[^\s?#]+(?:\?[^\s#]*)?(?:#[^\s]*)?"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false,
+            specializationMode: RegexSpecializationMode.General);
+        var emailDefault = RegexAutomaton.Compile(
+            @"[\w\.+-]+@[\w\.-]+\.[\w\.-]+"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var emailGeneral = RegexAutomaton.Compile(
+            @"[\w\.+-]+@[\w\.-]+\.[\w\.-]+"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false,
+            specializationMode: RegexSpecializationMode.General);
+        var noqaDefault = RegexAutomaton.Compile(
+            @"(?P<spaces>\s*)(?P<noqa>(?i:# noqa)(?::\s?(?P<codes>([A-Z]+[0-9]+(?:[,\s]+)?)+))?)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        var noqaGeneral = RegexAutomaton.Compile(
+            @"(?P<spaces>\s*)(?P<noqa>(?i:# noqa)(?::\s?(?P<codes>([A-Z]+[0-9]+(?:[,\s]+)?)+))?)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true,
+            specializationMode: RegexSpecializationMode.General);
+        var keywordDefault = RegexAutomaton.Compile(
+            @"(\s*)\b(?:False|None|True|and|as|assert|async|await|break|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|nonlocal|not|or|pass|raise|return|try|while|with|yield)\b(\s*)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        var keywordGeneral = RegexAutomaton.Compile(
+            @"(\s*)\b(?:False|None|True|and|as|assert|async|await|break|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|nonlocal|not|or|pass|raise|return|try|while|with|yield)\b(\s*)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true,
+            specializationMode: RegexSpecializationMode.General);
+        var operatorDefault = RegexAutomaton.Compile(
+            @"[^,\s](\s*)(?:[-+*/|!<=>%&^]+|:=)(\s*)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        var operatorGeneral = RegexAutomaton.Compile(
+            @"[^,\s](\s*)(?:[-+*/|!<=>%&^]+|:=)(\s*)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true,
+            specializationMode: RegexSpecializationMode.General);
+        var pathSemverDefault = RegexAutomaton.Compile(
+            @"cargo[\\/]registry[\\/]src[\\/][^\\/]+[\\/]([0-9A-Za-z_-]+)-([0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z+.-]*)[\\/]"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var pathSemverGeneral = RegexAutomaton.Compile(
+            @"cargo[\\/]registry[\\/]src[\\/][^\\/]+[\\/]([0-9A-Za-z_-]+)-([0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z+.-]*)[\\/]"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false,
+            specializationMode: RegexSpecializationMode.General);
+        var bibleDefault = RegexAutomaton.Compile(
+            BibleReferencePattern(),
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true);
+        var bibleGeneral = RegexAutomaton.Compile(
+            BibleReferencePattern(),
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true,
+            specializationMode: RegexSpecializationMode.General);
+        var fnPredicateDefault = RegexAutomaton.Compile(
+            @"^\s*fn\s+(is_([^\(]+))\(([^)]+)\) -> bool \{$"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var fnPredicateGeneral = RegexAutomaton.Compile(
+            @"^\s*fn\s+(is_([^\(]+))\(([^)]+)\) -> bool \{$"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false,
+            specializationMode: RegexSpecializationMode.General);
+        byte[] captureLine = "value  # NoQa: E501"u8.ToArray();
+
+        Assert.Equal(RegexEngineKind.Ipv4Address, GetEngineKind(ipv4Default));
+        Assert.NotEqual(RegexEngineKind.Ipv4Address, GetEngineKind(ipv4General));
+        Assert.Equal(new RegexMatch(0, 13), ipv4General.Find("192.168.10.11"u8));
+        Assert.Equal(RegexEngineKind.Uri, GetEngineKind(uriDefault));
+        Assert.NotEqual(RegexEngineKind.Uri, GetEngineKind(uriGeneral));
+        Assert.Equal(new RegexMatch(0, 19), uriGeneral.Find("https://example.io/"u8));
+        Assert.Equal(RegexEngineKind.EmailAddress, GetEngineKind(emailDefault));
+        Assert.NotEqual(RegexEngineKind.EmailAddress, GetEngineKind(emailGeneral));
+        Assert.Equal(new RegexMatch(0, 11), emailGeneral.Find("dev@site.io"u8));
+        Assert.True(noqaDefault.UsesNoqaCaptureEngine);
+        Assert.False(noqaGeneral.UsesNoqaCaptureEngine);
+        Assert.NotNull(noqaGeneral.FindCaptures(captureLine));
+        Assert.True(keywordDefault.UsesKeywordWhitespaceCaptureEngine);
+        Assert.False(keywordGeneral.UsesKeywordWhitespaceCaptureEngine);
+        Assert.NotNull(keywordGeneral.FindCaptures(" if "u8));
+        Assert.True(operatorDefault.UsesOperatorSpacingCaptureEngine);
+        Assert.False(operatorGeneral.UsesOperatorSpacingCaptureEngine);
+        Assert.NotNull(operatorGeneral.FindCaptures("a += b"u8));
+        Assert.True(pathSemverDefault.UsesPathSemverCaptureEngine);
+        Assert.False(pathSemverGeneral.UsesPathSemverCaptureEngine);
+        Assert.NotNull(pathSemverGeneral.FindCaptures(@"cargo/registry/src/github.com-hash/serde-1.0.197/"u8));
+        Assert.True(bibleDefault.UsesBibleReferenceCaptureEngine);
+        Assert.False(bibleGeneral.UsesBibleReferenceCaptureEngine);
+        Assert.NotNull(bibleGeneral.FindCaptures("Gen 1:1"u8));
+        Assert.True(fnPredicateDefault.UsesFnPredicateCaptureEngine);
+        Assert.False(fnPredicateGeneral.UsesFnPredicateCaptureEngine);
+        Assert.NotNull(fnPredicateGeneral.FindCaptures("    fn is_ascii_word(byte: u8) -> bool {"u8));
+    }
+
+    /// <summary>
+    /// Verifies fallback mode disables recognizer engines while preserving regex semantics.
+    /// </summary>
+    [Fact]
+    public void RegexSpecializationFallbackModeUsesCoreAutomata()
+    {
+        var defaultAutomaton = RegexAutomaton.Compile("foo|bar"u8);
+        var fallbackAutomaton = RegexAutomaton.Compile(
+            "foo|bar"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            specializationMode: RegexSpecializationMode.Fallback);
+        var dateFallback = RegexAutomaton.Compile(
+            @"([0-9]{4})-([0-9]{2})-([0-9]{2})"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false,
+            specializationMode: RegexSpecializationMode.Fallback);
+
+        Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(defaultAutomaton));
+        Assert.NotEqual(RegexEngineKind.LiteralSet, GetEngineKind(fallbackAutomaton));
+        Assert.NotEqual(RegexEngineKind.BoundedDigitDelimiter, GetEngineKind(dateFallback));
+        Assert.Equal(new RegexMatch(3, 3), fallbackAutomaton.Find("xx bar"u8));
+        Assert.Equal(new RegexMatch(0, 10), dateFallback.Find("2026-06-23"u8));
+    }
+
+    /// <summary>
+    /// Verifies bounded digit delimiter specialization is skipped when UTF-8 or Unicode class semantics matter.
+    /// </summary>
+    [Fact]
+    public void BoundedDigitDelimiterEngineSkipsUtf8UnicodeMode()
     {
         var automaton = RegexAutomaton.Compile(
             @"([0-9][0-9]?)/([0-9][0-9]?)/([0-9][0-9]([0-9][0-9])?)"u8);
 
-        Assert.NotEqual(RegexEngineKind.Date, GetEngineKind(automaton));
+        Assert.NotEqual(RegexEngineKind.BoundedDigitDelimiter, GetEngineKind(automaton));
     }
 
     /// <summary>
@@ -4952,6 +5236,27 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies zero-width leading assertions do not hide a following prefix-set prefilter.
+    /// </summary>
+    [Fact]
+    public void BuildsPrefixPrefilterAfterLeadingWordBoundary()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            specializationMode: RegexSpecializationMode.General);
+
+        Assert.True(
+            automaton.PrefilterKind is RegexPrefilterKind.Teddy or RegexPrefilterKind.AhoCorasick,
+            "Expected a prefix-set prefilter, got " + automaton.PrefilterKind + ".");
+        Assert.Equal(0, automaton.RequiredLiteralWindow);
+        Assert.Equal(new RegexMatch(4, 11), automaton.Find("xxx struct file;"u8));
+        Assert.Null(automaton.Find("destructor file;"u8));
+    }
+
+    /// <summary>
     /// Verifies hard start anchors skip unhelpful prefilter construction.
     /// </summary>
     [Fact]
@@ -6041,6 +6346,30 @@ public sealed class RegexAutomatonTests
         Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
         Assert.Equal(new RegexMatch(0, 9), automaton.Find("A12Result"u8));
         Assert.Null(automaton.Find("A1234Result"u8));
+    }
+
+    /// <summary>
+    /// Verifies scoped ungreedy flags invert simple-sequence repetition preference.
+    /// </summary>
+    [Fact]
+    public void SimpleSequenceEngineHonorsScopedUngreedyRepetition()
+    {
+        var defaultAutomaton = RegexAutomaton.Compile(@"(?U:ab+)"u8);
+        var automaton = RegexAutomaton.Compile(
+            @"(?U:ab+)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(new RegexMatch(0, 2), defaultAutomaton.Find("abbbbc"u8));
+        Assert.Equal(2, defaultAutomaton.CountMatches("abbbbc\nab\n"u8));
+        Assert.Equal(4, defaultAutomaton.SumMatchSpans("abbbbc\nab\n"u8));
+        Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
+        Assert.Equal(new RegexMatch(0, 2), automaton.Find("abbbbc"u8));
+        Assert.Equal(2, automaton.CountMatches("abbbbc\nab\n"u8));
+        Assert.Equal(4, automaton.SumMatchSpans("abbbbc\nab\n"u8));
     }
 
     /// <summary>

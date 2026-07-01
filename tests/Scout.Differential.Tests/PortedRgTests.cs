@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 
 namespace Scout;
@@ -787,7 +788,8 @@ internal static class PortedRgTests
                 "tests/misc.rs",
                 "preprocessing",
                 dir => CreateUpstreamDataFile(dir, "sherlock.xz"),
-                DifferentialCase.Exact("--path-separator", "/", "--pre", "xzcat", "Sherlock", "sherlock.xz")),
+                DifferentialCase.ExactWithArguments(dir =>
+                    ["--path-separator", "/", "--pre", CreateSherlockPreprocessorScript(dir), "Sherlock", "sherlock.xz"])),
             new(
                 "tests/misc.rs",
                 "preprocessing_glob",
@@ -796,7 +798,8 @@ internal static class PortedRgTests
                     dir.CreateFile("sherlock", Sherlock);
                     CreateUpstreamDataFile(dir, "sherlock.xz");
                 },
-                DifferentialCase.Normalized(DifferentialComparisonMode.SortLines, "--path-separator", "/", "--pre", "xzcat", "--pre-glob", "*.xz", "Sherlock", ".")),
+                DifferentialCase.ExactWithArguments(dir =>
+                    ["--path-separator", "/", "--pre", CreateSherlockPreprocessorScript(dir), "--pre-glob", "*.xz", "Sherlock", "."])),
             new(
                 "tests/misc.rs",
                 "compressed_gzip",
@@ -2510,6 +2513,51 @@ internal static class PortedRgTests
     private static void CreateUpstreamDataFile(RgTestDirectory dir, string fileName)
     {
         dir.CreateBytes(fileName, File.ReadAllBytes(Path.Combine(UpstreamDataDirectory, fileName)));
+    }
+
+    private static string CreateSherlockPreprocessorScript(RgTestDirectory dir)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            string path = Path.Combine(dir.RootPath, "preprocessor.cmd");
+            var builder = new StringBuilder();
+            builder.AppendLine("@echo off");
+            builder.AppendLine("more >NUL");
+            foreach (string line in Sherlock.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                builder.Append("echo ");
+                builder.AppendLine(line);
+            }
+
+            File.WriteAllText(path, builder.ToString());
+            return path;
+        }
+
+        string unixPath = Path.Combine(dir.RootPath, "preprocessor.sh");
+        File.WriteAllText(unixPath, "#!/bin/sh\ncat >/dev/null\ncat <<'SCOUT_EOF'\n" + Sherlock + "SCOUT_EOF\n");
+        MakeExecutable(unixPath);
+        return unixPath;
+    }
+
+    private static void MakeExecutable(string path)
+    {
+        ProcessStartInfo startInfo = new("chmod")
+        {
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+        };
+        startInfo.ArgumentList.Add("+x");
+        startInfo.ArgumentList.Add(path);
+
+        using Process process = new()
+        {
+            StartInfo = startInfo,
+        };
+        Assert.True(process.Start());
+        string error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0, error);
     }
 
     private static void CreateUtf16Sherlock(RgTestDirectory dir)

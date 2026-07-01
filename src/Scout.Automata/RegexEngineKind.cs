@@ -11,7 +11,7 @@ internal enum RegexEngineKind
     EmailAddress,
     Uri,
     UriOrEmail,
-    Date,
+    BoundedDigitDelimiter,
     WordWhitespaceLiteral,
     BoundedLetterSuffixWhitespace,
     RunLiteralDotStar,
