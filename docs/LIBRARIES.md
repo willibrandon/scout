@@ -8,6 +8,14 @@ Suggested GitHub repository description:
 Byte-oriented regex and ripgrep-compatible search libraries for .NET Native AOT.
 ```
 
+Install the v0.4.0 packages from NuGet:
+
+```sh
+dotnet add package Scout.Text.Regex --version 0.4.0
+dotnet add package Scout.IO.Globbing --version 0.4.0
+dotnet add package Scout.IO.Ignore --version 0.4.0
+```
+
 ## Scout.Text.Regex
 
 Use `Scout.Text.Regex` when input is bytes, not necessarily valid UTF-16 text.
