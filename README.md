@@ -39,6 +39,16 @@ for the full reference.
 
 Choose one installation method:
 
+**NuGet libraries**
+
+The reusable packages are introduced in v0.4.0:
+
+```sh
+dotnet add package Scout.Text.Regex --version 0.4.0
+dotnet add package Scout.IO.Globbing --version 0.4.0
+dotnet add package Scout.IO.Ignore --version 0.4.0
+```
+
 **.NET tool**
 
 ```sh
