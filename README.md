@@ -8,8 +8,8 @@ tool. The CLI is a ripgrep-compatible reference application and conformance harn
 ported engine and traversal stack, not a wrapper around `rg`.
 
 > **Status:** v0.4.0, tracking ripgrep 15.1.0 (commit `4857d6fa67`). Functional and fully
-> tested — 3,515 tests pass on all six supported platforms. The release workflow publishes native
-> binaries, .NET tool packages, Homebrew, Scoop, and winget.
+> tested — 3,515 tests pass on all six supported platforms. The release workflow publishes NuGet
+> library packages, native binaries, .NET tool packages, Homebrew, Scoop, and winget.
 
 ## Libraries
 
