@@ -7,7 +7,7 @@ namespace Scout;
 internal static class StandardSearchTargetOperations
 {
     private const int ParallelOutputFlushThreshold = 128 * 1024;
-    private const int ParallelDirectOutputFlushThreshold = ParallelOutputFlushThreshold;
+    private const int ParallelDirectOutputFlushThreshold = 16 * 1024;
     private const int DirectoryEntryLiteralPrecheckBufferLength = 16 * 1024;
     private const long DirectoryEntryRegexCandidatePrecheckMinLength = 0;
     private const int PooledRawFileReadMaxLength = 2 * 1024 * 1024;
@@ -307,7 +307,7 @@ internal static class StandardSearchTargetOperations
         ref bool matched,
         ref bool errored)
     {
-        int threadCount = GetStandardSearchDirectoryThreadCount(lowArgs, pattern);
+        int threadCount = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
         if (threadCount > 1)
         {
             SearchDirectoryParallel(root, pattern, defaultRoot, lowArgs, separators, lineLimit, color, fileTypes, output, diagnostics, logger, asciiCaseInsensitive, lineNumber, heading, threadCount, ref wroteHeadingOutput, ref matched, ref errored);
@@ -547,7 +547,7 @@ internal static class StandardSearchTargetOperations
         ref bool errored,
         ref SearchStats stats)
     {
-        int threadCount = GetStandardSearchDirectoryThreadCount(lowArgs, pattern);
+        int threadCount = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
         if (threadCount > 1)
         {
             SearchDirectoryParallelWithStats(root, pattern, defaultRoot, lowArgs, separators, lineLimit, color, fileTypes, output, diagnostics, logger, asciiCaseInsensitive, lineNumber, heading, threadCount, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
@@ -903,24 +903,6 @@ internal static class StandardSearchTargetOperations
     private static byte GetParallelOutputLineFlushTerminator(OutputSeparators separators)
     {
         return separators.NullData ? (byte)0 : (byte)'\n';
-    }
-
-    internal static int GetStandardSearchDirectoryThreadCount(CliLowArgs lowArgs, IReadOnlyList<byte[]> pattern)
-    {
-        int threadCount = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
-        if (threadCount <= 2 ||
-            lowArgs.Threads is not null ||
-            !OperatingSystem.IsMacOS() ||
-            lowArgs.SearchMode != CliSearchMode.Standard ||
-            lowArgs.Replacement.HasValue ||
-            pattern.Count != 1 ||
-            pattern[0].Length == 0 ||
-            !LiteralLineSearcher.IsLiteralRegex(pattern[0]))
-        {
-            return threadCount;
-        }
-
-        return 2;
     }
 
     private static void SearchDirectoryEntryFile(
