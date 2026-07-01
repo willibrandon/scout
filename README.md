@@ -124,7 +124,7 @@ identify `scout`, not ripgrep. Any other difference is a bug, tracked in
 ## Performance
 
 Measured against release-LTO ripgrep with `hyperfine` on the standard benchmark corpora
-(OpenSubtitles, a Linux kernel tree), Scout must meet every hosted Release Gate threshold.
+and held-out Linux regex workloads, Scout must meet every hosted Release Gate threshold.
 Wall-time ratio is Scout ÷ ripgrep; below 1.0 is faster than ripgrep.
 
 | Workload | Release gate |
@@ -132,6 +132,8 @@ Wall-time ratio is Scout ÷ ripgrep; below 1.0 is faster than ripgrep.
 | Literal scan, large file | ≤1.20× |
 | Regex scan, large file | ≤1.20× |
 | Recursive literal, large tree | ≤1.25× |
+| Held-out general regex, large tree | ≤1.50× |
+| Held-out general capture replacement, large tree | ≤1.75× |
 | Many small files, parallel | ≤1.30× |
 | Cold start (`--version`) | ≤1.00× |
 | Cold start (tiny search) | ≤1.00× |
