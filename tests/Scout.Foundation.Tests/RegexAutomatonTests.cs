@@ -5277,10 +5277,10 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
-    /// Verifies zero-width leading assertions do not hide a following prefix-set prefilter.
+    /// Verifies word-boundary literal prefixes use the structural literal-set engine.
     /// </summary>
     [Fact]
-    public void BuildsPrefixPrefilterAfterLeadingWordBoundary()
+    public void BuildsWordBoundaryLiteralSetAfterLeadingWordBoundary()
     {
         var automaton = RegexAutomaton.Compile(
             @"\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*"u8,
@@ -5289,9 +5289,8 @@ public sealed class RegexAutomatonTests
             dotMatchesNewline: false,
             specializationMode: RegexSpecializationMode.General);
 
-        Assert.True(
-            automaton.PrefilterKind is RegexPrefilterKind.Teddy or RegexPrefilterKind.AhoCorasick,
-            "Expected a prefix-set prefilter, got " + automaton.PrefilterKind + ".");
+        Assert.Equal(RegexEngineKind.WordBoundaryLiteralSet, GetEngineKind(automaton));
+        Assert.Equal(RegexPrefilterKind.None, automaton.PrefilterKind);
         Assert.Equal(0, automaton.RequiredLiteralWindow);
         Assert.Equal(new RegexMatch(4, 11), automaton.Find("xxx struct file;"u8));
         Assert.Null(automaton.Find("destructor file;"u8));
