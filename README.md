@@ -1,17 +1,25 @@
 # Scout
 
-A feature-complete port of [ripgrep](https://github.com/BurntSushi/ripgrep) to C# / .NET Native AOT.
+Byte-oriented regex and ripgrep-compatible search libraries for .NET Native AOT.
 
-Scout recursively searches a directory tree for a regex pattern, respecting `.gitignore` by
-default and skipping hidden and binary files. It aims to reproduce ripgrep's behavior — identical
-exit codes and search output — while compiling ahead-of-time to native code. It is a genuine
-reimplementation, not a wrapper: the regex engine, the directory walker, the glob and ignore
-logic, and the PCRE2 integration are all ported, so Scout *behaves like* ripgrep rather than
-calling it.
+Scout is a reusable search stack for .NET: a byte-oriented linear-time regex engine, glob and
+ignore matching, a parallel filesystem walker, static PCRE2 bindings, and the `scout` command-line
+tool. The CLI is a ripgrep-compatible reference application and conformance harness for the same
+ported engine and traversal stack, not a wrapper around `rg`.
 
-> **Status:** v0.3.0, tracking ripgrep 15.1.0 (commit `4857d6fa67`). Functional and fully
-> tested — 3,504 tests pass on all six supported platforms. The release workflow publishes native
-> binaries, .NET tool packages, Homebrew, Scoop, and winget.
+> **Status:** v0.4.0, tracking ripgrep 15.1.0 (commit `4857d6fa67`). Functional and fully
+> tested — 3,515 tests pass on all six supported platforms. The release workflow publishes NuGet
+> library packages, native binaries, .NET tool packages, Homebrew, Scoop, and winget.
+
+## Libraries
+
+Scout's reusable packages target `net9.0` and `net10.0`:
+
+- `Scout.Text.Regex` — byte-oriented, linear-time regular expressions.
+- `Scout.IO.Globbing` — byte glob and glob-set matching.
+- `Scout.IO.Ignore` — ripgrep-compatible ignore handling and recursive walking through `FileWalker`.
+
+See [docs/LIBRARIES.md](docs/LIBRARIES.md) for API examples.
 
 ## Example
 
@@ -30,6 +38,16 @@ for the full reference.
 ## Installation
 
 Choose one installation method:
+
+**NuGet libraries**
+
+Install the reusable packages from NuGet:
+
+```sh
+dotnet add package Scout.Text.Regex
+dotnet add package Scout.IO.Globbing
+dotnet add package Scout.IO.Ignore
+```
 
 **.NET tool**
 
@@ -111,7 +129,7 @@ The source tree maps recognizably onto ripgrep's crates. The pieces worth knowin
 
 Scout's contract is *behavioral parity* with ripgrep, checked continuously. A differential suite
 runs Scout and the pinned `rg` over a large corpus and compares exit codes and output; ripgrep's
-own integration tests and the regex and encoding conformance corpora run alongside it — 3,504
+own integration tests and the regex and encoding conformance corpora run alongside it — 3,515
 tests, zero skipped, on every supported platform.
 
 Exit codes and deterministic search output match ripgrep exactly. The differential harness

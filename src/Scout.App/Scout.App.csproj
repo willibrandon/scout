@@ -30,4 +30,9 @@
     <ProjectReference Include="..\Scout.Searching\Scout.Searching.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Using Include="Scout.IO.Globbing" />
+    <Using Include="Scout.IO.Ignore" />
+  </ItemGroup>
+
 </Project>

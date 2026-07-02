@@ -389,6 +389,151 @@ jobs:
             artifacts/tool-packages/Scout.${{ needs.validate.outputs.version }}.nupkg
             artifacts/tool-packages/Scout.${{ needs.validate.outputs.version }}.nupkg.sha256
 
+  pack-library-packages:
+    name: pack library packages
+    needs: validate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.102
+      - name: Restore
+        run: dotnet restore Scout.slnx
+      - name: Pack libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.validate.outputs.version }}"
+          mkdir -p artifacts/library-packages
+          projects=(
+            src/Scout.Automata.AhoCorasick/Scout.Automata.AhoCorasick.csproj
+            src/Scout.Automata.Memmem/Scout.Automata.Memmem.csproj
+            src/Scout.Automata.Syntax/Scout.Automata.Syntax.csproj
+            src/Scout.Automata/Scout.Automata.csproj
+            src/Scout.Bytes/Scout.Bytes.csproj
+            src/Scout.Diagnostics/Scout.Diagnostics.csproj
+            src/Scout.Errors/Scout.Errors.csproj
+            src/Scout.Globbing/Scout.Globbing.csproj
+            src/Scout.Ignore/Scout.Ignore.csproj
+            src/Scout.Matching/Scout.Matching.csproj
+            src/Scout.Os/Scout.Os.csproj
+            src/Scout.Regex/Scout.Regex.csproj
+          )
+          for project in "${projects[@]}"; do
+            dotnet pack "$project" \
+              -c Release \
+              --no-restore \
+              -o artifacts/library-packages \
+              -p:Version="$version" \
+              -p:PackageVersion="$version" \
+              -p:ContinuousIntegrationBuild=true
+          done
+      - name: Verify package set
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.validate.outputs.version }}"
+          packages=(
+            Scout.Automata
+            Scout.Automata.AhoCorasick
+            Scout.Automata.Memmem
+            Scout.Automata.Syntax
+            Scout.Bytes
+            Scout.Diagnostics
+            Scout.Errors
+            Scout.IO.Globbing
+            Scout.IO.Ignore
+            Scout.Matching
+            Scout.Os
+            Scout.Text.Regex
+          )
+          for package in "${packages[@]}"; do
+            test -f "artifacts/library-packages/${package}.${version}.nupkg"
+          done
+      - name: Verify library install and AOT publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.validate.outputs.version }}"
+          consumer="$(mktemp -d)"
+          cat > "$consumer/NuGet.Config" <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="libraries" value="$(pwd)/artifacts/library-packages" />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+            </packageSources>
+            <packageSourceMapping>
+              <packageSource key="libraries">
+                <package pattern="Scout.*" />
+              </packageSource>
+              <packageSource key="nuget.org">
+                <package pattern="Microsoft.*" />
+              </packageSource>
+            </packageSourceMapping>
+          </configuration>
+          EOF
+          cat > "$consumer/ScoutLibraryConsumer.csproj" <<EOF
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <OutputType>Exe</OutputType>
+              <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+              <ImplicitUsings>enable</ImplicitUsings>
+              <Nullable>enable</Nullable>
+            </PropertyGroup>
+            <ItemGroup>
+              <PackageReference Include="Scout.Text.Regex" Version="$version" />
+              <PackageReference Include="Scout.IO.Globbing" Version="$version" />
+              <PackageReference Include="Scout.IO.Ignore" Version="$version" />
+            </ItemGroup>
+          </Project>
+          EOF
+          cat > "$consumer/Program.cs" <<'EOF'
+          using Scout.IO.Globbing;
+          using Scout.IO.Ignore;
+          using Scout.Text.Regex;
+
+          ByteRegex regex = ByteRegex.Compile("two");
+          if (!regex.IsMatch("one two three"u8))
+          {
+              throw new InvalidOperationException("regex package did not match");
+          }
+
+          Glob glob = Glob.Parse("*.cs");
+          if (!glob.IsMatch("Program.cs"))
+          {
+              throw new InvalidOperationException("glob package did not match");
+          }
+
+          FileWalker walker = FileWalker.Create(new FileWalkerOptions { Roots = new List<string> { Environment.CurrentDirectory } });
+          if (!walker.Enumerate().Any(entry => entry.Path.EndsWith("Program.cs", StringComparison.Ordinal)))
+          {
+              throw new InvalidOperationException("ignore package did not walk the consumer project");
+          }
+          EOF
+          dotnet restore "$consumer" -f net9.0 --configfile "$consumer/NuGet.Config"
+          dotnet run --project "$consumer" -f net9.0 -c Release --no-restore
+          dotnet restore "$consumer" -f net10.0 -r linux-x64 --configfile "$consumer/NuGet.Config"
+          dotnet publish "$consumer" \
+            -f net10.0 \
+            -c Release \
+            -r linux-x64 \
+            --self-contained true \
+            --no-restore \
+            -p:PublishAot=true \
+            -p:PublishTrimmed=true
+      - name: Upload library packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: scout-library-packages
+          if-no-files-found: error
+          overwrite: true
+          path: artifacts/library-packages/*.nupkg
+
   publish-nuget:
     name: publish NuGet packages
     needs:
@@ -397,11 +542,14 @@ jobs:
       - build-macos
       - build-windows
       - pack-tool-pointer
+      - pack-library-packages
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: 10.0.102
+          dotnet-version: |
+            9.0.x
+            10.0.102
       - uses: actions/download-artifact@v8
         with:
           path: artifacts/downloaded
@@ -443,7 +591,7 @@ jobs:
           printf 'needle\n' > artifacts/nuget-source/search.txt
           "$install/scout" --no-config -n needle artifacts/nuget-source/search.txt > artifacts/nuget-source/search.out
           printf '1:needle\n' | cmp -s - artifacts/nuget-source/search.out
-      - name: Push RID packages
+      - name: Push Scout dependency packages
         shell: bash
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}

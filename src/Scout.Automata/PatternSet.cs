@@ -92,7 +92,7 @@ public sealed class PatternSet
         RegexCompileOptions options,
         out PatternSet? patternSet)
     {
-        return TryCompile(patterns, parsedRoots: null, options, requireFullAcceleration: true, useLeanAutomata: true, out patternSet);
+        return TryCompile(patterns, parsedRoots: null, options, dfaSizeLimit: null, requireFullAcceleration: true, useLeanAutomata: true, out patternSet);
     }
 
     internal static bool TryCompileAccelerated(
@@ -101,7 +101,7 @@ public sealed class PatternSet
         RegexCompileOptions options,
         out PatternSet? patternSet)
     {
-        return TryCompile(patterns, parsedRoots, options, requireFullAcceleration: true, useLeanAutomata: true, out patternSet);
+        return TryCompile(patterns, parsedRoots, options, dfaSizeLimit: null, requireFullAcceleration: true, useLeanAutomata: true, out patternSet);
     }
 
     /// <summary>
@@ -129,6 +129,8 @@ public sealed class PatternSet
     /// <param name="lineTerminator">The line terminator byte used when CRLF mode is disabled.</param>
     /// <param name="utf8">Whether empty and scalar-consuming matches must respect UTF-8 code point boundaries.</param>
     /// <param name="unicodeClasses">Whether Perl classes and word-boundary assertions use Unicode word definitions.</param>
+    /// <param name="dfaSizeLimit">The maximum DFA cache size in bytes, or <see langword="null" /> for the default.</param>
+    /// <param name="specializationMode">The specialization mode to use, or <see langword="null" /> for Scout's current default.</param>
     /// <returns>The compiled set.</returns>
     public static PatternSet Compile(
         IReadOnlyList<byte[]> patterns,
@@ -138,10 +140,12 @@ public sealed class PatternSet
         bool crlf = false,
         byte lineTerminator = (byte)'\n',
         bool utf8 = true,
-        bool unicodeClasses = true)
+        bool unicodeClasses = true,
+        ulong? dfaSizeLimit = null,
+        RegexSpecializationMode? specializationMode = null)
     {
-        var options = new RegexCompileOptions(caseInsensitive, swapGreed: false, multiLine, dotMatchesNewline, crlf, lineTerminator, utf8, unicodeClasses);
-        TryCompile(patterns, parsedRoots: null, options, requireFullAcceleration: false, useLeanAutomata: false, out PatternSet? patternSet);
+        var options = new RegexCompileOptions(caseInsensitive, swapGreed: false, multiLine, dotMatchesNewline, crlf, lineTerminator, utf8, unicodeClasses, specializationMode);
+        TryCompile(patterns, parsedRoots: null, options, dfaSizeLimit, requireFullAcceleration: false, useLeanAutomata: false, out PatternSet? patternSet);
         return patternSet!;
     }
 
@@ -149,6 +153,7 @@ public sealed class PatternSet
         IReadOnlyList<byte[]> patterns,
         IReadOnlyList<RegexSyntaxNode>? parsedRoots,
         RegexCompileOptions options,
+        ulong? dfaSizeLimit,
         bool requireFullAcceleration,
         bool useLeanAutomata,
         out PatternSet? patternSet)
@@ -228,12 +233,12 @@ public sealed class PatternSet
                 ? RegexAutomaton.CompileParsedForPatternSet(
                     plan.Tree!,
                     options,
-                    dfaSizeLimit: null,
+                    dfaSizeLimit,
                     utf8ByteTrieCache: utf8ByteTrieCache)
                 : RegexAutomaton.CompileParsedWithCache(
                     plan.Tree!,
                     options,
-                    dfaSizeLimit: null,
+                    dfaSizeLimit,
                     compilePrefilter: plan.RequiredLiterals is null,
                     utf8ByteTrieCache: utf8ByteTrieCache));
             automataPatternIds.Add(index);

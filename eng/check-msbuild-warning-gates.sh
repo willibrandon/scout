@@ -396,6 +396,7 @@ find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" -name '*.csproj' -type
         -getProperty:TrimmerSingleWarn \
         -getProperty:SuppressTrimAnalysisWarnings \
         -getProperty:RuntimeFrameworkVersion \
+        -getProperty:TargetFramework \
         -getProperty:PublishAot \
         -getProperty:NativeLib \
         -getProperty:OutputType \
@@ -420,6 +421,7 @@ find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" -name '*.csproj' -type
     trimmer_single_warn="$(json_property "TrimmerSingleWarn" "$evaluation_output")"
     suppress_trim_analysis_warnings="$(json_property "SuppressTrimAnalysisWarnings" "$evaluation_output")"
     runtime_framework_version="$(json_property "RuntimeFrameworkVersion" "$evaluation_output")"
+    target_framework="$(json_property "TargetFramework" "$evaluation_output")"
     publish_aot="$(json_property "PublishAot" "$evaluation_output")"
     native_lib="$(json_property "NativeLib" "$evaluation_output")"
     output_type="$(json_property "OutputType" "$evaluation_output")"
@@ -444,6 +446,7 @@ find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" -name '*.csproj' -type
     write_property "TrimmerSingleWarn" "$trimmer_single_warn" "$property_output"
     write_property "SuppressTrimAnalysisWarnings" "$suppress_trim_analysis_warnings" "$property_output"
     write_property "RuntimeFrameworkVersion" "$runtime_framework_version" "$property_output"
+    write_property "TargetFramework" "$target_framework" "$property_output"
     write_property "PublishAot" "$publish_aot" "$property_output"
     write_property "NativeLib" "$native_lib" "$property_output"
     write_property "OutputType" "$output_type" "$property_output"
@@ -470,7 +473,11 @@ find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" -name '*.csproj' -type
     check_true "$relative_project" "ILLinkTreatWarningsAsErrors" "$il_link_treat_warnings_as_errors"
     check_false "$relative_project" "TrimmerSingleWarn" "$trimmer_single_warn"
     check_false "$relative_project" "SuppressTrimAnalysisWarnings" "$suppress_trim_analysis_warnings"
-    check_equals "$relative_project" "RuntimeFrameworkVersion" "$runtime_framework_version" "10.0.2"
+    if [ "$target_framework" = "net10.0" ]; then
+        check_equals "$relative_project" "RuntimeFrameworkVersion" "$runtime_framework_version" "10.0.2"
+    else
+        check_empty "$relative_project" "RuntimeFrameworkVersion" "$runtime_framework_version"
+    fi
     if is_runtime_aot_project "$relative_project"; then
         check_true "$relative_project" "IsAotCompatible" "$is_aot_compatible"
         check_true "$relative_project" "EnableTrimAnalyzer" "$enable_trim_analyzer"

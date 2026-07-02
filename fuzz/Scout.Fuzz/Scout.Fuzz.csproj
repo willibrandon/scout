@@ -12,4 +12,8 @@
     <ProjectReference Include="..\..\src\Scout.Regex\Scout.Regex.csproj" />
     <ProjectReference Include="..\..\src\Scout.Searching\Scout.Searching.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Scout.IO.Globbing" />
+  </ItemGroup>
 </Project>

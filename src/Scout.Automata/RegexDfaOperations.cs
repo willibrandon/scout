@@ -183,7 +183,9 @@ internal static class RegexDfaOperations
         int stateIndex,
         ReadOnlySpan<byte> haystack,
         int position,
-        Dictionary<(int State, int Position), bool>? cache = null)
+        Dictionary<(int State, int Position), bool>? cache = null,
+        HashSet<(int State, int Position)>? visited = null,
+        Stack<(int State, int Position)>? pending = null)
     {
         cache ??= [];
         if (stateIndex < 0)
@@ -197,8 +199,10 @@ internal static class RegexDfaOperations
             return cached;
         }
 
-        var visited = new HashSet<(int State, int Position)>();
-        var pending = new Stack<(int State, int Position)>();
+        visited ??= [];
+        pending ??= [];
+        visited.Clear();
+        pending.Clear();
         pending.Push(start);
 
         while (pending.Count > 0)

@@ -1,4 +1,13 @@
 <Project>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <RuntimeFrameworkVersion>10.0.2</RuntimeFrameworkVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(IsAotCompatible)' == 'true'">
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+  </PropertyGroup>
+
   <PropertyGroup Condition="$([System.String]::Copy('$(MSBuildProjectName)').EndsWith('.Tests'))">
     <DefaultAppHostRuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(NETCoreSdkPortableRuntimeIdentifier)' != '' and '$(DefaultAppHostRuntimeIdentifier)' == '$(NETCoreSdkRuntimeIdentifier)'">$(NETCoreSdkPortableRuntimeIdentifier)</DefaultAppHostRuntimeIdentifier>
   </PropertyGroup>
@@ -8,6 +17,17 @@
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false"
                       PrivateAssets="all" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(PackageReadmeFile)' == ''">
+    <PackageReadmeFile>PACKAGE.md</PackageReadmeFile>
+    <ScoutUsesDefaultPackageReadme>true</ScoutUsesDefaultPackageReadme>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(ScoutUsesDefaultPackageReadme)' == 'true' and Exists('$(MSBuildThisFileDirectory)PACKAGE.md')">
+    <None Include="$(MSBuildThisFileDirectory)PACKAGE.md"
+          Pack="true"
+          PackagePath="\" />
   </ItemGroup>
 
   <ItemGroup>

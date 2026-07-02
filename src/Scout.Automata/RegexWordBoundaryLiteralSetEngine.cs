@@ -11,13 +11,17 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
     private readonly int[][] literalIndexesByFirstByte;
     private readonly RegexCompileOptions leadingBoundaryOptions;
     private readonly RegexCompileOptions trailingBoundaryOptions;
+    private readonly RegexCompileOptions suffixWhitespaceOptions;
     private readonly int maxLiteralLength;
     private readonly bool asciiBoundaryFastPath;
+    private readonly bool hasIdentifierSuffix;
 
     private RegexWordBoundaryLiteralSetEngine(
         IReadOnlyList<byte[]> literals,
         RegexCompileOptions leadingBoundaryOptions,
         RegexCompileOptions trailingBoundaryOptions,
+        RegexCompileOptions suffixWhitespaceOptions,
+        bool hasIdentifierSuffix,
         bool takeLiteralOwnership)
     {
         this.literals = new byte[literals.Count][];
@@ -31,6 +35,8 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
 
         this.leadingBoundaryOptions = leadingBoundaryOptions;
         this.trailingBoundaryOptions = trailingBoundaryOptions;
+        this.suffixWhitespaceOptions = suffixWhitespaceOptions;
+        this.hasIdentifierSuffix = hasIdentifierSuffix;
         asciiBoundaryFastPath = !leadingBoundaryOptions.Utf8 &&
             !leadingBoundaryOptions.UnicodeClasses &&
             !trailingBoundaryOptions.Utf8 &&
@@ -50,6 +56,24 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
             return false;
         }
 
+        if (TryGetWordBoundaryLiteralIdentifierPrefix(
+                root,
+                options,
+                out List<byte[]> prefixLiterals,
+                out RegexCompileOptions prefixBoundaryOptions,
+                out RegexCompileOptions suffixWhitespaceOptions) &&
+            prefixLiterals.Count > 0)
+        {
+            engine = new RegexWordBoundaryLiteralSetEngine(
+                prefixLiterals,
+                prefixBoundaryOptions,
+                prefixBoundaryOptions,
+                suffixWhitespaceOptions,
+                hasIdentifierSuffix: true,
+                takeLiteralOwnership: true);
+            return true;
+        }
+
         if (!TryGetWordBoundaryLiteralSet(
                 root,
                 options,
@@ -65,6 +89,8 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
             literals,
             leadingBoundaryOptions,
             trailingBoundaryOptions,
+            suffixWhitespaceOptions: default,
+            hasIdentifierSuffix: false,
             takeLiteralOwnership: true);
         return true;
     }
@@ -84,13 +110,13 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
             }
 
             RegexLiteralSetCandidate candidate = ResolveCandidate(startOffset, match);
-            if (!HasWordBoundaries(haystack, candidate.Match.Start, candidate.Match.Length) ||
+            if (!TryResolveMatch(haystack, candidate, out RegexMatch resolved) ||
                 !IsBetter(candidate, best))
             {
                 continue;
             }
 
-            best = candidate;
+            best = new RegexLiteralSetCandidate(candidate.LiteralId, resolved);
         }
 
         return best.HasValue ? best.Value.Match : null;
@@ -111,9 +137,9 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
             byte[] literal = literals[literalId];
             if (literal.Length <= haystack.Length - start &&
                 haystack.Slice(start, literal.Length).SequenceEqual(literal) &&
-                HasWordBoundaries(haystack, start, literal.Length))
+                TryResolveMatch(haystack, new RegexLiteralSetCandidate(literalId, new RegexMatch(start, literal.Length)), out RegexMatch match))
             {
-                return new RegexMatch(start, literal.Length);
+                return match;
             }
         }
 
@@ -141,9 +167,8 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
             AhoCorasickMatch ahoMatch = matches.Current;
             RegexLiteralSetCandidate candidate = ResolveCandidate(startOffset, ahoMatch);
             if (candidate.Match.Start >= nextAllowedStart &&
-                HasWordBoundaries(haystack, candidate.Match.Start, candidate.Match.Length))
+                TryResolveMatch(haystack, candidate, out RegexMatch match))
             {
-                RegexMatch match = candidate.Match;
                 total += sumSpans ? match.Length : 1;
                 nextAllowedStart = match.End;
             }
@@ -156,6 +181,111 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
     {
         int start = startOffset + match.Start;
         return new RegexLiteralSetCandidate(match.PatternId, new RegexMatch(start, match.Length));
+    }
+
+    private bool TryResolveMatch(ReadOnlySpan<byte> haystack, RegexLiteralSetCandidate candidate, out RegexMatch match)
+    {
+        RegexMatch literalMatch = candidate.Match;
+        if (!hasIdentifierSuffix)
+        {
+            match = literalMatch;
+            return HasWordBoundaries(haystack, literalMatch.Start, literalMatch.Length);
+        }
+
+        if (!HasLeadingWordBoundary(haystack, literalMatch.Start, literalMatch.Length) ||
+            !TryConsumeIdentifierSuffix(haystack, literalMatch.End, out int end))
+        {
+            match = default;
+            return false;
+        }
+
+        match = new RegexMatch(literalMatch.Start, end - literalMatch.Start);
+        return true;
+    }
+
+    private bool HasLeadingWordBoundary(ReadOnlySpan<byte> haystack, int start, int length)
+    {
+        int end = start + length;
+        if (length <= 0 ||
+            start < 0 ||
+            end > haystack.Length)
+        {
+            return false;
+        }
+
+        if (asciiBoundaryFastPath ||
+            HasAsciiBoundaryContext(haystack, start, end))
+        {
+            return start == 0 || !IsAsciiWord(haystack[start - 1]);
+        }
+
+        return RegexByteClass.PredicateMatches(
+            haystack,
+            start,
+            RegexSyntaxKind.WordBoundary,
+            leadingBoundaryOptions.MultiLine,
+            leadingBoundaryOptions.Crlf,
+            leadingBoundaryOptions.LineTerminator,
+            leadingBoundaryOptions.Utf8,
+            leadingBoundaryOptions.UnicodeClasses);
+    }
+
+    private bool TryConsumeIdentifierSuffix(ReadOnlySpan<byte> haystack, int start, out int end)
+    {
+        end = start;
+        int position = start;
+        int whitespaceStart = position;
+        while (TryConsumeWhitespace(haystack, position, out int whitespaceLength))
+        {
+            position += whitespaceLength;
+        }
+
+        if (position == whitespaceStart ||
+            position >= haystack.Length ||
+            !RegexSimpleSequenceSegment.IsAsciiIdentifierStart(haystack[position]))
+        {
+            return false;
+        }
+
+        position++;
+        while (position < haystack.Length && RegexSimpleSequenceSegment.IsAsciiWord(haystack[position]))
+        {
+            position++;
+        }
+
+        end = position;
+        return true;
+    }
+
+    private bool TryConsumeWhitespace(ReadOnlySpan<byte> haystack, int position, out int length)
+    {
+        length = 0;
+        if ((uint)position >= (uint)haystack.Length)
+        {
+            return false;
+        }
+
+        byte value = haystack[position];
+        if (RegexSimpleSequenceSegment.IsRegexWhitespace(value))
+        {
+            length = 1;
+            return true;
+        }
+
+        return value > 0x7F &&
+            RegexByteClass.TryGetAtomMatchLength(
+                haystack,
+                position,
+                RegexSyntaxKind.WhitespaceClass,
+                ReadOnlySpan<byte>.Empty,
+                suffixWhitespaceOptions.CaseInsensitive,
+                suffixWhitespaceOptions.MultiLine,
+                suffixWhitespaceOptions.DotMatchesNewline,
+                suffixWhitespaceOptions.Crlf,
+                suffixWhitespaceOptions.LineTerminator,
+                suffixWhitespaceOptions.Utf8,
+                suffixWhitespaceOptions.UnicodeClasses,
+                out length);
     }
 
     private bool HasWordBoundaries(ReadOnlySpan<byte> haystack, int start, int length)
@@ -236,6 +366,95 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
         }
 
         return true;
+    }
+
+    private static bool TryGetWordBoundaryLiteralIdentifierPrefix(
+        RegexSyntaxNode root,
+        RegexCompileOptions options,
+        out List<byte[]> literals,
+        out RegexCompileOptions leadingBoundaryOptions,
+        out RegexCompileOptions suffixWhitespaceOptions)
+    {
+        literals = [];
+        leadingBoundaryOptions = options;
+        suffixWhitespaceOptions = options;
+        if (!TryUnwrapWithOptions(root, options, out root, out options) ||
+            root is not RegexSequenceNode sequence ||
+            !TryCollectSequenceItems(sequence, options, out List<(RegexSyntaxNode Node, RegexCompileOptions Options)> items) ||
+            items.Count is < 4 or > 5 ||
+            !TryGetWordBoundaryOptions(items[0].Node, items[0].Options, out leadingBoundaryOptions) ||
+            !TryExpandLiteralLanguage(items[1].Node, items[1].Options, literals) ||
+            !TryGetOneOrMoreWhitespace(items[2].Node, items[2].Options, out suffixWhitespaceOptions) ||
+            !IsAsciiIdentifierStartAtom(items[3].Node, items[3].Options) ||
+            items.Count == 5 && !IsZeroOrMoreAsciiWordAtom(items[4].Node, items[4].Options))
+        {
+            return false;
+        }
+
+        for (int index = 0; index < literals.Count; index++)
+        {
+            byte[] literal = literals[index];
+            if (literal.Length == 0 ||
+                literal.Length > MaxLiteralLength ||
+                !IsAsciiWordLiteral(literal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryCollectSequenceItems(
+        RegexSequenceNode sequence,
+        RegexCompileOptions options,
+        out List<(RegexSyntaxNode Node, RegexCompileOptions Options)> items)
+    {
+        items = [];
+        RegexCompileOptions currentOptions = options;
+        for (int index = 0; index < sequence.Nodes.Count; index++)
+        {
+            RegexSyntaxNode child = sequence.Nodes[index];
+            if (child is RegexInlineFlagsNode flags)
+            {
+                currentOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
+                continue;
+            }
+
+            items.Add((child, currentOptions));
+        }
+
+        return true;
+    }
+
+    private static bool TryGetOneOrMoreWhitespace(
+        RegexSyntaxNode node,
+        RegexCompileOptions options,
+        out RegexCompileOptions whitespaceOptions)
+    {
+        whitespaceOptions = default;
+        return TryUnwrapWithOptions(node, options, out RegexSyntaxNode unwrapped, out whitespaceOptions) &&
+            unwrapped is RegexRepetitionNode { Minimum: > 0, Maximum: null } repetition &&
+            TryUnwrapWithOptions(repetition.Child, whitespaceOptions, out RegexSyntaxNode child, out whitespaceOptions) &&
+            child is RegexAtomNode { Kind: RegexSyntaxKind.WhitespaceClass };
+    }
+
+    private static bool IsAsciiIdentifierStartAtom(RegexSyntaxNode node, RegexCompileOptions options)
+    {
+        return TryUnwrapWithOptions(node, options, out RegexSyntaxNode unwrapped, out RegexCompileOptions atomOptions) &&
+            unwrapped is RegexAtomNode { Kind: RegexSyntaxKind.CharacterClass } atom &&
+            !atomOptions.CaseInsensitive &&
+            CharacterClassMatchesExactly(atom.Value.Span, RegexSimpleSequenceSegment.IsAsciiIdentifierStart);
+    }
+
+    private static bool IsZeroOrMoreAsciiWordAtom(RegexSyntaxNode node, RegexCompileOptions options)
+    {
+        return TryUnwrapWithOptions(node, options, out RegexSyntaxNode unwrapped, out RegexCompileOptions repetitionOptions) &&
+            unwrapped is RegexRepetitionNode { Minimum: 0, Maximum: null } repetition &&
+            TryUnwrapWithOptions(repetition.Child, repetitionOptions, out RegexSyntaxNode child, out RegexCompileOptions atomOptions) &&
+            child is RegexAtomNode { Kind: RegexSyntaxKind.CharacterClass } atom &&
+            !atomOptions.CaseInsensitive &&
+            CharacterClassMatchesExactly(atom.Value.Span, RegexSimpleSequenceSegment.IsAsciiWord);
     }
 
     private static bool TryCollectWordBoundaryLiteralSet(
@@ -624,6 +843,67 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
         }
 
         return candidate.LiteralId < best.LiteralId;
+    }
+
+    private static bool CharacterClassMatchesExactly(ReadOnlySpan<byte> expression, Func<byte, bool> predicate)
+    {
+        Span<bool> classMatches = stackalloc bool[256];
+        if (!TryBuildSimpleAsciiClass(expression, classMatches))
+        {
+            return false;
+        }
+
+        for (int candidate = 0; candidate <= 0xFF; candidate++)
+        {
+            byte value = (byte)candidate;
+            if (classMatches[value] != predicate(value))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryBuildSimpleAsciiClass(ReadOnlySpan<byte> expression, Span<bool> matches)
+    {
+        if (expression.IsEmpty || expression[0] == (byte)'^')
+        {
+            return false;
+        }
+
+        for (int index = 0; index < expression.Length; index++)
+        {
+            byte start = expression[index];
+            if (start is (byte)'\\' or (byte)'[' or (byte)']' || start > 0x7F)
+            {
+                return false;
+            }
+
+            if (index + 2 < expression.Length &&
+                expression[index + 1] == (byte)'-' &&
+                expression[index + 2] is not ((byte)'\\' or (byte)'[' or (byte)']') &&
+                expression[index + 2] <= 0x7F)
+            {
+                byte end = expression[index + 2];
+                if (start > end)
+                {
+                    return false;
+                }
+
+                for (int value = start; value <= end; value++)
+                {
+                    matches[value] = true;
+                }
+
+                index += 2;
+                continue;
+            }
+
+            matches[start] = true;
+        }
+
+        return true;
     }
 
     private static bool IsAsciiWordLiteral(ReadOnlySpan<byte> literal)

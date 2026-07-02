@@ -17,6 +17,8 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="Scout.IO.Globbing" />
+    <Using Include="Scout.IO.Ignore" />
   </ItemGroup>
 
   <ItemGroup>
