@@ -2,12 +2,6 @@
 
 Scout is a byte-oriented regex and search library stack for .NET Native AOT. The `scout` CLI is a ripgrep-compatible reference application and conformance harness for the same packages.
 
-Suggested GitHub repository description:
-
-```text
-Byte-oriented regex and ripgrep-compatible search libraries for .NET Native AOT.
-```
-
 Install the packages from NuGet:
 
 ```sh
