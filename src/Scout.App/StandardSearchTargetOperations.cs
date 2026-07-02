@@ -7,7 +7,7 @@ namespace Scout;
 internal static class StandardSearchTargetOperations
 {
     private const int ParallelOutputFlushThreshold = 128 * 1024;
-    private const int ParallelDirectOutputFlushThreshold = 16 * 1024;
+    private const int ParallelDirectOutputFlushThreshold = 128 * 1024;
     private const int DirectoryEntryLiteralPrecheckBufferLength = 16 * 1024;
     private const long DirectoryEntryRegexCandidatePrecheckMinLength = 0;
     private const int PooledRawFileReadMaxLength = 2 * 1024 * 1024;

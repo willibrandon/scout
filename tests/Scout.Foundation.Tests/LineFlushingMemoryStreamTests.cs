@@ -26,4 +26,22 @@ public sealed class LineFlushingMemoryStreamTests
         Assert.Equal("aa\nbb"u8.ToArray(), output.ToArray());
         Assert.Equal(0, buffer.Length);
     }
+
+    /// <summary>
+    /// Verifies threshold flushing keeps the worker buffer reusable for output-heavy parallel searches.
+    /// </summary>
+    [Fact]
+    public void ThresholdFlushKeepsReusableCapacity()
+    {
+        using MemoryStream output = new();
+        RawByteWriter writer = new(output);
+        object outputLock = new();
+        using LineFlushingMemoryStream buffer = new(writer, outputLock, (byte)'\n', lineFlushThreshold: 4);
+
+        buffer.Write("aa\nbb\n"u8);
+
+        Assert.Equal("aa\nbb\n"u8.ToArray(), output.ToArray());
+        Assert.Equal(0, buffer.Length);
+        Assert.True(buffer.Capacity > 0);
+    }
 }

@@ -2,10 +2,13 @@ namespace Scout;
 
 internal sealed class LineFlushingMemoryStream : MemoryStream
 {
+    private const int MinimumRetainedCapacity = 256;
+
     private readonly RawByteWriter output;
     private readonly object outputLock;
     private readonly byte lineTerminator;
     private readonly int lineFlushThreshold;
+    private readonly int maxRetainedCapacity;
 
     public LineFlushingMemoryStream(
         RawByteWriter output,
@@ -13,10 +16,13 @@ internal sealed class LineFlushingMemoryStream : MemoryStream
         byte lineTerminator,
         int lineFlushThreshold)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(lineFlushThreshold, 1);
+
         this.output = output;
         this.outputLock = outputLock;
         this.lineTerminator = lineTerminator;
         this.lineFlushThreshold = lineFlushThreshold;
+        maxRetainedCapacity = Math.Max(MinimumRetainedCapacity, lineFlushThreshold * 4);
     }
 
     public override void Write(byte[] buffer, int offset, int count)
@@ -66,7 +72,7 @@ internal sealed class LineFlushingMemoryStream : MemoryStream
 
         Position = remaining;
         SetLength(remaining);
-        TrimLargeEmptyBuffer();
+        TrimOversizedEmptyBuffer();
     }
 
     private void FlushToOutput()
@@ -87,7 +93,7 @@ internal sealed class LineFlushingMemoryStream : MemoryStream
 
         Position = 0;
         SetLength(0);
-        TrimLargeEmptyBuffer();
+        TrimOversizedEmptyBuffer();
     }
 
     private void WriteToOutput(ReadOnlySpan<byte> bytes)
@@ -98,9 +104,9 @@ internal sealed class LineFlushingMemoryStream : MemoryStream
         }
     }
 
-    private void TrimLargeEmptyBuffer()
+    private void TrimOversizedEmptyBuffer()
     {
-        if (Length == 0 && Capacity > lineFlushThreshold)
+        if (Length == 0 && Capacity > maxRetainedCapacity)
         {
             Capacity = 0;
         }
