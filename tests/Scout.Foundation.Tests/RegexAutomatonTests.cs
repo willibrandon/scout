@@ -3369,6 +3369,47 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies UTF-8 word-boundary literal prefixes count through identifier suffixes.
+    /// </summary>
+    [Fact]
+    public void WordBoundaryLiteralSetCountsIdentifierSuffixes()
+    {
+        var automaton = RegexAutomaton.Compile(@"\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*"u8);
+        var builder = new System.Text.StringBuilder(capacity: 64_000);
+        int expectedCount = 0;
+        long expectedSpanSum = 0;
+        for (int index = 0; index < 1_024; index++)
+        {
+            builder.Append("static int value_");
+            builder.Append(index);
+            builder.AppendLine(" = 42;");
+
+            string keyword = (index % 4) switch
+            {
+                0 => "struct",
+                1 => "enum",
+                2 => "union",
+                _ => "class",
+            };
+            string declaration = string.Concat(keyword, " Type_", index);
+            builder.Append(declaration);
+            builder.AppendLine(" { int field; };");
+            if (index % 4 != 3)
+            {
+                expectedCount++;
+                expectedSpanSum += System.Text.Encoding.UTF8.GetByteCount(declaration);
+            }
+        }
+
+        builder.AppendLine("éstruct Type_non_ascii_prefix { int field; };");
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes(builder.ToString());
+
+        Assert.Equal(RegexEngineKind.WordBoundaryLiteralSet, GetEngineKind(automaton));
+        Assert.Equal(expectedCount, automaton.CountMatches(haystack));
+        Assert.Equal(expectedSpanSum, automaton.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
     /// Verifies unanchored lazy DFA search can reverse-match branches containing multi-byte literals.
     /// </summary>
     [Fact]

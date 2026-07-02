@@ -2801,7 +2801,7 @@ internal sealed class RegexMetaEngine
         long total = 0;
         int offset = Math.Clamp(startAt, 0, haystack.Length);
         int suppressedEmptyStart = -1;
-        Dictionary<(int State, int Position), bool>? reachabilityCache = lazyDfa is not null ? [] : null;
+        Dictionary<(int State, int Position), bool>? reachabilityCache = lazyDfa is not null && prefilter is null ? [] : null;
         while (offset <= haystack.Length)
         {
             RegexMatch? match = Find(haystack, offset, startPredicate, reachabilityCache);

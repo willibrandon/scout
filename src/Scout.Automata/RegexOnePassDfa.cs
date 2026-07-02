@@ -6,11 +6,18 @@ internal sealed class RegexOnePassDfa
     private readonly PikeVm fallback;
     private List<int> current = [];
     private List<int> next = [];
+    private readonly bool[] visited;
+    private readonly bool[] closedSplits;
+    private readonly Dictionary<(int State, int Position), bool> reachabilityCache = [];
+    private readonly HashSet<(int State, int Position)> reachabilityVisited = [];
+    private readonly Stack<(int State, int Position)> reachabilityPending = [];
 
     public RegexOnePassDfa(RegexNfa nfa)
     {
         this.nfa = nfa;
         fallback = new PikeVm(nfa);
+        visited = new bool[nfa.States.Count];
+        closedSplits = new bool[nfa.States.Count];
     }
 
     public static bool CanCompile(RegexNfa nfa)
@@ -38,16 +45,16 @@ internal sealed class RegexOnePassDfa
     public bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int length)
     {
         current.Clear();
-        AddThread(nfa.StartState, haystack, start, current, new bool[nfa.States.Count], new bool[nfa.States.Count]);
+        reachabilityCache.Clear();
+        ClearThreadScratch();
+        AddThread(nfa.StartState, haystack, start, current, visited, closedSplits);
         int deferredAcceptLength = -1;
-        Dictionary<(int State, int Position), bool>? reachabilityCache = null;
         for (int position = start; position <= haystack.Length; position++)
         {
             int acceptIndex = IndexOfAccept(current);
             if (acceptIndex >= 0)
             {
                 deferredAcceptLength = position - start;
-                reachabilityCache ??= [];
                 if (!HasEarlierConsumer(current, acceptIndex, haystack, position, reachabilityCache))
                 {
                     length = deferredAcceptLength;
@@ -132,16 +139,23 @@ internal sealed class RegexOnePassDfa
             }
 
             matched = true;
+            ClearThreadScratch();
             AddThread(
                 target,
                 haystack,
                 position + consume,
                 destination,
-                new bool[nfa.States.Count],
-                new bool[nfa.States.Count]);
+                visited,
+                closedSplits);
         }
 
         return true;
+    }
+
+    private void ClearThreadScratch()
+    {
+        Array.Clear(visited);
+        Array.Clear(closedSplits);
     }
 
     private void AddThread(
@@ -241,14 +255,28 @@ internal sealed class RegexOnePassDfa
                     state.Utf8,
                     state.UnicodeClasses,
                     out int consume) &&
-                RegexDfaOperations.CanReachAccept(nfa, state.Next, haystack, position + consume, reachabilityCache))
+                RegexDfaOperations.CanReachAccept(
+                    nfa,
+                    state.Next,
+                    haystack,
+                    position + consume,
+                    reachabilityCache,
+                    reachabilityVisited,
+                    reachabilityPending))
             {
                 return true;
             }
 
             if (state.Kind == RegexNfaStateKind.Sparse &&
                 state.TryGetSparseTarget(haystack[position], out int sparseNext) &&
-                RegexDfaOperations.CanReachAccept(nfa, sparseNext, haystack, position + 1, reachabilityCache))
+                RegexDfaOperations.CanReachAccept(
+                    nfa,
+                    sparseNext,
+                    haystack,
+                    position + 1,
+                    reachabilityCache,
+                    reachabilityVisited,
+                    reachabilityPending))
             {
                 return true;
             }
