@@ -503,21 +503,21 @@ jobs:
               throw new InvalidOperationException("regex package did not match");
           }
 
-          Glob glob = Glob.Parse("*.cs");
-          if (!glob.IsMatch("Program.cs"))
+          Glob glob = Glob.Parse("*.cs"u8.ToArray());
+          if (!glob.IsMatch("Program.cs"u8))
           {
               throw new InvalidOperationException("glob package did not match");
           }
 
-          FileWalker walker = FileWalker.Create(new FileWalkerOptions { Roots = new List<string> { Environment.CurrentDirectory } });
-          if (!walker.Enumerate().Any(entry => entry.Path.EndsWith("Program.cs", StringComparison.Ordinal)))
+          FileWalker walker = new(new FileWalkerOptions());
+          if (!walker.Enumerate(Environment.CurrentDirectory).Any(entry => entry.FullPath.EndsWith("Program.cs", StringComparison.Ordinal)))
           {
               throw new InvalidOperationException("ignore package did not walk the consumer project");
           }
           EOF
-          dotnet restore "$consumer" -f net9.0 --configfile "$consumer/NuGet.Config"
+          dotnet restore "$consumer" -p:TargetFramework=net9.0 --configfile "$consumer/NuGet.Config"
           dotnet run --project "$consumer" -f net9.0 -c Release --no-restore
-          dotnet restore "$consumer" -f net10.0 -r linux-x64 --configfile "$consumer/NuGet.Config"
+          dotnet restore "$consumer" -p:TargetFramework=net10.0 -r linux-x64 --configfile "$consumer/NuGet.Config"
           dotnet publish "$consumer" \
             -f net10.0 \
             -c Release \
