@@ -706,16 +706,16 @@ gate_tree_warmup() {
 }
 
 check_time_gate() {
-    name="$1"
-    gate="$2"
-    json="$3"
-    rg_index="${4:-1}"
-    scout_index="${5:-2}"
-    rg_median="$(hyperfine_json_metric "$json" "$rg_index" "median")" || fail "Could not read rg median from $json."
-    scout_median="$(hyperfine_json_metric "$json" "$scout_index" "median")" || fail "Could not read scout median from $json."
-    [ -n "$rg_median" ] || fail "Could not read rg median from $json."
-    [ -n "$scout_median" ] || fail "Could not read scout median from $json."
-    awk -v name="$name" -v rg="$rg_median" -v scout="$scout_median" -v gate="$gate" '
+    time_gate_name="$1"
+    time_gate_limit="$2"
+    time_gate_json="$3"
+    time_gate_rg_index="${4:-1}"
+    time_gate_scout_index="${5:-2}"
+    time_gate_rg_median="$(hyperfine_json_metric "$time_gate_json" "$time_gate_rg_index" "median")" || fail "Could not read rg median from $time_gate_json."
+    time_gate_scout_median="$(hyperfine_json_metric "$time_gate_json" "$time_gate_scout_index" "median")" || fail "Could not read scout median from $time_gate_json."
+    [ -n "$time_gate_rg_median" ] || fail "Could not read rg median from $time_gate_json."
+    [ -n "$time_gate_scout_median" ] || fail "Could not read scout median from $time_gate_json."
+    awk -v name="$time_gate_name" -v rg="$time_gate_rg_median" -v scout="$time_gate_scout_median" -v gate="$time_gate_limit" '
         BEGIN {
             if (rg <= 0) {
                 printf "%s: rg median is not positive: %s\n", name, rg > "/dev/stderr"
@@ -731,15 +731,15 @@ check_time_gate() {
 }
 
 check_time_gate_combined() {
-    name="$1"
-    gate="$2"
-    json="$3"
-    reverse_json="$4"
-    rg_median="$(combined_hyperfine_json_metric_median "$json" 1 "$reverse_json" 2 "times")" || fail "Could not read rg time samples from $json and $reverse_json."
-    scout_median="$(combined_hyperfine_json_metric_median "$json" 2 "$reverse_json" 1 "times")" || fail "Could not read scout time samples from $json and $reverse_json."
-    [ -n "$rg_median" ] || fail "Could not read rg time samples from $json and $reverse_json."
-    [ -n "$scout_median" ] || fail "Could not read scout time samples from $json and $reverse_json."
-    awk -v name="$name" -v rg="$rg_median" -v scout="$scout_median" -v gate="$gate" '
+    combined_gate_name="$1"
+    combined_gate_limit="$2"
+    combined_gate_json="$3"
+    combined_gate_reverse_json="$4"
+    combined_gate_rg_median="$(combined_hyperfine_json_metric_median "$combined_gate_json" 1 "$combined_gate_reverse_json" 2 "times")" || fail "Could not read rg time samples from $combined_gate_json and $combined_gate_reverse_json."
+    combined_gate_scout_median="$(combined_hyperfine_json_metric_median "$combined_gate_json" 2 "$combined_gate_reverse_json" 1 "times")" || fail "Could not read scout time samples from $combined_gate_json and $combined_gate_reverse_json."
+    [ -n "$combined_gate_rg_median" ] || fail "Could not read rg time samples from $combined_gate_json and $combined_gate_reverse_json."
+    [ -n "$combined_gate_scout_median" ] || fail "Could not read scout time samples from $combined_gate_json and $combined_gate_reverse_json."
+    awk -v name="$combined_gate_name" -v rg="$combined_gate_rg_median" -v scout="$combined_gate_scout_median" -v gate="$combined_gate_limit" '
         BEGIN {
             if (rg <= 0) {
                 printf "%s: rg combined median is not positive: %s\n", name, rg > "/dev/stderr"
@@ -755,15 +755,15 @@ check_time_gate_combined() {
 }
 
 check_rss_gate() {
-    name="$1"
-    json="$2"
-    rg_index="${3:-1}"
-    scout_index="${4:-2}"
-    rg_memory="$(hyperfine_json_median_memory "$json" "$rg_index")" || fail "Could not read rg memory from $json."
-    scout_memory="$(hyperfine_json_median_memory "$json" "$scout_index")" || fail "Could not read scout memory from $json."
-    [ -n "$rg_memory" ] || fail "Could not read rg memory from $json."
-    [ -n "$scout_memory" ] || fail "Could not read scout memory from $json."
-    awk -v name="$name" -v rg="$rg_memory" -v scout="$scout_memory" -v rg_floor="$RG_RSS_FLOOR" -v scout_floor="$SCOUT_RSS_FLOOR" '
+    rss_gate_name="$1"
+    rss_gate_json="$2"
+    rss_gate_rg_index="${3:-1}"
+    rss_gate_scout_index="${4:-2}"
+    rss_gate_rg_memory="$(hyperfine_json_median_memory "$rss_gate_json" "$rss_gate_rg_index")" || fail "Could not read rg memory from $rss_gate_json."
+    rss_gate_scout_memory="$(hyperfine_json_median_memory "$rss_gate_json" "$rss_gate_scout_index")" || fail "Could not read scout memory from $rss_gate_json."
+    [ -n "$rss_gate_rg_memory" ] || fail "Could not read rg memory from $rss_gate_json."
+    [ -n "$rss_gate_scout_memory" ] || fail "Could not read scout memory from $rss_gate_json."
+    awk -v name="$rss_gate_name" -v rg="$rss_gate_rg_memory" -v scout="$rss_gate_scout_memory" -v rg_floor="$RG_RSS_FLOOR" -v scout_floor="$SCOUT_RSS_FLOOR" '
         BEGIN {
             if (rg <= 0 || scout <= 0) {
                 printf "%s: missing positive memory data: rg=%s scout=%s\n", name, rg, scout > "/dev/stderr"
@@ -793,25 +793,25 @@ check_ratio_gate() {
 }
 
 check_combined_gate_pair() {
-    name="$1"
-    gate="$2"
-    json="$3"
-    reverse_json="$4"
-    time_gate_ok="1"
-    rss_gate_ok="1"
+    combined_pair_name="$1"
+    combined_pair_gate="$2"
+    combined_pair_json="$3"
+    combined_pair_reverse_json="$4"
+    combined_pair_time_gate_ok="1"
+    combined_pair_rss_gate_ok="1"
 
-    check_time_gate_combined "$name" "$gate" "$json" "$reverse_json" || time_gate_ok="0"
-    check_rss_gate "$name" "$json" || rss_gate_ok="0"
+    check_time_gate_combined "$combined_pair_name" "$combined_pair_gate" "$combined_pair_json" "$combined_pair_reverse_json" || combined_pair_time_gate_ok="0"
+    check_rss_gate "$combined_pair_name" "$combined_pair_json" || combined_pair_rss_gate_ok="0"
 
-    if [ "$time_gate_ok" = "0" ]; then
-        printf '%s\n' "$name exceeded the combined-order performance gate." >&2
+    if [ "$combined_pair_time_gate_ok" = "0" ]; then
+        printf '%s\n' "$combined_pair_name exceeded the combined-order performance gate." >&2
     fi
 
-    if [ "$rss_gate_ok" = "0" ]; then
-        printf '%s\n' "$name exceeded the peak RSS gate." >&2
+    if [ "$combined_pair_rss_gate_ok" = "0" ]; then
+        printf '%s\n' "$combined_pair_name exceeded the peak RSS gate." >&2
     fi
 
-    [ "$time_gate_ok" = "1" ] && [ "$rss_gate_ok" = "1" ]
+    [ "$combined_pair_time_gate_ok" = "1" ] && [ "$combined_pair_rss_gate_ok" = "1" ]
 }
 
 run_hyperfine_pair() {
