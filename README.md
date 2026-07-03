@@ -7,8 +7,8 @@ ignore matching, a parallel filesystem walker, static PCRE2 bindings, and the `s
 tool. The CLI is a ripgrep-compatible reference application and conformance harness for the same
 ported engine and traversal stack, not a wrapper around `rg`.
 
-> **Status:** v0.4.0, tracking ripgrep 15.1.0 (commit `4857d6fa67`). Functional and fully
-> tested — 3,515 tests pass on all six supported platforms. The release workflow publishes NuGet
+> **Status:** v0.4.1, tracking ripgrep 15.1.0 (commit `4857d6fa67`). Functional and fully
+> tested — 3,524 tests pass on all six supported platforms. The release workflow publishes NuGet
 > library packages, native binaries, .NET tool packages, Homebrew, Scoop, and winget.
 
 ## Libraries
@@ -129,7 +129,7 @@ The source tree maps recognizably onto ripgrep's crates. The pieces worth knowin
 
 Scout's contract is *behavioral parity* with ripgrep, checked continuously. A differential suite
 runs Scout and the pinned `rg` over a large corpus and compares exit codes and output; ripgrep's
-own integration tests and the regex and encoding conformance corpora run alongside it — 3,515
+own integration tests and the regex and encoding conformance corpora run alongside it — 3,524
 tests, zero skipped, on every supported platform.
 
 Exit codes and deterministic search output match ripgrep exactly. The differential harness
