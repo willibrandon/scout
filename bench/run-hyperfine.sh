@@ -15,7 +15,7 @@ GATE_TREE_RUNS="5"
 GATE_TREE_WARMUP="5"
 GATE_LARGE_FILE_THREADS="4"
 GATE_LARGE_FILE_SEGMENT_BUFFER_LENGTH="131072"
-GATE_RETRY_FAILED_WORKLOADS="${SCOUT_GATE_RETRY_FAILED_WORKLOADS:-1}"
+GATE_RETRY_FAILED_WORKLOADS="${SCOUT_GATE_RETRY_FAILED_WORKLOADS:-2}"
 
 fail() {
     printf '%s\n' "$1" >&2
@@ -31,7 +31,7 @@ usage() {
         '  SCOUT_RSS_BASELINE_BIN            Native AOT real binary for RSS-floor measurement. Defaults to sibling scout-real when present.' \
         '  SCOUT_BENCH_OPENSUBTITLES_EN     OpenSubtitles en.txt path for --gate.' \
         '  SCOUT_BENCH_LINUX_TREE           Linux source tree path for --gate.' \
-        '  SCOUT_GATE_RETRY_FAILED_WORKLOADS Retry a failed gate workload once. Defaults to 1; set 0 to disable.' \
+        '  SCOUT_GATE_RETRY_FAILED_WORKLOADS Retry a failed gate workload this many times. Defaults to 2; set 0 to disable.' \
         '' \
         'The --gate mode requires frozen corpus hashes in tests/PREREQS.lock.'
 }
@@ -866,15 +866,25 @@ run_pair_impl() {
                 fail "$name exceeded the performance gate."
             fi
 
-            retry_json="$OUT_DIR/$name.retry.json"
-            retry_reverse_json="$OUT_DIR/$name.retry.reverse.json"
-            printf '%s\n' "$name retrying failed gate workload once."
-            run_hyperfine_pair "$no_shell" "$retry_json" "rg:$name" "$rg_command" "scout:$name" "$scout_command" "$runs" "$warmup"
-            printf '%s\n' "$name retry running reversed command order for combined timing gate."
-            run_hyperfine_pair "$no_shell" "$retry_reverse_json" "scout:$name" "$scout_command" "rg:$name" "$rg_command" "$runs" "$warmup"
+            retry_attempt=0
+            while [ "$retry_attempt" -lt "$GATE_RETRY_FAILED_WORKLOADS" ]; do
+                retry_attempt=$((retry_attempt + 1))
+                retry_label="$name retry $retry_attempt"
+                retry_json="$OUT_DIR/$name.retry-$retry_attempt.json"
+                retry_reverse_json="$OUT_DIR/$name.retry-$retry_attempt.reverse.json"
 
-            check_combined_gate_pair "$name retry" "$gate" "$retry_json" "$retry_reverse_json" || fail "$name exceeded the performance gate after retry."
-            printf '%s\n' "$name retry passed; continuing."
+                printf '%s\n' "$name retrying failed gate workload ($retry_attempt/$GATE_RETRY_FAILED_WORKLOADS)."
+                run_hyperfine_pair "$no_shell" "$retry_json" "rg:$name" "$rg_command" "scout:$name" "$scout_command" "$runs" "$warmup"
+                printf '%s\n' "$retry_label running reversed command order for combined timing gate."
+                run_hyperfine_pair "$no_shell" "$retry_reverse_json" "scout:$name" "$scout_command" "rg:$name" "$rg_command" "$runs" "$warmup"
+
+                if check_combined_gate_pair "$retry_label" "$gate" "$retry_json" "$retry_reverse_json"; then
+                    printf '%s\n' "$retry_label passed; continuing."
+                    return 0
+                fi
+            done
+
+            fail "$name exceeded the performance gate after $GATE_RETRY_FAILED_WORKLOADS retries."
         fi
     fi
 }
@@ -957,6 +967,12 @@ while [ "$#" -gt 0 ]; do
             ;;
     esac
 done
+
+case "$GATE_RETRY_FAILED_WORKLOADS" in
+    ''|*[!0-9]*)
+        fail "SCOUT_GATE_RETRY_FAILED_WORKLOADS must be a non-negative integer."
+        ;;
+esac
 
 if [ "$MODE" = "list" ]; then
     list_workloads

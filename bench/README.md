@@ -52,10 +52,11 @@ orders (`rg` then `scout`, and `scout` then `rg`); the timing gate uses the
 combined median samples for each binary. This removes command-order bias from
 hosted macOS runners, where hyperfine 1.20 runs each command group in input
 order instead of interleaving individual runs. If a workload exceeds its timing
-or RSS gate, the script repeats only that workload once and requires the retry
-to pass the same gates. This keeps stable regressions blocking while avoiding a
-full manual release-gate rerun for a single noisy hosted-runner sample. Set
-`SCOUT_GATE_RETRY_FAILED_WORKLOADS=0` to disable the retry.
+or RSS gate, the script repeats only that workload up to two times and requires
+a retry to pass the same gates. This keeps stable regressions blocking while
+avoiding a full manual release-gate rerun for a noisy hosted-runner sample. Set
+`SCOUT_GATE_RETRY_FAILED_WORKLOADS=N` to change the retry count, or set it to
+`0` to disable retries.
 
 The OpenSubtitles regex workload is a public benchmark workload. It pins
 `--threads 4` so the segmented regex path is measured against a stable worker

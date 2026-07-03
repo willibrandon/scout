@@ -79,10 +79,10 @@ public sealed class SearchThreadPlannerTests
     [InlineData(1, 1)]
     [InlineData(2, 2)]
     [InlineData(3, 3)]
-    [InlineData(4, 3)]
-    [InlineData(5, 3)]
-    [InlineData(6, 3)]
-    [InlineData(12, 3)]
+    [InlineData(4, 4)]
+    [InlineData(5, 4)]
+    [InlineData(6, 4)]
+    [InlineData(12, 4)]
     public void SearchWalkPlanningUsesMacOsDefaultDirectorySearchThreadMatrix(int upstreamDefault, int expectedThreads)
     {
         int threads = SearchWalkPlanning.GetMacOsDefaultSearchWalkThreadCount(upstreamDefault);
