@@ -12,6 +12,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>true</IsPackable>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <NoPackageAnalysis>true</NoPackageAnalysis>
+    <ScoutBundleProjectReferencesInPackage>true</ScoutBundleProjectReferencesInPackage>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);ScoutCopyProjectReferenceOutputsToPackage</TargetsForTfmSpecificBuildOutput>
     <PackageId>Scout.Text.Regex</PackageId>
     <Title>Scout.Text.Regex</Title>
     <Description>Byte-oriented, linear-time regular expressions for .NET Native AOT.</Description>

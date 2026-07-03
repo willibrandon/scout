@@ -409,17 +409,8 @@ jobs:
           version="${{ needs.validate.outputs.version }}"
           mkdir -p artifacts/library-packages
           projects=(
-            src/Scout.Automata.AhoCorasick/Scout.Automata.AhoCorasick.csproj
-            src/Scout.Automata.Memmem/Scout.Automata.Memmem.csproj
-            src/Scout.Automata.Syntax/Scout.Automata.Syntax.csproj
-            src/Scout.Automata/Scout.Automata.csproj
-            src/Scout.Bytes/Scout.Bytes.csproj
-            src/Scout.Diagnostics/Scout.Diagnostics.csproj
-            src/Scout.Errors/Scout.Errors.csproj
             src/Scout.Globbing/Scout.Globbing.csproj
             src/Scout.Ignore/Scout.Ignore.csproj
-            src/Scout.Matching/Scout.Matching.csproj
-            src/Scout.Os/Scout.Os.csproj
             src/Scout.Regex/Scout.Regex.csproj
           )
           for project in "${projects[@]}"; do
@@ -437,22 +428,16 @@ jobs:
           set -euo pipefail
           version="${{ needs.validate.outputs.version }}"
           packages=(
-            Scout.Automata
-            Scout.Automata.AhoCorasick
-            Scout.Automata.Memmem
-            Scout.Automata.Syntax
-            Scout.Bytes
-            Scout.Diagnostics
-            Scout.Errors
             Scout.IO.Globbing
             Scout.IO.Ignore
-            Scout.Matching
-            Scout.Os
             Scout.Text.Regex
           )
+          expected=()
           for package in "${packages[@]}"; do
-            test -f "artifacts/library-packages/${package}.${version}.nupkg"
+            expected+=("${package}.${version}.nupkg")
           done
+          mapfile -t actual < <(find artifacts/library-packages -maxdepth 1 -type f -name '*.nupkg' -printf '%f\n' | sort)
+          diff -u <(printf '%s\n' "${expected[@]}" | sort) <(printf '%s\n' "${actual[@]}")
       - name: Verify library install and AOT publish
         shell: bash
         run: |
@@ -469,7 +454,9 @@ jobs:
             </packageSources>
             <packageSourceMapping>
               <packageSource key="libraries">
-                <package pattern="Scout.*" />
+                <package pattern="Scout.Text.Regex" />
+                <package pattern="Scout.IO.Globbing" />
+                <package pattern="Scout.IO.Ignore" />
               </packageSource>
               <packageSource key="nuget.org">
                 <package pattern="Microsoft.*" />
@@ -560,6 +547,25 @@ jobs:
           mkdir -p artifacts/nuget-source
           find artifacts/downloaded -type f -name '*.nupkg' -exec cp {} artifacts/nuget-source/ \;
           ls -la artifacts/nuget-source
+      - name: Verify NuGet package set
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.validate.outputs.version }}"
+          expected=(
+            Scout.${version}.nupkg
+            Scout.IO.Globbing.${version}.nupkg
+            Scout.IO.Ignore.${version}.nupkg
+            Scout.Text.Regex.${version}.nupkg
+            Scout.linux-arm64.${version}.nupkg
+            Scout.linux-x64.${version}.nupkg
+            Scout.osx-arm64.${version}.nupkg
+            Scout.osx-x64.${version}.nupkg
+            Scout.win-arm64.${version}.nupkg
+            Scout.win-x64.${version}.nupkg
+          )
+          mapfile -t actual < <(find artifacts/nuget-source -maxdepth 1 -type f -name '*.nupkg' -printf '%f\n' | sort)
+          diff -u <(printf '%s\n' "${expected[@]}" | sort) <(printf '%s\n' "${actual[@]}")
       - name: Verify local dotnet tool install
         shell: bash
         run: |
@@ -591,15 +597,27 @@ jobs:
           printf 'needle\n' > artifacts/nuget-source/search.txt
           "$install/scout" --no-config -n needle artifacts/nuget-source/search.txt > artifacts/nuget-source/search.out
           printf '1:needle\n' | cmp -s - artifacts/nuget-source/search.out
-      - name: Push Scout dependency packages
+      - name: Push RID and library packages
         shell: bash
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
           set -euo pipefail
           version="${{ needs.validate.outputs.version }}"
-          mapfile -t packages < <(find artifacts/nuget-source -type f -name "Scout.*.${version}.nupkg" ! -name "Scout.${version}.nupkg" | sort)
-          for package in "${packages[@]}"; do
+          package_ids=(
+            Scout.linux-arm64
+            Scout.linux-x64
+            Scout.osx-arm64
+            Scout.osx-x64
+            Scout.win-arm64
+            Scout.win-x64
+            Scout.IO.Globbing
+            Scout.IO.Ignore
+            Scout.Text.Regex
+          )
+          for package_id in "${package_ids[@]}"; do
+            package="artifacts/nuget-source/${package_id}.${version}.nupkg"
+            test -f "$package"
             dotnet nuget push "$package" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
           done
       - name: Push pointer package

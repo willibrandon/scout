@@ -30,6 +30,14 @@
           PackagePath="\" />
   </ItemGroup>
 
+  <Target Name="ScoutCopyProjectReferenceOutputsToPackage"
+          DependsOnTargets="ResolveReferences"
+          Condition="'$(ScoutBundleProjectReferencesInPackage)' == 'true'">
+    <ItemGroup>
+      <BuildOutputInPackage Include="@(ReferenceCopyLocalPaths->WithMetadataValue('ReferenceSourceTarget', 'ProjectReference'))" />
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <ScoutSuppressionScanFile Include="$(MSBuildThisFileDirectory)**/*.cs"
                               Exclude="$(MSBuildThisFileDirectory)**/bin/**" />

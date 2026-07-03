@@ -10,6 +10,11 @@
     <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <NoPackageAnalysis>true</NoPackageAnalysis>
+    <ScoutBundleProjectReferencesInPackage>true</ScoutBundleProjectReferencesInPackage>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);ScoutCopyProjectReferenceOutputsToPackage</TargetsForTfmSpecificBuildOutput>
     <PackageId>Scout.IO.Globbing</PackageId>
     <Title>Scout.IO.Globbing</Title>
     <Description>Byte-oriented glob and glob-set matching for .NET Native AOT.</Description>

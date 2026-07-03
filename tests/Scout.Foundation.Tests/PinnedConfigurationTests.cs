@@ -1704,7 +1704,15 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("Verify library install and AOT publish", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("name: scout-library-packages", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("- pack-library-packages", releaseWorkflow, StringComparison.Ordinal);
-        Assert.Contains("Push Scout dependency packages", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("Verify NuGet package set", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("Push RID and library packages", releaseWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("src/Scout.Automata/Scout.Automata.csproj", releaseWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("src/Scout.Automata.Syntax/Scout.Automata.Syntax.csproj", releaseWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("src/Scout.Bytes/Scout.Bytes.csproj", releaseWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("src/Scout.Diagnostics/Scout.Diagnostics.csproj", releaseWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("src/Scout.Errors/Scout.Errors.csproj", releaseWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("src/Scout.Matching/Scout.Matching.csproj", releaseWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("src/Scout.Os/Scout.Os.csproj", releaseWorkflow, StringComparison.Ordinal);
     }
 
     /// <summary>

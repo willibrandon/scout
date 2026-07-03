@@ -21,6 +21,7 @@
     <SuppressTrimAnalysisWarnings>false</SuppressTrimAnalysisWarnings>
     <_TrimmerShowRedundantSuppressions>true</_TrimmerShowRedundantSuppressions>
     <RootNamespace>Scout</RootNamespace>
+    <IsPackable>false</IsPackable>
     <VersionPrefix>0.4.0</VersionPrefix>
     <Version>$(VersionPrefix)</Version>
     <AssemblyVersion>0.4.0.0</AssemblyVersion>
