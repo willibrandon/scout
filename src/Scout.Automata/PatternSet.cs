@@ -1,7 +1,7 @@
 namespace Scout;
 
 /// <summary>
-/// Represents an ordered multi-regex set.
+/// Represents an ordered multi-regex set. Instances are safe to share across threads for matching.
 /// </summary>
 public sealed class PatternSet
 {

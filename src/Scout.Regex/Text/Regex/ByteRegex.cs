@@ -3,7 +3,7 @@ using System.Text;
 namespace Scout.Text.Regex;
 
 /// <summary>
-/// Represents a compiled byte-oriented regular expression.
+/// Represents a compiled byte-oriented regular expression. Instances are safe to share across threads for matching.
 /// </summary>
 public sealed class ByteRegex
 {

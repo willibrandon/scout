@@ -12,14 +12,14 @@ internal sealed class RegexMetaEngine
     private const int AnchoredLeftmostDfaHaystackThreshold = 4096;
     private const ulong DefaultDfaSizeLimit = 16UL * 1024UL * 1024UL;
 
-    private readonly PikeVm? pikeVm;
-    private readonly RegexBoundedBacktracker? boundedBacktracker;
-    private readonly RegexOnePassDfa? onePassDfa;
+    private readonly RegexRunnerPool<PikeVm>? pikeVmPool;
+    private readonly RegexRunnerPool<RegexBoundedBacktracker>? boundedBacktrackerPool;
+    private readonly RegexRunnerPool<RegexOnePassDfa>? onePassDfaPool;
     private readonly RegexDenseDfa? denseDfa;
     private readonly RegexSparseDfa? sparseDfa;
-    private readonly RegexLazyDfa? lazyDfa;
-    private readonly Func<RegexLazyDfa?>? anchoredLeftmostDfaFactory;
-    private readonly RegexLazyDfa? asciiFastDfa;
+    private readonly RegexRunnerPool<RegexLazyDfa>? lazyDfaPool;
+    private readonly RegexRunnerPool<RegexLazyDfa>? anchoredLeftmostDfaPool;
+    private readonly RegexRunnerPool<RegexLazyDfa>? asciiFastDfaPool;
     private readonly RegexEmptyEngine? empty;
     private readonly RegexLiteralSetEngine? literalSet;
     private readonly RegexAlternationSetEngine? alternationSet;
@@ -67,14 +67,9 @@ internal sealed class RegexMetaEngine
     private readonly RegexPrefilter? prefilter;
     private readonly Func<RegexNfa>? nfaFactory;
     private readonly object nfaInitializationLock = new();
-    private readonly Func<RegexUnanchoredLazyDfa?>? unanchoredLazyDfaFactory;
-    private readonly Func<RegexUnanchoredLazyDfa?>? asciiFastUnanchoredDfaFactory;
-    private readonly object unanchoredDfaInitializationLock = new();
-    private readonly object anchoredLeftmostDfaInitializationLock = new();
+    private readonly RegexRunnerPool<RegexUnanchoredLazyDfa>? unanchoredLazyDfaPool;
+    private readonly RegexRunnerPool<RegexUnanchoredLazyDfa>? asciiFastUnanchoredDfaPool;
     private RegexNfa? nfa;
-    private RegexUnanchoredLazyDfa? unanchoredLazyDfa;
-    private RegexUnanchoredLazyDfa? asciiFastUnanchoredDfa;
-    private RegexLazyDfa? anchoredLeftmostDfa;
     private readonly bool utf8;
     private readonly RegexUnguardedFindDelegate? unguardedFind;
 
@@ -137,22 +132,30 @@ internal sealed class RegexMetaEngine
         RegexWholeLineEngine? wholeLine = null,
         RegexEmptyEngine? empty = null,
         RegexDelimitedCaptureEngine? delimitedCapture = null,
-        RegexStructuredLogCaptureEngine? structuredLogCapture = null)
+        RegexStructuredLogCaptureEngine? structuredLogCapture = null,
+        Func<RegexLazyDfa?>? lazyDfaFactory = null,
+        Func<RegexLazyDfa?>? asciiFastDfaFactory = null)
     {
         Kind = kind;
         this.nfa = nfa;
         this.nfaFactory = nfaFactory;
-        this.pikeVm = pikeVm;
-        this.boundedBacktracker = boundedBacktracker;
-        this.onePassDfa = onePassDfa;
+        pikeVmPool = pikeVm is null || nfa is null
+            ? null
+            : new RegexRunnerPool<PikeVm>(pikeVm, () => new PikeVm(nfa));
+        boundedBacktrackerPool = boundedBacktracker is null || nfa is null
+            ? null
+            : new RegexRunnerPool<RegexBoundedBacktracker>(boundedBacktracker, () => new RegexBoundedBacktracker(nfa));
+        onePassDfaPool = onePassDfa is null || nfa is null
+            ? null
+            : new RegexRunnerPool<RegexOnePassDfa>(onePassDfa, () => new RegexOnePassDfa(nfa));
         this.denseDfa = denseDfa;
         this.sparseDfa = sparseDfa;
-        this.lazyDfa = lazyDfa;
-        this.asciiFastDfa = asciiFastDfa;
+        lazyDfaPool = CreatePool(lazyDfa, lazyDfaFactory);
+        anchoredLeftmostDfaPool = CreatePool(initial: null, anchoredLeftmostDfaFactory);
+        asciiFastDfaPool = CreatePool(asciiFastDfa, asciiFastDfaFactory);
         this.empty = empty;
-        this.anchoredLeftmostDfaFactory = anchoredLeftmostDfaFactory;
-        this.asciiFastUnanchoredDfaFactory = asciiFastUnanchoredDfaFactory;
-        this.unanchoredLazyDfaFactory = unanchoredLazyDfaFactory;
+        asciiFastUnanchoredDfaPool = CreatePool(initial: null, asciiFastUnanchoredDfaFactory);
+        unanchoredLazyDfaPool = CreatePool(initial: null, unanchoredLazyDfaFactory);
         this.literalSet = literalSet;
         this.alternationSet = alternationSet;
         this.wholeLine = wholeLine;
@@ -199,6 +202,17 @@ internal sealed class RegexMetaEngine
         this.prefilter = prefilter;
         this.utf8 = utf8;
         unguardedFind = prefilter is null ? CreateUnguardedFind() : null;
+    }
+
+    private static RegexRunnerPool<T>? CreatePool<T>(T? initial, Func<T?>? factory)
+        where T : class
+    {
+        if (initial is null)
+        {
+            return factory is null ? null : new RegexRunnerPool<T>(factory);
+        }
+
+        return new RegexRunnerPool<T>(initial, factory ?? (() => null));
     }
 
     public RegexEngineKind Kind { get; }
@@ -1533,7 +1547,13 @@ internal sealed class RegexMetaEngine
             }
 
             RegexNfa? asciiFastNfa = TryCompileAsciiFastNfa(asciiFastPattern, root, options);
-            RegexLazyDfa? asciiFastDfa = TryCreateAsciiFastDfa(asciiFastNfa, effectiveDfaSizeLimit);
+            Func<RegexLazyDfa?>? asciiFastDfaFactory = CreateAsciiFastDfaFactory(asciiFastNfa, effectiveDfaSizeLimit);
+            RegexLazyDfa? asciiFastDfa = asciiFastDfaFactory?.Invoke();
+            if (asciiFastDfa is null)
+            {
+                asciiFastDfaFactory = null;
+            }
+
             Func<RegexUnanchoredLazyDfa?>? asciiFastUnanchoredDfaFactory = CreateAsciiFastUnanchoredDfaFactory(
                 asciiFastNfa,
                 root,
@@ -1557,6 +1577,7 @@ internal sealed class RegexMetaEngine
                 prefilter,
                 nfa.Utf8,
                 asciiFastDfa: asciiFastDfa,
+                asciiFastDfaFactory: asciiFastDfaFactory,
                 asciiFastUnanchoredDfaFactory: asciiFastUnanchoredDfaFactory);
         }
 
@@ -1604,7 +1625,10 @@ internal sealed class RegexMetaEngine
                 nfa.Utf8);
         }
 
-        if (!RegexLazyDfa.TryCreate(nfa, effectiveDfaSizeLimit, out RegexLazyDfa? lazyDfa))
+        Func<RegexLazyDfa?> lazyDfaFactory = () =>
+            RegexLazyDfa.TryCreate(nfa, effectiveDfaSizeLimit, out RegexLazyDfa? dfa) ? dfa : null;
+        RegexLazyDfa? lazyDfa = lazyDfaFactory();
+        if (lazyDfa is null)
         {
             return new RegexMetaEngine(
                 RegexEngineKind.PikeVm,
@@ -1653,7 +1677,8 @@ internal sealed class RegexMetaEngine
             prefilter,
             nfa.Utf8,
             unanchoredLazyDfaFactory: unanchoredLazyDfaFactory,
-            anchoredLeftmostDfaFactory: anchoredLeftmostDfaFactory);
+            anchoredLeftmostDfaFactory: anchoredLeftmostDfaFactory,
+            lazyDfaFactory: lazyDfaFactory);
     }
 
     private static Func<RegexUnanchoredLazyDfa?>? CreateUnanchoredLazyDfaFactory(
@@ -1703,9 +1728,14 @@ internal sealed class RegexMetaEngine
             : null;
     }
 
-    private static RegexLazyDfa? TryCreateAsciiFastDfa(RegexNfa? asciiFastNfa, ulong dfaSizeLimit)
+    private static Func<RegexLazyDfa?>? CreateAsciiFastDfaFactory(RegexNfa? asciiFastNfa, ulong dfaSizeLimit)
     {
-        return asciiFastNfa is not null && RegexLazyDfa.TryCreate(asciiFastNfa, dfaSizeLimit, out RegexLazyDfa? asciiFastDfa)
+        if (asciiFastNfa is null)
+        {
+            return null;
+        }
+
+        return () => RegexLazyDfa.TryCreate(asciiFastNfa, dfaSizeLimit, out RegexLazyDfa? asciiFastDfa)
             ? asciiFastDfa
             : null;
     }
@@ -2099,12 +2129,21 @@ internal sealed class RegexMetaEngine
             return FindWithRequiredLiteralPrefilter(haystack, startOffset, reachabilityCache);
         }
 
-        RegexUnanchoredLazyDfa? activeUnanchoredLazyDfa = GetUnanchoredLazyDfa(haystack.Length);
-        if (activeUnanchoredLazyDfa is not null &&
-            activeUnanchoredLazyDfa.TryFind(haystack, startOffset, out RegexMatch unanchoredMatch, out bool gaveUp) &&
-            !gaveUp)
+        RegexUnanchoredLazyDfa? activeUnanchoredLazyDfa = RentUnanchoredLazyDfa(haystack.Length);
+        if (activeUnanchoredLazyDfa is not null)
         {
-            return unanchoredMatch;
+            try
+            {
+                if (activeUnanchoredLazyDfa.TryFind(haystack, startOffset, out RegexMatch unanchoredMatch, out bool gaveUp) &&
+                    !gaveUp)
+                {
+                    return unanchoredMatch;
+                }
+            }
+            finally
+            {
+                unanchoredLazyDfaPool!.Return(activeUnanchoredLazyDfa);
+            }
         }
 
         if (TryFindAsciiFastUnanchored(haystack, startOffset, out RegexMatch asciiFastMatch))
@@ -2152,7 +2191,7 @@ internal sealed class RegexMetaEngine
     {
         return prefilter?.UsesRequiredLiteralWindow == true &&
             (haystackLength < UnanchoredLazyDfaHaystackThreshold ||
-            unanchoredLazyDfaFactory is null && asciiFastUnanchoredDfaFactory is null);
+            unanchoredLazyDfaPool is null && asciiFastUnanchoredDfaPool is null);
     }
 
     private RegexMatch? FindWithRequiredLiteralPrefilter(
@@ -2399,11 +2438,20 @@ internal sealed class RegexMetaEngine
             return endAnchoredSequence.CountMatches(haystack, startAt);
         }
 
-        RegexUnanchoredLazyDfa? activeUnanchoredLazyDfa = GetUnanchoredLazyDfa(haystack.Length);
-        if (activeUnanchoredLazyDfa is not null &&
-            activeUnanchoredLazyDfa.TryCountMatches(haystack, startAt, out long unanchoredCount))
+        RegexUnanchoredLazyDfa? activeUnanchoredLazyDfa = RentUnanchoredLazyDfa(haystack.Length);
+        if (activeUnanchoredLazyDfa is not null)
         {
-            return unanchoredCount;
+            try
+            {
+                if (activeUnanchoredLazyDfa.TryCountMatches(haystack, startAt, out long unanchoredCount))
+                {
+                    return unanchoredCount;
+                }
+            }
+            finally
+            {
+                unanchoredLazyDfaPool!.Return(activeUnanchoredLazyDfa);
+            }
         }
 
         if (TryIterateAsciiFastUnanchored(haystack, startAt, startPredicate, sumSpans: false, out long asciiFastCount))
@@ -2631,11 +2679,20 @@ internal sealed class RegexMetaEngine
             return endAnchoredSequence.SumMatchSpans(haystack, startAt);
         }
 
-        RegexUnanchoredLazyDfa? activeUnanchoredLazyDfa = GetUnanchoredLazyDfa(haystack.Length);
-        if (activeUnanchoredLazyDfa is not null &&
-            activeUnanchoredLazyDfa.TrySumMatchSpans(haystack, startAt, out long unanchoredSpanSum))
+        RegexUnanchoredLazyDfa? activeUnanchoredLazyDfa = RentUnanchoredLazyDfa(haystack.Length);
+        if (activeUnanchoredLazyDfa is not null)
         {
-            return unanchoredSpanSum;
+            try
+            {
+                if (activeUnanchoredLazyDfa.TrySumMatchSpans(haystack, startAt, out long unanchoredSpanSum))
+                {
+                    return unanchoredSpanSum;
+                }
+            }
+            finally
+            {
+                unanchoredLazyDfaPool!.Return(activeUnanchoredLazyDfa);
+            }
         }
 
         if (TryIterateAsciiFastUnanchored(haystack, startAt, startPredicate, sumSpans: true, out long asciiFastSpanSum))
@@ -2671,15 +2728,22 @@ internal sealed class RegexMetaEngine
     private bool TryFindAsciiFastUnanchored(ReadOnlySpan<byte> haystack, int startAt, out RegexMatch match)
     {
         match = default;
-        RegexUnanchoredLazyDfa? activeAsciiFastUnanchoredDfa = GetAsciiFastUnanchoredDfa(haystack.Length);
-        if (activeAsciiFastUnanchoredDfa is null ||
-            !activeAsciiFastUnanchoredDfa.TryFind(haystack, startAt, out match, out bool gaveUp) ||
-            gaveUp)
+        RegexUnanchoredLazyDfa? activeAsciiFastUnanchoredDfa = RentAsciiFastUnanchoredDfa(haystack.Length);
+        if (activeAsciiFastUnanchoredDfa is null)
         {
             return false;
         }
 
-        return CanAcceptAsciiFastUnanchored(haystack, startAt, match);
+        try
+        {
+            return activeAsciiFastUnanchoredDfa.TryFind(haystack, startAt, out match, out bool gaveUp) &&
+                !gaveUp &&
+                CanAcceptAsciiFastUnanchored(haystack, startAt, match);
+        }
+        finally
+        {
+            asciiFastUnanchoredDfaPool!.Return(activeAsciiFastUnanchoredDfa);
+        }
     }
 
     private bool TryIterateAsciiFastUnanchored(
@@ -2690,59 +2754,66 @@ internal sealed class RegexMetaEngine
         out long total)
     {
         total = 0;
-        RegexUnanchoredLazyDfa? activeAsciiFastUnanchoredDfa = GetAsciiFastUnanchoredDfa(haystack.Length);
+        RegexUnanchoredLazyDfa? activeAsciiFastUnanchoredDfa = RentAsciiFastUnanchoredDfa(haystack.Length);
         if (activeAsciiFastUnanchoredDfa is null)
         {
             return false;
         }
 
-        int offset = Math.Clamp(startAt, 0, haystack.Length);
-        Dictionary<(int State, int Position), bool> forwardReachabilityCache = [];
-        Dictionary<(int State, int Position), bool> reverseReachabilityCache = [];
-        while (offset <= haystack.Length)
+        try
         {
-            if (!activeAsciiFastUnanchoredDfa.TryFind(
-                    haystack,
-                    offset,
-                    forwardReachabilityCache,
-                    reverseReachabilityCache,
-                    out RegexMatch match,
-                    out bool gaveUp))
+            int offset = Math.Clamp(startAt, 0, haystack.Length);
+            Dictionary<(int State, int Position), bool> forwardReachabilityCache = [];
+            Dictionary<(int State, int Position), bool> reverseReachabilityCache = [];
+            while (offset <= haystack.Length)
             {
-                if (!gaveUp && IsAsciiRange(haystack, offset, haystack.Length))
+                if (!activeAsciiFastUnanchoredDfa.TryFind(
+                        haystack,
+                        offset,
+                        forwardReachabilityCache,
+                        reverseReachabilityCache,
+                        out RegexMatch match,
+                        out bool gaveUp))
                 {
-                    return true;
+                    if (!gaveUp && IsAsciiRange(haystack, offset, haystack.Length))
+                    {
+                        return true;
+                    }
+
+                    if (!TryFindByAnchoredScan(haystack, offset, startPredicate, out match))
+                    {
+                        return true;
+                    }
+
+                    total += sumSpans ? match.Length : 1;
+                    offset = AdvanceAfterNonOverlappingMatch(match, haystack.Length);
+                    continue;
                 }
 
-                if (!TryFindByAnchoredScan(haystack, offset, startPredicate, out match))
+                if (!CanAcceptAsciiFastUnanchored(haystack, offset, match))
                 {
-                    return true;
+                    if (!TryFindByAnchoredScan(haystack, offset, startPredicate, out match))
+                    {
+                        return true;
+                    }
+                }
+                else
+                {
+                    total += sumSpans ? match.Length : 1;
+                    offset = AdvanceAfterNonOverlappingMatch(match, haystack.Length);
+                    continue;
                 }
 
                 total += sumSpans ? match.Length : 1;
                 offset = AdvanceAfterNonOverlappingMatch(match, haystack.Length);
-                continue;
             }
 
-            if (!CanAcceptAsciiFastUnanchored(haystack, offset, match))
-            {
-                if (!TryFindByAnchoredScan(haystack, offset, startPredicate, out match))
-                {
-                    return true;
-                }
-            }
-            else
-            {
-                total += sumSpans ? match.Length : 1;
-                offset = AdvanceAfterNonOverlappingMatch(match, haystack.Length);
-                continue;
-            }
-
-            total += sumSpans ? match.Length : 1;
-            offset = AdvanceAfterNonOverlappingMatch(match, haystack.Length);
+            return true;
         }
-
-        return true;
+        finally
+        {
+            asciiFastUnanchoredDfaPool!.Return(activeAsciiFastUnanchoredDfa);
+        }
     }
 
     private static int AdvanceAfterNonOverlappingMatch(RegexMatch match, int haystackLength)
@@ -2801,7 +2872,7 @@ internal sealed class RegexMetaEngine
         long total = 0;
         int offset = Math.Clamp(startAt, 0, haystack.Length);
         int suppressedEmptyStart = -1;
-        Dictionary<(int State, int Position), bool>? reachabilityCache = lazyDfa is not null && prefilter is null ? [] : null;
+        Dictionary<(int State, int Position), bool>? reachabilityCache = lazyDfaPool is not null && prefilter is null ? [] : null;
         while (offset <= haystack.Length)
         {
             RegexMatch? match = Find(haystack, offset, startPredicate, reachabilityCache);
@@ -3054,60 +3125,36 @@ internal sealed class RegexMetaEngine
         }
     }
 
-    private RegexUnanchoredLazyDfa? GetUnanchoredLazyDfa(int haystackLength)
+    private RegexUnanchoredLazyDfa? RentUnanchoredLazyDfa(int haystackLength)
     {
         if (haystackLength < UnanchoredLazyDfaHaystackThreshold ||
-            unanchoredLazyDfaFactory is null)
+            unanchoredLazyDfaPool is null)
         {
             return null;
         }
 
-        if (unanchoredLazyDfa is not null)
-        {
-            return unanchoredLazyDfa;
-        }
-
-        lock (unanchoredDfaInitializationLock)
-        {
-            return unanchoredLazyDfa ??= unanchoredLazyDfaFactory();
-        }
+        return unanchoredLazyDfaPool.Rent();
     }
 
-    private RegexUnanchoredLazyDfa? GetAsciiFastUnanchoredDfa(int haystackLength)
+    private RegexUnanchoredLazyDfa? RentAsciiFastUnanchoredDfa(int haystackLength)
     {
         if (haystackLength < UnanchoredLazyDfaHaystackThreshold ||
-            asciiFastUnanchoredDfaFactory is null)
+            asciiFastUnanchoredDfaPool is null)
         {
             return null;
         }
 
-        if (asciiFastUnanchoredDfa is not null)
-        {
-            return asciiFastUnanchoredDfa;
-        }
-
-        lock (unanchoredDfaInitializationLock)
-        {
-            return asciiFastUnanchoredDfa ??= asciiFastUnanchoredDfaFactory();
-        }
+        return asciiFastUnanchoredDfaPool.Rent();
     }
 
-    private RegexLazyDfa? GetAnchoredLeftmostDfa()
+    private RegexLazyDfa? RentAnchoredLeftmostDfa()
     {
-        if (anchoredLeftmostDfaFactory is null)
+        if (anchoredLeftmostDfaPool is null)
         {
             return null;
         }
 
-        if (anchoredLeftmostDfa is not null)
-        {
-            return anchoredLeftmostDfa;
-        }
-
-        lock (anchoredLeftmostDfaInitializationLock)
-        {
-            return anchoredLeftmostDfa ??= anchoredLeftmostDfaFactory();
-        }
+        return anchoredLeftmostDfaPool.Rent();
     }
 
     public RegexMatch? FindEarliest(ReadOnlySpan<byte> haystack, int startAt)
@@ -3375,27 +3422,29 @@ internal sealed class RegexMetaEngine
             return asciiWordBoundary.TryMatchAt(haystack, start, out length);
         }
 
-        if (lazyDfa is not null)
+        if (lazyDfaPool is not null)
         {
-            if (ShouldUseAnchoredLeftmostDfa(haystack.Length, reachabilityCache) &&
-                GetAnchoredLeftmostDfa() is RegexLazyDfa anchoredLeftmost)
+            RegexLazyDfa? lazyDfa = lazyDfaPool.Rent();
+            if (lazyDfa is not null)
             {
-                if (anchoredLeftmost.TryFindEnd(haystack, start, out int end, out bool gaveUp))
+                try
                 {
-                    if (!gaveUp)
+                    if (ShouldUseAnchoredLeftmostDfa(haystack.Length, reachabilityCache) &&
+                        TryMatchWithAnchoredLeftmostDfa(haystack, start, out bool anchoredMatched, out length, out bool anchoredHandled))
                     {
-                        length = end - start;
-                        return true;
+                        if (anchoredHandled)
+                        {
+                            return anchoredMatched;
+                        }
                     }
+
+                    return lazyDfa.TryMatchAt(haystack, start, reachabilityCache, out length);
                 }
-                else if (!gaveUp)
+                finally
                 {
-                    length = 0;
-                    return false;
+                    lazyDfaPool.Return(lazyDfa);
                 }
             }
-
-            return lazyDfa.TryMatchAt(haystack, start, reachabilityCache, out length);
         }
 
         if (sparseDfa is not null)
@@ -3408,38 +3457,140 @@ internal sealed class RegexMetaEngine
             return denseDfa.TryMatchAt(haystack, start, out length);
         }
 
-        if (onePassDfa is not null)
+        if (onePassDfaPool is not null)
         {
-            return onePassDfa.TryMatchAt(haystack, start, out length);
-        }
-
-        if (boundedBacktracker is not null)
-        {
-            return boundedBacktracker.TryMatchAt(haystack, start, out length);
-        }
-
-        if (asciiFastDfa is not null)
-        {
-            if (asciiFastDfa.TryMatchAsciiAt(haystack, start, out int asciiLength, out bool aborted))
+            RegexOnePassDfa? onePassDfa = onePassDfaPool.Rent();
+            if (onePassDfa is not null)
             {
-                int asciiEnd = start + asciiLength;
-                if (asciiLength > 0 && (asciiEnd >= haystack.Length || haystack[asciiEnd] <= 0x7F))
+                try
                 {
-                    length = asciiLength;
+                    return onePassDfa.TryMatchAt(haystack, start, out length);
+                }
+                finally
+                {
+                    onePassDfaPool.Return(onePassDfa);
+                }
+            }
+        }
+
+        if (boundedBacktrackerPool is not null)
+        {
+            RegexBoundedBacktracker? boundedBacktracker = boundedBacktrackerPool.Rent();
+            if (boundedBacktracker is not null)
+            {
+                try
+                {
+                    return boundedBacktracker.TryMatchAt(haystack, start, out length);
+                }
+                finally
+                {
+                    boundedBacktrackerPool.Return(boundedBacktracker);
+                }
+            }
+        }
+
+        if (asciiFastDfaPool is not null)
+        {
+            RegexLazyDfa? asciiFastDfa = asciiFastDfaPool.Rent();
+            if (asciiFastDfa is not null)
+            {
+                try
+                {
+                    if (asciiFastDfa.TryMatchAsciiAt(haystack, start, out int asciiLength, out bool aborted))
+                    {
+                        int asciiEnd = start + asciiLength;
+                        if (asciiLength > 0 && (asciiEnd >= haystack.Length || haystack[asciiEnd] <= 0x7F))
+                        {
+                            length = asciiLength;
+                            return true;
+                        }
+
+                        return TryPikeVmMatchAt(haystack, start, out length);
+                    }
+
+                    if (!aborted)
+                    {
+                        length = 0;
+                        return false;
+                    }
+                }
+                finally
+                {
+                    asciiFastDfaPool.Return(asciiFastDfa);
+                }
+            }
+        }
+
+        return TryPikeVmMatchAt(haystack, start, out length);
+    }
+
+    private bool TryMatchWithAnchoredLeftmostDfa(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        out bool matched,
+        out int length,
+        out bool handled)
+    {
+        matched = false;
+        length = 0;
+        handled = false;
+        RegexLazyDfa? anchoredLeftmost = RentAnchoredLeftmostDfa();
+        if (anchoredLeftmost is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            if (anchoredLeftmost.TryFindEnd(haystack, start, out int end, out bool gaveUp))
+            {
+                if (!gaveUp)
+                {
+                    matched = true;
+                    length = end - start;
+                    handled = true;
                     return true;
                 }
-
-                return pikeVm!.TryMatchAt(haystack, start, out length);
             }
-
-            if (!aborted)
+            else if (!gaveUp)
             {
+                matched = false;
                 length = 0;
-                return false;
+                handled = true;
+                return true;
             }
+
+            return false;
+        }
+        finally
+        {
+            anchoredLeftmostDfaPool!.Return(anchoredLeftmost);
+        }
+    }
+
+    private bool TryPikeVmMatchAt(ReadOnlySpan<byte> haystack, int start, out int length)
+    {
+        if (pikeVmPool is null)
+        {
+            var pikeVm = new PikeVm(GetNfa());
+            return pikeVm.TryMatchAt(haystack, start, out length);
         }
 
-        return pikeVm!.TryMatchAt(haystack, start, out length);
+        PikeVm? pooledPikeVm = pikeVmPool.Rent();
+        if (pooledPikeVm is null)
+        {
+            var pikeVm = new PikeVm(GetNfa());
+            return pikeVm.TryMatchAt(haystack, start, out length);
+        }
+
+        try
+        {
+            return pooledPikeVm.TryMatchAt(haystack, start, out length);
+        }
+        finally
+        {
+            pikeVmPool.Return(pooledPikeVm);
+        }
     }
 
     private static bool ShouldUseAnchoredLeftmostDfa(

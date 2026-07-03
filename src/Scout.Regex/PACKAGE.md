@@ -10,3 +10,5 @@ ByteRegexCaptures? captures = regex.FindCaptures(data);
 ```
 
 The engine is backed by Scout's automata implementation and is designed for Native AOT, trimming, and linear-time search.
+
+Compiled `ByteRegex` and `ByteRegexSet` instances are safe to share across threads for matching. Callback state passed to iteration APIs remains caller-owned.

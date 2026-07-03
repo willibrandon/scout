@@ -1,3 +1,4 @@
+using System.Text;
 using Scout.Text.Regex;
 
 namespace Scout;
@@ -7,6 +8,9 @@ namespace Scout;
 /// </summary>
 public sealed class ByteRegexApiTests
 {
+    private const int ConcurrentSearchIterations = 64;
+    private const int ConcurrentHaystackCount = 8;
+
     /// <summary>
     /// Verifies byte regex matching exposes byte offsets and spans.
     /// </summary>
@@ -109,9 +113,150 @@ public sealed class ByteRegexApiTests
         Assert.Equal(2, set.CountMatches("foo1 barz"u8));
     }
 
+    /// <summary>
+    /// Verifies a compiled regex can be shared across concurrent lazy-DFA searches.
+    /// </summary>
+    [Fact]
+    public void SharedRegexFindsFromMultipleThreads()
+    {
+        var regex = ByteRegex.Compile(
+            @"func \w+",
+            new ByteRegexOptions
+            {
+                MultiLine = true,
+                UnicodeClasses = true,
+                EngineMode = ByteRegexEngineMode.General,
+            });
+        byte[][] haystacks = CreateConcurrentRegexHaystacks();
+
+        Parallel.For(0, ConcurrentSearchIterations, _ =>
+        {
+            foreach (byte[] haystack in haystacks)
+            {
+                ByteRegexMatch? match = regex.Find(haystack);
+                AssertFunctionMatch(match, haystack);
+                Assert.True(regex.IsMatch(haystack));
+
+                var matches = new List<ByteRegexMatch>();
+                int count = regex.ForEachMatch(haystack, ref matches, AddMatch);
+
+                Assert.Equal(1, count);
+                Assert.Single(matches);
+                Assert.Equal(match!.Value, matches[0]);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Verifies a compiled regex can be shared across concurrent PikeVM searches.
+    /// </summary>
+    [Fact]
+    public void SharedRegexPikeVmFallbackFindsFromMultipleThreads()
+    {
+        var regex = ByteRegex.Compile(
+            @"func \w+",
+            new ByteRegexOptions
+            {
+                MultiLine = true,
+                UnicodeClasses = true,
+                DfaSizeLimit = 1,
+                EngineMode = ByteRegexEngineMode.General,
+            });
+        byte[][] haystacks = CreateConcurrentRegexHaystacks();
+
+        Parallel.For(0, ConcurrentSearchIterations, _ =>
+        {
+            foreach (byte[] haystack in haystacks)
+            {
+                AssertFunctionMatch(regex.Find(haystack), haystack);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Verifies generic capture matching can be shared across concurrent searches.
+    /// </summary>
+    [Fact]
+    public void SharedRegexCapturesFromMultipleThreads()
+    {
+        var regex = ByteRegex.Compile(
+            @"func ([a-z_]+)",
+            new ByteRegexOptions
+            {
+                MultiLine = true,
+                UnicodeClasses = false,
+                EngineMode = ByteRegexEngineMode.AutomataOnly,
+            });
+        byte[][] haystacks = CreateConcurrentRegexHaystacks();
+
+        Parallel.For(0, ConcurrentSearchIterations, _ =>
+        {
+            foreach (byte[] haystack in haystacks)
+            {
+                ByteRegexCaptures? captures = regex.FindCaptures(haystack);
+
+                Assert.NotNull(captures);
+                AssertFunctionMatch(captures.Match, haystack);
+                ByteRegexMatch? group = captures.GetGroup(1);
+                Assert.True(group.HasValue);
+                Assert.True(group.Value.Value(haystack).StartsWith("handler_"u8));
+            }
+        });
+    }
+
+    /// <summary>
+    /// Verifies a compiled regex set can be shared across concurrent searches.
+    /// </summary>
+    [Fact]
+    public void SharedRegexSetFindsFromMultipleThreads()
+    {
+        var set = ByteRegexSet.Compile(
+            ["func \\w+", "return \\w+"],
+            new ByteRegexOptions
+            {
+                MultiLine = true,
+                UnicodeClasses = true,
+                DfaSizeLimit = 1,
+                EngineMode = ByteRegexEngineMode.General,
+            });
+        byte[][] haystacks = CreateConcurrentRegexHaystacks();
+
+        Parallel.For(0, ConcurrentSearchIterations, _ =>
+        {
+            foreach (byte[] haystack in haystacks)
+            {
+                ByteRegexSetMatch? match = set.Find(haystack);
+
+                Assert.True(match.HasValue);
+                Assert.Equal(0, match.Value.PatternId);
+                AssertFunctionMatch(match.Value.Match, haystack);
+            }
+        });
+    }
+
     private static bool AddMatch(ReadOnlySpan<byte> input, ByteRegexMatch match, ref List<ByteRegexMatch> state)
     {
         state.Add(match);
         return true;
+    }
+
+    private static byte[][] CreateConcurrentRegexHaystacks()
+    {
+        return Enumerable.Range(0, ConcurrentHaystackCount)
+            .Select(static index => Encoding.UTF8.GetBytes($"package mod{index};\nfunc handler_{index}() {{ return errors.New(\"boom\") }}\n"))
+            .ToArray();
+    }
+
+    private static void AssertFunctionMatch(ByteRegexMatch? match, ReadOnlySpan<byte> haystack)
+    {
+        Assert.True(match.HasValue);
+        AssertFunctionMatch(match.Value, haystack);
+    }
+
+    private static void AssertFunctionMatch(ByteRegexMatch match, ReadOnlySpan<byte> haystack)
+    {
+        ReadOnlySpan<byte> value = match.Value(haystack);
+        Assert.True(value.StartsWith("func handler_"u8));
+        Assert.Equal(haystack.IndexOf("func "u8), match.Start);
     }
 }
