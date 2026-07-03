@@ -395,6 +395,25 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
+    /// Verifies PCRE2 stats search uses the same binary-safe prefix for matching and stats.
+    /// </summary>
+    [Fact]
+    public void StatsImplicitBinaryPcre2SearchUsesBinarySafePrefix()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        File.WriteAllBytes(path, Encoding.UTF8.GetBytes("alpha\n\0foo bar after\n"));
+
+        const string Pattern = @"(?=.*foo).*bar";
+        (int exitCode, byte[] output, string error) = RunScout("--stats", "-P", Pattern, root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--stats", "-P", Pattern, root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(NormalizeStatsTimings(pinnedOutput), NormalizeStatsTimings(output));
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies multiline regex stats stop at the same binary-safe prefix as ripgrep.
     /// </summary>
     [Fact]
@@ -1063,6 +1082,29 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
+    /// Verifies matching binary files print ripgrep's binary-file message in PCRE2 mode.
+    /// </summary>
+    [Fact]
+    public void Pcre2BinaryFileDefaultPrintsBinaryMatchMessage()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        File.WriteAllBytes(path, Encoding.UTF8.GetBytes("prefix needle\nalpha\0needle\nnext needle\n"));
+
+        (int exitCode, byte[] output, string error) = RunScout("-P", "needle", path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-P", "needle", path);
+        (int binaryExitCode, byte[] binaryOutput, string binaryError) = RunScout("--binary", "-P", "needle", path);
+        (int pinnedBinaryExitCode, byte[] pinnedBinaryOutput, string pinnedBinaryError) = RunPinnedRipgrep("--binary", "-P", "needle", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+        Assert.Equal(pinnedBinaryExitCode, binaryExitCode);
+        Assert.Equal(pinnedBinaryOutput, binaryOutput);
+        Assert.Equal(pinnedBinaryError, binaryError);
+    }
+
+    /// <summary>
     /// Verifies text mode prints binary matching lines instead of the binary-file message.
     /// </summary>
     [Fact]
@@ -1119,6 +1161,32 @@ public sealed class ScoutApplicationRuntimeTests
         (int pinnedDefaultExitCode, byte[] pinnedDefaultOutput, string pinnedDefaultError) = RunPinnedRipgrep("--sort=path", "needle", root);
         (int binaryExitCode, byte[] binaryOutput, string binaryError) = RunScout("--sort=path", "--binary", "needle", root);
         (int pinnedBinaryExitCode, byte[] pinnedBinaryOutput, string pinnedBinaryError) = RunPinnedRipgrep("--sort=path", "--binary", "needle", root);
+
+        Assert.Equal(pinnedDefaultExitCode, defaultExitCode);
+        Assert.Equal(pinnedDefaultOutput, defaultOutput);
+        Assert.Equal(pinnedDefaultError, defaultError);
+        Assert.Equal(pinnedBinaryExitCode, binaryExitCode);
+        Assert.Equal(pinnedBinaryOutput, binaryOutput);
+        Assert.Equal(pinnedBinaryError, binaryError);
+    }
+
+    /// <summary>
+    /// Verifies recursive PCRE2 binary filtering stops before matches after the first NUL.
+    /// </summary>
+    [Fact]
+    public void RecursivePcre2BinaryFilteringMatchesPinnedRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string after = Path.Combine(root, "after.dat");
+        string before = Path.Combine(root, "before.dat");
+        File.WriteAllBytes(after, Encoding.UTF8.GetBytes("alpha\0foo bar after\n"));
+        File.WriteAllBytes(before, Encoding.UTF8.GetBytes("foo bar before\0alpha\n"));
+
+        const string Pattern = @"(?=.*foo).*bar";
+        (int defaultExitCode, byte[] defaultOutput, string defaultError) = RunScout("--sort=path", "-P", Pattern, root);
+        (int pinnedDefaultExitCode, byte[] pinnedDefaultOutput, string pinnedDefaultError) = RunPinnedRipgrep("--sort=path", "-P", Pattern, root);
+        (int binaryExitCode, byte[] binaryOutput, string binaryError) = RunScout("--sort=path", "--binary", "-P", Pattern, root);
+        (int pinnedBinaryExitCode, byte[] pinnedBinaryOutput, string pinnedBinaryError) = RunPinnedRipgrep("--sort=path", "--binary", "-P", Pattern, root);
 
         Assert.Equal(pinnedDefaultExitCode, defaultExitCode);
         Assert.Equal(pinnedDefaultOutput, defaultOutput);
