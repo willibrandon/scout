@@ -1,7 +1,7 @@
 namespace Scout;
 
 /// <summary>
-/// Executes a byte-oriented regular expression automaton.
+/// Executes a byte-oriented regular expression automaton. Instances are safe to share across threads for matching.
 /// </summary>
 public sealed class RegexAutomaton
 {
@@ -19,7 +19,7 @@ public sealed class RegexAutomaton
     private readonly int captureCount;
     private readonly int wholePatternCaptureIndex;
 
-    private RegexCaptureEngine? captureEngine;
+    private RegexRunnerPool<RegexCaptureEngine>? captureEnginePool;
     private RegexAlternationSetEngine? syntheticCaptureAlternationSet;
     private RegexDelimitedCaptureEngine? delimitedCaptureEngine;
     private RegexStructuredLogCaptureEngine? structuredLogCaptureEngine;
@@ -1250,7 +1250,9 @@ public sealed class RegexAutomaton
                 if (captureRoot is not null && captureCount > 0 && wholePatternCaptureIndex == 0)
                 {
                     RegexNfa captureNfa = RegexNfaCompiler.CompileCaptures(captureRoot, captureOptions, captureCount);
-                    captureEngine = new RegexCaptureEngine(captureNfa, prefilter: null);
+                    captureEnginePool = new RegexRunnerPool<RegexCaptureEngine>(
+                        new RegexCaptureEngine(captureNfa, prefilter: null),
+                        () => new RegexCaptureEngine(captureNfa, prefilter: null));
                 }
 
                 genericCaptureOnly = true;
@@ -1412,7 +1414,9 @@ public sealed class RegexAutomaton
                 {
                     RegexNfa captureNfa = RegexNfaCompiler.CompileCaptures(captureRoot, captureOptions, captureCount);
                     RegexPrefilter? effectiveCapturePrefilter = capturePrefilter ?? RegexPrefilter.Compile(captureRoot, captureOptions);
-                    captureEngine = new RegexCaptureEngine(captureNfa, effectiveCapturePrefilter);
+                    captureEnginePool = new RegexRunnerPool<RegexCaptureEngine>(
+                        new RegexCaptureEngine(captureNfa, effectiveCapturePrefilter),
+                        () => new RegexCaptureEngine(captureNfa, effectiveCapturePrefilter));
                 }
             }
 
@@ -1660,12 +1664,25 @@ public sealed class RegexAutomaton
             return null;
         }
 
-        if (captureEngine is null)
+        if (captureEnginePool is null)
         {
             return new RegexCaptures(match.Value, [match.Value]);
         }
 
-        return captureEngine.MatchAt(haystack, match.Value.Start);
+        RegexCaptureEngine? captureEngine = captureEnginePool.Rent();
+        if (captureEngine is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return captureEngine.MatchAt(haystack, match.Value.Start);
+        }
+        finally
+        {
+            captureEnginePool.Return(captureEngine);
+        }
     }
 
     private static bool HasHigherPriorityFixedWidthSpecialization(RegexSyntaxNode root, RegexCompileOptions options)

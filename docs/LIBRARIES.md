@@ -41,6 +41,8 @@ ByteRegexSet set = ByteRegexSet.Compile(["struct", "enum", "union"]);
 ByteRegexSetMatch? match = set.Find(data);
 ```
 
+Compiled `ByteRegex`, `ByteRegexSet`, `RegexAutomaton`, and `PatternSet` instances are safe to share across threads for matching. Callback state passed to iteration APIs remains caller-owned.
+
 ## Scout.IO.Globbing
 
 Use `Scout.IO.Globbing` for byte-oriented glob and glob-set matching.
