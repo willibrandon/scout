@@ -3,7 +3,9 @@ namespace Scout;
 internal sealed class RegexRunnerPool<T>
     where T : class
 {
-    private const int LocalSlotCount = 16;
+    private const int LocalSlotCount = 64;
+    private const int LocalSlotMask = LocalSlotCount - 1;
+    private const int LocalSlotProbeCount = 4;
 
     private readonly RegexRunnerPoolSlot<T>[] localSlots = CreateLocalSlots();
     private readonly System.Collections.Concurrent.ConcurrentBag<T> overflow = [];
@@ -23,22 +25,28 @@ internal sealed class RegexRunnerPool<T>
     public T? Rent()
     {
         int threadId = Environment.CurrentManagedThreadId;
+        int slotIndex = threadId & LocalSlotMask;
 
-        for (int i = 0; i < localSlots.Length; i++)
+        for (int probe = 0; probe < LocalSlotProbeCount; probe++)
         {
-            RegexRunnerPoolSlot<T> slot = localSlots[i];
-            if (System.Threading.Volatile.Read(ref slot.ThreadId) != threadId)
+            RegexRunnerPoolSlot<T> slot = localSlots[(slotIndex + probe) & LocalSlotMask];
+            int owner = System.Threading.Volatile.Read(ref slot.ThreadId);
+
+            if (owner == threadId)
             {
-                continue;
+                T? localItem = System.Threading.Interlocked.Exchange(ref slot.Item, null);
+                if (localItem is not null)
+                {
+                    return localItem;
+                }
+
+                break;
             }
 
-            T? localItem = System.Threading.Interlocked.Exchange(ref slot.Item, null);
-            if (localItem is not null)
+            if (owner == 0)
             {
-                return localItem;
+                break;
             }
-
-            break;
         }
 
         if (overflow.TryTake(out T? item))
@@ -52,11 +60,12 @@ internal sealed class RegexRunnerPool<T>
     public void Return(T item)
     {
         int threadId = Environment.CurrentManagedThreadId;
+        int slotIndex = threadId & LocalSlotMask;
         RegexRunnerPoolSlot<T>? emptySlot = null;
 
-        for (int i = 0; i < localSlots.Length; i++)
+        for (int probe = 0; probe < LocalSlotProbeCount; probe++)
         {
-            RegexRunnerPoolSlot<T> slot = localSlots[i];
+            RegexRunnerPoolSlot<T> slot = localSlots[(slotIndex + probe) & LocalSlotMask];
             int owner = System.Threading.Volatile.Read(ref slot.ThreadId);
 
             if (owner == threadId)
@@ -70,9 +79,10 @@ internal sealed class RegexRunnerPool<T>
                 return;
             }
 
-            if (owner == 0 && emptySlot is null)
+            if (owner == 0)
             {
                 emptySlot = slot;
+                break;
             }
         }
 

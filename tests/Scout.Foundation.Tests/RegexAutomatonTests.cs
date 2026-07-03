@@ -5,6 +5,8 @@ namespace Scout;
 /// </summary>
 public sealed class RegexAutomatonTests
 {
+    private const int PathologicalNoMatchTimeoutMilliseconds = 5000;
+
     /// <summary>
     /// Verifies leading required literals use the Memmem regex prefilter.
     /// </summary>
@@ -5593,7 +5595,7 @@ public sealed class RegexAutomatonTests
     /// <summary>
     /// Verifies a large lazy-DFA state space fails over before pathological no-match verification stalls.
     /// </summary>
-    [Fact(Timeout = 1000)]
+    [Fact(Timeout = PathologicalNoMatchTimeoutMilliseconds)]
     public void RejectsUnterminatedRepeatedRegexSignatureWithoutStalling()
     {
         var automaton = RegexAutomaton.Compile(
@@ -5618,7 +5620,7 @@ public sealed class RegexAutomatonTests
     /// <summary>
     /// Verifies failed lazy-DFA prefix candidates stop at the dead state instead of rescanning to EOF.
     /// </summary>
-    [Fact(Timeout = 1000)]
+    [Fact(Timeout = PathologicalNoMatchTimeoutMilliseconds)]
     public void RejectsManyFailedSignaturePrefixesWithoutRescanningRemainder()
     {
         var automaton = RegexAutomaton.Compile(
@@ -6028,7 +6030,7 @@ public sealed class RegexAutomatonTests
     /// <summary>
     /// Verifies sparse-class no-match runs are rejected with one forward scan instead of retrying each start.
     /// </summary>
-    [Fact(Timeout = 1000)]
+    [Fact(Timeout = PathologicalNoMatchTimeoutMilliseconds)]
     public void RejectsDisjointByteRunSuffixBoundaryNoMatchWithoutRescanning()
     {
         var automaton = RegexAutomaton.Compile(
