@@ -8,7 +8,7 @@ internal static class RegexDfaOperations
         {
             RegexNfaState state = nfa.States[index];
             if (state.Kind == RegexNfaStateKind.Predicate ||
-                RegexByteClass.RequiresUtf8ScalarMatch(state.AtomKind, state.Value.Span, state.Utf8, state.CaseInsensitive, state.UnicodeClasses))
+                state.RequiresUtf8ScalarMatch)
             {
                 return false;
             }
@@ -123,8 +123,9 @@ internal static class RegexDfaOperations
                     state.DotMatchesNewline,
                     state.Crlf,
                     state.LineTerminator,
-                    state.Utf8,
                     state.UnicodeClasses,
+                    state.RequiresUtf8ScalarMatch,
+                    state.CanUseAsciiScalarFastPath,
                     out int consume))
             {
                 continue;
@@ -272,8 +273,9 @@ internal static class RegexDfaOperations
                             state.DotMatchesNewline,
                             state.Crlf,
                             state.LineTerminator,
-                            state.Utf8,
                             state.UnicodeClasses,
+                            state.RequiresUtf8ScalarMatch,
+                            state.CanUseAsciiScalarFastPath,
                             out int consume))
                     {
                         pending.Push((state.Next, current.Position + consume));
