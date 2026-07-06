@@ -3296,6 +3296,66 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies specialization defaults are scoped to the current operation instead of process-wide state.
+    /// </summary>
+    [Fact]
+    public void RegexSpecializationDefaultScopeDoesNotLeakAcrossConcurrentOperations()
+    {
+        using var scopeEntered = new ManualResetEventSlim();
+        using var releaseScope = new ManualResetEventSlim();
+        using var completed = new ManualResetEventSlim();
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        RegexEngineKind? generalKind = null;
+        OperationCanceledException? threadCancellation = null;
+        byte[] uriPattern = @"[\w]+://[^/\s?#]+[^\s?#]+(?:\?[^\s#]*)?(?:#[^\s]*)?"u8.ToArray();
+
+        var scoped = new Thread(() =>
+        {
+            try
+            {
+                using RegexSpecializationModeScope scope = RegexSpecializationModeDefaults.Use(RegexSpecializationMode.General);
+                scopeEntered.Set();
+                releaseScope.Wait(cancellationToken);
+
+                var general = RegexAutomaton.Compile(
+                    uriPattern,
+                    caseInsensitive: false,
+                    multiLine: false,
+                    dotMatchesNewline: false,
+                    utf8: false,
+                    unicodeClasses: false);
+
+                generalKind = GetEngineKind(general);
+            }
+            catch (OperationCanceledException exception)
+            {
+                threadCancellation = exception;
+            }
+            finally
+            {
+                completed.Set();
+            }
+        });
+        scoped.Start();
+
+        scopeEntered.Wait(cancellationToken);
+        var defaultAutomaton = RegexAutomaton.Compile(
+            uriPattern,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        releaseScope.Set();
+        completed.Wait(cancellationToken);
+
+        Assert.Null(threadCancellation);
+        Assert.NotEqual(RegexEngineKind.Uri, generalKind);
+        Assert.Equal(RegexEngineKind.Uri, GetEngineKind(defaultAutomaton));
+    }
+
+    /// <summary>
     /// Verifies fallback mode disables recognizer engines while preserving regex semantics.
     /// </summary>
     [Fact]
