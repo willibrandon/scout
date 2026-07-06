@@ -8,8 +8,10 @@ namespace Scout;
 /// </summary>
 public sealed class ByteRegexApiTests
 {
+    private const int BoundedAssignmentSearchTimeoutMilliseconds = 5000;
     private const int ConcurrentSearchIterations = 64;
     private const int ConcurrentHaystackCount = 8;
+    private const string BoundedAssignmentPattern = "(?i)[\\w.-]{0,50}?(?:adafruit)(?:[ \\t\\w.-]{0,20})[\\s'\"]{0,3}(?:=|>|:{1,3}=|\\|\\||:|=>|\\?=|,)[\\x60'\"\\s=]{0,5}([a-z0-9_-]{32})(?:[\\x60'\"\\s;]|\\\\[nr]|$)";
 
     /// <summary>
     /// Verifies byte regex matching exposes byte offsets and spans.
@@ -45,6 +47,30 @@ public sealed class ByteRegexApiTests
         Assert.Equal(new ByteRegexMatch(2, 3), captures.GetGroup(1));
         Assert.Equal(new ByteRegexMatch(5, 3), captures.GetGroup(2));
         Assert.Equal(3, captures.ParticipatingCount());
+    }
+
+    /// <summary>
+    /// Verifies bounded assignment patterns with Unicode classes do not expand into pathological VM searches.
+    /// </summary>
+    [Fact(Timeout = BoundedAssignmentSearchTimeoutMilliseconds)]
+    public void FindsBoundedAssignmentCapturesWithoutStalling()
+    {
+        var regex = ByteRegex.Compile(BoundedAssignmentPattern);
+        byte[] positive = Encoding.UTF8.GetBytes("adafruit_api_key = abc123def456ghi789jkl012mno345pq\n");
+        byte[] negative = Encoding.UTF8.GetBytes("regex = '''(?i)[\\\\w.-]{0,50}?(?:adafruit)(?:[ \\\\t\\\\w.-]{0,20})''' keywords = [\"adafruit\"]");
+
+        ByteRegexMatch? match = regex.Find(positive);
+        ByteRegexCaptures? captures = regex.FindCaptures(positive);
+
+        Assert.True(match.HasValue);
+        Assert.NotNull(captures);
+        Assert.Equal(match.Value, captures.Match);
+        ByteRegexMatch? secret = captures.GetGroup(1);
+        Assert.True(secret.HasValue);
+        Assert.True(secret.Value.Value(positive).SequenceEqual("abc123def456ghi789jkl012mno345pq"u8));
+        Assert.Null(regex.Find(negative));
+        Assert.False(regex.IsMatch(negative));
+        Assert.Equal(0, regex.Count(negative));
     }
 
     /// <summary>

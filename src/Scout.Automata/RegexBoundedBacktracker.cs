@@ -93,8 +93,9 @@ internal sealed class RegexBoundedBacktracker
                             state.DotMatchesNewline,
                             state.Crlf,
                             state.LineTerminator,
-                            state.Utf8,
                             state.UnicodeClasses,
+                            state.RequiresUtf8ScalarMatch,
+                            state.CanUseAsciiScalarFastPath,
                             out int consume) &&
                         TryMatchState(state.Next, start, position + consume, haystack, visiting, out end);
                 case RegexNfaStateKind.Sparse:

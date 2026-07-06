@@ -57,10 +57,48 @@ internal static class RegexByteClass
         }
 
         bool requiresUtf8ScalarMatch = RequiresUtf8ScalarMatch(kind, expression, utf8, caseInsensitive, unicodeClasses);
+        bool canUseAsciiScalarFastPath = CanUseAsciiScalarFastPath(kind, expression);
+        return TryGetAtomMatchLength(
+            haystack,
+            position,
+            kind,
+            expression,
+            caseInsensitive,
+            multiLine,
+            dotMatchesNewline,
+            crlf,
+            lineTerminator,
+            unicodeClasses,
+            requiresUtf8ScalarMatch,
+            canUseAsciiScalarFastPath,
+            out length);
+    }
+
+    public static bool TryGetAtomMatchLength(
+        ReadOnlySpan<byte> haystack,
+        int position,
+        RegexSyntaxKind kind,
+        ReadOnlySpan<byte> expression,
+        bool caseInsensitive,
+        bool multiLine,
+        bool dotMatchesNewline,
+        bool crlf,
+        byte lineTerminator,
+        bool unicodeClasses,
+        bool requiresUtf8ScalarMatch,
+        bool canUseAsciiScalarFastPath,
+        out int length)
+    {
+        length = 0;
+        if (position >= haystack.Length)
+        {
+            return false;
+        }
+
         if (requiresUtf8ScalarMatch)
         {
             if (haystack[position] <= 0x7F &&
-                CanUseAsciiScalarFastPath(kind, expression))
+                canUseAsciiScalarFastPath)
             {
                 if (!AtomMatches(
                     haystack[position],
@@ -116,7 +154,7 @@ internal static class RegexByteClass
         return true;
     }
 
-    private static bool CanUseAsciiScalarFastPath(RegexSyntaxKind kind, ReadOnlySpan<byte> expression)
+    internal static bool CanUseAsciiScalarFastPath(RegexSyntaxKind kind, ReadOnlySpan<byte> expression)
     {
         return kind switch
         {

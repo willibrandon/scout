@@ -8,6 +8,7 @@ internal sealed class RegexMetaEngine
     private const int SparseDfaStateLimit = 64;
     private const int OnePassDfaNfaStateLimit = 48;
     private const int BoundedBacktrackerNfaStateLimit = 24;
+    private const int CompactScalarFallbackNfaStateThreshold = 4096;
     private const int UnanchoredLazyDfaHaystackThreshold = 4096;
     private const int AnchoredLeftmostDfaHaystackThreshold = 4096;
     private const ulong DefaultDfaSizeLimit = 16UL * 1024UL * 1024UL;
@@ -1504,6 +1505,7 @@ internal sealed class RegexMetaEngine
 
         if (!RegexDfaOperations.CanCompile(nfa))
         {
+            nfa = TryUseCompactScalarFallbackNfa(nfa, root, options);
             if (nfa.States.Count <= OnePassDfaNfaStateLimit && RegexOnePassDfa.CanCompile(nfa))
             {
                 return new RegexMetaEngine(
@@ -1679,6 +1681,22 @@ internal sealed class RegexMetaEngine
             unanchoredLazyDfaFactory: unanchoredLazyDfaFactory,
             anchoredLeftmostDfaFactory: anchoredLeftmostDfaFactory,
             lazyDfaFactory: lazyDfaFactory);
+    }
+
+    private static RegexNfa TryUseCompactScalarFallbackNfa(
+        RegexNfa nfa,
+        RegexSyntaxNode? root,
+        RegexCompileOptions? options)
+    {
+        if (nfa.States.Count < CompactScalarFallbackNfaStateThreshold ||
+            root is null ||
+            !options.HasValue)
+        {
+            return nfa;
+        }
+
+        RegexNfa compact = RegexNfaCompiler.CompileWithCompactScalarAtoms(root, options.Value, utf8ByteTrieCache: null);
+        return compact.States.Count < nfa.States.Count ? compact : nfa;
     }
 
     private static Func<RegexUnanchoredLazyDfa?>? CreateUnanchoredLazyDfaFactory(

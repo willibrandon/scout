@@ -32,6 +32,8 @@ internal sealed class RegexNfaState
         Alternative = alternative;
         CaptureIndex = captureIndex;
         SparseTransitions = sparseTransitions ?? [];
+        RequiresUtf8ScalarMatch = RegexByteClass.RequiresUtf8ScalarMatch(atomKind, value.Span, utf8, caseInsensitive, unicodeClasses);
+        CanUseAsciiScalarFastPath = RegexByteClass.CanUseAsciiScalarFastPath(atomKind, value.Span);
     }
 
     public RegexNfaStateKind Kind { get; }
@@ -61,6 +63,10 @@ internal sealed class RegexNfaState
     public int CaptureIndex { get; }
 
     public RegexNfaSparseTransition[] SparseTransitions { get; }
+
+    public bool RequiresUtf8ScalarMatch { get; }
+
+    public bool CanUseAsciiScalarFastPath { get; }
 
     public bool TryGetSparseTarget(byte value, out int next)
     {

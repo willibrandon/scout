@@ -670,7 +670,14 @@ public sealed class RegexAutomaton
             utf8ByteTrieCache);
         int wholePatternCaptureIndex = TryGetWholePatternCaptureIndex(tree.Root, tree.CaptureCount);
         return new RegexAutomaton(
-            RegexMetaEngine.Compile(nfa, prefilter: null, dfaSizeLimit: dfaSizeLimit),
+            RegexMetaEngine.Compile(
+                nfa,
+                prefilter: null,
+                dfaSizeLimit: dfaSizeLimit,
+                literalSet: null,
+                alternationSet: null,
+                root: tree.Root,
+                options: options),
             startPredicate: null,
             lengthGuard: null,
             requiredByteSetGuard: null,

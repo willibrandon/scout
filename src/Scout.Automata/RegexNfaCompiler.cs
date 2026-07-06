@@ -80,7 +80,7 @@ internal sealed class RegexNfaCompiler
 
     public static RegexNfa CompileCaptures(RegexSyntaxNode root, RegexCompileOptions options, int captureCount)
     {
-        var compiler = new RegexNfaCompiler(includeCaptures: true, captureCount);
+        var compiler = new RegexNfaCompiler(includeCaptures: true, captureCount, expandUtf8Atoms: false);
         int accept = compiler.AddAccept();
         int start = compiler.CompileNode(root, accept, options);
         return new RegexNfa(compiler.states, start, compiler.RequiresUtf8SearchBoundary(options.Utf8), captureCount);

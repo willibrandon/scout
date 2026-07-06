@@ -168,8 +168,9 @@ internal sealed class PikeVm
                 state.DotMatchesNewline,
                 state.Crlf,
                 state.LineTerminator,
-                state.Utf8,
                 state.UnicodeClasses,
+                state.RequiresUtf8ScalarMatch,
+                state.CanUseAsciiScalarFastPath,
                 out int consume))
         {
             AddThread(state.Next, haystack, position + consume, threads, seen, new bool[nfa.States.Count], new bool[nfa.States.Count]);
@@ -295,8 +296,9 @@ internal sealed class PikeVm
                     state.DotMatchesNewline,
                     state.Crlf,
                     state.LineTerminator,
-                    state.Utf8,
                     state.UnicodeClasses,
+                    state.RequiresUtf8ScalarMatch,
+                    state.CanUseAsciiScalarFastPath,
                     out int consume) &&
                 RegexDfaOperations.CanReachAccept(nfa, state.Next, haystack, position + consume, reachabilityCache))
             {

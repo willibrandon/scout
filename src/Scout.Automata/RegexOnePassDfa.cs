@@ -28,7 +28,7 @@ internal sealed class RegexOnePassDfa
         {
             RegexNfaState state = nfa.States[index];
             RegexNfaStateKind kind = state.Kind;
-            if (RegexByteClass.RequiresUtf8ScalarMatch(state.AtomKind, state.Value.Span, state.Utf8, state.CaseInsensitive, state.UnicodeClasses))
+            if (state.RequiresUtf8ScalarMatch)
             {
                 return false;
             }
@@ -117,8 +117,9 @@ internal sealed class RegexOnePassDfa
                     state.DotMatchesNewline,
                     state.Crlf,
                     state.LineTerminator,
-                    state.Utf8,
                     state.UnicodeClasses,
+                    state.RequiresUtf8ScalarMatch,
+                    state.CanUseAsciiScalarFastPath,
                     out consume))
             {
                 target = state.Next;
@@ -252,8 +253,9 @@ internal sealed class RegexOnePassDfa
                     state.DotMatchesNewline,
                     state.Crlf,
                     state.LineTerminator,
-                    state.Utf8,
                     state.UnicodeClasses,
+                    state.RequiresUtf8ScalarMatch,
+                    state.CanUseAsciiScalarFastPath,
                     out int consume) &&
                 RegexDfaOperations.CanReachAccept(
                     nfa,

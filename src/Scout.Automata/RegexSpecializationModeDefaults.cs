@@ -2,12 +2,12 @@ namespace Scout;
 
 internal static class RegexSpecializationModeDefaults
 {
-    private static int current;
+    private static readonly AsyncLocal<RegexSpecializationMode?> CurrentMode = new();
 
     public static RegexSpecializationMode Current
     {
-        get => (RegexSpecializationMode)System.Threading.Volatile.Read(ref current);
-        set => System.Threading.Volatile.Write(ref current, (int)value);
+        get => CurrentMode.Value ?? RegexSpecializationMode.Default;
+        set => CurrentMode.Value = value;
     }
 
     public static RegexSpecializationModeScope Use(RegexSpecializationMode mode)

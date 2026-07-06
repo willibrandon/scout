@@ -155,8 +155,9 @@ internal sealed class RegexCaptureEngine
                         state.DotMatchesNewline,
                         state.Crlf,
                         state.LineTerminator,
-                        state.Utf8,
                         state.UnicodeClasses,
+                        state.RequiresUtf8ScalarMatch,
+                        state.CanUseAsciiScalarFastPath,
                         out int consume))
                 {
                     AddThread(
@@ -407,8 +408,9 @@ internal sealed class RegexCaptureEngine
                     state.DotMatchesNewline,
                     state.Crlf,
                     state.LineTerminator,
-                    state.Utf8,
                     state.UnicodeClasses,
+                    state.RequiresUtf8ScalarMatch,
+                    state.CanUseAsciiScalarFastPath,
                     out int consume) &&
                 RegexDfaOperations.CanReachAccept(nfa, state.Next, haystack, position + consume, reachabilityCache))
             {
