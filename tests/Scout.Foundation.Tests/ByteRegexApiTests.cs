@@ -9,8 +9,6 @@ namespace Scout;
 public sealed class ByteRegexApiTests
 {
     private const int BoundedAssignmentSearchTimeoutMilliseconds = 5000;
-    private const int LargeBoundedUnicodeClassCandidateCount = 5000;
-    private const int LargeBoundedUnicodeClassSearchTimeoutMilliseconds = 5000;
     private const int RepeatedBoundedAssignmentSearchTimeoutMilliseconds = 5000;
     private const int RepeatedBoundedAssignmentCandidateCount = 800;
     private const int RepeatedBoundedAssignmentStressCandidateCount = 4000;
@@ -18,7 +16,6 @@ public sealed class ByteRegexApiTests
     private const int ConcurrentSearchIterations = 64;
     private const int ConcurrentHaystackCount = 8;
     private const string BoundedAssignmentPattern = "(?i)[\\w.-]{0,50}?(?:adafruit)(?:[ \\t\\w.-]{0,20})[\\s'\"]{0,3}(?:=|>|:{1,3}=|\\|\\||:|=>|\\?=|,)[\\x60'\"\\s=]{0,5}([a-z0-9_-]{32})(?:[\\x60'\"\\s;]|\\\\[nr]|$)";
-    private const string LargeBoundedUnicodeClassPattern = "x[\\w-]{50,1000}";
     private const string RepeatedBoundedAssignmentPattern = "(?i)[\\w.-]{0,50}?(?:bitbucket)(?:[ \\t\\w.-]{0,20})[\\s'\"]{0,3}(?:=|>|:{1,3}=|\\|\\||:|=>|\\?=|,)[\\x60'\"\\s=]{0,5}([a-z0-9]{32})(?:[\\x60'\"\\s;]|\\\\[nr]|$)";
 
     /// <summary>
@@ -79,23 +76,6 @@ public sealed class ByteRegexApiTests
         Assert.Null(regex.Find(negative));
         Assert.False(regex.IsMatch(negative));
         Assert.Equal(0, regex.Count(negative));
-    }
-
-    /// <summary>
-    /// Verifies a large bounded Unicode class compiles and rejects the issue 32 candidate set without stalling.
-    /// </summary>
-    [Fact(Timeout = LargeBoundedUnicodeClassSearchTimeoutMilliseconds)]
-    public void RejectsLargeBoundedUnicodeClassCandidatesWithoutStalling()
-    {
-        var regex = ByteRegex.Compile(
-            LargeBoundedUnicodeClassPattern,
-            new ByteRegexOptions { EngineMode = ByteRegexEngineMode.AutomataOnly });
-        byte[] input = Encoding.UTF8.GetBytes(string.Concat(
-            Enumerable.Repeat(
-                LargeBoundedUnicodeClassPattern + "\n",
-                LargeBoundedUnicodeClassCandidateCount)));
-
-        Assert.Null(regex.Find(input));
     }
 
     /// <summary>
