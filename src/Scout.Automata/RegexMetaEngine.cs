@@ -1,5 +1,8 @@
 namespace Scout;
 
+/// <summary>
+/// Selects and coordinates the compiled regex engines, prefilters, and pooled runner state.
+/// </summary>
 internal sealed class RegexMetaEngine
 {
     private const int DenseDfaNfaStateLimit = 8;
@@ -2174,6 +2177,28 @@ internal sealed class RegexMetaEngine
             return FindWithRequiredLiteralPrefilter(haystack, startOffset, reachabilityCache);
         }
 
+        if (pikeVmPool is not null)
+        {
+            if (prefilter is not null)
+            {
+                var exactCandidates = RegexCandidateStartEnumerator.ExactPrefix(
+                    haystack,
+                    startOffset,
+                    haystack.Length,
+                    utf8,
+                    prefilter);
+                return FindWithPikeVm(haystack, ref exactCandidates);
+            }
+
+            var everyCandidates = RegexCandidateStartEnumerator.Every(
+                haystack,
+                startOffset,
+                haystack.Length,
+                utf8,
+                startPredicate);
+            return FindWithPikeVm(haystack, ref everyCandidates);
+        }
+
         if (prefilter is not null)
         {
             for (int start = prefilter.FindCandidate(haystack, startOffset);
@@ -2217,6 +2242,17 @@ internal sealed class RegexMetaEngine
         int startOffset,
         Dictionary<(int State, int Position), bool>? reachabilityCache)
     {
+        if (pikeVmPool is not null)
+        {
+            var requiredCandidates = RegexCandidateStartEnumerator.RequiredLiteralRanges(
+                haystack,
+                startOffset,
+                haystack.Length,
+                utf8,
+                prefilter!);
+            return FindWithPikeVm(haystack, ref requiredCandidates);
+        }
+
         int nextStartToTry = startOffset;
         for (int requiredAt = prefilter!.FindRequiredLiteral(haystack, startOffset);
              requiredAt >= 0;
@@ -2237,6 +2273,26 @@ internal sealed class RegexMetaEngine
         }
 
         return null;
+    }
+
+    private RegexMatch? FindWithPikeVm(
+        ReadOnlySpan<byte> haystack,
+        ref RegexCandidateStartEnumerator candidates)
+    {
+        PikeVm? pikeVm = pikeVmPool!.Rent();
+        if (pikeVm is null)
+        {
+            return new PikeVm(GetNfa()).Find(haystack, ref candidates);
+        }
+
+        try
+        {
+            return pikeVm.Find(haystack, ref candidates);
+        }
+        finally
+        {
+            pikeVmPool.Return(pikeVm);
+        }
     }
 
     public long CountMatches(ReadOnlySpan<byte> haystack, int startAt, RegexStartPredicate? startPredicate = null)

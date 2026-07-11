@@ -13,6 +13,8 @@ GATE_OPENSUBTITLES_RUNS="5"
 GATE_OPENSUBTITLES_WARMUP="5"
 GATE_TREE_RUNS="5"
 GATE_TREE_WARMUP="5"
+GATE_BOUNDED_ASSIGNMENT_RUNS="5"
+GATE_BOUNDED_ASSIGNMENT_WARMUP="5"
 GATE_LARGE_FILE_THREADS="4"
 GATE_LARGE_FILE_SEGMENT_BUFFER_LENGTH="131072"
 GATE_RETRY_FAILED_WORKLOADS="${SCOUT_GATE_RETRY_FAILED_WORKLOADS:-2}"
@@ -465,6 +467,27 @@ make_cold_tiny_corpus() {
     fi
 }
 
+make_bounded_assignment_corpus() {
+    bounded_assignment_dir="$OUT_DIR/bounded-assignment"
+    bounded_assignment_pattern="$bounded_assignment_dir/pattern.txt"
+    bounded_assignment_input="$bounded_assignment_dir/no-match-800.txt"
+    mkdir -p "$bounded_assignment_dir"
+
+    cat > "$bounded_assignment_pattern" <<'EOF'
+(?i)[\w.-]{0,50}?(?:bitbucket)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[\x60'"\s=]{0,5}([a-z0-9]{32})(?:[\x60'"\s;]|\\[nr]|$)
+EOF
+    awk 'BEGIN { for (i = 0; i < 800; i++) print "bitbucket repository setting without a credential" }' > "$bounded_assignment_input"
+}
+
+expect_no_match_command() {
+    no_match_command="$1"
+    no_match_label="$2"
+    no_match_message="$(shell_quote "$no_match_label unexpectedly matched.")"
+    printf '%s; status=$?; case $status in 1) exit 0 ;; 0) printf "%%s\\n" %s >&2; exit 125 ;; *) exit $status ;; esac' \
+        "$no_match_command" \
+        "$no_match_message"
+}
+
 hyperfine_json_metric() {
     json="$1"
     index="$2"
@@ -705,6 +728,24 @@ gate_tree_warmup() {
     printf '%s\n' "$WARMUP"
 }
 
+gate_bounded_assignment_runs() {
+    if [ "$MODE" = "gate" ] && [ "$RUNS_SPECIFIED" = "0" ]; then
+        printf '%s\n' "$GATE_BOUNDED_ASSIGNMENT_RUNS"
+        return
+    fi
+
+    printf '%s\n' "$RUNS"
+}
+
+gate_bounded_assignment_warmup() {
+    if [ "$MODE" = "gate" ] && [ "$WARMUP_SPECIFIED" = "0" ]; then
+        printf '%s\n' "$GATE_BOUNDED_ASSIGNMENT_WARMUP"
+        return
+    fi
+
+    printf '%s\n' "$WARMUP"
+}
+
 check_time_gate() {
     time_gate_name="$1"
     time_gate_limit="$2"
@@ -916,6 +957,7 @@ list_workloads() {
         'smoke_large_literal          generated single file, no release gate' \
         'smoke_many_small             generated many-small-files tree, no release gate' \
         'smoke_cold_version           scout --version vs rg --version, no release gate' \
+        'bounded_assignment_no_match  generated 800-candidate issue #30 scan, gate <= 1.50x' \
         'subtitles_en_literal         OpenSubtitles literal scan, gate <= 1.20x' \
         'subtitles_en_regex           OpenSubtitles regex scan, gate <= 1.20x' \
         'linux_recursive_literal      Linux tree recursive walk, gate <= 1.25x' \
@@ -1005,9 +1047,14 @@ SCOUT_RSS_FLOOR="0"
 if [ "$MODE" = "smoke" ]; then
     make_smoke_corpus
     make_cold_tiny_corpus
+    make_bounded_assignment_corpus
     Q_SINGLE="$(shell_quote "$OUT_DIR/smoke-corpus/large-single.txt")"
     Q_TREE="$(shell_quote "$OUT_DIR/smoke-corpus/many-small")"
     Q_TINY="$(shell_quote "$OUT_DIR/cold-tiny.txt")"
+    Q_BOUNDED_ASSIGNMENT_PATTERN="$(shell_quote "$OUT_DIR/bounded-assignment/pattern.txt")"
+    Q_BOUNDED_ASSIGNMENT_INPUT="$(shell_quote "$OUT_DIR/bounded-assignment/no-match-800.txt")"
+    RG_BOUNDED_ASSIGNMENT_COMMAND="$(expect_no_match_command "$Q_RG --no-config -U --count-matches --no-messages -f $Q_BOUNDED_ASSIGNMENT_PATTERN $Q_BOUNDED_ASSIGNMENT_INPUT" "rg bounded-assignment search")"
+    SCOUT_BOUNDED_ASSIGNMENT_COMMAND="$(expect_no_match_command "$Q_SCOUT --no-config -U --count-matches --no-messages -f $Q_BOUNDED_ASSIGNMENT_PATTERN $Q_BOUNDED_ASSIGNMENT_INPUT" "Scout bounded-assignment search")"
 
     run_pair \
         "smoke_large_literal" \
@@ -1029,10 +1076,16 @@ if [ "$MODE" = "smoke" ]; then
         "1.00" \
         "$Q_RG --no-config 'needle' $Q_TINY" \
         "$Q_SCOUT --no-config 'needle' $Q_TINY"
+    run_pair \
+        "bounded_assignment_no_match" \
+        "1.50" \
+        "$RG_BOUNDED_ASSIGNMENT_COMMAND" \
+        "$SCOUT_BOUNDED_ASSIGNMENT_COMMAND"
     exit 0
 fi
 
 make_cold_tiny_corpus
+make_bounded_assignment_corpus
 OPENSUBTITLES_EN="${SCOUT_BENCH_OPENSUBTITLES_EN:-}"
 LINUX_TREE="${SCOUT_BENCH_LINUX_TREE:-}"
 OPENSUBTITLES_EN="$(require_gate_corpus_file "opensubtitles-en" "$OPENSUBTITLES_EN")"
@@ -1041,14 +1094,27 @@ LINUX_TREE="$(require_gate_corpus_tree "linux-kernel" "$LINUX_TREE")"
 Q_OPEN="$(shell_quote "$OPENSUBTITLES_EN")"
 Q_LINUX="$(shell_quote "$LINUX_TREE")"
 Q_TINY="$(shell_quote "$OUT_DIR/cold-tiny.txt")"
+Q_BOUNDED_ASSIGNMENT_PATTERN="$(shell_quote "$OUT_DIR/bounded-assignment/pattern.txt")"
+Q_BOUNDED_ASSIGNMENT_INPUT="$(shell_quote "$OUT_DIR/bounded-assignment/no-match-800.txt")"
+RG_BOUNDED_ASSIGNMENT_COMMAND="$(expect_no_match_command "$Q_RG --no-config -U --count-matches --no-messages -f $Q_BOUNDED_ASSIGNMENT_PATTERN $Q_BOUNDED_ASSIGNMENT_INPUT" "rg bounded-assignment search")"
+SCOUT_BOUNDED_ASSIGNMENT_COMMAND="$(expect_no_match_command "$Q_SCOUT --no-config -U --count-matches --no-messages -f $Q_BOUNDED_ASSIGNMENT_PATTERN $Q_BOUNDED_ASSIGNMENT_INPUT" "Scout bounded-assignment search")"
 OPENSUBTITLES_RUNS="$(gate_opensubtitles_runs)"
 OPENSUBTITLES_WARMUP="$(gate_opensubtitles_warmup)"
 TREE_RUNS="$(gate_tree_runs)"
 TREE_WARMUP="$(gate_tree_warmup)"
+BOUNDED_ASSIGNMENT_RUNS="$(gate_bounded_assignment_runs)"
+BOUNDED_ASSIGNMENT_WARMUP="$(gate_bounded_assignment_warmup)"
 
 analyze_large_file_segments "subtitles_en_regex" "$OPENSUBTITLES_EN" "$GATE_LARGE_FILE_SEGMENT_BUFFER_LENGTH" "$GATE_LARGE_FILE_THREADS"
 measure_rss_floor "$OPENSUBTITLES_RUNS" "$OPENSUBTITLES_WARMUP"
 
+run_pair \
+    "bounded_assignment_no_match" \
+    "1.50" \
+    "$RG_BOUNDED_ASSIGNMENT_COMMAND" \
+    "$SCOUT_BOUNDED_ASSIGNMENT_COMMAND" \
+    "$BOUNDED_ASSIGNMENT_RUNS" \
+    "$BOUNDED_ASSIGNMENT_WARMUP"
 run_pair \
     "subtitles_en_literal" \
     "1.20" \

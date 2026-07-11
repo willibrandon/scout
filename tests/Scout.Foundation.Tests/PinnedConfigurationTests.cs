@@ -3065,6 +3065,14 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("median peak RSS ratio", script, StringComparison.Ordinal);
         Assert.Contains("GATE_OPENSUBTITLES_RUNS=\"5\"", script, StringComparison.Ordinal);
         Assert.Contains("GATE_OPENSUBTITLES_WARMUP=\"5\"", script, StringComparison.Ordinal);
+        Assert.Contains("GATE_BOUNDED_ASSIGNMENT_RUNS=\"5\"", script, StringComparison.Ordinal);
+        Assert.Contains("GATE_BOUNDED_ASSIGNMENT_WARMUP=\"5\"", script, StringComparison.Ordinal);
+        Assert.Contains("gate_bounded_assignment_runs", script, StringComparison.Ordinal);
+        Assert.Contains("gate_bounded_assignment_warmup", script, StringComparison.Ordinal);
+        Assert.Contains("bounded_assignment_no_match", script, StringComparison.Ordinal);
+        Assert.Contains("expect_no_match_command", script, StringComparison.Ordinal);
+        Assert.Contains("unexpectedly matched", script, StringComparison.Ordinal);
+        Assert.Contains("bitbucket", script, StringComparison.Ordinal);
         Assert.Contains("GATE_LARGE_FILE_THREADS=\"4\"", script, StringComparison.Ordinal);
         Assert.Contains("GATE_LARGE_FILE_SEGMENT_BUFFER_LENGTH=\"131072\"", script, StringComparison.Ordinal);
         Assert.Contains("analyze_large_file_segments", script, StringComparison.Ordinal);
@@ -3123,6 +3131,11 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("rg-first run", readme, StringComparison.Ordinal);
         Assert.Contains("OpenSubtitles workloads use five runs and five", readme, StringComparison.Ordinal);
         Assert.Contains("Linux-tree workloads use five runs and five", readme, StringComparison.Ordinal);
+        Assert.Contains("bounded-assignment workload uses five runs and five", readme, StringComparison.Ordinal);
+        Assert.Contains("bounded_assignment_no_match", readme, StringComparison.Ordinal);
+        Assert.Contains("at or below 1.50x", readme, StringComparison.Ordinal);
+        Assert.Contains("bounded_assignment_no_match", parity, StringComparison.Ordinal);
+        Assert.Contains("<= 1.50x", parity, StringComparison.Ordinal);
         Assert.Contains("run_pair_no_shell", script, StringComparison.Ordinal);
         Assert.Contains("-N", script, StringComparison.Ordinal);
         Assert.Contains("make_cold_tiny_corpus", script, StringComparison.Ordinal);

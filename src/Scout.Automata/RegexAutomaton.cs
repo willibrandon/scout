@@ -234,7 +234,7 @@ public sealed class RegexAutomaton
                 RegexMetaEngine.CompileWordBoundaryLiteralSet(
                     wordBoundaryLiteralSet,
                     options.Utf8,
-                    () => RegexNfaCompiler.Compile(tree.Root, options, utf8ByteTrieCache)),
+                    () => CompileGeneralNfa(tree.Root, options, utf8ByteTrieCache)),
                 startPredicate: null,
                 lengthGuard: null,
                 requiredByteSetGuard: null,
@@ -255,7 +255,7 @@ public sealed class RegexAutomaton
                 RegexMetaEngine.CompileAlternationSet(
                     alternationSet,
                     options.Utf8,
-                    () => RegexNfaCompiler.Compile(tree.Root, options, utf8ByteTrieCache)),
+                    () => CompileGeneralNfa(tree.Root, options, utf8ByteTrieCache)),
                 startPredicate: null,
                 lengthGuard: null,
                 requiredByteSetGuard: null,
@@ -281,7 +281,7 @@ public sealed class RegexAutomaton
                 RegexMetaEngine.CompileDelimitedCapture(
                     earlyDelimitedCapture,
                     options.Utf8,
-                    () => RegexNfaCompiler.Compile(tree.Root, options, utf8ByteTrieCache)),
+                    () => CompileGeneralNfa(tree.Root, options, utf8ByteTrieCache)),
                 startPredicate: null,
                 lengthGuard: null,
                 requiredByteSetGuard: null,
@@ -326,7 +326,7 @@ public sealed class RegexAutomaton
                 RegexMetaEngine.CompileBoundedScalarClassSequence(
                     earlyBoundedScalarClassSequence,
                     options.Utf8,
-                    () => RegexNfaCompiler.Compile(tree.Root, options, utf8ByteTrieCache)),
+                    () => CompileGeneralNfa(tree.Root, options, utf8ByteTrieCache)),
                 startPredicate: null,
                 lengthGuard: null,
                 requiredByteSetGuard: null,
@@ -347,7 +347,7 @@ public sealed class RegexAutomaton
                 RegexMetaEngine.CompileBoundedByteClassSequence(
                     earlyBoundedByteClassSequence,
                     options.Utf8,
-                    () => RegexNfaCompiler.Compile(tree.Root, options, utf8ByteTrieCache)),
+                    () => CompileGeneralNfa(tree.Root, options, utf8ByteTrieCache)),
                 startPredicate: null,
                 lengthGuard: null,
                 requiredByteSetGuard: null,
@@ -391,7 +391,7 @@ public sealed class RegexAutomaton
                 RegexMetaEngine.CompileUnicodeGraphemeCluster(
                     unicodeGraphemeCluster,
                     options.Utf8,
-                    () => RegexNfaCompiler.Compile(tree.Root, options, utf8ByteTrieCache)),
+                    () => CompileGeneralNfa(tree.Root, options, utf8ByteTrieCache)),
                 startPredicate: null,
                 lengthGuard: null,
                 requiredByteSetGuard: null,
@@ -412,7 +412,7 @@ public sealed class RegexAutomaton
                 RegexMetaEngine.CompileScalarRun(
                     earlyScalarRun,
                     options.Utf8,
-                    () => RegexNfaCompiler.Compile(tree.Root, options, utf8ByteTrieCache)),
+                    () => CompileGeneralNfa(tree.Root, options, utf8ByteTrieCache)),
                 startPredicate: null,
                 lengthGuard: RegexLengthGuard.TryCreate(tree.Root, options),
                 requiredByteSetGuard: null,
@@ -433,7 +433,7 @@ public sealed class RegexAutomaton
                 RegexMetaEngine.CompileSimpleSequence(
                     earlySimpleSequence,
                     options.Utf8,
-                    () => RegexNfaCompiler.Compile(tree.Root, options, utf8ByteTrieCache)),
+                    () => CompileGeneralNfa(tree.Root, options, utf8ByteTrieCache)),
                 startPredicate: null,
                 lengthGuard: RegexLengthGuard.TryCreate(tree.Root, options),
                 requiredByteSetGuard: null,
@@ -460,7 +460,7 @@ public sealed class RegexAutomaton
                 RegexMetaEngine.CompileFixedWidthAlternation(
                     earlyFixedWidthAlternation,
                     options.Utf8,
-                    () => RegexNfaCompiler.Compile(tree.Root, options, utf8ByteTrieCache)),
+                    () => CompileGeneralNfa(tree.Root, options, utf8ByteTrieCache)),
                 startPredicate: null,
                 lengthGuard: null,
                 requiredByteSetGuard: null,
@@ -483,7 +483,7 @@ public sealed class RegexAutomaton
                 RegexMetaEngine.CompileDelimitedSpan(
                     earlyDelimitedSpan,
                     options.Utf8,
-                    () => RegexNfaCompiler.Compile(tree.Root, options, utf8ByteTrieCache)),
+                    () => CompileGeneralNfa(tree.Root, options, utf8ByteTrieCache)),
                 startPredicate: null,
                 lengthGuard: null,
                 requiredByteSetGuard: null,
@@ -496,7 +496,7 @@ public sealed class RegexAutomaton
                 captureCount: 0);
         }
 
-        RegexNfa nfa = RegexNfaCompiler.Compile(
+        RegexNfa nfa = CompileGeneralNfa(
             tree.Root,
             options,
             utf8ByteTrieCache);
@@ -664,7 +664,7 @@ public sealed class RegexAutomaton
         ulong? dfaSizeLimit,
         Dictionary<string, RegexUtf8ByteTrie>? utf8ByteTrieCache)
     {
-        RegexNfa nfa = RegexNfaCompiler.Compile(
+        RegexNfa nfa = CompileGeneralNfa(
             tree.Root,
             options,
             utf8ByteTrieCache);
@@ -689,6 +689,271 @@ public sealed class RegexAutomaton
             capturePrefilter: null,
             tree.CaptureCount,
             wholePatternCaptureIndex);
+    }
+
+    /// <summary>
+    /// Compiles the general-purpose NFA, avoiding an expanded UTF-8 byte graph when the
+    /// meta engine is guaranteed to replace that graph with compact scalar atoms.
+    /// </summary>
+    private static RegexNfa CompileGeneralNfa(
+        RegexSyntaxNode root,
+        RegexCompileOptions options,
+        Dictionary<string, RegexUtf8ByteTrie>? utf8ByteTrieCache)
+    {
+        return ShouldCompileCompactScalarNfa(root, options)
+            ? RegexNfaCompiler.CompileWithCompactScalarAtoms(root, options, utf8ByteTrieCache)
+            : RegexNfaCompiler.Compile(root, options, utf8ByteTrieCache);
+    }
+
+    /// <summary>
+    /// Determines whether an option-aware syntax analysis proves that eager UTF-8 expansion
+    /// cannot enable a DFA and would cross the meta engine's compact-fallback threshold.
+    /// </summary>
+    /// <param name="root">The parsed regex root.</param>
+    /// <param name="options">The root compilation options.</param>
+    /// <returns><see langword="true" /> when compact scalar construction should be used.</returns>
+    internal static bool ShouldCompileCompactScalarNfa(
+        RegexSyntaxNode root,
+        RegexCompileOptions options)
+    {
+        const int compactScalarFallbackNfaStateThreshold = 4096;
+
+        return ContainsDfaUnsupportedPredicate(root) &&
+            EstimateExpandedScalarStateCount(
+                root,
+                options,
+                compactScalarFallbackNfaStateThreshold) >= compactScalarFallbackNfaStateThreshold;
+    }
+
+    /// <summary>
+    /// Reports whether a syntax subtree contains a zero-width predicate that the byte DFA
+    /// engines cannot compile.
+    /// </summary>
+    private static bool ContainsDfaUnsupportedPredicate(RegexSyntaxNode node)
+    {
+        return node switch
+        {
+            RegexAtomNode atom => atom.Kind is RegexSyntaxKind.StartAnchor
+                or RegexSyntaxKind.EndAnchor
+                or RegexSyntaxKind.AbsoluteStartAnchor
+                or RegexSyntaxKind.AbsoluteEndAnchor
+                or RegexSyntaxKind.WordBoundary
+                or RegexSyntaxKind.NotWordBoundary
+                or RegexSyntaxKind.WordStartBoundary
+                or RegexSyntaxKind.WordEndBoundary
+                or RegexSyntaxKind.WordStartHalfBoundary
+                or RegexSyntaxKind.WordEndHalfBoundary,
+            RegexGroupNode group => ContainsDfaUnsupportedPredicate(group.Child),
+            RegexSequenceNode sequence => AnyContainsDfaUnsupportedPredicate(sequence.Nodes),
+            RegexAlternationNode alternation => AnyContainsDfaUnsupportedPredicate(alternation.Alternatives),
+            RegexRepetitionNode { Maximum: 0 } => false,
+            RegexRepetitionNode repetition => ContainsDfaUnsupportedPredicate(repetition.Child),
+            _ => false,
+        };
+    }
+
+    /// <summary>
+    /// Reports whether any syntax node in a collection contains a DFA-unsupported predicate.
+    /// </summary>
+    private static bool AnyContainsDfaUnsupportedPredicate(IReadOnlyList<RegexSyntaxNode> nodes)
+    {
+        for (int index = 0; index < nodes.Count; index++)
+        {
+            if (ContainsDfaUnsupportedPredicate(nodes[index]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Computes a saturated lower bound for scalar-expansion states in a syntax subtree.
+    /// </summary>
+    private static int EstimateExpandedScalarStateCount(
+        RegexSyntaxNode node,
+        RegexCompileOptions options,
+        int limit)
+    {
+        switch (node)
+        {
+            case RegexAtomNode atom:
+                return CountExpandedScalarAtomStates(atom, options, limit);
+
+            case RegexGroupNode group:
+                return EstimateExpandedScalarStateCount(
+                    group.Child,
+                    options.Apply(group.EnabledFlags, group.DisabledFlags),
+                    limit);
+
+            case RegexSequenceNode sequence:
+                return EstimateSequenceExpandedScalarStateCount(sequence, options, limit);
+
+            case RegexAlternationNode alternation:
+                {
+                    int maximum = 0;
+                    for (int index = 0; index < alternation.Alternatives.Count; index++)
+                    {
+                        maximum = Math.Max(
+                            maximum,
+                            EstimateExpandedScalarStateCount(alternation.Alternatives[index], options, limit));
+                    }
+
+                    return maximum;
+                }
+
+            case RegexRepetitionNode repetition:
+                {
+                    int childCount = EstimateExpandedScalarStateCount(repetition.Child, options, limit);
+                    int compilations = repetition.Maximum ?? SaturatingAdd(repetition.Minimum, 1, limit);
+                    return SaturatingMultiply(childCount, compilations, limit);
+                }
+
+            default:
+                return 0;
+        }
+    }
+
+    /// <summary>
+    /// Computes a saturated scalar-expansion state lower bound for a sequence while applying
+    /// inline option changes in source order.
+    /// </summary>
+    private static int EstimateSequenceExpandedScalarStateCount(
+        RegexSequenceNode sequence,
+        RegexCompileOptions options,
+        int limit)
+    {
+        int count = 0;
+        RegexCompileOptions currentOptions = options;
+        for (int index = 0; index < sequence.Nodes.Count; index++)
+        {
+            RegexSyntaxNode child = sequence.Nodes[index];
+            if (child is RegexInlineFlagsNode flags)
+            {
+                currentOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
+                continue;
+            }
+
+            count = SaturatingAdd(
+                count,
+                EstimateExpandedScalarStateCount(child, currentOptions, limit),
+                limit);
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// Counts the byte-NFA states needed to expand one scalar-consuming atom without retaining
+    /// the temporary graph.
+    /// </summary>
+    private static int CountExpandedScalarAtomStates(
+        RegexAtomNode atom,
+        RegexCompileOptions options,
+        int limit)
+    {
+        if (!RegexByteClass.RequiresUtf8ScalarMatch(
+            atom.Kind,
+            atom.Value.Span,
+            options.Utf8,
+            options.CaseInsensitive,
+            options.UnicodeClasses))
+        {
+            return 0;
+        }
+
+        int count = 0;
+        int AddByteClass(ReadOnlySpan<byte> ranges, int next)
+        {
+            return count++;
+        }
+
+        int AddSplit(int first, int second)
+        {
+            return count++;
+        }
+
+        int AddSparse(ReadOnlySpan<RegexNfaSparseTransition> transitions)
+        {
+            return count++;
+        }
+
+        if (RegexUtf8ByteCompiler.TryGetSharedTrie(
+            atom.Kind,
+            atom.Value.Span,
+            options,
+            reversed: false,
+            out RegexUtf8ByteTrie? sharedTrie))
+        {
+            _ = sharedTrie!.Compile(next: -1, AddSplit, AddSparse);
+            return Math.Min(count, limit);
+        }
+
+        if (!RegexUtf8ByteCompiler.TryBuildNormalizedScalarRanges(
+            atom.Kind,
+            atom.Value.Span,
+            options,
+            out List<RegexScalarRange> ranges))
+        {
+            return 0;
+        }
+
+        if (RegexUtf8ByteCompiler.TryCompileCompactFromRanges(
+            ranges,
+            reversed: false,
+            next: -1,
+            AddByteClass,
+            AddSplit,
+            out _))
+        {
+            return Math.Min(count, limit);
+        }
+
+        if (RegexUtf8ByteCompiler.TryCompileRangeSequencesFromRanges(
+            ranges,
+            reversed: false,
+            next: -1,
+            AddByteClass,
+            AddSplit,
+            out _))
+        {
+            return Math.Min(count, limit);
+        }
+
+        if (!RegexUtf8ByteCompiler.TryCreateFromRanges(ranges, reversed: false, out RegexUtf8ByteTrie? trie))
+        {
+            return 0;
+        }
+
+        _ = trie!.Compile(next: -1, AddSplit, AddSparse);
+        return Math.Min(count, limit);
+    }
+
+    /// <summary>
+    /// Adds two non-negative values and saturates at a limit.
+    /// </summary>
+    private static int SaturatingAdd(int left, int right, int limit)
+    {
+        return left >= limit - Math.Min(right, limit) ? limit : left + right;
+    }
+
+    /// <summary>
+    /// Multiplies two non-negative values and saturates at a limit.
+    /// </summary>
+    private static int SaturatingMultiply(int left, int right, int limit)
+    {
+        if (left == 0 || right == 0)
+        {
+            return 0;
+        }
+
+        if (left >= limit || right >= limit)
+        {
+            return limit;
+        }
+
+        return left >= (limit + right - 1) / right ? limit : left * right;
     }
 
     internal static RegexAutomaton CompileParsedForPatternSet(
