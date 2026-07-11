@@ -18,7 +18,7 @@ internal sealed class RegexLazyDfa(
     private const int MaxAcceleratorNeedles = 3;
 
     private readonly RegexNfa _nfa = nfa;
-    private readonly PikeVm _fallback = new(nfa);
+    private PikeVm? _fallback;
     private readonly Dictionary<RegexDfaStateKey, RegexLazyDfaState> _states = states;
     private RegexDfaBudget _budget = budget;
     private readonly RegexLazyDfaState _startState = startState;
@@ -431,7 +431,7 @@ internal sealed class RegexLazyDfa(
 
             if (!TryTransition(current, haystack[position], out current))
             {
-                return _fallback.TryMatchAt(haystack, start, out length);
+                return GetOrCreateFallback().TryMatchAt(haystack, start, out length);
             }
 
             if (current.NfaStates.Length == 0)
@@ -455,6 +455,11 @@ internal sealed class RegexLazyDfa(
 
         length = 0;
         return false;
+    }
+
+    private PikeVm GetOrCreateFallback()
+    {
+        return _fallback ??= new PikeVm(_nfa);
     }
 
     /// <summary>

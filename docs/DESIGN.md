@@ -401,6 +401,7 @@ Performance parity is a **blocking** acceptance criterion, not best-effort. The 
 |----------------|---------------------------|
 | Large single-file literal/regex scan (mmap, SIMD-bound) | ≤ **1.20×** wall time |
 | Repeated-candidate regex no-match scan (issue #30) | ≤ **1.50×** wall time |
+| Large bounded Unicode-class compile and no-match scan (issue #32) | ≤ **1.50×** wall time |
 | Recursive walk over a large tree (I/O + ignore-bound) | ≤ **1.25×** |
 | Many-small-files, parallel | ≤ **1.30×** |
 | Cold-start (`scout --version`, tiny search) | ≤ **1.0×** (AOT expected at parity or better) |

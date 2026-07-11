@@ -2,19 +2,28 @@ using System.Text;
 
 namespace Scout;
 
-internal sealed class RegexUtf8ByteTriePlan
+/// <summary>
+/// Represents an immutable, reusable DAG for lowering UTF-8 byte sequences into NFA states.
+/// </summary>
+/// <param name="id">The plan-local node identifier.</param>
+/// <param name="accept">Whether this node accepts by continuing at the caller's target.</param>
+/// <param name="transitions">The ordered byte-range transitions.</param>
+internal sealed class RegexUtf8ByteTriePlan(
+    int id,
+    bool accept,
+    RegexUtf8ByteTriePlanTransition[] transitions)
 {
-    private readonly int id;
-    private readonly bool accept;
-    private readonly RegexUtf8ByteTriePlanTransition[] transitions;
+    private readonly int _id = id;
+    private readonly bool _accept = accept;
+    private readonly RegexUtf8ByteTriePlanTransition[] _transitions = transitions;
 
-    private RegexUtf8ByteTriePlan(int id, bool accept, RegexUtf8ByteTriePlanTransition[] transitions)
-    {
-        this.id = id;
-        this.accept = accept;
-        this.transitions = transitions;
-    }
+    internal int Id => _id;
 
+    /// <summary>
+    /// Creates a minimized compile plan from a materialized byte trie.
+    /// </summary>
+    /// <param name="root">The byte-trie root.</param>
+    /// <returns>The immutable compile-plan root.</returns>
     public static RegexUtf8ByteTriePlan Create(RegexUtf8ByteTrieNode root)
     {
         Dictionary<string, RegexUtf8ByteTriePlan> interned = new(StringComparer.Ordinal);
@@ -22,10 +31,39 @@ internal sealed class RegexUtf8ByteTriePlan
         return CreateNode(root, interned, ref nextId);
     }
 
+    /// <summary>
+    /// Lowers this reusable plan into NFA states that continue at a caller-provided target.
+    /// </summary>
+    /// <param name="next">The continuation state.</param>
+    /// <param name="addSplit">Adds an ordered split state.</param>
+    /// <param name="addSparse">Adds an ordered sparse-transition state.</param>
+    /// <returns>The start state of the lowered plan.</returns>
     public int Compile(int next, RegexAddSplitState addSplit, RegexAddSparseState addSparse)
     {
         Dictionary<(int Plan, int Next), int> memo = [];
         return Compile(next, addSplit, addSparse, memo);
+    }
+
+    internal bool HasTransitions(ReadOnlySpan<RegexUtf8ByteTriePlanTransition> transitions)
+    {
+        if (_accept || transitions.Length != _transitions.Length)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < transitions.Length; index++)
+        {
+            RegexUtf8ByteTriePlanTransition left = _transitions[index];
+            RegexUtf8ByteTriePlanTransition right = transitions[index];
+            if (left.Start != right.Start ||
+                left.End != right.End ||
+                !ReferenceEquals(left.Target, right.Target))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private int Compile(
@@ -34,44 +72,34 @@ internal sealed class RegexUtf8ByteTriePlan
         RegexAddSparseState addSparse,
         Dictionary<(int Plan, int Next), int> memo)
     {
-        if (accept && transitions.Length == 0)
+        if (_accept && _transitions.Length == 0)
         {
             return next;
         }
 
-        (int Plan, int Next) key = (id, next);
+        (int Plan, int Next) key = (_id, next);
         if (memo.TryGetValue(key, out int existing))
         {
             return existing;
         }
 
         List<int> branches = new(2);
-        if (accept)
+        if (_accept)
         {
             branches.Add(next);
         }
 
-        if (transitions.Length > 0)
+        if (_transitions.Length > 0)
         {
-            int sparseCount = 0;
-            for (int index = 0; index < transitions.Length; index++)
+            var sparseTransitions = new RegexNfaSparseTransition[_transitions.Length];
+            for (int index = 0; index < _transitions.Length; index++)
             {
-                sparseCount += transitions[index].Ranges.Length / 2;
-            }
-
-            var sparseTransitions = new RegexNfaSparseTransition[sparseCount];
-            int sparseIndex = 0;
-            for (int index = 0; index < transitions.Length; index++)
-            {
-                RegexUtf8ByteTriePlanTransition transition = transitions[index];
+                RegexUtf8ByteTriePlanTransition transition = _transitions[index];
                 int target = transition.Target.Compile(next, addSplit, addSparse, memo);
-                for (int rangeIndex = 0; rangeIndex < transition.Ranges.Length; rangeIndex += 2)
-                {
-                    sparseTransitions[sparseIndex++] = new RegexNfaSparseTransition(
-                        transition.Ranges[rangeIndex],
-                        transition.Ranges[rangeIndex + 1],
-                        target);
-                }
+                sparseTransitions[index] = new RegexNfaSparseTransition(
+                    transition.Start,
+                    transition.End,
+                    target);
             }
 
             branches.Add(addSparse(sparseTransitions));
@@ -154,7 +182,7 @@ internal sealed class RegexUtf8ByteTriePlan
             builder.Append('-');
             builder.Append(transition.End);
             builder.Append(':');
-            builder.Append(transition.Target.id);
+            builder.Append(transition.Target._id);
             builder.Append(';');
         }
 
