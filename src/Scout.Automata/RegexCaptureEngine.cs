@@ -33,27 +33,21 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
         if (_prefilter?.UsesRequiredLiteralWindow == true)
         {
-            int nextStartToTry = startOffset;
-            for (int requiredAt = _prefilter.FindRequiredLiteral(haystack, startOffset);
-                 requiredAt >= 0;
-                 requiredAt = _prefilter.FindRequiredLiteral(haystack, requiredAt + 1))
+            Span<long> requiredRangeBuffer =
+                stackalloc long[RegexCandidateStartEnumerator.RequiredLiteralRangeBufferLength];
+            var candidates = RegexCandidateStartEnumerator.RequiredLiteralRanges(
+                haystack,
+                startOffset,
+                haystack.Length,
+                _nfa.Utf8,
+                _prefilter,
+                requiredRangeBuffer);
+            while (candidates.MoveNext(out int start))
             {
-                int firstStart = Math.Max(startOffset, requiredAt - _prefilter.RequiredLiteralWindow);
-                firstStart = Math.Max(firstStart, nextStartToTry);
-                for (int start = firstStart; start <= requiredAt; start++)
+                if (TryMatchAt(haystack, start, out RegexCaptures? captures))
                 {
-                    if (_nfa.Utf8 && !RegexByteClass.IsUtf8Boundary(haystack, start))
-                    {
-                        continue;
-                    }
-
-                    if (TryMatchAt(haystack, start, out RegexCaptures? captures))
-                    {
-                        return captures;
-                    }
+                    return captures;
                 }
-
-                nextStartToTry = Math.Max(nextStartToTry, requiredAt + 1);
             }
 
             return null;

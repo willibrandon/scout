@@ -1,36 +1,49 @@
 namespace Scout;
 
-internal sealed class RegexLazyDfa
+/// <summary>
+/// Executes a lazily materialized DFA with bounded transition storage and safe fallback.
+/// </summary>
+/// <param name="nfa">The NFA represented by the lazy DFA.</param>
+/// <param name="states">The interned DFA states.</param>
+/// <param name="startState">The DFA start state.</param>
+/// <param name="budget">The remaining transition-storage budget.</param>
+/// <param name="leftmostPrune">Whether closures retain only leftmost-priority states.</param>
+internal sealed class RegexLazyDfa(
+    RegexNfa nfa,
+    Dictionary<RegexDfaStateKey, RegexLazyDfaState> states,
+    RegexLazyDfaState startState,
+    RegexDfaBudget budget,
+    bool leftmostPrune)
 {
     private const int MaxAcceleratorNeedles = 3;
 
-    private readonly RegexNfa nfa;
-    private readonly PikeVm fallback;
-    private readonly Dictionary<RegexDfaStateKey, RegexLazyDfaState> states;
-    private RegexDfaBudget budget;
-    private readonly RegexLazyDfaState startState;
-    private readonly bool leftmostPrune;
+    private readonly RegexNfa _nfa = nfa;
+    private readonly PikeVm _fallback = new(nfa);
+    private readonly Dictionary<RegexDfaStateKey, RegexLazyDfaState> _states = states;
+    private RegexDfaBudget _budget = budget;
+    private readonly RegexLazyDfaState _startState = startState;
+    private readonly bool _leftmostPrune = leftmostPrune;
 
-    private RegexLazyDfa(
-        RegexNfa nfa,
-        Dictionary<RegexDfaStateKey, RegexLazyDfaState> states,
-        RegexLazyDfaState startState,
-        RegexDfaBudget budget,
-        bool leftmostPrune)
-    {
-        this.nfa = nfa;
-        fallback = new PikeVm(nfa);
-        this.states = states;
-        this.startState = startState;
-        this.budget = budget;
-        this.leftmostPrune = leftmostPrune;
-    }
-
+    /// <summary>
+    /// Attempts to create a general lazy DFA within a byte budget.
+    /// </summary>
+    /// <param name="nfa">The NFA to execute.</param>
+    /// <param name="dfaSizeLimit">The maximum estimated DFA storage in bytes.</param>
+    /// <param name="dfa">Receives the lazy DFA when successful.</param>
+    /// <returns><see langword="true"/> when the start state fits within the budget.</returns>
     public static bool TryCreate(RegexNfa nfa, ulong dfaSizeLimit, out RegexLazyDfa? dfa)
     {
         return TryCreate(nfa, dfaSizeLimit, leftmostPrune: false, out dfa);
     }
 
+    /// <summary>
+    /// Attempts to create a lazy DFA with optional leftmost-priority pruning.
+    /// </summary>
+    /// <param name="nfa">The NFA to execute.</param>
+    /// <param name="dfaSizeLimit">The maximum estimated DFA storage in bytes.</param>
+    /// <param name="leftmostPrune">Whether closures retain only leftmost-priority states.</param>
+    /// <param name="dfa">Receives the lazy DFA when successful.</param>
+    /// <returns><see langword="true"/> when the start state fits within the budget.</returns>
     public static bool TryCreate(RegexNfa nfa, ulong dfaSizeLimit, bool leftmostPrune, out RegexLazyDfa? dfa)
     {
         var budget = new RegexDfaBudget(dfaSizeLimit);
@@ -48,21 +61,51 @@ internal sealed class RegexLazyDfa
         return true;
     }
 
+    /// <summary>
+    /// Attempts to match at one byte offset.
+    /// </summary>
+    /// <param name="haystack">The bytes being searched.</param>
+    /// <param name="start">The byte offset at which matching begins.</param>
+    /// <param name="length">Receives the accepted match length.</param>
+    /// <returns><see langword="true"/> when a match is accepted.</returns>
     public bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int length)
     {
         return TryMatchAt(haystack, start, reachabilityCache: null, out length);
     }
 
+    /// <summary>
+    /// Attempts to find a match end at or after one byte offset.
+    /// </summary>
+    /// <param name="haystack">The bytes being searched.</param>
+    /// <param name="start">The byte offset at which matching begins.</param>
+    /// <param name="end">Receives the accepted end offset.</param>
+    /// <returns><see langword="true"/> when a match is accepted.</returns>
     public bool TryFindEnd(ReadOnlySpan<byte> haystack, int start, out int end)
     {
         return TryFindEnd(haystack, start, reachabilityCache: null, out end);
     }
 
+    /// <summary>
+    /// Attempts to find a match end and reports transition-budget exhaustion.
+    /// </summary>
+    /// <param name="haystack">The bytes being searched.</param>
+    /// <param name="start">The byte offset at which matching begins.</param>
+    /// <param name="end">Receives the accepted end offset.</param>
+    /// <param name="gaveUp">Receives whether the DFA exhausted its transition budget.</param>
+    /// <returns><see langword="true"/> when a match is accepted.</returns>
     public bool TryFindEnd(ReadOnlySpan<byte> haystack, int start, out int end, out bool gaveUp)
     {
         return TryFindEnd(haystack, start, reachabilityCache: null, out end, out gaveUp);
     }
 
+    /// <summary>
+    /// Attempts to find a match end with a reusable reachability cache.
+    /// </summary>
+    /// <param name="haystack">The bytes being searched.</param>
+    /// <param name="start">The byte offset at which matching begins.</param>
+    /// <param name="reachabilityCache">The optional reusable NFA reachability cache.</param>
+    /// <param name="end">Receives the accepted end offset.</param>
+    /// <returns><see langword="true"/> when a match is accepted.</returns>
     public bool TryFindEnd(
         ReadOnlySpan<byte> haystack,
         int start,
@@ -72,6 +115,15 @@ internal sealed class RegexLazyDfa
         return TryFindEnd(haystack, start, reachabilityCache, out end, out _);
     }
 
+    /// <summary>
+    /// Attempts to find a match end with reusable reachability and budget reporting.
+    /// </summary>
+    /// <param name="haystack">The bytes being searched.</param>
+    /// <param name="start">The byte offset at which matching begins.</param>
+    /// <param name="reachabilityCache">The optional reusable NFA reachability cache.</param>
+    /// <param name="end">Receives the accepted end offset.</param>
+    /// <param name="gaveUp">Receives whether the DFA exhausted its transition budget.</param>
+    /// <returns><see langword="true"/> when a match is accepted.</returns>
     public bool TryFindEnd(
         ReadOnlySpan<byte> haystack,
         int start,
@@ -79,7 +131,7 @@ internal sealed class RegexLazyDfa
         out int end,
         out bool gaveUp)
     {
-        if (leftmostPrune)
+        if (_leftmostPrune)
         {
             return TryFindEndLeftmost(haystack, start, out end, out gaveUp);
         }
@@ -95,16 +147,42 @@ internal sealed class RegexLazyDfa
         return false;
     }
 
+    /// <summary>
+    /// Attempts to find a match start by running a leftmost-pruned DFA in reverse.
+    /// </summary>
+    /// <param name="haystack">The bytes being searched.</param>
+    /// <param name="start">The earliest permitted start.</param>
+    /// <param name="end">The exclusive reverse-search end.</param>
+    /// <param name="matchStart">Receives the accepted start offset.</param>
+    /// <returns><see langword="true"/> when a start is accepted.</returns>
     public bool TryFindStartReverse(ReadOnlySpan<byte> haystack, int start, int end, out int matchStart)
     {
         return TryFindStartReverse(haystack, start, end, reachabilityCache: null, out matchStart);
     }
 
+    /// <summary>
+    /// Attempts to find a reverse match start and reports transition-budget exhaustion.
+    /// </summary>
+    /// <param name="haystack">The bytes being searched.</param>
+    /// <param name="start">The earliest permitted start.</param>
+    /// <param name="end">The exclusive reverse-search end.</param>
+    /// <param name="matchStart">Receives the accepted start offset.</param>
+    /// <param name="gaveUp">Receives whether the DFA exhausted its transition budget.</param>
+    /// <returns><see langword="true"/> when a start is accepted.</returns>
     public bool TryFindStartReverse(ReadOnlySpan<byte> haystack, int start, int end, out int matchStart, out bool gaveUp)
     {
         return TryFindStartReverse(haystack, start, end, reachabilityCache: null, out matchStart, out gaveUp);
     }
 
+    /// <summary>
+    /// Attempts to find a reverse match start with a reusable reachability cache.
+    /// </summary>
+    /// <param name="haystack">The bytes being searched.</param>
+    /// <param name="start">The earliest permitted start.</param>
+    /// <param name="end">The exclusive reverse-search end.</param>
+    /// <param name="reachabilityCache">The optional reusable NFA reachability cache.</param>
+    /// <param name="matchStart">Receives the accepted start offset.</param>
+    /// <returns><see langword="true"/> when a start is accepted.</returns>
     public bool TryFindStartReverse(
         ReadOnlySpan<byte> haystack,
         int start,
@@ -115,6 +193,16 @@ internal sealed class RegexLazyDfa
         return TryFindStartReverse(haystack, start, end, reachabilityCache, out matchStart, out _);
     }
 
+    /// <summary>
+    /// Attempts to find a reverse match start with reusable reachability and budget reporting.
+    /// </summary>
+    /// <param name="haystack">The bytes being searched.</param>
+    /// <param name="start">The earliest permitted start.</param>
+    /// <param name="end">The exclusive reverse-search end.</param>
+    /// <param name="reachabilityCache">The optional reusable NFA reachability cache.</param>
+    /// <param name="matchStart">Receives the accepted start offset.</param>
+    /// <param name="gaveUp">Receives whether the DFA exhausted its transition budget.</param>
+    /// <returns><see langword="true"/> when a start is accepted.</returns>
     public bool TryFindStartReverse(
         ReadOnlySpan<byte> haystack,
         int start,
@@ -124,7 +212,7 @@ internal sealed class RegexLazyDfa
         out bool gaveUp)
     {
         _ = reachabilityCache;
-        if (leftmostPrune)
+        if (_leftmostPrune)
         {
             return TryFindStartReverseLeftmost(haystack, start, end, out matchStart, out gaveUp);
         }
@@ -134,10 +222,65 @@ internal sealed class RegexLazyDfa
         return false;
     }
 
+    /// <summary>
+    /// Finds the earliest and latest starts accepted while running the DFA in reverse.
+    /// </summary>
+    /// <param name="haystack">The bytes containing the reverse search window.</param>
+    /// <param name="start">The earliest permitted start.</param>
+    /// <param name="end">The exclusive end from which reverse matching begins.</param>
+    /// <param name="earliest">Receives the earliest accepted start.</param>
+    /// <param name="latest">Receives the latest accepted start.</param>
+    /// <param name="gaveUp">Receives whether the DFA exhausted its transition budget.</param>
+    /// <returns><see langword="true"/> when at least one start is accepted.</returns>
+    internal bool TryFindStartBoundsReverse(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        int end,
+        out int earliest,
+        out int latest,
+        out bool gaveUp)
+    {
+        RegexLazyDfaState current = _startState;
+        earliest = -1;
+        latest = -1;
+        gaveUp = false;
+        int position = end;
+        while (position >= start)
+        {
+            if (current.AcceptIndex >= 0)
+            {
+                earliest = position;
+                if (latest < 0)
+                {
+                    latest = position;
+                }
+            }
+
+            if (position == start)
+            {
+                break;
+            }
+
+            if (!TryTransition(current, haystack[position - 1], out current))
+            {
+                gaveUp = true;
+                return earliest >= 0;
+            }
+
+            position--;
+            if (current.NfaStates.Length == 0)
+            {
+                break;
+            }
+        }
+
+        return earliest >= 0;
+    }
+
     private bool TryFindEndLeftmost(ReadOnlySpan<byte> haystack, int start, out int end, out bool gaveUp)
     {
         gaveUp = false;
-        RegexLazyDfaState current = startState;
+        RegexLazyDfaState current = _startState;
         int lastAcceptEnd = -1;
         for (int position = start; position <= haystack.Length; position++)
         {
@@ -188,7 +331,7 @@ internal sealed class RegexLazyDfa
         out bool gaveUp)
     {
         gaveUp = false;
-        RegexLazyDfaState current = startState;
+        RegexLazyDfaState current = _startState;
         int lastAcceptStart = -1;
         int position = end;
         while (position >= start)
@@ -233,13 +376,21 @@ internal sealed class RegexLazyDfa
         return lastAcceptStart >= 0;
     }
 
+    /// <summary>
+    /// Attempts to match at one byte offset with a reusable reachability cache.
+    /// </summary>
+    /// <param name="haystack">The bytes being searched.</param>
+    /// <param name="start">The byte offset at which matching begins.</param>
+    /// <param name="reachabilityCache">The optional reusable NFA reachability cache.</param>
+    /// <param name="length">Receives the accepted match length.</param>
+    /// <returns><see langword="true"/> when a match is accepted.</returns>
     public bool TryMatchAt(
         ReadOnlySpan<byte> haystack,
         int start,
         Dictionary<(int State, int Position), bool>? reachabilityCache,
         out int length)
     {
-        RegexLazyDfaState current = startState;
+        RegexLazyDfaState current = _startState;
         int deferredAcceptLength = -1;
         bool hasReusableReachabilityCache = reachabilityCache is not null;
         if (hasReusableReachabilityCache)
@@ -260,7 +411,7 @@ internal sealed class RegexLazyDfa
                 }
 
                 reachabilityCache ??= [];
-                if (!RegexDfaOperations.HasEarlierConsumer(nfa, current.NfaStates, acceptIndex, haystack, position, reachabilityCache))
+                if (!RegexDfaOperations.HasEarlierConsumer(_nfa, current.NfaStates, acceptIndex, haystack, position, reachabilityCache))
                 {
                     length = deferredAcceptLength;
                     return true;
@@ -280,7 +431,7 @@ internal sealed class RegexLazyDfa
 
             if (!TryTransition(current, haystack[position], out current))
             {
-                return fallback.TryMatchAt(haystack, start, out length);
+                return _fallback.TryMatchAt(haystack, start, out length);
             }
 
             if (current.NfaStates.Length == 0)
@@ -306,10 +457,18 @@ internal sealed class RegexLazyDfa
         return false;
     }
 
+    /// <summary>
+    /// Attempts to match an ASCII haystack and reports when non-ASCII input aborts the fast path.
+    /// </summary>
+    /// <param name="haystack">The bytes being searched.</param>
+    /// <param name="start">The byte offset at which matching begins.</param>
+    /// <param name="length">Receives the accepted match length.</param>
+    /// <param name="aborted">Receives whether non-ASCII input or budget exhaustion aborted the path.</param>
+    /// <returns><see langword="true"/> when a match is accepted.</returns>
     public bool TryMatchAsciiAt(ReadOnlySpan<byte> haystack, int start, out int length, out bool aborted)
     {
         aborted = false;
-        RegexLazyDfaState current = startState;
+        RegexLazyDfaState current = _startState;
         int deferredAcceptLength = -1;
         Dictionary<(int State, int Position), bool>? reachabilityCache = null;
         for (int position = start; position <= haystack.Length; position++)
@@ -325,7 +484,7 @@ internal sealed class RegexLazyDfa
                 }
 
                 reachabilityCache ??= [];
-                if (!RegexDfaOperations.HasEarlierConsumer(nfa, current.NfaStates, acceptIndex, haystack, position, reachabilityCache))
+                if (!RegexDfaOperations.HasEarlierConsumer(_nfa, current.NfaStates, acceptIndex, haystack, position, reachabilityCache))
                 {
                     length = deferredAcceptLength;
                     return true;
@@ -382,8 +541,8 @@ internal sealed class RegexLazyDfa
             return true;
         }
 
-        if (!budget.TryReserve(RegexDfaBudget.SparseTransitionBytes) ||
-            !TryIntern(nfa, states, ref budget, Move(state.NfaStates, value), out RegexLazyDfaState? created))
+        if (!_budget.TryReserve(RegexDfaBudget.SparseTransitionBytes) ||
+            !TryIntern(_nfa, _states, ref _budget, Move(state.NfaStates, value), out RegexLazyDfaState? created))
         {
             nextState = state;
             return false;
@@ -396,9 +555,9 @@ internal sealed class RegexLazyDfa
 
     private int[] Move(int[] nfaStates, byte value)
     {
-        return leftmostPrune
-            ? RegexDfaOperations.MoveLeftmost(nfa, nfaStates, value)
-            : RegexDfaOperations.Move(nfa, nfaStates, value);
+        return _leftmostPrune
+            ? RegexDfaOperations.MoveLeftmost(_nfa, nfaStates, value)
+            : RegexDfaOperations.Move(_nfa, nfaStates, value);
     }
 
     private bool TryAccelerate(
@@ -418,7 +577,7 @@ internal sealed class RegexLazyDfa
         out int acceleratedPosition)
     {
         acceleratedPosition = position;
-        if (!allowLeftmost && leftmostPrune ||
+        if (!allowLeftmost && _leftmostPrune ||
             position >= haystack.Length ||
             !TryGetOrCreateAccelerator(state, out byte[] needles))
         {

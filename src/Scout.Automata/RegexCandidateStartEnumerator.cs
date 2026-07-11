@@ -10,6 +10,7 @@ namespace Scout;
 /// <param name="utf8">Whether candidates must begin on UTF-8 boundaries.</param>
 /// <param name="prefilter">The prefilter used by prefix and required-literal modes.</param>
 /// <param name="startPredicate">The predicate used by the every-start mode.</param>
+/// <param name="requiredRangeBuffer">Scratch storage for ordered required-literal ranges.</param>
 internal ref struct RegexCandidateStartEnumerator(
     ReadOnlySpan<byte> haystack,
     RegexCandidateStartMode mode,
@@ -17,8 +18,14 @@ internal ref struct RegexCandidateStartEnumerator(
     int maxStart,
     bool utf8,
     RegexPrefilter? prefilter,
-    RegexStartPredicate? startPredicate)
+    RegexStartPredicate? startPredicate,
+    Span<long> requiredRangeBuffer)
 {
+    /// <summary>
+    /// The stack scratch length required by the ordered required-literal range stream.
+    /// </summary>
+    internal const int RequiredLiteralRangeBufferLength = 32;
+
     private readonly ReadOnlySpan<byte> _haystack = haystack;
     private readonly RegexCandidateStartMode _mode = mode;
     private readonly RegexPrefilter? _prefilter = prefilter;
@@ -30,6 +37,9 @@ internal ref struct RegexCandidateStartEnumerator(
     private int _rangeEnd = Math.Clamp(startAt, 0, haystack.Length) - 1;
     private int _requiredSearchAt = Math.Clamp(startAt, 0, haystack.Length);
     private int _pendingRequiredAt = -1;
+    private Span<long> _requiredRangeBuffer = requiredRangeBuffer;
+    private int _requiredRangeCount;
+    private bool _requiredGateDisabled;
 
     /// <summary>
     /// Creates an enumerator that considers every legal match start.
@@ -54,7 +64,8 @@ internal ref struct RegexCandidateStartEnumerator(
             maxStart,
             utf8,
             prefilter: null,
-            startPredicate);
+            startPredicate,
+            requiredRangeBuffer: default);
     }
 
     /// <summary>
@@ -80,7 +91,8 @@ internal ref struct RegexCandidateStartEnumerator(
             maxStart,
             utf8,
             prefilter,
-            startPredicate: null);
+            startPredicate: null,
+            requiredRangeBuffer: default);
     }
 
     /// <summary>
@@ -91,13 +103,15 @@ internal ref struct RegexCandidateStartEnumerator(
     /// <param name="maxStart">The last permitted match start.</param>
     /// <param name="utf8">Whether candidates must begin on UTF-8 boundaries.</param>
     /// <param name="prefilter">The required-literal prefilter used to form ranges.</param>
+    /// <param name="requiredRangeBuffer">Stack scratch used to order narrowed ranges.</param>
     /// <returns>A required-literal-range candidate enumerator.</returns>
     public static RegexCandidateStartEnumerator RequiredLiteralRanges(
         ReadOnlySpan<byte> haystack,
         int startAt,
         int maxStart,
         bool utf8,
-        RegexPrefilter prefilter)
+        RegexPrefilter prefilter,
+        Span<long> requiredRangeBuffer)
     {
         return new RegexCandidateStartEnumerator(
             haystack,
@@ -106,7 +120,8 @@ internal ref struct RegexCandidateStartEnumerator(
             maxStart,
             utf8,
             prefilter,
-            startPredicate: null);
+            startPredicate: null,
+            requiredRangeBuffer);
     }
 
     /// <summary>
@@ -188,19 +203,120 @@ internal ref struct RegexCandidateStartEnumerator(
 
     private bool TryLoadNextRequiredLiteralRange()
     {
-        int requiredAt = _pendingRequiredAt;
-        _pendingRequiredAt = -1;
-        if (requiredAt < 0)
+        if (_requiredGateDisabled || !_prefilter!.UsesRequiredLiteralPrefixGate)
         {
-            requiredAt = FindNextRequiredLiteral();
+            return TryLoadFallbackRequiredLiteralRange();
+        }
+
+        while (true)
+        {
+            if (_requiredRangeCount == 0)
+            {
+                int requiredAt = TakeNextRequiredLiteral();
+                if (requiredAt < 0)
+                {
+                    return false;
+                }
+
+                if (!_prefilter.TryGetRequiredLiteralRange(
+                        _haystack,
+                        requiredAt,
+                        _startAt,
+                        _maxStart,
+                        out int rangeStart,
+                        out int rangeEnd))
+                {
+                    continue;
+                }
+
+                if (!TryInsertRequiredLiteralRange(rangeStart, rangeEnd))
+                {
+                    return TryFallbackFromBufferedRanges(requiredAt);
+                }
+            }
+
+            int earliestEnd = UnpackRangeEnd(_requiredRangeBuffer[0]);
+            int nextRequiredAt = TakeNextRequiredLiteral();
+            if (nextRequiredAt < 0)
+            {
+                return TryPopRequiredLiteralRange();
+            }
+
+            int conservativeStart = Math.Max(
+                _startAt,
+                nextRequiredAt - _prefilter.RequiredLiteralWindow);
+            // A later hit can reverse-match to an earlier start. The earliest buffered range is
+            // ordered only after every future conservative range begins beyond its end.
+            if (conservativeStart > earliestEnd)
+            {
+                _pendingRequiredAt = nextRequiredAt;
+                return TryPopRequiredLiteralRange();
+            }
+
+            if (!_prefilter.TryGetRequiredLiteralRange(
+                    _haystack,
+                    nextRequiredAt,
+                    _startAt,
+                    _maxStart,
+                    out int nextRangeStart,
+                    out int nextRangeEnd))
+            {
+                continue;
+            }
+
+            if (!TryInsertRequiredLiteralRange(nextRangeStart, nextRangeEnd))
+            {
+                return TryFallbackFromBufferedRanges(nextRequiredAt);
+            }
+        }
+    }
+
+    private bool TryLoadFallbackRequiredLiteralRange()
+    {
+        while (true)
+        {
+            int requiredAt = TakeNextRequiredLiteral();
             if (requiredAt < 0)
             {
                 return false;
             }
+
+            int rangeStart = Math.Max(
+                _nextStart,
+                Math.Max(_startAt, requiredAt - _prefilter!.RequiredLiteralWindow));
+            int rangeEnd = Math.Min(_maxStart, requiredAt);
+            if (rangeStart > rangeEnd)
+            {
+                if (rangeStart > _maxStart)
+                {
+                    return false;
+                }
+
+                continue;
+            }
+
+            return CompleteFallbackRequiredLiteralRange(rangeStart, rangeEnd);
+        }
+    }
+
+    private bool TryFallbackFromBufferedRanges(int requiredAt)
+    {
+        // A broad range preserves ordering and completeness if pathological disjoint ranges
+        // exceed the bounded stack scratch.
+        _requiredGateDisabled = true;
+        _requiredRangeCount = 0;
+        int rangeStart = Math.Max(_startAt, _nextStart);
+        int rangeEnd = Math.Min(_maxStart, requiredAt);
+        if (rangeStart > rangeEnd)
+        {
+            return TryLoadFallbackRequiredLiteralRange();
         }
 
-        int mergedStart = Math.Max(_startAt, requiredAt - _prefilter!.RequiredLiteralWindow);
-        int mergedEnd = Math.Min(_maxStart, requiredAt);
+        return CompleteFallbackRequiredLiteralRange(rangeStart, rangeEnd);
+    }
+
+    private bool CompleteFallbackRequiredLiteralRange(int rangeStart, int rangeEnd)
+    {
         while (true)
         {
             int nextRequiredAt = FindNextRequiredLiteral();
@@ -209,19 +325,107 @@ internal ref struct RegexCandidateStartEnumerator(
                 break;
             }
 
-            int nextRangeStart = Math.Max(_startAt, nextRequiredAt - _prefilter.RequiredLiteralWindow);
-            if (nextRangeStart > mergedEnd + 1)
+            int nextRangeStart = Math.Max(
+                _startAt,
+                nextRequiredAt - _prefilter!.RequiredLiteralWindow);
+            if ((long)nextRangeStart > (long)rangeEnd + 1)
             {
                 _pendingRequiredAt = nextRequiredAt;
                 break;
             }
 
-            mergedEnd = Math.Min(_maxStart, nextRequiredAt);
+            rangeEnd = Math.Max(rangeEnd, Math.Min(_maxStart, nextRequiredAt));
         }
 
-        _nextStart = mergedStart;
-        _rangeEnd = mergedEnd;
-        return _nextStart <= _rangeEnd;
+        _nextStart = rangeStart;
+        _rangeEnd = rangeEnd;
+        return true;
+    }
+
+    private bool TryInsertRequiredLiteralRange(int rangeStart, int rangeEnd)
+    {
+        int index = 0;
+        while (index < _requiredRangeCount &&
+            (long)UnpackRangeEnd(_requiredRangeBuffer[index]) + 1 < rangeStart)
+        {
+            index++;
+        }
+
+        int mergeEnd = index;
+        while (mergeEnd < _requiredRangeCount &&
+            UnpackRangeStart(_requiredRangeBuffer[mergeEnd]) <= (long)rangeEnd + 1)
+        {
+            rangeStart = Math.Min(rangeStart, UnpackRangeStart(_requiredRangeBuffer[mergeEnd]));
+            rangeEnd = Math.Max(rangeEnd, UnpackRangeEnd(_requiredRangeBuffer[mergeEnd]));
+            mergeEnd++;
+        }
+
+        int removed = mergeEnd - index;
+        if (removed == 0 && _requiredRangeCount == _requiredRangeBuffer.Length)
+        {
+            return false;
+        }
+
+        if (removed == 0)
+        {
+            for (int source = _requiredRangeCount - 1; source >= index; source--)
+            {
+                _requiredRangeBuffer[source + 1] = _requiredRangeBuffer[source];
+            }
+        }
+        else
+        {
+            int destination = index + 1;
+            for (int source = mergeEnd; source < _requiredRangeCount; source++, destination++)
+            {
+                _requiredRangeBuffer[destination] = _requiredRangeBuffer[source];
+            }
+        }
+
+        _requiredRangeBuffer[index] = PackRange(rangeStart, rangeEnd);
+        _requiredRangeCount = _requiredRangeCount - removed + 1;
+        return true;
+    }
+
+    private bool TryPopRequiredLiteralRange()
+    {
+        long range = _requiredRangeBuffer[0];
+        for (int index = 1; index < _requiredRangeCount; index++)
+        {
+            _requiredRangeBuffer[index - 1] = _requiredRangeBuffer[index];
+        }
+
+        _requiredRangeCount--;
+        _nextStart = Math.Max(_nextStart, UnpackRangeStart(range));
+        _rangeEnd = UnpackRangeEnd(range);
+        if (_nextStart <= _rangeEnd)
+        {
+            return true;
+        }
+
+        return TryLoadNextRequiredLiteralRange();
+    }
+
+    private int TakeNextRequiredLiteral()
+    {
+        int requiredAt = _pendingRequiredAt;
+        _pendingRequiredAt = -1;
+        return requiredAt >= 0 ? requiredAt : FindNextRequiredLiteral();
+    }
+
+    private static long PackRange(int start, int end)
+    {
+        return (long)(uint)start << 32 | (uint)end;
+    }
+
+    private static int UnpackRangeStart(long range)
+    {
+        return (int)(range >> 32);
+    }
+
+    private static int UnpackRangeEnd(long range)
+    {
+        return (int)range;
     }
 
     private int FindNextRequiredLiteral()

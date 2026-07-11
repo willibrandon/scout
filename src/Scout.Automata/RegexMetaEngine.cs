@@ -2242,6 +2242,8 @@ internal sealed class RegexMetaEngine
         int startOffset,
         Dictionary<(int State, int Position), bool>? reachabilityCache)
     {
+        Span<long> requiredRangeBuffer =
+            stackalloc long[RegexCandidateStartEnumerator.RequiredLiteralRangeBufferLength];
         if (pikeVmPool is not null)
         {
             var requiredCandidates = RegexCandidateStartEnumerator.RequiredLiteralRanges(
@@ -2249,27 +2251,24 @@ internal sealed class RegexMetaEngine
                 startOffset,
                 haystack.Length,
                 utf8,
-                prefilter!);
+                prefilter!,
+                requiredRangeBuffer);
             return FindWithPikeVm(haystack, ref requiredCandidates);
         }
 
-        int nextStartToTry = startOffset;
-        for (int requiredAt = prefilter!.FindRequiredLiteral(haystack, startOffset);
-             requiredAt >= 0;
-             requiredAt = prefilter.FindRequiredLiteral(haystack, requiredAt + 1))
+        var fallbackCandidates = RegexCandidateStartEnumerator.RequiredLiteralRanges(
+            haystack,
+            startOffset,
+            haystack.Length,
+            utf8,
+            prefilter!,
+            requiredRangeBuffer);
+        while (fallbackCandidates.MoveNext(out int start))
         {
-            int firstStart = Math.Max(startOffset, requiredAt - prefilter.RequiredLiteralWindow);
-            firstStart = Math.Max(firstStart, nextStartToTry);
-            for (int start = firstStart; start <= requiredAt; start++)
+            if (TryMatchAt(haystack, start, out int length, reachabilityCache))
             {
-                if (prefilter.CanStartAt(haystack, start) &&
-                    TryMatchAt(haystack, start, out int length, reachabilityCache))
-                {
-                    return new RegexMatch(start, length);
-                }
+                return new RegexMatch(start, length);
             }
-
-            nextStartToTry = Math.Max(nextStartToTry, requiredAt + 1);
         }
 
         return null;

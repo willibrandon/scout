@@ -204,6 +204,8 @@ Rationale unchanged and reaffirmed: the BCL engine is UTF-16/`char`/`string`-bas
 
 PikeVM-backed unanchored searches inject streamed prefilter candidates into one insertion-ordered active-state frontier. Mutable frontier, closure, and reachability storage belongs to pooled runners, while the compiled regex remains immutable and safe for concurrent callers. This is the authoritative Thompson matcher—with full leftmost-first, anchor, UTF-8, and capture-replay semantics—not a pattern-family recognizer.
 
+For a uniquely proven inner literal with a finite prefix, the required-literal prefilter can reverse-match an ASCII projection of that prefix with pooled lazy-DFA runners before injecting starts. Non-ASCII windows, ambiguous provenance, unsupported positional syntax, and exhausted DFA budgets retain the conservative lookbehind range. The forward Thompson matcher remains authoritative, so this is a general reverse-inner strategy rather than a pattern recognizer.
+
 SIMD via `System.Runtime.Intrinsics`: shipped baseline is SSE2 + AVX2 (x64) and `AdvSimd`/NEON (arm64); AVX-512 paths are additive and `Avx512*.IsSupported`-gated, delivered before Release. Scalar fallback always present.
 
 **`Scout.Text.Regex`** (public package): the supported .NET-facing facade over the byte regex engine. It exposes `ByteRegex` and `ByteRegexSet` APIs that accept `ReadOnlySpan<byte>` haystacks, return byte offsets, preserve capture spans, and allow callers to choose optimized, general, or automata-only engine modes without depending on CLI internals. The package is Native-AOT-safe and targets `net9.0` and `net10.0`.

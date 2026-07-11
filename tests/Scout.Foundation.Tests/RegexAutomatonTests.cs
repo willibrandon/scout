@@ -4533,6 +4533,132 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies reverse-prefix feasibility preserves every possible bounded-prefix start.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralReversePrefixGatePreservesFeasibleStartBounds()
+    {
+        RegexMetaEngine engine = CompileRequiredLiteralPike(
+            GetBoundedAssignmentPattern(),
+            out RegexPrefilter prefilter);
+        byte[] haystack = System.Text.Encoding.ASCII.GetBytes(
+            new string('a', 51) + "bitbucket = 0123456789abcdef0123456789abcdef;");
+        int requiredAt = prefilter.FindRequiredLiteral(haystack, startAt: 0);
+
+        Assert.Equal(51, requiredAt);
+        Assert.True(prefilter.UsesRequiredLiteralPrefixGate);
+        Assert.True(prefilter.TryGetRequiredLiteralRange(
+            haystack,
+            requiredAt,
+            minStart: 0,
+            maxStart: haystack.Length,
+            out int rangeStart,
+            out int rangeEnd));
+        Assert.Equal(1, rangeStart);
+        Assert.Equal(51, rangeEnd);
+        Assert.Equal(new RegexMatch(1, haystack.Length - 1), engine.Find(haystack, startAt: 0));
+        Assert.Equal(new RegexMatch(2, haystack.Length - 2), engine.Find(haystack, startAt: 2));
+        Assert.Null(engine.Find(haystack, startAt: 52));
+    }
+
+    /// <summary>
+    /// Verifies Unicode input retains the conservative range when the ASCII projection cannot
+    /// prove equivalent prefix semantics.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralReversePrefixGateFallsBackForUnicodeWindows()
+    {
+        RegexMetaEngine engine = CompileRequiredLiteralPike(
+            GetBoundedAssignmentPattern(),
+            out RegexPrefilter prefilter);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes(
+            "δ" + new string('a', 49) + "bitbucket = 0123456789abcdef0123456789abcdef;");
+        int requiredAt = prefilter.FindRequiredLiteral(haystack, startAt: 0);
+
+        Assert.Equal(51, requiredAt);
+        Assert.True(prefilter.UsesRequiredLiteralPrefixGate);
+        Assert.True(prefilter.TryGetRequiredLiteralRange(
+            haystack,
+            requiredAt,
+            minStart: 0,
+            maxStart: haystack.Length,
+            out int rangeStart,
+            out int rangeEnd));
+        Assert.Equal(0, rangeStart);
+        Assert.Equal(51, rangeEnd);
+        Assert.Equal(new RegexMatch(0, haystack.Length), engine.Find(haystack, startAt: 0));
+    }
+
+    /// <summary>
+    /// Verifies ambiguous required-literal provenance retains conservative candidate ranges.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralReversePrefixGateFallsBackForAmbiguousProvenance()
+    {
+        RegexMetaEngine engine = CompileRequiredLiteralPike(
+            @"(?:.{0,2}needle|.{0,3}needle)=[0-9]"u8,
+            out RegexPrefilter prefilter);
+        ReadOnlySpan<byte> haystack = "xxxneedle=7"u8;
+        int requiredAt = prefilter.FindRequiredLiteral(haystack, startAt: 0);
+
+        Assert.Equal(3, requiredAt);
+        Assert.False(prefilter.UsesRequiredLiteralPrefixGate);
+        Assert.True(prefilter.TryGetRequiredLiteralRange(
+            haystack,
+            requiredAt,
+            minStart: 0,
+            maxStart: haystack.Length,
+            out int rangeStart,
+            out int rangeEnd));
+        Assert.Equal(0, rangeStart);
+        Assert.Equal(3, rangeEnd);
+        Assert.Equal(new RegexMatch(0, haystack.Length), engine.Find(haystack, startAt: 0));
+    }
+
+    /// <summary>
+    /// Verifies lookahead orders narrowed ranges when a later literal proves an earlier start.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralReversePrefixGateOrdersNonMonotonicRanges()
+    {
+        RegexMetaEngine engine = CompileRequiredLiteralPike(
+            @"(?:Z.{99}|)(?:needle)"u8,
+            out RegexPrefilter prefilter);
+        byte[] haystack = Enumerable.Repeat((byte)'x', 126).ToArray();
+        "needle"u8.CopyTo(haystack.AsSpan(100));
+        "needle"u8.CopyTo(haystack.AsSpan(110));
+        "needle"u8.CopyTo(haystack.AsSpan(120));
+        haystack[20] = (byte)'Z';
+
+        Assert.True(prefilter.UsesRequiredLiteralPrefixGate);
+        Assert.Equal(new RegexMatch(20, 106), engine.Find(haystack, startAt: 0));
+    }
+
+    /// <summary>
+    /// Verifies non-ASCII case-folding classes are not projected into a byte-mode prefix DFA.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralReversePrefixGateRejectsNonAsciiCaseFoldedClasses()
+    {
+        byte[] pattern = System.Text.Encoding.UTF8.GetBytes("(?i)[K]{0,1}(?:needle)");
+        _ = CompileRequiredLiteralPike(pattern, out RegexPrefilter prefilter);
+        ReadOnlySpan<byte> haystack = "Kneedle"u8;
+        int requiredAt = prefilter.FindRequiredLiteral(haystack, startAt: 0);
+
+        Assert.False(prefilter.UsesRequiredLiteralPrefixGate);
+        Assert.Equal(1, requiredAt);
+        Assert.True(prefilter.TryGetRequiredLiteralRange(
+            haystack,
+            requiredAt,
+            minStart: 0,
+            maxStart: haystack.Length,
+            out int rangeStart,
+            out int rangeEnd));
+        Assert.Equal(0, rangeStart);
+        Assert.Equal(1, rangeEnd);
+    }
+
+    /// <summary>
     /// Verifies the meta engine selects the dense DFA for small position-independent NFAs.
     /// </summary>
     [Fact]
@@ -4639,8 +4765,7 @@ public sealed class RegexAutomatonTests
     [Fact]
     public void CompilesLargePredicateScalarExpansionsDirectlyToCompactNfa()
     {
-        byte[] pattern = System.Text.Encoding.ASCII.GetBytes(
-            "(?i)[\\w.-]{0,50}?(?:bitbucket)(?:[ \\t\\w.-]{0,20})[\\s'\"]{0,3}(?:=|>|:{1,3}=|\\|\\||:|=>|\\?=|,)[\\x60'\"\\s=]{0,5}([a-z0-9]{32})(?:[\\x60'\"\\s;]|\\\\[nr]|$)");
+        byte[] pattern = GetBoundedAssignmentPattern();
         RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
         var options = new RegexCompileOptions(
             caseInsensitive: false,
@@ -4667,6 +4792,76 @@ public sealed class RegexAutomatonTests
         Assert.Equal(
             new RegexMatch(0, 45),
             automaton.Find("bitbucket = 0123456789abcdef0123456789abcdef;"u8));
+    }
+
+    /// <summary>
+    /// Verifies the issue 30 workload emits one authoritative start per repeated inner literal
+    /// instead of expanding overlapping Unicode lookbehind windows into a whole-haystack scan.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralReversePrefixGateNarrowsIssue30Candidates()
+    {
+        _ = CompileRequiredLiteralPike(GetBoundedAssignmentPattern(), out RegexPrefilter prefilter);
+        const string line = "bitbucket repository setting without a credential\n";
+        byte[] haystack = System.Text.Encoding.ASCII.GetBytes(string.Concat(Enumerable.Repeat(line, 800)));
+        Span<long> requiredRangeBuffer =
+            stackalloc long[RegexCandidateStartEnumerator.RequiredLiteralRangeBufferLength];
+        var candidates = RegexCandidateStartEnumerator.RequiredLiteralRanges(
+            haystack,
+            startAt: 0,
+            maxStart: haystack.Length,
+            utf8: true,
+            prefilter,
+            requiredRangeBuffer);
+        var starts = new List<int>();
+
+        while (candidates.MoveNext(out int start))
+        {
+            starts.Add(start);
+        }
+
+        Assert.Equal(200, prefilter.RequiredLiteralWindow);
+        Assert.Equal(800, starts.Count);
+        Assert.Equal(0, starts[0]);
+        Assert.Equal(line.Length, starts[1]);
+        Assert.Equal(799 * line.Length, starts[^1]);
+    }
+
+    /// <summary>
+    /// Verifies exhausted range scratch falls back to conservative starts without reordering.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralReversePrefixGateFallsBackWhenRangeScratchFills()
+    {
+        _ = CompileRequiredLiteralPike(GetBoundedAssignmentPattern(), out RegexPrefilter prefilter);
+        const string line = "bitbucket repository setting without a credential\n";
+        byte[] haystack = System.Text.Encoding.ASCII.GetBytes(string.Concat(Enumerable.Repeat(line, 6)));
+        Span<long> requiredRangeBuffer = stackalloc long[1];
+        var candidates = RegexCandidateStartEnumerator.RequiredLiteralRanges(
+            haystack,
+            startAt: 0,
+            maxStart: haystack.Length,
+            utf8: true,
+            prefilter,
+            requiredRangeBuffer);
+        var starts = new List<int>();
+
+        while (candidates.MoveNext(out int start))
+        {
+            starts.Add(start);
+        }
+
+        Assert.NotEmpty(starts);
+        Assert.Equal(0, starts[0]);
+        for (int index = 1; index < starts.Count; index++)
+        {
+            Assert.True(starts[index - 1] < starts[index]);
+        }
+
+        for (int index = 0; index < 6; index++)
+        {
+            Assert.Contains(index * line.Length, starts);
+        }
     }
 
     /// <summary>
@@ -6874,6 +7069,12 @@ public sealed class RegexAutomatonTests
         Assert.Equal(
             expected,
             System.Text.Encoding.UTF8.GetString(haystack.AsSpan(group.Value.Start, group.Value.Length)));
+    }
+
+    private static byte[] GetBoundedAssignmentPattern()
+    {
+        return System.Text.Encoding.ASCII.GetBytes(
+            "(?i)[\\w.-]{0,50}?(?:bitbucket)(?:[ \\t\\w.-]{0,20})[\\s'\"]{0,3}(?:=|>|:{1,3}=|\\|\\||:|=>|\\?=|,)[\\x60'\"\\s=]{0,5}([a-z0-9]{32})(?:[\\x60'\"\\s;]|\\\\[nr]|$)");
     }
 
     private static RegexNfa CompileNfa(ReadOnlySpan<byte> pattern)

@@ -3,9 +3,45 @@ using System.Text;
 
 namespace Scout;
 
-internal sealed class RegexPrefilter
+/// <summary>
+/// Locates conservative regex match candidates before authoritative engine evaluation.
+/// </summary>
+/// <param name="kind">The prefilter strategy.</param>
+/// <param name="memmem">The case-sensitive single-prefix finder.</param>
+/// <param name="teddy">The small prefix-set finder.</param>
+/// <param name="ahoCorasick">The general prefix-set finder.</param>
+/// <param name="candidateGate">The optional exact-prefix candidate gate.</param>
+/// <param name="requiredLiteralPrefixGate">The optional reverse-prefix required-literal gate.</param>
+/// <param name="requiredMemmem">The case-sensitive required-literal finder.</param>
+/// <param name="requiredLiteral">The case-insensitive required-literal finder.</param>
+/// <param name="requiredLiterals">The general required-literal-set finder.</param>
+/// <param name="requiredTeddy">The small required-literal-set finder.</param>
+/// <param name="startPredicate">The eagerly compiled start predicate.</param>
+/// <param name="startPredicateFactory">The lazy start-predicate factory.</param>
+/// <param name="requiredLiteralWindow">The conservative maximum required-literal lookbehind.</param>
+internal sealed class RegexPrefilter(
+    RegexPrefilterKind kind,
+    MemmemFinder? memmem,
+    RegexTeddyPrefilter? teddy,
+    AhoCorasickAutomaton? ahoCorasick,
+    RegexPrefixCandidateGate? candidateGate = null,
+    RegexRequiredLiteralPrefixGate? requiredLiteralPrefixGate = null,
+    MemmemFinder? requiredMemmem = null,
+    RegexAsciiCaseInsensitiveFinder? requiredLiteral = null,
+    AhoCorasickAutomaton? requiredLiterals = null,
+    RegexTeddyPrefilter? requiredTeddy = null,
+    RegexStartPredicate? startPredicate = null,
+    Func<RegexStartPredicate?>? startPredicateFactory = null,
+    int requiredLiteralWindow = RegexPrefilter.RequiredLiteralLookBehind)
 {
+    /// <summary>
+    /// The largest conservative required-literal lookbehind supported by a prefilter.
+    /// </summary>
     internal const int RequiredLiteralLookBehind = 512;
+
+    /// <summary>
+    /// The largest short lookbehind preferred when required literals are equally selective.
+    /// </summary>
     internal const int MaxSelectiveRequiredLiteralLookBehind = 8;
     private const int MaxRequiredLiteralVariants = 128;
     private const int MaxExpandedRequiredLiteralVariants = 1024;
@@ -16,63 +52,65 @@ internal sealed class RegexPrefilter
     private const int LowSelectivityPrefixSetThreshold = 64;
     private const int LargeCaseInsensitiveAsciiPrefixAnalysisNodeThreshold = 1024;
 
-    private readonly MemmemFinder? memmem;
-    private readonly RegexTeddyPrefilter? teddy;
-    private readonly AhoCorasickAutomaton? ahoCorasick;
-    private readonly RegexPrefixCandidateGate? candidateGate;
-    private readonly MemmemFinder? requiredMemmem;
-    private readonly RegexAsciiCaseInsensitiveFinder? requiredLiteral;
-    private readonly AhoCorasickAutomaton? requiredLiterals;
-    private readonly RegexTeddyPrefilter? requiredTeddy;
-    private readonly RegexStartPredicate? startPredicate;
-    private readonly Lazy<RegexStartPredicate?>? lazyStartPredicate;
-    private readonly int requiredLiteralWindow;
+    private readonly MemmemFinder? _memmem = memmem;
+    private readonly RegexTeddyPrefilter? _teddy = teddy;
+    private readonly AhoCorasickAutomaton? _ahoCorasick = ahoCorasick;
+    private readonly RegexPrefixCandidateGate? _candidateGate = candidateGate;
+    private readonly RegexRequiredLiteralPrefixGate? _requiredLiteralPrefixGate = requiredLiteralPrefixGate;
+    private readonly MemmemFinder? _requiredMemmem = requiredMemmem;
+    private readonly RegexAsciiCaseInsensitiveFinder? _requiredLiteral = requiredLiteral;
+    private readonly AhoCorasickAutomaton? _requiredLiterals = requiredLiterals;
+    private readonly RegexTeddyPrefilter? _requiredTeddy = requiredTeddy;
+    private readonly RegexStartPredicate? _startPredicate = startPredicate;
+    private readonly Lazy<RegexStartPredicate?>? _lazyStartPredicate = startPredicateFactory is null
+        ? null
+        : new Lazy<RegexStartPredicate?>(startPredicateFactory);
+    private readonly int _requiredLiteralWindow = Math.Clamp(
+        requiredLiteralWindow,
+        0,
+        RequiredLiteralLookBehind);
 
-    private RegexPrefilter(
-        RegexPrefilterKind kind,
-        MemmemFinder? memmem,
-        RegexTeddyPrefilter? teddy,
-        AhoCorasickAutomaton? ahoCorasick,
-        RegexPrefixCandidateGate? candidateGate = null,
-        MemmemFinder? requiredMemmem = null,
-        RegexAsciiCaseInsensitiveFinder? requiredLiteral = null,
-        AhoCorasickAutomaton? requiredLiterals = null,
-        RegexTeddyPrefilter? requiredTeddy = null,
-        RegexStartPredicate? startPredicate = null,
-        Func<RegexStartPredicate?>? startPredicateFactory = null,
-        int requiredLiteralWindow = RequiredLiteralLookBehind)
-    {
-        Kind = kind;
-        this.memmem = memmem;
-        this.teddy = teddy;
-        this.ahoCorasick = ahoCorasick;
-        this.candidateGate = candidateGate;
-        this.requiredMemmem = requiredMemmem;
-        this.requiredLiteral = requiredLiteral;
-        this.requiredLiterals = requiredLiterals;
-        this.requiredTeddy = requiredTeddy;
-        this.startPredicate = startPredicate;
-        lazyStartPredicate = startPredicateFactory is null
-            ? null
-            : new Lazy<RegexStartPredicate?>(startPredicateFactory);
-        this.requiredLiteralWindow = Math.Clamp(requiredLiteralWindow, 0, RequiredLiteralLookBehind);
-    }
+    /// <summary>
+    /// Gets the prefilter strategy.
+    /// </summary>
+    public RegexPrefilterKind Kind { get; } = kind;
 
-    public RegexPrefilterKind Kind { get; }
+    /// <summary>
+    /// Gets a value indicating whether this prefilter searches for required inner literals.
+    /// </summary>
+    public bool UsesRequiredLiteralWindow => _requiredMemmem is not null ||
+        _requiredLiteral is not null ||
+        _requiredLiterals is not null ||
+        _requiredTeddy is not null;
 
-    public bool UsesRequiredLiteralWindow => requiredMemmem is not null ||
-        requiredLiteral is not null ||
-        requiredLiterals is not null ||
-        requiredTeddy is not null;
+    /// <summary>
+    /// Gets the conservative maximum lookbehind for required-literal hits.
+    /// </summary>
+    public int RequiredLiteralWindow => UsesRequiredLiteralWindow ? _requiredLiteralWindow : 0;
 
-    public int RequiredLiteralWindow => UsesRequiredLiteralWindow ? requiredLiteralWindow : 0;
+    /// <summary>
+    /// Gets a value indicating whether required-literal ranges can use reverse-prefix narrowing.
+    /// </summary>
+    public bool UsesRequiredLiteralPrefixGate => _requiredLiteralPrefixGate is not null;
 
+    /// <summary>
+    /// Determines whether a match can begin at one byte offset.
+    /// </summary>
+    /// <param name="haystack">The bytes being searched.</param>
+    /// <param name="start">The proposed match start.</param>
+    /// <returns><see langword="true"/> when the start is feasible.</returns>
     public bool CanStartAt(ReadOnlySpan<byte> haystack, int start)
     {
-        RegexStartPredicate? predicate = startPredicate ?? lazyStartPredicate?.Value;
+        RegexStartPredicate? predicate = _startPredicate ?? _lazyStartPredicate?.Value;
         return predicate is null || predicate.CanStartAt(haystack, start);
     }
 
+    /// <summary>
+    /// Compiles the most selective safe prefilter for a regex syntax tree.
+    /// </summary>
+    /// <param name="root">The regex syntax tree.</param>
+    /// <param name="options">The regex compile options.</param>
+    /// <returns>The compiled prefilter, or <see langword="null"/> when none is safe.</returns>
     public static RegexPrefilter? Compile(RegexSyntaxNode root, RegexCompileOptions options)
     {
         return Compile(root, options, out _);
@@ -130,11 +168,17 @@ internal sealed class RegexPrefilter
                     requiredCandidate.UnicodeClasses,
                     out byte[][] preparedLiterals))
             {
+                RegexRequiredLiteralPrefixGate.TryCreate(
+                    root,
+                    options,
+                    requiredCandidate,
+                    out RegexRequiredLiteralPrefixGate? requiredLiteralPrefixGate);
                 return CreateRequiredLiteralPrefilter(
                     preparedLiterals,
                     requiredCandidate.CaseInsensitive,
                     startPredicate: null,
                     maxLookBehind: requiredCandidate.MaxLookBehind,
+                    requiredLiteralPrefixGate: requiredLiteralPrefixGate,
                     startPredicateFactory: CreateStartPredicateFactory());
             }
 
@@ -413,6 +457,12 @@ internal sealed class RegexPrefilter
                 out rejectedLowSelectivityPrefixSet);
     }
 
+    /// <summary>
+    /// Finds the next exact-prefix candidate at or after one byte offset.
+    /// </summary>
+    /// <param name="haystack">The bytes being searched.</param>
+    /// <param name="startAt">The first offset to inspect.</param>
+    /// <returns>The next candidate offset, or <c>-1</c> when none remains.</returns>
     public int FindCandidate(ReadOnlySpan<byte> haystack, int startAt)
     {
         int searchAt = startAt;
@@ -424,8 +474,8 @@ internal sealed class RegexPrefilter
                 return -1;
             }
 
-            if (candidateGate is null ||
-                candidateGate.CanMatch(haystack, candidate, out int resumeAt))
+            if (_candidateGate is null ||
+                _candidateGate.CanMatch(haystack, candidate, out int resumeAt))
             {
                 return candidate;
             }
@@ -436,27 +486,68 @@ internal sealed class RegexPrefilter
         return -1;
     }
 
+    /// <summary>
+    /// Finds the next required-literal occurrence at or after one byte offset.
+    /// </summary>
+    /// <param name="haystack">The bytes being searched.</param>
+    /// <param name="startAt">The first offset to inspect.</param>
+    /// <returns>The next required-literal offset, or <c>-1</c> when none remains.</returns>
     public int FindRequiredLiteral(ReadOnlySpan<byte> haystack, int startAt)
     {
-        if (requiredMemmem is not null)
+        if (_requiredMemmem is not null)
         {
-            int offset = requiredMemmem.Find(haystack[startAt..]);
+            int offset = _requiredMemmem.Find(haystack[startAt..]);
             return offset < 0 ? -1 : startAt + offset;
         }
 
-        if (requiredLiteral is not null)
+        if (_requiredLiteral is not null)
         {
-            int offset = requiredLiteral.Find(haystack[startAt..]);
+            int offset = _requiredLiteral.Find(haystack[startAt..]);
             return offset < 0 ? -1 : startAt + offset;
         }
 
-        if (requiredTeddy is not null)
+        if (_requiredTeddy is not null)
         {
-            return requiredTeddy.FindCandidate(haystack, startAt);
+            return _requiredTeddy.FindCandidate(haystack, startAt);
         }
 
-        AhoCorasickMatch? match = requiredLiterals!.Find(haystack[startAt..]);
+        AhoCorasickMatch? match = _requiredLiterals!.Find(haystack[startAt..]);
         return match.HasValue ? startAt + match.Value.Start : -1;
+    }
+
+    /// <summary>
+    /// Gets the conservative or reverse-prefix-narrowed start range for one required literal.
+    /// </summary>
+    /// <param name="haystack">The bytes being searched.</param>
+    /// <param name="requiredAt">The byte offset at which the required literal begins.</param>
+    /// <param name="minStart">The first permitted match start.</param>
+    /// <param name="maxStart">The last permitted match start.</param>
+    /// <param name="rangeStart">Receives the first candidate start.</param>
+    /// <param name="rangeEnd">Receives the last candidate start.</param>
+    /// <returns><see langword="true"/> when the range is nonempty.</returns>
+    public bool TryGetRequiredLiteralRange(
+        ReadOnlySpan<byte> haystack,
+        int requiredAt,
+        int minStart,
+        int maxStart,
+        out int rangeStart,
+        out int rangeEnd)
+    {
+        rangeStart = Math.Max(minStart, requiredAt - RequiredLiteralWindow);
+        rangeEnd = Math.Min(maxStart, requiredAt);
+        if (rangeStart > rangeEnd)
+        {
+            return false;
+        }
+
+        return _requiredLiteralPrefixGate is null ||
+            _requiredLiteralPrefixGate.TryNarrowRange(
+                haystack,
+                requiredAt,
+                rangeStart,
+                rangeEnd,
+                out rangeStart,
+                out rangeEnd);
     }
 
     private static RegexPrefilter CreateRequiredLiteralPrefilter(
@@ -464,6 +555,7 @@ internal sealed class RegexPrefilter
         bool asciiCaseInsensitive,
         RegexStartPredicate? startPredicate,
         int maxLookBehind,
+        RegexRequiredLiteralPrefixGate? requiredLiteralPrefixGate = null,
         Func<RegexStartPredicate?>? startPredicateFactory = null)
     {
         if (preparedLiterals.Length == 1)
@@ -475,6 +567,7 @@ internal sealed class RegexPrefilter
                     memmem: null,
                     teddy: null,
                     ahoCorasick: null,
+                    requiredLiteralPrefixGate: requiredLiteralPrefixGate,
                     requiredMemmem: new MemmemFinder(preparedLiterals[0]),
                     startPredicate: startPredicate,
                     startPredicateFactory: startPredicateFactory,
@@ -486,6 +579,7 @@ internal sealed class RegexPrefilter
                 memmem: null,
                 teddy: null,
                 ahoCorasick: null,
+                requiredLiteralPrefixGate: requiredLiteralPrefixGate,
                 requiredLiteral: new RegexAsciiCaseInsensitiveFinder(preparedLiterals[0]),
                 startPredicate: startPredicate,
                 startPredicateFactory: startPredicateFactory,
@@ -499,6 +593,7 @@ internal sealed class RegexPrefilter
                 memmem: null,
                 teddy: null,
                 ahoCorasick: null,
+                requiredLiteralPrefixGate: requiredLiteralPrefixGate,
                 requiredTeddy: requiredTeddy,
                 startPredicate: startPredicate,
                 startPredicateFactory: startPredicateFactory,
@@ -510,6 +605,7 @@ internal sealed class RegexPrefilter
             memmem: null,
             teddy: null,
             ahoCorasick: null,
+            requiredLiteralPrefixGate: requiredLiteralPrefixGate,
             requiredLiterals: AhoCorasickAutomaton.Create(preparedLiterals, AhoCorasickMatchKind.LeftmostFirst, asciiCaseInsensitive),
             startPredicate: startPredicate,
             startPredicateFactory: startPredicateFactory,
@@ -518,18 +614,18 @@ internal sealed class RegexPrefilter
 
     private int FindRawCandidate(ReadOnlySpan<byte> haystack, int startAt)
     {
-        if (memmem is not null)
+        if (_memmem is not null)
         {
-            int offset = memmem.Find(haystack[startAt..]);
+            int offset = _memmem.Find(haystack[startAt..]);
             return offset < 0 ? -1 : startAt + offset;
         }
 
-        if (teddy is not null)
+        if (_teddy is not null)
         {
-            return teddy.FindCandidate(haystack, startAt);
+            return _teddy.FindCandidate(haystack, startAt);
         }
 
-        AhoCorasickMatch? match = ahoCorasick!.Find(haystack[startAt..]);
+        AhoCorasickMatch? match = _ahoCorasick!.Find(haystack[startAt..]);
         return match.HasValue ? startAt + match.Value.Start : -1;
     }
 
@@ -1868,7 +1964,14 @@ internal sealed class RegexPrefilter
             : prefixMax + childLookBehind;
     }
 
-    private static bool TryGetMaximumByteLength(
+    /// <summary>
+    /// Attempts to compute a finite maximum byte length for a syntax subtree.
+    /// </summary>
+    /// <param name="node">The syntax subtree.</param>
+    /// <param name="options">The options in effect at the subtree root.</param>
+    /// <param name="maximum">Receives the maximum byte length.</param>
+    /// <returns><see langword="true"/> when the maximum is finite and representable.</returns>
+    internal static bool TryGetMaximumByteLength(
         RegexSyntaxNode node,
         RegexCompileOptions options,
         out int maximum)
