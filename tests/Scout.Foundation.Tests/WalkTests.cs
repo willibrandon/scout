@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Scout;
@@ -69,6 +70,116 @@ public sealed class WalkTests
         });
 
         Assert.Equal(4, visitors);
+    }
+
+    /// <summary>
+    /// Verifies parallel walking completes every worker after exhausting the work queue.
+    /// </summary>
+    [Fact]
+    public void ParallelWalkCompletesEveryWorkerAfterExhaustion()
+    {
+        string root = CreateTempDirectory();
+        File.WriteAllText(Path.Combine(root, "file"), string.Empty);
+        int completions = 0;
+
+        new WalkBuilder(root).Threads(4).BuildParallel().RunWithCompletion(() =>
+        {
+            Func<DirEntry, WalkState> visitor = static _ => WalkState.Continue;
+            return (visitor, () => Interlocked.Increment(ref completions));
+        });
+
+        Assert.Equal(4, completions);
+    }
+
+    /// <summary>
+    /// Verifies parallel walking completes every worker after an early quit.
+    /// </summary>
+    [Fact]
+    public void ParallelWalkCompletesEveryWorkerAfterQuit()
+    {
+        string root = CreateTempDirectory();
+        File.WriteAllText(Path.Combine(root, "file"), string.Empty);
+        int completions = 0;
+
+        new WalkBuilder(root).Threads(4).BuildParallel().RunWithCompletion(() =>
+        {
+            Func<DirEntry, WalkState> visitor = static _ => WalkState.Quit;
+            return (visitor, () => Interlocked.Increment(ref completions));
+        });
+
+        Assert.Equal(4, completions);
+    }
+
+    /// <summary>
+    /// Verifies failures raised while completing a parallel worker propagate to the caller.
+    /// </summary>
+    [Fact]
+    public void ParallelWalkPropagatesWorkerCompletionFailure()
+    {
+        string root = CreateTempDirectory();
+        File.WriteAllText(Path.Combine(root, "file"), string.Empty);
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+            new WalkBuilder(root).Threads(1).BuildParallel().RunWithCompletion(() =>
+            {
+                Func<DirEntry, WalkState> visitor = static _ => WalkState.Continue;
+                return (visitor, static () => throw new InvalidOperationException("completion failed"));
+            }));
+
+        Assert.Equal("completion failed", error.Message);
+    }
+
+    /// <summary>
+    /// Verifies parallel walking completes a worker after its visitor fails.
+    /// </summary>
+    [Fact]
+    public void ParallelWalkCompletesWorkerAfterVisitorFailure()
+    {
+        string root = CreateTempDirectory();
+        File.WriteAllText(Path.Combine(root, "file"), string.Empty);
+        int completions = 0;
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+            new WalkBuilder(root).Threads(1).BuildParallel().RunWithCompletion(() =>
+            {
+                Func<DirEntry, WalkState> visitor = static _ => throw new InvalidOperationException("visitor failed");
+                return (visitor, () => Interlocked.Increment(ref completions));
+            }));
+
+        Assert.Equal("visitor failed", error.Message);
+        Assert.Equal(1, completions);
+    }
+
+    /// <summary>
+    /// Verifies a visitor-factory failure occurs before any parallel worker starts.
+    /// </summary>
+    [Fact]
+    public void ParallelWalkCreatesAllVisitorsBeforeStartingWorkers()
+    {
+        string root = CreateTempDirectory();
+        File.WriteAllText(Path.Combine(root, "file"), string.Empty);
+        int factories = 0;
+        int visits = 0;
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+            new WalkBuilder(root).Threads(4).BuildParallel().RunWithCompletion(() =>
+            {
+                if (Interlocked.Increment(ref factories) == 2)
+                {
+                    throw new InvalidOperationException("factory failed");
+                }
+
+                Func<DirEntry, WalkState> visitor = _ =>
+                {
+                    Interlocked.Increment(ref visits);
+                    return WalkState.Continue;
+                };
+                return (visitor, static () => { });
+            }));
+
+        Assert.Equal("factory failed", error.Message);
+        Assert.Equal(2, factories);
+        Assert.Equal(0, visits);
     }
 
     /// <summary>
@@ -172,8 +283,12 @@ public sealed class WalkTests
         Directory.CreateDirectory(Path.Combine(root, "a", "b"));
         Assert.True(TryCreateDirectorySymlink(Path.Combine(root, "a"), Path.Combine(root, "a", "b", "c")), "Required directory symlink could not be created.");
 
-        Assert.Equal(["a", "a/b"], Collect(root, new WalkBuilder(root)));
-        Assert.Equal(["a", "a/b"], Collect(root, new WalkBuilder(root).FollowLinks(true)));
+        string[] expected = ["a", "a/b"];
+        Assert.Equal(expected, Collect(root, new WalkBuilder(root)));
+        Assert.Equal(expected, Collect(root, new WalkBuilder(root).FollowLinks(true)));
+        Assert.Equal(
+            expected,
+            CollectParallel(root, new WalkBuilder(root).FollowLinks(true).Threads(4)));
     }
 
     /// <summary>
@@ -190,6 +305,84 @@ public sealed class WalkTests
 
         Assert.Equal(FileIdentity.FromPath(target), FileIdentity.FromPath(link));
         Assert.NotEqual(FileIdentity.FromPath(target), FileIdentity.FromPath(link, followLinks: false));
+    }
+
+    /// <summary>
+    /// Verifies supported Unix architectures prefer their native <c>stat</c> layout without a second metadata probe.
+    /// </summary>
+    [Fact]
+    public void UnixStatLayoutPrefersCurrentArchitecture()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            Assert.True(OperatingSystem.IsWindows());
+        }
+        else
+        {
+            UnixStatLayout layout = UnixStatLayout.ForCurrentPlatform[0];
+            if (OperatingSystem.IsMacOS())
+            {
+                Assert.Equal(RuntimeInformation.ProcessArchitecture == Architecture.X64 ? 8 : 4, layout.ModeOffset);
+            }
+            else
+            {
+                Assert.True(OperatingSystem.IsLinux());
+                int expectedModeOffset = RuntimeInformation.ProcessArchitecture switch
+                {
+                    Architecture.X64 => 24,
+                    Architecture.Arm64 => 16,
+                    _ => 16,
+                };
+                Assert.Equal(expectedModeOffset, layout.ModeOffset);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Verifies native Unix status decoding preserves file, directory, and symbolic-link metadata.
+    /// </summary>
+    [Fact]
+    public void NativeUnixStatusDecodesFilesystemEntries()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            Assert.True(OperatingSystem.IsWindows());
+            Assert.False(NativeFileSystemMetadata.TryGetUnixStatus("unused", followLinks: false, out _));
+        }
+        else
+        {
+            string root = CreateTempDirectory();
+            string directory = Path.Combine(root, "directory");
+            string file = Path.Combine(root, "file");
+            string link = Path.Combine(root, "link");
+            Directory.CreateDirectory(directory);
+            File.WriteAllBytes(file, "needle"u8.ToArray());
+            Assert.True(TryCreateFileSymlink(file, link), "Required file symlink could not be created.");
+
+            Assert.True(NativeFileSystemMetadata.TryGetUnixStatus(directory, followLinks: false, out NativeUnixFileStatus directoryStatus));
+            Assert.True(directoryStatus.IsDirectory);
+            Assert.False(directoryStatus.IsSymbolicLink);
+            Assert.Null(directoryStatus.Length);
+            Assert.False(directoryStatus.Metadata.IsEmpty);
+
+            Assert.True(NativeFileSystemMetadata.TryGetUnixStatus(file, followLinks: false, out NativeUnixFileStatus fileStatus));
+            Assert.False(fileStatus.IsDirectory);
+            Assert.False(fileStatus.IsSymbolicLink);
+            Assert.Equal(6, fileStatus.Length);
+            Assert.False(fileStatus.Metadata.IsEmpty);
+
+            Assert.True(NativeFileSystemMetadata.TryGetUnixStatus(link, followLinks: false, out NativeUnixFileStatus linkStatus));
+            Assert.False(linkStatus.IsDirectory);
+            Assert.True(linkStatus.IsSymbolicLink);
+            Assert.Null(linkStatus.Length);
+            Assert.False(linkStatus.Metadata.IsEmpty);
+
+            Assert.True(NativeFileSystemMetadata.TryGetUnixStatus(link, followLinks: true, out NativeUnixFileStatus targetStatus));
+            Assert.False(targetStatus.IsDirectory);
+            Assert.True(targetStatus.IsSymbolicLink);
+            Assert.Equal(6, targetStatus.Length);
+            Assert.Equal(fileStatus.Metadata, targetStatus.Metadata);
+        }
     }
 
     /// <summary>

@@ -128,7 +128,7 @@ public sealed class Walk : IEnumerable<DirEntry>
             yield break;
         }
 
-        bool added = !entry.Identity.IsEmpty && ancestors.Add(entry.Identity);
+        bool added = followLinks && !entry.Identity.IsEmpty && ancestors.Add(entry.Identity);
         try
         {
             foreach (WalkPath childPath in EnumerateChildren(entry))
@@ -472,6 +472,16 @@ public sealed class Walk : IEnumerable<DirEntry>
         }
 
         return paths.ToArray();
+    }
+
+    /// <summary>
+    /// Determines whether an entry identity is needed for symbolic-link loop detection.
+    /// </summary>
+    /// <param name="entry">The directory entry being descended into.</param>
+    /// <returns><see langword="true" /> when the identity must be retained.</returns>
+    internal bool ShouldTrackAncestor(DirEntry entry)
+    {
+        return followLinks && !entry.Identity.IsEmpty;
     }
 
     private WalkPath[] EnumerateRawUnixChildren(DirEntry entry)

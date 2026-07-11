@@ -4,6 +4,9 @@ using Microsoft.Win32.SafeHandles;
 
 namespace Scout;
 
+/// <summary>
+/// Searches standard input, files, and directory trees with Scout's standard matcher pipeline.
+/// </summary>
 internal static class StandardSearchTargetOperations
 {
     private const int ParallelOutputFlushThreshold = 128 * 1024;
@@ -448,15 +451,15 @@ internal static class StandardSearchTargetOperations
 
         try
         {
-            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger).Threads(threadCount).BuildParallel().Run(() =>
+            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger).Threads(threadCount).BuildParallel().RunWithCompletion(() =>
             {
                 RegexSearchPlan? regexPlan = CreateReusableDirectoryRegexSearchPlan(pattern, lowArgs, color, asciiCaseInsensitive);
                 MemoryStream buffer = directOutput
                     ? new LineFlushingMemoryStream(output, outputLock, GetParallelOutputLineFlushTerminator(separators), ParallelDirectOutputFlushThreshold)
                     : new MemoryStream();
-                RawByteWriter writer = CreateParallelOutputWriter(buffer);
+                RawByteWriter writer = CreateParallelOutputWriter(buffer, directOutput);
                 directOutputBuffers?.Add(buffer);
-                return entry =>
+                Func<DirEntry, WalkState> visitor = entry =>
                 {
                     if (!entry.IsFile)
                     {
@@ -513,6 +516,7 @@ internal static class StandardSearchTargetOperations
 
                     return fileMatched && lowArgs.Quiet ? WalkState.Quit : WalkState.Continue;
                 };
+                return (visitor, () => writer.Flush());
             });
         }
         finally
@@ -687,14 +691,14 @@ internal static class StandardSearchTargetOperations
 
         try
         {
-            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger).Threads(threadCount).BuildParallel().Run(() =>
+            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger).Threads(threadCount).BuildParallel().RunWithCompletion(() =>
             {
                 MemoryStream buffer = directOutput
                     ? new LineFlushingMemoryStream(output, outputLock, GetParallelOutputLineFlushTerminator(separators), ParallelDirectOutputFlushThreshold)
                     : new MemoryStream();
-                RawByteWriter writer = CreateParallelOutputWriter(buffer);
+                RawByteWriter writer = CreateParallelOutputWriter(buffer, directOutput);
                 directOutputBuffers?.Add(buffer);
-                return entry =>
+                Func<DirEntry, WalkState> visitor = entry =>
                 {
                     if (!entry.IsFile)
                     {
@@ -757,6 +761,7 @@ internal static class StandardSearchTargetOperations
 
                     return WalkState.Continue;
                 };
+                return (visitor, () => writer.Flush());
             });
         }
         finally
@@ -787,9 +792,11 @@ internal static class StandardSearchTargetOperations
         writer = CreateParallelOutputWriter(buffer);
     }
 
-    private static RawByteWriter CreateParallelOutputWriter(MemoryStream buffer)
+    private static RawByteWriter CreateParallelOutputWriter(MemoryStream buffer, bool blockBuffered = false)
     {
-        return new RawByteWriter(buffer);
+        return new RawByteWriter(
+            buffer,
+            blockBuffered ? RawByteWriterBufferMode.Block : RawByteWriterBufferMode.None);
     }
 
     private static void WriteBufferedOutputIfAny(RawByteWriter output, object outputLock, MemoryStream buffer)

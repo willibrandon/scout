@@ -3,6 +3,9 @@ using System.Text;
 
 namespace Scout.IO.Ignore;
 
+/// <summary>
+/// Reads byte-preserving file metadata from the native Unix filesystem API.
+/// </summary>
 internal static unsafe partial class NativeFileSystemMetadata
 {
     private const int StatBufferSize = 512;
@@ -16,6 +19,13 @@ internal static unsafe partial class NativeFileSystemMetadata
     private const uint UnixSymbolicLink = 0xA000;
     private const uint UnixSocket = 0xC000;
 
+    /// <summary>
+    /// Tries to read stable filesystem metadata for a path.
+    /// </summary>
+    /// <param name="path">The path to inspect.</param>
+    /// <param name="followLinks">Whether to inspect a symbolic link's target.</param>
+    /// <param name="metadata">Receives the filesystem metadata.</param>
+    /// <returns><see langword="true" /> when metadata was read.</returns>
     public static bool TryGet(string path, bool followLinks, out FileSystemMetadata metadata)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
@@ -29,6 +39,12 @@ internal static unsafe partial class NativeFileSystemMetadata
         return false;
     }
 
+    /// <summary>
+    /// Tries to read the filesystem device containing a path.
+    /// </summary>
+    /// <param name="path">The path to inspect.</param>
+    /// <param name="device">Receives the filesystem device.</param>
+    /// <returns><see langword="true" /> when the device was read.</returns>
     public static bool TryGetDevice(string path, out FileSystemDevice device)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
@@ -53,6 +69,12 @@ internal static unsafe partial class NativeFileSystemMetadata
         return false;
     }
 
+    /// <summary>
+    /// Tries to read a symbolic link target as text.
+    /// </summary>
+    /// <param name="path">The symbolic link path.</param>
+    /// <param name="target">Receives the link target.</param>
+    /// <returns><see langword="true" /> when the target was read.</returns>
     public static bool TryReadLinkTarget(string path, out string target)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
@@ -72,6 +94,12 @@ internal static unsafe partial class NativeFileSystemMetadata
         return false;
     }
 
+    /// <summary>
+    /// Tries to read a symbolic link target without decoding its Unix path bytes.
+    /// </summary>
+    /// <param name="path">The raw symbolic link path.</param>
+    /// <param name="target">Receives the raw link target.</param>
+    /// <returns><see langword="true" /> when the target was read.</returns>
     public static bool TryReadRawUnixLinkTarget(ReadOnlySpan<byte> path, out byte[] target)
     {
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
@@ -103,6 +131,13 @@ internal static unsafe partial class NativeFileSystemMetadata
         return false;
     }
 
+    /// <summary>
+    /// Tries to read the native Unix status for a text path.
+    /// </summary>
+    /// <param name="path">The path to inspect.</param>
+    /// <param name="followLinks">Whether to inspect a symbolic link's target.</param>
+    /// <param name="status">Receives the native status.</param>
+    /// <returns><see langword="true" /> when status was read.</returns>
     public static bool TryGetUnixStatus(string path, bool followLinks, out NativeUnixFileStatus status)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
@@ -130,13 +165,16 @@ internal static unsafe partial class NativeFileSystemMetadata
             }
         }
 
-        uint? linkExpectedFileType = TryGetExpectedTextFileType(path, followLinks: false);
-        uint? effectiveExpectedFileType = followLinks
-            ? TryGetExpectedTextFileType(path, followLinks: true)
-            : linkExpectedFileType;
-        return TryCreateUnixStatus(linkStatus, effectiveStatus, linkExpectedFileType, effectiveExpectedFileType, out status);
+        return TryCreateUnixStatus(linkStatus, effectiveStatus, null, null, out status);
     }
 
+    /// <summary>
+    /// Tries to read the native Unix status without decoding the path bytes.
+    /// </summary>
+    /// <param name="path">The raw path to inspect.</param>
+    /// <param name="followLinks">Whether to inspect a symbolic link's target.</param>
+    /// <param name="status">Receives the native status.</param>
+    /// <returns><see langword="true" /> when status was read.</returns>
     public static bool TryGetRawUnixStatus(ReadOnlySpan<byte> path, bool followLinks, out NativeUnixFileStatus status)
     {
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
