@@ -9,9 +9,14 @@ namespace Scout;
 public sealed class ByteRegexApiTests
 {
     private const int BoundedAssignmentSearchTimeoutMilliseconds = 5000;
+    private const int RepeatedBoundedAssignmentSearchTimeoutMilliseconds = 5000;
+    private const int RepeatedBoundedAssignmentCandidateCount = 800;
+    private const int RepeatedBoundedAssignmentStressCandidateCount = 4000;
+    private const long RepeatedBoundedAssignmentAllocationLimit = 64 * 1024;
     private const int ConcurrentSearchIterations = 64;
     private const int ConcurrentHaystackCount = 8;
     private const string BoundedAssignmentPattern = "(?i)[\\w.-]{0,50}?(?:adafruit)(?:[ \\t\\w.-]{0,20})[\\s'\"]{0,3}(?:=|>|:{1,3}=|\\|\\||:|=>|\\?=|,)[\\x60'\"\\s=]{0,5}([a-z0-9_-]{32})(?:[\\x60'\"\\s;]|\\\\[nr]|$)";
+    private const string RepeatedBoundedAssignmentPattern = "(?i)[\\w.-]{0,50}?(?:bitbucket)(?:[ \\t\\w.-]{0,20})[\\s'\"]{0,3}(?:=|>|:{1,3}=|\\|\\||:|=>|\\?=|,)[\\x60'\"\\s=]{0,5}([a-z0-9]{32})(?:[\\x60'\"\\s;]|\\\\[nr]|$)";
 
     /// <summary>
     /// Verifies byte regex matching exposes byte offsets and spans.
@@ -71,6 +76,75 @@ public sealed class ByteRegexApiTests
         Assert.Null(regex.Find(negative));
         Assert.False(regex.IsMatch(negative));
         Assert.Equal(0, regex.Count(negative));
+    }
+
+    /// <summary>
+    /// Verifies a large set of repeated nonmatching bounded-assignment candidates is rejected without stalling.
+    /// </summary>
+    [Fact(Timeout = RepeatedBoundedAssignmentSearchTimeoutMilliseconds)]
+    public void RejectsManyRepeatedBoundedAssignmentCandidatesWithoutRescanning()
+    {
+        var regex = ByteRegex.Compile(RepeatedBoundedAssignmentPattern);
+        byte[] input = CreateRepeatedBoundedAssignmentInput(RepeatedBoundedAssignmentStressCandidateCount);
+
+        Assert.Null(regex.Find(input));
+    }
+
+    /// <summary>
+    /// Verifies every public engine mode rejects repeated candidates consistently across search operations.
+    /// </summary>
+    [Theory(Timeout = RepeatedBoundedAssignmentSearchTimeoutMilliseconds)]
+    [InlineData(ByteRegexEngineMode.Optimized)]
+    [InlineData(ByteRegexEngineMode.General)]
+    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    public void RejectsRepeatedBoundedAssignmentCandidatesAcrossEngineModes(ByteRegexEngineMode engineMode)
+    {
+        var regex = ByteRegex.Compile(
+            RepeatedBoundedAssignmentPattern,
+            new ByteRegexOptions { EngineMode = engineMode });
+        byte[] terminalMatch = Encoding.UTF8.GetBytes("bitbucket = abc123def456ghi789jkl012mno345pq");
+        byte[] input = CreateRepeatedBoundedAssignmentInput(RepeatedBoundedAssignmentCandidateCount);
+
+        ByteRegexCaptures? captures = regex.FindCaptures(terminalMatch);
+        Assert.NotNull(captures);
+        Assert.Equal(new ByteRegexMatch(0, terminalMatch.Length), captures.Match);
+        ByteRegexMatch? secret = captures.GetGroup(1);
+        Assert.Equal(new ByteRegexMatch(12, 32), secret);
+        Assert.True(secret!.Value.Value(terminalMatch).SequenceEqual("abc123def456ghi789jkl012mno345pq"u8));
+        Assert.Null(regex.Find(input));
+        Assert.False(regex.IsMatch(input));
+        Assert.Equal(0, regex.Count(input));
+        Assert.Null(regex.FindCaptures(input));
+    }
+
+    /// <summary>
+    /// Verifies warmed repeated-candidate match and capture searches reuse scratch instead of allocating per candidate.
+    /// </summary>
+    [Theory(Timeout = RepeatedBoundedAssignmentSearchTimeoutMilliseconds)]
+    [InlineData(ByteRegexEngineMode.Optimized)]
+    [InlineData(ByteRegexEngineMode.General)]
+    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    public void ReusesScratchForRepeatedBoundedAssignmentSearches(ByteRegexEngineMode engineMode)
+    {
+        var regex = ByteRegex.Compile(
+            RepeatedBoundedAssignmentPattern,
+            new ByteRegexOptions { EngineMode = engineMode });
+        byte[] input = CreateRepeatedBoundedAssignmentInput(RepeatedBoundedAssignmentCandidateCount);
+        Assert.Null(regex.Find(input));
+        Assert.Null(regex.FindCaptures(input));
+
+        long findBefore = GC.GetAllocatedBytesForCurrentThread();
+        ByteRegexMatch? match = regex.Find(input);
+        long findAllocated = GC.GetAllocatedBytesForCurrentThread() - findBefore;
+
+        long capturesBefore = GC.GetAllocatedBytesForCurrentThread();
+        ByteRegexCaptures? captures = regex.FindCaptures(input);
+        long capturesAllocated = GC.GetAllocatedBytesForCurrentThread() - capturesBefore;
+
+        Assert.Null(match);
+        Assert.Null(captures);
+        Assert.InRange(findAllocated, 0, RepeatedBoundedAssignmentAllocationLimit);
+        Assert.InRange(capturesAllocated, 0, RepeatedBoundedAssignmentAllocationLimit);
     }
 
     /// <summary>
@@ -195,7 +269,27 @@ public sealed class ByteRegexApiTests
             foreach (byte[] haystack in haystacks)
             {
                 AssertFunctionMatch(regex.Find(haystack), haystack);
+                Assert.True(regex.IsMatch(haystack));
+                Assert.Equal(1, regex.Count(haystack));
             }
+        });
+    }
+
+    /// <summary>
+    /// Verifies the repeated-candidate PikeVM search state can be leased safely by concurrent callers.
+    /// </summary>
+    [Fact(Timeout = RepeatedBoundedAssignmentSearchTimeoutMilliseconds)]
+    public void SharedBoundedAssignmentRegexRejectsCandidatesFromMultipleThreads()
+    {
+        var regex = ByteRegex.Compile(
+            RepeatedBoundedAssignmentPattern,
+            new ByteRegexOptions { EngineMode = ByteRegexEngineMode.AutomataOnly });
+        byte[] input = CreateRepeatedBoundedAssignmentInput(16);
+
+        Parallel.For(0, ConcurrentSearchIterations, _ =>
+        {
+            Assert.Null(regex.Find(input));
+            Assert.False(regex.IsMatch(input));
         });
     }
 
@@ -271,6 +365,12 @@ public sealed class ByteRegexApiTests
         return Enumerable.Range(0, ConcurrentHaystackCount)
             .Select(static index => Encoding.UTF8.GetBytes($"package mod{index};\nfunc handler_{index}() {{ return errors.New(\"boom\") }}\n"))
             .ToArray();
+    }
+
+    private static byte[] CreateRepeatedBoundedAssignmentInput(int candidateCount)
+    {
+        return Encoding.UTF8.GetBytes(string.Concat(
+            Enumerable.Repeat("bitbucket repository setting without a credential\n", candidateCount)));
     }
 
     private static void AssertFunctionMatch(ByteRegexMatch? match, ReadOnlySpan<byte> haystack)

@@ -9,16 +9,16 @@ namespace Scout.IO.Ignore;
 public sealed class WalkParallel
 {
     private const int MaxDefaultThreadCount = 12;
-    private readonly Walk walk;
-    private readonly int requestedThreads;
+    private readonly Walk _walk;
+    private readonly int _requestedThreads;
 
     internal WalkParallel(Walk walk, int requestedThreads)
     {
         ArgumentNullException.ThrowIfNull(walk);
         ArgumentOutOfRangeException.ThrowIfNegative(requestedThreads);
 
-        this.walk = walk;
-        this.requestedThreads = requestedThreads;
+        _walk = walk;
+        _requestedThreads = requestedThreads;
     }
 
     /// <summary>
@@ -29,8 +29,24 @@ public sealed class WalkParallel
     {
         ArgumentNullException.ThrowIfNull(visitorFactory);
 
+        RunCore(() => (visitorFactory(), static () => { }));
+    }
+
+    /// <summary>
+    /// Runs traversal with one visitor and completion callback per worker.
+    /// </summary>
+    /// <param name="visitorFactory">Creates a visitor and completion callback for each worker.</param>
+    internal void RunWithCompletion(Func<(Func<DirEntry, WalkState> Visitor, Action Complete)> visitorFactory)
+    {
+        ArgumentNullException.ThrowIfNull(visitorFactory);
+
+        RunCore(visitorFactory);
+    }
+
+    private void RunCore(Func<(Func<DirEntry, WalkState> Visitor, Action Complete)> visitorFactory)
+    {
         int threadCount = ResolveThreadCount();
-        ConcurrentStack<WalkWorkItem>[] stacks = CreateStacks(threadCount, walk.CreateInitialWorkItems());
+        ConcurrentStack<WalkWorkItem>[] stacks = CreateStacks(threadCount, _walk.CreateInitialWorkItems());
         if (stacks.Length == 0)
         {
             return;
@@ -42,6 +58,12 @@ public sealed class WalkParallel
             remaining += stacks[index].Count;
         }
 
+        var visitors = new (Func<DirEntry, WalkState> Visit, Action Complete)[stacks.Length];
+        for (int index = 0; index < visitors.Length; index++)
+        {
+            visitors[index] = visitorFactory();
+        }
+
         int quit = 0;
         ExceptionDispatchInfo? failure = null;
         object failureLock = new();
@@ -49,7 +71,7 @@ public sealed class WalkParallel
         for (int index = 0; index < stacks.Length; index++)
         {
             int workerIndex = index;
-            Func<DirEntry, WalkState> visitor = visitorFactory();
+            (Func<DirEntry, WalkState> visitor, Action completeVisitor) = visitors[index];
             ThreadPool.QueueUserWorkItem(_ =>
             {
                 try
@@ -61,7 +83,17 @@ public sealed class WalkParallel
                 }
                 finally
                 {
-                    completed.Signal();
+                    try
+                    {
+                        completeVisitor();
+                    }
+                    catch (Exception exception) when (CaptureFailure(exception))
+                    {
+                    }
+                    finally
+                    {
+                        completed.Signal();
+                    }
                 }
             });
         }
@@ -130,7 +162,7 @@ public sealed class WalkParallel
             return;
         }
 
-        if (!walk.TryEvaluateEntry(
+        if (!_walk.TryEvaluateEntry(
             item.Path,
             item.Depth,
             item.Ancestors,
@@ -159,7 +191,7 @@ public sealed class WalkParallel
         }
 
         HashSet<FileIdentity> childAncestors = item.Ancestors;
-        if (!state.Entry.Identity.IsEmpty)
+        if (_walk.ShouldTrackAncestor(state.Entry))
         {
             childAncestors = new HashSet<FileIdentity>(item.Ancestors)
             {
@@ -167,7 +199,7 @@ public sealed class WalkParallel
             };
         }
 
-        WalkPath[] children = walk.EnumerateChildren(state.Entry);
+        WalkPath[] children = _walk.EnumerateChildren(state.Entry);
         for (int index = children.Length - 1; index >= 0; index--)
         {
             if (Volatile.Read(ref quit) != 0)
@@ -189,9 +221,9 @@ public sealed class WalkParallel
 
     private int ResolveThreadCount()
     {
-        if (requestedThreads != 0)
+        if (_requestedThreads != 0)
         {
-            return requestedThreads;
+            return _requestedThreads;
         }
 
         return Math.Min(Environment.ProcessorCount, MaxDefaultThreadCount);

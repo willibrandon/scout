@@ -1,59 +1,65 @@
 namespace Scout;
 
-internal sealed class RegexCaptureEngine
+/// <summary>
+/// Executes capture-aware NFA searches with reusable runner-local scratch state.
+/// </summary>
+/// <param name="nfa">The capture-aware NFA to execute.</param>
+/// <param name="prefilter">The optional prefilter used to enumerate candidate starts.</param>
+internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter)
 {
-    private readonly RegexNfa nfa;
-    private readonly RegexPrefilter? prefilter;
-    private List<CaptureThread> current = [];
-    private List<CaptureThread> next = [];
-    private List<(int StateIndex, int[] Starts, int[] Ends)> closureStack = [];
-    private HashSet<(int State, int Position)> currentSeen = [];
-    private HashSet<(int State, int Position)> nextSeen = [];
+    private readonly RegexNfa _nfa = nfa;
+    private readonly RegexPrefilter? _prefilter = prefilter;
+    private readonly List<(int StateIndex, int[] Starts, int[] Ends)> _closureStack = [];
+    private readonly int[] _closureVisited = new int[nfa.States.Count];
+    private readonly int[] _closureClosedSplits = new int[nfa.States.Count];
+    private readonly Dictionary<(int State, int Position), bool> _reachabilityCache = [];
+    private readonly HashSet<(int State, int Position)> _reachabilityVisited = [];
+    private readonly Stack<(int State, int Position)> _reachabilityPending = [];
+    private List<CaptureThread> _current = [];
+    private List<CaptureThread> _next = [];
+    private HashSet<(int State, int Position)> _currentSeen = [];
+    private HashSet<(int State, int Position)> _nextSeen = [];
+    private int _closureGeneration;
 
-    public RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter)
-    {
-        this.nfa = nfa;
-        this.prefilter = prefilter;
-    }
-
+    /// <summary>
+    /// Finds the first match and its participating capture groups at or after a byte offset.
+    /// </summary>
+    /// <param name="haystack">The haystack bytes.</param>
+    /// <param name="startAt">The first byte offset to consider.</param>
+    /// <returns>The first capture result, or <see langword="null" /> when no match exists.</returns>
     public RegexCaptures? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
+        _reachabilityCache.Clear();
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
-        if (prefilter?.UsesRequiredLiteralWindow == true)
+        if (_prefilter?.UsesRequiredLiteralWindow == true)
         {
-            int nextStartToTry = startOffset;
-            for (int requiredAt = prefilter.FindRequiredLiteral(haystack, startOffset);
-                 requiredAt >= 0;
-                 requiredAt = prefilter.FindRequiredLiteral(haystack, requiredAt + 1))
+            Span<long> requiredRangeBuffer =
+                stackalloc long[RegexCandidateStartEnumerator.RequiredLiteralRangeBufferLength];
+            var candidates = RegexCandidateStartEnumerator.RequiredLiteralRanges(
+                haystack,
+                startOffset,
+                haystack.Length,
+                _nfa.Utf8,
+                _prefilter,
+                requiredRangeBuffer);
+            while (candidates.MoveNext(out int start))
             {
-                int firstStart = Math.Max(startOffset, requiredAt - prefilter.RequiredLiteralWindow);
-                firstStart = Math.Max(firstStart, nextStartToTry);
-                for (int start = firstStart; start <= requiredAt; start++)
+                if (TryMatchAt(haystack, start, out RegexCaptures? captures))
                 {
-                    if (nfa.Utf8 && !RegexByteClass.IsUtf8Boundary(haystack, start))
-                    {
-                        continue;
-                    }
-
-                    if (TryMatchAt(haystack, start, out RegexCaptures? captures))
-                    {
-                        return captures;
-                    }
+                    return captures;
                 }
-
-                nextStartToTry = Math.Max(nextStartToTry, requiredAt + 1);
             }
 
             return null;
         }
 
-        if (prefilter is not null)
+        if (_prefilter is not null)
         {
-            for (int start = prefilter.FindCandidate(haystack, startOffset);
+            for (int start = _prefilter.FindCandidate(haystack, startOffset);
                  start >= 0;
-                 start = prefilter.FindCandidate(haystack, start + 1))
+                 start = _prefilter.FindCandidate(haystack, start + 1))
             {
-                if (nfa.Utf8 && !RegexByteClass.IsUtf8Boundary(haystack, start))
+                if (_nfa.Utf8 && !RegexByteClass.IsUtf8Boundary(haystack, start))
                 {
                     continue;
                 }
@@ -69,7 +75,7 @@ internal sealed class RegexCaptureEngine
 
         for (int start = startOffset; start <= haystack.Length; start++)
         {
-            if (nfa.Utf8 && !RegexByteClass.IsUtf8Boundary(haystack, start))
+            if (_nfa.Utf8 && !RegexByteClass.IsUtf8Boundary(haystack, start))
             {
                 continue;
             }
@@ -85,8 +91,9 @@ internal sealed class RegexCaptureEngine
 
     internal RegexCaptures? MatchAt(ReadOnlySpan<byte> haystack, int startAt)
     {
+        _reachabilityCache.Clear();
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
-        if (nfa.Utf8 && !RegexByteClass.IsUtf8Boundary(haystack, startOffset))
+        if (_nfa.Utf8 && !RegexByteClass.IsUtf8Boundary(haystack, startOffset))
         {
             return null;
         }
@@ -98,52 +105,49 @@ internal sealed class RegexCaptureEngine
 
     private bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out RegexCaptures? captures)
     {
-        int[] starts = CreateCaptureSlots(nfa.CaptureCount + 1);
-        int[] ends = CreateCaptureSlots(nfa.CaptureCount + 1);
+        int[] starts = CreateCaptureSlots(_nfa.CaptureCount + 1);
+        int[] ends = CreateCaptureSlots(_nfa.CaptureCount + 1);
         starts[0] = start;
 
-        current.Clear();
-        currentSeen.Clear();
+        _current.Clear();
+        _currentSeen.Clear();
         AddThread(
-            nfa.StartState,
+            _nfa.StartState,
             haystack,
             start,
             starts,
             ends,
-            current,
-            currentSeen,
-            new bool[nfa.States.Count],
-            new bool[nfa.States.Count]);
+            _current,
+            _currentSeen);
 
         CaptureThread? deferredAccept = null;
-        Dictionary<(int State, int Position), bool> reachabilityCache = [];
-        while (current.Count > 0)
+        while (_current.Count > 0)
         {
-            int position = MinPosition(current);
-            int acceptIndex = IndexOfAccept(current, position);
+            int position = MinPosition(_current);
+            int acceptIndex = IndexOfAccept(_current, position);
             if (acceptIndex >= 0)
             {
-                CaptureThread accepted = current[acceptIndex].WithGroupEnd(0, position);
+                CaptureThread accepted = _current[acceptIndex].WithGroupEnd(0, position);
                 deferredAccept = accepted;
-                if (!HasEarlierConsumer(current, acceptIndex, haystack, position, reachabilityCache))
+                if (!HasEarlierConsumer(_current, acceptIndex, haystack, position))
                 {
                     captures = ToCaptures(accepted, start, position);
                     return true;
                 }
             }
 
-            next.Clear();
-            nextSeen.Clear();
-            for (int index = 0; index < current.Count; index++)
+            _next.Clear();
+            _nextSeen.Clear();
+            for (int index = 0; index < _current.Count; index++)
             {
-                CaptureThread thread = current[index];
+                CaptureThread thread = _current[index];
                 if (thread.Position != position)
                 {
-                    AddThreadEntry(thread, next, nextSeen);
+                    AddThreadEntry(thread, _next, _nextSeen);
                     continue;
                 }
 
-                RegexNfaState state = nfa.States[thread.State];
+                RegexNfaState state = _nfa.States[thread.State];
                 if (state.Kind == RegexNfaStateKind.Atom &&
                     RegexByteClass.TryGetAtomMatchLength(
                         haystack,
@@ -166,10 +170,8 @@ internal sealed class RegexCaptureEngine
                         position + consume,
                         CloneSlots(thread.Starts),
                         CloneSlots(thread.Ends),
-                        next,
-                        nextSeen,
-                        new bool[nfa.States.Count],
-                        new bool[nfa.States.Count]);
+                        _next,
+                        _nextSeen);
                 }
                 else if (position < haystack.Length &&
                     state.Kind == RegexNfaStateKind.Sparse &&
@@ -181,15 +183,13 @@ internal sealed class RegexCaptureEngine
                         position + 1,
                         CloneSlots(thread.Starts),
                         CloneSlots(thread.Ends),
-                        next,
-                        nextSeen,
-                        new bool[nfa.States.Count],
-                        new bool[nfa.States.Count]);
+                        _next,
+                        _nextSeen);
                 }
             }
 
-            (current, next) = (next, current);
-            (currentSeen, nextSeen) = (nextSeen, currentSeen);
+            (_current, _next) = (_next, _current);
+            (_currentSeen, _nextSeen) = (_nextSeen, _currentSeen);
         }
 
         if (deferredAccept.HasValue)
@@ -210,17 +210,16 @@ internal sealed class RegexCaptureEngine
         int[] starts,
         int[] ends,
         List<CaptureThread> threads,
-        HashSet<(int State, int Position)> seen,
-        bool[] visited,
-        bool[] closedSplits)
+        HashSet<(int State, int Position)> seen)
     {
-        closureStack.Clear();
+        int generation = NextClosureGeneration();
+        _closureStack.Clear();
         PushClosureFrame(stateIndex, starts, ends);
-        while (closureStack.Count > 0)
+        while (_closureStack.Count > 0)
         {
-            int frameIndex = closureStack.Count - 1;
-            (int frameStateIndex, int[] frameStarts, int[] frameEnds) = closureStack[frameIndex];
-            closureStack.RemoveAt(frameIndex);
+            int frameIndex = _closureStack.Count - 1;
+            (int frameStateIndex, int[] frameStarts, int[] frameEnds) = _closureStack[frameIndex];
+            _closureStack.RemoveAt(frameIndex);
             stateIndex = frameStateIndex;
             starts = frameStarts;
             ends = frameEnds;
@@ -229,14 +228,14 @@ internal sealed class RegexCaptureEngine
                 continue;
             }
 
-            RegexNfaState state = nfa.States[stateIndex];
-            if (visited[stateIndex])
+            RegexNfaState state = _nfa.States[stateIndex];
+            if (_closureVisited[stateIndex] == generation)
             {
-                PushClosedSplitExit(stateIndex, state, starts, ends, closedSplits);
+                PushClosedSplitExit(stateIndex, state, starts, ends);
                 continue;
             }
 
-            visited[stateIndex] = true;
+            _closureVisited[stateIndex] = generation;
             switch (state.Kind)
             {
                 case RegexNfaStateKind.Split:
@@ -274,7 +273,7 @@ internal sealed class RegexCaptureEngine
         {
             if (nextState >= 0)
             {
-                closureStack.Add((nextState, frameStarts, frameEnds));
+                _closureStack.Add((nextState, frameStarts, frameEnds));
             }
         }
 
@@ -282,15 +281,14 @@ internal sealed class RegexCaptureEngine
             int loopStateIndex,
             RegexNfaState loopState,
             int[] frameStarts,
-            int[] frameEnds,
-            bool[] closed)
+            int[] frameEnds)
         {
-            if (closed[loopStateIndex])
+            if (_closureClosedSplits[loopStateIndex] == generation)
             {
                 return;
             }
 
-            closed[loopStateIndex] = true;
+            _closureClosedSplits[loopStateIndex] = generation;
             switch (loopState.Kind)
             {
                 case RegexNfaStateKind.GreedyLoopSplit:
@@ -301,6 +299,18 @@ internal sealed class RegexCaptureEngine
                     break;
             }
         }
+    }
+
+    private int NextClosureGeneration()
+    {
+        if (_closureGeneration == int.MaxValue)
+        {
+            Array.Clear(_closureVisited);
+            Array.Clear(_closureClosedSplits);
+            _closureGeneration = 0;
+        }
+
+        return ++_closureGeneration;
     }
 
     private static void AddThreadEntry(
@@ -380,8 +390,7 @@ internal sealed class RegexCaptureEngine
         List<CaptureThread> threads,
         int acceptIndex,
         ReadOnlySpan<byte> haystack,
-        int position,
-        Dictionary<(int State, int Position), bool> reachabilityCache)
+        int position)
     {
         if (position >= haystack.Length)
         {
@@ -396,7 +405,7 @@ internal sealed class RegexCaptureEngine
                 continue;
             }
 
-            RegexNfaState state = nfa.States[thread.State];
+            RegexNfaState state = _nfa.States[thread.State];
             if (state.Kind == RegexNfaStateKind.Atom &&
                 RegexByteClass.TryGetAtomMatchLength(
                     haystack,
@@ -411,15 +420,29 @@ internal sealed class RegexCaptureEngine
                     state.UnicodeClasses,
                     state.RequiresUtf8ScalarMatch,
                     state.CanUseAsciiScalarFastPath,
-                    out int consume) &&
-                RegexDfaOperations.CanReachAccept(nfa, state.Next, haystack, position + consume, reachabilityCache))
+                out int consume) &&
+                RegexDfaOperations.CanReachAccept(
+                    _nfa,
+                    state.Next,
+                    haystack,
+                    position + consume,
+                    _reachabilityCache,
+                    _reachabilityVisited,
+                    _reachabilityPending))
             {
                 return true;
             }
 
             if (state.Kind == RegexNfaStateKind.Sparse &&
                 state.TryGetSparseTarget(haystack[position], out int sparseNext) &&
-                RegexDfaOperations.CanReachAccept(nfa, sparseNext, haystack, position + 1, reachabilityCache))
+                RegexDfaOperations.CanReachAccept(
+                    _nfa,
+                    sparseNext,
+                    haystack,
+                    position + 1,
+                    _reachabilityCache,
+                    _reachabilityVisited,
+                    _reachabilityPending))
             {
                 return true;
             }
@@ -433,7 +456,7 @@ internal sealed class RegexCaptureEngine
         for (int index = 0; index < threads.Count; index++)
         {
             CaptureThread thread = threads[index];
-            if (thread.Position == position && nfa.States[thread.State].Kind == RegexNfaStateKind.Accept)
+            if (thread.Position == position && _nfa.States[thread.State].Kind == RegexNfaStateKind.Accept)
             {
                 return index;
             }

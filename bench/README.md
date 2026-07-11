@@ -4,6 +4,10 @@
 is the CLI benchsuite driver required by the design for comparing the pinned
 release-LTO `rg` oracle against a Native AOT `scout` binary.
 
+`BoundedAssignmentBenchmarks` tracks issue #30 through the public `ByteRegex`
+API. It measures `Find`, `Count`, and `FindCaptures` in optimized and
+automata-only modes with 1, 100, and 800 repeated required-literal candidates.
+
 Smoke run:
 
 ```sh
@@ -72,13 +76,22 @@ independent of the public OpenSubtitles pattern family. The non-capturing
 workload measures general alternation and prefilter behavior, and the
 replacement workload measures the same class of search through capture output.
 
+The generated `bounded_assignment_no_match` workload uses issue #30's exact
+pattern and an 800-line input containing repeated `bitbucket` candidates but no
+credential. `-U --count-matches --no-messages` reproduces the reported CLI path
+while presenting the complete file to the regex engine as one haystack. A
+no-match exit code of `1` is normalized for hyperfine; an unexpected match or
+any search failure still fails the workload. Its combined command-order median
+must remain at or below 1.50x the pinned `rg` oracle.
+
 Median peak RSS is capped at 1.5x rg plus the measured Native AOT fixed-image
 floor recorded in `docs/PARITY.md`: the script first measures an rg and
 `scout-real` tiny `--mmap -n` literal RSS floor and allows the measured Scout
 Native AOT floor in addition to the 1.5x rg limit for every RSS gate. Peak RSS
 is judged from the rg-first run so the later rg command cannot inherit an
 earlier scout process peak on macOS.
-In gate mode, the OpenSubtitles workloads use five runs and five warmups, and the
+In gate mode, the bounded-assignment workload uses five runs and five warmups.
+The OpenSubtitles workloads use five runs and five warmups.
 Linux-tree workloads use five runs and five warmups by default because hosted
 macOS filesystem timings are noisier; explicit `--runs` and `--warmup` values
 still override those defaults.

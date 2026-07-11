@@ -676,6 +676,23 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
+    /// Verifies a parallel worker flushes output smaller than its block buffer when traversal completes.
+    /// </summary>
+    [Fact]
+    public void ParallelDirectorySearchFlushesBufferedWorkerTail()
+    {
+        string root = CreateTempDirectory();
+        File.WriteAllText(Path.Combine(root, "input.txt"), "alpha\nneedle\n");
+
+        (int exitCode, byte[] output, string error) = RunScout("--no-config", "--threads", "2", "-n", "needle", root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-config", "--threads", "2", "-n", "needle", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies default multi-threaded directory search finds the same matches as ripgrep.
     /// </summary>
     [Fact]

@@ -202,6 +202,10 @@ Rationale unchanged and reaffirmed: the BCL engine is UTF-16/`char`/`string`-bas
 
 **`Scout.Automata`** (port of `regex-automata`): **all engines up front** — Thompson NFA compiler (UTF-8 automata over bytes), PikeVM, hybrid (lazy) DFA, dense & sparse DFA, one-pass DFA, bounded backtracker, meta strategy selection, and prefilters (`Memmem`, `AhoCorasick`, `Teddy`). `PatternSet`/multi-regex for globset & ignore.
 
+PikeVM-backed unanchored searches inject streamed prefilter candidates into one insertion-ordered active-state frontier. Mutable frontier, closure, and reachability storage belongs to pooled runners, while the compiled regex remains immutable and safe for concurrent callers. This is the authoritative Thompson matcher—with full leftmost-first, anchor, UTF-8, and capture-replay semantics—not a pattern-family recognizer.
+
+For a uniquely proven inner literal with a finite prefix, the required-literal prefilter can reverse-match an ASCII projection of that prefix with pooled lazy-DFA runners before injecting starts. Non-ASCII windows, ambiguous provenance, unsupported positional syntax, and exhausted DFA budgets retain the conservative lookbehind range. The forward Thompson matcher remains authoritative, so this is a general reverse-inner strategy rather than a pattern recognizer.
+
 SIMD via `System.Runtime.Intrinsics`: shipped baseline is SSE2 + AVX2 (x64) and `AdvSimd`/NEON (arm64); AVX-512 paths are additive and `Avx512*.IsSupported`-gated, delivered before Release. Scalar fallback always present.
 
 **`Scout.Text.Regex`** (public package): the supported .NET-facing facade over the byte regex engine. It exposes `ByteRegex` and `ByteRegexSet` APIs that accept `ReadOnlySpan<byte>` haystacks, return byte offsets, preserve capture spans, and allow callers to choose optimized, general, or automata-only engine modes without depending on CLI internals. The package is Native-AOT-safe and targets `net9.0` and `net10.0`.
@@ -396,6 +400,7 @@ Performance parity is a **blocking** acceptance criterion, not best-effort. The 
 | Workload class | Release gate vs Rust `rg` |
 |----------------|---------------------------|
 | Large single-file literal/regex scan (mmap, SIMD-bound) | ≤ **1.20×** wall time |
+| Repeated-candidate regex no-match scan (issue #30) | ≤ **1.50×** wall time |
 | Recursive walk over a large tree (I/O + ignore-bound) | ≤ **1.25×** |
 | Many-small-files, parallel | ≤ **1.30×** |
 | Cold-start (`scout --version`, tiny search) | ≤ **1.0×** (AOT expected at parity or better) |
