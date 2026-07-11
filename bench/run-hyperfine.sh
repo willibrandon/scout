@@ -15,6 +15,8 @@ GATE_TREE_RUNS="5"
 GATE_TREE_WARMUP="5"
 GATE_BOUNDED_ASSIGNMENT_RUNS="5"
 GATE_BOUNDED_ASSIGNMENT_WARMUP="5"
+GATE_LARGE_BOUNDED_UNICODE_CLASS_RUNS="5"
+GATE_LARGE_BOUNDED_UNICODE_CLASS_WARMUP="5"
 GATE_LARGE_FILE_THREADS="4"
 GATE_LARGE_FILE_SEGMENT_BUFFER_LENGTH="131072"
 GATE_RETRY_FAILED_WORKLOADS="${SCOUT_GATE_RETRY_FAILED_WORKLOADS:-2}"
@@ -479,6 +481,18 @@ EOF
     awk 'BEGIN { for (i = 0; i < 800; i++) print "bitbucket repository setting without a credential" }' > "$bounded_assignment_input"
 }
 
+make_large_bounded_unicode_class_corpus() {
+    large_bounded_unicode_class_dir="$OUT_DIR/large-bounded-unicode-class"
+    large_bounded_unicode_class_pattern="$large_bounded_unicode_class_dir/pattern.txt"
+    large_bounded_unicode_class_input="$large_bounded_unicode_class_dir/no-match-5000.txt"
+    mkdir -p "$large_bounded_unicode_class_dir"
+
+    cat > "$large_bounded_unicode_class_pattern" <<'EOF'
+x[\w-]{50,1000}
+EOF
+    awk 'BEGIN { for (i = 0; i < 5000; i++) printf "x[%cw-]{50,1000}\n", 92 }' > "$large_bounded_unicode_class_input"
+}
+
 expect_no_match_command() {
     no_match_command="$1"
     no_match_label="$2"
@@ -746,6 +760,24 @@ gate_bounded_assignment_warmup() {
     printf '%s\n' "$WARMUP"
 }
 
+gate_large_bounded_unicode_class_runs() {
+    if [ "$MODE" = "gate" ] && [ "$RUNS_SPECIFIED" = "0" ]; then
+        printf '%s\n' "$GATE_LARGE_BOUNDED_UNICODE_CLASS_RUNS"
+        return
+    fi
+
+    printf '%s\n' "$RUNS"
+}
+
+gate_large_bounded_unicode_class_warmup() {
+    if [ "$MODE" = "gate" ] && [ "$WARMUP_SPECIFIED" = "0" ]; then
+        printf '%s\n' "$GATE_LARGE_BOUNDED_UNICODE_CLASS_WARMUP"
+        return
+    fi
+
+    printf '%s\n' "$WARMUP"
+}
+
 check_time_gate() {
     time_gate_name="$1"
     time_gate_limit="$2"
@@ -958,6 +990,7 @@ list_workloads() {
         'smoke_many_small             generated many-small-files tree, no release gate' \
         'smoke_cold_version           scout --version vs rg --version, no release gate' \
         'bounded_assignment_no_match  generated 800-candidate issue #30 scan, gate <= 1.50x' \
+        'large_bounded_unicode_class_no_match generated 5,000-candidate issue #32 scan in general mode, gate <= 1.50x' \
         'subtitles_en_literal         OpenSubtitles literal scan, gate <= 1.20x' \
         'subtitles_en_regex           OpenSubtitles regex scan, gate <= 1.20x' \
         'linux_recursive_literal      Linux tree recursive walk, gate <= 1.25x' \
@@ -1048,13 +1081,18 @@ if [ "$MODE" = "smoke" ]; then
     make_smoke_corpus
     make_cold_tiny_corpus
     make_bounded_assignment_corpus
+    make_large_bounded_unicode_class_corpus
     Q_SINGLE="$(shell_quote "$OUT_DIR/smoke-corpus/large-single.txt")"
     Q_TREE="$(shell_quote "$OUT_DIR/smoke-corpus/many-small")"
     Q_TINY="$(shell_quote "$OUT_DIR/cold-tiny.txt")"
     Q_BOUNDED_ASSIGNMENT_PATTERN="$(shell_quote "$OUT_DIR/bounded-assignment/pattern.txt")"
     Q_BOUNDED_ASSIGNMENT_INPUT="$(shell_quote "$OUT_DIR/bounded-assignment/no-match-800.txt")"
+    Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN="$(shell_quote "$OUT_DIR/large-bounded-unicode-class/pattern.txt")"
+    Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT="$(shell_quote "$OUT_DIR/large-bounded-unicode-class/no-match-5000.txt")"
     RG_BOUNDED_ASSIGNMENT_COMMAND="$(expect_no_match_command "$Q_RG --no-config -U --count-matches --no-messages -f $Q_BOUNDED_ASSIGNMENT_PATTERN $Q_BOUNDED_ASSIGNMENT_INPUT" "rg bounded-assignment search")"
     SCOUT_BOUNDED_ASSIGNMENT_COMMAND="$(expect_no_match_command "$Q_SCOUT --no-config -U --count-matches --no-messages -f $Q_BOUNDED_ASSIGNMENT_PATTERN $Q_BOUNDED_ASSIGNMENT_INPUT" "Scout bounded-assignment search")"
+    RG_LARGE_BOUNDED_UNICODE_CLASS_COMMAND="$(expect_no_match_command "$Q_RG --no-config -U --count-matches --no-messages -f $Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN $Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT" "rg large bounded Unicode-class search")"
+    SCOUT_LARGE_BOUNDED_UNICODE_CLASS_COMMAND="$(expect_no_match_command "SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config -U --count-matches --no-messages -f $Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN $Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT" "Scout large bounded Unicode-class search")"
 
     run_pair \
         "smoke_large_literal" \
@@ -1081,11 +1119,17 @@ if [ "$MODE" = "smoke" ]; then
         "1.50" \
         "$RG_BOUNDED_ASSIGNMENT_COMMAND" \
         "$SCOUT_BOUNDED_ASSIGNMENT_COMMAND"
+    run_pair \
+        "large_bounded_unicode_class_no_match" \
+        "1.50" \
+        "$RG_LARGE_BOUNDED_UNICODE_CLASS_COMMAND" \
+        "$SCOUT_LARGE_BOUNDED_UNICODE_CLASS_COMMAND"
     exit 0
 fi
 
 make_cold_tiny_corpus
 make_bounded_assignment_corpus
+make_large_bounded_unicode_class_corpus
 OPENSUBTITLES_EN="${SCOUT_BENCH_OPENSUBTITLES_EN:-}"
 LINUX_TREE="${SCOUT_BENCH_LINUX_TREE:-}"
 OPENSUBTITLES_EN="$(require_gate_corpus_file "opensubtitles-en" "$OPENSUBTITLES_EN")"
@@ -1096,14 +1140,20 @@ Q_LINUX="$(shell_quote "$LINUX_TREE")"
 Q_TINY="$(shell_quote "$OUT_DIR/cold-tiny.txt")"
 Q_BOUNDED_ASSIGNMENT_PATTERN="$(shell_quote "$OUT_DIR/bounded-assignment/pattern.txt")"
 Q_BOUNDED_ASSIGNMENT_INPUT="$(shell_quote "$OUT_DIR/bounded-assignment/no-match-800.txt")"
+Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN="$(shell_quote "$OUT_DIR/large-bounded-unicode-class/pattern.txt")"
+Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT="$(shell_quote "$OUT_DIR/large-bounded-unicode-class/no-match-5000.txt")"
 RG_BOUNDED_ASSIGNMENT_COMMAND="$(expect_no_match_command "$Q_RG --no-config -U --count-matches --no-messages -f $Q_BOUNDED_ASSIGNMENT_PATTERN $Q_BOUNDED_ASSIGNMENT_INPUT" "rg bounded-assignment search")"
 SCOUT_BOUNDED_ASSIGNMENT_COMMAND="$(expect_no_match_command "$Q_SCOUT --no-config -U --count-matches --no-messages -f $Q_BOUNDED_ASSIGNMENT_PATTERN $Q_BOUNDED_ASSIGNMENT_INPUT" "Scout bounded-assignment search")"
+RG_LARGE_BOUNDED_UNICODE_CLASS_COMMAND="$(expect_no_match_command "$Q_RG --no-config -U --count-matches --no-messages -f $Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN $Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT" "rg large bounded Unicode-class search")"
+SCOUT_LARGE_BOUNDED_UNICODE_CLASS_COMMAND="$(expect_no_match_command "SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config -U --count-matches --no-messages -f $Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN $Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT" "Scout large bounded Unicode-class search")"
 OPENSUBTITLES_RUNS="$(gate_opensubtitles_runs)"
 OPENSUBTITLES_WARMUP="$(gate_opensubtitles_warmup)"
 TREE_RUNS="$(gate_tree_runs)"
 TREE_WARMUP="$(gate_tree_warmup)"
 BOUNDED_ASSIGNMENT_RUNS="$(gate_bounded_assignment_runs)"
 BOUNDED_ASSIGNMENT_WARMUP="$(gate_bounded_assignment_warmup)"
+LARGE_BOUNDED_UNICODE_CLASS_RUNS="$(gate_large_bounded_unicode_class_runs)"
+LARGE_BOUNDED_UNICODE_CLASS_WARMUP="$(gate_large_bounded_unicode_class_warmup)"
 
 analyze_large_file_segments "subtitles_en_regex" "$OPENSUBTITLES_EN" "$GATE_LARGE_FILE_SEGMENT_BUFFER_LENGTH" "$GATE_LARGE_FILE_THREADS"
 measure_rss_floor "$OPENSUBTITLES_RUNS" "$OPENSUBTITLES_WARMUP"
@@ -1115,6 +1165,13 @@ run_pair \
     "$SCOUT_BOUNDED_ASSIGNMENT_COMMAND" \
     "$BOUNDED_ASSIGNMENT_RUNS" \
     "$BOUNDED_ASSIGNMENT_WARMUP"
+run_pair \
+    "large_bounded_unicode_class_no_match" \
+    "1.50" \
+    "$RG_LARGE_BOUNDED_UNICODE_CLASS_COMMAND" \
+    "$SCOUT_LARGE_BOUNDED_UNICODE_CLASS_COMMAND" \
+    "$LARGE_BOUNDED_UNICODE_CLASS_RUNS" \
+    "$LARGE_BOUNDED_UNICODE_CLASS_WARMUP"
 run_pair \
     "subtitles_en_literal" \
     "1.20" \

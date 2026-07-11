@@ -5,7 +5,9 @@ namespace Scout;
 /// </summary>
 public sealed class RegexAutomatonTests
 {
+    private const int LargeBoundedUnicodeClassNfaStateLimit = 400_000;
     private const int PathologicalNoMatchTimeoutMilliseconds = 5000;
+    private const int SingleUnicodeClassNfaStateLimit = 512;
 
     /// <summary>
     /// Verifies leading required literals use the Memmem regex prefilter.
@@ -4715,6 +4717,47 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies the minimized Unicode word-class plan remains small enough to reuse for each continuation.
+    /// </summary>
+    [Fact]
+    public void MinimizesUnicodeWordClassNfa()
+    {
+        RegexNfa nfa = CompileNfa(@"[\w-]"u8);
+
+        Assert.InRange(nfa.States.Count, 1, SingleUnicodeClassNfaStateLimit);
+        Assert.True(RegexDfaOperations.CanCompile(nfa));
+        AssertSparseTransitionsAreOrderedAndDisjoint(nfa);
+    }
+
+    /// <summary>
+    /// Verifies the issue 32 bounded repetition remains within the expected Thompson NFA size budget.
+    /// </summary>
+    [Fact]
+    public void KeepsLargeBoundedUnicodeClassNfaWithinBudget()
+    {
+        RegexNfa nfa = CompileNfa(@"x[\w-]{50,1000}"u8);
+
+        Assert.InRange(nfa.States.Count, 1, LargeBoundedUnicodeClassNfaStateLimit);
+        Assert.True(RegexDfaOperations.CanCompile(nfa));
+    }
+
+    /// <summary>
+    /// Verifies minimizing the Unicode class preserves lazy-DFA selection and the literal-prefix prefilter.
+    /// </summary>
+    [Fact]
+    public void PreservesLargeBoundedUnicodeClassLazyDfaAndPrefilter()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"x[\w-]{50,1000}"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false);
+
+        Assert.Equal(RegexEngineKind.LazyDfa, GetEngineKind(automaton));
+        Assert.Equal(RegexPrefilterKind.Memmem, automaton.PrefilterKind);
+    }
+
+    /// <summary>
     /// Verifies the meta engine selects the bounded backtracker for small position-sensitive predicates.
     /// </summary>
     [Fact]
@@ -4792,6 +4835,55 @@ public sealed class RegexAutomatonTests
         Assert.Equal(
             new RegexMatch(0, 45),
             automaton.Find("bitbucket = 0123456789abcdef0123456789abcdef;"u8));
+    }
+
+    /// <summary>
+    /// Verifies minimized byte-NFA lowering agrees with compact scalar execution on valid and malformed UTF-8.
+    /// </summary>
+    [Fact]
+    public void MinimizedUnicodeByteNfaMatchesCompactScalarSemantics()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(@"x[\w-]{1,3}"u8);
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false);
+        RegexNfa minimized = RegexNfaCompiler.Compile(tree.Root, options);
+        RegexNfa compact = RegexNfaCompiler.CompileWithCompactScalarAtoms(
+            tree.Root,
+            options,
+            utf8ByteTrieCache: null);
+        var minimizedVm = new PikeVm(minimized);
+        var compactVm = new PikeVm(compact);
+        byte[][] haystacks =
+        [
+            "xA"u8.ToArray(),
+            "x-é"u8.ToArray(),
+            "xéπ中"u8.ToArray(),
+            "x\u200C_"u8.ToArray(),
+            "x!"u8.ToArray(),
+            [(byte)'x', 0xC0, 0x80],
+            [(byte)'x', 0xC2],
+            [(byte)'x', 0xED, 0xA0, 0x80],
+            [(byte)'x', 0xF4, 0x90, 0x80, 0x80],
+        ];
+
+        for (int haystackIndex = 0; haystackIndex < haystacks.Length; haystackIndex++)
+        {
+            byte[] haystack = haystacks[haystackIndex];
+            for (int start = 0; start <= haystack.Length; start++)
+            {
+                bool minimizedMatched = minimizedVm.TryMatchAt(haystack, start, out int minimizedLength);
+                bool compactMatched = compactVm.TryMatchAt(haystack, start, out int compactLength);
+
+                Assert.Equal(compactMatched, minimizedMatched);
+                if (compactMatched)
+                {
+                    Assert.Equal(compactLength, minimizedLength);
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -4895,11 +4987,11 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
-    /// Verifies compact scalar atoms preserve the anchored PikeVM semantics of their expanded
+    /// Verifies compact scalar atoms preserve the anchored PikeVM semantics of their minimized
     /// UTF-8 byte-NFA equivalents across ASCII, Unicode, and rejected inputs.
     /// </summary>
     [Fact]
-    public void CompactScalarPredicateNfaMatchesExpandedByteNfaSemantics()
+    public void CompactScalarPredicateNfaMatchesMinimizedByteNfaSemantics()
     {
         ReadOnlySpan<byte> pattern = "(?i)[\\w.-]$"u8;
         RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
@@ -4909,14 +5001,12 @@ public sealed class RegexAutomatonTests
             multiLine: false,
             dotMatchesNewline: false);
 
-        Assert.True(RegexAutomaton.ShouldCompileCompactScalarNfa(tree.Root, options));
-
-        RegexNfa expanded = RegexNfaCompiler.Compile(tree.Root, options);
+        RegexNfa minimized = RegexNfaCompiler.Compile(tree.Root, options);
         RegexNfa compact = RegexNfaCompiler.CompileWithCompactScalarAtoms(
             tree.Root,
             options,
             utf8ByteTrieCache: null);
-        var expandedVm = new PikeVm(expanded);
+        var minimizedVm = new PikeVm(minimized);
         var compactVm = new PikeVm(compact);
         byte[][] haystacks =
         [
@@ -4929,20 +5019,18 @@ public sealed class RegexAutomatonTests
             [0xFF],
         ];
 
-        Assert.True(expanded.States.Count >= 4096);
-        Assert.True(compact.States.Count < expanded.States.Count);
         for (int haystackIndex = 0; haystackIndex < haystacks.Length; haystackIndex++)
         {
             byte[] haystack = haystacks[haystackIndex];
             for (int start = 0; start <= haystack.Length; start++)
             {
-                bool expandedMatched = expandedVm.TryMatchAt(haystack, start, out int expandedLength);
+                bool minimizedMatched = minimizedVm.TryMatchAt(haystack, start, out int minimizedLength);
                 bool compactMatched = compactVm.TryMatchAt(haystack, start, out int compactLength);
 
-                Assert.Equal(expandedMatched, compactMatched);
-                if (expandedMatched)
+                Assert.Equal(minimizedMatched, compactMatched);
+                if (minimizedMatched)
                 {
-                    Assert.Equal(expandedLength, compactLength);
+                    Assert.Equal(minimizedLength, compactLength);
                 }
             }
         }
@@ -5333,6 +5421,115 @@ public sealed class RegexAutomatonTests
         Assert.Equal(new RegexMatch(0, 2), RegexAutomaton.Compile(@"\p{gcb=Extend}"u8).Find("\u0300"u8));
         Assert.Equal(new RegexMatch(0, 3), RegexAutomaton.Compile(@"\p{gcb=SpacingMark}"u8).Find("\u0903"u8));
         Assert.Equal(new RegexMatch(0, 5), RegexAutomaton.Compile(@"[\p{gcb=Extend}\p{gcb=ZWJ}]+"u8).Find("\u0300\u200D"u8));
+    }
+
+    /// <summary>
+    /// Verifies minimized scalar ranges preserve every UTF-8 length boundary and the surrogate gap.
+    /// </summary>
+    [Fact]
+    public void MinimizedUnicodeRangePreservesUtf8ScalarBoundaries()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"[\u{7F}-\u{10FFFF}]"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            specializationMode: RegexSpecializationMode.Fallback);
+        byte[][] validScalars =
+        [
+            [0x7F],
+            [0xC2, 0x80],
+            [0xDF, 0xBF],
+            [0xE0, 0xA0, 0x80],
+            [0xED, 0x9F, 0xBF],
+            [0xEE, 0x80, 0x80],
+            [0xEF, 0xBF, 0xBF],
+            [0xF0, 0x90, 0x80, 0x80],
+            [0xF4, 0x8F, 0xBF, 0xBF],
+        ];
+
+        Assert.Null(automaton.MatchAt([0x7E], startAt: 0));
+        for (int index = 0; index < validScalars.Length; index++)
+        {
+            byte[] scalar = validScalars[index];
+            Assert.Equal(new RegexMatch(0, scalar.Length), automaton.MatchAt(scalar, startAt: 0));
+        }
+    }
+
+    /// <summary>
+    /// Verifies minimized scalar ranges reject malformed, overlong, surrogate, and out-of-range UTF-8.
+    /// </summary>
+    [Fact]
+    public void MinimizedUnicodeRangeRejectsInvalidUtf8()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"[\u{7F}-\u{10FFFF}]"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            specializationMode: RegexSpecializationMode.Fallback);
+        byte[][] invalidSequences =
+        [
+            [0x80],
+            [0xC0, 0x80],
+            [0xC1, 0xBF],
+            [0xC2],
+            [0xE0, 0x80, 0x80],
+            [0xE0, 0xA0],
+            [0xED, 0xA0, 0x80],
+            [0xED, 0xBF, 0xBF],
+            [0xF0, 0x80, 0x80, 0x80],
+            [0xF0, 0x90, 0x80],
+            [0xF4, 0x90, 0x80, 0x80],
+            [0xF5, 0x80, 0x80, 0x80],
+            [0xFF],
+        ];
+
+        for (int index = 0; index < invalidSequences.Length; index++)
+        {
+            Assert.Null(automaton.MatchAt(invalidSequences[index], startAt: 0));
+        }
+    }
+
+    /// <summary>
+    /// Verifies the minimized Unicode word class retains regex-syntax's pinned scalar membership.
+    /// </summary>
+    [Fact]
+    public void MinimizedUnicodeWordClassPreservesPinnedMembership()
+    {
+        var word = RegexAutomaton.Compile(
+            @"\w"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            specializationMode: RegexSpecializationMode.Fallback);
+        var wordOrHyphen = RegexAutomaton.Compile(
+            @"[\w-]"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            specializationMode: RegexSpecializationMode.Fallback);
+        byte[][] wordScalars =
+        [
+            "A"u8.ToArray(),
+            "_"u8.ToArray(),
+            "é"u8.ToArray(),
+            "π"u8.ToArray(),
+            "中"u8.ToArray(),
+            "\u200C"u8.ToArray(),
+        ];
+
+        for (int index = 0; index < wordScalars.Length; index++)
+        {
+            byte[] scalar = wordScalars[index];
+            Assert.Equal(new RegexMatch(0, scalar.Length), word.MatchAt(scalar, startAt: 0));
+            Assert.Equal(new RegexMatch(0, scalar.Length), wordOrHyphen.MatchAt(scalar, startAt: 0));
+        }
+
+        Assert.Null(word.MatchAt("-"u8, startAt: 0));
+        Assert.Equal(new RegexMatch(0, 1), wordOrHyphen.MatchAt("-"u8, startAt: 0));
+        Assert.Null(word.MatchAt("!"u8, startAt: 0));
+        Assert.Null(word.MatchAt("☃"u8, startAt: 0));
     }
 
     /// <summary>
@@ -6939,6 +7136,23 @@ public sealed class RegexAutomatonTests
             .GetField("engine", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
             .GetValue(automaton)!)
             .Kind;
+    }
+
+    private static void AssertSparseTransitionsAreOrderedAndDisjoint(RegexNfa nfa)
+    {
+        for (int stateIndex = 0; stateIndex < nfa.States.Count; stateIndex++)
+        {
+            RegexNfaSparseTransition[] transitions = nfa.States[stateIndex].SparseTransitions;
+            for (int transitionIndex = 0; transitionIndex < transitions.Length; transitionIndex++)
+            {
+                RegexNfaSparseTransition transition = transitions[transitionIndex];
+                Assert.True(transition.Start <= transition.End);
+                if (transitionIndex > 0)
+                {
+                    Assert.True(transitions[transitionIndex - 1].End < transition.Start);
+                }
+            }
+        }
     }
 
     private static bool HasLengthGuard(RegexAutomaton automaton)

@@ -54,7 +54,8 @@ guards, leaving only the core NFA/DFA engine selection.
 
 The OpenSubtitles regex workload remains a public benchmark workload. The
 release gate also includes `bounded_assignment_no_match`, the generated issue
-#30 regression; `linux_heldout_regex_general`, a Linux-tree regex
+#30 regression; `large_bounded_unicode_class_no_match`, the generated issue #32
+regression running in general mode; `linux_heldout_regex_general`, a Linux-tree regex
 workload that runs Scout with `SCOUT_REGEX_SPECIALIZATION_MODE=general`, and
 `linux_heldout_capture_general`, a replacement workload over the same held-out
 pattern family that exercises capture output. Those held-out gates compare
@@ -67,6 +68,7 @@ Current ablation collection:
 | --- | --- | --- | --- | --- |
 | `default` | `subtitles_en_regex` | `0.797x` release gate | `<= 1.20x` | Public benchmark workload under normal release behavior. |
 | `default` | `bounded_assignment_no_match` | Pending first release-gate sample | `<= 1.50x` | Generated issue #30 no-match scan over 800 repeated required-literal candidates. |
+| `general` | `large_bounded_unicode_class_no_match` | Pending first release-gate sample | `<= 1.50x` | Generated issue #32 no-match scan over 5,000 candidates using the general automata implementation. |
 | `general` | `linux_heldout_regex_general` | `1.458x` release-gate retry | `<= 1.50x` | Held-out Linux-tree regex with domain, benchmark-family, and corpus-specific recognizers disabled. |
 | `general` | `linux_heldout_capture_general` | `1.520x` release gate | `<= 1.75x` | Held-out Linux-tree replacement workload through capture output with the same recognizers disabled. |
 | `fallback` | Local diagnostic control. | Not release-gated. | N/A | Spot-checks core automata behavior without recognizer or guard acceleration; it is not used for a release-speed claim. |

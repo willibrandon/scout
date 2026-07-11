@@ -3,21 +3,32 @@ using System.Text;
 
 namespace Scout;
 
+/// <summary>
+/// Lowers Unicode scalar atoms into equivalent byte-oriented UTF-8 automata.
+/// </summary>
 internal static class RegexUtf8ByteCompiler
 {
     private const int MaxScalar = 0x10FFFF;
     private const int SurrogateStart = 0xD800;
     private const int SurrogateEnd = 0xDFFF;
     private const long RangeSequenceScalarThreshold = 4096;
-    private static readonly Lazy<RegexUtf8ByteTrie> UnicodeDigitTrie = new(() => CreateTableTrie(RegexUnicodeTables.DecimalNumberRanges, reversed: false));
-    private static readonly Lazy<RegexUtf8ByteTrie> ReversedUnicodeDigitTrie = new(() => CreateTableTrie(RegexUnicodeTables.DecimalNumberRanges, reversed: true));
-    private static readonly Lazy<RegexUtf8ByteTrie> UnicodeWhitespaceTrie = new(() => CreateTableTrie(RegexUnicodeTables.PerlSpaceRanges, reversed: false));
-    private static readonly Lazy<RegexUtf8ByteTrie> ReversedUnicodeWhitespaceTrie = new(() => CreateTableTrie(RegexUnicodeTables.PerlSpaceRanges, reversed: true));
-    private static readonly Lazy<RegexUtf8ByteTrie> UnicodeLetterTrie = new(() => CreateTableTrie(RegexUnicodeTables.GetGeneralCategoryRanges(RegexUnicodePropertyKind.Letter), reversed: false));
-    private static readonly Lazy<RegexUtf8ByteTrie> ReversedUnicodeLetterTrie = new(() => CreateTableTrie(RegexUnicodeTables.GetGeneralCategoryRanges(RegexUnicodePropertyKind.Letter), reversed: true));
-    private static readonly Lazy<RegexUtf8ByteTrie> UnicodeAlphabeticTrie = new(() => CreateTableTrie(RegexUnicodeTables.AlphabeticRanges, reversed: false));
-    private static readonly Lazy<RegexUtf8ByteTrie> ReversedUnicodeAlphabeticTrie = new(() => CreateTableTrie(RegexUnicodeTables.AlphabeticRanges, reversed: true));
+    private static readonly Lazy<RegexUtf8ByteTrie> _unicodeDigitTrie = new(() => CreateTableTrie(RegexUnicodeTables.DecimalNumberRanges, reversed: false));
+    private static readonly Lazy<RegexUtf8ByteTrie> _reversedUnicodeDigitTrie = new(() => CreateTableTrie(RegexUnicodeTables.DecimalNumberRanges, reversed: true));
+    private static readonly Lazy<RegexUtf8ByteTrie> _unicodeWhitespaceTrie = new(() => CreateTableTrie(RegexUnicodeTables.PerlSpaceRanges, reversed: false));
+    private static readonly Lazy<RegexUtf8ByteTrie> _reversedUnicodeWhitespaceTrie = new(() => CreateTableTrie(RegexUnicodeTables.PerlSpaceRanges, reversed: true));
+    private static readonly Lazy<RegexUtf8ByteTrie> _unicodeLetterTrie = new(() => CreateTableTrie(RegexUnicodeTables.GetGeneralCategoryRanges(RegexUnicodePropertyKind.Letter), reversed: false));
+    private static readonly Lazy<RegexUtf8ByteTrie> _reversedUnicodeLetterTrie = new(() => CreateTableTrie(RegexUnicodeTables.GetGeneralCategoryRanges(RegexUnicodePropertyKind.Letter), reversed: true));
+    private static readonly Lazy<RegexUtf8ByteTrie> _unicodeAlphabeticTrie = new(() => CreateTableTrie(RegexUnicodeTables.AlphabeticRanges, reversed: false));
+    private static readonly Lazy<RegexUtf8ByteTrie> _reversedUnicodeAlphabeticTrie = new(() => CreateTableTrie(RegexUnicodeTables.AlphabeticRanges, reversed: true));
 
+    /// <summary>
+    /// Creates an option-aware cache key for a UTF-8 atom compile plan.
+    /// </summary>
+    /// <param name="kind">The syntax atom kind.</param>
+    /// <param name="expression">The atom expression.</param>
+    /// <param name="options">The effective compile options.</param>
+    /// <param name="reversed">Whether the automaton is compiled in reverse.</param>
+    /// <returns>The cache key.</returns>
     public static string CreateCacheKey(
         RegexSyntaxKind kind,
         ReadOnlySpan<byte> expression,
@@ -27,6 +38,15 @@ internal static class RegexUtf8ByteCompiler
         return $"{(int)kind}|{(options.CaseInsensitive ? 1 : 0)}|{(options.DotMatchesNewline ? 1 : 0)}|{(options.Crlf ? 1 : 0)}|{options.LineTerminator}|{(options.Utf8 ? 1 : 0)}|{(options.UnicodeClasses ? 1 : 0)}|{(reversed ? 1 : 0)}|{Convert.ToHexString(expression)}";
     }
 
+    /// <summary>
+    /// Attempts to create a reusable UTF-8 byte trie for one syntax atom.
+    /// </summary>
+    /// <param name="kind">The syntax atom kind.</param>
+    /// <param name="expression">The atom expression.</param>
+    /// <param name="options">The effective compile options.</param>
+    /// <param name="reversed">Whether to reverse UTF-8 byte sequences.</param>
+    /// <param name="trie">Receives the reusable trie.</param>
+    /// <returns><see langword="true" /> when the atom requires and supports scalar lowering.</returns>
     public static bool TryCreate(
         RegexSyntaxKind kind,
         ReadOnlySpan<byte> expression,
@@ -49,6 +69,13 @@ internal static class RegexUtf8ByteCompiler
         return TryCreateFromRanges(ranges, reversed, out trie);
     }
 
+    /// <summary>
+    /// Attempts to create a reusable UTF-8 byte trie from normalized scalar ranges.
+    /// </summary>
+    /// <param name="ranges">The scalar ranges.</param>
+    /// <param name="reversed">Whether to reverse UTF-8 byte sequences.</param>
+    /// <param name="trie">Receives the reusable trie.</param>
+    /// <returns><see langword="true" /> when at least one valid scalar was compiled.</returns>
     public static bool TryCreateFromRanges(
         List<RegexScalarRange> ranges,
         bool reversed,
@@ -58,6 +85,13 @@ internal static class RegexUtf8ByteCompiler
         if (ranges.Count == 0)
         {
             return false;
+        }
+
+        if (!reversed &&
+            EstimateScalarCount(ranges) > RangeSequenceScalarThreshold &&
+            TryCreateMinimizedForwardTrie(ranges, out trie))
+        {
+            return true;
         }
 
         var created = new RegexUtf8ByteTrie();
@@ -77,6 +111,15 @@ internal static class RegexUtf8ByteCompiler
         return trie is not null;
     }
 
+    /// <summary>
+    /// Attempts to get a process-wide reusable trie for a common Unicode class.
+    /// </summary>
+    /// <param name="kind">The syntax atom kind.</param>
+    /// <param name="expression">The atom expression.</param>
+    /// <param name="options">The effective compile options.</param>
+    /// <param name="reversed">Whether to select a reverse trie.</param>
+    /// <param name="trie">Receives the shared trie.</param>
+    /// <returns><see langword="true" /> when a shared trie exists.</returns>
     public static bool TryGetSharedTrie(
         RegexSyntaxKind kind,
         ReadOnlySpan<byte> expression,
@@ -94,9 +137,9 @@ internal static class RegexUtf8ByteCompiler
         {
             trie = kind switch
             {
-                RegexSyntaxKind.DigitClass => reversed ? ReversedUnicodeDigitTrie.Value : UnicodeDigitTrie.Value,
-                RegexSyntaxKind.WhitespaceClass => reversed ? ReversedUnicodeWhitespaceTrie.Value : UnicodeWhitespaceTrie.Value,
-                RegexSyntaxKind.LetterClass => reversed ? ReversedUnicodeAlphabeticTrie.Value : UnicodeAlphabeticTrie.Value,
+                RegexSyntaxKind.DigitClass => reversed ? _reversedUnicodeDigitTrie.Value : _unicodeDigitTrie.Value,
+                RegexSyntaxKind.WhitespaceClass => reversed ? _reversedUnicodeWhitespaceTrie.Value : _unicodeWhitespaceTrie.Value,
+                RegexSyntaxKind.LetterClass => reversed ? _reversedUnicodeAlphabeticTrie.Value : _unicodeAlphabeticTrie.Value,
                 _ => null,
             };
             return trie is not null;
@@ -105,11 +148,23 @@ internal static class RegexUtf8ByteCompiler
         trie = kind == RegexSyntaxKind.UnicodePropertyClass &&
             expression.Length == 1 &&
             expression[0] == (byte)RegexUnicodePropertyKind.Letter
-            ? reversed ? ReversedUnicodeLetterTrie.Value : UnicodeLetterTrie.Value
+            ? reversed ? _reversedUnicodeLetterTrie.Value : _unicodeLetterTrie.Value
             : null;
         return trie is not null;
     }
 
+    /// <summary>
+    /// Attempts to lower an atom through the compact any-valid-scalar fast path.
+    /// </summary>
+    /// <param name="kind">The syntax atom kind.</param>
+    /// <param name="expression">The atom expression.</param>
+    /// <param name="options">The effective compile options.</param>
+    /// <param name="reversed">Whether to reverse UTF-8 byte sequences.</param>
+    /// <param name="next">The continuation state.</param>
+    /// <param name="addByteClass">Adds a byte-class state.</param>
+    /// <param name="addSplit">Adds an ordered split state.</param>
+    /// <param name="start">Receives the compiled start state.</param>
+    /// <returns><see langword="true" /> when the compact form applies.</returns>
     public static bool TryCompileCompact(
         RegexSyntaxKind kind,
         ReadOnlySpan<byte> expression,
@@ -130,6 +185,16 @@ internal static class RegexUtf8ByteCompiler
         return TryCompileCompactFromRanges(ranges, reversed, next, addByteClass, addSplit, out start);
     }
 
+    /// <summary>
+    /// Attempts to lower scalar ranges through the compact any-valid-scalar fast path.
+    /// </summary>
+    /// <param name="ranges">The normalized scalar ranges.</param>
+    /// <param name="reversed">Whether to reverse UTF-8 byte sequences.</param>
+    /// <param name="next">The continuation state.</param>
+    /// <param name="addByteClass">Adds a byte-class state.</param>
+    /// <param name="addSplit">Adds an ordered split state.</param>
+    /// <param name="start">Receives the compiled start state.</param>
+    /// <returns><see langword="true" /> when the compact form applies.</returns>
     public static bool TryCompileCompactFromRanges(
         List<RegexScalarRange> ranges,
         bool reversed,
@@ -148,6 +213,18 @@ internal static class RegexUtf8ByteCompiler
         return true;
     }
 
+    /// <summary>
+    /// Attempts to lower a large reverse atom as decomposed UTF-8 range sequences.
+    /// </summary>
+    /// <param name="kind">The syntax atom kind.</param>
+    /// <param name="expression">The atom expression.</param>
+    /// <param name="options">The effective compile options.</param>
+    /// <param name="reversed">Whether to reverse UTF-8 byte sequences.</param>
+    /// <param name="next">The continuation state.</param>
+    /// <param name="addByteClass">Adds a byte-class state.</param>
+    /// <param name="addSplit">Adds an ordered split state.</param>
+    /// <param name="start">Receives the compiled start state.</param>
+    /// <returns><see langword="true" /> when the reverse range-sequence path applies.</returns>
     public static bool TryCompileRangeSequences(
         RegexSyntaxKind kind,
         ReadOnlySpan<byte> expression,
@@ -168,6 +245,16 @@ internal static class RegexUtf8ByteCompiler
         return TryCompileRangeSequencesFromRanges(ranges, reversed, next, addByteClass, addSplit, out start);
     }
 
+    /// <summary>
+    /// Attempts to lower large scalar ranges as reverse UTF-8 range sequences.
+    /// </summary>
+    /// <param name="ranges">The normalized scalar ranges.</param>
+    /// <param name="reversed">Whether to reverse UTF-8 byte sequences.</param>
+    /// <param name="next">The continuation state.</param>
+    /// <param name="addByteClass">Adds a byte-class state.</param>
+    /// <param name="addSplit">Adds an ordered split state.</param>
+    /// <param name="start">Receives the compiled start state.</param>
+    /// <returns><see langword="true" /> when the reverse range-sequence path applies.</returns>
     public static bool TryCompileRangeSequencesFromRanges(
         List<RegexScalarRange> ranges,
         bool reversed,
@@ -177,7 +264,7 @@ internal static class RegexUtf8ByteCompiler
         out int start)
     {
         start = -1;
-        if (EstimateScalarCount(ranges) <= RangeSequenceScalarThreshold)
+        if (!reversed || EstimateScalarCount(ranges) <= RangeSequenceScalarThreshold)
         {
             return false;
         }
@@ -202,6 +289,14 @@ internal static class RegexUtf8ByteCompiler
         return true;
     }
 
+    /// <summary>
+    /// Attempts to build sorted, merged scalar ranges for a syntax atom.
+    /// </summary>
+    /// <param name="kind">The syntax atom kind.</param>
+    /// <param name="expression">The atom expression.</param>
+    /// <param name="options">The effective compile options.</param>
+    /// <param name="ranges">Receives the normalized scalar ranges.</param>
+    /// <returns><see langword="true" /> when scalar ranges were produced.</returns>
     public static bool TryBuildNormalizedScalarRanges(
         RegexSyntaxKind kind,
         ReadOnlySpan<byte> expression,
@@ -217,6 +312,15 @@ internal static class RegexUtf8ByteCompiler
         return ranges.Count != 0;
     }
 
+    /// <summary>
+    /// Attempts to determine the minimum and maximum UTF-8 widths of an atom.
+    /// </summary>
+    /// <param name="kind">The syntax atom kind.</param>
+    /// <param name="expression">The atom expression.</param>
+    /// <param name="options">The effective compile options.</param>
+    /// <param name="minimumBytes">Receives the minimum byte width.</param>
+    /// <param name="maximumBytes">Receives the maximum byte width.</param>
+    /// <returns><see langword="true" /> when a width range was determined.</returns>
     public static bool TryGetUtf8ByteLengthRange(
         RegexSyntaxKind kind,
         ReadOnlySpan<byte> expression,
@@ -820,6 +924,29 @@ internal static class RegexUtf8ByteCompiler
         }
 
         return trie;
+    }
+
+    private static bool TryCreateMinimizedForwardTrie(
+        List<RegexScalarRange> ranges,
+        out RegexUtf8ByteTrie? trie)
+    {
+        List<RegexScalarRange> normalized = [.. ranges];
+        Normalize(normalized);
+        RegexUtf8ByteTriePlanCompiler compiler = new();
+        bool added = false;
+        for (int index = 0; index < normalized.Count; index++)
+        {
+            RegexScalarRange range = normalized[index];
+            RegexUtf8SequenceEnumerator sequences = new(range.Start, range.End);
+            while (sequences.MoveNext(out RegexUtf8ByteSequence sequence))
+            {
+                compiler.Add(sequence);
+                added = true;
+            }
+        }
+
+        trie = added ? new RegexUtf8ByteTrie(compiler.Finish()) : null;
+        return trie is not null;
     }
 
     private static void RemoveLineTerminators(List<RegexScalarRange> ranges, bool crlf, byte lineTerminator)
