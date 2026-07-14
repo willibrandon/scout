@@ -50,6 +50,63 @@ public sealed unsafe partial class RawUnixDirectoryTests
     }
 
     /// <summary>
+    /// Verifies adjacent short directory-entry records preserve complete names.
+    /// </summary>
+    [Fact]
+    public void EnumeratePreservesAdjacentShortEntryNames()
+    {
+        if (OperatingSystem.IsWindows() || (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()))
+        {
+            Assert.Throws<PlatformNotSupportedException>(() => RawUnixDirectory.Enumerate("unused"u8));
+        }
+        else
+        {
+            string root = CreateTempDirectory();
+            try
+            {
+                string[] names =
+                [
+                    "a",
+                    "bb",
+                    "ccc",
+                    "dddd",
+                    "eeeee",
+                    "ffffff",
+                    "ggggggg",
+                    "hhhhhhhh",
+                    "iiiiiiiii",
+                    "jjjjjjjjjj",
+                    "kkkkkkkkkkk",
+                ];
+                for (int index = 0; index < names.Length; index++)
+                {
+                    File.WriteAllText(Path.Combine(root, names[index]), "needle");
+                }
+
+                RawUnixDirectoryEntry[] entries = RawUnixDirectory.Enumerate(Encoding.UTF8.GetBytes(root));
+                Assert.Equal(names.Length, entries.Length);
+                for (int index = 0; index < entries.Length; index++)
+                {
+                    Assert.DoesNotContain((byte)0, entries[index].Name.ToArray());
+                }
+
+                for (int index = 0; index < names.Length; index++)
+                {
+                    byte[] expectedName = Encoding.UTF8.GetBytes(names[index]);
+                    RawUnixDirectoryEntry entry = Find(entries, expectedName);
+                    Assert.Equal(expectedName, entry.Name.ToArray());
+                    Assert.Equal(Encoding.UTF8.GetBytes(Path.Combine(root, names[index])), entry.FullPath.ToArray());
+                    Assert.Equal(RawUnixDirectoryEntryType.RegularFile, entry.FileType);
+                }
+            }
+            finally
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    /// <summary>
     /// Verifies enumeration retains native regular-file, directory, and symbolic-link types.
     /// </summary>
     [Fact]

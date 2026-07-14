@@ -12,7 +12,8 @@ internal sealed class RegexTeddyPrefilter(
     SearchValues<byte> firstByteSearch,
     int[][] patternIndexesByFirstByte,
     byte[] commonOffsets,
-    byte[] commonBytes)
+    byte[] commonBytes,
+    RegexTeddyN3Scanner? n3Scanner)
 {
     private const int MinimumPatternCount = 3;
     private const int MaximumPatternCount = 16;
@@ -25,6 +26,7 @@ internal sealed class RegexTeddyPrefilter(
     private readonly int[][] _patternIndexesByFirstByte = patternIndexesByFirstByte;
     private readonly byte[] _commonOffsets = commonOffsets;
     private readonly byte[] _commonBytes = commonBytes;
+    private readonly RegexTeddyN3Scanner? _n3Scanner = n3Scanner;
 
     /// <summary>
     /// Attempts to create a case-sensitive prefilter for a small literal set.
@@ -78,6 +80,10 @@ internal sealed class RegexTeddyPrefilter(
             asciiCaseInsensitive,
             out byte[] commonOffsets,
             out byte[] commonBytes);
+        RegexTeddyN3Scanner.TryCreate(
+            ownedNeedles,
+            asciiCaseInsensitive,
+            out RegexTeddyN3Scanner? n3Scanner);
         prefilter = new RegexTeddyPrefilter(
             ownedNeedles,
             asciiCaseInsensitive,
@@ -85,7 +91,8 @@ internal sealed class RegexTeddyPrefilter(
             SearchValues.Create(distinctFirstBytes),
             patternIndexesByFirstByte,
             commonOffsets,
-            commonBytes);
+            commonBytes,
+            n3Scanner);
         return true;
     }
 
@@ -98,6 +105,25 @@ internal sealed class RegexTeddyPrefilter(
     public int FindCandidate(ReadOnlySpan<byte> haystack, int startAt)
     {
         startAt = Math.Clamp(startAt, 0, haystack.Length);
+        if (_n3Scanner is not null)
+        {
+            for (int position = startAt; position < haystack.Length; position++)
+            {
+                position = _n3Scanner.FindCandidate(haystack, position);
+                if (position < 0)
+                {
+                    return -1;
+                }
+
+                if (MatchesAt(haystack, position))
+                {
+                    return position;
+                }
+            }
+
+            return -1;
+        }
+
         if (_distinctFirstBytes.Length == 1)
         {
             return FindCandidateByFirstByte(haystack, startAt, _distinctFirstBytes[0]);

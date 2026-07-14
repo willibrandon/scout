@@ -282,6 +282,101 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies three-byte Teddy fingerprints preserve every prefix at every vector alignment.
+    /// </summary>
+    [Fact]
+    public void TeddyPrefilterMatchesN3PrefixesAtEveryVectorAlignment()
+    {
+        byte[][] needles =
+        [
+            "struct"u8.ToArray(),
+            "enum"u8.ToArray(),
+            "union"u8.ToArray(),
+        ];
+        Assert.True(RegexTeddyPrefilter.TryCreate(needles, out RegexTeddyPrefilter? prefilter));
+
+        for (int needleIndex = 0; needleIndex < needles.Length; needleIndex++)
+        {
+            for (int offset = 0; offset < 96; offset++)
+            {
+                byte[] haystack = Enumerable.Repeat((byte)'x', 128).ToArray();
+                needles[needleIndex].CopyTo(haystack.AsSpan(offset));
+
+                Assert.Equal(offset, prefilter!.FindCandidate(haystack, 0));
+                Assert.Equal(offset, prefilter.FindCandidate(haystack, offset));
+                Assert.Equal(-1, prefilter.FindCandidate(haystack, offset + 1));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Verifies three-byte Teddy fingerprints preserve all ASCII case permutations.
+    /// </summary>
+    [Fact]
+    public void TeddyPrefilterMatchesN3AsciiCasePermutations()
+    {
+        byte[][] needles =
+        [
+            "struct"u8.ToArray(),
+            "enum"u8.ToArray(),
+            "union"u8.ToArray(),
+        ];
+        Assert.True(RegexTeddyPrefilter.TryCreate(
+            needles,
+            asciiCaseInsensitive: true,
+            out RegexTeddyPrefilter? prefilter));
+
+        for (int needleIndex = 0; needleIndex < needles.Length; needleIndex++)
+        {
+            for (int permutation = 0; permutation < 8; permutation++)
+            {
+                byte[] haystack = Enumerable.Repeat((byte)'x', 64).ToArray();
+                needles[needleIndex].CopyTo(haystack.AsSpan(31));
+                for (int byteIndex = 0; byteIndex < 3; byteIndex++)
+                {
+                    if ((permutation & (1 << byteIndex)) != 0)
+                    {
+                        haystack[31 + byteIndex] = (byte)(haystack[31 + byteIndex] - 32);
+                    }
+                }
+
+                Assert.Equal(31, prefilter!.FindCandidate(haystack, 0));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Verifies bucket collisions cannot turn Teddy fingerprints into reported matches.
+    /// </summary>
+    [Fact]
+    public void TeddyPrefilterVerifiesN3BucketCollisions()
+    {
+        byte[][] needles =
+        [
+            "abc0"u8.ToArray(),
+            "bcd1"u8.ToArray(),
+            "cde2"u8.ToArray(),
+            "def3"u8.ToArray(),
+            "efg4"u8.ToArray(),
+            "fgh5"u8.ToArray(),
+            "ghi6"u8.ToArray(),
+            "hij7"u8.ToArray(),
+            "abk8"u8.ToArray(),
+            "bcl9"u8.ToArray(),
+            "cdmA"u8.ToArray(),
+            "denB"u8.ToArray(),
+            "efoC"u8.ToArray(),
+            "fgpD"u8.ToArray(),
+            "ghqE"u8.ToArray(),
+            "hirF"u8.ToArray(),
+        ];
+        Assert.True(RegexTeddyPrefilter.TryCreate(needles, out RegexTeddyPrefilter? prefilter));
+
+        Assert.Equal(40, prefilter!.FindCandidate("abkX bclX cdmX denX efoX fgpX ghqX hirX abc0"u8, 0));
+        Assert.Equal(-1, prefilter.FindCandidate("abkX bclX cdmX denX efoX fgpX ghqX hirX"u8, 0));
+    }
+
+    /// <summary>
     /// Verifies pure literal alternations use exact leftmost-first literal-set execution.
     /// </summary>
     [Fact]

@@ -2014,7 +2014,7 @@ internal static class StandardSearchTargetOperations
             return false;
         }
 
-        if (!TryReadPooledRawFile(path, checked((int)knownLength.GetValueOrDefault()), lowArgs.EncodingMode, out byte[] rentedBytes, out int byteLength))
+        if (!TryReadPooledRawFile(path, knownLength, lowArgs.EncodingMode, out byte[] rentedBytes, out int byteLength))
         {
             return false;
         }
@@ -2068,12 +2068,19 @@ internal static class StandardSearchTargetOperations
         }
     }
 
-    private static bool CanUsePooledRawFileRead(
+    /// <summary>
+    /// Determines whether a raw file can use the pooled buffered-read path.
+    /// </summary>
+    /// <param name="knownLength">The file length when directory traversal already resolved it.</param>
+    /// <param name="lowArgs">The parsed low-level command-line arguments.</param>
+    /// <param name="autoMmapEligible">Whether automatic memory mapping remains eligible.</param>
+    /// <returns><see langword="true" /> when the pooled buffered-read path can inspect the file.</returns>
+    internal static bool CanUsePooledRawFileRead(
         long? knownLength,
         CliLowArgs lowArgs,
         bool autoMmapEligible)
     {
-        return knownLength is >= 0 and <= PooledRawFileReadMaxLength &&
+        return (knownLength is null or >= 0 and <= PooledRawFileReadMaxLength) &&
             !autoMmapEligible &&
             lowArgs.MmapMode != CliMmapMode.AlwaysTryMmap &&
             lowArgs.Preprocessor is null &&
@@ -2081,9 +2088,18 @@ internal static class StandardSearchTargetOperations
             lowArgs.EncodingMode is CliEncodingMode.Auto or CliEncodingMode.None;
     }
 
-    private static bool TryReadPooledRawFile(
+    /// <summary>
+    /// Reads a small raw file into a shared pooled buffer, discovering its length after opening when necessary.
+    /// </summary>
+    /// <param name="path">The file path.</param>
+    /// <param name="knownLength">The file length when directory traversal already resolved it.</param>
+    /// <param name="encodingMode">The requested input encoding mode.</param>
+    /// <param name="bytes">Receives the rented buffer. The caller must return it to <see cref="ArrayPool{T}.Shared" />.</param>
+    /// <param name="byteLength">Receives the number of bytes read into <paramref name="bytes" />.</param>
+    /// <returns><see langword="true" /> when the file was read into a pooled buffer.</returns>
+    internal static bool TryReadPooledRawFile(
         string path,
-        int length,
+        long? knownLength,
         CliEncodingMode encodingMode,
         out byte[] bytes,
         out int byteLength)
@@ -2093,13 +2109,20 @@ internal static class StandardSearchTargetOperations
         byte[]? rented = null;
         try
         {
-            rented = ArrayPool<byte>.Shared.Rent(Math.Max(1, length));
             using SafeFileHandle handle = File.OpenHandle(
                 path,
                 FileMode.Open,
                 FileAccess.Read,
                 FileShare.ReadWrite | FileShare.Delete,
                 FileOptions.SequentialScan);
+            long fileLength = knownLength ?? RandomAccess.GetLength(handle);
+            if (fileLength is < 0 or > PooledRawFileReadMaxLength)
+            {
+                return false;
+            }
+
+            int length = checked((int)fileLength);
+            rented = ArrayPool<byte>.Shared.Rent(Math.Max(1, length));
             int totalRead = 0;
             while (totalRead < length)
             {
