@@ -416,6 +416,10 @@ resolve_hyperfine() {
     command -v hyperfine || true
 }
 
+resolve_python() {
+    command -v python3 || command -v python || true
+}
+
 require_gate_corpus_file() {
     name="$1"
     path_value="$2"
@@ -502,18 +506,11 @@ expect_no_match_command() {
         "$no_match_message"
 }
 
-hyperfine_json_metric() {
-    json="$1"
-    index="$2"
-    metric="$3"
-    hyperfine_json_samples "$json" "$index" "$metric" | sed -n '1p'
-}
-
 hyperfine_json_samples() {
     json="$1"
     index="$2"
     metric="$3"
-    python3 - "$json" "$index" "$metric" <<'PY'
+    "$PYTHON" - "$json" "$index" "$metric" <<'PY'
 import json
 import sys
 
@@ -534,6 +531,30 @@ if isinstance(value, list):
         print(item)
 else:
     print(value)
+PY
+}
+
+interleaved_json_median_ratio() {
+    json="$1"
+    "$PYTHON" - "$json" <<'PY'
+import json
+import math
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    document = json.load(handle)
+
+try:
+    value = document["sampling"]["median_ratio"]
+except (KeyError, TypeError):
+    sys.exit(1)
+
+if isinstance(value, bool) or not isinstance(value, (int, float)):
+    sys.exit(1)
+if not math.isfinite(value) or value <= 0:
+    sys.exit(1)
+
+print(value)
 PY
 }
 
@@ -575,18 +596,6 @@ median_numbers() {
             }
         }
     '
-}
-
-combined_hyperfine_json_metric_median() {
-    first_json="$1"
-    first_index="$2"
-    second_json="$3"
-    second_index="$4"
-    metric="$5"
-    {
-        hyperfine_json_samples "$first_json" "$first_index" "$metric"
-        hyperfine_json_samples "$second_json" "$second_index" "$metric"
-    } | median_numbers
 }
 
 hyperfine_json_median_memory() {
@@ -636,7 +645,7 @@ analyze_large_file_segments() {
     path="$2"
     buffer_length="$3"
     thread_count="$4"
-    python3 - "$name" "$path" "$buffer_length" "$thread_count" <<'PY'
+    "$PYTHON" - "$name" "$path" "$buffer_length" "$thread_count" <<'PY'
 import statistics
 import sys
 
@@ -782,44 +791,15 @@ check_time_gate() {
     time_gate_name="$1"
     time_gate_limit="$2"
     time_gate_json="$3"
-    time_gate_rg_index="${4:-1}"
-    time_gate_scout_index="${5:-2}"
-    time_gate_rg_median="$(hyperfine_json_metric "$time_gate_json" "$time_gate_rg_index" "median")" || fail "Could not read rg median from $time_gate_json."
-    time_gate_scout_median="$(hyperfine_json_metric "$time_gate_json" "$time_gate_scout_index" "median")" || fail "Could not read scout median from $time_gate_json."
-    [ -n "$time_gate_rg_median" ] || fail "Could not read rg median from $time_gate_json."
-    [ -n "$time_gate_scout_median" ] || fail "Could not read scout median from $time_gate_json."
-    awk -v name="$time_gate_name" -v rg="$time_gate_rg_median" -v scout="$time_gate_scout_median" -v gate="$time_gate_limit" '
+    time_gate_ratio="$(interleaved_json_median_ratio "$time_gate_json")" || fail "Could not read the paired ABBA median ratio from $time_gate_json."
+    [ -n "$time_gate_ratio" ] || fail "Could not read the paired ABBA median ratio from $time_gate_json."
+    awk -v name="$time_gate_name" -v ratio="$time_gate_ratio" -v gate="$time_gate_limit" '
         BEGIN {
-            if (rg <= 0) {
-                printf "%s: rg median is not positive: %s\n", name, rg > "/dev/stderr"
+            if (ratio <= 0) {
+                printf "%s: paired ABBA median ratio is not positive: %s\n", name, ratio > "/dev/stderr"
                 exit 2
             }
-            ratio = scout / rg
-            printf "%s median ratio %.3fx (gate %.3fx)\n", name, ratio, gate
-            if (ratio > gate) {
-                exit 1
-            }
-        }
-    '
-}
-
-check_time_gate_combined() {
-    combined_gate_name="$1"
-    combined_gate_limit="$2"
-    combined_gate_json="$3"
-    combined_gate_reverse_json="$4"
-    combined_gate_rg_median="$(combined_hyperfine_json_metric_median "$combined_gate_json" 1 "$combined_gate_reverse_json" 2 "times")" || fail "Could not read rg time samples from $combined_gate_json and $combined_gate_reverse_json."
-    combined_gate_scout_median="$(combined_hyperfine_json_metric_median "$combined_gate_json" 2 "$combined_gate_reverse_json" 1 "times")" || fail "Could not read scout time samples from $combined_gate_json and $combined_gate_reverse_json."
-    [ -n "$combined_gate_rg_median" ] || fail "Could not read rg time samples from $combined_gate_json and $combined_gate_reverse_json."
-    [ -n "$combined_gate_scout_median" ] || fail "Could not read scout time samples from $combined_gate_json and $combined_gate_reverse_json."
-    awk -v name="$combined_gate_name" -v rg="$combined_gate_rg_median" -v scout="$combined_gate_scout_median" -v gate="$combined_gate_limit" '
-        BEGIN {
-            if (rg <= 0) {
-                printf "%s: rg combined median is not positive: %s\n", name, rg > "/dev/stderr"
-                exit 2
-            }
-            ratio = scout / rg
-            printf "%s combined median ratio %.3fx (gate %.3fx)\n", name, ratio, gate
+            printf "%s paired ABBA median ratio %.3fx (gate %.3fx)\n", name, ratio, gate
             if (ratio > gate) {
                 exit 1
             }
@@ -861,30 +841,25 @@ check_rss_gate() {
     '
 }
 
-check_ratio_gate() {
-    check_time_gate "$@" && check_rss_gate "$1" "$3" "${4:-1}" "${5:-2}"
-}
+check_interleaved_gate() {
+    interleaved_gate_name="$1"
+    interleaved_gate_limit="$2"
+    interleaved_gate_json="$3"
+    interleaved_gate_time_ok="1"
+    interleaved_gate_rss_ok="1"
 
-check_combined_gate_pair() {
-    combined_pair_name="$1"
-    combined_pair_gate="$2"
-    combined_pair_json="$3"
-    combined_pair_reverse_json="$4"
-    combined_pair_time_gate_ok="1"
-    combined_pair_rss_gate_ok="1"
+    check_time_gate "$interleaved_gate_name" "$interleaved_gate_limit" "$interleaved_gate_json" || interleaved_gate_time_ok="0"
+    check_rss_gate "$interleaved_gate_name" "$interleaved_gate_json" || interleaved_gate_rss_ok="0"
 
-    check_time_gate_combined "$combined_pair_name" "$combined_pair_gate" "$combined_pair_json" "$combined_pair_reverse_json" || combined_pair_time_gate_ok="0"
-    check_rss_gate "$combined_pair_name" "$combined_pair_json" || combined_pair_rss_gate_ok="0"
-
-    if [ "$combined_pair_time_gate_ok" = "0" ]; then
-        printf '%s\n' "$combined_pair_name exceeded the combined-order performance gate." >&2
+    if [ "$interleaved_gate_time_ok" = "0" ]; then
+        printf '%s\n' "$interleaved_gate_name exceeded the interleaved ABBA performance gate." >&2
     fi
 
-    if [ "$combined_pair_rss_gate_ok" = "0" ]; then
-        printf '%s\n' "$combined_pair_name exceeded the peak RSS gate." >&2
+    if [ "$interleaved_gate_rss_ok" = "0" ]; then
+        printf '%s\n' "$interleaved_gate_name exceeded the peak RSS gate." >&2
     fi
 
-    [ "$combined_pair_time_gate_ok" = "1" ] && [ "$combined_pair_rss_gate_ok" = "1" ]
+    [ "$interleaved_gate_time_ok" = "1" ] && [ "$interleaved_gate_rss_ok" = "1" ]
 }
 
 run_hyperfine_pair() {
@@ -916,6 +891,38 @@ run_hyperfine_pair() {
         --command-name "$second_name" "$second_command"
 }
 
+run_hyperfine_interleaved() {
+    no_shell="$1"
+    interleaved_json="$2"
+    interleaved_name="$3"
+    interleaved_rg_command="$4"
+    interleaved_scout_command="$5"
+    interleaved_runs="$6"
+    interleaved_warmup="$7"
+
+    if [ "$no_shell" = "1" ]; then
+        "$PYTHON" "$ROOT/bench/hyperfine_interleaved.py" \
+            --hyperfine "$HYPERFINE" \
+            --name "$interleaved_name" \
+            --rg-command "$interleaved_rg_command" \
+            --scout-command "$interleaved_scout_command" \
+            --rounds "$interleaved_runs" \
+            --warmup-rounds "$interleaved_warmup" \
+            --output "$interleaved_json" \
+            --no-shell
+        return
+    fi
+
+    "$PYTHON" "$ROOT/bench/hyperfine_interleaved.py" \
+        --hyperfine "$HYPERFINE" \
+        --name "$interleaved_name" \
+        --rg-command "$interleaved_rg_command" \
+        --scout-command "$interleaved_scout_command" \
+        --rounds "$interleaved_runs" \
+        --warmup-rounds "$interleaved_warmup" \
+        --output "$interleaved_json"
+}
+
 run_pair_impl() {
     name="$1"
     gate="$2"
@@ -927,14 +934,10 @@ run_pair_impl() {
     json="$OUT_DIR/$name.json"
 
     printf '%s\n' "== $name"
-    run_hyperfine_pair "$no_shell" "$json" "rg:$name" "$rg_command" "scout:$name" "$scout_command" "$runs" "$warmup"
-
     if [ "$MODE" = "gate" ]; then
-        reverse_json="$OUT_DIR/$name.reverse.json"
-        printf '%s\n' "$name running reversed command order for combined timing gate."
-        run_hyperfine_pair "$no_shell" "$reverse_json" "scout:$name" "$scout_command" "rg:$name" "$rg_command" "$runs" "$warmup"
+        run_hyperfine_interleaved "$no_shell" "$json" "$name" "$rg_command" "$scout_command" "$runs" "$warmup"
 
-        if ! check_combined_gate_pair "$name" "$gate" "$json" "$reverse_json"; then
+        if ! check_interleaved_gate "$name" "$gate" "$json"; then
             if [ "$GATE_RETRY_FAILED_WORKLOADS" = "0" ]; then
                 fail "$name exceeded the performance gate."
             fi
@@ -944,14 +947,11 @@ run_pair_impl() {
                 retry_attempt=$((retry_attempt + 1))
                 retry_label="$name retry $retry_attempt"
                 retry_json="$OUT_DIR/$name.retry-$retry_attempt.json"
-                retry_reverse_json="$OUT_DIR/$name.retry-$retry_attempt.reverse.json"
 
                 printf '%s\n' "$name retrying failed gate workload ($retry_attempt/$GATE_RETRY_FAILED_WORKLOADS)."
-                run_hyperfine_pair "$no_shell" "$retry_json" "rg:$name" "$rg_command" "scout:$name" "$scout_command" "$runs" "$warmup"
-                printf '%s\n' "$retry_label running reversed command order for combined timing gate."
-                run_hyperfine_pair "$no_shell" "$retry_reverse_json" "scout:$name" "$scout_command" "rg:$name" "$rg_command" "$runs" "$warmup"
+                run_hyperfine_interleaved "$no_shell" "$retry_json" "$retry_label" "$rg_command" "$scout_command" "$runs" "$warmup"
 
-                if check_combined_gate_pair "$retry_label" "$gate" "$retry_json" "$retry_reverse_json"; then
+                if check_interleaved_gate "$retry_label" "$gate" "$retry_json"; then
                     printf '%s\n' "$retry_label passed; continuing."
                     return 0
                 fi
@@ -959,7 +959,10 @@ run_pair_impl() {
 
             fail "$name exceeded the performance gate after $GATE_RETRY_FAILED_WORKLOADS retries."
         fi
+        return
     fi
+
+    run_hyperfine_pair "$no_shell" "$json" "rg:$name" "$rg_command" "scout:$name" "$scout_command" "$runs" "$warmup"
 }
 
 run_pair() {
@@ -1062,10 +1065,17 @@ RG_VALUE="$(read_ripgrep_oracle_value "path" "ripgrep_rg_path")" || fail "Missin
 RG_BIN="$(resolve_repo_path "$RG_VALUE")"
 RG_SHA256="$(read_ripgrep_oracle_value "sha256" "ripgrep_rg_sha256")" || fail "Missing ripgrep oracle sha256 in tests/PREREQS.lock."
 HYPERFINE="$(resolve_hyperfine)"
+PYTHON=""
+if [ "$MODE" = "gate" ]; then
+    PYTHON="$(resolve_python)"
+fi
 
 [ -x "$SCOUT_BIN" ] || fail "Missing executable Native AOT scout binary: $SCOUT_BIN"
 [ -x "$RG_BIN" ] || fail "Missing executable reference rg binary: $RG_BIN"
 [ -x "$HYPERFINE" ] || fail "Missing executable hyperfine binary."
+if [ "$MODE" = "gate" ]; then
+    [ -x "$PYTHON" ] || fail "python3 or python is required to run benchmark gates."
+fi
 check_file_hash "reference rg" "$RG_BIN" "$RG_SHA256"
 
 mkdir -p "$OUT_DIR"

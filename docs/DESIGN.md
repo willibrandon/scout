@@ -409,6 +409,12 @@ Performance parity is a **blocking** acceptance criterion, not best-effort. The 
 | Cold-start (`scout --version`, tiny search) | ≤ **1.0×** (AOT expected at parity or better) |
 | Peak RSS | ≤ **1.5×** |
 
+Each wall-time workload is sampled in fresh `rg`, Scout, Scout, `rg` Hyperfine
+rounds. The gate uses the median of the paired per-round geometric Scout/rg
+ratios, reducing order and phase bias from filesystem-cache or hosted-runner
+drift. Peak RSS uses only the leading rg/Scout pair from each fresh round because
+macOS reports child peak RSS cumulatively within a Hyperfine process.
+
 The earlier "20–30% initially, tightening later / tracked misses" language is removed. M8 (perf hardening) exists to *reach* these gates; **v1 does not ship until every gate is green.** Profiling via `dotnet-trace`/`EventPipe` + Linux `perf`. (If a gate proves physically unachievable on a given workload, that is escalated to the stakeholder for an explicit, documented gate change in `PARITY.md` and the benchsuite — never silently absorbed.)
 
 ---
