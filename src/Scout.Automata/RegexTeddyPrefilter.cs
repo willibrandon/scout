@@ -1,38 +1,53 @@
+using System.Buffers;
+
 namespace Scout;
 
-internal sealed class RegexTeddyPrefilter
+/// <summary>
+/// Finds candidates for a small set of literal regex prefixes.
+/// </summary>
+internal sealed class RegexTeddyPrefilter(
+    byte[][] needles,
+    bool asciiCaseInsensitive,
+    byte[] distinctFirstBytes,
+    SearchValues<byte> firstByteSearch,
+    int[][] patternIndexesByFirstByte,
+    byte[] commonOffsets,
+    byte[] commonBytes)
 {
     private const int MinimumPatternCount = 3;
     private const int MaximumPatternCount = 16;
     private const int MaximumPatternLength = 16;
 
-    private readonly byte[][] needles;
-    private readonly bool[] firstBytes = new bool[256];
-    private readonly byte[] distinctFirstBytes;
-    private readonly byte[] commonOffsets;
-    private readonly byte[] commonBytes;
-    private readonly bool asciiCaseInsensitive;
+    private readonly byte[][] _needles = needles;
+    private readonly bool _asciiCaseInsensitive = asciiCaseInsensitive;
+    private readonly byte[] _distinctFirstBytes = distinctFirstBytes;
+    private readonly SearchValues<byte> _firstByteSearch = firstByteSearch;
+    private readonly int[][] _patternIndexesByFirstByte = patternIndexesByFirstByte;
+    private readonly byte[] _commonOffsets = commonOffsets;
+    private readonly byte[] _commonBytes = commonBytes;
 
-    private RegexTeddyPrefilter(byte[][] needles, bool asciiCaseInsensitive)
-    {
-        this.needles = needles;
-        this.asciiCaseInsensitive = asciiCaseInsensitive;
-        var distinct = new List<byte>();
-        for (int index = 0; index < needles.Length; index++)
-        {
-            AddFirstByteVariants(needles[index][0], distinct);
-        }
-
-        distinctFirstBytes = distinct.ToArray();
-        BuildCommonByteChecks(needles, asciiCaseInsensitive, out commonOffsets, out commonBytes);
-    }
-
+    /// <summary>
+    /// Attempts to create a case-sensitive prefilter for a small literal set.
+    /// </summary>
+    /// <param name="needles">The literal prefixes.</param>
+    /// <param name="prefilter">Receives the prefilter when the literal set is supported.</param>
+    /// <returns><see langword="true" /> when the prefilter was created.</returns>
     public static bool TryCreate(byte[][] needles, out RegexTeddyPrefilter? prefilter)
     {
         return TryCreate(needles, asciiCaseInsensitive: false, out prefilter);
     }
 
-    public static bool TryCreate(byte[][] needles, bool asciiCaseInsensitive, out RegexTeddyPrefilter? prefilter)
+    /// <summary>
+    /// Attempts to create a prefilter for a small literal set.
+    /// </summary>
+    /// <param name="needles">The literal prefixes.</param>
+    /// <param name="asciiCaseInsensitive">Whether ASCII letters compare case-insensitively.</param>
+    /// <param name="prefilter">Receives the prefilter when the literal set is supported.</param>
+    /// <returns><see langword="true" /> when the prefilter was created.</returns>
+    public static bool TryCreate(
+        byte[][] needles,
+        bool asciiCaseInsensitive,
+        out RegexTeddyPrefilter? prefilter)
     {
         if (needles.Length is < MinimumPatternCount or > MaximumPatternCount)
         {
@@ -53,30 +68,59 @@ internal sealed class RegexTeddyPrefilter
             ownedNeedles[index] = needle.ToArray();
         }
 
-        prefilter = new RegexTeddyPrefilter(ownedNeedles, asciiCaseInsensitive);
+        BuildFirstByteData(
+            ownedNeedles,
+            asciiCaseInsensitive,
+            out byte[] distinctFirstBytes,
+            out int[][] patternIndexesByFirstByte);
+        BuildCommonByteChecks(
+            ownedNeedles,
+            asciiCaseInsensitive,
+            out byte[] commonOffsets,
+            out byte[] commonBytes);
+        prefilter = new RegexTeddyPrefilter(
+            ownedNeedles,
+            asciiCaseInsensitive,
+            distinctFirstBytes,
+            SearchValues.Create(distinctFirstBytes),
+            patternIndexesByFirstByte,
+            commonOffsets,
+            commonBytes);
         return true;
     }
 
+    /// <summary>
+    /// Finds the next literal-prefix candidate at or after a byte offset.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startAt">The first byte offset to inspect.</param>
+    /// <returns>The candidate offset, or <c>-1</c> when none remains.</returns>
     public int FindCandidate(ReadOnlySpan<byte> haystack, int startAt)
     {
         startAt = Math.Clamp(startAt, 0, haystack.Length);
-        if (distinctFirstBytes.Length == 1)
+        if (_distinctFirstBytes.Length == 1)
         {
-            return FindCandidateByFirstByte(haystack, startAt, distinctFirstBytes[0]);
+            return FindCandidateByFirstByte(haystack, startAt, _distinctFirstBytes[0]);
         }
 
-        if (distinctFirstBytes.Length == 2)
+        if (_distinctFirstBytes.Length == 2)
         {
-            return FindCandidateByFirstBytePair(haystack, startAt, distinctFirstBytes[0], distinctFirstBytes[1]);
+            return FindCandidateByFirstBytePair(
+                haystack,
+                startAt,
+                _distinctFirstBytes[0],
+                _distinctFirstBytes[1]);
         }
 
         for (int position = startAt; position < haystack.Length; position++)
         {
-            if (!firstBytes[haystack[position]])
+            int offset = haystack[position..].IndexOfAny(_firstByteSearch);
+            if (offset < 0)
             {
-                continue;
+                return -1;
             }
 
+            position += offset;
             if (MatchesAt(haystack, position))
             {
                 return position;
@@ -108,7 +152,11 @@ internal sealed class RegexTeddyPrefilter
         return -1;
     }
 
-    private int FindCandidateByFirstBytePair(ReadOnlySpan<byte> haystack, int startAt, byte firstByte, byte secondByte)
+    private int FindCandidateByFirstBytePair(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        byte firstByte,
+        byte secondByte)
     {
         for (int position = startAt; position < haystack.Length;)
         {
@@ -128,6 +176,52 @@ internal sealed class RegexTeddyPrefilter
         }
 
         return -1;
+    }
+
+    private static void BuildFirstByteData(
+        byte[][] needles,
+        bool asciiCaseInsensitive,
+        out byte[] distinctFirstBytes,
+        out int[][] patternIndexesByFirstByte)
+    {
+        var distinct = new List<byte>();
+        var indexes = new List<int>?[256];
+        for (int patternIndex = 0; patternIndex < needles.Length; patternIndex++)
+        {
+            byte value = needles[patternIndex][0];
+            AddFirstByte(value, patternIndex, distinct, indexes);
+            if (asciiCaseInsensitive && IsAsciiCased(value))
+            {
+                AddFirstByte(FoldAscii(value), patternIndex, distinct, indexes);
+                AddFirstByte(ToggleAsciiCase(value), patternIndex, distinct, indexes);
+            }
+        }
+
+        patternIndexesByFirstByte = new int[256][];
+        for (int index = 0; index < patternIndexesByFirstByte.Length; index++)
+        {
+            patternIndexesByFirstByte[index] = indexes[index]?.ToArray() ?? [];
+        }
+
+        distinctFirstBytes = distinct.ToArray();
+    }
+
+    private static void AddFirstByte(
+        byte value,
+        int patternIndex,
+        List<byte> distinct,
+        List<int>?[] indexes)
+    {
+        List<int> bucket = indexes[value] ??= [];
+        if (!bucket.Contains(patternIndex))
+        {
+            bucket.Add(patternIndex);
+        }
+
+        if (!distinct.Contains(value))
+        {
+            distinct.Add(value);
+        }
     }
 
     private static void BuildCommonByteChecks(
@@ -175,9 +269,10 @@ internal sealed class RegexTeddyPrefilter
             return false;
         }
 
-        for (int index = 0; index < needles.Length; index++)
+        ReadOnlySpan<int> patternIndexes = _patternIndexesByFirstByte[haystack[position]];
+        for (int index = 0; index < patternIndexes.Length; index++)
         {
-            ReadOnlySpan<byte> needle = needles[index];
+            ReadOnlySpan<byte> needle = _needles[patternIndexes[index]];
             if (needle.Length <= haystack.Length - position &&
                 ByteEquals(haystack[position + needle.Length - 1], needle[^1]) &&
                 MatchesNeedle(haystack[position..(position + needle.Length)], needle))
@@ -191,11 +286,11 @@ internal sealed class RegexTeddyPrefilter
 
     private bool CommonBytesMatch(ReadOnlySpan<byte> haystack, int position)
     {
-        for (int index = 0; index < commonOffsets.Length; index++)
+        for (int index = 0; index < _commonOffsets.Length; index++)
         {
-            int at = position + commonOffsets[index];
+            int at = position + _commonOffsets[index];
             if ((uint)at >= (uint)haystack.Length ||
-                !ByteEquals(haystack[at], commonBytes[index]))
+                !ByteEquals(haystack[at], _commonBytes[index]))
             {
                 return false;
             }
@@ -220,30 +315,9 @@ internal sealed class RegexTeddyPrefilter
     private bool ByteEquals(byte left, byte right)
     {
         return left == right ||
-            asciiCaseInsensitive &&
+            _asciiCaseInsensitive &&
             IsAsciiCased(left) &&
             FoldAscii(left) == FoldAscii(right);
-    }
-
-    private void AddFirstByteVariants(byte value, List<byte> distinct)
-    {
-        AddFirstByte(value, distinct);
-        if (!asciiCaseInsensitive || !IsAsciiCased(value))
-        {
-            return;
-        }
-
-        AddFirstByte(FoldAscii(value), distinct);
-        AddFirstByte(ToggleAsciiCase(value), distinct);
-    }
-
-    private void AddFirstByte(byte value, List<byte> distinct)
-    {
-        firstBytes[value] = true;
-        if (!distinct.Contains(value))
-        {
-            distinct.Add(value);
-        }
     }
 
     private static byte NormalizeAsciiCase(byte value, bool asciiCaseInsensitive)

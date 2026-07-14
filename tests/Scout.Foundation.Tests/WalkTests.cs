@@ -54,6 +54,22 @@ public sealed class WalkTests
     }
 
     /// <summary>
+    /// Verifies entries expose exact file metadata when native directory records permit a lazy status query.
+    /// </summary>
+    [Fact]
+    public void WalkEntriesResolveLazyFileMetadata()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "file");
+        File.WriteAllText(path, "hello");
+
+        DirEntry entry = Assert.Single(new WalkBuilder(root).Build(), static entry => entry.Depth == 1);
+
+        Assert.Equal(5, entry.Length);
+        Assert.Equal(FileIdentity.FromPath(path, followLinks: false), entry.Identity);
+    }
+
+    /// <summary>
     /// Verifies parallel walking creates one visitor per configured worker.
     /// </summary>
     [Fact]
@@ -421,6 +437,19 @@ public sealed class WalkTests
     }
 
     /// <summary>
+    /// Verifies a valid replacement character in a file name is yielded only once.
+    /// </summary>
+    [Fact]
+    public void WalkDoesNotDuplicateValidUnicodeReplacementCharacterFileName()
+    {
+        string root = CreateTempDirectory();
+        const string fileName = "valid\uFFFD.txt";
+        File.WriteAllText(Path.Combine(root, fileName), string.Empty);
+
+        Assert.Equal([fileName], Collect(root, new WalkBuilder(root)));
+    }
+
+    /// <summary>
     /// Verifies same-file-system traversal still descends through the root file system.
     /// </summary>
     [Fact]
@@ -530,6 +559,41 @@ public sealed class WalkTests
         File.WriteAllText(Path.Combine(root, "src", "target"), string.Empty);
 
         Assert.Equal(["src", "src/target"], Collect(root, new WalkBuilder(root)));
+    }
+
+    /// <summary>
+    /// Verifies a directory ignored by its parent is pruned before its own ignore files are parsed.
+    /// </summary>
+    [Fact]
+    public void IgnoredDirectoryDoesNotLoadItsOwnIgnoreFiles()
+    {
+        string root = CreateTempDirectory();
+        string ignored = Directory.CreateDirectory(Path.Combine(root, "ignored")).FullName;
+        File.WriteAllText(Path.Combine(root, ".ignore"), "ignored/\n");
+        File.WriteAllText(Path.Combine(ignored, ".ignore"), "{a,b\n");
+        File.WriteAllText(Path.Combine(ignored, "unreachable"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "keep"), string.Empty);
+
+        Assert.Equal(["keep"], Collect(root, new WalkBuilder(root)));
+        Assert.Equal(["keep"], CollectParallel(root, new WalkBuilder(root).Threads(4)));
+    }
+
+    /// <summary>
+    /// Verifies directories named like standard ignore files are traversed instead of parsed as files.
+    /// </summary>
+    /// <param name="ignoreFileName">The standard ignore file name to use for the directory.</param>
+    [Theory]
+    [InlineData(".ignore")]
+    [InlineData(".gitignore")]
+    public void IgnoreFileNameDirectoryDoesNotAbortTraversal(string ignoreFileName)
+    {
+        string root = CreateTempDirectory();
+        Directory.CreateDirectory(Path.Combine(root, ignoreFileName));
+        File.WriteAllText(Path.Combine(root, "keep"), string.Empty);
+
+        string[] expected = [ignoreFileName, "keep"];
+        Assert.Equal(expected, Collect(root, new WalkBuilder(root).Hidden(false)));
+        Assert.Equal(expected, CollectParallel(root, new WalkBuilder(root).Hidden(false).Threads(4)));
     }
 
     /// <summary>

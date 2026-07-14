@@ -236,6 +236,52 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies Teddy filters vectorized first-byte candidates through the corresponding literal bucket.
+    /// </summary>
+    [Fact]
+    public void TeddyPrefilterMatchesDistinctFirstByteBuckets()
+    {
+        Assert.True(RegexTeddyPrefilter.TryCreate(
+            [
+                "Collect"u8.ToArray(),
+                "extension"u8.ToArray(),
+                "Create"u8.ToArray(),
+                "GlobSet"u8.ToArray(),
+            ],
+            asciiCaseInsensitive: false,
+            out RegexTeddyPrefilter? prefilter));
+
+        Assert.Equal(3, prefilter!.FindCandidate("xx extensionSuffixPatterns"u8, 0));
+        Assert.Equal(3, prefilter.FindCandidate("xx CreateAhoCorasick"u8, 0));
+        Assert.Equal(3, prefilter.FindCandidate("xx GlobSet.cs"u8, 0));
+        Assert.Equal(-1, prefilter.FindCandidate("xx CrateAhoCorasick"u8, 0));
+        Assert.Equal(-1, prefilter.FindCandidate("xx extensionSuffixPatterns"u8, 4));
+    }
+
+    /// <summary>
+    /// Verifies vectorized Teddy buckets retain ASCII case-insensitive first-byte variants.
+    /// </summary>
+    [Fact]
+    public void TeddyPrefilterMatchesVectorizedCaseInsensitiveFirstByteBuckets()
+    {
+        Assert.True(RegexTeddyPrefilter.TryCreate(
+            [
+                "collect"u8.ToArray(),
+                "extension"u8.ToArray(),
+                "create"u8.ToArray(),
+                "globset"u8.ToArray(),
+            ],
+            asciiCaseInsensitive: true,
+            out RegexTeddyPrefilter? prefilter));
+
+        Assert.Equal(3, prefilter!.FindCandidate("xx COLLECT"u8, 0));
+        Assert.Equal(3, prefilter.FindCandidate("xx EXTENSION"u8, 0));
+        Assert.Equal(3, prefilter.FindCandidate("xx CREATE"u8, 0));
+        Assert.Equal(3, prefilter.FindCandidate("xx GLOBSET"u8, 0));
+        Assert.Equal(-1, prefilter.FindCandidate("xx CRATE"u8, 0));
+    }
+
+    /// <summary>
     /// Verifies pure literal alternations use exact leftmost-first literal-set execution.
     /// </summary>
     [Fact]

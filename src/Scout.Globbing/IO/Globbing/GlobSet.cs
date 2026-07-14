@@ -6,6 +6,8 @@ namespace Scout.IO.Globbing;
 /// </summary>
 public sealed class GlobSet
 {
+    private const int ExtensionSuffixAutomatonThreshold = 8;
+    private const int MinimumRequiredLiteralLength = 2;
     private const int StackCandidateLimit = 256;
 
     private readonly Glob[] globs;
@@ -23,6 +25,7 @@ public sealed class GlobSet
     private readonly int[] prefixIndexes;
     private readonly AhoCorasickAutomaton? suffixMatcher;
     private readonly int[] suffixIndexes;
+    private readonly bool[] _suffixRequiresEnd;
     private readonly int[] alwaysIndexes;
 
     private GlobSet(
@@ -41,6 +44,7 @@ public sealed class GlobSet
         int[] prefixIndexes,
         AhoCorasickAutomaton? suffixMatcher,
         int[] suffixIndexes,
+        bool[] suffixRequiresEnd,
         int[] alwaysIndexes)
     {
         this.globs = globs;
@@ -58,6 +62,7 @@ public sealed class GlobSet
         this.prefixIndexes = prefixIndexes;
         this.suffixMatcher = suffixMatcher;
         this.suffixIndexes = suffixIndexes;
+        _suffixRequiresEnd = suffixRequiresEnd;
         this.alwaysIndexes = alwaysIndexes;
     }
 
@@ -109,6 +114,8 @@ public sealed class GlobSet
         var prefixIndexes = new List<int>();
         var suffixPatterns = new List<byte[]>();
         var suffixIndexes = new List<int>();
+        var requiredLiteralPatterns = new List<byte[]>();
+        var requiredLiteralIndexes = new List<int>();
         var alwaysIndexes = new List<int>();
 
         for (int index = 0; index < copy.Length; index++)
@@ -130,8 +137,25 @@ public sealed class GlobSet
                 prefixIndexes,
                 suffixPatterns,
                 suffixIndexes,
+                requiredLiteralPatterns,
+                requiredLiteralIndexes,
                 alwaysIndexes);
         }
+
+        if (suffixPatterns.Count > 0 ||
+            extensionSuffixPatterns.Count >= ExtensionSuffixAutomatonThreshold)
+        {
+            suffixPatterns.AddRange(extensionSuffixPatterns);
+            suffixIndexes.AddRange(extensionSuffixIndexes);
+            extensionSuffixPatterns.Clear();
+            extensionSuffixIndexes.Clear();
+        }
+
+        int suffixPatternCount = suffixPatterns.Count;
+        suffixPatterns.AddRange(requiredLiteralPatterns);
+        suffixIndexes.AddRange(requiredLiteralIndexes);
+        bool[] suffixRequiresEnd = new bool[suffixPatterns.Count];
+        Array.Fill(suffixRequiresEnd, value: true, startIndex: 0, count: suffixPatternCount);
 
         return new GlobSet(
             copy,
@@ -149,6 +173,7 @@ public sealed class GlobSet
             prefixIndexes.ToArray(),
             CreateAhoCorasick(copy, suffixPatterns, suffixIndexes),
             suffixIndexes.ToArray(),
+            suffixRequiresEnd,
             alwaysIndexes.ToArray());
     }
 
@@ -167,6 +192,7 @@ public sealed class GlobSet
         if (globs.Length <= StackCandidateLimit)
         {
             Span<bool> candidates = stackalloc bool[globs.Length];
+            candidates.Clear();
             CollectCandidates(path, candidates);
             return AnyCandidateMatches(path, candidates);
         }
@@ -193,6 +219,7 @@ public sealed class GlobSet
         if (globs.Length <= StackCandidateLimit)
         {
             Span<bool> candidates = stackalloc bool[globs.Length];
+            candidates.Clear();
             CollectCandidates(candidate, candidates);
             return AnyCandidateMatches(candidate, candidates);
         }
@@ -282,6 +309,7 @@ public sealed class GlobSet
         if (globs.Length <= StackCandidateLimit)
         {
             Span<bool> candidates = stackalloc bool[globs.Length];
+            candidates.Clear();
             CollectCandidates(path, candidates);
             MatchingCandidateIndexesInto(path, candidates, indexes);
             return;
@@ -311,6 +339,7 @@ public sealed class GlobSet
         if (globs.Length <= StackCandidateLimit)
         {
             Span<bool> candidates = stackalloc bool[globs.Length];
+            candidates.Clear();
             CollectCandidates(candidate, candidates);
             MatchingCandidateIndexesInto(candidate, candidates, indexes);
             return;
@@ -343,6 +372,7 @@ public sealed class GlobSet
         if (globs.Length <= StackCandidateLimit)
         {
             Span<bool> candidates = stackalloc bool[globs.Length];
+            candidates.Clear();
             CollectCandidates(candidate, candidates);
             return LastMatchingCandidateIndex(candidate, candidates, eligible);
         }
@@ -369,6 +399,8 @@ public sealed class GlobSet
         List<int> prefixIndexes,
         List<byte[]> suffixPatterns,
         List<int> suffixIndexes,
+        List<byte[]> requiredLiteralPatterns,
+        List<int> requiredLiteralIndexes,
         List<int> alwaysIndexes)
     {
         if (glob.TryGetLiteral(out byte[] literal))
@@ -438,7 +470,16 @@ public sealed class GlobSet
 
         if (!classified)
         {
-            alwaysIndexes.Add(globIndex);
+            if (glob.TryGetRequiredLiteral(out byte[] requiredLiteral) &&
+                requiredLiteral.Length >= MinimumRequiredLiteralLength)
+            {
+                requiredLiteralPatterns.Add(requiredLiteral);
+                requiredLiteralIndexes.Add(globIndex);
+            }
+            else
+            {
+                alwaysIndexes.Add(globIndex);
+            }
         }
     }
 
@@ -636,7 +677,7 @@ public sealed class GlobSet
         while (matches.MoveNext())
         {
             AhoCorasickMatch match = matches.Current;
-            if (match.End == path.Length)
+            if (!_suffixRequiresEnd[match.PatternId] || match.End == path.Length)
             {
                 candidates[suffixIndexes[match.PatternId]] = true;
             }

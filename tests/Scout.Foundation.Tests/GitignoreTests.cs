@@ -214,6 +214,21 @@ public sealed class GitignoreTests
     }
 
     /// <summary>
+    /// Verifies direct matching does not treat a sibling with a shared text prefix as a descendant.
+    /// </summary>
+    [Fact]
+    public void DirectMatchRequiresDirectorySeparatorAfterRootPrefix()
+    {
+        string workspace = CreateTempDirectory();
+        string root = Path.Combine(workspace, "root");
+        string sibling = Path.Combine(workspace, "root-sibling", "target");
+        IgnoreRuleSet rules = LoadRulesForText(root, "/target\n");
+
+        Assert.Equal(IgnoreDecision.Ignore, rules.Match(CreateEntry(root, "target", isDirectory: false)));
+        Assert.Equal(IgnoreDecision.None, rules.Match(CreateAbsoluteEntry(sibling, isDirectory: false)));
+    }
+
+    /// <summary>
     /// Verifies parent-like path names under the matcher root are still ordinary relative paths.
     /// </summary>
     [Fact]

@@ -277,17 +277,14 @@ public sealed class LiteralLineSearcherTests
     public void RegexSearchPlanUsesCandidateLineAcceleratorForPreparedLeadingAlternation()
     {
         byte[][] patterns = [@"(?-u:\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*)"u8.ToArray()];
-        object? plan = typeof(LiteralLineSearcher)
-            .GetMethod("CreateRegexSearchPlan", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
-            .Invoke(null, [patterns, false, true]);
-
-        object? accelerator = plan!
-            .GetType()
-            .GetMethod("GetCandidateLineAccelerator")!
-            .Invoke(plan, [0]);
+        RegexSearchPlan? plan = LiteralLineSearcher.CreateRegexSearchPlan(
+            patterns,
+            asciiCaseInsensitive: false,
+            compileAutomata: true);
+        RegexCandidateLineAccelerator? accelerator = plan?.GetCandidateLineAccelerator(0);
 
         Assert.NotNull(accelerator);
-        AssertRegexSearchPlanAvoidsAutomata(plan);
+        AssertRegexSearchPlanAvoidsAutomata(plan!);
     }
 
     /// <summary>
@@ -298,18 +295,15 @@ public sealed class LiteralLineSearcherTests
     {
         using RegexSpecializationModeScope scope = RegexSpecializationModeDefaults.Use(RegexSpecializationMode.General);
         byte[][] patterns = [@"(?:\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*)"u8.ToArray()];
-        object? plan = typeof(LiteralLineSearcher)
-            .GetMethod("CreateRegexSearchPlan", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
-            .Invoke(null, [patterns, false, true]);
-
-        object? accelerator = plan!
-            .GetType()
-            .GetMethod("GetCandidateLineAccelerator")!
-            .Invoke(plan, [0]);
+        RegexSearchPlan? plan = LiteralLineSearcher.CreateRegexSearchPlan(
+            patterns,
+            asciiCaseInsensitive: false,
+            compileAutomata: true);
+        RegexCandidateLineAccelerator? accelerator = plan?.GetCandidateLineAccelerator(0);
 
         Assert.NotNull(accelerator);
-        Assert.True((bool)accelerator.GetType().GetProperty("HasVerifier")!.GetValue(accelerator)!);
-        AssertRegexSearchPlanAvoidsAutomata(plan);
+        Assert.True(accelerator.HasVerifier);
+        AssertRegexSearchPlanAvoidsAutomata(plan!);
     }
 
     /// <summary>
@@ -319,26 +313,19 @@ public sealed class LiteralLineSearcherTests
     public void RegexSearchPlanUsesCandidateLineAcceleratorForPreparedCaptureLeadingAlternation()
     {
         byte[][] patterns = [@"(?-u:\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*))"u8.ToArray()];
-        object? plan = typeof(LiteralLineSearcher)
-            .GetMethod("CreateRegexSearchPlan", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
-            .Invoke(null, [patterns, false, true]);
-
-        object? accelerator = plan!
-            .GetType()
-            .GetMethod("GetCandidateLineAccelerator")!
-            .Invoke(plan, [0]);
+        RegexSearchPlan? plan = LiteralLineSearcher.CreateRegexSearchPlan(
+            patterns,
+            asciiCaseInsensitive: false,
+            compileAutomata: true);
+        RegexCandidateLineAccelerator? accelerator = plan?.GetCandidateLineAccelerator(0);
 
         Assert.NotNull(accelerator);
-        AssertRegexSearchPlanAvoidsAutomata(plan);
+        AssertRegexSearchPlanAvoidsAutomata(plan!);
     }
 
-    private static void AssertRegexSearchPlanAvoidsAutomata(object plan)
+    private static void AssertRegexSearchPlanAvoidsAutomata(RegexSearchPlan plan)
     {
-        var automata = (RegexAutomaton?[])plan
-            .GetType()
-            .GetField("automata", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
-            .GetValue(plan)!;
-        Assert.All(automata, Assert.Null);
+        Assert.Null(plan.GetAutomaton(0));
     }
 
     /// <summary>
@@ -348,14 +335,11 @@ public sealed class LiteralLineSearcherTests
     public void RegexSearchPlanKeepsScopedUngreedySpansOnAutomatonPath()
     {
         byte[][] patterns = [@"(?U:ab+)"u8.ToArray()];
-        object? plan = typeof(LiteralLineSearcher)
-            .GetMethod("CreateRegexSearchPlan", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
-            .Invoke(null, [patterns, false, true]);
-
-        object? accelerator = plan!
-            .GetType()
-            .GetMethod("GetCandidateLineAccelerator")!
-            .Invoke(plan, [0]);
+        RegexSearchPlan? plan = LiteralLineSearcher.CreateRegexSearchPlan(
+            patterns,
+            asciiCaseInsensitive: false,
+            compileAutomata: true);
+        RegexCandidateLineAccelerator? accelerator = plan?.GetCandidateLineAccelerator(0);
 
         Assert.Null(accelerator);
     }
@@ -398,6 +382,177 @@ public sealed class LiteralLineSearcherTests
         Assert.Equal(0, sink.ByteOffset);
         Assert.Equal(12, sink.MatchColumn);
         Assert.Equal("destructor struct file;\n"u8.ToArray(), sink.Line.ToArray());
+    }
+
+    /// <summary>
+    /// Verifies mixed literal and regex alternations scan their exact prefix candidates instead of every byte offset.
+    /// </summary>
+    [Fact(Timeout = 5000)]
+    public void SearchMixedAlternationUsesCandidatePrefixesWithoutAFullVerifier()
+    {
+        const string pattern =
+            "CollectExtensionSuffixCandidates|extensionSuffixPatterns|CreateAhoCorasick|GlobSet.cs";
+        byte[][] patterns = [Encoding.UTF8.GetBytes(pattern)];
+        byte[] unrelatedLine = "private readonly byte[][] unrelatedPatterns;\n"u8.ToArray();
+        byte[] matchingLine = "CreateAhoCorasick(copy);\n"u8.ToArray();
+        byte[] haystack = new byte[(unrelatedLine.Length * 350_000) + matchingLine.Length];
+        for (int offset = 0; offset < haystack.Length - matchingLine.Length; offset += unrelatedLine.Length)
+        {
+            unrelatedLine.CopyTo(haystack, offset);
+        }
+
+        matchingLine.CopyTo(haystack, haystack.Length - matchingLine.Length);
+        RegexSearchPlan? plan = LiteralLineSearcher.CreateRegexSearchPlan(
+            patterns,
+            asciiCaseInsensitive: false,
+            compileAutomata: true);
+        RegexCandidateLineAccelerator? accelerator = plan?.GetCandidateLineAccelerator(0);
+        var sink = new CapturingMatchLineSink();
+
+        bool matched = LiteralLineSearcher.SearchMatchLinesWithRegexPlan(
+            haystack,
+            patterns,
+            plan,
+            ref sink);
+        LiteralLineSearcher.CountMatchesAndMatchingLinesWithRegexPlan(
+            haystack,
+            patterns,
+            plan,
+            asciiCaseInsensitive: false,
+            lineRegexp: false,
+            wordRegexp: false,
+            maxMatchingLines: null,
+            crlf: false,
+            nullData: false,
+            out long matchingLines,
+            out long matches);
+
+        Assert.NotNull(accelerator);
+        Assert.False(accelerator.HasVerifier);
+        Assert.True(matched);
+        Assert.Equal(1UL, sink.Matches);
+        Assert.Equal(350_001, sink.LineNumber);
+        Assert.Equal("CreateAhoCorasick"u8.ToArray(), sink.Match);
+        Assert.Equal(1, matchingLines);
+        Assert.Equal(1, matches);
+
+        var rejectedSink = new CapturingMatchLineSink();
+        Assert.False(LiteralLineSearcher.SearchMatchLinesWithRegexPlan(
+            "CreateButNotAhoCorasick\n"u8,
+            patterns,
+            plan,
+            ref rejectedSink));
+        Assert.Equal(0UL, rejectedSink.Matches);
+    }
+
+    /// <summary>
+    /// Verifies one-pass statistics counting agrees with the independent match and line counters.
+    /// </summary>
+    [Theory]
+    [InlineData("foo|bar.", "foo bar1\nnone\nbar2 foo\n", false, false, false, false)]
+    [InlineData(@"\bfoo\b|bar", "food foo\nbar\n", false, false, false, false)]
+    [InlineData("foo|bar", "foo\r\nbar\r\n", false, false, true, false)]
+    [InlineData("foo|bar", "foo\0bar\0", false, false, false, true)]
+    [InlineData("foo.*", "foo\nfoobar\nnone\n", true, false, false, false)]
+    [InlineData("$", "value", false, false, false, false)]
+    public void CountMatchesAndMatchingLinesAgreesWithIndependentCounters(
+        string pattern,
+        string haystack,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool crlf,
+        bool nullData)
+    {
+        byte[][] patterns = [Encoding.UTF8.GetBytes(pattern)];
+        byte[] bytes = Encoding.UTF8.GetBytes(haystack);
+        RegexSearchPlan? plan = LiteralLineSearcher.CreateRegexSearchPlan(
+            patterns,
+            asciiCaseInsensitive: false,
+            compileAutomata: true);
+
+        LiteralLineSearcher.CountMatchesAndMatchingLinesWithRegexPlan(
+            bytes,
+            patterns,
+            plan,
+            asciiCaseInsensitive: false,
+            lineRegexp,
+            wordRegexp,
+            maxMatchingLines: null,
+            crlf,
+            nullData,
+            out long matchingLines,
+            out long matches);
+
+        Assert.Equal(
+            LiteralLineSearcher.CountMatchingLines(
+                bytes,
+                patterns,
+                asciiCaseInsensitive: false,
+                invertMatch: false,
+                lineRegexp,
+                wordRegexp,
+                maxMatchingLines: null,
+                crlf,
+                nullData),
+            matchingLines);
+        Assert.Equal(
+            LiteralLineSearcher.CountMatches(
+                bytes,
+                patterns,
+                asciiCaseInsensitive: false,
+                invertMatch: false,
+                lineRegexp,
+                wordRegexp,
+                maxMatchingLines: null,
+                crlf,
+                nullData),
+            matches);
+    }
+
+    /// <summary>
+    /// Verifies combined statistics exclude a line terminator from authoritative regex matching.
+    /// </summary>
+    [Fact]
+    public void CountMatchesAndMatchingLinesExcludesLineTerminator()
+    {
+        byte[][] patterns = ["foo[^x]"u8.ToArray()];
+        RegexSearchPlan? plan = LiteralLineSearcher.CreateRegexSearchPlan(
+            patterns,
+            asciiCaseInsensitive: false,
+            compileAutomata: true);
+
+        LiteralLineSearcher.CountMatchesAndMatchingLinesWithRegexPlan(
+            "foo\n"u8,
+            patterns,
+            plan,
+            asciiCaseInsensitive: false,
+            lineRegexp: false,
+            wordRegexp: false,
+            maxMatchingLines: null,
+            crlf: false,
+            nullData: false,
+            out long matchingLines,
+            out long matches);
+
+        Assert.Equal(0, matchingLines);
+        Assert.Equal(0, matches);
+    }
+
+    /// <summary>
+    /// Verifies match-line candidate scanning excludes the line terminator from match content.
+    /// </summary>
+    [Fact]
+    public void SearchMatchLinesExcludesLineTerminatorFromCandidateMatches()
+    {
+        var sink = new CapturingMatchLineSink();
+
+        bool matched = LiteralLineSearcher.SearchMatchLines(
+            "foo\n"u8,
+            ["foo[^x]"u8.ToArray()],
+            ref sink);
+
+        Assert.False(matched);
+        Assert.Equal(0UL, sink.Matches);
     }
 
     /// <summary>

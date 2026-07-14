@@ -290,4 +290,147 @@ public sealed class GlobSetTests
         Assert.Equal([1], set.MatchingIndexes("src/App.cs"u8));
         Assert.Equal([0, 1], set.MatchingIndexes("SRC/App.CS"u8));
     }
+
+    /// <summary>
+    /// Verifies large extension-suffix sets preserve indexes and per-glob case semantics.
+    /// </summary>
+    [Fact]
+    public void ExtensionSuffixAutomatonPreservesIndexesAndCaseModes()
+    {
+        var set = GlobSet.Create(
+            [
+                Glob.Parse("*.CS"u8.ToArray()),
+                Glob.Parse("*.cs"u8.ToArray(), new GlobOptions(asciiCaseInsensitive: true)),
+                Glob.Parse("*.rs"u8.ToArray()),
+                Glob.Parse("*.fs"u8.ToArray()),
+                Glob.Parse("*.vb"u8.ToArray()),
+                Glob.Parse("*.cpp"u8.ToArray()),
+                Glob.Parse("*.h"u8.ToArray()),
+                Glob.Parse("*.java"u8.ToArray()),
+            ]);
+
+        Assert.Equal([1], set.MatchingIndexes("src/App.cs"u8));
+        Assert.Equal([0, 1], set.MatchingIndexes("src/App.CS"u8));
+        Assert.Equal([2], set.MatchingIndexes("src/lib.rs"u8));
+        Assert.Empty(set.MatchingIndexes("src/readme.md"u8));
+    }
+
+    /// <summary>
+    /// Verifies required-literal extraction finds the mandatory runs in Linux's general root ignore patterns.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralExtractionFindsLinuxRootPatternRuns()
+    {
+        var dotFile = Glob.Parse(".*"u8.ToArray());
+        var asn1 = Glob.Parse("*.asn1.[ch]"u8.ToArray());
+        var numberedC = Glob.Parse("*.c.[012]*.*"u8.ToArray());
+        var objectVariant = Glob.Parse("*.o.*"u8.ToArray());
+        var generatedTable = Glob.Parse("*.tab.[ch]"u8.ToArray());
+
+        Assert.True(dotFile.TryGetRequiredLiteral(out byte[] dotFileLiteral));
+        Assert.True(asn1.TryGetRequiredLiteral(out byte[] asn1Literal));
+        Assert.True(numberedC.TryGetRequiredLiteral(out byte[] numberedCLiteral));
+        Assert.True(objectVariant.TryGetRequiredLiteral(out byte[] objectVariantLiteral));
+        Assert.True(generatedTable.TryGetRequiredLiteral(out byte[] generatedTableLiteral));
+        Assert.Equal("."u8.ToArray(), dotFileLiteral);
+        Assert.Equal(".asn1."u8.ToArray(), asn1Literal);
+        Assert.Equal(".c."u8.ToArray(), numberedCLiteral);
+        Assert.Equal(".o."u8.ToArray(), objectVariantLiteral);
+        Assert.Equal(".tab."u8.ToArray(), generatedTableLiteral);
+    }
+
+    /// <summary>
+    /// Verifies required-literal extraction skips brace alternatives and classes while retaining escaped and unclosed literals.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralExtractionIsConservativeAroundGlobSyntax()
+    {
+        var alternatives = Glob.Parse("*left{alternative,longer}right*.[ch]"u8.ToArray());
+        var classes = Glob.Parse("*prefix[abc]suffix*.[ch]"u8.ToArray());
+        var escapes = Glob.Parse("*\\[identifier*.[ch]"u8.ToArray());
+        var unclosedClass = Glob.Parse(
+            "*token[rest"u8.ToArray(),
+            new GlobOptions(allowUnclosedClass: true));
+        var recursivePrefix = Glob.Parse(
+            "**/dir_root_32/*"u8.ToArray(),
+            GlobOptions.UnixLiteralSeparator);
+
+        Assert.True(alternatives.TryGetRequiredLiteral(out byte[] alternativeLiteral));
+        Assert.True(classes.TryGetRequiredLiteral(out byte[] classLiteral));
+        Assert.True(escapes.TryGetRequiredLiteral(out byte[] escapeLiteral));
+        Assert.True(unclosedClass.TryGetRequiredLiteral(out byte[] unclosedClassLiteral));
+        Assert.True(recursivePrefix.TryGetRequiredLiteral(out byte[] recursivePrefixLiteral));
+        Assert.Equal("right"u8.ToArray(), alternativeLiteral);
+        Assert.Equal("prefix"u8.ToArray(), classLiteral);
+        Assert.Equal("[identifier"u8.ToArray(), escapeLiteral);
+        Assert.Equal("token[rest"u8.ToArray(), unclosedClassLiteral);
+        Assert.Equal("dir_root_32/"u8.ToArray(), recursivePrefixLiteral);
+    }
+
+    /// <summary>
+    /// Verifies required-literal candidates remain subject to exact glob verification.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralCandidatesAreVerifiedByGlobMatcher()
+    {
+        var basenameSet = GlobSet.Create(
+            [
+                Glob.Parse(
+                    "*.o.*"u8.ToArray(),
+                    new GlobOptions(literalSeparator: true, matchBaseName: true)),
+            ]);
+        var shapeSet = GlobSet.Create(
+            [Glob.Parse("*left?required*.[ch]"u8.ToArray())]);
+
+        Assert.Empty(basenameSet.MatchingIndexes("dir.o.value/file.c"u8));
+        Assert.Empty(shapeSet.MatchingIndexes("leftrequired.c"u8));
+        Assert.Equal([0], shapeSet.MatchingIndexes("left-required.c"u8));
+    }
+
+    /// <summary>
+    /// Verifies merged suffix and required-literal patterns retain their distinct indexes and end requirements.
+    /// </summary>
+    [Fact]
+    public void SuffixAndRequiredLiteralCandidatesShareMatcherWithoutLosingSemantics()
+    {
+        var set = GlobSet.Create(
+            [
+                Glob.Parse("*tail"u8.ToArray()),
+                Glob.Parse("*tail*.[ch]"u8.ToArray()),
+            ]);
+
+        Assert.Equal([1], set.MatchingIndexes("tail-value.c"u8));
+        Assert.Equal([0], set.MatchingIndexes("value.c-tail"u8));
+        Assert.Empty(set.MatchingIndexes("value.c-tail-extra"u8));
+    }
+
+    /// <summary>
+    /// Verifies required-literal candidates preserve alternatives, classes, escapes, and mixed ASCII case modes.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralCandidatesPreserveGeneralGlobSemantics()
+    {
+        var alternatives = GlobSet.Create(
+            [Glob.Parse("*left{alpha,beta}right*.[ch]"u8.ToArray())]);
+        var classes = GlobSet.Create(
+            [Glob.Parse("*prefix[ab]suffix*.[ch]"u8.ToArray())]);
+        var escapes = GlobSet.Create(
+            [Glob.Parse("*\\[identifier*.[ch]"u8.ToArray())]);
+        var mixedCase = GlobSet.Create(
+            [
+                Glob.Parse("*Required*.[ch]"u8.ToArray()),
+                Glob.Parse(
+                    "*Required*.[ch]"u8.ToArray(),
+                    new GlobOptions(asciiCaseInsensitive: true)),
+            ]);
+
+        Assert.Equal([0], alternatives.MatchingIndexes("xxleftbetarightyy.h"u8));
+        Assert.Empty(alternatives.MatchingIndexes("xxleftgammarightyy.h"u8));
+        Assert.Equal([0], classes.MatchingIndexes("xxprefixbsuffixyy.c"u8));
+        Assert.Empty(classes.MatchingIndexes("xxprefixcsuffixyy.c"u8));
+        Assert.Equal([0], escapes.MatchingIndexes("xx[identifier-tail.h"u8));
+        Assert.Empty(escapes.MatchingIndexes("xxidentifier-tail.h"u8));
+        Assert.Equal([1], mixedCase.MatchingIndexes("xxrequiredyy.h"u8));
+        Assert.Equal([0, 1], mixedCase.MatchingIndexes("xxRequiredyy.h"u8));
+    }
 }

@@ -8,8 +8,12 @@ namespace Scout.IO.Ignore;
 public sealed class DirEntry
 {
     private static readonly UTF8Encoding Utf8Lossy = new(encoderShouldEmitUTF8Identifier: false);
-    private readonly byte[]? unixPathBytes;
-    private readonly byte[]? unixFileNameBytes;
+    private readonly byte[]? _unixPathBytes;
+    private readonly byte[]? _unixFileNameBytes;
+    private readonly long? _length;
+    private readonly FileIdentity _identity;
+    private readonly bool _deferMetadata;
+    private DirEntryMetadata? _deferredMetadata;
 
     internal DirEntry(
         string fullPath,
@@ -22,7 +26,8 @@ public sealed class DirEntry
         FileIdentity identity,
         string? resolvedFullPath = null,
         byte[]? unixPathBytes = null,
-        byte[]? unixFileNameBytes = null)
+        byte[]? unixFileNameBytes = null,
+        bool deferMetadata = false)
     {
         ArgumentException.ThrowIfNullOrEmpty(fullPath);
         ArgumentOutOfRangeException.ThrowIfNegative(depth);
@@ -34,10 +39,11 @@ public sealed class DirEntry
         IsDirectory = isDirectory;
         IsSymbolicLink = isSymbolicLink;
         IsStdin = isStdin;
-        Length = length;
-        Identity = identity;
-        this.unixPathBytes = unixPathBytes;
-        this.unixFileNameBytes = unixFileNameBytes;
+        _length = length;
+        _identity = identity;
+        _unixPathBytes = unixPathBytes;
+        _unixFileNameBytes = unixFileNameBytes;
+        _deferMetadata = deferMetadata;
     }
 
     /// <summary>
@@ -52,15 +58,22 @@ public sealed class DirEntry
     /// </summary>
     public string FileName => IsStdin
         ? "<stdin>"
-        : unixFileNameBytes is not null
-            ? Utf8Lossy.GetString(unixFileNameBytes)
+        : _unixFileNameBytes is not null
+            ? Utf8Lossy.GetString(_unixFileNameBytes)
             : Path.GetFileName(FullPath);
 
-    internal bool IsRawUnixPath => unixPathBytes is not null;
+    internal bool IsRawUnixPath => _unixPathBytes is not null;
 
-    internal ReadOnlySpan<byte> UnixPathBytes => unixPathBytes.AsSpan();
+    internal ReadOnlySpan<byte> UnixPathBytes => _unixPathBytes.AsSpan();
 
-    internal ReadOnlySpan<byte> UnixFileNameBytes => unixFileNameBytes.AsSpan();
+    internal ReadOnlySpan<byte> UnixFileNameBytes => _unixFileNameBytes.AsSpan();
+
+    /// <summary>
+    /// Gets the file length only when traversal already resolved it without an additional metadata query.
+    /// </summary>
+    internal long? KnownLength => _deferMetadata
+        ? Volatile.Read(ref _deferredMetadata)?.Length
+        : _length;
 
     /// <summary>
     /// Gets the entry depth relative to the walk root.
@@ -93,17 +106,48 @@ public sealed class DirEntry
     public bool IsStdin { get; }
 
     /// <summary>
-    /// Gets the file length when this entry is a file.
+    /// Gets the file length when this entry is a file. On Unix, first access may query
+    /// the filesystem when the native directory record supplied only the entry type.
     /// </summary>
-    public long? Length { get; }
+    public long? Length => _deferMetadata ? GetDeferredMetadata().Length : _length;
 
     /// <summary>
-    /// Gets the best available same-file identity for this entry.
+    /// Gets the best available same-file identity. On Unix, first access may query
+    /// the filesystem when the native directory record supplied only the entry type.
     /// </summary>
-    public FileIdentity Identity { get; }
+    public FileIdentity Identity => _deferMetadata ? GetDeferredMetadata().Identity : _identity;
 
     internal static DirEntry Stdin()
     {
         return new DirEntry("<stdin>", 0, default, isDirectory: false, isSymbolicLink: false, isStdin: true, null, default);
+    }
+
+    private DirEntryMetadata GetDeferredMetadata()
+    {
+        DirEntryMetadata? metadata = Volatile.Read(ref _deferredMetadata);
+        if (metadata is not null)
+        {
+            return metadata;
+        }
+
+        metadata = ResolveMetadata();
+        return Interlocked.CompareExchange(ref _deferredMetadata, metadata, null) ?? metadata;
+    }
+
+    private DirEntryMetadata ResolveMetadata()
+    {
+        NativeUnixFileStatus status;
+        bool found = IsRawUnixPath
+            ? NativeFileSystemMetadata.TryGetRawUnixStatus(UnixPathBytes, followLinks: false, out status)
+            : NativeFileSystemMetadata.TryGetUnixStatus(FullPath, followLinks: false, out status);
+        if (!found)
+        {
+            return new DirEntryMetadata(_length, _identity);
+        }
+
+        FileIdentity identity = IsRawUnixPath
+            ? FileIdentity.FromRawUnixPath(UnixPathBytes, status.Metadata)
+            : FileIdentity.FromPathMetadata(FullPath, status.Metadata);
+        return new DirEntryMetadata(status.Length, identity);
     }
 }

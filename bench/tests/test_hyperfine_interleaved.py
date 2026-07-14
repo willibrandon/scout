@@ -1,11 +1,16 @@
-"""Deterministic tests for the Hyperfine ABBA sampling helper."""
+"""Deterministic tests for balanced Hyperfine gate sampling."""
 
 from __future__ import annotations
 
+import argparse
+import io
+import json
 import math
 import statistics
 import sys
+import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,9 +18,12 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hyperfine_interleaved import (
-    _run_abba_round,
-    abba_schedule,
+    _parse_args,
+    _run_balanced_round,
     aggregate_round_documents,
+    balanced_schedule,
+    round_roles,
+    run_interleaved,
     sample_name,
 )
 
@@ -23,16 +31,34 @@ from hyperfine_interleaved import (
 class HyperfineInterleavedTests(unittest.TestCase):
     """Verify balanced sampling and strict Hyperfine result validation."""
 
-    def test_five_round_schedule_is_balanced_abba(self) -> None:
-        schedule = abba_schedule(5)
+    def test_six_round_schedule_balances_roles_in_every_position(self) -> None:
+        schedule = balanced_schedule(6)
 
-        self.assertEqual(("rg", "scout", "scout", "rg") * 5, schedule)
-        self.assertEqual(10, schedule.count("rg"))
-        self.assertEqual(10, schedule.count("scout"))
+        self.assertEqual(
+            (
+                "rg",
+                "scout",
+                "scout",
+                "rg",
+                "scout",
+                "rg",
+                "rg",
+                "scout",
+            )
+            * 3,
+            schedule,
+        )
+        for position in range(4):
+            roles = schedule[position::4]
+            self.assertEqual(3, roles.count("rg"))
+            self.assertEqual(3, roles.count("scout"))
 
-    def test_round_invocation_uses_exact_abba_order_and_no_shell_mode(self) -> None:
+        with self.assertRaises(ValueError):
+            balanced_schedule(5)
+
+    def test_even_round_invocation_uses_baab_order_and_no_shell_mode(self) -> None:
         with patch("hyperfine_interleaved.subprocess.run") as run:
-            _run_abba_round(
+            _run_balanced_round(
                 "hyperfine",
                 "workload",
                 2,
@@ -52,76 +78,195 @@ class HyperfineInterleavedTests(unittest.TestCase):
                 "1",
                 "-N",
                 "--command-name",
-                "rg:workload:round-2:position-1",
-                "rg command",
-                "--command-name",
-                "scout:workload:round-2:position-2",
+                "scout:workload:round-2:position-1",
                 "scout command",
                 "--command-name",
-                "scout:workload:round-2:position-3",
-                "scout command",
-                "--command-name",
-                "rg:workload:round-2:position-4",
+                "rg:workload:round-2:position-2",
                 "rg command",
+                "--command-name",
+                "rg:workload:round-2:position-3",
+                "rg command",
+                "--command-name",
+                "scout:workload:round-2:position-4",
+                "scout command",
             ],
             arguments,
         )
         run.assert_called_once_with(arguments, check=True)
 
-    def test_abba_resists_monotonic_drift_without_masking_regression(self) -> None:
-        drift = [math.log(position + 1) for position in range(1, 21)]
-        grouped_rg_positions = (1, 2, 3, 4, 5, 16, 17, 18, 19, 20)
-        grouped_scout_positions = tuple(range(6, 16))
+    def test_command_line_requires_complete_measured_and_warmup_cycles(self) -> None:
+        arguments = [
+            "--hyperfine",
+            "hyperfine",
+            "--name",
+            "workload",
+            "--rg-command",
+            "rg command",
+            "--scout-command",
+            "scout command",
+            "--rounds",
+            "2",
+            "--warmup-rounds",
+            "0",
+            "--output",
+            "result.json",
+        ]
+
+        parsed = _parse_args(arguments)
+        self.assertEqual(2, parsed.rounds)
+        self.assertEqual(0, parsed.warmup_rounds)
+
+        for option, index in (("--rounds", 9), ("--warmup-rounds", 11)):
+            with self.subTest(option=option):
+                invalid = list(arguments)
+                invalid[index] = "1"
+                with redirect_stderr(io.StringIO()):
+                    with self.assertRaises(SystemExit):
+                        _parse_args(invalid)
+
+    def test_run_removes_stale_round_documents_before_sampling(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output = Path(temporary_directory) / "result.json"
+            sample_directory = Path(temporary_directory) / "result.samples"
+            sample_directory.mkdir()
+            stale_round = sample_directory / "round-99.json"
+            unrelated = sample_directory / "notes.txt"
+            stale_round.write_text("stale", encoding="utf-8")
+            unrelated.write_text("keep", encoding="utf-8")
+            arguments = argparse.Namespace(
+                output=str(output),
+                warmup_rounds=0,
+                rounds=2,
+                hyperfine="hyperfine",
+                name="workload",
+                rg_command="rg command",
+                scout_command="scout command",
+                no_shell=False,
+            )
+
+            with redirect_stdout(io.StringIO()), patch(
+                "hyperfine_interleaved._run_balanced_round",
+                side_effect=RuntimeError("stop after cleanup"),
+            ):
+                with self.assertRaises(RuntimeError):
+                    run_interleaved(arguments)
+
+            self.assertFalse(stale_round.exists())
+            self.assertTrue(unrelated.exists())
+
+    def test_run_prints_one_compact_summary_without_per_round_chatter(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output = Path(temporary_directory) / "result.json"
+            arguments = argparse.Namespace(
+                output=str(output),
+                warmup_rounds=2,
+                rounds=2,
+                hyperfine="hyperfine",
+                name="workload",
+                rg_command="rg command",
+                scout_command="scout command",
+                no_shell=False,
+            )
+
+            def write_round_document(
+                _hyperfine: str,
+                workload: str,
+                round_number: int,
+                _rg_command: str,
+                _scout_command: str,
+                _no_shell: bool,
+                output: Path | None,
+            ) -> None:
+                if output is not None:
+                    output.write_text(
+                        json.dumps(self._round_document(workload, round_number)),
+                        encoding="utf-8",
+                    )
+
+            standard_output = io.StringIO()
+            with redirect_stdout(standard_output), patch(
+                "hyperfine_interleaved._run_balanced_round",
+                side_effect=write_round_document,
+            ) as run_round:
+                run_interleaved(arguments)
+
+            self.assertEqual(4, run_round.call_count)
+            self.assertEqual(
+                "Sampling: 2 warm-up + 2 measured rounds "
+                "(alternating ABBA/BAAB)\n"
+                "  cycle    rg (s)  Scout (s)   ratio\n"
+                "      1    16.708     16.745    1.002x\n",
+                standard_output.getvalue(),
+            )
+            self.assertNotIn("warmup round 1/2", standard_output.getvalue())
+            self.assertNotIn("measured round 1/2", standard_output.getvalue())
+
+    def test_balanced_cycles_resist_drift_without_masking_regression(self) -> None:
+        drift = [math.log(position + 1) for position in range(1, 25)]
+        grouped_rg_positions = (*range(1, 7), *range(19, 25))
+        grouped_scout_positions = tuple(range(7, 19))
 
         grouped_ratio = self._drifted_ratio(
             drift, grouped_rg_positions, grouped_scout_positions, 1.20
         )
-        abba = aggregate_round_documents(
+        balanced = aggregate_round_documents(
             self._drift_documents("workload", drift, 1.20), "workload"
         )
-        regressed_abba = aggregate_round_documents(
+        regressed = aggregate_round_documents(
             self._drift_documents("workload", drift, 1.30), "workload"
         )
         exponential_regression = aggregate_round_documents(
             self._drift_documents(
                 "workload",
-                [1.3**position for position in range(1, 21)],
+                [1.3**position for position in range(1, 25)],
                 1.30,
             ),
             "workload",
         )
 
         self.assertGreater(grouped_ratio, 1.25)
-        self.assertLess(abba["sampling"]["median_ratio"], 1.25)
-        self.assertAlmostEqual(
-            1.2053249575958502, abba["sampling"]["median_ratio"], places=12
-        )
-        self.assertGreater(regressed_abba["sampling"]["median_ratio"], 1.25)
+        self.assertLess(balanced["sampling"]["median_ratio"], 1.25)
+        self.assertGreater(regressed["sampling"]["median_ratio"], 1.25)
         self.assertAlmostEqual(
             1.30, exponential_regression["sampling"]["median_ratio"], places=12
         )
 
+    def test_balanced_cycles_cancel_first_position_cache_cost(self) -> None:
+        first_position_cold = [
+            2.0 if (position - 1) % 4 == 0 else 1.0
+            for position in range(1, 25)
+        ]
+
+        aggregate = aggregate_round_documents(
+            self._drift_documents("workload", first_position_cold, 1.20),
+            "workload",
+        )
+
+        self.assertAlmostEqual(1.20, aggregate["sampling"]["median_ratio"], places=12)
+
     def test_aggregation_preserves_balanced_time_cpu_and_rss_samples(self) -> None:
         documents = [
             self._round_document("workload", round_number)
-            for round_number in range(1, 6)
+            for round_number in range(1, 7)
         ]
 
         aggregate = aggregate_round_documents(documents, "workload")
 
-        self.assertEqual("ABBA", aggregate["sampling"]["strategy"])
-        self.assertEqual(10, aggregate["sampling"]["timing_samples_per_command"])
-        self.assertEqual(5, aggregate["sampling"]["rss_samples_per_command"])
-        self.assertEqual(5, len(aggregate["sampling"]["round_ratios"]))
-        self.assertEqual(10, len(aggregate["results"][0]["times"]))
-        self.assertEqual(10, len(aggregate["results"][1]["times"]))
-        self.assertEqual(5, len(aggregate["results"][0]["memory_usage_byte"]))
-        self.assertEqual(5, len(aggregate["results"][1]["memory_usage_byte"]))
+        self.assertEqual("ABBA/BAAB", aggregate["sampling"]["strategy"])
+        self.assertEqual(3, aggregate["sampling"]["cycles"])
+        self.assertEqual(12, aggregate["sampling"]["timing_samples_per_command"])
+        self.assertEqual(3, aggregate["sampling"]["rss_samples_per_command"])
+        self.assertEqual(6, len(aggregate["sampling"]["round_ratios"]))
+        self.assertEqual(3, len(aggregate["sampling"]["cycle_ratios"]))
+        self.assertEqual(12, len(aggregate["results"][0]["times"]))
+        self.assertEqual(12, len(aggregate["results"][1]["times"]))
+        self.assertEqual(3, len(aggregate["results"][0]["memory_usage_byte"]))
+        self.assertEqual(3, len(aggregate["results"][1]["memory_usage_byte"]))
         self.assertEqual(
-            [10_000_001] * 5, aggregate["results"][0]["memory_usage_byte"]
+            [10_000_001] * 3, aggregate["results"][0]["memory_usage_byte"]
         )
         self.assertEqual(
-            [10_000_002] * 5, aggregate["results"][1]["memory_usage_byte"]
+            [10_000_001] * 3, aggregate["results"][1]["memory_usage_byte"]
         )
 
     def test_aggregation_rejects_missing_unbalanced_and_nonpositive_samples(self) -> None:
@@ -136,10 +281,15 @@ class HyperfineInterleavedTests(unittest.TestCase):
         nonpositive = self._round_document("workload", 1)
         nonpositive["results"][0]["times"] = [0.0]
 
-        for document in (missing, unbalanced, nonpositive):
-            with self.subTest(document=document):
+        for documents in (
+            [missing, self._round_document("workload", 2)],
+            [unbalanced, self._round_document("workload", 2)],
+            [nonpositive, self._round_document("workload", 2)],
+            [self._round_document("workload", 1)],
+        ):
+            with self.subTest(documents=documents):
                 with self.assertRaises(ValueError):
-                    aggregate_round_documents([document], "workload")
+                    aggregate_round_documents(documents, "workload")
 
     @staticmethod
     def _drifted_ratio(
@@ -157,7 +307,7 @@ class HyperfineInterleavedTests(unittest.TestCase):
     @staticmethod
     def _round_document(workload: str, round_number: int) -> dict[str, object]:
         results = []
-        for position, role in enumerate(("rg", "scout", "scout", "rg"), start=1):
+        for position, role in enumerate(round_roles(round_number), start=1):
             results.append(
                 {
                     "command": sample_name(workload, round_number, position, role),
@@ -174,14 +324,14 @@ class HyperfineInterleavedTests(unittest.TestCase):
     def _drift_documents(
         workload: str, drift: list[float], scout_ratio: float
     ) -> list[dict[str, object]]:
-        if len(drift) != 20:
-            raise ValueError("the drift fixture requires five ABBA rounds")
+        if len(drift) != 24:
+            raise ValueError("the drift fixture requires three ABBA/BAAB cycles")
 
         documents = []
-        for round_index in range(5):
+        for round_index in range(6):
             results = []
             for position, role in enumerate(
-                ("rg", "scout", "scout", "rg"), start=1
+                round_roles(round_index + 1), start=1
             ):
                 drift_index = (round_index * 4) + position - 1
                 role_ratio = scout_ratio if role == "scout" else 1.0

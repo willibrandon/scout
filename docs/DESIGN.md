@@ -238,7 +238,7 @@ Hedging ("`System.Text.Encoding` first, port tables where they diverge") is remo
 Because output must be **byte-identical** to ripgrep's `serde_json`-produced JSON Lines, and `System.Text.Json` does **not** guarantee serde-compatible escaping/ordering across runtime versions, the JSON printer is a **hand-written, allocation-free byte writer** with **pinned escaping rules** matching serde_json exactly (control-char escaping, `\uXXXX` forms, no superfluous escapes, field order fixed by us, `bytes` fields base64 when non-UTF-8 per the documented schema). It emits `begin`/`match`/`context`/`end`/`summary` records. Verified byte-for-byte against `tests/json.rs`. `System.Text.Json` is not on this path.
 
 ### 4.6 Globbing (`Scout.Globbing` / `Scout.IO.Globbing`)
-`Glob`/`GlobSet` multi-strategy matcher (literal map, basename, extension, prefix/suffix via `AhoCorasick`, regex-set fallback via `PatternSet`); full glob syntax incl. `**`, `{...}`, `[...]`, `literal_separator`, platform-aware escaping.
+`Glob`/`GlobSet` multi-strategy matcher (literal map, basename, extension, and prefix/suffix/mandatory-literal candidate filtering via `AhoCorasick`); every broad candidate is still verified by the full glob matcher, without pattern-family recognizers. Full glob syntax includes `**`, `{...}`, `[...]`, `literal_separator`, and platform-aware escaping.
 
 The public package is `Scout.IO.Globbing`; its namespace matches the package ID and contains the supported glob API surface.
 
@@ -409,11 +409,13 @@ Performance parity is a **blocking** acceptance criterion, not best-effort. The 
 | Cold-start (`scout --version`, tiny search) | ≤ **1.0×** (AOT expected at parity or better) |
 | Peak RSS | ≤ **1.5×** |
 
-Each wall-time workload is sampled in fresh `rg`, Scout, Scout, `rg` Hyperfine
-rounds. The gate uses the median of the paired per-round geometric Scout/rg
-ratios, reducing order and phase bias from filesystem-cache or hosted-runner
-drift. Peak RSS uses only the leading rg/Scout pair from each fresh round because
-macOS reports child peak RSS cumulatively within a Hyperfine process.
+Each wall-time workload is sampled in alternating fresh `rg`, Scout, Scout, `rg`
+and Scout, `rg`, `rg`, Scout Hyperfine rounds. The two round ratios form one
+geometric cycle ratio, and the gate uses the median cycle ratio. This balances
+every command position and reduces filesystem-cache or hosted-runner phase bias.
+Peak RSS uses only the first command in each fresh process because macOS reports
+child peak RSS cumulatively; alternating rounds provide one clean sample per tool
+in every cycle.
 
 The earlier "20–30% initially, tightening later / tracked misses" language is removed. M8 (perf hardening) exists to *reach* these gates; **v1 does not ship until every gate is green.** Profiling via `dotnet-trace`/`EventPipe` + Linux `perf`. (If a gate proves physically unachievable on a given workload, that is escalated to the stakeholder for an explicit, documented gate change in `PARITY.md` and the benchsuite — never silently absorbed.)
 

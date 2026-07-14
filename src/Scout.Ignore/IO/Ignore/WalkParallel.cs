@@ -200,6 +200,10 @@ public sealed class WalkParallel
         }
 
         WalkPath[] children = _walk.EnumerateChildren(state.Entry);
+        IgnoreStack childIgnoreStack = _walk.CreateChildIgnoreStack(
+            state.Entry,
+            state.IgnoreStack,
+            children);
         for (int index = children.Length - 1; index >= 0; index--)
         {
             if (Volatile.Read(ref quit) != 0)
@@ -211,7 +215,7 @@ public sealed class WalkParallel
                 children[index],
                 item.Depth + 1,
                 childAncestors,
-                state.ChildIgnoreStack,
+                childIgnoreStack,
                 item.RootDevice,
                 isRoot: false);
             Interlocked.Increment(ref remaining);

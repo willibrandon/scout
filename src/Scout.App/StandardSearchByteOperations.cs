@@ -4,6 +4,9 @@ using System.Text;
 
 namespace Scout;
 
+/// <summary>
+/// Searches decoded byte buffers and records standard search statistics.
+/// </summary>
 internal static class StandardSearchByteOperations
 {
     private static readonly byte[] LineFeed = [(byte)'\n'];
@@ -592,17 +595,38 @@ internal static class StandardSearchByteOperations
         if (!stopOnNonmatch && maxCount is null)
         {
             RegexSearchPlan? regexPlan = LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: true);
-            long matchedLines = LiteralLineSearcher.CountMatchingLinesWithRegexPlan(
-                bytes,
-                pattern,
-                regexPlan,
-                asciiCaseInsensitive,
-                statsInvertMatch,
-                lineRegexp,
-                wordRegexp,
-                maxMatchingLines: null,
-                crlf,
-                nullData);
+            long matchedLines;
+            long matches = 0;
+            if (statsInvertMatch)
+            {
+                matchedLines = LiteralLineSearcher.CountMatchingLinesWithRegexPlan(
+                    bytes,
+                    pattern,
+                    regexPlan,
+                    asciiCaseInsensitive,
+                    invertMatch: true,
+                    lineRegexp,
+                    wordRegexp,
+                    maxMatchingLines: null,
+                    crlf,
+                    nullData);
+            }
+            else
+            {
+                LiteralLineSearcher.CountMatchesAndMatchingLinesWithRegexPlan(
+                    bytes,
+                    pattern,
+                    regexPlan,
+                    asciiCaseInsensitive,
+                    lineRegexp,
+                    wordRegexp,
+                    maxMatchingLines: null,
+                    crlf,
+                    nullData,
+                    out matchedLines,
+                    out matches);
+            }
+
             if (matchedLines > 0)
             {
                 stats.AddMatchedLines((ulong)matchedLines);
@@ -611,17 +635,6 @@ internal static class StandardSearchByteOperations
 
             if (!statsInvertMatch)
             {
-                long matches = LiteralLineSearcher.CountMatchesWithRegexPlan(
-                    bytes,
-                    pattern,
-                    regexPlan,
-                    asciiCaseInsensitive,
-                    invertMatch: false,
-                    lineRegexp,
-                    wordRegexp,
-                    maxMatchingLines: null,
-                    crlf,
-                    nullData);
                 stats.AddMatches((ulong)matches);
             }
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run Hyperfine samples in balanced ABBA rounds and aggregate their results."""
+"""Run Hyperfine samples in balanced ABBA/BAAB cycles and aggregate them."""
 
 from __future__ import annotations
 
@@ -14,28 +14,47 @@ from pathlib import Path
 from typing import Any
 
 
-_ABBA_ROLES = ("rg", "scout", "scout", "rg")
+_ROUND_ROLES = (
+    ("rg", "scout", "scout", "rg"),
+    ("scout", "rg", "rg", "scout"),
+)
 
 
-def abba_schedule(rounds: int) -> tuple[str, ...]:
-    """Return the balanced command roles for the requested number of rounds."""
+def round_roles(round_number: int) -> tuple[str, ...]:
+    """Return the command roles for one one-based round in the alternating schedule."""
+    if round_number <= 0:
+        raise ValueError("round number must be positive")
+
+    return _ROUND_ROLES[(round_number - 1) % len(_ROUND_ROLES)]
+
+
+def balanced_schedule(rounds: int) -> tuple[str, ...]:
+    """Return alternating ABBA/BAAB roles for an even number of rounds."""
     if rounds < 0:
         raise ValueError("rounds must be non-negative")
+    if rounds % len(_ROUND_ROLES) != 0:
+        raise ValueError("rounds must form complete ABBA/BAAB cycles")
 
-    return _ABBA_ROLES * rounds
+    return tuple(
+        role
+        for round_number in range(1, rounds + 1)
+        for role in round_roles(round_number)
+    )
 
 
 def sample_name(workload: str, round_number: int, position: int, role: str) -> str:
-    """Return the expected Hyperfine command name for one ABBA sample."""
+    """Return the expected Hyperfine command name for one balanced sample."""
     return f"{role}:{workload}:round-{round_number}:position-{position}"
 
 
 def aggregate_round_documents(
     round_documents: Sequence[Mapping[str, Any]], workload: str
 ) -> dict[str, Any]:
-    """Validate and aggregate raw one-run Hyperfine ABBA documents."""
+    """Validate and aggregate raw one-run Hyperfine ABBA/BAAB documents."""
     if not round_documents:
-        raise ValueError("at least one measured ABBA round is required")
+        raise ValueError("at least one measured ABBA/BAAB cycle is required")
+    if len(round_documents) % len(_ROUND_ROLES) != 0:
+        raise ValueError("measured rounds must form complete ABBA/BAAB cycles")
 
     wall_times = {"rg": [], "scout": []}
     user_times = {"rg": [], "scout": []}
@@ -46,14 +65,15 @@ def aggregate_round_documents(
 
     for round_number, document in enumerate(round_documents, start=1):
         results = document.get("results")
-        if not isinstance(results, list) or len(results) != len(_ABBA_ROLES):
+        roles = round_roles(round_number)
+        if not isinstance(results, list) or len(results) != len(roles):
             raise ValueError(
-                f"round {round_number} must contain exactly four ABBA results"
+                f"round {round_number} must contain exactly four balanced results"
             )
 
         round_wall_times = {"rg": [], "scout": []}
         for position, (role, result) in enumerate(
-            zip(_ABBA_ROLES, results, strict=True), start=1
+            zip(roles, results), start=1
         ):
             if not isinstance(result, Mapping):
                 raise ValueError(
@@ -83,9 +103,9 @@ def aggregate_round_documents(
             )
 
             # Darwin reports RUSAGE_CHILDREN peak RSS cumulatively within one
-            # Hyperfine process. Only the leading rg/Scout pair is uncontaminated
-            # by a preceding Scout process. A fresh process is used for each round.
-            if position <= 2:
+            # Hyperfine process. Only the leading command is uncontaminated.
+            # Alternating rounds provide one clean sample per role in each cycle.
+            if position == 1:
                 memory_samples[role].append(
                     _single_number(
                         result,
@@ -114,8 +134,26 @@ def aggregate_round_documents(
             )
         round_ratios.append(round_ratio)
 
+    cycle_ratios = []
+    for index in range(0, len(round_ratios), len(_ROUND_ROLES)):
+        try:
+            cycle_ratio = math.exp(
+                statistics.fmean(
+                    math.log(value)
+                    for value in round_ratios[index : index + len(_ROUND_ROLES)]
+                )
+            )
+        except OverflowError as error:
+            raise ValueError(
+                f"cycle {(index // len(_ROUND_ROLES)) + 1} produced an invalid ratio"
+            ) from error
+        if not math.isfinite(cycle_ratio) or cycle_ratio <= 0:
+            raise ValueError(
+                f"cycle {(index // len(_ROUND_ROLES)) + 1} produced an invalid ratio"
+            )
+        cycle_ratios.append(cycle_ratio)
     expected_time_samples = len(round_documents) * 2
-    expected_memory_samples = len(round_documents)
+    expected_memory_samples = len(round_documents) // len(_ROUND_ROLES)
     for role in ("rg", "scout"):
         if len(wall_times[role]) != expected_time_samples:
             raise ValueError(f"{role} has an unbalanced timing sample count")
@@ -124,12 +162,14 @@ def aggregate_round_documents(
 
     return {
         "sampling": {
-            "strategy": "ABBA",
+            "strategy": "ABBA/BAAB",
             "rounds": len(round_documents),
+            "cycles": len(cycle_ratios),
             "timing_samples_per_command": expected_time_samples,
             "rss_samples_per_command": expected_memory_samples,
             "round_ratios": round_ratios,
-            "median_ratio": statistics.median(round_ratios),
+            "cycle_ratios": cycle_ratios,
+            "median_ratio": statistics.median(cycle_ratios),
         },
         "results": [
             _aggregate_result(
@@ -262,7 +302,7 @@ def _aggregate_result(
     }
 
 
-def _run_abba_round(
+def _run_balanced_round(
     hyperfine: str,
     workload: str,
     round_number: int,
@@ -279,7 +319,7 @@ def _run_abba_round(
         arguments.extend(("--export-json", str(output)))
 
     commands = {"rg": rg_command, "scout": scout_command}
-    for position, role in enumerate(abba_schedule(1), start=1):
+    for position, role in enumerate(round_roles(round_number), start=1):
         arguments.extend(
             (
                 "--command-name",
@@ -307,40 +347,46 @@ def _write_document(path: Path, document: Mapping[str, Any]) -> None:
         stream.write("\n")
 
 
-def _print_round_summaries(document: Mapping[str, Any], workload: str) -> None:
+def _geometric_mean(values: Sequence[float]) -> float:
+    return math.exp(statistics.fmean(math.log(value) for value in values))
+
+
+def _print_cycle_summaries(document: Mapping[str, Any]) -> None:
     sampling = document["sampling"]
     results = document["results"]
     rg = results[0]
     scout = results[1]
-    rounds = sampling["rounds"]
-    for round_index in range(rounds):
-        offset = round_index * 2
+    cycles = sampling["cycles"]
+    print("  cycle    rg (s)  Scout (s)   ratio")
+    for cycle_index in range(cycles):
+        offset = cycle_index * 4
+        rg_seconds = _geometric_mean(rg["times"][offset : offset + 4])
+        scout_seconds = _geometric_mean(
+            scout["times"][offset : offset + 4]
+        )
         print(
-            f"{workload} round {round_index + 1} ABBA seconds: "
-            f"rg={rg['times'][offset]:.6f}/{rg['times'][offset + 1]:.6f} "
-            f"scout={scout['times'][offset]:.6f}/{scout['times'][offset + 1]:.6f}; "
-            f"user rg={rg['user_times'][offset]:.6f}/{rg['user_times'][offset + 1]:.6f} "
-            f"scout={scout['user_times'][offset]:.6f}/{scout['user_times'][offset + 1]:.6f}; "
-            f"system rg={rg['system_times'][offset]:.6f}/{rg['system_times'][offset + 1]:.6f} "
-            f"scout={scout['system_times'][offset]:.6f}/{scout['system_times'][offset + 1]:.6f}; "
-            f"rss rg={rg['memory_usage_byte'][round_index]} "
-            f"scout={scout['memory_usage_byte'][round_index]} bytes; "
-            f"paired ratio={sampling['round_ratios'][round_index]:.6f}x"
+            f"  {cycle_index + 1:>5}  {rg_seconds:>8.3f}  "
+            f"{scout_seconds:>9.3f}  "
+            f"{sampling['cycle_ratios'][cycle_index]:>7.3f}x"
         )
 
 
 def run_interleaved(args: argparse.Namespace) -> None:
-    """Run warmup and measured ABBA rounds, then write their aggregate JSON."""
+    """Run balanced warmup and measured cycles, then write aggregate JSON."""
     output = Path(args.output)
     output.unlink(missing_ok=True)
     sample_directory = output.with_name(f"{output.stem}.samples")
     sample_directory.mkdir(parents=True, exist_ok=True)
+    for stale_round in sample_directory.glob("round-*.json"):
+        stale_round.unlink()
 
+    print(
+        f"Sampling: {args.warmup_rounds} warm-up + {args.rounds} measured "
+        "rounds (alternating ABBA/BAAB)",
+        flush=True,
+    )
     for warmup_round in range(1, args.warmup_rounds + 1):
-        print(
-            f"{args.name} warmup round {warmup_round}/{args.warmup_rounds} ABBA"
-        )
-        _run_abba_round(
+        _run_balanced_round(
             args.hyperfine,
             f"{args.name}:warmup",
             warmup_round,
@@ -353,9 +399,8 @@ def run_interleaved(args: argparse.Namespace) -> None:
     raw_paths = []
     round_documents = []
     for round_number in range(1, args.rounds + 1):
-        print(f"{args.name} measured round {round_number}/{args.rounds} ABBA")
         raw_path = sample_directory / f"round-{round_number}.json"
-        _run_abba_round(
+        _run_balanced_round(
             args.hyperfine,
             args.name,
             round_number,
@@ -370,13 +415,22 @@ def run_interleaved(args: argparse.Namespace) -> None:
     document = aggregate_round_documents(round_documents, args.name)
     document["sampling"]["raw_round_files"] = raw_paths
     _write_document(output, document)
-    _print_round_summaries(document, args.name)
+    _print_cycle_summaries(document)
 
 
 def _positive_integer(value: str) -> int:
     number = int(value)
     if number <= 0:
         raise argparse.ArgumentTypeError("must be a positive integer")
+    return number
+
+
+def _positive_even_integer(value: str) -> int:
+    number = _positive_integer(value)
+    if number % len(_ROUND_ROLES) != 0:
+        raise argparse.ArgumentTypeError(
+            "must form complete ABBA/BAAB cycles (use an even number)"
+        )
     return number
 
 
@@ -387,17 +441,28 @@ def _non_negative_integer(value: str) -> int:
     return number
 
 
+def _non_negative_even_integer(value: str) -> int:
+    number = _non_negative_integer(value)
+    if number % len(_ROUND_ROLES) != 0:
+        raise argparse.ArgumentTypeError(
+            "must form complete ABBA/BAAB cycles (use zero or an even number)"
+        )
+    return number
+
+
 def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run balanced ABBA Hyperfine samples for a Scout gate workload."
+        description=(
+            "Run balanced ABBA/BAAB Hyperfine samples for a Scout gate workload."
+        )
     )
     parser.add_argument("--hyperfine", required=True)
     parser.add_argument("--name", required=True)
     parser.add_argument("--rg-command", required=True)
     parser.add_argument("--scout-command", required=True)
-    parser.add_argument("--rounds", required=True, type=_positive_integer)
+    parser.add_argument("--rounds", required=True, type=_positive_even_integer)
     parser.add_argument(
-        "--warmup-rounds", required=True, type=_non_negative_integer
+        "--warmup-rounds", required=True, type=_non_negative_even_integer
     )
     parser.add_argument("--output", required=True)
     parser.add_argument("--no-shell", action="store_true")
@@ -409,7 +474,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         run_interleaved(_parse_args(sys.argv[1:] if argv is None else argv))
     except (OSError, ValueError, json.JSONDecodeError, subprocess.CalledProcessError) as error:
-        print(f"hyperfine ABBA sampling failed: {error}", file=sys.stderr)
+        print(f"balanced Hyperfine sampling failed: {error}", file=sys.stderr)
         return 1
 
     return 0

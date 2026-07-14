@@ -11,9 +11,11 @@ public static unsafe partial class RawUnixDirectory
     private const int LinuxDirentNameOffset = 19;
     private const int MacOSDirentNameOffset = 21;
     private const int MacOSDirentNameLengthOffset = 18;
+    private const int MacOSDirentFileTypeOffset = 20;
     private const int MacOSLegacyDirentNameOffset = 8;
     private const int MacOSLegacyDirentNameLengthOffset = 7;
     private const int MacOSLegacyDirentRecordLengthOffset = 4;
+    private const int MacOSLegacyDirentFileTypeOffset = 6;
     private const int DirentRecordLengthOffset = 16;
     private const uint DirectoryMode = 0x1FF;
 
@@ -98,30 +100,46 @@ public static unsafe partial class RawUnixDirectory
     private static RawUnixDirectoryEntry[] EnumerateOpenDirectory(nint directory, ReadOnlySpan<byte> parentPath)
     {
         var entries = new List<RawUnixDirectoryEntry>();
+        byte[] ownedParentPath = parentPath.ToArray();
         while (true)
         {
             nint entryPointer = ReadDir(directory);
             if (entryPointer == 0)
             {
+                ThrowIfReadDirectoryFailed(Marshal.GetLastPInvokeError());
                 return entries.ToArray();
             }
 
-            byte[] name = ReadName(entryPointer);
+            byte[] name = ReadName(entryPointer, out RawUnixDirectoryEntryType fileType);
             if (IsCurrentOrParent(name))
             {
                 continue;
             }
 
-            entries.Add(new RawUnixDirectoryEntry(name, Join(parentPath, name)));
+            entries.Add(new RawUnixDirectoryEntry(name, ownedParentPath, fileType));
         }
     }
 
-    private static byte[] ReadName(nint entryPointer)
+    /// <summary>
+    /// Throws when a native directory read ended because of an error rather than end-of-directory.
+    /// </summary>
+    /// <param name="error">The captured native error code.</param>
+    internal static void ThrowIfReadDirectoryFailed(int error)
+    {
+        if (error != 0)
+        {
+            throw new IOException(new Win32Exception(error).Message);
+        }
+    }
+
+    private static byte[] ReadName(
+        nint entryPointer,
+        out RawUnixDirectoryEntryType fileType)
     {
         byte* entry = (byte*)entryPointer;
         if (OperatingSystem.IsMacOS() &&
-            (TryReadMacOSName(entry, DirentRecordLengthOffset, MacOSDirentNameLengthOffset, MacOSDirentNameOffset, twoByteNameLength: true, out byte[] name) ||
-                TryReadMacOSName(entry, MacOSLegacyDirentRecordLengthOffset, MacOSLegacyDirentNameLengthOffset, MacOSLegacyDirentNameOffset, twoByteNameLength: false, out name)))
+            (TryReadMacOSName(entry, DirentRecordLengthOffset, MacOSDirentNameLengthOffset, MacOSDirentNameOffset, MacOSDirentFileTypeOffset, twoByteNameLength: true, out byte[] name, out fileType) ||
+                TryReadMacOSName(entry, MacOSLegacyDirentRecordLengthOffset, MacOSLegacyDirentNameLengthOffset, MacOSLegacyDirentNameOffset, MacOSLegacyDirentFileTypeOffset, twoByteNameLength: false, out name, out fileType)))
         {
             return name;
         }
@@ -135,6 +153,7 @@ public static unsafe partial class RawUnixDirectory
             nameLength++;
         }
 
+        fileType = (RawUnixDirectoryEntryType)entry[nameOffset - 1];
         return new ReadOnlySpan<byte>(entry + nameOffset, nameLength).ToArray();
     }
 
@@ -143,10 +162,13 @@ public static unsafe partial class RawUnixDirectory
         int recordLengthOffset,
         int nameLengthOffset,
         int nameOffset,
+        int fileTypeOffset,
         bool twoByteNameLength,
-        out byte[] name)
+        out byte[] name,
+        out RawUnixDirectoryEntryType fileType)
     {
         name = [];
+        fileType = RawUnixDirectoryEntryType.Unknown;
         int recordLength = BitConverter.ToUInt16(new ReadOnlySpan<byte>(entry + recordLengthOffset, sizeof(ushort)));
         int nameLength = twoByteNameLength
             ? BitConverter.ToUInt16(new ReadOnlySpan<byte>(entry + nameLengthOffset, sizeof(ushort)))
@@ -159,6 +181,7 @@ public static unsafe partial class RawUnixDirectory
         }
 
         name = new ReadOnlySpan<byte>(entry + nameOffset, nameLength).ToArray();
+        fileType = (RawUnixDirectoryEntryType)entry[fileTypeOffset];
         return true;
     }
 
@@ -167,7 +190,13 @@ public static unsafe partial class RawUnixDirectory
         return name is [(byte)'.'] or [(byte)'.', (byte)'.'];
     }
 
-    private static byte[] Join(ReadOnlySpan<byte> parentPath, ReadOnlySpan<byte> name)
+    /// <summary>
+    /// Joins raw Unix parent-path and entry-name bytes.
+    /// </summary>
+    /// <param name="parentPath">The raw parent path.</param>
+    /// <param name="name">The raw entry name.</param>
+    /// <returns>The joined raw path.</returns>
+    internal static byte[] Join(ReadOnlySpan<byte> parentPath, ReadOnlySpan<byte> name)
     {
         bool needsSeparator = parentPath[^1] != (byte)'/';
         byte[] path = new byte[parentPath.Length + (needsSeparator ? 1 : 0) + name.Length];

@@ -9,14 +9,16 @@ RUNS_SPECIFIED="0"
 WARMUP="1"
 WARMUP_SPECIFIED="0"
 OUT_DIR="$ROOT/artifacts/bench/hyperfine"
-GATE_OPENSUBTITLES_RUNS="5"
-GATE_OPENSUBTITLES_WARMUP="5"
-GATE_TREE_RUNS="5"
-GATE_TREE_WARMUP="5"
-GATE_BOUNDED_ASSIGNMENT_RUNS="5"
-GATE_BOUNDED_ASSIGNMENT_WARMUP="5"
-GATE_LARGE_BOUNDED_UNICODE_CLASS_RUNS="5"
-GATE_LARGE_BOUNDED_UNICODE_CLASS_WARMUP="5"
+GATE_OPENSUBTITLES_RUNS="6"
+GATE_OPENSUBTITLES_WARMUP="6"
+GATE_TREE_RUNS="6"
+GATE_TREE_WARMUP="6"
+GATE_COLD_RUNS="6"
+GATE_COLD_WARMUP="6"
+GATE_BOUNDED_ASSIGNMENT_RUNS="6"
+GATE_BOUNDED_ASSIGNMENT_WARMUP="6"
+GATE_LARGE_BOUNDED_UNICODE_CLASS_RUNS="6"
+GATE_LARGE_BOUNDED_UNICODE_CLASS_WARMUP="6"
 GATE_LARGE_FILE_THREADS="4"
 GATE_LARGE_FILE_SEGMENT_BUFFER_LENGTH="131072"
 GATE_RETRY_FAILED_WORKLOADS="${SCOUT_GATE_RETRY_FAILED_WORKLOADS:-2}"
@@ -623,21 +625,23 @@ measure_rss_floor() {
     warmup="$2"
     json="$OUT_DIR/rss_floor.json"
 
-    printf '%s\n' "== rss_floor"
-    "$HYPERFINE" \
-        -N \
-        --warmup "$warmup" \
-        --runs "$runs" \
-        --export-json "$json" \
-        --command-name "rg:rss_floor" "$Q_RG --no-config --mmap -n 'needle' $Q_TINY" \
-        --command-name "scout:rss_floor" "$Q_SCOUT_RSS_BASELINE --no-config --mmap -n 'needle' $Q_TINY"
+    printf '\n== rss_floor ==\n'
+    run_hyperfine_interleaved \
+        "1" \
+        "$json" \
+        "rss_floor" \
+        "$Q_RG --no-config --mmap -n 'needle' $Q_TINY" \
+        "$Q_SCOUT_RSS_BASELINE --no-config --mmap -n 'needle' $Q_TINY" \
+        "$runs" \
+        "$warmup"
 
     RG_RSS_FLOOR="$(hyperfine_json_median_memory "$json" 1)" || fail "Could not read rg RSS floor from $json."
     SCOUT_RSS_FLOOR="$(hyperfine_json_median_memory "$json" 2)" || fail "Could not read scout RSS floor from $json."
     [ -n "$RG_RSS_FLOOR" ] || fail "Could not read rg RSS floor from $json."
     [ -n "$SCOUT_RSS_FLOOR" ] || fail "Could not read scout RSS floor from $json."
-    printf 'rg RSS floor %d bytes\n' "$RG_RSS_FLOOR"
-    printf 'scout Native AOT RSS floor %d bytes\n' "$SCOUT_RSS_FLOOR"
+    printf '\nRSS floor:\n'
+    printf '  rg      %d bytes\n' "$RG_RSS_FLOOR"
+    printf '  Scout  %d bytes\n' "$SCOUT_RSS_FLOOR"
 }
 
 analyze_large_file_segments() {
@@ -751,6 +755,24 @@ gate_tree_warmup() {
     printf '%s\n' "$WARMUP"
 }
 
+gate_cold_runs() {
+    if [ "$MODE" = "gate" ] && [ "$RUNS_SPECIFIED" = "0" ]; then
+        printf '%s\n' "$GATE_COLD_RUNS"
+        return
+    fi
+
+    printf '%s\n' "$RUNS"
+}
+
+gate_cold_warmup() {
+    if [ "$MODE" = "gate" ] && [ "$WARMUP_SPECIFIED" = "0" ]; then
+        printf '%s\n' "$GATE_COLD_WARMUP"
+        return
+    fi
+
+    printf '%s\n' "$WARMUP"
+}
+
 gate_bounded_assignment_runs() {
     if [ "$MODE" = "gate" ] && [ "$RUNS_SPECIFIED" = "0" ]; then
         printf '%s\n' "$GATE_BOUNDED_ASSIGNMENT_RUNS"
@@ -791,18 +813,17 @@ check_time_gate() {
     time_gate_name="$1"
     time_gate_limit="$2"
     time_gate_json="$3"
-    time_gate_ratio="$(interleaved_json_median_ratio "$time_gate_json")" || fail "Could not read the paired ABBA median ratio from $time_gate_json."
-    [ -n "$time_gate_ratio" ] || fail "Could not read the paired ABBA median ratio from $time_gate_json."
+    time_gate_ratio="$(interleaved_json_median_ratio "$time_gate_json")" || fail "Could not read the balanced cycle median ratio from $time_gate_json."
+    [ -n "$time_gate_ratio" ] || fail "Could not read the balanced cycle median ratio from $time_gate_json."
     awk -v name="$time_gate_name" -v ratio="$time_gate_ratio" -v gate="$time_gate_limit" '
         BEGIN {
             if (ratio <= 0) {
-                printf "%s: paired ABBA median ratio is not positive: %s\n", name, ratio > "/dev/stderr"
+                printf "%s: balanced cycle median ratio is not positive: %s\n", name, ratio > "/dev/stderr"
                 exit 2
             }
-            printf "%s paired ABBA median ratio %.3fx (gate %.3fx)\n", name, ratio, gate
-            if (ratio > gate) {
-                exit 1
-            }
+            passed = ratio <= gate
+            printf "  wall  %.3fx (limit %.3fx) %s\n", ratio, gate, passed ? "PASS" : "FAIL"
+            exit passed ? 0 : 1
         }
     '
 }
@@ -823,8 +844,6 @@ check_rss_gate() {
                 exit 2
             }
 
-            ratio = scout / rg
-            printf "%s median peak RSS %d bytes vs rg %d bytes\n", name, scout, rg
             if (rg_floor <= 0 || scout_floor <= 0) {
                 printf "%s: missing positive RSS floor data: rg=%s scout=%s\n", name, rg_floor, scout_floor > "/dev/stderr"
                 exit 2
@@ -833,10 +852,10 @@ check_rss_gate() {
             fixed = scout_floor
 
             limit = (rg * 1.5) + fixed
-            printf "%s median peak RSS ratio %.3fx (gate 1.500x + measured Native AOT fixed RSS floor %d bytes)\n", name, ratio, fixed
-            if (scout > limit) {
-                exit 1
-            }
+            passed = scout <= limit
+            mib = 1024 * 1024
+            printf "  RSS   %.1f MiB (rg %.1f MiB; limit %.1f MiB = 1.500x rg + %.1f MiB floor) %s\n", scout / mib, rg / mib, limit / mib, fixed / mib, passed ? "PASS" : "FAIL"
+            exit passed ? 0 : 1
         }
     '
 }
@@ -850,14 +869,6 @@ check_interleaved_gate() {
 
     check_time_gate "$interleaved_gate_name" "$interleaved_gate_limit" "$interleaved_gate_json" || interleaved_gate_time_ok="0"
     check_rss_gate "$interleaved_gate_name" "$interleaved_gate_json" || interleaved_gate_rss_ok="0"
-
-    if [ "$interleaved_gate_time_ok" = "0" ]; then
-        printf '%s\n' "$interleaved_gate_name exceeded the interleaved ABBA performance gate." >&2
-    fi
-
-    if [ "$interleaved_gate_rss_ok" = "0" ]; then
-        printf '%s\n' "$interleaved_gate_name exceeded the peak RSS gate." >&2
-    fi
 
     [ "$interleaved_gate_time_ok" = "1" ] && [ "$interleaved_gate_rss_ok" = "1" ]
 }
@@ -933,31 +944,32 @@ run_pair_impl() {
     no_shell="$7"
     json="$OUT_DIR/$name.json"
 
-    printf '%s\n' "== $name"
+    printf '\n== %s ==\n' "$name"
+    printf 'Limits: wall %.3fx; RSS 1.500x rg + Native AOT floor\n' "$gate"
     if [ "$MODE" = "gate" ]; then
         run_hyperfine_interleaved "$no_shell" "$json" "$name" "$rg_command" "$scout_command" "$runs" "$warmup"
 
         if ! check_interleaved_gate "$name" "$gate" "$json"; then
             if [ "$GATE_RETRY_FAILED_WORKLOADS" = "0" ]; then
-                fail "$name exceeded the performance gate."
+                fail "Result: FAIL ($name)."
             fi
 
             retry_attempt=0
             while [ "$retry_attempt" -lt "$GATE_RETRY_FAILED_WORKLOADS" ]; do
                 retry_attempt=$((retry_attempt + 1))
-                retry_label="$name retry $retry_attempt"
+                retry_label="$name-retry-$retry_attempt"
                 retry_json="$OUT_DIR/$name.retry-$retry_attempt.json"
 
-                printf '%s\n' "$name retrying failed gate workload ($retry_attempt/$GATE_RETRY_FAILED_WORKLOADS)."
+                printf '\n-- retry %s/%s --\n' "$retry_attempt" "$GATE_RETRY_FAILED_WORKLOADS"
                 run_hyperfine_interleaved "$no_shell" "$retry_json" "$retry_label" "$rg_command" "$scout_command" "$runs" "$warmup"
 
                 if check_interleaved_gate "$retry_label" "$gate" "$retry_json"; then
-                    printf '%s\n' "$retry_label passed; continuing."
+                    printf 'Result: PASS on retry %s/%s\n' "$retry_attempt" "$GATE_RETRY_FAILED_WORKLOADS"
                     return 0
                 fi
             done
 
-            fail "$name exceeded the performance gate after $GATE_RETRY_FAILED_WORKLOADS retries."
+            fail "Result: FAIL after the initial attempt and $GATE_RETRY_FAILED_WORKLOADS retries ($name)."
         fi
         return
     fi
@@ -1051,6 +1063,26 @@ case "$GATE_RETRY_FAILED_WORKLOADS" in
         fail "SCOUT_GATE_RETRY_FAILED_WORKLOADS must be a non-negative integer."
         ;;
 esac
+
+case "$RUNS" in
+    ''|*[!0-9]*|0*)
+        fail "--runs must be a positive integer."
+        ;;
+esac
+
+case "$WARMUP" in
+    ''|*[!0-9]*|0[0-9]*)
+        fail "--warmup must be a non-negative integer."
+        ;;
+esac
+
+if [ "$MODE" = "gate" ] && [ "$RUNS_SPECIFIED" = "1" ] && [ $((RUNS % 2)) -ne 0 ]; then
+    fail "--gate requires an even --runs value for complete ABBA/BAAB cycles."
+fi
+
+if [ "$MODE" = "gate" ] && [ "$WARMUP_SPECIFIED" = "1" ] && [ $((WARMUP % 2)) -ne 0 ]; then
+    fail "--gate requires an even --warmup value for complete ABBA/BAAB cycles."
+fi
 
 if [ "$MODE" = "list" ]; then
     list_workloads
@@ -1160,11 +1192,14 @@ OPENSUBTITLES_RUNS="$(gate_opensubtitles_runs)"
 OPENSUBTITLES_WARMUP="$(gate_opensubtitles_warmup)"
 TREE_RUNS="$(gate_tree_runs)"
 TREE_WARMUP="$(gate_tree_warmup)"
+COLD_RUNS="$(gate_cold_runs)"
+COLD_WARMUP="$(gate_cold_warmup)"
 BOUNDED_ASSIGNMENT_RUNS="$(gate_bounded_assignment_runs)"
 BOUNDED_ASSIGNMENT_WARMUP="$(gate_bounded_assignment_warmup)"
 LARGE_BOUNDED_UNICODE_CLASS_RUNS="$(gate_large_bounded_unicode_class_runs)"
 LARGE_BOUNDED_UNICODE_CLASS_WARMUP="$(gate_large_bounded_unicode_class_warmup)"
 
+printf '\n== corpus balance ==\n'
 analyze_large_file_segments "subtitles_en_regex" "$OPENSUBTITLES_EN" "$GATE_LARGE_FILE_SEGMENT_BUFFER_LENGTH" "$GATE_LARGE_FILE_THREADS"
 measure_rss_floor "$OPENSUBTITLES_RUNS" "$OPENSUBTITLES_WARMUP"
 
@@ -1228,9 +1263,13 @@ run_pair_no_shell \
     "cold_version" \
     "1.00" \
     "$Q_RG --no-config --version" \
-    "$Q_SCOUT --no-config --version"
+    "$Q_SCOUT --no-config --version" \
+    "$COLD_RUNS" \
+    "$COLD_WARMUP"
 run_pair_no_shell \
     "cold_tiny_search" \
     "1.00" \
     "$Q_RG --no-config 'needle' $Q_TINY" \
-    "$Q_SCOUT --no-config 'needle' $Q_TINY"
+    "$Q_SCOUT --no-config 'needle' $Q_TINY" \
+    "$COLD_RUNS" \
+    "$COLD_WARMUP"

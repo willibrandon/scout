@@ -131,9 +131,11 @@ public sealed class Walk : IEnumerable<DirEntry>
         bool added = followLinks && !entry.Identity.IsEmpty && ancestors.Add(entry.Identity);
         try
         {
-            foreach (WalkPath childPath in EnumerateChildren(entry))
+            WalkPath[] children = EnumerateChildren(entry);
+            IgnoreStack childIgnoreStack = CreateChildIgnoreStack(entry, state.IgnoreStack, children);
+            foreach (WalkPath childPath in children)
             {
-                foreach (DirEntry childEntry in Enumerate(childPath, depth + 1, ancestors, state.ChildIgnoreStack, rootDevice, isRoot: false))
+                foreach (DirEntry childEntry in Enumerate(childPath, depth + 1, ancestors, childIgnoreStack, rootDevice, isRoot: false))
                 {
                     yield return childEntry;
                 }
@@ -163,7 +165,7 @@ public sealed class Walk : IEnumerable<DirEntry>
             IgnoreRuleSet globalGitRules = gitGlobal
                 ? GlobalGitIgnore.Load(Directory.GetCurrentDirectory(), ignoreCaseInsensitive, logger)
                 : new IgnoreRuleSet();
-            var rootIgnoreStack = IgnoreStack.Create(globalGitRules);
+            var rootIgnoreStack = IgnoreStack.Create(globalGitRules, requireGit);
             IgnoreStack ignoreStack = parents
                 ? rootIgnoreStack.AddParents(
                     fullPath,
@@ -215,17 +217,6 @@ public sealed class Walk : IEnumerable<DirEntry>
             return false;
         }
 
-        IgnoreStack childIgnoreStack = entry.IsDirectory && !entry.IsRawUnixPath
-            ? ignoreStack.AddDirectory(
-                entry.FullPath,
-                dotIgnore,
-                gitIgnore,
-                gitExclude,
-                requireGit,
-                ignoreCaseInsensitive,
-                customIgnoreFileNames,
-                logger)
-            : ignoreStack;
         IgnoreDecision overrideDecision = isRoot ? IgnoreDecision.None : overrides.Match(entry);
         if (overrideDecision == IgnoreDecision.Ignore)
         {
@@ -280,8 +271,34 @@ public sealed class Walk : IEnumerable<DirEntry>
             return false;
         }
 
-        state = new WalkEntryState(entry, childIgnoreStack, ShouldYield(entry, isRoot), ShouldRecurse(entry, rootDevice, isRoot));
+        state = new WalkEntryState(entry, ignoreStack, ShouldYield(entry, isRoot), ShouldRecurse(entry, rootDevice, isRoot));
         return true;
+    }
+
+    /// <summary>
+    /// Creates the child ignore stack from directory entries that traversal already enumerated.
+    /// </summary>
+    /// <param name="directory">The directory being descended into.</param>
+    /// <param name="ignoreStack">The ignore stack inherited by the directory.</param>
+    /// <param name="children">The directory's already-enumerated children.</param>
+    /// <returns>The ignore stack to use when evaluating <paramref name="children" />.</returns>
+    internal IgnoreStack CreateChildIgnoreStack(
+        DirEntry directory,
+        IgnoreStack ignoreStack,
+        ReadOnlySpan<WalkPath> children)
+    {
+        return directory.IsRawUnixPath
+            ? ignoreStack
+            : ignoreStack.AddDirectory(
+                directory.FullPath,
+                children,
+                dotIgnore,
+                gitIgnore,
+                gitExclude,
+                requireGit,
+                ignoreCaseInsensitive,
+                customIgnoreFileNames,
+                logger);
     }
 
     private bool ShouldYield(DirEntry entry, bool isRoot)
@@ -351,9 +368,39 @@ public sealed class Walk : IEnumerable<DirEntry>
 
     private DirEntry CreateEntry(WalkPath path, int depth)
     {
+        if (!followLinks && path.HasUsableUnixFileType)
+        {
+            return CreateEntryFromUnixDirectoryType(path, depth);
+        }
+
         return path.IsRawUnixPath
             ? CreateRawUnixEntry(path, depth)
             : CreateTextEntry(path.TextPath, depth);
+    }
+
+    private static DirEntry CreateEntryFromUnixDirectoryType(WalkPath path, int depth)
+    {
+        bool isDirectory = path.IsKnownUnixDirectory;
+        bool isSymbolicLink = path.IsKnownUnixSymbolicLink;
+        FileAttributes attributes = isDirectory ? FileAttributes.Directory : default;
+        if (isSymbolicLink)
+        {
+            attributes |= FileAttributes.ReparsePoint;
+        }
+
+        return new DirEntry(
+            path.TextPath,
+            depth,
+            attributes,
+            isDirectory,
+            isSymbolicLink,
+            isStdin: false,
+            length: null,
+            identity: default,
+            resolvedFullPath: null,
+            path.IsRawUnixPath ? path.UnixPathBytes.ToArray() : null,
+            path.IsRawUnixPath ? path.UnixFileNameBytes.ToArray() : null,
+            deferMetadata: true);
     }
 
     private DirEntry CreateTextEntry(string path, int depth)
@@ -438,19 +485,19 @@ public sealed class Walk : IEnumerable<DirEntry>
 
     internal WalkPath[] EnumerateChildren(DirEntry entry)
     {
-        if (entry.IsRawUnixPath)
+        if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
         {
-            return EnumerateRawUnixChildren(entry);
+            return EnumerateUnixChildren(entry);
         }
 
         string[] children = Directory.GetFileSystemEntries(entry.ResolvedFullPath);
         List<WalkPath>? paths = null;
         for (int index = 0; index < children.Length; index++)
         {
-            (paths ??= new List<WalkPath>(children.Length)).Add(WalkPath.FromText(children[index]));
+            string child = children[index];
+            (paths ??= new List<WalkPath>(children.Length)).Add(WalkPath.FromText(child));
         }
 
-        AddRawInvalidUtf8Children(entry, ref paths);
         if (paths is null)
         {
             return [];
@@ -484,9 +531,12 @@ public sealed class Walk : IEnumerable<DirEntry>
         return followLinks && !entry.Identity.IsEmpty;
     }
 
-    private WalkPath[] EnumerateRawUnixChildren(DirEntry entry)
+    private WalkPath[] EnumerateUnixChildren(DirEntry entry)
     {
-        RawUnixDirectoryEntry[] rawEntries = RawUnixDirectory.Enumerate(entry.UnixPathBytes);
+        byte[] parentPath = entry.IsRawUnixPath
+            ? entry.UnixPathBytes.ToArray()
+            : Encoding.UTF8.GetBytes(entry.ResolvedFullPath);
+        RawUnixDirectoryEntry[] rawEntries = RawUnixDirectory.Enumerate(parentPath);
         if (rawEntries.Length == 0)
         {
             return [];
@@ -495,57 +545,31 @@ public sealed class Walk : IEnumerable<DirEntry>
         var paths = new List<WalkPath>(rawEntries.Length);
         for (int index = 0; index < rawEntries.Length; index++)
         {
-            paths.Add(WalkPath.FromRawUnix(rawEntries[index].FullPath.Span, rawEntries[index].Name.Span));
+            RawUnixDirectoryEntry rawEntry = rawEntries[index];
+            if (!entry.IsRawUnixPath && TryDecodeUtf8(rawEntry.Name.Span, out string fileName))
+            {
+                paths.Add(WalkPath.FromText(Path.Combine(entry.FullPath, fileName), rawEntry.FileType));
+            }
+            else
+            {
+                paths.Add(WalkPath.FromRawUnix(rawEntry.FullPath.Span, rawEntry.Name.Span, rawEntry.FileType));
+            }
         }
 
         Sort(paths);
         return paths.ToArray();
     }
 
-    private static void AddRawInvalidUtf8Children(DirEntry entry, ref List<WalkPath>? paths)
-    {
-        if (!OperatingSystem.IsLinux())
-        {
-            return;
-        }
-
-        byte[] parentPath = entry.IsRawUnixPath
-            ? entry.UnixPathBytes.ToArray()
-            : Encoding.UTF8.GetBytes(entry.ResolvedFullPath);
-        RawUnixDirectoryEntry[] rawEntries;
-        try
-        {
-            rawEntries = RawUnixDirectory.Enumerate(parentPath);
-        }
-        catch (IOException)
-        {
-            return;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return;
-        }
-
-        for (int index = 0; index < rawEntries.Length; index++)
-        {
-            if (IsValidUtf8(rawEntries[index].Name.Span))
-            {
-                continue;
-            }
-
-            (paths ??= new List<WalkPath>()).Add(WalkPath.FromRawUnix(rawEntries[index].FullPath.Span, rawEntries[index].Name.Span));
-        }
-    }
-
-    private static bool IsValidUtf8(ReadOnlySpan<byte> bytes)
+    private static bool TryDecodeUtf8(ReadOnlySpan<byte> bytes, out string text)
     {
         try
         {
-            _ = Utf8Strict.GetString(bytes);
+            text = Utf8Strict.GetString(bytes);
             return true;
         }
         catch (DecoderFallbackException)
         {
+            text = string.Empty;
             return false;
         }
     }

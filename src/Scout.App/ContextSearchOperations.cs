@@ -1,6 +1,9 @@
 
 namespace Scout;
 
+/// <summary>
+/// Builds line match state and writes context-aware search output.
+/// </summary>
 internal static class ContextSearchOperations
 {
     internal static bool SearchBytes(
@@ -114,7 +117,24 @@ internal static class ContextSearchOperations
         bool nullData,
         bool stopOnNonmatch = false)
     {
+        if (!stopOnNonmatch)
+        {
+            return BuildLinesFromMatches(
+                bytes,
+                pattern,
+                asciiCaseInsensitive,
+                invertMatch,
+                lineRegexp,
+                wordRegexp,
+                crlf,
+                nullData);
+        }
+
         var lines = new List<ContextLineInfo>();
+        RegexSearchPlan? regexPlan = LiteralLineSearcher.CreateRegexSearchPlan(
+            pattern,
+            asciiCaseInsensitive,
+            compileAutomata: true);
         bool hasSelectedMatch = false;
         int lineStart = 0;
         long lineNumber = 1;
@@ -123,12 +143,32 @@ internal static class ContextSearchOperations
             ReadOnlySpan<byte> remaining = bytes.AsSpan(lineStart);
             int lineLength = GetLineLength(remaining, nullData);
             ReadOnlySpan<byte> line = remaining[..lineLength];
-            bool originalMatch = TryFindLineMatch(line, pattern, asciiCaseInsensitive, false, lineRegexp, wordRegexp, crlf, nullData, out long originalColumn);
+            bool originalMatch = TryFindLineMatch(
+                line,
+                pattern,
+                asciiCaseInsensitive,
+                invertMatch: false,
+                lineRegexp,
+                wordRegexp,
+                crlf,
+                nullData,
+                out long originalColumn,
+                regexPlan);
             bool selectedMatch = originalMatch;
             long matchColumn = originalColumn;
             if (invertMatch)
             {
-                selectedMatch = TryFindLineMatch(line, pattern, asciiCaseInsensitive, true, lineRegexp, wordRegexp, crlf, nullData, out matchColumn);
+                selectedMatch = TryFindLineMatch(
+                    line,
+                    pattern,
+                    asciiCaseInsensitive,
+                    invertMatch: true,
+                    lineRegexp,
+                    wordRegexp,
+                    crlf,
+                    nullData,
+                    out matchColumn,
+                    regexPlan);
             }
 
             lines.Add(new ContextLineInfo(lineStart, lineLength, lineNumber, selectedMatch, matchColumn, originalMatch, originalColumn));
@@ -138,6 +178,64 @@ internal static class ContextSearchOperations
             }
 
             hasSelectedMatch |= selectedMatch;
+            lineStart += lineLength;
+            lineNumber++;
+        }
+
+        return lines;
+    }
+
+    private static List<ContextLineInfo> BuildLinesFromMatches(
+        byte[] bytes,
+        IReadOnlyList<byte[]> pattern,
+        bool asciiCaseInsensitive,
+        bool invertMatch,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool crlf,
+        bool nullData)
+    {
+        RegexSearchPlan? regexPlan = LiteralLineSearcher.CreateRegexSearchPlan(
+            pattern,
+            asciiCaseInsensitive,
+            compileAutomata: true);
+        var matchingLines = new List<ContextLineInfo>();
+        var sink = new ContextLineMatchSink(matchingLines);
+        LiteralLineSearcher.SearchWithRegexPlan(
+            bytes,
+            pattern,
+            regexPlan,
+            ref sink,
+            asciiCaseInsensitive,
+            invertMatch: false,
+            lineRegexp,
+            wordRegexp,
+            maxMatchingLines: null,
+            crlf,
+            nullData);
+
+        var lines = new List<ContextLineInfo>();
+        int matchingIndex = 0;
+        int lineStart = 0;
+        long lineNumber = 1;
+        while (lineStart < bytes.Length)
+        {
+            int lineLength = GetLineLength(bytes.AsSpan(lineStart), nullData);
+            bool originalMatch = matchingIndex < matchingLines.Count &&
+                matchingLines[matchingIndex].Start == lineStart;
+            long originalColumn = originalMatch
+                ? matchingLines[matchingIndex++].ContextColumn
+                : 0;
+            bool selectedMatch = invertMatch ? !originalMatch : originalMatch;
+            long matchColumn = invertMatch ? 0 : originalColumn;
+            lines.Add(new ContextLineInfo(
+                lineStart,
+                lineLength,
+                lineNumber,
+                selectedMatch,
+                matchColumn,
+                originalMatch,
+                originalColumn));
             lineStart += lineLength;
             lineNumber++;
         }
@@ -176,6 +274,10 @@ internal static class ContextSearchOperations
         bool crlf,
         bool nullData)
     {
+        RegexSearchPlan? regexPlan = LiteralLineSearcher.CreateRegexSearchPlan(
+            pattern,
+            asciiCaseInsensitive,
+            compileAutomata: true);
         bool hasSelectedMatch = false;
         int lineStart = 0;
         while (lineStart < bytes.Length)
@@ -183,7 +285,17 @@ internal static class ContextSearchOperations
             ReadOnlySpan<byte> remaining = bytes[lineStart..];
             int lineLength = GetLineLength(remaining, nullData);
             ReadOnlySpan<byte> line = remaining[..lineLength];
-            bool selectedMatch = TryFindLineMatch(line, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, crlf, nullData, out _);
+            bool selectedMatch = TryFindLineMatch(
+                line,
+                pattern,
+                asciiCaseInsensitive,
+                invertMatch,
+                lineRegexp,
+                wordRegexp,
+                crlf,
+                nullData,
+                out _,
+                regexPlan);
             if (hasSelectedMatch && !selectedMatch)
             {
                 return lineStart + lineLength;
@@ -246,10 +358,22 @@ internal static class ContextSearchOperations
         bool wordRegexp,
         bool crlf,
         bool nullData,
-        out long matchColumn)
+        out long matchColumn,
+        RegexSearchPlan? regexPlan = null)
     {
         var sink = new FirstLineMatchSink();
-        bool matched = LiteralLineSearcher.Search(line, pattern, ref sink, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxMatchingLines: 1, crlf: crlf, nullData: nullData);
+        bool matched = LiteralLineSearcher.SearchWithRegexPlan(
+            line,
+            pattern,
+            regexPlan,
+            ref sink,
+            asciiCaseInsensitive,
+            invertMatch,
+            lineRegexp,
+            wordRegexp,
+            maxMatchingLines: 1,
+            crlf,
+            nullData);
         matchColumn = matched ? sink.MatchColumn : 0;
         return matched;
     }
