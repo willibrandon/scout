@@ -1949,7 +1949,7 @@ public sealed class RegexAutomaton
 
         try
         {
-            return captureEngine.MatchAt(haystack, match.Value.Start);
+            return captureEngine.MatchAt(haystack, match.Value.Start, match.Value.End);
         }
         finally
         {

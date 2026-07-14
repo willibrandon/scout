@@ -46,7 +46,7 @@ internal sealed class RegexPrefilter(
     private const int MaxRequiredLiteralVariants = 128;
     private const int MaxExpandedRequiredLiteralVariants = 1024;
     private const int MaxClassLiteralVariants = 16;
-    private const int PreferredPrefixBytes = 2;
+    private const int PreferredPrefixBytes = 3;
     private const int MaxPrefixVariants = 512;
     private const int MaxPrefixAtomVariants = 32;
     private const int LowSelectivityPrefixSetThreshold = 64;

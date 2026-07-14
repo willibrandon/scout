@@ -496,6 +496,14 @@ expect_equal ".NET SDK" "$EXPECTED_SDK" "$ACTUAL_SDK"
 mark_root_safe_for_git
 "$ROOT/eng/check-msbuild-warning-gates.sh" "$ROOT/artifacts/preflight/msbuild-warning-gates"
 dotnet format "$ROOT/Scout.slnx" --no-restore --verify-no-changes
+if command -v python3 >/dev/null 2>&1; then
+    BENCH_PYTHON="python3"
+elif command -v python >/dev/null 2>&1; then
+    BENCH_PYTHON="python"
+else
+    fail "python3 or python is required to verify the benchmark sampling harness."
+fi
+"$BENCH_PYTHON" -m unittest discover -s "$ROOT/bench/tests" -p 'test_*.py'
 
 EXPECTED_RIPGREP="$(read_lock_value "ripgrep_commit")" || fail "Missing ripgrep_commit in tests/PREREQS.lock."
 require_literal "$EXPECTED_RIPGREP" "ripgrep_commit"

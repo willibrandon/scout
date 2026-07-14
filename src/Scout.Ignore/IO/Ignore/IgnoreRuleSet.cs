@@ -1,24 +1,47 @@
+using System.Text;
+
 namespace Scout.IO.Ignore;
 
+/// <summary>
+/// Stores ordered ignore rules that share a base directory and matches them as a set.
+/// </summary>
 internal sealed class IgnoreRuleSet
 {
-    private readonly List<IgnoreRule> rules = [];
-    private string? baseDirectory;
-    private GlobSet? globSet;
-    private bool[]? fileRuleEligibility;
+    private readonly List<IgnoreRule> _rules = [];
+    private string? _baseDirectory;
+    private GlobSet? _globSet;
+    private bool[]? _fileRuleEligibility;
 
-    public bool IsEmpty => rules.Count == 0;
+    /// <summary>
+    /// Gets a value indicating whether the set contains no rules.
+    /// </summary>
+    public bool IsEmpty => _rules.Count == 0;
 
-    internal int Count => rules.Count;
+    /// <summary>
+    /// Gets the number of rules in the set.
+    /// </summary>
+    internal int Count => _rules.Count;
 
+    /// <summary>
+    /// Adds an ignore rule to the end of the set.
+    /// </summary>
+    /// <param name="rule">The rule to add.</param>
     public void Add(IgnoreRule rule)
     {
-        baseDirectory ??= rule.BaseDirectory;
-        rules.Add(rule);
-        globSet = null;
-        fileRuleEligibility = null;
+        ArgumentNullException.ThrowIfNull(rule);
+
+        _baseDirectory ??= rule.BaseDirectory;
+        _rules.Add(rule);
+        _globSet = null;
+        _fileRuleEligibility = null;
     }
 
+    /// <summary>
+    /// Adds rules parsed from an ignore file.
+    /// </summary>
+    /// <param name="baseDirectory">The directory relative to which patterns are matched.</param>
+    /// <param name="path">The ignore file path.</param>
+    /// <param name="asciiCaseInsensitive">Whether patterns use ASCII-insensitive matching.</param>
     public void AddFile(string baseDirectory, string path, bool asciiCaseInsensitive)
     {
         if (!TryAddFile(baseDirectory, path, asciiCaseInsensitive, out string? errorMessage))
@@ -27,6 +50,14 @@ internal sealed class IgnoreRuleSet
         }
     }
 
+    /// <summary>
+    /// Tries to add rules parsed from an ignore file.
+    /// </summary>
+    /// <param name="baseDirectory">The directory relative to which patterns are matched.</param>
+    /// <param name="path">The ignore file path.</param>
+    /// <param name="asciiCaseInsensitive">Whether patterns use ASCII-insensitive matching.</param>
+    /// <param name="errorMessage">The parsing or I/O error when the file cannot be added.</param>
+    /// <returns><see langword="true" /> when the file was added successfully.</returns>
     public bool TryAddFile(string baseDirectory, string path, bool asciiCaseInsensitive, out string? errorMessage)
     {
         if (Directory.Exists(path))
@@ -65,12 +96,17 @@ internal sealed class IgnoreRuleSet
         }
     }
 
+    /// <summary>
+    /// Summarizes the glob strategies used by rules at and after an index.
+    /// </summary>
+    /// <param name="startIndex">The first rule index to include.</param>
+    /// <returns>The glob strategy summary.</returns>
     internal IgnoreGlobSetSummary GetGlobSetSummary(int startIndex)
     {
         var summary = new IgnoreGlobSetSummary(0, 0, 0, 0, 0, 0, 0);
-        for (int index = startIndex; index < rules.Count; index++)
+        for (int index = startIndex; index < _rules.Count; index++)
         {
-            summary = summary.Add(rules[index].GetGlobSetSummary());
+            summary = summary.Add(_rules[index].GetGlobSetSummary());
         }
 
         return summary;
@@ -91,15 +127,26 @@ internal sealed class IgnoreRuleSet
         }
     }
 
+    /// <summary>
+    /// Matches a directory entry against the ordered rules.
+    /// </summary>
+    /// <param name="entry">The directory entry to match.</param>
+    /// <returns>The last matching rule's decision.</returns>
     public IgnoreDecision Match(DirEntry entry)
     {
         return Match(entry, out _);
     }
 
+    /// <summary>
+    /// Matches a directory entry and returns the rule responsible for the decision.
+    /// </summary>
+    /// <param name="entry">The directory entry to match.</param>
+    /// <param name="matchedRule">The last matching rule, when one exists.</param>
+    /// <returns>The last matching rule's decision.</returns>
     internal IgnoreDecision Match(DirEntry entry, out IgnoreRule? matchedRule)
     {
         matchedRule = null;
-        if (rules.Count == 0)
+        if (_rules.Count == 0)
         {
             return IgnoreDecision.None;
         }
@@ -110,7 +157,7 @@ internal sealed class IgnoreRuleSet
             return MatchSlow(entry, out matchedRule);
         }
 
-        var candidate = GlobCandidate.FromBytes(System.Text.Encoding.UTF8.GetBytes(relativePath));
+        var candidate = GlobCandidate.FromBytes(Encoding.UTF8.GetBytes(relativePath));
         ReadOnlySpan<bool> eligible = entry.IsDirectory ? [] : GetFileRuleEligibility();
         int matchedIndex = GetGlobSet().LastMatchingIndex(candidate, eligible);
         if (matchedIndex < 0)
@@ -118,7 +165,7 @@ internal sealed class IgnoreRuleSet
             return IgnoreDecision.None;
         }
 
-        matchedRule = rules[matchedIndex];
+        matchedRule = _rules[matchedIndex];
         return matchedRule.IsWhitelist ? IgnoreDecision.Whitelist : IgnoreDecision.Ignore;
     }
 
@@ -126,9 +173,9 @@ internal sealed class IgnoreRuleSet
     {
         IgnoreDecision decision = IgnoreDecision.None;
         matchedRule = null;
-        for (int index = 0; index < rules.Count; index++)
+        for (int index = 0; index < _rules.Count; index++)
         {
-            IgnoreRule rule = rules[index];
+            IgnoreRule rule = _rules[index];
             IgnoreDecision current = rule.Match(entry);
             if (current != IgnoreDecision.None)
             {
@@ -142,45 +189,50 @@ internal sealed class IgnoreRuleSet
 
     private GlobSet GetGlobSet()
     {
-        if (globSet is not null)
+        if (_globSet is not null)
         {
-            return globSet;
+            return _globSet;
         }
 
-        var globs = new Glob[rules.Count];
-        for (int index = 0; index < rules.Count; index++)
+        var globs = new Glob[_rules.Count];
+        for (int index = 0; index < _rules.Count; index++)
         {
-            globs[index] = rules[index].Glob;
+            globs[index] = _rules[index].Glob;
         }
 
-        globSet = GlobSet.Create(globs);
-        return globSet;
+        _globSet = GlobSet.Create(globs);
+        return _globSet;
     }
 
     private bool[] GetFileRuleEligibility()
     {
-        if (fileRuleEligibility is not null)
+        if (_fileRuleEligibility is not null)
         {
-            return fileRuleEligibility;
+            return _fileRuleEligibility;
         }
 
-        fileRuleEligibility = new bool[rules.Count];
-        for (int index = 0; index < rules.Count; index++)
+        _fileRuleEligibility = new bool[_rules.Count];
+        for (int index = 0; index < _rules.Count; index++)
         {
-            fileRuleEligibility[index] = !rules[index].IsDirectoryOnly;
+            _fileRuleEligibility[index] = !_rules[index].IsDirectoryOnly;
         }
 
-        return fileRuleEligibility;
+        return _fileRuleEligibility;
     }
 
     private string? GetRelativePath(string fullPath)
     {
-        if (baseDirectory is null)
+        if (_baseDirectory is null)
         {
             return null;
         }
 
-        string relative = Path.GetRelativePath(baseDirectory, fullPath);
+        if (!OperatingSystem.IsWindows() && TryGetRelativePathStart(fullPath, out int relativeStart))
+        {
+            return NormalizePattern(fullPath[relativeStart..]);
+        }
+
+        string relative = Path.GetRelativePath(_baseDirectory, fullPath);
         if (relative == "." || PathUtil.IsRelativePathOutsideBase(relative))
         {
             return null;
@@ -189,9 +241,41 @@ internal sealed class IgnoreRuleSet
         return NormalizePattern(relative);
     }
 
+    private bool TryGetRelativePathStart(string fullPath, out int relativeStart)
+    {
+        string baseDirectory = _baseDirectory!;
+        relativeStart = 0;
+        if (fullPath.Length <= baseDirectory.Length ||
+            !fullPath.StartsWith(baseDirectory, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (Path.EndsInDirectorySeparator(baseDirectory))
+        {
+            relativeStart = baseDirectory.Length;
+            return true;
+        }
+
+        char boundary = fullPath[baseDirectory.Length];
+        if (boundary != Path.DirectorySeparatorChar &&
+            boundary != Path.AltDirectorySeparatorChar)
+        {
+            return false;
+        }
+
+        relativeStart = baseDirectory.Length + 1;
+        return relativeStart < fullPath.Length;
+    }
+
+    /// <summary>
+    /// Matches a path and then each of its parents against the ordered rules.
+    /// </summary>
+    /// <param name="entry">The path entry to match.</param>
+    /// <returns>The first decision found while walking toward the rule-set root.</returns>
     public IgnoreDecision MatchPathOrAnyParents(DirEntry entry)
     {
-        if (baseDirectory is not null && !PathUtil.IsPathUnderBase(baseDirectory, entry.FullPath))
+        if (_baseDirectory is not null && !PathUtil.IsPathUnderBase(_baseDirectory, entry.FullPath))
         {
             throw new ArgumentException("path is expected to be under the root", nameof(entry));
         }

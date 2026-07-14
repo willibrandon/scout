@@ -12,7 +12,6 @@ internal static class StandardSearchTargetOperations
     private const int ParallelOutputFlushThreshold = 128 * 1024;
     private const int ParallelDirectOutputFlushThreshold = 128 * 1024;
     private const int DirectoryEntryLiteralPrecheckBufferLength = 16 * 1024;
-    private const long DirectoryEntryRegexCandidatePrecheckMinLength = 0;
     private const int PooledRawFileReadMaxLength = 2 * 1024 * 1024;
     internal static bool SearchStandardInput(
         IReadOnlyList<byte[]> pattern,
@@ -1053,7 +1052,7 @@ internal static class StandardSearchTargetOperations
             return true;
         }
 
-        if (!SearchFileContentReader.TryRead(entry.FullPath, lowArgs, autoMmapEligible: false, diagnostics, logger, out byte[] bytes, out SearchFileReadKind readKind, entry.Length))
+        if (!SearchFileContentReader.TryRead(entry.FullPath, lowArgs, autoMmapEligible: false, diagnostics, logger, out byte[] bytes, out SearchFileReadKind readKind, entry.KnownLength))
         {
             errored = true;
             return true;
@@ -1183,7 +1182,6 @@ internal static class StandardSearchTargetOperations
         accelerator = null;
         replacement = default;
         if (entry.IsRawUnixPath ||
-            entry.Length is null ||
             heading ||
             color.Enabled ||
             lineLimit.IsEnabled ||
@@ -1530,11 +1528,6 @@ internal static class StandardSearchTargetOperations
             return false;
         }
 
-        if (entry.Length is null)
-        {
-            return false;
-        }
-
         if (lowArgs.SearchMode != CliSearchMode.Standard ||
             lowArgs.InvertMatch ||
             lowArgs.LineRegexp ||
@@ -1561,7 +1554,16 @@ internal static class StandardSearchTargetOperations
             LiteralLineSearcher.IsLiteralRegex(literal);
     }
 
-    private static bool CanUseDirectoryEntryRegexCandidatePrecheck(
+    /// <summary>
+    /// Determines whether a directory entry can use the bounded regex-candidate precheck.
+    /// </summary>
+    /// <param name="entry">The directory entry being searched.</param>
+    /// <param name="pattern">The prepared search patterns.</param>
+    /// <param name="lowArgs">The parsed low-level search options.</param>
+    /// <param name="regexPlan">The reusable regex search plan.</param>
+    /// <param name="accelerator">The candidate accelerator when the precheck is eligible.</param>
+    /// <returns><see langword="true" /> when the precheck can be used.</returns>
+    internal static bool CanUseDirectoryEntryRegexCandidatePrecheck(
         DirEntry entry,
         IReadOnlyList<byte[]> pattern,
         CliLowArgs lowArgs,
@@ -1570,8 +1572,6 @@ internal static class StandardSearchTargetOperations
     {
         accelerator = null;
         if (entry.IsRawUnixPath ||
-            entry.Length is null ||
-            entry.Length < DirectoryEntryRegexCandidatePrecheckMinLength ||
             lowArgs.SearchMode != CliSearchMode.Standard ||
             lowArgs.InvertMatch ||
             lowArgs.LineRegexp ||
@@ -1801,7 +1801,7 @@ internal static class StandardSearchTargetOperations
             return;
         }
 
-        SearchFile(entry.FullPath, entry.Length, pattern, lowArgs, implicitSearch: true, isOneFile: false, autoMmapEligible: false, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, regexPlan);
+        SearchFile(entry.FullPath, entry.KnownLength, pattern, lowArgs, implicitSearch: true, isOneFile: false, autoMmapEligible: false, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, regexPlan);
     }
 
     private static void SearchDirectoryEntryFileWithStats(
@@ -1832,7 +1832,7 @@ internal static class StandardSearchTargetOperations
             return;
         }
 
-        SearchFileWithStats(entry.FullPath, entry.Length, pattern, lowArgs, implicitSearch: true, autoMmapEligible: false, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
+        SearchFileWithStats(entry.FullPath, entry.KnownLength, pattern, lowArgs, implicitSearch: true, autoMmapEligible: false, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
     }
 
     private static void SearchFile(
@@ -2014,7 +2014,7 @@ internal static class StandardSearchTargetOperations
             return false;
         }
 
-        if (!TryReadPooledRawFile(path, checked((int)knownLength.GetValueOrDefault()), lowArgs.EncodingMode, out byte[] rentedBytes, out int byteLength))
+        if (!TryReadPooledRawFile(path, knownLength, lowArgs.EncodingMode, out byte[] rentedBytes, out int byteLength))
         {
             return false;
         }
@@ -2068,12 +2068,19 @@ internal static class StandardSearchTargetOperations
         }
     }
 
-    private static bool CanUsePooledRawFileRead(
+    /// <summary>
+    /// Determines whether a raw file can use the pooled buffered-read path.
+    /// </summary>
+    /// <param name="knownLength">The file length when directory traversal already resolved it.</param>
+    /// <param name="lowArgs">The parsed low-level command-line arguments.</param>
+    /// <param name="autoMmapEligible">Whether automatic memory mapping remains eligible.</param>
+    /// <returns><see langword="true" /> when the pooled buffered-read path can inspect the file.</returns>
+    internal static bool CanUsePooledRawFileRead(
         long? knownLength,
         CliLowArgs lowArgs,
         bool autoMmapEligible)
     {
-        return knownLength is >= 0 and <= PooledRawFileReadMaxLength &&
+        return (knownLength is null or >= 0 and <= PooledRawFileReadMaxLength) &&
             !autoMmapEligible &&
             lowArgs.MmapMode != CliMmapMode.AlwaysTryMmap &&
             lowArgs.Preprocessor is null &&
@@ -2081,9 +2088,18 @@ internal static class StandardSearchTargetOperations
             lowArgs.EncodingMode is CliEncodingMode.Auto or CliEncodingMode.None;
     }
 
-    private static bool TryReadPooledRawFile(
+    /// <summary>
+    /// Reads a small raw file into a shared pooled buffer, discovering its length after opening when necessary.
+    /// </summary>
+    /// <param name="path">The file path.</param>
+    /// <param name="knownLength">The file length when directory traversal already resolved it.</param>
+    /// <param name="encodingMode">The requested input encoding mode.</param>
+    /// <param name="bytes">Receives the rented buffer. The caller must return it to <see cref="ArrayPool{T}.Shared" />.</param>
+    /// <param name="byteLength">Receives the number of bytes read into <paramref name="bytes" />.</param>
+    /// <returns><see langword="true" /> when the file was read into a pooled buffer.</returns>
+    internal static bool TryReadPooledRawFile(
         string path,
-        int length,
+        long? knownLength,
         CliEncodingMode encodingMode,
         out byte[] bytes,
         out int byteLength)
@@ -2093,13 +2109,20 @@ internal static class StandardSearchTargetOperations
         byte[]? rented = null;
         try
         {
-            rented = ArrayPool<byte>.Shared.Rent(Math.Max(1, length));
             using SafeFileHandle handle = File.OpenHandle(
                 path,
                 FileMode.Open,
                 FileAccess.Read,
                 FileShare.ReadWrite | FileShare.Delete,
                 FileOptions.SequentialScan);
+            long fileLength = knownLength ?? RandomAccess.GetLength(handle);
+            if (fileLength is < 0 or > PooledRawFileReadMaxLength)
+            {
+                return false;
+            }
+
+            int length = checked((int)fileLength);
+            rented = ArrayPool<byte>.Shared.Rent(Math.Max(1, length));
             int totalRead = 0;
             while (totalRead < length)
             {

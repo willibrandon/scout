@@ -1,54 +1,75 @@
 namespace Scout.IO.Ignore;
 
-internal sealed class IgnoreStack
+/// <summary>
+/// Represents the ordered ignore rules inherited by one directory.
+/// </summary>
+/// <param name="parent">The parent directory's ignore stack.</param>
+/// <param name="customRules">The custom ignore rules introduced by this directory.</param>
+/// <param name="dotRules">The <c>.ignore</c> rules introduced by this directory.</param>
+/// <param name="gitRules">The <c>.gitignore</c> rules introduced by this directory.</param>
+/// <param name="gitExcludeRules">The Git exclude rules introduced by this directory.</param>
+/// <param name="globalGitRules">The configured global Git ignore rules.</param>
+/// <param name="hasGit">Whether this directory contains a Git or JJ repository marker.</param>
+/// <param name="requireGit">Whether Git-specific rules require a repository marker.</param>
+internal sealed class IgnoreStack(
+    IgnoreStack? parent,
+    IgnoreRuleSet customRules,
+    IgnoreRuleSet dotRules,
+    IgnoreRuleSet gitRules,
+    IgnoreRuleSet gitExcludeRules,
+    IgnoreRuleSet globalGitRules,
+    bool hasGit,
+    bool requireGit)
 {
-    private readonly IgnoreStack? parent;
-    private readonly IgnoreRuleSet customRules;
-    private readonly IgnoreRuleSet dotRules;
-    private readonly IgnoreRuleSet gitRules;
-    private readonly IgnoreRuleSet gitExcludeRules;
-    private readonly IgnoreRuleSet globalGitRules;
-    private readonly bool hasGit;
-    private readonly bool requireGit;
+    private static readonly IgnoreRuleSet s_emptyRules = new();
+    private readonly IgnoreStack? _parent = parent;
+    private readonly IgnoreRuleSet _customRules = customRules;
+    private readonly IgnoreRuleSet _dotRules = dotRules;
+    private readonly IgnoreRuleSet _gitRules = gitRules;
+    private readonly IgnoreRuleSet _gitExcludeRules = gitExcludeRules;
+    private readonly IgnoreRuleSet _globalGitRules = globalGitRules;
+    private readonly bool _hasGit = hasGit;
+    private readonly bool _requireGit = requireGit;
 
-    private IgnoreStack(
-        IgnoreStack? parent,
-        IgnoreRuleSet customRules,
-        IgnoreRuleSet dotRules,
-        IgnoreRuleSet gitRules,
-        IgnoreRuleSet gitExcludeRules,
-        IgnoreRuleSet globalGitRules,
-        bool hasGit,
-        bool requireGit)
-    {
-        this.parent = parent;
-        this.customRules = customRules;
-        this.dotRules = dotRules;
-        this.gitRules = gitRules;
-        this.gitExcludeRules = gitExcludeRules;
-        this.globalGitRules = globalGitRules;
-        this.hasGit = hasGit;
-        this.requireGit = requireGit;
-    }
-
+    /// <summary>
+    /// Gets an empty ignore stack suitable for standard-filter-free traversal.
+    /// </summary>
     public static IgnoreStack Empty { get; } =
-        Create(new IgnoreRuleSet());
+        Create(s_emptyRules, requireGit: true);
 
-    public static IgnoreStack Create(IgnoreRuleSet globalGitRules)
+    /// <summary>
+    /// Creates a root ignore stack.
+    /// </summary>
+    /// <param name="globalGitRules">The configured global Git ignore rules.</param>
+    /// <param name="requireGit">Whether Git-specific rules require a repository marker.</param>
+    /// <returns>The root ignore stack.</returns>
+    public static IgnoreStack Create(IgnoreRuleSet globalGitRules, bool requireGit)
     {
         ArgumentNullException.ThrowIfNull(globalGitRules);
 
         return new(
             null,
-            new IgnoreRuleSet(),
-            new IgnoreRuleSet(),
-            new IgnoreRuleSet(),
-            new IgnoreRuleSet(),
+            s_emptyRules,
+            s_emptyRules,
+            s_emptyRules,
+            s_emptyRules,
             globalGitRules,
             hasGit: false,
-            requireGit: true);
+            requireGit);
     }
 
+    /// <summary>
+    /// Adds ignore rules inherited from directories above a traversal root.
+    /// </summary>
+    /// <param name="path">The traversal root path.</param>
+    /// <param name="dotIgnore">Whether <c>.ignore</c> files are enabled.</param>
+    /// <param name="gitIgnore">Whether <c>.gitignore</c> files are enabled.</param>
+    /// <param name="gitExclude">Whether Git exclude files are enabled.</param>
+    /// <param name="requireGit">Whether Git-specific rules require a repository marker.</param>
+    /// <param name="ignoreCaseInsensitive">Whether ignore patterns use ASCII-insensitive matching.</param>
+    /// <param name="customIgnoreFileNames">The custom ignore file names to load.</param>
+    /// <param name="logger">The diagnostic logger.</param>
+    /// <returns>The inherited ignore stack.</returns>
     public IgnoreStack AddParents(
         string path,
         bool dotIgnore,
@@ -94,8 +115,82 @@ internal sealed class IgnoreStack
         return stack;
     }
 
+    /// <summary>
+    /// Adds ignore rules for a directory whose entries have not been enumerated.
+    /// </summary>
+    /// <param name="directory">The directory containing the ignore rules.</param>
+    /// <param name="dotIgnore">Whether <c>.ignore</c> files are enabled.</param>
+    /// <param name="gitIgnore">Whether <c>.gitignore</c> files are enabled.</param>
+    /// <param name="gitExclude">Whether Git exclude files are enabled.</param>
+    /// <param name="requireGit">Whether Git-specific rules require a repository marker.</param>
+    /// <param name="ignoreCaseInsensitive">Whether ignore patterns use ASCII-insensitive matching.</param>
+    /// <param name="customIgnoreFileNames">The custom ignore file names to load.</param>
+    /// <param name="logger">The diagnostic logger.</param>
+    /// <returns>The ignore stack for children of <paramref name="directory" />.</returns>
     public IgnoreStack AddDirectory(
         string directory,
+        bool dotIgnore,
+        bool gitIgnore,
+        bool gitExclude,
+        bool requireGit,
+        bool ignoreCaseInsensitive,
+        IReadOnlyList<string> customIgnoreFileNames,
+        DiagnosticLogger logger)
+    {
+        return AddDirectoryCore(
+            directory,
+            entries: default,
+            entriesKnown: false,
+            dotIgnore,
+            gitIgnore,
+            gitExclude,
+            requireGit,
+            ignoreCaseInsensitive,
+            customIgnoreFileNames,
+            logger);
+    }
+
+    /// <summary>
+    /// Adds ignore rules discovered among a directory's already-enumerated entries.
+    /// </summary>
+    /// <param name="directory">The directory containing the ignore rules.</param>
+    /// <param name="entries">The entries already enumerated from the directory.</param>
+    /// <param name="dotIgnore">Whether <c>.ignore</c> files are enabled.</param>
+    /// <param name="gitIgnore">Whether <c>.gitignore</c> files are enabled.</param>
+    /// <param name="gitExclude">Whether Git exclude files are enabled.</param>
+    /// <param name="requireGit">Whether Git-specific rules require a repository marker.</param>
+    /// <param name="ignoreCaseInsensitive">Whether ignore patterns use ASCII-insensitive matching.</param>
+    /// <param name="customIgnoreFileNames">The custom ignore file names to load.</param>
+    /// <param name="logger">The diagnostic logger.</param>
+    /// <returns>The ignore stack for children of <paramref name="directory" />.</returns>
+    internal IgnoreStack AddDirectory(
+        string directory,
+        ReadOnlySpan<WalkPath> entries,
+        bool dotIgnore,
+        bool gitIgnore,
+        bool gitExclude,
+        bool requireGit,
+        bool ignoreCaseInsensitive,
+        IReadOnlyList<string> customIgnoreFileNames,
+        DiagnosticLogger logger)
+    {
+        return AddDirectoryCore(
+            directory,
+            entries,
+            entriesKnown: true,
+            dotIgnore,
+            gitIgnore,
+            gitExclude,
+            requireGit,
+            ignoreCaseInsensitive,
+            customIgnoreFileNames,
+            logger);
+    }
+
+    private IgnoreStack AddDirectoryCore(
+        string directory,
+        ReadOnlySpan<WalkPath> entries,
+        bool entriesKnown,
         bool dotIgnore,
         bool gitIgnore,
         bool gitExclude,
@@ -107,47 +202,138 @@ internal sealed class IgnoreStack
         ArgumentException.ThrowIfNullOrEmpty(directory);
         ArgumentNullException.ThrowIfNull(customIgnoreFileNames);
 
-        bool directoryHasGit = HasGitDirectory(directory);
-        var gitRuleSet = new IgnoreRuleSet();
-        var gitExcludeRuleSet = new IgnoreRuleSet();
-        if (gitIgnore)
+        bool hasGitEntry = !entriesKnown;
+        bool hasJjEntry = !entriesKnown;
+        bool hasGitIgnore = !entriesKnown;
+        bool hasDotIgnore = !entriesKnown;
+        Span<bool> hasCustomIgnore = customIgnoreFileNames.Count <= 64
+            ? stackalloc bool[customIgnoreFileNames.Count]
+            : new bool[customIgnoreFileNames.Count];
+        if (!entriesKnown)
         {
-            AddFileRules(directory, ".gitignore", gitRuleSet, ignoreCaseInsensitive, logger);
+            hasCustomIgnore.Fill(true);
+        }
+        else
+        {
+            for (int nameIndex = 0; nameIndex < customIgnoreFileNames.Count; nameIndex++)
+            {
+                string customName = customIgnoreFileNames[nameIndex];
+                hasCustomIgnore[nameIndex] = customName.Contains(Path.DirectorySeparatorChar) ||
+                    customName.Contains(Path.AltDirectorySeparatorChar);
+            }
+
+            for (int entryIndex = 0; entryIndex < entries.Length; entryIndex++)
+            {
+                WalkPath entry = entries[entryIndex];
+                if (entry.IsRawUnixPath)
+                {
+                    continue;
+                }
+
+                ReadOnlySpan<char> fileName = Path.GetFileName(entry.TextPath.AsSpan());
+                hasGitEntry |= fileName.SequenceEqual(".git");
+                hasJjEntry |= fileName.SequenceEqual(".jj");
+                hasGitIgnore |= fileName.SequenceEqual(".gitignore");
+                hasDotIgnore |= fileName.SequenceEqual(".ignore");
+                for (int nameIndex = 0; nameIndex < customIgnoreFileNames.Count; nameIndex++)
+                {
+                    hasCustomIgnore[nameIndex] |= fileName.Equals(
+                        customIgnoreFileNames[nameIndex],
+                        StringComparison.Ordinal);
+                }
+            }
         }
 
-        if (gitExclude)
+        bool checkVcsDirectory = requireGit && (gitIgnore || gitExclude);
+        bool directoryHasGit = checkVcsDirectory &&
+            HasGitDirectory(directory, hasGitEntry, hasJjEntry);
+        IgnoreRuleSet? gitRuleSet = null;
+        IgnoreRuleSet? gitExcludeRuleSet = null;
+        if (gitIgnore && hasGitIgnore)
         {
+            gitRuleSet = new IgnoreRuleSet();
+            AddFileRules(
+                directory,
+                ".gitignore",
+                gitRuleSet,
+                ignoreCaseInsensitive,
+                logger);
+        }
+
+        if (gitExclude && hasGitEntry)
+        {
+            gitExcludeRuleSet = new IgnoreRuleSet();
             AddGitExcludeRules(directory, gitExcludeRuleSet, ignoreCaseInsensitive, logger);
         }
 
-        var dotRuleSet = new IgnoreRuleSet();
-        if (dotIgnore)
+        IgnoreRuleSet? dotRuleSet = null;
+        if (dotIgnore && hasDotIgnore)
         {
-            AddFileRules(directory, ".ignore", dotRuleSet, ignoreCaseInsensitive, logger);
+            dotRuleSet = new IgnoreRuleSet();
+            AddFileRules(
+                directory,
+                ".ignore",
+                dotRuleSet,
+                ignoreCaseInsensitive,
+                logger);
         }
 
-        var customRuleSet = new IgnoreRuleSet();
+        IgnoreRuleSet? customRuleSet = null;
         for (int index = 0; index < customIgnoreFileNames.Count; index++)
         {
-            AddFileRules(directory, customIgnoreFileNames[index], customRuleSet, ignoreCaseInsensitive, logger);
+            if (!hasCustomIgnore[index])
+            {
+                continue;
+            }
+
+            customRuleSet ??= new IgnoreRuleSet();
+            AddFileRules(
+                directory,
+                customIgnoreFileNames[index],
+                customRuleSet,
+                ignoreCaseInsensitive,
+                logger);
         }
 
-        if (customRuleSet.IsEmpty && dotRuleSet.IsEmpty && gitRuleSet.IsEmpty && gitExcludeRuleSet.IsEmpty && !directoryHasGit)
+        if (IsEmpty(customRuleSet) &&
+            IsEmpty(dotRuleSet) &&
+            IsEmpty(gitRuleSet) &&
+            IsEmpty(gitExcludeRuleSet) &&
+            !directoryHasGit)
         {
             return this;
         }
 
-        return new IgnoreStack(this, customRuleSet, dotRuleSet, gitRuleSet, gitExcludeRuleSet, globalGitRules, directoryHasGit, requireGit);
+        return new IgnoreStack(
+            this,
+            OrEmpty(customRuleSet),
+            OrEmpty(dotRuleSet),
+            OrEmpty(gitRuleSet),
+            OrEmpty(gitExcludeRuleSet),
+            _globalGitRules,
+            directoryHasGit,
+            requireGit);
     }
 
+    /// <summary>
+    /// Matches a directory entry against the inherited ignore rules.
+    /// </summary>
+    /// <param name="entry">The directory entry to match.</param>
+    /// <returns>The highest-precedence ignore decision.</returns>
     public IgnoreDecision Match(DirEntry entry)
     {
         return Match(entry, out _);
     }
 
+    /// <summary>
+    /// Matches a directory entry and returns the rule responsible for the decision.
+    /// </summary>
+    /// <param name="entry">The directory entry to match.</param>
+    /// <param name="matchedRule">The matching rule, when one exists.</param>
+    /// <returns>The highest-precedence ignore decision.</returns>
     internal IgnoreDecision Match(DirEntry entry, out IgnoreRule? matchedRule)
     {
-        bool anyGit = !requireGit || HasGitInStack();
+        bool anyGit = !_requireGit || HasGitInStack();
         bool sawGit = false;
         matchedRule = null;
         IgnoreDecision customDecision = IgnoreDecision.None;
@@ -161,37 +347,37 @@ internal sealed class IgnoreStack
         IgnoreRule? gitExcludeRule = null;
         IgnoreRule? globalGitRule = null;
 
-        for (IgnoreStack? current = this; current is not null; current = current.parent)
+        for (IgnoreStack? current = this; current is not null; current = current._parent)
         {
             if (customDecision == IgnoreDecision.None)
             {
-                customDecision = current.customRules.Match(entry, out customRule);
+                customDecision = current._customRules.Match(entry, out customRule);
             }
 
             if (dotDecision == IgnoreDecision.None)
             {
-                dotDecision = current.dotRules.Match(entry, out dotRule);
+                dotDecision = current._dotRules.Match(entry, out dotRule);
             }
 
             if (anyGit && !sawGit)
             {
                 if (gitDecision == IgnoreDecision.None)
                 {
-                    gitDecision = current.gitRules.Match(entry, out gitRule);
+                    gitDecision = current._gitRules.Match(entry, out gitRule);
                 }
 
                 if (gitExcludeDecision == IgnoreDecision.None)
                 {
-                    gitExcludeDecision = current.gitExcludeRules.Match(entry, out gitExcludeRule);
+                    gitExcludeDecision = current._gitExcludeRules.Match(entry, out gitExcludeRule);
                 }
             }
 
-            sawGit |= current.hasGit;
+            sawGit |= current._hasGit;
         }
 
         if (anyGit)
         {
-            globalGitDecision = globalGitRules.Match(entry, out globalGitRule);
+            globalGitDecision = _globalGitRules.Match(entry, out globalGitRule);
         }
 
         return FirstDecision(
@@ -210,9 +396,9 @@ internal sealed class IgnoreStack
 
     private bool HasGitInStack()
     {
-        for (IgnoreStack? current = this; current is not null; current = current.parent)
+        for (IgnoreStack? current = this; current is not null; current = current._parent)
         {
-            if (current.hasGit)
+            if (current._hasGit)
             {
                 return true;
             }
@@ -262,14 +448,36 @@ internal sealed class IgnoreStack
         return globalGitDecision;
     }
 
-    private static bool HasGitDirectory(string directory)
+    private static bool IsEmpty(IgnoreRuleSet? ruleSet)
     {
-        return Directory.Exists(Path.Combine(directory, ".git"))
-            || File.Exists(Path.Combine(directory, ".git"))
-            || Directory.Exists(Path.Combine(directory, ".jj"));
+        return ruleSet is null || ruleSet.IsEmpty;
     }
 
-    private static void AddFileRules(string directory, string fileName, IgnoreRuleSet ruleSet, bool ignoreCaseInsensitive, DiagnosticLogger logger)
+    private static IgnoreRuleSet OrEmpty(IgnoreRuleSet? ruleSet)
+    {
+        return IsEmpty(ruleSet) ? s_emptyRules : ruleSet!;
+    }
+
+    private static bool HasGitDirectory(string directory, bool hasGitEntry, bool hasJjEntry)
+    {
+        if (hasGitEntry)
+        {
+            string dotGit = Path.Combine(directory, ".git");
+            if (Directory.Exists(dotGit) || File.Exists(dotGit))
+            {
+                return true;
+            }
+        }
+
+        return hasJjEntry && Directory.Exists(Path.Combine(directory, ".jj"));
+    }
+
+    private static void AddFileRules(
+        string directory,
+        string fileName,
+        IgnoreRuleSet ruleSet,
+        bool ignoreCaseInsensitive,
+        DiagnosticLogger logger)
     {
         string path = Path.Combine(directory, fileName);
         if (!File.Exists(path))

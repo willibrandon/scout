@@ -1,24 +1,35 @@
 namespace Scout.IO.Ignore;
 
-internal readonly struct WalkEntryState
+/// <summary>
+/// Carries the evaluated state needed to visit or descend into one entry.
+/// </summary>
+/// <param name="entry">The evaluated directory entry.</param>
+/// <param name="ignoreStack">The parent ignore stack used to evaluate the entry.</param>
+/// <param name="shouldYield">Whether the entry should be yielded to the visitor.</param>
+/// <param name="shouldRecurse">Whether traversal should descend into the entry.</param>
+internal readonly struct WalkEntryState(
+    DirEntry entry,
+    IgnoreStack ignoreStack,
+    bool shouldYield,
+    bool shouldRecurse)
 {
-    public WalkEntryState(
-        DirEntry entry,
-        IgnoreStack childIgnoreStack,
-        bool shouldYield,
-        bool shouldRecurse)
-    {
-        Entry = entry;
-        ChildIgnoreStack = childIgnoreStack;
-        ShouldYield = shouldYield;
-        ShouldRecurse = shouldRecurse;
-    }
+    /// <summary>
+    /// Gets the evaluated directory entry.
+    /// </summary>
+    public DirEntry Entry { get; } = entry;
 
-    public DirEntry Entry { get; }
+    /// <summary>
+    /// Gets the parent ignore stack used to evaluate the entry.
+    /// </summary>
+    public IgnoreStack IgnoreStack { get; } = ignoreStack;
 
-    public IgnoreStack ChildIgnoreStack { get; }
+    /// <summary>
+    /// Gets a value indicating whether the entry should be yielded to the visitor.
+    /// </summary>
+    public bool ShouldYield { get; } = shouldYield;
 
-    public bool ShouldYield { get; }
-
-    public bool ShouldRecurse { get; }
+    /// <summary>
+    /// Gets a value indicating whether traversal should descend into the entry.
+    /// </summary>
+    public bool ShouldRecurse { get; } = shouldRecurse;
 }

@@ -99,7 +99,8 @@ not. This is why the literal workload's RSS is higher even though its search
 buffer is only `128 KiB`.
 
 Guard: `bench/run-hyperfine.sh --gate` measures the rg and `scout-real` tiny
-`--mmap -n` literal RSS floors in the same hyperfine run. Every peak-RSS gate
-then requires `scout <= (rg * 1.5) + measured_scout_native_aot_floor`, so the
-fixed runtime/image floor is measured per run instead of hidden behind a magic
-constant.
+`--mmap -n` literal RSS floors from alternating first-position samples in fresh
+Hyperfine processes so macOS does not carry one child's cumulative peak into the
+other measurement. The fixed runtime/image floor is measured per run instead of
+hidden behind a magic constant. Every peak-RSS gate then requires
+`scout <= (rg * 1.5) + measured_scout_native_aot_floor`.

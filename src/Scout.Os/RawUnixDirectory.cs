@@ -11,9 +11,7 @@ public static unsafe partial class RawUnixDirectory
     private const int LinuxDirentNameOffset = 19;
     private const int MacOSDirentNameOffset = 21;
     private const int MacOSDirentNameLengthOffset = 18;
-    private const int MacOSLegacyDirentNameOffset = 8;
-    private const int MacOSLegacyDirentNameLengthOffset = 7;
-    private const int MacOSLegacyDirentRecordLengthOffset = 4;
+    private const int MacOSDirentFileTypeOffset = 20;
     private const int DirentRecordLengthOffset = 16;
     private const uint DirectoryMode = 0x1FF;
 
@@ -98,68 +96,83 @@ public static unsafe partial class RawUnixDirectory
     private static RawUnixDirectoryEntry[] EnumerateOpenDirectory(nint directory, ReadOnlySpan<byte> parentPath)
     {
         var entries = new List<RawUnixDirectoryEntry>();
+        byte[] ownedParentPath = parentPath.ToArray();
         while (true)
         {
             nint entryPointer = ReadDir(directory);
             if (entryPointer == 0)
             {
+                ThrowIfReadDirectoryFailed(Marshal.GetLastPInvokeError());
                 return entries.ToArray();
             }
 
-            byte[] name = ReadName(entryPointer);
+            byte[] name = ReadName(entryPointer, out RawUnixDirectoryEntryType fileType);
             if (IsCurrentOrParent(name))
             {
                 continue;
             }
 
-            entries.Add(new RawUnixDirectoryEntry(name, Join(parentPath, name)));
+            entries.Add(new RawUnixDirectoryEntry(name, ownedParentPath, fileType));
         }
     }
 
-    private static byte[] ReadName(nint entryPointer)
+    /// <summary>
+    /// Throws when a native directory read ended because of an error rather than end-of-directory.
+    /// </summary>
+    /// <param name="error">The captured native error code.</param>
+    internal static void ThrowIfReadDirectoryFailed(int error)
+    {
+        if (error != 0)
+        {
+            throw new IOException(new Win32Exception(error).Message);
+        }
+    }
+
+    private static byte[] ReadName(
+        nint entryPointer,
+        out RawUnixDirectoryEntryType fileType)
     {
         byte* entry = (byte*)entryPointer;
-        if (OperatingSystem.IsMacOS() &&
-            (TryReadMacOSName(entry, DirentRecordLengthOffset, MacOSDirentNameLengthOffset, MacOSDirentNameOffset, twoByteNameLength: true, out byte[] name) ||
-                TryReadMacOSName(entry, MacOSLegacyDirentRecordLengthOffset, MacOSLegacyDirentNameLengthOffset, MacOSLegacyDirentNameOffset, twoByteNameLength: false, out name)))
+        if (OperatingSystem.IsMacOS())
         {
-            return name;
+            int darwinNameLength = BitConverter.ToUInt16(
+                new ReadOnlySpan<byte>(entry + MacOSDirentNameLengthOffset, sizeof(ushort)));
+            fileType = (RawUnixDirectoryEntryType)entry[MacOSDirentFileTypeOffset];
+            return new ReadOnlySpan<byte>(entry + MacOSDirentNameOffset, darwinNameLength).ToArray();
         }
 
-        int nameOffset = OperatingSystem.IsMacOS() ? MacOSDirentNameOffset : LinuxDirentNameOffset;
         int recordLength = BitConverter.ToUInt16(new ReadOnlySpan<byte>(entry + DirentRecordLengthOffset, sizeof(ushort)));
-        int maxNameLength = Math.Max(0, recordLength - nameOffset);
+        int maxNameLength = Math.Max(0, recordLength - LinuxDirentNameOffset);
         int nameLength = 0;
-        while (nameLength < maxNameLength && entry[nameOffset + nameLength] != 0)
+        while (nameLength < maxNameLength && entry[LinuxDirentNameOffset + nameLength] != 0)
         {
             nameLength++;
         }
 
-        return new ReadOnlySpan<byte>(entry + nameOffset, nameLength).ToArray();
+        fileType = (RawUnixDirectoryEntryType)entry[LinuxDirentNameOffset - 1];
+        return new ReadOnlySpan<byte>(entry + LinuxDirentNameOffset, nameLength).ToArray();
     }
 
-    private static bool TryReadMacOSName(
-        byte* entry,
-        int recordLengthOffset,
-        int nameLengthOffset,
-        int nameOffset,
-        bool twoByteNameLength,
-        out byte[] name)
+    private static nint ReadDir(nint directory)
     {
-        name = [];
-        int recordLength = BitConverter.ToUInt16(new ReadOnlySpan<byte>(entry + recordLengthOffset, sizeof(ushort)));
-        int nameLength = twoByteNameLength
-            ? BitConverter.ToUInt16(new ReadOnlySpan<byte>(entry + nameLengthOffset, sizeof(ushort)))
-            : entry[nameLengthOffset];
-        if (nameLength <= 0 ||
-            recordLength < nameOffset + nameLength + 1 ||
-            entry[nameOffset + nameLength] != 0)
+        if (OperatingSystem.IsMacOS() &&
+            RuntimeInformation.ProcessArchitecture == Architecture.X64)
         {
-            return false;
+            return ReadDirMacOSInode64(directory);
         }
 
-        name = new ReadOnlySpan<byte>(entry + nameOffset, nameLength).ToArray();
-        return true;
+        return ReadDirDefault(directory);
+    }
+
+    private static nint OpenDir(byte* path)
+    {
+        if (OperatingSystem.IsMacOS() &&
+            RuntimeInformation.ProcessArchitecture == Architecture.X64)
+        {
+            return OpenDirMacOSInode64(path);
+        }
+
+        return OpenDirDefault(path);
     }
 
     private static bool IsCurrentOrParent(ReadOnlySpan<byte> name)
@@ -167,7 +180,13 @@ public static unsafe partial class RawUnixDirectory
         return name is [(byte)'.'] or [(byte)'.', (byte)'.'];
     }
 
-    private static byte[] Join(ReadOnlySpan<byte> parentPath, ReadOnlySpan<byte> name)
+    /// <summary>
+    /// Joins raw Unix parent-path and entry-name bytes.
+    /// </summary>
+    /// <param name="parentPath">The raw parent path.</param>
+    /// <param name="name">The raw entry name.</param>
+    /// <returns>The joined raw path.</returns>
+    internal static byte[] Join(ReadOnlySpan<byte> parentPath, ReadOnlySpan<byte> name)
     {
         bool needsSeparator = parentPath[^1] != (byte)'/';
         byte[] path = new byte[parentPath.Length + (needsSeparator ? 1 : 0) + name.Length];
@@ -185,7 +204,11 @@ public static unsafe partial class RawUnixDirectory
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [LibraryImport("libc", EntryPoint = "opendir", SetLastError = true)]
-    private static partial nint OpenDir(byte* path);
+    private static partial nint OpenDirDefault(byte* path);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [LibraryImport("libc", EntryPoint = "opendir$INODE64", SetLastError = true)]
+    private static partial nint OpenDirMacOSInode64(byte* path);
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [LibraryImport("libc", EntryPoint = "mkdir", SetLastError = true)]
@@ -193,7 +216,11 @@ public static unsafe partial class RawUnixDirectory
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [LibraryImport("libc", EntryPoint = "readdir", SetLastError = true)]
-    private static partial nint ReadDir(nint directory);
+    private static partial nint ReadDirDefault(nint directory);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [LibraryImport("libc", EntryPoint = "readdir$INODE64", SetLastError = true)]
+    private static partial nint ReadDirMacOSInode64(nint directory);
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [LibraryImport("libc", EntryPoint = "closedir", SetLastError = true)]

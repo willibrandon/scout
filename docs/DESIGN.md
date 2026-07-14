@@ -202,7 +202,9 @@ Rationale unchanged and reaffirmed: the BCL engine is UTF-16/`char`/`string`-bas
 
 **`Scout.Automata`** (port of `regex-automata`): **all engines up front** — Thompson NFA compiler (UTF-8 automata over bytes), PikeVM, hybrid (lazy) DFA, dense & sparse DFA, one-pass DFA, bounded backtracker, meta strategy selection, and prefilters (`Memmem`, `AhoCorasick`, `Teddy`). `PatternSet`/multi-regex for globset & ignore.
 
-PikeVM-backed unanchored searches inject streamed prefilter candidates into one insertion-ordered active-state frontier. Mutable frontier, closure, and reachability storage belongs to pooled runners, while the compiled regex remains immutable and safe for concurrent callers. This is the authoritative Thompson matcher—with full leftmost-first, anchor, UTF-8, and capture-replay semantics—not a pattern-family recognizer.
+Finite bounded repetitions use a canonical common-exit Thompson topology: every optional skip branch targets the same continuation, consuming branches chain through the remaining copies, and split order alone encodes greedy or lazy priority. The forward and reversed compilers use the same construction.
+
+PikeVM-backed unanchored searches inject streamed prefilter candidates into one insertion-ordered active-state frontier. Capture replay stores ordered states and flat capture-slot rows in pooled runner-owned buffers, and an iterative closure stack uses restore frames while exploring capture boundaries. First arrival retains leftmost-first priority without cloning capture arrays at each transition. All mutable frontier, closure, capture, and reachability storage belongs to pooled runners, while the compiled regex remains immutable and safe for concurrent callers. This is the authoritative Thompson matcher—with full leftmost-first, anchor, UTF-8, and capture-replay semantics—not a pattern-family recognizer.
 
 For a uniquely proven inner literal with a finite prefix, the required-literal prefilter can reverse-match an ASCII projection of that prefix with pooled lazy-DFA runners before injecting starts. Non-ASCII windows, ambiguous provenance, unsupported positional syntax, and exhausted DFA budgets retain the conservative lookbehind range. The forward Thompson matcher remains authoritative, so this is a general reverse-inner strategy rather than a pattern recognizer.
 
@@ -236,7 +238,7 @@ Hedging ("`System.Text.Encoding` first, port tables where they diverge") is remo
 Because output must be **byte-identical** to ripgrep's `serde_json`-produced JSON Lines, and `System.Text.Json` does **not** guarantee serde-compatible escaping/ordering across runtime versions, the JSON printer is a **hand-written, allocation-free byte writer** with **pinned escaping rules** matching serde_json exactly (control-char escaping, `\uXXXX` forms, no superfluous escapes, field order fixed by us, `bytes` fields base64 when non-UTF-8 per the documented schema). It emits `begin`/`match`/`context`/`end`/`summary` records. Verified byte-for-byte against `tests/json.rs`. `System.Text.Json` is not on this path.
 
 ### 4.6 Globbing (`Scout.Globbing` / `Scout.IO.Globbing`)
-`Glob`/`GlobSet` multi-strategy matcher (literal map, basename, extension, prefix/suffix via `AhoCorasick`, regex-set fallback via `PatternSet`); full glob syntax incl. `**`, `{...}`, `[...]`, `literal_separator`, platform-aware escaping.
+`Glob`/`GlobSet` multi-strategy matcher (literal map, basename, extension, and prefix/suffix/mandatory-literal candidate filtering via `AhoCorasick`); every broad candidate is still verified by the full glob matcher, without pattern-family recognizers. Full glob syntax includes `**`, `{...}`, `[...]`, `literal_separator`, and platform-aware escaping.
 
 The public package is `Scout.IO.Globbing`; its namespace matches the package ID and contains the supported glob API surface.
 
@@ -406,6 +408,14 @@ Performance parity is a **blocking** acceptance criterion, not best-effort. The 
 | Many-small-files, parallel | ≤ **1.30×** |
 | Cold-start (`scout --version`, tiny search) | ≤ **1.0×** (AOT expected at parity or better) |
 | Peak RSS | ≤ **1.5×** |
+
+Each wall-time workload is sampled in alternating fresh `rg`, Scout, Scout, `rg`
+and Scout, `rg`, `rg`, Scout Hyperfine rounds. The two round ratios form one
+geometric cycle ratio, and the gate uses the median cycle ratio. This balances
+every command position and reduces filesystem-cache or hosted-runner phase bias.
+Peak RSS uses only the first command in each fresh process because macOS reports
+child peak RSS cumulatively; alternating rounds provide one clean sample per tool
+in every cycle.
 
 The earlier "20–30% initially, tightening later / tracked misses" language is removed. M8 (perf hardening) exists to *reach* these gates; **v1 does not ship until every gate is green.** Profiling via `dotnet-trace`/`EventPipe` + Linux `perf`. (If a gate proves physically unachievable on a given workload, that is escalated to the stakeholder for an explicit, documented gate change in `PARITY.md` and the benchsuite — never silently absorbed.)
 

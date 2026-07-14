@@ -1,4 +1,4 @@
 using System.Runtime.CompilerServices;
 
-[assembly: InternalsVisibleTo("scout")]
+[assembly: InternalsVisibleTo("Scout.Ignore")]
 [assembly: InternalsVisibleTo("Scout.Foundation.Tests")]

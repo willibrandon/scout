@@ -156,10 +156,11 @@ Wall-time ratio is Scout ÷ ripgrep; below 1.0 is faster than ripgrep.
 | Cold start (`--version`) | ≤1.00× |
 | Cold start (tiny search) | ≤1.00× |
 
-The hosted Release Gates workflow is the source of truth for observed ratios. It measures
-each workload in both command orders and uses combined median samples to avoid hosted-runner
-order bias. Resident memory carries the managed runtime's fixed image cost above ripgrep's;
-the accounting is documented in `docs/PARITY.md`.
+The hosted Release Gates workflow is the source of truth for observed ratios. It pairs fresh
+`rg`, Scout, Scout, `rg` and Scout, `rg`, `rg`, Scout Hyperfine rounds, then compares the median
+paired-cycle geometric Scout/rg ratio. Alternating command positions reduce order, cache,
+and runner-phase bias. Resident memory carries the managed runtime's fixed image cost above
+ripgrep's; the accounting is documented in `docs/PARITY.md`.
 
 ## License
 

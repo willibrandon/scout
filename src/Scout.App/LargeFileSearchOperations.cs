@@ -4,6 +4,9 @@ using System.Runtime.InteropServices;
 
 namespace Scout;
 
+/// <summary>
+/// Searches files through bounded streaming buffers when whole-file loading is unsuitable.
+/// </summary>
 internal static unsafe class LargeFileSearchOperations
 {
     private const int StreamingFileBufferLength = 131_072;
@@ -375,6 +378,10 @@ internal static unsafe class LargeFileSearchOperations
 
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, StreamingFileStreamBufferLength, FileOptions.SequentialScan);
         using var bufferOwner = new NativeByteBuffer(bufferLength);
+        RegexSearchPlan? lineRegexPlan = LiteralLineSearcher.CreateRegexSearchPlan(
+            pattern,
+            asciiCaseInsensitive,
+            compileAutomata: true);
         MemoryStream? pendingLine = null;
         long pendingLineOffset = 0;
         long absoluteOffset = 0;
@@ -393,7 +400,17 @@ internal static unsafe class LargeFileSearchOperations
                 return true;
             }
 
-            bool selectedMatch = ContextSearchOperations.TryFindLineMatch(line, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, separators.Crlf, separators.NullData, out long matchColumn);
+            bool selectedMatch = ContextSearchOperations.TryFindLineMatch(
+                line,
+                pattern,
+                asciiCaseInsensitive,
+                invertMatch,
+                lineRegexp,
+                wordRegexp,
+                separators.Crlf,
+                separators.NullData,
+                out long matchColumn,
+                lineRegexPlan);
             if (stopOnNonmatch && hasSelectedMatch && !selectedMatch)
             {
                 return true;

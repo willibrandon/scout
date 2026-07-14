@@ -307,6 +307,59 @@ public sealed class Glob
         return suffix.Length != 0;
     }
 
+    internal bool TryGetRequiredLiteral(out byte[] literal)
+    {
+        var longest = new List<byte>();
+        var current = new List<byte>();
+        int patternIndex = StartsWithRecursivePrefix() ? 3 : 0;
+        while (patternIndex < pattern.Length)
+        {
+            if (IsEscapedLiteral(pattern, patternIndex))
+            {
+                current.Add(pattern[patternIndex + 1]);
+                patternIndex += 2;
+                continue;
+            }
+
+            byte token = pattern[patternIndex];
+            if (token == (byte)'[')
+            {
+                int classEnd = FindClassEnd(pattern, patternIndex);
+                if (classEnd > patternIndex)
+                {
+                    KeepLongestLiteral(current, longest);
+                    patternIndex = classEnd + 1;
+                    continue;
+                }
+            }
+
+            if (token == (byte)'{')
+            {
+                int braceEnd = FindBraceEnd(pattern, patternIndex);
+                if (braceEnd > patternIndex)
+                {
+                    KeepLongestLiteral(current, longest);
+                    patternIndex = braceEnd + 1;
+                    continue;
+                }
+            }
+
+            if (token is (byte)'*' or (byte)'?')
+            {
+                KeepLongestLiteral(current, longest);
+                patternIndex++;
+                continue;
+            }
+
+            current.Add(token);
+            patternIndex++;
+        }
+
+        KeepLongestLiteral(current, longest);
+        literal = longest.ToArray();
+        return literal.Length != 0;
+    }
+
     internal bool TryGetExtensionOnly(out byte[] extension)
     {
         extension = [];
@@ -1157,6 +1210,17 @@ public sealed class Glob
         left.CopyTo(combined);
         right.CopyTo(combined.AsSpan(left.Length));
         return combined;
+    }
+
+    private static void KeepLongestLiteral(List<byte> current, List<byte> longest)
+    {
+        if (current.Count > longest.Count)
+        {
+            longest.Clear();
+            longest.AddRange(current);
+        }
+
+        current.Clear();
     }
 
     private static void AppendAnyBytes(List<byte> bytes)
