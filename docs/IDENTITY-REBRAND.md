@@ -40,9 +40,9 @@ Today the version is a hardcoded literal `"ripgrep 15.1.0 (rev 4857d6fa67)"` in 
 
 | Property | Value (example) |
 |---|---|
-| `Version` / `VersionPrefix` | `0.4.4` (Scout's own SemVer, decoupled from ripgrep 15.1.0) |
+| `Version` / `VersionPrefix` | `0.4.5` (Scout's own SemVer, decoupled from ripgrep 15.1.0) |
 | `AssemblyVersion` / `FileVersion` | derived from `Version` |
-| `AssemblyInformationalVersion` | `0.4.4+ripgrep.15.1.0.4857d6fa67` (SemVer build metadata carries the upstream coordinate) |
+| `AssemblyInformationalVersion` | `0.4.5+ripgrep.15.1.0.4857d6fa67` (SemVer build metadata carries the upstream coordinate) |
 | `Product` | `Scout` |
 | `Company` / `Authors` | project owner |
 | `Description` | `Scout — a feature-complete port of ripgrep to .NET Native AOT` |
@@ -51,7 +51,7 @@ Today the version is a hardcoded literal `"ripgrep 15.1.0 (rev 4857d6fa67)"` in 
 
 **`--version` banner** (managed `VersionOutput.cs:9,14` + native `scout_main.c:27`, kept in lockstep) — derive from the informational version:
 ```
-scout 0.4.4 (ripgrep 15.1.0 compatible, rev 4857d6fa67)
+scout 0.4.5 (ripgrep 15.1.0 compatible, rev 4857d6fa67)
 ```
 The `simd(compile):…` / `features:…` body (`VersionOutput.cs:21-52`) is format scaffolding `rg` also emits — keep the **format**; only the leading identity token changes. The upstream `rev` is sourced from the pin table (provenance), not Scout's own version.
 
