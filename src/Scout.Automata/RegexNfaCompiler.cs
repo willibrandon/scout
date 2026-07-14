@@ -1,32 +1,36 @@
 namespace Scout;
 
-internal sealed class RegexNfaCompiler
+/// <summary>
+/// Compiles parsed regex syntax into forward and reversed Thompson NFAs.
+/// </summary>
+/// <param name="includeCaptures">Whether to emit capture boundary states.</param>
+/// <param name="captureCount">The number of capture groups in the syntax tree.</param>
+/// <param name="utf8ByteTrieCache">The optional cache shared by UTF-8 byte-trie compilation.</param>
+/// <param name="expandUtf8Atoms">Whether to expand Unicode scalar atoms into UTF-8 byte states.</param>
+internal sealed class RegexNfaCompiler(
+    bool includeCaptures = false,
+    int captureCount = 0,
+    Dictionary<string, RegexUtf8ByteTrie>? utf8ByteTrieCache = null,
+    bool expandUtf8Atoms = true)
 {
-    private readonly List<RegexNfaState> states = [];
-    private readonly Dictionary<string, RegexUtf8ByteTrie> utf8ByteTrieCache;
-    private readonly Dictionary<RegexNfaAtomCacheKey, int> atomStateCache = [];
-    private readonly Dictionary<RegexNfaByteClassCacheKey, int> byteClassStateCache = [];
-    private readonly Dictionary<RegexNfaControlCacheKey, int> controlStateCache = [];
-    private readonly Dictionary<RegexNfaSparseCacheKey, int> sparseStateCache = [];
-    private readonly Dictionary<(RegexUtf8ByteTrie Trie, int Next), int> utf8ByteTrieStateCache = [];
-    private readonly bool includeCaptures;
-    private readonly int captureCount;
-    private readonly bool expandUtf8Atoms;
-    private bool cacheStates;
-    private bool sawUtf8Disabled;
+    private readonly List<RegexNfaState> _states = [];
+    private readonly Dictionary<string, RegexUtf8ByteTrie> _utf8ByteTrieCache = utf8ByteTrieCache ?? [];
+    private readonly Dictionary<RegexNfaAtomCacheKey, int> _atomStateCache = [];
+    private readonly Dictionary<RegexNfaByteClassCacheKey, int> _byteClassStateCache = [];
+    private readonly Dictionary<RegexNfaControlCacheKey, int> _controlStateCache = [];
+    private readonly Dictionary<RegexNfaSparseCacheKey, int> _sparseStateCache = [];
+    private readonly Dictionary<(RegexUtf8ByteTrie Trie, int Next), int> _utf8ByteTrieStateCache = [];
+    private readonly bool _includeCaptures = includeCaptures;
+    private readonly int _captureCount = captureCount;
+    private readonly bool _expandUtf8Atoms = expandUtf8Atoms;
+    private bool _cacheStates;
+    private bool _sawUtf8Disabled;
 
-    private RegexNfaCompiler(
-        bool includeCaptures = false,
-        int captureCount = 0,
-        Dictionary<string, RegexUtf8ByteTrie>? utf8ByteTrieCache = null,
-        bool expandUtf8Atoms = true)
-    {
-        this.includeCaptures = includeCaptures;
-        this.captureCount = captureCount;
-        this.utf8ByteTrieCache = utf8ByteTrieCache ?? [];
-        this.expandUtf8Atoms = expandUtf8Atoms;
-    }
-
+    /// <summary>
+    /// Compiles a syntax tree with the default regex options.
+    /// </summary>
+    /// <param name="root">The root syntax node.</param>
+    /// <returns>The compiled NFA.</returns>
     public static RegexNfa Compile(RegexSyntaxNode root)
     {
         return Compile(
@@ -34,11 +38,24 @@ internal sealed class RegexNfaCompiler
             new RegexCompileOptions(caseInsensitive: false, swapGreed: false, multiLine: false, dotMatchesNewline: false));
     }
 
+    /// <summary>
+    /// Compiles a syntax tree with the supplied regex options.
+    /// </summary>
+    /// <param name="root">The root syntax node.</param>
+    /// <param name="options">The regex compilation options.</param>
+    /// <returns>The compiled NFA.</returns>
     public static RegexNfa Compile(RegexSyntaxNode root, RegexCompileOptions options)
     {
         return Compile(root, options, utf8ByteTrieCache: null);
     }
 
+    /// <summary>
+    /// Compiles a syntax tree, optionally reusing a UTF-8 byte-trie cache.
+    /// </summary>
+    /// <param name="root">The root syntax node.</param>
+    /// <param name="options">The regex compilation options.</param>
+    /// <param name="utf8ByteTrieCache">The optional UTF-8 byte-trie cache.</param>
+    /// <returns>The compiled NFA.</returns>
     public static RegexNfa Compile(
         RegexSyntaxNode root,
         RegexCompileOptions options,
@@ -47,9 +64,16 @@ internal sealed class RegexNfaCompiler
         var compiler = new RegexNfaCompiler(utf8ByteTrieCache: utf8ByteTrieCache);
         int accept = compiler.AddAccept();
         int start = compiler.CompileNode(root, accept, options);
-        return new RegexNfa(compiler.states, start, compiler.RequiresUtf8SearchBoundary(options.Utf8));
+        return new RegexNfa(compiler._states, start, compiler.RequiresUtf8SearchBoundary(options.Utf8));
     }
 
+    /// <summary>
+    /// Compiles a syntax tree while retaining compact Unicode scalar atoms.
+    /// </summary>
+    /// <param name="root">The root syntax node.</param>
+    /// <param name="options">The regex compilation options.</param>
+    /// <param name="utf8ByteTrieCache">The optional UTF-8 byte-trie cache.</param>
+    /// <returns>The compiled NFA.</returns>
     public static RegexNfa CompileWithCompactScalarAtoms(
         RegexSyntaxNode root,
         RegexCompileOptions options,
@@ -58,32 +82,51 @@ internal sealed class RegexNfaCompiler
         var compiler = new RegexNfaCompiler(utf8ByteTrieCache: utf8ByteTrieCache, expandUtf8Atoms: false);
         int accept = compiler.AddAccept();
         int start = compiler.CompileNode(root, accept, options);
-        return new RegexNfa(compiler.states, start, compiler.RequiresUtf8SearchBoundary(options.Utf8));
+        return new RegexNfa(compiler._states, start, compiler.RequiresUtf8SearchBoundary(options.Utf8));
     }
 
+    /// <summary>
+    /// Compiles a syntax tree with a lazy unanchored prefix.
+    /// </summary>
+    /// <param name="root">The root syntax node.</param>
+    /// <param name="options">The regex compilation options.</param>
+    /// <returns>The compiled NFA.</returns>
     public static RegexNfa CompileUnanchored(RegexSyntaxNode root, RegexCompileOptions options)
     {
         var compiler = new RegexNfaCompiler();
         int accept = compiler.AddAccept();
         int patternStart = compiler.CompileNode(root, accept, options);
         int start = compiler.AddUnanchoredPrefix(patternStart);
-        return new RegexNfa(compiler.states, start, compiler.RequiresUtf8SearchBoundary(options.Utf8));
+        return new RegexNfa(compiler._states, start, compiler.RequiresUtf8SearchBoundary(options.Utf8));
     }
 
+    /// <summary>
+    /// Compiles a syntax tree for matching bytes in reverse order.
+    /// </summary>
+    /// <param name="root">The root syntax node.</param>
+    /// <param name="options">The regex compilation options.</param>
+    /// <returns>The compiled reversed NFA.</returns>
     public static RegexNfa CompileReversed(RegexSyntaxNode root, RegexCompileOptions options)
     {
         var compiler = new RegexNfaCompiler();
         int accept = compiler.AddAccept();
         int start = compiler.CompileNodeReversed(root, accept, options);
-        return new RegexNfa(compiler.states, start, compiler.RequiresUtf8SearchBoundary(options.Utf8));
+        return new RegexNfa(compiler._states, start, compiler.RequiresUtf8SearchBoundary(options.Utf8));
     }
 
+    /// <summary>
+    /// Compiles a syntax tree with capture boundary states and compact scalar atoms.
+    /// </summary>
+    /// <param name="root">The root syntax node.</param>
+    /// <param name="options">The regex compilation options.</param>
+    /// <param name="captureCount">The number of capture groups in the syntax tree.</param>
+    /// <returns>The compiled capture NFA.</returns>
     public static RegexNfa CompileCaptures(RegexSyntaxNode root, RegexCompileOptions options, int captureCount)
     {
         var compiler = new RegexNfaCompiler(includeCaptures: true, captureCount, expandUtf8Atoms: false);
         int accept = compiler.AddAccept();
         int start = compiler.CompileNode(root, accept, options);
-        return new RegexNfa(compiler.states, start, compiler.RequiresUtf8SearchBoundary(options.Utf8), captureCount);
+        return new RegexNfa(compiler._states, start, compiler.RequiresUtf8SearchBoundary(options.Utf8), captureCount);
     }
 
     private int CompileNode(RegexSyntaxNode node, int next, RegexCompileOptions options)
@@ -136,7 +179,7 @@ internal sealed class RegexNfaCompiler
             if (child is RegexInlineFlagsNode flags)
             {
                 RegexCompileOptions nextOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
-                sawUtf8Disabled |= currentOptions.Utf8 && !nextOptions.Utf8;
+                _sawUtf8Disabled |= currentOptions.Utf8 && !nextOptions.Utf8;
                 currentOptions = nextOptions;
                 continue;
             }
@@ -176,7 +219,7 @@ internal sealed class RegexNfaCompiler
             if (child is RegexInlineFlagsNode flags)
             {
                 RegexCompileOptions nextOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
-                sawUtf8Disabled |= currentOptions.Utf8 && !nextOptions.Utf8;
+                _sawUtf8Disabled |= currentOptions.Utf8 && !nextOptions.Utf8;
                 currentOptions = nextOptions;
                 continue;
             }
@@ -234,8 +277,8 @@ internal sealed class RegexNfaCompiler
     private int CompileGroup(RegexGroupNode node, int next, RegexCompileOptions options)
     {
         RegexCompileOptions groupOptions = options.Apply(node.EnabledFlags, node.DisabledFlags);
-        sawUtf8Disabled |= options.Utf8 && !groupOptions.Utf8;
-        if (!includeCaptures || node.Kind != RegexSyntaxKind.CapturingGroup)
+        _sawUtf8Disabled |= options.Utf8 && !groupOptions.Utf8;
+        if (!_includeCaptures || node.Kind != RegexSyntaxKind.CapturingGroup)
         {
             return CompileNode(node.Child, next, groupOptions);
         }
@@ -248,7 +291,7 @@ internal sealed class RegexNfaCompiler
     private int CompileGroupReversed(RegexGroupNode node, int next, RegexCompileOptions options)
     {
         RegexCompileOptions groupOptions = options.Apply(node.EnabledFlags, node.DisabledFlags);
-        sawUtf8Disabled |= options.Utf8 && !groupOptions.Utf8;
+        _sawUtf8Disabled |= options.Utf8 && !groupOptions.Utf8;
         return CompileNodeReversed(node.Child, next, groupOptions);
     }
 
@@ -256,16 +299,20 @@ internal sealed class RegexNfaCompiler
     {
         bool lazy = options.SwapGreed ? !node.Lazy : node.Lazy;
         int start = next;
-        int maximum = node.Maximum ?? int.MaxValue;
         if (node.Maximum is null)
         {
             start = CompileStar(node.Child, start, options, lazy);
-            maximum = node.Minimum;
         }
-
-        for (int count = maximum; count > node.Minimum; count--)
+        else
         {
-            start = CompileOptional(node.Child, start, options, lazy);
+            // Consuming branches chain through later copies, but every skip targets one exit.
+            // Chaining skips through the remaining optional copies needlessly expands closures.
+            int commonExit = next;
+            for (int count = node.Maximum.Value; count > node.Minimum; count--)
+            {
+                int childStart = CompileNode(node.Child, start, options);
+                start = lazy ? AddSplit(commonExit, childStart) : AddSplit(childStart, commonExit);
+            }
         }
 
         for (int count = 0; count < node.Minimum; count++)
@@ -280,16 +327,19 @@ internal sealed class RegexNfaCompiler
     {
         bool lazy = options.SwapGreed ? !node.Lazy : node.Lazy;
         int start = next;
-        int maximum = node.Maximum ?? int.MaxValue;
         if (node.Maximum is null)
         {
             start = CompileStarReversed(node.Child, start, options, lazy);
-            maximum = node.Minimum;
         }
-
-        for (int count = maximum; count > node.Minimum; count--)
+        else
         {
-            start = CompileOptionalReversed(node.Child, start, options, lazy);
+            // Keep the reversed topology identical to the forward common-exit construction.
+            int commonExit = next;
+            for (int count = node.Maximum.Value; count > node.Minimum; count--)
+            {
+                int childStart = CompileNodeReversed(node.Child, start, options);
+                start = lazy ? AddSplit(commonExit, childStart) : AddSplit(childStart, commonExit);
+            }
         }
 
         for (int count = 0; count < node.Minimum; count++)
@@ -300,24 +350,12 @@ internal sealed class RegexNfaCompiler
         return start;
     }
 
-    private int CompileOptional(RegexSyntaxNode child, int next, RegexCompileOptions options, bool lazy)
-    {
-        int childStart = CompileNode(child, next, options);
-        return lazy ? AddSplit(next, childStart) : AddSplit(childStart, next);
-    }
-
-    private int CompileOptionalReversed(RegexSyntaxNode child, int next, RegexCompileOptions options, bool lazy)
-    {
-        int childStart = CompileNodeReversed(child, next, options);
-        return lazy ? AddSplit(next, childStart) : AddSplit(childStart, next);
-    }
-
     private int CompileStar(RegexSyntaxNode child, int next, RegexCompileOptions options, bool lazy)
     {
-        int split = states.Count;
-        states.Add(CreateControlState(RegexNfaStateKind.Split, next: -1, alternative: -1));
+        int split = _states.Count;
+        _states.Add(CreateControlState(RegexNfaStateKind.Split, next: -1, alternative: -1));
         int childStart = CompileNode(child, split, options);
-        states[split] = lazy
+        _states[split] = lazy
             ? CreateControlState(RegexNfaStateKind.LazyLoopSplit, next, childStart)
             : CreateControlState(RegexNfaStateKind.GreedyLoopSplit, childStart, next);
         return split;
@@ -325,10 +363,10 @@ internal sealed class RegexNfaCompiler
 
     private int CompileStarReversed(RegexSyntaxNode child, int next, RegexCompileOptions options, bool lazy)
     {
-        int split = states.Count;
-        states.Add(CreateControlState(RegexNfaStateKind.Split, next: -1, alternative: -1));
+        int split = _states.Count;
+        _states.Add(CreateControlState(RegexNfaStateKind.Split, next: -1, alternative: -1));
         int childStart = CompileNodeReversed(child, split, options);
-        states[split] = lazy
+        _states[split] = lazy
             ? CreateControlState(RegexNfaStateKind.LazyLoopSplit, next, childStart)
             : CreateControlState(RegexNfaStateKind.GreedyLoopSplit, childStart, next);
         return split;
@@ -390,7 +428,7 @@ internal sealed class RegexNfaCompiler
         bool reversed,
         out int start)
     {
-        if (!expandUtf8Atoms)
+        if (!_expandUtf8Atoms)
         {
             start = -1;
             return false;
@@ -405,15 +443,15 @@ internal sealed class RegexNfaCompiler
         int AddSourceByteClass(ReadOnlySpan<byte> ranges, int target) => AddByteClass(ranges, target, options.Utf8);
         if (RegexUtf8ByteCompiler.TryGetSharedTrie(kind, value, options, reversed, out RegexUtf8ByteTrie? sharedTrie))
         {
-            cacheStates = !includeCaptures;
+            _cacheStates = !_includeCaptures;
             start = CompileUtf8ByteTrie(sharedTrie!, next);
             return true;
         }
 
         string key = RegexUtf8ByteCompiler.CreateCacheKey(kind, value, options, reversed);
-        if (utf8ByteTrieCache.TryGetValue(key, out RegexUtf8ByteTrie? trie))
+        if (_utf8ByteTrieCache.TryGetValue(key, out RegexUtf8ByteTrie? trie))
         {
-            cacheStates = !includeCaptures;
+            _cacheStates = !_includeCaptures;
             start = CompileUtf8ByteTrie(trie, next);
             return true;
         }
@@ -440,23 +478,23 @@ internal sealed class RegexNfaCompiler
             return false;
         }
 
-        utf8ByteTrieCache.Add(key, trie!);
-        cacheStates = !includeCaptures;
+        _utf8ByteTrieCache.Add(key, trie!);
+        _cacheStates = !_includeCaptures;
         start = CompileUtf8ByteTrie(trie!, next);
         return true;
     }
 
     private int CompileUtf8ByteTrie(RegexUtf8ByteTrie trie, int next)
     {
-        if (cacheStates && utf8ByteTrieStateCache.TryGetValue((trie, next), out int existing))
+        if (_cacheStates && _utf8ByteTrieStateCache.TryGetValue((trie, next), out int existing))
         {
             return existing;
         }
 
         int start = trie.Compile(next, AddSplit, AddSparse);
-        if (cacheStates)
+        if (_cacheStates)
         {
-            utf8ByteTrieStateCache.Add((trie, next), start);
+            _utf8ByteTrieStateCache.Add((trie, next), start);
         }
 
         return start;
@@ -464,10 +502,10 @@ internal sealed class RegexNfaCompiler
 
     private int AddUnanchoredPrefix(int next)
     {
-        int split = states.Count;
-        states.Add(CreateControlState(RegexNfaStateKind.Split, next: -1, alternative: -1));
-        int any = states.Count;
-        states.Add(new RegexNfaState(
+        int split = _states.Count;
+        _states.Add(CreateControlState(RegexNfaStateKind.Split, next: -1, alternative: -1));
+        int any = _states.Count;
+        _states.Add(new RegexNfaState(
             RegexNfaStateKind.Atom,
             RegexSyntaxKind.AnyClass,
             ReadOnlyMemory<byte>.Empty,
@@ -480,23 +518,23 @@ internal sealed class RegexNfaCompiler
             unicodeClasses: false,
             split,
             alternative: -1));
-        states[split] = CreateControlState(RegexNfaStateKind.LazyLoopSplit, next, any);
+        _states[split] = CreateControlState(RegexNfaStateKind.LazyLoopSplit, next, any);
         return split;
     }
 
     private int AddSplit(int first, int second)
     {
         var key = new RegexNfaControlCacheKey(RegexNfaStateKind.Split, first, second);
-        if (cacheStates && controlStateCache.TryGetValue(key, out int existing))
+        if (_cacheStates && _controlStateCache.TryGetValue(key, out int existing))
         {
             return existing;
         }
 
-        int state = states.Count;
-        states.Add(CreateControlState(RegexNfaStateKind.Split, first, second));
-        if (cacheStates)
+        int state = _states.Count;
+        _states.Add(CreateControlState(RegexNfaStateKind.Split, first, second));
+        if (_cacheStates)
         {
-            controlStateCache.Add(key, state);
+            _controlStateCache.Add(key, state);
         }
 
         return state;
@@ -509,16 +547,16 @@ internal sealed class RegexNfaCompiler
 
     private int AddByteClass(ReadOnlySpan<byte> ranges, int next, bool utf8)
     {
-        if (cacheStates && ranges.Length == 2)
+        if (_cacheStates && ranges.Length == 2)
         {
             var key = new RegexNfaByteClassCacheKey(ranges[0], ranges[1], utf8, next);
-            if (byteClassStateCache.TryGetValue(key, out int existing))
+            if (_byteClassStateCache.TryGetValue(key, out int existing))
             {
                 return existing;
             }
 
-            int cachedState = states.Count;
-            states.Add(new RegexNfaState(
+            int cachedState = _states.Count;
+            _states.Add(new RegexNfaState(
                 RegexNfaStateKind.Atom,
                 RegexSyntaxKind.ByteClass,
                 new byte[] { ranges[0], ranges[1] },
@@ -531,7 +569,7 @@ internal sealed class RegexNfaCompiler
                 unicodeClasses: false,
                 next,
                 alternative: -1));
-            byteClassStateCache.Add(key, cachedState);
+            _byteClassStateCache.Add(key, cachedState);
             return cachedState;
         }
 
@@ -565,7 +603,7 @@ internal sealed class RegexNfaCompiler
         int next,
         int alternative)
     {
-        if (cacheStates)
+        if (_cacheStates)
         {
             var key = RegexNfaAtomCacheKey.Create(
                 stateKind,
@@ -580,13 +618,13 @@ internal sealed class RegexNfaCompiler
                 unicodeClasses,
                 next,
                 alternative);
-            if (atomStateCache.TryGetValue(key, out int existing))
+            if (_atomStateCache.TryGetValue(key, out int existing))
             {
                 return existing;
             }
 
-            int cachedState = states.Count;
-            states.Add(new RegexNfaState(
+            int cachedState = _states.Count;
+            _states.Add(new RegexNfaState(
                 stateKind,
                 atomKind,
                 value,
@@ -599,12 +637,12 @@ internal sealed class RegexNfaCompiler
                 unicodeClasses,
                 next,
                 alternative));
-            atomStateCache.Add(key, cachedState);
+            _atomStateCache.Add(key, cachedState);
             return cachedState;
         }
 
-        int state = states.Count;
-        states.Add(new RegexNfaState(
+        int state = _states.Count;
+        _states.Add(new RegexNfaState(
             stateKind,
             atomKind,
             value,
@@ -624,17 +662,17 @@ internal sealed class RegexNfaCompiler
     {
         RegexNfaSparseTransition[] value = transitions.ToArray();
         RegexNfaSparseCacheKey key = default;
-        if (cacheStates)
+        if (_cacheStates)
         {
             key = new RegexNfaSparseCacheKey(value);
-            if (sparseStateCache.TryGetValue(key, out int existing))
+            if (_sparseStateCache.TryGetValue(key, out int existing))
             {
                 return existing;
             }
         }
 
-        int state = states.Count;
-        states.Add(new RegexNfaState(
+        int state = _states.Count;
+        _states.Add(new RegexNfaState(
             RegexNfaStateKind.Sparse,
             RegexSyntaxKind.Empty,
             ReadOnlyMemory<byte>.Empty,
@@ -648,9 +686,9 @@ internal sealed class RegexNfaCompiler
             next: -1,
             alternative: -1,
             sparseTransitions: value));
-        if (cacheStates)
+        if (_cacheStates)
         {
-            sparseStateCache.Add(key, state);
+            _sparseStateCache.Add(key, state);
         }
 
         return state;
@@ -658,20 +696,20 @@ internal sealed class RegexNfaCompiler
 
     private int AddAccept()
     {
-        int state = states.Count;
-        states.Add(CreateControlState(RegexNfaStateKind.Accept, next: -1, alternative: -1));
+        int state = _states.Count;
+        _states.Add(CreateControlState(RegexNfaStateKind.Accept, next: -1, alternative: -1));
         return state;
     }
 
     private int AddCapture(RegexNfaStateKind kind, int captureIndex, int next)
     {
-        if (captureIndex <= 0 || captureIndex > captureCount)
+        if (captureIndex <= 0 || captureIndex > _captureCount)
         {
             throw new InvalidOperationException("Capture index is outside the compiled capture range.");
         }
 
-        int state = states.Count;
-        states.Add(new RegexNfaState(
+        int state = _states.Count;
+        _states.Add(new RegexNfaState(
             kind,
             RegexSyntaxKind.Empty,
             ReadOnlyMemory<byte>.Empty,
@@ -712,9 +750,9 @@ internal sealed class RegexNfaCompiler
             return false;
         }
 
-        for (int index = 0; index < states.Count; index++)
+        for (int index = 0; index < _states.Count; index++)
         {
-            RegexNfaState state = states[index];
+            RegexNfaState state = _states[index];
             if (state.Kind is not (RegexNfaStateKind.Atom or RegexNfaStateKind.Predicate))
             {
                 continue;
@@ -726,7 +764,7 @@ internal sealed class RegexNfaCompiler
             }
         }
 
-        return !sawUtf8Disabled;
+        return !_sawUtf8Disabled;
     }
 
     private static bool IsPredicate(RegexSyntaxKind kind)

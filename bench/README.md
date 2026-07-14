@@ -12,6 +12,19 @@ automata-only modes with 1, 100, and 800 repeated required-literal candidates.
 API. It compares Unicode and ASCII-equivalent compilation, then measures a cold
 compile and no-match search for upper repetition bounds from 50 through 1,000.
 
+`BoundedUrlCaptureBenchmarks` tracks issue #34's exact bounded connection-URL
+pattern and matching input. It compares warmed `Find` and `FindCaptures` calls
+in optimized, general, and automata-only modes, including their managed
+allocations. Run it directly with:
+
+```sh
+dotnet run -c Release --project bench/Scout.Benchmarks -- \
+  --filter '*BoundedUrlCaptureBenchmarks*'
+```
+
+This microbenchmark is intentionally not a hyperfine Release Gate workload;
+process startup would obscure the in-process capture replay being measured.
+
 Smoke run:
 
 ```sh
