@@ -112,6 +112,18 @@ measures the general automata implementation without domain or benchmark-family
 recognizers. Its median balanced-cycle ratio must remain at or below 1.50x the
 pinned `rg` oracle.
 
+The issue #37, #36, and #44 gates share a deterministic CRLF corpus made from
+200,000 Paladin-like four-line records, followed by the four delegate
+declarations from the issue #36 reproduction. The three issue #37 workloads
+measure `\bGeneratedRecord\b`, the anchored declaration expression, and the
+70-to-90-character identifier class. The issue #36 workload measures the
+original four-branch shared-prefix alternation. The issue #44 workloads search
+for the same 64 absent literals once through repeated `-e` arguments and once
+through a pattern file. Every command pins `--threads 1 --mmap --count-matches`,
+and Scout runs with `SCOUT_REGEX_SPECIALIZATION_MODE=general` so these gates
+exercise the authoritative matcher and its conservative prefilters. Each median
+balanced-cycle ratio must remain at or below 1.50x the pinned `rg` oracle.
+
 Median peak RSS is capped at 1.5x rg plus the measured Native AOT fixed-image
 floor recorded in `docs/PARITY.md`: the script first measures rg and
 `scout-real` tiny `--mmap -n` literal RSS floors from alternating first-position

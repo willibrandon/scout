@@ -10,6 +10,61 @@ public sealed class RegexAutomatonTests
     private const int SingleUnicodeClassNfaStateLimit = 512;
 
     /// <summary>
+    /// Verifies an unscoped case-insensitive flag applies to later alternatives in its group.
+    /// </summary>
+    [Fact]
+    public void UnscopedCaseInsensitiveFlagPropagatesAcrossAlternatives()
+    {
+        var automaton = RegexAutomaton.Compile("a(?i)b|c"u8);
+
+        Assert.Equal(new RegexMatch(0, 2), automaton.Find("aB"u8));
+        Assert.Equal(new RegexMatch(0, 1), automaton.Find("C"u8));
+    }
+
+    /// <summary>
+    /// Verifies a scoped case-insensitive flag does not apply to later alternatives.
+    /// </summary>
+    [Fact]
+    public void ScopedCaseInsensitiveFlagDoesNotPropagateAcrossAlternatives()
+    {
+        var automaton = RegexAutomaton.Compile("(?i:a)|c"u8);
+
+        Assert.Equal(new RegexMatch(0, 1), automaton.Find("A"u8));
+        Assert.Null(automaton.Find("C"u8));
+    }
+
+    /// <summary>
+    /// Verifies an unscoped multiline disable applies to anchors in later alternatives.
+    /// </summary>
+    [Fact]
+    public void UnscopedMultilineDisablePropagatesAcrossAlternatives()
+    {
+        var automaton = RegexAutomaton.Compile(
+            "(?-m)x|^baz"u8,
+            caseInsensitive: false,
+            multiLine: true,
+            dotMatchesNewline: false);
+
+        Assert.Null(automaton.Find("foo\nbaz"u8));
+        Assert.Equal(new RegexMatch(0, 3), automaton.Find("baz\nfoo"u8));
+    }
+
+    /// <summary>
+    /// Verifies a scoped multiline disable leaves later alternatives at the parent setting.
+    /// </summary>
+    [Fact]
+    public void ScopedMultilineDisableDoesNotPropagateAcrossAlternatives()
+    {
+        var automaton = RegexAutomaton.Compile(
+            "(?-m:x)|^baz"u8,
+            caseInsensitive: false,
+            multiLine: true,
+            dotMatchesNewline: false);
+
+        Assert.Equal(new RegexMatch(4, 3), automaton.Find("foo\nbaz"u8));
+    }
+
+    /// <summary>
     /// Verifies leading required literals use the Memmem regex prefilter.
     /// </summary>
     [Fact]
@@ -857,6 +912,24 @@ public sealed class RegexAutomatonTests
         Assert.Equal(3, captures.GroupCount);
         Assert.Equal(new RegexMatch(2, 6), captures.GetGroup(1));
         Assert.Equal(new RegexMatch(2, 3), captures.GetGroup(2));
+    }
+
+    /// <summary>
+    /// Verifies exact-span capture replay evaluates boundaries against the original haystack.
+    /// </summary>
+    [Fact]
+    public void ReplayCapturesRetainsOriginalBoundaryContext()
+    {
+        var automaton = RegexAutomaton.Compile(@"\B(foo)\B"u8);
+        ReadOnlySpan<byte> haystack = "xfooy"u8;
+        RegexMatch match = Assert.IsType<RegexMatch>(automaton.Find(haystack));
+
+        RegexCaptures? captures = automaton.ReplayCaptures(haystack, match.Start, match.End);
+
+        Assert.NotNull(captures);
+        Assert.Equal(match, captures.Match);
+        Assert.Equal(new RegexMatch(1, 3), captures.GetGroup(1));
+        Assert.Null(automaton.ReplayCaptures(haystack, match.Start, match.End - 1));
     }
 
     /// <summary>
@@ -3523,6 +3596,10 @@ public sealed class RegexAutomatonTests
         Assert.Equal(RegexEngineKind.LiteralSet, GetEngineKind(defaultAutomaton));
         Assert.NotEqual(RegexEngineKind.LiteralSet, GetEngineKind(fallbackAutomaton));
         Assert.NotEqual(RegexEngineKind.BoundedDigitDelimiter, GetEngineKind(dateFallback));
+        Assert.Equal(RegexPrefilterKind.None, fallbackAutomaton.PrefilterKind);
+        Assert.False(HasStartPredicate(fallbackAutomaton));
+        Assert.Equal(RegexPrefilterKind.None, dateFallback.PrefilterKind);
+        Assert.False(HasStartPredicate(dateFallback));
         Assert.Equal(new RegexMatch(3, 3), fallbackAutomaton.Find("xx bar"u8));
         Assert.Equal(new RegexMatch(0, 10), dateFallback.Find("2026-06-23"u8));
     }
@@ -4455,6 +4532,54 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies required-literal extraction does not concatenate a partial child prefix across repetitions.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralSetDoesNotConcatenatePartialRepeatedPrefixes()
+    {
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: true,
+            dotMatchesNewline: false,
+            utf8: true,
+            unicodeClasses: true);
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(@"\w+\s*\([^)]*(,[^)]*){8,}\)"u8);
+        byte[] haystack =
+            "ApplyFlag(enabledFlags[index], enabled: true, ref caseInsensitive, ref swapGreed, ref multiLine, ref dotMatchesNewline, ref crlf, ref utf8, ref unicodeClasses);"u8.ToArray();
+
+        Assert.True(RegexPrefilter.TryCollectRequiredLiteralSet(tree.Root, options, out byte[][] literals));
+        Assert.All(
+            literals,
+            literal => Assert.True(
+                haystack.IndexOf(literal) >= 0,
+                $"The extracted required literal '{System.Text.Encoding.UTF8.GetString(literal)}' is not present."));
+    }
+
+    /// <summary>
+    /// Verifies a prefilter cannot reject a match whose repeated child has a nonliteral suffix.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralPrefilterPreservesPartialRepeatedPrefixMatches()
+    {
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: true,
+            dotMatchesNewline: false,
+            utf8: true,
+            unicodeClasses: true,
+            excludeLineTerminators: true);
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(@"(?:\w+\s*\([^)]*(,[^)]*){8,}\))"u8);
+        ReadOnlySpan<byte> haystack =
+            "ApplyFlag(enabledFlags[index], enabled: true, ref caseInsensitive, ref swapGreed, ref multiLine, ref dotMatchesNewline, ref crlf, ref utf8, ref unicodeClasses);\n"u8;
+        var prefilter = RegexPrefilter.Compile(tree.Root, options);
+
+        Assert.Null(prefilter);
+        Assert.NotNull(RegexAutomaton.CompileParsed(tree, options, compilePrefilter: false).Find(haystack));
+    }
+
+    /// <summary>
     /// Verifies the single required-literal finder preserves ASCII case-insensitive matching.
     /// </summary>
     [Fact]
@@ -4913,6 +5038,632 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies the bounded backtracker agrees with PikeVM for position-sensitive matches in a
+    /// haystack large enough to exceed the former state-by-position allocation limit.
+    /// </summary>
+    /// <param name="pattern">The regex pattern to compile.</param>
+    /// <param name="prefix">The haystack prefix containing the candidate.</param>
+    /// <param name="start">The anchored candidate offset.</param>
+    [Theory]
+    [InlineData(@"\babc\b", "abc ", 0)]
+    [InlineData(@"\babc\b", "xabc ", 1)]
+    [InlineData("(?m)^abc$", "abc\n", 0)]
+    [InlineData("(?m)^abc$", "x\nabc\n", 2)]
+    [InlineData("(?m)^abc$", "xabc\n", 1)]
+    public void BoundedBacktrackerMatchesPikeVmForLongPositionSensitiveHaystacks(
+        string pattern,
+        string prefix,
+        int start)
+    {
+        RegexNfa nfa = CompileNfa(System.Text.Encoding.UTF8.GetBytes(pattern));
+        Assert.True(RegexBoundedBacktracker.CanCompile(nfa));
+        byte[] haystack = new byte[1_000_000];
+        System.Text.Encoding.UTF8.GetBytes(prefix).CopyTo(haystack, 0);
+        var expectedEngine = new PikeVm(nfa);
+        var actualEngine = new RegexBoundedBacktracker(nfa);
+
+        bool expected = expectedEngine.TryMatchAt(haystack, start, out int expectedLength);
+        bool actual = actualEngine.TryMatchAt(haystack, start, out int actualLength);
+
+        Assert.Equal(expected, actual);
+        Assert.Equal(expectedLength, actualLength);
+    }
+
+    /// <summary>
+    /// Verifies case-sensitive single-byte literal states agree with the general atom matcher.
+    /// </summary>
+    [Fact]
+    public void CaseSensitiveLiteralAtomFastPathMatchesGeneralAtomSemantics()
+    {
+        var state = new RegexNfaState(
+            RegexNfaStateKind.Atom,
+            RegexSyntaxKind.Literal,
+            "A"u8.ToArray(),
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            crlf: false,
+            lineTerminator: (byte)'\n',
+            utf8: false,
+            unicodeClasses: true,
+            next: 1,
+            alternative: -1);
+
+        for (int value = byte.MinValue; value <= byte.MaxValue; value++)
+        {
+            byte[] haystack = [(byte)value];
+            bool expected = RegexByteClass.TryGetAtomMatchLength(
+                haystack,
+                position: 0,
+                RegexSyntaxKind.Literal,
+                "A"u8,
+                caseInsensitive: false,
+                multiLine: false,
+                dotMatchesNewline: false,
+                crlf: false,
+                lineTerminator: (byte)'\n',
+                utf8: false,
+                unicodeClasses: true,
+                out int expectedLength);
+            bool actual = state.TryGetAtomMatchLength(haystack, position: 0, out int actualLength);
+
+            Assert.Equal(expected, actual);
+            Assert.Equal(expectedLength, actualLength);
+        }
+
+        Assert.False(state.TryGetAtomMatchLength(ReadOnlySpan<byte>.Empty, position: 0, out int emptyLength));
+        Assert.Equal(0, emptyLength);
+
+        var excludedLineFeed = new RegexNfaState(
+            RegexNfaStateKind.Atom,
+            RegexSyntaxKind.Literal,
+            "\n"u8.ToArray(),
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            crlf: false,
+            lineTerminator: (byte)'\n',
+            utf8: false,
+            unicodeClasses: true,
+            next: 1,
+            alternative: -1,
+            excludeLineTerminators: true);
+        Assert.False(excludedLineFeed.TryGetAtomMatchLength("\n"u8, position: 0, out int excludedLength));
+        Assert.Equal(0, excludedLength);
+    }
+
+    /// <summary>
+    /// Verifies single-rent prefiltered bounded iteration preserves unfiltered match ordering,
+    /// non-overlap, word boundaries, and start-offset behavior on a long haystack.
+    /// </summary>
+    [Fact]
+    public void PrefilteredBoundedBacktrackerCountsLikeUnfilteredEngineOnLongHaystack()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(@"\babc\b"u8);
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: true,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true,
+            specializationMode: RegexSpecializationMode.General,
+            excludeLineTerminators: true);
+        var prefiltered = RegexAutomaton.CompileParsed(tree, options, compilePrefilter: true);
+        var unfiltered = RegexAutomaton.CompileParsed(tree, options, compilePrefilter: false);
+        Assert.Equal(RegexEngineKind.BoundedBacktracker, prefiltered.EngineKind);
+        Assert.Equal(RegexEngineKind.BoundedBacktracker, unfiltered.EngineKind);
+        Assert.Equal(RegexPrefilterKind.RequiredLiteral, prefiltered.PrefilterKind);
+        Assert.Equal(RegexPrefilterKind.None, unfiltered.PrefilterKind);
+        byte[] haystack = new byte[100_000];
+        haystack.AsSpan().Fill((byte)' ');
+        "abc abc_abc abcabc abc"u8.CopyTo(haystack);
+        "abc abc_abc abc"u8.CopyTo(haystack.AsSpan(50_000));
+        "abc abc_abc abc"u8.CopyTo(haystack.AsSpan(99_970));
+
+        foreach (int startAt in new[] { 0, 1, 3, 50_000, 99_970, haystack.Length })
+        {
+            Assert.Equal(
+                unfiltered.CountMatches(haystack, startAt),
+                prefiltered.CountMatches(haystack, startAt));
+            Assert.Equal(
+                unfiltered.SumMatchSpans(haystack, startAt),
+                prefiltered.SumMatchSpans(haystack, startAt));
+        }
+    }
+
+    /// <summary>
+    /// Verifies fallback compilation retains a conservative start predicate when no literal
+    /// prefilter can narrow an anchored bounded-class search.
+    /// </summary>
+    [Fact]
+    public void FallbackCompilesStartPredicateForAnchoredBoundedClass()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(@"^[A-Za-z_]{70,90}\r?$"u8);
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: true,
+            dotMatchesNewline: false,
+            crlf: false,
+            lineTerminator: (byte)'\n',
+            utf8: false,
+            unicodeClasses: true,
+            specializationMode: RegexSpecializationMode.General,
+            excludeLineTerminators: true,
+            excludeCrLf: false);
+        var automaton = RegexAutomaton.CompileParsed(tree, options, compilePrefilter: true);
+        byte[] matchingLine = System.Text.Encoding.ASCII.GetBytes(new string('A', 80));
+        byte[] haystack = new byte[5 + matchingLine.Length + 2];
+        "!!!\r\n"u8.CopyTo(haystack);
+        matchingLine.CopyTo(haystack, 5);
+        "\r\n"u8.CopyTo(haystack.AsSpan(5 + matchingLine.Length));
+
+        Assert.Equal(RegexPrefilterKind.None, automaton.PrefilterKind);
+        Assert.True(HasStartPredicate(automaton));
+        Assert.Equal(new RegexMatch(5, matchingLine.Length + 1), automaton.Find(haystack));
+        Assert.Equal(1, automaton.CountMatches(haystack));
+    }
+
+    /// <summary>
+    /// Verifies the bounded line-start workload attempts exactly one candidate per eligible record.
+    /// </summary>
+    [Fact]
+    public void LineStartPredicateSkipsInteriorBoundedClassCandidates()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(@"^[A-Za-z_]{70,90}\r?$"u8);
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: true,
+            dotMatchesNewline: false,
+            crlf: false,
+            lineTerminator: (byte)'\n',
+            utf8: false,
+            unicodeClasses: true,
+            specializationMode: RegexSpecializationMode.General,
+            excludeLineTerminators: true,
+            excludeCrLf: false);
+        Assert.True(RegexStartPredicate.TryCreate(tree.Root, options, out RegexStartPredicate? predicate));
+        Assert.NotNull(predicate);
+        byte[] line = System.Text.Encoding.ASCII.GetBytes(new string('A', 80));
+        byte[] haystack = new byte[(line.Length + 2) * 3];
+        for (int index = 0; index < 3; index++)
+        {
+            int offset = index * (line.Length + 2);
+            line.CopyTo(haystack, offset);
+            "\r\n"u8.CopyTo(haystack.AsSpan(offset + line.Length));
+        }
+
+        Assert.Equal([0, 82, 164], EnumerateCandidateStarts(haystack, startAt: 0, options.Utf8, predicate));
+        Assert.Equal([82, 164], EnumerateCandidateStarts(haystack, startAt: 1, options.Utf8, predicate));
+    }
+
+    /// <summary>
+    /// Verifies CRLF line starts occur after a complete pair or a lone terminator, never between a pair.
+    /// </summary>
+    [Fact]
+    public void LineStartPredicatePreservesCrlfBoundaries()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(@"(?Rm)^"u8);
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        Assert.True(RegexStartPredicate.TryCreate(tree.Root, options, out RegexStartPredicate? predicate));
+        Assert.NotNull(predicate);
+
+        Assert.Equal(
+            [0, 3, 5, 7],
+            EnumerateCandidateStarts("a\r\nb\rc\n"u8, startAt: 0, options.Utf8, predicate));
+        Assert.Equal(
+            [3, 5, 7],
+            EnumerateCandidateStarts("a\r\nb\rc\n"u8, startAt: 1, options.Utf8, predicate));
+        Assert.Equal(
+            [3, 5, 7],
+            EnumerateCandidateStarts("a\r\nb\rc\n"u8, startAt: 2, options.Utf8, predicate));
+        Assert.Equal(
+            [5, 7],
+            EnumerateCandidateStarts("a\r\nb\rc\n"u8, startAt: 5, options.Utf8, predicate));
+        Assert.Equal(
+            [0, 3, 5],
+            EnumerateCandidateStarts("a\r\nb\r"u8, startAt: 0, options.Utf8, predicate));
+    }
+
+    /// <summary>
+    /// Verifies absolute and single-line start assertions permit only the beginning of the haystack.
+    /// </summary>
+    [Fact]
+    public void TextStartPredicateExhaustsAfterPositionZero()
+    {
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: true,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        RegexSyntaxTree absoluteTree = RegexSyntaxParser.Parse(@"\Afoo"u8);
+        Assert.True(RegexStartPredicate.TryCreate(absoluteTree.Root, options, out RegexStartPredicate? absolute));
+        Assert.NotNull(absolute);
+        RegexSyntaxTree singleLineTree = RegexSyntaxParser.Parse(@"(?-m:^foo)"u8);
+        Assert.True(RegexStartPredicate.TryCreate(singleLineTree.Root, options, out RegexStartPredicate? singleLine));
+        Assert.NotNull(singleLine);
+
+        Assert.Equal([0], EnumerateCandidateStarts("foo\nfoo"u8, startAt: 0, options.Utf8, absolute));
+        Assert.Empty(EnumerateCandidateStarts("foo\nfoo"u8, startAt: 1, options.Utf8, absolute));
+        Assert.Equal([0], EnumerateCandidateStarts("foo\nfoo"u8, startAt: 0, options.Utf8, singleLine));
+        Assert.Empty(EnumerateCandidateStarts("foo\nfoo"u8, startAt: 1, options.Utf8, singleLine));
+    }
+
+    /// <summary>
+    /// Verifies multiline start predicates use the configured semantic line terminator, including NUL.
+    /// </summary>
+    [Fact]
+    public void LineStartPredicateUsesConfiguredNulTerminator()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse("^"u8);
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: true,
+            dotMatchesNewline: false,
+            crlf: false,
+            lineTerminator: 0,
+            utf8: false,
+            unicodeClasses: false);
+        Assert.True(RegexStartPredicate.TryCreate(tree.Root, options, out RegexStartPredicate? predicate));
+        Assert.NotNull(predicate);
+        byte[] haystack = [(byte)'a', 0, (byte)'b', 0];
+
+        Assert.Equal([0, 2, 4], EnumerateCandidateStarts(haystack, startAt: 0, options.Utf8, predicate));
+        Assert.Equal([2, 4], EnumerateCandidateStarts(haystack, startAt: 1, options.Utf8, predicate));
+    }
+
+    /// <summary>
+    /// Verifies scoped and inherited multiline flags constrain starts only when every alternative does.
+    /// </summary>
+    [Fact]
+    public void LineStartPredicateCombinesOnlyRequiredAlternativeAnchors()
+    {
+        var multilineOptions = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: true,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        var singleLineOptions = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+
+        Assert.Equal(
+            [2],
+            EnumerateCandidateStarts("x\nb"u8, "(?-m:^a)|(?m:^b)"u8, multilineOptions));
+        Assert.Equal(
+            [2],
+            EnumerateCandidateStarts("x\nb"u8, "(?m)^a|^b"u8, singleLineOptions));
+        Assert.Empty(EnumerateCandidateStarts("x\nb"u8, "(?-m)^a|^b"u8, multilineOptions));
+        Assert.Equal(
+            [1],
+            EnumerateCandidateStarts("xb"u8, "(?m)^a|b"u8, singleLineOptions));
+        Assert.Equal(
+            [1],
+            EnumerateCandidateStarts("xb"u8, "^a|b"u8, multilineOptions));
+    }
+
+    /// <summary>
+    /// Verifies required-start scanning still rejects positions inside UTF-8 continuation bytes.
+    /// </summary>
+    [Fact]
+    public void LineStartPredicatePreservesUtf8Boundaries()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse("^"u8);
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: true,
+            dotMatchesNewline: false,
+            crlf: false,
+            lineTerminator: 0xCE,
+            utf8: true,
+            unicodeClasses: true);
+        Assert.True(RegexStartPredicate.TryCreate(tree.Root, options, out RegexStartPredicate? predicate));
+        Assert.NotNull(predicate);
+        byte[] haystack = [0xCE, 0xB4, 0xCE, (byte)'a'];
+
+        Assert.Equal([0, 3], EnumerateCandidateStarts(haystack, startAt: 0, options.Utf8, predicate));
+    }
+
+    /// <summary>
+    /// Verifies required-start filtering agrees with unrestricted engine iteration for every start offset.
+    /// </summary>
+    /// <param name="pattern">The pattern whose leading assertions are analyzed.</param>
+    /// <param name="haystackText">The haystack searched by both paths.</param>
+    [Theory]
+    [InlineData("(?m)^a|b", "xxb\nxa\na")]
+    [InlineData("(?m)^a|^b", "xxb\na\nb")]
+    [InlineData("(?m:^a)|(?-m:^b)", "x\nb\na")]
+    [InlineData("(?Rm)^a|^b", "x\r\na\rb\n")]
+    [InlineData("^a|b", "xxb\na")]
+    public void RequiredStartPredicateMatchesUnrestrictedEngineIteration(string pattern, string haystackText)
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(System.Text.Encoding.UTF8.GetBytes(pattern));
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: true,
+            unicodeClasses: true,
+            specializationMode: RegexSpecializationMode.General);
+        RegexNfa nfa = RegexNfaCompiler.CompileWithCompactScalarAtoms(tree.Root, options, utf8ByteTrieCache: null);
+        var engine = RegexMetaEngine.Compile(nfa, prefilter: null, dfaSizeLimit: 0);
+        Assert.True(RegexStartPredicate.TryCreate(tree.Root, options, out RegexStartPredicate? predicate));
+        Assert.NotNull(predicate);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes(haystackText);
+
+        for (int startAt = 0; startAt <= haystack.Length; startAt++)
+        {
+            Assert.Equal(engine.Find(haystack, startAt), engine.Find(haystack, startAt, predicate));
+            Assert.Equal(engine.CountMatches(haystack, startAt), engine.CountMatches(haystack, startAt, predicate));
+            Assert.Equal(engine.SumMatchSpans(haystack, startAt), engine.SumMatchSpans(haystack, startAt, predicate));
+        }
+    }
+
+    /// <summary>
+    /// Verifies single-pass required-start aggregation preserves PikeVM non-overlap,
+    /// empty-match suppression, UTF-8, and clamped start-offset semantics.
+    /// </summary>
+    /// <param name="pattern">The anchored pattern compiled by the meta engine.</param>
+    /// <param name="haystackText">The haystack searched by both iteration strategies.</param>
+    /// <param name="usesBoundedBacktracker">Whether the finite topology selects the bounded backtracker.</param>
+    [Theory]
+    [InlineData("(?m)^[A-Za-z_]{70,90}\\r?$", "short\r\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\nend\n", true)]
+    [InlineData("(?m)^(?:[A-Za-z_]{0,90}\\r?\\n|)", "AAAA\r\n\nBBBB\n", true)]
+    [InlineData("(?m)^(?:\u03B4+|[A-Za-z_]{0,90}\\r?\\n|)", "\u03B4\u03B4\nAAAA\r\n\u03B4\n", false)]
+    public void RequiredStartAggregateMatchesSequentialPikeIteration(
+        string pattern,
+        string haystackText,
+        bool usesBoundedBacktracker)
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(System.Text.Encoding.UTF8.GetBytes(pattern));
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: true,
+            unicodeClasses: true,
+            specializationMode: RegexSpecializationMode.General);
+        RegexNfa nfa = RegexNfaCompiler.CompileWithCompactScalarAtoms(
+            tree.Root,
+            options,
+            utf8ByteTrieCache: null);
+        var engine = RegexMetaEngine.Compile(nfa, prefilter: null, dfaSizeLimit: 0);
+        Assert.Equal(
+            usesBoundedBacktracker ? RegexEngineKind.BoundedBacktracker : RegexEngineKind.PikeVm,
+            engine.Kind);
+        Assert.True(RegexStartPredicate.TryCreate(tree.Root, options, out RegexStartPredicate? predicate));
+        Assert.NotNull(predicate);
+        Assert.True(predicate.HasRequiredStart);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes(haystackText);
+
+        for (int startAt = 0; startAt <= haystack.Length + 2; startAt++)
+        {
+            (long expectedCount, long expectedSpanSum) = IterateSequentialPikeMatches(
+                new PikeVm(nfa),
+                nfa,
+                haystack,
+                startAt,
+                predicate);
+
+            Assert.Equal(expectedCount, engine.CountMatches(haystack, startAt, predicate));
+            Assert.Equal(expectedSpanSum, engine.SumMatchSpans(haystack, startAt, predicate));
+        }
+    }
+
+    /// <summary>
+    /// Verifies generation-stamped one-pass scratch agrees with PikeVM across repeated searches,
+    /// including the generation-overflow reset.
+    /// </summary>
+    /// <param name="pattern">The position-sensitive pattern to compile.</param>
+    /// <param name="haystack">The haystack to match.</param>
+    /// <param name="start">The anchored start offset.</param>
+    [Theory]
+    [InlineData("(?m)^a+$", "x\naaa\n", 2)]
+    [InlineData("(?m)^a+$", "x\naaa\n", 1)]
+    [InlineData(@"\b(?:ab|a)+\b", "x ababa y", 2)]
+    [InlineData("(?m)^(?:a?)+$", "x\n\n", 2)]
+    [InlineData(@"(?Rm)^a+\r?$", "x\r\naaa\r\n", 3)]
+    public void OnePassGenerationScratchMatchesPikeVm(
+        string pattern,
+        string haystack,
+        int start)
+    {
+        RegexNfa nfa = CompileNfa(System.Text.Encoding.UTF8.GetBytes(pattern));
+        Assert.True(RegexOnePassDfa.CanCompile(nfa));
+        byte[] bytes = System.Text.Encoding.UTF8.GetBytes(haystack);
+        var expectedEngine = new PikeVm(nfa);
+        var actualEngine = new RegexOnePassDfa(nfa);
+
+        for (int iteration = 0; iteration < 1024; iteration++)
+        {
+            if (iteration == 512)
+            {
+                typeof(RegexOnePassDfa)
+                    .GetField("_threadScratchGeneration", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                    .SetValue(actualEngine, int.MaxValue);
+            }
+
+            bool expected = expectedEngine.TryMatchAt(bytes, start, out int expectedLength);
+            bool actual = actualEngine.TryMatchAt(bytes, start, out int actualLength);
+
+            Assert.Equal(expected, actual);
+            Assert.Equal(expectedLength, actualLength);
+        }
+    }
+
+    /// <summary>
+    /// Verifies bounded literal-run comparisons preserve PikeVM semantics across complete,
+    /// partial, boundary, inline-flag, and later-byte failures.
+    /// </summary>
+    /// <param name="pattern">The regex pattern to compile.</param>
+    /// <param name="haystack">The haystack to match.</param>
+    /// <param name="start">The anchored start offset.</param>
+    [Theory]
+    [InlineData(@"\bGeneratedRecord\b", " GeneratedRecord ", 1)]
+    [InlineData(@"\bGeneratedRecord\b", " GeneratedXecord ", 1)]
+    [InlineData(@"\bGeneratedRecord\b", " GeneratedReco", 1)]
+    [InlineData(@"\bGeneratedRecord\b", " GeneratedRecordX ", 1)]
+    [InlineData("(?-i:AbCd)(?i:Ef)(?-i:GhIj)", "AbCdeFGhIj", 0)]
+    [InlineData("(?-i:AbCd)(?i:Ef)(?-i:GhIj)", "AbCdeFGHIj", 0)]
+    public void BoundedLiteralRunsMatchPikeVm(
+        string pattern,
+        string haystack,
+        int start)
+    {
+        RegexNfa nfa = CompileNfa(System.Text.Encoding.UTF8.GetBytes(pattern));
+        Assert.True(RegexBoundedBacktracker.CanCompile(nfa));
+
+        AssertBoundedBacktrackerMatchesPikeVm(
+            nfa,
+            System.Text.Encoding.UTF8.GetBytes(haystack),
+            start);
+    }
+
+    /// <summary>
+    /// Verifies finite greedy, lazy, and alternation branches preserve PikeVM priority.
+    /// </summary>
+    /// <param name="pattern">The finite acyclic pattern to compile.</param>
+    /// <param name="haystack">The haystack matched at its beginning.</param>
+    /// <param name="expectedLength">The expected match length, or <c>-1</c> for no match.</param>
+    [Theory]
+    [InlineData("a{1,3}a", "aaaa", 4)]
+    [InlineData("a{1,3}?a", "aaaa", 2)]
+    [InlineData("(?:ab|a)c", "abc", 3)]
+    [InlineData("(?:ab|a)c", "ac", 2)]
+    [InlineData("(?:ab|a)c", "ax", -1)]
+    [InlineData("(?:ab|a)", "ab", 2)]
+    [InlineData("(?:a|ab)", "ab", 1)]
+    public void BoundedAcyclicBranchesMatchPikeVmPriority(
+        string pattern,
+        string haystack,
+        int expectedLength)
+    {
+        RegexNfa nfa = CompileNfa(System.Text.Encoding.UTF8.GetBytes(pattern));
+        Assert.True(RegexBoundedBacktracker.CanCompile(nfa));
+        byte[] bytes = System.Text.Encoding.UTF8.GetBytes(haystack);
+
+        AssertBoundedBacktrackerMatchesPikeVm(nfa, bytes, start: 0);
+        bool matched = new RegexBoundedBacktracker(nfa).TryMatchAt(bytes, start: 0, out int length);
+
+        Assert.Equal(expectedLength >= 0, matched);
+        Assert.Equal(Math.Max(0, expectedLength), length);
+    }
+
+    /// <summary>
+    /// Verifies ambiguous finite branches fall back to PikeVM before exponential backtracking.
+    /// </summary>
+    [Fact(Timeout = PathologicalNoMatchTimeoutMilliseconds)]
+    public void BoundedAcyclicBranchWorkBudgetPreventsExponentialNoMatch()
+    {
+        string pattern = string.Concat(Enumerable.Repeat("a?", 40)) + "a{40}b";
+        RegexNfa nfa = CompileNfa(System.Text.Encoding.UTF8.GetBytes(pattern));
+        Assert.True(RegexBoundedBacktracker.CanCompile(nfa));
+        byte[] haystack = Enumerable.Repeat((byte)'a', 40).ToArray();
+        var pikeVm = new PikeVm(nfa);
+        var bounded = new RegexBoundedBacktracker(nfa);
+
+        Assert.False(pikeVm.TryMatchAt(haystack, start: 0, out int expectedLength));
+        Assert.False(bounded.TryMatchAt(haystack, start: 0, out int actualLength));
+        Assert.Equal(expectedLength, actualLength);
+    }
+
+    /// <summary>
+    /// Verifies one-pass literal-run comparisons preserve PikeVM semantics across complete,
+    /// partial, anchored, inline-flag, and later-byte failures.
+    /// </summary>
+    /// <param name="pattern">The regex pattern to compile.</param>
+    /// <param name="haystack">The haystack to match.</param>
+    /// <param name="start">The anchored start offset.</param>
+    [Theory]
+    [InlineData("(?m)^internal sealed class GeneratedRecord\\r?$", "internal sealed class GeneratedRecord\r\n", 0)]
+    [InlineData("(?m)^internal sealed class GeneratedRecord\\r?$", "internal sealed class GeneratedXecord\n", 0)]
+    [InlineData("(?m)^internal sealed class GeneratedRecord\\r?$", "internal sealed class GeneratedReco", 0)]
+    [InlineData("(?m)^internal sealed class GeneratedRecord\\r?$", "internal sealed class GeneratedRecordX\n", 0)]
+    [InlineData("(?m)^internal sealed class GeneratedRecord\\r?$", "x\ninternal sealed class GeneratedRecord\n", 2)]
+    [InlineData("(?m)^(?-i:AbCd)(?i:Ef)(?-i:GhIj)\\r?$", "AbCdeFGhIj\n", 0)]
+    [InlineData("(?m)^(?-i:AbCd)(?i:Ef)(?-i:GhIj)\\r?$", "AbCdEFGHIj\n", 0)]
+    public void OnePassLiteralRunsMatchPikeVm(
+        string pattern,
+        string haystack,
+        int start)
+    {
+        RegexNfa nfa = CompileNfa(System.Text.Encoding.UTF8.GetBytes(pattern));
+        Assert.True(RegexOnePassDfa.CanCompile(nfa));
+
+        AssertOnePassDfaMatchesPikeVm(
+            nfa,
+            System.Text.Encoding.UTF8.GetBytes(haystack),
+            start);
+    }
+
+    /// <summary>
+    /// Verifies a shared first literal byte retains one-pass ambiguity and PikeVM fallback semantics.
+    /// </summary>
+    /// <param name="haystack">The haystack to match.</param>
+    [Theory]
+    [InlineData("abef\n")]
+    [InlineData("abcdabef\n")]
+    [InlineData("abcf\n")]
+    public void OnePassLiteralRunsPreserveAmbiguousFirstByteFallback(string haystack)
+    {
+        RegexNfa nfa = CompileNfa("(?m)^(?:abcd|abef)+$"u8);
+        Assert.True(RegexOnePassDfa.CanCompile(nfa));
+
+        AssertOnePassDfaMatchesPikeVm(
+            nfa,
+            System.Text.Encoding.UTF8.GetBytes(haystack),
+            start: 0);
+    }
+
+    /// <summary>
+    /// Verifies literal-run comparisons cannot consume a literal excluded as a record terminator.
+    /// </summary>
+    [Fact]
+    public void LiteralRunsPreserveExcludedLineTerminatorSemantics()
+    {
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: true,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true,
+            excludeLineTerminators: true);
+        RegexNfa boundedNfa = RegexNfaCompiler.Compile(
+            RegexSyntaxParser.Parse("ab\ncd"u8).Root,
+            options);
+        RegexNfa onePassNfa = RegexNfaCompiler.Compile(
+            RegexSyntaxParser.Parse("(?m)^ab\ncd(?:x)?$"u8).Root,
+            options);
+        ReadOnlySpan<byte> haystack = "ab\ncd"u8;
+
+        Assert.True(RegexBoundedBacktracker.CanCompile(boundedNfa));
+        Assert.True(RegexOnePassDfa.CanCompile(onePassNfa));
+        AssertBoundedBacktrackerMatchesPikeVm(boundedNfa, haystack, start: 0);
+        AssertOnePassDfaMatchesPikeVm(onePassNfa, haystack, start: 0);
+    }
+
+    /// <summary>
     /// Verifies the meta engine selects the one-pass DFA for deterministic position-sensitive loops.
     /// </summary>
     [Fact]
@@ -4927,16 +5678,16 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
-    /// Verifies the meta engine keeps larger position-sensitive predicates on the PikeVM path.
+    /// Verifies the meta engine selects the bounded engine for a finite acyclic position-sensitive predicate.
     /// </summary>
     [Fact]
-    public void MetaEngineSelectsPikeVmForLargePositionSensitivePredicates()
+    public void MetaEngineSelectsBoundedBacktrackerForFinitePositionSensitivePredicates()
     {
         RegexNfa nfa = CompileNfa("(?m)^abcdefghijklmnopqrstuvwxyz0123456789$"u8);
 
         var engine = RegexMetaEngine.Compile(nfa);
 
-        Assert.Equal(RegexEngineKind.PikeVm, engine.Kind);
+        Assert.Equal(RegexEngineKind.BoundedBacktracker, engine.Kind);
         Assert.Equal(
             new RegexMatch(3, 36),
             engine.Find("xx\nabcdefghijklmnopqrstuvwxyz0123456789\n"u8, startAt: 0));
@@ -7303,6 +8054,99 @@ public sealed class RegexAutomatonTests
             .GetValue(automaton) is not null;
     }
 
+    private static bool HasStartPredicate(RegexAutomaton automaton)
+    {
+        return typeof(RegexAutomaton)
+            .GetField("startPredicate", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(automaton) is not null;
+    }
+
+    private static int[] EnumerateCandidateStarts(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        bool utf8,
+        RegexStartPredicate predicate)
+    {
+        var starts = new List<int>();
+        var candidates = RegexCandidateStartEnumerator.Every(
+            haystack,
+            startAt,
+            haystack.Length,
+            utf8,
+            predicate);
+        while (candidates.MoveNext(out int start))
+        {
+            starts.Add(start);
+        }
+
+        return starts.ToArray();
+    }
+
+    private static (long Count, long SpanSum) IterateSequentialPikeMatches(
+        PikeVm pikeVm,
+        RegexNfa nfa,
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        RegexStartPredicate predicate)
+    {
+        long count = 0;
+        long spanSum = 0;
+        int offset = Math.Clamp(startAt, 0, haystack.Length);
+        int suppressedEmptyStart = -1;
+        while (offset <= haystack.Length)
+        {
+            RegexMatch? match = null;
+            for (int candidate = offset; candidate <= haystack.Length; candidate++)
+            {
+                if ((!nfa.Utf8 || RegexByteClass.IsUtf8Boundary(haystack, candidate)) &&
+                    predicate.CanStartAt(haystack, candidate) &&
+                    pikeVm.TryMatchAt(haystack, candidate, out int length))
+                {
+                    match = new RegexMatch(candidate, length);
+                    break;
+                }
+            }
+
+            if (!match.HasValue)
+            {
+                break;
+            }
+
+            if (match.Value.Length == 0 && match.Value.Start == suppressedEmptyStart)
+            {
+                offset = Math.Min(match.Value.Start + 1, haystack.Length + 1);
+                suppressedEmptyStart = -1;
+                continue;
+            }
+
+            count++;
+            spanSum += match.Value.Length;
+            if (match.Value.Length == 0)
+            {
+                suppressedEmptyStart = -1;
+                offset = Math.Min(match.Value.Start + 1, haystack.Length + 1);
+            }
+            else
+            {
+                suppressedEmptyStart = Math.Min(match.Value.End, haystack.Length + 1);
+                offset = suppressedEmptyStart;
+            }
+        }
+
+        return (count, spanSum);
+    }
+
+    private static int[] EnumerateCandidateStarts(
+        ReadOnlySpan<byte> haystack,
+        ReadOnlySpan<byte> pattern,
+        RegexCompileOptions options)
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
+        Assert.True(RegexStartPredicate.TryCreate(tree.Root, options, out RegexStartPredicate? predicate));
+        Assert.NotNull(predicate);
+        return EnumerateCandidateStarts(haystack, startAt: 0, options.Utf8, predicate);
+    }
+
     private static bool UsesSingleLiteralFirstByte(RegexAutomaton automaton)
     {
         object? literalSet = GetLiteralSetEngine(automaton);
@@ -7432,6 +8276,36 @@ public sealed class RegexAutomatonTests
             "(?i)[\\w.-]{0,50}?(?:bitbucket)(?:[ \\t\\w.-]{0,20})[\\s'\"]{0,3}(?:=|>|:{1,3}=|\\|\\||:|=>|\\?=|,)[\\x60'\"\\s=]{0,5}([a-z0-9]{32})(?:[\\x60'\"\\s;]|\\\\[nr]|$)");
     }
 
+    private static void AssertBoundedBacktrackerMatchesPikeVm(
+        RegexNfa nfa,
+        ReadOnlySpan<byte> haystack,
+        int start)
+    {
+        var expectedEngine = new PikeVm(nfa);
+        var actualEngine = new RegexBoundedBacktracker(nfa);
+
+        bool expected = expectedEngine.TryMatchAt(haystack, start, out int expectedLength);
+        bool actual = actualEngine.TryMatchAt(haystack, start, out int actualLength);
+
+        Assert.Equal(expected, actual);
+        Assert.Equal(expectedLength, actualLength);
+    }
+
+    private static void AssertOnePassDfaMatchesPikeVm(
+        RegexNfa nfa,
+        ReadOnlySpan<byte> haystack,
+        int start)
+    {
+        var expectedEngine = new PikeVm(nfa);
+        var actualEngine = new RegexOnePassDfa(nfa);
+
+        bool expected = expectedEngine.TryMatchAt(haystack, start, out int expectedLength);
+        bool actual = actualEngine.TryMatchAt(haystack, start, out int actualLength);
+
+        Assert.Equal(expected, actual);
+        Assert.Equal(expectedLength, actualLength);
+    }
+
     private static RegexNfa CompileNfa(ReadOnlySpan<byte> pattern)
     {
         RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
@@ -7444,7 +8318,14 @@ public sealed class RegexAutomatonTests
         ReadOnlySpan<byte> pattern,
         out RegexPrefilter prefilter)
     {
+        ReadOnlySpan<byte> prefix = "(?:"u8;
+        ReadOnlySpan<byte> suffix = ")(?:)+"u8;
+        byte[] cyclicPattern = new byte[prefix.Length + pattern.Length + suffix.Length];
+        prefix.CopyTo(cyclicPattern);
+        pattern.CopyTo(cyclicPattern.AsSpan(prefix.Length));
+        suffix.CopyTo(cyclicPattern.AsSpan(prefix.Length + pattern.Length));
         RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
+        RegexSyntaxTree cyclicTree = RegexSyntaxParser.Parse(cyclicPattern);
         var options = new RegexCompileOptions(
             caseInsensitive: false,
             swapGreed: false,
@@ -7457,7 +8338,7 @@ public sealed class RegexAutomatonTests
         Assert.True(compiledPrefilter.UsesRequiredLiteralWindow);
 
         RegexNfa nfa = RegexNfaCompiler.CompileWithCompactScalarAtoms(
-            tree.Root,
+            cyclicTree.Root,
             options,
             utf8ByteTrieCache: null);
         var engine = RegexMetaEngine.Compile(nfa, compiledPrefilter, dfaSizeLimit: 0);

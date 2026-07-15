@@ -111,6 +111,28 @@ public sealed class RegexSyntaxParserTests
     }
 
     /// <summary>
+    /// Verifies unscoped inline flags are inherited by later alternatives in the same group.
+    /// </summary>
+    [Fact]
+    public void PropagatesUnscopedInlineFlagsAcrossAlternatives()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse("a(?i)b|c(?-i)d|e"u8);
+
+        RegexAlternationNode root = Assert.IsType<RegexAlternationNode>(tree.Root);
+        RegexSequenceNode second = Assert.IsType<RegexSequenceNode>(root.Alternatives[1]);
+        RegexInlineFlagsNode inheritedEnable = Assert.IsType<RegexInlineFlagsNode>(second.Nodes[0]);
+        Assert.Equal("i", inheritedEnable.EnabledFlags);
+        Assert.Empty(inheritedEnable.DisabledFlags);
+
+        RegexSequenceNode third = Assert.IsType<RegexSequenceNode>(root.Alternatives[2]);
+        Assert.Collection(
+            third.Nodes,
+            node => Assert.Equal("i", Assert.IsType<RegexInlineFlagsNode>(node).EnabledFlags),
+            node => Assert.Equal("i", Assert.IsType<RegexInlineFlagsNode>(node).DisabledFlags),
+            node => Assert.Equal((byte)'e', Assert.IsType<RegexAtomNode>(node).Value.Span[0]));
+    }
+
+    /// <summary>
     /// Verifies extended-mode whitespace and comments are parse-time syntax.
     /// </summary>
     [Fact]
@@ -125,6 +147,105 @@ public sealed class RegexSyntaxParserTests
         Assert.Equal((byte)'b', Assert.IsType<RegexAtomNode>(root.Nodes[2]).Value.Span[0]);
         Assert.Equal((byte)' ', Assert.IsType<RegexAtomNode>(root.Nodes[3]).Value.Span[0]);
         Assert.Equal((byte)'c', Assert.IsType<RegexAtomNode>(root.Nodes[4]).Value.Span[0]);
+    }
+
+    /// <summary>
+    /// Verifies an unscoped extended-mode flag is confined to its enclosing alternation branch.
+    /// </summary>
+    [Fact]
+    public void ConfinesUnscopedExtendedModeToEnclosingBranchGroup()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(@"(?:(?x)a b)|(?:c d)"u8);
+
+        RegexAlternationNode root = Assert.IsType<RegexAlternationNode>(tree.Root);
+        RegexGroupNode extendedBranch = Assert.IsType<RegexGroupNode>(root.Alternatives[0]);
+        RegexSequenceNode extendedSequence = Assert.IsType<RegexSequenceNode>(extendedBranch.Child);
+        Assert.Equal(3, extendedSequence.Nodes.Count);
+        Assert.IsType<RegexInlineFlagsNode>(extendedSequence.Nodes[0]);
+        Assert.Equal((byte)'a', Assert.IsType<RegexAtomNode>(extendedSequence.Nodes[1]).Value.Span[0]);
+        Assert.Equal((byte)'b', Assert.IsType<RegexAtomNode>(extendedSequence.Nodes[2]).Value.Span[0]);
+
+        RegexGroupNode literalBranch = Assert.IsType<RegexGroupNode>(root.Alternatives[1]);
+        RegexSequenceNode literalSequence = Assert.IsType<RegexSequenceNode>(literalBranch.Child);
+        Assert.Equal(3, literalSequence.Nodes.Count);
+        Assert.Equal((byte)'c', Assert.IsType<RegexAtomNode>(literalSequence.Nodes[0]).Value.Span[0]);
+        Assert.Equal((byte)' ', Assert.IsType<RegexAtomNode>(literalSequence.Nodes[1]).Value.Span[0]);
+        Assert.Equal((byte)'d', Assert.IsType<RegexAtomNode>(literalSequence.Nodes[2]).Value.Span[0]);
+    }
+
+    /// <summary>
+    /// Verifies nested unscoped extended-mode changes restore the mode of each enclosing group.
+    /// </summary>
+    [Fact]
+    public void RestoresExtendedModeAcrossNestedGroups()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(@"(?x:(?:(?-x)a b)c d)e f"u8);
+
+        RegexSequenceNode root = Assert.IsType<RegexSequenceNode>(tree.Root);
+        Assert.Equal(4, root.Nodes.Count);
+        RegexGroupNode outerGroup = Assert.IsType<RegexGroupNode>(root.Nodes[0]);
+        RegexSequenceNode outerSequence = Assert.IsType<RegexSequenceNode>(outerGroup.Child);
+        Assert.Equal(3, outerSequence.Nodes.Count);
+
+        RegexGroupNode innerGroup = Assert.IsType<RegexGroupNode>(outerSequence.Nodes[0]);
+        RegexSequenceNode innerSequence = Assert.IsType<RegexSequenceNode>(innerGroup.Child);
+        Assert.Equal(4, innerSequence.Nodes.Count);
+        Assert.IsType<RegexInlineFlagsNode>(innerSequence.Nodes[0]);
+        Assert.Equal((byte)' ', Assert.IsType<RegexAtomNode>(innerSequence.Nodes[2]).Value.Span[0]);
+
+        Assert.Equal((byte)'c', Assert.IsType<RegexAtomNode>(outerSequence.Nodes[1]).Value.Span[0]);
+        Assert.Equal((byte)'d', Assert.IsType<RegexAtomNode>(outerSequence.Nodes[2]).Value.Span[0]);
+        Assert.Equal((byte)'e', Assert.IsType<RegexAtomNode>(root.Nodes[1]).Value.Span[0]);
+        Assert.Equal((byte)' ', Assert.IsType<RegexAtomNode>(root.Nodes[2]).Value.Span[0]);
+        Assert.Equal((byte)'f', Assert.IsType<RegexAtomNode>(root.Nodes[3]).Value.Span[0]);
+    }
+
+    /// <summary>
+    /// Verifies an unscoped extended-mode flag is confined by capturing group boundaries.
+    /// </summary>
+    [Theory]
+    [InlineData("((?x)a b)c d")]
+    [InlineData("(?<name>(?x)a b)c d")]
+    public void ConfinesUnscopedExtendedModeToCapturingGroup(string pattern)
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(Encoding.ASCII.GetBytes(pattern));
+
+        RegexSequenceNode root = Assert.IsType<RegexSequenceNode>(tree.Root);
+        Assert.Equal(4, root.Nodes.Count);
+        Assert.IsType<RegexGroupNode>(root.Nodes[0]);
+        Assert.Equal((byte)'c', Assert.IsType<RegexAtomNode>(root.Nodes[1]).Value.Span[0]);
+        Assert.Equal((byte)' ', Assert.IsType<RegexAtomNode>(root.Nodes[2]).Value.Span[0]);
+        Assert.Equal((byte)'d', Assert.IsType<RegexAtomNode>(root.Nodes[3]).Value.Span[0]);
+    }
+
+    /// <summary>
+    /// Verifies duplicate named captures are rejected across an entire parsed expression.
+    /// </summary>
+    [Theory]
+    [InlineData("(?P<word>a)(?<word>b)")]
+    [InlineData("(?<word>a)|(?P<word>b)")]
+    [InlineData("(?<word>a(?<word>b))")]
+    public void RejectsDuplicateCaptureGroupNames(string pattern)
+    {
+        FormatException exception = Assert.Throws<FormatException>(
+            () => RegexSyntaxParser.Parse(Encoding.ASCII.GetBytes(pattern)));
+
+        Assert.Contains("duplicate capture group name", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("byte offset", exception.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Verifies capture group names remain case-sensitive.
+    /// </summary>
+    [Fact]
+    public void AllowsCaptureGroupNamesThatDifferByCase()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(@"(?<Word>a)(?<word>b)"u8);
+
+        Assert.Equal(2, tree.CaptureCount);
+        RegexSequenceNode root = Assert.IsType<RegexSequenceNode>(tree.Root);
+        Assert.Equal("Word", Assert.IsType<RegexGroupNode>(root.Nodes[0]).CaptureName);
+        Assert.Equal("word", Assert.IsType<RegexGroupNode>(root.Nodes[1]).CaptureName);
     }
 
     /// <summary>

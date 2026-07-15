@@ -63,7 +63,7 @@ internal struct RegexPlanCountingLineSink<TSink>(
         MatchedLines++;
         if (_countMatches)
         {
-            Matches += LiteralLineSearcher.CountLineMatchesWithRegexPlan(
+            Matches += LiteralLineSearcher.CountReportedLineMatchesWithRegexPlan(
                 line,
                 _needles,
                 _regexPlan,

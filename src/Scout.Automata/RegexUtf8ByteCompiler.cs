@@ -35,7 +35,7 @@ internal static class RegexUtf8ByteCompiler
         RegexCompileOptions options,
         bool reversed)
     {
-        return $"{(int)kind}|{(options.CaseInsensitive ? 1 : 0)}|{(options.DotMatchesNewline ? 1 : 0)}|{(options.Crlf ? 1 : 0)}|{options.LineTerminator}|{(options.Utf8 ? 1 : 0)}|{(options.UnicodeClasses ? 1 : 0)}|{(reversed ? 1 : 0)}|{Convert.ToHexString(expression)}";
+        return $"{(int)kind}|{(options.CaseInsensitive ? 1 : 0)}|{(options.DotMatchesNewline ? 1 : 0)}|{(options.Crlf ? 1 : 0)}|{options.LineTerminator}|{(options.Utf8 ? 1 : 0)}|{(options.UnicodeClasses ? 1 : 0)}|{(options.ExcludeLineTerminators ? 1 : 0)}|{(options.ExcludeCrLf ? 1 : 0)}|{options.ExcludedLineTerminator}|{(reversed ? 1 : 0)}|{Convert.ToHexString(expression)}";
     }
 
     /// <summary>
@@ -128,7 +128,7 @@ internal static class RegexUtf8ByteCompiler
         out RegexUtf8ByteTrie? trie)
     {
         trie = null;
-        if (!options.UnicodeClasses)
+        if (!options.UnicodeClasses || options.ExcludeLineTerminators)
         {
             return false;
         }
@@ -309,6 +309,11 @@ internal static class RegexUtf8ByteCompiler
         }
 
         Normalize(ranges);
+        if (options.ExcludeLineTerminators)
+        {
+            RemoveLineTerminators(ranges, options.ExcludeCrLf, options.ExcludedLineTerminator);
+        }
+
         return ranges.Count != 0;
     }
 
@@ -952,20 +957,18 @@ internal static class RegexUtf8ByteCompiler
     private static void RemoveLineTerminators(List<RegexScalarRange> ranges, bool crlf, byte lineTerminator)
     {
         var excluded = new List<RegexScalarRange>();
+        AddRange(excluded, lineTerminator, lineTerminator);
         if (crlf)
         {
             AddRange(excluded, '\n', '\n');
             AddRange(excluded, '\r', '\r');
         }
-        else
-        {
-            AddRange(excluded, lineTerminator, lineTerminator);
-        }
 
         Normalize(ranges);
         Normalize(excluded);
+        RegexScalarRange[] source = ranges.ToArray();
         ranges.Clear();
-        AddComplementAgainst(ranges, excluded, source: AllValidScalarRanges());
+        AddComplementAgainst(ranges, excluded, source);
     }
 
     private static bool TryGetAsciiRangesWhenAllNonAsciiScalarsMatch(List<RegexScalarRange> ranges, out byte[] asciiRanges)

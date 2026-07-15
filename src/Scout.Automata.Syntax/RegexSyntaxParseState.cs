@@ -3,44 +3,50 @@ using System.Text;
 
 namespace Scout;
 
-internal sealed class RegexSyntaxParseState
+/// <summary>
+/// Maintains the mutable state used while parsing a regex syntax tree.
+/// </summary>
+internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
 {
-    private readonly ReadOnlyMemory<byte> pattern;
-    private int captureCount;
-    private bool extendedMode;
-    private int index;
+    private readonly HashSet<string> _captureNames = new(StringComparer.Ordinal);
+    private readonly ReadOnlyMemory<byte> _pattern = pattern;
+    private int _captureCount;
+    private bool _extendedMode;
+    private int _index;
 
-    public RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
-    {
-        this.pattern = pattern;
-    }
+    private ReadOnlySpan<byte> Pattern => _pattern.Span;
 
-    private ReadOnlySpan<byte> Pattern => pattern.Span;
-
+    /// <summary>
+    /// Parses the configured regex pattern.
+    /// </summary>
+    /// <returns>The parsed regex syntax tree.</returns>
     public RegexSyntaxTree Parse()
     {
         RegexSyntaxNode root = ParseAlternation(stopAtGroupEnd: false);
-        if (index != Pattern.Length)
+        if (_index != Pattern.Length)
         {
             Throw("unexpected trailing token");
         }
 
-        return new RegexSyntaxTree(pattern, root, captureCount);
+        return new RegexSyntaxTree(_pattern, root, _captureCount);
     }
 
     private RegexSyntaxNode ParseAlternation(bool stopAtGroupEnd)
     {
-        int position = index;
+        int position = _index;
         var alternatives = new List<RegexSyntaxNode>();
+        var inheritedFlags = new List<RegexInlineFlagsNode>();
         while (true)
         {
-            alternatives.Add(ParseSequence(stopAtGroupEnd));
-            if (index >= Pattern.Length || Pattern[index] != (byte)'|')
+            RegexSyntaxNode alternative = ParseSequence(stopAtGroupEnd);
+            alternatives.Add(PrependInheritedFlags(alternative, inheritedFlags));
+            CollectUnscopedFlags(alternative, inheritedFlags);
+            if (_index >= Pattern.Length || Pattern[_index] != (byte)'|')
             {
                 break;
             }
 
-            index++;
+            _index++;
         }
 
         return alternatives.Count == 1
@@ -48,22 +54,81 @@ internal sealed class RegexSyntaxParseState
             : new RegexAlternationNode(alternatives, position);
     }
 
+    private static RegexSyntaxNode PrependInheritedFlags(
+        RegexSyntaxNode alternative,
+        List<RegexInlineFlagsNode> inheritedFlags)
+    {
+        if (inheritedFlags.Count == 0)
+        {
+            return alternative;
+        }
+
+        var nodes = new List<RegexSyntaxNode>(inheritedFlags.Count + 1);
+        nodes.AddRange(inheritedFlags);
+        if (alternative is RegexSequenceNode sequence)
+        {
+            nodes.AddRange(sequence.Nodes);
+        }
+        else
+        {
+            nodes.Add(alternative);
+        }
+
+        return new RegexSequenceNode(nodes, alternative.Position);
+    }
+
+    private static void CollectUnscopedFlags(
+        RegexSyntaxNode alternative,
+        List<RegexInlineFlagsNode> inheritedFlags)
+    {
+        if (alternative is RegexInlineFlagsNode flags)
+        {
+            AddRuntimeFlags(flags, inheritedFlags);
+            return;
+        }
+
+        if (alternative is not RegexSequenceNode sequence)
+        {
+            return;
+        }
+
+        for (int index = 0; index < sequence.Nodes.Count; index++)
+        {
+            if (sequence.Nodes[index] is RegexInlineFlagsNode inlineFlags)
+            {
+                AddRuntimeFlags(inlineFlags, inheritedFlags);
+            }
+        }
+    }
+
+    private static void AddRuntimeFlags(
+        RegexInlineFlagsNode flags,
+        List<RegexInlineFlagsNode> inheritedFlags)
+    {
+        string enabledFlags = flags.EnabledFlags.Replace("x", string.Empty, StringComparison.Ordinal);
+        string disabledFlags = flags.DisabledFlags.Replace("x", string.Empty, StringComparison.Ordinal);
+        if (enabledFlags.Length > 0 || disabledFlags.Length > 0)
+        {
+            inheritedFlags.Add(new RegexInlineFlagsNode(enabledFlags, disabledFlags, flags.Position));
+        }
+    }
+
     private RegexSyntaxNode ParseSequence(bool stopAtGroupEnd)
     {
-        int position = index;
+        int position = _index;
         var nodes = new List<RegexSyntaxNode>();
-        while (index < Pattern.Length)
+        while (_index < Pattern.Length)
         {
-            if (extendedMode)
+            if (_extendedMode)
             {
                 SkipExtendedPatternWhitespace();
-                if (index >= Pattern.Length)
+                if (_index >= Pattern.Length)
                 {
                     break;
                 }
             }
 
-            byte token = Pattern[index];
+            byte token = Pattern[_index];
             if (token == (byte)'|')
             {
                 break;
@@ -98,8 +163,8 @@ internal sealed class RegexSyntaxParseState
 
     private RegexSyntaxNode ParseAtom()
     {
-        int position = index;
-        byte token = Pattern[index++];
+        int position = _index;
+        byte token = Pattern[_index++];
         if (token is (byte)'?' or (byte)'*' or (byte)'+')
         {
             Throw("repetition operator missing expression");
@@ -123,7 +188,7 @@ internal sealed class RegexSyntaxParseState
             Rune.DecodeFromUtf8(Pattern[position..], out _, out int length) == OperationStatus.Done &&
             length > 1)
         {
-            index = position + length;
+            _index = position + length;
             return new RegexAtomNode(RegexSyntaxKind.Literal, Pattern.Slice(position, length).ToArray(), position);
         }
 
@@ -132,12 +197,12 @@ internal sealed class RegexSyntaxParseState
 
     private RegexSyntaxNode ParseGroup(int position)
     {
-        if (index < Pattern.Length && Pattern[index] == (byte)'?')
+        if (_index < Pattern.Length && Pattern[_index] == (byte)'?')
         {
-            index++;
-            if (index < Pattern.Length && Pattern[index] == (byte)':')
+            _index++;
+            if (_index < Pattern.Length && Pattern[_index] == (byte)':')
             {
-                index++;
+                _index++;
                 return ParseGroupBody(position, capturing: false, captureName: null, enabledFlags: string.Empty, disabledFlags: string.Empty);
             }
 
@@ -149,7 +214,7 @@ internal sealed class RegexSyntaxParseState
             ParseInlineFlags(out string enabledFlags, out string disabledFlags, out bool scoped);
             if (scoped)
             {
-                bool previousExtendedMode = extendedMode;
+                bool previousExtendedMode = _extendedMode;
                 ApplyParseFlags(enabledFlags, disabledFlags);
                 try
                 {
@@ -157,7 +222,7 @@ internal sealed class RegexSyntaxParseState
                 }
                 finally
                 {
-                    extendedMode = previousExtendedMode;
+                    _extendedMode = previousExtendedMode;
                 }
             }
 
@@ -175,45 +240,53 @@ internal sealed class RegexSyntaxParseState
         string enabledFlags,
         string disabledFlags)
     {
-        int captureIndex = 0;
-        if (capturing)
+        bool previousExtendedMode = _extendedMode;
+        try
         {
-            captureCount++;
-            captureIndex = captureCount;
-        }
+            int captureIndex = 0;
+            if (capturing)
+            {
+                _captureCount++;
+                captureIndex = _captureCount;
+            }
 
-        RegexSyntaxNode child = ParseAlternation(stopAtGroupEnd: true);
-        if (index >= Pattern.Length || Pattern[index] != (byte)')')
+            RegexSyntaxNode child = ParseAlternation(stopAtGroupEnd: true);
+            if (_index >= Pattern.Length || Pattern[_index] != (byte)')')
+            {
+                Throw("unclosed group");
+            }
+
+            _index++;
+            return new RegexGroupNode(
+                capturing ? RegexSyntaxKind.CapturingGroup : RegexSyntaxKind.NonCapturingGroup,
+                child,
+                captureIndex,
+                captureName,
+                enabledFlags,
+                disabledFlags,
+                position);
+        }
+        finally
         {
-            Throw("unclosed group");
+            _extendedMode = previousExtendedMode;
         }
-
-        index++;
-        return new RegexGroupNode(
-            capturing ? RegexSyntaxKind.CapturingGroup : RegexSyntaxKind.NonCapturingGroup,
-            child,
-            captureIndex,
-            captureName,
-            enabledFlags,
-            disabledFlags,
-            position);
     }
 
     private void ApplyParseFlags(string enabledFlags, string disabledFlags)
     {
-        for (int index = 0; index < enabledFlags.Length; index++)
+        for (int flagIndex = 0; flagIndex < enabledFlags.Length; flagIndex++)
         {
-            if (enabledFlags[index] == 'x')
+            if (enabledFlags[flagIndex] == 'x')
             {
-                extendedMode = true;
+                _extendedMode = true;
             }
         }
 
-        for (int index = 0; index < disabledFlags.Length; index++)
+        for (int flagIndex = 0; flagIndex < disabledFlags.Length; flagIndex++)
         {
-            if (disabledFlags[index] == 'x')
+            if (disabledFlags[flagIndex] == 'x')
             {
-                extendedMode = false;
+                _extendedMode = false;
             }
         }
     }
@@ -222,13 +295,13 @@ internal sealed class RegexSyntaxParseState
     {
         captureName = null;
         int nameStart;
-        if (index + 1 < Pattern.Length && Pattern[index] == (byte)'P' && Pattern[index + 1] == (byte)'<')
+        if (_index + 1 < Pattern.Length && Pattern[_index] == (byte)'P' && Pattern[_index + 1] == (byte)'<')
         {
-            nameStart = index + 2;
+            nameStart = _index + 2;
         }
-        else if (index < Pattern.Length && Pattern[index] == (byte)'<')
+        else if (_index < Pattern.Length && Pattern[_index] == (byte)'<')
         {
-            nameStart = index + 1;
+            nameStart = _index + 1;
         }
         else
         {
@@ -251,7 +324,12 @@ internal sealed class RegexSyntaxParseState
         }
 
         captureName = Encoding.ASCII.GetString(Pattern[nameStart..nameEnd]);
-        index = nameEnd + 1;
+        _index = nameEnd + 1;
+        if (!_captureNames.Add(captureName))
+        {
+            Throw("duplicate capture group name");
+        }
+
         return true;
     }
 
@@ -260,13 +338,13 @@ internal sealed class RegexSyntaxParseState
         var enabled = new List<byte>();
         var disabled = new List<byte>();
         bool disabling = false;
-        while (index < Pattern.Length)
+        while (_index < Pattern.Length)
         {
-            byte token = Pattern[index];
+            byte token = Pattern[_index];
             if (token == (byte)'-')
             {
                 disabling = true;
-                index++;
+                _index++;
                 continue;
             }
 
@@ -277,7 +355,7 @@ internal sealed class RegexSyntaxParseState
                     Throw("missing inline flags");
                 }
 
-                index++;
+                _index++;
                 enabledFlags = Encoding.ASCII.GetString([.. enabled]);
                 disabledFlags = Encoding.ASCII.GetString([.. disabled]);
                 scoped = true;
@@ -291,7 +369,7 @@ internal sealed class RegexSyntaxParseState
                     Throw("missing inline flags");
                 }
 
-                index++;
+                _index++;
                 enabledFlags = Encoding.ASCII.GetString([.. enabled]);
                 disabledFlags = Encoding.ASCII.GetString([.. disabled]);
                 scoped = false;
@@ -312,7 +390,7 @@ internal sealed class RegexSyntaxParseState
                 enabled.Add(token);
             }
 
-            index++;
+            _index++;
         }
 
         Throw("unclosed inline flags");
@@ -323,87 +401,87 @@ internal sealed class RegexSyntaxParseState
 
     private RegexSyntaxNode ParseClass(int position)
     {
-        int expressionStart = index;
-        if (extendedMode)
+        int expressionStart = _index;
+        if (_extendedMode)
         {
             var expression = new List<byte>();
-            while (index < Pattern.Length)
+            while (_index < Pattern.Length)
             {
-                byte value = Pattern[index];
-                if (value == (byte)'\\' && index + 1 < Pattern.Length)
+                byte value = Pattern[_index];
+                if (value == (byte)'\\' && _index + 1 < Pattern.Length)
                 {
                     expression.Add(value);
-                    expression.Add(Pattern[index + 1]);
-                    index += 2;
+                    expression.Add(Pattern[_index + 1]);
+                    _index += 2;
                     continue;
                 }
 
                 if (value == (byte)'[' &&
-                    index + 1 < Pattern.Length &&
-                    Pattern[index + 1] == (byte)':' &&
-                    TryFindPosixClassEnd(index + 2, out int posixClassEnd))
+                    _index + 1 < Pattern.Length &&
+                    Pattern[_index + 1] == (byte)':' &&
+                    TryFindPosixClassEnd(_index + 2, out int posixClassEnd))
                 {
-                    expression.AddRange(Pattern[index..(posixClassEnd + 1)].ToArray());
-                    index = posixClassEnd + 1;
+                    expression.AddRange(Pattern[_index..(posixClassEnd + 1)].ToArray());
+                    _index = posixClassEnd + 1;
                     continue;
                 }
 
                 if (value == (byte)']')
                 {
-                    index++;
+                    _index++;
                     return new RegexAtomNode(RegexSyntaxKind.CharacterClass, expression.ToArray(), position);
                 }
 
                 if (IsExtendedWhitespaceByte(value))
                 {
-                    index++;
+                    _index++;
                     continue;
                 }
 
                 if (value == (byte)'#')
                 {
-                    index++;
-                    while (index < Pattern.Length && Pattern[index] != (byte)'\n')
+                    _index++;
+                    while (_index < Pattern.Length && Pattern[_index] != (byte)'\n')
                     {
-                        index++;
+                        _index++;
                     }
 
                     continue;
                 }
 
                 expression.Add(value);
-                index++;
+                _index++;
             }
 
             Throw("unclosed character class");
             return new RegexEmptyNode(position);
         }
 
-        while (index < Pattern.Length)
+        while (_index < Pattern.Length)
         {
-            if (Pattern[index] == (byte)'\\')
+            if (Pattern[_index] == (byte)'\\')
             {
-                index += 2;
+                _index += 2;
                 continue;
             }
 
-            if (Pattern[index] == (byte)'[' &&
-                index + 1 < Pattern.Length &&
-                Pattern[index + 1] == (byte)':' &&
-                TryFindPosixClassEnd(index + 2, out int posixClassEnd))
+            if (Pattern[_index] == (byte)'[' &&
+                _index + 1 < Pattern.Length &&
+                Pattern[_index + 1] == (byte)':' &&
+                TryFindPosixClassEnd(_index + 2, out int posixClassEnd))
             {
-                index = posixClassEnd + 1;
+                _index = posixClassEnd + 1;
                 continue;
             }
 
-            if (Pattern[index] == (byte)']')
+            if (Pattern[_index] == (byte)']')
             {
-                ReadOnlyMemory<byte> expression = pattern.Slice(expressionStart, index - expressionStart);
-                index++;
+                ReadOnlyMemory<byte> expression = _pattern.Slice(expressionStart, _index - expressionStart);
+                _index++;
                 return new RegexAtomNode(RegexSyntaxKind.CharacterClass, expression, position);
             }
 
-            index++;
+            _index++;
         }
 
         Throw("unclosed character class");
@@ -412,12 +490,12 @@ internal sealed class RegexSyntaxParseState
 
     private RegexSyntaxNode ParseEscape(int position)
     {
-        if (index >= Pattern.Length)
+        if (_index >= Pattern.Length)
         {
             Throw("escape at end of pattern");
         }
 
-        byte escaped = Pattern[index++];
+        byte escaped = Pattern[_index++];
         if (escaped == (byte)'b' && TryParseNamedWordBoundary(out RegexSyntaxKind boundaryKind))
         {
             return new RegexAtomNode(boundaryKind, ReadOnlyMemory<byte>.Empty, position);
@@ -457,11 +535,11 @@ internal sealed class RegexSyntaxParseState
     private bool TryParseUnicodePropertyClass(int position, bool negated, out RegexSyntaxNode node)
     {
         node = new RegexEmptyNode(position);
-        int start = index;
+        int start = _index;
         ReadOnlySpan<byte> name;
-        if (index < Pattern.Length && Pattern[index] == (byte)'{')
+        if (_index < Pattern.Length && Pattern[_index] == (byte)'{')
         {
-            int nameStart = index + 1;
+            int nameStart = _index + 1;
             int nameEnd = nameStart;
             while (nameEnd < Pattern.Length && Pattern[nameEnd] != (byte)'}')
             {
@@ -470,22 +548,22 @@ internal sealed class RegexSyntaxParseState
 
             if (nameEnd >= Pattern.Length || nameEnd == nameStart)
             {
-                index = start;
+                _index = start;
                 return false;
             }
 
             name = Pattern[nameStart..nameEnd];
-            index = nameEnd + 1;
+            _index = nameEnd + 1;
         }
         else
         {
-            if (index >= Pattern.Length)
+            if (_index >= Pattern.Length)
             {
                 return false;
             }
 
-            name = Pattern.Slice(index, 1);
-            index++;
+            name = Pattern.Slice(_index, 1);
+            _index++;
         }
 
         if (!negated && RegexUnicodePropertyNames.NameEquals(name, "any"))
@@ -496,7 +574,7 @@ internal sealed class RegexSyntaxParseState
 
         if (!RegexUnicodePropertyNames.TryGetKind(name, out RegexUnicodePropertyKind propertyKind))
         {
-            index = start;
+            _index = start;
             return false;
         }
 
@@ -509,30 +587,30 @@ internal sealed class RegexSyntaxParseState
 
     private bool TryParseNamedWordBoundary(out RegexSyntaxKind boundaryKind)
     {
-        if (index + 12 <= Pattern.Length && Pattern.Slice(index, 12).SequenceEqual("{start-half}"u8))
+        if (_index + 12 <= Pattern.Length && Pattern.Slice(_index, 12).SequenceEqual("{start-half}"u8))
         {
-            index += 12;
+            _index += 12;
             boundaryKind = RegexSyntaxKind.WordStartHalfBoundary;
             return true;
         }
 
-        if (index + 10 <= Pattern.Length && Pattern.Slice(index, 10).SequenceEqual("{end-half}"u8))
+        if (_index + 10 <= Pattern.Length && Pattern.Slice(_index, 10).SequenceEqual("{end-half}"u8))
         {
-            index += 10;
+            _index += 10;
             boundaryKind = RegexSyntaxKind.WordEndHalfBoundary;
             return true;
         }
 
-        if (index + 7 <= Pattern.Length && Pattern.Slice(index, 7).SequenceEqual("{start}"u8))
+        if (_index + 7 <= Pattern.Length && Pattern.Slice(_index, 7).SequenceEqual("{start}"u8))
         {
-            index += 7;
+            _index += 7;
             boundaryKind = RegexSyntaxKind.WordStartBoundary;
             return true;
         }
 
-        if (index + 5 <= Pattern.Length && Pattern.Slice(index, 5).SequenceEqual("{end}"u8))
+        if (_index + 5 <= Pattern.Length && Pattern.Slice(_index, 5).SequenceEqual("{end}"u8))
         {
-            index += 5;
+            _index += 5;
             boundaryKind = RegexSyntaxKind.WordEndBoundary;
             return true;
         }
@@ -546,10 +624,10 @@ internal sealed class RegexSyntaxParseState
         escapedNode = new RegexEmptyNode(position);
         if (escaped == (byte)'x')
         {
-            if (index + 1 < Pattern.Length &&
-                TryReadHexByte(Pattern[index], Pattern[index + 1], out byte literal))
+            if (_index + 1 < Pattern.Length &&
+                TryReadHexByte(Pattern[_index], Pattern[_index + 1], out byte literal))
             {
-                index += 2;
+                _index += 2;
                 escapedNode = new RegexAtomNode(RegexSyntaxKind.Literal, new[] { literal }, position);
                 return true;
             }
@@ -568,17 +646,17 @@ internal sealed class RegexSyntaxParseState
     private bool TryParseBracedByteEscape(int position, out RegexSyntaxNode escapedNode)
     {
         escapedNode = new RegexEmptyNode(position);
-        if (index >= Pattern.Length || Pattern[index] != (byte)'{')
+        if (_index >= Pattern.Length || Pattern[_index] != (byte)'{')
         {
             return false;
         }
 
-        index++;
+        _index++;
         int value = 0;
         int digits = 0;
-        while (index < Pattern.Length && Pattern[index] != (byte)'}')
+        while (_index < Pattern.Length && Pattern[_index] != (byte)'}')
         {
-            if (!TryGetHexValue(Pattern[index], out int digit))
+            if (!TryGetHexValue(Pattern[_index], out int digit))
             {
                 Throw("invalid hexadecimal escape");
             }
@@ -590,15 +668,15 @@ internal sealed class RegexSyntaxParseState
             }
 
             digits++;
-            index++;
+            _index++;
         }
 
-        if (digits == 0 || index >= Pattern.Length || Pattern[index] != (byte)'}')
+        if (digits == 0 || _index >= Pattern.Length || Pattern[_index] != (byte)'}')
         {
             Throw("unclosed hexadecimal escape");
         }
 
-        index++;
+        _index++;
         escapedNode = new RegexAtomNode(RegexSyntaxKind.Literal, new[] { (byte)value }, position);
         return true;
     }
@@ -606,35 +684,35 @@ internal sealed class RegexSyntaxParseState
     private bool TryParseRepetition(RegexSyntaxNode child, out RegexSyntaxNode repetition)
     {
         repetition = child;
-        if (index >= Pattern.Length)
+        if (_index >= Pattern.Length)
         {
             return false;
         }
 
-        int position = index;
+        int position = _index;
         int minimum;
         int? maximum;
-        byte token = Pattern[index];
+        byte token = Pattern[_index];
         if (token == (byte)'?')
         {
             ThrowIfInlineFlagsRepeat(child);
             minimum = 0;
             maximum = 1;
-            index++;
+            _index++;
         }
         else if (token == (byte)'*')
         {
             ThrowIfInlineFlagsRepeat(child);
             minimum = 0;
             maximum = null;
-            index++;
+            _index++;
         }
         else if (token == (byte)'+')
         {
             ThrowIfInlineFlagsRepeat(child);
             minimum = 1;
             maximum = null;
-            index++;
+            _index++;
         }
         else if (token == (byte)'{')
         {
@@ -651,10 +729,10 @@ internal sealed class RegexSyntaxParseState
         }
 
         bool lazy = false;
-        if (index < Pattern.Length && Pattern[index] == (byte)'?')
+        if (_index < Pattern.Length && Pattern[_index] == (byte)'?')
         {
             lazy = true;
-            index++;
+            _index++;
         }
 
         repetition = new RegexRepetitionNode(child, minimum, maximum, lazy, position);
@@ -671,21 +749,21 @@ internal sealed class RegexSyntaxParseState
 
     private void SkipExtendedPatternWhitespace()
     {
-        while (index < Pattern.Length)
+        while (_index < Pattern.Length)
         {
-            byte value = Pattern[index];
+            byte value = Pattern[_index];
             if (IsExtendedWhitespaceByte(value))
             {
-                index++;
+                _index++;
                 continue;
             }
 
             if (value == (byte)'#')
             {
-                index++;
-                while (index < Pattern.Length && Pattern[index] != (byte)'\n')
+                _index++;
+                while (_index < Pattern.Length && Pattern[_index] != (byte)'\n')
                 {
-                    index++;
+                    _index++;
                 }
 
                 continue;
@@ -697,21 +775,21 @@ internal sealed class RegexSyntaxParseState
 
     private bool TryParseCountedRepetition(out int minimum, out int? maximum)
     {
-        int start = index;
-        index++;
+        int start = _index;
+        _index++;
         if (!TryReadDecimal(out minimum))
         {
-            index = start;
+            _index = start;
             maximum = null;
             return false;
         }
 
         maximum = minimum;
-        if (index < Pattern.Length && Pattern[index] == (byte)',')
+        if (_index < Pattern.Length && Pattern[_index] == (byte)',')
         {
-            index++;
+            _index++;
             maximum = null;
-            if (index < Pattern.Length && IsAsciiDigitByte(Pattern[index]))
+            if (_index < Pattern.Length && IsAsciiDigitByte(Pattern[_index]))
             {
                 if (!TryReadDecimal(out int parsedMaximum))
                 {
@@ -722,9 +800,9 @@ internal sealed class RegexSyntaxParseState
             }
         }
 
-        if (index >= Pattern.Length || Pattern[index] != (byte)'}')
+        if (_index >= Pattern.Length || Pattern[_index] != (byte)'}')
         {
-            index = start;
+            _index = start;
             return false;
         }
 
@@ -733,17 +811,17 @@ internal sealed class RegexSyntaxParseState
             Throw("repetition maximum is smaller than minimum");
         }
 
-        index++;
+        _index++;
         return true;
     }
 
     private bool TryReadDecimal(out int value)
     {
         value = 0;
-        int start = index;
-        while (index < Pattern.Length && IsAsciiDigitByte(Pattern[index]))
+        int start = _index;
+        while (_index < Pattern.Length && IsAsciiDigitByte(Pattern[_index]))
         {
-            int digit = Pattern[index] - (byte)'0';
+            int digit = Pattern[_index] - (byte)'0';
             if (value > (int.MaxValue - digit) / 10)
             {
                 value = int.MaxValue;
@@ -753,10 +831,10 @@ internal sealed class RegexSyntaxParseState
                 value = (value * 10) + digit;
             }
 
-            index++;
+            _index++;
         }
 
-        return index > start;
+        return _index > start;
     }
 
     private bool TryFindPosixClassEnd(int searchIndex, out int classEnd)
@@ -844,6 +922,6 @@ internal sealed class RegexSyntaxParseState
 
     private void Throw(string message)
     {
-        throw new FormatException($"{message} at byte offset {index}");
+        throw new FormatException($"{message} at byte offset {_index}");
     }
 }

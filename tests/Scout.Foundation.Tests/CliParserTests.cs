@@ -643,7 +643,7 @@ public sealed class CliParserTests
         Assert.Single(nullData.LowArgs.Positional);
         Assert.Equal(CliParseStatus.Ok, crlfThenNullData.Status);
         Assert.True(crlfThenNullData.LowArgs!.NullData);
-        Assert.True(crlfThenNullData.LowArgs.Crlf);
+        Assert.False(crlfThenNullData.LowArgs.Crlf);
         Assert.Single(crlfThenNullData.LowArgs.Positional);
         Assert.Equal(CliParseStatus.Ok, nullDataThenCrlf.Status);
         Assert.True(nullDataThenCrlf.LowArgs!.Crlf);

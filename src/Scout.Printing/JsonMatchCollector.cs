@@ -1,49 +1,43 @@
-
 namespace Scout;
 
-internal struct JsonMatchCollector : IMatchLineSink
+/// <summary>
+/// Collects match spans and optional replacement metadata for one JSON output record.
+/// </summary>
+/// <param name="matches">The list that receives match spans.</param>
+/// <param name="replacement">The optional replacement template.</param>
+/// <param name="patterns">The ordered regex patterns.</param>
+/// <param name="asciiCaseInsensitive">Whether matching is ASCII case-insensitive.</param>
+/// <param name="capturePlan">The optional authoritative capture plan.</param>
+internal struct JsonMatchCollector(
+    List<JsonMatchSpan> matches,
+    ReadOnlyMemory<byte>? replacement,
+    IReadOnlyList<byte[]> patterns,
+    bool asciiCaseInsensitive,
+    ReplacementCapturePlan? capturePlan = null) : IMatchLineSink
 {
-    private readonly List<JsonMatchSpan> matches;
-    private readonly ReadOnlyMemory<byte>? replacement;
-    private readonly IReadOnlyList<byte[]> patterns;
-    private readonly ReplacementCapturePlan? capturePlan;
-    private readonly ReplacementTemplate? template;
-    private readonly int[]? captureStarts;
-    private readonly int[]? captureLengths;
-    private readonly Dictionary<string, int>? captureNames;
-    private readonly bool asciiCaseInsensitive;
+    private readonly List<JsonMatchSpan> _matches = matches;
+    private readonly ReadOnlyMemory<byte>? _replacement = replacement;
+    private readonly IReadOnlyList<byte[]> _patterns = patterns;
+    private readonly ReplacementCapturePlan? _capturePlan = capturePlan;
+    private readonly (
+        ReplacementTemplate Template,
+        int[] CaptureStarts,
+        int[] CaptureLengths,
+        Dictionary<string, int>? CaptureNames)? _captureState =
+        replacement is ReadOnlyMemory<byte> replacementValue
+            ? CreateCaptureState(replacementValue, capturePlan)
+            : null;
+    private readonly bool _asciiCaseInsensitive = asciiCaseInsensitive;
 
-    public JsonMatchCollector(
-        List<JsonMatchSpan> matches,
-        ReadOnlyMemory<byte>? replacement,
-        IReadOnlyList<byte[]> patterns,
-        bool asciiCaseInsensitive,
-        ReplacementCapturePlan? capturePlan = null)
-    {
-        this.matches = matches;
-        this.replacement = replacement;
-        this.patterns = patterns;
-        this.capturePlan = capturePlan;
-        if (replacement is ReadOnlyMemory<byte> replacementValue)
-        {
-            template = ReplacementTemplate.Create(replacementValue.Span, patterns);
-            captureStarts = new int[Math.Max(1, template.HighestCapture + 1)];
-            captureLengths = new int[Math.Max(1, template.HighestCapture + 1)];
-            captureNames = template.UsesNamedCaptureReferences
-                ? new Dictionary<string, int>(StringComparer.Ordinal)
-                : null;
-        }
-        else
-        {
-            template = null;
-            captureStarts = null;
-            captureLengths = null;
-            captureNames = null;
-        }
-
-        this.asciiCaseInsensitive = asciiCaseInsensitive;
-    }
-
+    /// <summary>
+    /// Adds one match and expands replacement metadata in its original containing-line context.
+    /// </summary>
+    /// <param name="lineNumber">The one-based line number.</param>
+    /// <param name="lineByteOffset">The zero-based byte offset of the line.</param>
+    /// <param name="matchByteOffset">The zero-based byte offset of the match.</param>
+    /// <param name="matchColumn">The one-based byte column of the match.</param>
+    /// <param name="line">The containing line bytes.</param>
+    /// <param name="match">The matching bytes.</param>
     public void MatchedLine(
         long lineNumber,
         long lineByteOffset,
@@ -53,18 +47,43 @@ internal struct JsonMatchCollector : IMatchLineSink
         ReadOnlySpan<byte> match)
     {
         int start = checked((int)matchColumn - 1);
-        byte[]? expandedReplacement = replacement is ReadOnlyMemory<byte> replacementValue
+        byte[]? expandedReplacement =
+            _replacement is ReadOnlyMemory<byte> replacementValue &&
+            _captureState is { } captureState
             ? ReplacementFormatter.Expand(
                 replacementValue.Span,
-                match,
-                patterns,
-                asciiCaseInsensitive,
-                capturePlan,
-                template,
-                captureStarts,
-                captureLengths,
-                captureNames)
+                line,
+                start,
+                match.Length,
+                _patterns,
+                _asciiCaseInsensitive,
+                _capturePlan,
+                captureState.Template,
+                captureState.CaptureStarts,
+                captureState.CaptureLengths,
+                captureState.CaptureNames)
             : null;
-        matches.Add(new JsonMatchSpan(start, start + match.Length, expandedReplacement));
+        _matches.Add(new JsonMatchSpan(start, start + match.Length, expandedReplacement));
+    }
+
+    private static (
+        ReplacementTemplate Template,
+        int[] CaptureStarts,
+        int[] CaptureLengths,
+        Dictionary<string, int>? CaptureNames) CreateCaptureState(
+            ReadOnlyMemory<byte> replacement,
+            ReplacementCapturePlan? capturePlan)
+    {
+        var template = ReplacementTemplate.Create(
+            replacement.Span,
+            capturePlan?.CaptureCount ?? 0);
+        int bufferLength = Math.Max(1, template.HighestCapture + 1);
+        return (
+            template,
+            new int[bufferLength],
+            new int[bufferLength],
+            template.UsesNamedCaptureReferences
+                ? new Dictionary<string, int>(StringComparer.Ordinal)
+                : null);
     }
 }

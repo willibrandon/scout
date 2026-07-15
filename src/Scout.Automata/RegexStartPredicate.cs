@@ -3,100 +3,195 @@ using System.Text;
 
 namespace Scout;
 
-internal sealed class RegexStartPredicate
+/// <summary>
+/// Conservatively narrows byte positions at which a compiled regex can begin matching.
+/// </summary>
+/// <param name="allowedBytes">The allowed byte lookup for each inspected position.</param>
+/// <param name="prefixesByFirstByte">The multi-byte prefixes grouped by normalized first byte.</param>
+/// <param name="singleBytePrefixes">The single-byte prefix lookup.</param>
+/// <param name="secondBytesByFirstByte">The two-byte prefix lookup grouped by normalized first byte.</param>
+/// <param name="asciiCaseInsensitivePrefixes">Whether prefix comparisons fold ASCII case.</param>
+/// <param name="requiredStartKind">The position constraint shared by every possible match.</param>
+/// <param name="requiredLineTerminator">The semantic line terminator for a line-start constraint.</param>
+/// <param name="requiredCrlf">Whether a line-start constraint uses CRLF-aware semantics.</param>
+internal sealed class RegexStartPredicate(
+    bool[][] allowedBytes,
+    byte[][][]? prefixesByFirstByte,
+    bool[]? singleBytePrefixes,
+    bool[][]? secondBytesByFirstByte,
+    bool asciiCaseInsensitivePrefixes,
+    RegexRequiredStartKind requiredStartKind,
+    byte requiredLineTerminator,
+    bool requiredCrlf)
 {
     private const int MaxPredicateLength = 64;
     private const int MaxFirstByteVariants = 192;
     private const int MaxPrefixPredicateCount = 256;
 
-    private readonly bool[][] allowedBytes;
-    private readonly byte[][][]? prefixesByFirstByte;
-    private readonly bool[]? singleBytePrefixes;
-    private readonly bool[][]? secondBytesByFirstByte;
-    private readonly bool asciiCaseInsensitivePrefixes;
+    private readonly bool[][] _allowedBytes = allowedBytes;
+    private readonly SearchValues<byte>? _uniformAllowedBytes = CreateUniformAllowedBytes(allowedBytes);
+    private readonly byte[][][]? _prefixesByFirstByte = prefixesByFirstByte;
+    private readonly bool[]? _singleBytePrefixes = singleBytePrefixes;
+    private readonly bool[][]? _secondBytesByFirstByte = secondBytesByFirstByte;
+    private readonly bool _asciiCaseInsensitivePrefixes = asciiCaseInsensitivePrefixes;
+    private readonly RegexRequiredStartKind _requiredStartKind = requiredStartKind;
+    private readonly byte _requiredLineTerminator = requiredLineTerminator;
+    private readonly bool _requiredCrlf = requiredCrlf;
 
-    private RegexStartPredicate(List<byte[]> allowedBytes)
-    {
-        this.allowedBytes = new bool[allowedBytes.Count][];
-        for (int index = 0; index < allowedBytes.Count; index++)
-        {
-            bool[] lookup = new bool[256];
-            byte[] bytes = allowedBytes[index];
-            for (int byteIndex = 0; byteIndex < bytes.Length; byteIndex++)
-            {
-                lookup[bytes[byteIndex]] = true;
-            }
+    /// <summary>
+    /// Gets a value indicating whether every match must begin at a text or line boundary.
+    /// </summary>
+    public bool HasRequiredStart => _requiredStartKind != RegexRequiredStartKind.None;
 
-            this.allowedBytes[index] = lookup;
-        }
-    }
-
-    private RegexStartPredicate(byte[][] prefixes, bool asciiCaseInsensitive)
-    {
-        allowedBytes = [];
-        asciiCaseInsensitivePrefixes = asciiCaseInsensitive;
-        singleBytePrefixes = new bool[256];
-        secondBytesByFirstByte = BuildSecondByteBuckets();
-        prefixesByFirstByte = BuildPrefixBuckets(prefixes, asciiCaseInsensitive, singleBytePrefixes, secondBytesByFirstByte);
-    }
-
+    /// <summary>
+    /// Creates a conservative start predicate for a parsed regex.
+    /// </summary>
+    /// <param name="root">The parsed regex root.</param>
+    /// <param name="options">The effective compile options.</param>
+    /// <param name="predicate">Receives the compiled predicate when one can narrow starts.</param>
+    /// <returns><see langword="true" /> when a predicate was created.</returns>
     public static bool TryCreate(RegexSyntaxNode root, RegexCompileOptions options, out RegexStartPredicate? predicate)
     {
         return TryCreate(root, options, prefixSet: null, out predicate);
     }
 
+    /// <summary>
+    /// Creates a conservative first-byte and required-position predicate for a parsed regex.
+    /// </summary>
+    /// <param name="root">The parsed regex root.</param>
+    /// <param name="options">The effective compile options.</param>
+    /// <param name="predicate">Receives the compiled predicate when one can narrow starts.</param>
+    /// <returns><see langword="true" /> when a predicate was created.</returns>
     internal static bool TryCreateFirstByteOnly(
         RegexSyntaxNode root,
         RegexCompileOptions options,
         out RegexStartPredicate? predicate)
     {
-        return TryCreateFirstByte(root, options, out predicate);
+        AnalyzeRequiredStart(
+            root,
+            options,
+            out RegexRequiredStartKind requiredStartKind,
+            out byte requiredLineTerminator,
+            out bool requiredCrlf,
+            out _);
+        return TryCreateFirstByte(
+                root,
+                options,
+                requiredStartKind,
+                requiredLineTerminator,
+                requiredCrlf,
+                out predicate) ||
+            TryCreateRequiredStartOnly(
+                requiredStartKind,
+                requiredLineTerminator,
+                requiredCrlf,
+                out predicate);
     }
 
+    /// <summary>
+    /// Creates a conservative start predicate using parsed syntax and an optional prefix set.
+    /// </summary>
+    /// <param name="root">The parsed regex root.</param>
+    /// <param name="options">The effective compile options.</param>
+    /// <param name="prefixSet">An optional set of exact prefixes available to the predicate.</param>
+    /// <param name="predicate">Receives the compiled predicate when one can narrow starts.</param>
+    /// <returns><see langword="true" /> when a predicate was created.</returns>
     internal static bool TryCreate(
         RegexSyntaxNode root,
         RegexCompileOptions options,
         RegexStartPrefixSet? prefixSet,
         out RegexStartPredicate? predicate)
     {
+        AnalyzeRequiredStart(
+            root,
+            options,
+            out RegexRequiredStartKind requiredStartKind,
+            out byte requiredLineTerminator,
+            out bool requiredCrlf,
+            out _);
         var allowed = new List<byte[]>();
         bool caseFoldMayNeedUnicodeScalars = options.CaseInsensitive && options.UnicodeClasses;
         bool hasPositionalPredicate = TryAppend(root, options, allowed, caseFoldMayNeedUnicodeScalars, out _) &&
             allowed.Count != 0;
         if (hasPositionalPredicate)
         {
-            if (TryCreatePrefixSet(prefixSet, options, minimumUsefulLength: allowed.Count + 1, out predicate))
+            if (TryCreatePrefixSet(
+                    prefixSet,
+                    options,
+                    minimumUsefulLength: allowed.Count + 1,
+                    requiredStartKind,
+                    requiredLineTerminator,
+                    requiredCrlf,
+                    out predicate))
             {
                 return true;
             }
 
-            predicate = new RegexStartPredicate(allowed);
+            predicate = CreateAllowedBytesPredicate(
+                allowed,
+                requiredStartKind,
+                requiredLineTerminator,
+                requiredCrlf);
             return true;
         }
 
-        if (TryCreatePrefixSet(prefixSet, options, minimumUsefulLength: 2, out predicate))
+        if (TryCreatePrefixSet(
+                prefixSet,
+                options,
+                minimumUsefulLength: 2,
+                requiredStartKind,
+                requiredLineTerminator,
+                requiredCrlf,
+                out predicate))
         {
             return true;
         }
 
-        return TryCreateFirstByte(root, options, out predicate);
+        return TryCreateFirstByte(
+                root,
+                options,
+                requiredStartKind,
+                requiredLineTerminator,
+                requiredCrlf,
+                out predicate) ||
+            TryCreateRequiredStartOnly(
+                requiredStartKind,
+                requiredLineTerminator,
+                requiredCrlf,
+                out predicate);
     }
 
+    /// <summary>
+    /// Determines whether a match can begin at one byte offset.
+    /// </summary>
+    /// <param name="haystack">The bytes being searched.</param>
+    /// <param name="start">The proposed match start.</param>
+    /// <returns><see langword="true" /> when the start is feasible.</returns>
     public bool CanStartAt(ReadOnlySpan<byte> haystack, int start)
     {
-        if (prefixesByFirstByte is not null)
-        {
-            return CanStartAtPrefix(haystack, start);
-        }
-
-        if (start < 0 || start > haystack.Length - allowedBytes.Length)
+        if (HasRequiredStart && !IsRequiredStart(haystack, start))
         {
             return false;
         }
 
-        for (int index = 0; index < allowedBytes.Length; index++)
+        if (_prefixesByFirstByte is not null)
         {
-            if (!allowedBytes[index][haystack[start + index]])
+            return CanStartAtPrefix(haystack, start);
+        }
+
+        if (start > haystack.Length - _allowedBytes.Length)
+        {
+            return false;
+        }
+
+        if (_uniformAllowedBytes is not null)
+        {
+            return haystack.Slice(start, _allowedBytes.Length).IndexOfAnyExcept(_uniformAllowedBytes) < 0;
+        }
+
+        for (int index = 0; index < _allowedBytes.Length; index++)
+        {
+            if (!_allowedBytes[index][haystack[start + index]])
             {
                 return false;
             }
@@ -105,29 +200,99 @@ internal sealed class RegexStartPredicate
         return true;
     }
 
+    private static SearchValues<byte>? CreateUniformAllowedBytes(bool[][] allowedBytes)
+    {
+        if (allowedBytes.Length < 8)
+        {
+            return null;
+        }
+
+        bool[] first = allowedBytes[0];
+        for (int index = 1; index < allowedBytes.Length; index++)
+        {
+            if (!allowedBytes[index].AsSpan().SequenceEqual(first))
+            {
+                return null;
+            }
+        }
+
+        Span<byte> values = stackalloc byte[byte.MaxValue + 1];
+        int count = 0;
+        for (int value = 0; value < first.Length; value++)
+        {
+            if (first[value])
+            {
+                values[count++] = (byte)value;
+            }
+        }
+
+        return SearchValues.Create(values[..count]);
+    }
+
+    /// <summary>
+    /// Finds the next position satisfying the predicate's required start assertion.
+    /// </summary>
+    /// <param name="haystack">The bytes being searched.</param>
+    /// <param name="startAt">The first position to consider.</param>
+    /// <param name="maxStart">The last position to consider.</param>
+    /// <returns>The next possible position, or <c>-1</c> when the range is exhausted.</returns>
+    public int FindNextRequiredStart(ReadOnlySpan<byte> haystack, int startAt, int maxStart)
+    {
+        int start = Math.Max(0, startAt);
+        int maximum = Math.Min(haystack.Length, maxStart);
+        if (start > maximum)
+        {
+            return -1;
+        }
+
+        if (_requiredStartKind == RegexRequiredStartKind.None)
+        {
+            return start;
+        }
+
+        if (_requiredStartKind == RegexRequiredStartKind.Text)
+        {
+            return start == 0 ? 0 : -1;
+        }
+
+        if (IsRequiredStart(haystack, start))
+        {
+            return start;
+        }
+
+        return _requiredCrlf
+            ? FindNextCrlfStart(haystack, start, maximum)
+            : FindNextLineStart(haystack, start, maximum, _requiredLineTerminator);
+    }
+
+    /// <summary>
+    /// Adds every feasible first byte represented by this predicate to a lookup.
+    /// </summary>
+    /// <param name="bytes">The destination byte lookup.</param>
+    /// <returns><see langword="true" /> when the predicate contains a byte constraint.</returns>
     internal bool TryAddFirstBytes(bool[] bytes)
     {
-        if (prefixesByFirstByte is not null)
+        if (_prefixesByFirstByte is not null)
         {
             for (int value = 0; value <= byte.MaxValue; value++)
             {
-                if ((singleBytePrefixes is not null && singleBytePrefixes[value]) ||
-                    (secondBytesByFirstByte is not null && HasAnySecondByte(secondBytesByFirstByte[value])) ||
-                    prefixesByFirstByte[value].Length != 0)
+                if ((_singleBytePrefixes is not null && _singleBytePrefixes[value]) ||
+                    (_secondBytesByFirstByte is not null && HasAnySecondByte(_secondBytesByFirstByte[value])) ||
+                    _prefixesByFirstByte[value].Length != 0)
                 {
-                    AddFirstByte(bytes, (byte)value, asciiCaseInsensitivePrefixes);
+                    AddFirstByte(bytes, (byte)value, _asciiCaseInsensitivePrefixes);
                 }
             }
 
             return true;
         }
 
-        if (allowedBytes.Length == 0)
+        if (_allowedBytes.Length == 0)
         {
             return false;
         }
 
-        bool[] first = allowedBytes[0];
+        bool[] first = _allowedBytes[0];
         for (int index = 0; index <= byte.MaxValue; index++)
         {
             if (first[index])
@@ -170,10 +335,88 @@ internal sealed class RegexStartPredicate
         }
     }
 
+    private static RegexStartPredicate CreateAllowedBytesPredicate(
+        List<byte[]> allowedByteSets,
+        RegexRequiredStartKind requiredStartKind,
+        byte requiredLineTerminator,
+        bool requiredCrlf)
+    {
+        bool[][] allowedByteLookups = new bool[allowedByteSets.Count][];
+        for (int index = 0; index < allowedByteSets.Count; index++)
+        {
+            bool[] lookup = new bool[256];
+            byte[] bytes = allowedByteSets[index];
+            for (int byteIndex = 0; byteIndex < bytes.Length; byteIndex++)
+            {
+                lookup[bytes[byteIndex]] = true;
+            }
+
+            allowedByteLookups[index] = lookup;
+        }
+
+        return new RegexStartPredicate(
+            allowedByteLookups,
+            prefixesByFirstByte: null,
+            singleBytePrefixes: null,
+            secondBytesByFirstByte: null,
+            asciiCaseInsensitivePrefixes: false,
+            requiredStartKind,
+            requiredLineTerminator,
+            requiredCrlf);
+    }
+
+    private static RegexStartPredicate CreatePrefixPredicate(
+        byte[][] prefixes,
+        bool asciiCaseInsensitive,
+        RegexRequiredStartKind requiredStartKind,
+        byte requiredLineTerminator,
+        bool requiredCrlf)
+    {
+        bool[] singleBytePrefixes = new bool[256];
+        bool[][] secondBytesByFirstByte = BuildSecondByteBuckets();
+        byte[][][] prefixesByFirstByte = BuildPrefixBuckets(
+            prefixes,
+            asciiCaseInsensitive,
+            singleBytePrefixes,
+            secondBytesByFirstByte);
+        return new RegexStartPredicate(
+            allowedBytes: [],
+            prefixesByFirstByte,
+            singleBytePrefixes,
+            secondBytesByFirstByte,
+            asciiCaseInsensitive,
+            requiredStartKind,
+            requiredLineTerminator,
+            requiredCrlf);
+    }
+
+    private static bool TryCreateRequiredStartOnly(
+        RegexRequiredStartKind requiredStartKind,
+        byte requiredLineTerminator,
+        bool requiredCrlf,
+        out RegexStartPredicate? predicate)
+    {
+        if (requiredStartKind == RegexRequiredStartKind.None)
+        {
+            predicate = null;
+            return false;
+        }
+
+        predicate = CreateAllowedBytesPredicate(
+            [],
+            requiredStartKind,
+            requiredLineTerminator,
+            requiredCrlf);
+        return true;
+    }
+
     private static bool TryCreatePrefixSet(
         RegexStartPrefixSet? prefixSet,
         RegexCompileOptions options,
         int minimumUsefulLength,
+        RegexRequiredStartKind requiredStartKind,
+        byte requiredLineTerminator,
+        bool requiredCrlf,
         out RegexStartPredicate? predicate)
     {
         predicate = null;
@@ -221,31 +464,36 @@ internal sealed class RegexStartPredicate
             }
         }
 
-        predicate = new RegexStartPredicate(preparedPrefixes, asciiCaseInsensitive);
+        predicate = CreatePrefixPredicate(
+            preparedPrefixes,
+            asciiCaseInsensitive,
+            requiredStartKind,
+            requiredLineTerminator,
+            requiredCrlf);
         return true;
     }
 
     private bool CanStartAtPrefix(ReadOnlySpan<byte> haystack, int start)
     {
-        if (start < 0 || start >= haystack.Length || prefixesByFirstByte is null)
+        if (start < 0 || start >= haystack.Length || _prefixesByFirstByte is null)
         {
             return false;
         }
 
-        byte first = NormalizeAsciiCase(haystack[start], asciiCaseInsensitivePrefixes);
-        if (singleBytePrefixes is not null && singleBytePrefixes[first])
+        byte first = NormalizeAsciiCase(haystack[start], _asciiCaseInsensitivePrefixes);
+        if (_singleBytePrefixes is not null && _singleBytePrefixes[first])
         {
             return true;
         }
 
-        if (secondBytesByFirstByte is not null &&
+        if (_secondBytesByFirstByte is not null &&
             start + 1 < haystack.Length &&
-            secondBytesByFirstByte[first][NormalizeAsciiCase(haystack[start + 1], asciiCaseInsensitivePrefixes)])
+            _secondBytesByFirstByte[first][NormalizeAsciiCase(haystack[start + 1], _asciiCaseInsensitivePrefixes)])
         {
             return true;
         }
 
-        byte[][] candidates = prefixesByFirstByte[first];
+        byte[][] candidates = _prefixesByFirstByte[first];
         for (int index = 0; index < candidates.Length; index++)
         {
             byte[] prefix = candidates[index];
@@ -254,7 +502,7 @@ internal sealed class RegexStartPredicate
                 continue;
             }
 
-            if (PrefixMatches(haystack[start..], prefix, asciiCaseInsensitivePrefixes))
+            if (PrefixMatches(haystack[start..], prefix, _asciiCaseInsensitivePrefixes))
             {
                 return true;
             }
@@ -353,7 +601,340 @@ internal sealed class RegexStartPredicate
             : value;
     }
 
-    private static bool TryCreateFirstByte(RegexSyntaxNode root, RegexCompileOptions options, out RegexStartPredicate? predicate)
+    private bool IsRequiredStart(ReadOnlySpan<byte> haystack, int start)
+    {
+        if (start < 0 || start > haystack.Length)
+        {
+            return false;
+        }
+
+        if (_requiredStartKind == RegexRequiredStartKind.None)
+        {
+            return true;
+        }
+
+        if (start == 0)
+        {
+            return true;
+        }
+
+        if (_requiredStartKind == RegexRequiredStartKind.Text)
+        {
+            return false;
+        }
+
+        byte previous = haystack[start - 1];
+        if (!_requiredCrlf)
+        {
+            return previous == _requiredLineTerminator;
+        }
+
+        return previous == (byte)'\n' ||
+            previous == (byte)'\r' && (start == haystack.Length || haystack[start] != (byte)'\n');
+    }
+
+    private static int FindNextLineStart(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        int maximum,
+        byte lineTerminator)
+    {
+        if (start >= maximum)
+        {
+            return -1;
+        }
+
+        int offset = haystack.Slice(start, maximum - start).IndexOf(lineTerminator);
+        return offset < 0 ? -1 : start + offset + 1;
+    }
+
+    private static int FindNextCrlfStart(ReadOnlySpan<byte> haystack, int start, int maximum)
+    {
+        int searchAt = start;
+        while (searchAt < maximum)
+        {
+            int offset = haystack.Slice(searchAt, maximum - searchAt).IndexOfAny((byte)'\r', (byte)'\n');
+            if (offset < 0)
+            {
+                return -1;
+            }
+
+            int terminator = searchAt + offset;
+            int candidate = terminator + 1;
+            if (haystack[terminator] == (byte)'\n' ||
+                candidate == haystack.Length ||
+                haystack[candidate] != (byte)'\n')
+            {
+                return candidate;
+            }
+
+            searchAt = candidate;
+        }
+
+        return -1;
+    }
+
+    private static void AnalyzeRequiredStart(
+        RegexSyntaxNode node,
+        RegexCompileOptions options,
+        out RegexRequiredStartKind requiredStartKind,
+        out byte requiredLineTerminator,
+        out bool requiredCrlf,
+        out bool alwaysZeroWidth)
+    {
+        requiredStartKind = RegexRequiredStartKind.None;
+        requiredLineTerminator = options.LineTerminator;
+        requiredCrlf = false;
+        alwaysZeroWidth = false;
+        switch (node.Kind)
+        {
+            case RegexSyntaxKind.Empty:
+            case RegexSyntaxKind.EndAnchor:
+            case RegexSyntaxKind.AbsoluteEndAnchor:
+            case RegexSyntaxKind.WordBoundary:
+            case RegexSyntaxKind.NotWordBoundary:
+            case RegexSyntaxKind.WordStartBoundary:
+            case RegexSyntaxKind.WordEndBoundary:
+            case RegexSyntaxKind.WordStartHalfBoundary:
+            case RegexSyntaxKind.WordEndHalfBoundary:
+            case RegexSyntaxKind.InlineFlags:
+                alwaysZeroWidth = true;
+                return;
+            case RegexSyntaxKind.StartAnchor:
+                alwaysZeroWidth = true;
+                if (options.MultiLine)
+                {
+                    requiredStartKind = RegexRequiredStartKind.Line;
+                    requiredLineTerminator = options.LineTerminator;
+                    requiredCrlf = options.Crlf;
+                }
+                else
+                {
+                    requiredStartKind = RegexRequiredStartKind.Text;
+                }
+
+                return;
+            case RegexSyntaxKind.AbsoluteStartAnchor:
+                requiredStartKind = RegexRequiredStartKind.Text;
+                alwaysZeroWidth = true;
+                return;
+            case RegexSyntaxKind.Sequence:
+                AnalyzeRequiredSequence(
+                    (RegexSequenceNode)node,
+                    options,
+                    out requiredStartKind,
+                    out requiredLineTerminator,
+                    out requiredCrlf,
+                    out alwaysZeroWidth);
+                return;
+            case RegexSyntaxKind.Alternation:
+                AnalyzeRequiredAlternation(
+                    (RegexAlternationNode)node,
+                    options,
+                    out requiredStartKind,
+                    out requiredLineTerminator,
+                    out requiredCrlf,
+                    out alwaysZeroWidth);
+                return;
+            case RegexSyntaxKind.CapturingGroup:
+            case RegexSyntaxKind.NonCapturingGroup:
+                var group = (RegexGroupNode)node;
+                AnalyzeRequiredStart(
+                    group.Child,
+                    options.Apply(group.EnabledFlags, group.DisabledFlags),
+                    out requiredStartKind,
+                    out requiredLineTerminator,
+                    out requiredCrlf,
+                    out alwaysZeroWidth);
+                return;
+            case RegexSyntaxKind.Repetition:
+                var repetition = (RegexRepetitionNode)node;
+                if (repetition.Maximum == 0)
+                {
+                    alwaysZeroWidth = true;
+                    return;
+                }
+
+                AnalyzeRequiredStart(
+                    repetition.Child,
+                    options,
+                    out RegexRequiredStartKind childStartKind,
+                    out byte childLineTerminator,
+                    out bool childCrlf,
+                    out alwaysZeroWidth);
+                if (repetition.Minimum > 0)
+                {
+                    requiredStartKind = childStartKind;
+                    requiredLineTerminator = childLineTerminator;
+                    requiredCrlf = childCrlf;
+                }
+
+                return;
+        }
+    }
+
+    private static void AnalyzeRequiredSequence(
+        RegexSequenceNode sequence,
+        RegexCompileOptions options,
+        out RegexRequiredStartKind requiredStartKind,
+        out byte requiredLineTerminator,
+        out bool requiredCrlf,
+        out bool alwaysZeroWidth)
+    {
+        requiredStartKind = RegexRequiredStartKind.None;
+        requiredLineTerminator = options.LineTerminator;
+        requiredCrlf = false;
+        alwaysZeroWidth = true;
+        RegexCompileOptions currentOptions = options;
+        for (int index = 0; index < sequence.Nodes.Count; index++)
+        {
+            RegexSyntaxNode child = sequence.Nodes[index];
+            if (child is RegexInlineFlagsNode flags)
+            {
+                currentOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
+                continue;
+            }
+
+            AnalyzeRequiredStart(
+                child,
+                currentOptions,
+                out RegexRequiredStartKind childStartKind,
+                out byte childLineTerminator,
+                out bool childCrlf,
+                out bool childAlwaysZeroWidth);
+            alwaysZeroWidth &= childAlwaysZeroWidth;
+            if (requiredStartKind == RegexRequiredStartKind.None && childStartKind != RegexRequiredStartKind.None)
+            {
+                requiredStartKind = childStartKind;
+                requiredLineTerminator = childLineTerminator;
+                requiredCrlf = childCrlf;
+            }
+
+            if (requiredStartKind == RegexRequiredStartKind.None && !childAlwaysZeroWidth)
+            {
+                alwaysZeroWidth = false;
+                return;
+            }
+        }
+    }
+
+    private static void AnalyzeRequiredAlternation(
+        RegexAlternationNode alternation,
+        RegexCompileOptions options,
+        out RegexRequiredStartKind requiredStartKind,
+        out byte requiredLineTerminator,
+        out bool requiredCrlf,
+        out bool alwaysZeroWidth)
+    {
+        requiredStartKind = RegexRequiredStartKind.None;
+        requiredLineTerminator = options.LineTerminator;
+        requiredCrlf = false;
+        alwaysZeroWidth = true;
+        bool allAlternativesConstrained = alternation.Alternatives.Count != 0;
+        bool hasConstraint = false;
+        for (int index = 0; index < alternation.Alternatives.Count; index++)
+        {
+            AnalyzeRequiredStart(
+                alternation.Alternatives[index],
+                options,
+                out RegexRequiredStartKind alternativeStartKind,
+                out byte alternativeLineTerminator,
+                out bool alternativeCrlf,
+                out bool alternativeAlwaysZeroWidth);
+            alwaysZeroWidth &= alternativeAlwaysZeroWidth;
+            if (alternativeStartKind == RegexRequiredStartKind.None)
+            {
+                allAlternativesConstrained = false;
+                continue;
+            }
+
+            if (!hasConstraint)
+            {
+                requiredStartKind = alternativeStartKind;
+                requiredLineTerminator = alternativeLineTerminator;
+                requiredCrlf = alternativeCrlf;
+                hasConstraint = true;
+                continue;
+            }
+
+            if (!TryMergeRequiredStarts(
+                    requiredStartKind,
+                    requiredLineTerminator,
+                    requiredCrlf,
+                    alternativeStartKind,
+                    alternativeLineTerminator,
+                    alternativeCrlf,
+                    out requiredStartKind,
+                    out requiredLineTerminator,
+                    out requiredCrlf))
+            {
+                allAlternativesConstrained = false;
+            }
+        }
+
+        if (!allAlternativesConstrained)
+        {
+            requiredStartKind = RegexRequiredStartKind.None;
+            requiredLineTerminator = options.LineTerminator;
+            requiredCrlf = false;
+        }
+    }
+
+    private static bool TryMergeRequiredStarts(
+        RegexRequiredStartKind leftKind,
+        byte leftLineTerminator,
+        bool leftCrlf,
+        RegexRequiredStartKind rightKind,
+        byte rightLineTerminator,
+        bool rightCrlf,
+        out RegexRequiredStartKind mergedKind,
+        out byte mergedLineTerminator,
+        out bool mergedCrlf)
+    {
+        if (leftKind == RegexRequiredStartKind.Text)
+        {
+            mergedKind = rightKind;
+            mergedLineTerminator = rightLineTerminator;
+            mergedCrlf = rightCrlf;
+            return true;
+        }
+
+        if (rightKind == RegexRequiredStartKind.Text)
+        {
+            mergedKind = leftKind;
+            mergedLineTerminator = leftLineTerminator;
+            mergedCrlf = leftCrlf;
+            return true;
+        }
+
+        mergedKind = RegexRequiredStartKind.Line;
+        if (leftCrlf == rightCrlf)
+        {
+            if (!leftCrlf && leftLineTerminator != rightLineTerminator)
+            {
+                mergedLineTerminator = leftLineTerminator;
+                mergedCrlf = false;
+                return false;
+            }
+
+            mergedLineTerminator = leftCrlf ? (byte)'\n' : leftLineTerminator;
+            mergedCrlf = leftCrlf;
+            return true;
+        }
+
+        byte singleLineTerminator = leftCrlf ? rightLineTerminator : leftLineTerminator;
+        mergedLineTerminator = (byte)'\n';
+        mergedCrlf = true;
+        return singleLineTerminator == (byte)'\n';
+    }
+
+    private static bool TryCreateFirstByte(
+        RegexSyntaxNode root,
+        RegexCompileOptions options,
+        RegexRequiredStartKind requiredStartKind,
+        byte requiredLineTerminator,
+        bool requiredCrlf,
+        out RegexStartPredicate? predicate)
     {
         var bytes = new List<byte>();
         if (!TryCollectFirstBytes(root, options, bytes, out bool canMatchEmpty) ||
@@ -365,7 +946,11 @@ internal sealed class RegexStartPredicate
             return false;
         }
 
-        predicate = new RegexStartPredicate([bytes.ToArray()]);
+        predicate = CreateAllowedBytesPredicate(
+            [bytes.ToArray()],
+            requiredStartKind,
+            requiredLineTerminator,
+            requiredCrlf);
         return true;
     }
 

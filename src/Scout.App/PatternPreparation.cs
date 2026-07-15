@@ -2,9 +2,12 @@ using System.Text;
 
 namespace Scout;
 
+/// <summary>
+/// Prepares and validates command-line patterns before regex compilation.
+/// </summary>
 internal static class PatternPreparation
 {
-    private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
+    private static readonly UTF8Encoding s_utf8 = new(encoderShouldEmitUTF8Identifier: false);
     private const ulong RegexCompiledBaseSize = 64;
     private const ulong RegexCompiledByteSize = 16;
     private const ulong RegexCompiledUnicodeDigitClassSize = 2_048;
@@ -13,6 +16,12 @@ internal static class PatternPreparation
     private const ulong RegexCompiledUnicodeWhitespaceClassSize = 512;
     private const ulong RegexCompiledUnicodeNegatedWhitespaceClassSize = 2_048;
 
+    /// <summary>
+    /// Converts an operating-system string pattern to UTF-8 bytes.
+    /// </summary>
+    /// <param name="pattern">The pattern to convert.</param>
+    /// <param name="bytes">Receives the UTF-8 pattern bytes.</param>
+    /// <returns><see langword="true" /> when the pattern can be represented as text.</returns>
     public static bool TryGetPatternBytes(OsString pattern, out byte[] bytes)
     {
         if (!pattern.TryGetText(out string text))
@@ -21,23 +30,17 @@ internal static class PatternPreparation
             return false;
         }
 
-        bytes = Utf8.GetBytes(text);
+        bytes = s_utf8.GetBytes(text);
         return true;
     }
 
-    private static bool ContainsLineFeed(IReadOnlyList<byte[]> patterns)
-    {
-        for (int index = 0; index < patterns.Count; index++)
-        {
-            if (ContainsLiteralLineFeed(patterns[index]))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
+    /// <summary>
+    /// Determines whether a pattern set contains the configured record terminator.
+    /// </summary>
+    /// <param name="patterns">The patterns to inspect.</param>
+    /// <param name="nullData">Whether NUL terminates records.</param>
+    /// <param name="fixedStrings">Whether patterns are fixed strings.</param>
+    /// <returns><see langword="true" /> when a pattern contains the record terminator.</returns>
     public static bool ContainsLineTerminator(List<byte[]> patterns, bool nullData, bool fixedStrings)
     {
         byte terminator = nullData ? (byte)0 : (byte)'\n';
@@ -62,6 +65,11 @@ internal static class PatternPreparation
         return false;
     }
 
+    /// <summary>
+    /// Determines whether any regex pattern contains an explicit NUL literal.
+    /// </summary>
+    /// <param name="patterns">The patterns to inspect.</param>
+    /// <returns><see langword="true" /> when a pattern contains an explicit NUL literal.</returns>
     public static bool ContainsRegexNulLiteral(List<byte[]> patterns)
     {
         for (int index = 0; index < patterns.Count; index++)
@@ -75,6 +83,11 @@ internal static class PatternPreparation
         return false;
     }
 
+    /// <summary>
+    /// Builds the diagnostic emitted when a line-oriented regex contains its record terminator.
+    /// </summary>
+    /// <param name="nullData">Whether NUL terminates records.</param>
+    /// <returns>The diagnostic message.</returns>
     public static string BuildLineTerminatorPatternError(bool nullData)
     {
         string literal = nullData ? "\\0" : "\\n";
@@ -83,11 +96,24 @@ internal static class PatternPreparation
             "When multiline mode is enabled, new line characters can be matched.";
     }
 
+    /// <summary>
+    /// Determines whether patterns require whole-buffer multiline execution.
+    /// </summary>
+    /// <param name="patterns">The parsed regex patterns.</param>
+    /// <param name="multilineDotall">Whether dotall is enabled before inline flags are applied.</param>
+    /// <returns><see langword="true" /> when line-oriented execution cannot preserve matcher semantics.</returns>
     public static bool ShouldUseMultilineRegex(IReadOnlyList<byte[]> patterns, bool multilineDotall)
     {
-        return multilineDotall || ContainsLineFeed(patterns) || RegexSyntaxAnalysis.CanMatchLineFeed(patterns) || RegexSyntaxAnalysis.RequiresWholeHaystack(patterns);
+        return RegexSyntaxAnalysis.CanMatchLineFeed(patterns, multilineDotall) ||
+            RegexSyntaxAnalysis.RequiresWholeHaystack(patterns);
     }
 
+    /// <summary>
+    /// Determines whether JSON output requires whole-buffer multiline execution.
+    /// </summary>
+    /// <param name="patterns">The parsed regex patterns.</param>
+    /// <param name="multilineDotall">Whether dotall is enabled before inline flags are applied.</param>
+    /// <returns><see langword="true" /> when JSON line reporting requires multiline execution.</returns>
     public static bool ShouldUseJsonMultilineRegex(IReadOnlyList<byte[]> patterns, bool multilineDotall)
     {
         return ShouldUseMultilineRegex(patterns, multilineDotall) || RegexSyntaxAnalysis.CanMatchAnchorLineBoundary(patterns);
@@ -550,6 +576,10 @@ internal static class PatternPreparation
         return value is (byte)' ' or (byte)'\t' or (byte)'\n' or (byte)'\r' or 0x0C;
     }
 
+    /// <summary>
+    /// Escapes regex metacharacters in every fixed-string pattern.
+    /// </summary>
+    /// <param name="patterns">The patterns to escape in place.</param>
     public static void EscapeFixedStringPatterns(List<byte[]> patterns)
     {
         for (int index = 0; index < patterns.Count; index++)
@@ -592,6 +622,10 @@ internal static class PatternPreparation
         return escaped;
     }
 
+    /// <summary>
+    /// Wraps non-ASCII patterns so outer transformations preserve their scope.
+    /// </summary>
+    /// <param name="patterns">The patterns to update in place.</param>
     public static void WrapNonAsciiPatterns(List<byte[]> patterns)
     {
         for (int index = 0; index < patterns.Count; index++)
@@ -603,6 +637,10 @@ internal static class PatternPreparation
         }
     }
 
+    /// <summary>
+    /// Disables Unicode mode around every pattern.
+    /// </summary>
+    /// <param name="patterns">The patterns to update in place.</param>
     public static void WrapNoUnicodePatterns(List<byte[]> patterns)
     {
         for (int index = 0; index < patterns.Count; index++)
@@ -611,6 +649,10 @@ internal static class PatternPreparation
         }
     }
 
+    /// <summary>
+    /// Wraps patterns whose top-level syntax requires a non-capturing scope.
+    /// </summary>
+    /// <param name="patterns">The patterns to update in place.</param>
     public static void WrapRegexPatterns(List<byte[]> patterns)
     {
         for (int index = 0; index < patterns.Count; index++)
@@ -722,6 +764,11 @@ internal static class PatternPreparation
         return false;
     }
 
+    /// <summary>
+    /// Determines whether a byte has regex metacharacter meaning.
+    /// </summary>
+    /// <param name="value">The byte to inspect.</param>
+    /// <returns><see langword="true" /> when the byte must be escaped in a fixed string.</returns>
     public static bool IsRegexMetaByte(byte value)
     {
         return value is (byte)'\\'
@@ -740,6 +787,12 @@ internal static class PatternPreparation
             or (byte)'|';
     }
 
+    /// <summary>
+    /// Validates that repetition operators have preceding expressions.
+    /// </summary>
+    /// <param name="patterns">The patterns to validate.</param>
+    /// <param name="diagnostics">The diagnostic destination.</param>
+    /// <returns><see langword="true" /> when every repetition is valid.</returns>
     public static bool TryValidateRegexRepetitionExpressions(List<byte[]> patterns, DiagnosticMessenger diagnostics)
     {
         for (int index = 0; index < patterns.Count; index++)
@@ -757,6 +810,13 @@ internal static class PatternPreparation
         return true;
     }
 
+    /// <summary>
+    /// Validates the configured compiled-regex size limit.
+    /// </summary>
+    /// <param name="patterns">The patterns to estimate.</param>
+    /// <param name="lowArgs">The parsed low-level arguments.</param>
+    /// <param name="diagnostics">The diagnostic destination.</param>
+    /// <returns><see langword="true" /> when the estimated compiled size is within the limit.</returns>
     public static bool TryValidateRegexSizeLimit(List<byte[]> patterns, CliLowArgs lowArgs, DiagnosticMessenger diagnostics)
     {
         if (lowArgs.RegexSizeLimit is not ulong limit)
@@ -1069,6 +1129,12 @@ internal static class PatternPreparation
         return builder.ToString();
     }
 
+    /// <summary>
+    /// Resolves whether ASCII case-insensitive matching is active for a pattern set.
+    /// </summary>
+    /// <param name="pattern">The patterns to inspect.</param>
+    /// <param name="caseMode">The requested case mode.</param>
+    /// <returns><see langword="true" /> when ASCII matching should ignore case.</returns>
     public static bool IsAsciiCaseInsensitive(IReadOnlyList<byte[]> pattern, CliCaseMode caseMode)
     {
         return caseMode == CliCaseMode.Insensitive

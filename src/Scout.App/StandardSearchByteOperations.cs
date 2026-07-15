@@ -353,7 +353,13 @@ internal static class StandardSearchByteOperations
             return false;
         }
 
-        RegexSearchPlan? regexPlan = LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: true);
+        RegexSearchPlan? regexPlan = CreateRegexSearchPlan(
+            pattern,
+            asciiCaseInsensitive,
+            lineRegexp: false,
+            wordRegexp: false,
+            crlf: false,
+            nullData: false);
         if (regexPlan is null)
         {
             return false;
@@ -546,15 +552,19 @@ internal static class StandardSearchByteOperations
 
         bool statsInvertMatch = searchMode == CliSearchMode.FilesWithoutMatch ? false : invertMatch;
         if (multiline &&
-            !crlf &&
             !nullData &&
             PatternPreparation.ShouldUseMultilineRegex(pattern, multilineDotall))
         {
-            List<RegexMatch> matches = MultilineSearchOperations.TryCollectSignatureArityMatches(bytes, pattern, asciiCaseInsensitive, lineRegexp, wordRegexp, out List<RegexMatch> acceleratedMatches)
-                ? acceleratedMatches
-                : MultilineSearchOperations.CollectMultilineMatches(bytes, pattern, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall);
+            List<RegexMatch> matches = MultilineSearchOperations.CollectMultilineMatches(
+                bytes,
+                pattern,
+                asciiCaseInsensitive,
+                lineRegexp,
+                wordRegexp,
+                multilineDotall,
+                crlf);
             List<ContextLineInfo> multilineLines = statsInvertMatch
-                ? MultilineSearchOperations.BuildMultilineInvertedLines(bytes, pattern, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall)
+                ? MultilineSearchOperations.BuildMultilineInvertedLines(bytes, pattern, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, crlf)
                 : MultilineSearchOperations.BuildMultilineContextLines(bytes, matches, stopOnNonmatch);
             ulong matchedLines = 0;
             for (int index = 0; index < multilineLines.Count; index++)
@@ -594,7 +604,14 @@ internal static class StandardSearchByteOperations
 
         if (!stopOnNonmatch && maxCount is null)
         {
-            RegexSearchPlan? regexPlan = LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: true);
+            RegexSearchPlan? regexPlan = CreateRegexSearchPlan(
+                pattern,
+                asciiCaseInsensitive,
+                lineRegexp,
+                wordRegexp,
+                crlf,
+                nullData,
+                preserveCrlfCarriageReturn: multiline && crlf);
             long matchedLines;
             long matches = 0;
             if (statsInvertMatch)
@@ -642,7 +659,25 @@ internal static class StandardSearchByteOperations
             return stats;
         }
 
-        List<ContextLineInfo> lines = ContextSearchOperations.BuildLines(bytes, pattern, asciiCaseInsensitive, statsInvertMatch, lineRegexp, wordRegexp, crlf, nullData, stopOnNonmatch);
+        RegexSearchPlan? lineRegexPlan = CreateRegexSearchPlan(
+            pattern,
+            asciiCaseInsensitive,
+            lineRegexp,
+            wordRegexp,
+            crlf,
+            nullData,
+            preserveCrlfCarriageReturn: multiline && crlf);
+        List<ContextLineInfo> lines = ContextSearchOperations.BuildLines(
+            bytes,
+            pattern,
+            asciiCaseInsensitive,
+            statsInvertMatch,
+            lineRegexp,
+            wordRegexp,
+            crlf,
+            nullData,
+            stopOnNonmatch,
+            lineRegexPlan);
         ulong primaryMatches = 0;
         ulong bytesSearched = (ulong)bytes.Length;
         for (int index = 0; index < lines.Count; index++)
@@ -657,7 +692,15 @@ internal static class StandardSearchByteOperations
             if (!statsInvertMatch)
             {
                 ReadOnlySpan<byte> lineBytes = bytes.AsSpan(line.Start, line.Length);
-                stats.AddMatches((ulong)LiteralLineSearcher.CountLineMatches(lineBytes, pattern, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf, nullData));
+                stats.AddMatches((ulong)LiteralLineSearcher.CountReportedLineMatchesWithRegexPlan(
+                    lineBytes,
+                    pattern,
+                    lineRegexPlan,
+                    asciiCaseInsensitive,
+                    lineRegexp,
+                    wordRegexp,
+                    crlf,
+                    nullData));
             }
 
             primaryMatches++;
@@ -800,8 +843,32 @@ internal static class StandardSearchByteOperations
         ReadOnlySpan<byte> inputSpan = bytes.AsSpan(0, byteLength);
         byte[]? convertedBytes = convertBinaryNuls ? BinaryDetection.ConvertNulToLineFeed(inputSpan) : null;
         ReadOnlySpan<byte> activeSpan = convertedBytes is null ? inputSpan : convertedBytes;
+        bool useCrlfLinePlan = multiline &&
+            separators.Crlf &&
+            !PatternPreparation.ShouldUseMultilineRegex(pattern, multilineDotall);
+        if (useCrlfLinePlan)
+        {
+            regexPlan = CreateRegexSearchPlan(
+                pattern,
+                asciiCaseInsensitive,
+                lineRegexp,
+                wordRegexp,
+                separators.Crlf,
+                separators.NullData,
+                preserveCrlfCarriageReturn: true);
+        }
+
         int stopLength = stopOnNonmatch
-            ? ContextSearchOperations.GetStopOnNonmatchLength(activeSpan, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, separators.Crlf, separators.NullData)
+            ? ContextSearchOperations.GetStopOnNonmatchLength(
+                activeSpan,
+                pattern,
+                asciiCaseInsensitive,
+                invertMatch,
+                lineRegexp,
+                wordRegexp,
+                separators.Crlf,
+                separators.NullData,
+                regexPlan)
             : activeSpan.Length;
         ReadOnlySpan<byte> searchSpan = activeSpan[..stopLength];
         ReadOnlySpan<byte> outputSpan = convertedBytes is null
@@ -846,7 +913,18 @@ internal static class StandardSearchByteOperations
 
         if (quiet)
         {
-            return SearchModeEvaluation.SearchQuiet(searchSpan, pattern, searchMode, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
+            return SearchModeEvaluation.SearchQuiet(
+                searchSpan,
+                pattern,
+                searchMode,
+                asciiCaseInsensitive,
+                invertMatch,
+                lineRegexp,
+                wordRegexp,
+                maxCount,
+                separators.Crlf,
+                separators.NullData,
+                regexPlan);
         }
 
         if (searchMode == CliSearchMode.Count)
@@ -854,11 +932,17 @@ internal static class StandardSearchByteOperations
             long count;
             if (onlyMatching && !invertMatch)
             {
-                count = LiteralLineSearcher.CountMatches(searchSpan, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
+                count = LiteralLineSearcher.CountMatchesWithRegexPlan(searchSpan, pattern, regexPlan, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
             }
             else
             {
-                RegexSearchPlan? effectiveRegexPlan = regexPlan ?? LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: true);
+                RegexSearchPlan? effectiveRegexPlan = regexPlan ?? CreateRegexSearchPlan(
+                    pattern,
+                    asciiCaseInsensitive,
+                    lineRegexp,
+                    wordRegexp,
+                    separators.Crlf,
+                    separators.NullData);
                 count = LiteralLineSearcher.CountMatchingLinesWithRegexPlan(searchSpan, pattern, effectiveRegexPlan, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
             }
 
@@ -867,20 +951,33 @@ internal static class StandardSearchByteOperations
 
         if (searchMode == CliSearchMode.CountMatches)
         {
-            long count = LiteralLineSearcher.CountMatches(searchSpan, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
+            long count = LiteralLineSearcher.CountMatchesWithRegexPlan(searchSpan, pattern, regexPlan, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
             return SearchOutputFormatting.WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.FilesWithMatches)
         {
-            RegexSearchPlan? effectiveRegexPlan = regexPlan ?? LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: true);
+            RegexSearchPlan? effectiveRegexPlan = regexPlan ?? CreateRegexSearchPlan(
+                pattern,
+                asciiCaseInsensitive,
+                lineRegexp,
+                wordRegexp,
+                separators.Crlf,
+                separators.NullData,
+                preserveCrlfCarriageReturn: multiline && separators.Crlf);
             bool hasMatch = LiteralLineSearcher.HasMatchWithRegexPlan(searchSpan, pattern, effectiveRegexPlan, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
             return SearchOutputFormatting.WritePathIf(output, prefix, color, hasMatch, nullPathTerminator, separators.LineTerminator);
         }
 
         if (searchMode == CliSearchMode.FilesWithoutMatch)
         {
-            RegexSearchPlan? effectiveRegexPlan = regexPlan ?? LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: true);
+            RegexSearchPlan? effectiveRegexPlan = regexPlan ?? CreateRegexSearchPlan(
+                pattern,
+                asciiCaseInsensitive,
+                lineRegexp,
+                wordRegexp,
+                separators.Crlf,
+                separators.NullData);
             bool hasMatch = LiteralLineSearcher.HasMatchWithRegexPlan(searchSpan, pattern, effectiveRegexPlan, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
             return SearchOutputFormatting.WritePathIf(output, prefix, color, !hasMatch, nullPathTerminator, separators.LineTerminator);
         }
@@ -888,19 +985,40 @@ internal static class StandardSearchByteOperations
         if (passthru || beforeContext > 0 || afterContext > 0)
         {
             byte[] contextBytes = byteLength == bytes.Length ? bytes : inputSpan.ToArray();
-            return ContextSearchOperations.SearchBytes(contextBytes, pattern, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, vimgrep, onlyMatching, replacement, maxCount, trim, beforeContext, afterContext, passthru, nullPathTerminator, stopOnNonmatch);
+            return ContextSearchOperations.SearchBytes(contextBytes, pattern, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, vimgrep, onlyMatching, replacement, maxCount, trim, beforeContext, afterContext, passthru, nullPathTerminator, stopOnNonmatch, regexPlan);
         }
 
         if (replacement is ReadOnlyMemory<byte> replacementValue && !invertMatch)
         {
-            var replacementCapturePlan = ReplacementCapturePlan.TryCreate(pattern, asciiCaseInsensitive);
+            var replacementOptions = new RegexSearchPlanOptions(
+                asciiCaseInsensitive,
+                lineRegexp,
+                wordRegexp,
+                separators.Crlf,
+                separators.NullData);
+            RegexSearchPlan? effectiveRegexPlan = regexPlan;
+            if (effectiveRegexPlan is null || !effectiveRegexPlan.Options.IsCompatible(
+                replacementOptions.AsciiCaseInsensitive,
+                replacementOptions.LineRegexp,
+                replacementOptions.WordRegexp,
+                replacementOptions.Crlf,
+                replacementOptions.NullData,
+                replacementOptions.Multiline,
+                replacementOptions.MultilineDotall))
+            {
+                effectiveRegexPlan = RegexSearchPlan.Create(pattern, replacementOptions);
+            }
+
+            var replacementCapturePlan = ReplacementCapturePlan.TryCreate(
+                pattern,
+                replacementOptions,
+                effectiveRegexPlan);
             if (onlyMatching)
             {
                 var replacementMatchSink = new ReplacementMatchSink(output, prefix, separators.FieldMatch, replacementValue, pattern, asciiCaseInsensitive, lineNumber, column, byteOffset, nullPathTerminator, color: color, lineTerminator: separators.LineTerminator, capturePlan: replacementCapturePlan);
-                return LiteralLineSearcher.SearchMatches(outputSpan, pattern, ref replacementMatchSink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
+                return LiteralLineSearcher.SearchMatchLinesWithRegexPlan(outputSpan, pattern, effectiveRegexPlan, ref replacementMatchSink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
             }
 
-            RegexSearchPlan? effectiveRegexPlan = regexPlan ?? LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: true);
             var replacementLineSink = new ReplacementLineSink(output, prefix, separators.FieldMatch, replacementValue, pattern, asciiCaseInsensitive, lineNumber, column, byteOffset, trim, nullPathTerminator, vimgrep, lineLimit, color: color, lineTerminator: separators.LineTerminator, capturePlan: replacementCapturePlan, streamPlainBodyDirectly: true);
             bool matched = LiteralLineSearcher.SearchMatchLinesWithRegexPlan(outputSpan, pattern, effectiveRegexPlan, ref replacementLineSink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
             replacementLineSink.Flush();
@@ -910,19 +1028,19 @@ internal static class StandardSearchByteOperations
         if (vimgrep && !invertMatch)
         {
             var vimgrepSink = new VimgrepSink(output, prefix, separators.FieldMatch, lineNumber, column, byteOffset, onlyMatching, trim, nullPathTerminator, lineLimit, pattern, asciiCaseInsensitive, lineRegexp, wordRegexp, separators.Crlf, separators.NullData, color, separators.LineTerminator);
-            return LiteralLineSearcher.SearchMatchLines(outputSpan, pattern, ref vimgrepSink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
+            return LiteralLineSearcher.SearchMatchLinesWithRegexPlan(outputSpan, pattern, regexPlan, ref vimgrepSink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
         }
 
         if (onlyMatching && !invertMatch)
         {
             var matchSink = new StandardMatchSink(output, prefix, separators.FieldMatch, lineNumber, column, byteOffset, trim, nullPathTerminator: nullPathTerminator, color: color, lineTerminator: separators.LineTerminator);
-            return LiteralLineSearcher.SearchMatches(outputSpan, pattern, ref matchSink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
+            return LiteralLineSearcher.SearchMatchLinesWithRegexPlan(outputSpan, pattern, regexPlan, ref matchSink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
         }
 
         if (color.Enabled && !invertMatch)
         {
             var coloredSink = new ColoredSearchSink(output, prefix, separators.FieldMatch, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
-            bool matched = LiteralLineSearcher.SearchMatchLines(outputSpan, pattern, ref coloredSink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
+            bool matched = LiteralLineSearcher.SearchMatchLinesWithRegexPlan(outputSpan, pattern, regexPlan, ref coloredSink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
             coloredSink.Flush();
             return matched;
         }
@@ -935,6 +1053,26 @@ internal static class StandardSearchByteOperations
         }
 
         return LiteralLineSearcher.Search(outputSpan, pattern, ref sink, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData, requireMatchColumn);
+    }
+
+    private static RegexSearchPlan? CreateRegexSearchPlan(
+        IReadOnlyList<byte[]> pattern,
+        bool asciiCaseInsensitive,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool crlf,
+        bool nullData,
+        bool preserveCrlfCarriageReturn = false)
+    {
+        return RegexSearchPlan.Create(
+            pattern,
+            new RegexSearchPlanOptions(
+                asciiCaseInsensitive,
+                lineRegexp,
+                wordRegexp,
+                crlf,
+                nullData,
+                preserveCrlfCarriageReturn: preserveCrlfCarriageReturn));
     }
 
     private static bool TrySearchBinarySuppressed(

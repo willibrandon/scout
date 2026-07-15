@@ -1070,6 +1070,230 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies multiline nullable and end-asserted empty matches follow ripgrep's EOF reporting rules.
+    /// </summary>
+    [Fact]
+    public void MultilineEmptyMatchEofMatrixMatchesRipgrep()
+    {
+        string root = CreateTempDirectory();
+        (string Name, byte[] Bytes)[] inputs =
+        [
+            ("empty", []),
+            ("unterminated", "foo"u8.ToArray()),
+            ("lf", "foo\n"u8.ToArray()),
+            ("crlf", "foo\r\n"u8.ToArray()),
+        ];
+        string[] patterns = [@"(?s:.*?)", @"\z", @"(?:\z)?", @"foo|\z"];
+        string[][] modes =
+        [
+            ["--count-matches"],
+            ["-o"],
+            ["-r", "X"],
+            ["-o", "-r", "X"],
+        ];
+
+        for (int inputIndex = 0; inputIndex < inputs.Length; inputIndex++)
+        {
+            string path = Path.Combine(root, inputs[inputIndex].Name + ".txt");
+            File.WriteAllBytes(path, inputs[inputIndex].Bytes);
+            for (int patternIndex = 0; patternIndex < patterns.Length; patternIndex++)
+            {
+                for (int modeIndex = 0; modeIndex < modes.Length; modeIndex++)
+                {
+                    string[] arguments = [.. modes[modeIndex], "-U", patterns[patternIndex], path];
+                    (int exitCode, byte[] output, string error) = RunScout(arguments);
+                    (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
+
+                    Assert.Equal(pinnedExitCode, exitCode);
+                    Assert.Equal(pinnedOutput, output);
+                    Assert.Equal(pinnedError, error);
+                }
+
+                string[] jsonArguments = ["--json", "-o", "-U", patterns[patternIndex], path];
+                (int jsonExitCode, byte[] jsonOutput, string jsonError) = RunScout(jsonArguments);
+                (int pinnedJsonExitCode, byte[] pinnedJsonOutput, string pinnedJsonError) = RunPinnedRipgrep(jsonArguments);
+
+                Assert.Equal(pinnedJsonExitCode, jsonExitCode);
+                Assert.Equal(NormalizeJsonTimings(pinnedJsonOutput), NormalizeJsonTimings(jsonOutput));
+                Assert.Equal(pinnedJsonError, jsonError);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Verifies an EOF-only alternative is a fallback only when no earlier match was reported.
+    /// </summary>
+    [Fact]
+    public void MultilineEofSelectionIsGlobalFallback()
+    {
+        string root = CreateTempDirectory();
+        string earlierMatch = Path.Combine(root, "earlier.txt");
+        string finalMatch = Path.Combine(root, "final.txt");
+        string fallback = Path.Combine(root, "fallback.txt");
+        File.WriteAllText(earlierMatch, "x\nbar");
+        File.WriteAllText(finalMatch, "bar\nx");
+        File.WriteAllText(fallback, "bar");
+        string[][] argumentSets =
+        [
+            ["--count-matches", "-U", @"x|\z", earlierMatch],
+            ["-o", "-U", @"x|\z", earlierMatch],
+            ["-r", "X", "-U", @"x|\z", earlierMatch],
+            ["--json", "-U", @"x|\z", earlierMatch],
+            ["--count-matches", "-U", @"x|\z", finalMatch],
+            ["--count-matches", "-U", @"x|\z", fallback],
+            ["-o", "-r", "X", "-U", @"x|\z", fallback],
+        ];
+
+        for (int index = 0; index < argumentSets.Length; index++)
+        {
+            string[] arguments = argumentSets[index];
+            (int exitCode, byte[] output, string error) = RunScout(arguments);
+            (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
+
+            Assert.Equal(pinnedExitCode, exitCode);
+            if (arguments[0] == "--json")
+            {
+                Assert.Equal(NormalizeJsonTimings(pinnedOutput), NormalizeJsonTimings(output));
+            }
+            else
+            {
+                Assert.Equal(pinnedOutput, output);
+            }
+
+            Assert.Equal(pinnedError, error);
+        }
+    }
+
+    /// <summary>
+    /// Verifies an EOF selection has no synthetic match column or replacement span.
+    /// </summary>
+    [Fact]
+    public void MultilineEofSelectionFormattingMatchesRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "head\ntail");
+        string[][] argumentSets =
+        [
+            ["-n", "--column", "-U", "-r", "X", @"\z", path],
+            ["-o", "-n", "--column", "-U", "-r", "X", @"\z", path],
+            ["--vimgrep", "-U", "-r", "X", @"\z", path],
+            ["-C1", "-U", "-r", "X", @"\z", path],
+        ];
+
+        for (int index = 0; index < argumentSets.Length; index++)
+        {
+            string[] arguments = argumentSets[index];
+            (int exitCode, byte[] output, string error) = RunScout(arguments);
+            (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
+
+            Assert.Equal(pinnedExitCode, exitCode);
+            Assert.Equal(pinnedOutput, output);
+            Assert.Equal(pinnedError, error);
+        }
+    }
+
+    /// <summary>
+    /// Verifies multiline routing uses actual line-feed reachability instead of flag or class presence.
+    /// </summary>
+    [Fact]
+    public void MultilineExecutionModeAnalysisMatchesRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "aa\n");
+        string[][] argumentSets =
+        [
+            ["-U", "-c", "(?s:a)", path],
+            ["-U", "--multiline-dotall", "-c", "a", path],
+            ["-U", "-c", "[a]", path],
+            ["-U", "-c", "(?s)(?-s:.)", path],
+            ["-U", "-c", "(?s:.)", path],
+        ];
+
+        for (int index = 0; index < argumentSets.Length; index++)
+        {
+            string[] arguments = argumentSets[index];
+            (int exitCode, byte[] output, string error) = RunScout(arguments);
+            (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
+
+            Assert.Equal(pinnedExitCode, exitCode);
+            Assert.Equal(pinnedOutput, output);
+            Assert.Equal(pinnedError, error);
+        }
+    }
+
+    /// <summary>
+    /// Verifies multiline CRLF searches select records with carriage-return matches while reporting against record content.
+    /// </summary>
+    [Fact]
+    public void MultilineCrlfCarriageReturnMatchesRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        string emptyCrlfPath = Path.Combine(root, "empty-crlf.txt");
+        string longCrlfPath = Path.Combine(root, "long-crlf.txt");
+        File.WriteAllBytes(path, "a\r\nb\r\n"u8.ToArray());
+        File.WriteAllBytes(emptyCrlfPath, "\r\n"u8.ToArray());
+        File.WriteAllBytes(longCrlfPath, "abcdef\r\n"u8.ToArray());
+        string[][] argumentSets =
+        [
+            ["-U", "--crlf", "-n", @"\r", path],
+            ["-U", "--crlf", "-c", @"\r", path],
+            ["-U", "--crlf", "--count-matches", @"\r", path],
+            ["-U", "--crlf", "-o", @"\r", path],
+            ["-U", "--crlf", "-r", "X", @"\r", path],
+            ["-U", "--crlf", "-o", "-r", "X", @"\r", path],
+            ["-U", "--crlf", "--vimgrep", @"\r", path],
+            ["-U", "--crlf", "--vimgrep", "-o", @"\r", path],
+            ["-U", "--crlf", "-n", "--column", @"\r", path],
+            ["-U", "--crlf", "--json", @"\r", path],
+            ["-U", "--crlf", "--json", @"a(?:\r)?", path],
+            ["-U", "--crlf", "--stats", @"\r", path],
+            ["-U", "--crlf", "-n", ".", emptyCrlfPath],
+            ["-U", "--crlf", "-n", @"[\r]", emptyCrlfPath],
+            ["-U", "--crlf", "-n", @"\s", emptyCrlfPath],
+            ["-U", "--crlf", "-n", "(?s:.)", emptyCrlfPath],
+            ["-U", "--crlf", "-C1", @"\r", path],
+            ["-U", "--crlf", "-C1", "-o", @"\r", path],
+            ["-U", "--crlf", "-C1", "-r", "X", @"\r", path],
+            ["-U", "--crlf", "--passthru", @"\r", path],
+            ["-U", "--crlf", "-q", @"\r", path],
+            ["-U", "--crlf", "-l", @"\r", path],
+            ["-U", "--crlf", "-L", @"\r", path],
+            ["-U", "--crlf", "-m1", "--stats", @"\r", path],
+            ["-U", "--crlf", "--color", "always", "-n", "--column", @"\r", path],
+            ["-U", "--crlf", "-M2", "-r", "X", @"\r", longCrlfPath],
+            ["-U", "--crlf", "-M2", "--max-columns-preview", "-r", "X", @"\r", longCrlfPath],
+            ["-U", "--crlf", "--vimgrep", "-M2", @"\r", longCrlfPath],
+            ["-U", "--crlf", "--color", "always", "-M2", @"\r", longCrlfPath],
+        ];
+
+        for (int index = 0; index < argumentSets.Length; index++)
+        {
+            string[] arguments = argumentSets[index];
+            (int exitCode, byte[] output, string error) = RunScout(arguments);
+            (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
+
+            Assert.Equal(pinnedExitCode, exitCode);
+            if (Array.IndexOf(arguments, "--json") >= 0)
+            {
+                Assert.Equal(NormalizeJsonTimings(pinnedOutput), NormalizeJsonTimings(output));
+            }
+            else if (Array.IndexOf(arguments, "--stats") >= 0)
+            {
+                Assert.Equal(NormalizeStatsTimings(pinnedOutput), NormalizeStatsTimings(output));
+            }
+            else
+            {
+                Assert.Equal(pinnedOutput, output);
+            }
+
+            Assert.Equal(pinnedError, error);
+        }
+    }
+
+    /// <summary>
     /// Verifies multiline mode uses multiline regex anchors inside whole-buffer searches.
     /// </summary>
     [Fact]
@@ -1081,6 +1305,72 @@ public sealed class ScoutApplicationTests
 
         (int exitCode, byte[] output, string error) = RunScout("-n", "-U", "foo\n^bar", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("-n", "-U", "foo\n^bar", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies repeated multiline patterns retain ripgrep's ordered alternation semantics.
+    /// </summary>
+    [Fact]
+    public void RepeatedMultilinePatternsPreserveOrderedAlternation()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "foo\nbarbaz\n");
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "-n",
+            "-o",
+            "-U",
+            "-e",
+            "foo\nbar",
+            "-e",
+            "foo\nbarbaz",
+            path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "-n",
+            "-o",
+            "-U",
+            "-e",
+            "foo\nbar",
+            "-e",
+            "foo\nbarbaz",
+            path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies unscoped flags in one multiline pattern do not affect a later pattern.
+    /// </summary>
+    [Fact]
+    public void RepeatedMultilinePatternsKeepFlagsScopedToEachPattern()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "FOO\nbar\nbaz\nqux\n");
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "-n",
+            "-U",
+            "-e",
+            "(?i)foo\nbar",
+            "-e",
+            "BAZ\nQUX",
+            path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "-n",
+            "-U",
+            "-e",
+            "(?i)foo\nbar",
+            "-e",
+            "BAZ\nQUX",
+            path);
 
         Assert.Equal(pinnedExitCode, exitCode);
         Assert.Equal(pinnedOutput, output);
@@ -4098,7 +4388,7 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
-    /// Verifies replacement capture extraction handles held-out structural captures without generic rematching.
+    /// Verifies replacement capture extraction handles held-out structural captures with the authoritative matcher.
     /// </summary>
     [Fact]
     public void ReplacementCapturePlanCollectsHeldoutStructuralCaptures()
@@ -4109,8 +4399,8 @@ public sealed class ScoutApplicationTests
         int[] captureLengths = new int[3];
 
         Assert.NotNull(plan);
-        AssertReplacementCapturePlanAvoidsAutomata(plan);
-        Assert.True(plan.TryCollectNumericCaptures("struct Foo"u8, captureStarts, captureLengths));
+        Assert.Equal(2, plan.CaptureCount);
+        Assert.True(plan.TryCollectCaptures("struct Foo"u8, captureStarts, captureLengths, captureNames: null));
         Assert.Equal([0, 0, 7], captureStarts);
         Assert.Equal([10, 6, 3], captureLengths);
     }
@@ -4131,16 +4421,161 @@ public sealed class ScoutApplicationTests
             plan);
 
         Assert.NotNull(plan);
-        AssertReplacementCapturePlanAvoidsAutomata(plan);
         Assert.Equal("struct Foo"u8.ToArray(), replacement);
     }
 
-    private static void AssertReplacementCapturePlanAvoidsAutomata(ReplacementCapturePlan plan)
+    /// <summary>
+    /// Verifies repeated patterns share ripgrep's global numeric capture numbering.
+    /// </summary>
+    [Fact]
+    public void ReplaceExpandsGlobalCapturesAcrossRepeatedPatterns()
     {
-        var automata = (RegexAutomaton?[])typeof(ReplacementCapturePlan)
-            .GetField("automata", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
-            .GetValue(plan)!;
-        Assert.All(automata, Assert.Null);
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "a\nb\n");
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "-o", "-r", "$0|$1|$2", "-e", "(a)", "-e", "(b)", path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "-o", "-r", "$0|$1|$2", "-e", "(a)", "-e", "(b)", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal("a|a|\nb||b\n"u8.ToArray(), output);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies replacement captures retain boundary context for full-line and only-matching output.
+    /// </summary>
+    [Fact]
+    public void ReplaceReplaysCapturesInOriginalLineContext()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "xfooy\n");
+
+        (int lineExitCode, byte[] lineOutput, string lineError) = RunScout(
+            "-r", "[$1]", @"\B(foo)\B", path);
+        (int pinnedLineExitCode, byte[] pinnedLineOutput, string pinnedLineError) = RunPinnedRipgrep(
+            "-r", "[$1]", @"\B(foo)\B", path);
+        (int onlyExitCode, byte[] onlyOutput, string onlyError) = RunScout(
+            "-o", "-r", "<$1>", @"\B(foo)\B", path);
+        (int pinnedOnlyExitCode, byte[] pinnedOnlyOutput, string pinnedOnlyError) = RunPinnedRipgrep(
+            "-o", "-r", "<$1>", @"\B(foo)\B", path);
+
+        Assert.Equal(pinnedLineExitCode, lineExitCode);
+        Assert.Equal(pinnedLineOutput, lineOutput);
+        Assert.Equal(pinnedLineError, lineError);
+        Assert.Equal(pinnedOnlyExitCode, onlyExitCode);
+        Assert.Equal(pinnedOnlyOutput, onlyOutput);
+        Assert.Equal(pinnedOnlyError, onlyError);
+    }
+
+    /// <summary>
+    /// Verifies capture replay uses the same terminator-free record seen by haystack anchors.
+    /// </summary>
+    [Fact]
+    public void ReplaceReplaysCapturesAgainstAuthoritativeRecordContent()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "foo\n");
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "-r", "$1|$2", @"(?:(foo\z)|(foo))", path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "-r", "$1|$2", @"(?:(foo\z)|(foo))", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal("foo|\n"u8.ToArray(), output);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies multiline replacement reuses the combined matcher's global capture numbering.
+    /// </summary>
+    [Fact]
+    public void MultilineReplaceExpandsGlobalCapturesAcrossRepeatedPatterns()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "before\na\nx\nmiddle one\nmiddle two\nb\ny\nafter\n");
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "-U", "-o", "-r", "$1|$2", "-e", "a\n(x)", "-e", "b\n(y)", path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "-U", "-o", "-r", "$1|$2", "-e", "a\n(x)", "-e", "b\n(y)", path);
+        (int contextExitCode, byte[] contextOutput, string contextError) = RunScout(
+            "-n", "-U", "-C1", "-r", "$1|$2", "-e", "a\n(x)", "-e", "b\n(y)", path);
+        (int pinnedContextExitCode, byte[] pinnedContextOutput, string pinnedContextError) = RunPinnedRipgrep(
+            "-n", "-U", "-C1", "-r", "$1|$2", "-e", "a\n(x)", "-e", "b\n(y)", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal("x|\n|y\n"u8.ToArray(), output);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+        Assert.Equal(pinnedContextExitCode, contextExitCode);
+        Assert.Equal(pinnedContextOutput, contextOutput);
+        Assert.Equal(pinnedContextError, contextError);
+    }
+
+    /// <summary>
+    /// Verifies named captures retain their global indexes across repeated patterns.
+    /// </summary>
+    [Fact]
+    public void ReplacementCapturePlanExpandsGlobalNamedCaptures()
+    {
+        byte[][] patterns =
+        [
+            "(?P<left>a)"u8.ToArray(),
+            "(?P<right>b)"u8.ToArray(),
+        ];
+        var plan = ReplacementCapturePlan.TryCreate(patterns, asciiCaseInsensitive: false);
+
+        Assert.NotNull(plan);
+        Assert.Equal(
+            "a|a|"u8.ToArray(),
+            ReplacementFormatter.Expand("$0|$left|$right"u8, "a"u8, patterns, false, plan));
+        Assert.Equal(
+            "b||b"u8.ToArray(),
+            ReplacementFormatter.Expand("$0|$left|$right"u8, "b"u8, patterns, false, plan));
+    }
+
+    /// <summary>
+    /// Verifies captures are accepted only when the authoritative matcher associates the complete reported span.
+    /// </summary>
+    [Fact]
+    public void ReplacementCapturePlanRequiresFullSpanAssociation()
+    {
+        byte[][] patterns = ["(a)"u8.ToArray(), "(b)"u8.ToArray()];
+        var plan = ReplacementCapturePlan.TryCreate(patterns, asciiCaseInsensitive: false);
+        int[] captureStarts = new int[3];
+        int[] captureLengths = new int[3];
+
+        Assert.NotNull(plan);
+        Assert.False(plan.TryCollectCaptures("ab"u8, captureStarts, captureLengths, captureNames: null));
+        Assert.Equal([0, -1, -1], captureStarts);
+        Assert.Equal([2, -1, -1], captureLengths);
+    }
+
+    /// <summary>
+    /// Verifies duplicate names across repeated patterns are rejected by the combined syntax parser.
+    /// </summary>
+    [Fact]
+    public void ReplacementCapturePlanRejectsDuplicateNamesAcrossPatterns()
+    {
+        byte[][] patterns =
+        [
+            "(?P<value>a)"u8.ToArray(),
+            "(?P<value>b)"u8.ToArray(),
+        ];
+
+        FormatException exception = Assert.Throws<FormatException>(
+            () => ReplacementCapturePlan.TryCreate(patterns, asciiCaseInsensitive: false));
+
+        Assert.Contains("duplicate capture group name", exception.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

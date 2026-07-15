@@ -1,29 +1,80 @@
 namespace Scout;
 
-internal sealed class ReplacementCapturePlan
+/// <summary>
+/// Extracts replacement captures with the authoritative matcher used by regex search.
+/// </summary>
+/// <param name="searchPlan">The combined regex search plan.</param>
+internal sealed class ReplacementCapturePlan(RegexSearchPlan searchPlan)
 {
-    private static readonly object CacheLock = new();
-    private static readonly List<(IReadOnlyList<byte[]> Patterns, bool AsciiCaseInsensitive, ThreadLocal<ReplacementCapturePlan?> Plan)> Cache = [];
+    private static readonly object s_cacheLock = new();
+    private static readonly List<(
+        IReadOnlyList<byte[]> Patterns,
+        RegexSearchPlanOptions Options,
+        ThreadLocal<ReplacementCapturePlan?> Plan)> s_cache = [];
 
-    private readonly RegexAutomaton?[] automata;
-    private readonly SimpleReplacementCapturePlan?[] simplePlans;
+    private readonly RegexSearchPlan _searchPlan = searchPlan;
 
-    private ReplacementCapturePlan(RegexAutomaton?[] automata, SimpleReplacementCapturePlan?[] simplePlans)
+    /// <summary>
+    /// Gets the number of globally numbered capture groups.
+    /// </summary>
+    internal int CaptureCount => _searchPlan.CaptureCount;
+
+    /// <summary>
+    /// Creates a replacement capture plan with ordinary line-search semantics.
+    /// </summary>
+    /// <param name="patterns">The ordered regex patterns.</param>
+    /// <param name="asciiCaseInsensitive">Whether matching is ASCII case-insensitive.</param>
+    /// <returns>The capture plan, or <see langword="null" /> for an empty pattern set.</returns>
+    internal static ReplacementCapturePlan? TryCreate(
+        IReadOnlyList<byte[]> patterns,
+        bool asciiCaseInsensitive)
     {
-        this.automata = automata;
-        this.simplePlans = simplePlans;
+        return TryCreate(
+            patterns,
+            new RegexSearchPlanOptions(asciiCaseInsensitive),
+            searchPlan: null);
     }
 
-    public static ReplacementCapturePlan? TryCreate(IReadOnlyList<byte[]> patterns, bool asciiCaseInsensitive)
+    /// <summary>
+    /// Creates a replacement capture plan, reusing a compatible search plan when supplied.
+    /// </summary>
+    /// <param name="patterns">The ordered regex patterns.</param>
+    /// <param name="options">The regex search semantics.</param>
+    /// <param name="searchPlan">An optional plan already used by the search.</param>
+    /// <returns>The capture plan, or <see langword="null" /> for an empty pattern set.</returns>
+    internal static ReplacementCapturePlan? TryCreate(
+        IReadOnlyList<byte[]> patterns,
+        RegexSearchPlanOptions options,
+        RegexSearchPlan? searchPlan)
     {
-        ThreadLocal<ReplacementCapturePlan?>? cachedPlan = null;
-        lock (CacheLock)
+        ArgumentNullException.ThrowIfNull(patterns);
+        if (searchPlan is not null && searchPlan.Options.IsCompatible(
+            options.AsciiCaseInsensitive,
+            options.LineRegexp,
+            options.WordRegexp,
+            options.Crlf,
+            options.NullData,
+            options.Multiline,
+            options.MultilineDotall))
         {
-            for (int index = 0; index < Cache.Count; index++)
+            return new ReplacementCapturePlan(searchPlan);
+        }
+
+        ThreadLocal<ReplacementCapturePlan?>? cachedPlan = null;
+        lock (s_cacheLock)
+        {
+            for (int index = 0; index < s_cache.Count; index++)
             {
-                (IReadOnlyList<byte[]> cachedPatterns, bool cachedAsciiCaseInsensitive, ThreadLocal<ReplacementCapturePlan?> plan) = Cache[index];
+                (IReadOnlyList<byte[]> cachedPatterns, RegexSearchPlanOptions cachedOptions, ThreadLocal<ReplacementCapturePlan?> plan) = s_cache[index];
                 if (ReferenceEquals(cachedPatterns, patterns) &&
-                    cachedAsciiCaseInsensitive == asciiCaseInsensitive)
+                    cachedOptions.IsCompatible(
+                        options.AsciiCaseInsensitive,
+                        options.LineRegexp,
+                        options.WordRegexp,
+                        options.Crlf,
+                        options.NullData,
+                        options.Multiline,
+                        options.MultilineDotall))
                 {
                     cachedPlan = plan;
                     break;
@@ -32,126 +83,148 @@ internal sealed class ReplacementCapturePlan
 
             if (cachedPlan is null)
             {
-                cachedPlan = new ThreadLocal<ReplacementCapturePlan?>(() => TryCompile(patterns, asciiCaseInsensitive));
-                Cache.Add((patterns, asciiCaseInsensitive, cachedPlan));
+                cachedPlan = new ThreadLocal<ReplacementCapturePlan?>(() => Compile(patterns, options));
+                s_cache.Add((patterns, options, cachedPlan));
             }
         }
 
         return cachedPlan.Value;
     }
 
-    private static ReplacementCapturePlan? TryCompile(IReadOnlyList<byte[]> patterns, bool asciiCaseInsensitive)
-    {
-        var automata = new RegexAutomaton?[patterns.Count];
-        var simplePlans = new SimpleReplacementCapturePlan?[patterns.Count];
-        for (int index = 0; index < patterns.Count; index++)
-        {
-            if (SimpleReplacementCapturePlan.TryCreate(patterns[index], asciiCaseInsensitive, out SimpleReplacementCapturePlan? simplePlan))
-            {
-                simplePlans[index] = simplePlan;
-                continue;
-            }
-
-            try
-            {
-                automata[index] = RegexAutomaton.Compile(
-                    patterns[index],
-                    asciiCaseInsensitive,
-                    multiLine: false,
-                    dotMatchesNewline: false);
-            }
-            catch (Exception ex) when (ex is FormatException or ArgumentException)
-            {
-                return null;
-            }
-        }
-
-        return new ReplacementCapturePlan(automata, simplePlans);
-    }
-
-    public bool TryCollectNumericCaptures(
+    /// <summary>
+    /// Collects globally numbered captures for a complete match span.
+    /// </summary>
+    /// <param name="matched">The match span reported by the authoritative search plan.</param>
+    /// <param name="captureStarts">Receives capture starts relative to <paramref name="matched" />.</param>
+    /// <param name="captureLengths">Receives capture lengths.</param>
+    /// <param name="captureNames">Receives global capture-name mappings when requested.</param>
+    /// <returns><see langword="true" /> when the same combined matcher associates the complete span with captures.</returns>
+    internal bool TryCollectCaptures(
         ReadOnlySpan<byte> matched,
         int[] captureStarts,
-        int[] captureLengths)
+        int[] captureLengths,
+        Dictionary<string, int>? captureNames)
     {
-        for (int index = 0; index < automata.Length; index++)
-        {
-            if (simplePlans[index]?.TryCollectNumericCaptures(matched, captureStarts, captureLengths) == true)
-            {
-                return true;
-            }
-
-            RegexAutomaton? automaton = automata[index];
-            if (automaton is null)
-            {
-                continue;
-            }
-
-            RegexCaptures? captures = automaton.FindCaptures(matched);
-            if (captures is null ||
-                captures.Match.Start != 0 ||
-                captures.Match.Length != matched.Length)
-            {
-                continue;
-            }
-
-            Array.Fill(captureStarts, -1);
-            Array.Fill(captureLengths, -1);
-            int groupCount = Math.Min(captures.GroupCount, captureStarts.Length);
-            for (int group = 0; group < groupCount; group++)
-            {
-                if (captures.GetGroup(group) is RegexMatch capture)
-                {
-                    captureStarts[group] = capture.Start;
-                    captureLengths[group] = capture.Length;
-                }
-            }
-
-            return true;
-        }
-
-        return false;
+        return TryCollectCaptures(
+            matched,
+            matchStart: 0,
+            matched.Length,
+            captureStarts,
+            captureLengths,
+            captureNames);
     }
 
-    public bool TryAddExpandedNumericReplacement(
-        List<byte> bytes,
-        ReadOnlySpan<byte> matched,
-        ReplacementTemplate template)
+    /// <summary>
+    /// Collects globally numbered captures for a known span in its original haystack context.
+    /// </summary>
+    /// <param name="haystack">The complete record or haystack used by the authoritative match.</param>
+    /// <param name="matchStart">The known match start in <paramref name="haystack" />.</param>
+    /// <param name="matchLength">The known match length.</param>
+    /// <param name="captureStarts">Receives capture starts relative to the known match.</param>
+    /// <param name="captureLengths">Receives capture lengths.</param>
+    /// <param name="captureNames">Receives global capture-name mappings when requested.</param>
+    /// <returns><see langword="true" /> when the same combined matcher associates the exact span with captures.</returns>
+    internal bool TryCollectCaptures(
+        ReadOnlySpan<byte> haystack,
+        int matchStart,
+        int matchLength,
+        int[] captureStarts,
+        int[] captureLengths,
+        Dictionary<string, int>? captureNames)
     {
-        if (template.UsesNamedCaptureReferences)
+        ArgumentNullException.ThrowIfNull(captureStarts);
+        ArgumentNullException.ThrowIfNull(captureLengths);
+        if ((uint)matchStart > (uint)haystack.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(matchStart));
+        }
+
+        if (matchLength < 0 || matchLength > haystack.Length - matchStart)
+        {
+            throw new ArgumentOutOfRangeException(nameof(matchLength));
+        }
+
+        Array.Fill(captureStarts, -1);
+        Array.Fill(captureLengths, -1);
+        captureNames?.Clear();
+        if (captureStarts.Length > 0 && captureLengths.Length > 0)
+        {
+            captureStarts[0] = 0;
+            captureLengths[0] = matchLength;
+        }
+
+        int matchEnd = matchStart + matchLength;
+        ReadOnlySpan<byte> replayHaystack = GetReplayHaystack(haystack);
+        if (matchEnd > replayHaystack.Length)
         {
             return false;
         }
 
-        for (int index = 0; index < simplePlans.Length; index++)
-        {
-            if (simplePlans[index]?.TryAddExpandedNumericReplacement(bytes, matched, template) == true)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    public bool TryWriteExpandedNumericReplacement(
-        RawByteWriter output,
-        ReadOnlySpan<byte> matched,
-        ReplacementTemplate template)
-    {
-        if (template.UsesNamedCaptureReferences)
+        RegexCaptures? captures = _searchPlan.ReplayCaptures(
+            replayHaystack,
+            matchStart,
+            matchEnd);
+        if (captures is null ||
+            captures.Match.Start != matchStart ||
+            captures.Match.End != matchEnd)
         {
             return false;
         }
 
-        for (int index = 0; index < simplePlans.Length; index++)
+        int groupCount = Math.Min(captures.GroupCount, Math.Min(captureStarts.Length, captureLengths.Length));
+        for (int group = 0; group < groupCount; group++)
         {
-            if (simplePlans[index]?.TryWriteExpandedNumericReplacement(output, matched, template) == true)
+            if (captures.GetGroup(group) is RegexMatch capture)
             {
-                return true;
+                captureStarts[group] = capture.Start - matchStart;
+                captureLengths[group] = capture.Length;
             }
         }
 
-        return false;
+        if (captureNames is not null)
+        {
+            foreach (KeyValuePair<string, int> captureName in _searchPlan.CaptureNames)
+            {
+                captureNames.Add(captureName.Key, captureName.Value);
+            }
+        }
+
+        return true;
+    }
+
+    private ReadOnlySpan<byte> GetReplayHaystack(ReadOnlySpan<byte> haystack)
+    {
+        if (_searchPlan.Options.Multiline ||
+            (!_searchPlan.Options.NullData &&
+            !_searchPlan.Options.LineRegexp &&
+            !_searchPlan.HasHaystackAnchors))
+        {
+            return haystack;
+        }
+
+        byte terminator = _searchPlan.Options.NullData ? (byte)0 : (byte)'\n';
+        if (haystack.IsEmpty || haystack[^1] != terminator)
+        {
+            return haystack;
+        }
+
+        haystack = haystack[..^1];
+        if (!_searchPlan.Options.NullData &&
+            _searchPlan.Options.Crlf &&
+            !haystack.IsEmpty &&
+            haystack[^1] == (byte)'\r')
+        {
+            haystack = haystack[..^1];
+        }
+
+        return haystack;
+    }
+
+    private static ReplacementCapturePlan? Compile(
+        IReadOnlyList<byte[]> patterns,
+        RegexSearchPlanOptions options)
+    {
+        var searchPlan = RegexSearchPlan.Create(patterns, options);
+        return searchPlan is null ? null : new ReplacementCapturePlan(searchPlan);
     }
 }

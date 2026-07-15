@@ -789,6 +789,10 @@ public sealed class CliLowArgs
     public void SetNullData(bool yes)
     {
         NullData = yes;
+        if (yes)
+        {
+            Crlf = false;
+        }
     }
 
     /// <summary>

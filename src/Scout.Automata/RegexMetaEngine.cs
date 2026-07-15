@@ -10,7 +10,7 @@ internal sealed class RegexMetaEngine
     private const int DenseDfaStateLimit = 16;
     private const int SparseDfaStateLimit = 64;
     private const int OnePassDfaNfaStateLimit = 48;
-    private const int BoundedBacktrackerNfaStateLimit = 24;
+    private const int BoundedBacktrackerNfaStateLimit = 256;
     private const int CompactScalarFallbackNfaStateThreshold = 4096;
     private const int UnanchoredLazyDfaHaystackThreshold = 4096;
     private const int AnchoredLeftmostDfaHaystackThreshold = 4096;
@@ -219,12 +219,24 @@ internal sealed class RegexMetaEngine
         return new RegexRunnerPool<T>(initial, factory ?? (() => null));
     }
 
+    /// <summary>
+    /// Gets the selected regex engine kind.
+    /// </summary>
     public RegexEngineKind Kind { get; }
 
+    /// <summary>
+    /// Gets the selected prefilter kind.
+    /// </summary>
     public RegexPrefilterKind PrefilterKind => prefilter?.Kind ?? RegexPrefilterKind.None;
 
+    /// <summary>
+    /// Gets the maximum lookbehind window required by the selected literal prefilter.
+    /// </summary>
     public int RequiredLiteralWindow => prefilter?.RequiredLiteralWindow ?? 0;
 
+    /// <summary>
+    /// Creates a meta engine backed by an empty-match engine.
+    /// </summary>
     public static RegexMetaEngine CompileEmpty(RegexEmptyEngine empty)
     {
         return new RegexMetaEngine(
@@ -247,6 +259,9 @@ internal sealed class RegexMetaEngine
             empty: empty);
     }
 
+    /// <summary>
+    /// Creates a meta engine backed by a literal-set engine.
+    /// </summary>
     public static RegexMetaEngine CompileLiteralSet(RegexLiteralSetEngine literalSet, bool utf8)
     {
         return new RegexMetaEngine(
@@ -268,6 +283,9 @@ internal sealed class RegexMetaEngine
             utf8);
     }
 
+    /// <summary>
+    /// Creates a meta engine backed by an alternation-set engine.
+    /// </summary>
     public static RegexMetaEngine CompileAlternationSet(
         RegexAlternationSetEngine alternationSet,
         bool utf8,
@@ -294,6 +312,9 @@ internal sealed class RegexMetaEngine
             nfaFactory: fallbackNfaFactory);
     }
 
+    /// <summary>
+    /// Creates a meta engine backed by a word-boundary literal-set engine.
+    /// </summary>
     public static RegexMetaEngine CompileWordBoundaryLiteralSet(
         RegexWordBoundaryLiteralSetEngine wordBoundaryLiteralSet,
         bool utf8,
@@ -321,6 +342,9 @@ internal sealed class RegexMetaEngine
             wordBoundaryLiteralSet: wordBoundaryLiteralSet);
     }
 
+    /// <summary>
+    /// Creates a meta engine backed by a bounded scalar-class sequence engine.
+    /// </summary>
     public static RegexMetaEngine CompileBoundedScalarClassSequence(
         RegexBoundedScalarClassSequenceEngine boundedScalarClassSequence,
         bool utf8,
@@ -348,6 +372,9 @@ internal sealed class RegexMetaEngine
             nfaFactory: fallbackNfaFactory);
     }
 
+    /// <summary>
+    /// Creates a meta engine backed by a bounded byte-class sequence engine.
+    /// </summary>
     public static RegexMetaEngine CompileBoundedByteClassSequence(
         RegexBoundedByteClassSequenceEngine boundedByteClassSequence,
         bool utf8,
@@ -375,6 +402,9 @@ internal sealed class RegexMetaEngine
             nfaFactory: fallbackNfaFactory);
     }
 
+    /// <summary>
+    /// Creates a meta engine backed by a Unicode grapheme-cluster engine.
+    /// </summary>
     public static RegexMetaEngine CompileUnicodeGraphemeCluster(
         RegexUnicodeGraphemeClusterEngine unicodeGraphemeCluster,
         bool utf8,
@@ -402,6 +432,9 @@ internal sealed class RegexMetaEngine
             nfaFactory: fallbackNfaFactory);
     }
 
+    /// <summary>
+    /// Creates a meta engine backed by a simple-sequence engine.
+    /// </summary>
     public static RegexMetaEngine CompileSimpleSequence(
         RegexSimpleSequenceEngine simpleSequence,
         bool utf8,
@@ -428,6 +461,9 @@ internal sealed class RegexMetaEngine
             nfaFactory: fallbackNfaFactory);
     }
 
+    /// <summary>
+    /// Creates a meta engine backed by a delimited-span engine.
+    /// </summary>
     public static RegexMetaEngine CompileDelimitedSpan(
         RegexDelimitedSpanEngine delimitedSpan,
         bool utf8,
@@ -455,6 +491,9 @@ internal sealed class RegexMetaEngine
             delimitedSpan: delimitedSpan);
     }
 
+    /// <summary>
+    /// Creates a meta engine backed by a delimited-capture engine.
+    /// </summary>
     public static RegexMetaEngine CompileDelimitedCapture(
         RegexDelimitedCaptureEngine delimitedCapture,
         bool utf8,
@@ -482,6 +521,9 @@ internal sealed class RegexMetaEngine
             delimitedCapture: delimitedCapture);
     }
 
+    /// <summary>
+    /// Creates a meta engine backed by a structured-log capture engine.
+    /// </summary>
     public static RegexMetaEngine CompileStructuredLogCapture(
         RegexStructuredLogCaptureEngine structuredLogCapture,
         bool utf8)
@@ -507,6 +549,9 @@ internal sealed class RegexMetaEngine
             structuredLogCapture: structuredLogCapture);
     }
 
+    /// <summary>
+    /// Creates a meta engine backed by a fixed word-and-whitespace sequence engine.
+    /// </summary>
     public static RegexMetaEngine CompileFixedWordWhitespaceSequence(
         RegexFixedWordWhitespaceSequenceEngine fixedWordWhitespaceSequence,
         bool utf8)
@@ -532,6 +577,9 @@ internal sealed class RegexMetaEngine
             fixedWordWhitespaceSequence: fixedWordWhitespaceSequence);
     }
 
+    /// <summary>
+    /// Creates a meta engine backed by a repeated-literal-run engine.
+    /// </summary>
     public static RegexMetaEngine CompileRepeatedLiteralRunOrEmpty(
         RegexRepeatedLiteralRunOrEmptyEngine repeatedLiteralRunOrEmpty,
         bool utf8)
@@ -557,6 +605,9 @@ internal sealed class RegexMetaEngine
             repeatedLiteralRunOrEmpty: repeatedLiteralRunOrEmpty);
     }
 
+    /// <summary>
+    /// Creates a meta engine backed by a fixed-width alternation engine.
+    /// </summary>
     public static RegexMetaEngine CompileFixedWidthAlternation(
         RegexFixedWidthAlternationEngine fixedWidthAlternation,
         bool utf8,
@@ -584,6 +635,9 @@ internal sealed class RegexMetaEngine
             fixedWidthAlternation: fixedWidthAlternation);
     }
 
+    /// <summary>
+    /// Creates a meta engine backed by a scalar-run engine.
+    /// </summary>
     public static RegexMetaEngine CompileScalarRun(
         RegexScalarRunEngine scalarRun,
         bool utf8,
@@ -611,21 +665,33 @@ internal sealed class RegexMetaEngine
             nfaFactory: fallbackNfaFactory);
     }
 
+    /// <summary>
+    /// Selects a meta engine for an NFA without a prefilter or explicit DFA size limit.
+    /// </summary>
     public static RegexMetaEngine Compile(RegexNfa nfa)
     {
         return Compile(nfa, prefilter: null, dfaSizeLimit: null);
     }
 
+    /// <summary>
+    /// Selects a meta engine for an NFA and optional prefilter.
+    /// </summary>
     public static RegexMetaEngine Compile(RegexNfa nfa, RegexPrefilter? prefilter)
     {
         return Compile(nfa, prefilter, dfaSizeLimit: null);
     }
 
+    /// <summary>
+    /// Selects a meta engine for an NFA, optional prefilter, and optional DFA size limit.
+    /// </summary>
     public static RegexMetaEngine Compile(RegexNfa nfa, RegexPrefilter? prefilter, ulong? dfaSizeLimit)
     {
         return Compile(nfa, prefilter, dfaSizeLimit, literalSet: null, alternationSet: null, simpleSequence: null);
     }
 
+    /// <summary>
+    /// Selects and configures the most appropriate authoritative engine and conservative accelerators.
+    /// </summary>
     public static RegexMetaEngine Compile(
         RegexNfa nfa,
         RegexPrefilter? prefilter,
@@ -1657,7 +1723,6 @@ internal sealed class RegexMetaEngine
         Func<RegexUnanchoredLazyDfa?>? unanchoredLazyDfaFactory = CreateUnanchoredLazyDfaFactory(
             root,
             options,
-            prefilter,
             effectiveDfaSizeLimit);
         Func<RegexLazyDfa?> anchoredLeftmostDfaFactory = () =>
             RegexLazyDfa.TryCreate(nfa, effectiveDfaSizeLimit, leftmostPrune: true, out RegexLazyDfa? anchoredLeftmostDfa)
@@ -1705,12 +1770,10 @@ internal sealed class RegexMetaEngine
     private static Func<RegexUnanchoredLazyDfa?>? CreateUnanchoredLazyDfaFactory(
         RegexSyntaxNode? root,
         RegexCompileOptions? options,
-        RegexPrefilter? prefilter,
         ulong dfaSizeLimit)
     {
         if (root is null ||
-            !options.HasValue ||
-            prefilter is not null)
+            !options.HasValue)
         {
             return null;
         }
@@ -1734,16 +1797,7 @@ internal sealed class RegexMetaEngine
             return null;
         }
 
-        RegexCompileOptions source = options.Value;
-        var asciiOptions = new RegexCompileOptions(
-            source.CaseInsensitive,
-            source.SwapGreed,
-            source.MultiLine,
-            source.DotMatchesNewline,
-            source.Crlf,
-            source.LineTerminator,
-            utf8: false,
-            unicodeClasses: false);
+        RegexCompileOptions asciiOptions = options.Value.WithAsciiSemantics();
         return () => RegexUnanchoredLazyDfa.TryCreate(root, asciiOptions, dfaSizeLimit, out RegexUnanchoredLazyDfa? dfa)
             ? dfa
             : null;
@@ -1778,6 +1832,13 @@ internal sealed class RegexMetaEngine
             : null;
     }
 
+    /// <summary>
+    /// Finds the first leftmost match at or after a byte offset.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startAt">The first permitted match start.</param>
+    /// <param name="startPredicate">An optional conservative candidate-start predicate.</param>
+    /// <returns>The first match, or <see langword="null" /> when no match exists.</returns>
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt, RegexStartPredicate? startPredicate = null)
     {
         if (startPredicate is null &&
@@ -1814,6 +1875,12 @@ internal sealed class RegexMetaEngine
         return null;
     }
 
+    /// <summary>
+    /// Determines whether the haystack contains a match.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startPredicate">An optional conservative candidate-start predicate.</param>
+    /// <returns><see langword="true" /> when a match exists.</returns>
     public bool IsMatch(ReadOnlySpan<byte> haystack, RegexStartPredicate? startPredicate = null)
     {
         if (empty is not null)
@@ -1873,6 +1940,12 @@ internal sealed class RegexMetaEngine
         return Find(haystack, startAt: 0, startPredicate).HasValue;
     }
 
+    /// <summary>
+    /// Counts line-feed-delimited records containing at least one match.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startPredicate">An optional conservative candidate-start predicate.</param>
+    /// <returns>The number of matching records.</returns>
     public long CountMatchingLines(ReadOnlySpan<byte> haystack, RegexStartPredicate? startPredicate = null)
     {
         if (anchoredLineLiteralGap is not null)
@@ -1925,6 +1998,7 @@ internal sealed class RegexMetaEngine
         Dictionary<(int State, int Position), bool>? reachabilityCache)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        bool hasRequiredStart = startPredicate?.HasRequiredStart == true;
         if (empty is not null)
         {
             return empty.Find(haystack, startOffset);
@@ -2150,7 +2224,9 @@ internal sealed class RegexMetaEngine
             return FindWithRequiredLiteralPrefilter(haystack, startOffset, reachabilityCache);
         }
 
-        RegexUnanchoredLazyDfa? activeUnanchoredLazyDfa = RentUnanchoredLazyDfa(haystack.Length);
+        RegexUnanchoredLazyDfa? activeUnanchoredLazyDfa = hasRequiredStart
+            ? null
+            : RentUnanchoredLazyDfa(haystack.Length);
         if (activeUnanchoredLazyDfa is not null)
         {
             try
@@ -2167,7 +2243,8 @@ internal sealed class RegexMetaEngine
             }
         }
 
-        if (TryFindAsciiFastUnanchored(haystack, startOffset, out RegexMatch asciiFastMatch))
+        if (!hasRequiredStart &&
+            TryFindAsciiFastUnanchored(haystack, startOffset, out RegexMatch asciiFastMatch))
         {
             return asciiFastMatch;
         }
@@ -2214,13 +2291,14 @@ internal sealed class RegexMetaEngine
             return null;
         }
 
-        for (int start = startOffset; start <= haystack.Length; start++)
+        var fallbackCandidates = RegexCandidateStartEnumerator.Every(
+            haystack,
+            startOffset,
+            haystack.Length,
+            utf8,
+            startPredicate);
+        while (fallbackCandidates.MoveNext(out int start))
         {
-            if (startPredicate is not null && !startPredicate.CanStartAt(haystack, start))
-            {
-                continue;
-            }
-
             if (TryMatchAt(haystack, start, out int length, reachabilityCache))
             {
                 return new RegexMatch(start, length);
@@ -2294,6 +2372,13 @@ internal sealed class RegexMetaEngine
         }
     }
 
+    /// <summary>
+    /// Counts non-overlapping leftmost matches at or after a byte offset.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startAt">The first permitted match start.</param>
+    /// <param name="startPredicate">An optional conservative candidate-start predicate.</param>
+    /// <returns>The number of non-overlapping matches.</returns>
     public long CountMatches(ReadOnlySpan<byte> haystack, int startAt, RegexStartPredicate? startPredicate = null)
     {
         if (empty is not null)
@@ -2511,7 +2596,42 @@ internal sealed class RegexMetaEngine
             return endAnchoredSequence.CountMatches(haystack, startAt);
         }
 
-        RegexUnanchoredLazyDfa? activeUnanchoredLazyDfa = RentUnanchoredLazyDfa(haystack.Length);
+        if (TryIteratePrefilteredBoundedBacktracker(
+            haystack,
+            startAt,
+            startPredicate,
+            sumSpans: false,
+            out long prefilteredBoundedCount))
+        {
+            return prefilteredBoundedCount;
+        }
+
+        bool hasRequiredStart = startPredicate?.HasRequiredStart == true;
+        if (hasRequiredStart &&
+            TryIterateRequiredStartBoundedBacktracker(
+                haystack,
+                startAt,
+                startPredicate!,
+                sumSpans: false,
+                out long requiredStartBoundedCount))
+        {
+            return requiredStartBoundedCount;
+        }
+
+        if (hasRequiredStart &&
+            TryIterateRequiredStartPikeVm(
+                haystack,
+                startAt,
+                startPredicate!,
+                sumSpans: false,
+                out long requiredStartCount))
+        {
+            return requiredStartCount;
+        }
+
+        RegexUnanchoredLazyDfa? activeUnanchoredLazyDfa = hasRequiredStart
+            ? null
+            : RentUnanchoredLazyDfa(haystack.Length);
         if (activeUnanchoredLazyDfa is not null)
         {
             try
@@ -2527,7 +2647,8 @@ internal sealed class RegexMetaEngine
             }
         }
 
-        if (TryIterateAsciiFastUnanchored(haystack, startAt, startPredicate, sumSpans: false, out long asciiFastCount))
+        if (!hasRequiredStart &&
+            TryIterateAsciiFastUnanchored(haystack, startAt, startPredicate, sumSpans: false, out long asciiFastCount))
         {
             return asciiFastCount;
         }
@@ -2535,6 +2656,13 @@ internal sealed class RegexMetaEngine
         return IterateNonOverlapping(haystack, startAt, startPredicate, sumSpans: false);
     }
 
+    /// <summary>
+    /// Sums the byte lengths of non-overlapping leftmost matches at or after a byte offset.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startAt">The first permitted match start.</param>
+    /// <param name="startPredicate">An optional conservative candidate-start predicate.</param>
+    /// <returns>The sum of matched byte lengths.</returns>
     public long SumMatchSpans(ReadOnlySpan<byte> haystack, int startAt, RegexStartPredicate? startPredicate = null)
     {
         if (empty is not null)
@@ -2752,7 +2880,42 @@ internal sealed class RegexMetaEngine
             return endAnchoredSequence.SumMatchSpans(haystack, startAt);
         }
 
-        RegexUnanchoredLazyDfa? activeUnanchoredLazyDfa = RentUnanchoredLazyDfa(haystack.Length);
+        if (TryIteratePrefilteredBoundedBacktracker(
+            haystack,
+            startAt,
+            startPredicate,
+            sumSpans: true,
+            out long prefilteredBoundedSpanSum))
+        {
+            return prefilteredBoundedSpanSum;
+        }
+
+        bool hasRequiredStart = startPredicate?.HasRequiredStart == true;
+        if (hasRequiredStart &&
+            TryIterateRequiredStartBoundedBacktracker(
+                haystack,
+                startAt,
+                startPredicate!,
+                sumSpans: true,
+                out long requiredStartBoundedSpanSum))
+        {
+            return requiredStartBoundedSpanSum;
+        }
+
+        if (hasRequiredStart &&
+            TryIterateRequiredStartPikeVm(
+                haystack,
+                startAt,
+                startPredicate!,
+                sumSpans: true,
+                out long requiredStartSpanSum))
+        {
+            return requiredStartSpanSum;
+        }
+
+        RegexUnanchoredLazyDfa? activeUnanchoredLazyDfa = hasRequiredStart
+            ? null
+            : RentUnanchoredLazyDfa(haystack.Length);
         if (activeUnanchoredLazyDfa is not null)
         {
             try
@@ -2768,7 +2931,8 @@ internal sealed class RegexMetaEngine
             }
         }
 
-        if (TryIterateAsciiFastUnanchored(haystack, startAt, startPredicate, sumSpans: true, out long asciiFastSpanSum))
+        if (!hasRequiredStart &&
+            TryIterateAsciiFastUnanchored(haystack, startAt, startPredicate, sumSpans: true, out long asciiFastSpanSum))
         {
             return asciiFastSpanSum;
         }
@@ -2796,6 +2960,302 @@ internal sealed class RegexMetaEngine
         count = 0;
         spanSum = 0;
         return false;
+    }
+
+    private bool TryIteratePrefilteredBoundedBacktracker(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        RegexStartPredicate? startPredicate,
+        bool sumSpans,
+        out long total)
+    {
+        total = 0;
+        if (boundedBacktrackerPool is null || prefilter is null || startPredicate is not null)
+        {
+            return false;
+        }
+
+        RegexBoundedBacktracker? boundedBacktracker = boundedBacktrackerPool.Rent();
+        if (boundedBacktracker is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            if (prefilter.UsesRequiredLiteralWindow)
+            {
+                Span<long> requiredRangeBuffer =
+                    stackalloc long[RegexCandidateStartEnumerator.RequiredLiteralRangeBufferLength];
+                var candidates = RegexCandidateStartEnumerator.RequiredLiteralRanges(
+                    haystack,
+                    startAt,
+                    haystack.Length,
+                    utf8,
+                    prefilter,
+                    requiredRangeBuffer);
+                total = IteratePrefilteredBoundedCandidates(
+                    haystack,
+                    startAt,
+                    sumSpans,
+                    boundedBacktracker,
+                    ref candidates);
+            }
+            else
+            {
+                var candidates = RegexCandidateStartEnumerator.ExactPrefix(
+                    haystack,
+                    startAt,
+                    haystack.Length,
+                    utf8,
+                    prefilter);
+                total = IteratePrefilteredBoundedCandidates(
+                    haystack,
+                    startAt,
+                    sumSpans,
+                    boundedBacktracker,
+                    ref candidates);
+            }
+
+            return true;
+        }
+        finally
+        {
+            boundedBacktrackerPool.Return(boundedBacktracker);
+        }
+    }
+
+    private bool TryIterateRequiredStartPikeVm(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        RegexStartPredicate startPredicate,
+        bool sumSpans,
+        out long total)
+    {
+        total = 0;
+        if (pikeVmPool is null || prefilter is not null)
+        {
+            return false;
+        }
+
+        PikeVm? pikeVm = pikeVmPool.Rent();
+        if (pikeVm is null)
+        {
+            return false;
+        }
+
+        RegexLazyDfa? asciiFastDfa = asciiFastDfaPool?.Rent();
+
+        try
+        {
+            var candidates = RegexCandidateStartEnumerator.Every(
+                haystack,
+                startAt,
+                haystack.Length,
+                utf8,
+                startPredicate);
+            total = IterateRequiredStartPikeVmCandidates(
+                haystack,
+                startAt,
+                sumSpans,
+                pikeVm,
+                asciiFastDfa,
+                ref candidates);
+            return true;
+        }
+        finally
+        {
+            if (asciiFastDfa is not null)
+            {
+                asciiFastDfaPool!.Return(asciiFastDfa);
+            }
+
+            pikeVmPool.Return(pikeVm);
+        }
+    }
+
+    private bool TryIterateRequiredStartBoundedBacktracker(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        RegexStartPredicate startPredicate,
+        bool sumSpans,
+        out long total)
+    {
+        total = 0;
+        if (boundedBacktrackerPool is null || prefilter is not null)
+        {
+            return false;
+        }
+
+        RegexBoundedBacktracker? boundedBacktracker = boundedBacktrackerPool.Rent();
+        if (boundedBacktracker is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            var candidates = RegexCandidateStartEnumerator.Every(
+                haystack,
+                startAt,
+                haystack.Length,
+                utf8,
+                startPredicate);
+            total = IterateRequiredStartBoundedCandidates(
+                haystack,
+                startAt,
+                sumSpans,
+                boundedBacktracker,
+                ref candidates);
+            return true;
+        }
+        finally
+        {
+            boundedBacktrackerPool.Return(boundedBacktracker);
+        }
+    }
+
+    private static long IterateRequiredStartBoundedCandidates(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        bool sumSpans,
+        RegexBoundedBacktracker boundedBacktracker,
+        scoped ref RegexCandidateStartEnumerator candidates)
+    {
+        long total = 0;
+        int offset = Math.Clamp(startAt, 0, haystack.Length);
+        int suppressedEmptyStart = -1;
+        while (candidates.MoveNext(out int candidate))
+        {
+            if (candidate < offset ||
+                !boundedBacktracker.TryMatchAt(haystack, candidate, out int length))
+            {
+                continue;
+            }
+
+            if (length == 0 && candidate == suppressedEmptyStart)
+            {
+                offset = Math.Min(candidate + 1, haystack.Length + 1);
+                suppressedEmptyStart = -1;
+                continue;
+            }
+
+            total += sumSpans ? length : 1;
+            if (length == 0)
+            {
+                suppressedEmptyStart = -1;
+                offset = Math.Min(candidate + 1, haystack.Length + 1);
+            }
+            else
+            {
+                suppressedEmptyStart = Math.Min(candidate + length, haystack.Length + 1);
+                offset = suppressedEmptyStart;
+            }
+        }
+
+        return total;
+    }
+
+    private static long IterateRequiredStartPikeVmCandidates(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        bool sumSpans,
+        PikeVm pikeVm,
+        RegexLazyDfa? asciiFastDfa,
+        scoped ref RegexCandidateStartEnumerator candidates)
+    {
+        long total = 0;
+        int offset = Math.Clamp(startAt, 0, haystack.Length);
+        int suppressedEmptyStart = -1;
+        while (candidates.MoveNext(out int candidate))
+        {
+            if (candidate < offset ||
+                !TryMatchRequiredStartCandidate(
+                    haystack,
+                    candidate,
+                    pikeVm,
+                    asciiFastDfa,
+                    out int length))
+            {
+                continue;
+            }
+
+            if (length == 0 && candidate == suppressedEmptyStart)
+            {
+                offset = Math.Min(candidate + 1, haystack.Length + 1);
+                suppressedEmptyStart = -1;
+                continue;
+            }
+
+            total += sumSpans ? length : 1;
+            if (length == 0)
+            {
+                suppressedEmptyStart = -1;
+                offset = Math.Min(candidate + 1, haystack.Length + 1);
+            }
+            else
+            {
+                suppressedEmptyStart = Math.Min(candidate + length, haystack.Length + 1);
+                offset = suppressedEmptyStart;
+            }
+        }
+
+        return total;
+    }
+
+    private static bool TryMatchRequiredStartCandidate(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        PikeVm pikeVm,
+        RegexLazyDfa? asciiFastDfa,
+        out int length)
+    {
+        if (asciiFastDfa is not null)
+        {
+            if (asciiFastDfa.TryMatchAsciiAt(haystack, start, out int asciiLength, out bool aborted))
+            {
+                int asciiEnd = start + asciiLength;
+                if (asciiLength > 0 &&
+                    (asciiEnd >= haystack.Length || haystack[asciiEnd] <= 0x7F))
+                {
+                    length = asciiLength;
+                    return true;
+                }
+            }
+            else if (!aborted)
+            {
+                length = 0;
+                return false;
+            }
+        }
+
+        return pikeVm.TryMatchAt(haystack, start, out length);
+    }
+
+    private static long IteratePrefilteredBoundedCandidates(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        bool sumSpans,
+        RegexBoundedBacktracker boundedBacktracker,
+        scoped ref RegexCandidateStartEnumerator candidates)
+    {
+        long total = 0;
+        int minimumStart = Math.Clamp(startAt, 0, haystack.Length);
+        while (candidates.MoveNext(out int candidate))
+        {
+            if (candidate < minimumStart ||
+                !boundedBacktracker.TryMatchAt(haystack, candidate, out int length))
+            {
+                continue;
+            }
+
+            total += sumSpans ? length : 1;
+            minimumStart = length == 0
+                ? Math.Min(candidate + 1, haystack.Length + 1)
+                : Math.Min(candidate + length, haystack.Length + 1);
+        }
+
+        return total;
     }
 
     private bool TryFindAsciiFastUnanchored(ReadOnlySpan<byte> haystack, int startAt, out RegexMatch match)
@@ -3230,6 +3690,12 @@ internal sealed class RegexMetaEngine
         return anchoredLeftmostDfaPool.Rent();
     }
 
+    /// <summary>
+    /// Finds the earliest match end among candidates at or after a byte offset.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startAt">The first permitted match start.</param>
+    /// <returns>The earliest-ending match, or <see langword="null" /> when no match exists.</returns>
     public RegexMatch? FindEarliest(ReadOnlySpan<byte> haystack, int startAt)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);

@@ -485,7 +485,7 @@ public sealed class FlagCatalogTests
         Assert.Equal(CliParseStatus.Ok, ioToggles.Status);
         Assert.Equal(CliBufferMode.Auto, ioToggles.LowArgs!.BufferMode);
         Assert.Equal(CliMmapMode.Never, ioToggles.LowArgs.MmapMode);
-        Assert.True(ioToggles.LowArgs.Crlf);
+        Assert.False(ioToggles.LowArgs.Crlf);
         Assert.True(ioToggles.LowArgs.NullData);
     }
 

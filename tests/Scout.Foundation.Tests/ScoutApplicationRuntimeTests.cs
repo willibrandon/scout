@@ -124,6 +124,46 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
+    /// Verifies JSON replacement metadata uses global names across repeated patterns.
+    /// </summary>
+    [Fact]
+    public void JsonOutputReplacementMetadataExpandsRepeatedPatternCaptures()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "a\nb\n");
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--json", "-r", "$0|$left|$right", "-e", "(?P<left>a)", "-e", "(?P<right>b)", path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "--json", "-r", "$0|$left|$right", "-e", "(?P<left>a)", "-e", "(?P<right>b)", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(NormalizeJsonTimings(pinnedOutput), NormalizeJsonTimings(output));
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies JSON replacement captures retain their original record-boundary context.
+    /// </summary>
+    [Fact]
+    public void JsonOutputReplacementMetadataRetainsBoundaryContext()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "xfooy\n");
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--json", "-r", "<$1>", @"\B(foo)\B", path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "--json", "-r", "<$1>", @"\B(foo)\B", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(NormalizeJsonTimings(pinnedOutput), NormalizeJsonTimings(output));
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies JSON replacement metadata expands captures from patterns with inline regex flags.
     /// </summary>
     [Fact]
@@ -1928,6 +1968,35 @@ public sealed class ScoutApplicationRuntimeTests
 
         Assert.Equal(pinnedExitCode, exitCode);
         Assert.Equal(NormalizeJsonTimings(pinnedOutput), NormalizeJsonTimings(output));
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies NUL record terminators are excluded when replaying end-anchored replacement captures.
+    /// </summary>
+    [Fact]
+    public void NullDataReplacementReplaysEndAnchoredCapturesAgainstRecordContent()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        File.WriteAllBytes(path, "a\0b\0"u8.ToArray());
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--null-data",
+            "--replace",
+            "<$x>",
+            "(?<x>a)$",
+            path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "--null-data",
+            "--replace",
+            "<$x>",
+            "(?<x>a)$",
+            path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal("<a>\0"u8.ToArray(), output);
+        Assert.Equal(pinnedOutput, output);
         Assert.Equal(pinnedError, error);
     }
 

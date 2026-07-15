@@ -354,7 +354,14 @@ internal static unsafe class LargeFileSearchOperations
 
         if (CanSearchStreamingCountWithPlan(searchMode, stopOnNonmatch, quiet, separators))
         {
-            RegexSearchPlan? regexPlan = LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: true);
+            var regexPlan = RegexSearchPlan.Create(
+                pattern,
+                new RegexSearchPlanOptions(
+                    asciiCaseInsensitive,
+                    lineRegexp,
+                    wordRegexp,
+                    separators.Crlf,
+                    separators.NullData));
             return SearchStreamingCountWithPlan(
                 path,
                 pattern,
@@ -378,10 +385,14 @@ internal static unsafe class LargeFileSearchOperations
 
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, StreamingFileStreamBufferLength, FileOptions.SequentialScan);
         using var bufferOwner = new NativeByteBuffer(bufferLength);
-        RegexSearchPlan? lineRegexPlan = LiteralLineSearcher.CreateRegexSearchPlan(
+        var lineRegexPlan = RegexSearchPlan.Create(
             pattern,
-            asciiCaseInsensitive,
-            compileAutomata: true);
+            new RegexSearchPlanOptions(
+                asciiCaseInsensitive,
+                lineRegexp,
+                wordRegexp,
+                separators.Crlf,
+                separators.NullData));
         MemoryStream? pendingLine = null;
         long pendingLineOffset = 0;
         long absoluteOffset = 0;
@@ -1709,11 +1720,17 @@ internal static unsafe class LargeFileSearchOperations
             !wordRegexp &&
             !separators.NullData &&
             !separators.Crlf;
+        var regexPlanOptions = new RegexSearchPlanOptions(
+            asciiCaseInsensitive,
+            lineRegexp,
+            wordRegexp,
+            separators.Crlf,
+            separators.NullData);
         RegexSearchPlan? regexPlan = fastLiteralPattern is null
-            ? LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: !searchSegmentsInParallel)
+            ? RegexSearchPlan.Create(pattern, regexPlanOptions)
             : null;
         using ThreadLocal<RegexSearchPlan?>? parallelRegexPlans = searchSegmentsInParallel && fastLiteralPattern is null
-            ? new ThreadLocal<RegexSearchPlan?>(() => LiteralLineSearcher.CreateRegexSearchPlan(pattern, asciiCaseInsensitive, compileAutomata: true))
+            ? new ThreadLocal<RegexSearchPlan?>(() => RegexSearchPlan.Create(pattern, regexPlanOptions))
             : null;
         int effectiveBufferLength = searchSegmentsInParallel
             ? Math.Max(bufferLength, fastLiteralPattern is null ? ExplicitRegexStreamingFileBufferLength : ExplicitParallelLiteralStreamingFileBufferLength)
@@ -1793,7 +1810,7 @@ internal static unsafe class LargeFileSearchOperations
 
             if (quiet)
             {
-                if (!SearchModeEvaluation.SearchQuiet(segment, pattern, CliSearchMode.Standard, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, remainingMatches, separators.Crlf, separators.NullData))
+                if (!SearchModeEvaluation.SearchQuiet(segment, pattern, CliSearchMode.Standard, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, remainingMatches, separators.Crlf, separators.NullData, regexPlan))
                 {
                     lineNumberValue += (long)lineCount;
                     return false;

@@ -63,6 +63,19 @@ internal sealed class PikeVm(RegexNfa nfa)
     /// <returns><see langword="true" /> when the pattern matches at <paramref name="start" />.</returns>
     public bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int length)
     {
+        var candidates = RegexCandidateStartEnumerator.Every(
+            haystack,
+            start,
+            start,
+            utf8: false,
+            startPredicate: null);
+        RegexMatch? match = FindAscii(haystack, ref candidates, out bool requiresVariableWidth);
+        if (!requiresVariableWidth)
+        {
+            length = match?.Length ?? 0;
+            return match.HasValue;
+        }
+
         return TryMatchAt(haystack, start, earliest: false, out length);
     }
 
@@ -223,15 +236,33 @@ internal sealed class PikeVm(RegexNfa nfa)
     /// <returns>The leftmost-first match, or <see langword="null" /> when no candidate matches.</returns>
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, ref RegexCandidateStartEnumerator candidates)
     {
-        return haystack.IndexOfAnyExceptInRange((byte)0x00, (byte)0x7F) < 0
-            ? FindAscii(haystack, ref candidates)
-            : FindVariableWidth(haystack, ref candidates);
+        // Value copies share the required-range Span. An active buffer is mutable semantic
+        // state, so it must remain owned by the original enumerator if speculation is discarded.
+        if (candidates.HasBufferedRequiredRanges)
+        {
+            return FindVariableWidth(haystack, ref candidates);
+        }
+
+        RegexCandidateStartEnumerator asciiCandidates = candidates;
+        RegexMatch? match = FindAscii(
+            haystack,
+            ref asciiCandidates,
+            out bool requiresVariableWidth);
+        if (requiresVariableWidth)
+        {
+            return FindVariableWidth(haystack, ref candidates);
+        }
+
+        candidates = asciiCandidates;
+        return match;
     }
 
     private RegexMatch? FindAscii(
         ReadOnlySpan<byte> haystack,
-        ref RegexCandidateStartEnumerator candidates)
+        ref RegexCandidateStartEnumerator candidates,
+        out bool requiresVariableWidth)
     {
+        requiresVariableWidth = false;
         ResetAsciiCurrentThreadSet();
 
         bool hasCandidate = candidates.MoveNext(out int candidate);
@@ -294,6 +325,12 @@ internal sealed class PikeVm(RegexNfa nfa)
 
                 if (stateKind == RegexNfaStateKind.Atom)
                 {
+                    if (hasByte && value > 0x7F)
+                    {
+                        requiresVariableWidth = true;
+                        return null;
+                    }
+
                     if (hasByte && AsciiAtomMatches(stateIndex, value))
                     {
                         AddAsciiThread(
@@ -311,20 +348,27 @@ internal sealed class PikeVm(RegexNfa nfa)
                     continue;
                 }
 
-                if (hasByte &&
-                    stateKind == RegexNfaStateKind.Sparse &&
-                    _states[stateIndex].TryGetSparseTarget(value, out int sparseNext))
+                if (hasByte && stateKind == RegexNfaStateKind.Sparse)
                 {
-                    AddAsciiThread(
-                        sparseNext,
-                        haystack,
-                        position + 1,
-                        threadStart,
-                        _asciiNextStates,
-                        _asciiNextStarts,
-                        _asciiNextSeen,
-                        _asciiNextSeenGeneration,
-                        ref _asciiNextCount);
+                    if (value > 0x7F)
+                    {
+                        requiresVariableWidth = true;
+                        return null;
+                    }
+
+                    if (_states[stateIndex].TryGetSparseTarget(value, out int sparseNext))
+                    {
+                        AddAsciiThread(
+                            sparseNext,
+                            haystack,
+                            position + 1,
+                            threadStart,
+                            _asciiNextStates,
+                            _asciiNextStarts,
+                            _asciiNextSeen,
+                            _asciiNextSeenGeneration,
+                            ref _asciiNextCount);
+                    }
                 }
             }
 
@@ -562,20 +606,7 @@ internal sealed class PikeVm(RegexNfa nfa)
             }
         }
         else if (state.Kind == RegexNfaStateKind.Atom &&
-            RegexByteClass.TryGetAtomMatchLength(
-                haystack,
-                position,
-                state.AtomKind,
-                state.Value.Span,
-                state.CaseInsensitive,
-                state.MultiLine,
-                state.DotMatchesNewline,
-                state.Crlf,
-                state.LineTerminator,
-                state.UnicodeClasses,
-                state.RequiresUtf8ScalarMatch,
-                state.CanUseAsciiScalarFastPath,
-                out int consume))
+            state.TryGetAtomMatchLength(haystack, position, out int consume))
         {
             AddThread(
                 state.Next,
@@ -1014,20 +1045,7 @@ internal sealed class PikeVm(RegexNfa nfa)
 
             RegexNfaState state = _states[threads[index].State];
             if (state.Kind == RegexNfaStateKind.Atom &&
-                RegexByteClass.TryGetAtomMatchLength(
-                    haystack,
-                    position,
-                    state.AtomKind,
-                    state.Value.Span,
-                    state.CaseInsensitive,
-                    state.MultiLine,
-                    state.DotMatchesNewline,
-                    state.Crlf,
-                    state.LineTerminator,
-                    state.UnicodeClasses,
-                    state.RequiresUtf8ScalarMatch,
-                    state.CanUseAsciiScalarFastPath,
-                    out int consume) &&
+                state.TryGetAtomMatchLength(haystack, position, out int consume) &&
                 RegexDfaOperations.CanReachAccept(
                     _nfa,
                     state.Next,
@@ -1115,20 +1133,7 @@ internal sealed class PikeVm(RegexNfa nfa)
             for (int value = 0; value <= 0x7F; value++)
             {
                 haystack[0] = (byte)value;
-                if (RegexByteClass.TryGetAtomMatchLength(
-                        haystack,
-                        position: 0,
-                        state.AtomKind,
-                        state.Value.Span,
-                        state.CaseInsensitive,
-                        state.MultiLine,
-                        state.DotMatchesNewline,
-                        state.Crlf,
-                        state.LineTerminator,
-                        state.UnicodeClasses,
-                        state.RequiresUtf8ScalarMatch,
-                        state.CanUseAsciiScalarFastPath,
-                        out int length) &&
+                if (state.TryGetAtomMatchLength(haystack, position: 0, out int length) &&
                     length == 1)
                 {
                     int word = (stateIndex * 2) + (value >> 6);

@@ -2560,7 +2560,8 @@ internal sealed class RegexPrefilter(
             return false;
         }
 
-        for (int count = 0; count < node.Minimum; count++)
+        int contiguousCopies = childCanContinue ? node.Minimum : 1;
+        for (int count = 0; count < contiguousCopies; count++)
         {
             if (!AppendLiteralVariants(run, childRun.ToArray()))
             {

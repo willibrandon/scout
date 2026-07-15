@@ -1,99 +1,94 @@
-
 namespace Scout;
 
-internal struct ReplacementLineSink : IMatchLineSink
+/// <summary>
+/// Replaces every match in a line while preserving the original line context for capture replay.
+/// </summary>
+/// <param name="output">The output writer.</param>
+/// <param name="prefix">The optional path prefix.</param>
+/// <param name="fieldSeparator">The separator written between output fields.</param>
+/// <param name="replacement">The replacement template.</param>
+/// <param name="patterns">The ordered regex patterns.</param>
+/// <param name="asciiCaseInsensitive">Whether matching is ASCII case-insensitive.</param>
+/// <param name="lineNumber">Whether to write line numbers.</param>
+/// <param name="column">Whether to write columns.</param>
+/// <param name="byteOffset">Whether to write byte offsets.</param>
+/// <param name="trim">Whether to trim leading ASCII whitespace.</param>
+/// <param name="nullPathTerminator">Whether to terminate path fields with a NUL byte.</param>
+/// <param name="vimgrep">Whether to emit one record per replacement.</param>
+/// <param name="lineLimit">The output line-length policy.</param>
+/// <param name="lineNumberOffset">The line-number offset applied to emitted matches.</param>
+/// <param name="byteOffsetOffset">The byte-offset adjustment applied to emitted matches.</param>
+/// <param name="color">The configured output colors.</param>
+/// <param name="lineTerminator">The output line terminator.</param>
+/// <param name="capturePlan">The optional authoritative capture plan.</param>
+/// <param name="streamPlainBodyDirectly">Whether plain replacement output may be streamed directly.</param>
+internal struct ReplacementLineSink(
+    RawByteWriter output,
+    OutputPath? prefix,
+    ReadOnlyMemory<byte> fieldSeparator,
+    ReadOnlyMemory<byte> replacement,
+    IReadOnlyList<byte[]> patterns,
+    bool asciiCaseInsensitive,
+    bool lineNumber,
+    bool column,
+    bool byteOffset,
+    bool trim,
+    bool nullPathTerminator,
+    bool vimgrep,
+    OutputLineLimit lineLimit,
+    long lineNumberOffset = 0,
+    long byteOffsetOffset = 0,
+    OutputColor color = default,
+    ReadOnlyMemory<byte> lineTerminator = default,
+    ReplacementCapturePlan? capturePlan = null,
+    bool streamPlainBodyDirectly = false) : IMatchLineSink
 {
-    private static readonly byte[] NullByte = [0];
+    private static readonly byte[] s_nullByte = [0];
 
-    private readonly RawByteWriter output;
-    private readonly OutputPath? prefix;
-    private readonly ReadOnlyMemory<byte> fieldSeparator;
-    private readonly ReadOnlyMemory<byte> replacement;
-    private readonly IReadOnlyList<byte[]> patterns;
-    private readonly ReplacementCapturePlan? capturePlan;
-    private ReplacementTemplate? template;
-    private int[]? captureStartsBuffer;
-    private int[]? captureLengthsBuffer;
-    private Dictionary<string, int>? captureNamesBuffer;
-    private readonly bool streamPlainBodyDirectly;
-    private readonly bool asciiCaseInsensitive;
-    private readonly bool lineNumber;
-    private readonly bool column;
-    private readonly bool byteOffset;
-    private readonly bool trim;
-    private readonly bool nullPathTerminator;
-    private readonly bool vimgrep;
-    private readonly OutputLineLimit lineLimit;
-    private readonly long lineNumberOffset;
-    private readonly long byteOffsetOffset;
-    private readonly ReadOnlyMemory<byte> lineTerminator;
-    private readonly List<int> starts;
-    private readonly List<int> lengths;
-    private readonly List<long> replacementColumns;
-    private readonly List<int> replacementLengths;
-    private readonly OutputColor color;
-    private byte[]? currentLine;
-    private long currentLineNumber;
-    private long currentLineByteOffset;
-    private int currentLineWrittenUntil;
-    private bool streamingPlainLine;
+    private readonly RawByteWriter _output = output ?? throw new ArgumentNullException(nameof(output));
+    private readonly OutputPath? _prefix = prefix;
+    private readonly ReadOnlyMemory<byte> _fieldSeparator = fieldSeparator;
+    private readonly ReadOnlyMemory<byte> _replacement = replacement;
+    private readonly IReadOnlyList<byte[]> _patterns = patterns;
+    private readonly ReplacementCapturePlan? _capturePlan = capturePlan;
+    private ReplacementTemplate? _template;
+    private int[]? _captureStartsBuffer;
+    private int[]? _captureLengthsBuffer;
+    private Dictionary<string, int>? _captureNamesBuffer;
+    private readonly bool _streamPlainBodyDirectly = streamPlainBodyDirectly;
+    private readonly bool _asciiCaseInsensitive = asciiCaseInsensitive;
+    private readonly bool _lineNumber = lineNumber;
+    private readonly bool _column = column;
+    private readonly bool _byteOffset = byteOffset;
+    private readonly bool _trim = trim;
+    private readonly bool _nullPathTerminator = nullPathTerminator;
+    private readonly bool _vimgrep = vimgrep;
+    private readonly OutputLineLimit _lineLimit = lineLimit;
+    private readonly long _lineNumberOffset = lineNumberOffset;
+    private readonly long _byteOffsetOffset = byteOffsetOffset;
+    private readonly ReadOnlyMemory<byte> _lineTerminator =
+        lineTerminator.IsEmpty ? "\n"u8.ToArray() : lineTerminator;
+    private readonly List<int> _starts = [];
+    private readonly List<int> _lengths = [];
+    private readonly List<long> _replacementColumns = [];
+    private readonly List<int> _replacementLengths = [];
+    private readonly OutputColor _color = color;
+    private byte[]? _currentLine;
+    private long _currentLineNumber;
+    private long _currentLineByteOffset;
+    private int _currentLineWrittenUntil;
+    private bool _streamingPlainLine;
+    private bool _selectionOnly;
 
-    public ReplacementLineSink(
-        RawByteWriter output,
-        OutputPath? prefix,
-        ReadOnlyMemory<byte> fieldSeparator,
-        ReadOnlyMemory<byte> replacement,
-        IReadOnlyList<byte[]> patterns,
-        bool asciiCaseInsensitive,
-        bool lineNumber,
-        bool column,
-        bool byteOffset,
-        bool trim,
-        bool nullPathTerminator,
-        bool vimgrep,
-        OutputLineLimit lineLimit,
-        long lineNumberOffset = 0,
-        long byteOffsetOffset = 0,
-        OutputColor color = default,
-        ReadOnlyMemory<byte> lineTerminator = default,
-        ReplacementCapturePlan? capturePlan = null,
-        bool streamPlainBodyDirectly = false)
-    {
-        ArgumentNullException.ThrowIfNull(output);
-        this.output = output;
-        this.prefix = prefix;
-        this.fieldSeparator = fieldSeparator;
-        this.replacement = replacement;
-        this.patterns = patterns;
-        this.capturePlan = capturePlan;
-        template = null;
-        captureStartsBuffer = null;
-        captureLengthsBuffer = null;
-        captureNamesBuffer = null;
-        this.streamPlainBodyDirectly = streamPlainBodyDirectly;
-        this.asciiCaseInsensitive = asciiCaseInsensitive;
-        this.lineNumber = lineNumber;
-        this.column = column;
-        this.byteOffset = byteOffset;
-        this.trim = trim;
-        this.nullPathTerminator = nullPathTerminator;
-        this.vimgrep = vimgrep;
-        this.lineLimit = lineLimit;
-        this.lineNumberOffset = lineNumberOffset;
-        this.byteOffsetOffset = byteOffsetOffset;
-        this.lineTerminator = lineTerminator.IsEmpty ? "\n"u8.ToArray() : lineTerminator;
-        this.color = color;
-        starts = [];
-        lengths = [];
-        replacementColumns = [];
-        replacementLengths = [];
-        currentLine = null;
-        currentLineNumber = 0;
-        currentLineByteOffset = 0;
-        currentLineWrittenUntil = 0;
-        streamingPlainLine = false;
-    }
-
+    /// <summary>
+    /// Records one match and its original containing-line context.
+    /// </summary>
+    /// <param name="lineNumber">The one-based line number.</param>
+    /// <param name="lineByteOffset">The zero-based byte offset of the line.</param>
+    /// <param name="matchByteOffset">The zero-based byte offset of the match.</param>
+    /// <param name="matchColumn">The one-based byte column of the match.</param>
+    /// <param name="line">The containing line bytes.</param>
+    /// <param name="match">The matching bytes.</param>
     public void MatchedLine(
         long lineNumber,
         long lineByteOffset,
@@ -103,87 +98,122 @@ internal struct ReplacementLineSink : IMatchLineSink
         ReadOnlySpan<byte> match)
     {
         _ = matchByteOffset;
-        if (currentLine is not null && currentLineNumber != lineNumber)
+        if (_currentLine is not null && _currentLineNumber != lineNumber)
         {
             Flush();
         }
 
-        if (streamingPlainLine && currentLineNumber != lineNumber)
+        if (_streamingPlainLine && _currentLineNumber != lineNumber)
         {
             ResetLineState();
         }
 
-        if (streamPlainBodyDirectly && CanWritePlainBodyDirectly())
+        _selectionOnly = false;
+
+        if (_streamPlainBodyDirectly && CanWritePlainBodyDirectly())
         {
             StreamPlainMatchedLine(lineNumber, lineByteOffset, matchColumn, line, match);
             return;
         }
 
-        if (currentLine is null)
+        if (_currentLine is null)
         {
-            currentLine = line.ToArray();
-            currentLineNumber = lineNumber;
-            currentLineByteOffset = lineByteOffset;
+            _currentLine = line.ToArray();
+            _currentLineNumber = lineNumber;
+            _currentLineByteOffset = lineByteOffset;
         }
 
-        starts.Add((int)matchColumn - 1);
-        lengths.Add(match.Length);
+        _starts.Add((int)matchColumn - 1);
+        _lengths.Add(match.Length);
     }
 
+    /// <summary>
+    /// Completes a matching line and writes any buffered replacement output.
+    /// </summary>
+    /// <param name="lineNumber">The one-based line number.</param>
+    /// <param name="lineByteOffset">The zero-based byte offset of the line.</param>
+    /// <param name="line">The containing line bytes.</param>
     public void FinishLine(long lineNumber, long lineByteOffset, ReadOnlySpan<byte> line)
     {
-        _ = lineByteOffset;
-        if (streamingPlainLine && currentLineNumber == lineNumber)
+        if (_streamingPlainLine && _currentLineNumber == lineNumber)
         {
-            output.Write(line[currentLineWrittenUntil..]);
+            _output.Write(line[_currentLineWrittenUntil..]);
             if (!HasInputTerminator(line))
             {
-                output.Write(lineTerminator.Span);
+                _output.Write(_lineTerminator.Span);
             }
 
             ResetLineState();
             return;
         }
 
-        if (currentLine is not null && currentLineNumber == lineNumber)
+        if (_currentLine is null)
+        {
+            _currentLine = line.ToArray();
+            _currentLineNumber = lineNumber;
+            _currentLineByteOffset = lineByteOffset;
+            _selectionOnly = true;
+        }
+
+        if (_currentLine is not null && _currentLineNumber == lineNumber)
         {
             Flush();
         }
     }
 
+    /// <summary>
+    /// Writes and clears any buffered replacement line.
+    /// </summary>
     public void Flush()
     {
-        if (streamingPlainLine)
+        if (_streamingPlainLine)
         {
             ResetLineState();
             return;
         }
 
-        if (currentLine is null)
+        if (_currentLine is null)
         {
+            return;
+        }
+
+        if (_selectionOnly)
+        {
+            WritePrefix(
+                _currentLineNumber + _lineNumberOffset,
+                _byteOffsetOffset + _currentLineByteOffset,
+                outputColumn: 0);
+            int selectedTrimOffset = _trim ? GetTrimOffset(_currentLine) : 0;
+            ReadOnlySpan<byte> selectedDisplayLine = _currentLine.AsSpan(selectedTrimOffset);
+            WriteSelectedBody(selectedDisplayLine);
+
+            ResetLineState();
             return;
         }
 
         if (CanWritePlainBodyDirectly())
         {
-            WritePrefix(currentLineNumber + lineNumberOffset, byteOffsetOffset + currentLineByteOffset, starts.Count > 0 ? starts[0] + 1L : 1L);
+            WritePrefix(
+                _currentLineNumber + _lineNumberOffset,
+                _byteOffsetOffset + _currentLineByteOffset,
+                _starts.Count > 0 ? _starts[0] + 1L : 1L);
             ReplacementTemplate activeTemplate = GetTemplate();
             ReplacementFormatter.WriteReplacedLine(
-                output,
-                currentLine,
-                starts,
-                lengths,
-                replacement.Span,
-                patterns,
-                asciiCaseInsensitive,
-                capturePlan,
+                _output,
+                _currentLine,
+                _starts,
+                _lengths,
+                _replacement.Span,
+                _patterns,
+                _asciiCaseInsensitive,
+                _capturePlan,
                 activeTemplate,
                 GetCaptureStartsBuffer(activeTemplate),
                 GetCaptureLengthsBuffer(activeTemplate),
                 GetCaptureNamesBuffer(activeTemplate));
-            if (!HasInputTerminator(currentLine))
+            if (!HasInputTerminator(_currentLine))
             {
-                output.Write(lineTerminator.Span);
+                _output.Write(_lineTerminator.Span);
             }
 
             ResetLineState();
@@ -192,32 +222,38 @@ internal struct ReplacementLineSink : IMatchLineSink
 
         ReplacementTemplate replacementTemplate = GetTemplate();
         byte[] replacedLine = ReplacementFormatter.ReplaceLine(
-            currentLine,
-            starts,
-            lengths,
-            replacement.Span,
-            patterns,
-            asciiCaseInsensitive,
-            replacementColumns,
-            replacementLengths,
-            capturePlan,
+            _currentLine,
+            _starts,
+            _lengths,
+            _replacement.Span,
+            _patterns,
+            _asciiCaseInsensitive,
+            _replacementColumns,
+            _replacementLengths,
+            _capturePlan,
             replacementTemplate,
             GetCaptureStartsBuffer(replacementTemplate),
             GetCaptureLengthsBuffer(replacementTemplate),
             GetCaptureNamesBuffer(replacementTemplate));
-        int trimOffset = trim ? GetTrimOffset(replacedLine) : 0;
+        int trimOffset = _trim ? GetTrimOffset(replacedLine) : 0;
         ReadOnlySpan<byte> displayLine = replacedLine.AsSpan(trimOffset);
-        if (vimgrep)
+        if (_vimgrep)
         {
-            for (int index = 0; index < replacementColumns.Count; index++)
+            for (int index = 0; index < _replacementColumns.Count; index++)
             {
-                WritePrefix(currentLineNumber + lineNumberOffset, byteOffsetOffset + currentLineByteOffset + replacementColumns[index] - 1, replacementColumns[index]);
+                WritePrefix(
+                    _currentLineNumber + _lineNumberOffset,
+                    _byteOffsetOffset + _currentLineByteOffset + _replacementColumns[index] - 1,
+                    _replacementColumns[index]);
                 WriteBody(displayLine, trimOffset, index);
             }
         }
         else
         {
-            WritePrefix(currentLineNumber + lineNumberOffset, byteOffsetOffset + currentLineByteOffset, replacementColumns[0]);
+            WritePrefix(
+                _currentLineNumber + _lineNumberOffset,
+                _byteOffsetOffset + _currentLineByteOffset,
+                _replacementColumns[0]);
             WriteBody(displayLine, trimOffset);
         }
 
@@ -226,10 +262,35 @@ internal struct ReplacementLineSink : IMatchLineSink
 
     private bool CanWritePlainBodyDirectly()
     {
-        return !trim &&
-            !vimgrep &&
-            !color.Enabled &&
-            !lineLimit.IsEnabled;
+        return !_trim &&
+            !_vimgrep &&
+            !_color.Enabled &&
+            !_lineLimit.IsEnabled;
+    }
+
+    private void WriteSelectedBody(ReadOnlySpan<byte> displayLine)
+    {
+        if (_lineLimit.IsExceeded(displayLine))
+        {
+            if (_lineLimit.Preview)
+            {
+                _output.Write(displayLine[.._lineLimit.GetPreviewLength(displayLine)]);
+                _output.Write(" [... omitted end of long line]"u8);
+            }
+            else
+            {
+                _output.Write("[Omitted long matching line]"u8);
+            }
+
+            _output.Write(_lineTerminator.Span);
+            return;
+        }
+
+        _output.Write(displayLine);
+        if (!HasInputTerminator(displayLine))
+        {
+            _output.Write(_lineTerminator.Span);
+        }
     }
 
     private void StreamPlainMatchedLine(
@@ -240,56 +301,63 @@ internal struct ReplacementLineSink : IMatchLineSink
         ReadOnlySpan<byte> match)
     {
         int matchStart = checked((int)matchColumn - 1);
-        if (!streamingPlainLine)
+        if (!_streamingPlainLine)
         {
-            currentLineNumber = lineNumber;
-            currentLineByteOffset = lineByteOffset;
-            currentLineWrittenUntil = 0;
-            streamingPlainLine = true;
-            WritePrefix(currentLineNumber + lineNumberOffset, byteOffsetOffset + currentLineByteOffset, matchColumn);
+            _currentLineNumber = lineNumber;
+            _currentLineByteOffset = lineByteOffset;
+            _currentLineWrittenUntil = 0;
+            _streamingPlainLine = true;
+            WritePrefix(
+                _currentLineNumber + _lineNumberOffset,
+                _byteOffsetOffset + _currentLineByteOffset,
+                matchColumn);
         }
 
         if ((uint)matchStart > (uint)line.Length ||
             match.Length > line.Length - matchStart ||
-            matchStart < currentLineWrittenUntil)
+            matchStart < _currentLineWrittenUntil)
         {
             return;
         }
 
-        int gapLength = matchStart - currentLineWrittenUntil;
+        int gapLength = matchStart - _currentLineWrittenUntil;
         if (gapLength > 0)
         {
-            output.Write(line.Slice(currentLineWrittenUntil, gapLength));
+            _output.Write(line.Slice(_currentLineWrittenUntil, gapLength));
         }
 
         ReplacementTemplate activeTemplate = GetTemplate();
         ReplacementFormatter.WriteExpanded(
-            output,
-            replacement.Span,
-            match,
-            patterns,
-            asciiCaseInsensitive,
-            capturePlan,
+            _output,
+            _replacement.Span,
+            line,
+            matchStart,
+            match.Length,
+            _patterns,
+            _asciiCaseInsensitive,
+            _capturePlan,
             activeTemplate,
             GetCaptureStartsBuffer(activeTemplate),
             GetCaptureLengthsBuffer(activeTemplate),
             GetCaptureNamesBuffer(activeTemplate));
-        currentLineWrittenUntil = matchStart + match.Length;
+        _currentLineWrittenUntil = matchStart + match.Length;
     }
 
     private ReplacementTemplate GetTemplate()
     {
-        return template ??= ReplacementTemplate.Create(replacement.Span, patterns);
+        return _template ??= ReplacementTemplate.Create(
+            _replacement.Span,
+            _capturePlan?.CaptureCount ?? 0);
     }
 
     private int[] GetCaptureStartsBuffer(ReplacementTemplate activeTemplate)
     {
-        return captureStartsBuffer ??= new int[Math.Max(1, activeTemplate.HighestCapture + 1)];
+        return _captureStartsBuffer ??= new int[Math.Max(1, activeTemplate.HighestCapture + 1)];
     }
 
     private int[] GetCaptureLengthsBuffer(ReplacementTemplate activeTemplate)
     {
-        return captureLengthsBuffer ??= new int[Math.Max(1, activeTemplate.HighestCapture + 1)];
+        return _captureLengthsBuffer ??= new int[Math.Max(1, activeTemplate.HighestCapture + 1)];
     }
 
     private Dictionary<string, int>? GetCaptureNamesBuffer(ReplacementTemplate activeTemplate)
@@ -299,111 +367,117 @@ internal struct ReplacementLineSink : IMatchLineSink
             return null;
         }
 
-        return captureNamesBuffer ??= new Dictionary<string, int>(StringComparer.Ordinal);
+        return _captureNamesBuffer ??= new Dictionary<string, int>(StringComparer.Ordinal);
     }
 
     private void WritePrefix(long outputLineNumber, long outputByteOffset, long outputColumn)
     {
         bool linked = false;
-        bool hasLineNumber = lineNumber;
-        bool hasColumn = column && outputColumn > 0;
-        bool hasByteOffset = byteOffset;
+        bool hasLineNumber = _lineNumber;
+        bool hasColumn = _column && outputColumn > 0;
+        bool hasByteOffset = _byteOffset;
 
-        if (prefix is not null)
+        if (_prefix is not null)
         {
-            linked = prefix.BeginHyperlink(output, outputLineNumber, outputColumn > 0 ? outputColumn : null);
-            color.WritePath(output, prefix.Display);
+            linked = _prefix.BeginHyperlink(
+                _output,
+                outputLineNumber,
+                outputColumn > 0 ? outputColumn : null);
+            _color.WritePath(_output, _prefix.Display);
             if (!hasLineNumber && !hasColumn && !hasByteOffset)
             {
-                OutputPath.EndHyperlink(output, ref linked);
+                OutputPath.EndHyperlink(_output, ref linked);
             }
 
-            output.Write(nullPathTerminator ? NullByte : fieldSeparator.Span);
+            _output.Write(_nullPathTerminator ? s_nullByte : _fieldSeparator.Span);
         }
 
         if (hasLineNumber)
         {
-            color.WriteLineNumber(output, outputLineNumber);
+            _color.WriteLineNumber(_output, outputLineNumber);
             if (!hasColumn && !hasByteOffset)
             {
-                OutputPath.EndHyperlink(output, ref linked);
+                OutputPath.EndHyperlink(_output, ref linked);
             }
 
-            output.Write(fieldSeparator.Span);
+            _output.Write(_fieldSeparator.Span);
         }
 
         if (hasColumn)
         {
-            color.WriteNumberField(output, outputColumn);
+            _color.WriteNumberField(_output, outputColumn);
             if (!hasByteOffset)
             {
-                OutputPath.EndHyperlink(output, ref linked);
+                OutputPath.EndHyperlink(_output, ref linked);
             }
 
-            output.Write(fieldSeparator.Span);
+            _output.Write(_fieldSeparator.Span);
         }
 
         if (hasByteOffset)
         {
-            color.WriteNumberField(output, outputByteOffset);
-            OutputPath.EndHyperlink(output, ref linked);
-            output.Write(fieldSeparator.Span);
+            _color.WriteNumberField(_output, outputByteOffset);
+            OutputPath.EndHyperlink(_output, ref linked);
+            _output.Write(_fieldSeparator.Span);
         }
     }
 
     private void WriteBody(ReadOnlySpan<byte> displayLine, int trimOffset, int highlightedReplacementIndex = -1)
     {
-        if (lineLimit.IsExceeded(displayLine))
+        if (_lineLimit.IsExceeded(displayLine))
         {
-            if (lineLimit.Preview)
+            if (_lineLimit.Preview)
             {
-                WriteBodyWithOptionalColor(displayLine[..lineLimit.GetPreviewLength(displayLine)], trimOffset, highlightedReplacementIndex);
-                output.Write(" [... "u8);
+                WriteBodyWithOptionalColor(
+                    displayLine[.._lineLimit.GetPreviewLength(displayLine)],
+                    trimOffset,
+                    highlightedReplacementIndex);
+                _output.Write(" [... "u8);
                 long remaining = CountMatchesAfterPreview();
-                OutputColor.WriteNumber(output, remaining);
-                output.Write(" more match"u8);
+                OutputColor.WriteNumber(_output, remaining);
+                _output.Write(" more match"u8);
                 if (remaining != 1)
                 {
-                    output.Write("es"u8);
+                    _output.Write("es"u8);
                 }
 
-                output.Write("]"u8);
+                _output.Write("]"u8);
             }
             else
             {
-                output.Write("[Omitted long line with "u8);
-                OutputColor.WriteNumber(output, replacementColumns.Count);
-                output.Write(" matches]"u8);
+                _output.Write("[Omitted long line with "u8);
+                OutputColor.WriteNumber(_output, _replacementColumns.Count);
+                _output.Write(" matches]"u8);
             }
 
-            output.Write(lineTerminator.Span);
+            _output.Write(_lineTerminator.Span);
             return;
         }
 
-        if (color.Enabled)
+        if (_color.Enabled)
         {
             WriteColoredBody(displayLine, trimOffset, highlightedReplacementIndex);
         }
         else
         {
-            output.Write(displayLine);
+            _output.Write(displayLine);
         }
 
         if (!HasInputTerminator(displayLine))
         {
-            output.Write(lineTerminator.Span);
+            _output.Write(_lineTerminator.Span);
         }
     }
 
     private void WriteBodyWithOptionalColor(ReadOnlySpan<byte> displayLine, int trimOffset, int highlightedReplacementIndex)
     {
-        if (color.Enabled)
+        if (_color.Enabled)
         {
             WriteColoredBody(displayLine, trimOffset, highlightedReplacementIndex);
         }
         else
         {
-            output.Write(displayLine);
+            _output.Write(displayLine);
         }
     }
 
@@ -412,11 +486,13 @@ internal struct ReplacementLineSink : IMatchLineSink
         List<int> displayStarts = [];
         List<int> displayLengths = [];
         int startIndex = highlightedReplacementIndex >= 0 ? highlightedReplacementIndex : 0;
-        int endIndex = highlightedReplacementIndex >= 0 ? highlightedReplacementIndex + 1 : replacementColumns.Count;
+        int endIndex = highlightedReplacementIndex >= 0
+            ? highlightedReplacementIndex + 1
+            : _replacementColumns.Count;
         for (int index = startIndex; index < endIndex; index++)
         {
-            int start = (int)replacementColumns[index] - 1 - trimOffset;
-            int length = replacementLengths[index];
+            int start = (int)_replacementColumns[index] - 1 - trimOffset;
+            int length = _replacementLengths[index];
             if (start + length <= 0)
             {
                 continue;
@@ -432,7 +508,7 @@ internal struct ReplacementLineSink : IMatchLineSink
             displayLengths.Add(length);
         }
 
-        ColoredLineWriter.Write(output, displayLine, displayStarts, displayLengths, color);
+        ColoredLineWriter.Write(_output, displayLine, displayStarts, displayLengths, _color);
     }
 
     private bool HasInputTerminator(ReadOnlySpan<byte> bytes)
@@ -445,16 +521,16 @@ internal struct ReplacementLineSink : IMatchLineSink
 
     private bool IsNullLineTerminator()
     {
-        return lineTerminator.Length == 1 && lineTerminator.Span[0] == 0;
+        return _lineTerminator.Length == 1 && _lineTerminator.Span[0] == 0;
     }
 
     private long CountMatchesAfterPreview()
     {
         long count = 0;
-        ulong columns = lineLimit.MaxColumns.GetValueOrDefault();
-        for (int index = 0; index < replacementColumns.Count; index++)
+        ulong columns = _lineLimit.MaxColumns.GetValueOrDefault();
+        for (int index = 0; index < _replacementColumns.Count; index++)
         {
-            if ((ulong)replacementColumns[index] > columns)
+            if ((ulong)_replacementColumns[index] > columns)
             {
                 count++;
             }
@@ -486,12 +562,13 @@ internal struct ReplacementLineSink : IMatchLineSink
 
     private void ResetLineState()
     {
-        currentLine = null;
-        starts.Clear();
-        lengths.Clear();
-        replacementColumns.Clear();
-        replacementLengths.Clear();
-        currentLineWrittenUntil = 0;
-        streamingPlainLine = false;
+        _currentLine = null;
+        _starts.Clear();
+        _lengths.Clear();
+        _replacementColumns.Clear();
+        _replacementLengths.Clear();
+        _currentLineWrittenUntil = 0;
+        _streamingPlainLine = false;
+        _selectionOnly = false;
     }
 }

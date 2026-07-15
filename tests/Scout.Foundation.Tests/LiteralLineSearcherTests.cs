@@ -8,6 +8,129 @@ namespace Scout;
 public sealed class LiteralLineSearcherTests
 {
     /// <summary>
+    /// Verifies whole-record matching keeps the single-pattern literal contract.
+    /// </summary>
+    [Fact]
+    public void SinglePatternLineRegexpTreatsMetacharactersLiterally()
+    {
+        var sink = new CapturingLineSink();
+
+        bool matched = LiteralLineSearcher.Search(
+            "a.c\nabc\n"u8,
+            "a.c"u8,
+            ref sink,
+            lineRegexp: true);
+
+        Assert.True(matched);
+        Assert.Equal(1UL, sink.MatchedLines);
+        Assert.Equal(1, sink.LineNumber);
+        Assert.Equal("a.c\n"u8.ToArray(), sink.Line.ToArray());
+    }
+
+    /// <summary>
+    /// Verifies line feeds remain literal content in NUL-terminated whole-record matching.
+    /// </summary>
+    [Fact]
+    public void SinglePatternLineRegexpMatchesCompleteNullTerminatedRecord()
+    {
+        var sink = new CapturingLineSink();
+
+        bool matched = LiteralLineSearcher.Search(
+            "a\nb\0a\0"u8,
+            "a\nb"u8,
+            ref sink,
+            lineRegexp: true,
+            nullData: true);
+
+        Assert.True(matched);
+        Assert.Equal(1UL, sink.MatchedLines);
+        Assert.Equal(1, sink.LineNumber);
+        Assert.Equal("a\nb\0"u8.ToArray(), sink.Line.ToArray());
+    }
+
+    /// <summary>
+    /// Verifies parsed character-class intersections remain authoritative in line-oriented search.
+    /// </summary>
+    [Fact]
+    public void CountMatchesUsesAuthoritativeCharacterClassIntersection()
+    {
+        byte[][] patterns = ["[a-z&&def]+"u8.ToArray()];
+
+        long matches = LiteralLineSearcher.CountMatches(
+            "abc\ndef\nfed\nxyz\n"u8,
+            patterns);
+
+        Assert.Equal(2, matches);
+    }
+
+    /// <summary>
+    /// Verifies a leading unscoped multiline flag is interpreted by the parsed automaton.
+    /// </summary>
+    [Fact]
+    public void CountMatchesHonorsLeadingUnscopedMultilineFlag()
+    {
+        byte[][] patterns = ["(?m)^Scout.*$"u8.ToArray()];
+
+        long matches = LiteralLineSearcher.CountMatches(
+            "Scout one\nnot Scout\nScout two\n"u8,
+            patterns);
+
+        Assert.Equal(2, matches);
+    }
+
+    /// <summary>
+    /// Verifies the authoritative matcher handles the three general regex shapes from issue 37.
+    /// </summary>
+    /// <param name="pattern">The regex pattern.</param>
+    /// <param name="haystack">The records to search.</param>
+    /// <param name="expected">The expected non-overlapping match count.</param>
+    [Theory]
+    [InlineData(@"\bGeneratedRecord\b", "GeneratedRecords\nGeneratedRecord\nx GeneratedRecord y\n", 2)]
+    [InlineData(@"^internal sealed class GeneratedRecord\r?$", "public class Other\r\ninternal sealed class GeneratedRecord\r\n", 1)]
+    public void CountMatchesUsesAuthoritativeGeneralRegexPlan(
+        string pattern,
+        string haystack,
+        long expected)
+    {
+        byte[][] patterns = [Encoding.UTF8.GetBytes(pattern)];
+
+        long matches = LiteralLineSearcher.CountMatches(
+            Encoding.UTF8.GetBytes(haystack),
+            patterns);
+
+        Assert.Equal(expected, matches);
+    }
+
+    /// <summary>
+    /// Verifies an anchored bounded class is evaluated once by the authoritative matcher.
+    /// </summary>
+    [Fact]
+    public void CountMatchesUsesAuthoritativeBoundedClassPlan()
+    {
+        byte[][] patterns = ["^[A-Za-z_]{70,90}$"u8.ToArray()];
+        byte[] haystack = Encoding.UTF8.GetBytes($"short\n{new string('A', 80)}\n{new string('A', 91)}\n");
+
+        long matches = LiteralLineSearcher.CountMatches(haystack, patterns);
+
+        Assert.Equal(1, matches);
+    }
+
+    /// <summary>
+    /// Verifies absolute anchors retain ripgrep's ordinary per-record semantics.
+    /// </summary>
+    [Fact]
+    public void CountMatchesTreatsAbsoluteAnchorsAsRecordAnchorsInOrdinarySearch()
+    {
+        byte[][] patterns = [@"\Afoo\z"u8.ToArray()];
+
+        long matches = LiteralLineSearcher.CountMatches(
+            "foo\nbar\nfoo\n"u8,
+            patterns);
+
+        Assert.Equal(2, matches);
+    }
+
+    /// <summary>
     /// Verifies plain regex patterns use the literal search path through the multi-pattern API.
     /// </summary>
     [Fact]
@@ -93,10 +216,10 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
-    /// Verifies pure literal alternations use the literal-set regex path for line search.
+    /// Verifies the authoritative plan searches pure literal alternations.
     /// </summary>
     [Fact]
-    public void SearchUsesLiteralSetRegexFastPathForLiteralAlternation()
+    public void SearchAuthoritativePlanHandlesLiteralAlternation()
     {
         var sink = new CapturingLineSink();
         byte[][] patterns = ["alpha|Sherlock Holmes|omega"u8.ToArray()];
@@ -114,10 +237,10 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
-    /// Verifies literal-set regex line counting honors max-count as matching lines, not matches.
+    /// Verifies authoritative line counting applies max-count to matching lines rather than matches.
     /// </summary>
     [Fact]
-    public void CountMatchingLinesUsesLiteralSetRegexFastPathForLiteralAlternation()
+    public void CountMatchingLinesAuthoritativePlanHonorsLiteralAlternationLimit()
     {
         byte[][] patterns = ["foo|bar"u8.ToArray()];
 
@@ -130,10 +253,10 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
-    /// Verifies literal-set regex match counting preserves leftmost-first alternation priority.
+    /// Verifies authoritative match counting preserves leftmost-first alternation priority.
     /// </summary>
     [Fact]
-    public void CountMatchesUsesLiteralSetRegexFastPathForLiteralAlternation()
+    public void CountMatchesAuthoritativePlanPreservesLiteralAlternationPriority()
     {
         byte[][] patterns = ["foo|foobar|bar"u8.ToArray()];
 
@@ -227,10 +350,10 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
-    /// Verifies class-sequence regex acceleration reports line metadata for ASCII matches.
+    /// Verifies authoritative class-sequence matching reports line metadata for ASCII matches.
     /// </summary>
     [Fact]
-    public void SearchUsesClassSequenceAcceleratorForAsciiWords()
+    public void SearchAuthoritativePlanMatchesAsciiClassSequence()
     {
         var sink = new CapturingLineSink();
         byte[][] patterns = ["\\w{5}\\s+\\w{5}\\s+\\w{5}"u8.ToArray()];
@@ -249,10 +372,10 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
-    /// Verifies leading literal regex candidates can search whole haystacks while preserving line output.
+    /// Verifies a conservative prefilter preserves line output for a leading alternation.
     /// </summary>
     [Fact]
-    public void SearchUsesCandidateLineAcceleratorForLeadingAlternation()
+    public void SearchPrefilteredAuthoritativePlanMatchesLeadingAlternation()
     {
         var sink = new CapturingLineSink();
         byte[][] patterns = [@"\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*"u8.ToArray()];
@@ -271,61 +394,46 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
-    /// Verifies Scout's prepared no-Unicode wrapper still allows candidate-line acceleration.
+    /// Verifies Scout's prepared no-Unicode wrapper keeps one authoritative matcher with an optional prefilter.
     /// </summary>
     [Fact]
-    public void RegexSearchPlanUsesCandidateLineAcceleratorForPreparedLeadingAlternation()
+    public void RegexSearchPlanUsesAuthoritativeMatcherForPreparedLeadingAlternation()
     {
         byte[][] patterns = [@"(?-u:\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*)"u8.ToArray()];
         RegexSearchPlan? plan = LiteralLineSearcher.CreateRegexSearchPlan(
             patterns,
-            asciiCaseInsensitive: false,
-            compileAutomata: true);
-        RegexCandidateLineAccelerator? accelerator = plan?.GetCandidateLineAccelerator(0);
-
-        Assert.NotNull(accelerator);
-        AssertRegexSearchPlanAvoidsAutomata(plan!);
+            asciiCaseInsensitive: false);
+        Assert.NotNull(plan);
+        Assert.NotEqual(RegexPrefilterKind.None, plan.Matcher.PrefilterKind);
     }
 
     /// <summary>
-    /// Verifies the CLI's neutral regex wrapper still allows general-mode candidate-line acceleration.
+    /// Verifies the CLI's neutral regex wrapper retains the authoritative matcher in general mode.
     /// </summary>
     [Fact]
-    public void RegexSearchPlanUsesCandidateLineAcceleratorForCliWrappedLeadingAlternationInGeneralMode()
+    public void RegexSearchPlanUsesAuthoritativeMatcherForCliWrappedLeadingAlternationInGeneralMode()
     {
         using RegexSpecializationModeScope scope = RegexSpecializationModeDefaults.Use(RegexSpecializationMode.General);
         byte[][] patterns = [@"(?:\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*)"u8.ToArray()];
         RegexSearchPlan? plan = LiteralLineSearcher.CreateRegexSearchPlan(
             patterns,
-            asciiCaseInsensitive: false,
-            compileAutomata: true);
-        RegexCandidateLineAccelerator? accelerator = plan?.GetCandidateLineAccelerator(0);
-
-        Assert.NotNull(accelerator);
-        Assert.True(accelerator.HasVerifier);
-        AssertRegexSearchPlanAvoidsAutomata(plan!);
+            asciiCaseInsensitive: false);
+        Assert.NotNull(plan);
+        Assert.NotEqual(RegexPrefilterKind.None, plan.Matcher.PrefilterKind);
     }
 
     /// <summary>
-    /// Verifies Scout's prepared capture wrapper still allows candidate-line acceleration.
+    /// Verifies Scout's prepared capture wrapper keeps capture semantics in the authoritative matcher.
     /// </summary>
     [Fact]
-    public void RegexSearchPlanUsesCandidateLineAcceleratorForPreparedCaptureLeadingAlternation()
+    public void RegexSearchPlanUsesAuthoritativeMatcherForPreparedCaptureLeadingAlternation()
     {
         byte[][] patterns = [@"(?-u:\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*))"u8.ToArray()];
         RegexSearchPlan? plan = LiteralLineSearcher.CreateRegexSearchPlan(
             patterns,
-            asciiCaseInsensitive: false,
-            compileAutomata: true);
-        RegexCandidateLineAccelerator? accelerator = plan?.GetCandidateLineAccelerator(0);
-
-        Assert.NotNull(accelerator);
-        AssertRegexSearchPlanAvoidsAutomata(plan!);
-    }
-
-    private static void AssertRegexSearchPlanAvoidsAutomata(RegexSearchPlan plan)
-    {
-        Assert.Null(plan.GetAutomaton(0));
+            asciiCaseInsensitive: false);
+        Assert.NotNull(plan);
+        Assert.Equal(2, plan.CaptureCount);
     }
 
     /// <summary>
@@ -337,18 +445,18 @@ public sealed class LiteralLineSearcherTests
         byte[][] patterns = [@"(?U:ab+)"u8.ToArray()];
         RegexSearchPlan? plan = LiteralLineSearcher.CreateRegexSearchPlan(
             patterns,
-            asciiCaseInsensitive: false,
-            compileAutomata: true);
-        RegexCandidateLineAccelerator? accelerator = plan?.GetCandidateLineAccelerator(0);
+            asciiCaseInsensitive: false);
 
-        Assert.Null(accelerator);
+        Assert.NotNull(plan);
+        RegexMatch? match = plan.Matcher.Find("abbbb"u8);
+        Assert.Equal(new RegexMatch(0, 2), match);
     }
 
     /// <summary>
-    /// Verifies whole-haystack regex candidate scanning still preserves line-oriented matching.
+    /// Verifies conservative candidate discovery preserves line-oriented matching.
     /// </summary>
     [Fact]
-    public void SearchCandidateLineAcceleratorDoesNotMatchAcrossLines()
+    public void SearchPrefilteredAuthoritativePlanDoesNotMatchAcrossLines()
     {
         var sink = new CapturingLineSink();
         byte[][] patterns = [@"\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*"u8.ToArray()];
@@ -363,10 +471,10 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
-    /// Verifies candidate-line scanning keeps looking within a line after a false prefix.
+    /// Verifies authoritative verification continues after a false candidate prefix.
     /// </summary>
     [Fact]
-    public void SearchCandidateLineAcceleratorContinuesAfterFalsePrefix()
+    public void SearchPrefilteredAuthoritativePlanContinuesAfterFalseCandidate()
     {
         var sink = new CapturingLineSink();
         byte[][] patterns = [@"\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*"u8.ToArray()];
@@ -385,28 +493,27 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
-    /// Verifies mixed literal and regex alternations scan their exact prefix candidates instead of every byte offset.
+    /// Verifies dot-star alternatives with one shared literal prefix use one authoritative matcher and conservative candidates.
     /// </summary>
-    [Fact(Timeout = 5000)]
-    public void SearchMixedAlternationUsesCandidatePrefixesWithoutAFullVerifier()
+    [Fact]
+    public void SearchSharedDelegatePrefixAlternationUsesAuthoritativePlan()
     {
         const string pattern =
-            "CollectExtensionSuffixCandidates|extensionSuffixPatterns|CreateAhoCorasick|GlobSet.cs";
+            "delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|" +
+            "delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler";
+        const string unrelatedLine =
+            "internal sealed class TransactionRecord { private readonly int _state; }\n";
+        const int unrelatedLineCount = 1_980;
         byte[][] patterns = [Encoding.UTF8.GetBytes(pattern)];
-        byte[] unrelatedLine = "private readonly byte[][] unrelatedPatterns;\n"u8.ToArray();
-        byte[] matchingLine = "CreateAhoCorasick(copy);\n"u8.ToArray();
-        byte[] haystack = new byte[(unrelatedLine.Length * 350_000) + matchingLine.Length];
-        for (int offset = 0; offset < haystack.Length - matchingLine.Length; offset += unrelatedLine.Length)
-        {
-            unrelatedLine.CopyTo(haystack, offset);
-        }
-
-        matchingLine.CopyTo(haystack, haystack.Length - matchingLine.Length);
+        byte[] haystack = Encoding.UTF8.GetBytes(
+            string.Concat(Enumerable.Repeat(unrelatedLine, unrelatedLineCount)) +
+            "    public delegate bool ShowMessageBoxHandler(string message, string caption, bool buttons);\n" +
+            "    public delegate bool ShowCheckboxMessageBoxHandler(string message, string caption, bool buttons);\n" +
+            "    public delegate void SetProgressBarValue(int percentComplete, int currentValue);\n" +
+            "    public delegate void UpdateEDIEvent(string eventString);\n");
         RegexSearchPlan? plan = LiteralLineSearcher.CreateRegexSearchPlan(
             patterns,
-            asciiCaseInsensitive: false,
-            compileAutomata: true);
-        RegexCandidateLineAccelerator? accelerator = plan?.GetCandidateLineAccelerator(0);
+            asciiCaseInsensitive: false);
         var sink = new CapturingMatchLineSink();
 
         bool matched = LiteralLineSearcher.SearchMatchLinesWithRegexPlan(
@@ -427,8 +534,60 @@ public sealed class LiteralLineSearcherTests
             out long matchingLines,
             out long matches);
 
-        Assert.NotNull(accelerator);
-        Assert.False(accelerator.HasVerifier);
+        Assert.True(matched);
+        Assert.Equal(4UL, sink.Matches);
+        Assert.Equal(unrelatedLineCount + 4, sink.LineNumber);
+        Assert.Equal(12, sink.MatchColumn);
+        Assert.Equal("delegate void UpdateEDIEvent"u8.ToArray(), sink.Match);
+        Assert.Equal(4, matchingLines);
+        Assert.Equal(4, matches);
+        Assert.NotNull(plan);
+        Assert.NotEqual(RegexPrefilterKind.None, plan.Matcher.PrefilterKind);
+    }
+
+    /// <summary>
+    /// Verifies mixed literal and regex alternatives use a conservative prefilter and authoritative verification.
+    /// </summary>
+    [Fact(Timeout = 5000)]
+    public void SearchMixedAlternationUsesConservativeCandidatesWithAuthoritativeVerification()
+    {
+        const string pattern =
+            "CollectExtensionSuffixCandidates|extensionSuffixPatterns|CreateAhoCorasick|GlobSet.cs";
+        byte[][] patterns = [Encoding.UTF8.GetBytes(pattern)];
+        byte[] unrelatedLine = "private readonly byte[][] unrelatedPatterns;\n"u8.ToArray();
+        byte[] matchingLine = "CreateAhoCorasick(copy);\n"u8.ToArray();
+        byte[] haystack = new byte[(unrelatedLine.Length * 350_000) + matchingLine.Length];
+        for (int offset = 0; offset < haystack.Length - matchingLine.Length; offset += unrelatedLine.Length)
+        {
+            unrelatedLine.CopyTo(haystack, offset);
+        }
+
+        matchingLine.CopyTo(haystack, haystack.Length - matchingLine.Length);
+        RegexSearchPlan? plan = LiteralLineSearcher.CreateRegexSearchPlan(
+            patterns,
+            asciiCaseInsensitive: false);
+        var sink = new CapturingMatchLineSink();
+
+        bool matched = LiteralLineSearcher.SearchMatchLinesWithRegexPlan(
+            haystack,
+            patterns,
+            plan,
+            ref sink);
+        LiteralLineSearcher.CountMatchesAndMatchingLinesWithRegexPlan(
+            haystack,
+            patterns,
+            plan,
+            asciiCaseInsensitive: false,
+            lineRegexp: false,
+            wordRegexp: false,
+            maxMatchingLines: null,
+            crlf: false,
+            nullData: false,
+            out long matchingLines,
+            out long matches);
+
+        Assert.NotNull(plan);
+        Assert.NotEqual(RegexPrefilterKind.None, plan.Matcher.PrefilterKind);
         Assert.True(matched);
         Assert.Equal(1UL, sink.Matches);
         Assert.Equal(350_001, sink.LineNumber);
@@ -467,8 +626,7 @@ public sealed class LiteralLineSearcherTests
         byte[] bytes = Encoding.UTF8.GetBytes(haystack);
         RegexSearchPlan? plan = LiteralLineSearcher.CreateRegexSearchPlan(
             patterns,
-            asciiCaseInsensitive: false,
-            compileAutomata: true);
+            asciiCaseInsensitive: false);
 
         LiteralLineSearcher.CountMatchesAndMatchingLinesWithRegexPlan(
             bytes,
@@ -518,8 +676,7 @@ public sealed class LiteralLineSearcherTests
         byte[][] patterns = ["foo[^x]"u8.ToArray()];
         RegexSearchPlan? plan = LiteralLineSearcher.CreateRegexSearchPlan(
             patterns,
-            asciiCaseInsensitive: false,
-            compileAutomata: true);
+            asciiCaseInsensitive: false);
 
         LiteralLineSearcher.CountMatchesAndMatchingLinesWithRegexPlan(
             "foo\n"u8,
@@ -556,10 +713,10 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
-    /// Verifies candidate-line scanning emits match-line records for prepared captures.
+    /// Verifies authoritative matching emits match-line records for prepared captures.
     /// </summary>
     [Fact]
-    public void SearchMatchLinesUsesCandidateLineAcceleratorForPreparedCaptures()
+    public void SearchMatchLinesUsesAuthoritativePlanForPreparedCaptures()
     {
         var sink = new CapturingMatchLineSink();
         byte[][] patterns = [@"(?-u:\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*))"u8.ToArray()];
@@ -578,10 +735,10 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
-    /// Verifies candidate-line scanning can skip exact match-column work when the sink does not need it.
+    /// Verifies authoritative line search can skip exact match-column work when the sink does not need it.
     /// </summary>
     [Fact]
-    public void SearchCandidateLineAcceleratorCanSkipMatchColumn()
+    public void SearchAuthoritativePlanCanSkipMatchColumn()
     {
         var sink = new CapturingLineSink();
         byte[][] patterns = [@"\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*"u8.ToArray()];
@@ -601,10 +758,10 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
-    /// Verifies class-sequence regex acceleration falls back to Unicode-aware matching when needed.
+    /// Verifies authoritative class-sequence matching is Unicode-aware.
     /// </summary>
     [Fact]
-    public void SearchUsesClassSequenceAcceleratorForUnicodeWords()
+    public void SearchAuthoritativePlanMatchesUnicodeWords()
     {
         var sink = new CapturingLineSink();
         byte[][] patterns = ["\\w{5}\\s+\\w{5}\\s+\\w{5}"u8.ToArray()];
@@ -624,10 +781,10 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
-    /// Verifies class-sequence regex acceleration recognizes Unicode whitespace separators.
+    /// Verifies authoritative class-sequence matching recognizes Unicode whitespace separators.
     /// </summary>
     [Fact]
-    public void SearchUsesClassSequenceAcceleratorForUnicodeWhitespace()
+    public void SearchAuthoritativePlanMatchesUnicodeWhitespace()
     {
         var sink = new CapturingLineSink();
         byte[][] patterns = ["\\w{5}\\s+\\w{5}\\s+\\w{5}"u8.ToArray()];
@@ -647,10 +804,10 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
-    /// Verifies class-sequence regex acceleration can skip earliest-column Unicode work when only line selection is needed.
+    /// Verifies authoritative whole-haystack search can omit the column when only line selection is needed.
     /// </summary>
     [Fact]
-    public void SearchClassSequenceAcceleratorCanSkipUnicodeColumnFallback()
+    public void SearchAuthoritativeMatcherCanSkipUnicodeMatchColumn()
     {
         var sink = new CapturingLineSink();
         byte[][] patterns = ["\\w{5}\\s+\\w{5}\\s+\\w{5}"u8.ToArray()];
@@ -664,15 +821,15 @@ public sealed class LiteralLineSearcherTests
 
         Assert.True(matched);
         Assert.Equal(1UL, sink.MatchedLines);
-        Assert.True(sink.MatchColumn > 1);
+        Assert.Equal(0, sink.MatchColumn);
         Assert.Equal(haystack, sink.Line);
     }
 
     /// <summary>
-    /// Verifies no-column class-sequence acceleration still checks earlier Unicode-only matching lines.
+    /// Verifies no-column authoritative matching still checks earlier Unicode-only matching lines.
     /// </summary>
     [Fact]
-    public void SearchClassSequenceAcceleratorChecksEarlierUnicodeLineWhenColumnSkipped()
+    public void SearchAuthoritativePlanChecksEarlierUnicodeLineWhenColumnSkipped()
     {
         var sink = new CapturingLineSink();
         byte[][] patterns = ["\\w{5}\\s+\\w{5}\\s+\\w{5}"u8.ToArray()];
@@ -691,10 +848,10 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
-    /// Verifies Unicode class-sequence backtracking stays on UTF-8 scalar boundaries.
+    /// Verifies authoritative Unicode matching stays on UTF-8 scalar boundaries while backtracking.
     /// </summary>
     [Fact]
-    public void SearchClassSequenceAcceleratorBacktracksUnicodeScalars()
+    public void SearchAuthoritativePlanBacktracksUnicodeScalars()
     {
         var sink = new CapturingLineSink();
         byte[][] patterns = ["\\w+\\w\\s"u8.ToArray()];
@@ -721,6 +878,10 @@ public sealed class LiteralLineSearcherTests
         var sink = new CapturingLineSink();
         byte[][] patterns = [@"\w+\s*\([^)]*(,[^)]*){8,}\)"u8.ToArray()];
         byte[] haystack = "ApplyFlag(enabledFlags[index], enabled: true, ref caseInsensitive, ref swapGreed, ref multiLine, ref dotMatchesNewline, ref crlf, ref utf8, ref unicodeClasses);\n"u8.ToArray();
+        var plan = RegexSearchPlan.Create(patterns, asciiCaseInsensitive: false);
+
+        Assert.NotNull(plan);
+        Assert.NotNull(plan.Matcher.Find(haystack));
 
         bool matched = LiteralLineSearcher.Search(
             haystack,
@@ -758,10 +919,10 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
-    /// Verifies class-sequence regex acceleration honors max-count limiting.
+    /// Verifies authoritative class-sequence matching honors max-count limiting.
     /// </summary>
     [Fact]
-    public void SearchClassSequenceAcceleratorHonorsMaxMatchingLines()
+    public void SearchAuthoritativePlanHonorsMaxMatchingLines()
     {
         var sink = new CapturingLineSink();
         byte[][] patterns = ["\\w{5}\\s+\\w{5}\\s+\\w{5}"u8.ToArray()];

@@ -20,6 +20,7 @@ public sealed class RegexAutomaton
     private readonly int wholePatternCaptureIndex;
 
     private RegexRunnerPool<RegexCaptureEngine>? captureEnginePool;
+    private RegexRunnerPool<RegexCaptureEngine>? _exactCaptureEnginePool;
     private RegexAlternationSetEngine? syntheticCaptureAlternationSet;
     private RegexDelimitedCaptureEngine? delimitedCaptureEngine;
     private RegexStructuredLogCaptureEngine? structuredLogCaptureEngine;
@@ -43,6 +44,7 @@ public sealed class RegexAutomaton
     private RegexFnPredicateCaptureEngine? fnPredicateCaptureEngine;
     private volatile bool captureEnginesInitialized;
     private volatile bool genericCaptureOnly;
+    private volatile bool _exactCaptureEngineInitialized;
 
     private RegexAutomaton(
         RegexMetaEngine engine,
@@ -164,9 +166,22 @@ public sealed class RegexAutomaton
         bool compilePrefilter,
         Dictionary<string, RegexUtf8ByteTrie>? utf8ByteTrieCache = null)
     {
-        if (options.SpecializationMode == RegexSpecializationMode.Fallback)
+        if (options.ExcludeLineTerminators)
         {
-            return CompileParsedFallback(tree, options, dfaSizeLimit, utf8ByteTrieCache);
+            RegexLineTerminatorAnalysis.Validate(tree.Root, options);
+        }
+
+        if (options.SpecializationMode == RegexSpecializationMode.Fallback ||
+            options.ExcludeLineTerminators)
+        {
+            bool compileSearchGuards = options.SpecializationMode != RegexSpecializationMode.Fallback;
+            return CompileParsedFallback(
+                tree,
+                options,
+                dfaSizeLimit,
+                compilePrefilter,
+                compileSearchGuards,
+                utf8ByteTrieCache);
         }
 
         RegexEmptyEngine.TryCreate(tree.Root, options, out RegexEmptyEngine? empty);
@@ -662,23 +677,37 @@ public sealed class RegexAutomaton
         RegexSyntaxTree tree,
         RegexCompileOptions options,
         ulong? dfaSizeLimit,
+        bool compilePrefilter,
+        bool compileSearchGuards,
         Dictionary<string, RegexUtf8ByteTrie>? utf8ByteTrieCache)
     {
+        RegexStartPrefixSet? startPrefixSet = null;
+        RegexPrefilter? prefilter = compileSearchGuards && compilePrefilter
+            ? RegexPrefilter.Compile(tree.Root, options, out startPrefixSet)
+            : null;
         RegexNfa nfa = CompileGeneralNfa(
             tree.Root,
             options,
             utf8ByteTrieCache);
         int wholePatternCaptureIndex = TryGetWholePatternCaptureIndex(tree.Root, tree.CaptureCount);
+        var metaEngine = RegexMetaEngine.Compile(
+            nfa,
+            prefilter,
+            dfaSizeLimit: dfaSizeLimit,
+            literalSet: null,
+            alternationSet: null,
+            asciiFastPattern: tree.Pattern,
+            root: tree.Root,
+            options: options);
+        RegexStartPredicate? startPredicate = null;
+        if (compileSearchGuards && ShouldCompileStartPredicate(metaEngine.Kind, prefilter))
+        {
+            RegexStartPredicate.TryCreate(tree.Root, options, startPrefixSet, out startPredicate);
+        }
+
         return new RegexAutomaton(
-            RegexMetaEngine.Compile(
-                nfa,
-                prefilter: null,
-                dfaSizeLimit: dfaSizeLimit,
-                literalSet: null,
-                alternationSet: null,
-                root: tree.Root,
-                options: options),
-            startPredicate: null,
+            metaEngine,
+            startPredicate,
             lengthGuard: null,
             requiredByteSetGuard: null,
             requiredLiteralAnySetGuard: null,
@@ -686,7 +715,7 @@ public sealed class RegexAutomaton
             tree.CaptureCount > 0 ? tree.Pattern : default,
             tree.CaptureCount > 0 ? tree.Root : null,
             options,
-            capturePrefilter: null,
+            prefilter,
             tree.CaptureCount,
             wholePatternCaptureIndex);
     }
@@ -962,6 +991,18 @@ public sealed class RegexAutomaton
         ulong? dfaSizeLimit,
         Dictionary<string, RegexUtf8ByteTrie>? utf8ByteTrieCache = null)
     {
+        if (options.ExcludeLineTerminators)
+        {
+            RegexLineTerminatorAnalysis.Validate(tree.Root, options);
+            return CompileParsedFallback(
+                tree,
+                options,
+                dfaSizeLimit,
+                compilePrefilter: false,
+                compileSearchGuards: true,
+                utf8ByteTrieCache);
+        }
+
         RegexNfa nfa = RegexNfaCompiler.CompileWithCompactScalarAtoms(
             tree.Root,
             options,
@@ -1517,7 +1558,8 @@ public sealed class RegexAutomaton
                 return;
             }
 
-            if (captureOptions.SpecializationMode == RegexSpecializationMode.Fallback)
+            if (captureOptions.SpecializationMode == RegexSpecializationMode.Fallback ||
+                captureOptions.ExcludeLineTerminators)
             {
                 if (captureRoot is not null && captureCount > 0 && wholePatternCaptureIndex == 0)
                 {
@@ -1717,6 +1759,35 @@ public sealed class RegexAutomaton
         }
     }
 
+    private void EnsureExactCaptureEngine()
+    {
+        if (_exactCaptureEngineInitialized)
+        {
+            return;
+        }
+
+        lock (captureInitializationLock)
+        {
+            if (_exactCaptureEngineInitialized)
+            {
+                return;
+            }
+
+            if (captureRoot is not null && captureCount > 0)
+            {
+                RegexNfa captureNfa = RegexNfaCompiler.CompileCaptures(
+                    captureRoot,
+                    captureOptions,
+                    captureCount);
+                _exactCaptureEnginePool = new RegexRunnerPool<RegexCaptureEngine>(
+                    new RegexCaptureEngine(captureNfa, prefilter: null),
+                    () => new RegexCaptureEngine(captureNfa, prefilter: null));
+            }
+
+            _exactCaptureEngineInitialized = true;
+        }
+    }
+
     /// <summary>
     /// Finds the first match and its participating capture groups in a haystack at or after a byte offset.
     /// </summary>
@@ -1860,6 +1931,64 @@ public sealed class RegexAutomaton
         }
 
         return FindGenericCaptures(haystack, startAt);
+    }
+
+    /// <summary>
+    /// Replays capture groups for one known match span in its original haystack context.
+    /// </summary>
+    /// <param name="haystack">The complete haystack used by the authoritative match.</param>
+    /// <param name="startAt">The known match start.</param>
+    /// <param name="endAt">The known exclusive match end.</param>
+    /// <returns>The capture result for the exact span, or <see langword="null" /> when it cannot be replayed.</returns>
+    internal RegexCaptures? ReplayCaptures(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        int endAt)
+    {
+        if ((uint)startAt > (uint)haystack.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startAt));
+        }
+
+        if (endAt < startAt || endAt > haystack.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(endAt));
+        }
+
+        var match = new RegexMatch(startAt, endAt - startAt);
+        if (captureCount == 0)
+        {
+            return new RegexCaptures(match, [match]);
+        }
+
+        if (wholePatternCaptureIndex > 0)
+        {
+            var groups = new RegexMatch?[captureCount + 1];
+            groups[0] = match;
+            groups[wholePatternCaptureIndex] = match;
+            return new RegexCaptures(match, groups);
+        }
+
+        EnsureExactCaptureEngine();
+        if (_exactCaptureEnginePool is null)
+        {
+            return null;
+        }
+
+        RegexCaptureEngine? captureEngine = _exactCaptureEnginePool.Rent();
+        if (captureEngine is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return captureEngine.MatchAt(haystack, startAt, endAt);
+        }
+        finally
+        {
+            _exactCaptureEnginePool.Return(captureEngine);
+        }
     }
 
     private long CountCapturesWithFind(ReadOnlySpan<byte> haystack, int startAt)

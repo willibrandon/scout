@@ -3,10 +3,25 @@ using System.Text;
 
 namespace Scout;
 
+/// <summary>
+/// Implements byte, UTF-8 scalar, character-class, and zero-width predicate matching.
+/// </summary>
 internal static class RegexByteClass
 {
-    private static readonly bool[] AsciiCaseFoldNeedsUnicodeScalar = CreateAsciiCaseFoldNeedsUnicodeScalar();
+    private static readonly bool[] s_asciiCaseFoldNeedsUnicodeScalar = CreateAsciiCaseFoldNeedsUnicodeScalar();
 
+    /// <summary>
+    /// Reports whether an atom consumes one byte.
+    /// </summary>
+    /// <param name="value">The candidate byte.</param>
+    /// <param name="kind">The atom syntax kind.</param>
+    /// <param name="expression">The atom expression.</param>
+    /// <param name="caseInsensitive">Whether matching ignores case.</param>
+    /// <param name="multiLine">Whether anchors use multiline semantics.</param>
+    /// <param name="dotMatchesNewline">Whether dot consumes line terminators.</param>
+    /// <param name="crlf">Whether CR and LF form the line-terminator family.</param>
+    /// <param name="lineTerminator">The configured non-CRLF line terminator.</param>
+    /// <returns><see langword="true" /> when the atom consumes the byte.</returns>
     public static bool AtomMatches(
         byte value,
         RegexSyntaxKind kind,
@@ -36,6 +51,22 @@ internal static class RegexByteClass
         };
     }
 
+    /// <summary>
+    /// Attempts to match an atom and determine its consumed UTF-8 byte length.
+    /// </summary>
+    /// <param name="haystack">The bytes being matched.</param>
+    /// <param name="position">The candidate byte position.</param>
+    /// <param name="kind">The atom syntax kind.</param>
+    /// <param name="expression">The atom expression.</param>
+    /// <param name="caseInsensitive">Whether matching ignores case.</param>
+    /// <param name="multiLine">Whether anchors use multiline semantics.</param>
+    /// <param name="dotMatchesNewline">Whether dot consumes line terminators.</param>
+    /// <param name="crlf">Whether CR and LF form the line-terminator family.</param>
+    /// <param name="lineTerminator">The configured non-CRLF line terminator.</param>
+    /// <param name="utf8">Whether matching observes UTF-8 scalar boundaries.</param>
+    /// <param name="unicodeClasses">Whether character classes use Unicode semantics.</param>
+    /// <param name="length">Receives the consumed byte length.</param>
+    /// <returns><see langword="true" /> when the atom matches.</returns>
     public static bool TryGetAtomMatchLength(
         ReadOnlySpan<byte> haystack,
         int position,
@@ -74,6 +105,23 @@ internal static class RegexByteClass
             out length);
     }
 
+    /// <summary>
+    /// Attempts to match an atom using precomputed scalar-decoding policy.
+    /// </summary>
+    /// <param name="haystack">The bytes being matched.</param>
+    /// <param name="position">The candidate byte position.</param>
+    /// <param name="kind">The atom syntax kind.</param>
+    /// <param name="expression">The atom expression.</param>
+    /// <param name="caseInsensitive">Whether matching ignores case.</param>
+    /// <param name="multiLine">Whether anchors use multiline semantics.</param>
+    /// <param name="dotMatchesNewline">Whether dot consumes line terminators.</param>
+    /// <param name="crlf">Whether CR and LF form the line-terminator family.</param>
+    /// <param name="lineTerminator">The configured non-CRLF line terminator.</param>
+    /// <param name="unicodeClasses">Whether character classes use Unicode semantics.</param>
+    /// <param name="requiresUtf8ScalarMatch">Whether the atom requires scalar decoding.</param>
+    /// <param name="canUseAsciiScalarFastPath">Whether ASCII can bypass scalar decoding.</param>
+    /// <param name="length">Receives the consumed byte length.</param>
+    /// <returns><see langword="true" /> when the atom matches.</returns>
     public static bool TryGetAtomMatchLength(
         ReadOnlySpan<byte> haystack,
         int position,
@@ -197,6 +245,18 @@ internal static class RegexByteClass
         return false;
     }
 
+    /// <summary>
+    /// Reports whether a zero-width predicate matches at a byte position.
+    /// </summary>
+    /// <param name="haystack">The bytes being matched.</param>
+    /// <param name="position">The candidate byte position.</param>
+    /// <param name="kind">The predicate syntax kind.</param>
+    /// <param name="multiLine">Whether anchors use multiline semantics.</param>
+    /// <param name="crlf">Whether CR and LF form the line-terminator family.</param>
+    /// <param name="lineTerminator">The configured non-CRLF line terminator.</param>
+    /// <param name="utf8">Whether matching observes UTF-8 scalar boundaries.</param>
+    /// <param name="unicodeClasses">Whether word predicates use Unicode semantics.</param>
+    /// <returns><see langword="true" /> when the predicate matches.</returns>
     public static bool PredicateMatches(
         ReadOnlySpan<byte> haystack,
         int position,
@@ -229,9 +289,20 @@ internal static class RegexByteClass
         };
     }
 
+    /// <summary>
+    /// Reports whether a byte position is outside the interior of a valid UTF-8 scalar.
+    /// </summary>
+    /// <param name="bytes">The bytes to inspect.</param>
+    /// <param name="position">The candidate boundary position.</param>
+    /// <returns><see langword="true" /> when the position is a UTF-8 boundary.</returns>
     public static bool IsUtf8Boundary(ReadOnlySpan<byte> bytes, int position)
     {
         if (position <= 0 || position >= bytes.Length)
+        {
+            return true;
+        }
+
+        if ((bytes[position] & 0xC0) != 0x80)
         {
             return true;
         }
@@ -250,6 +321,15 @@ internal static class RegexByteClass
         return true;
     }
 
+    /// <summary>
+    /// Determines whether an atom requires UTF-8 scalar decoding.
+    /// </summary>
+    /// <param name="kind">The atom syntax kind.</param>
+    /// <param name="expression">The atom expression.</param>
+    /// <param name="utf8">Whether matching observes UTF-8 scalar boundaries.</param>
+    /// <param name="caseInsensitive">Whether matching ignores case.</param>
+    /// <param name="unicodeClasses">Whether character classes use Unicode semantics.</param>
+    /// <returns><see langword="true" /> when scalar decoding is required.</returns>
     public static bool RequiresUtf8ScalarMatch(RegexSyntaxKind kind, ReadOnlySpan<byte> expression, bool utf8, bool caseInsensitive, bool unicodeClasses)
     {
         bool codepointMode = utf8 || unicodeClasses;
@@ -285,7 +365,7 @@ internal static class RegexByteClass
 
     private static bool LiteralByteCaseFoldMayNeedUnicodeScalar(byte literal)
     {
-        return literal > 0x7F || AsciiCaseFoldNeedsUnicodeScalar[literal];
+        return literal > 0x7F || s_asciiCaseFoldNeedsUnicodeScalar[literal];
     }
 
     private static bool ClassCaseFoldMayNeedUnicodeScalar(ReadOnlySpan<byte> expression)
@@ -335,7 +415,7 @@ internal static class RegexByteClass
         {
             if (foldedStart <= value &&
                 value <= foldedEnd &&
-                AsciiCaseFoldNeedsUnicodeScalar[value])
+                s_asciiCaseFoldNeedsUnicodeScalar[value])
             {
                 return true;
             }
@@ -1497,9 +1577,10 @@ internal static class RegexByteClass
             return false;
         }
 
-        if (!unicodeWord)
+        byte previous = haystack[position - 1];
+        if (!unicodeWord || previous <= 0x7F)
         {
-            return IsAsciiWordByte(haystack[position - 1]);
+            return IsAsciiWordByte(previous);
         }
 
         int firstCandidate = Math.Max(0, position - 4);
@@ -1522,9 +1603,10 @@ internal static class RegexByteClass
             return false;
         }
 
-        if (!unicodeWord)
+        byte current = haystack[position];
+        if (!unicodeWord || current <= 0x7F)
         {
-            return IsAsciiWordByte(haystack[position]);
+            return IsAsciiWordByte(current);
         }
 
         return TryDecodeUtf8Scalar(haystack, position, out Rune rune, out _) &&

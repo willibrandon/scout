@@ -179,20 +179,7 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
 
                 RegexNfaState state = _nfa.States[thread.State];
                 if (state.Kind == RegexNfaStateKind.Atom &&
-                    RegexByteClass.TryGetAtomMatchLength(
-                        haystack,
-                        position,
-                        state.AtomKind,
-                        state.Value.Span,
-                        state.CaseInsensitive,
-                        state.MultiLine,
-                        state.DotMatchesNewline,
-                        state.Crlf,
-                        state.LineTerminator,
-                        state.UnicodeClasses,
-                        state.RequiresUtf8ScalarMatch,
-                        state.CanUseAsciiScalarFastPath,
-                        out int consume) &&
+                    state.TryGetAtomMatchLength(haystack, position, out int consume) &&
                     (!exactEnd || consume <= requiredEnd - position))
                 {
                     AddThread(
@@ -345,20 +332,7 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
 
             RegexNfaState state = _nfa.States[thread.State];
             if (state.Kind == RegexNfaStateKind.Atom &&
-                RegexByteClass.TryGetAtomMatchLength(
-                    haystack,
-                    position,
-                    state.AtomKind,
-                    state.Value.Span,
-                    state.CaseInsensitive,
-                    state.MultiLine,
-                    state.DotMatchesNewline,
-                    state.Crlf,
-                    state.LineTerminator,
-                    state.UnicodeClasses,
-                    state.RequiresUtf8ScalarMatch,
-                    state.CanUseAsciiScalarFastPath,
-                    out int consume) &&
+                state.TryGetAtomMatchLength(haystack, position, out int consume) &&
                 RegexDfaOperations.CanReachAccept(
                     _nfa,
                     state.Next,

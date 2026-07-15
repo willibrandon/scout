@@ -1,25 +1,28 @@
 namespace Scout;
 
-internal sealed class RegexOnePassDfa
+/// <summary>
+/// Executes one-pass NFA searches and falls back when a step becomes ambiguous.
+/// </summary>
+/// <param name="nfa">The NFA to execute.</param>
+internal sealed class RegexOnePassDfa(RegexNfa nfa)
 {
-    private readonly RegexNfa nfa;
-    private readonly PikeVm fallback;
-    private List<int> current = [];
-    private List<int> next = [];
-    private readonly bool[] visited;
-    private readonly bool[] closedSplits;
-    private readonly Dictionary<(int State, int Position), bool> reachabilityCache = [];
-    private readonly HashSet<(int State, int Position)> reachabilityVisited = [];
-    private readonly Stack<(int State, int Position)> reachabilityPending = [];
+    private readonly RegexNfa _nfa = nfa;
+    private readonly PikeVm _fallback = new(nfa);
+    private readonly RegexLiteralRunTable _literalRuns = RegexLiteralRunTable.Create(nfa);
+    private List<int> _current = [];
+    private List<int> _next = [];
+    private readonly int[] _visited = new int[nfa.States.Count];
+    private readonly int[] _closedSplits = new int[nfa.States.Count];
+    private readonly Dictionary<(int State, int Position), bool> _reachabilityCache = [];
+    private readonly HashSet<(int State, int Position)> _reachabilityVisited = [];
+    private readonly Stack<(int State, int Position)> _reachabilityPending = [];
+    private int _threadScratchGeneration;
 
-    public RegexOnePassDfa(RegexNfa nfa)
-    {
-        this.nfa = nfa;
-        fallback = new PikeVm(nfa);
-        visited = new bool[nfa.States.Count];
-        closedSplits = new bool[nfa.States.Count];
-    }
-
+    /// <summary>
+    /// Determines whether an NFA can benefit from the one-pass engine.
+    /// </summary>
+    /// <param name="nfa">The NFA to inspect.</param>
+    /// <returns><see langword="true" /> when the NFA contains supported predicates and branches.</returns>
     public static bool CanCompile(RegexNfa nfa)
     {
         bool sawPredicate = false;
@@ -42,20 +45,35 @@ internal sealed class RegexOnePassDfa
         return sawPredicate && sawBranch;
     }
 
+    /// <summary>
+    /// Attempts a leftmost-first match anchored at a byte offset.
+    /// </summary>
+    /// <param name="haystack">The bytes to match.</param>
+    /// <param name="start">The anchored start offset.</param>
+    /// <param name="length">The matched byte length when successful.</param>
+    /// <returns><see langword="true" /> when the NFA matches at <paramref name="start" />.</returns>
     public bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int length)
     {
-        current.Clear();
-        reachabilityCache.Clear();
-        ClearThreadScratch();
-        AddThread(nfa.StartState, haystack, start, current, visited, closedSplits);
+        _current.Clear();
+        _reachabilityCache.Clear();
+        int threadScratchGeneration = NextThreadScratchGeneration();
+        AddThread(
+            _nfa.StartState,
+            haystack,
+            start,
+            _current,
+            _visited,
+            _closedSplits,
+            threadScratchGeneration);
         int deferredAcceptLength = -1;
-        for (int position = start; position <= haystack.Length; position++)
+        int position = start;
+        while (position <= haystack.Length)
         {
-            int acceptIndex = IndexOfAccept(current);
+            int acceptIndex = IndexOfAccept(_current);
             if (acceptIndex >= 0)
             {
                 deferredAcceptLength = position - start;
-                if (!HasEarlierConsumer(current, acceptIndex, haystack, position, reachabilityCache))
+                if (!HasEarlierConsumer(_current, acceptIndex, haystack, position, _reachabilityCache))
                 {
                     length = deferredAcceptLength;
                     return true;
@@ -67,13 +85,13 @@ internal sealed class RegexOnePassDfa
                 break;
             }
 
-            next.Clear();
-            if (!TryStep(haystack, position, next))
+            _next.Clear();
+            if (!TryStep(haystack, position, _next, out int consume))
             {
-                return fallback.TryMatchAt(haystack, start, out length);
+                return _fallback.TryMatchAt(haystack, start, out length);
             }
 
-            if (next.Count == 0)
+            if (_next.Count == 0)
             {
                 if (deferredAcceptLength >= 0)
                 {
@@ -85,7 +103,8 @@ internal sealed class RegexOnePassDfa
                 return false;
             }
 
-            (current, next) = (next, current);
+            position += consume;
+            (_current, _next) = (_next, _current);
         }
 
         if (deferredAcceptLength >= 0)
@@ -98,36 +117,31 @@ internal sealed class RegexOnePassDfa
         return false;
     }
 
-    private bool TryStep(ReadOnlySpan<byte> haystack, int position, List<int> destination)
+    private bool TryStep(
+        ReadOnlySpan<byte> haystack,
+        int position,
+        List<int> destination,
+        out int consume)
     {
+        consume = 0;
         bool matched = false;
-        for (int index = 0; index < current.Count; index++)
+        int matchedStateIndex = -1;
+        int target = -1;
+        for (int index = 0; index < _current.Count; index++)
         {
-            RegexNfaState state = nfa.States[current[index]];
-            int target;
-            int consume;
+            int stateIndex = _current[index];
+            RegexNfaState state = _nfa.States[stateIndex];
+            int candidateTarget;
+            int candidateConsume;
             if (state.Kind == RegexNfaStateKind.Atom &&
-                RegexByteClass.TryGetAtomMatchLength(
-                    haystack,
-                    position,
-                    state.AtomKind,
-                    state.Value.Span,
-                    state.CaseInsensitive,
-                    state.MultiLine,
-                    state.DotMatchesNewline,
-                    state.Crlf,
-                    state.LineTerminator,
-                    state.UnicodeClasses,
-                    state.RequiresUtf8ScalarMatch,
-                    state.CanUseAsciiScalarFastPath,
-                    out consume))
+                state.TryGetAtomMatchLength(haystack, position, out candidateConsume))
             {
-                target = state.Next;
+                candidateTarget = state.Next;
             }
             else if (state.Kind == RegexNfaStateKind.Sparse &&
-                state.TryGetSparseTarget(haystack[position], out target))
+                state.TryGetSparseTarget(haystack[position], out candidateTarget))
             {
-                consume = 1;
+                candidateConsume = 1;
             }
             else
             {
@@ -140,23 +154,54 @@ internal sealed class RegexOnePassDfa
             }
 
             matched = true;
-            ClearThreadScratch();
-            AddThread(
-                target,
-                haystack,
-                position + consume,
-                destination,
-                visited,
-                closedSplits);
+            matchedStateIndex = stateIndex;
+            target = candidateTarget;
+            consume = candidateConsume;
         }
 
+        if (!matched)
+        {
+            return true;
+        }
+
+        if (_literalRuns.TryGet(
+            matchedStateIndex,
+            out ReadOnlySpan<byte> literalBytes,
+            out int literalSuccessor))
+        {
+            if (literalBytes.Length > haystack.Length - position ||
+                !haystack.Slice(position, literalBytes.Length).SequenceEqual(literalBytes))
+            {
+                consume = 0;
+                return true;
+            }
+
+            target = literalSuccessor;
+            consume = literalBytes.Length;
+        }
+
+        int threadScratchGeneration = NextThreadScratchGeneration();
+        AddThread(
+            target,
+            haystack,
+            position + consume,
+            destination,
+            _visited,
+            _closedSplits,
+            threadScratchGeneration);
         return true;
     }
 
-    private void ClearThreadScratch()
+    private int NextThreadScratchGeneration()
     {
-        Array.Clear(visited);
-        Array.Clear(closedSplits);
+        if (_threadScratchGeneration == int.MaxValue)
+        {
+            Array.Clear(_visited);
+            Array.Clear(_closedSplits);
+            _threadScratchGeneration = 0;
+        }
+
+        return ++_threadScratchGeneration;
     }
 
     private void AddThread(
@@ -164,34 +209,63 @@ internal sealed class RegexOnePassDfa
         ReadOnlySpan<byte> haystack,
         int position,
         List<int> threads,
-        bool[] visited,
-        bool[] closedSplits)
+        int[] visited,
+        int[] closedSplits,
+        int threadScratchGeneration)
     {
         if (stateIndex < 0)
         {
             return;
         }
 
-        if (visited[stateIndex])
+        if (visited[stateIndex] == threadScratchGeneration)
         {
-            AddClosedSplitExit(stateIndex, haystack, position, threads, visited, closedSplits);
+            AddClosedSplitExit(
+                stateIndex,
+                haystack,
+                position,
+                threads,
+                visited,
+                closedSplits,
+                threadScratchGeneration);
             return;
         }
 
-        visited[stateIndex] = true;
-        RegexNfaState state = nfa.States[stateIndex];
+        visited[stateIndex] = threadScratchGeneration;
+        RegexNfaState state = _nfa.States[stateIndex];
         switch (state.Kind)
         {
             case RegexNfaStateKind.Split:
             case RegexNfaStateKind.GreedyLoopSplit:
             case RegexNfaStateKind.LazyLoopSplit:
-                AddThread(state.Next, haystack, position, threads, visited, closedSplits);
-                AddThread(state.Alternative, haystack, position, threads, visited, closedSplits);
+                AddThread(
+                    state.Next,
+                    haystack,
+                    position,
+                    threads,
+                    visited,
+                    closedSplits,
+                    threadScratchGeneration);
+                AddThread(
+                    state.Alternative,
+                    haystack,
+                    position,
+                    threads,
+                    visited,
+                    closedSplits,
+                    threadScratchGeneration);
                 break;
             case RegexNfaStateKind.Predicate:
                 if (RegexByteClass.PredicateMatches(haystack, position, state.AtomKind, state.MultiLine, state.Crlf, state.LineTerminator, state.Utf8, state.UnicodeClasses))
                 {
-                    AddThread(state.Next, haystack, position, threads, visited, closedSplits);
+                    AddThread(
+                        state.Next,
+                        haystack,
+                        position,
+                        threads,
+                        visited,
+                        closedSplits,
+                        threadScratchGeneration);
                 }
 
                 break;
@@ -206,23 +280,38 @@ internal sealed class RegexOnePassDfa
         ReadOnlySpan<byte> haystack,
         int position,
         List<int> threads,
-        bool[] visited,
-        bool[] closedSplits)
+        int[] visited,
+        int[] closedSplits,
+        int threadScratchGeneration)
     {
-        RegexNfaState state = nfa.States[stateIndex];
-        if (closedSplits[stateIndex])
+        RegexNfaState state = _nfa.States[stateIndex];
+        if (closedSplits[stateIndex] == threadScratchGeneration)
         {
             return;
         }
 
-        closedSplits[stateIndex] = true;
+        closedSplits[stateIndex] = threadScratchGeneration;
         switch (state.Kind)
         {
             case RegexNfaStateKind.GreedyLoopSplit:
-                AddThread(state.Alternative, haystack, position, threads, visited, closedSplits);
+                AddThread(
+                    state.Alternative,
+                    haystack,
+                    position,
+                    threads,
+                    visited,
+                    closedSplits,
+                    threadScratchGeneration);
                 break;
             case RegexNfaStateKind.LazyLoopSplit:
-                AddThread(state.Next, haystack, position, threads, visited, closedSplits);
+                AddThread(
+                    state.Next,
+                    haystack,
+                    position,
+                    threads,
+                    visited,
+                    closedSplits,
+                    threadScratchGeneration);
                 break;
         }
     }
@@ -241,30 +330,17 @@ internal sealed class RegexOnePassDfa
 
         for (int index = 0; index < acceptIndex; index++)
         {
-            RegexNfaState state = nfa.States[threads[index]];
+            RegexNfaState state = _nfa.States[threads[index]];
             if (state.Kind == RegexNfaStateKind.Atom &&
-                RegexByteClass.TryGetAtomMatchLength(
-                    haystack,
-                    position,
-                    state.AtomKind,
-                    state.Value.Span,
-                    state.CaseInsensitive,
-                    state.MultiLine,
-                    state.DotMatchesNewline,
-                    state.Crlf,
-                    state.LineTerminator,
-                    state.UnicodeClasses,
-                    state.RequiresUtf8ScalarMatch,
-                    state.CanUseAsciiScalarFastPath,
-                    out int consume) &&
+                state.TryGetAtomMatchLength(haystack, position, out int consume) &&
                 RegexDfaOperations.CanReachAccept(
-                    nfa,
+                    _nfa,
                     state.Next,
                     haystack,
                     position + consume,
                     reachabilityCache,
-                    reachabilityVisited,
-                    reachabilityPending))
+                    _reachabilityVisited,
+                    _reachabilityPending))
             {
                 return true;
             }
@@ -272,13 +348,13 @@ internal sealed class RegexOnePassDfa
             if (state.Kind == RegexNfaStateKind.Sparse &&
                 state.TryGetSparseTarget(haystack[position], out int sparseNext) &&
                 RegexDfaOperations.CanReachAccept(
-                    nfa,
+                    _nfa,
                     sparseNext,
                     haystack,
                     position + 1,
                     reachabilityCache,
-                    reachabilityVisited,
-                    reachabilityPending))
+                    _reachabilityVisited,
+                    _reachabilityPending))
             {
                 return true;
             }
@@ -291,7 +367,7 @@ internal sealed class RegexOnePassDfa
     {
         for (int index = 0; index < threads.Count; index++)
         {
-            if (nfa.States[threads[index]].Kind == RegexNfaStateKind.Accept)
+            if (_nfa.States[threads[index]].Kind == RegexNfaStateKind.Accept)
             {
                 return index;
             }

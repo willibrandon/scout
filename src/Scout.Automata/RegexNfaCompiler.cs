@@ -392,7 +392,10 @@ internal sealed class RegexNfaCompiler(
             options.Utf8,
             options.UnicodeClasses,
             next,
-            alternative: -1);
+            alternative: -1,
+            excludeLineTerminators: options.ExcludeLineTerminators,
+            excludeCrLf: options.ExcludeCrLf,
+            excludedLineTerminator: options.ExcludedLineTerminator);
     }
 
     private int CompileAtomReversed(RegexAtomNode node, int next, RegexCompileOptions options)
@@ -417,7 +420,10 @@ internal sealed class RegexNfaCompiler(
             options.Utf8,
             options.UnicodeClasses,
             next,
-            alternative: -1);
+            alternative: -1,
+            excludeLineTerminators: options.ExcludeLineTerminators,
+            excludeCrLf: options.ExcludeCrLf,
+            excludedLineTerminator: options.ExcludedLineTerminator);
     }
 
     private bool TryCompileUtf8ByteAtom(
@@ -601,8 +607,12 @@ internal sealed class RegexNfaCompiler(
         bool utf8,
         bool unicodeClasses,
         int next,
-        int alternative)
+        int alternative,
+        bool excludeLineTerminators = false,
+        bool excludeCrLf = false,
+        byte? excludedLineTerminator = null)
     {
+        byte effectiveExcludedLineTerminator = excludedLineTerminator ?? lineTerminator;
         if (_cacheStates)
         {
             var key = RegexNfaAtomCacheKey.Create(
@@ -617,7 +627,10 @@ internal sealed class RegexNfaCompiler(
                 utf8,
                 unicodeClasses,
                 next,
-                alternative);
+                alternative,
+                excludeLineTerminators,
+                excludeCrLf,
+                effectiveExcludedLineTerminator);
             if (_atomStateCache.TryGetValue(key, out int existing))
             {
                 return existing;
@@ -636,7 +649,10 @@ internal sealed class RegexNfaCompiler(
                 utf8,
                 unicodeClasses,
                 next,
-                alternative));
+                alternative,
+                excludeLineTerminators: excludeLineTerminators,
+                excludeCrLf: excludeCrLf,
+                excludedLineTerminator: effectiveExcludedLineTerminator));
             _atomStateCache.Add(key, cachedState);
             return cachedState;
         }
@@ -654,7 +670,10 @@ internal sealed class RegexNfaCompiler(
             utf8,
             unicodeClasses,
             next,
-            alternative));
+            alternative,
+            excludeLineTerminators: excludeLineTerminators,
+            excludeCrLf: excludeCrLf,
+            excludedLineTerminator: effectiveExcludedLineTerminator));
         return state;
     }
 

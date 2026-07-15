@@ -19,6 +19,8 @@ GATE_BOUNDED_ASSIGNMENT_RUNS="6"
 GATE_BOUNDED_ASSIGNMENT_WARMUP="6"
 GATE_LARGE_BOUNDED_UNICODE_CLASS_RUNS="6"
 GATE_LARGE_BOUNDED_UNICODE_CLASS_WARMUP="6"
+GATE_LINE_REGEX_RUNS="6"
+GATE_LINE_REGEX_WARMUP="6"
 GATE_LARGE_FILE_THREADS="4"
 GATE_LARGE_FILE_SEGMENT_BUFFER_LENGTH="131072"
 GATE_RETRY_FAILED_WORKLOADS="${SCOUT_GATE_RETRY_FAILED_WORKLOADS:-2}"
@@ -499,6 +501,36 @@ EOF
     awk 'BEGIN { for (i = 0; i < 5000; i++) printf "x[%cw-]{50,1000}\n", 92 }' > "$large_bounded_unicode_class_input"
 }
 
+make_line_regex_corpus() {
+    line_regex_dir="$OUT_DIR/line-regex"
+    line_regex_input="$line_regex_dir/paladin-like-200000.txt"
+    line_regex_absent_patterns="$line_regex_dir/absent-patterns-64.txt"
+    mkdir -p "$line_regex_dir"
+
+    awk 'BEGIN {
+        for (i = 0; i < 200000; i++) {
+            printf "GeneratedRecordFactory uses GeneratedRecordBuilder and unrelated symbols.\r\n"
+            printf "internal sealed class GeneratedRecord\r\n"
+            printf "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_abcdefghijklmnopqrstuvwxyz_\r\n"
+            printf "internal sealed class OtherRecord { private readonly int _state; }\r\n"
+        }
+
+        printf "    public delegate bool ShowMessageBoxHandler(string message, string caption, bool buttons);\r\n"
+        printf "    public delegate bool ShowCheckboxMessageBoxHandler(string message, string caption, bool buttons);\r\n"
+        printf "    public delegate void SetProgressBarValue(int percentComplete, int currentValue);\r\n"
+        printf "    public delegate void UpdateEDIEvent(string eventString);\r\n"
+    }' > "$line_regex_input"
+    awk 'BEGIN {
+        for (i = 0; i < 64; i++) {
+            printf "issue44_absent_pattern_%03d\n", i
+        }
+    }' > "$line_regex_absent_patterns"
+}
+
+make_absent_regexp_arguments() {
+    awk '{ printf " -e %s", $0 }' "$1"
+}
+
 expect_no_match_command() {
     no_match_command="$1"
     no_match_label="$2"
@@ -809,6 +841,24 @@ gate_large_bounded_unicode_class_warmup() {
     printf '%s\n' "$WARMUP"
 }
 
+gate_line_regex_runs() {
+    if [ "$MODE" = "gate" ] && [ "$RUNS_SPECIFIED" = "0" ]; then
+        printf '%s\n' "$GATE_LINE_REGEX_RUNS"
+        return
+    fi
+
+    printf '%s\n' "$RUNS"
+}
+
+gate_line_regex_warmup() {
+    if [ "$MODE" = "gate" ] && [ "$WARMUP_SPECIFIED" = "0" ]; then
+        printf '%s\n' "$GATE_LINE_REGEX_WARMUP"
+        return
+    fi
+
+    printf '%s\n' "$WARMUP"
+}
+
 check_time_gate() {
     time_gate_name="$1"
     time_gate_limit="$2"
@@ -1006,6 +1056,12 @@ list_workloads() {
         'smoke_cold_version           scout --version vs rg --version, no release gate' \
         'bounded_assignment_no_match  generated 800-candidate issue #30 scan, gate <= 1.50x' \
         'large_bounded_unicode_class_no_match generated 5,000-candidate issue #32 scan in general mode, gate <= 1.50x' \
+        'line_regex_word_boundary_general generated issue #37 word-boundary scan in general mode, gate <= 1.50x' \
+        'line_regex_anchored_general  generated issue #37 anchored-line scan in general mode, gate <= 1.50x' \
+        'line_regex_bounded_class_general generated issue #37 bounded-class scan in general mode, gate <= 1.50x' \
+        'shared_delegate_prefix_general generated issue #36 shared-prefix alternation in general mode, gate <= 1.50x' \
+        'many_absent_regexp_general  generated issue #44 64-pattern -e scan in general mode, gate <= 1.50x' \
+        'many_absent_pattern_file_general generated issue #44 64-pattern -f scan in general mode, gate <= 1.50x' \
         'subtitles_en_literal         OpenSubtitles literal scan, gate <= 1.20x' \
         'subtitles_en_regex           OpenSubtitles regex scan, gate <= 1.20x' \
         'linux_recursive_literal      Linux tree recursive walk, gate <= 1.25x' \
@@ -1172,6 +1228,7 @@ fi
 make_cold_tiny_corpus
 make_bounded_assignment_corpus
 make_large_bounded_unicode_class_corpus
+make_line_regex_corpus
 OPENSUBTITLES_EN="${SCOUT_BENCH_OPENSUBTITLES_EN:-}"
 LINUX_TREE="${SCOUT_BENCH_LINUX_TREE:-}"
 OPENSUBTITLES_EN="$(require_gate_corpus_file "opensubtitles-en" "$OPENSUBTITLES_EN")"
@@ -1184,10 +1241,19 @@ Q_BOUNDED_ASSIGNMENT_PATTERN="$(shell_quote "$OUT_DIR/bounded-assignment/pattern
 Q_BOUNDED_ASSIGNMENT_INPUT="$(shell_quote "$OUT_DIR/bounded-assignment/no-match-800.txt")"
 Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN="$(shell_quote "$OUT_DIR/large-bounded-unicode-class/pattern.txt")"
 Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT="$(shell_quote "$OUT_DIR/large-bounded-unicode-class/no-match-5000.txt")"
+Q_LINE_REGEX_INPUT="$(shell_quote "$OUT_DIR/line-regex/paladin-like-200000.txt")"
+Q_LINE_REGEX_ABSENT_PATTERNS="$(shell_quote "$OUT_DIR/line-regex/absent-patterns-64.txt")"
+LINE_REGEX_ABSENT_REGEXP_ARGUMENTS="$(make_absent_regexp_arguments "$OUT_DIR/line-regex/absent-patterns-64.txt")"
+RG_LINE_REGEX_PREFIX="$Q_RG --no-config --threads 1 --mmap --count-matches --no-messages"
+SCOUT_LINE_REGEX_PREFIX="env SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config --threads 1 --mmap --count-matches --no-messages"
 RG_BOUNDED_ASSIGNMENT_COMMAND="$(expect_no_match_command "$Q_RG --no-config -U --count-matches --no-messages -f $Q_BOUNDED_ASSIGNMENT_PATTERN $Q_BOUNDED_ASSIGNMENT_INPUT" "rg bounded-assignment search")"
 SCOUT_BOUNDED_ASSIGNMENT_COMMAND="$(expect_no_match_command "$Q_SCOUT --no-config -U --count-matches --no-messages -f $Q_BOUNDED_ASSIGNMENT_PATTERN $Q_BOUNDED_ASSIGNMENT_INPUT" "Scout bounded-assignment search")"
 RG_LARGE_BOUNDED_UNICODE_CLASS_COMMAND="$(expect_no_match_command "$Q_RG --no-config -U --count-matches --no-messages -f $Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN $Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT" "rg large bounded Unicode-class search")"
 SCOUT_LARGE_BOUNDED_UNICODE_CLASS_COMMAND="$(expect_no_match_command "SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config -U --count-matches --no-messages -f $Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN $Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT" "Scout large bounded Unicode-class search")"
+RG_MANY_ABSENT_REGEXP_COMMAND="$(expect_no_match_command "$RG_LINE_REGEX_PREFIX $LINE_REGEX_ABSENT_REGEXP_ARGUMENTS $Q_LINE_REGEX_INPUT" "rg 64-pattern -e search")"
+SCOUT_MANY_ABSENT_REGEXP_COMMAND="$(expect_no_match_command "$SCOUT_LINE_REGEX_PREFIX $LINE_REGEX_ABSENT_REGEXP_ARGUMENTS $Q_LINE_REGEX_INPUT" "Scout 64-pattern -e search")"
+RG_MANY_ABSENT_PATTERN_FILE_COMMAND="$(expect_no_match_command "$RG_LINE_REGEX_PREFIX -f $Q_LINE_REGEX_ABSENT_PATTERNS $Q_LINE_REGEX_INPUT" "rg 64-pattern -f search")"
+SCOUT_MANY_ABSENT_PATTERN_FILE_COMMAND="$(expect_no_match_command "$SCOUT_LINE_REGEX_PREFIX -f $Q_LINE_REGEX_ABSENT_PATTERNS $Q_LINE_REGEX_INPUT" "Scout 64-pattern -f search")"
 OPENSUBTITLES_RUNS="$(gate_opensubtitles_runs)"
 OPENSUBTITLES_WARMUP="$(gate_opensubtitles_warmup)"
 TREE_RUNS="$(gate_tree_runs)"
@@ -1198,6 +1264,8 @@ BOUNDED_ASSIGNMENT_RUNS="$(gate_bounded_assignment_runs)"
 BOUNDED_ASSIGNMENT_WARMUP="$(gate_bounded_assignment_warmup)"
 LARGE_BOUNDED_UNICODE_CLASS_RUNS="$(gate_large_bounded_unicode_class_runs)"
 LARGE_BOUNDED_UNICODE_CLASS_WARMUP="$(gate_large_bounded_unicode_class_warmup)"
+LINE_REGEX_RUNS="$(gate_line_regex_runs)"
+LINE_REGEX_WARMUP="$(gate_line_regex_warmup)"
 
 printf '\n== corpus balance ==\n'
 analyze_large_file_segments "subtitles_en_regex" "$OPENSUBTITLES_EN" "$GATE_LARGE_FILE_SEGMENT_BUFFER_LENGTH" "$GATE_LARGE_FILE_THREADS"
@@ -1217,6 +1285,48 @@ run_pair \
     "$SCOUT_LARGE_BOUNDED_UNICODE_CLASS_COMMAND" \
     "$LARGE_BOUNDED_UNICODE_CLASS_RUNS" \
     "$LARGE_BOUNDED_UNICODE_CLASS_WARMUP"
+run_pair \
+    "line_regex_word_boundary_general" \
+    "1.50" \
+    "$RG_LINE_REGEX_PREFIX '\\bGeneratedRecord\\b' $Q_LINE_REGEX_INPUT" \
+    "$SCOUT_LINE_REGEX_PREFIX '\\bGeneratedRecord\\b' $Q_LINE_REGEX_INPUT" \
+    "$LINE_REGEX_RUNS" \
+    "$LINE_REGEX_WARMUP"
+run_pair \
+    "line_regex_anchored_general" \
+    "1.50" \
+    "$RG_LINE_REGEX_PREFIX '^internal sealed class GeneratedRecord\\r?$' $Q_LINE_REGEX_INPUT" \
+    "$SCOUT_LINE_REGEX_PREFIX '^internal sealed class GeneratedRecord\\r?$' $Q_LINE_REGEX_INPUT" \
+    "$LINE_REGEX_RUNS" \
+    "$LINE_REGEX_WARMUP"
+run_pair \
+    "line_regex_bounded_class_general" \
+    "1.50" \
+    "$RG_LINE_REGEX_PREFIX '^[A-Za-z_]{70,90}\\r?$' $Q_LINE_REGEX_INPUT" \
+    "$SCOUT_LINE_REGEX_PREFIX '^[A-Za-z_]{70,90}\\r?$' $Q_LINE_REGEX_INPUT" \
+    "$LINE_REGEX_RUNS" \
+    "$LINE_REGEX_WARMUP"
+run_pair \
+    "shared_delegate_prefix_general" \
+    "1.50" \
+    "$RG_LINE_REGEX_PREFIX 'delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler' $Q_LINE_REGEX_INPUT" \
+    "$SCOUT_LINE_REGEX_PREFIX 'delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler' $Q_LINE_REGEX_INPUT" \
+    "$LINE_REGEX_RUNS" \
+    "$LINE_REGEX_WARMUP"
+run_pair \
+    "many_absent_regexp_general" \
+    "1.50" \
+    "$RG_MANY_ABSENT_REGEXP_COMMAND" \
+    "$SCOUT_MANY_ABSENT_REGEXP_COMMAND" \
+    "$LINE_REGEX_RUNS" \
+    "$LINE_REGEX_WARMUP"
+run_pair \
+    "many_absent_pattern_file_general" \
+    "1.50" \
+    "$RG_MANY_ABSENT_PATTERN_FILE_COMMAND" \
+    "$SCOUT_MANY_ABSENT_PATTERN_FILE_COMMAND" \
+    "$LINE_REGEX_RUNS" \
+    "$LINE_REGEX_WARMUP"
 run_pair \
     "subtitles_en_literal" \
     "1.20" \

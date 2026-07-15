@@ -30,6 +30,7 @@ internal ref struct RegexCandidateStartEnumerator(
     private readonly RegexCandidateStartMode _mode = mode;
     private readonly RegexPrefilter? _prefilter = prefilter;
     private readonly RegexStartPredicate? _startPredicate = startPredicate;
+    private readonly bool _hasRequiredStart = startPredicate?.HasRequiredStart ?? false;
     private readonly bool _utf8 = utf8;
     private readonly int _startAt = Math.Clamp(startAt, 0, haystack.Length);
     private readonly int _maxStart = Math.Clamp(maxStart, 0, haystack.Length);
@@ -140,11 +141,25 @@ internal ref struct RegexCandidateStartEnumerator(
         };
     }
 
+    /// <summary>
+    /// Gets a value indicating whether this enumerator has active required-literal ranges
+    /// in its caller-provided scratch buffer.
+    /// </summary>
+    internal readonly bool HasBufferedRequiredRanges => _requiredRangeCount > 0;
+
     private bool MoveNextEvery(out int start)
     {
         while (_nextStart <= _maxStart)
         {
-            int candidate = _nextStart++;
+            int candidate = _hasRequiredStart
+                ? _startPredicate!.FindNextRequiredStart(_haystack, _nextStart, _maxStart)
+                : _nextStart;
+            if (candidate < 0)
+            {
+                break;
+            }
+
+            _nextStart = candidate + 1;
             if (IsUtf8Boundary(candidate) &&
                 (_startPredicate is null || _startPredicate.CanStartAt(_haystack, candidate)))
             {
