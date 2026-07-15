@@ -11,6 +11,7 @@ namespace Scout;
 /// <param name="prefilter">The prefilter used by prefix and required-literal modes.</param>
 /// <param name="startPredicate">The predicate used by the every-start mode.</param>
 /// <param name="requiredRangeBuffer">Scratch storage for ordered required-literal ranges.</param>
+/// <param name="nulDetection">Optional one-element storage that records observed NUL bytes.</param>
 internal ref struct RegexCandidateStartEnumerator(
     ReadOnlySpan<byte> haystack,
     RegexCandidateStartMode mode,
@@ -19,7 +20,8 @@ internal ref struct RegexCandidateStartEnumerator(
     bool utf8,
     RegexPrefilter? prefilter,
     RegexStartPredicate? startPredicate,
-    Span<long> requiredRangeBuffer)
+    Span<long> requiredRangeBuffer,
+    Span<bool> nulDetection)
 {
     /// <summary>
     /// The stack scratch length required by the ordered required-literal range stream.
@@ -39,6 +41,7 @@ internal ref struct RegexCandidateStartEnumerator(
     private int _requiredSearchAt = Math.Clamp(startAt, 0, haystack.Length);
     private int _pendingRequiredAt = -1;
     private Span<long> _requiredRangeBuffer = requiredRangeBuffer;
+    private Span<bool> _nulDetection = nulDetection;
     private int _requiredRangeCount;
     private bool _requiredGateDisabled;
 
@@ -66,7 +69,8 @@ internal ref struct RegexCandidateStartEnumerator(
             utf8,
             prefilter: null,
             startPredicate,
-            requiredRangeBuffer: default);
+            requiredRangeBuffer: default,
+            nulDetection: default);
     }
 
     /// <summary>
@@ -93,7 +97,8 @@ internal ref struct RegexCandidateStartEnumerator(
             utf8,
             prefilter,
             startPredicate: null,
-            requiredRangeBuffer: default);
+            requiredRangeBuffer: default,
+            nulDetection: default);
     }
 
     /// <summary>
@@ -122,7 +127,41 @@ internal ref struct RegexCandidateStartEnumerator(
             utf8,
             prefilter,
             startPredicate: null,
-            requiredRangeBuffer);
+            requiredRangeBuffer,
+            nulDetection: default);
+    }
+
+    /// <summary>
+    /// Creates a required-literal range enumerator that detects NUL bytes in the same scan.
+    /// </summary>
+    /// <param name="haystack">The bytes being searched.</param>
+    /// <param name="startAt">The first permitted match start.</param>
+    /// <param name="maxStart">The last permitted match start.</param>
+    /// <param name="utf8">Whether candidates must begin on UTF-8 boundaries.</param>
+    /// <param name="prefilter">The required-literal prefilter used to form ranges.</param>
+    /// <param name="requiredRangeBuffer">Stack scratch used to order narrowed ranges.</param>
+    /// <param name="nulDetection">One-element storage that records observed NUL bytes.</param>
+    /// <returns>A required-literal-range candidate enumerator.</returns>
+    public static RegexCandidateStartEnumerator RequiredLiteralRangesAndDetectNul(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        int maxStart,
+        bool utf8,
+        RegexPrefilter prefilter,
+        Span<long> requiredRangeBuffer,
+        Span<bool> nulDetection)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(nulDetection.Length, 1);
+        return new RegexCandidateStartEnumerator(
+            haystack,
+            RegexCandidateStartMode.RequiredLiteralRanges,
+            startAt,
+            maxStart,
+            utf8,
+            prefilter,
+            startPredicate: null,
+            requiredRangeBuffer,
+            nulDetection);
     }
 
     /// <summary>
@@ -450,7 +489,12 @@ internal ref struct RegexCandidateStartEnumerator(
             return -1;
         }
 
-        int requiredAt = _prefilter!.FindRequiredLiteral(_haystack, _requiredSearchAt);
+        int requiredAt = _nulDetection.IsEmpty
+            ? _prefilter!.FindRequiredLiteral(_haystack, _requiredSearchAt)
+            : _prefilter!.FindRequiredLiteralAndDetectNul(
+                _haystack,
+                _requiredSearchAt,
+                ref _nulDetection[0]);
         if (requiredAt < 0)
         {
             _requiredSearchAt = _haystack.Length;

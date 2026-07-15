@@ -859,6 +859,106 @@ public static class LiteralLineSearcher
     }
 
     /// <summary>
+    /// Attempts to count regex matches while its required-literal scan detects NUL bytes.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="needles">The ordered byte regex patterns.</param>
+    /// <param name="regexPlan">The optional reusable regex plan, populated when compilation is required.</param>
+    /// <param name="asciiCaseInsensitive">Whether ASCII matching is case-insensitive.</param>
+    /// <param name="invertMatch">Whether non-matching lines are selected.</param>
+    /// <param name="lineRegexp">Whether matches must span complete lines.</param>
+    /// <param name="wordRegexp">Whether matches must satisfy word boundaries.</param>
+    /// <param name="maxMatchingLines">The optional maximum number of matching lines.</param>
+    /// <param name="crlf">Whether CRLF is a line terminator.</param>
+    /// <param name="nullData">Whether NUL is the record terminator.</param>
+    /// <param name="count">Receives the number of non-overlapping matches.</param>
+    /// <param name="containsNul">Receives whether the complete haystack contains a NUL byte.</param>
+    /// <returns><see langword="true" /> when matching and NUL detection shared one complete scan.</returns>
+    internal static bool TryCountMatchesAndDetectNulWithRegexPlan(
+        ReadOnlySpan<byte> haystack,
+        IReadOnlyList<byte[]> needles,
+        ref RegexSearchPlan? regexPlan,
+        bool asciiCaseInsensitive,
+        bool invertMatch,
+        bool lineRegexp,
+        bool wordRegexp,
+        ulong? maxMatchingLines,
+        bool crlf,
+        bool nullData,
+        out long count,
+        out bool containsNul)
+    {
+        count = 0;
+        containsNul = false;
+        if (invertMatch || lineRegexp || maxMatchingLines is not null)
+        {
+            return false;
+        }
+
+        regexPlan = EnsureRegexSearchPlan(
+            needles,
+            regexPlan,
+            asciiCaseInsensitive,
+            lineRegexp,
+            wordRegexp,
+            crlf,
+            nullData);
+        return CanSearchWholeHaystack(regexPlan, invertMatch) &&
+            regexPlan!.Matcher.TryCountMatchesAndDetectNul(
+                haystack,
+                out count,
+                out containsNul);
+    }
+
+    /// <summary>
+    /// Attempts to count non-empty regex matches while separately detecting NUL bytes.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="needles">The ordered byte regex patterns.</param>
+    /// <param name="regexPlan">The optional reusable regex plan, populated when compilation is required.</param>
+    /// <param name="asciiCaseInsensitive">Whether ASCII matching is case-insensitive.</param>
+    /// <param name="invertMatch">Whether non-matching lines are selected.</param>
+    /// <param name="lineRegexp">Whether matches must span complete lines.</param>
+    /// <param name="wordRegexp">Whether matches must satisfy word boundaries.</param>
+    /// <param name="crlf">Whether CRLF is a line terminator.</param>
+    /// <param name="nullData">Whether NUL is the record terminator.</param>
+    /// <param name="count">Receives the number of non-overlapping matches.</param>
+    /// <param name="containsNul">Receives whether the complete haystack contains a NUL byte.</param>
+    /// <returns><see langword="true" /> when the plan can search an independent complete-line segment.</returns>
+    internal static bool TryCountNonEmptyMatchesAndDetectNulWithRegexPlan(
+        ReadOnlySpan<byte> haystack,
+        IReadOnlyList<byte[]> needles,
+        ref RegexSearchPlan? regexPlan,
+        bool asciiCaseInsensitive,
+        bool invertMatch,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool crlf,
+        bool nullData,
+        out long count,
+        out bool containsNul)
+    {
+        count = 0;
+        containsNul = false;
+        regexPlan = EnsureRegexSearchPlan(
+            needles,
+            regexPlan,
+            asciiCaseInsensitive,
+            lineRegexp,
+            wordRegexp,
+            crlf,
+            nullData);
+        if (!CanSearchWholeHaystack(regexPlan, invertMatch))
+        {
+            return false;
+        }
+
+        count = regexPlan!.Matcher.CountMatches(haystack);
+        containsNul = haystack.Contains((byte)0);
+        return true;
+    }
+
+    /// <summary>
     /// Counts non-overlapping regex matches and their distinct containing lines in one line-selection pass.
     /// </summary>
     internal static void CountMatchesAndMatchingLinesWithRegexPlan(

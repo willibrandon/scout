@@ -116,6 +116,70 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
+    /// Verifies complete-line segments can reuse general non-empty regex plans while observing NUL bytes.
+    /// </summary>
+    /// <param name="pattern">The regex pattern.</param>
+    /// <param name="haystack">The complete line segment to search.</param>
+    [Theory]
+    [InlineData(@"\bGeneratedRecord\b", "internal sealed class GeneratedRecord\r\n")]
+    [InlineData(@"^internal sealed class GeneratedRecord\r?$", "internal sealed class GeneratedRecord\r\n")]
+    [InlineData(@"^[A-Za-z_]{70,90}\r?$", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\n")]
+    public void CountsIndependentCompleteLineSegmentWithGeneralRegexPlan(
+        string pattern,
+        string haystack)
+    {
+        byte[][] patterns = [Encoding.UTF8.GetBytes(pattern)];
+        RegexSearchPlan? plan = null;
+
+        bool counted = LiteralLineSearcher.TryCountNonEmptyMatchesAndDetectNulWithRegexPlan(
+            Encoding.UTF8.GetBytes(haystack),
+            patterns,
+            ref plan,
+            asciiCaseInsensitive: false,
+            invertMatch: false,
+            lineRegexp: false,
+            wordRegexp: false,
+            crlf: false,
+            nullData: false,
+            out long count,
+            out bool containsNul);
+
+        Assert.True(counted);
+        Assert.Equal(1, count);
+        Assert.False(containsNul);
+        Assert.NotNull(plan);
+    }
+
+    /// <summary>
+    /// Verifies regex plans whose matches depend on artificial segment boundaries are not counted independently.
+    /// </summary>
+    /// <param name="pattern">The boundary-dependent regex pattern.</param>
+    [Theory]
+    [InlineData("a*")]
+    [InlineData(@"\Afoo")]
+    public void IndependentCompleteLineSegmentRejectsBoundaryDependentRegexPlan(string pattern)
+    {
+        byte[][] patterns = [Encoding.UTF8.GetBytes(pattern)];
+        RegexSearchPlan? plan = null;
+
+        bool counted = LiteralLineSearcher.TryCountNonEmptyMatchesAndDetectNulWithRegexPlan(
+            "foo\n"u8,
+            patterns,
+            ref plan,
+            asciiCaseInsensitive: false,
+            invertMatch: false,
+            lineRegexp: false,
+            wordRegexp: false,
+            crlf: false,
+            nullData: false,
+            out _,
+            out _);
+
+        Assert.False(counted);
+        Assert.NotNull(plan);
+    }
+
+    /// <summary>
     /// Verifies absolute anchors retain ripgrep's ordinary per-record semantics.
     /// </summary>
     [Fact]

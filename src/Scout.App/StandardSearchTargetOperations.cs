@@ -13,6 +13,9 @@ internal static class StandardSearchTargetOperations
     private const int ParallelDirectOutputFlushThreshold = 128 * 1024;
     private const int DirectoryEntryLiteralPrecheckBufferLength = 16 * 1024;
     private const int PooledRawFileReadMaxLength = 2 * 1024 * 1024;
+    private const int MemoryMappedCountWindowLength = 6 * 1024 * 1024;
+    private const int MemoryMappedCountMaximumPendingLineLength = 8 * 1024 * 1024;
+
     internal static bool SearchStandardInput(
         IReadOnlyList<byte[]> pattern,
         Stream standardInput,
@@ -1356,6 +1359,43 @@ internal static class StandardSearchTargetOperations
             return;
         }
 
+        if (TrySearchFileMemoryMapped(
+            path,
+            pattern,
+            lowArgs,
+            output,
+            logger,
+            prefix,
+            separators,
+            lineLimit,
+            color,
+            searchMode,
+            vimgrep,
+            lineNumber,
+            column,
+            byteOffset,
+            asciiCaseInsensitive,
+            invertMatch,
+            lineRegexp,
+            wordRegexp,
+            onlyMatching,
+            replacement,
+            maxCount,
+            textMode,
+            quiet,
+            trim,
+            beforeContext,
+            afterContext,
+            passthru,
+            includeZero,
+            nullPathTerminator,
+            heading,
+            ref matched,
+            regexPlan))
+        {
+            return;
+        }
+
         if (TrySearchFileWithPooledRawRead(
             path,
             knownLength,
@@ -1407,6 +1447,410 @@ internal static class StandardSearchTargetOperations
         bool memoryMapped = IsMemoryMapped(readKind);
         bool searchTextMode = textMode || SearchesBinaryAsText(readKind, lowArgs, searchMode, bytes, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp);
         matched |= StandardSearchByteOperations.SearchBytesWithOptionalHeading(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, searchTextMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, ShouldQuitOnBinary(lowArgs, implicitSearch, searchTextMode), heading, ref wroteHeadingOutput, memoryMapped, regexPlan);
+    }
+
+    /// <summary>
+    /// Searches an explicitly mapped file directly from its read-only view when the selected
+    /// output mode does not require mutable binary conversion or buffered heading output.
+    /// </summary>
+    private static bool TrySearchFileMemoryMapped(
+        string path,
+        IReadOnlyList<byte[]> pattern,
+        CliLowArgs lowArgs,
+        RawByteWriter output,
+        DiagnosticLogger logger,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        CliSearchMode searchMode,
+        bool vimgrep,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool asciiCaseInsensitive,
+        bool invertMatch,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool onlyMatching,
+        ReadOnlyMemory<byte>? replacement,
+        ulong? maxCount,
+        bool textMode,
+        bool quiet,
+        bool trim,
+        ulong beforeContext,
+        ulong afterContext,
+        bool passthru,
+        bool includeZero,
+        bool nullPathTerminator,
+        bool heading,
+        ref bool matched,
+        RegexSearchPlan? regexPlan)
+    {
+        if (lowArgs.MmapMode != CliMmapMode.AlwaysTryMmap ||
+            searchMode == CliSearchMode.Standard ||
+            heading ||
+            lowArgs.Preprocessor is not null ||
+            lowArgs.SearchZip ||
+            lowArgs.EncodingMode is not (CliEncodingMode.Auto or CliEncodingMode.None))
+        {
+            return false;
+        }
+
+        MemoryMappedSearchFile? mappedSearchFile = null;
+        try
+        {
+            if (!MemoryMappedSearchFile.TryOpenFile(path, out mappedSearchFile))
+            {
+                return false;
+            }
+
+            if (lowArgs.EncodingMode == CliEncodingMode.Auto &&
+                (!mappedSearchFile!.TryMapView(
+                    offset: 0,
+                    checked((int)Math.Min(mappedSearchFile.Length, 4))) ||
+                HasSearchEncodingBom(mappedSearchFile.Bytes)))
+            {
+                return false;
+            }
+
+            RegexSearchPlan? effectiveRegexPlan = regexPlan;
+            bool canFuseMacOsCount = OperatingSystem.IsMacOS() &&
+                !textMode &&
+                !separators.NullData &&
+                searchMode == CliSearchMode.CountMatches &&
+                !quiet &&
+                !lowArgs.Multiline &&
+                !lowArgs.MultilineDotall &&
+                !lowArgs.StopOnNonmatch &&
+                maxCount is null;
+            if (canFuseMacOsCount &&
+                mappedSearchFile!.Length > MemoryMappedCountWindowLength &&
+                TryCountMemoryMappedWindows(
+                    mappedSearchFile,
+                    pattern,
+                    ref effectiveRegexPlan,
+                    asciiCaseInsensitive,
+                    invertMatch,
+                    lineRegexp,
+                    wordRegexp,
+                    separators.Crlf,
+                    out long windowedCount,
+                    out bool windowedContainsNul))
+            {
+                if (windowedContainsNul)
+                {
+                    return false;
+                }
+
+                SearchDiagnosticLogging.LogTraceSearchPath(
+                    logger,
+                    path,
+                    SearchFileReadKind.MemoryMapped);
+                matched |= SearchOutputFormatting.WriteCount(
+                    output,
+                    prefix,
+                    color,
+                    windowedCount,
+                    includeZero,
+                    nullPathTerminator,
+                    separators.LineTerminator);
+                return true;
+            }
+
+            if (mappedSearchFile!.Length > int.MaxValue ||
+                !mappedSearchFile.TryMapView(offset: 0, checked((int)mappedSearchFile.Length)))
+            {
+                return false;
+            }
+
+            ReadOnlySpan<byte> bytes = mappedSearchFile!.Bytes;
+            if (lowArgs.EncodingMode == CliEncodingMode.Auto && HasSearchEncodingBom(bytes))
+            {
+                return false;
+            }
+
+            if (OperatingSystem.IsMacOS() && !textMode && !separators.NullData)
+            {
+                if (canFuseMacOsCount &&
+                    LiteralLineSearcher.TryCountMatchesAndDetectNulWithRegexPlan(
+                        bytes,
+                        pattern,
+                        ref effectiveRegexPlan,
+                        asciiCaseInsensitive,
+                        invertMatch,
+                        lineRegexp,
+                        wordRegexp,
+                        maxCount,
+                        separators.Crlf,
+                        separators.NullData,
+                        out long count,
+                        out bool containsNul))
+                {
+                    if (containsNul)
+                    {
+                        return false;
+                    }
+
+                    SearchDiagnosticLogging.LogTraceSearchPath(
+                        logger,
+                        path,
+                        SearchFileReadKind.MemoryMapped);
+                    matched |= SearchOutputFormatting.WriteCount(
+                        output,
+                        prefix,
+                        color,
+                        count,
+                        includeZero,
+                        nullPathTerminator,
+                        separators.LineTerminator);
+                    return true;
+                }
+
+                if (bytes.Contains((byte)0))
+                {
+                    return false;
+                }
+            }
+
+            SearchDiagnosticLogging.LogTraceSearchPath(logger, path, SearchFileReadKind.MemoryMapped);
+            bool searchTextMode = textMode || searchMode != CliSearchMode.Standard;
+            matched |= StandardSearchByteOperations.SearchMemoryMappedBytes(
+                bytes,
+                pattern,
+                output,
+                prefix,
+                separators,
+                lineLimit,
+                color,
+                searchMode,
+                vimgrep,
+                lineNumber,
+                column,
+                byteOffset,
+                asciiCaseInsensitive,
+                invertMatch,
+                lineRegexp,
+                wordRegexp,
+                lowArgs.Multiline,
+                lowArgs.MultilineDotall,
+                onlyMatching,
+                replacement,
+                maxCount,
+                searchTextMode,
+                quiet,
+                trim,
+                beforeContext,
+                afterContext,
+                passthru,
+                includeZero,
+                nullPathTerminator,
+                lowArgs.StopOnNonmatch,
+                ShouldQuitOnBinary(lowArgs, implicitSearch: false, searchTextMode),
+                effectiveRegexPlan);
+            return true;
+        }
+        finally
+        {
+            mappedSearchFile?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Counts non-multiline matches through bounded sequential views while authoritative regex
+    /// matching observes binary NUL bytes.
+    /// </summary>
+    private static bool TryCountMemoryMappedWindows(
+        MemoryMappedSearchFile mappedSearchFile,
+        IReadOnlyList<byte[]> pattern,
+        ref RegexSearchPlan? regexPlan,
+        bool asciiCaseInsensitive,
+        bool invertMatch,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool crlf,
+        out long count,
+        out bool containsNul)
+    {
+        count = 0;
+        containsNul = false;
+        MemoryStream? pendingLine = null;
+        try
+        {
+            long offset = 0;
+            while (offset < mappedSearchFile.Length)
+            {
+                if (!mappedSearchFile.TryMapView(offset, MemoryMappedCountWindowLength))
+                {
+                    return false;
+                }
+
+                ReadOnlySpan<byte> window = mappedSearchFile.Bytes;
+                int segmentStart = 0;
+                if (pendingLine is not null)
+                {
+                    int firstLineFeed = window.IndexOf((byte)'\n');
+                    if (firstLineFeed < 0)
+                    {
+                        if (pendingLine.Length >
+                            MemoryMappedCountMaximumPendingLineLength - window.Length)
+                        {
+                            return false;
+                        }
+
+                        pendingLine.Write(window);
+                        offset += window.Length;
+                        continue;
+                    }
+
+                    int pendingLength = firstLineFeed + 1;
+                    if (pendingLine.Length >
+                        MemoryMappedCountMaximumPendingLineLength - pendingLength)
+                    {
+                        return false;
+                    }
+
+                    pendingLine.Write(window[..pendingLength]);
+                    ReadOnlySpan<byte> line = pendingLine.GetBuffer().AsSpan(
+                        start: 0,
+                        checked((int)pendingLine.Length));
+                    if (!TryCountMemoryMappedSegment(
+                        line,
+                        pattern,
+                        ref regexPlan,
+                        asciiCaseInsensitive,
+                        invertMatch,
+                        lineRegexp,
+                        wordRegexp,
+                        crlf,
+                        ref count,
+                        ref containsNul))
+                    {
+                        return false;
+                    }
+
+                    pendingLine.Dispose();
+                    pendingLine = null;
+                    segmentStart = pendingLength;
+                }
+
+                int lastLineFeed = window[segmentStart..].LastIndexOf((byte)'\n');
+                if (lastLineFeed >= 0)
+                {
+                    int completeLength = lastLineFeed + 1;
+                    if (!TryCountMemoryMappedSegment(
+                        window.Slice(segmentStart, completeLength),
+                        pattern,
+                        ref regexPlan,
+                        asciiCaseInsensitive,
+                        invertMatch,
+                        lineRegexp,
+                        wordRegexp,
+                        crlf,
+                        ref count,
+                        ref containsNul))
+                    {
+                        return false;
+                    }
+
+                    segmentStart += completeLength;
+                }
+
+                if (segmentStart < window.Length)
+                {
+                    pendingLine = new MemoryStream();
+                    pendingLine.Write(window[segmentStart..]);
+                }
+
+                offset += window.Length;
+            }
+
+            if (pendingLine is not null)
+            {
+                ReadOnlySpan<byte> line = pendingLine.GetBuffer().AsSpan(
+                    start: 0,
+                    checked((int)pendingLine.Length));
+                if (!TryCountMemoryMappedSegment(
+                    line,
+                    pattern,
+                    ref regexPlan,
+                    asciiCaseInsensitive,
+                    invertMatch,
+                    lineRegexp,
+                    wordRegexp,
+                    crlf,
+                    ref count,
+                    ref containsNul))
+                {
+                    return false;
+                }
+
+                pendingLine.Dispose();
+                pendingLine = null;
+            }
+
+            return true;
+        }
+        finally
+        {
+            pendingLine?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Adds one complete line segment's authoritative match count and NUL observation.
+    /// </summary>
+    private static bool TryCountMemoryMappedSegment(
+        ReadOnlySpan<byte> segment,
+        IReadOnlyList<byte[]> pattern,
+        ref RegexSearchPlan? regexPlan,
+        bool asciiCaseInsensitive,
+        bool invertMatch,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool crlf,
+        ref long count,
+        ref bool containsNul)
+    {
+        if (segment.IsEmpty)
+        {
+            return true;
+        }
+
+        if (!LiteralLineSearcher.TryCountMatchesAndDetectNulWithRegexPlan(
+            segment,
+            pattern,
+            ref regexPlan,
+            asciiCaseInsensitive,
+            invertMatch,
+            lineRegexp,
+            wordRegexp,
+            maxMatchingLines: null,
+            crlf,
+            nullData: false,
+            out long segmentCount,
+            out bool segmentContainsNul))
+        {
+            if (!LiteralLineSearcher.TryCountNonEmptyMatchesAndDetectNulWithRegexPlan(
+                segment,
+                pattern,
+                ref regexPlan,
+                asciiCaseInsensitive,
+                invertMatch,
+                lineRegexp,
+                wordRegexp,
+                crlf,
+                nullData: false,
+                out segmentCount,
+                out segmentContainsNul))
+            {
+                return false;
+            }
+        }
+
+        count += segmentCount;
+        containsNul |= segmentContainsNul;
+        return true;
     }
 
     private static bool TrySearchFileWithPooledRawRead(

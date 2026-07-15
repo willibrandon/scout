@@ -164,6 +164,37 @@ public sealed class MemmemSearchTests
     }
 
     /// <summary>
+    /// Verifies fused packed-pair search observes NUL bytes across vector and scalar boundaries.
+    /// </summary>
+    [Fact]
+    public void FindAndDetectNulHandlesPackedPairBoundaries()
+    {
+        byte[] needle = "aeaeaeaeae"u8.ToArray();
+        int[] nulOffsets = [0, 15, 16, 31, 32, 254, 255, 256, 510, 511];
+        foreach (int nulOffset in nulOffsets)
+        {
+            byte[] haystack = new byte[512];
+            haystack.AsSpan().Fill((byte)'x');
+            haystack[nulOffset] = 0;
+            needle.CopyTo(haystack, 345);
+            var finder = new MemmemFinder(needle);
+            bool containsNul = false;
+
+            int match = finder.FindAndDetectNul(haystack, ref containsNul);
+
+            Assert.Equal(345, match);
+            if (nulOffset < match)
+            {
+                Assert.True(containsNul);
+            }
+
+            containsNul = false;
+            Assert.Equal(-1, finder.FindAndDetectNul(haystack.AsSpan(match + 1), ref containsNul));
+            Assert.Equal(nulOffset > match, containsNul);
+        }
+    }
+
+    /// <summary>
     /// Verifies empty-needle semantics match Rust substring search behavior.
     /// </summary>
     [Fact]

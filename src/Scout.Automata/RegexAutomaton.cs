@@ -1437,6 +1437,25 @@ public sealed class RegexAutomaton
     }
 
     /// <summary>
+    /// Attempts to count authoritative matches while required-literal search detects NUL bytes.
+    /// </summary>
+    /// <param name="haystack">The haystack bytes.</param>
+    /// <param name="count">Receives the number of non-overlapping matches.</param>
+    /// <param name="containsNul">Receives whether the haystack contains a NUL byte.</param>
+    /// <returns><see langword="true" /> when matching and NUL detection shared one complete scan.</returns>
+    internal bool TryCountMatchesAndDetectNul(
+        ReadOnlySpan<byte> haystack,
+        out long count,
+        out bool containsNul)
+    {
+        return engine.TryCountMatchesAndDetectNul(
+            haystack,
+            startPredicate,
+            out count,
+            out containsNul);
+    }
+
+    /// <summary>
     /// Sums the byte lengths of all non-overlapping matches in a haystack.
     /// </summary>
     /// <param name="haystack">The haystack bytes.</param>

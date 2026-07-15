@@ -1482,9 +1482,10 @@ internal static unsafe class LargeFileSearchOperations
             }
             else
             {
-                segmentCount = LiteralLineSearcher.CountMatches(
+                segmentCount = LiteralLineSearcher.CountMatchesWithRegexPlan(
                     segment,
                     pattern,
+                    regexPlan,
                     asciiCaseInsensitive,
                     invertMatch,
                     lineRegexp,

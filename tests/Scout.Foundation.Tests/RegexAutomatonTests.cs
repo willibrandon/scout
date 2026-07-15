@@ -5024,6 +5024,180 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies an oversized Unicode-class NFA keeps its required-literal prefilter without
+    /// constructing an unanchored lazy DFA.
+    /// </summary>
+    [Fact]
+    public void LargeBoundedUnicodeClassSkipsUnanchoredLazyDfa()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"x[\w-]{50,1000}"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true,
+            specializationMode: RegexSpecializationMode.General);
+        byte[] noMatchHaystack = System.Text.Encoding.ASCII.GetBytes(
+            string.Concat(Enumerable.Repeat("x[\\w-]{50,1000}\n", 5_000)));
+        byte[] unicodeHaystack = System.Text.Encoding.UTF8.GetBytes(
+            new string('!', 5_000) + "x" + new string('δ', 50));
+
+        Assert.Equal(RegexEngineKind.LazyDfa, GetEngineKind(automaton));
+        Assert.Equal(RegexPrefilterKind.Memmem, automaton.PrefilterKind);
+        Assert.True(GetEngineNfaStateCount(automaton) > 4_096);
+        Assert.False(HasUnanchoredLazyDfaPool(automaton));
+        Assert.Null(automaton.Find(noMatchHaystack));
+        Assert.Equal(0, automaton.CountMatches(noMatchHaystack));
+        Assert.Equal(0, automaton.SumMatchSpans(noMatchHaystack));
+        Assert.Equal(new RegexMatch(5_000, 101), automaton.Find(unicodeHaystack));
+        Assert.Equal(101, automaton.SumMatchSpans(unicodeHaystack));
+    }
+
+    /// <summary>
+    /// Verifies the issue 37 shared-prefix plan uses its exact-prefix prefilter before
+    /// materializing the retained unanchored lazy DFA.
+    /// </summary>
+    [Fact]
+    public void SharedDelegatePrefixRetainsUnanchoredLazyDfa()
+    {
+        const string pattern =
+            "delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|" +
+            "delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler";
+        var plan = RegexSearchPlan.Create(
+            [System.Text.Encoding.ASCII.GetBytes(pattern)],
+            new RegexSearchPlanOptions(asciiCaseInsensitive: false));
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes(
+            new string('δ', 2_500) +
+            " public delegate void UpdateEDIEvent(string eventString);");
+
+        Assert.NotNull(plan);
+        Assert.Equal(RegexEngineKind.LazyDfa, GetEngineKind(plan.Matcher));
+        Assert.Equal(0, plan.Matcher.RequiredLiteralWindow);
+        Assert.Equal("delegate "u8.ToArray(), GetRequiredMemmemNeedle(plan.Matcher));
+        Assert.InRange(GetEngineNfaStateCount(plan.Matcher), 257, 4_096);
+        Assert.True(HasUnanchoredLazyDfaPool(plan.Matcher));
+        Assert.False(HasMaterializedUnanchoredLazyDfa(plan.Matcher));
+        Assert.Equal(new RegexMatch(5_008, 28), plan.Matcher.Find(haystack));
+        Assert.Equal(28, plan.Matcher.SumMatchSpans(haystack));
+        Assert.False(HasMaterializedUnanchoredLazyDfa(plan.Matcher));
+    }
+
+    /// <summary>
+    /// Verifies shared required literals collapse only at the selective eight-byte threshold.
+    /// </summary>
+    [Fact]
+    public void SharedRequiredLiteralPrefixHonorsCollapseThreshold()
+    {
+        var sevenBytePlan = RegexSearchPlan.Create(
+            ["abcdefgAlpha"u8.ToArray(), "abcdefgBeta"u8.ToArray(), "abcdefgGamma"u8.ToArray()],
+            new RegexSearchPlanOptions(asciiCaseInsensitive: false));
+        var eightBytePlan = RegexSearchPlan.Create(
+            ["abcdefghAlpha"u8.ToArray(), "abcdefghBeta"u8.ToArray(), "abcdefghGamma"u8.ToArray()],
+            new RegexSearchPlanOptions(asciiCaseInsensitive: false));
+
+        Assert.NotNull(sevenBytePlan);
+        Assert.Equal(0, sevenBytePlan.Matcher.RequiredLiteralWindow);
+        Assert.False(sevenBytePlan.Matcher.TryCountMatchesAndDetectNul(
+            "abcdefg unrelated text"u8,
+            out _,
+            out _));
+        Assert.NotNull(eightBytePlan);
+        Assert.Equal(0, eightBytePlan.Matcher.RequiredLiteralWindow);
+        Assert.True(eightBytePlan.Matcher.TryCountMatchesAndDetectNul(
+            "abcdefgh unrelated text"u8,
+            out long count,
+            out bool containsNul));
+        Assert.Equal(0, count);
+        Assert.False(containsNul);
+    }
+
+    /// <summary>
+    /// Verifies the issue 44 64-pattern plan rejects an absent exact-prefix set before
+    /// materializing the retained unanchored lazy DFA.
+    /// </summary>
+    [Fact]
+    public void ManyAbsentPatternsRetainUnanchoredLazyDfa()
+    {
+        byte[][] patterns = Enumerable.Range(0, 64)
+            .Select(static index => System.Text.Encoding.ASCII.GetBytes($"issue44_absent_pattern_{index:000}"))
+            .ToArray();
+        var plan = RegexSearchPlan.Create(
+            patterns,
+            new RegexSearchPlanOptions(asciiCaseInsensitive: false));
+        byte[] noMatchHaystack = System.Text.Encoding.ASCII.GetBytes(
+            string.Concat(Enumerable.Repeat("GeneratedRecord has no requested token.\n", 200)));
+
+        Assert.NotNull(plan);
+        Assert.Equal(RegexEngineKind.LazyDfa, GetEngineKind(plan.Matcher));
+        Assert.Equal(0, plan.Matcher.RequiredLiteralWindow);
+        Assert.Equal("issue44_absent_pattern_0"u8.ToArray(), GetRequiredMemmemNeedle(plan.Matcher));
+        Assert.InRange(GetEngineNfaStateCount(plan.Matcher), 1_024, 4_096);
+        Assert.True(HasUnanchoredLazyDfaPool(plan.Matcher));
+        Assert.False(HasMaterializedUnanchoredLazyDfa(plan.Matcher));
+        Assert.Null(plan.Matcher.Find(noMatchHaystack));
+        Assert.Equal(0, plan.Matcher.CountMatches(noMatchHaystack));
+        Assert.Equal(0, plan.Matcher.SumMatchSpans(noMatchHaystack));
+        Assert.False(HasMaterializedUnanchoredLazyDfa(plan.Matcher));
+    }
+
+    /// <summary>
+    /// Verifies authoritative required-literal counting detects NUL bytes without a second scan.
+    /// </summary>
+    [Fact]
+    public void RequiredLiteralCountDetectsNulInCandidateScan()
+    {
+        const string pattern =
+            "delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|" +
+            "delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler";
+        var plan = RegexSearchPlan.Create(
+            [System.Text.Encoding.ASCII.GetBytes(pattern)],
+            new RegexSearchPlanOptions(asciiCaseInsensitive: false));
+        byte[][] haystacks =
+        [
+            "public delegate void UpdateEDIEvent(string value);\n"u8.ToArray(),
+            "\0prefix public delegate void UpdateEDIEvent(string value);\n"u8.ToArray(),
+            "0123456789abcdef\0no required literal follows"u8.ToArray(),
+            (
+                "delegate rejected\n0123456789abcdef\0between candidates\n" +
+                "public delegate void UpdateEDIEvent(string value);\n"
+            ).Select(static character => (byte)character).ToArray(),
+            "public delegate void UpdateEDIEvent(string value);\0tail"u8.ToArray(),
+        ];
+
+        Assert.NotNull(plan);
+        foreach (byte[] haystack in haystacks)
+        {
+            Assert.True(plan.Matcher.TryCountMatchesAndDetectNul(
+                haystack,
+                out long count,
+                out bool containsNul));
+            Assert.Equal(plan.Matcher.CountMatches(haystack), count);
+            Assert.Equal(haystack.Contains((byte)0), containsNul);
+        }
+    }
+
+    /// <summary>
+    /// Verifies ASCII-projected unanchored lazy-DFA factories observe the same NFA state budget.
+    /// </summary>
+    [Fact]
+    public void AsciiFastUnanchoredLazyDfaHonorsNfaStateBudget()
+    {
+        RegexMetaEngine eligible = CompileCompactScalarMetaEngine(@"x[\w-]{50,1000}"u8);
+        RegexMetaEngine oversized = CompileCompactScalarMetaEngine(@"x[\w-]{50,3000}"u8);
+        byte[] haystack = System.Text.Encoding.ASCII.GetBytes(
+            "pre " + "x" + new string('a', 50));
+
+        Assert.Equal(RegexEngineKind.PikeVm, eligible.Kind);
+        Assert.True(HasAsciiFastUnanchoredLazyDfaPool(eligible));
+        Assert.Equal(RegexEngineKind.PikeVm, oversized.Kind);
+        Assert.False(HasAsciiFastUnanchoredLazyDfaPool(oversized));
+        Assert.Equal(new RegexMatch(4, 51), oversized.Find(haystack, startAt: 0));
+        Assert.Equal(1, oversized.CountMatches(haystack, startAt: 0));
+        Assert.Equal(51, oversized.SumMatchSpans(haystack, startAt: 0));
+    }
+
+    /// <summary>
     /// Verifies the meta engine selects the bounded backtracker for small position-sensitive predicates.
     /// </summary>
     [Fact]
@@ -8024,10 +8198,90 @@ public sealed class RegexAutomatonTests
 
     private static RegexEngineKind GetEngineKind(RegexAutomaton automaton)
     {
-        return ((RegexMetaEngine)typeof(RegexAutomaton)
+        return GetMetaEngine(automaton).Kind;
+    }
+
+    private static RegexMetaEngine GetMetaEngine(RegexAutomaton automaton)
+    {
+        return (RegexMetaEngine)typeof(RegexAutomaton)
             .GetField("engine", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
-            .GetValue(automaton)!)
-            .Kind;
+            .GetValue(automaton)!;
+    }
+
+    private static int GetEngineNfaStateCount(RegexAutomaton automaton)
+    {
+        var nfa = (RegexNfa)typeof(RegexMetaEngine)
+            .GetField("nfa", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(GetMetaEngine(automaton))!;
+        return nfa.States.Count;
+    }
+
+    private static bool HasUnanchoredLazyDfaPool(RegexAutomaton automaton)
+    {
+        return typeof(RegexMetaEngine)
+            .GetField(
+                "unanchoredLazyDfaPool",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(GetMetaEngine(automaton)) is not null;
+    }
+
+    private static byte[] GetRequiredMemmemNeedle(RegexAutomaton automaton)
+    {
+        var prefilter = (RegexPrefilter)typeof(RegexMetaEngine)
+            .GetField("prefilter", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(GetMetaEngine(automaton))!;
+        var finder = (MemmemFinder)typeof(RegexPrefilter)
+            .GetField("_requiredMemmem", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(prefilter)!;
+        return finder.Needle.ToArray();
+    }
+
+    private static bool HasMaterializedUnanchoredLazyDfa(RegexAutomaton automaton)
+    {
+        object? pool = typeof(RegexMetaEngine)
+            .GetField(
+                "unanchoredLazyDfaPool",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(GetMetaEngine(automaton));
+        if (pool is null)
+        {
+            return false;
+        }
+
+        var localSlots = (Array)pool.GetType()
+            .GetField("localSlots", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(pool)!;
+        foreach (object slot in localSlots)
+        {
+            if (slot.GetType()
+                .GetField("Item", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .GetValue(slot) is not null)
+            {
+                return true;
+            }
+        }
+
+        var overflow = (System.Collections.IEnumerable)pool.GetType()
+            .GetField("overflow", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(pool)!;
+        System.Collections.IEnumerator enumerator = overflow.GetEnumerator();
+        try
+        {
+            return enumerator.MoveNext();
+        }
+        finally
+        {
+            (enumerator as IDisposable)?.Dispose();
+        }
+    }
+
+    private static bool HasAsciiFastUnanchoredLazyDfaPool(RegexMetaEngine engine)
+    {
+        return typeof(RegexMetaEngine)
+            .GetField(
+                "asciiFastUnanchoredDfaPool",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(engine) is not null;
     }
 
     private static void AssertSparseTransitionsAreOrderedAndDisjoint(RegexNfa nfa)
@@ -8312,6 +8566,33 @@ public sealed class RegexAutomatonTests
         return RegexNfaCompiler.Compile(
             tree.Root,
             new RegexCompileOptions(caseInsensitive: false, swapGreed: false, multiLine: false, dotMatchesNewline: false));
+    }
+
+    private static RegexMetaEngine CompileCompactScalarMetaEngine(ReadOnlySpan<byte> pattern)
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: true,
+            unicodeClasses: true);
+        RegexNfa nfa = RegexNfaCompiler.CompileWithCompactScalarAtoms(
+            tree.Root,
+            options,
+            utf8ByteTrieCache: null);
+        var prefilter = RegexPrefilter.Compile(tree.Root, options);
+
+        return RegexMetaEngine.Compile(
+            nfa,
+            prefilter,
+            dfaSizeLimit: null,
+            literalSet: null,
+            alternationSet: null,
+            asciiFastPattern: tree.Pattern,
+            root: tree.Root,
+            options: options);
     }
 
     private static RegexMetaEngine CompileRequiredLiteralPike(

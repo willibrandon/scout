@@ -12,6 +12,7 @@ internal sealed class RegexMetaEngine
     private const int OnePassDfaNfaStateLimit = 48;
     private const int BoundedBacktrackerNfaStateLimit = 256;
     private const int CompactScalarFallbackNfaStateThreshold = 4096;
+    private const int UnanchoredLazyDfaNfaStateLimit = 4096;
     private const int UnanchoredLazyDfaHaystackThreshold = 4096;
     private const int AnchoredLeftmostDfaHaystackThreshold = 4096;
     private const ulong DefaultDfaSizeLimit = 16UL * 1024UL * 1024UL;
@@ -1721,6 +1722,7 @@ internal sealed class RegexMetaEngine
         }
 
         Func<RegexUnanchoredLazyDfa?>? unanchoredLazyDfaFactory = CreateUnanchoredLazyDfaFactory(
+            nfa,
             root,
             options,
             effectiveDfaSizeLimit);
@@ -1767,12 +1769,22 @@ internal sealed class RegexMetaEngine
         return compact.States.Count < nfa.States.Count ? compact : nfa;
     }
 
+    /// <summary>
+    /// Creates an unanchored lazy-DFA factory when the primary NFA is within the construction budget.
+    /// </summary>
+    /// <param name="nfa">The primary NFA used to estimate forward and reverse construction cost.</param>
+    /// <param name="root">The parsed regex root.</param>
+    /// <param name="options">The root compilation options.</param>
+    /// <param name="dfaSizeLimit">The maximum estimated DFA storage in bytes.</param>
+    /// <returns>The factory, or <see langword="null" /> when unanchored construction is ineligible.</returns>
     private static Func<RegexUnanchoredLazyDfa?>? CreateUnanchoredLazyDfaFactory(
+        RegexNfa nfa,
         RegexSyntaxNode? root,
         RegexCompileOptions? options,
         ulong dfaSizeLimit)
     {
-        if (root is null ||
+        if (nfa.States.Count > UnanchoredLazyDfaNfaStateLimit ||
+            root is null ||
             !options.HasValue)
         {
             return null;
@@ -1784,6 +1796,14 @@ internal sealed class RegexMetaEngine
             : null;
     }
 
+    /// <summary>
+    /// Creates an ASCII unanchored lazy-DFA factory when its NFA is within the construction budget.
+    /// </summary>
+    /// <param name="asciiFastNfa">The optional ASCII-projected NFA.</param>
+    /// <param name="root">The parsed regex root.</param>
+    /// <param name="options">The root compilation options.</param>
+    /// <param name="dfaSizeLimit">The maximum estimated DFA storage in bytes.</param>
+    /// <returns>The factory, or <see langword="null" /> when unanchored construction is ineligible.</returns>
     private static Func<RegexUnanchoredLazyDfa?>? CreateAsciiFastUnanchoredDfaFactory(
         RegexNfa? asciiFastNfa,
         RegexSyntaxNode? root,
@@ -1791,6 +1811,7 @@ internal sealed class RegexMetaEngine
         ulong dfaSizeLimit)
     {
         if (asciiFastNfa is null ||
+            asciiFastNfa.States.Count > UnanchoredLazyDfaNfaStateLimit ||
             root is null ||
             !options.HasValue)
         {
@@ -2219,9 +2240,9 @@ internal sealed class RegexMetaEngine
             return asciiWordBoundary.Find(haystack, startOffset);
         }
 
-        if (ShouldUseRequiredLiteralPrefilterBeforeUnanchoredDfa(haystack.Length))
+        if (ShouldUsePrefilterBeforeUnanchoredDfa(haystack.Length))
         {
-            return FindWithRequiredLiteralPrefilter(haystack, startOffset, reachabilityCache);
+            return FindWithPrefilter(haystack, startOffset, reachabilityCache);
         }
 
         RegexUnanchoredLazyDfa? activeUnanchoredLazyDfa = hasRequiredStart
@@ -2249,24 +2270,13 @@ internal sealed class RegexMetaEngine
             return asciiFastMatch;
         }
 
-        if (prefilter?.UsesRequiredLiteralWindow == true)
+        if (prefilter is not null)
         {
-            return FindWithRequiredLiteralPrefilter(haystack, startOffset, reachabilityCache);
+            return FindWithPrefilter(haystack, startOffset, reachabilityCache);
         }
 
         if (pikeVmPool is not null)
         {
-            if (prefilter is not null)
-            {
-                var exactCandidates = RegexCandidateStartEnumerator.ExactPrefix(
-                    haystack,
-                    startOffset,
-                    haystack.Length,
-                    utf8,
-                    prefilter);
-                return FindWithPikeVm(haystack, ref exactCandidates);
-            }
-
             var everyCandidates = RegexCandidateStartEnumerator.Every(
                 haystack,
                 startOffset,
@@ -2274,21 +2284,6 @@ internal sealed class RegexMetaEngine
                 utf8,
                 startPredicate);
             return FindWithPikeVm(haystack, ref everyCandidates);
-        }
-
-        if (prefilter is not null)
-        {
-            for (int start = prefilter.FindCandidate(haystack, startOffset);
-                 start >= 0;
-                 start = prefilter.FindCandidate(haystack, start + 1))
-            {
-                if (TryMatchAt(haystack, start, out int length, reachabilityCache))
-                {
-                    return new RegexMatch(start, length);
-                }
-            }
-
-            return null;
         }
 
         var fallbackCandidates = RegexCandidateStartEnumerator.Every(
@@ -2308,13 +2303,69 @@ internal sealed class RegexMetaEngine
         return null;
     }
 
-    private bool ShouldUseRequiredLiteralPrefilterBeforeUnanchoredDfa(int haystackLength)
+    /// <summary>
+    /// Determines whether a selective literal prefilter should run before unanchored DFA search.
+    /// </summary>
+    /// <param name="haystackLength">The number of bytes in the haystack.</param>
+    /// <returns><see langword="true" /> when prefiltering should run first.</returns>
+    private bool ShouldUsePrefilterBeforeUnanchoredDfa(int haystackLength)
     {
-        return prefilter?.UsesRequiredLiteralWindow == true &&
-            (haystackLength < UnanchoredLazyDfaHaystackThreshold ||
-            unanchoredLazyDfaPool is null && asciiFastUnanchoredDfaPool is null);
+        if (prefilter is null)
+        {
+            return false;
+        }
+
+        return prefilter.UsesRequiredLiteralWindow && prefilter.RequiredLiteralWindow == 0 ||
+            haystackLength < UnanchoredLazyDfaHaystackThreshold ||
+            unanchoredLazyDfaPool is null && asciiFastUnanchoredDfaPool is null;
     }
 
+    /// <summary>
+    /// Finds the first authoritative match among candidates reported by the selected prefilter.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startOffset">The first permitted match start.</param>
+    /// <param name="reachabilityCache">Optional shared NFA reachability state.</param>
+    /// <returns>The first match, or <see langword="null" /> when no candidate matches.</returns>
+    private RegexMatch? FindWithPrefilter(
+        ReadOnlySpan<byte> haystack,
+        int startOffset,
+        Dictionary<(int State, int Position), bool>? reachabilityCache)
+    {
+        if (prefilter!.UsesRequiredLiteralWindow)
+        {
+            return FindWithRequiredLiteralPrefilter(haystack, startOffset, reachabilityCache);
+        }
+
+        var exactCandidates = RegexCandidateStartEnumerator.ExactPrefix(
+            haystack,
+            startOffset,
+            haystack.Length,
+            utf8,
+            prefilter);
+        if (pikeVmPool is not null)
+        {
+            return FindWithPikeVm(haystack, ref exactCandidates);
+        }
+
+        while (exactCandidates.MoveNext(out int start))
+        {
+            if (TryMatchAt(haystack, start, out int length, reachabilityCache))
+            {
+                return new RegexMatch(start, length);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Finds the first authoritative match within the ranges implied by a required literal.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startOffset">The first permitted match start.</param>
+    /// <param name="reachabilityCache">Optional shared NFA reachability state.</param>
+    /// <returns>The first match, or <see langword="null" /> when no candidate matches.</returns>
     private RegexMatch? FindWithRequiredLiteralPrefilter(
         ReadOnlySpan<byte> haystack,
         int startOffset,
@@ -2322,26 +2373,19 @@ internal sealed class RegexMetaEngine
     {
         Span<long> requiredRangeBuffer =
             stackalloc long[RegexCandidateStartEnumerator.RequiredLiteralRangeBufferLength];
-        if (pikeVmPool is not null)
-        {
-            var requiredCandidates = RegexCandidateStartEnumerator.RequiredLiteralRanges(
-                haystack,
-                startOffset,
-                haystack.Length,
-                utf8,
-                prefilter!,
-                requiredRangeBuffer);
-            return FindWithPikeVm(haystack, ref requiredCandidates);
-        }
-
-        var fallbackCandidates = RegexCandidateStartEnumerator.RequiredLiteralRanges(
+        var requiredCandidates = RegexCandidateStartEnumerator.RequiredLiteralRanges(
             haystack,
             startOffset,
             haystack.Length,
             utf8,
             prefilter!,
             requiredRangeBuffer);
-        while (fallbackCandidates.MoveNext(out int start))
+        if (pikeVmPool is not null)
+        {
+            return FindWithPikeVm(haystack, ref requiredCandidates);
+        }
+
+        while (requiredCandidates.MoveNext(out int start))
         {
             if (TryMatchAt(haystack, start, out int length, reachabilityCache))
             {
@@ -2369,6 +2413,87 @@ internal sealed class RegexMetaEngine
         finally
         {
             pikeVmPool.Return(pikeVm);
+        }
+    }
+
+    /// <summary>
+    /// Counts authoritative matches while a case-sensitive required-literal scan detects NUL bytes.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startPredicate">An optional conservative candidate-start predicate.</param>
+    /// <param name="count">Receives the number of non-overlapping matches.</param>
+    /// <param name="containsNul">Receives whether the complete haystack contains a NUL byte.</param>
+    /// <returns><see langword="true" /> when counting and NUL detection shared one complete scan.</returns>
+    internal bool TryCountMatchesAndDetectNul(
+        ReadOnlySpan<byte> haystack,
+        RegexStartPredicate? startPredicate,
+        out long count,
+        out bool containsNul)
+    {
+        count = 0;
+        containsNul = false;
+        if (prefilter?.CanDetectNulDuringRequiredLiteralSearch != true ||
+            prefilter.RequiredLiteralWindow != 0)
+        {
+            return false;
+        }
+
+        Span<long> requiredRangeBuffer =
+            stackalloc long[RegexCandidateStartEnumerator.RequiredLiteralRangeBufferLength];
+        Span<bool> nulDetection = stackalloc bool[1] { false };
+        var candidates = RegexCandidateStartEnumerator.RequiredLiteralRangesAndDetectNul(
+            haystack,
+            startAt: 0,
+            haystack.Length,
+            utf8,
+            prefilter,
+            requiredRangeBuffer,
+            nulDetection);
+        PikeVm? pikeVm = pikeVmPool?.Rent();
+        RegexBoundedBacktracker? boundedBacktracker = pikeVm is null
+            ? boundedBacktrackerPool?.Rent()
+            : null;
+        try
+        {
+            int minimumStart = 0;
+            while (candidates.MoveNext(out int candidate))
+            {
+                if (candidate < minimumStart ||
+                    startPredicate is not null && !startPredicate.CanStartAt(haystack, candidate))
+                {
+                    continue;
+                }
+
+                bool matched = pikeVm is not null
+                    ? pikeVm.TryMatchAt(haystack, candidate, out int length)
+                    : boundedBacktracker is not null
+                        ? boundedBacktracker.TryMatchAt(haystack, candidate, out length)
+                        : TryMatchAt(haystack, candidate, out length);
+                if (!matched)
+                {
+                    continue;
+                }
+
+                count++;
+                minimumStart = length == 0
+                    ? Math.Min(candidate + 1, haystack.Length + 1)
+                    : Math.Min(candidate + length, haystack.Length + 1);
+            }
+
+            containsNul = nulDetection[0];
+            return true;
+        }
+        finally
+        {
+            if (boundedBacktracker is not null)
+            {
+                boundedBacktrackerPool!.Return(boundedBacktracker);
+            }
+
+            if (pikeVm is not null)
+            {
+                pikeVmPool!.Return(pikeVm);
+            }
         }
     }
 
@@ -2627,6 +2752,11 @@ internal sealed class RegexMetaEngine
                 out long requiredStartCount))
         {
             return requiredStartCount;
+        }
+
+        if (ShouldUsePrefilterBeforeUnanchoredDfa(haystack.Length))
+        {
+            return IterateNonOverlapping(haystack, startAt, startPredicate, sumSpans: false);
         }
 
         RegexUnanchoredLazyDfa? activeUnanchoredLazyDfa = hasRequiredStart
@@ -2913,6 +3043,11 @@ internal sealed class RegexMetaEngine
             return requiredStartSpanSum;
         }
 
+        if (ShouldUsePrefilterBeforeUnanchoredDfa(haystack.Length))
+        {
+            return IterateNonOverlapping(haystack, startAt, startPredicate, sumSpans: true);
+        }
+
         RegexUnanchoredLazyDfa? activeUnanchoredLazyDfa = hasRequiredStart
             ? null
             : RentUnanchoredLazyDfa(haystack.Length);
@@ -2970,7 +3105,10 @@ internal sealed class RegexMetaEngine
         out long total)
     {
         total = 0;
-        if (boundedBacktrackerPool is null || prefilter is null || startPredicate is not null)
+        if (boundedBacktrackerPool is null ||
+            prefilter is null ||
+            startPredicate is not null ||
+            !ShouldUsePrefilterBeforeUnanchoredDfa(haystack.Length))
         {
             return false;
         }

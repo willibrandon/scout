@@ -773,6 +773,388 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
+    /// Verifies explicit mmap count-matches search preserves ripgrep-compatible binary handling.
+    /// </summary>
+    [Fact]
+    public void MmapCountMatchesHandlesBinaryInputLikeRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        File.WriteAllBytes(path, "needle\0needle\n"u8.ToArray());
+
+        (int exitCode, byte[] output, string error) = RunScout("--no-config", "--mmap", "--count-matches", "^needle$", path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-config", "--mmap", "--count-matches", "^needle$", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies explicit mmap count-matches search evaluates a text file directly from its mapped slice.
+    /// </summary>
+    [Fact]
+    public void MmapCountMatchesUsesMappedSlice()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "alpha\nneedle\nneedle\n");
+
+        (int exitCode, byte[] output, string error) = RunScout("--no-config", "--trace", "--mmap", "--count-matches", "needle", path);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("2\n"u8.ToArray(), output);
+        Assert.Contains("searching via memory map", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Verifies the issue 37 shared-prefix regex counts text directly from an explicit mapping.
+    /// </summary>
+    [Fact]
+    public void MmapCountMatchesUsesMappedSliceForSharedDelegatePrefix()
+    {
+        const string pattern =
+            "delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|" +
+            "delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler";
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.cs");
+        File.WriteAllText(path, "public delegate void UpdateEDIEvent(string value);\n");
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--no-config",
+            "--trace",
+            "--mmap",
+            "--count-matches",
+            pattern,
+            path);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("1\n"u8.ToArray(), output);
+        Assert.Contains("searching via memory map", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Verifies the issue 37 mapped fast path falls back to ripgrep-compatible binary handling.
+    /// </summary>
+    [Fact]
+    public void MmapCountMatchesHandlesBinarySharedDelegatePrefixLikeRipgrep()
+    {
+        const string pattern =
+            "delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|" +
+            "delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler";
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        File.WriteAllBytes(
+            path,
+            "public delegate void UpdateEDIEvent(string value);\0tail"u8.ToArray());
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            pattern,
+            path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            pattern,
+            path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies nullable regexes retain ripgrep-compatible explicit-mmap count semantics.
+    /// </summary>
+    [Fact]
+    public void MmapCountMatchesHandlesNullableRegexLikeRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "bbb\n");
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            "a*",
+            path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            "a*",
+            path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies options that require the regular count path retain explicit-mmap parity.
+    /// </summary>
+    [Fact]
+    public void MmapCountMatchesPreservesFallbackOptionSemanticsLikeRipgrep()
+    {
+        const string pattern =
+            "delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|" +
+            "delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler";
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.cs");
+        File.WriteAllText(
+            path,
+            "public delegate void UpdateEDIEvent(string first);\n" +
+            "public sealed class Unrelated;\n" +
+            "public delegate void UpdateEDIEvent(string second);\n");
+        string[][] optionSets =
+        [
+            ["--quiet"],
+            ["--multiline"],
+            ["--stop-on-nonmatch"],
+        ];
+
+        foreach (string[] options in optionSets)
+        {
+            string[] arguments =
+            [
+                "--no-config",
+                "--mmap",
+                "--count-matches",
+                .. options,
+                pattern,
+                path,
+            ];
+            (int exitCode, byte[] output, string error) = RunScout(arguments);
+            (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) =
+                RunPinnedRipgrep(arguments);
+
+            Assert.Equal(pinnedExitCode, exitCode);
+            Assert.Equal(pinnedOutput, output);
+            Assert.Equal(pinnedError, error);
+        }
+    }
+
+    /// <summary>
+    /// Verifies bounded mapped counting preserves matches and limits across a view boundary.
+    /// </summary>
+    [Fact]
+    public void MmapCountMatchesHandlesWindowBoundaryLikeRipgrep()
+    {
+        const int windowLength = 6 * 1024 * 1024;
+        const string pattern =
+            "delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|" +
+            "delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler";
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.cs");
+        byte[] bytes = new byte[windowLength + 256];
+        bytes.AsSpan().Fill((byte)'x');
+        "delegate void UpdateEDIEvent(string first);\n"u8.CopyTo(bytes);
+        "delegate void UpdateEDIEvent(string boundary);\n"u8.CopyTo(
+            bytes.AsSpan(windowLength - 4));
+        "delegate void UpdateEDIEvent(string final);\n"u8.CopyTo(
+            bytes.AsSpan(windowLength + 128));
+        File.WriteAllBytes(path, bytes);
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--no-config",
+            "--trace",
+            "--mmap",
+            "--count-matches",
+            pattern,
+            path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            pattern,
+            path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal("3\n"u8.ToArray(), output);
+        Assert.Empty(pinnedError);
+        Assert.Contains("searching via memory map", error, StringComparison.Ordinal);
+
+        (exitCode, output, error) = RunScout(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            "--max-count",
+            "1",
+            pattern,
+            path);
+        (pinnedExitCode, pinnedOutput, pinnedError) = RunPinnedRipgrep(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            "--max-count",
+            "1",
+            pattern,
+            path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies general line-regex plans preserve counts across bounded mapped views.
+    /// </summary>
+    /// <param name="pattern">The regex pattern.</param>
+    /// <param name="matchingLine">A complete matching line.</param>
+    [Theory]
+    [InlineData(@"\bGeneratedRecord\b", "internal sealed class GeneratedRecord\r\n")]
+    [InlineData(@"^internal sealed class GeneratedRecord\r?$", "internal sealed class GeneratedRecord\r\n")]
+    [InlineData(@"^[A-Za-z_]{70,90}\r?$", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\n")]
+    public void MmapCountMatchesHandlesGeneralRegexAcrossWindowBoundaryLikeRipgrep(
+        string pattern,
+        string matchingLine)
+    {
+        const int windowLength = 6 * 1024 * 1024;
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        byte[] bytes = new byte[windowLength + 256];
+        bytes.AsSpan().Fill((byte)'x');
+        int lineStart = windowLength - 11;
+        bytes[lineStart - 1] = (byte)'\n';
+        Encoding.UTF8.GetBytes(matchingLine).CopyTo(bytes, lineStart);
+        File.WriteAllBytes(path, bytes);
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--no-config",
+            "--trace",
+            "--mmap",
+            "--count-matches",
+            pattern,
+            path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            pattern,
+            path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal("1\n"u8.ToArray(), output);
+        Assert.Empty(pinnedError);
+        Assert.Contains("searching via memory map", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Verifies bounded mapped counting observes binary data beyond its first view.
+    /// </summary>
+    /// <param name="pattern">The regex pattern.</param>
+    /// <param name="matchingLine">A complete matching line.</param>
+    [Theory]
+    [InlineData(@"^[A-Za-z_]{70,90}\r?$", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\n")]
+    [InlineData("delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler", "public delegate void UpdateEDIEvent(string value);\n")]
+    public void MmapCountMatchesHandlesBinaryAfterWindowLikeRipgrep(
+        string pattern,
+        string matchingLine)
+    {
+        const int windowLength = 6 * 1024 * 1024;
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        byte[] bytes = new byte[windowLength + 256];
+        bytes.AsSpan().Fill((byte)'x');
+        Encoding.UTF8.GetBytes(matchingLine).CopyTo(bytes, 0);
+        bytes[windowLength + 128] = 0;
+        File.WriteAllBytes(path, bytes);
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            pattern,
+            path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            pattern,
+            path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies an oversized incomplete line leaves bounded mapped counting without changing results.
+    /// </summary>
+    [Fact]
+    public void MmapCountMatchesHandlesOversizedPendingLineLikeRipgrep()
+    {
+        const int fileLength = (8 * 1024 * 1024) + 256;
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        byte[] bytes = new byte[fileLength];
+        bytes.AsSpan().Fill((byte)'x');
+        File.WriteAllBytes(path, bytes);
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            @"\bGeneratedRecord\b",
+            path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            @"\bGeneratedRecord\b",
+            path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies a large BOM-encoded input bypasses raw bounded mapped counting.
+    /// </summary>
+    [Fact]
+    public void MmapCountMatchesHandlesLargeBomInputLikeRipgrep()
+    {
+        const int fileLength = (6 * 1024 * 1024) + 2;
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        byte[] bytes = new byte[fileLength];
+        bytes[0] = 0xFF;
+        bytes[1] = 0xFE;
+        for (int index = 2; index < bytes.Length; index += 2)
+        {
+            bytes[index] = (byte)'x';
+        }
+
+        byte[] encodedNeedle = System.Text.Encoding.Unicode.GetBytes("needle\n");
+        encodedNeedle.CopyTo(bytes, 2);
+        File.WriteAllBytes(path, bytes);
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            "needle",
+            path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            "needle",
+            path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies explicit files larger than the managed array limit use the streaming reader path.
     /// </summary>
     [Fact]

@@ -134,19 +134,20 @@ internal static class StandardSearchByteOperations
 
         ArgumentOutOfRangeException.ThrowIfNegative(byteLength);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(byteLength, bytes.Length);
+        ReadOnlySpan<byte> inputSpan = bytes.AsSpan(0, byteLength);
         if (!heading)
         {
-            return SearchBytes(bytes, byteLength, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary, memoryMapped, regexPlan);
+            return SearchBytes(inputSpan, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary, memoryMapped, regexPlan, byteLength == bytes.Length ? bytes : null);
         }
 
-        if (TrySearchBinarySuppressed(bytes, byteLength, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary, memoryMapped, out bool binaryMatched, out _))
+        if (TrySearchBinarySuppressed(inputSpan, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary, memoryMapped, out bool binaryMatched, out _))
         {
             return binaryMatched;
         }
 
         using MemoryStream bufferedOutput = new();
         var bufferedWriter = new RawByteWriter(bufferedOutput);
-        bool matched = SearchBytes(bytes, byteLength, pattern, bufferedWriter, prefix: null, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary, memoryMapped, regexPlan);
+        bool matched = SearchBytes(inputSpan, pattern, bufferedWriter, prefix: null, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary, memoryMapped, regexPlan, byteLength == bytes.Length ? bytes : null);
         bufferedWriter.Flush();
         byte[] body = bufferedOutput.ToArray();
         if (body.Length == 0)
@@ -168,6 +169,112 @@ internal static class StandardSearchByteOperations
         output.Write(body);
         wroteHeadingOutput = true;
         return matched;
+    }
+
+    /// <summary>
+    /// Searches a zero-copy memory-mapped byte span.
+    /// </summary>
+    /// <param name="bytes">The mapped bytes whose lifetime covers this call.</param>
+    /// <param name="pattern">The prepared patterns.</param>
+    /// <param name="output">The output writer.</param>
+    /// <param name="prefix">The optional output path prefix.</param>
+    /// <param name="separators">The configured output and record separators.</param>
+    /// <param name="lineLimit">The output line limit.</param>
+    /// <param name="color">The output color configuration.</param>
+    /// <param name="searchMode">The requested search mode.</param>
+    /// <param name="vimgrep">Whether vimgrep output is enabled.</param>
+    /// <param name="lineNumber">Whether line numbers are printed.</param>
+    /// <param name="column">Whether columns are printed.</param>
+    /// <param name="byteOffset">Whether byte offsets are printed.</param>
+    /// <param name="asciiCaseInsensitive">Whether ASCII case-insensitive matching is enabled.</param>
+    /// <param name="invertMatch">Whether non-matching lines are selected.</param>
+    /// <param name="lineRegexp">Whether matches must span a complete line.</param>
+    /// <param name="wordRegexp">Whether matches must satisfy word boundaries.</param>
+    /// <param name="multiline">Whether multiline matching is enabled.</param>
+    /// <param name="multilineDotall">Whether dot matches line terminators in multiline mode.</param>
+    /// <param name="onlyMatching">Whether only matching spans are printed.</param>
+    /// <param name="replacement">The optional replacement template.</param>
+    /// <param name="maxCount">The optional maximum selected match count.</param>
+    /// <param name="textMode">Whether input is searched as text.</param>
+    /// <param name="quiet">Whether output is suppressed.</param>
+    /// <param name="trim">Whether leading ASCII whitespace is trimmed.</param>
+    /// <param name="beforeContext">The number of preceding context lines.</param>
+    /// <param name="afterContext">The number of following context lines.</param>
+    /// <param name="passthru">Whether every input line is printed.</param>
+    /// <param name="includeZero">Whether zero counts are printed.</param>
+    /// <param name="nullPathTerminator">Whether paths are NUL terminated.</param>
+    /// <param name="stopOnNonmatch">Whether searching stops at the first non-match.</param>
+    /// <param name="quitOnBinary">Whether binary detection stops searching.</param>
+    /// <param name="regexPlan">The optional reusable regex plan.</param>
+    /// <returns><see langword="true" /> when the input satisfies the selected search mode.</returns>
+    internal static bool SearchMemoryMappedBytes(
+        ReadOnlySpan<byte> bytes,
+        IReadOnlyList<byte[]> pattern,
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        CliSearchMode searchMode,
+        bool vimgrep,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool asciiCaseInsensitive,
+        bool invertMatch,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool multiline,
+        bool multilineDotall,
+        bool onlyMatching,
+        ReadOnlyMemory<byte>? replacement,
+        ulong? maxCount,
+        bool textMode,
+        bool quiet,
+        bool trim,
+        ulong beforeContext,
+        ulong afterContext,
+        bool passthru,
+        bool includeZero,
+        bool nullPathTerminator,
+        bool stopOnNonmatch,
+        bool quitOnBinary,
+        RegexSearchPlan? regexPlan = null)
+    {
+        return SearchBytes(
+            bytes,
+            pattern,
+            output,
+            prefix,
+            separators,
+            lineLimit,
+            color,
+            searchMode,
+            vimgrep,
+            lineNumber,
+            column,
+            byteOffset,
+            asciiCaseInsensitive,
+            invertMatch,
+            lineRegexp,
+            wordRegexp,
+            multiline,
+            multilineDotall,
+            onlyMatching,
+            replacement,
+            maxCount,
+            textMode,
+            quiet,
+            trim,
+            beforeContext,
+            afterContext,
+            passthru,
+            includeZero,
+            nullPathTerminator,
+            stopOnNonmatch,
+            quitOnBinary,
+            memoryMapped: true,
+            regexPlan);
     }
 
     internal static bool SearchBytesWithStats(
@@ -753,11 +860,11 @@ internal static class StandardSearchByteOperations
         bool stopOnNonmatch,
         bool quitOnBinary,
         bool memoryMapped = false,
-        RegexSearchPlan? regexPlan = null)
+        RegexSearchPlan? regexPlan = null,
+        byte[]? sourceBytes = null)
     {
         return SearchBytes(
-            bytes,
-            bytes.Length,
+            bytes.AsSpan(),
             pattern,
             output,
             prefix,
@@ -789,12 +896,12 @@ internal static class StandardSearchByteOperations
             stopOnNonmatch,
             quitOnBinary,
             memoryMapped,
-            regexPlan);
+            regexPlan,
+            sourceBytes ?? bytes);
     }
 
     private static bool SearchBytes(
-        byte[] bytes,
-        int byteLength,
+        ReadOnlySpan<byte> inputSpan,
         IReadOnlyList<byte[]> pattern,
         RawByteWriter output,
         OutputPath? prefix,
@@ -826,21 +933,19 @@ internal static class StandardSearchByteOperations
         bool stopOnNonmatch,
         bool quitOnBinary,
         bool memoryMapped = false,
-        RegexSearchPlan? regexPlan = null)
+        RegexSearchPlan? regexPlan = null,
+        byte[]? sourceBytes = null)
     {
         if (maxCount == 0)
         {
             return false;
         }
 
-        ArgumentOutOfRangeException.ThrowIfNegative(byteLength);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(byteLength, bytes.Length);
-        if (TrySearchBinarySuppressed(bytes, byteLength, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary, memoryMapped, out bool binaryMatched, out bool convertBinaryNuls))
+        if (TrySearchBinarySuppressed(inputSpan, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, quitOnBinary, memoryMapped, out bool binaryMatched, out bool convertBinaryNuls))
         {
             return binaryMatched;
         }
 
-        ReadOnlySpan<byte> inputSpan = bytes.AsSpan(0, byteLength);
         byte[]? convertedBytes = convertBinaryNuls ? BinaryDetection.ConvertNulToLineFeed(inputSpan) : null;
         ReadOnlySpan<byte> activeSpan = convertedBytes is null ? inputSpan : convertedBytes;
         bool useCrlfLinePlan = multiline &&
@@ -984,7 +1089,7 @@ internal static class StandardSearchByteOperations
 
         if (passthru || beforeContext > 0 || afterContext > 0)
         {
-            byte[] contextBytes = byteLength == bytes.Length ? bytes : inputSpan.ToArray();
+            byte[] contextBytes = sourceBytes ?? inputSpan.ToArray();
             return ContextSearchOperations.SearchBytes(contextBytes, pattern, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, vimgrep, onlyMatching, replacement, maxCount, trim, beforeContext, afterContext, passthru, nullPathTerminator, stopOnNonmatch, regexPlan);
         }
 
@@ -1076,8 +1181,7 @@ internal static class StandardSearchByteOperations
     }
 
     private static bool TrySearchBinarySuppressed(
-        byte[] bytes,
-        int byteLength,
+        ReadOnlySpan<byte> inputSpan,
         IReadOnlyList<byte[]> pattern,
         RawByteWriter output,
         OutputPath? prefix,
@@ -1114,7 +1218,6 @@ internal static class StandardSearchByteOperations
     {
         matched = false;
         convertBinaryNuls = false;
-        ReadOnlySpan<byte> inputSpan = bytes.AsSpan(0, byteLength);
         BinaryDetectionResult binaryDetection = BinaryDetection.Detect(inputSpan, textMode, separators.NullData, quitOnBinary);
         if (!binaryDetection.IsBinary)
         {

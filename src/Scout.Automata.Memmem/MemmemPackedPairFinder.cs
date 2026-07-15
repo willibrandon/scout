@@ -7,26 +7,34 @@ using System.Runtime.Intrinsics.X86;
 
 namespace Scout;
 
-internal readonly struct MemmemPackedPairFinder
+/// <summary>
+/// Finds byte substrings by screening candidate starts with a ranked pair of needle bytes.
+/// </summary>
+/// <param name="first">The first ranked byte.</param>
+/// <param name="second">The second ranked byte.</param>
+/// <param name="firstIndex">The first ranked byte's needle offset.</param>
+/// <param name="secondIndex">The second ranked byte's needle offset.</param>
+internal readonly struct MemmemPackedPairFinder(
+    byte first,
+    byte second,
+    int firstIndex,
+    int secondIndex)
 {
     private const int MinimumNeedleLength = 3;
     private const int MinimumHaystackLength = 256;
 
-    private readonly byte first;
-    private readonly byte second;
-    private readonly int firstIndex;
-    private readonly int secondIndex;
-    private readonly int maxIndex;
+    private readonly byte _first = first;
+    private readonly byte _second = second;
+    private readonly int _firstIndex = firstIndex;
+    private readonly int _secondIndex = secondIndex;
+    private readonly int _maxIndex = Math.Max(firstIndex, secondIndex);
 
-    private MemmemPackedPairFinder(byte first, byte second, int firstIndex, int secondIndex)
-    {
-        this.first = first;
-        this.second = second;
-        this.firstIndex = firstIndex;
-        this.secondIndex = secondIndex;
-        maxIndex = Math.Max(firstIndex, secondIndex);
-    }
-
+    /// <summary>
+    /// Attempts to create a ranked packed-pair finder for a sufficiently long needle.
+    /// </summary>
+    /// <param name="needle">The byte substring to rank.</param>
+    /// <param name="finder">Receives the packed-pair finder.</param>
+    /// <returns><see langword="true" /> when packed-pair search is available.</returns>
     public static bool TryCreate(ReadOnlySpan<byte> needle, out MemmemPackedPairFinder finder)
     {
         finder = default;
@@ -74,6 +82,12 @@ internal readonly struct MemmemPackedPairFinder
         return true;
     }
 
+    /// <summary>
+    /// Finds the first occurrence of a needle with the ranked packed pair.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="needle">The byte substring to find.</param>
+    /// <returns>The zero-based occurrence offset, or <c>-1</c> when absent.</returns>
     public int Find(ReadOnlySpan<byte> haystack, ReadOnlySpan<byte> needle)
     {
         if (needle.Length > haystack.Length)
@@ -118,14 +132,228 @@ internal readonly struct MemmemPackedPairFinder
         return MemmemSearch.FindWithoutPackedPair(haystack, needle);
     }
 
+    /// <summary>
+    /// Finds the first occurrence while detecting NUL bytes in the inspected prefix.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="needle">The byte substring to find.</param>
+    /// <param name="containsNul">Set to <see langword="true" /> when an inspected byte is NUL.</param>
+    /// <returns>The zero-based occurrence offset, or <c>-1</c> when absent.</returns>
+    public int FindAndDetectNul(
+        ReadOnlySpan<byte> haystack,
+        ReadOnlySpan<byte> needle,
+        ref bool containsNul)
+    {
+        if (needle.Length > haystack.Length)
+        {
+            containsNul |= haystack.Contains((byte)0);
+            return -1;
+        }
+
+        if (Vector128.IsHardwareAccelerated &&
+            haystack.Length >= MinimumLengthForVector(Vector128<byte>.Count, needle.Length))
+        {
+            return FindVector128AndDetectNul(haystack, needle, ref containsNul);
+        }
+
+        return FindScalarAndDetectNul(haystack, needle, ref containsNul);
+    }
+
+    private int FindScalarAndDetectNul(
+        ReadOnlySpan<byte> haystack,
+        ReadOnlySpan<byte> needle,
+        ref bool containsNul)
+    {
+        int lastStart = haystack.Length - needle.Length;
+        int searchAt = 0;
+        while (searchAt < haystack.Length)
+        {
+            int relative = haystack[searchAt..].IndexOfAny(_first, (byte)0);
+            if (relative < 0)
+            {
+                return -1;
+            }
+
+            int found = searchAt + relative;
+            if (haystack[found] == 0)
+            {
+                containsNul = true;
+            }
+
+            int candidate = found - _firstIndex;
+            if (candidate >= 0 &&
+                candidate <= lastStart &&
+                haystack[found] == _first &&
+                haystack[candidate + _secondIndex] == _second &&
+                haystack.Slice(candidate, needle.Length).SequenceEqual(needle))
+            {
+                return candidate;
+            }
+
+            searchAt = found + 1;
+        }
+
+        return -1;
+    }
+
+    private int FindVector128AndDetectNul(
+        ReadOnlySpan<byte> haystack,
+        ReadOnlySpan<byte> needle,
+        ref bool containsNul)
+    {
+        bool detectedNul = containsNul || haystack[.._firstIndex].Contains((byte)0);
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        var firstVector = Vector128.Create(_first);
+        var secondVector = Vector128.Create(_second);
+        var minimumVector = Vector128.Create(byte.MaxValue);
+        int offset = 0;
+        int vectorEnd = haystack.Length - MinimumLengthForVector(Vector128<byte>.Count, needle.Length);
+        int lastStart = haystack.Length - needle.Length;
+        int unrolledEnd = vectorEnd - Vector128<byte>.Count * 3;
+        while (offset <= unrolledEnd)
+        {
+            if (TryFindVector128ChunkAndDetectNul(
+                    ref reference,
+                    firstVector,
+                    secondVector,
+                    haystack,
+                    needle,
+                    offset,
+                    lastStart,
+                    ref minimumVector,
+                    out int candidate) ||
+                TryFindVector128ChunkAndDetectNul(
+                    ref reference,
+                    firstVector,
+                    secondVector,
+                    haystack,
+                    needle,
+                    offset + Vector128<byte>.Count,
+                    lastStart,
+                    ref minimumVector,
+                    out candidate) ||
+                TryFindVector128ChunkAndDetectNul(
+                    ref reference,
+                    firstVector,
+                    secondVector,
+                    haystack,
+                    needle,
+                    offset + Vector128<byte>.Count * 2,
+                    lastStart,
+                    ref minimumVector,
+                    out candidate) ||
+                TryFindVector128ChunkAndDetectNul(
+                    ref reference,
+                    firstVector,
+                    secondVector,
+                    haystack,
+                    needle,
+                    offset + Vector128<byte>.Count * 3,
+                    lastStart,
+                    ref minimumVector,
+                    out candidate))
+            {
+                detectedNul |= Vector128.EqualsAny(minimumVector, Vector128<byte>.Zero);
+                containsNul = detectedNul;
+                return candidate;
+            }
+
+            offset += Vector128<byte>.Count * 4;
+        }
+
+        while (offset <= vectorEnd)
+        {
+            if (TryFindVector128ChunkAndDetectNul(
+                    ref reference,
+                    firstVector,
+                    secondVector,
+                    haystack,
+                    needle,
+                    offset,
+                    lastStart,
+                    ref minimumVector,
+                    out int candidate))
+            {
+                detectedNul |= Vector128.EqualsAny(minimumVector, Vector128<byte>.Zero);
+                containsNul = detectedNul;
+                return candidate;
+            }
+
+            offset += Vector128<byte>.Count;
+        }
+
+        detectedNul |= Vector128.EqualsAny(minimumVector, Vector128<byte>.Zero);
+        int match = FindScalarPairAndDetectNul(haystack, needle, offset, ref detectedNul);
+        containsNul = detectedNul;
+        return match;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool TryFindVector128ChunkAndDetectNul(
+        ref byte reference,
+        Vector128<byte> firstVector,
+        Vector128<byte> secondVector,
+        ReadOnlySpan<byte> haystack,
+        ReadOnlySpan<byte> needle,
+        int offset,
+        int lastStart,
+        ref Vector128<byte> minimumVector,
+        out int match)
+    {
+        var firstBlock = Vector128.LoadUnsafe(ref reference, (nuint)(offset + _firstIndex));
+        var secondBlock = Vector128.LoadUnsafe(ref reference, (nuint)(offset + _secondIndex));
+        minimumVector = Vector128.Min(minimumVector, firstBlock);
+        uint mask =
+            (Vector128.Equals(firstBlock, firstVector) &
+             Vector128.Equals(secondBlock, secondVector)).ExtractMostSignificantBits();
+        while (mask != 0)
+        {
+            int candidate = offset + BitOperations.TrailingZeroCount(mask);
+            if (candidate <= lastStart &&
+                haystack.Slice(candidate, needle.Length).SequenceEqual(needle))
+            {
+                match = candidate;
+                return true;
+            }
+
+            mask &= mask - 1;
+        }
+
+        match = -1;
+        return false;
+    }
+
+    private int FindScalarPairAndDetectNul(
+        ReadOnlySpan<byte> haystack,
+        ReadOnlySpan<byte> needle,
+        int start,
+        ref bool containsNul)
+    {
+        int lastStart = haystack.Length - needle.Length;
+        for (int candidate = start; candidate <= lastStart; candidate++)
+        {
+            containsNul |= haystack[candidate + _firstIndex] == 0;
+            if (haystack[candidate + _firstIndex] == _first &&
+                haystack[candidate + _secondIndex] == _second &&
+                haystack.Slice(candidate, needle.Length).SequenceEqual(needle))
+            {
+                return candidate;
+            }
+        }
+
+        int nulTailStart = Math.Clamp(lastStart + _firstIndex + 1, 0, haystack.Length);
+        containsNul |= haystack[nulTailStart..].Contains((byte)0);
+        return -1;
+    }
+
     private int MinimumLengthForVector(int vectorLength, int needleLength)
     {
-        return Math.Max(needleLength, maxIndex + vectorLength);
+        return Math.Max(needleLength, _maxIndex + vectorLength);
     }
 
     private bool IsAdjacentPair()
     {
-        return AreAdjacentPair(firstIndex, secondIndex);
+        return AreAdjacentPair(_firstIndex, _secondIndex);
     }
 
     private static bool AreAdjacentPair(int left, int right)
@@ -136,9 +364,9 @@ internal readonly struct MemmemPackedPairFinder
     private int FindAdjacentPairScalar64(ReadOnlySpan<byte> haystack, ReadOnlySpan<byte> needle)
     {
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
-        int pairStart = Math.Min(firstIndex, secondIndex);
-        byte low = firstIndex < secondIndex ? first : second;
-        byte high = firstIndex < secondIndex ? second : first;
+        int pairStart = Math.Min(_firstIndex, _secondIndex);
+        byte low = _firstIndex < _secondIndex ? _first : _second;
+        byte high = _firstIndex < _secondIndex ? _second : _first;
         ulong lowPattern = RepeatByte(low);
         ulong highPattern = RepeatByte(high);
         int offset = 0;
@@ -182,8 +410,8 @@ internal readonly struct MemmemPackedPairFinder
     private int FindVector512(ReadOnlySpan<byte> haystack, ReadOnlySpan<byte> needle)
     {
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
-        var firstVector = Vector512.Create(first);
-        var secondVector = Vector512.Create(second);
+        var firstVector = Vector512.Create(_first);
+        var secondVector = Vector512.Create(_second);
         int offset = 0;
         int vectorEnd = haystack.Length - MinimumLengthForVector(Vector512<byte>.Count, needle.Length);
         int lastStart = haystack.Length - needle.Length;
@@ -247,8 +475,8 @@ internal readonly struct MemmemPackedPairFinder
         int lastStart,
         out int match)
     {
-        var firstBlock = Vector512.LoadUnsafe(ref reference, (nuint)(offset + firstIndex));
-        var secondBlock = Vector512.LoadUnsafe(ref reference, (nuint)(offset + secondIndex));
+        var firstBlock = Vector512.LoadUnsafe(ref reference, (nuint)(offset + _firstIndex));
+        var secondBlock = Vector512.LoadUnsafe(ref reference, (nuint)(offset + _secondIndex));
         ulong mask =
             (Avx512BW.CompareEqual(firstBlock, firstVector) &
              Avx512BW.CompareEqual(secondBlock, secondVector)).ExtractMostSignificantBits();
@@ -277,9 +505,9 @@ internal readonly struct MemmemPackedPairFinder
     private int FindVector512ThreeByte(ReadOnlySpan<byte> haystack, ReadOnlySpan<byte> needle)
     {
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
-        var firstVector = Vector512.Create(first);
-        var secondVector = Vector512.Create(second);
-        int remainingIndex = 3 - firstIndex - secondIndex;
+        var firstVector = Vector512.Create(_first);
+        var secondVector = Vector512.Create(_second);
+        int remainingIndex = 3 - _firstIndex - _secondIndex;
         byte remaining = needle[remainingIndex];
         int offset = 0;
         int vectorEnd = haystack.Length - MinimumLengthForVector(Vector512<byte>.Count, needle.Length);
@@ -348,8 +576,8 @@ internal readonly struct MemmemPackedPairFinder
         byte remaining,
         out int match)
     {
-        var firstBlock = Vector512.LoadUnsafe(ref reference, (nuint)(offset + firstIndex));
-        var secondBlock = Vector512.LoadUnsafe(ref reference, (nuint)(offset + secondIndex));
+        var firstBlock = Vector512.LoadUnsafe(ref reference, (nuint)(offset + _firstIndex));
+        var secondBlock = Vector512.LoadUnsafe(ref reference, (nuint)(offset + _secondIndex));
         ulong mask =
             (Avx512BW.CompareEqual(firstBlock, firstVector) &
              Avx512BW.CompareEqual(secondBlock, secondVector)).ExtractMostSignificantBits();
@@ -378,8 +606,8 @@ internal readonly struct MemmemPackedPairFinder
     private int FindVector256(ReadOnlySpan<byte> haystack, ReadOnlySpan<byte> needle)
     {
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
-        var firstVector = Vector256.Create(first);
-        var secondVector = Vector256.Create(second);
+        var firstVector = Vector256.Create(_first);
+        var secondVector = Vector256.Create(_second);
         int offset = 0;
         int vectorEnd = haystack.Length - MinimumLengthForVector(Vector256<byte>.Count, needle.Length);
         int lastStart = haystack.Length - needle.Length;
@@ -461,8 +689,8 @@ internal readonly struct MemmemPackedPairFinder
         int lastStart,
         out int match)
     {
-        var firstBlock = Vector256.LoadUnsafe(ref reference, (nuint)(offset + firstIndex));
-        var secondBlock = Vector256.LoadUnsafe(ref reference, (nuint)(offset + secondIndex));
+        var firstBlock = Vector256.LoadUnsafe(ref reference, (nuint)(offset + _firstIndex));
+        var secondBlock = Vector256.LoadUnsafe(ref reference, (nuint)(offset + _secondIndex));
         uint mask =
             (Avx2.CompareEqual(firstBlock, firstVector) &
              Avx2.CompareEqual(secondBlock, secondVector)).ExtractMostSignificantBits();
@@ -491,15 +719,15 @@ internal readonly struct MemmemPackedPairFinder
     private int FindSse2(ReadOnlySpan<byte> haystack, ReadOnlySpan<byte> needle)
     {
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
-        var firstVector = Vector128.Create(first);
-        var secondVector = Vector128.Create(second);
+        var firstVector = Vector128.Create(_first);
+        var secondVector = Vector128.Create(_second);
         int offset = 0;
         int vectorEnd = haystack.Length - MinimumLengthForVector(Vector128<byte>.Count, needle.Length);
         int lastStart = haystack.Length - needle.Length;
         while (offset <= vectorEnd)
         {
-            var firstBlock = Vector128.LoadUnsafe(ref reference, (nuint)(offset + firstIndex));
-            var secondBlock = Vector128.LoadUnsafe(ref reference, (nuint)(offset + secondIndex));
+            var firstBlock = Vector128.LoadUnsafe(ref reference, (nuint)(offset + _firstIndex));
+            var secondBlock = Vector128.LoadUnsafe(ref reference, (nuint)(offset + _secondIndex));
             uint mask =
                 (Sse2.CompareEqual(firstBlock, firstVector) &
                  Sse2.CompareEqual(secondBlock, secondVector)).ExtractMostSignificantBits();
@@ -528,15 +756,15 @@ internal readonly struct MemmemPackedPairFinder
     private int FindAdvSimd(ReadOnlySpan<byte> haystack, ReadOnlySpan<byte> needle)
     {
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
-        var firstVector = Vector128.Create(first);
-        var secondVector = Vector128.Create(second);
+        var firstVector = Vector128.Create(_first);
+        var secondVector = Vector128.Create(_second);
         int offset = 0;
         int vectorEnd = haystack.Length - MinimumLengthForVector(Vector128<byte>.Count, needle.Length);
         int lastStart = haystack.Length - needle.Length;
         while (offset <= vectorEnd)
         {
-            var firstBlock = Vector128.LoadUnsafe(ref reference, (nuint)(offset + firstIndex));
-            var secondBlock = Vector128.LoadUnsafe(ref reference, (nuint)(offset + secondIndex));
+            var firstBlock = Vector128.LoadUnsafe(ref reference, (nuint)(offset + _firstIndex));
+            var secondBlock = Vector128.LoadUnsafe(ref reference, (nuint)(offset + _secondIndex));
             uint mask =
                 (AdvSimd.CompareEqual(firstBlock, firstVector) &
                  AdvSimd.CompareEqual(secondBlock, secondVector)).ExtractMostSignificantBits();
@@ -567,8 +795,8 @@ internal readonly struct MemmemPackedPairFinder
         int lastStart = haystack.Length - needle.Length;
         for (int candidate = start; candidate <= lastStart; candidate++)
         {
-            if (haystack[candidate + firstIndex] == first &&
-                haystack[candidate + secondIndex] == second &&
+            if (haystack[candidate + _firstIndex] == _first &&
+                haystack[candidate + _secondIndex] == _second &&
                 haystack.Slice(candidate, needle.Length).SequenceEqual(needle))
             {
                 return candidate;

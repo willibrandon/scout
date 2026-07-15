@@ -47,6 +47,7 @@ internal sealed class RegexPrefilter(
     private const int MaxExpandedRequiredLiteralVariants = 1024;
     private const int MaxClassLiteralVariants = 16;
     private const int PreferredPrefixBytes = 3;
+    private const int MinimumSharedRequiredLiteralPrefixBytes = 8;
     private const int MaxPrefixVariants = 512;
     private const int MaxPrefixAtomVariants = 32;
     private const int LowSelectivityPrefixSetThreshold = 64;
@@ -92,6 +93,11 @@ internal sealed class RegexPrefilter(
     /// Gets a value indicating whether required-literal ranges can use reverse-prefix narrowing.
     /// </summary>
     public bool UsesRequiredLiteralPrefixGate => _requiredLiteralPrefixGate is not null;
+
+    /// <summary>
+    /// Gets a value indicating whether required-literal search can detect NUL bytes in the same pass.
+    /// </summary>
+    public bool CanDetectNulDuringRequiredLiteralSearch => _requiredMemmem is not null;
 
     /// <summary>
     /// Determines whether a match can begin at one byte offset.
@@ -516,6 +522,27 @@ internal sealed class RegexPrefilter(
     }
 
     /// <summary>
+    /// Finds the next required literal while detecting NUL bytes in the inspected prefix.
+    /// </summary>
+    /// <param name="haystack">The bytes being searched.</param>
+    /// <param name="startAt">The first offset to inspect.</param>
+    /// <param name="containsNul">Set to <see langword="true" /> when an inspected byte is NUL.</param>
+    /// <returns>The next required-literal offset, or <c>-1</c> when none remains.</returns>
+    public int FindRequiredLiteralAndDetectNul(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        ref bool containsNul)
+    {
+        if (_requiredMemmem is null)
+        {
+            throw new InvalidOperationException("NUL detection requires a case-sensitive required literal.");
+        }
+
+        int offset = _requiredMemmem.FindAndDetectNul(haystack[startAt..], ref containsNul);
+        return offset < 0 ? -1 : startAt + offset;
+    }
+
+    /// <summary>
     /// Gets the conservative or reverse-prefix-narrowed start range for one required literal.
     /// </summary>
     /// <param name="haystack">The bytes being searched.</param>
@@ -558,6 +585,13 @@ internal sealed class RegexPrefilter(
         RegexRequiredLiteralPrefixGate? requiredLiteralPrefixGate = null,
         Func<RegexStartPredicate?>? startPredicateFactory = null)
     {
+        if (!asciiCaseInsensitive &&
+            maxLookBehind == 0 &&
+            TryGetSharedRequiredLiteralPrefix(preparedLiterals, out byte[] sharedPrefix))
+        {
+            preparedLiterals = [sharedPrefix];
+        }
+
         if (preparedLiterals.Length == 1)
         {
             if (!asciiCaseInsensitive)
@@ -610,6 +644,45 @@ internal sealed class RegexPrefilter(
             startPredicate: startPredicate,
             startPredicateFactory: startPredicateFactory,
             requiredLiteralWindow: maxLookBehind);
+    }
+
+    /// <summary>
+    /// Extracts a selective prefix shared by every exact-start required literal.
+    /// </summary>
+    /// <param name="literals">The required literals.</param>
+    /// <param name="prefix">Receives the shared prefix.</param>
+    /// <returns><see langword="true" /> when a sufficiently selective prefix exists.</returns>
+    private static bool TryGetSharedRequiredLiteralPrefix(byte[][] literals, out byte[] prefix)
+    {
+        prefix = [];
+        if (literals.Length < 2)
+        {
+            return false;
+        }
+
+        int length = literals[0].Length;
+        for (int literalIndex = 1;
+             literalIndex < literals.Length && length >= MinimumSharedRequiredLiteralPrefixBytes;
+             literalIndex++)
+        {
+            byte[] literal = literals[literalIndex];
+            length = Math.Min(length, literal.Length);
+            int index = 0;
+            while (index < length && literals[0][index] == literal[index])
+            {
+                index++;
+            }
+
+            length = index;
+        }
+
+        if (length < MinimumSharedRequiredLiteralPrefixBytes)
+        {
+            return false;
+        }
+
+        prefix = literals[0].AsSpan(0, length).ToArray();
+        return true;
     }
 
     private int FindRawCandidate(ReadOnlySpan<byte> haystack, int startAt)
