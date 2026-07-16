@@ -254,6 +254,67 @@ public sealed class RegexCaptureEngineTests()
         Assert.Equal(new RegexMatch(2, 2), shorter.GetGroup(1));
     }
 
+    /// <summary>
+    /// Verifies warmed exact-span replay writes absolute capture pairs without allocating.
+    /// </summary>
+    [Fact]
+    public void ReplaysIntoCallerOwnedCaptureSlotsWithoutAllocating()
+    {
+        RegexCaptureEngine engine = Compile(@"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)");
+        byte[] haystack = "xx struct Foo yy"u8.ToArray();
+        int[] captureSlots = new int[6];
+
+        for (int index = 0; index < 32; index++)
+        {
+            Assert.True(engine.TryReplayCaptures(haystack, 3, 13, captureSlots));
+        }
+
+        bool replayed = true;
+        int checksum = 0;
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int index = 0; index < 1_024; index++)
+        {
+            replayed &= engine.TryReplayCaptures(haystack, 3, 13, captureSlots);
+            checksum += captureSlots[5];
+        }
+
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.True(replayed);
+        Assert.Equal(13 * 1_024, checksum);
+        Assert.Equal([3, 13, 3, 9, 10, 13], captureSlots);
+        Assert.Equal(0, allocated);
+    }
+
+    /// <summary>
+    /// Verifies concurrent exact-span replay rents independent mutable engines while sharing one automaton.
+    /// </summary>
+    [Fact]
+    public void ConcurrentCallerOwnedCaptureReplayIsIndependent()
+    {
+        var automaton = RegexAutomaton.Compile(
+            @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: false);
+        byte[] haystack = "xx struct Foo yy"u8.ToArray();
+        int failures = 0;
+
+        Parallel.For(0, 512, _ =>
+        {
+            int[] captureSlots = new int[automaton.CaptureSlotCount];
+            if (!automaton.TryReplayCaptures(haystack, 3, 13, captureSlots) ||
+                !captureSlots.AsSpan().SequenceEqual([3, 13, 3, 9, 10, 13]))
+            {
+                System.Threading.Interlocked.Increment(ref failures);
+            }
+        });
+
+        Assert.Equal(0, failures);
+    }
+
     private static RegexCaptureEngine Compile(string pattern)
     {
         RegexSyntaxTree tree = RegexSyntaxParser.Parse(Encoding.UTF8.GetBytes(pattern));

@@ -13,9 +13,6 @@ internal sealed class RegexOnePassDfa(RegexNfa nfa)
     private List<int> _next = [];
     private readonly int[] _visited = new int[nfa.States.Count];
     private readonly int[] _closedSplits = new int[nfa.States.Count];
-    private readonly Dictionary<(int State, int Position), bool> _reachabilityCache = [];
-    private readonly HashSet<(int State, int Position)> _reachabilityVisited = [];
-    private readonly Stack<(int State, int Position)> _reachabilityPending = [];
     private int _threadScratchGeneration;
 
     /// <summary>
@@ -55,7 +52,6 @@ internal sealed class RegexOnePassDfa(RegexNfa nfa)
     public bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int length)
     {
         _current.Clear();
-        _reachabilityCache.Clear();
         int threadScratchGeneration = NextThreadScratchGeneration();
         AddThread(
             _nfa.StartState,
@@ -73,7 +69,7 @@ internal sealed class RegexOnePassDfa(RegexNfa nfa)
             if (acceptIndex >= 0)
             {
                 deferredAcceptLength = position - start;
-                if (!HasEarlierConsumer(_current, acceptIndex, haystack, position, _reachabilityCache))
+                if (!HasEarlierMatchingConsumer(_current, acceptIndex, haystack, position))
                 {
                     length = deferredAcceptLength;
                     return true;
@@ -316,12 +312,11 @@ internal sealed class RegexOnePassDfa(RegexNfa nfa)
         }
     }
 
-    private bool HasEarlierConsumer(
+    private bool HasEarlierMatchingConsumer(
         List<int> threads,
         int acceptIndex,
         ReadOnlySpan<byte> haystack,
-        int position,
-        Dictionary<(int State, int Position), bool> reachabilityCache)
+        int position)
     {
         if (position >= haystack.Length)
         {
@@ -332,29 +327,13 @@ internal sealed class RegexOnePassDfa(RegexNfa nfa)
         {
             RegexNfaState state = _nfa.States[threads[index]];
             if (state.Kind == RegexNfaStateKind.Atom &&
-                state.TryGetAtomMatchLength(haystack, position, out int consume) &&
-                RegexDfaOperations.CanReachAccept(
-                    _nfa,
-                    state.Next,
-                    haystack,
-                    position + consume,
-                    reachabilityCache,
-                    _reachabilityVisited,
-                    _reachabilityPending))
+                state.TryGetAtomMatchLength(haystack, position, out _))
             {
                 return true;
             }
 
             if (state.Kind == RegexNfaStateKind.Sparse &&
-                state.TryGetSparseTarget(haystack[position], out int sparseNext) &&
-                RegexDfaOperations.CanReachAccept(
-                    _nfa,
-                    sparseNext,
-                    haystack,
-                    position + 1,
-                    reachabilityCache,
-                    _reachabilityVisited,
-                    _reachabilityPending))
+                state.TryGetSparseTarget(haystack[position], out _))
             {
                 return true;
             }

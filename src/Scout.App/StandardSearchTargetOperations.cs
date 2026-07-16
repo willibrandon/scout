@@ -13,7 +13,7 @@ internal static class StandardSearchTargetOperations
     private const int ParallelDirectOutputFlushThreshold = 128 * 1024;
     private const int DirectoryEntryLiteralPrecheckBufferLength = 16 * 1024;
     private const int PooledRawFileReadMaxLength = 2 * 1024 * 1024;
-    private const int MemoryMappedCountWindowLength = 6 * 1024 * 1024;
+    private const int MemoryMappedCountWindowLength = 4 * 1024 * 1024;
     private const int MemoryMappedCountMaximumPendingLineLength = 8 * 1024 * 1024;
 
     internal static bool SearchStandardInput(
@@ -1515,26 +1515,31 @@ internal static class StandardSearchTargetOperations
             }
 
             RegexSearchPlan? effectiveRegexPlan = regexPlan;
-            bool canFuseMacOsCount = OperatingSystem.IsMacOS() &&
+            bool canCountMacOsMemoryMappedWindows = OperatingSystem.IsMacOS() &&
                 !textMode &&
                 !separators.NullData &&
-                searchMode == CliSearchMode.CountMatches &&
+                (searchMode is CliSearchMode.Count or CliSearchMode.CountMatches) &&
                 !quiet &&
-                !lowArgs.Multiline &&
-                !lowArgs.MultilineDotall &&
                 !lowArgs.StopOnNonmatch &&
                 maxCount is null;
-            if (canFuseMacOsCount &&
+            bool canFuseMacOsMatchCount = canCountMacOsMemoryMappedWindows &&
+                searchMode == CliSearchMode.CountMatches &&
+                !lowArgs.Multiline &&
+                !lowArgs.MultilineDotall;
+            if (canCountMacOsMemoryMappedWindows &&
                 mappedSearchFile!.Length > MemoryMappedCountWindowLength &&
                 TryCountMemoryMappedWindows(
                     mappedSearchFile,
                     pattern,
                     ref effectiveRegexPlan,
+                    searchMode,
                     asciiCaseInsensitive,
                     invertMatch,
                     lineRegexp,
                     wordRegexp,
                     separators.Crlf,
+                    lowArgs.Multiline,
+                    lowArgs.MultilineDotall,
                     out long windowedCount,
                     out bool windowedContainsNul))
             {
@@ -1572,7 +1577,7 @@ internal static class StandardSearchTargetOperations
 
             if (OperatingSystem.IsMacOS() && !textMode && !separators.NullData)
             {
-                if (canFuseMacOsCount &&
+                if (canFuseMacOsMatchCount &&
                     LiteralLineSearcher.TryCountMatchesAndDetectNulWithRegexPlan(
                         bytes,
                         pattern,
@@ -1657,23 +1662,50 @@ internal static class StandardSearchTargetOperations
     }
 
     /// <summary>
-    /// Counts non-multiline matches through bounded sequential views while authoritative regex
-    /// matching observes binary NUL bytes.
+    /// Counts matching records or non-overlapping matches through bounded sequential views while
+    /// authoritative regex matching observes binary NUL bytes.
     /// </summary>
-    private static bool TryCountMemoryMappedWindows(
+    /// <param name="mappedSearchFile">The file whose views are replaced as counting advances.</param>
+    /// <param name="pattern">The ordered regex patterns.</param>
+    /// <param name="regexPlan">The optional reusable authoritative regex plan.</param>
+    /// <param name="searchMode">Whether to count matching records or individual matches.</param>
+    /// <param name="asciiCaseInsensitive">Whether ASCII matching is case-insensitive.</param>
+    /// <param name="invertMatch">Whether non-matching records are selected.</param>
+    /// <param name="lineRegexp">Whether matches must span complete records.</param>
+    /// <param name="wordRegexp">Whether matches must satisfy word boundaries.</param>
+    /// <param name="crlf">Whether CRLF terminates records.</param>
+    /// <param name="multiline">Whether matches may span records.</param>
+    /// <param name="multilineDotall">Whether dot matches record terminators in multiline mode.</param>
+    /// <param name="count">Receives the complete count when bounded counting succeeds.</param>
+    /// <param name="containsNul">Receives whether any bounded view contains a NUL byte.</param>
+    /// <returns>
+    /// <see langword="true" /> when every complete-record segment was counted without changing
+    /// regex semantics; otherwise, <see langword="false" />.
+    /// </returns>
+    internal static bool TryCountMemoryMappedWindows(
         MemoryMappedSearchFile mappedSearchFile,
         IReadOnlyList<byte[]> pattern,
         ref RegexSearchPlan? regexPlan,
+        CliSearchMode searchMode,
         bool asciiCaseInsensitive,
         bool invertMatch,
         bool lineRegexp,
         bool wordRegexp,
         bool crlf,
+        bool multiline,
+        bool multilineDotall,
         out long count,
         out bool containsNul)
     {
         count = 0;
         containsNul = false;
+        if (searchMode is not (CliSearchMode.Count or CliSearchMode.CountMatches) ||
+            multiline ||
+            multilineDotall)
+        {
+            return false;
+        }
+
         MemoryStream? pendingLine = null;
         try
         {
@@ -1718,6 +1750,7 @@ internal static class StandardSearchTargetOperations
                         line,
                         pattern,
                         ref regexPlan,
+                        searchMode,
                         asciiCaseInsensitive,
                         invertMatch,
                         lineRegexp,
@@ -1742,6 +1775,7 @@ internal static class StandardSearchTargetOperations
                         window.Slice(segmentStart, completeLength),
                         pattern,
                         ref regexPlan,
+                        searchMode,
                         asciiCaseInsensitive,
                         invertMatch,
                         lineRegexp,
@@ -1774,6 +1808,7 @@ internal static class StandardSearchTargetOperations
                     line,
                     pattern,
                     ref regexPlan,
+                    searchMode,
                     asciiCaseInsensitive,
                     invertMatch,
                     lineRegexp,
@@ -1798,12 +1833,13 @@ internal static class StandardSearchTargetOperations
     }
 
     /// <summary>
-    /// Adds one complete line segment's authoritative match count and NUL observation.
+    /// Adds one complete-record segment's authoritative count and NUL observation.
     /// </summary>
     private static bool TryCountMemoryMappedSegment(
         ReadOnlySpan<byte> segment,
         IReadOnlyList<byte[]> pattern,
         ref RegexSearchPlan? regexPlan,
+        CliSearchMode searchMode,
         bool asciiCaseInsensitive,
         bool invertMatch,
         bool lineRegexp,
@@ -1817,21 +1853,12 @@ internal static class StandardSearchTargetOperations
             return true;
         }
 
-        if (!LiteralLineSearcher.TryCountMatchesAndDetectNulWithRegexPlan(
-            segment,
-            pattern,
-            ref regexPlan,
-            asciiCaseInsensitive,
-            invertMatch,
-            lineRegexp,
-            wordRegexp,
-            maxMatchingLines: null,
-            crlf,
-            nullData: false,
-            out long segmentCount,
-            out bool segmentContainsNul))
+        long segmentCount;
+        bool segmentContainsNul;
+        bool counted;
+        if (searchMode == CliSearchMode.Count)
         {
-            if (!LiteralLineSearcher.TryCountNonEmptyMatchesAndDetectNulWithRegexPlan(
+            counted = LiteralLineSearcher.TryCountMatchingLinesAndDetectNulWithRegexPlan(
                 segment,
                 pattern,
                 ref regexPlan,
@@ -1842,10 +1869,40 @@ internal static class StandardSearchTargetOperations
                 crlf,
                 nullData: false,
                 out segmentCount,
-                out segmentContainsNul))
-            {
-                return false;
-            }
+                out segmentContainsNul);
+        }
+        else
+        {
+            counted = LiteralLineSearcher.TryCountMatchesAndDetectNulWithRegexPlan(
+                segment,
+                pattern,
+                ref regexPlan,
+                asciiCaseInsensitive,
+                invertMatch,
+                lineRegexp,
+                wordRegexp,
+                maxMatchingLines: null,
+                crlf,
+                nullData: false,
+                out segmentCount,
+                out segmentContainsNul) ||
+                LiteralLineSearcher.TryCountNonEmptyMatchesAndDetectNulWithRegexPlan(
+                    segment,
+                    pattern,
+                    ref regexPlan,
+                    asciiCaseInsensitive,
+                    invertMatch,
+                    lineRegexp,
+                    wordRegexp,
+                    crlf,
+                    nullData: false,
+                    out segmentCount,
+                    out segmentContainsNul);
+        }
+
+        if (!counted)
+        {
+            return false;
         }
 
         count += segmentCount;

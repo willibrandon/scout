@@ -61,6 +61,16 @@ internal sealed class RegexSearchPlan(
     internal int CaptureCount { get; } = captureCount;
 
     /// <summary>
+    /// Gets the number of flattened start and exclusive-end capture slots required for replay.
+    /// </summary>
+    internal int CaptureSlotCount => _matcher.CaptureSlotCount;
+
+    /// <summary>
+    /// Gets the syntax-derived minimum number of bytes that any match can consume.
+    /// </summary>
+    internal int MinimumMatchLength => _matcher.MinimumMatchLength;
+
+    /// <summary>
     /// Gets the global capture indexes keyed by capture name.
     /// </summary>
     internal IReadOnlyDictionary<string, int> CaptureNames { get; } = captureNames;
@@ -189,6 +199,23 @@ internal sealed class RegexSearchPlan(
             nullData,
             multiline,
             multilineDotall);
+    }
+
+    /// <summary>
+    /// Replays captures for a known match span into caller-owned flattened slots.
+    /// </summary>
+    /// <param name="haystack">The complete haystack used by the authoritative match.</param>
+    /// <param name="startAt">The known match start.</param>
+    /// <param name="endAt">The known exclusive match end.</param>
+    /// <param name="captureSlots">Receives absolute start and exclusive-end offsets for every capture.</param>
+    /// <returns><see langword="true" /> when the exact span can be replayed.</returns>
+    internal bool TryReplayCaptures(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        int endAt,
+        Span<int> captureSlots)
+    {
+        return _matcher.TryReplayCaptures(haystack, startAt, endAt, captureSlots);
     }
 
     /// <summary>

@@ -93,6 +93,299 @@ public sealed class MemoryMappedSearchFileTests
         }
     }
 
+    /// <summary>
+    /// Verifies bounded CRLF views preserve record and match counts for general and line-anchored
+    /// expressions, including a final record without a terminator.
+    /// </summary>
+    /// <param name="searchMode">Whether matching records or individual matches are counted.</param>
+    [Theory]
+    [InlineData(CliSearchMode.Count)]
+    [InlineData(CliSearchMode.CountMatches)]
+    public void BoundedCountHandlesGeneralExpressionsAcrossViews(CliSearchMode searchMode)
+    {
+        string root = CreateTempDirectory();
+        try
+        {
+            const int repeatedRecords = 180_000;
+            string path = Path.Combine(root, "input.txt");
+            WriteRepeatedRecords(
+                path,
+                "alpha bravo charl delta echoo foxtt\r\n"u8.ToArray(),
+                repeatedRecords,
+                "alpha bravo charl delta echoo foxtt"u8.ToArray());
+            using RegexSpecializationModeScope scope =
+                RegexSpecializationModeDefaults.Use(RegexSpecializationMode.General);
+
+            Assert.True(MemoryMappedSearchFile.TryOpenFile(
+                path,
+                out MemoryMappedSearchFile? mappedSearchFile));
+            using (mappedSearchFile)
+            {
+                Assert.NotNull(mappedSearchFile);
+                var cases = new (byte[] Pattern, int MatchesPerRecord)[]
+                {
+                    (@"\b\w{5}\s+\w{5}\s+\w{5}\b"u8.ToArray(), 2),
+                    ("^alpha bravo charl delta echoo foxtt$"u8.ToArray(), 1),
+                };
+                foreach ((byte[] pattern, int matchesPerRecord) in cases)
+                {
+                    byte[][] patterns = [pattern];
+                    RegexSearchPlan? regexPlan = null;
+                    Assert.True(StandardSearchTargetOperations.TryCountMemoryMappedWindows(
+                        mappedSearchFile,
+                        patterns,
+                        ref regexPlan,
+                        searchMode,
+                        asciiCaseInsensitive: false,
+                        invertMatch: false,
+                        lineRegexp: false,
+                        wordRegexp: false,
+                        crlf: true,
+                        multiline: false,
+                        multilineDotall: false,
+                        out long count,
+                        out bool containsNul));
+                    long expectedCount = repeatedRecords + 1L;
+                    if (searchMode == CliSearchMode.CountMatches)
+                    {
+                        expectedCount *= matchesPerRecord;
+                    }
+
+                    Assert.Equal(expectedCount, count);
+                    Assert.False(containsNul);
+                    Assert.NotNull(regexPlan);
+                }
+            }
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Verifies bounded counting reports a NUL found after earlier views together with the complete
+    /// mode-specific count.
+    /// </summary>
+    /// <param name="searchMode">Whether matching records or individual matches are counted.</param>
+    /// <param name="matchesPerRecord">The expected contribution from each matching record.</param>
+    [Theory]
+    [InlineData(CliSearchMode.Count, 1)]
+    [InlineData(CliSearchMode.CountMatches, 2)]
+    public void BoundedCountReportsLateNul(
+        CliSearchMode searchMode,
+        int matchesPerRecord)
+    {
+        string root = CreateTempDirectory();
+        try
+        {
+            const int repeatedRecords = 180_000;
+            string path = Path.Combine(root, "input.txt");
+            WriteRepeatedRecords(
+                path,
+                "alpha bravo charl delta echoo foxtt\r\n"u8.ToArray(),
+                repeatedRecords,
+                "alpha bravo charl delta echoo foxtt\0"u8.ToArray());
+            byte[][] patterns = [@"\b\w{5}\s+\w{5}\s+\w{5}\b"u8.ToArray()];
+            RegexSearchPlan? regexPlan = null;
+
+            Assert.True(MemoryMappedSearchFile.TryOpenFile(
+                path,
+                out MemoryMappedSearchFile? mappedSearchFile));
+            using (mappedSearchFile)
+            {
+                Assert.NotNull(mappedSearchFile);
+                Assert.True(StandardSearchTargetOperations.TryCountMemoryMappedWindows(
+                    mappedSearchFile,
+                    patterns,
+                    ref regexPlan,
+                    searchMode,
+                    asciiCaseInsensitive: false,
+                    invertMatch: false,
+                    lineRegexp: false,
+                    wordRegexp: false,
+                    crlf: true,
+                    multiline: false,
+                    multilineDotall: false,
+                    out long count,
+                    out bool containsNul));
+                Assert.Equal((repeatedRecords + 1L) * matchesPerRecord, count);
+                Assert.True(containsNul);
+            }
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Verifies a record larger than the bounded carry limit declines the optimization before
+    /// unbounded memory is retained.
+    /// </summary>
+    [Fact]
+    public void BoundedCountDeclinesOversizedRecord()
+    {
+        string root = CreateTempDirectory();
+        try
+        {
+            string path = Path.Combine(root, "input.txt");
+            File.WriteAllBytes(path, new byte[(8 * 1024 * 1024) + 1]);
+            byte[][] patterns = ["needle"u8.ToArray()];
+            RegexSearchPlan? regexPlan = null;
+
+            Assert.True(MemoryMappedSearchFile.TryOpenFile(
+                path,
+                out MemoryMappedSearchFile? mappedSearchFile));
+            using (mappedSearchFile)
+            {
+                Assert.NotNull(mappedSearchFile);
+                Assert.False(StandardSearchTargetOperations.TryCountMemoryMappedWindows(
+                    mappedSearchFile,
+                    patterns,
+                    ref regexPlan,
+                    CliSearchMode.CountMatches,
+                    asciiCaseInsensitive: false,
+                    invertMatch: false,
+                    lineRegexp: false,
+                    wordRegexp: false,
+                    crlf: false,
+                    multiline: false,
+                    multilineDotall: false,
+                    out _,
+                    out _));
+            }
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Verifies record-boundary-dependent expressions decline bounded segmentation.
+    /// </summary>
+    /// <param name="pattern">The boundary-dependent expression.</param>
+    /// <param name="searchMode">Whether matching records or individual matches would be counted.</param>
+    [Theory]
+    [InlineData("a*", CliSearchMode.Count)]
+    [InlineData("a*", CliSearchMode.CountMatches)]
+    [InlineData(@"\Afoo", CliSearchMode.Count)]
+    [InlineData(@"\Afoo", CliSearchMode.CountMatches)]
+    public void BoundedCountDeclinesBoundaryDependentExpression(
+        string pattern,
+        CliSearchMode searchMode)
+    {
+        string root = CreateTempDirectory();
+        try
+        {
+            string path = Path.Combine(root, "input.txt");
+            File.WriteAllBytes(path, "foo\n"u8.ToArray());
+            byte[][] patterns = [System.Text.Encoding.UTF8.GetBytes(pattern)];
+            RegexSearchPlan? regexPlan = null;
+
+            Assert.True(MemoryMappedSearchFile.TryOpenFile(
+                path,
+                out MemoryMappedSearchFile? mappedSearchFile));
+            using (mappedSearchFile)
+            {
+                Assert.NotNull(mappedSearchFile);
+                Assert.False(StandardSearchTargetOperations.TryCountMemoryMappedWindows(
+                    mappedSearchFile,
+                    patterns,
+                    ref regexPlan,
+                    searchMode,
+                    asciiCaseInsensitive: false,
+                    invertMatch: false,
+                    lineRegexp: false,
+                    wordRegexp: false,
+                    crlf: false,
+                    multiline: false,
+                    multilineDotall: false,
+                    out _,
+                    out _));
+                Assert.NotNull(regexPlan);
+            }
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Verifies multiline semantics decline record-aligned bounded counting before a view is read.
+    /// </summary>
+    /// <param name="searchMode">Whether matching records or individual matches would be counted.</param>
+    [Theory]
+    [InlineData(CliSearchMode.Count)]
+    [InlineData(CliSearchMode.CountMatches)]
+    public void BoundedCountDeclinesMultilineSearch(CliSearchMode searchMode)
+    {
+        string root = CreateTempDirectory();
+        try
+        {
+            string path = Path.Combine(root, "input.txt");
+            File.WriteAllBytes(path, "foo\nbar\n"u8.ToArray());
+            byte[][] patterns = ["foo.*bar"u8.ToArray()];
+            RegexSearchPlan? regexPlan = null;
+
+            Assert.True(MemoryMappedSearchFile.TryOpenFile(
+                path,
+                out MemoryMappedSearchFile? mappedSearchFile));
+            using (mappedSearchFile)
+            {
+                Assert.NotNull(mappedSearchFile);
+                Assert.False(StandardSearchTargetOperations.TryCountMemoryMappedWindows(
+                    mappedSearchFile,
+                    patterns,
+                    ref regexPlan,
+                    searchMode,
+                    asciiCaseInsensitive: false,
+                    invertMatch: false,
+                    lineRegexp: false,
+                    wordRegexp: false,
+                    crlf: false,
+                    multiline: true,
+                    multilineDotall: true,
+                    out _,
+                    out _));
+                Assert.Null(regexPlan);
+            }
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static void WriteRepeatedRecords(
+        string path,
+        byte[] record,
+        int count,
+        byte[]? finalRecord)
+    {
+        const int RecordsPerBlock = 4096;
+        byte[] block = GC.AllocateUninitializedArray<byte>(record.Length * RecordsPerBlock);
+        for (int index = 0; index < RecordsPerBlock; index++)
+        {
+            record.CopyTo(block.AsSpan(index * record.Length));
+        }
+
+        using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read);
+        while (count > 0)
+        {
+            int records = Math.Min(count, RecordsPerBlock);
+            stream.Write(block.AsSpan(0, records * record.Length));
+            count -= records;
+        }
+
+        if (finalRecord is not null)
+        {
+            stream.Write(finalRecord);
+        }
+    }
+
     private static string CreateTempDirectory()
     {
         string root = Path.Combine(Path.GetTempPath(), $"scout-mmap-{Guid.NewGuid():N}");

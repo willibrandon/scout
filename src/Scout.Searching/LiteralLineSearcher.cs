@@ -179,42 +179,82 @@ public static class LiteralLineSearcher
             wordRegexp,
             crlf,
             nullData);
-
-        if (CanSearchWholeHaystack(regexPlan, invertMatch))
+        if (!invertMatch &&
+            !CanAnyIndependentRecordMatch(haystack, regexPlan, nullData))
         {
-            return SearchAuthoritativeRegexLines(
+            return false;
+        }
+
+        if (CanSearchWholeHaystackWithFullMatches(regexPlan, invertMatch) ||
+            regexPlan is not null && CanGroupAuthoritativeMatchesByEnd(
+                haystack,
+                regexPlan,
+                invertMatch,
+                requireMatchColumn))
+        {
+            bool authoritativeMatched = SearchAuthoritativeRegexLines(
                 haystack,
                 regexPlan!,
                 ref sink,
                 out _,
+                out bool completedEfficiently,
                 countSearchedLines: false,
                 maxMatchingLines,
                 nullData,
                 requireMatchColumn);
+            if (completedEfficiently)
+            {
+                return authoritativeMatched;
+            }
         }
 
         bool matched = false;
         ulong matchedLines = 0;
         int lineStart = 0;
         long lineNumber = 1;
-        while (lineStart < haystack.Length)
+        RegexFindRunner findRunner = regexPlan is null
+            ? default
+            : regexPlan.Matcher.RentFindRunner();
+        try
         {
-            ReadOnlySpan<byte> remaining = haystack[lineStart..];
-            int lineLength = GetLineLength(remaining, nullData);
-            ReadOnlySpan<byte> line = remaining[..lineLength];
-            if (TryMatchLine(line, needles, regexPlan, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, crlf, nullData, out int matchStart))
+            while (lineStart < haystack.Length)
             {
-                sink.MatchedLine(lineNumber, lineStart, matchStart < 0 ? 0 : matchStart + 1, line);
-                matched = true;
-                matchedLines++;
-                if (maxMatchingLines is ulong limit && matchedLines >= limit)
+                ReadOnlySpan<byte> remaining = haystack[lineStart..];
+                int lineLength = GetLineLength(remaining, nullData);
+                ReadOnlySpan<byte> line = remaining[..lineLength];
+                if (TryMatchLine(
+                        line,
+                        needles,
+                        regexPlan,
+                        ref findRunner,
+                        asciiCaseInsensitive,
+                        invertMatch,
+                        lineRegexp,
+                        wordRegexp,
+                        crlf,
+                        nullData,
+                        out int matchStart))
                 {
-                    return true;
+                    sink.MatchedLine(
+                        lineNumber,
+                        lineStart,
+                        requireMatchColumn && matchStart >= 0 ? matchStart + 1 : 0,
+                        line);
+                    matched = true;
+                    matchedLines++;
+                    if (maxMatchingLines is ulong limit && matchedLines >= limit)
+                    {
+                        return true;
+                    }
                 }
-            }
 
-            lineStart += lineLength;
-            lineNumber++;
+                lineStart += lineLength;
+                lineNumber++;
+            }
+        }
+        finally
+        {
+            findRunner.Dispose();
         }
 
         return matched;
@@ -237,6 +277,13 @@ public static class LiteralLineSearcher
         bool requireMatchColumn = true)
         where TSink : struct, ILineSink
     {
+        if (maxMatchingLines == 0)
+        {
+            matchedLines = 0;
+            matches = 0;
+            return false;
+        }
+
         regexPlan = EnsureRegexSearchPlan(
             needles,
             regexPlan,
@@ -245,33 +292,99 @@ public static class LiteralLineSearcher
             wordRegexp,
             crlf,
             nullData);
-        var countingSink = new RegexPlanCountingLineSink<TSink>(
-            sink,
-            needles,
-            regexPlan,
-            asciiCaseInsensitive,
-            lineRegexp,
-            wordRegexp,
-            crlf,
-            nullData,
-            countMatches: !invertMatch);
-        bool matched = SearchWithRegexPlan(
-            haystack,
-            needles,
-            regexPlan,
-            ref countingSink,
-            asciiCaseInsensitive,
-            invertMatch,
-            lineRegexp,
-            wordRegexp,
-            maxMatchingLines,
-            crlf,
-            nullData,
-            requireMatchColumn);
+        if (!invertMatch &&
+            !CanAnyIndependentRecordMatch(haystack, regexPlan, nullData))
+        {
+            matchedLines = 0;
+            matches = 0;
+            return false;
+        }
 
-        sink = countingSink.Inner;
-        matchedLines = countingSink.MatchedLines;
-        matches = countingSink.Matches;
+        if (CanGroupAuthoritativeMatchesByEnd(
+                haystack,
+                regexPlan!,
+                invertMatch,
+                requireMatchColumn))
+        {
+            bool authoritativeMatched = SearchAuthoritativeRegexLinesAndCountMatches(
+                haystack,
+                regexPlan!,
+                ref sink,
+                out matchedLines,
+                out matches,
+                out bool completedEfficiently,
+                maxMatchingLines,
+                nullData);
+            if (completedEfficiently)
+            {
+                return authoritativeMatched;
+            }
+        }
+
+        bool matched = false;
+        matchedLines = 0;
+        matches = 0;
+        int lineStart = 0;
+        long lineNumber = 1;
+        RegexFindRunner findRunner = regexPlan is null
+            ? default
+            : regexPlan.Matcher.RentFindRunner();
+        try
+        {
+            while (lineStart < haystack.Length)
+            {
+                ReadOnlySpan<byte> remaining = haystack[lineStart..];
+                int lineLength = GetLineLength(remaining, nullData);
+                ReadOnlySpan<byte> line = remaining[..lineLength];
+                if (TryMatchLine(
+                        line,
+                        needles,
+                        regexPlan,
+                        ref findRunner,
+                        asciiCaseInsensitive,
+                        invertMatch,
+                        lineRegexp,
+                        wordRegexp,
+                        crlf,
+                        nullData,
+                        out int matchStart))
+                {
+                    sink.MatchedLine(
+                        lineNumber,
+                        lineStart,
+                        requireMatchColumn && matchStart >= 0 ? matchStart + 1 : 0,
+                        line);
+                    matched = true;
+                    matchedLines++;
+                    if (!invertMatch)
+                    {
+                        matches += CountReportedLineMatchesWithRegexPlan(
+                            line,
+                            needles,
+                            regexPlan,
+                            ref findRunner,
+                            asciiCaseInsensitive,
+                            lineRegexp,
+                            wordRegexp,
+                            crlf,
+                            nullData);
+                    }
+
+                    if (maxMatchingLines is ulong limit && matchedLines >= limit)
+                    {
+                        return true;
+                    }
+                }
+
+                lineStart += lineLength;
+                lineNumber++;
+            }
+        }
+        finally
+        {
+            findRunner.Dispose();
+        }
+
         return matched;
     }
 
@@ -306,43 +419,84 @@ public static class LiteralLineSearcher
             wordRegexp,
             crlf,
             nullData);
-
-        if (CanSearchWholeHaystack(regexPlan, invertMatch))
+        if (!invertMatch &&
+            !CanAnyIndependentRecordMatch(haystack, regexPlan, nullData))
         {
-            return SearchAuthoritativeRegexLines(
+            searchedLines = CountSearchLines(haystack, nullData);
+            return false;
+        }
+
+        if (CanSearchWholeHaystackWithFullMatches(regexPlan, invertMatch) ||
+            regexPlan is not null && CanGroupAuthoritativeMatchesByEnd(
+                haystack,
+                regexPlan,
+                invertMatch,
+                requireMatchColumn))
+        {
+            bool authoritativeMatched = SearchAuthoritativeRegexLines(
                 haystack,
                 regexPlan!,
                 ref sink,
                 out searchedLines,
+                out bool completedEfficiently,
                 countSearchedLines: true,
                 maxMatchingLines,
                 nullData,
                 requireMatchColumn);
+            if (completedEfficiently)
+            {
+                return authoritativeMatched;
+            }
         }
 
         bool matched = false;
         ulong matchedLines = 0;
         int lineStart = 0;
         long lineNumber = 1;
-        while (lineStart < haystack.Length)
+        RegexFindRunner findRunner = regexPlan is null
+            ? default
+            : regexPlan.Matcher.RentFindRunner();
+        try
         {
-            ReadOnlySpan<byte> remaining = haystack[lineStart..];
-            int lineLength = GetLineLength(remaining, nullData);
-            ReadOnlySpan<byte> line = remaining[..lineLength];
-            if (TryMatchLine(line, needles, regexPlan, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, crlf, nullData, out int matchStart))
+            while (lineStart < haystack.Length)
             {
-                sink.MatchedLine(lineNumber, lineStart, matchStart < 0 ? 0 : matchStart + 1, line);
-                matched = true;
-                matchedLines++;
-                if (maxMatchingLines is ulong limit && matchedLines >= limit)
+                ReadOnlySpan<byte> remaining = haystack[lineStart..];
+                int lineLength = GetLineLength(remaining, nullData);
+                ReadOnlySpan<byte> line = remaining[..lineLength];
+                if (TryMatchLine(
+                        line,
+                        needles,
+                        regexPlan,
+                        ref findRunner,
+                        asciiCaseInsensitive,
+                        invertMatch,
+                        lineRegexp,
+                        wordRegexp,
+                        crlf,
+                        nullData,
+                        out int matchStart))
                 {
-                    searchedLines = lineNumber;
-                    return true;
+                    sink.MatchedLine(
+                        lineNumber,
+                        lineStart,
+                        requireMatchColumn && matchStart >= 0 ? matchStart + 1 : 0,
+                        line);
+                    matched = true;
+                    matchedLines++;
+                    if (maxMatchingLines is ulong limit && matchedLines >= limit)
+                    {
+                        searchedLines = lineNumber;
+                        return true;
+                    }
                 }
-            }
 
-            lineStart += lineLength;
-            lineNumber++;
+                lineStart += lineLength;
+                lineNumber++;
+            }
+        }
+        finally
+        {
+            findRunner.Dispose();
         }
 
         searchedLines = lineNumber - 1;
@@ -386,15 +540,116 @@ public static class LiteralLineSearcher
         return (long)sink.MatchedLines;
     }
 
-    private static bool CanSearchWholeHaystack(RegexSearchPlan? regexPlan, bool invertMatch)
+    private static bool CanSearchWholeHaystackWithFullMatches(
+        RegexSearchPlan? regexPlan,
+        bool invertMatch)
+    {
+        return CanSearchIndependentRecords(regexPlan, invertMatch) &&
+            regexPlan!.Matcher.CanSearchWholeHaystackWithFullMatches;
+    }
+
+    /// <summary>
+    /// Attempts to count a complete segment with one concrete forward match-end runner.
+    /// </summary>
+    /// <param name="haystack">The complete search segment.</param>
+    /// <param name="regexPlan">The authoritative regex plan.</param>
+    /// <param name="count">Receives the match count when the runner completes.</param>
+    /// <returns><see langword="true" /> when a runner was available and completed.</returns>
+    private static bool TryCountWholeHaystackWithMatchEnds(
+        ReadOnlySpan<byte> haystack,
+        RegexSearchPlan regexPlan,
+        out long count)
+    {
+        count = 0;
+        RegexMatchEndRunner runner = regexPlan.Matcher.RentMatchEndRunner(
+            haystack,
+            startAt: 0);
+        try
+        {
+            return runner.IsAvailable && runner.TryCountMatches(
+                haystack,
+                startAt: 0,
+                out count);
+        }
+        finally
+        {
+            runner.Dispose();
+        }
+    }
+
+    private static bool CanSearchIndependentRecords(
+        RegexSearchPlan? regexPlan,
+        bool invertMatch)
     {
         return !invertMatch &&
             regexPlan is not null &&
-            !regexPlan.Options.LineRegexp &&
+            (!regexPlan.Options.LineRegexp ||
+                !regexPlan.Options.Multiline && !regexPlan.Options.NullData) &&
             !regexPlan.Options.PreserveCrlfCarriageReturn &&
             !regexPlan.HasHaystackAnchors &&
             (!regexPlan.Options.NullData || !regexPlan.HasLineAnchors) &&
             !regexPlan.CanMatchEmpty;
+    }
+
+    /// <summary>
+    /// Determines whether any independent record is large enough to satisfy the syntax-derived
+    /// minimum match length.
+    /// </summary>
+    /// <param name="haystack">The complete record-aligned search segment.</param>
+    /// <param name="regexPlan">The optional authoritative regex plan.</param>
+    /// <param name="nullData">Whether NUL terminates records.</param>
+    /// <returns>
+    /// <see langword="true" /> when a record may be long enough or independent-record reasoning
+    /// is not valid for the plan.
+    /// </returns>
+    private static bool CanAnyIndependentRecordMatch(
+        ReadOnlySpan<byte> haystack,
+        RegexSearchPlan? regexPlan,
+        bool nullData)
+    {
+        if (!CanSearchIndependentRecords(regexPlan, invertMatch: false) ||
+            regexPlan!.MinimumMatchLength <= 0)
+        {
+            return true;
+        }
+
+        int minimumMatchLength = regexPlan.MinimumMatchLength;
+        byte terminator = nullData ? (byte)0 : (byte)'\n';
+        int recordStart = 0;
+        while (recordStart < haystack.Length)
+        {
+            int terminatorOffset = haystack[recordStart..].IndexOf(terminator);
+            int recordLength = terminatorOffset < 0
+                ? haystack.Length - recordStart
+                : terminatorOffset + 1;
+            if (recordLength >= minimumMatchLength)
+            {
+                return true;
+            }
+
+            recordStart += recordLength;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Determines whether match ends identify selected records without reconstructing match starts.
+    /// </summary>
+    /// <param name="haystack">The complete search segment.</param>
+    /// <param name="regexPlan">The authoritative regex plan.</param>
+    /// <param name="invertMatch">Whether non-matching records are selected.</param>
+    /// <param name="requireMatchColumn">Whether the first match start must be reported.</param>
+    /// <returns><see langword="true" /> when forward match ends preserve record selection semantics.</returns>
+    internal static bool CanGroupAuthoritativeMatchesByEnd(
+        ReadOnlySpan<byte> haystack,
+        RegexSearchPlan regexPlan,
+        bool invertMatch,
+        bool requireMatchColumn)
+    {
+        return !requireMatchColumn &&
+            !regexPlan.Options.Multiline &&
+            CanSearchIndependentRecords(regexPlan, invertMatch);
     }
 
     private static bool SearchAuthoritativeRegexLines<TSink>(
@@ -402,6 +657,7 @@ public static class LiteralLineSearcher
         RegexSearchPlan regexPlan,
         ref TSink sink,
         out long searchedLines,
+        out bool completedEfficiently,
         bool countSearchedLines,
         ulong? maxMatchingLines,
         bool nullData,
@@ -409,51 +665,268 @@ public static class LiteralLineSearcher
         where TSink : struct, ILineSink
     {
         searchedLines = 0;
+        completedEfficiently = true;
         bool matched = false;
         ulong matchedLines = 0;
         int searchOffset = 0;
         int lineStart = 0;
         int lineEnd = haystack.IsEmpty ? 0 : GetLineLength(haystack, nullData);
         long lineNumber = 1;
-        while (searchOffset < haystack.Length)
+        RegexMatchEndRunner matchEndRunner = default;
+        bool useForwardMatchEnds = CanGroupAuthoritativeMatchesByEnd(
+            haystack,
+            regexPlan,
+            invertMatch: false,
+            requireMatchColumn);
+        if (useForwardMatchEnds &&
+            !regexPlan.Matcher.CanSearchWholeHaystackWithFullMatches)
         {
-            RegexMatch? match = regexPlan.Matcher.Find(haystack, searchOffset);
-            if (!match.HasValue)
+            if (RegexProjectedRecordRunSearcher.TrySearchLines(
+                    haystack,
+                    regexPlan,
+                    ref sink,
+                    out bool projectedMatched,
+                    out long projectedSearchedLines,
+                    countSearchedLines,
+                    maxMatchingLines,
+                    nullData))
             {
-                break;
+                searchedLines = projectedSearchedLines;
+                return projectedMatched;
+            }
+        }
+
+        if (useForwardMatchEnds)
+        {
+            matchEndRunner = regexPlan.Matcher.RentMatchEndRunner(haystack, searchOffset);
+            if (!matchEndRunner.IsAvailable &&
+                !regexPlan.Matcher.CanSearchWholeHaystackWithFullMatches)
+            {
+                completedEfficiently = false;
+                return false;
             }
 
-            while (match.Value.Start >= lineEnd && lineEnd < haystack.Length)
-            {
-                lineStart = lineEnd;
-                lineEnd += GetLineLength(haystack[lineStart..], nullData);
-                lineNumber++;
-            }
+            useForwardMatchEnds = matchEndRunner.IsAvailable;
+        }
 
-            int matchColumn = requireMatchColumn ? match.Value.Start - lineStart + 1 : 0;
-            sink.MatchedLine(
-                lineNumber,
-                lineStart,
-                matchColumn,
-                haystack.Slice(lineStart, lineEnd - lineStart));
-            matched = true;
-            matchedLines++;
-            if (maxMatchingLines is ulong limit && matchedLines >= limit)
+        RegexFindRunner findRunner = regexPlan.Matcher.RentFindRunner();
+        try
+        {
+            while (searchOffset < haystack.Length)
             {
-                if (countSearchedLines)
+                int matchStart;
+                int matchPosition;
+                if (useForwardMatchEnds)
                 {
-                    searchedLines = lineNumber;
+                    bool found = matchEndRunner.TryFindEnd(
+                        haystack,
+                        searchOffset,
+                        out int matchEnd,
+                        out bool completed);
+                    if (!completed)
+                    {
+                        matchEndRunner.Dispose();
+                        useForwardMatchEnds = false;
+                        continue;
+                    }
+
+                    if (!found)
+                    {
+                        break;
+                    }
+
+                    matchStart = -1;
+                    matchPosition = matchEnd - 1;
+                }
+                else
+                {
+                    RegexMatch? match = findRunner.Find(haystack, searchOffset);
+                    if (!match.HasValue)
+                    {
+                        break;
+                    }
+
+                    matchStart = match.Value.Start;
+                    matchPosition = matchStart;
                 }
 
-                return true;
-            }
+                while (matchPosition >= lineEnd && lineEnd < haystack.Length)
+                {
+                    lineStart = lineEnd;
+                    lineEnd += GetLineLength(haystack[lineStart..], nullData);
+                    lineNumber++;
+                }
 
-            searchOffset = lineEnd;
+                int matchColumn = requireMatchColumn ? matchStart - lineStart + 1 : 0;
+                sink.MatchedLine(
+                    lineNumber,
+                    lineStart,
+                    matchColumn,
+                    haystack.Slice(lineStart, lineEnd - lineStart));
+                matched = true;
+                matchedLines++;
+                if (maxMatchingLines is ulong limit && matchedLines >= limit)
+                {
+                    if (countSearchedLines)
+                    {
+                        searchedLines = lineNumber;
+                    }
+
+                    return true;
+                }
+
+                searchOffset = lineEnd;
+            }
+        }
+        finally
+        {
+            matchEndRunner.Dispose();
+            findRunner.Dispose();
         }
 
         if (countSearchedLines)
         {
             searchedLines = CountSearchLines(haystack, nullData);
+        }
+
+        return matched;
+    }
+
+    /// <summary>
+    /// Emits authoritative matching lines and counts non-overlapping matches in one forward scan.
+    /// </summary>
+    /// <typeparam name="TSink">The line-sink type.</typeparam>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="regexPlan">The authoritative regex plan.</param>
+    /// <param name="sink">The sink that receives each selected line once.</param>
+    /// <param name="matchedLines">Receives the selected-line count.</param>
+    /// <param name="matches">Receives the non-overlapping match count.</param>
+    /// <param name="completedEfficiently">
+    /// Receives whether a concrete forward runner was available before any output was produced.
+    /// </param>
+    /// <param name="maxMatchingLines">The optional selected-line limit.</param>
+    /// <param name="nullData">Whether NUL terminates records.</param>
+    /// <returns><see langword="true" /> when at least one line matches.</returns>
+    private static bool SearchAuthoritativeRegexLinesAndCountMatches<TSink>(
+        ReadOnlySpan<byte> haystack,
+        RegexSearchPlan regexPlan,
+        ref TSink sink,
+        out ulong matchedLines,
+        out long matches,
+        out bool completedEfficiently,
+        ulong? maxMatchingLines,
+        bool nullData)
+        where TSink : struct, ILineSink
+    {
+        matchedLines = 0;
+        matches = 0;
+        completedEfficiently = true;
+        bool matched = false;
+        int searchOffset = 0;
+        int searchLimit = haystack.Length;
+        int lineStart = 0;
+        int lineEnd = haystack.IsEmpty ? 0 : GetLineLength(haystack, nullData);
+        int reportedLineStart = -1;
+        long lineNumber = 1;
+        if (!regexPlan.Matcher.CanSearchWholeHaystackWithFullMatches)
+        {
+            if (RegexProjectedRecordRunSearcher.TrySearchLinesAndCountMatches(
+                    haystack,
+                    regexPlan,
+                    ref sink,
+                    out bool projectedMatched,
+                    out ulong projectedMatchedLines,
+                    out long projectedMatches,
+                    maxMatchingLines,
+                    nullData))
+            {
+                matchedLines = projectedMatchedLines;
+                matches = projectedMatches;
+                return projectedMatched;
+            }
+        }
+
+        RegexMatchEndRunner matchEndRunner = regexPlan.Matcher.RentMatchEndRunner(
+            haystack,
+            searchOffset);
+        if (!matchEndRunner.IsAvailable &&
+            !regexPlan.Matcher.CanSearchWholeHaystackWithFullMatches)
+        {
+            completedEfficiently = false;
+            return false;
+        }
+
+        bool useForwardMatchEnds = matchEndRunner.IsAvailable;
+        RegexFindRunner findRunner = regexPlan.Matcher.RentFindRunner();
+        try
+        {
+            while (searchOffset < searchLimit)
+            {
+                ReadOnlySpan<byte> searchHaystack = haystack[..searchLimit];
+                int matchEnd;
+                if (useForwardMatchEnds)
+                {
+                    bool found = matchEndRunner.TryFindEnd(
+                        searchHaystack,
+                        searchOffset,
+                        out matchEnd,
+                        out bool completed);
+                    if (!completed)
+                    {
+                        matchEndRunner.Dispose();
+                        useForwardMatchEnds = false;
+                        continue;
+                    }
+
+                    if (!found)
+                    {
+                        break;
+                    }
+                }
+                else
+                {
+                    RegexMatch? match = findRunner.Find(searchHaystack, searchOffset);
+                    if (!match.HasValue)
+                    {
+                        break;
+                    }
+
+                    matchEnd = match.Value.End;
+                }
+
+                System.Diagnostics.Debug.Assert(matchEnd > searchOffset);
+                int matchPosition = matchEnd - 1;
+                while (matchPosition >= lineEnd && lineEnd < searchLimit)
+                {
+                    lineStart = lineEnd;
+                    lineEnd += GetLineLength(haystack[lineStart..searchLimit], nullData);
+                    lineNumber++;
+                }
+
+                if (reportedLineStart != lineStart)
+                {
+                    sink.MatchedLine(
+                        lineNumber,
+                        lineStart,
+                        matchColumn: 0,
+                        haystack.Slice(lineStart, lineEnd - lineStart));
+                    reportedLineStart = lineStart;
+                    matched = true;
+                    matchedLines++;
+                    if (maxMatchingLines is ulong limit && matchedLines >= limit)
+                    {
+                        searchLimit = lineEnd;
+                    }
+                }
+
+                matches++;
+                searchOffset = matchEnd;
+            }
+        }
+        finally
+        {
+            matchEndRunner.Dispose();
+            findRunner.Dispose();
         }
 
         return matched;
@@ -844,15 +1317,41 @@ public static class LiteralLineSearcher
             wordRegexp,
             crlf,
             nullData);
+        if (!invertMatch &&
+            !CanAnyIndependentRecordMatch(haystack, regexPlan, nullData))
+        {
+            return 0;
+        }
 
         if (invertMatch || lineRegexp)
         {
             return CountMatchingLinesWithRegexPlan(haystack, needles, regexPlan, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxMatchingLines, crlf, nullData);
         }
 
-        if (maxMatchingLines is null && CanSearchWholeHaystack(regexPlan, invertMatch))
+        if (maxMatchingLines is null &&
+            CanSearchIndependentRecords(regexPlan, invertMatch))
         {
-            return regexPlan!.Matcher.CountMatches(haystack);
+            if (regexPlan!.Matcher.CanSearchWholeHaystackWithFullMatches)
+            {
+                return regexPlan.Matcher.CountMatches(haystack);
+            }
+
+            if (RegexProjectedRecordRunSearcher.TryCountMatches(
+                    haystack,
+                    regexPlan,
+                    nullData,
+                    out long projectedCount))
+            {
+                return projectedCount;
+            }
+
+            if (TryCountWholeHaystackWithMatchEnds(
+                    haystack,
+                    regexPlan,
+                    out long matchEndCount))
+            {
+                return matchEndCount;
+            }
         }
 
         return CountPatternMatchesByLine(haystack, needles, regexPlan, asciiCaseInsensitive, wordRegexp, maxMatchingLines, crlf, nullData);
@@ -903,7 +1402,14 @@ public static class LiteralLineSearcher
             wordRegexp,
             crlf,
             nullData);
-        return CanSearchWholeHaystack(regexPlan, invertMatch) &&
+        if (CanSearchIndependentRecords(regexPlan, invertMatch) &&
+            !CanAnyIndependentRecordMatch(haystack, regexPlan, nullData))
+        {
+            containsNul = haystack.Contains((byte)0);
+            return true;
+        }
+
+        return CanSearchWholeHaystackWithFullMatches(regexPlan, invertMatch) &&
             regexPlan!.Matcher.TryCountMatchesAndDetectNul(
                 haystack,
                 out count,
@@ -948,12 +1454,103 @@ public static class LiteralLineSearcher
             wordRegexp,
             crlf,
             nullData);
-        if (!CanSearchWholeHaystack(regexPlan, invertMatch))
+        if (!CanSearchIndependentRecords(regexPlan, invertMatch))
         {
             return false;
         }
 
-        count = regexPlan!.Matcher.CountMatches(haystack);
+        if (!CanAnyIndependentRecordMatch(haystack, regexPlan, nullData))
+        {
+            containsNul = haystack.Contains((byte)0);
+            return true;
+        }
+
+        if (regexPlan!.Matcher.CanSearchWholeHaystackWithFullMatches)
+        {
+            count = regexPlan.Matcher.CountMatches(haystack);
+        }
+        else if (RegexProjectedRecordRunSearcher.TryCountMatches(
+                     haystack,
+                     regexPlan,
+                     nullData,
+                     out long projectedCount))
+        {
+            count = projectedCount;
+        }
+        else if (TryCountWholeHaystackWithMatchEnds(
+                     haystack,
+                     regexPlan,
+                     out long matchEndCount))
+        {
+            count = matchEndCount;
+        }
+        else
+        {
+            return false;
+        }
+
+        containsNul = haystack.Contains((byte)0);
+        return true;
+    }
+
+    /// <summary>
+    /// Attempts to count matching records while separately detecting NUL bytes in one complete,
+    /// independently searchable record segment.
+    /// </summary>
+    /// <param name="haystack">The complete record-aligned segment to search.</param>
+    /// <param name="needles">The ordered byte regex patterns.</param>
+    /// <param name="regexPlan">The optional reusable regex plan, populated when compilation is required.</param>
+    /// <param name="asciiCaseInsensitive">Whether ASCII matching is case-insensitive.</param>
+    /// <param name="invertMatch">Whether non-matching records are selected.</param>
+    /// <param name="lineRegexp">Whether matches must span complete records.</param>
+    /// <param name="wordRegexp">Whether matches must satisfy word boundaries.</param>
+    /// <param name="crlf">Whether CRLF is a record terminator.</param>
+    /// <param name="nullData">Whether NUL is the record terminator.</param>
+    /// <param name="count">Receives the number of matching records.</param>
+    /// <param name="containsNul">Receives whether the complete segment contains a NUL byte.</param>
+    /// <returns>
+    /// <see langword="true" /> when artificial segment boundaries cannot change record-selection
+    /// semantics; otherwise, <see langword="false" />.
+    /// </returns>
+    internal static bool TryCountMatchingLinesAndDetectNulWithRegexPlan(
+        ReadOnlySpan<byte> haystack,
+        IReadOnlyList<byte[]> needles,
+        ref RegexSearchPlan? regexPlan,
+        bool asciiCaseInsensitive,
+        bool invertMatch,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool crlf,
+        bool nullData,
+        out long count,
+        out bool containsNul)
+    {
+        count = 0;
+        containsNul = false;
+        regexPlan = EnsureRegexSearchPlan(
+            needles,
+            regexPlan,
+            asciiCaseInsensitive,
+            lineRegexp,
+            wordRegexp,
+            crlf,
+            nullData);
+        if (!CanSearchIndependentRecords(regexPlan, invertMatch))
+        {
+            return false;
+        }
+
+        count = CountMatchingLinesWithRegexPlan(
+            haystack,
+            needles,
+            regexPlan,
+            asciiCaseInsensitive,
+            invertMatch,
+            lineRegexp,
+            wordRegexp,
+            maxMatchingLines: null,
+            crlf,
+            nullData);
         containsNul = haystack.Contains((byte)0);
         return true;
     }
@@ -1089,7 +1686,12 @@ public static class LiteralLineSearcher
             wordRegexp,
             crlf,
             nullData);
-        if (CanSearchWholeHaystack(regexPlan, invertMatch: false))
+        if (!CanAnyIndependentRecordMatch(haystack, regexPlan, nullData))
+        {
+            return false;
+        }
+
+        if (CanSearchWholeHaystackWithFullMatches(regexPlan, invertMatch: false))
         {
             return SearchAuthoritativeRegexMatches(
                 haystack,
@@ -1103,23 +1705,45 @@ public static class LiteralLineSearcher
         ulong matchedLines = 0;
         int lineStart = 0;
         long lineNumber = 1;
-        while (lineStart < haystack.Length)
+        RegexFindRunner findRunner = regexPlan is null
+            ? default
+            : regexPlan.Matcher.RentFindRunner();
+        try
         {
-            ReadOnlySpan<byte> remaining = haystack[lineStart..];
-            int lineLength = GetLineLength(remaining, nullData);
-            ReadOnlySpan<byte> line = remaining[..lineLength];
-            if (SearchLineMatches(line, lineStart, lineNumber, needles, regexPlan, ref sink, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf, nullData))
+            while (lineStart < haystack.Length)
             {
-                matched = true;
-                matchedLines++;
-                if (maxMatchingLines is ulong limit && matchedLines >= limit)
+                ReadOnlySpan<byte> remaining = haystack[lineStart..];
+                int lineLength = GetLineLength(remaining, nullData);
+                ReadOnlySpan<byte> line = remaining[..lineLength];
+                if (SearchLineMatches(
+                        line,
+                        lineStart,
+                        lineNumber,
+                        needles,
+                        regexPlan,
+                        ref findRunner,
+                        ref sink,
+                        asciiCaseInsensitive,
+                        lineRegexp,
+                        wordRegexp,
+                        crlf,
+                        nullData))
                 {
-                    return true;
+                    matched = true;
+                    matchedLines++;
+                    if (maxMatchingLines is ulong limit && matchedLines >= limit)
+                    {
+                        return true;
+                    }
                 }
-            }
 
-            lineStart += lineLength;
-            lineNumber++;
+                lineStart += lineLength;
+                lineNumber++;
+            }
+        }
+        finally
+        {
+            findRunner.Dispose();
         }
 
         return matched;
@@ -1140,9 +1764,10 @@ public static class LiteralLineSearcher
         int lineStart = 0;
         int lineEnd = haystack.IsEmpty ? 0 : GetLineLength(haystack, nullData);
         long lineNumber = 1;
+        using RegexFindRunner findRunner = regexPlan.Matcher.RentFindRunner();
         while (searchOffset < haystack.Length)
         {
-            RegexMatch? match = regexPlan.Matcher.Find(haystack, searchOffset);
+            RegexMatch? match = findRunner.Find(haystack, searchOffset);
             if (!match.HasValue)
             {
                 break;
@@ -1316,8 +1941,12 @@ public static class LiteralLineSearcher
             wordRegexp,
             crlf,
             nullData);
+        if (!CanAnyIndependentRecordMatch(haystack, regexPlan, nullData))
+        {
+            return false;
+        }
 
-        if (CanSearchWholeHaystack(regexPlan, invertMatch: false))
+        if (CanSearchWholeHaystackWithFullMatches(regexPlan, invertMatch: false))
         {
             return SearchAuthoritativeRegexMatchLines(
                 haystack,
@@ -1331,24 +1960,46 @@ public static class LiteralLineSearcher
         ulong matchedLines = 0;
         int lineStart = 0;
         long lineNumber = 1;
-        while (lineStart < haystack.Length)
+        RegexFindRunner findRunner = regexPlan is null
+            ? default
+            : regexPlan.Matcher.RentFindRunner();
+        try
         {
-            ReadOnlySpan<byte> remaining = haystack[lineStart..];
-            int lineLength = GetLineLength(remaining, nullData);
-            ReadOnlySpan<byte> line = remaining[..lineLength];
-            if (SearchLineMatchLines(line, lineStart, lineNumber, needles, regexPlan, ref sink, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf, nullData))
+            while (lineStart < haystack.Length)
             {
-                sink.FinishLine(lineNumber, lineStart, line);
-                matched = true;
-                matchedLines++;
-                if (maxMatchingLines is ulong limit && matchedLines >= limit)
+                ReadOnlySpan<byte> remaining = haystack[lineStart..];
+                int lineLength = GetLineLength(remaining, nullData);
+                ReadOnlySpan<byte> line = remaining[..lineLength];
+                if (SearchLineMatchLines(
+                        line,
+                        lineStart,
+                        lineNumber,
+                        needles,
+                        regexPlan,
+                        ref findRunner,
+                        ref sink,
+                        asciiCaseInsensitive,
+                        lineRegexp,
+                        wordRegexp,
+                        crlf,
+                        nullData))
                 {
-                    return true;
+                    sink.FinishLine(lineNumber, lineStart, line);
+                    matched = true;
+                    matchedLines++;
+                    if (maxMatchingLines is ulong limit && matchedLines >= limit)
+                    {
+                        return true;
+                    }
                 }
-            }
 
-            lineStart += lineLength;
-            lineNumber++;
+                lineStart += lineLength;
+                lineNumber++;
+            }
+        }
+        finally
+        {
+            findRunner.Dispose();
         }
 
         return matched;
@@ -1369,9 +2020,10 @@ public static class LiteralLineSearcher
         int lineStart = 0;
         int lineEnd = haystack.IsEmpty ? 0 : GetLineLength(haystack, nullData);
         long lineNumber = 1;
+        using RegexFindRunner findRunner = regexPlan.Matcher.RentFindRunner();
         while (searchOffset < haystack.Length)
         {
-            RegexMatch? match = regexPlan.Matcher.Find(haystack, searchOffset);
+            RegexMatch? match = findRunner.Find(haystack, searchOffset);
             if (!match.HasValue)
             {
                 break;
@@ -1631,9 +2283,54 @@ public static class LiteralLineSearcher
             wordRegexp,
             crlf,
             nullData);
+        RegexFindRunner findRunner = regexPlan is null
+            ? default
+            : regexPlan.Matcher.RentFindRunner();
+        try
+        {
+            return CountReportedLineMatchesWithRegexPlan(
+                line,
+                needles,
+                regexPlan,
+                ref findRunner,
+                asciiCaseInsensitive,
+                lineRegexp,
+                wordRegexp,
+                crlf,
+                nullData);
+        }
+        finally
+        {
+            findRunner.Dispose();
+        }
+    }
+
+    private static long CountReportedLineMatchesWithRegexPlan(
+        ReadOnlySpan<byte> line,
+        IReadOnlyList<byte[]> needles,
+        RegexSearchPlan? regexPlan,
+        ref RegexFindRunner findRunner,
+        bool asciiCaseInsensitive,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool crlf,
+        bool nullData)
+    {
         if (lineRegexp)
         {
-            return TryFindPatternMatch(line, needles, offset: 0, asciiCaseInsensitive, lineRegexp: true, wordRegexp: false, crlf, nullData, regexPlan, out _, out _)
+            return TryFindPatternMatch(
+                    line,
+                    needles,
+                    offset: 0,
+                    asciiCaseInsensitive,
+                    lineRegexp: true,
+                    wordRegexp: false,
+                    crlf,
+                    nullData,
+                    regexPlan,
+                    ref findRunner,
+                    out _,
+                    out _)
                 ? 1
                 : 0;
         }
@@ -1648,6 +2345,7 @@ public static class LiteralLineSearcher
             content,
             needles,
             regexPlan,
+            ref findRunner,
             asciiCaseInsensitive,
             wordRegexp,
             allowEndEmptyMatch: content.Length < line.Length);
@@ -1718,6 +2416,7 @@ public static class LiteralLineSearcher
         long lineNumber,
         IReadOnlyList<byte[]> needles,
         RegexSearchPlan? regexPlan,
+        ref RegexFindRunner findRunner,
         ref TSink sink,
         bool asciiCaseInsensitive,
         bool lineRegexp,
@@ -1728,7 +2427,19 @@ public static class LiteralLineSearcher
     {
         if (lineRegexp)
         {
-            if (!TryFindPatternMatch(line, needles, offset: 0, asciiCaseInsensitive, lineRegexp: true, wordRegexp: false, crlf, nullData, regexPlan, out int matchStart, out int matchLength))
+            if (!TryFindPatternMatch(
+                    line,
+                    needles,
+                    offset: 0,
+                    asciiCaseInsensitive,
+                    lineRegexp: true,
+                    wordRegexp: false,
+                    crlf,
+                    nullData,
+                    regexPlan,
+                    ref findRunner,
+                    out int matchStart,
+                    out int matchLength))
             {
                 return false;
             }
@@ -1744,6 +2455,7 @@ public static class LiteralLineSearcher
             lineNumber,
             needles,
             regexPlan,
+            ref findRunner,
             ref sink,
             asciiCaseInsensitive,
             wordRegexp,
@@ -1788,6 +2500,7 @@ public static class LiteralLineSearcher
         long lineNumber,
         IReadOnlyList<byte[]> needles,
         RegexSearchPlan? regexPlan,
+        ref RegexFindRunner findRunner,
         ref TSink sink,
         bool asciiCaseInsensitive,
         bool lineRegexp,
@@ -1798,7 +2511,19 @@ public static class LiteralLineSearcher
     {
         if (lineRegexp)
         {
-            if (!TryFindPatternMatch(line, needles, offset: 0, asciiCaseInsensitive, lineRegexp: true, wordRegexp: false, crlf, nullData, regexPlan, out int matchStart, out int matchLength))
+            if (!TryFindPatternMatch(
+                    line,
+                    needles,
+                    offset: 0,
+                    asciiCaseInsensitive,
+                    lineRegexp: true,
+                    wordRegexp: false,
+                    crlf,
+                    nullData,
+                    regexPlan,
+                    ref findRunner,
+                    out int matchStart,
+                    out int matchLength))
             {
                 return false;
             }
@@ -1824,6 +2549,7 @@ public static class LiteralLineSearcher
                 crlf: false,
                 nullData: false,
                 regexPlan,
+                ref findRunner,
                 out _,
                 out _))
         {
@@ -1843,6 +2569,7 @@ public static class LiteralLineSearcher
             lineNumber,
             needles,
             regexPlan,
+            ref findRunner,
             ref sink,
             asciiCaseInsensitive,
             wordRegexp);
@@ -2018,6 +2745,7 @@ public static class LiteralLineSearcher
         long lineNumber,
         IReadOnlyList<byte[]> needles,
         RegexSearchPlan? regexPlan,
+        ref RegexFindRunner findRunner,
         ref TSink sink,
         bool asciiCaseInsensitive,
         bool wordRegexp,
@@ -2029,7 +2757,19 @@ public static class LiteralLineSearcher
         int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         while (offset <= line.Length)
         {
-            if (!TryFindPatternMatch(line, needles, offset, asciiCaseInsensitive, lineRegexp: false, wordRegexp, crlf: false, nullData: false, regexPlan, out int start, out int length))
+            if (!TryFindPatternMatch(
+                    line,
+                    needles,
+                    offset,
+                    asciiCaseInsensitive,
+                    lineRegexp: false,
+                    wordRegexp,
+                    crlf: false,
+                    nullData: false,
+                    regexPlan,
+                    ref findRunner,
+                    out int start,
+                    out int length))
             {
                 return matched;
             }
@@ -2066,6 +2806,7 @@ public static class LiteralLineSearcher
         long lineNumber,
         IReadOnlyList<byte[]> needles,
         RegexSearchPlan? regexPlan,
+        ref RegexFindRunner findRunner,
         ref TSink sink,
         bool asciiCaseInsensitive,
         bool wordRegexp)
@@ -2076,7 +2817,19 @@ public static class LiteralLineSearcher
         int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         while (offset <= content.Length)
         {
-            if (!TryFindPatternMatch(content, needles, offset, asciiCaseInsensitive, lineRegexp: false, wordRegexp, crlf: false, nullData: false, regexPlan, out int start, out int length))
+            if (!TryFindPatternMatch(
+                    content,
+                    needles,
+                    offset,
+                    asciiCaseInsensitive,
+                    lineRegexp: false,
+                    wordRegexp,
+                    crlf: false,
+                    nullData: false,
+                    regexPlan,
+                    ref findRunner,
+                    out int start,
+                    out int length))
             {
                 return matched;
             }
@@ -2159,6 +2912,7 @@ public static class LiteralLineSearcher
         ReadOnlySpan<byte> line,
         IReadOnlyList<byte[]> needles,
         RegexSearchPlan? regexPlan,
+        ref RegexFindRunner findRunner,
         bool asciiCaseInsensitive,
         bool invertMatch,
         bool lineRegexp,
@@ -2180,6 +2934,7 @@ public static class LiteralLineSearcher
             crlf,
             nullData,
             regexPlan,
+            ref findRunner,
             out matchStart,
             out _);
 
@@ -2204,6 +2959,7 @@ public static class LiteralLineSearcher
                     crlf: false,
                     nullData: false,
                     regexPlan,
+                    ref findRunner,
                     out matchStart,
                     out _))
             {
@@ -2458,35 +3214,46 @@ public static class LiteralLineSearcher
         long count = 0;
         ulong matchedLines = 0;
         int lineStart = 0;
-        while (lineStart < haystack.Length)
+        RegexFindRunner findRunner = regexPlan is null
+            ? default
+            : regexPlan.Matcher.RentFindRunner();
+        try
         {
-            ReadOnlySpan<byte> remaining = haystack[lineStart..];
-            int lineLength = GetLineLength(remaining, nullData);
-            ReadOnlySpan<byte> record = remaining[..lineLength];
-            ReadOnlySpan<byte> line = RegexPatternContent(
-                record,
-                regexPlan,
-                wordRegexp,
-                crlf,
-                nullData);
-            long lineMatches = CountPatternMatches(
-                line,
-                needles,
-                regexPlan,
-                asciiCaseInsensitive,
-                wordRegexp,
-                allowEndEmptyMatch: line.Length < record.Length);
-            if (lineMatches > 0)
+            while (lineStart < haystack.Length)
             {
-                count += lineMatches;
-                matchedLines++;
-                if (maxMatchingLines is ulong limit && matchedLines >= limit)
+                ReadOnlySpan<byte> remaining = haystack[lineStart..];
+                int lineLength = GetLineLength(remaining, nullData);
+                ReadOnlySpan<byte> record = remaining[..lineLength];
+                ReadOnlySpan<byte> line = RegexPatternContent(
+                    record,
+                    regexPlan,
+                    wordRegexp,
+                    crlf,
+                    nullData);
+                long lineMatches = CountPatternMatches(
+                    line,
+                    needles,
+                    regexPlan,
+                    ref findRunner,
+                    asciiCaseInsensitive,
+                    wordRegexp,
+                    allowEndEmptyMatch: line.Length < record.Length);
+                if (lineMatches > 0)
                 {
-                    return count;
+                    count += lineMatches;
+                    matchedLines++;
+                    if (maxMatchingLines is ulong limit && matchedLines >= limit)
+                    {
+                        return count;
+                    }
                 }
-            }
 
-            lineStart += lineLength;
+                lineStart += lineLength;
+            }
+        }
+        finally
+        {
+            findRunner.Dispose();
         }
 
         return count;
@@ -2500,12 +3267,53 @@ public static class LiteralLineSearcher
         bool wordRegexp,
         bool allowEndEmptyMatch)
     {
+        RegexFindRunner findRunner = regexPlan is null
+            ? default
+            : regexPlan.Matcher.RentFindRunner();
+        try
+        {
+            return CountPatternMatches(
+                haystack,
+                needles,
+                regexPlan,
+                ref findRunner,
+                asciiCaseInsensitive,
+                wordRegexp,
+                allowEndEmptyMatch);
+        }
+        finally
+        {
+            findRunner.Dispose();
+        }
+    }
+
+    private static long CountPatternMatches(
+        ReadOnlySpan<byte> haystack,
+        IReadOnlyList<byte[]> needles,
+        RegexSearchPlan? regexPlan,
+        ref RegexFindRunner findRunner,
+        bool asciiCaseInsensitive,
+        bool wordRegexp,
+        bool allowEndEmptyMatch)
+    {
         long count = 0;
         int offset = 0;
         int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         while (offset <= haystack.Length)
         {
-            if (!TryFindPatternMatch(haystack, needles, offset, asciiCaseInsensitive, lineRegexp: false, wordRegexp, crlf: false, nullData: false, regexPlan, out int start, out int length))
+            if (!TryFindPatternMatch(
+                    haystack,
+                    needles,
+                    offset,
+                    asciiCaseInsensitive,
+                    lineRegexp: false,
+                    wordRegexp,
+                    crlf: false,
+                    nullData: false,
+                    regexPlan,
+                    ref findRunner,
+                    out int start,
+                    out int length))
             {
                 return count;
             }
@@ -2543,42 +3351,64 @@ public static class LiteralLineSearcher
         bool wordRegexp,
         bool allowEndEmptyMatch)
     {
-        long count = 0;
-        int offset = 0;
-        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
-        while (offset <= haystack.Length)
+        RegexFindRunner findRunner = regexPlan is null
+            ? default
+            : regexPlan.Matcher.RentFindRunner();
+        try
         {
-            if (!TryFindPatternMatch(haystack, needles, offset, asciiCaseInsensitive, lineRegexp: false, wordRegexp, crlf: false, nullData: false, regexPlan, out int start, out int length))
+            long count = 0;
+            int offset = 0;
+            int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
+            while (offset <= haystack.Length)
             {
-                return count;
+                if (!TryFindPatternMatch(
+                        haystack,
+                        needles,
+                        offset,
+                        asciiCaseInsensitive,
+                        lineRegexp: false,
+                        wordRegexp,
+                        crlf: false,
+                        nullData: false,
+                        regexPlan,
+                        ref findRunner,
+                        out int start,
+                        out int length))
+                {
+                    return count;
+                }
+
+                var match = new MatcherMatch(start, length);
+                if (MatchIterator.IsSuppressedEmpty(match, suppressedEmptyStart))
+                {
+                    offset = MatchIterator.AdvanceAfterSuppressedEmpty(match, haystack.Length);
+                    suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
+                    continue;
+                }
+
+                if (!allowEndEmptyMatch && IsLineEndEmptyMatch(haystack, start, length))
+                {
+                    return count;
+                }
+
+                if (IsMatchStartAfterColumn(start, column))
+                {
+                    count++;
+                }
+
+                offset = MatchIterator.AdvanceAfterReported(match, haystack.Length, ref suppressedEmptyStart);
+                if (offset > haystack.Length)
+                {
+                    return count;
+                }
             }
 
-            var match = new MatcherMatch(start, length);
-            if (MatchIterator.IsSuppressedEmpty(match, suppressedEmptyStart))
-            {
-                offset = MatchIterator.AdvanceAfterSuppressedEmpty(match, haystack.Length);
-                suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
-                continue;
-            }
-
-            if (!allowEndEmptyMatch && IsLineEndEmptyMatch(haystack, start, length))
-            {
-                return count;
-            }
-
-            if (IsMatchStartAfterColumn(start, column))
-            {
-                count++;
-            }
-
-            offset = MatchIterator.AdvanceAfterReported(match, haystack.Length, ref suppressedEmptyStart);
-            if (offset > haystack.Length)
-            {
-                return count;
-            }
+            return count;
         }
-
-        return count;
+        finally
+        {
+            findRunner.Dispose();
+        }
     }
 
     private static bool IsMatchStartAfterColumn(int start, ulong column)
@@ -2625,6 +3455,36 @@ public static class LiteralLineSearcher
         out int matchStart,
         out int matchLength)
     {
+        RegexFindRunner findRunner = default;
+        return TryFindPatternMatch(
+            haystack,
+            needles,
+            offset,
+            asciiCaseInsensitive,
+            lineRegexp,
+            wordRegexp,
+            crlf,
+            nullData,
+            regexPlan,
+            ref findRunner,
+            out matchStart,
+            out matchLength);
+    }
+
+    private static bool TryFindPatternMatch(
+        ReadOnlySpan<byte> haystack,
+        IReadOnlyList<byte[]> needles,
+        int offset,
+        bool asciiCaseInsensitive,
+        bool lineRegexp,
+        bool wordRegexp,
+        bool crlf,
+        bool nullData,
+        RegexSearchPlan? regexPlan,
+        ref RegexFindRunner findRunner,
+        out int matchStart,
+        out int matchLength)
+    {
         matchStart = -1;
         matchLength = 0;
         if (needles.Count == 0)
@@ -2649,7 +3509,17 @@ public static class LiteralLineSearcher
             wordRegexp,
             crlf,
             nullData);
-        RegexMatch? match = regexPlan?.Matcher.Find(haystack, offset);
+        if (regexPlan is not null &&
+            haystack.Length - offset < regexPlan.MinimumMatchLength)
+        {
+            return false;
+        }
+
+        RegexMatch? match = regexPlan is null
+            ? null
+            : findRunner.IsInitialized
+                ? findRunner.Find(haystack, offset)
+                : regexPlan.Matcher.Find(haystack, offset);
         if (!match.HasValue)
         {
             return false;

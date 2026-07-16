@@ -45,9 +45,7 @@ internal struct ReplacementMatchSink(
     private readonly ReplacementCapturePlan? _capturePlan = capturePlan;
     private readonly (
         ReplacementTemplate Template,
-        int[] CaptureStarts,
-        int[] CaptureLengths,
-        Dictionary<string, int>? CaptureNames) _captureState =
+        int[] CaptureSlots) _captureState =
         CreateCaptureState(replacement, capturePlan);
     private readonly bool _asciiCaseInsensitive = asciiCaseInsensitive;
     private readonly bool _lineNumber = lineNumber;
@@ -95,9 +93,7 @@ internal struct ReplacementMatchSink(
             _asciiCaseInsensitive,
             _capturePlan,
             _captureState.Template,
-            _captureState.CaptureStarts,
-            _captureState.CaptureLengths,
-            _captureState.CaptureNames);
+            _captureState.CaptureSlots);
         long adjustedColumn = matchColumn + _cumulativeDelta;
         long adjustedByteOffset = _byteOffsetOffset + lineByteOffset + adjustedColumn - 1;
         bool linked = false;
@@ -211,22 +207,16 @@ internal struct ReplacementMatchSink(
 
     private static (
         ReplacementTemplate Template,
-        int[] CaptureStarts,
-        int[] CaptureLengths,
-        Dictionary<string, int>? CaptureNames) CreateCaptureState(
+        int[] CaptureSlots) CreateCaptureState(
             ReadOnlyMemory<byte> replacement,
             ReplacementCapturePlan? capturePlan)
     {
         var template = ReplacementTemplate.Create(
             replacement.Span,
             capturePlan?.CaptureCount ?? 0);
-        int bufferLength = Math.Max(1, template.HighestCapture + 1);
+        int captureCount = Math.Max(template.HighestCapture, capturePlan?.CaptureCount ?? 0);
         return (
             template,
-            new int[bufferLength],
-            new int[bufferLength],
-            template.UsesNamedCaptureReferences
-                ? new Dictionary<string, int>(StringComparer.Ordinal)
-                : null);
+            new int[checked(2 * (captureCount + 1))]);
     }
 }

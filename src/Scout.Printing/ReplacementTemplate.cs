@@ -140,10 +140,9 @@ internal sealed class ReplacementTemplate(
 
     internal void AddExpanded(
         List<byte> bytes,
-        ReadOnlySpan<byte> matched,
-        int[] captureStarts,
-        int[] captureLengths,
-        Dictionary<string, int>? captureNames)
+        ReadOnlySpan<byte> haystack,
+        ReadOnlySpan<int> captureSlots,
+        IReadOnlyDictionary<string, int>? captureNames)
     {
         for (int index = 0; index < _parts.Length; index++)
         {
@@ -154,13 +153,46 @@ internal sealed class ReplacementTemplate(
             }
             else if (part.CaptureIndex >= 0)
             {
-                AddCapture(bytes, matched, captureStarts, captureLengths, part.CaptureIndex);
+                AddCapture(bytes, haystack, captureSlots, part.CaptureIndex);
             }
             else if (part.CaptureName is not null &&
                 captureNames is not null &&
                 captureNames.TryGetValue(part.CaptureName, out int captureIndex))
             {
-                AddCapture(bytes, matched, captureStarts, captureLengths, captureIndex);
+                AddCapture(bytes, haystack, captureSlots, captureIndex);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Writes the expanded replacement directly from caller-owned capture slots.
+    /// </summary>
+    /// <param name="output">The destination byte writer.</param>
+    /// <param name="haystack">The complete haystack containing the capture spans.</param>
+    /// <param name="captureSlots">The absolute start and exclusive-end offsets for every capture.</param>
+    /// <param name="captureNames">The immutable capture indexes keyed by name.</param>
+    internal void WriteExpanded(
+        RawByteWriter output,
+        ReadOnlySpan<byte> haystack,
+        ReadOnlySpan<int> captureSlots,
+        IReadOnlyDictionary<string, int>? captureNames)
+    {
+        for (int index = 0; index < _parts.Length; index++)
+        {
+            ReplacementTemplatePart part = _parts[index];
+            if (part.IsLiteral)
+            {
+                output.Write(part.Literal);
+            }
+            else if (part.CaptureIndex >= 0)
+            {
+                WriteCapture(output, haystack, captureSlots, part.CaptureIndex);
+            }
+            else if (part.CaptureName is not null &&
+                captureNames is not null &&
+                captureNames.TryGetValue(part.CaptureName, out int captureIndex))
+            {
+                WriteCapture(output, haystack, captureSlots, captureIndex);
             }
         }
     }
@@ -210,24 +242,67 @@ internal sealed class ReplacementTemplate(
 
     private static void AddCapture(
         List<byte> bytes,
-        ReadOnlySpan<byte> matched,
-        int[] captureStarts,
-        int[] captureLengths,
+        ReadOnlySpan<byte> haystack,
+        ReadOnlySpan<int> captureSlots,
         int captureIndex)
     {
-        if ((uint)captureIndex >= (uint)captureStarts.Length)
+        if (!TryGetCaptureRange(
+            haystack.Length,
+            captureSlots,
+            captureIndex,
+            out int start,
+            out int length))
         {
             return;
         }
 
-        int start = captureStarts[captureIndex];
-        int length = captureLengths[captureIndex];
-        if (start < 0 || length < 0 || start + length > matched.Length)
+        Add(bytes, haystack.Slice(start, length));
+    }
+
+    private static void WriteCapture(
+        RawByteWriter output,
+        ReadOnlySpan<byte> haystack,
+        ReadOnlySpan<int> captureSlots,
+        int captureIndex)
+    {
+        if (!TryGetCaptureRange(
+            haystack.Length,
+            captureSlots,
+            captureIndex,
+            out int start,
+            out int length))
         {
             return;
         }
 
-        Add(bytes, matched.Slice(start, length));
+        output.Write(haystack.Slice(start, length));
+    }
+
+    private static bool TryGetCaptureRange(
+        int haystackLength,
+        ReadOnlySpan<int> captureSlots,
+        int captureIndex,
+        out int start,
+        out int length)
+    {
+        if ((uint)captureIndex >= (uint)(captureSlots.Length / 2))
+        {
+            start = -1;
+            length = 0;
+            return false;
+        }
+
+        int slot = 2 * captureIndex;
+        start = captureSlots[slot];
+        int end = captureSlots[slot + 1];
+        if (start < 0 || end < start || end > haystackLength)
+        {
+            length = 0;
+            return false;
+        }
+
+        length = end - start;
+        return true;
     }
 
     private static bool IsCaptureName(ReadOnlySpan<byte> capture)

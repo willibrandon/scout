@@ -127,27 +127,6 @@ internal static class RegexLineTerminatorAnalysis
         }
 
         RegexCompileOptions unrestricted = options.WithLineTerminatorExclusion(exclude: false);
-        bool hasUnrestrictedScalarRange = RegexUtf8ByteCompiler.TryBuildNormalizedScalarRanges(
-            atom.Kind,
-            atom.Value.Span,
-            unrestricted,
-            out _);
-        if (hasUnrestrictedScalarRange)
-        {
-            bool hasRestrictedScalarRange = RegexUtf8ByteCompiler.TryBuildNormalizedScalarRanges(
-                atom.Kind,
-                atom.Value.Span,
-                options,
-                out _);
-            if (!hasRestrictedScalarRange)
-            {
-                return RegexLineTerminatorAnalysisResult.EmptyAtom;
-            }
-
-            position = -1;
-            return RegexLineTerminatorAnalysisResult.None;
-        }
-
         bool matchedBeforeExclusion = false;
         for (int value = byte.MinValue; value <= byte.MaxValue; value++)
         {
@@ -171,6 +150,30 @@ internal static class RegexLineTerminatorAnalysis
                 position = -1;
                 return RegexLineTerminatorAnalysisResult.None;
             }
+        }
+
+        bool hasUnrestrictedScalarRange = RegexUtf8ByteCompiler.TryBuildNormalizedScalarRanges(
+            atom.Kind,
+            atom.Value.Span,
+            unrestricted,
+            out List<RegexScalarRange> unrestrictedRanges);
+        if (hasUnrestrictedScalarRange)
+        {
+            for (int rangeIndex = 0; rangeIndex < unrestrictedRanges.Count; rangeIndex++)
+            {
+                RegexScalarRange range = unrestrictedRanges[rangeIndex];
+                for (int scalar = range.Start; scalar <= range.End; scalar++)
+                {
+                    if (scalar > byte.MaxValue ||
+                        !options.IsExcludedLineTerminator((byte)scalar))
+                    {
+                        position = -1;
+                        return RegexLineTerminatorAnalysisResult.None;
+                    }
+                }
+            }
+
+            return RegexLineTerminatorAnalysisResult.EmptyAtom;
         }
 
         if (matchedBeforeExclusion)

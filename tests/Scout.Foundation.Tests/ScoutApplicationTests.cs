@@ -2096,6 +2096,46 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies large general-regex match counting and uncolored statistics preserve ripgrep's
+    /// complete output contract when multiple non-overlapping matches occur on selected lines.
+    /// </summary>
+    [Fact]
+    public void LargeGeneralRegexCountMatchesAndStatsMatchRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "large-general.txt");
+        using (var writer = new StreamWriter(path))
+        {
+            for (int index = 0; index < 12_000; index++)
+            {
+                writer.WriteLine(index % 3 == 0
+                    ? "alpha bravo charl delta echoo foxtt"
+                    : "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+            }
+        }
+
+        const string pattern = @"\w{5}\s+\w{5}\s+\w{5}";
+        string[] countArguments = ["--no-mmap", "--count-matches", pattern, path];
+        (int countExitCode, byte[] countOutput, string countError) = RunScout(countArguments);
+        (int pinnedCountExitCode, byte[] pinnedCountOutput, string pinnedCountError) =
+            RunPinnedRipgrep(countArguments);
+
+        Assert.Equal(pinnedCountExitCode, countExitCode);
+        Assert.Equal(pinnedCountOutput, countOutput);
+        Assert.Equal(pinnedCountError, countError);
+
+        string[] statsArguments =
+            ["--no-mmap", "--color=never", "--stats", "-n", pattern, path];
+        (int statsExitCode, byte[] statsOutput, string statsError) = RunScout(statsArguments);
+        (int pinnedStatsExitCode, byte[] pinnedStatsOutput, string pinnedStatsError) =
+            RunPinnedRipgrep(statsArguments);
+
+        Assert.Equal(pinnedStatsExitCode, statsExitCode);
+        Assert.Equal(NormalizeStatsTimings(pinnedStatsOutput), NormalizeStatsTimings(statsOutput));
+        Assert.Equal(pinnedStatsError, statsError);
+    }
+
+    /// <summary>
     /// Verifies count mode omits files with no matches and returns no-match.
     /// </summary>
     [Fact]
@@ -4406,6 +4446,31 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies absolute capture slots remain relative to the original record when CRLF is trimmed for replay.
+    /// </summary>
+    [Fact]
+    public void ReplacementCapturePlanPreservesAbsoluteSlotsWhenReplayTrimsCrlf()
+    {
+        byte[][] patterns = [@"(foo)\z"u8.ToArray()];
+        var options = new RegexSearchPlanOptions(
+            asciiCaseInsensitive: false,
+            crlf: true);
+        var searchPlan = RegexSearchPlan.Create(patterns, options);
+        var capturePlan = ReplacementCapturePlan.TryCreate(patterns, options, searchPlan);
+
+        Assert.NotNull(searchPlan);
+        Assert.NotNull(capturePlan);
+        int[] captureSlots = new int[capturePlan.CaptureSlotCount];
+
+        Assert.True(capturePlan.TryCollectCaptureSlots(
+            "xxfoo\r\n"u8,
+            matchStart: 2,
+            matchLength: 3,
+            captureSlots));
+        Assert.Equal([2, 5, 2, 5], captureSlots);
+    }
+
+    /// <summary>
     /// Verifies replacement capture extraction recognizes Scout's prepared no-Unicode wrapper.
     /// </summary>
     [Fact]
@@ -4422,6 +4487,119 @@ public sealed class ScoutApplicationTests
 
         Assert.NotNull(plan);
         Assert.Equal("struct Foo"u8.ToArray(), replacement);
+    }
+
+    /// <summary>
+    /// Verifies warmed capture replay expands named and optional captures directly without per-match allocations.
+    /// </summary>
+    [Fact]
+    public void ReplacementFormatterWritesCaptureTemplateWithoutAllocating()
+    {
+        byte[][] patterns =
+        [
+            @"\b(?P<kind>struct|enum|union)\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?:\.(?P<suffix>h))?"u8.ToArray(),
+        ];
+        var plan = ReplacementCapturePlan.TryCreate(patterns, asciiCaseInsensitive: false);
+        Assert.NotNull(plan);
+        var template = ReplacementTemplate.Create("$kind:$name:$suffix:$9"u8, plan.CaptureCount);
+        int[] captureSlots = new int[Math.Max(
+            plan.CaptureSlotCount,
+            checked(2 * (template.HighestCapture + 1)))];
+        byte[] haystack = "xx struct Foo yy"u8.ToArray();
+
+        using var verificationStream = new MemoryStream();
+        var verificationWriter = new RawByteWriter(verificationStream);
+        ReplacementFormatter.WriteExpanded(
+            verificationWriter,
+            "$kind:$name:$suffix:$9"u8,
+            haystack,
+            matchStart: 3,
+            matchLength: 10,
+            patterns,
+            asciiCaseInsensitive: false,
+            plan,
+            template,
+            captureSlots);
+        Assert.Equal("struct:Foo::"u8.ToArray(), verificationStream.ToArray());
+
+        var output = new RawByteWriter(Stream.Null, RawByteWriterBufferMode.Block);
+        for (int index = 0; index < 32; index++)
+        {
+            ReplacementFormatter.WriteExpanded(
+                output,
+                "$kind:$name:$suffix:$9"u8,
+                haystack,
+                matchStart: 3,
+                matchLength: 10,
+                patterns,
+                asciiCaseInsensitive: false,
+                plan,
+                template,
+                captureSlots);
+        }
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int index = 0; index < 1_024; index++)
+        {
+            ReplacementFormatter.WriteExpanded(
+                output,
+                "$kind:$name:$suffix:$9"u8,
+                haystack,
+                matchStart: 3,
+                matchLength: 10,
+                patterns,
+                asciiCaseInsensitive: false,
+                plan,
+                template,
+                captureSlots);
+        }
+
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.Equal(0, allocated);
+    }
+
+    /// <summary>
+    /// Verifies direct replacement preserves optional named captures, surrounding boundaries, and CRLF records.
+    /// </summary>
+    [Fact]
+    public void ReplacePreservesOptionalNamedCapturesInCrlfContext()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "xfooy\r\nxfoo-bary\r\n");
+        const string pattern = @"\B(?P<word>foo)(?:-(?P<suffix>bar))?\B";
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--crlf", "-r", "${word}|${suffix}", pattern, path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "--crlf", "-r", "${word}|${suffix}", pattern, path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal("xfoo|y\r\nxfoo|bary\r\n"u8.ToArray(), output);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies text-mode replacement writes invalid UTF-8 capture bytes without decoding or transcoding them.
+    /// </summary>
+    [Fact]
+    public void ReplacePreservesInvalidUtf8CaptureBytesInTextMode()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.bin");
+        File.WriteAllBytes(path, [0xFF, (byte)'A', (byte)'\n']);
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--text", "-r", "$2$1", @"(?-u:(.))(A)", path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "--text", "-r", "$2$1", @"(?-u:(.))(A)", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal([(byte)'A', 0xFF, (byte)'\n'], output);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
     }
 
     /// <summary>

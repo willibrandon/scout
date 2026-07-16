@@ -509,7 +509,7 @@ make_line_regex_corpus() {
 
     awk 'BEGIN {
         for (i = 0; i < 200000; i++) {
-            printf "GeneratedRecordFactory uses GeneratedRecordBuilder and unrelated symbols.\r\n"
+            printf "alpha bravo charl delta eagle foxtt and unrelated symbols.\r\n"
             printf "internal sealed class GeneratedRecord\r\n"
             printf "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_abcdefghijklmnopqrstuvwxyz_\r\n"
             printf "internal sealed class OtherRecord { private readonly int _state; }\r\n"
@@ -565,30 +565,6 @@ if isinstance(value, list):
         print(item)
 else:
     print(value)
-PY
-}
-
-interleaved_json_median_ratio() {
-    json="$1"
-    "$PYTHON" - "$json" <<'PY'
-import json
-import math
-import sys
-
-with open(sys.argv[1], encoding="utf-8") as handle:
-    document = json.load(handle)
-
-try:
-    value = document["sampling"]["median_ratio"]
-except (KeyError, TypeError):
-    sys.exit(1)
-
-if isinstance(value, bool) or not isinstance(value, (int, float)):
-    sys.exit(1)
-if not math.isfinite(value) or value <= 0:
-    sys.exit(1)
-
-print(value)
 PY
 }
 
@@ -859,68 +835,39 @@ gate_line_regex_warmup() {
     printf '%s\n' "$WARMUP"
 }
 
-check_time_gate() {
-    time_gate_name="$1"
-    time_gate_limit="$2"
-    time_gate_json="$3"
-    time_gate_ratio="$(interleaved_json_median_ratio "$time_gate_json")" || fail "Could not read the balanced cycle median ratio from $time_gate_json."
-    [ -n "$time_gate_ratio" ] || fail "Could not read the balanced cycle median ratio from $time_gate_json."
-    awk -v name="$time_gate_name" -v ratio="$time_gate_ratio" -v gate="$time_gate_limit" '
-        BEGIN {
-            if (ratio <= 0) {
-                printf "%s: balanced cycle median ratio is not positive: %s\n", name, ratio > "/dev/stderr"
-                exit 2
-            }
-            passed = ratio <= gate
-            printf "  wall  %.3fx (limit %.3fx) %s\n", ratio, gate, passed ? "PASS" : "FAIL"
-            exit passed ? 0 : 1
-        }
-    '
-}
+report_interleaved_gate() {
+    report_gate_name="$1"
+    report_gate_limit="$2"
+    report_gate_json="$3"
+    report_gate_final_context="${4:-}"
+    report_gate_status="0"
 
-check_rss_gate() {
-    rss_gate_name="$1"
-    rss_gate_json="$2"
-    rss_gate_rg_index="${3:-1}"
-    rss_gate_scout_index="${4:-2}"
-    rss_gate_rg_memory="$(hyperfine_json_median_memory "$rss_gate_json" "$rss_gate_rg_index")" || fail "Could not read rg memory from $rss_gate_json."
-    rss_gate_scout_memory="$(hyperfine_json_median_memory "$rss_gate_json" "$rss_gate_scout_index")" || fail "Could not read scout memory from $rss_gate_json."
-    [ -n "$rss_gate_rg_memory" ] || fail "Could not read rg memory from $rss_gate_json."
-    [ -n "$rss_gate_scout_memory" ] || fail "Could not read scout memory from $rss_gate_json."
-    awk -v name="$rss_gate_name" -v rg="$rss_gate_rg_memory" -v scout="$rss_gate_scout_memory" -v rg_floor="$RG_RSS_FLOOR" -v scout_floor="$SCOUT_RSS_FLOOR" '
-        BEGIN {
-            if (rg <= 0 || scout <= 0) {
-                printf "%s: missing positive memory data: rg=%s scout=%s\n", name, rg, scout > "/dev/stderr"
-                exit 2
-            }
+    if [ -n "$report_gate_final_context" ]; then
+        "$PYTHON" "$ROOT/bench/hyperfine_gate.py" \
+            --input "$report_gate_json" \
+            --wall-limit "$report_gate_limit" \
+            --scout-rss-floor "$SCOUT_RSS_FLOOR" \
+            --workload "$report_gate_name" \
+            --final-failure-context "$report_gate_final_context" || report_gate_status="$?"
+    else
+        "$PYTHON" "$ROOT/bench/hyperfine_gate.py" \
+            --input "$report_gate_json" \
+            --wall-limit "$report_gate_limit" \
+            --scout-rss-floor "$SCOUT_RSS_FLOOR" \
+            --workload "$report_gate_name" || report_gate_status="$?"
+    fi
 
-            if (rg_floor <= 0 || scout_floor <= 0) {
-                printf "%s: missing positive RSS floor data: rg=%s scout=%s\n", name, rg_floor, scout_floor > "/dev/stderr"
-                exit 2
-            }
-
-            fixed = scout_floor
-
-            limit = (rg * 1.5) + fixed
-            passed = scout <= limit
-            mib = 1024 * 1024
-            printf "  RSS   %.1f MiB (rg %.1f MiB; limit %.1f MiB = 1.500x rg + %.1f MiB floor) %s\n", scout / mib, rg / mib, limit / mib, fixed / mib, passed ? "PASS" : "FAIL"
-            exit passed ? 0 : 1
-        }
-    '
-}
-
-check_interleaved_gate() {
-    interleaved_gate_name="$1"
-    interleaved_gate_limit="$2"
-    interleaved_gate_json="$3"
-    interleaved_gate_time_ok="1"
-    interleaved_gate_rss_ok="1"
-
-    check_time_gate "$interleaved_gate_name" "$interleaved_gate_limit" "$interleaved_gate_json" || interleaved_gate_time_ok="0"
-    check_rss_gate "$interleaved_gate_name" "$interleaved_gate_json" || interleaved_gate_rss_ok="0"
-
-    [ "$interleaved_gate_time_ok" = "1" ] && [ "$interleaved_gate_rss_ok" = "1" ]
+    case "$report_gate_status" in
+        0)
+            return 0
+            ;;
+        10|11|12)
+            return 1
+            ;;
+        *)
+            fail "Could not evaluate the Hyperfine gate from $report_gate_json."
+            ;;
+    esac
 }
 
 run_hyperfine_pair() {
@@ -999,9 +946,9 @@ run_pair_impl() {
     if [ "$MODE" = "gate" ]; then
         run_hyperfine_interleaved "$no_shell" "$json" "$name" "$rg_command" "$scout_command" "$runs" "$warmup"
 
-        if ! check_interleaved_gate "$name" "$gate" "$json"; then
+        if ! report_interleaved_gate "$name" "$gate" "$json"; then
             if [ "$GATE_RETRY_FAILED_WORKLOADS" = "0" ]; then
-                fail "Result: FAIL ($name)."
+                return 1
             fi
 
             retry_attempt=0
@@ -1010,16 +957,24 @@ run_pair_impl() {
                 retry_label="$name-retry-$retry_attempt"
                 retry_json="$OUT_DIR/$name.retry-$retry_attempt.json"
 
-                printf '\n-- retry %s/%s --\n' "$retry_attempt" "$GATE_RETRY_FAILED_WORKLOADS"
+                printf '\n-- %s retry %s/%s --\n' "$name" "$retry_attempt" "$GATE_RETRY_FAILED_WORKLOADS"
                 run_hyperfine_interleaved "$no_shell" "$retry_json" "$retry_label" "$rg_command" "$scout_command" "$runs" "$warmup"
 
-                if check_interleaved_gate "$retry_label" "$gate" "$retry_json"; then
-                    printf 'Result: PASS on retry %s/%s\n' "$retry_attempt" "$GATE_RETRY_FAILED_WORKLOADS"
+                retry_final_context=""
+                if [ "$retry_attempt" = "$GATE_RETRY_FAILED_WORKLOADS" ]; then
+                    retry_noun="retries"
+                    if [ "$GATE_RETRY_FAILED_WORKLOADS" = "1" ]; then
+                        retry_noun="retry"
+                    fi
+                    retry_final_context="after the initial attempt and $GATE_RETRY_FAILED_WORKLOADS $retry_noun"
+                fi
+
+                if report_interleaved_gate "$name" "$gate" "$retry_json" "$retry_final_context"; then
                     return 0
                 fi
             done
 
-            fail "Result: FAIL after the initial attempt and $GATE_RETRY_FAILED_WORKLOADS retries ($name)."
+            return 1
         fi
         return
     fi
@@ -1054,9 +1009,11 @@ list_workloads() {
         'smoke_large_literal          generated single file, no release gate' \
         'smoke_many_small             generated many-small-files tree, no release gate' \
         'smoke_cold_version           scout --version vs rg --version, no release gate' \
+        'smoke_cold_tiny_search       cold tiny search, no release gate' \
         'bounded_assignment_no_match  generated 800-candidate issue #30 scan, gate <= 1.50x' \
         'large_bounded_unicode_class_no_match generated 5,000-candidate issue #32 scan in general mode, gate <= 1.50x' \
-        'line_regex_word_boundary_general generated issue #37 word-boundary scan in general mode, gate <= 1.50x' \
+        'line_regex_word_boundary_general generated issue #37 prefilter-free word-boundary match count in general mode, gate <= 1.50x' \
+        'line_regex_word_boundary_line_count_general generated issue #37 prefilter-free word-boundary line count in general mode, gate <= 1.50x' \
         'line_regex_anchored_general  generated issue #37 anchored-line scan in general mode, gate <= 1.50x' \
         'line_regex_bounded_class_general generated issue #37 bounded-class scan in general mode, gate <= 1.50x' \
         'shared_delegate_prefix_general generated issue #36 shared-prefix alternation in general mode, gate <= 1.50x' \
@@ -1246,6 +1203,8 @@ Q_LINE_REGEX_ABSENT_PATTERNS="$(shell_quote "$OUT_DIR/line-regex/absent-patterns
 LINE_REGEX_ABSENT_REGEXP_ARGUMENTS="$(make_absent_regexp_arguments "$OUT_DIR/line-regex/absent-patterns-64.txt")"
 RG_LINE_REGEX_PREFIX="$Q_RG --no-config --threads 1 --mmap --count-matches --no-messages"
 SCOUT_LINE_REGEX_PREFIX="env SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config --threads 1 --mmap --count-matches --no-messages"
+RG_LINE_REGEX_LINE_COUNT_PREFIX="$Q_RG --no-config --threads 1 --mmap --count --no-messages"
+SCOUT_LINE_REGEX_LINE_COUNT_PREFIX="env SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config --threads 1 --mmap --count --no-messages"
 RG_BOUNDED_ASSIGNMENT_COMMAND="$(expect_no_match_command "$Q_RG --no-config -U --count-matches --no-messages -f $Q_BOUNDED_ASSIGNMENT_PATTERN $Q_BOUNDED_ASSIGNMENT_INPUT" "rg bounded-assignment search")"
 SCOUT_BOUNDED_ASSIGNMENT_COMMAND="$(expect_no_match_command "$Q_SCOUT --no-config -U --count-matches --no-messages -f $Q_BOUNDED_ASSIGNMENT_PATTERN $Q_BOUNDED_ASSIGNMENT_INPUT" "Scout bounded-assignment search")"
 RG_LARGE_BOUNDED_UNICODE_CLASS_COMMAND="$(expect_no_match_command "$Q_RG --no-config -U --count-matches --no-messages -f $Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN $Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT" "rg large bounded Unicode-class search")"
@@ -1288,8 +1247,15 @@ run_pair \
 run_pair \
     "line_regex_word_boundary_general" \
     "1.50" \
-    "$RG_LINE_REGEX_PREFIX '\\bGeneratedRecord\\b' $Q_LINE_REGEX_INPUT" \
-    "$SCOUT_LINE_REGEX_PREFIX '\\bGeneratedRecord\\b' $Q_LINE_REGEX_INPUT" \
+    "$RG_LINE_REGEX_PREFIX '\\b\\w{5}\\s+\\w{5}\\s+\\w{5}\\b' $Q_LINE_REGEX_INPUT" \
+    "$SCOUT_LINE_REGEX_PREFIX '\\b\\w{5}\\s+\\w{5}\\s+\\w{5}\\b' $Q_LINE_REGEX_INPUT" \
+    "$LINE_REGEX_RUNS" \
+    "$LINE_REGEX_WARMUP"
+run_pair \
+    "line_regex_word_boundary_line_count_general" \
+    "1.50" \
+    "$RG_LINE_REGEX_LINE_COUNT_PREFIX '\\b\\w{5}\\s+\\w{5}\\s+\\w{5}\\b' $Q_LINE_REGEX_INPUT" \
+    "$SCOUT_LINE_REGEX_LINE_COUNT_PREFIX '\\b\\w{5}\\s+\\w{5}\\s+\\w{5}\\b' $Q_LINE_REGEX_INPUT" \
     "$LINE_REGEX_RUNS" \
     "$LINE_REGEX_WARMUP"
 run_pair \

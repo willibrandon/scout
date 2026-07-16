@@ -944,7 +944,7 @@ public sealed class ScoutApplicationRuntimeTests
     [Fact]
     public void MmapCountMatchesHandlesWindowBoundaryLikeRipgrep()
     {
-        const int windowLength = 6 * 1024 * 1024;
+        const int windowLength = 4 * 1024 * 1024;
         const string pattern =
             "delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|" +
             "delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler";
@@ -1014,7 +1014,7 @@ public sealed class ScoutApplicationRuntimeTests
         string pattern,
         string matchingLine)
     {
-        const int windowLength = 6 * 1024 * 1024;
+        const int windowLength = 4 * 1024 * 1024;
         string root = CreateTempDirectory();
         string path = Path.Combine(root, "input.txt");
         byte[] bytes = new byte[windowLength + 256];
@@ -1048,12 +1048,15 @@ public sealed class ScoutApplicationRuntimeTests
     /// <summary>
     /// Verifies bounded mapped counting observes binary data beyond its first view.
     /// </summary>
+    /// <param name="countOption">Whether matching records or individual matches are counted.</param>
     /// <param name="pattern">The regex pattern.</param>
     /// <param name="matchingLine">A complete matching line.</param>
     [Theory]
-    [InlineData(@"^[A-Za-z_]{70,90}\r?$", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\n")]
-    [InlineData("delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler", "public delegate void UpdateEDIEvent(string value);\n")]
-    public void MmapCountMatchesHandlesBinaryAfterWindowLikeRipgrep(
+    [InlineData("--count-matches", @"^[A-Za-z_]{70,90}\r?$", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\n")]
+    [InlineData("--count-matches", "delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler", "public delegate void UpdateEDIEvent(string value);\n")]
+    [InlineData("--count", @"\b\w{5}\s+\w{5}\s+\w{5}\b", "alpha bravo charl delta echoo foxtt\n")]
+    public void MmapCountHandlesBinaryAfterWindowLikeRipgrep(
+        string countOption,
         string pattern,
         string matchingLine)
     {
@@ -1069,13 +1072,13 @@ public sealed class ScoutApplicationRuntimeTests
         (int exitCode, byte[] output, string error) = RunScout(
             "--no-config",
             "--mmap",
-            "--count-matches",
+            countOption,
             pattern,
             path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
             "--no-config",
             "--mmap",
-            "--count-matches",
+            countOption,
             pattern,
             path);
 
@@ -1203,7 +1206,7 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
-    /// Verifies implicit parallel streaming reuses planned automata for regex patterns.
+    /// Verifies implicit parallel streaming shares one planned automaton for regex patterns.
     /// </summary>
     [Fact]
     public void LargeImplicitDirectoryRegexSearchesLikeRipgrep()
@@ -1221,8 +1224,8 @@ public sealed class ScoutApplicationRuntimeTests
         }
 
         string pattern = @"\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*";
-        (int exitCode, byte[] output, string error) = RunScout("--no-config", "--threads", "2", "-n", pattern, root);
-        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-config", "--threads", "2", "-n", pattern, root);
+        (int exitCode, byte[] output, string error) = RunScout("--no-config", "--threads", "4", "-n", pattern, root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-config", "--threads", "4", "-n", pattern, root);
 
         Assert.Equal(pinnedExitCode, exitCode);
         Assert.Equal(pinnedOutput, output);

@@ -1622,7 +1622,24 @@ internal sealed class RegexStartPredicate(
             return false;
         }
 
-        for (int count = 0; count < node.Minimum; count++)
+        int originalCount = allowed.Count;
+        if (!TryAppend(node.Child, options, allowed, caseFoldMayNeedUnicodeScalars, out bool firstChildCanContinue))
+        {
+            return false;
+        }
+
+        if (!firstChildCanContinue)
+        {
+            return true;
+        }
+
+        if (allowed.Count == originalCount)
+        {
+            canContinue = true;
+            return true;
+        }
+
+        for (int count = 1; count < node.Minimum; count++)
         {
             if (!TryAppend(node.Child, options, allowed, caseFoldMayNeedUnicodeScalars, out bool childCanContinue))
             {

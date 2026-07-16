@@ -53,6 +53,47 @@ internal sealed class PikeVm(RegexNfa nfa)
     private int _asciiNextSeenGeneration;
     private int _asciiCurrentCount;
     private int _asciiNextCount;
+    private long _runnerLeaseVersion;
+    private long _activeRunnerLeaseVersion;
+
+    /// <summary>
+    /// Begins an exclusive operation-scoped lease for this mutable runner.
+    /// </summary>
+    /// <returns>The generation token that owns the lease.</returns>
+    internal long BeginRunnerLease()
+    {
+        long leaseVersion = System.Threading.Interlocked.Increment(ref _runnerLeaseVersion);
+        System.Threading.Volatile.Write(ref _activeRunnerLeaseVersion, leaseVersion);
+        return leaseVersion;
+    }
+
+    /// <summary>
+    /// Determines whether a generation token still owns this mutable runner.
+    /// </summary>
+    /// <param name="leaseVersion">The generation token to verify.</param>
+    /// <returns><see langword="true" /> when the lease remains active.</returns>
+    internal bool IsRunnerLeaseActive(long leaseVersion)
+    {
+        return leaseVersion != 0 &&
+            System.Threading.Volatile.Read(ref _activeRunnerLeaseVersion) == leaseVersion;
+    }
+
+    /// <summary>
+    /// Attempts to end an exclusive operation-scoped lease exactly once.
+    /// </summary>
+    /// <param name="leaseVersion">The generation token returned when the lease began.</param>
+    /// <returns>
+    /// <see langword="true" /> when this call ended the current lease; otherwise,
+    /// <see langword="false" /> for a copied, stale, or already returned lease.
+    /// </returns>
+    internal bool TryEndRunnerLease(long leaseVersion)
+    {
+        return leaseVersion != 0 &&
+            System.Threading.Interlocked.CompareExchange(
+                ref _activeRunnerLeaseVersion,
+                value: 0,
+                comparand: leaseVersion) == leaseVersion;
+    }
 
     /// <summary>
     /// Attempts a leftmost-first match anchored at a byte offset.

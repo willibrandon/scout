@@ -45,9 +45,9 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
                 requiredRangeBuffer);
             while (candidates.MoveNext(out int start))
             {
-                if (TryMatchAt(haystack, start, requiredEnd: -1, out RegexCaptures? captures))
+                if (TryMatchAt(haystack, start, requiredEnd: -1, _deferredAcceptSlots))
                 {
-                    return captures;
+                    return ToCaptures(_deferredAcceptSlots);
                 }
             }
 
@@ -65,9 +65,9 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
                     continue;
                 }
 
-                if (TryMatchAt(haystack, start, requiredEnd: -1, out RegexCaptures? captures))
+                if (TryMatchAt(haystack, start, requiredEnd: -1, _deferredAcceptSlots))
                 {
-                    return captures;
+                    return ToCaptures(_deferredAcceptSlots);
                 }
             }
 
@@ -81,9 +81,9 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
                 continue;
             }
 
-            if (TryMatchAt(haystack, start, requiredEnd: -1, out RegexCaptures? captures))
+            if (TryMatchAt(haystack, start, requiredEnd: -1, _deferredAcceptSlots))
             {
-                return captures;
+                return ToCaptures(_deferredAcceptSlots);
             }
         }
 
@@ -106,17 +106,48 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
             return null;
         }
 
-        return TryMatchAt(haystack, startOffset, endOffset, out RegexCaptures? captures)
-            ? captures
+        return TryMatchAt(haystack, startOffset, endOffset, _deferredAcceptSlots)
+            ? ToCaptures(_deferredAcceptSlots)
             : null;
+    }
+
+    /// <summary>
+    /// Replays captures for an anchored match into caller-owned flattened start and exclusive-end slots.
+    /// </summary>
+    /// <param name="haystack">The complete haystack bytes used to evaluate predicates.</param>
+    /// <param name="startAt">The anchored match start.</param>
+    /// <param name="endAt">The required exclusive match end.</param>
+    /// <param name="captureSlots">Receives absolute start and exclusive-end offsets for every capture.</param>
+    /// <returns><see langword="true" /> when the exact span can be replayed.</returns>
+    internal bool TryReplayCaptures(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        int endAt,
+        Span<int> captureSlots)
+    {
+        if (captureSlots.Length < _initialSlots.Length)
+        {
+            throw new ArgumentException("The capture slot buffer is too small.", nameof(captureSlots));
+        }
+
+        int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        int endOffset = Math.Clamp(endAt, startOffset, haystack.Length);
+        if (_nfa.Utf8 && !RegexByteClass.IsUtf8Boundary(haystack, startOffset))
+        {
+            captureSlots.Fill(-1);
+            return false;
+        }
+
+        return TryMatchAt(haystack, startOffset, endOffset, captureSlots);
     }
 
     private bool TryMatchAt(
         ReadOnlySpan<byte> haystack,
         int start,
         int requiredEnd,
-        out RegexCaptures? captures)
+        Span<int> captureSlots)
     {
+        captureSlots.Fill(-1);
         bool exactEnd = requiredEnd >= 0;
         Array.Fill(_initialSlots, -1);
         _initialSlots[0] = start;
@@ -142,7 +173,11 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
                 {
                     if (position == requiredEnd)
                     {
-                        captures = ToCaptures(_current.GetSlots(acceptIndex), start, position);
+                        CopyCaptureSlots(
+                            _current.GetSlots(acceptIndex),
+                            start,
+                            position,
+                            captureSlots);
                         return true;
                     }
                 }
@@ -153,7 +188,11 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
                     deferredAcceptEnd = position;
                     if (!HasEarlierConsumer(_current, acceptIndex, haystack, position))
                     {
-                        captures = ToCaptures(_deferredAcceptSlots, start, position);
+                        CopyCaptureSlots(
+                            _deferredAcceptSlots,
+                            start,
+                            position,
+                            captureSlots);
                         return true;
                     }
                 }
@@ -208,11 +247,14 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
 
         if (hasDeferredAccept)
         {
-            captures = ToCaptures(_deferredAcceptSlots, start, deferredAcceptEnd);
+            CopyCaptureSlots(
+                _deferredAcceptSlots,
+                start,
+                deferredAcceptEnd,
+                captureSlots);
             return true;
         }
 
-        captures = null;
         return false;
     }
 
@@ -389,9 +431,20 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
         return position;
     }
 
-    private static RegexCaptures ToCaptures(ReadOnlySpan<int> slots, int start, int end)
+    private static void CopyCaptureSlots(
+        ReadOnlySpan<int> source,
+        int start,
+        int end,
+        Span<int> destination)
     {
-        var match = new RegexMatch(start, end - start);
+        source.CopyTo(destination);
+        destination[0] = start;
+        destination[1] = end;
+    }
+
+    private static RegexCaptures ToCaptures(ReadOnlySpan<int> slots)
+    {
+        var match = new RegexMatch(slots[0], slots[1] - slots[0]);
         var groups = new RegexMatch?[slots.Length / 2];
         groups[0] = match;
         for (int index = 1; index < groups.Length; index++)

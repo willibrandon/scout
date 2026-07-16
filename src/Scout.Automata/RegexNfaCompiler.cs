@@ -7,11 +7,13 @@ namespace Scout;
 /// <param name="captureCount">The number of capture groups in the syntax tree.</param>
 /// <param name="utf8ByteTrieCache">The optional cache shared by UTF-8 byte-trie compilation.</param>
 /// <param name="expandUtf8Atoms">Whether to expand Unicode scalar atoms into UTF-8 byte states.</param>
+/// <param name="constructionBudget">The optional shared retained-NFA construction budget.</param>
 internal sealed class RegexNfaCompiler(
     bool includeCaptures = false,
     int captureCount = 0,
     Dictionary<string, RegexUtf8ByteTrie>? utf8ByteTrieCache = null,
-    bool expandUtf8Atoms = true)
+    bool expandUtf8Atoms = true,
+    RegexNfaConstructionBudget? constructionBudget = null)
 {
     private readonly List<RegexNfaState> _states = [];
     private readonly Dictionary<string, RegexUtf8ByteTrie> _utf8ByteTrieCache = utf8ByteTrieCache ?? [];
@@ -23,6 +25,7 @@ internal sealed class RegexNfaCompiler(
     private readonly bool _includeCaptures = includeCaptures;
     private readonly int _captureCount = captureCount;
     private readonly bool _expandUtf8Atoms = expandUtf8Atoms;
+    private readonly RegexNfaConstructionBudget? _constructionBudget = constructionBudget;
     private bool _cacheStates;
     private bool _sawUtf8Disabled;
 
@@ -101,6 +104,41 @@ internal sealed class RegexNfaCompiler(
     }
 
     /// <summary>
+    /// Attempts to compile a syntax tree with a lazy unanchored prefix under a shared budget.
+    /// </summary>
+    /// <param name="root">The root syntax node.</param>
+    /// <param name="options">The regex compilation options.</param>
+    /// <param name="constructionBudget">The shared forward-and-reverse construction budget.</param>
+    /// <param name="nfa">Receives the compiled NFA when successful.</param>
+    /// <returns><see langword="true" /> when construction remained within budget.</returns>
+    internal static bool TryCompileUnanchored(
+        RegexSyntaxNode root,
+        RegexCompileOptions options,
+        RegexNfaConstructionBudget constructionBudget,
+        out RegexNfa? nfa)
+    {
+        ulong checkpoint = constructionBudget.CreateCheckpoint();
+        try
+        {
+            var compiler = new RegexNfaCompiler(constructionBudget: constructionBudget);
+            int accept = compiler.AddAccept();
+            int patternStart = compiler.CompileNode(root, accept, options);
+            int start = compiler.AddUnanchoredPrefix(patternStart);
+            nfa = new RegexNfa(
+                compiler._states,
+                start,
+                compiler.RequiresUtf8SearchBoundary(options.Utf8));
+            return true;
+        }
+        catch (InsufficientMemoryException)
+        {
+            constructionBudget.Restore(checkpoint);
+            nfa = null;
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Compiles a syntax tree for matching bytes in reverse order.
     /// </summary>
     /// <param name="root">The root syntax node.</param>
@@ -112,6 +150,261 @@ internal sealed class RegexNfaCompiler(
         int accept = compiler.AddAccept();
         int start = compiler.CompileNodeReversed(root, accept, options);
         return new RegexNfa(compiler._states, start, compiler.RequiresUtf8SearchBoundary(options.Utf8));
+    }
+
+    /// <summary>
+    /// Attempts to compile a syntax tree in reverse under a shared construction budget.
+    /// </summary>
+    /// <param name="root">The root syntax node.</param>
+    /// <param name="options">The regex compilation options.</param>
+    /// <param name="constructionBudget">The shared forward-and-reverse construction budget.</param>
+    /// <param name="nfa">Receives the compiled reverse NFA when successful.</param>
+    /// <returns><see langword="true" /> when construction remained within budget.</returns>
+    internal static bool TryCompileReversed(
+        RegexSyntaxNode root,
+        RegexCompileOptions options,
+        RegexNfaConstructionBudget constructionBudget,
+        out RegexNfa? nfa)
+    {
+        ulong checkpoint = constructionBudget.CreateCheckpoint();
+        try
+        {
+            var compiler = new RegexNfaCompiler(constructionBudget: constructionBudget);
+            int accept = compiler.AddAccept();
+            int start = compiler.CompileNodeReversed(root, accept, options);
+            nfa = new RegexNfa(
+                compiler._states,
+                start,
+                compiler.RequiresUtf8SearchBoundary(options.Utf8));
+            return true;
+        }
+        catch (InsufficientMemoryException)
+        {
+            constructionBudget.Restore(checkpoint);
+            nfa = null;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Computes conservative compiler-grounded state upper bounds for paired unanchored NFAs.
+    /// </summary>
+    /// <param name="root">The root syntax node.</param>
+    /// <param name="options">The regex compilation options.</param>
+    /// <returns>The forward and reverse state-count upper bounds.</returns>
+    internal static RegexNfaConstructionEstimate EstimateUnanchoredConstruction(
+        RegexSyntaxNode root,
+        RegexCompileOptions options)
+    {
+        ulong forward = EstimateNodeStateCount(root, options, reversed: false);
+        forward = RegexNfaConstructionBudget.SaturatingAdd(forward, 3);
+        ulong reverse = EstimateNodeStateCount(root, options, reversed: true);
+        reverse = RegexNfaConstructionBudget.SaturatingAdd(reverse, 1);
+        return new RegexNfaConstructionEstimate(forward, reverse);
+    }
+
+    private static ulong EstimateNodeStateCount(
+        RegexSyntaxNode node,
+        RegexCompileOptions options,
+        bool reversed)
+    {
+        return node switch
+        {
+            RegexEmptyNode => 0,
+            RegexSequenceNode sequence => EstimateSequenceStateCount(sequence, options, reversed),
+            RegexAlternationNode alternation => EstimateAlternationStateCount(alternation, options, reversed),
+            RegexGroupNode group => EstimateNodeStateCount(
+                group.Child,
+                options.Apply(group.EnabledFlags, group.DisabledFlags),
+                reversed),
+            RegexRepetitionNode repetition => EstimateRepetitionStateCount(repetition, options, reversed),
+            RegexInlineFlagsNode => 0,
+            RegexAtomNode atom => EstimateAtomStateCount(atom, options, reversed),
+            _ => 0,
+        };
+    }
+
+    private static ulong EstimateSequenceStateCount(
+        RegexSequenceNode sequence,
+        RegexCompileOptions options,
+        bool reversed)
+    {
+        ulong count = 0;
+        RegexCompileOptions currentOptions = options;
+        for (int index = 0; index < sequence.Nodes.Count; index++)
+        {
+            RegexSyntaxNode child = sequence.Nodes[index];
+            if (child is RegexInlineFlagsNode flags)
+            {
+                currentOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
+                continue;
+            }
+
+            count = RegexNfaConstructionBudget.SaturatingAdd(
+                count,
+                EstimateNodeStateCount(child, currentOptions, reversed));
+        }
+
+        return count;
+    }
+
+    private static ulong EstimateAlternationStateCount(
+        RegexAlternationNode alternation,
+        RegexCompileOptions options,
+        bool reversed)
+    {
+        ulong count = alternation.Alternatives.Count > 0
+            ? (ulong)alternation.Alternatives.Count - 1
+            : 0;
+        for (int index = 0; index < alternation.Alternatives.Count; index++)
+        {
+            count = RegexNfaConstructionBudget.SaturatingAdd(
+                count,
+                EstimateNodeStateCount(alternation.Alternatives[index], options, reversed));
+        }
+
+        return count;
+    }
+
+    private static ulong EstimateRepetitionStateCount(
+        RegexRepetitionNode repetition,
+        RegexCompileOptions options,
+        bool reversed)
+    {
+        ulong childCount = EstimateNodeStateCount(repetition.Child, options, reversed);
+        if (!repetition.Maximum.HasValue)
+        {
+            ulong copies = RegexNfaConstructionBudget.SaturatingAdd(
+                (ulong)repetition.Minimum,
+                1);
+            return RegexNfaConstructionBudget.SaturatingAdd(
+                RegexNfaConstructionBudget.SaturatingMultiply(childCount, copies),
+                1);
+        }
+
+        ulong maximum = (ulong)repetition.Maximum.Value;
+        ulong optionalCopies = maximum - (ulong)repetition.Minimum;
+        return RegexNfaConstructionBudget.SaturatingAdd(
+            RegexNfaConstructionBudget.SaturatingMultiply(childCount, maximum),
+            optionalCopies);
+    }
+
+    private static ulong EstimateAtomStateCount(
+        RegexAtomNode atom,
+        RegexCompileOptions options,
+        bool reversed)
+    {
+        RegexSyntaxKind kind = reversed ? ReverseAtomKind(atom.Kind) : atom.Kind;
+        if (!RegexByteClass.RequiresUtf8ScalarMatch(
+                kind,
+                atom.Value.Span,
+                options.Utf8,
+                options.CaseInsensitive,
+                options.UnicodeClasses))
+        {
+            return 1;
+        }
+
+        if (RegexUtf8ByteCompiler.TryGetSharedTrie(
+                kind,
+                atom.Value.Span,
+                options,
+                reversed,
+                out RegexUtf8ByteTrie? sharedTrie))
+        {
+            return CountUtf8TrieStates(sharedTrie!);
+        }
+
+        if (!RegexUtf8ByteCompiler.TryBuildNormalizedScalarRanges(
+                kind,
+                atom.Value.Span,
+                options,
+                out List<RegexScalarRange> ranges))
+        {
+            return 1;
+        }
+
+        ulong count = 0;
+        int AddByteClass(ReadOnlySpan<byte> value, int next)
+        {
+            count = RegexNfaConstructionBudget.SaturatingAdd(count, 1);
+            return count >= int.MaxValue ? int.MaxValue : (int)count;
+        }
+
+        int AddSplit(int first, int second)
+        {
+            count = RegexNfaConstructionBudget.SaturatingAdd(count, 1);
+            return count >= int.MaxValue ? int.MaxValue : (int)count;
+        }
+
+        if (RegexUtf8ByteCompiler.TryCompileCompactFromRanges(
+                ranges,
+                reversed,
+                next: -1,
+                AddByteClass,
+                AddSplit,
+                out _))
+        {
+            return count;
+        }
+
+        if (RegexUtf8ByteCompiler.TryCompileRangeSequencesFromRanges(
+                ranges,
+                reversed,
+                next: -1,
+                AddByteClass,
+                AddSplit,
+                out _))
+        {
+            return count;
+        }
+
+        if (!RegexUtf8ByteCompiler.TryCreateFromRanges(ranges, reversed, out RegexUtf8ByteTrie? trie))
+        {
+            return 1;
+        }
+
+        return CountUtf8TrieStates(trie!);
+    }
+
+    private static ulong CountUtf8TrieStates(RegexUtf8ByteTrie trie)
+    {
+        int nextState = 1;
+        ulong count = 0;
+        Dictionary<RegexNfaControlCacheKey, int> controlStates = [];
+        Dictionary<RegexNfaSparseCacheKey, int> sparseStates = [];
+
+        int AddSplit(int first, int second)
+        {
+            var key = new RegexNfaControlCacheKey(RegexNfaStateKind.Split, first, second);
+            if (controlStates.TryGetValue(key, out int existing))
+            {
+                return existing;
+            }
+
+            int state = nextState++;
+            controlStates.Add(key, state);
+            count = RegexNfaConstructionBudget.SaturatingAdd(count, 1);
+            return state;
+        }
+
+        int AddSparse(ReadOnlySpan<RegexNfaSparseTransition> transitions)
+        {
+            RegexNfaSparseTransition[] value = transitions.ToArray();
+            var key = new RegexNfaSparseCacheKey(value);
+            if (sparseStates.TryGetValue(key, out int existing))
+            {
+                return existing;
+            }
+
+            int state = nextState++;
+            sparseStates.Add(key, state);
+            count = RegexNfaConstructionBudget.SaturatingAdd(count, 1);
+            return state;
+        }
+
+        _ = trie.Compile(next: 0, AddSplit, AddSparse);
+        return count;
     }
 
     /// <summary>
@@ -353,6 +646,7 @@ internal sealed class RegexNfaCompiler(
     private int CompileStar(RegexSyntaxNode child, int next, RegexCompileOptions options, bool lazy)
     {
         int split = _states.Count;
+        _constructionBudget?.ReserveState(payloadBytes: 0);
         _states.Add(CreateControlState(RegexNfaStateKind.Split, next: -1, alternative: -1));
         int childStart = CompileNode(child, split, options);
         _states[split] = lazy
@@ -364,6 +658,7 @@ internal sealed class RegexNfaCompiler(
     private int CompileStarReversed(RegexSyntaxNode child, int next, RegexCompileOptions options, bool lazy)
     {
         int split = _states.Count;
+        _constructionBudget?.ReserveState(payloadBytes: 0);
         _states.Add(CreateControlState(RegexNfaStateKind.Split, next: -1, alternative: -1));
         int childStart = CompileNodeReversed(child, split, options);
         _states[split] = lazy
@@ -508,6 +803,8 @@ internal sealed class RegexNfaCompiler(
 
     private int AddUnanchoredPrefix(int next)
     {
+        _constructionBudget?.ReserveState(payloadBytes: 0);
+        _constructionBudget?.ReserveState(payloadBytes: 0);
         int split = _states.Count;
         _states.Add(CreateControlState(RegexNfaStateKind.Split, next: -1, alternative: -1));
         int any = _states.Count;
@@ -537,6 +834,7 @@ internal sealed class RegexNfaCompiler(
         }
 
         int state = _states.Count;
+        _constructionBudget?.ReserveState(payloadBytes: 0);
         _states.Add(CreateControlState(RegexNfaStateKind.Split, first, second));
         if (_cacheStates)
         {
@@ -562,6 +860,7 @@ internal sealed class RegexNfaCompiler(
             }
 
             int cachedState = _states.Count;
+            _constructionBudget?.ReserveState(payloadBytes: 2);
             _states.Add(new RegexNfaState(
                 RegexNfaStateKind.Atom,
                 RegexSyntaxKind.ByteClass,
@@ -579,6 +878,8 @@ internal sealed class RegexNfaCompiler(
             return cachedState;
         }
 
+        ulong checkpoint = _constructionBudget?.CreateCheckpoint() ?? 0;
+        _constructionBudget?.ReserveState((ulong)ranges.Length);
         byte[] value = ranges.ToArray();
         return AddAtomState(
             RegexNfaStateKind.Atom,
@@ -592,7 +893,9 @@ internal sealed class RegexNfaCompiler(
             utf8: utf8,
             unicodeClasses: false,
             next,
-            alternative: -1);
+            alternative: -1,
+            payloadReserved: true,
+            reservationCheckpoint: checkpoint);
     }
 
     private int AddAtomState(
@@ -610,7 +913,9 @@ internal sealed class RegexNfaCompiler(
         int alternative,
         bool excludeLineTerminators = false,
         bool excludeCrLf = false,
-        byte? excludedLineTerminator = null)
+        byte? excludedLineTerminator = null,
+        bool payloadReserved = false,
+        ulong reservationCheckpoint = 0)
     {
         byte effectiveExcludedLineTerminator = excludedLineTerminator ?? lineTerminator;
         if (_cacheStates)
@@ -633,10 +938,20 @@ internal sealed class RegexNfaCompiler(
                 effectiveExcludedLineTerminator);
             if (_atomStateCache.TryGetValue(key, out int existing))
             {
+                if (payloadReserved)
+                {
+                    _constructionBudget?.Restore(reservationCheckpoint);
+                }
+
                 return existing;
             }
 
             int cachedState = _states.Count;
+            if (!payloadReserved)
+            {
+                _constructionBudget?.ReserveState((ulong)value.Length);
+            }
+
             _states.Add(new RegexNfaState(
                 stateKind,
                 atomKind,
@@ -658,6 +973,11 @@ internal sealed class RegexNfaCompiler(
         }
 
         int state = _states.Count;
+        if (!payloadReserved)
+        {
+            _constructionBudget?.ReserveState((ulong)value.Length);
+        }
+
         _states.Add(new RegexNfaState(
             stateKind,
             atomKind,
@@ -679,6 +999,9 @@ internal sealed class RegexNfaCompiler(
 
     private int AddSparse(ReadOnlySpan<RegexNfaSparseTransition> transitions)
     {
+        ulong checkpoint = _constructionBudget?.CreateCheckpoint() ?? 0;
+        _constructionBudget?.ReserveState(
+            RegexNfaConstructionBudget.EstimateSparsePayloadBytes(transitions.Length));
         RegexNfaSparseTransition[] value = transitions.ToArray();
         RegexNfaSparseCacheKey key = default;
         if (_cacheStates)
@@ -686,6 +1009,7 @@ internal sealed class RegexNfaCompiler(
             key = new RegexNfaSparseCacheKey(value);
             if (_sparseStateCache.TryGetValue(key, out int existing))
             {
+                _constructionBudget?.Restore(checkpoint);
                 return existing;
             }
         }
@@ -716,6 +1040,7 @@ internal sealed class RegexNfaCompiler(
     private int AddAccept()
     {
         int state = _states.Count;
+        _constructionBudget?.ReserveState(payloadBytes: 0);
         _states.Add(CreateControlState(RegexNfaStateKind.Accept, next: -1, alternative: -1));
         return state;
     }
@@ -728,6 +1053,7 @@ internal sealed class RegexNfaCompiler(
         }
 
         int state = _states.Count;
+        _constructionBudget?.ReserveState(payloadBytes: 0);
         _states.Add(new RegexNfaState(
             kind,
             RegexSyntaxKind.Empty,

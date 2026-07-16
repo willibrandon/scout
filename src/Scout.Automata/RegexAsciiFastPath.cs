@@ -29,7 +29,7 @@ internal static class RegexAsciiFastPath
 
         RegexCompileOptions asciiOptions = options.WithAsciiSemantics();
         RegexNfa candidate = RegexNfaCompiler.Compile(root, asciiOptions);
-        if (!RegexDfaOperations.CanCompile(candidate))
+        if (!RegexUnanchoredDenseDfa.CanCompile(candidate))
         {
             return false;
         }
@@ -55,16 +55,6 @@ internal static class RegexAsciiFastPath
     {
         switch (node.Kind)
         {
-            case RegexSyntaxKind.StartAnchor:
-            case RegexSyntaxKind.EndAnchor:
-            case RegexSyntaxKind.AbsoluteStartAnchor:
-            case RegexSyntaxKind.AbsoluteEndAnchor:
-            case RegexSyntaxKind.WordBoundary:
-            case RegexSyntaxKind.NotWordBoundary:
-            case RegexSyntaxKind.WordStartBoundary:
-            case RegexSyntaxKind.WordEndBoundary:
-            case RegexSyntaxKind.WordStartHalfBoundary:
-            case RegexSyntaxKind.WordEndHalfBoundary:
             case RegexSyntaxKind.UnicodePropertyClass:
             case RegexSyntaxKind.NotUnicodePropertyClass:
                 return true;

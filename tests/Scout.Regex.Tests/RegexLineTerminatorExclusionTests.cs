@@ -225,14 +225,33 @@ public sealed class RegexLineTerminatorExclusionTests
     }
 
     /// <summary>
-    /// Verifies line-oriented compilation declines exact semantic specializations.
+    /// Verifies a scalar class without ASCII members remains valid after record-terminator exclusion.
     /// </summary>
     [Fact]
-    public void LineOrientedCompilationUsesGenericEngineSelection()
+    public void AnalysisAllowsUnicodeOnlyClass()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(@"\p{Greek}"u8);
+        RegexCompileOptions options = CreateOptions();
+
+        Assert.Equal(
+            RegexLineTerminatorAnalysisResult.None,
+            RegexLineTerminatorAnalysis.Analyze(tree.Root, options, out int position));
+        Assert.Equal(-1, position);
+
+        var automaton = RegexAutomaton.CompileParsed(tree, options);
+        Assert.Equal(new RegexMatch(0, 2), automaton.Find("π\n"u8));
+    }
+
+    /// <summary>
+    /// Verifies line-oriented compilation retains the exact pure-literal specialization after
+    /// record-terminator validation.
+    /// </summary>
+    [Fact]
+    public void LineOrientedPureLiteralUsesLiteralSet()
     {
         RegexAutomaton automaton = Compile("literal"u8);
 
-        Assert.NotEqual(RegexEngineKind.LiteralSet, automaton.EngineKind);
+        Assert.Equal(RegexEngineKind.LiteralSet, automaton.EngineKind);
         Assert.Equal(new RegexMatch(2, 7), automaton.Find("--literal--"u8));
     }
 

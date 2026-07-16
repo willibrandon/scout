@@ -6,7 +6,8 @@ namespace Scout;
 public sealed class RegexAutomaton
 {
     private readonly RegexMetaEngine engine;
-    private readonly RegexStartPredicate? startPredicate;
+    private readonly RegexStartPredicate? _startPredicate;
+    private readonly RegexStartPredicateFactory? _startPredicateFactory;
     private readonly RegexLengthGuard? lengthGuard;
     private readonly RegexRequiredByteSetGuard? requiredByteSetGuard;
     private readonly RegexRequiredLiteralAnySetGuard? requiredLiteralAnySetGuard;
@@ -58,10 +59,12 @@ public sealed class RegexAutomaton
         RegexCompileOptions captureOptions,
         RegexPrefilter? capturePrefilter,
         int captureCount,
-        int wholePatternCaptureIndex = 0)
+        int wholePatternCaptureIndex = 0,
+        RegexStartPredicateFactory? startPredicateFactory = null)
     {
         this.engine = engine;
-        this.startPredicate = startPredicate;
+        _startPredicate = startPredicate;
+        _startPredicateFactory = startPredicateFactory;
         this.lengthGuard = lengthGuard;
         this.requiredByteSetGuard = requiredByteSetGuard;
         this.requiredLiteralAnySetGuard = requiredLiteralAnySetGuard;
@@ -171,16 +174,45 @@ public sealed class RegexAutomaton
             RegexLineTerminatorAnalysis.Validate(tree.Root, options);
         }
 
-        if (options.SpecializationMode == RegexSpecializationMode.Fallback ||
-            options.ExcludeLineTerminators)
+        if (options.SpecializationMode == RegexSpecializationMode.Fallback)
         {
-            bool compileSearchGuards = options.SpecializationMode != RegexSpecializationMode.Fallback;
             return CompileParsedFallback(
                 tree,
                 options,
                 dfaSizeLimit,
                 compilePrefilter,
-                compileSearchGuards,
+                compileSearchGuards: false,
+                utf8ByteTrieCache);
+        }
+
+        if (options.ExcludeLineTerminators)
+        {
+            RegexLiteralSetEngine.TryCreate(
+                tree.Root,
+                options,
+                out RegexLiteralSetEngine? excludedLineLiteralSet);
+            if (excludedLineLiteralSet is not null && tree.CaptureCount == 0)
+            {
+                return new RegexAutomaton(
+                    RegexMetaEngine.CompileLiteralSet(excludedLineLiteralSet, options.Utf8),
+                    startPredicate: null,
+                    lengthGuard: null,
+                    requiredByteSetGuard: null,
+                    requiredLiteralAnySetGuard: null,
+                    syntheticCaptureAlternationSet: null,
+                    capturePattern: default,
+                    captureRoot: null,
+                    captureOptions: default,
+                    capturePrefilter: null,
+                    captureCount: 0);
+            }
+
+            return CompileParsedFallback(
+                tree,
+                options,
+                dfaSizeLimit,
+                compilePrefilter,
+                compileSearchGuards: true,
                 utf8ByteTrieCache);
         }
 
@@ -685,10 +717,18 @@ public sealed class RegexAutomaton
         RegexPrefilter? prefilter = compileSearchGuards && compilePrefilter
             ? RegexPrefilter.Compile(tree.Root, options, out startPrefixSet)
             : null;
+        RegexNfa? asciiFastNfa = RegexAsciiFastPath.TryCompileNfa(
+            tree.Pattern.Span,
+            tree.Root,
+            options,
+            out RegexNfa? projectedNfa)
+            ? projectedNfa
+            : null;
         RegexNfa nfa = CompileGeneralNfa(
             tree.Root,
             options,
-            utf8ByteTrieCache);
+            utf8ByteTrieCache,
+            hasSafeAsciiProjection: asciiFastNfa is not null);
         int wholePatternCaptureIndex = TryGetWholePatternCaptureIndex(tree.Root, tree.CaptureCount);
         var metaEngine = RegexMetaEngine.Compile(
             nfa,
@@ -698,17 +738,32 @@ public sealed class RegexAutomaton
             alternationSet: null,
             asciiFastPattern: tree.Pattern,
             root: tree.Root,
-            options: options);
+            options: options,
+            precompiledAsciiFastNfa: asciiFastNfa);
         RegexStartPredicate? startPredicate = null;
+        RegexStartPredicateFactory? startPredicateFactory = null;
+        RegexLengthGuard? lengthGuard = compileSearchGuards
+            ? RegexLengthGuard.TryCreate(tree.Root, options)
+            : null;
         if (compileSearchGuards && ShouldCompileStartPredicate(metaEngine.Kind, prefilter))
         {
-            RegexStartPredicate.TryCreate(tree.Root, options, startPrefixSet, out startPredicate);
+            if (metaEngine.HasAsciiProjectedMatchEndRunner)
+            {
+                startPredicateFactory = new RegexStartPredicateFactory(
+                    tree.Root,
+                    options,
+                    startPrefixSet);
+            }
+            else
+            {
+                RegexStartPredicate.TryCreate(tree.Root, options, startPrefixSet, out startPredicate);
+            }
         }
 
         return new RegexAutomaton(
             metaEngine,
             startPredicate,
-            lengthGuard: null,
+            lengthGuard,
             requiredByteSetGuard: null,
             requiredLiteralAnySetGuard: null,
             syntheticCaptureAlternationSet: null,
@@ -717,7 +772,8 @@ public sealed class RegexAutomaton
             options,
             prefilter,
             tree.CaptureCount,
-            wholePatternCaptureIndex);
+            wholePatternCaptureIndex,
+            startPredicateFactory);
     }
 
     /// <summary>
@@ -727,9 +783,10 @@ public sealed class RegexAutomaton
     private static RegexNfa CompileGeneralNfa(
         RegexSyntaxNode root,
         RegexCompileOptions options,
-        Dictionary<string, RegexUtf8ByteTrie>? utf8ByteTrieCache)
+        Dictionary<string, RegexUtf8ByteTrie>? utf8ByteTrieCache,
+        bool hasSafeAsciiProjection = false)
     {
-        return ShouldCompileCompactScalarNfa(root, options)
+        return ShouldCompileCompactScalarNfa(root, options, hasSafeAsciiProjection)
             ? RegexNfaCompiler.CompileWithCompactScalarAtoms(root, options, utf8ByteTrieCache)
             : RegexNfaCompiler.Compile(root, options, utf8ByteTrieCache);
     }
@@ -740,14 +797,21 @@ public sealed class RegexAutomaton
     /// </summary>
     /// <param name="root">The parsed regex root.</param>
     /// <param name="options">The root compilation options.</param>
+    /// <param name="hasSafeAsciiProjection">
+    /// Whether an equivalent byte-oriented projection is available for ASCII records.
+    /// </param>
     /// <returns><see langword="true" /> when compact scalar construction should be used.</returns>
     internal static bool ShouldCompileCompactScalarNfa(
         RegexSyntaxNode root,
-        RegexCompileOptions options)
+        RegexCompileOptions options,
+        bool hasSafeAsciiProjection = false)
     {
         const int compactScalarFallbackNfaStateThreshold = 4096;
 
-        return ContainsDfaUnsupportedPredicate(root) &&
+        bool projectedLineSearch = hasSafeAsciiProjection &&
+            options.ExcludeLineTerminators &&
+            options.ExcludedLineTerminator <= 0x7F;
+        return (ContainsDfaUnsupportedPredicate(root) || projectedLineSearch) &&
             EstimateExpandedScalarStateCount(
                 root,
                 options,
@@ -798,9 +862,9 @@ public sealed class RegexAutomaton
     }
 
     /// <summary>
-    /// Computes a saturated lower bound for scalar-expansion states in a syntax subtree.
+    /// Computes a saturated conservative upper bound for scalar-expansion states in a syntax subtree.
     /// </summary>
-    private static int EstimateExpandedScalarStateCount(
+    internal static int EstimateExpandedScalarStateCount(
         RegexSyntaxNode node,
         RegexCompileOptions options,
         int limit)
@@ -821,15 +885,23 @@ public sealed class RegexAutomaton
 
             case RegexAlternationNode alternation:
                 {
-                    int maximum = 0;
+                    int count = 0;
                     for (int index = 0; index < alternation.Alternatives.Count; index++)
                     {
-                        maximum = Math.Max(
-                            maximum,
-                            EstimateExpandedScalarStateCount(alternation.Alternatives[index], options, limit));
+                        count = SaturatingAdd(
+                            count,
+                            EstimateExpandedScalarStateCount(
+                                alternation.Alternatives[index],
+                                options,
+                                limit),
+                            limit);
+                        if (count >= limit)
+                        {
+                            return limit;
+                        }
                     }
 
-                    return maximum;
+                    return count;
                 }
 
             case RegexRepetitionNode repetition:
@@ -845,7 +917,7 @@ public sealed class RegexAutomaton
     }
 
     /// <summary>
-    /// Computes a saturated scalar-expansion state lower bound for a sequence while applying
+    /// Computes a saturated scalar-expansion state upper bound for a sequence while applying
     /// inline option changes in source order.
     /// </summary>
     private static int EstimateSequenceExpandedScalarStateCount(
@@ -868,14 +940,18 @@ public sealed class RegexAutomaton
                 count,
                 EstimateExpandedScalarStateCount(child, currentOptions, limit),
                 limit);
+            if (count >= limit)
+            {
+                return limit;
+            }
         }
 
         return count;
     }
 
     /// <summary>
-    /// Counts the byte-NFA states needed to expand one scalar-consuming atom without retaining
-    /// the temporary graph.
+    /// Computes a conservative upper bound for the byte-NFA states needed to expand one
+    /// scalar-consuming atom without constructing the temporary UTF-8 trie.
     /// </summary>
     private static int CountExpandedScalarAtomStates(
         RegexAtomNode atom,
@@ -892,33 +968,6 @@ public sealed class RegexAutomaton
             return 0;
         }
 
-        int count = 0;
-        int AddByteClass(ReadOnlySpan<byte> ranges, int next)
-        {
-            return count++;
-        }
-
-        int AddSplit(int first, int second)
-        {
-            return count++;
-        }
-
-        int AddSparse(ReadOnlySpan<RegexNfaSparseTransition> transitions)
-        {
-            return count++;
-        }
-
-        if (RegexUtf8ByteCompiler.TryGetSharedTrie(
-            atom.Kind,
-            atom.Value.Span,
-            options,
-            reversed: false,
-            out RegexUtf8ByteTrie? sharedTrie))
-        {
-            _ = sharedTrie!.Compile(next: -1, AddSplit, AddSparse);
-            return Math.Min(count, limit);
-        }
-
         if (!RegexUtf8ByteCompiler.TryBuildNormalizedScalarRanges(
             atom.Kind,
             atom.Value.Span,
@@ -928,35 +977,25 @@ public sealed class RegexAutomaton
             return 0;
         }
 
-        if (RegexUtf8ByteCompiler.TryCompileCompactFromRanges(
-            ranges,
-            reversed: false,
-            next: -1,
-            AddByteClass,
-            AddSplit,
-            out _))
+        int count = 0;
+        int branchCount = 0;
+        for (int rangeIndex = 0; rangeIndex < ranges.Count; rangeIndex++)
         {
-            return Math.Min(count, limit);
+            RegexScalarRange range = ranges[rangeIndex];
+            var sequences = new RegexUtf8SequenceEnumerator(range.Start, range.End);
+            while (sequences.MoveNext(out RegexUtf8ByteSequence sequence))
+            {
+                count = SaturatingAdd(count, sequence.Length, limit);
+                if (count >= limit)
+                {
+                    return limit;
+                }
+
+                branchCount++;
+            }
         }
 
-        if (RegexUtf8ByteCompiler.TryCompileRangeSequencesFromRanges(
-            ranges,
-            reversed: false,
-            next: -1,
-            AddByteClass,
-            AddSplit,
-            out _))
-        {
-            return Math.Min(count, limit);
-        }
-
-        if (!RegexUtf8ByteCompiler.TryCreateFromRanges(ranges, reversed: false, out RegexUtf8ByteTrie? trie))
-        {
-            return 0;
-        }
-
-        _ = trie!.Compile(next: -1, AddSplit, AddSparse);
-        return Math.Min(count, limit);
+        return SaturatingAdd(count, Math.Max(branchCount - 1, 0), limit);
     }
 
     /// <summary>
@@ -1036,6 +1075,11 @@ public sealed class RegexAutomaton
             or RegexEngineKind.SparseDfa
             or RegexEngineKind.OnePassDfa
             or RegexEngineKind.BoundedBacktracker;
+    }
+
+    private RegexStartPredicate? GetStartPredicate()
+    {
+        return _startPredicate ?? _startPredicateFactory?.GetOrCreate();
     }
 
     private static bool HasHardStartAnchor(RegexSyntaxNode root, RegexCompileOptions options)
@@ -1298,8 +1342,227 @@ public sealed class RegexAutomaton
             return null;
         }
 
-        return engine.Find(haystack, startAt, startPredicate);
+        return engine.Find(haystack, startAt, GetStartPredicate());
     }
+
+    /// <summary>
+    /// Rents one reusable authoritative runner for repeated searches in a single operation.
+    /// </summary>
+    /// <returns>The operation-scoped runner.</returns>
+    internal RegexFindRunner RentFindRunner()
+    {
+        return RentFindRunner(allowUnanchoredDfa: true);
+    }
+
+    /// <summary>
+    /// Rents a compact authoritative runner for independently bounded records whose projected
+    /// fast path has already been selected separately.
+    /// </summary>
+    /// <returns>The operation-scoped record runner.</returns>
+    internal RegexFindRunner RentRecordFindRunner()
+    {
+        return RentFindRunner(allowUnanchoredDfa: false);
+    }
+
+    private RegexFindRunner RentFindRunner(bool allowUnanchoredDfa)
+    {
+        PikeVm? pikeVm = engine.RentFindPikeVm();
+        return new RegexFindRunner(
+            this,
+            pikeVm,
+            pikeVm?.BeginRunnerLease() ?? 0,
+            allowUnanchoredDfa &&
+                (engine.CanRentFindAnchoredDfa ||
+                    engine.CanRentFindUnanchoredDfa && _startPredicate?.HasRequiredStart != true)
+                ? new RegexFindRunnerState(this)
+                : null,
+            allowUnanchoredDfa);
+    }
+
+    /// <summary>
+    /// Rents an eligible anchored DFA after the actual search window is known.
+    /// </summary>
+    /// <param name="haystack">The complete search window.</param>
+    /// <returns>The rented DFA, or <see langword="null" /> when anchored execution is ineligible.</returns>
+    internal RegexLazyDfa? RentFindAnchoredDfa(ReadOnlySpan<byte> haystack)
+    {
+        return engine.RentFindAnchoredDfa(haystack);
+    }
+
+    /// <summary>
+    /// Rents an eligible unanchored DFA after the actual search window is known.
+    /// </summary>
+    /// <param name="haystack">The complete search window.</param>
+    /// <param name="usesAsciiProjection">
+    /// Receives whether the rented DFA executes an ASCII projection that requires authority checks.
+    /// </param>
+    /// <returns>The rented DFA, or <see langword="null" /> when unanchored execution is ineligible.</returns>
+    internal RegexUnanchoredLazyDfa? RentFindUnanchoredDfa(
+        ReadOnlySpan<byte> haystack,
+        out bool usesAsciiProjection)
+    {
+        return engine.RentFindUnanchoredDfa(haystack, out usesAsciiProjection);
+    }
+
+    /// <summary>
+    /// Finds the first match with operation-scoped mutable engine state.
+    /// </summary>
+    /// <param name="haystack">The haystack bytes.</param>
+    /// <param name="startAt">The first byte offset to consider.</param>
+    /// <param name="pikeVm">The operation-scoped Pike VM, or <see langword="null" />.</param>
+    /// <param name="state">The optional shared lazy-DFA state for this operation.</param>
+    /// <param name="allowUnanchoredDfa">Whether the operation may activate an unanchored DFA.</param>
+    /// <returns>The first match, or <see langword="null" /> when no match exists.</returns>
+    internal RegexMatch? FindWithRunner(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        PikeVm? pikeVm,
+        RegexFindRunnerState? state,
+        bool allowUnanchoredDfa)
+    {
+        if (hasSearchGuards && !CanSearch(haystack, startAt))
+        {
+            return null;
+        }
+
+        RegexStartPredicate? startPredicate = GetStartPredicate();
+        state?.EnsureDfa(
+            haystack,
+            startPredicate?.HasRequiredStart == true);
+        return engine.FindWithRunner(
+            haystack,
+            startAt,
+            startPredicate,
+            pikeVm,
+            state?.AnchoredDfa,
+            state?.UnanchoredDfa,
+            state?.UsesAsciiProjection == true,
+            allowUnanchoredDfa);
+    }
+
+    /// <summary>
+    /// Returns an operation-scoped Pike VM to this automaton's runner pool.
+    /// </summary>
+    /// <param name="pikeVm">The Pike VM to return, or <see langword="null" />.</param>
+    /// <param name="pikeVmLeaseVersion">The exclusive Pike VM lease generation.</param>
+    internal void ReturnFindPikeVm(PikeVm? pikeVm, long pikeVmLeaseVersion)
+    {
+        engine.ReturnFindPikeVm(pikeVm, pikeVmLeaseVersion);
+    }
+
+    /// <summary>
+    /// Returns an operation-scoped anchored DFA to this automaton's runner pool.
+    /// </summary>
+    /// <param name="anchoredDfa">The DFA to return, or <see langword="null" />.</param>
+    /// <param name="anchoredDfaLeaseVersion">The exclusive DFA lease generation.</param>
+    internal void ReturnFindAnchoredDfa(
+        RegexLazyDfa? anchoredDfa,
+        long anchoredDfaLeaseVersion)
+    {
+        engine.ReturnFindAnchoredDfa(anchoredDfa, anchoredDfaLeaseVersion);
+    }
+
+    /// <summary>
+    /// Returns an operation-scoped unanchored DFA to this automaton's runner pool.
+    /// </summary>
+    /// <param name="unanchoredDfa">The DFA to return, or <see langword="null" />.</param>
+    /// <param name="unanchoredDfaLeaseVersion">The exclusive DFA lease generation.</param>
+    /// <param name="usesAsciiProjection">
+    /// Whether <paramref name="unanchoredDfa" /> belongs to the ASCII-projection pool.
+    /// </param>
+    internal void ReturnFindUnanchoredDfa(
+        RegexUnanchoredLazyDfa? unanchoredDfa,
+        long unanchoredDfaLeaseVersion,
+        bool usesAsciiProjection)
+    {
+        engine.ReturnFindUnanchoredDfa(
+            unanchoredDfa,
+            unanchoredDfaLeaseVersion,
+            usesAsciiProjection);
+    }
+
+    /// <summary>
+    /// Attempts to find the next match end without reconstructing its start.
+    /// </summary>
+    /// <param name="haystack">The haystack bytes.</param>
+    /// <param name="startAt">The first byte offset to consider.</param>
+    /// <param name="end">Receives the exclusive match end.</param>
+    /// <param name="completed">
+    /// Receives whether the forward DFA completed authoritatively, including a definitive no-match result.
+    /// </param>
+    /// <returns><see langword="true" /> when a match end is found.</returns>
+    internal bool TryFindEnd(ReadOnlySpan<byte> haystack, int startAt, out int end, out bool completed)
+    {
+        if (hasSearchGuards && !CanSearch(haystack, startAt))
+        {
+            end = 0;
+            completed = true;
+            return false;
+        }
+
+        return engine.TryFindEnd(
+            haystack,
+            startAt,
+            _startPredicate,
+            out end,
+            out completed);
+    }
+
+    /// <summary>
+    /// Rents one forward unanchored DFA for successive match-end searches.
+    /// </summary>
+    /// <param name="haystack">The complete search window.</param>
+    /// <param name="startAt">The first byte offset to consider.</param>
+    /// <returns>The rented runner, or an unavailable runner when search guards reject the window.</returns>
+    internal RegexMatchEndRunner RentMatchEndRunner(ReadOnlySpan<byte> haystack, int startAt)
+    {
+        if (hasSearchGuards && !CanSearch(haystack, startAt))
+        {
+            return default;
+        }
+
+        return engine.RentMatchEndRunner(
+            haystack,
+            startAt,
+            _startPredicate);
+    }
+
+    /// <summary>
+    /// Rents one ASCII-projected forward runner for independent ASCII record slices.
+    /// </summary>
+    /// <param name="activationLength">
+    /// The complete segment length used to decide whether lazy-DFA activation is worthwhile.
+    /// </param>
+    /// <returns>The projected runner, or an unavailable runner when no safe projection exists.</returns>
+    internal RegexMatchEndRunner RentAsciiProjectedMatchEndRunner(int activationLength)
+    {
+        return engine.RentAsciiProjectedMatchEndRunner(activationLength);
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether complete match spans can be searched without an
+    /// unanchored-DFA runner.
+    /// </summary>
+    internal bool CanSearchWholeHaystackWithFullMatches =>
+        _startPredicate?.HasRequiredStart == true ||
+        engine.CanSearchWholeHaystackWithFullMatches;
+
+    /// <summary>
+    /// Gets a value indicating whether a safe ASCII-projected match-end runner can be rented.
+    /// </summary>
+    internal bool HasAsciiProjectedMatchEndRunner => engine.HasAsciiProjectedMatchEndRunner;
+
+    /// <summary>
+    /// Gets the minimum independent ASCII record-run length that amortizes the available
+    /// projected match-end runner.
+    /// </summary>
+    internal int AsciiProjectedMatchEndActivationLength =>
+        engine.AsciiProjectedMatchEndActivationLength;
+
+    /// <summary>
+    /// Gets the syntax-derived minimum number of bytes that any match can consume.
+    /// </summary>
+    internal int MinimumMatchLength => lengthGuard?.MinimumBytes ?? 0;
 
     internal RegexMatch? MatchAt(ReadOnlySpan<byte> haystack, int startAt)
     {
@@ -1308,7 +1571,9 @@ public sealed class RegexAutomaton
             return null;
         }
 
-        if (startPredicate is not null && !startPredicate.CanStartAt(haystack, Math.Clamp(startAt, 0, haystack.Length)))
+        RegexStartPredicate? startPredicate = GetStartPredicate();
+        if (startPredicate is not null &&
+            !startPredicate.CanStartAt(haystack, Math.Clamp(startAt, 0, haystack.Length)))
         {
             return null;
         }
@@ -1318,6 +1583,7 @@ public sealed class RegexAutomaton
 
     internal bool TryAddStartBytes(bool[] bytes)
     {
+        RegexStartPredicate? startPredicate = _startPredicate ?? _startPredicateFactory?.GetOrCreate();
         return startPredicate?.TryAddFirstBytes(bytes) == true;
     }
 
@@ -1397,7 +1663,7 @@ public sealed class RegexAutomaton
     public bool IsMatch(ReadOnlySpan<byte> haystack)
     {
         return CanSearch(haystack, startAt: 0) &&
-            engine.IsMatch(haystack, startPredicate);
+            engine.IsMatch(haystack, GetStartPredicate());
     }
 
     /// <summary>
@@ -1407,7 +1673,7 @@ public sealed class RegexAutomaton
     /// <returns>The number of matching lines.</returns>
     public long CountMatchingLines(ReadOnlySpan<byte> haystack)
     {
-        return engine.CountMatchingLines(haystack, startPredicate);
+        return engine.CountMatchingLines(haystack, GetStartPredicate());
     }
 
     /// <summary>
@@ -1433,7 +1699,7 @@ public sealed class RegexAutomaton
             return 0;
         }
 
-        return engine.CountMatches(haystack, startAt, startPredicate);
+        return engine.CountMatches(haystack, startAt, GetStartPredicate());
     }
 
     /// <summary>
@@ -1450,7 +1716,7 @@ public sealed class RegexAutomaton
     {
         return engine.TryCountMatchesAndDetectNul(
             haystack,
-            startPredicate,
+            GetStartPredicate(),
             out count,
             out containsNul);
     }
@@ -1478,7 +1744,7 @@ public sealed class RegexAutomaton
             return 0;
         }
 
-        return engine.SumMatchSpans(haystack, startAt, startPredicate);
+        return engine.SumMatchSpans(haystack, startAt, GetStartPredicate());
     }
 
     /// <summary>
@@ -1953,6 +2219,82 @@ public sealed class RegexAutomaton
     }
 
     /// <summary>
+    /// Gets the number of flattened start and exclusive-end capture slots required for replay.
+    /// </summary>
+    internal int CaptureSlotCount => checked(2 * (captureCount + 1));
+
+    /// <summary>
+    /// Replays capture groups for one known match span into caller-owned flattened slots.
+    /// </summary>
+    /// <param name="haystack">The complete haystack used by the authoritative match.</param>
+    /// <param name="startAt">The known match start.</param>
+    /// <param name="endAt">The known exclusive match end.</param>
+    /// <param name="captureSlots">Receives absolute start and exclusive-end offsets for every capture.</param>
+    /// <returns><see langword="true" /> when the exact span can be replayed.</returns>
+    internal bool TryReplayCaptures(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        int endAt,
+        Span<int> captureSlots)
+    {
+        if ((uint)startAt > (uint)haystack.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startAt));
+        }
+
+        if (endAt < startAt || endAt > haystack.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(endAt));
+        }
+
+        if (captureSlots.Length < CaptureSlotCount)
+        {
+            throw new ArgumentException("The capture slot buffer is too small.", nameof(captureSlots));
+        }
+
+        if (captureCount == 0)
+        {
+            captureSlots.Fill(-1);
+            captureSlots[0] = startAt;
+            captureSlots[1] = endAt;
+            return true;
+        }
+
+        if (wholePatternCaptureIndex > 0)
+        {
+            captureSlots.Fill(-1);
+            captureSlots[0] = startAt;
+            captureSlots[1] = endAt;
+            captureSlots[2 * wholePatternCaptureIndex] = startAt;
+            captureSlots[(2 * wholePatternCaptureIndex) + 1] = endAt;
+            return true;
+        }
+
+        EnsureExactCaptureEngine();
+        if (_exactCaptureEnginePool is null)
+        {
+            captureSlots.Fill(-1);
+            return false;
+        }
+
+        RegexCaptureEngine? captureEngine = _exactCaptureEnginePool.Rent();
+        if (captureEngine is null)
+        {
+            captureSlots.Fill(-1);
+            return false;
+        }
+
+        try
+        {
+            return captureEngine.TryReplayCaptures(haystack, startAt, endAt, captureSlots);
+        }
+        finally
+        {
+            _exactCaptureEnginePool.Return(captureEngine);
+        }
+    }
+
+    /// <summary>
     /// Replays capture groups for one known match span in its original haystack context.
     /// </summary>
     /// <param name="haystack">The complete haystack used by the authoritative match.</param>
@@ -2064,7 +2406,7 @@ public sealed class RegexAutomaton
 
     private RegexCaptures? FindWholePatternCaptures(ReadOnlySpan<byte> haystack, int startAt)
     {
-        RegexMatch? match = engine.Find(haystack, startAt, startPredicate);
+        RegexMatch? match = engine.Find(haystack, startAt, GetStartPredicate());
         if (!match.HasValue)
         {
             return null;
@@ -2078,7 +2420,7 @@ public sealed class RegexAutomaton
 
     private RegexCaptures? FindGenericCaptures(ReadOnlySpan<byte> haystack, int startAt)
     {
-        RegexMatch? match = engine.Find(haystack, startAt, startPredicate);
+        RegexMatch? match = engine.Find(haystack, startAt, GetStartPredicate());
         if (!match.HasValue)
         {
             return null;

@@ -52,9 +52,7 @@ internal struct ReplacementLineSink(
     private readonly IReadOnlyList<byte[]> _patterns = patterns;
     private readonly ReplacementCapturePlan? _capturePlan = capturePlan;
     private ReplacementTemplate? _template;
-    private int[]? _captureStartsBuffer;
-    private int[]? _captureLengthsBuffer;
-    private Dictionary<string, int>? _captureNamesBuffer;
+    private int[]? _captureSlotsBuffer;
     private readonly bool _streamPlainBodyDirectly = streamPlainBodyDirectly;
     private readonly bool _asciiCaseInsensitive = asciiCaseInsensitive;
     private readonly bool _lineNumber = lineNumber;
@@ -208,9 +206,7 @@ internal struct ReplacementLineSink(
                 _asciiCaseInsensitive,
                 _capturePlan,
                 activeTemplate,
-                GetCaptureStartsBuffer(activeTemplate),
-                GetCaptureLengthsBuffer(activeTemplate),
-                GetCaptureNamesBuffer(activeTemplate));
+                GetCaptureSlotsBuffer(activeTemplate));
             if (!HasInputTerminator(_currentLine))
             {
                 _output.Write(_lineTerminator.Span);
@@ -232,9 +228,7 @@ internal struct ReplacementLineSink(
             _replacementLengths,
             _capturePlan,
             replacementTemplate,
-            GetCaptureStartsBuffer(replacementTemplate),
-            GetCaptureLengthsBuffer(replacementTemplate),
-            GetCaptureNamesBuffer(replacementTemplate));
+            GetCaptureSlotsBuffer(replacementTemplate));
         int trimOffset = _trim ? GetTrimOffset(replacedLine) : 0;
         ReadOnlySpan<byte> displayLine = replacedLine.AsSpan(trimOffset);
         if (_vimgrep)
@@ -337,9 +331,7 @@ internal struct ReplacementLineSink(
             _asciiCaseInsensitive,
             _capturePlan,
             activeTemplate,
-            GetCaptureStartsBuffer(activeTemplate),
-            GetCaptureLengthsBuffer(activeTemplate),
-            GetCaptureNamesBuffer(activeTemplate));
+            GetCaptureSlotsBuffer(activeTemplate));
         _currentLineWrittenUntil = matchStart + match.Length;
     }
 
@@ -350,24 +342,10 @@ internal struct ReplacementLineSink(
             _capturePlan?.CaptureCount ?? 0);
     }
 
-    private int[] GetCaptureStartsBuffer(ReplacementTemplate activeTemplate)
+    private int[] GetCaptureSlotsBuffer(ReplacementTemplate activeTemplate)
     {
-        return _captureStartsBuffer ??= new int[Math.Max(1, activeTemplate.HighestCapture + 1)];
-    }
-
-    private int[] GetCaptureLengthsBuffer(ReplacementTemplate activeTemplate)
-    {
-        return _captureLengthsBuffer ??= new int[Math.Max(1, activeTemplate.HighestCapture + 1)];
-    }
-
-    private Dictionary<string, int>? GetCaptureNamesBuffer(ReplacementTemplate activeTemplate)
-    {
-        if (!activeTemplate.UsesNamedCaptureReferences)
-        {
-            return null;
-        }
-
-        return _captureNamesBuffer ??= new Dictionary<string, int>(StringComparer.Ordinal);
+        int captureCount = Math.Max(activeTemplate.HighestCapture, _capturePlan?.CaptureCount ?? 0);
+        return _captureSlotsBuffer ??= new int[checked(2 * (captureCount + 1))];
     }
 
     private void WritePrefix(long outputLineNumber, long outputByteOffset, long outputColumn)

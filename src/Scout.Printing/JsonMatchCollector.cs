@@ -21,9 +21,7 @@ internal struct JsonMatchCollector(
     private readonly ReplacementCapturePlan? _capturePlan = capturePlan;
     private readonly (
         ReplacementTemplate Template,
-        int[] CaptureStarts,
-        int[] CaptureLengths,
-        Dictionary<string, int>? CaptureNames)? _captureState =
+        int[] CaptureSlots)? _captureState =
         replacement is ReadOnlyMemory<byte> replacementValue
             ? CreateCaptureState(replacementValue, capturePlan)
             : null;
@@ -59,31 +57,23 @@ internal struct JsonMatchCollector(
                 _asciiCaseInsensitive,
                 _capturePlan,
                 captureState.Template,
-                captureState.CaptureStarts,
-                captureState.CaptureLengths,
-                captureState.CaptureNames)
+                captureState.CaptureSlots)
             : null;
         _matches.Add(new JsonMatchSpan(start, start + match.Length, expandedReplacement));
     }
 
     private static (
         ReplacementTemplate Template,
-        int[] CaptureStarts,
-        int[] CaptureLengths,
-        Dictionary<string, int>? CaptureNames) CreateCaptureState(
+        int[] CaptureSlots) CreateCaptureState(
             ReadOnlyMemory<byte> replacement,
             ReplacementCapturePlan? capturePlan)
     {
         var template = ReplacementTemplate.Create(
             replacement.Span,
             capturePlan?.CaptureCount ?? 0);
-        int bufferLength = Math.Max(1, template.HighestCapture + 1);
+        int captureCount = Math.Max(template.HighestCapture, capturePlan?.CaptureCount ?? 0);
         return (
             template,
-            new int[bufferLength],
-            new int[bufferLength],
-            template.UsesNamedCaptureReferences
-                ? new Dictionary<string, int>(StringComparer.Ordinal)
-                : null);
+            new int[checked(2 * (captureCount + 1))]);
     }
 }

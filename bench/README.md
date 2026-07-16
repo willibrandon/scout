@@ -75,7 +75,16 @@ therefore provide twelve timing samples for each binary while balancing every
 command position as filesystem-cache and hosted-runner conditions change.
 Warmup rounds alternate in the same way. Raw per-round JSON and the aggregated
 wall, user CPU, system CPU, and RSS samples remain in the output directory for
-diagnosis.
+diagnosis. The hosted performance job uploads the top-level aggregate JSON even
+when the gate fails, so the exact inputs to every completed attempt remain
+available without uploading the much larger per-round sample tree.
+
+Each attempt prints the wall and RSS components as either within or exceeding
+their limits, followed by one overall result that names the workload and failed
+component or components. RSS is compared in exact bytes. Its report includes
+exact byte counts, three-decimal MiB values, the measured floor and formula, and
+signed headroom or excess so a close failure cannot look equal to its rounded
+limit.
 
 If a workload exceeds its timing or RSS gate, the script repeats only that
 workload up to two times and requires a retry to pass the same gates. This keeps
@@ -114,13 +123,15 @@ pinned `rg` oracle.
 
 The issue #37, #36, and #44 gates share a deterministic CRLF corpus made from
 200,000 Paladin-like four-line records, followed by the four delegate
-declarations from the issue #36 reproduction. The three issue #37 workloads
-measure `\bGeneratedRecord\b`, the anchored declaration expression, and the
-70-to-90-character identifier class. The issue #36 workload measures the
-original four-branch shared-prefix alternation. The issue #44 workloads search
-for the same 64 absent literals once through repeated `-e` arguments and once
-through a pattern file. Every command pins `--threads 1 --mmap --count-matches`,
-and Scout runs with `SCOUT_REGEX_SPECIALIZATION_MODE=general` so these gates
+declarations from the issue #36 reproduction. The issue #37 workloads measure
+the prefilter-free `\b\w{5}\s+\w{5}\s+\w{5}\b` expression through both line
+and match counting, the anchored declaration expression, and the 70-to-90-character
+identifier class. The issue #36 workload measures the original four-branch
+shared-prefix alternation. The issue #44 workloads search for the same 64 absent
+literals once through repeated `-e` arguments and once through a pattern file.
+Every command pins `--threads 1 --mmap` and uses
+either `--count` or `--count-matches`. Scout runs with
+`SCOUT_REGEX_SPECIALIZATION_MODE=general` so these gates
 exercise the authoritative matcher and its conservative prefilters. Each median
 balanced-cycle ratio must remain at or below 1.50x the pinned `rg` oracle.
 
@@ -133,8 +144,9 @@ because, on macOS, child peak RSS is cumulative within one Hyperfine process.
 Only the leading command supplies a clean RSS sample. Alternating rounds put rg
 and Scout first once per cycle, so neither measurement inherits the other
 process's peak.
+
 In gate mode, every workload uses six measured rounds and six warmup rounds by
-default. That produces twelve measured samples and twelve warmup executions per
-binary. An explicit gate `--runs` value must be even so every ABBA round has its
-BAAB partner. An explicit gate `--warmup` value must also be even; zero disables
-warmups.
+default. That produces twelve measured timing samples and three clean RSS
+samples per binary, plus twelve warmup executions per binary. An explicit gate
+`--runs` value must be even so every ABBA round has its BAAB partner. An explicit
+gate `--warmup` value must also be even; zero disables warmups.

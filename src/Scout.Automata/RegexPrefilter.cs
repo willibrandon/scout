@@ -48,10 +48,12 @@ internal sealed class RegexPrefilter(
     private const int MaxClassLiteralVariants = 16;
     private const int PreferredPrefixBytes = 3;
     private const int MinimumSharedRequiredLiteralPrefixBytes = 8;
+    private const int MaximumSharedRequiredLiteralPrefixBytes = 64;
     private const int MaxPrefixVariants = 512;
     private const int MaxPrefixAtomVariants = 32;
     private const int LowSelectivityPrefixSetThreshold = 64;
     private const int LargeCaseInsensitiveAsciiPrefixAnalysisNodeThreshold = 1024;
+    private const int RequiredLiteralPrefilterAlternativePenalty = 64;
 
     private readonly MemmemFinder? _memmem = memmem;
     private readonly RegexTeddyPrefilter? _teddy = teddy;
@@ -157,6 +159,179 @@ internal sealed class RegexPrefilter(
         bool prefixUnicodeClasses = false;
         if (!TryAppendRequiredPrefix(root, options, prefix, out _, ref prefixCaseInsensitive, ref prefixUnicodeClasses) || prefix.Count == 0)
         {
+            bool hasSelectedCandidate = false;
+            bool selectedCandidateHasBoundedLookBehind = false;
+            bool selectedCandidateIsSharedExactStart = false;
+            RegexRequiredLiteralSetCandidate selectedCandidate = default;
+            byte[][] selectedPreparedLiterals = [];
+
+            void ConsiderRequiredLiteralCandidate(
+                RegexRequiredLiteralSetCandidate candidate,
+                int maxLookBehind,
+                bool hasBoundedLookBehind,
+                bool isSharedExactStart)
+            {
+                if (candidate.Literals.Length == 0 ||
+                    !TryPrepareRequiredLiteralSet(
+                        candidate.Literals,
+                        candidate.CaseInsensitive,
+                        candidate.UnicodeClasses,
+                        out byte[][] preparedLiterals) ||
+                    (hasSelectedCandidate &&
+                    !IsBetterRequiredLiteralPrefilterCandidate(
+                        preparedLiterals,
+                        maxLookBehind,
+                        selectedPreparedLiterals,
+                        selectedCandidate.MaxLookBehind,
+                        hasCurrent: true)))
+                {
+                    return;
+                }
+
+                selectedCandidate = new RegexRequiredLiteralSetCandidate(
+                    candidate.Literals,
+                    maxLookBehind,
+                    candidate.CaseInsensitive,
+                    candidate.UnicodeClasses);
+                selectedPreparedLiterals = preparedLiterals;
+                selectedCandidateHasBoundedLookBehind = hasBoundedLookBehind;
+                selectedCandidateIsSharedExactStart = isSharedExactStart;
+                hasSelectedCandidate = true;
+            }
+
+            bool hasSharedExactStartCandidate = TryCollectSharedExactStartRequiredLiteralCandidate(
+                root,
+                options,
+                out RegexRequiredLiteralSetCandidate sharedExactStartCandidate,
+                out int sharedExactStartCompetitorScoreCeiling);
+            if (!hasSharedExactStartCandidate)
+            {
+                if (TryCollectRequiredLiteralSetWithLookBehind(
+                        root,
+                        options,
+                        out RegexRequiredLiteralSetCandidate boundedEstablishedCandidate) &&
+                    boundedEstablishedCandidate.Literals.Length > 0 &&
+                    TryPrepareRequiredLiteralSet(
+                        boundedEstablishedCandidate.Literals,
+                        boundedEstablishedCandidate.CaseInsensitive,
+                        boundedEstablishedCandidate.UnicodeClasses,
+                        out byte[][] boundedEstablishedLiterals))
+                {
+                    RegexRequiredLiteralPrefixGate.TryCreate(
+                        root,
+                        options,
+                        boundedEstablishedCandidate,
+                        out RegexRequiredLiteralPrefixGate? establishedPrefixGate);
+                    return CreateRequiredLiteralPrefilter(
+                        boundedEstablishedLiterals,
+                        boundedEstablishedCandidate.CaseInsensitive,
+                        startPredicate: null,
+                        maxLookBehind: boundedEstablishedCandidate.MaxLookBehind,
+                        requiredLiteralPrefixGate: establishedPrefixGate,
+                        startPredicateFactory: CreateStartPredicateFactory());
+                }
+
+                if (TryCollectRequiredLiteralSet(
+                        root,
+                        options,
+                        out RegexRequiredLiteralSetCandidate ordinaryEstablishedCandidate) &&
+                    ordinaryEstablishedCandidate.Literals.Length > 0 &&
+                    TryPrepareRequiredLiteralSet(
+                        ordinaryEstablishedCandidate.Literals,
+                        ordinaryEstablishedCandidate.CaseInsensitive,
+                        ordinaryEstablishedCandidate.UnicodeClasses,
+                        out byte[][] ordinaryEstablishedLiterals))
+                {
+                    return CreateRequiredLiteralPrefilter(
+                        ordinaryEstablishedLiterals,
+                        ordinaryEstablishedCandidate.CaseInsensitive,
+                        startPredicate: null,
+                        maxLookBehind: RequiredLiteralLookBehind,
+                        startPredicateFactory: CreateStartPredicateFactory());
+                }
+
+                return TryFindRequiredLiteralCandidate(
+                        root,
+                        options,
+                        out RegexRequiredLiteralSetCandidate singleEstablishedCandidate) &&
+                    singleEstablishedCandidate.Literals.Length == 1 &&
+                    singleEstablishedCandidate.Literals[0].Length >= 3 &&
+                    TryPrepareRequiredLiteralSet(
+                        singleEstablishedCandidate.Literals,
+                        singleEstablishedCandidate.CaseInsensitive,
+                        singleEstablishedCandidate.UnicodeClasses,
+                        out byte[][] singleEstablishedLiteral)
+                    ? CreateRequiredLiteralPrefilter(
+                        singleEstablishedLiteral,
+                        singleEstablishedCandidate.CaseInsensitive,
+                        startPredicate: null,
+                        maxLookBehind: RequiredLiteralLookBehind,
+                        startPredicateFactory: CreateStartPredicateFactory())
+                    : null;
+            }
+
+            ConsiderRequiredLiteralCandidate(
+                sharedExactStartCandidate,
+                sharedExactStartCandidate.MaxLookBehind,
+                hasBoundedLookBehind: true,
+                isSharedExactStart: true);
+            if (RequiredLiteralPrefilterScore(sharedExactStartCandidate.Literals) >=
+                sharedExactStartCompetitorScoreCeiling)
+            {
+                return CreateSharedExactStartRequiredLiteralPrefilter(
+                    root,
+                    options,
+                    sharedExactStartCandidate);
+            }
+
+            if (TryCollectRequiredLiteralSetWithLookBehind(
+                    root,
+                    options,
+                    out RegexRequiredLiteralSetCandidate boundedCandidate))
+            {
+                ConsiderRequiredLiteralCandidate(
+                    boundedCandidate,
+                    boundedCandidate.MaxLookBehind,
+                    hasBoundedLookBehind: true,
+                    isSharedExactStart: false);
+            }
+
+            if (TryCollectRequiredLiteralSet(
+                    root,
+                    options,
+                    out RegexRequiredLiteralSetCandidate requiredCandidate))
+            {
+                ConsiderRequiredLiteralCandidate(
+                    requiredCandidate,
+                    RequiredLiteralLookBehind,
+                    hasBoundedLookBehind: false,
+                    isSharedExactStart: false);
+            }
+
+            if (TryFindRequiredLiteralCandidate(root, options, out requiredCandidate) &&
+                requiredCandidate.Literals.Length == 1 &&
+                requiredCandidate.Literals[0].Length >= 3)
+            {
+                ConsiderRequiredLiteralCandidate(
+                    requiredCandidate,
+                    RequiredLiteralLookBehind,
+                    hasBoundedLookBehind: false,
+                    isSharedExactStart: false);
+            }
+
+            if (!hasSelectedCandidate)
+            {
+                return null;
+            }
+
+            if (selectedCandidateIsSharedExactStart)
+            {
+                return CreateSharedExactStartRequiredLiteralPrefilter(
+                    root,
+                    options,
+                    selectedCandidate);
+            }
+
             Func<RegexStartPredicate?> CreateStartPredicateFactory()
             {
                 return () =>
@@ -166,59 +341,23 @@ internal sealed class RegexPrefilter(
                 };
             }
 
-            if (TryCollectRequiredLiteralSetWithLookBehind(root, options, out RegexRequiredLiteralSetCandidate requiredCandidate) &&
-                requiredCandidate.Literals.Length > 0 &&
-                TryPrepareRequiredLiteralSet(
-                    requiredCandidate.Literals,
-                    requiredCandidate.CaseInsensitive,
-                    requiredCandidate.UnicodeClasses,
-                    out byte[][] preparedLiterals))
+            RegexRequiredLiteralPrefixGate? requiredLiteralPrefixGate = null;
+            if (selectedCandidateHasBoundedLookBehind)
             {
                 RegexRequiredLiteralPrefixGate.TryCreate(
                     root,
                     options,
-                    requiredCandidate,
-                    out RegexRequiredLiteralPrefixGate? requiredLiteralPrefixGate);
-                return CreateRequiredLiteralPrefilter(
-                    preparedLiterals,
-                    requiredCandidate.CaseInsensitive,
-                    startPredicate: null,
-                    maxLookBehind: requiredCandidate.MaxLookBehind,
-                    requiredLiteralPrefixGate: requiredLiteralPrefixGate,
-                    startPredicateFactory: CreateStartPredicateFactory());
+                    selectedCandidate,
+                    out requiredLiteralPrefixGate);
             }
 
-            if (TryCollectRequiredLiteralSet(root, options, out requiredCandidate) &&
-                requiredCandidate.Literals.Length > 0 &&
-                TryPrepareRequiredLiteralSet(
-                    requiredCandidate.Literals,
-                    requiredCandidate.CaseInsensitive,
-                    requiredCandidate.UnicodeClasses,
-                    out preparedLiterals))
-            {
-                return CreateRequiredLiteralPrefilter(
-                    preparedLiterals,
-                    requiredCandidate.CaseInsensitive,
-                    startPredicate: null,
-                    maxLookBehind: RequiredLiteralLookBehind,
-                    startPredicateFactory: CreateStartPredicateFactory());
-            }
-
-            return TryFindRequiredLiteralCandidate(root, options, out requiredCandidate) &&
-                requiredCandidate.Literals.Length == 1 &&
-                requiredCandidate.Literals[0].Length >= 3 &&
-                TryPrepareRequiredLiteralSet(
-                    requiredCandidate.Literals,
-                    requiredCandidate.CaseInsensitive,
-                    requiredCandidate.UnicodeClasses,
-                    out byte[][] preparedRequired)
-                ? CreateRequiredLiteralPrefilter(
-                    preparedRequired,
-                    requiredCandidate.CaseInsensitive,
-                    startPredicate: null,
-                    maxLookBehind: RequiredLiteralLookBehind,
-                    startPredicateFactory: CreateStartPredicateFactory())
-                : null;
+            return CreateRequiredLiteralPrefilter(
+                selectedPreparedLiterals,
+                selectedCandidate.CaseInsensitive,
+                startPredicate: null,
+                maxLookBehind: selectedCandidate.MaxLookBehind,
+                requiredLiteralPrefixGate: requiredLiteralPrefixGate,
+                startPredicateFactory: CreateStartPredicateFactory());
         }
 
         var prefixOptions = new RegexCompileOptions(
@@ -461,6 +600,394 @@ internal sealed class RegexPrefilter(
                 unicodeCaseInsensitivePrefixes,
                 out prefilter,
                 out rejectedLowSelectivityPrefixSet);
+    }
+
+    /// <summary>
+    /// Collects a required-literal candidate when every leading alternation branch shares a
+    /// sufficiently selective case-sensitive prefix and then either ends as a fixed literal
+    /// sequence or reaches an unbounded repetition. Finite variable-width and nonliteral branches
+    /// deliberately fall through to the established required-literal analysis so that a more
+    /// selective inner literal is not displaced.
+    /// </summary>
+    /// <param name="root">The syntax tree whose leading alternation is inspected.</param>
+    /// <param name="options">The effective compile options.</param>
+    /// <param name="candidate">Receives the shared exact-start candidate when successful.</param>
+    /// <param name="competitorScoreCeiling">
+    /// Receives the greatest score any competing candidate can have when every branch is a
+    /// bounded fixed literal, or <see cref="int.MaxValue" /> when no safe ceiling is known.
+    /// </param>
+    /// <returns><see langword="true" /> when the shared prefix can compete with other candidates.</returns>
+    private static bool TryCollectSharedExactStartRequiredLiteralCandidate(
+        RegexSyntaxNode root,
+        RegexCompileOptions options,
+        out RegexRequiredLiteralSetCandidate candidate,
+        out int competitorScoreCeiling)
+    {
+        candidate = default;
+        competitorScoreCeiling = int.MaxValue;
+        if (!TryGetLeadingAlternation(
+                root,
+                options,
+                out RegexAlternationNode alternation,
+                out RegexCompileOptions alternationOptions))
+        {
+            return false;
+        }
+
+        List<byte>? sharedPrefix = null;
+        var fixedBranchPrefixes = new List<byte[]>(alternation.Alternatives.Count);
+        bool canBoundCompetitorScore = true;
+        int sharedLength = 0;
+        for (int index = 0; index < alternation.Alternatives.Count; index++)
+        {
+            var branchPrefix = new List<byte>();
+            if (!TryAppendEligibleSharedPrefixBranch(
+                    alternation.Alternatives[index],
+                    alternationOptions,
+                    branchPrefix,
+                    out bool reachedUnboundedBarrier))
+            {
+                return false;
+            }
+
+            if (canBoundCompetitorScore &&
+                (reachedUnboundedBarrier ||
+                branchPrefix.Count >= MaximumSharedRequiredLiteralPrefixBytes))
+            {
+                canBoundCompetitorScore = false;
+                fixedBranchPrefixes.Clear();
+            }
+            else if (canBoundCompetitorScore)
+            {
+                fixedBranchPrefixes.Add(branchPrefix.ToArray());
+            }
+
+            if (sharedPrefix is null)
+            {
+                sharedPrefix = branchPrefix;
+                sharedLength = branchPrefix.Count;
+                continue;
+            }
+
+            int commonLength = Math.Min(sharedLength, branchPrefix.Count);
+            int byteIndex = 0;
+            while (byteIndex < commonLength && sharedPrefix[byteIndex] == branchPrefix[byteIndex])
+            {
+                byteIndex++;
+            }
+
+            sharedLength = byteIndex;
+            if (sharedLength < MinimumSharedRequiredLiteralPrefixBytes)
+            {
+                return false;
+            }
+        }
+
+        if (sharedPrefix is null || sharedLength < MinimumSharedRequiredLiteralPrefixBytes)
+        {
+            return false;
+        }
+
+        candidate = new RegexRequiredLiteralSetCandidate(
+            [sharedPrefix.GetRange(0, sharedLength).ToArray()],
+            maxLookBehind: 0);
+        if (canBoundCompetitorScore)
+        {
+            int longestCommonSubstring = LongestCommonSubstringLength(fixedBranchPrefixes);
+            int maximumLiteralLength = 0;
+            for (int index = 0; index < fixedBranchPrefixes.Count; index++)
+            {
+                maximumLiteralLength = Math.Max(
+                    maximumLiteralLength,
+                    fixedBranchPrefixes[index].Length);
+            }
+
+            int singleLiteralCeiling = RequiredLiteralPrefilterScore(
+                literalCount: 1,
+                shortest: longestCommonSubstring,
+                longest: longestCommonSubstring,
+                totalLength: longestCommonSubstring);
+            int multipleLiteralCeiling = RequiredLiteralPrefilterScore(
+                literalCount: 2,
+                shortest: maximumLiteralLength,
+                longest: maximumLiteralLength,
+                totalLength: maximumLiteralLength * 2);
+            competitorScoreCeiling = Math.Max(singleLiteralCeiling, multipleLiteralCeiling);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Finds the longest contiguous byte sequence shared by every fixed branch.
+    /// </summary>
+    /// <param name="branches">The fixed branch byte sequences.</param>
+    /// <returns>The length of the longest shared byte sequence.</returns>
+    private static int LongestCommonSubstringLength(List<byte[]> branches)
+    {
+        if (branches.Count == 0)
+        {
+            return 0;
+        }
+
+        byte[] shortest = branches[0];
+        for (int index = 1; index < branches.Count; index++)
+        {
+            if (branches[index].Length < shortest.Length)
+            {
+                shortest = branches[index];
+            }
+        }
+
+        for (int length = shortest.Length; length > 0; length--)
+        {
+            for (int start = 0; start <= shortest.Length - length; start++)
+            {
+                ReadOnlySpan<byte> candidate = shortest.AsSpan(start, length);
+                bool shared = true;
+                for (int branchIndex = 0; branchIndex < branches.Count; branchIndex++)
+                {
+                    if (branches[branchIndex].AsSpan().IndexOf(candidate) < 0)
+                    {
+                        shared = false;
+                        break;
+                    }
+                }
+
+                if (shared)
+                {
+                    return length;
+                }
+            }
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// Creates the prefilter selected for a shared exact-start required-literal candidate.
+    /// </summary>
+    /// <param name="root">The syntax tree used to validate exact starts.</param>
+    /// <param name="options">The effective compile options.</param>
+    /// <param name="candidate">The selected shared exact-start candidate.</param>
+    /// <returns>The compiled required-literal prefilter.</returns>
+    private static RegexPrefilter CreateSharedExactStartRequiredLiteralPrefilter(
+        RegexSyntaxNode root,
+        RegexCompileOptions options,
+        RegexRequiredLiteralSetCandidate candidate)
+    {
+        RegexStartPredicate.TryCreate(root, options, out RegexStartPredicate? startPredicate);
+        return CreateRequiredLiteralPrefilter(
+            candidate.Literals,
+            asciiCaseInsensitive: false,
+            startPredicate,
+            maxLookBehind: candidate.MaxLookBehind);
+    }
+
+    /// <summary>
+    /// Finds the leading alternation after transparent groups and zero-width sequence nodes.
+    /// </summary>
+    /// <param name="node">The syntax subtree to inspect.</param>
+    /// <param name="options">The effective compile options.</param>
+    /// <param name="alternation">Receives the leading alternation.</param>
+    /// <param name="alternationOptions">Receives the options effective for its branches.</param>
+    /// <returns><see langword="true" /> when a leading alternation is found.</returns>
+    private static bool TryGetLeadingAlternation(
+        RegexSyntaxNode node,
+        RegexCompileOptions options,
+        out RegexAlternationNode alternation,
+        out RegexCompileOptions alternationOptions)
+    {
+        switch (node)
+        {
+            case RegexAlternationNode candidate:
+                alternation = candidate;
+                alternationOptions = options;
+                return true;
+
+            case RegexGroupNode group:
+                return TryGetLeadingAlternation(
+                    group.Child,
+                    options.Apply(group.EnabledFlags, group.DisabledFlags),
+                    out alternation,
+                    out alternationOptions);
+
+            case RegexSequenceNode sequence:
+                RegexCompileOptions currentOptions = options;
+                for (int index = 0; index < sequence.Nodes.Count; index++)
+                {
+                    RegexSyntaxNode child = sequence.Nodes[index];
+                    if (child is RegexInlineFlagsNode flags)
+                    {
+                        currentOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
+                        continue;
+                    }
+
+                    if (IsZeroWidthPrefixTransparent(child, currentOptions))
+                    {
+                        continue;
+                    }
+
+                    return TryGetLeadingAlternation(
+                        child,
+                        currentOptions,
+                        out alternation,
+                        out alternationOptions);
+                }
+
+                break;
+        }
+
+        alternation = null!;
+        alternationOptions = options;
+        return false;
+    }
+
+    /// <summary>
+    /// Appends one eligible branch's fixed case-sensitive prefix and reports whether it reaches
+    /// the unbounded barrier that permits the conservative shortcut.
+    /// </summary>
+    private static bool TryAppendEligibleSharedPrefixBranch(
+        RegexSyntaxNode node,
+        RegexCompileOptions options,
+        List<byte> prefix,
+        out bool reachedUnboundedBarrier)
+    {
+        reachedUnboundedBarrier = false;
+        if (IsZeroWidthPrefixTransparent(node, options))
+        {
+            return true;
+        }
+
+        switch (node)
+        {
+            case RegexAtomNode atom when atom.Kind == RegexSyntaxKind.Literal && !options.CaseInsensitive:
+                AppendSharedPrefixBytes(prefix, atom.Value.Span);
+                return true;
+
+            case RegexGroupNode group:
+                return TryAppendEligibleSharedPrefixBranch(
+                    group.Child,
+                    options.Apply(group.EnabledFlags, group.DisabledFlags),
+                    prefix,
+                    out reachedUnboundedBarrier);
+
+            case RegexSequenceNode sequence:
+                RegexCompileOptions currentOptions = options;
+                for (int index = 0; index < sequence.Nodes.Count; index++)
+                {
+                    RegexSyntaxNode child = sequence.Nodes[index];
+                    if (child is RegexInlineFlagsNode flags)
+                    {
+                        currentOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
+                        continue;
+                    }
+
+                    if (!TryAppendEligibleSharedPrefixBranch(
+                            child,
+                            currentOptions,
+                            prefix,
+                            out reachedUnboundedBarrier))
+                    {
+                        return false;
+                    }
+
+                    if (reachedUnboundedBarrier)
+                    {
+                        return true;
+                    }
+                }
+
+                return true;
+
+            case RegexRepetitionNode repetition when repetition.Maximum is null:
+                if (repetition.Minimum > 0)
+                {
+                    var childPrefix = new List<byte>();
+                    if (TryAppendEligibleSharedPrefixBranch(
+                            repetition.Child,
+                            options,
+                            childPrefix,
+                            out bool childReachedBarrier) &&
+                        !childReachedBarrier &&
+                        childPrefix.Count > 0)
+                    {
+                        for (int count = 0;
+                             count < repetition.Minimum && prefix.Count < MaximumSharedRequiredLiteralPrefixBytes;
+                             count++)
+                        {
+                            AppendSharedPrefixBytes(prefix, childPrefix);
+                        }
+                    }
+                }
+
+                reachedUnboundedBarrier = true;
+                return true;
+
+            case RegexRepetitionNode repetition when repetition.Maximum == repetition.Minimum:
+                if (repetition.Minimum == 0)
+                {
+                    return true;
+                }
+
+                var fixedChildPrefix = new List<byte>();
+                if (!TryAppendEligibleSharedPrefixBranch(
+                        repetition.Child,
+                        options,
+                        fixedChildPrefix,
+                        out bool fixedChildReachedBarrier))
+                {
+                    return false;
+                }
+
+                AppendSharedPrefixBytes(prefix, fixedChildPrefix);
+                if (fixedChildReachedBarrier)
+                {
+                    reachedUnboundedBarrier = true;
+                    return true;
+                }
+
+                if (fixedChildPrefix.Count == 0)
+                {
+                    return true;
+                }
+
+                for (int count = 1;
+                     count < repetition.Minimum && prefix.Count < MaximumSharedRequiredLiteralPrefixBytes;
+                     count++)
+                {
+                    AppendSharedPrefixBytes(prefix, fixedChildPrefix);
+                }
+
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Appends bytes up to the bounded shared-prefix analysis limit.
+    /// </summary>
+    private static void AppendSharedPrefixBytes(List<byte> prefix, ReadOnlySpan<byte> bytes)
+    {
+        int count = Math.Min(bytes.Length, MaximumSharedRequiredLiteralPrefixBytes - prefix.Count);
+        for (int index = 0; index < count; index++)
+        {
+            prefix.Add(bytes[index]);
+        }
+    }
+
+    /// <summary>
+    /// Appends list-backed bytes up to the bounded shared-prefix analysis limit.
+    /// </summary>
+    private static void AppendSharedPrefixBytes(List<byte> prefix, List<byte> bytes)
+    {
+        int count = Math.Min(bytes.Count, MaximumSharedRequiredLiteralPrefixBytes - prefix.Count);
+        for (int index = 0; index < count; index++)
+        {
+            prefix.Add(bytes[index]);
+        }
     }
 
     /// <summary>
@@ -1137,6 +1664,31 @@ internal sealed class RegexPrefilter(
 
         if (!TryCollectLeadingPrefixCandidates(node.Child, options, out List<RegexPrefixCandidate> childCandidates))
         {
+            return false;
+        }
+
+        bool hasEmptyCandidate = false;
+        bool hasNonEmptyCandidate = false;
+        for (int index = 0; index < childCandidates.Count; index++)
+        {
+            if (childCandidates[index].Bytes.Length == 0)
+            {
+                hasEmptyCandidate = true;
+            }
+            else
+            {
+                hasNonEmptyCandidate = true;
+            }
+        }
+
+        if (hasEmptyCandidate)
+        {
+            if (!hasNonEmptyCandidate)
+            {
+                candidates = childCandidates;
+                return true;
+            }
+
             return false;
         }
 
@@ -1831,6 +2383,35 @@ internal sealed class RegexPrefilter(
         }
 
         return candidateLookBehind < currentLookBehind;
+    }
+
+    /// <summary>
+    /// Determines whether one prepared prefilter candidate has a better balance of selectivity,
+    /// scanner cardinality, and lookbehind than the current candidate.
+    /// </summary>
+    /// <param name="candidate">The prepared candidate literals.</param>
+    /// <param name="candidateLookBehind">The candidate's maximum lookbehind.</param>
+    /// <param name="current">The prepared current literals.</param>
+    /// <param name="currentLookBehind">The current candidate's maximum lookbehind.</param>
+    /// <param name="hasCurrent">Whether a current candidate exists.</param>
+    /// <returns><see langword="true" /> when the candidate should replace the current candidate.</returns>
+    private static bool IsBetterRequiredLiteralPrefilterCandidate(
+        byte[][] candidate,
+        int candidateLookBehind,
+        byte[][] current,
+        int currentLookBehind,
+        bool hasCurrent)
+    {
+        if (!hasCurrent || current.Length == 0)
+        {
+            return true;
+        }
+
+        int candidateScore = RequiredLiteralPrefilterScore(candidate);
+        int currentScore = RequiredLiteralPrefilterScore(current);
+        return candidateScore != currentScore
+            ? candidateScore > currentScore
+            : candidateLookBehind < currentLookBehind;
     }
 
     private static bool TryFindRequiredLiteralWithLookBehind(
@@ -3366,7 +3947,56 @@ internal sealed class RegexPrefilter(
         }
 
         int averageLength = totalLength / literals.Length;
-        return (averageLength * 8) + (longest * 4) + (shortest * 2) - (literals.Length * 6);
+        return (averageLength * 8) +
+            (longest * 4) +
+            (shortest * 2) -
+            (literals.Length * 6);
+    }
+
+    /// <summary>
+    /// Scores one prepared prefilter candidate while accounting for multi-pattern scanner cost.
+    /// </summary>
+    /// <param name="literals">The prepared literal set.</param>
+    /// <returns>The relative prefilter score.</returns>
+    private static int RequiredLiteralPrefilterScore(byte[][] literals)
+    {
+        int shortest = int.MaxValue;
+        int longest = 0;
+        int totalLength = 0;
+        for (int index = 0; index < literals.Length; index++)
+        {
+            int length = literals[index].Length;
+            shortest = Math.Min(shortest, length);
+            longest = Math.Max(longest, length);
+            totalLength += length;
+        }
+
+        return RequiredLiteralPrefilterScore(
+            literals.Length,
+            shortest,
+            longest,
+            totalLength);
+    }
+
+    /// <summary>
+    /// Scores one prepared prefilter candidate from its cardinality and length summary.
+    /// </summary>
+    /// <param name="literalCount">The number of literals.</param>
+    /// <param name="shortest">The shortest literal length.</param>
+    /// <param name="longest">The longest literal length.</param>
+    /// <param name="totalLength">The sum of all literal lengths.</param>
+    /// <returns>The relative selectivity score.</returns>
+    private static int RequiredLiteralPrefilterScore(
+        int literalCount,
+        int shortest,
+        int longest,
+        int totalLength)
+    {
+        int averageLength = totalLength / literalCount;
+        return (averageLength * 8) +
+            (longest * 4) +
+            (shortest * 2) -
+            (literalCount * RequiredLiteralPrefilterAlternativePenalty);
     }
 
     internal static bool TryFindRequiredLiteral(RegexSyntaxNode node, RegexCompileOptions options, out byte[] literal)

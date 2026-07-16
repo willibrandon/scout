@@ -16,9 +16,7 @@ internal static class ReplacementFormatter
         List<int>? replacementLengths = null,
         ReplacementCapturePlan? capturePlan = null,
         ReplacementTemplate? template = null,
-        int[]? captureStartsBuffer = null,
-        int[]? captureLengthsBuffer = null,
-        Dictionary<string, int>? captureNamesBuffer = null)
+        int[]? captureSlotsBuffer = null)
     {
         template ??= ReplacementTemplate.Create(replacement, capturePlan?.CaptureCount ?? 0);
         replacementColumns.Clear();
@@ -40,9 +38,7 @@ internal static class ReplacementFormatter
                 asciiCaseInsensitive,
                 capturePlan,
                 template,
-                captureStartsBuffer,
-                captureLengthsBuffer,
-                captureNamesBuffer);
+                captureSlotsBuffer);
             replacementLengths?.Add(bytes.Count - replacementStart);
             previous = start + lengths[index];
         }
@@ -58,9 +54,7 @@ internal static class ReplacementFormatter
         bool asciiCaseInsensitive,
         ReplacementCapturePlan? capturePlan = null,
         ReplacementTemplate? template = null,
-        int[]? captureStartsBuffer = null,
-        int[]? captureLengthsBuffer = null,
-        Dictionary<string, int>? captureNamesBuffer = null)
+        int[]? captureSlotsBuffer = null)
     {
         return Expand(
             replacement,
@@ -71,9 +65,7 @@ internal static class ReplacementFormatter
             asciiCaseInsensitive,
             capturePlan,
             template,
-            captureStartsBuffer,
-            captureLengthsBuffer,
-            captureNamesBuffer);
+            captureSlotsBuffer);
     }
 
     internal static byte[] Expand(
@@ -85,9 +77,7 @@ internal static class ReplacementFormatter
         bool asciiCaseInsensitive,
         ReplacementCapturePlan? capturePlan = null,
         ReplacementTemplate? template = null,
-        int[]? captureStartsBuffer = null,
-        int[]? captureLengthsBuffer = null,
-        Dictionary<string, int>? captureNamesBuffer = null)
+        int[]? captureSlotsBuffer = null)
     {
         template ??= ReplacementTemplate.Create(replacement, capturePlan?.CaptureCount ?? 0);
         var bytes = new List<byte>(template.LiteralLength + matchLength);
@@ -100,9 +90,7 @@ internal static class ReplacementFormatter
             asciiCaseInsensitive,
             capturePlan,
             template,
-            captureStartsBuffer,
-            captureLengthsBuffer,
-            captureNamesBuffer);
+            captureSlotsBuffer);
         return bytes.ToArray();
     }
 
@@ -116,9 +104,7 @@ internal static class ReplacementFormatter
         bool asciiCaseInsensitive,
         ReplacementCapturePlan? capturePlan = null,
         ReplacementTemplate? template = null,
-        int[]? captureStartsBuffer = null,
-        int[]? captureLengthsBuffer = null,
-        Dictionary<string, int>? captureNamesBuffer = null)
+        int[]? captureSlotsBuffer = null)
     {
         template ??= ReplacementTemplate.Create(replacement, capturePlan?.CaptureCount ?? 0);
         int previous = 0;
@@ -136,9 +122,7 @@ internal static class ReplacementFormatter
                 asciiCaseInsensitive,
                 capturePlan,
                 template,
-                captureStartsBuffer,
-                captureLengthsBuffer,
-                captureNamesBuffer);
+                captureSlotsBuffer);
             previous = start + lengths[index];
         }
 
@@ -153,20 +137,19 @@ internal static class ReplacementFormatter
         bool asciiCaseInsensitive,
         ReplacementCapturePlan? capturePlan,
         ReplacementTemplate? template,
-        int[]? captureStartsBuffer,
-        int[]? captureLengthsBuffer,
-        Dictionary<string, int>? captureNamesBuffer)
+        int[]? captureSlotsBuffer)
     {
-        output.Write(Expand(
+        WriteExpanded(
+            output,
             replacement,
             matched,
+            matchStart: 0,
+            matched.Length,
             patterns,
             asciiCaseInsensitive,
             capturePlan,
             template,
-            captureStartsBuffer,
-            captureLengthsBuffer,
-            captureNamesBuffer));
+            captureSlotsBuffer);
     }
 
     internal static void WriteExpanded(
@@ -179,22 +162,34 @@ internal static class ReplacementFormatter
         bool asciiCaseInsensitive,
         ReplacementCapturePlan? capturePlan,
         ReplacementTemplate? template,
-        int[]? captureStartsBuffer,
-        int[]? captureLengthsBuffer,
-        Dictionary<string, int>? captureNamesBuffer)
+        int[]? captureSlotsBuffer)
     {
-        output.Write(Expand(
-            replacement,
-            haystack,
-            matchStart,
-            matchLength,
+        template ??= ReplacementTemplate.Create(replacement, capturePlan?.CaptureCount ?? 0);
+        ReplacementCapturePlan? activeCapturePlan = GetOrCreateCapturePlan(
             patterns,
             asciiCaseInsensitive,
-            capturePlan,
             template,
-            captureStartsBuffer,
-            captureLengthsBuffer,
-            captureNamesBuffer));
+            capturePlan);
+        int captureCount = Math.Max(template.HighestCapture, activeCapturePlan?.CaptureCount ?? 0);
+        int requiredLength = checked(2 * (captureCount + 1));
+        int[] captureSlots = captureSlotsBuffer is not null && captureSlotsBuffer.Length >= requiredLength
+            ? captureSlotsBuffer
+            : CreateCaptureSlots(captureCount);
+        if (activeCapturePlan is null ||
+            !activeCapturePlan.TryCollectCaptureSlots(
+                haystack,
+                matchStart,
+                matchLength,
+                captureSlots))
+        {
+            InitializeWholeMatch(haystack, matchStart, matchLength, captureSlots);
+        }
+
+        template.WriteExpanded(
+            output,
+            haystack,
+            captureSlots,
+            activeCapturePlan?.CaptureNames);
     }
 
     private static void AddExpanded(
@@ -206,45 +201,33 @@ internal static class ReplacementFormatter
         bool asciiCaseInsensitive,
         ReplacementCapturePlan? capturePlan,
         ReplacementTemplate template,
-        int[]? captureStartsBuffer,
-        int[]? captureLengthsBuffer,
-        Dictionary<string, int>? captureNamesBuffer)
+        int[]? captureSlotsBuffer)
     {
-        ReadOnlySpan<byte> matched = haystack.Slice(matchStart, matchLength);
         ReplacementCapturePlan? activeCapturePlan = GetOrCreateCapturePlan(
             patterns,
             asciiCaseInsensitive,
             template,
             capturePlan);
         int captureCount = Math.Max(template.HighestCapture, activeCapturePlan?.CaptureCount ?? 0);
-        int requiredLength = checked(captureCount + 1);
-        int[] captureStarts = captureStartsBuffer is not null && captureStartsBuffer.Length >= requiredLength
-            ? captureStartsBuffer
-            : CreateCaptureArray(captureCount);
-        int[] captureLengths = captureLengthsBuffer is not null && captureLengthsBuffer.Length >= requiredLength
-            ? captureLengthsBuffer
-            : CreateCaptureArray(captureCount);
-        Dictionary<string, int>? captureNames = template.UsesNamedCaptureReferences
-            ? captureNamesBuffer ?? new Dictionary<string, int>(StringComparer.Ordinal)
-            : null;
-
-        if (activeCapturePlan is not null)
-        {
-            _ = activeCapturePlan.TryCollectCaptures(
+        int requiredLength = checked(2 * (captureCount + 1));
+        int[] captureSlots = captureSlotsBuffer is not null && captureSlotsBuffer.Length >= requiredLength
+            ? captureSlotsBuffer
+            : CreateCaptureSlots(captureCount);
+        if (activeCapturePlan is null ||
+            !activeCapturePlan.TryCollectCaptureSlots(
                 haystack,
                 matchStart,
                 matchLength,
-                captureStarts,
-                captureLengths,
-                captureNames);
-        }
-        else
+                captureSlots))
         {
-            InitializeWholeMatch(matched, captureStarts, captureLengths);
-            captureNames?.Clear();
+            InitializeWholeMatch(haystack, matchStart, matchLength, captureSlots);
         }
 
-        template.AddExpanded(bytes, matched, captureStarts, captureLengths, captureNames);
+        template.AddExpanded(
+            bytes,
+            haystack,
+            captureSlots,
+            activeCapturePlan?.CaptureNames);
     }
 
     private static ReplacementCapturePlan? GetOrCreateCapturePlan(
@@ -268,25 +251,23 @@ internal static class ReplacementFormatter
         }
     }
 
-    private static int[] CreateCaptureArray(int captureCount)
+    private static int[] CreateCaptureSlots(int captureCount)
     {
-        int[] values = new int[Math.Max(1, checked(captureCount + 1))];
+        int[] values = new int[Math.Max(2, checked(2 * (captureCount + 1)))];
         Array.Fill(values, -1);
         return values;
     }
 
     private static void InitializeWholeMatch(
-        ReadOnlySpan<byte> matched,
-        int[] captureStarts,
-        int[] captureLengths)
+        ReadOnlySpan<byte> haystack,
+        int matchStart,
+        int matchLength,
+        Span<int> captureSlots)
     {
-        Array.Fill(captureStarts, -1);
-        Array.Fill(captureLengths, -1);
-        if (captureStarts.Length > 0 && captureLengths.Length > 0)
-        {
-            captureStarts[0] = 0;
-            captureLengths[0] = matched.Length;
-        }
+        _ = haystack.Slice(matchStart, matchLength);
+        captureSlots.Fill(-1);
+        captureSlots[0] = matchStart;
+        captureSlots[1] = matchStart + matchLength;
     }
 
     private static void Add(List<byte> bytes, ReadOnlySpan<byte> values)

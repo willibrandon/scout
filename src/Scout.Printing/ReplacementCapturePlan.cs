@@ -20,6 +20,16 @@ internal sealed class ReplacementCapturePlan(RegexSearchPlan searchPlan)
     internal int CaptureCount => _searchPlan.CaptureCount;
 
     /// <summary>
+    /// Gets the number of flattened start and exclusive-end capture slots required for replay.
+    /// </summary>
+    internal int CaptureSlotCount => _searchPlan.CaptureSlotCount;
+
+    /// <summary>
+    /// Gets the immutable global capture indexes keyed by capture name.
+    /// </summary>
+    internal IReadOnlyDictionary<string, int> CaptureNames => _searchPlan.CaptureNames;
+
+    /// <summary>
     /// Creates a replacement capture plan with ordinary line-search semantics.
     /// </summary>
     /// <param name="patterns">The ordered regex patterns.</param>
@@ -153,43 +163,100 @@ internal sealed class ReplacementCapturePlan(RegexSearchPlan searchPlan)
             captureLengths[0] = matchLength;
         }
 
-        int matchEnd = matchStart + matchLength;
-        ReadOnlySpan<byte> replayHaystack = GetReplayHaystack(haystack);
-        if (matchEnd > replayHaystack.Length)
-        {
-            return false;
-        }
-
-        RegexCaptures? captures = _searchPlan.ReplayCaptures(
-            replayHaystack,
+        int[] captureSlots = new int[CaptureSlotCount];
+        if (!TryCollectCaptureSlots(
+            haystack,
             matchStart,
-            matchEnd);
-        if (captures is null ||
-            captures.Match.Start != matchStart ||
-            captures.Match.End != matchEnd)
+            matchLength,
+            captureSlots))
         {
             return false;
         }
 
-        int groupCount = Math.Min(captures.GroupCount, Math.Min(captureStarts.Length, captureLengths.Length));
+        int groupCount = Math.Min(
+            captureSlots.Length / 2,
+            Math.Min(captureStarts.Length, captureLengths.Length));
         for (int group = 0; group < groupCount; group++)
         {
-            if (captures.GetGroup(group) is RegexMatch capture)
+            int captureStart = captureSlots[2 * group];
+            int captureEnd = captureSlots[(2 * group) + 1];
+            if (captureStart >= 0 && captureEnd >= captureStart)
             {
-                captureStarts[group] = capture.Start - matchStart;
-                captureLengths[group] = capture.Length;
+                captureStarts[group] = captureStart - matchStart;
+                captureLengths[group] = captureEnd - captureStart;
             }
         }
 
         if (captureNames is not null)
         {
-            foreach (KeyValuePair<string, int> captureName in _searchPlan.CaptureNames)
+            foreach (KeyValuePair<string, int> captureName in CaptureNames)
             {
                 captureNames.Add(captureName.Key, captureName.Value);
             }
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Collects flattened capture slots for a complete match span.
+    /// </summary>
+    /// <param name="matched">The match span reported by the authoritative search plan.</param>
+    /// <param name="captureSlots">Receives absolute start and exclusive-end offsets for every capture.</param>
+    /// <returns><see langword="true" /> when the same combined matcher associates the complete span with captures.</returns>
+    internal bool TryCollectCaptureSlots(
+        ReadOnlySpan<byte> matched,
+        Span<int> captureSlots)
+    {
+        return TryCollectCaptureSlots(
+            matched,
+            matchStart: 0,
+            matched.Length,
+            captureSlots);
+    }
+
+    /// <summary>
+    /// Collects flattened capture slots for a known span in its original haystack context.
+    /// </summary>
+    /// <param name="haystack">The complete record or haystack used by the authoritative match.</param>
+    /// <param name="matchStart">The known match start in <paramref name="haystack" />.</param>
+    /// <param name="matchLength">The known match length.</param>
+    /// <param name="captureSlots">Receives absolute start and exclusive-end offsets for every capture.</param>
+    /// <returns><see langword="true" /> when the same combined matcher associates the exact span with captures.</returns>
+    internal bool TryCollectCaptureSlots(
+        ReadOnlySpan<byte> haystack,
+        int matchStart,
+        int matchLength,
+        Span<int> captureSlots)
+    {
+        if ((uint)matchStart > (uint)haystack.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(matchStart));
+        }
+
+        if (matchLength < 0 || matchLength > haystack.Length - matchStart)
+        {
+            throw new ArgumentOutOfRangeException(nameof(matchLength));
+        }
+
+        if (captureSlots.Length < CaptureSlotCount)
+        {
+            throw new ArgumentException("The capture slot buffer is too small.", nameof(captureSlots));
+        }
+
+        int matchEnd = matchStart + matchLength;
+        ReadOnlySpan<byte> replayHaystack = GetReplayHaystack(haystack);
+        if (matchEnd > replayHaystack.Length)
+        {
+            captureSlots.Fill(-1);
+            return false;
+        }
+
+        return _searchPlan.TryReplayCaptures(
+            replayHaystack,
+            matchStart,
+            matchEnd,
+            captureSlots);
     }
 
     private ReadOnlySpan<byte> GetReplayHaystack(ReadOnlySpan<byte> haystack)

@@ -230,6 +230,13 @@ jobs:
         run: native/build-app-unix.sh osx-arm64 --with-differentials
       - name: Run hyperfine gates
         run: bench/run-hyperfine.sh --gate
+      - name: Upload hyperfine gate aggregates
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: hyperfine-gate-aggregates-${{ github.sha }}-${{ github.run_attempt }}
+          path: artifacts/bench/hyperfine/*.json
+          if-no-files-found: warn
 
   native-linux-x64:
     name: release native Linux gate (linux-x64)
