@@ -21,9 +21,6 @@ internal static class MultilineSearchOperations
         bool byteOffset,
         bool asciiCaseInsensitive,
         bool invertMatch,
-        bool lineRegexp,
-        bool wordRegexp,
-        bool multilineDotall,
         bool onlyMatching,
         ReadOnlyMemory<byte>? replacement,
         ulong? maxCount,
@@ -34,37 +31,277 @@ internal static class MultilineSearchOperations
         bool passthru,
         bool includeZero,
         bool nullPathTerminator,
+        RegexSearchPlan plan,
         out bool matched)
     {
-        matched = false;
-        bool contextOutputRequested = (beforeContext > 0 || afterContext > 0 || passthru) &&
-            searchMode == CliSearchMode.Standard;
         if (separators.NullData)
         {
+            matched = false;
             return false;
         }
 
+        MultilineSearchResult searchResult = CreateSearchResult(searchSpan, plan);
+        return TryWriteSearchResult(
+            searchSpan,
+            outputSpan,
+            patterns,
+            output,
+            prefix,
+            separators,
+            lineLimit,
+            color,
+            searchMode,
+            vimgrep,
+            lineNumber,
+            column,
+            byteOffset,
+            asciiCaseInsensitive,
+            invertMatch,
+            onlyMatching,
+            replacement,
+            maxCount,
+            quiet,
+            trim,
+            beforeContext,
+            afterContext,
+            passthru,
+            includeZero,
+            nullPathTerminator,
+            plan,
+            searchResult,
+            out matched);
+    }
+
+    /// <summary>
+    /// Executes one authoritative multiline traversal and retains its ordered matches.
+    /// </summary>
+    /// <param name="bytes">The bytes to search.</param>
+    /// <param name="plan">The operation-scoped multiline plan.</param>
+    /// <returns>The retained search result.</returns>
+    internal static MultilineSearchResult CreateSearchResult(
+        ReadOnlySpan<byte> bytes,
+        RegexSearchPlan plan)
+    {
+        return new MultilineSearchResult(CollectMultilineMatches(bytes, plan));
+    }
+
+    /// <summary>
+    /// Limits positive multiline discovery hits and retains every replay match in their coalesced line blocks.
+    /// </summary>
+    /// <param name="bytes">The complete searched bytes.</param>
+    /// <param name="searchResult">The complete authoritative match result.</param>
+    /// <param name="maxCount">The optional maximum number of discovery hits.</param>
+    /// <returns>The authoritative matches replayed from the retained physical-line blocks.</returns>
+    internal static MultilineSearchResult LimitPositiveMatches(
+        ReadOnlySpan<byte> bytes,
+        MultilineSearchResult searchResult,
+        ulong? maxCount)
+    {
+        ArgumentNullException.ThrowIfNull(searchResult);
+        if (maxCount is null || (ulong)searchResult.Matches.Count <= maxCount.Value)
+        {
+            return searchResult;
+        }
+
+        if (maxCount == 0)
+        {
+            return new MultilineSearchResult([]);
+        }
+
+        var blockStarts = new List<int>();
+        var blockEnds = new List<int>();
+        int discoveryCount = checked((int)Math.Min(
+            maxCount.Value,
+            (ulong)searchResult.Matches.Count));
+        for (int index = 0; index < discoveryCount; index++)
+        {
+            RegexMatch match = searchResult.Matches[index];
+            int blockStart = GetLineStart(bytes, match.Start);
+            int blockEnd = GetLineEnd(bytes, GetInclusiveMatchEnd(match));
+            if (blockStarts.Count > 0 && blockStart <= blockEnds[^1])
+            {
+                blockEnds[^1] = Math.Max(blockEnds[^1], blockEnd);
+                continue;
+            }
+
+            blockStarts.Add(blockStart);
+            blockEnds.Add(blockEnd);
+        }
+
+        var matches = new List<RegexMatch>();
+        int blockIndex = 0;
+        for (int index = 0;
+            index < searchResult.Matches.Count && blockIndex < blockStarts.Count;
+            index++)
+        {
+            RegexMatch match = searchResult.Matches[index];
+            int matchEnd = checked(match.Start + match.Length);
+            while (blockIndex < blockStarts.Count &&
+                (match.Start > blockEnds[blockIndex] ||
+                    (match.Start == blockEnds[blockIndex] && match.Length > 0)))
+            {
+                blockIndex++;
+            }
+
+            if (blockIndex >= blockStarts.Count)
+            {
+                break;
+            }
+
+            if (match.Start >= blockStarts[blockIndex] &&
+                matchEnd <= blockEnds[blockIndex])
+            {
+                matches.Add(match);
+            }
+        }
+
+        return new MultilineSearchResult(matches);
+    }
+
+    /// <summary>
+    /// Limits positive multiline discovery hits while retaining replay matches in their context ranges.
+    /// </summary>
+    /// <param name="bytes">The complete searched bytes.</param>
+    /// <param name="searchResult">The complete authoritative match result.</param>
+    /// <param name="maxCount">The optional maximum number of discovery hits.</param>
+    /// <param name="beforeContext">The number of preceding context lines.</param>
+    /// <param name="afterContext">The number of following context lines.</param>
+    /// <returns>The authoritative matches replayed from the retained match and context lines.</returns>
+    internal static MultilineSearchResult LimitPositiveContextMatches(
+        ReadOnlySpan<byte> bytes,
+        MultilineSearchResult searchResult,
+        ulong? maxCount,
+        ulong beforeContext,
+        ulong afterContext)
+    {
+        ArgumentNullException.ThrowIfNull(searchResult);
+        if (maxCount is null || (ulong)searchResult.Matches.Count <= maxCount.Value)
+        {
+            return searchResult;
+        }
+
+        List<ContextLineInfo> lines = BuildMultilineContextLines(
+            bytes,
+            searchResult.Matches);
+        bool[] included = new bool[lines.Count];
+        _ = IncludeMultilineContextLines(
+            bytes,
+            lines,
+            searchResult.Matches,
+            included,
+            beforeContext,
+            afterContext,
+            maxCount);
+
+        var matches = new List<RegexMatch>();
+        for (int index = 0; index < searchResult.Matches.Count; index++)
+        {
+            RegexMatch match = searchResult.Matches[index];
+            int firstLineIndex = GetMultilineLineIndex(
+                lines,
+                GetLineStart(bytes, match.Start));
+            int lastLineIndex = GetMultilineLineIndex(
+                lines,
+                GetLineStart(bytes, GetInclusiveMatchEnd(match)));
+            if (firstLineIndex < 0 || lastLineIndex < 0)
+            {
+                continue;
+            }
+
+            bool fullyIncluded = true;
+            for (int lineIndex = firstLineIndex;
+                lineIndex <= lastLineIndex;
+                lineIndex++)
+            {
+                if (!included[lineIndex])
+                {
+                    fullyIncluded = false;
+                    break;
+                }
+            }
+
+            if (fullyIncluded)
+            {
+                matches.Add(match);
+            }
+        }
+
+        return new MultilineSearchResult(matches);
+    }
+
+    /// <summary>
+    /// Applies CLI mode and output semantics to a retained multiline result.
+    /// </summary>
+    /// <returns><see langword="true" /> when multiline handling applies.</returns>
+    internal static bool TryWriteSearchResult(
+        ReadOnlySpan<byte> searchSpan,
+        ReadOnlySpan<byte> outputSpan,
+        IReadOnlyList<byte[]> patterns,
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        CliSearchMode searchMode,
+        bool vimgrep,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool asciiCaseInsensitive,
+        bool invertMatch,
+        bool onlyMatching,
+        ReadOnlyMemory<byte>? replacement,
+        ulong? maxCount,
+        bool quiet,
+        bool trim,
+        ulong beforeContext,
+        ulong afterContext,
+        bool passthru,
+        bool includeZero,
+        bool nullPathTerminator,
+        RegexSearchPlan plan,
+        MultilineSearchResult searchResult,
+        out bool matched)
+    {
+        ArgumentNullException.ThrowIfNull(searchResult);
+        bool contextOutputRequested =
+            (beforeContext > 0 || afterContext > 0 || passthru) &&
+            searchMode == CliSearchMode.Standard;
+        ulong? rendererMaxCount = maxCount;
+        if (!invertMatch && contextOutputRequested && !passthru)
+        {
+            searchResult = LimitPositiveContextMatches(
+                searchSpan,
+                searchResult,
+                maxCount,
+                beforeContext,
+                afterContext);
+        }
+        else if (!invertMatch)
+        {
+            searchResult = LimitPositiveMatches(
+                searchSpan,
+                searchResult,
+                maxCount);
+            rendererMaxCount = null;
+        }
+
+        List<RegexMatch> matches = searchResult.Matches;
+        matched = false;
+
         if (contextOutputRequested)
         {
-            matched = SearchMultilineContextBytes(searchSpan, outputSpan, patterns, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multilineDotall, vimgrep, onlyMatching, replacement, maxCount, trim, beforeContext, afterContext, passthru, nullPathTerminator);
+            matched = SearchMultilineContextBytes(searchSpan, outputSpan, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, invertMatch, vimgrep, onlyMatching, replacement, rendererMaxCount, trim, beforeContext, afterContext, passthru, nullPathTerminator, plan, matches);
             return true;
         }
 
         if (invertMatch)
         {
-            matched = SearchMultilineInvertedBytes(searchSpan, patterns, output, prefix, separators, lineLimit, color, searchMode, lineNumber, column, byteOffset, maxCount, quiet, trim, includeZero, nullPathTerminator, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall);
+            matched = SearchMultilineInvertedBytes(searchSpan, output, prefix, separators, lineLimit, color, searchMode, lineNumber, column, byteOffset, rendererMaxCount, quiet, trim, includeZero, nullPathTerminator, matches);
             return true;
         }
 
-        RegexSearchPlan plan = CreateMultilinePlan(
-            patterns,
-            asciiCaseInsensitive,
-            lineRegexp,
-            wordRegexp,
-            multilineDotall,
-            separators.Crlf);
-        if (!TryFindMultilineMatch(searchSpan, plan, startAt: 0, out RegexMatch firstMatch) ||
-            IsTrailingEmptyLineMatch(searchSpan, firstMatch))
+        if (!HasReportableMultilineMatch(searchSpan, matches))
         {
             if (searchMode == CliSearchMode.FilesWithoutMatch)
             {
@@ -101,7 +338,7 @@ internal static class MultilineSearchOperations
 
         if (searchMode == CliSearchMode.Count || searchMode == CliSearchMode.CountMatches)
         {
-            long count = CountMultilineMatches(searchSpan, plan, maxCount);
+            long count = CountMultilineMatches(searchSpan, matches, rendererMaxCount);
             matched = SearchOutputFormatting.WriteCount(output, prefix, color, count, includeZero, nullPathTerminator, separators.LineTerminator);
             return true;
         }
@@ -109,23 +346,19 @@ internal static class MultilineSearchOperations
         matched = true;
         if (replacement is ReadOnlyMemory<byte> replacementValue)
         {
-            var replacementCapturePlan = ReplacementCapturePlan.TryCreate(
-                patterns,
-                plan.Options,
-                plan);
             if (onlyMatching)
             {
-                WriteMultilineOnlyMatchingReplacements(outputSpan, patterns, plan, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, asciiCaseInsensitive, replacementCapturePlan, maxCount);
+                WriteMultilineOnlyMatchingReplacements(outputSpan, matches, plan, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, rendererMaxCount);
                 return true;
             }
 
-            WriteMultilineReplacedLines(outputSpan, patterns, plan, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, asciiCaseInsensitive, replacementCapturePlan, maxCount);
+            WriteMultilineReplacedLines(outputSpan, matches, plan, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, rendererMaxCount);
             return true;
         }
 
         if (onlyMatching && !vimgrep)
         {
-            WriteMultilineOnlyMatches(outputSpan, plan, output, prefix, separators, color, lineNumber, column, byteOffset, trim, nullPathTerminator, maxCount);
+            WriteMultilineOnlyMatches(outputSpan, matches, output, prefix, separators, color, lineNumber, column, byteOffset, trim, nullPathTerminator, rendererMaxCount);
             return true;
         }
 
@@ -133,21 +366,20 @@ internal static class MultilineSearchOperations
         {
             if (onlyMatching)
             {
-                WriteMultilineOnlyMatches(outputSpan, plan, output, prefix, separators, color, lineNumber: true, column: true, byteOffset, trim, nullPathTerminator, maxCount);
+                WriteMultilineOnlyMatches(outputSpan, matches, output, prefix, separators, color, lineNumber: true, column: true, byteOffset, trim, nullPathTerminator, rendererMaxCount);
                 return true;
             }
 
-            WriteMultilineVimgrepMatches(outputSpan, plan, output, prefix, separators, lineLimit, color, trim, nullPathTerminator, maxCount);
+            WriteMultilineVimgrepMatches(outputSpan, matches, output, prefix, separators, lineLimit, color, trim, nullPathTerminator, rendererMaxCount);
             return true;
         }
 
-        WriteMultilineMatchedLines(outputSpan, plan, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, maxCount);
+        WriteMultilineMatchedLines(outputSpan, matches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, rendererMaxCount);
         return true;
     }
 
     private static bool SearchMultilineInvertedBytes(
         ReadOnlySpan<byte> bytes,
-        IReadOnlyList<byte[]> patterns,
         RawByteWriter output,
         OutputPath? prefix,
         OutputSeparators separators,
@@ -162,12 +394,9 @@ internal static class MultilineSearchOperations
         bool trim,
         bool includeZero,
         bool nullPathTerminator,
-        bool asciiCaseInsensitive,
-        bool lineRegexp,
-        bool wordRegexp,
-        bool multilineDotall)
+        List<RegexMatch> matches)
     {
-        List<ContextLineInfo> lines = BuildMultilineInvertedLines(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, separators.Crlf);
+        List<ContextLineInfo> lines = BuildMultilineInvertedLines(bytes, matches);
         long count = CountSelectedMultilineLines(lines, maxCount);
         bool hasSelectedMatch = count > 0;
 
@@ -215,7 +444,6 @@ internal static class MultilineSearchOperations
     private static bool SearchMultilineContextBytes(
         ReadOnlySpan<byte> searchBytes,
         ReadOnlySpan<byte> outputBytes,
-        IReadOnlyList<byte[]> patterns,
         RawByteWriter output,
         OutputPath? prefix,
         OutputSeparators separators,
@@ -224,11 +452,7 @@ internal static class MultilineSearchOperations
         bool lineNumber,
         bool column,
         bool byteOffset,
-        bool asciiCaseInsensitive,
         bool invertMatch,
-        bool lineRegexp,
-        bool wordRegexp,
-        bool multilineDotall,
         bool vimgrep,
         bool onlyMatching,
         ReadOnlyMemory<byte>? replacement,
@@ -237,24 +461,15 @@ internal static class MultilineSearchOperations
         ulong beforeContext,
         ulong afterContext,
         bool passthru,
-        bool nullPathTerminator)
+        bool nullPathTerminator,
+        RegexSearchPlan plan,
+        List<RegexMatch> matches)
     {
         if (invertMatch)
         {
-            return SearchMultilineInvertedContextBytes(searchBytes, outputBytes, patterns, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount, trim, beforeContext, afterContext, passthru, nullPathTerminator);
+            return SearchMultilineInvertedContextBytes(searchBytes, outputBytes, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, maxCount, trim, beforeContext, afterContext, passthru, nullPathTerminator, matches);
         }
 
-        RegexSearchPlan plan = CreateMultilinePlan(
-            patterns,
-            asciiCaseInsensitive,
-            lineRegexp,
-            wordRegexp,
-            multilineDotall,
-            separators.Crlf);
-        List<RegexMatch> matches = CollectMultilineMatches(searchBytes, plan);
-        ReplacementCapturePlan? replacementCapturePlan = replacement.HasValue
-            ? ReplacementCapturePlan.TryCreate(patterns, plan.Options, plan)
-            : null;
         List<ContextLineInfo> lines = BuildMultilineContextLines(outputBytes, matches);
         bool[] included = new bool[lines.Count];
         bool matched = passthru
@@ -283,6 +498,7 @@ internal static class MultilineSearchOperations
                 index,
                 matches,
                 renderedMatchLimit,
+                maxCount,
                 output,
                 separators,
                 prefix,
@@ -296,9 +512,7 @@ internal static class MultilineSearchOperations
                 vimgrep,
                 onlyMatching,
                 replacement,
-                patterns,
-                asciiCaseInsensitive,
-                replacementCapturePlan,
+                plan,
                 ref lineSink,
                 out int consumedLineIndex);
             previousLineIndex = Math.Max(previousLineIndex, consumedLineIndex);
@@ -316,7 +530,6 @@ internal static class MultilineSearchOperations
     private static bool SearchMultilineInvertedContextBytes(
         ReadOnlySpan<byte> searchBytes,
         ReadOnlySpan<byte> outputBytes,
-        IReadOnlyList<byte[]> patterns,
         RawByteWriter output,
         OutputPath? prefix,
         OutputSeparators separators,
@@ -325,18 +538,15 @@ internal static class MultilineSearchOperations
         bool lineNumber,
         bool column,
         bool byteOffset,
-        bool asciiCaseInsensitive,
-        bool lineRegexp,
-        bool wordRegexp,
-        bool multilineDotall,
         ulong? maxCount,
         bool trim,
         ulong beforeContext,
         ulong afterContext,
         bool passthru,
-        bool nullPathTerminator)
+        bool nullPathTerminator,
+        List<RegexMatch> matches)
     {
-        List<ContextLineInfo> lines = BuildMultilineInvertedLines(searchBytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, separators.Crlf);
+        List<ContextLineInfo> lines = BuildMultilineInvertedLines(searchBytes, matches);
         bool[] included = new bool[lines.Count];
         bool matched = passthru
             ? ContextSearchOperations.IncludePassthruLines(lines, included)
@@ -395,6 +605,7 @@ internal static class MultilineSearchOperations
         int lineIndex,
         List<RegexMatch> matches,
         ulong? renderedMatchLimit,
+        ulong? discoveryMatchLimit,
         RawByteWriter output,
         OutputSeparators separators,
         OutputPath? prefix,
@@ -408,9 +619,7 @@ internal static class MultilineSearchOperations
         bool vimgrep,
         bool onlyMatching,
         ReadOnlyMemory<byte>? replacement,
-        IReadOnlyList<byte[]> patterns,
-        bool asciiCaseInsensitive,
-        ReplacementCapturePlan? replacementCapturePlan,
+        RegexSearchPlan searchPlan,
         ref StandardSearchSink lineSink,
         out int consumedLineIndex)
     {
@@ -429,10 +638,10 @@ internal static class MultilineSearchOperations
         {
             if (onlyMatching)
             {
-                return WriteMultilineOnlyMatchingReplacementsForContextLine(bytes, lines, lineIndex, matches, renderedMatchLimit, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, patterns, asciiCaseInsensitive, replacementCapturePlan, out consumedLineIndex);
+                return WriteMultilineOnlyMatchingReplacementsForContextLine(bytes, lines, lineIndex, matches, renderedMatchLimit, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, searchPlan, out consumedLineIndex);
             }
 
-            return TryWriteMultilineContextReplacementRecord(bytes, lines, lineIndex, matches, renderedMatchLimit, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, patterns, asciiCaseInsensitive, replacementCapturePlan, out consumedLineIndex);
+            return TryWriteMultilineContextReplacementRecord(bytes, lines, lineIndex, matches, renderedMatchLimit, discoveryMatchLimit, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, searchPlan, out consumedLineIndex);
         }
 
         if (onlyMatching)
@@ -456,14 +665,22 @@ internal static class MultilineSearchOperations
         return true;
     }
 
-    private static long CountMultilineMatches(ReadOnlySpan<byte> bytes, RegexSearchPlan plan, ulong? maxCount)
+    private static bool HasReportableMultilineMatch(
+        ReadOnlySpan<byte> bytes,
+        List<RegexMatch> matches)
+    {
+        return matches.Count > 0 && !IsTrailingEmptyLineMatch(bytes, matches[0]);
+    }
+
+    private static long CountMultilineMatches(
+        ReadOnlySpan<byte> bytes,
+        List<RegexMatch> matches,
+        ulong? maxCount)
     {
         long count = 0;
-        int offset = 0;
-        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
-        while (TryFindNextMultilineMatch(bytes, plan, ref offset, ref suppressedEmptyStart, out RegexMatch match))
+        for (int index = 0; index < matches.Count; index++)
         {
-            if (!IsSelectionOnlyEofMatch(bytes, match, offset))
+            if (!(index > 0 && IsEofEmptyMatch(bytes, matches[index])))
             {
                 count++;
                 if (maxCount is ulong limit && (ulong)count >= limit)
@@ -471,45 +688,9 @@ internal static class MultilineSearchOperations
                     return count;
                 }
             }
-
-            offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
         }
 
         return count;
-    }
-
-    private static long GetMultilineMatchColumn(RegexMatch match, int lineStart)
-    {
-        return match.Start >= lineStart ? match.Start - lineStart + 1L : 1;
-    }
-
-    /// <summary>
-    /// Compiles one authoritative matcher for an ordered multiline pattern set.
-    /// </summary>
-    /// <param name="patterns">The ordered regex patterns.</param>
-    /// <param name="asciiCaseInsensitive">Whether matching is ASCII case-insensitive.</param>
-    /// <param name="lineRegexp">Whether each match must span complete records.</param>
-    /// <param name="wordRegexp">Whether each match must have word boundaries.</param>
-    /// <param name="multilineDotall">Whether dot matches record terminators.</param>
-    /// <param name="crlf">Whether CRLF-aware matching is enabled.</param>
-    /// <returns>The compiled multiline search plan.</returns>
-    internal static RegexSearchPlan CreateMultilinePlan(
-        IReadOnlyList<byte[]> patterns,
-        bool asciiCaseInsensitive,
-        bool lineRegexp,
-        bool wordRegexp,
-        bool multilineDotall,
-        bool crlf = false)
-    {
-        return RegexSearchPlan.Create(
-            patterns,
-            new RegexSearchPlanOptions(
-                asciiCaseInsensitive,
-                lineRegexp,
-                wordRegexp,
-                crlf: crlf,
-                multiline: true,
-                multilineDotall: multilineDotall))!;
     }
 
     /// <summary>
@@ -594,7 +775,7 @@ internal static class MultilineSearchOperations
 
     private static void WriteMultilineMatchedLines(
         ReadOnlySpan<byte> bytes,
-        RegexSearchPlan plan,
+        List<RegexMatch> matches,
         RawByteWriter output,
         OutputPath? prefix,
         OutputSeparators separators,
@@ -609,19 +790,18 @@ internal static class MultilineSearchOperations
     {
         if (color.Enabled)
         {
-            WriteColoredMultilineMatchedLines(bytes, plan, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, maxCount);
+            WriteColoredMultilineMatchedLines(bytes, matches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, maxCount);
             return;
         }
 
         var sink = new StandardSearchSink(output, prefix, separators.FieldMatch, separators.FieldContext, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
-        int offset = 0;
-        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         int lastWrittenLineStart = -1;
         int currentLineStart = 0;
         long currentLineNumber = 1;
         ulong emitted = 0;
-        while (TryFindNextMultilineMatch(bytes, plan, ref offset, ref suppressedEmptyStart, out RegexMatch match))
+        for (int index = 0; index < matches.Count; index++)
         {
+            RegexMatch match = matches[index];
             int firstLineStart = GetLineStart(bytes, match.Start);
             int lastLineStart = GetLineStart(bytes, GetInclusiveMatchEnd(match));
             AdvanceLineNumber(bytes, firstLineStart, ref currentLineStart, ref currentLineNumber);
@@ -649,13 +829,12 @@ internal static class MultilineSearchOperations
 
             currentLineStart = Math.Max(currentLineStart, GetNextLineStart(GetLineEnd(bytes, lastLineStart), bytes.Length));
             currentLineNumber = Math.Max(currentLineNumber, outputLineNumber);
-            offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
         }
     }
 
     private static void WriteColoredMultilineMatchedLines(
         ReadOnlySpan<byte> bytes,
-        RegexSearchPlan plan,
+        List<RegexMatch> matches,
         RawByteWriter output,
         OutputPath? prefix,
         OutputSeparators separators,
@@ -669,14 +848,13 @@ internal static class MultilineSearchOperations
         ulong? maxCount)
     {
         var sink = new ColoredSearchSink(output, prefix, separators.FieldMatch, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
-        int offset = 0;
-        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         int lastWrittenLineStart = -1;
         int currentLineStart = 0;
         long currentLineNumber = 1;
         ulong emitted = 0;
-        while (TryFindNextMultilineMatch(bytes, plan, ref offset, ref suppressedEmptyStart, out RegexMatch match))
+        for (int index = 0; index < matches.Count; index++)
         {
+            RegexMatch match = matches[index];
             int firstLineStart = GetLineStart(bytes, match.Start);
             int lastLineStart = GetLineStart(bytes, GetInclusiveMatchEnd(match));
             AdvanceLineNumber(bytes, firstLineStart, ref currentLineStart, ref currentLineNumber);
@@ -717,7 +895,6 @@ internal static class MultilineSearchOperations
 
             currentLineStart = Math.Max(currentLineStart, GetNextLineStart(GetLineEnd(bytes, lastLineStart), bytes.Length));
             currentLineNumber = Math.Max(currentLineNumber, outputLineNumber);
-            offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
         }
 
         sink.Flush();
@@ -742,7 +919,7 @@ internal static class MultilineSearchOperations
 
     private static void WriteMultilineReplacedLines(
         ReadOnlySpan<byte> bytes,
-        IReadOnlyList<byte[]> patterns,
+        List<RegexMatch> matches,
         RegexSearchPlan plan,
         RawByteWriter output,
         OutputPath? prefix,
@@ -755,22 +932,19 @@ internal static class MultilineSearchOperations
         bool trim,
         bool nullPathTerminator,
         ReadOnlyMemory<byte> replacement,
-        bool asciiCaseInsensitive,
-        ReplacementCapturePlan? replacementCapturePlan,
         ulong? maxCount)
     {
-        int offset = 0;
-        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         ulong emitted = 0;
         int groupStart = -1;
         int groupEnd = -1;
         List<RegexMatch> groupMatches = [];
-        while (TryFindNextMultilineMatch(bytes, plan, ref offset, ref suppressedEmptyStart, out RegexMatch match))
+        for (int index = 0; index < matches.Count; index++)
         {
+            RegexMatch match = matches[index];
             GetMultilineReplacementRange(bytes, match, out int rangeStart, out int rangeEnd);
-            if (groupStart >= 0 && rangeStart >= groupEnd)
+            if (groupStart >= 0 && rangeStart > groupEnd)
             {
-                WriteMultilineReplacementRecord(bytes, groupStart, groupEnd, groupMatches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacement, patterns, asciiCaseInsensitive, replacementCapturePlan);
+                WriteMultilineReplacementRecord(bytes, groupStart, groupEnd, groupMatches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacement, plan);
                 groupMatches.Clear();
                 groupStart = -1;
                 groupEnd = -1;
@@ -793,18 +967,17 @@ internal static class MultilineSearchOperations
                 break;
             }
 
-            offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
         }
 
         if (groupStart >= 0)
         {
-            WriteMultilineReplacementRecord(bytes, groupStart, groupEnd, groupMatches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacement, patterns, asciiCaseInsensitive, replacementCapturePlan);
+            WriteMultilineReplacementRecord(bytes, groupStart, groupEnd, groupMatches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacement, plan);
         }
     }
 
     private static void WriteMultilineOnlyMatchingReplacements(
         ReadOnlySpan<byte> bytes,
-        IReadOnlyList<byte[]> patterns,
+        List<RegexMatch> matches,
         RegexSearchPlan plan,
         RawByteWriter output,
         OutputPath? prefix,
@@ -817,20 +990,16 @@ internal static class MultilineSearchOperations
         bool trim,
         bool nullPathTerminator,
         ReadOnlyMemory<byte> replacement,
-        bool asciiCaseInsensitive,
-        ReplacementCapturePlan? replacementCapturePlan,
         ulong? maxCount)
     {
-        int offset = 0;
-        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         ulong emitted = 0;
-        while (TryFindNextMultilineMatch(bytes, plan, ref offset, ref suppressedEmptyStart, out RegexMatch match))
+        for (int index = 0; index < matches.Count; index++)
         {
-            bool selectionOnly = IsSelectionOnlyEofMatch(bytes, match, offset);
+            RegexMatch match = matches[index];
+            bool selectionOnly = index > 0 && IsEofEmptyMatch(bytes, match);
             int lineStart = GetLineStart(bytes, match.Start);
             if (selectionOnly)
             {
-                offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
                 continue;
             }
 
@@ -846,9 +1015,7 @@ internal static class MultilineSearchOperations
                     bytes,
                     match.Start,
                     match.Length,
-                    patterns,
-                    asciiCaseInsensitive,
-                    capturePlan: replacementCapturePlan);
+                    plan);
                 WriteMultilineReplacementBody(body, match.Start, GetLineNumber(bytes, lineStart), match.Start - lineStart + 1L, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator);
             }
 
@@ -858,7 +1025,6 @@ internal static class MultilineSearchOperations
                 break;
             }
 
-            offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
         }
     }
 
@@ -878,9 +1044,7 @@ internal static class MultilineSearchOperations
         bool trim,
         bool nullPathTerminator,
         ReadOnlyMemory<byte> replacement,
-        IReadOnlyList<byte[]> patterns,
-        bool asciiCaseInsensitive,
-        ReplacementCapturePlan? replacementCapturePlan)
+        RegexSearchPlan searchPlan)
     {
         List<int> starts = [];
         List<int> lengths = [];
@@ -904,11 +1068,9 @@ internal static class MultilineSearchOperations
             starts,
             lengths,
             replacement.Span,
-            patterns,
-            asciiCaseInsensitive,
             replacementColumns,
             replacementLengths,
-            capturePlan: replacementCapturePlan);
+            searchPlan: searchPlan);
         int lineStart = GetLineStart(bytes, recordStart);
         long firstColumn = replacementColumns.Count > 0
             ? replacementColumns[0]
@@ -1005,7 +1167,7 @@ internal static class MultilineSearchOperations
 
     private static void WriteMultilineOnlyMatches(
         ReadOnlySpan<byte> bytes,
-        RegexSearchPlan plan,
+        List<RegexMatch> matches,
         RawByteWriter output,
         OutputPath? prefix,
         OutputSeparators separators,
@@ -1018,19 +1180,17 @@ internal static class MultilineSearchOperations
         ulong? maxCount)
     {
         var sink = new StandardMatchSink(output, prefix, separators.FieldMatch, lineNumber, column, byteOffset, trim, nullPathTerminator: nullPathTerminator, color: color, lineTerminator: separators.LineTerminator);
-        int offset = 0;
-        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         ulong emitted = 0;
-        while (TryFindNextMultilineMatch(bytes, plan, ref offset, ref suppressedEmptyStart, out RegexMatch match))
+        for (int index = 0; index < matches.Count; index++)
         {
-            bool selectionOnly = IsSelectionOnlyEofMatch(bytes, match, offset);
+            RegexMatch match = matches[index];
+            bool selectionOnly = index > 0 && IsEofEmptyMatch(bytes, match);
             int firstLineStart = GetLineStart(bytes, match.Start);
             long firstLineNumber = GetLineNumber(bytes, firstLineStart);
             long matchColumn = match.Start - firstLineStart + 1L;
             int matchEnd = match.Start + match.Length;
             if (selectionOnly)
             {
-                offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
                 continue;
             }
 
@@ -1066,13 +1226,12 @@ internal static class MultilineSearchOperations
                 return;
             }
 
-            offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
         }
     }
 
     private static void WriteMultilineVimgrepMatches(
         ReadOnlySpan<byte> bytes,
-        RegexSearchPlan plan,
+        List<RegexMatch> matches,
         RawByteWriter output,
         OutputPath? prefix,
         OutputSeparators separators,
@@ -1083,11 +1242,10 @@ internal static class MultilineSearchOperations
         ulong? maxCount)
     {
         var sink = new StandardSearchSink(output, prefix, separators.FieldMatch, separators.FieldContext, lineNumber: true, column: true, byteOffset: false, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
-        int offset = 0;
-        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         ulong emitted = 0;
-        while (TryFindNextMultilineMatch(bytes, plan, ref offset, ref suppressedEmptyStart, out RegexMatch match))
+        for (int index = 0; index < matches.Count; index++)
         {
+            RegexMatch match = matches[index];
             int lineStart = GetLineStart(bytes, match.Start);
             int lineEnd = GetLineEnd(bytes, lineStart);
             long lineNumber = GetLineNumber(bytes, lineStart);
@@ -1101,7 +1259,6 @@ internal static class MultilineSearchOperations
                 return;
             }
 
-            offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
         }
     }
 
@@ -1120,18 +1277,6 @@ internal static class MultilineSearchOperations
 
         match = default;
         return false;
-    }
-
-    internal static List<RegexMatch> CollectMultilineMatches(ReadOnlySpan<byte> bytes, IReadOnlyList<byte[]> patterns, bool asciiCaseInsensitive, bool lineRegexp, bool wordRegexp, bool multilineDotall, bool crlf = false)
-    {
-        RegexSearchPlan plan = CreateMultilinePlan(
-            patterns,
-            asciiCaseInsensitive,
-            lineRegexp,
-            wordRegexp,
-            multilineDotall,
-            crlf);
-        return CollectMultilineMatches(bytes, plan);
     }
 
     /// <summary>
@@ -1249,64 +1394,28 @@ internal static class MultilineSearchOperations
         return lines;
     }
 
-    private static List<ContextLineInfo> BuildMultilineContextLines(ReadOnlySpan<byte> bytes, IReadOnlyList<byte[]> patterns, bool asciiCaseInsensitive, bool lineRegexp, bool wordRegexp, bool multilineDotall)
-    {
-        var physicalLines = new List<ContextLineInfo>();
-        int lineStart = 0;
-        long lineNumber = 1;
-        while (lineStart < bytes.Length)
-        {
-            int lineLength = ContextSearchOperations.GetLineLength(bytes[lineStart..], nullData: false);
-            physicalLines.Add(new ContextLineInfo(lineStart, lineLength, lineNumber, selectedMatch: false, matchColumn: 0, originalMatch: false, contextColumn: 0));
-            lineStart += lineLength;
-            lineNumber++;
-        }
-
-        bool[] matchedLines = new bool[physicalLines.Count];
-        long[] matchColumns = new long[physicalLines.Count];
-        RegexSearchPlan plan = CreateMultilinePlan(
-            patterns,
-            asciiCaseInsensitive,
-            lineRegexp,
-            wordRegexp,
-            multilineDotall);
-        int offset = 0;
-        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
-        while (TryFindNextMultilineMatch(bytes, plan, ref offset, ref suppressedEmptyStart, out RegexMatch match))
-        {
-            MarkMultilineContextMatch(bytes, physicalLines, matchedLines, matchColumns, match);
-            offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
-        }
-
-        var lines = new List<ContextLineInfo>(physicalLines.Count);
-        for (int index = 0; index < physicalLines.Count; index++)
-        {
-            ContextLineInfo line = physicalLines[index];
-            lines.Add(new ContextLineInfo(line.Start, line.Length, line.LineNumber, matchedLines[index], matchColumns[index], matchedLines[index], contextColumn: 0));
-        }
-
-        return lines;
-    }
-
     /// <summary>
-    /// Builds physical-line metadata with lines outside multiline matches selected.
+    /// Builds physical-line metadata with lines outside matches from an existing multiline plan selected.
     /// </summary>
     /// <param name="bytes">The complete haystack.</param>
-    /// <param name="patterns">The ordered regex patterns.</param>
-    /// <param name="asciiCaseInsensitive">Whether ASCII matching is case-insensitive.</param>
-    /// <param name="lineRegexp">Whether patterns must match complete lines.</param>
-    /// <param name="wordRegexp">Whether matches require word boundaries.</param>
-    /// <param name="multilineDotall">Whether dot matches line terminators.</param>
-    /// <param name="crlf">Whether CRLF-aware matching is enabled.</param>
+    /// <param name="plan">The operation-scoped authoritative multiline plan.</param>
     /// <returns>The physical lines with multiline matches inverted.</returns>
     internal static List<ContextLineInfo> BuildMultilineInvertedLines(
         ReadOnlySpan<byte> bytes,
-        IReadOnlyList<byte[]> patterns,
-        bool asciiCaseInsensitive,
-        bool lineRegexp,
-        bool wordRegexp,
-        bool multilineDotall,
-        bool crlf = false)
+        RegexSearchPlan plan)
+    {
+        return BuildMultilineInvertedLines(bytes, CollectMultilineMatches(bytes, plan));
+    }
+
+    /// <summary>
+    /// Builds physical-line metadata with lines outside retained multiline matches selected.
+    /// </summary>
+    /// <param name="bytes">The complete haystack.</param>
+    /// <param name="matches">The retained authoritative multiline matches.</param>
+    /// <returns>The physical lines with the retained matches inverted.</returns>
+    internal static List<ContextLineInfo> BuildMultilineInvertedLines(
+        ReadOnlySpan<byte> bytes,
+        List<RegexMatch> matches)
     {
         var physicalLines = new List<ContextLineInfo>();
         int lineStart = 0;
@@ -1320,19 +1429,9 @@ internal static class MultilineSearchOperations
         }
 
         bool[] matchedLines = new bool[physicalLines.Count];
-        RegexSearchPlan plan = CreateMultilinePlan(
-            patterns,
-            asciiCaseInsensitive,
-            lineRegexp,
-            wordRegexp,
-            multilineDotall,
-            crlf);
-        int offset = 0;
-        int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
-        while (TryFindNextMultilineMatch(bytes, plan, ref offset, ref suppressedEmptyStart, out RegexMatch match))
+        for (int index = 0; index < matches.Count; index++)
         {
-            MarkMultilineMatchedLines(bytes, physicalLines, matchedLines, match);
-            offset = AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
+            MarkMultilineMatchedLines(bytes, physicalLines, matchedLines, matches[index]);
         }
 
         var lines = new List<ContextLineInfo>(physicalLines.Count);
@@ -1562,9 +1661,7 @@ internal static class MultilineSearchOperations
         bool trim,
         bool nullPathTerminator,
         ReadOnlyMemory<byte> replacement,
-        IReadOnlyList<byte[]> patterns,
-        bool asciiCaseInsensitive,
-        ReplacementCapturePlan? replacementCapturePlan,
+        RegexSearchPlan searchPlan,
         out int consumedLineIndex)
     {
         ContextLineInfo line = lines[lineIndex];
@@ -1601,9 +1698,7 @@ internal static class MultilineSearchOperations
                     bytes,
                     match.Start,
                     match.Length,
-                    patterns,
-                    asciiCaseInsensitive,
-                    capturePlan: replacementCapturePlan);
+                    searchPlan);
                 WriteMultilineReplacementBody(body, match.Start, GetLineNumber(bytes, lineStart), match.Start - lineStart + 1L, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator);
             }
 
@@ -1621,6 +1716,7 @@ internal static class MultilineSearchOperations
         int lineIndex,
         List<RegexMatch> matches,
         ulong? renderedMatchLimit,
+        ulong? discoveryMatchLimit,
         RawByteWriter output,
         OutputSeparators separators,
         OutputPath? prefix,
@@ -1632,9 +1728,7 @@ internal static class MultilineSearchOperations
         bool trim,
         bool nullPathTerminator,
         ReadOnlyMemory<byte> replacement,
-        IReadOnlyList<byte[]> patterns,
-        bool asciiCaseInsensitive,
-        ReplacementCapturePlan? replacementCapturePlan,
+        RegexSearchPlan searchPlan,
         out int consumedLineIndex)
     {
         ContextLineInfo line = lines[lineIndex];
@@ -1664,7 +1758,14 @@ internal static class MultilineSearchOperations
                 continue;
             }
 
-            if (rangeStart >= groupEnd)
+            if (rangeStart == groupEnd &&
+                discoveryMatchLimit is ulong limit &&
+                (ulong)index >= limit)
+            {
+                break;
+            }
+
+            if (rangeStart > groupEnd)
             {
                 break;
             }
@@ -1682,7 +1783,7 @@ internal static class MultilineSearchOperations
             return false;
         }
 
-        WriteMultilineReplacementRecord(bytes, groupStart, groupEnd, groupMatches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacement, patterns, asciiCaseInsensitive, replacementCapturePlan);
+        WriteMultilineReplacementRecord(bytes, groupStart, groupEnd, groupMatches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacement, searchPlan);
         int lastLineStart = GetLineStart(bytes, groupEnd > groupStart ? groupEnd - 1 : groupEnd);
         consumedLineIndex = Math.Max(consumedLineIndex, GetMultilineLineIndex(lines, lastLineStart));
         return true;

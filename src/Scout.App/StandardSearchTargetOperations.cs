@@ -18,6 +18,7 @@ internal static class StandardSearchTargetOperations
 
     internal static bool SearchStandardInput(
         IReadOnlyList<byte[]> pattern,
+        RegexSearchPlan regexPlan,
         Stream standardInput,
         RawByteWriter output,
         OutputSeparators separators,
@@ -53,12 +54,13 @@ internal static class StandardSearchTargetOperations
         ref bool wroteHeadingOutput)
     {
         byte[] bytes = SearchFileContentReader.ReadSearchStream(standardInput, encodingMode);
-        return StandardSearchByteOperations.SearchBytesWithOptionalHeading(bytes, pattern, output, SearchOutputFormatting.GetStandardInputPrefix(searchMode, autoPrefixPath, withFilename), separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, false, heading, ref wroteHeadingOutput);
+        return StandardSearchByteOperations.SearchBytesWithOptionalHeading(bytes, pattern, output, SearchOutputFormatting.GetStandardInputPrefix(searchMode, autoPrefixPath, withFilename), separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, false, heading, ref wroteHeadingOutput, memoryMapped: false, regexPlan);
     }
 
     internal static void SearchPath(
         SearchPathArgument pathArgument,
         IReadOnlyList<byte[]> pattern,
+        RegexSearchPlan regexPlan,
         Stream standardInput,
         bool defaultRoot,
         bool prefixPaths,
@@ -84,7 +86,7 @@ internal static class StandardSearchTargetOperations
         {
             OutputPath outputPath = SearchOutputFormatting.CreateRawUnixOutputPath(pathArgument);
             OutputPath? prefix = SearchOutputFormatting.GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
-            SearchRawUnixFile(pathArgument, pattern, lowArgs, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored);
+            SearchRawUnixFile(pathArgument, pattern, lowArgs, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, regexPlan);
             return;
         }
 
@@ -92,13 +94,13 @@ internal static class StandardSearchTargetOperations
         if (path == "-")
         {
             OutputPath? prefix = SearchOutputFormatting.GetStandardInputPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename);
-            matched |= SearchStandardInput(pattern, standardInput, output, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.EncodingMode, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, lowArgs.StopOnNonmatch, heading, ref wroteHeadingOutput);
+            matched |= SearchStandardInput(pattern, regexPlan, standardInput, output, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.EncodingMode, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, lowArgs.StopOnNonmatch, heading, ref wroteHeadingOutput);
             return;
         }
 
         if (Directory.Exists(path))
         {
-            SearchDirectory(path, pattern, defaultRoot, lowArgs, separators, lineLimit, color, fileTypes, output, diagnostics, logger, asciiCaseInsensitive, lineNumber, heading, ref wroteHeadingOutput, ref matched, ref errored);
+            SearchDirectory(path, pattern, regexPlan, defaultRoot, lowArgs, separators, lineLimit, color, fileTypes, output, diagnostics, logger, asciiCaseInsensitive, lineNumber, heading, ref wroteHeadingOutput, ref matched, ref errored);
             return;
         }
 
@@ -106,7 +108,7 @@ internal static class StandardSearchTargetOperations
         {
             OutputPath outputPath = SearchOutputFormatting.CreateOutputPath(path, pathArgument.DisplayBytes, lowArgs, color);
             OutputPath? prefix = SearchOutputFormatting.GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
-            SearchFile(path, null, pattern, lowArgs, false, !multiplePaths, autoMmapEligible, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored);
+            SearchFile(path, null, pattern, lowArgs, false, !multiplePaths, autoMmapEligible, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, regexPlan);
             return;
         }
 
@@ -116,6 +118,7 @@ internal static class StandardSearchTargetOperations
 
     internal static bool SearchStandardInputWithStats(
         IReadOnlyList<byte[]> pattern,
+        RegexSearchPlan regexPlan,
         Stream standardInput,
         RawByteWriter output,
         OutputSeparators separators,
@@ -152,12 +155,13 @@ internal static class StandardSearchTargetOperations
         ref SearchStats stats)
     {
         byte[] bytes = SearchFileContentReader.ReadSearchStream(standardInput, encodingMode);
-        return StandardSearchByteOperations.SearchBytesWithStats(bytes, pattern, output, SearchOutputFormatting.GetStandardInputPrefix(searchMode, autoPrefixPath, withFilename), separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, false, heading, ref wroteHeadingOutput, ref stats);
+        return StandardSearchByteOperations.SearchBytesWithStats(bytes, pattern, output, SearchOutputFormatting.GetStandardInputPrefix(searchMode, autoPrefixPath, withFilename), separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, false, heading, ref wroteHeadingOutput, ref stats, memoryMapped: false, regexPlan);
     }
 
     internal static void SearchPathWithStats(
         SearchPathArgument pathArgument,
         IReadOnlyList<byte[]> pattern,
+        RegexSearchPlan regexPlan,
         Stream standardInput,
         bool defaultRoot,
         bool prefixPaths,
@@ -184,7 +188,7 @@ internal static class StandardSearchTargetOperations
         {
             OutputPath outputPath = SearchOutputFormatting.CreateRawUnixOutputPath(pathArgument);
             OutputPath? prefix = SearchOutputFormatting.GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
-            SearchRawUnixFileWithStats(pathArgument, pattern, lowArgs, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
+            SearchRawUnixFileWithStats(pathArgument, pattern, lowArgs, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats, regexPlan);
             return;
         }
 
@@ -192,13 +196,13 @@ internal static class StandardSearchTargetOperations
         if (path == "-")
         {
             OutputPath? prefix = SearchOutputFormatting.GetStandardInputPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename);
-            matched |= SearchStandardInputWithStats(pattern, standardInput, output, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.EncodingMode, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, lowArgs.StopOnNonmatch, heading, ref wroteHeadingOutput, ref stats);
+            matched |= SearchStandardInputWithStats(pattern, regexPlan, standardInput, output, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.EncodingMode, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, lowArgs.StopOnNonmatch, heading, ref wroteHeadingOutput, ref stats);
             return;
         }
 
         if (Directory.Exists(path))
         {
-            SearchDirectoryWithStats(path, pattern, defaultRoot, lowArgs, separators, lineLimit, color, fileTypes, output, diagnostics, logger, asciiCaseInsensitive, lineNumber, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
+            SearchDirectoryWithStats(path, pattern, regexPlan, defaultRoot, lowArgs, separators, lineLimit, color, fileTypes, output, diagnostics, logger, asciiCaseInsensitive, lineNumber, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
             return;
         }
 
@@ -206,7 +210,7 @@ internal static class StandardSearchTargetOperations
         {
             OutputPath outputPath = SearchOutputFormatting.CreateOutputPath(path, pathArgument.DisplayBytes, lowArgs, color);
             OutputPath? prefix = SearchOutputFormatting.GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
-            SearchFileWithStats(path, null, pattern, lowArgs, false, autoMmapEligible, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
+            SearchFileWithStats(path, null, pattern, lowArgs, false, autoMmapEligible, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats, regexPlan);
             return;
         }
 
@@ -216,6 +220,7 @@ internal static class StandardSearchTargetOperations
 
     internal static bool SearchStandardInput(
         IReadOnlyList<byte[]> pattern,
+        RegexSearchPlan regexPlan,
         Stream standardInput,
         RawByteWriter output,
         OutputPath? prefix,
@@ -250,11 +255,12 @@ internal static class StandardSearchTargetOperations
         ref bool wroteHeadingOutput)
     {
         byte[] bytes = SearchFileContentReader.ReadSearchStream(standardInput, encodingMode);
-        return StandardSearchByteOperations.SearchBytesWithOptionalHeading(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, false, heading, ref wroteHeadingOutput);
+        return StandardSearchByteOperations.SearchBytesWithOptionalHeading(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, false, heading, ref wroteHeadingOutput, memoryMapped: false, regexPlan);
     }
 
     internal static bool SearchStandardInputWithStats(
         IReadOnlyList<byte[]> pattern,
+        RegexSearchPlan regexPlan,
         Stream standardInput,
         RawByteWriter output,
         OutputPath? prefix,
@@ -290,12 +296,13 @@ internal static class StandardSearchTargetOperations
         ref SearchStats stats)
     {
         byte[] bytes = SearchFileContentReader.ReadSearchStream(standardInput, encodingMode);
-        return StandardSearchByteOperations.SearchBytesWithStats(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, false, heading, ref wroteHeadingOutput, ref stats);
+        return StandardSearchByteOperations.SearchBytesWithStats(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multiline, multilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, stopOnNonmatch, false, heading, ref wroteHeadingOutput, ref stats, memoryMapped: false, regexPlan);
     }
 
     private static void SearchDirectory(
         string root,
         IReadOnlyList<byte[]> pattern,
+        RegexSearchPlan regexPlan,
         bool defaultRoot,
         CliLowArgs lowArgs,
         OutputSeparators separators,
@@ -315,7 +322,7 @@ internal static class StandardSearchTargetOperations
         int threadCount = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
         if (threadCount > 1)
         {
-            SearchDirectoryParallel(root, pattern, defaultRoot, lowArgs, separators, lineLimit, color, fileTypes, output, diagnostics, logger, asciiCaseInsensitive, lineNumber, heading, threadCount, ref wroteHeadingOutput, ref matched, ref errored);
+            SearchDirectoryParallel(root, pattern, regexPlan, defaultRoot, lowArgs, separators, lineLimit, color, fileTypes, output, diagnostics, logger, asciiCaseInsensitive, lineNumber, heading, threadCount, ref wroteHeadingOutput, ref matched, ref errored);
             return;
         }
 
@@ -325,7 +332,6 @@ internal static class StandardSearchTargetOperations
         bool interFileContextSeparator = StandardSearchOperations.ShouldWriteInterFileContextSeparator(lowArgs, heading, separators);
         bool wroteContextBody = false;
         var literalPrecheckState = new DirectoryLiteralPrecheckState();
-        RegexSearchPlan? regexPlan = CreateReusableDirectoryRegexSearchPlan(pattern, lowArgs, color, asciiCaseInsensitive);
         foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics, logger))
         {
             if (interFileContextSeparator)
@@ -391,6 +397,7 @@ internal static class StandardSearchTargetOperations
     private static void SearchDirectoryParallel(
         string root,
         IReadOnlyList<byte[]> pattern,
+        RegexSearchPlan regexPlan,
         bool defaultRoot,
         CliLowArgs lowArgs,
         OutputSeparators separators,
@@ -455,7 +462,6 @@ internal static class StandardSearchTargetOperations
         {
             SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger).Threads(threadCount).BuildParallel().RunWithCompletion(() =>
             {
-                RegexSearchPlan? regexPlan = CreateReusableDirectoryRegexSearchPlan(pattern, lowArgs, color, asciiCaseInsensitive);
                 MemoryStream buffer = directOutput
                     ? new LineFlushingMemoryStream(output, outputLock, GetParallelOutputLineFlushTerminator(separators), ParallelDirectOutputFlushThreshold)
                     : new MemoryStream();
@@ -536,6 +542,7 @@ internal static class StandardSearchTargetOperations
     private static void SearchDirectoryWithStats(
         string root,
         IReadOnlyList<byte[]> pattern,
+        RegexSearchPlan regexPlan,
         bool defaultRoot,
         CliLowArgs lowArgs,
         OutputSeparators separators,
@@ -556,7 +563,7 @@ internal static class StandardSearchTargetOperations
         int threadCount = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
         if (threadCount > 1)
         {
-            SearchDirectoryParallelWithStats(root, pattern, defaultRoot, lowArgs, separators, lineLimit, color, fileTypes, output, diagnostics, logger, asciiCaseInsensitive, lineNumber, heading, threadCount, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
+            SearchDirectoryParallelWithStats(root, pattern, regexPlan, defaultRoot, lowArgs, separators, lineLimit, color, fileTypes, output, diagnostics, logger, asciiCaseInsensitive, lineNumber, heading, threadCount, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
             return;
         }
 
@@ -591,7 +598,8 @@ internal static class StandardSearchTargetOperations
                     ref wroteHeadingOutput,
                     ref fileMatched,
                     ref fileErrored,
-                    ref stats);
+                    ref stats,
+                    regexPlan);
                 writer.Flush();
                 byte[] body = buffer.ToArray();
                 if (body.Length > 0)
@@ -622,13 +630,15 @@ internal static class StandardSearchTargetOperations
                 ref wroteHeadingOutput,
                 ref matched,
                 ref errored,
-                ref stats);
+                ref stats,
+                regexPlan);
         }
     }
 
     private static void SearchDirectoryParallelWithStats(
         string root,
         IReadOnlyList<byte[]> pattern,
+        RegexSearchPlan regexPlan,
         bool defaultRoot,
         CliLowArgs lowArgs,
         OutputSeparators separators,
@@ -735,7 +745,8 @@ internal static class StandardSearchTargetOperations
                         ref fileWroteHeading,
                         ref fileMatched,
                         ref fileErrored,
-                        ref fileStats);
+                        ref fileStats,
+                        regexPlan);
                     if (fileMatched)
                     {
                         Interlocked.Exchange(ref matchedFlag, 1);
@@ -862,60 +873,6 @@ internal static class StandardSearchTargetOperations
         return !heading && !interFileContextSeparator;
     }
 
-    private static RegexSearchPlan? CreateReusableDirectoryRegexSearchPlan(
-        IReadOnlyList<byte[]> pattern,
-        CliLowArgs lowArgs,
-        OutputColor color,
-        bool asciiCaseInsensitive)
-    {
-        if (!CanReuseDirectoryRegexSearchPlan(pattern, lowArgs, color))
-        {
-            return null;
-        }
-
-        if (lowArgs.SearchMode == CliSearchMode.Standard &&
-            pattern.Count == 1 &&
-            pattern[0].Length != 0 &&
-            LiteralLineSearcher.IsLiteralRegex(pattern[0]))
-        {
-            return null;
-        }
-
-        return RegexSearchPlan.Create(
-            pattern,
-            new RegexSearchPlanOptions(
-                asciiCaseInsensitive,
-                lowArgs.LineRegexp,
-                lowArgs.WordRegexp,
-                lowArgs.Crlf,
-                lowArgs.NullData));
-    }
-
-    private static bool CanReuseDirectoryRegexSearchPlan(
-        IReadOnlyList<byte[]> pattern,
-        CliLowArgs lowArgs,
-        OutputColor color)
-    {
-        if (pattern.Count == 0 ||
-            lowArgs.Multiline ||
-            lowArgs.Vimgrep ||
-            lowArgs.OnlyMatching ||
-            lowArgs.Quiet ||
-            lowArgs.BeforeContext != 0 ||
-            lowArgs.AfterContext != 0 ||
-            lowArgs.Passthru ||
-            lowArgs.StopOnNonmatch ||
-            color.Enabled)
-        {
-            return false;
-        }
-
-        return lowArgs.SearchMode is CliSearchMode.Standard
-            or CliSearchMode.Count
-            or CliSearchMode.FilesWithMatches
-            or CliSearchMode.FilesWithoutMatch;
-    }
-
     private static byte GetParallelOutputLineFlushTerminator(OutputSeparators separators)
     {
         return separators.NullData ? (byte)0 : (byte)'\n';
@@ -939,7 +896,7 @@ internal static class StandardSearchTargetOperations
         ref bool wroteHeadingOutput,
         ref bool matched,
         ref bool errored,
-        RegexSearchPlan? regexPlan = null)
+        RegexSearchPlan regexPlan)
     {
         if (TrySearchDirectoryEntryFileAfterLiteralPrecheck(
             entry,
@@ -1003,7 +960,7 @@ internal static class StandardSearchTargetOperations
         ref bool wroteHeadingOutput,
         ref bool matched,
         ref bool errored,
-        RegexSearchPlan? regexPlan)
+        RegexSearchPlan regexPlan)
     {
         if (lowArgs.MaxCount == 0)
         {
@@ -1016,10 +973,18 @@ internal static class StandardSearchTargetOperations
         }
 
         bool containsLiteral;
-        if (CanUseDirectoryEntryLiteralPrecheck(entry, pattern, lowArgs))
+        if (TryGetDirectoryEntryLiteralPrecheck(
+                entry,
+                lowArgs,
+                regexPlan,
+                out ReadOnlyMemory<byte> literal))
         {
-            byte[] literal = pattern[0];
-            if (!TryFileContainsLiteralWithoutAllocating(entry.FullPath, literal, asciiCaseInsensitive, lowArgs.EncodingMode, out containsLiteral))
+            if (!TryFileContainsLiteralWithoutAllocating(
+                    entry.FullPath,
+                    literal.Span,
+                    asciiCaseInsensitive,
+                    lowArgs.EncodingMode,
+                    out containsLiteral))
             {
                 return false;
             }
@@ -1046,7 +1011,8 @@ internal static class StandardSearchTargetOperations
         OutputPath outputPath = SearchOutputFormatting.CreateDirectoryEntryOutputPath(entry, displayPath, lowArgs, color);
         OutputPath? prefix = SearchOutputFormatting.GetFileSearchPrefix(lowArgs.SearchMode, autoPrefixPath: true, lowArgs.WithFilename, outputPath);
         bool memoryMapped = IsMemoryMapped(readKind);
-        bool searchTextMode = lowArgs.TextMode || SearchesBinaryAsText(readKind, lowArgs, lowArgs.SearchMode, bytes, pattern, asciiCaseInsensitive, invertMatch: false, lineRegexp: false, wordRegexp: false);
+        bool searchTextMode = lowArgs.TextMode ||
+            TreatMemoryMappedInputAsText(readKind, lowArgs, lowArgs.SearchMode);
         matched |= StandardSearchByteOperations.SearchBytesWithOptionalHeading(
             bytes,
             pattern,
@@ -1082,15 +1048,22 @@ internal static class StandardSearchTargetOperations
             heading,
             ref wroteHeadingOutput,
             memoryMapped,
-            regexPlan);
+            regexPlan,
+            GetBinaryDetectionScope(
+                readKind,
+                lowArgs,
+                lowArgs.SearchMode,
+                searchTextMode));
         return true;
     }
 
-    private static bool CanUseDirectoryEntryLiteralPrecheck(
+    private static bool TryGetDirectoryEntryLiteralPrecheck(
         DirEntry entry,
-        IReadOnlyList<byte[]> pattern,
-        CliLowArgs lowArgs)
+        CliLowArgs lowArgs,
+        RegexSearchPlan regexPlan,
+        out ReadOnlyMemory<byte> literal)
     {
+        literal = default;
         if (entry.IsRawUnixPath)
         {
             return false;
@@ -1109,22 +1082,21 @@ internal static class StandardSearchTargetOperations
             lowArgs.StopOnNonmatch ||
             lowArgs.SearchZip ||
             lowArgs.Preprocessor is not null ||
-            pattern.Count != 1)
+            regexPlan.PatternCount != 1 ||
+            !regexPlan.TryGetSingleCaseSensitiveLiteral(out literal))
         {
             return false;
         }
 
-        byte[] literal = pattern[0];
-        return literal.Length != 0 &&
-            !literal.AsSpan().Contains((byte)'\n') &&
-            !literal.AsSpan().Contains((byte)'\r') &&
-            !literal.AsSpan().Contains((byte)0) &&
-            LiteralLineSearcher.IsLiteralRegex(literal);
+        return !literal.IsEmpty &&
+            !literal.Span.Contains((byte)'\n') &&
+            !literal.Span.Contains((byte)'\r') &&
+            !literal.Span.Contains((byte)0);
     }
 
     private static bool TryFileContainsLiteralWithoutAllocating(
         string path,
-        byte[] literal,
+        ReadOnlySpan<byte> literal,
         bool asciiCaseInsensitive,
         CliEncodingMode encodingMode,
         out bool containsLiteral)
@@ -1132,7 +1104,7 @@ internal static class StandardSearchTargetOperations
         containsLiteral = false;
         if (encodingMode is not (CliEncodingMode.Auto or CliEncodingMode.None or CliEncodingMode.Utf8) ||
             literal.Length > DirectoryEntryLiteralPrecheckBufferLength / 2 ||
-            (asciiCaseInsensitive && literal.AsSpan().IndexOfAnyExceptInRange((byte)0x00, (byte)0x7f) >= 0))
+            (asciiCaseInsensitive && literal.IndexOfAnyExceptInRange((byte)0x00, (byte)0x7f) >= 0))
         {
             return false;
         }
@@ -1232,7 +1204,7 @@ internal static class StandardSearchTargetOperations
         ref bool wroteHeadingOutput,
         ref bool matched,
         ref bool errored,
-        RegexSearchPlan? regexPlan = null)
+        RegexSearchPlan regexPlan)
     {
         OutputPath outputPath = SearchOutputFormatting.CreateDirectoryEntryOutputPath(entry, displayPath, lowArgs, color);
         OutputPath? prefix = SearchOutputFormatting.GetFileSearchPrefix(lowArgs.SearchMode, autoPrefixPath: true, lowArgs.WithFilename, outputPath);
@@ -1263,18 +1235,19 @@ internal static class StandardSearchTargetOperations
         ref bool wroteHeadingOutput,
         ref bool matched,
         ref bool errored,
-        ref SearchStats stats)
+        ref SearchStats stats,
+        RegexSearchPlan regexPlan)
     {
         OutputPath outputPath = SearchOutputFormatting.CreateDirectoryEntryOutputPath(entry, displayPath, lowArgs, color);
         OutputPath? prefix = SearchOutputFormatting.GetFileSearchPrefix(lowArgs.SearchMode, autoPrefixPath: true, lowArgs.WithFilename, outputPath);
         if (entry.IsRawUnixPath)
         {
             var path = SearchPathArgument.FromUnixBytes(entry.UnixPathBytes, displayPath);
-            SearchRawUnixFileWithStats(path, pattern, lowArgs, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
+            SearchRawUnixFileWithStats(path, pattern, lowArgs, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats, regexPlan);
             return;
         }
 
-        SearchFileWithStats(entry.FullPath, entry.KnownLength, pattern, lowArgs, implicitSearch: true, autoMmapEligible: false, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats);
+        SearchFileWithStats(entry.FullPath, entry.KnownLength, pattern, lowArgs, implicitSearch: true, autoMmapEligible: false, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, ref stats, regexPlan);
     }
 
     private static void SearchFile(
@@ -1316,7 +1289,7 @@ internal static class StandardSearchTargetOperations
         ref bool wroteHeadingOutput,
         ref bool matched,
         ref bool errored,
-        RegexSearchPlan? regexPlan = null)
+        RegexSearchPlan regexPlan)
     {
         if (LargeFileSearchOperations.TrySearch(
             path,
@@ -1354,7 +1327,8 @@ internal static class StandardSearchTargetOperations
             nullPathTerminator,
             heading,
             ref matched,
-            ref errored))
+            ref errored,
+            regexPlan))
         {
             return;
         }
@@ -1445,8 +1419,9 @@ internal static class StandardSearchTargetOperations
 
         SearchDiagnosticLogging.LogTraceSearchPath(logger, path, readKind);
         bool memoryMapped = IsMemoryMapped(readKind);
-        bool searchTextMode = textMode || SearchesBinaryAsText(readKind, lowArgs, searchMode, bytes, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp);
-        matched |= StandardSearchByteOperations.SearchBytesWithOptionalHeading(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, searchTextMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, ShouldQuitOnBinary(lowArgs, implicitSearch, searchTextMode), heading, ref wroteHeadingOutput, memoryMapped, regexPlan);
+        bool searchTextMode = textMode ||
+            TreatMemoryMappedInputAsText(readKind, lowArgs, searchMode);
+        matched |= StandardSearchByteOperations.SearchBytesWithOptionalHeading(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, searchTextMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, ShouldQuitOnBinary(lowArgs, implicitSearch, searchTextMode), heading, ref wroteHeadingOutput, memoryMapped, regexPlan, GetBinaryDetectionScope(readKind, lowArgs, searchMode, searchTextMode));
     }
 
     /// <summary>
@@ -1485,7 +1460,7 @@ internal static class StandardSearchTargetOperations
         bool nullPathTerminator,
         bool heading,
         ref bool matched,
-        RegexSearchPlan? regexPlan)
+        RegexSearchPlan regexPlan)
     {
         if (lowArgs.MmapMode != CliMmapMode.AlwaysTryMmap ||
             searchMode == CliSearchMode.Standard ||
@@ -1514,7 +1489,6 @@ internal static class StandardSearchTargetOperations
                 return false;
             }
 
-            RegexSearchPlan? effectiveRegexPlan = regexPlan;
             bool canCountMacOsMemoryMappedWindows = OperatingSystem.IsMacOS() &&
                 !textMode &&
                 !separators.NullData &&
@@ -1531,7 +1505,7 @@ internal static class StandardSearchTargetOperations
                 TryCountMemoryMappedWindows(
                     mappedSearchFile,
                     pattern,
-                    ref effectiveRegexPlan,
+                    regexPlan,
                     searchMode,
                     asciiCaseInsensitive,
                     invertMatch,
@@ -1581,7 +1555,7 @@ internal static class StandardSearchTargetOperations
                     LiteralLineSearcher.TryCountMatchesAndDetectNulWithRegexPlan(
                         bytes,
                         pattern,
-                        ref effectiveRegexPlan,
+                        regexPlan,
                         asciiCaseInsensitive,
                         invertMatch,
                         lineRegexp,
@@ -1652,7 +1626,7 @@ internal static class StandardSearchTargetOperations
                 nullPathTerminator,
                 lowArgs.StopOnNonmatch,
                 ShouldQuitOnBinary(lowArgs, implicitSearch: false, searchTextMode),
-                effectiveRegexPlan);
+                regexPlan);
             return true;
         }
         finally
@@ -1667,7 +1641,7 @@ internal static class StandardSearchTargetOperations
     /// </summary>
     /// <param name="mappedSearchFile">The file whose views are replaced as counting advances.</param>
     /// <param name="pattern">The ordered regex patterns.</param>
-    /// <param name="regexPlan">The optional reusable authoritative regex plan.</param>
+    /// <param name="regexPlan">The authoritative regex plan.</param>
     /// <param name="searchMode">Whether to count matching records or individual matches.</param>
     /// <param name="asciiCaseInsensitive">Whether ASCII matching is case-insensitive.</param>
     /// <param name="invertMatch">Whether non-matching records are selected.</param>
@@ -1685,7 +1659,7 @@ internal static class StandardSearchTargetOperations
     internal static bool TryCountMemoryMappedWindows(
         MemoryMappedSearchFile mappedSearchFile,
         IReadOnlyList<byte[]> pattern,
-        ref RegexSearchPlan? regexPlan,
+        RegexSearchPlan regexPlan,
         CliSearchMode searchMode,
         bool asciiCaseInsensitive,
         bool invertMatch,
@@ -1749,7 +1723,7 @@ internal static class StandardSearchTargetOperations
                     if (!TryCountMemoryMappedSegment(
                         line,
                         pattern,
-                        ref regexPlan,
+                        regexPlan,
                         searchMode,
                         asciiCaseInsensitive,
                         invertMatch,
@@ -1774,7 +1748,7 @@ internal static class StandardSearchTargetOperations
                     if (!TryCountMemoryMappedSegment(
                         window.Slice(segmentStart, completeLength),
                         pattern,
-                        ref regexPlan,
+                        regexPlan,
                         searchMode,
                         asciiCaseInsensitive,
                         invertMatch,
@@ -1807,7 +1781,7 @@ internal static class StandardSearchTargetOperations
                 if (!TryCountMemoryMappedSegment(
                     line,
                     pattern,
-                    ref regexPlan,
+                    regexPlan,
                     searchMode,
                     asciiCaseInsensitive,
                     invertMatch,
@@ -1838,7 +1812,7 @@ internal static class StandardSearchTargetOperations
     private static bool TryCountMemoryMappedSegment(
         ReadOnlySpan<byte> segment,
         IReadOnlyList<byte[]> pattern,
-        ref RegexSearchPlan? regexPlan,
+        RegexSearchPlan regexPlan,
         CliSearchMode searchMode,
         bool asciiCaseInsensitive,
         bool invertMatch,
@@ -1861,7 +1835,7 @@ internal static class StandardSearchTargetOperations
             counted = LiteralLineSearcher.TryCountMatchingLinesAndDetectNulWithRegexPlan(
                 segment,
                 pattern,
-                ref regexPlan,
+                regexPlan,
                 asciiCaseInsensitive,
                 invertMatch,
                 lineRegexp,
@@ -1876,7 +1850,7 @@ internal static class StandardSearchTargetOperations
             counted = LiteralLineSearcher.TryCountMatchesAndDetectNulWithRegexPlan(
                 segment,
                 pattern,
-                ref regexPlan,
+                regexPlan,
                 asciiCaseInsensitive,
                 invertMatch,
                 lineRegexp,
@@ -1889,7 +1863,7 @@ internal static class StandardSearchTargetOperations
                 LiteralLineSearcher.TryCountNonEmptyMatchesAndDetectNulWithRegexPlan(
                     segment,
                     pattern,
-                    ref regexPlan,
+                    regexPlan,
                     asciiCaseInsensitive,
                     invertMatch,
                     lineRegexp,
@@ -1946,10 +1920,9 @@ internal static class StandardSearchTargetOperations
         bool heading,
         ref bool wroteHeadingOutput,
         ref bool matched,
-        RegexSearchPlan? regexPlan)
+        RegexSearchPlan regexPlan)
     {
-        if (regexPlan is null ||
-            !CanUsePooledRawFileRead(knownLength, lowArgs, autoMmapEligible))
+        if (!CanUsePooledRawFileRead(knownLength, lowArgs, autoMmapEligible))
         {
             return false;
         }
@@ -2137,7 +2110,7 @@ internal static class StandardSearchTargetOperations
         ref bool wroteHeadingOutput,
         ref bool matched,
         ref bool errored,
-        RegexSearchPlan? regexPlan = null)
+        RegexSearchPlan regexPlan)
     {
         if (!SearchFileContentReader.TryReadRawUnix(path, lowArgs, diagnostics, out byte[] bytes, out SearchFileReadKind readKind))
         {
@@ -2146,7 +2119,7 @@ internal static class StandardSearchTargetOperations
         }
 
         SearchDiagnosticLogging.LogTraceSearchPath(logger, path.DisplayText, readKind);
-        matched |= StandardSearchByteOperations.SearchBytesWithOptionalHeading(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, quitOnBinary: false, heading, ref wroteHeadingOutput, regexPlan: regexPlan);
+        matched |= StandardSearchByteOperations.SearchBytesWithOptionalHeading(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, quitOnBinary: false, heading, ref wroteHeadingOutput, memoryMapped: false, regexPlan);
     }
 
     private static void SearchFileWithStats(
@@ -2187,7 +2160,8 @@ internal static class StandardSearchTargetOperations
         ref bool wroteHeadingOutput,
         ref bool matched,
         ref bool errored,
-        ref SearchStats stats)
+        ref SearchStats stats,
+        RegexSearchPlan regexPlan)
     {
         if (!SearchFileContentReader.TryRead(path, lowArgs, autoMmapEligible, diagnostics, logger, out byte[] bytes, out SearchFileReadKind readKind, knownLength))
         {
@@ -2197,8 +2171,9 @@ internal static class StandardSearchTargetOperations
 
         SearchDiagnosticLogging.LogTraceSearchPath(logger, path, readKind);
         bool memoryMapped = IsMemoryMapped(readKind);
-        bool searchTextMode = textMode || SearchesBinaryAsText(readKind, lowArgs, searchMode, bytes, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp);
-        matched |= StandardSearchByteOperations.SearchBytesWithStats(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, searchTextMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, ShouldQuitOnBinary(lowArgs, implicitSearch, searchTextMode), heading, ref wroteHeadingOutput, ref stats, memoryMapped);
+        bool searchTextMode = textMode ||
+            TreatMemoryMappedInputAsText(readKind, lowArgs, searchMode);
+        matched |= StandardSearchByteOperations.SearchBytesWithStats(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, searchTextMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, ShouldQuitOnBinary(lowArgs, implicitSearch, searchTextMode), heading, ref wroteHeadingOutput, ref stats, memoryMapped, regexPlan, GetBinaryDetectionScope(readKind, lowArgs, searchMode, searchTextMode));
     }
 
     private static void SearchRawUnixFileWithStats(
@@ -2236,7 +2211,8 @@ internal static class StandardSearchTargetOperations
         ref bool wroteHeadingOutput,
         ref bool matched,
         ref bool errored,
-        ref SearchStats stats)
+        ref SearchStats stats,
+        RegexSearchPlan regexPlan)
     {
         if (!SearchFileContentReader.TryReadRawUnix(path, lowArgs, diagnostics, out byte[] bytes, out SearchFileReadKind readKind))
         {
@@ -2245,7 +2221,7 @@ internal static class StandardSearchTargetOperations
         }
 
         SearchDiagnosticLogging.LogTraceSearchPath(logger, path.DisplayText, readKind);
-        matched |= StandardSearchByteOperations.SearchBytesWithStats(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, quitOnBinary: false, heading, ref wroteHeadingOutput, ref stats);
+        matched |= StandardSearchByteOperations.SearchBytesWithStats(bytes, pattern, output, prefix, separators, lineLimit, color, searchMode, vimgrep, lineNumber, column, byteOffset, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, onlyMatching, replacement, maxCount, textMode, quiet, trim, beforeContext, afterContext, passthru, includeZero, nullPathTerminator, lowArgs.StopOnNonmatch, quitOnBinary: false, heading, ref wroteHeadingOutput, ref stats, memoryMapped: false, regexPlan);
     }
 
     private static bool IsMemoryMapped(SearchFileReadKind readKind)
@@ -2253,60 +2229,35 @@ internal static class StandardSearchTargetOperations
         return readKind == SearchFileReadKind.MemoryMapped;
     }
 
-    private static bool SearchesBinaryAsText(
+    private static bool TreatMemoryMappedInputAsText(
         SearchFileReadKind readKind,
         CliLowArgs lowArgs,
-        CliSearchMode searchMode,
-        byte[] bytes,
-        IReadOnlyList<byte[]> pattern,
-        bool asciiCaseInsensitive,
-        bool invertMatch,
-        bool lineRegexp,
-        bool wordRegexp)
+        CliSearchMode searchMode)
     {
         if (!IsMemoryMapped(readKind))
         {
             return false;
         }
 
-        if (searchMode != CliSearchMode.Standard)
-        {
-            return true;
-        }
-
-        if (lowArgs.MmapMode != CliMmapMode.AlwaysTryMmap)
-        {
-            return false;
-        }
-
-        if (lowArgs.Multiline || lowArgs.NullData)
-        {
-            return true;
-        }
-
-        return !HasSelectedMatchLineContainingNul(bytes, pattern, lowArgs, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp);
+        return searchMode != CliSearchMode.Standard ||
+            lowArgs.Multiline ||
+            lowArgs.NullData;
     }
 
-    private static bool HasSelectedMatchLineContainingNul(
-        byte[] bytes,
-        IReadOnlyList<byte[]> pattern,
+    private static StandardBinaryDetectionScope GetBinaryDetectionScope(
+        SearchFileReadKind readKind,
         CliLowArgs lowArgs,
-        bool asciiCaseInsensitive,
-        bool invertMatch,
-        bool lineRegexp,
-        bool wordRegexp)
+        CliSearchMode searchMode,
+        bool searchTextMode)
     {
-        List<ContextLineInfo> lines = ContextSearchOperations.BuildLines(bytes, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, lowArgs.Crlf, lowArgs.NullData, lowArgs.StopOnNonmatch);
-        for (int index = 0; index < lines.Count; index++)
-        {
-            ContextLineInfo line = lines[index];
-            if (line.SelectedMatch && bytes.AsSpan(line.Start, line.Length).Contains((byte)0))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return IsMemoryMapped(readKind) &&
+            lowArgs.MmapMode == CliMmapMode.AlwaysTryMmap &&
+            searchMode == CliSearchMode.Standard &&
+            !searchTextMode &&
+            !lowArgs.Multiline &&
+            !lowArgs.NullData
+                ? StandardBinaryDetectionScope.SelectedLines
+                : StandardBinaryDetectionScope.WholeInput;
     }
 
     private static bool ShouldQuitOnBinary(CliLowArgs lowArgs, bool implicitSearch, bool searchTextMode)

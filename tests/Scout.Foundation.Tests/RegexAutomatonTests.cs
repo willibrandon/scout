@@ -4136,6 +4136,39 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies parsed authoritative compilation bypasses raw alternation splitting while preserving
+    /// ordinary compilation's existing alternation-set specialization.
+    /// </summary>
+    [Fact]
+    public void ParsedAuthoritativeCompilationBypassesRawAlternationSet()
+    {
+        string pattern = string.Join(
+            "|",
+            Enumerable.Range(0, 64).Select(static index => $"(?:(?<capture{index}>absent_{index:D2}))"));
+        byte[] patternBytes = System.Text.Encoding.ASCII.GetBytes(pattern);
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(patternBytes);
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: true,
+            dotMatchesNewline: false,
+            utf8: false);
+
+        var ordinary = RegexAutomaton.CompileParsed(tree, options);
+        var authoritative = RegexAutomaton.CompileParsedAuthoritative(tree, options);
+        RegexCaptures? captures = authoritative.FindCaptures("prefix absent_63 suffix"u8);
+
+        Assert.Equal(RegexEngineKind.AlternationSet, ordinary.EngineKind);
+        Assert.False(ordinary.UsesParsedPatternSet);
+        Assert.Equal(RegexEngineKind.AlternationSet, authoritative.EngineKind);
+        Assert.True(authoritative.UsesParsedPatternSet);
+        Assert.False(authoritative.UsesSyntheticCaptureAlternationSet);
+        Assert.NotNull(captures);
+        Assert.Equal(new RegexMatch(7, 9), captures.Match);
+        Assert.Equal(new RegexMatch(7, 9), captures.GetGroup(64));
+    }
+
+    /// <summary>
     /// Verifies large whole-branch capture alternations can report captures from the winning branch.
     /// </summary>
     [Fact]
@@ -6323,6 +6356,305 @@ public sealed class RegexAutomatonTests
         Assert.True(HasStartPredicate(automaton));
         Assert.Equal(new RegexMatch(5, matchingLine.Length + 1), automaton.Find(haystack));
         Assert.Equal(1, automaton.CountMatches(haystack));
+    }
+
+    /// <summary>
+    /// Verifies a large byte-oriented anchored repetition derives its end candidate from the
+    /// reversed automaton while retaining the authoritative matcher for accepted candidates.
+    /// </summary>
+    [Fact]
+    public void FallbackCompilesReversedEndCandidateForLargeAnchoredBoundedClass()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(@"^[A-Za-z_]{70,90}$"u8);
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: true,
+            dotMatchesNewline: false,
+            crlf: false,
+            lineTerminator: (byte)'\n',
+            utf8: false,
+            unicodeClasses: true,
+            specializationMode: RegexSpecializationMode.General,
+            excludeLineTerminators: true,
+            excludeCrLf: false);
+        var automaton = RegexAutomaton.CompileParsed(tree, options, compilePrefilter: true);
+        byte[] matchingLine = System.Text.Encoding.ASCII.GetBytes(new string('A', 80));
+        byte[] lfHaystack = new byte[matchingLine.Length + 1];
+        matchingLine.CopyTo(lfHaystack, 0);
+        lfHaystack[^1] = (byte)'\n';
+        byte[] crlfHaystack = new byte[matchingLine.Length + 2];
+        matchingLine.CopyTo(crlfHaystack, 0);
+        "\r\n"u8.CopyTo(crlfHaystack.AsSpan(matchingLine.Length));
+
+        Assert.True(RegexStartPredicate.TryCreate(
+            tree.Root,
+            options,
+            out RegexStartPredicate? predicate));
+        Assert.NotNull(predicate);
+        Assert.Equal([0], EnumerateCandidateStarts(lfHaystack, startAt: 0, options.Utf8, predicate));
+        Assert.Empty(EnumerateCandidateStarts(crlfHaystack, startAt: 0, options.Utf8, predicate));
+        Assert.Equal(new RegexMatch(0, matchingLine.Length), automaton.Find(lfHaystack));
+        Assert.Equal(1, automaton.CountMatches(lfHaystack));
+        Assert.Null(automaton.Find(crlfHaystack));
+        Assert.Equal(0, automaton.CountMatches(crlfHaystack));
+    }
+
+    /// <summary>
+    /// Verifies reversed end candidates preserve authoritative ordering, spans, optional suffixes,
+    /// alternatives, non-ASCII literals, and start-offset behavior.
+    /// </summary>
+    /// <param name="pattern">The end-anchored pattern.</param>
+    /// <param name="haystackText">The mixed line-ending haystack.</param>
+    [Theory]
+    [InlineData("^[A-Za-z_]{2,4}$", "AB\nAB\r\nA_\nABCDE\n")]
+    [InlineData("^[A-Za-z_]{2,4}\\r?$", "AB\nAB\r\nA_\nABCDE\r\n")]
+    [InlineData("^(?:cat|dog)$", "cat\ndog\r\nfox\ndog\n")]
+    [InlineData("^(?:cat|dog?)$", "cat\ndo\ndog\r\nfox\n")]
+    [InlineData("^(?:[0-9]{2}|[A-F]{3})$", "12\nABC\r\n99\nFFFF\n")]
+    [InlineData("(?i)^[a-z]{2,4}k$", "ABK\nxyk\r\nfooK\nzz\n")]
+    [InlineData("^é$", "é\né\r\nx\n")]
+    public void ReversedEndCandidatesAgreeWithUnguardedFallback(
+        string pattern,
+        string haystackText)
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(System.Text.Encoding.UTF8.GetBytes(pattern));
+        var guardedOptions = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: true,
+            dotMatchesNewline: false,
+            crlf: false,
+            lineTerminator: (byte)'\n',
+            utf8: false,
+            unicodeClasses: true,
+            specializationMode: RegexSpecializationMode.General,
+            excludeLineTerminators: true,
+            excludeCrLf: false);
+        var fallbackOptions = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: true,
+            dotMatchesNewline: false,
+            crlf: false,
+            lineTerminator: (byte)'\n',
+            utf8: false,
+            unicodeClasses: true,
+            specializationMode: RegexSpecializationMode.Fallback,
+            excludeLineTerminators: true,
+            excludeCrLf: false);
+        var guarded = RegexAutomaton.CompileParsedAuthoritative(tree, guardedOptions);
+        var fallback = RegexAutomaton.CompileParsed(tree, fallbackOptions);
+        byte[] haystack = System.Text.Encoding.UTF8.GetBytes(haystackText);
+
+        for (int startAt = 0; startAt <= haystack.Length; startAt++)
+        {
+            Assert.Equal(fallback.Find(haystack, startAt), guarded.Find(haystack, startAt));
+            Assert.Equal(fallback.CountMatches(haystack, startAt), guarded.CountMatches(haystack, startAt));
+            Assert.Equal(fallback.SumMatchSpans(haystack, startAt), guarded.SumMatchSpans(haystack, startAt));
+        }
+    }
+
+    /// <summary>
+    /// Verifies deterministic mixed-byte haystacks cannot expose a false-negative end candidate
+    /// across optional suffixes, alternatives, nullable branches, line ends, and text ends.
+    /// </summary>
+    [Fact]
+    public void ReversedEndCandidatesRemainConservativeAcrossMixedByteHaystacks()
+    {
+        string[] patterns =
+        [
+            "^[AB]{1,3}$",
+            "^(?:A|BB)$",
+            "^A?B$",
+            "^AB?$",
+            "^(?:A$|B$)",
+            "^(?:[AB]+|C?)$",
+            @"\A[AB]{1,3}\z",
+        ];
+        uint randomState = 0x5C0A7;
+        byte[] alphabet = [(byte)'A', (byte)'B', (byte)'C', (byte)'\r', (byte)'\n', 0xC3, 0xA9];
+        foreach (string pattern in patterns)
+        {
+            RegexSyntaxTree tree = RegexSyntaxParser.Parse(System.Text.Encoding.ASCII.GetBytes(pattern));
+            var guardedOptions = new RegexCompileOptions(
+                caseInsensitive: false,
+                swapGreed: false,
+                multiLine: true,
+                dotMatchesNewline: false,
+                crlf: false,
+                lineTerminator: (byte)'\n',
+                utf8: false,
+                unicodeClasses: true,
+                specializationMode: RegexSpecializationMode.General,
+                excludeLineTerminators: true,
+                excludeCrLf: false);
+            var fallbackOptions = new RegexCompileOptions(
+                caseInsensitive: false,
+                swapGreed: false,
+                multiLine: true,
+                dotMatchesNewline: false,
+                crlf: false,
+                lineTerminator: (byte)'\n',
+                utf8: false,
+                unicodeClasses: true,
+                specializationMode: RegexSpecializationMode.Fallback,
+                excludeLineTerminators: true,
+                excludeCrLf: false);
+            var guarded = RegexAutomaton.CompileParsedAuthoritative(tree, guardedOptions);
+            var fallback = RegexAutomaton.CompileParsed(tree, fallbackOptions);
+
+            for (int iteration = 0; iteration < 256; iteration++)
+            {
+                byte[] haystack = new byte[Next(49)];
+                for (int index = 0; index < haystack.Length; index++)
+                {
+                    haystack[index] = alphabet[Next(alphabet.Length)];
+                }
+
+                for (int startAt = 0; startAt <= haystack.Length; startAt++)
+                {
+                    Assert.Equal(fallback.Find(haystack, startAt), guarded.Find(haystack, startAt));
+                    Assert.Equal(fallback.CountMatches(haystack, startAt), guarded.CountMatches(haystack, startAt));
+                    Assert.Equal(
+                        fallback.SumMatchSpans(haystack, startAt),
+                        guarded.SumMatchSpans(haystack, startAt));
+                }
+            }
+        }
+
+        int Next(int exclusiveMaximum)
+        {
+            randomState = unchecked((randomState * 1_664_525) + 1_013_904_223);
+            return (int)(randomState % (uint)exclusiveMaximum);
+        }
+    }
+
+    /// <summary>
+    /// Verifies a line-end candidate is eligible only when consuming atoms exclude that same
+    /// boundary, while a text-end-only candidate remains eligible independently of record policy.
+    /// </summary>
+    /// <param name="pattern">The anchored pattern to analyze.</param>
+    /// <param name="lineTerminator">The semantic line-end byte.</param>
+    /// <param name="excludedLineTerminator">The byte excluded from consuming atoms.</param>
+    /// <param name="textStart">Whether every match requires the start of the complete haystack.</param>
+    /// <param name="expected">Whether a conservative end candidate can be created.</param>
+    [Theory]
+    [InlineData("^[A-Z]{79}A$", (byte)'\n', (byte)'\n', false, true)]
+    [InlineData("^[A-Z\\n]{79}A$", (byte)'\n', (byte)0, false, false)]
+    [InlineData("^[A-Z\\x00]{79}A$", (byte)0, (byte)'\n', false, false)]
+    [InlineData(@"\A[A-Z\n]{79}A\z", (byte)'\n', (byte)0, true, true)]
+    [InlineData(@"(?:^[A-Z\n]{79}A$|\A[A-Z\n]{79}A\z)", (byte)'\n', (byte)0, false, false)]
+    public void ReversedEndCandidateEligibilityRequiresTheExcludedLineBoundary(
+        string pattern,
+        byte lineTerminator,
+        byte excludedLineTerminator,
+        bool textStart,
+        bool expected)
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(System.Text.Encoding.ASCII.GetBytes(pattern));
+        RegexCompileOptions options = CreateEndCandidateOptions(
+            lineTerminator,
+            excludedLineTerminator,
+            RegexSpecializationMode.General);
+        RegexStartPredicate.TryCreate(
+            tree.Root,
+            options,
+            out RegexStartPredicate? startPredicate);
+        bool created = RegexEndCandidatePredicate.TryCreate(
+            tree.Root,
+            options,
+            textStart ? RegexRequiredStartKind.Text : RegexRequiredStartKind.Line,
+            out RegexEndCandidatePredicate? endPredicate);
+
+        Assert.NotNull(startPredicate);
+        Assert.Equal(expected, created);
+        Assert.Equal(expected, endPredicate is not null);
+    }
+
+    /// <summary>
+    /// Verifies CRLF-aware boundaries remain on the authoritative matcher because a single-byte
+    /// predecessor check cannot represent their paired line-ending semantics.
+    /// </summary>
+    [Fact]
+    public void ReversedEndCandidateDeclinesCrlfBoundaries()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse("^[A-Z]{79}A$"u8);
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: true,
+            dotMatchesNewline: false,
+            crlf: true,
+            lineTerminator: (byte)'\n',
+            utf8: false,
+            unicodeClasses: true,
+            specializationMode: RegexSpecializationMode.General,
+            excludeLineTerminators: true,
+            excludeCrLf: true);
+
+        bool created = RegexEndCandidatePredicate.TryCreate(
+            tree.Root,
+            options,
+            RegexRequiredStartKind.Line,
+            out RegexEndCandidatePredicate? predicate);
+
+        Assert.False(created);
+        Assert.Null(predicate);
+    }
+
+    /// <summary>
+    /// Verifies guarded compilation agrees with the unguarded authoritative fallback across
+    /// matching and mismatched LF, NUL, line-end, text-end, and mixed-end boundary policies.
+    /// </summary>
+    /// <param name="pattern">The anchored pattern.</param>
+    /// <param name="lineTerminator">The semantic line-end byte.</param>
+    /// <param name="excludedLineTerminator">The byte excluded from consuming atoms.</param>
+    /// <param name="internalByte">The byte placed inside the otherwise ASCII haystack.</param>
+    [Theory]
+    [InlineData("^[A-Z]{79}A$", (byte)'\n', (byte)'\n', (byte)'B')]
+    [InlineData("^[A-Z]{79}A$", (byte)0, (byte)0, (byte)'B')]
+    [InlineData("^[A-Z\\n]{79}A$", (byte)'\n', (byte)0, (byte)'\n')]
+    [InlineData("^[A-Z\\x00]{79}A$", (byte)0, (byte)'\n', (byte)0)]
+    [InlineData(@"\A[A-Z\n]{79}A\z", (byte)'\n', (byte)0, (byte)'\n')]
+    [InlineData(@"(?:^[A-Z\n]{79}A$|\A[A-Z\n]{79}A\z)", (byte)'\n', (byte)0, (byte)'\n')]
+    public void ReversedEndCandidatesAgreeAcrossRecordBoundaryPolicies(
+        string pattern,
+        byte lineTerminator,
+        byte excludedLineTerminator,
+        byte internalByte)
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(System.Text.Encoding.ASCII.GetBytes(pattern));
+        RegexCompileOptions guardedOptions = CreateEndCandidateOptions(
+            lineTerminator,
+            excludedLineTerminator,
+            RegexSpecializationMode.General);
+        RegexCompileOptions fallbackOptions = CreateEndCandidateOptions(
+            lineTerminator,
+            excludedLineTerminator,
+            RegexSpecializationMode.Fallback);
+        var guarded = RegexAutomaton.CompileParsedAuthoritative(tree, guardedOptions);
+        var fallback = RegexAutomaton.CompileParsed(tree, fallbackOptions);
+        const int ContentLength = 80;
+        bool hasSemanticTerminator = lineTerminator == excludedLineTerminator;
+        byte[] haystack = new byte[ContentLength + (hasSemanticTerminator ? 1 : 0)];
+        haystack.AsSpan(0, ContentLength).Fill((byte)'B');
+        haystack[40] = internalByte;
+        haystack[ContentLength - 1] = (byte)'A';
+        if (hasSemanticTerminator)
+        {
+            haystack[ContentLength] = lineTerminator;
+        }
+
+        var expected = new RegexMatch(0, ContentLength);
+
+        Assert.Equal(expected, fallback.Find(haystack));
+        for (int startAt = 0; startAt <= haystack.Length; startAt++)
+        {
+            Assert.Equal(fallback.Find(haystack, startAt), guarded.Find(haystack, startAt));
+            Assert.Equal(fallback.CountMatches(haystack, startAt), guarded.CountMatches(haystack, startAt));
+            Assert.Equal(fallback.SumMatchSpans(haystack, startAt), guarded.SumMatchSpans(haystack, startAt));
+        }
     }
 
     /// <summary>
@@ -9700,6 +10032,26 @@ public sealed class RegexAutomatonTests
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
         return typeof(RegexAutomaton).GetField("_startPredicate", Flags)!.GetValue(automaton) is not null ||
             typeof(RegexAutomaton).GetField("_startPredicateFactory", Flags)!.GetValue(automaton) is not null;
+    }
+
+    private static RegexCompileOptions CreateEndCandidateOptions(
+        byte lineTerminator,
+        byte excludedLineTerminator,
+        RegexSpecializationMode specializationMode)
+    {
+        return new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: true,
+            dotMatchesNewline: false,
+            crlf: false,
+            lineTerminator,
+            utf8: false,
+            unicodeClasses: true,
+            specializationMode,
+            excludeLineTerminators: true,
+            excludeCrLf: false,
+            excludedLineTerminator);
     }
 
     private static int[] EnumerateCandidateStarts(

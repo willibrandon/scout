@@ -1,14 +1,24 @@
 namespace Scout;
 
+/// <summary>
+/// Accelerates an ordered set of exact literal patterns while preserving pattern identity.
+/// </summary>
 internal sealed class PatternSetLiteralAccelerator
 {
     private readonly AhoCorasickAutomaton automaton;
+    private readonly RegexCommonPrefixLiteralSetScanner? _commonPrefixScanner;
     private readonly RegexLargeLiteralSetScanner? largeLiteralScanner;
     private readonly byte[][] patterns;
     private readonly int[] patternIds;
     private readonly int[] allPatternIndexes;
     private readonly int[][]? patternsByFirstByte;
 
+    /// <summary>
+    /// Initializes an accelerator for ordered literal patterns and their source identifiers.
+    /// </summary>
+    /// <param name="patterns">The ordered literal patterns.</param>
+    /// <param name="patternIds">The source identifier for each pattern.</param>
+    /// <param name="asciiCaseInsensitive">Whether matching folds ASCII case.</param>
     public PatternSetLiteralAccelerator(IReadOnlyList<byte[]> patterns, IReadOnlyList<int> patternIds, bool asciiCaseInsensitive = false)
     {
         ArgumentNullException.ThrowIfNull(patterns);
@@ -32,12 +42,37 @@ internal sealed class PatternSetLiteralAccelerator
         automaton = AhoCorasickAutomaton.Create(patterns, AhoCorasickMatchKind.Standard, asciiCaseInsensitive);
         if (!asciiCaseInsensitive)
         {
-            RegexLargeLiteralSetScanner.TryCreate(this.patterns, out largeLiteralScanner);
+            RegexCommonPrefixLiteralSetScanner.TryCreate(
+                this.patterns,
+                out _commonPrefixScanner,
+                takeLiteralOwnership: true);
+            if (_commonPrefixScanner is null)
+            {
+                RegexLargeLiteralSetScanner.TryCreate(this.patterns, out largeLiteralScanner);
+            }
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether searches use the compiler-proven common-prefix scanner.
+    /// </summary>
+    internal bool UsesCommonPrefixScanner => _commonPrefixScanner is not null;
+
+    /// <summary>
+    /// Finds the leftmost match, breaking equal-start ties by source pattern order.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <returns>The selected pattern match, or <see langword="null" />.</returns>
     public PatternSetMatch? Find(ReadOnlySpan<byte> haystack)
     {
+        if (_commonPrefixScanner is not null)
+        {
+            RegexLiteralSetCandidate? candidate = _commonPrefixScanner.Find(haystack, startAt: 0);
+            return candidate.HasValue
+                ? new PatternSetMatch(patternIds[candidate.Value.LiteralId], candidate.Value.Match)
+                : null;
+        }
+
         if (largeLiteralScanner is not null)
         {
             RegexLiteralSetCandidate? candidate = largeLiteralScanner.Find(haystack, startAt: 0);
@@ -63,6 +98,12 @@ internal sealed class PatternSetLiteralAccelerator
         return best;
     }
 
+    /// <summary>
+    /// Finds the first ordered literal that matches at an exact byte offset.
+    /// </summary>
+    /// <param name="haystack">The bytes to inspect.</param>
+    /// <param name="startAt">The exact match start.</param>
+    /// <returns>The selected pattern match, or <see langword="null" />.</returns>
     public PatternSetMatch? FindAt(ReadOnlySpan<byte> haystack, int startAt)
     {
         ReadOnlySpan<int> candidates = GetExactCandidates(haystack, startAt);
@@ -94,8 +135,18 @@ internal sealed class PatternSetLiteralAccelerator
             : [];
     }
 
+    /// <summary>
+    /// Determines whether any literal matches the supplied bytes.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <returns><see langword="true" /> when a literal matches.</returns>
     public bool IsMatch(ReadOnlySpan<byte> haystack)
     {
+        if (_commonPrefixScanner is not null)
+        {
+            return _commonPrefixScanner.Find(haystack, startAt: 0).HasValue;
+        }
+
         if (largeLiteralScanner is not null)
         {
             return largeLiteralScanner.Find(haystack, startAt: 0).HasValue;
@@ -104,8 +155,19 @@ internal sealed class PatternSetLiteralAccelerator
         return automaton.Find(haystack).HasValue;
     }
 
+    /// <summary>
+    /// Counts ordered non-overlapping matches at or after a byte offset.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startAt">The first permitted match start.</param>
+    /// <returns>The number of matches.</returns>
     public long CountMatches(ReadOnlySpan<byte> haystack, int startAt)
     {
+        if (_commonPrefixScanner is not null)
+        {
+            return _commonPrefixScanner.CountMatches(haystack, startAt);
+        }
+
         if (largeLiteralScanner is not null)
         {
             return largeLiteralScanner.CountMatches(haystack, startAt);
@@ -114,8 +176,44 @@ internal sealed class PatternSetLiteralAccelerator
         return CountOrSumMatches(haystack, startAt, sumSpans: false);
     }
 
+    /// <summary>
+    /// Attempts to count ordered non-overlapping matches while the common-prefix scan detects NUL bytes.
+    /// </summary>
+    /// <param name="haystack">The complete bytes to search.</param>
+    /// <param name="count">Receives the non-overlapping match count.</param>
+    /// <param name="containsNul">Receives whether the complete haystack contains a NUL byte.</param>
+    /// <returns><see langword="true" /> when one common-prefix scan produced both results.</returns>
+    internal bool TryCountMatchesAndDetectNul(
+        ReadOnlySpan<byte> haystack,
+        out long count,
+        out bool containsNul)
+    {
+        if (_commonPrefixScanner is not null)
+        {
+            return _commonPrefixScanner.TryCountMatchesAndDetectNul(
+                haystack,
+                out count,
+                out containsNul);
+        }
+
+        count = 0;
+        containsNul = false;
+        return false;
+    }
+
+    /// <summary>
+    /// Sums ordered non-overlapping match lengths at or after a byte offset.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startAt">The first permitted match start.</param>
+    /// <returns>The sum of match lengths.</returns>
     public long SumMatchSpans(ReadOnlySpan<byte> haystack, int startAt)
     {
+        if (_commonPrefixScanner is not null)
+        {
+            return _commonPrefixScanner.SumMatchSpans(haystack, startAt);
+        }
+
         if (largeLiteralScanner is not null)
         {
             return largeLiteralScanner.SumMatchSpans(haystack, startAt);
@@ -124,6 +222,11 @@ internal sealed class PatternSetLiteralAccelerator
         return CountOrSumMatches(haystack, startAt, sumSpans: true);
     }
 
+    /// <summary>
+    /// Marks every source pattern identifier that occurs in the supplied bytes.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="matches">The source-pattern flags to update.</param>
     public void MarkMatchingPatternIds(ReadOnlySpan<byte> haystack, bool[] matches)
     {
         AhoCorasickOverlappingEnumerator literals = automaton.EnumerateOverlapping(haystack);

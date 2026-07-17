@@ -13,12 +13,6 @@ namespace Scout;
 /// <param name="trim">Whether to trim leading ASCII whitespace.</param>
 /// <param name="nullPathTerminator">Whether path prefixes use a NUL terminator.</param>
 /// <param name="lineLimit">The output line-length policy.</param>
-/// <param name="pattern">The ordered regex patterns.</param>
-/// <param name="asciiCaseInsensitive">Whether matching is ASCII case-insensitive.</param>
-/// <param name="lineRegexp">Whether patterns must match complete lines.</param>
-/// <param name="wordRegexp">Whether matches require word boundaries.</param>
-/// <param name="crlf">Whether CRLF terminates records.</param>
-/// <param name="nullData">Whether NUL terminates records.</param>
 /// <param name="color">The configured output colors.</param>
 /// <param name="lineTerminator">The output record terminator.</param>
 /// <param name="lineNumberOffset">The line-number adjustment.</param>
@@ -34,12 +28,6 @@ internal struct VimgrepSink(
     bool trim,
     bool nullPathTerminator,
     OutputLineLimit lineLimit,
-    IReadOnlyList<byte[]> pattern,
-    bool asciiCaseInsensitive,
-    bool lineRegexp,
-    bool wordRegexp,
-    bool crlf,
-    bool nullData,
     OutputColor color,
     ReadOnlyMemory<byte> lineTerminator,
     long lineNumberOffset = 0,
@@ -57,16 +45,13 @@ internal struct VimgrepSink(
     private readonly bool _trim = trim;
     private readonly bool _nullPathTerminator = nullPathTerminator;
     private readonly OutputLineLimit _lineLimit = lineLimit;
-    private readonly IReadOnlyList<byte[]> _pattern = pattern ?? throw new ArgumentNullException(nameof(pattern));
-    private readonly bool _asciiCaseInsensitive = asciiCaseInsensitive;
-    private readonly bool _lineRegexp = lineRegexp;
-    private readonly bool _wordRegexp = wordRegexp;
-    private readonly bool _crlf = crlf;
-    private readonly bool _nullData = nullData;
     private readonly OutputColor _color = color;
     private readonly ReadOnlyMemory<byte> _lineTerminator = lineTerminator;
     private readonly long _lineNumberOffset = lineNumberOffset;
     private readonly long _byteOffsetOffset = byteOffsetOffset;
+    private List<int>? _deferredMatchStarts;
+    private List<long>? _deferredMatchColumns;
+    private List<int>? _deferredMatchLengths;
     private long _lastMatchedLineNumber;
 
     /// <summary>
@@ -87,7 +72,34 @@ internal struct VimgrepSink(
         ReadOnlySpan<byte> match)
     {
         _lastMatchedLineNumber = lineNumber;
-        _ = lineByteOffset;
+        if (ShouldDeferLine(line))
+        {
+            (_deferredMatchStarts ??= []).Add(
+                checked((int)(matchByteOffset - lineByteOffset)));
+            (_deferredMatchColumns ??= []).Add(matchColumn);
+            (_deferredMatchLengths ??= []).Add(match.Length);
+            return;
+        }
+
+        WriteMatchedLine(
+            lineNumber,
+            matchByteOffset,
+            matchColumn,
+            line,
+            match,
+            lineMatchCount: 0,
+            matchesAfterPreview: 0);
+    }
+
+    private void WriteMatchedLine(
+        long lineNumber,
+        long matchByteOffset,
+        long matchColumn,
+        ReadOnlySpan<byte> line,
+        ReadOnlySpan<byte> match,
+        long lineMatchCount,
+        long matchesAfterPreview)
+    {
         lineNumber += _lineNumberOffset;
         matchByteOffset += _byteOffsetOffset;
         ReadOnlySpan<byte> body = _onlyMatching && matchColumn > 0 ? match : line;
@@ -139,7 +151,12 @@ internal struct VimgrepSink(
             _output.Write(_fieldSeparator.Span);
         }
 
-        WriteBody(displayBody, line, matchColumn - 1 - trimOffset, match.Length);
+        WriteBody(
+            displayBody,
+            matchColumn - 1 - trimOffset,
+            match.Length,
+            lineMatchCount,
+            matchesAfterPreview);
     }
 
     /// <summary>
@@ -150,25 +167,56 @@ internal struct VimgrepSink(
     /// <param name="line">The completed line.</param>
     public void FinishLine(long lineNumber, long lineByteOffset, ReadOnlySpan<byte> line)
     {
+        if (_deferredMatchStarts is { Count: > 0 } matchStarts)
+        {
+            List<long> matchColumns = _deferredMatchColumns!;
+            List<int> matchLengths = _deferredMatchLengths!;
+            int trimOffset = _trim ? GetTrimOffset(line) : 0;
+            int previewLength = _lineLimit.GetPreviewLength(line[trimOffset..]);
+            long matchesAfterPreview = CountDeferredMatchesAtOrAfter(previewLength);
+            long lineMatchCount = matchStarts.Count;
+            for (int index = 0; index < matchStarts.Count; index++)
+            {
+                int matchStart = matchStarts[index];
+                int matchLength = matchLengths[index];
+                WriteMatchedLine(
+                    lineNumber,
+                    lineByteOffset + matchStart,
+                    matchColumns[index],
+                    line,
+                    line.Slice(matchStart, matchLength),
+                    lineMatchCount,
+                    matchesAfterPreview);
+            }
+
+            matchStarts.Clear();
+            matchColumns.Clear();
+            matchLengths.Clear();
+            return;
+        }
+
         if (_lastMatchedLineNumber != lineNumber)
         {
-            MatchedLine(
+            WriteMatchedLine(
                 lineNumber,
-                lineByteOffset,
                 lineByteOffset,
                 matchColumn: 0,
                 line,
-                line);
+                line,
+                lineMatchCount: 0,
+                matchesAfterPreview: 0);
         }
     }
 
     private void WriteBody(
         ReadOnlySpan<byte> displayBody,
-        ReadOnlySpan<byte> line,
         long matchStart,
-        int matchLength)
+        int matchLength,
+        long lineMatchCount,
+        long matchesAfterPreview)
     {
-        if (matchStart < 0 && _lineLimit.IsExceeded(displayBody))
+        if ((_onlyMatching || matchStart < 0) &&
+            _lineLimit.IsExceeded(displayBody))
         {
             if (_lineLimit.Preview)
             {
@@ -188,24 +236,14 @@ internal struct VimgrepSink(
         {
             if (_lineLimit.Preview)
             {
-                ulong columns = _lineLimit.MaxColumns.GetValueOrDefault();
-                long remainingMatches = LiteralLineSearcher.CountLineMatchesAfterColumn(
-                    line,
-                    _pattern,
-                    columns,
-                    _asciiCaseInsensitive,
-                    _lineRegexp,
-                    _wordRegexp,
-                    _crlf,
-                    _nullData);
                 WriteHighlightedBody(
                     displayBody[.._lineLimit.GetPreviewLength(displayBody)],
                     matchStart,
                     matchLength);
                 _output.Write(" [... "u8);
-                OutputColor.WriteNumber(_output, remainingMatches);
+                OutputColor.WriteNumber(_output, matchesAfterPreview);
                 _output.Write(" more match"u8);
-                if (remainingMatches != 1)
+                if (matchesAfterPreview != 1)
                 {
                     _output.Write("es"u8);
                 }
@@ -215,16 +253,7 @@ internal struct VimgrepSink(
             else
             {
                 _output.Write("[Omitted long line with "u8);
-                OutputColor.WriteNumber(
-                    _output,
-                    LiteralLineSearcher.CountLineMatches(
-                        line,
-                        _pattern,
-                        _asciiCaseInsensitive,
-                        _lineRegexp,
-                        _wordRegexp,
-                        _crlf,
-                        _nullData));
+                OutputColor.WriteNumber(_output, lineMatchCount);
                 _output.Write(" matches]"u8);
             }
 
@@ -245,6 +274,32 @@ internal struct VimgrepSink(
         {
             _output.Write(_lineTerminator.Span);
         }
+    }
+
+    private bool ShouldDeferLine(ReadOnlySpan<byte> line)
+    {
+        if (_deferredMatchStarts is { Count: > 0 })
+        {
+            return true;
+        }
+
+        int trimOffset = _trim ? GetTrimOffset(line) : 0;
+        return _lineLimit.IsExceeded(line[trimOffset..]);
+    }
+
+    private long CountDeferredMatchesAtOrAfter(int start)
+    {
+        long count = 0;
+        List<int> matchStarts = _deferredMatchStarts!;
+        for (int index = 0; index < matchStarts.Count; index++)
+        {
+            if (matchStarts[index] >= start)
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     private void WriteHighlightedBody(ReadOnlySpan<byte> displayBody, long matchStart, int matchLength)

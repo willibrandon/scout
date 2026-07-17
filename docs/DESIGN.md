@@ -202,6 +202,8 @@ Rationale unchanged and reaffirmed: the BCL engine is UTF-16/`char`/`string`-bas
 
 **`Scout.Automata`** (port of `regex-automata`): **all engines up front** — Thompson NFA compiler (UTF-8 automata over bytes), PikeVM, hybrid (lazy) DFA, dense & sparse DFA, one-pass DFA, bounded backtracker, meta strategy selection, and prefilters (`Memmem`, `AhoCorasick`, `Teddy`). `PatternSet`/multi-regex for globset & ignore.
 
+The CLI creates one `RegexSearchPlan` per search operation from the complete ordered pattern set. The plan combines and parses the patterns once, derives record scope, line-terminator rules, literal acceleration, conservative prefilters, and capture mappings from that syntax tree, and owns the authoritative matcher. Each input buffer produces one ordered match stream whose spans are replayed by standard, context, JSON, vimgrep, statistics, and replacement output. Exact literal sets remain on the literal-set engine and can use a syntax-proven common-prefix scanner; captured exact alternatives retain ordered pattern identity through a parsed `PatternSet`.
+
 Finite bounded repetitions use a canonical common-exit Thompson topology: every optional skip branch targets the same continuation, consuming branches chain through the remaining copies, and split order alone encodes greedy or lazy priority. The forward and reversed compilers use the same construction.
 
 PikeVM-backed unanchored searches inject streamed prefilter candidates into one insertion-ordered active-state frontier. Capture replay stores ordered states and flat capture-slot rows in pooled runner-owned buffers, and an iterative closure stack uses restore frames while exploring capture boundaries. First arrival retains leftmost-first priority without cloning capture arrays at each transition. All mutable frontier, closure, capture, and reachability storage belongs to pooled runners, while the compiled regex remains immutable and safe for concurrent callers. This is the authoritative Thompson matcher—with full leftmost-first, anchor, UTF-8, and capture-replay semantics—not a pattern-family recognizer.
@@ -247,9 +249,9 @@ Stdin readability heuristics (Unix `fstat`, Windows `GetFileType`); output buffe
 
 ### 4.8 Ignore / walker (`Scout.Ignore` / `Scout.IO.Ignore`)
 
-#### 4.8.1 Parallelism semantics (corrected & specified, per Codex)
+#### 4.8.1 Parallelism semantics
 Exact replication of upstream:
-- **Default thread count** = `available_parallelism().map_or(1, get).min(12)` — the cap of **12** is confirmed at `crates/core/flags/hiargs.rs:173`; overridable by `-j/--threads`. Scout preserves that planner result, but caps default macOS directory-search fan-out at 3 workers because hosted macOS file I/O regresses sharply above that point; explicit `-j/--threads` values still bypass the platform default cap.
+- **Default thread count** = `available_parallelism().map_or(1, get).min(12)` — the cap of **12** is confirmed at `crates/core/flags/hiargs.rs:173`; overridable by `-j/--threads`. On macOS, Scout caps ordinary directory searches at three workers and replacement searches at six workers to balance file-search RSS with capture-rendering throughput. Explicit `-j/--threads` values bypass these default ceilings.
 - **Forced single-file output semantics** follow upstream: sorted output still forces `threads = 1`, and normal single-file/stdin dispatch preserves ordered output for the single subject. Scout adds an internal large-file segmented search worker path for eligible unsorted single-file scans; it is not a directory-walk parallelism surface, emits segments in byte order, and is pinned separately because it is required to keep Native AOT regex throughput within the §9 gate.
 - **Work-stealing** parallel walker (port of `crossbeam-deque` semantics) with per-thread `Sink`/`Printer`. Per-file output remains internally ordered and uncorrupted, but upstream does not promise stable inter-file order for default parallel directory walks. Exact byte gates therefore use sorted/forced-serial searches; differential cases over default or explicit parallel output normalize path order.
 

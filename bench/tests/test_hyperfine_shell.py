@@ -43,6 +43,32 @@ class HyperfineShellTests(unittest.TestCase):
             source,
         )
 
+    def test_issue_37_exact_expressions_remain_in_the_release_suite(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "bench" / "run-hyperfine.sh").read_text(encoding="utf-8")
+
+        self.assertIn('"line_regex_generated_record_word_boundary_general"', source)
+        self.assertIn(
+            "$RG_LINE_REGEX_PREFIX '\\\\bGeneratedRecord\\\\b'", source
+        )
+        self.assertIn(
+            "$SCOUT_LINE_REGEX_PREFIX '\\\\bGeneratedRecord\\\\b'", source
+        )
+        self.assertIn('"line_regex_bounded_class_exact_general"', source)
+        self.assertIn(
+            'RG_LINE_REGEX_BOUNDED_CLASS_EXACT_COMMAND="$(expect_no_match_command '
+            '"$RG_LINE_REGEX_PREFIX \'^[A-Za-z_]{70,90}$\'',
+            source,
+        )
+        self.assertIn(
+            'SCOUT_LINE_REGEX_BOUNDED_CLASS_EXACT_COMMAND="$(expect_no_match_command '
+            '"$SCOUT_LINE_REGEX_PREFIX \'^[A-Za-z_]{70,90}$\'',
+            source,
+        )
+        self.assertIn('"$RG_LINE_REGEX_BOUNDED_CLASS_EXACT_COMMAND"', source)
+        self.assertIn('"$SCOUT_LINE_REGEX_BOUNDED_CLASS_EXACT_COMMAND"', source)
+        self.assertIn("'^[A-Za-z_]{70,90}\\\\r?$'", source)
+
     def test_issue_44_absent_pattern_gates_remain_in_the_release_suite(self) -> None:
         root = Path(__file__).resolve().parents[2]
         source = (root / "bench" / "run-hyperfine.sh").read_text(encoding="utf-8")
@@ -54,6 +80,25 @@ class HyperfineShellTests(unittest.TestCase):
         self.assertIn("$SCOUT_MANY_ABSENT_REGEXP_COMMAND", source)
         self.assertIn("$RG_MANY_ABSENT_PATTERN_FILE_COMMAND", source)
         self.assertIn("$SCOUT_MANY_ABSENT_PATTERN_FILE_COMMAND", source)
+
+    def test_short_shared_delegate_gate_disables_shell_calibration(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "bench" / "run-hyperfine.sh").read_text(encoding="utf-8")
+
+        self.assertIn(
+            "run_pair_no_shell \\\n"
+            '    "shared_delegate_prefix_general"',
+            source,
+        )
+        self.assertIn(
+            'SHARED_DELEGATE_INPUTS="$Q_LINE_REGEX_INPUT $Q_LINE_REGEX_INPUT '
+            '$Q_LINE_REGEX_INPUT $Q_LINE_REGEX_INPUT"',
+            source,
+        )
+        self.assertIn(
+            "' $SHARED_DELEGATE_INPUTS\" \\",
+            source,
+        )
 
     def test_initial_failure_can_pass_on_first_retry(self) -> None:
         result = self._run(scenario="retry_pass", retries=2)

@@ -92,6 +92,7 @@ internal sealed class RegexMetaEngine
     private RegexNfa? nfa;
     private readonly bool utf8;
     private readonly RegexUnguardedFindDelegate? unguardedFind;
+    private readonly bool _usesParsedPatternSet;
 
     private RegexMetaEngine(
         RegexEngineKind kind,
@@ -155,7 +156,8 @@ internal sealed class RegexMetaEngine
         RegexStructuredLogCaptureEngine? structuredLogCapture = null,
         Func<RegexLazyDfa?>? lazyDfaFactory = null,
         Func<RegexLazyDfa?>? asciiFastDfaFactory = null,
-        RegexUnanchoredDenseDfa? asciiFastUnanchoredDenseDfa = null)
+        RegexUnanchoredDenseDfa? asciiFastUnanchoredDenseDfa = null,
+        bool usesParsedPatternSet = false)
     {
         Kind = kind;
         this.nfa = nfa;
@@ -223,6 +225,7 @@ internal sealed class RegexMetaEngine
         this.asciiWordBoundary = asciiWordBoundary;
         this.prefilter = prefilter;
         this.utf8 = utf8;
+        _usesParsedPatternSet = usesParsedPatternSet;
         unguardedFind = prefilter is null ? CreateUnguardedFind() : null;
     }
 
@@ -248,6 +251,18 @@ internal sealed class RegexMetaEngine
     /// </summary>
     internal bool CanSearchWholeHaystackWithFullMatches =>
         prefilter is not null || unguardedFind is not null;
+
+    /// <summary>
+    /// Gets a value indicating whether the ordered pattern-set engine was selected from parsed syntax.
+    /// </summary>
+    internal bool UsesParsedPatternSet => _usesParsedPatternSet;
+
+    /// <summary>
+    /// Gets a value indicating whether the selected AST-proven exact-literal engine uses a common-prefix scan.
+    /// </summary>
+    internal bool UsesCommonPrefixLiteralScanner =>
+        literalSet?.UsesCommonPrefixScanner == true ||
+        _usesParsedPatternSet && alternationSet?.UsesCommonPrefixLiteralScanner == true;
 
     /// <summary>
     /// Gets a value indicating whether a safe ASCII-projected match-end runner can be rented.
@@ -296,6 +311,24 @@ internal sealed class RegexMetaEngine
     /// Gets the maximum lookbehind window required by the selected literal prefilter.
     /// </summary>
     public int RequiredLiteralWindow => prefilter?.RequiredLiteralWindow ?? 0;
+
+    /// <summary>
+    /// Gets the sole case-sensitive literal selected by the exact compiled engine.
+    /// </summary>
+    /// <param name="literal">Receives the immutable literal bytes.</param>
+    /// <returns><see langword="true" /> when this meta engine is an exact single-literal engine.</returns>
+    internal bool TryGetSingleCaseSensitiveLiteral(out ReadOnlyMemory<byte> literal)
+    {
+        if (Kind == RegexEngineKind.LiteralSet &&
+            literalSet is not null &&
+            literalSet.TryGetSingleCaseSensitiveLiteral(out literal))
+        {
+            return true;
+        }
+
+        literal = default;
+        return false;
+    }
 
     /// <summary>
     /// Creates a meta engine backed by an empty-match engine.
@@ -373,6 +406,40 @@ internal sealed class RegexMetaEngine
             prefilter: null,
             utf8,
             nfaFactory: fallbackNfaFactory);
+    }
+
+    /// <summary>
+    /// Creates a meta engine backed by an ordered pattern set selected from parsed syntax.
+    /// </summary>
+    /// <param name="patternSet">The parsed-syntax pattern-set engine.</param>
+    /// <param name="utf8">Whether matches must respect UTF-8 code point boundaries.</param>
+    /// <param name="fallbackNfaFactory">Creates the general NFA when an operation requires it.</param>
+    /// <returns>The compiled meta engine.</returns>
+    public static RegexMetaEngine CompileParsedPatternSet(
+        RegexAlternationSetEngine patternSet,
+        bool utf8,
+        Func<RegexNfa>? fallbackNfaFactory)
+    {
+        ArgumentNullException.ThrowIfNull(patternSet);
+        return new RegexMetaEngine(
+            RegexEngineKind.AlternationSet,
+            nfa: null,
+            pikeVm: null,
+            boundedBacktracker: null,
+            onePassDfa: null,
+            denseDfa: null,
+            sparseDfa: null,
+            lazyDfa: null,
+            literalSet: null,
+            alternationSet: patternSet,
+            delimitedRun: null,
+            simpleSequence: null,
+            lineContains: null,
+            dotStarClassFallback: null,
+            prefilter: null,
+            utf8,
+            nfaFactory: fallbackNfaFactory,
+            usesParsedPatternSet: true);
     }
 
     /// <summary>
@@ -3152,7 +3219,7 @@ internal sealed class RegexMetaEngine
     }
 
     /// <summary>
-    /// Counts authoritative matches while a case-sensitive required-literal scan detects NUL bytes.
+    /// Counts authoritative matches while an exact-literal or required-literal scan detects NUL bytes.
     /// </summary>
     /// <param name="haystack">The bytes to search.</param>
     /// <param name="startPredicate">An optional conservative candidate-start predicate.</param>
@@ -3165,6 +3232,28 @@ internal sealed class RegexMetaEngine
         out long count,
         out bool containsNul)
     {
+        if (startPredicate is null)
+        {
+            if (literalSet is not null &&
+                literalSet.TryCountMatchesAndDetectNul(
+                    haystack,
+                    out count,
+                    out containsNul))
+            {
+                return true;
+            }
+
+            if (_usesParsedPatternSet &&
+                alternationSet is not null &&
+                alternationSet.TryCountMatchesAndDetectNul(
+                    haystack,
+                    out count,
+                    out containsNul))
+            {
+                return true;
+            }
+        }
+
         count = 0;
         containsNul = false;
         if (prefilter?.CanDetectNulDuringRequiredLiteralSearch != true ||

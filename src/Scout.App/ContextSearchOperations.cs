@@ -31,16 +31,9 @@ internal static class ContextSearchOperations
         bool passthru,
         bool nullPathTerminator,
         bool stopOnNonmatch,
-        RegexSearchPlan? regexPlan = null)
+        RegexSearchPlan regexPlan)
     {
-        regexPlan ??= CreateRegexPlan(
-            pattern,
-            asciiCaseInsensitive,
-            lineRegexp,
-            wordRegexp,
-            separators.Crlf,
-            separators.NullData);
-        List<ContextLineInfo> lines = BuildLines(
+        ContextSearchResult searchResult = BuildSearchResult(
             bytes,
             pattern,
             asciiCaseInsensitive,
@@ -51,17 +44,95 @@ internal static class ContextSearchOperations
             separators.NullData,
             stopOnNonmatch,
             regexPlan);
+        return WriteSearchResult(
+            bytes,
+            searchResult,
+            output,
+            prefix,
+            separators,
+            lineLimit,
+            color,
+            lineNumber,
+            column,
+            byteOffset,
+            invertMatch,
+            vimgrep,
+            onlyMatching,
+            replacement,
+            maxCount,
+            trim,
+            beforeContext,
+            afterContext,
+            passthru,
+            nullPathTerminator,
+            regexPlan);
+    }
+
+    /// <summary>
+    /// Writes a prebuilt context result by replaying its retained authoritative spans.
+    /// </summary>
+    /// <param name="bytes">The complete input bytes.</param>
+    /// <param name="searchResult">The prebuilt context line and match state.</param>
+    /// <param name="output">The output writer.</param>
+    /// <param name="prefix">The optional output path prefix.</param>
+    /// <param name="separators">The configured output separators.</param>
+    /// <param name="lineLimit">The output line-length policy.</param>
+    /// <param name="color">The configured output colors.</param>
+    /// <param name="lineNumber">Whether to write line numbers.</param>
+    /// <param name="column">Whether to write match columns.</param>
+    /// <param name="byteOffset">Whether to write byte offsets.</param>
+    /// <param name="invertMatch">Whether non-matching lines are selected.</param>
+    /// <param name="vimgrep">Whether to write vimgrep records.</param>
+    /// <param name="onlyMatching">Whether to write only retained match spans.</param>
+    /// <param name="replacement">The optional replacement template.</param>
+    /// <param name="maxCount">The optional maximum number of primary matching lines.</param>
+    /// <param name="trim">Whether to trim leading ASCII whitespace.</param>
+    /// <param name="beforeContext">The number of preceding context lines.</param>
+    /// <param name="afterContext">The number of following context lines.</param>
+    /// <param name="passthru">Whether to write every searched line.</param>
+    /// <param name="nullPathTerminator">Whether path prefixes use a NUL terminator.</param>
+    /// <param name="regexPlan">The authoritative plan used for capture replay.</param>
+    /// <returns><see langword="true" /> when the result contains a selected match.</returns>
+    internal static bool WriteSearchResult(
+        byte[] bytes,
+        ContextSearchResult searchResult,
+        RawByteWriter output,
+        OutputPath? prefix,
+        OutputSeparators separators,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool invertMatch,
+        bool vimgrep,
+        bool onlyMatching,
+        ReadOnlyMemory<byte>? replacement,
+        ulong? maxCount,
+        bool trim,
+        ulong beforeContext,
+        ulong afterContext,
+        bool passthru,
+        bool nullPathTerminator,
+        RegexSearchPlan regexPlan)
+    {
+        ArgumentNullException.ThrowIfNull(searchResult);
+        List<ContextLineInfo> lines = searchResult.Lines;
         if (lines.Count == 0)
         {
             return false;
         }
 
         bool[] included = new bool[lines.Count];
-        bool matched = passthru
-            ? IncludePassthruLines(lines, included)
-            : IncludeContextLines(lines, included, beforeContext, afterContext, maxCount);
+        bool matched = IncludeOutputLines(
+            lines,
+            included,
+            beforeContext,
+            afterContext,
+            passthru,
+            maxCount);
         bool passthruRequiresReportedMatch = passthru &&
-            regexPlan?.Options.PreserveCrlfCarriageReturn == true;
+            regexPlan.Options.PreserveCrlfCarriageReturn;
         if (passthruRequiresReportedMatch)
         {
             matched = false;
@@ -72,17 +143,6 @@ internal static class ContextSearchOperations
         }
 
         var lineSink = new StandardSearchSink(output, prefix, separators.FieldMatch, separators.FieldContext, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
-        ReplacementCapturePlan? replacementCapturePlan = replacement.HasValue
-            ? ReplacementCapturePlan.TryCreate(
-                pattern,
-                new RegexSearchPlanOptions(
-                    asciiCaseInsensitive,
-                    lineRegexp,
-                    wordRegexp,
-                    separators.Crlf,
-                    separators.NullData),
-                regexPlan)
-            : null;
         int previousLineIndex = -1;
         ulong passthruPrimaryMatches = 0;
         bool wrote = false;
@@ -112,7 +172,10 @@ internal static class ContextSearchOperations
                 }
             }
 
-            if (!passthru && wrote && index > previousLineIndex + 1)
+            if (!passthru &&
+                (beforeContext > 0 || afterContext > 0) &&
+                wrote &&
+                index > previousLineIndex + 1)
             {
                 if (separators.ContextEnabled)
                 {
@@ -124,6 +187,7 @@ internal static class ContextSearchOperations
             WriteContextOutputLine(
                 bytes,
                 line,
+                searchResult.GetMatches(line),
                 selectedMatch,
                 output,
                 prefix,
@@ -137,12 +201,7 @@ internal static class ContextSearchOperations
                 vimgrep,
                 onlyMatching,
                 replacement,
-                replacementCapturePlan,
                 invertMatch,
-                pattern,
-                asciiCaseInsensitive,
-                lineRegexp,
-                wordRegexp,
                 nullPathTerminator,
                 regexPlan,
                 ref lineSink);
@@ -153,7 +212,21 @@ internal static class ContextSearchOperations
         return matched;
     }
 
-    internal static List<ContextLineInfo> BuildLines(
+    /// <summary>
+    /// Builds context line state and retains every authoritative match span in one traversal.
+    /// </summary>
+    /// <param name="bytes">The complete input bytes.</param>
+    /// <param name="pattern">The ordered regex patterns.</param>
+    /// <param name="asciiCaseInsensitive">Whether matching is ASCII case-insensitive.</param>
+    /// <param name="invertMatch">Whether non-matching lines are selected.</param>
+    /// <param name="lineRegexp">Whether patterns must match complete lines.</param>
+    /// <param name="wordRegexp">Whether matches require word boundaries.</param>
+    /// <param name="crlf">Whether CRLF terminates records.</param>
+    /// <param name="nullData">Whether NUL terminates records.</param>
+    /// <param name="stopOnNonmatch">Whether collection stops after the first non-match following a selection.</param>
+    /// <param name="regexPlan">The authoritative regex plan.</param>
+    /// <returns>The complete context line and retained-span state.</returns>
+    internal static ContextSearchResult BuildSearchResult(
         byte[] bytes,
         IReadOnlyList<byte[]> pattern,
         bool asciiCaseInsensitive,
@@ -162,19 +235,12 @@ internal static class ContextSearchOperations
         bool wordRegexp,
         bool crlf,
         bool nullData,
-        bool stopOnNonmatch = false,
-        RegexSearchPlan? regexPlan = null)
+        bool stopOnNonmatch,
+        RegexSearchPlan regexPlan)
     {
-        regexPlan ??= CreateRegexPlan(
-            pattern,
-            asciiCaseInsensitive,
-            lineRegexp,
-            wordRegexp,
-            crlf,
-            nullData);
-        if (!stopOnNonmatch)
+        if (stopOnNonmatch)
         {
-            return BuildLinesFromMatches(
+            return BuildStoppedSearchResult(
                 bytes,
                 pattern,
                 asciiCaseInsensitive,
@@ -186,77 +252,19 @@ internal static class ContextSearchOperations
                 regexPlan);
         }
 
-        var lines = new List<ContextLineInfo>();
-        bool hasSelectedMatch = false;
-        int lineStart = 0;
-        long lineNumber = 1;
-        while (lineStart < bytes.Length)
-        {
-            ReadOnlySpan<byte> remaining = bytes.AsSpan(lineStart);
-            int lineLength = GetLineLength(remaining, nullData);
-            ReadOnlySpan<byte> line = remaining[..lineLength];
-            bool originalMatch = TryFindLineMatch(
-                line,
-                pattern,
-                asciiCaseInsensitive,
-                invertMatch: false,
-                lineRegexp,
-                wordRegexp,
-                crlf,
-                nullData,
-                out long originalColumn,
-                regexPlan);
-            bool selectedMatch = originalMatch;
-            long matchColumn = originalColumn;
-            if (invertMatch)
-            {
-                selectedMatch = TryFindLineMatch(
-                    line,
-                    pattern,
-                    asciiCaseInsensitive,
-                    invertMatch: true,
-                    lineRegexp,
-                    wordRegexp,
-                    crlf,
-                    nullData,
-                    out matchColumn,
-                    regexPlan);
-            }
-
-            lines.Add(new ContextLineInfo(lineStart, lineLength, lineNumber, selectedMatch, matchColumn, originalMatch, originalColumn));
-            if (stopOnNonmatch && hasSelectedMatch && !selectedMatch)
-            {
-                break;
-            }
-
-            hasSelectedMatch |= selectedMatch;
-            lineStart += lineLength;
-            lineNumber++;
-        }
-
-        return lines;
-    }
-
-    private static List<ContextLineInfo> BuildLinesFromMatches(
-        byte[] bytes,
-        IReadOnlyList<byte[]> pattern,
-        bool asciiCaseInsensitive,
-        bool invertMatch,
-        bool lineRegexp,
-        bool wordRegexp,
-        bool crlf,
-        bool nullData,
-        RegexSearchPlan? regexPlan)
-    {
-        var matchingLines = new List<ContextLineInfo>();
-        var sink = new ContextLineMatchSink(matchingLines);
-        LiteralLineSearcher.SearchWithRegexPlan(
+        var selectedLineStarts = new List<int>();
+        var selectedLineMatchRanges = new List<ContextLineMatchRange>();
+        var matches = new List<ContextLineMatch>();
+        var sink = new ContextMatchCollector(
+            selectedLineStarts,
+            selectedLineMatchRanges,
+            matches);
+        LiteralLineSearcher.SearchMatchLinesWithRegexPlan(
             bytes,
             pattern,
             regexPlan,
             ref sink,
             asciiCaseInsensitive,
-            invertMatch: false,
             lineRegexp,
             wordRegexp,
             maxMatchingLines: null,
@@ -264,16 +272,24 @@ internal static class ContextSearchOperations
             nullData);
 
         var lines = new List<ContextLineInfo>();
-        int matchingIndex = 0;
+        var lineMatchRanges = new List<ContextLineMatchRange>();
+        int selectedLineIndex = 0;
         int lineStart = 0;
         long lineNumber = 1;
         while (lineStart < bytes.Length)
         {
             int lineLength = GetLineLength(bytes.AsSpan(lineStart), nullData);
-            bool originalMatch = matchingIndex < matchingLines.Count &&
-                matchingLines[matchingIndex].Start == lineStart;
-            long originalColumn = originalMatch
-                ? matchingLines[matchingIndex++].ContextColumn
+            bool originalMatch = selectedLineIndex < selectedLineStarts.Count &&
+                selectedLineStarts[selectedLineIndex] == lineStart;
+            ContextLineMatchRange matchRange = originalMatch
+                ? selectedLineMatchRanges[selectedLineIndex++]
+                : new ContextLineMatchRange(
+                    selectedLineIndex < selectedLineMatchRanges.Count
+                        ? selectedLineMatchRanges[selectedLineIndex].Start
+                        : matches.Count,
+                    count: 0);
+            long originalColumn = matchRange.Count > 0
+                ? matches[matchRange.Start].Column
                 : 0;
             bool selectedMatch = invertMatch ? !originalMatch : originalMatch;
             long matchColumn = invertMatch ? 0 : originalColumn;
@@ -285,14 +301,31 @@ internal static class ContextSearchOperations
                 matchColumn,
                 originalMatch,
                 originalColumn));
+            lineMatchRanges.Add(matchRange);
             lineStart += lineLength;
             lineNumber++;
         }
 
-        return lines;
+        return new ContextSearchResult(
+            lines,
+            lineMatchRanges.ToArray(),
+            matches.ToArray());
     }
 
-    internal static int GetStopOnNonmatchLength(
+    /// <summary>
+    /// Builds bounded context state in one record traversal and retains authoritative spans.
+    /// </summary>
+    /// <param name="bytes">The complete input bytes.</param>
+    /// <param name="pattern">The ordered regex patterns.</param>
+    /// <param name="asciiCaseInsensitive">Whether matching is ASCII case-insensitive.</param>
+    /// <param name="invertMatch">Whether non-matching records are selected.</param>
+    /// <param name="lineRegexp">Whether patterns must match complete records.</param>
+    /// <param name="wordRegexp">Whether matches require word boundaries.</param>
+    /// <param name="crlf">Whether CRLF terminates records.</param>
+    /// <param name="nullData">Whether NUL terminates records.</param>
+    /// <param name="regexPlan">The authoritative regex plan.</param>
+    /// <returns>The bounded context line and retained-span state.</returns>
+    private static ContextSearchResult BuildStoppedSearchResult(
         byte[] bytes,
         IReadOnlyList<byte[]> pattern,
         bool asciiCaseInsensitive,
@@ -300,65 +333,88 @@ internal static class ContextSearchOperations
         bool lineRegexp,
         bool wordRegexp,
         bool crlf,
-        bool nullData)
-    {
-        return GetStopOnNonmatchLength(
-            bytes.AsSpan(),
-            pattern,
-            asciiCaseInsensitive,
-            invertMatch,
-            lineRegexp,
-            wordRegexp,
-            crlf,
-            nullData);
-    }
-
-    internal static int GetStopOnNonmatchLength(
-        ReadOnlySpan<byte> bytes,
-        IReadOnlyList<byte[]> pattern,
-        bool asciiCaseInsensitive,
-        bool invertMatch,
-        bool lineRegexp,
-        bool wordRegexp,
-        bool crlf,
         bool nullData,
-        RegexSearchPlan? regexPlan = null)
+        RegexSearchPlan regexPlan)
     {
-        regexPlan ??= CreateRegexPlan(
-            pattern,
+        ArgumentNullException.ThrowIfNull(pattern);
+        LiteralLineSearcher.ValidateRegexSearchPlan(
+            regexPlan,
             asciiCaseInsensitive,
             lineRegexp,
             wordRegexp,
             crlf,
             nullData);
+
+        var selectedLineStarts = new List<int>();
+        var selectedLineMatchRanges = new List<ContextLineMatchRange>();
+        var matches = new List<ContextLineMatch>();
+        var sink = new ContextMatchCollector(
+            selectedLineStarts,
+            selectedLineMatchRanges,
+            matches);
+        var lines = new List<ContextLineInfo>();
+        var lineMatchRanges = new List<ContextLineMatchRange>();
         bool hasSelectedMatch = false;
         int lineStart = 0;
-        while (lineStart < bytes.Length)
+        long lineNumber = 1;
+        RegexFindRunner findRunner = regexPlan.Matcher.RentFindRunner();
+        try
         {
-            ReadOnlySpan<byte> remaining = bytes[lineStart..];
-            int lineLength = GetLineLength(remaining, nullData);
-            ReadOnlySpan<byte> line = remaining[..lineLength];
-            bool selectedMatch = TryFindLineMatch(
-                line,
-                pattern,
-                asciiCaseInsensitive,
-                invertMatch,
-                lineRegexp,
-                wordRegexp,
-                crlf,
-                nullData,
-                out _,
-                regexPlan);
-            if (hasSelectedMatch && !selectedMatch)
+            while (lineStart < bytes.Length)
             {
-                return lineStart + lineLength;
-            }
+                int lineLength = GetLineLength(bytes.AsSpan(lineStart), nullData);
+                ReadOnlySpan<byte> line = bytes.AsSpan(lineStart, lineLength);
+                bool originalMatch =
+                    LiteralLineSearcher.SearchRecordMatchLinesWithRegexPlan(
+                        bytes,
+                        line,
+                        lineStart,
+                        lineNumber,
+                        pattern,
+                        regexPlan,
+                        ref findRunner,
+                        ref sink,
+                        asciiCaseInsensitive,
+                        lineRegexp,
+                        wordRegexp,
+                        crlf,
+                        nullData);
+                ContextLineMatchRange matchRange = originalMatch
+                    ? selectedLineMatchRanges[^1]
+                    : new ContextLineMatchRange(matches.Count, count: 0);
+                long originalColumn = matchRange.Count > 0
+                    ? matches[matchRange.Start].Column
+                    : 0;
+                bool selectedMatch = invertMatch ? !originalMatch : originalMatch;
+                long matchColumn = invertMatch ? 0 : originalColumn;
+                lines.Add(new ContextLineInfo(
+                    lineStart,
+                    lineLength,
+                    lineNumber,
+                    selectedMatch,
+                    matchColumn,
+                    originalMatch,
+                    originalColumn));
+                lineMatchRanges.Add(matchRange);
+                if (hasSelectedMatch && !selectedMatch)
+                {
+                    break;
+                }
 
-            hasSelectedMatch |= selectedMatch;
-            lineStart += lineLength;
+                hasSelectedMatch |= selectedMatch;
+                lineStart += lineLength;
+                lineNumber++;
+            }
+        }
+        finally
+        {
+            findRunner.Dispose();
         }
 
-        return bytes.Length;
+        return new ContextSearchResult(
+            lines,
+            lineMatchRanges.ToArray(),
+            matches.ToArray());
     }
 
     internal static bool IncludePassthruLines(List<ContextLineInfo> lines, bool[] included)
@@ -371,6 +427,34 @@ internal static class ContextSearchOperations
         }
 
         return matched;
+    }
+
+    /// <summary>
+    /// Marks the exact physical lines emitted by context or passthru replay.
+    /// </summary>
+    /// <param name="lines">The physical line metadata.</param>
+    /// <param name="included">The destination inclusion map.</param>
+    /// <param name="beforeContext">The number of preceding context lines.</param>
+    /// <param name="afterContext">The number of following context lines.</param>
+    /// <param name="passthru">Whether every searched line is emitted.</param>
+    /// <param name="maxCount">The optional maximum number of primary matching lines.</param>
+    /// <returns><see langword="true" /> when the lines contain a selected match.</returns>
+    internal static bool IncludeOutputLines(
+        List<ContextLineInfo> lines,
+        bool[] included,
+        ulong beforeContext,
+        ulong afterContext,
+        bool passthru,
+        ulong? maxCount)
+    {
+        return passthru
+            ? IncludePassthruLines(lines, included)
+            : IncludeContextLines(
+                lines,
+                included,
+                beforeContext,
+                afterContext,
+                maxCount);
     }
 
     internal static bool IncludeContextLines(
@@ -412,7 +496,7 @@ internal static class ContextSearchOperations
         bool crlf,
         bool nullData,
         out long matchColumn,
-        RegexSearchPlan? regexPlan = null)
+        RegexSearchPlan regexPlan)
     {
         var sink = new FirstLineMatchSink();
         bool matched = LiteralLineSearcher.SearchWithRegexPlan(
@@ -429,24 +513,6 @@ internal static class ContextSearchOperations
             nullData);
         matchColumn = matched ? sink.MatchColumn : 0;
         return matched;
-    }
-
-    private static RegexSearchPlan? CreateRegexPlan(
-        IReadOnlyList<byte[]> pattern,
-        bool asciiCaseInsensitive,
-        bool lineRegexp,
-        bool wordRegexp,
-        bool crlf,
-        bool nullData)
-    {
-        return RegexSearchPlan.Create(
-            pattern,
-            new RegexSearchPlanOptions(
-                asciiCaseInsensitive,
-                lineRegexp,
-                wordRegexp,
-                crlf,
-                nullData));
     }
 
     internal static int GetLineLength(ReadOnlySpan<byte> remaining, bool nullData)
@@ -466,9 +532,33 @@ internal static class ContextSearchOperations
         }
     }
 
-    private static void WriteContextOutputLine(
-        byte[] bytes,
+    /// <summary>
+    /// Writes one retained physical line without invoking the matcher again.
+    /// </summary>
+    /// <param name="bytes">The complete input bytes used for output.</param>
+    /// <param name="line">The retained physical line metadata.</param>
+    /// <param name="matches">The authoritative match spans retained for the line.</param>
+    /// <param name="selectedMatch">Whether the line is emitted as a selected match.</param>
+    /// <param name="output">The output writer.</param>
+    /// <param name="prefix">The optional output path prefix.</param>
+    /// <param name="lineNumber">Whether to write line numbers.</param>
+    /// <param name="column">Whether to write match columns.</param>
+    /// <param name="byteOffset">Whether to write byte offsets.</param>
+    /// <param name="trim">Whether to trim leading ASCII whitespace.</param>
+    /// <param name="separators">The configured output separators.</param>
+    /// <param name="lineLimit">The output line-length policy.</param>
+    /// <param name="color">The configured output colors.</param>
+    /// <param name="vimgrep">Whether to write vimgrep records.</param>
+    /// <param name="onlyMatching">Whether to write only retained match spans.</param>
+    /// <param name="replacement">The optional replacement template.</param>
+    /// <param name="invertMatch">Whether non-matching lines are selected.</param>
+    /// <param name="nullPathTerminator">Whether path prefixes use a NUL terminator.</param>
+    /// <param name="regexPlan">The authoritative plan used for capture replay.</param>
+    /// <param name="lineSink">The standard line writer used for plain output.</param>
+    internal static void WriteContextOutputLine(
+        ReadOnlySpan<byte> bytes,
         ContextLineInfo line,
+        ReadOnlySpan<ContextLineMatch> matches,
         bool selectedMatch,
         RawByteWriter output,
         OutputPath? prefix,
@@ -482,22 +572,32 @@ internal static class ContextSearchOperations
         bool vimgrep,
         bool onlyMatching,
         ReadOnlyMemory<byte>? replacement,
-        ReplacementCapturePlan? replacementCapturePlan,
         bool invertMatch,
-        IReadOnlyList<byte[]> pattern,
-        bool asciiCaseInsensitive,
-        bool lineRegexp,
-        bool wordRegexp,
         bool nullPathTerminator,
-        RegexSearchPlan? regexPlan,
+        RegexSearchPlan regexPlan,
         ref StandardSearchSink lineSink)
     {
-        ReadOnlySpan<byte> lineBytes = bytes.AsSpan(line.Start, line.Length);
+        ReadOnlySpan<byte> lineBytes = bytes.Slice(line.Start, line.Length);
         if (selectedMatch)
         {
             if (onlyMatching && !invertMatch)
             {
-                WriteOnlyMatchesForContextLine(lineBytes, line, output, prefix, lineNumber, column, byteOffset, trim, separators.FieldMatch, replacement, replacementCapturePlan, pattern, asciiCaseInsensitive, lineRegexp, wordRegexp, nullPathTerminator, color, separators.LineTerminator, separators.Crlf, separators.NullData, regexPlan);
+                WriteOnlyMatchesForContextLine(
+                    lineBytes,
+                    line,
+                    matches,
+                    output,
+                    prefix,
+                    lineNumber,
+                    column,
+                    byteOffset,
+                    trim,
+                    separators.FieldMatch,
+                    replacement,
+                    nullPathTerminator,
+                    color,
+                    separators.LineTerminator,
+                    regexPlan);
                 return;
             }
 
@@ -508,8 +608,6 @@ internal static class ContextSearchOperations
                     prefix,
                     separators.FieldMatch,
                     replacementValue,
-                    pattern,
-                    asciiCaseInsensitive,
                     lineNumber,
                     column,
                     byteOffset,
@@ -521,16 +619,28 @@ internal static class ContextSearchOperations
                     line.Start,
                     color,
                     separators.LineTerminator,
-                    replacementCapturePlan);
-                LiteralLineSearcher.SearchMatchLinesWithRegexPlan(lineBytes, pattern, regexPlan, ref replacementLineSink, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf: separators.Crlf, nullData: separators.NullData);
+                    regexPlan);
+                ReplayMatches(lineBytes, matches, ref replacementLineSink);
                 replacementLineSink.Flush();
                 return;
             }
 
             if (vimgrep && !invertMatch)
             {
-                var vimgrepSink = new VimgrepSink(output, prefix, separators.FieldMatch, lineNumber, column, byteOffset, onlyMatching: false, trim, nullPathTerminator, lineLimit, pattern, asciiCaseInsensitive, lineRegexp, wordRegexp, separators.Crlf, separators.NullData, color, separators.LineTerminator, line.LineNumber - 1, line.Start);
-                LiteralLineSearcher.SearchMatchLinesWithRegexPlan(lineBytes, pattern, regexPlan, ref vimgrepSink, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf: separators.Crlf, nullData: separators.NullData);
+                VimgrepSink vimgrepSink = CreateContextVimgrepSink(
+                    output,
+                    prefix,
+                    separators.FieldMatch,
+                    lineNumber,
+                    column,
+                    byteOffset,
+                    trim,
+                    nullPathTerminator,
+                    lineLimit,
+                    color,
+                    separators.LineTerminator,
+                    line);
+                ReplayMatches(lineBytes, matches, ref vimgrepSink);
                 return;
             }
 
@@ -550,7 +660,7 @@ internal static class ContextSearchOperations
                     separators.LineTerminator,
                     line.LineNumber - 1,
                     line.Start);
-                LiteralLineSearcher.SearchMatchLinesWithRegexPlan(lineBytes, pattern, regexPlan, ref coloredSink, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf: separators.Crlf, nullData: separators.NullData);
+                ReplayMatches(lineBytes, matches, ref coloredSink);
                 coloredSink.Flush();
                 return;
             }
@@ -563,14 +673,65 @@ internal static class ContextSearchOperations
         {
             if (onlyMatching)
             {
-                WriteOnlyMatchesForContextLine(lineBytes, line, output, prefix, lineNumber, column, byteOffset, trim, separators.FieldContext, replacement, replacementCapturePlan, pattern, asciiCaseInsensitive, lineRegexp, wordRegexp, nullPathTerminator, color, separators.LineTerminator, separators.Crlf, separators.NullData, regexPlan);
+                WriteOnlyMatchesForContextLine(
+                    lineBytes,
+                    line,
+                    matches,
+                    output,
+                    prefix,
+                    lineNumber,
+                    column,
+                    byteOffset,
+                    trim,
+                    separators.FieldContext,
+                    replacement,
+                    nullPathTerminator,
+                    color,
+                    separators.LineTerminator,
+                    regexPlan);
+                return;
+            }
+
+            if (replacement is ReadOnlyMemory<byte> replacementValue)
+            {
+                var replacementLineSink = new ReplacementLineSink(
+                    output,
+                    prefix,
+                    separators.FieldContext,
+                    replacementValue,
+                    lineNumber,
+                    column,
+                    byteOffset,
+                    trim,
+                    nullPathTerminator,
+                    vimgrep,
+                    lineLimit,
+                    line.LineNumber - 1,
+                    line.Start,
+                    color,
+                    separators.LineTerminator,
+                    regexPlan);
+                ReplayMatches(lineBytes, matches, ref replacementLineSink);
+                replacementLineSink.Flush();
                 return;
             }
 
             if (vimgrep)
             {
-                var vimgrepSink = new VimgrepSink(output, prefix, separators.FieldContext, lineNumber, column, byteOffset, onlyMatching: false, trim, nullPathTerminator, lineLimit, pattern, asciiCaseInsensitive, lineRegexp, wordRegexp, separators.Crlf, separators.NullData, color, separators.LineTerminator, line.LineNumber - 1, line.Start);
-                LiteralLineSearcher.SearchMatchLinesWithRegexPlan(lineBytes, pattern, regexPlan, ref vimgrepSink, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf: separators.Crlf, nullData: separators.NullData);
+                VimgrepSink vimgrepSink = CreateContextVimgrepSink(
+                    output,
+                    prefix,
+                    separators.FieldContext,
+                    lineNumber,
+                    column,
+                    byteOffset,
+                    trim,
+                    nullPathTerminator,
+                    lineLimit,
+                    color,
+                    separators.LineTerminator,
+                    line);
+                ReplayMatches(lineBytes, matches, ref vimgrepSink);
                 return;
             }
 
@@ -590,7 +751,7 @@ internal static class ContextSearchOperations
                     separators.LineTerminator,
                     line.LineNumber - 1,
                     line.Start);
-                LiteralLineSearcher.SearchMatchLinesWithRegexPlan(lineBytes, pattern, regexPlan, ref coloredSink, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf: separators.Crlf, nullData: separators.NullData);
+                ReplayMatches(lineBytes, matches, ref coloredSink);
                 coloredSink.Flush();
                 return;
             }
@@ -602,6 +763,7 @@ internal static class ContextSearchOperations
     private static void WriteOnlyMatchesForContextLine(
         ReadOnlySpan<byte> lineBytes,
         ContextLineInfo line,
+        ReadOnlySpan<ContextLineMatch> matches,
         RawByteWriter output,
         OutputPath? prefix,
         bool lineNumber,
@@ -610,17 +772,10 @@ internal static class ContextSearchOperations
         bool trim,
         ReadOnlyMemory<byte> fieldSeparator,
         ReadOnlyMemory<byte>? replacement,
-        ReplacementCapturePlan? replacementCapturePlan,
-        IReadOnlyList<byte[]> pattern,
-        bool asciiCaseInsensitive,
-        bool lineRegexp,
-        bool wordRegexp,
         bool nullPathTerminator,
         OutputColor color,
         ReadOnlyMemory<byte> lineTerminator,
-        bool crlf,
-        bool nullData,
-        RegexSearchPlan? regexPlan)
+        RegexSearchPlan regexPlan)
     {
         if (replacement is ReadOnlyMemory<byte> replacementValue)
         {
@@ -629,8 +784,6 @@ internal static class ContextSearchOperations
                 prefix,
                 fieldSeparator,
                 replacementValue,
-                pattern,
-                asciiCaseInsensitive,
                 lineNumber,
                 column,
                 byteOffset,
@@ -639,8 +792,8 @@ internal static class ContextSearchOperations
                 line.Start,
                 color,
                 lineTerminator,
-                replacementCapturePlan);
-            LiteralLineSearcher.SearchMatchLinesWithRegexPlan(lineBytes, pattern, regexPlan, ref replacementMatchSink, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf: crlf, nullData: nullData);
+                regexPlan);
+            ReplayMatches(lineBytes, matches, ref replacementMatchSink);
         }
         else
         {
@@ -657,7 +810,80 @@ internal static class ContextSearchOperations
                 nullPathTerminator,
                 color,
                 lineTerminator);
-            LiteralLineSearcher.SearchMatchLinesWithRegexPlan(lineBytes, pattern, regexPlan, ref matchSink, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf: crlf, nullData: nullData);
+            ReplayMatches(lineBytes, matches, ref matchSink);
         }
+    }
+
+    private static VimgrepSink CreateContextVimgrepSink(
+        RawByteWriter output,
+        OutputPath? prefix,
+        ReadOnlyMemory<byte> fieldSeparator,
+        bool lineNumber,
+        bool column,
+        bool byteOffset,
+        bool trim,
+        bool nullPathTerminator,
+        OutputLineLimit lineLimit,
+        OutputColor color,
+        ReadOnlyMemory<byte> lineTerminator,
+        ContextLineInfo line)
+    {
+        return new VimgrepSink(
+            output,
+            prefix,
+            fieldSeparator,
+            lineNumber,
+            column,
+            byteOffset,
+            onlyMatching: false,
+            trim,
+            nullPathTerminator,
+            lineLimit,
+            color,
+            lineTerminator,
+            line.LineNumber - 1,
+            line.Start);
+    }
+
+    private static void ReplayMatches<TSink>(
+        ReadOnlySpan<byte> line,
+        ReadOnlySpan<ContextLineMatch> matches,
+        ref TSink sink)
+        where TSink : struct, IMatchLineSink
+    {
+        for (int index = 0; index < matches.Length; index++)
+        {
+            ContextLineMatch match = matches[index];
+            if (IsSelectionOnlyRecordEndMatch(line, match))
+            {
+                continue;
+            }
+
+            sink.MatchedLine(
+                lineNumber: 1,
+                lineByteOffset: 0,
+                matchByteOffset: match.Start,
+                match.Column,
+                line,
+                line.Slice(match.Start, match.Length));
+        }
+
+        sink.FinishLine(
+            lineNumber: 1,
+            lineByteOffset: 0,
+            line);
+    }
+
+    /// <summary>
+    /// Determines whether an empty match at the end of an unterminated record only selects that record.
+    /// </summary>
+    /// <param name="line">The complete record bytes, including a terminator when present.</param>
+    /// <param name="match">The retained authoritative match.</param>
+    /// <returns><see langword="true" /> when the match selects the record without adding a reportable span.</returns>
+    internal static bool IsSelectionOnlyRecordEndMatch(
+        ReadOnlySpan<byte> line,
+        ContextLineMatch match)
+    {
+        return match.Length == 0 && match.Start == line.Length;
     }
 }

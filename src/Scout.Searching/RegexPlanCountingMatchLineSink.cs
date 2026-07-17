@@ -27,6 +27,11 @@ internal struct RegexPlanCountingMatchLineSink<TSink>(TSink inner) : IMatchLineS
     public long Matches { get; private set; }
 
     /// <summary>
+    /// Gets the exclusive end of the last selected line.
+    /// </summary>
+    public ulong LastMatchedLineEnd { get; private set; }
+
+    /// <summary>
     /// Forwards and counts one reportable match.
     /// </summary>
     /// <param name="lineNumber">The one-based line number.</param>
@@ -45,6 +50,7 @@ internal struct RegexPlanCountingMatchLineSink<TSink>(TSink inner) : IMatchLineS
     {
         _inner.MatchedLine(lineNumber, lineByteOffset, matchByteOffset, matchColumn, line, match);
         Matches++;
+        LastMatchedLineEnd = checked((ulong)(lineByteOffset + line.Length));
         CountLine(lineNumber);
     }
 
@@ -56,6 +62,7 @@ internal struct RegexPlanCountingMatchLineSink<TSink>(TSink inner) : IMatchLineS
     /// <param name="line">The completed line.</param>
     public void FinishLine(long lineNumber, long lineByteOffset, ReadOnlySpan<byte> line)
     {
+        LastMatchedLineEnd = checked((ulong)(lineByteOffset + line.Length));
         CountLine(lineNumber);
         _inner.FinishLine(lineNumber, lineByteOffset, line);
     }

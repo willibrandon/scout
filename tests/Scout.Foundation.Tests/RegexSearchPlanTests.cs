@@ -8,7 +8,41 @@ namespace Scout;
 public sealed class RegexSearchPlanTests
 {
     /// <summary>
-    /// Verifies ordinary line-search plans retain the exact literal-set engine for one or many patterns.
+    /// Verifies an empty pattern set produces a non-null authoritative plan that can never match.
+    /// </summary>
+    [Fact]
+    public void EmptyPatternSetCreatesAnExplicitEmptyLanguagePlan()
+    {
+        var options = new RegexSearchPlanOptions(
+            asciiCaseInsensitive: true,
+            crlf: true,
+            multiline: true,
+            multilineDotall: true);
+
+        var plan = RegexSearchPlan.Create([], options);
+
+        Assert.True(plan.IsEmptyLanguage);
+        Assert.Equal(0, plan.PatternCount);
+        Assert.True(plan.Pattern.IsEmpty);
+        Assert.Equal(0, plan.CaptureCount);
+        Assert.Empty(plan.CaptureNames);
+        Assert.False(plan.CanMatchEmpty);
+        Assert.False(plan.EmptyMatchRequiresEndAssertion);
+        Assert.True(plan.IsCompatible(
+            asciiCaseInsensitive: true,
+            lineRegexp: false,
+            wordRegexp: false,
+            crlf: true,
+            nullData: false,
+            multiline: true,
+            multilineDotall: true));
+        Assert.Null(plan.Matcher.Find(ReadOnlySpan<byte>.Empty));
+        Assert.Null(plan.Matcher.Find("anything"u8));
+        Assert.Equal(0, plan.Matcher.CountMatches("anything"u8));
+    }
+
+    /// <summary>
+    /// Verifies parsed ordinary line-search plans select the exact literal-set engine for one or many patterns.
     /// </summary>
     [Fact]
     public void UsesLiteralSetForOrdinaryLiteralPatterns()
@@ -117,9 +151,243 @@ public sealed class RegexSearchPlanTests
             new RegexSearchPlanOptions(asciiCaseInsensitive: false));
 
         Assert.NotNull(plan);
+        Assert.False(plan.IsEmptyLanguage);
         Assert.Equal("(?:ab)|(?:a)", Encoding.UTF8.GetString(plan.Pattern.Span));
         Assert.Equal(2, plan.PatternCount);
         Assert.Equal(new RegexMatch(0, 2), plan.Matcher.Find("ab"u8));
+    }
+
+    /// <summary>
+    /// Verifies authoritative pattern sets preserve ordered overlap resolution and global captures
+    /// without selecting the raw alternation-set engine.
+    /// </summary>
+    /// <param name="patternCount">The number of ordered source patterns.</param>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(4)]
+    [InlineData(8)]
+    [InlineData(16)]
+    [InlineData(32)]
+    [InlineData(64)]
+    public void AuthoritativePatternSetsPreserveOrderingOverlapsAndGlobalCaptures(int patternCount)
+    {
+        byte[][] patterns = new byte[patternCount][];
+        for (int index = 0; index < patterns.Length; index++)
+        {
+            string overlap = index == 0 ? "ab|a" : "a";
+            patterns[index] = Encoding.ASCII.GetBytes(
+                $"(?<capture{index}>{overlap}|token_{index:D2})");
+        }
+
+        var plan = RegexSearchPlan.Create(
+            patterns,
+            new RegexSearchPlanOptions(
+                asciiCaseInsensitive: false,
+                multiline: true));
+        RegexCaptures? first = plan.Matcher.FindCaptures("aba"u8);
+        int lastPattern = patternCount - 1;
+        byte[] lastToken = Encoding.ASCII.GetBytes($"token_{lastPattern:D2}");
+        RegexCaptures? last = plan.Matcher.FindCaptures(lastToken);
+
+        Assert.False(plan.IsEmptyLanguage);
+        Assert.Equal(patternCount, plan.PatternCount);
+        Assert.Equal(patternCount, plan.CaptureCount);
+        Assert.NotEqual(RegexEngineKind.AlternationSet, plan.Matcher.EngineKind);
+        Assert.False(plan.Matcher.UsesSyntheticCaptureAlternationSet);
+        Assert.NotNull(first);
+        Assert.Equal(new RegexMatch(0, 2), first.Match);
+        Assert.Equal(new RegexMatch(0, 2), first.GetGroup(1));
+        Assert.Equal(2, plan.Matcher.CountMatches("aba"u8));
+        Assert.NotNull(last);
+        Assert.Equal(new RegexMatch(0, lastToken.Length), last.Match);
+        Assert.Equal(new RegexMatch(0, lastToken.Length), last.GetGroup(patternCount));
+        Assert.Equal(patternCount, plan.CaptureNames[$"capture{lastPattern}"]);
+    }
+
+    /// <summary>
+    /// Verifies a large exact-literal plan retains the literal-set engine and searches the complete
+    /// haystack through its syntax-derived common-prefix scanner.
+    /// </summary>
+    [Fact]
+    public void LargeExactLiteralPlanUsesCommonPrefixLiteralSetWholeHaystackRoute()
+    {
+        byte[][] patterns = Enumerable.Range(0, 64)
+            .Select(static index => Encoding.ASCII.GetBytes($"issue44_absent_pattern_{index:D3}"))
+            .ToArray();
+        var plan = RegexSearchPlan.Create(
+            patterns,
+            new RegexSearchPlanOptions(asciiCaseInsensitive: false));
+        byte[] haystack = "prefix issue44_absent_pattern_063 suffix\n"u8.ToArray();
+
+        long count = LiteralLineSearcher.CountMatchesWithRegexPlan(
+            haystack,
+            patterns,
+            plan,
+            asciiCaseInsensitive: false);
+
+        Assert.Equal(RegexEngineKind.LiteralSet, plan.Matcher.EngineKind);
+        Assert.False(plan.Matcher.UsesParsedPatternSet);
+        Assert.True(plan.Matcher.CanSearchWholeHaystackWithFullMatches);
+        Assert.True(plan.Matcher.UsesCommonPrefixLiteralScanner);
+        Assert.False(plan.Matcher.UsesSyntheticCaptureAlternationSet);
+        Assert.Equal(new RegexMatch(7, 26), plan.Matcher.Find(haystack));
+        Assert.Equal(1, count);
+    }
+
+    /// <summary>
+    /// Verifies the exact common-prefix engine counts matches and observes a late NUL through one
+    /// authoritative candidate scan.
+    /// </summary>
+    [Fact]
+    public void LargeExactLiteralPlanFusesMatchCountingAndNulDetection()
+    {
+        byte[][] patterns = Enumerable.Range(0, 64)
+            .Select(static index =>
+                Encoding.ASCII.GetBytes($"issue44_absent_pattern_{index:D3}"))
+            .ToArray();
+        var plan = RegexSearchPlan.Create(
+            patterns,
+            new RegexSearchPlanOptions(asciiCaseInsensitive: false));
+        byte[] haystack =
+            "issue44_absent_pattern_099 issue44_absent_pattern_063 trailing\0"u8
+                .ToArray();
+
+        Assert.True(plan.Matcher.TryCountMatchesAndDetectNul(
+            haystack,
+            out long count,
+            out bool containsNul));
+        Assert.Equal(plan.Matcher.CountMatches(haystack), count);
+        Assert.Equal(1, count);
+        Assert.True(containsNul);
+    }
+
+    /// <summary>
+    /// Verifies parsed exact-literal pattern sets fuse source-ordered counting and complete NUL
+    /// detection without returning to raw-pattern recognition.
+    /// </summary>
+    [Fact]
+    public void ParsedCommonPrefixPatternSetFusesOrderedCountingAndNulDetection()
+    {
+        byte[][] longerFirstPatterns = CreateCapturedCommonPrefixPatterns(shorterFirst: false);
+        byte[][] shorterFirstPatterns = CreateCapturedCommonPrefixPatterns(shorterFirst: true);
+        var longerFirst = RegexSearchPlan.Create(
+            longerFirstPatterns,
+            new RegexSearchPlanOptions(asciiCaseInsensitive: false));
+        var shorterFirst = RegexSearchPlan.Create(
+            shorterFirstPatterns,
+            new RegexSearchPlanOptions(asciiCaseInsensitive: false));
+        byte[] haystack = "aaaaaaaaaaaaaaaa\0"u8.ToArray();
+
+        AssertParsedFusedCount(longerFirst, haystack, expectedCount: 1);
+        AssertParsedFusedCount(shorterFirst, haystack, expectedCount: 2);
+    }
+
+    /// <summary>
+    /// Verifies a scope whose execution depends on syntax analysis retains parsed planning.
+    /// </summary>
+    [Fact]
+    public void ScopeDependentPlanningUsesParsedLiteralPath()
+    {
+        var plan = RegexSearchPlan.CreateScoped(
+            ["literal"u8.ToArray()],
+            new RegexSearchPlanOptions(asciiCaseInsensitive: false),
+            RegexSearchScopePolicy.StandardMultiline);
+
+        Assert.Equal(RegexEngineKind.LiteralSet, plan.Matcher.EngineKind);
+        Assert.Equal(new RegexMatch(1, 7), plan.Matcher.Find(" literal "u8));
+    }
+
+    /// <summary>
+    /// Verifies the literal-set common-prefix route preserves source order for overlapping exact literals.
+    /// </summary>
+    [Fact]
+    public void CommonPrefixLiteralSetPreservesOrderedOverlaps()
+    {
+        byte[][] longerFirst = Enumerable.Range(0, 64)
+            .Select(static index => Encoding.ASCII.GetBytes($"issue44_common_token_{index:D3}"))
+            .ToArray();
+        longerFirst[0] = "issue44_common_long"u8.ToArray();
+        longerFirst[1] = "issue44_common"u8.ToArray();
+        byte[][] shorterFirst = longerFirst.Select(static pattern => pattern.ToArray()).ToArray();
+        (shorterFirst[0], shorterFirst[1]) = (shorterFirst[1], shorterFirst[0]);
+        byte[] haystack = "issue44_common_long issue44_common"u8.ToArray();
+
+        var longerPlan = RegexSearchPlan.Create(
+            longerFirst,
+            new RegexSearchPlanOptions(asciiCaseInsensitive: false));
+        var shorterPlan = RegexSearchPlan.Create(
+            shorterFirst,
+            new RegexSearchPlanOptions(asciiCaseInsensitive: false));
+
+        Assert.Equal(RegexEngineKind.LiteralSet, longerPlan.Matcher.EngineKind);
+        Assert.False(longerPlan.Matcher.UsesParsedPatternSet);
+        Assert.True(longerPlan.Matcher.UsesCommonPrefixLiteralScanner);
+        Assert.Equal(new RegexMatch(0, longerFirst[0].Length), longerPlan.Matcher.Find(haystack));
+        Assert.Equal(2, longerPlan.Matcher.CountMatches(haystack));
+        Assert.Equal(
+            longerFirst[0].Length + longerFirst[1].Length,
+            longerPlan.Matcher.SumMatchSpans(haystack));
+        Assert.Equal(RegexEngineKind.LiteralSet, shorterPlan.Matcher.EngineKind);
+        Assert.False(shorterPlan.Matcher.UsesParsedPatternSet);
+        Assert.True(shorterPlan.Matcher.UsesCommonPrefixLiteralScanner);
+        Assert.Equal(new RegexMatch(0, shorterFirst[0].Length), shorterPlan.Matcher.Find(haystack));
+        Assert.Equal(2, shorterPlan.Matcher.CountMatches(haystack));
+        Assert.Equal(
+            shorterFirst[0].Length * 2,
+            shorterPlan.Matcher.SumMatchSpans(haystack));
+    }
+
+    /// <summary>
+    /// Verifies a rejected common-prefix occurrence does not hide a match beginning at an
+    /// overlapping occurrence.
+    /// </summary>
+    [Fact]
+    public void CommonPrefixLiteralSetRetriesOverlappingPrefixCandidates()
+    {
+        byte[][] patterns = Enumerable.Range(0, 16)
+            .Select(static index => Encoding.ASCII.GetBytes($"aaaaaaaaX{index:X2}"))
+            .ToArray();
+        var plan = RegexSearchPlan.Create(
+            patterns,
+            new RegexSearchPlanOptions(asciiCaseInsensitive: false));
+        byte[] haystack = "aaaaaaaaaX00"u8.ToArray();
+
+        Assert.True(plan.Matcher.UsesCommonPrefixLiteralScanner);
+        Assert.Equal(new RegexMatch(1, patterns[0].Length), plan.Matcher.Find(haystack));
+        Assert.Null(plan.Matcher.Find(haystack, startAt: 2));
+        Assert.Equal(1, plan.Matcher.CountMatches(haystack));
+        Assert.Equal(patterns[0].Length, plan.Matcher.SumMatchSpans(haystack));
+    }
+
+    private static void AssertParsedFusedCount(
+        RegexSearchPlan plan,
+        byte[] haystack,
+        long expectedCount)
+    {
+        Assert.Equal(RegexEngineKind.AlternationSet, plan.Matcher.EngineKind);
+        Assert.True(plan.Matcher.UsesParsedPatternSet);
+        Assert.True(plan.Matcher.UsesCommonPrefixLiteralScanner);
+        Assert.True(plan.Matcher.TryCountMatchesAndDetectNul(
+            haystack,
+            out long count,
+            out bool containsNul));
+        Assert.Equal(plan.Matcher.CountMatches(haystack), count);
+        Assert.Equal(expectedCount, count);
+        Assert.True(containsNul);
+    }
+
+    private static byte[][] CreateCapturedCommonPrefixPatterns(bool shorterFirst)
+    {
+        string[] literals = Enumerable.Range(0, 16)
+            .Select(static index => $"aaaaaaaaZ{index:X2}")
+            .ToArray();
+        literals[0] = shorterFirst ? "aaaaaaaa" : "aaaaaaaaa";
+        literals[1] = shorterFirst ? "aaaaaaaaa" : "aaaaaaaa";
+        return literals
+            .Select(static (literal, index) =>
+                Encoding.ASCII.GetBytes($"(?<capture{index}>{literal})"))
+            .ToArray();
     }
 
     /// <summary>
@@ -341,6 +609,44 @@ public sealed class RegexSearchPlanTests
         Assert.NotNull(plan);
         Assert.Equal(new RegexMatch(0, 1), plan.Matcher.Find("a\nb"u8));
         Assert.Null(plan.Matcher.Find("b"u8));
+    }
+
+    /// <summary>
+    /// Verifies a NUL-delimited record can contain and match across line feeds without a
+    /// line-end candidate treating the first line feed as an uncrossable record boundary.
+    /// </summary>
+    [Fact]
+    public void NullDataAnchoredPatternCanCrossLineFeedsWithinARecord()
+    {
+        byte[][] patterns =
+        [
+            @"^[A-Z\n]{79}A$"u8.ToArray(),
+            "^Z$"u8.ToArray(),
+        ];
+        var plan = RegexSearchPlan.Create(
+            patterns,
+            new RegexSearchPlanOptions(
+                asciiCaseInsensitive: false,
+                nullData: true));
+        byte[] haystack = new byte[81];
+        haystack.AsSpan(0, 80).Fill((byte)'B');
+        haystack[40] = (byte)'\n';
+        haystack[79] = (byte)'A';
+        haystack[80] = 0;
+        var sink = new CapturingLineSink();
+
+        bool matched = LiteralLineSearcher.SearchWithRegexPlan(
+            haystack,
+            patterns,
+            plan,
+            ref sink,
+            nullData: true);
+
+        Assert.True(matched);
+        Assert.Equal(new RegexMatch(0, 80), plan.Matcher.Find(haystack.AsSpan(0, 80)));
+        Assert.Equal(1UL, sink.MatchedLines);
+        Assert.Equal(1, sink.LineNumber);
+        Assert.Equal(haystack, sink.Line);
     }
 
     /// <summary>

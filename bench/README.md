@@ -48,8 +48,8 @@ also be started manually from Actions. Manual performance-only reruns should set
 Gates repeat the native
 entrypoint and final `scout` executable smoke checks on all six hosted release
 RIDs: `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`, `win-x64`, and
-`win-arm64`. Full pinned test passes currently run on the hosted Unix RIDs with
-complete oracle/tool pin support: `linux-x64`, `linux-arm64`, and `osx-arm64`.
+`win-arm64`. Full pinned test passes run on all six hosted release RIDs with
+captured oracle and tool pin support.
 The hyperfine performance gate runs on GitHub-hosted `macos-26` arm64. The
 pinned CI runner labels are `ubuntu-24.04, ubuntu-24.04-arm, macos-26-intel,
 macos-26, windows-2025-vs2026, and windows-11-arm`; those are the only labels
@@ -70,13 +70,18 @@ manifest. The committed lockfile now contains frozen hashes, so
 The script enforces the wall-time gates from `docs/DESIGN.md` with paired
 ABBA/BAAB cycles. One fresh Hyperfine process runs `rg`, Scout, Scout, `rg`; the
 next runs Scout, `rg`, `rg`, Scout. A cycle ratio is the geometric mean of those
-two round ratios, and the gate uses the median cycle ratio. Six measured rounds
-therefore provide twelve timing samples for each binary while balancing every
-command position as filesystem-cache and hosted-runner conditions change.
-Warmup rounds alternate in the same way. Raw per-round JSON and the aggregated
-wall, user CPU, system CPU, and RSS samples remain in the output directory for
-diagnosis. The hosted performance job uploads the top-level aggregate JSON even
-when the gate fails, so the exact inputs to every completed attempt remain
+two round ratios, and the gate uses the median cycle ratio. Six valid measured
+rounds therefore provide twelve timing samples for each binary while balancing
+every command position as filesystem-cache and hosted-runner conditions change.
+Warmup rounds alternate in the same way. A zero-valued measured wall time is a
+timer-resolution artifact, so the harness discards the entire balanced round
+and repeats the same ABBA or BAAB position schedule. It collects six valid
+measured rounds, allows at most eight timer-resolution replacements per
+workload attempt, and records each discarded round for diagnosis.
+Raw per-round JSON and the aggregated wall, user CPU, system CPU, and RSS
+samples remain in the output directory for diagnosis. The hosted performance
+job uploads the top-level aggregate JSON even when the gate fails, so the exact
+inputs to every completed attempt remain
 available without uploading the much larger per-round sample tree.
 
 Each attempt prints the wall and RSS components as either within or exceeding
@@ -125,10 +130,13 @@ The issue #37, #36, and #44 gates share a deterministic CRLF corpus made from
 200,000 Paladin-like four-line records, followed by the four delegate
 declarations from the issue #36 reproduction. The issue #37 workloads measure
 the prefilter-free `\b\w{5}\s+\w{5}\s+\w{5}\b` expression through both line
-and match counting, the anchored declaration expression, and the 70-to-90-character
-identifier class. The issue #36 workload measures the original four-branch
-shared-prefix alternation. The issue #44 workloads search for the same 64 absent
-literals once through repeated `-e` arguments and once through a pattern file.
+and match counting, the exact `\bGeneratedRecord\b` expression, the anchored
+declaration expression, and both the CRLF-aware and exact
+`^[A-Za-z_]{70,90}$` identifier-class expressions. The issue #36 workload
+measures the original four-branch shared-prefix alternation across four
+sequential scans of the corpus, keeping each timed command above the host timer
+resolution. The issue #44 workloads search for the same 64 absent literals once
+through repeated `-e` arguments and once through a pattern file.
 Every command pins `--threads 1 --mmap` and uses
 either `--count` or `--count-matches`. Scout runs with
 `SCOUT_REGEX_SPECIALIZATION_MODE=general` so these gates
@@ -145,8 +153,8 @@ Only the leading command supplies a clean RSS sample. Alternating rounds put rg
 and Scout first once per cycle, so neither measurement inherits the other
 process's peak.
 
-In gate mode, every workload uses six measured rounds and six warmup rounds by
-default. That produces twelve measured timing samples and three clean RSS
+In gate mode, every workload uses six valid measured rounds and six warmup
+rounds by default. That produces twelve measured timing samples and three clean RSS
 samples per binary, plus twelve warmup executions per binary. An explicit gate
 `--runs` value must be even so every ABBA round has its BAAB partner. An explicit
 gate `--warmup` value must also be even; zero disables warmups.

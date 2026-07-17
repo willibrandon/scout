@@ -131,24 +131,6 @@ public sealed class RegexAutomaton
         RegexSpecializationMode? specializationMode = null)
     {
         var options = new RegexCompileOptions(caseInsensitive, swapGreed: false, multiLine, dotMatchesNewline, crlf, lineTerminator, utf8, unicodeClasses, specializationMode);
-        if (options.SpecializationMode != RegexSpecializationMode.Fallback &&
-            RegexLiteralSetEngine.TryCreateLiteralAlternation(pattern, options, out RegexLiteralSetEngine? literalSet) &&
-            literalSet is not null)
-        {
-            return new RegexAutomaton(
-                RegexMetaEngine.CompileLiteralSet(literalSet, options.Utf8),
-                startPredicate: null,
-                lengthGuard: null,
-                requiredByteSetGuard: null,
-                requiredLiteralAnySetGuard: null,
-                syntheticCaptureAlternationSet: null,
-                capturePattern: default,
-                captureRoot: null,
-                captureOptions: default,
-                capturePrefilter: null,
-                captureCount: 0);
-        }
-
         RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
         return CompileParsed(tree, options, dfaSizeLimit);
     }
@@ -160,6 +142,28 @@ public sealed class RegexAutomaton
         bool compilePrefilter = true)
     {
         return CompileParsedWithCache(tree, options, dfaSizeLimit, compilePrefilter, utf8ByteTrieCache: null);
+    }
+
+    /// <summary>
+    /// Compiles parsed syntax without consulting specializations that rescan the original pattern bytes.
+    /// </summary>
+    /// <param name="tree">The parsed regex syntax tree.</param>
+    /// <param name="options">The effective compile options.</param>
+    /// <param name="dfaSizeLimit">The maximum DFA cache size in bytes, or <see langword="null" /> for the default.</param>
+    /// <param name="compilePrefilter">Whether to compile conservative syntax-derived search prefilters.</param>
+    /// <returns>The compiled authoritative automaton.</returns>
+    internal static RegexAutomaton CompileParsedAuthoritative(
+        RegexSyntaxTree tree,
+        RegexCompileOptions options,
+        ulong? dfaSizeLimit = null,
+        bool compilePrefilter = true)
+    {
+        return CompileParsedWithCache(
+            tree,
+            options.WithoutRawPatternSpecializations(),
+            dfaSizeLimit,
+            compilePrefilter,
+            utf8ByteTrieCache: null);
     }
 
     internal static RegexAutomaton CompileParsedWithCache(
@@ -183,6 +187,36 @@ public sealed class RegexAutomaton
                 compilePrefilter,
                 compileSearchGuards: false,
                 utf8ByteTrieCache);
+        }
+
+        if (!options.AllowRawPatternSpecializations &&
+            tree.CaptureCount > 0 &&
+            RegexAlternationSetEngine.TryCreateParsedLiteralAlternatives(
+                tree.Root,
+                tree.CaptureCount,
+                options,
+                out RegexAlternationSetEngine? parsedPatternSet) &&
+            parsedPatternSet is not null)
+        {
+            int parsedWholePatternCaptureIndex = TryGetWholePatternCaptureIndex(
+                tree.Root,
+                tree.CaptureCount);
+            return new RegexAutomaton(
+                RegexMetaEngine.CompileParsedPatternSet(
+                    parsedPatternSet,
+                    options.Utf8,
+                    () => CompileGeneralNfa(tree.Root, options, utf8ByteTrieCache)),
+                startPredicate: null,
+                lengthGuard: null,
+                requiredByteSetGuard: null,
+                requiredLiteralAnySetGuard: null,
+                syntheticCaptureAlternationSet: null,
+                tree.CaptureCount > 0 ? tree.Pattern : default,
+                tree.CaptureCount > 0 ? tree.Root : null,
+                options,
+                capturePrefilter: null,
+                tree.CaptureCount,
+                parsedWholePatternCaptureIndex);
         }
 
         if (options.ExcludeLineTerminators)
@@ -295,7 +329,17 @@ public sealed class RegexAutomaton
                 wholePatternCaptureIndex);
         }
 
-        RegexAlternationSetEngine.TryCreate(tree.Pattern.Span, tree.Root, tree.CaptureCount, options, out RegexAlternationSetEngine? alternationSet);
+        RegexAlternationSetEngine? alternationSet = null;
+        if (options.AllowRawPatternSpecializations)
+        {
+            RegexAlternationSetEngine.TryCreate(
+                tree.Pattern.Span,
+                tree.Root,
+                tree.CaptureCount,
+                options,
+                out alternationSet);
+        }
+
         if (alternationSet is not null)
         {
             return new RegexAutomaton(
@@ -1320,6 +1364,27 @@ public sealed class RegexAutomaton
     internal RegexEngineKind EngineKind => engine.Kind;
 
     /// <summary>
+    /// Gets a value indicating whether the ordered pattern-set engine was selected from parsed syntax.
+    /// </summary>
+    internal bool UsesParsedPatternSet => engine.UsesParsedPatternSet;
+
+    /// <summary>
+    /// Gets a value indicating whether the selected AST-proven exact-literal engine uses a common-prefix scan.
+    /// </summary>
+    internal bool UsesCommonPrefixLiteralScanner =>
+        engine.UsesCommonPrefixLiteralScanner;
+
+    /// <summary>
+    /// Gets the sole case-sensitive literal selected by the exact compiled engine.
+    /// </summary>
+    /// <param name="literal">Receives the immutable literal bytes.</param>
+    /// <returns><see langword="true" /> when this automaton uses an exact single-literal engine.</returns>
+    internal bool TryGetSingleCaseSensitiveLiteral(out ReadOnlyMemory<byte> literal)
+    {
+        return engine.TryGetSingleCaseSensitiveLiteral(out literal);
+    }
+
+    /// <summary>
     /// Finds the first match in a haystack.
     /// </summary>
     /// <param name="haystack">The haystack bytes.</param>
@@ -1703,7 +1768,7 @@ public sealed class RegexAutomaton
     }
 
     /// <summary>
-    /// Attempts to count authoritative matches while required-literal search detects NUL bytes.
+    /// Attempts to count authoritative matches while the selected candidate scan detects NUL bytes.
     /// </summary>
     /// <param name="haystack">The haystack bytes.</param>
     /// <param name="count">Receives the number of non-overlapping matches.</param>
@@ -1861,7 +1926,8 @@ public sealed class RegexAutomaton
 
             if (captureRoot is not null && captureCount > 0 && wholePatternCaptureIndex == 0)
             {
-                if (syntheticCaptureAlternationSet is null)
+                if (captureOptions.AllowRawPatternSpecializations &&
+                    syntheticCaptureAlternationSet is null)
                 {
                     RegexAlternationSetEngine.TryCreateSyntheticCaptures(
                         capturePattern.Span,

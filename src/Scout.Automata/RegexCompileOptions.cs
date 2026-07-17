@@ -15,6 +15,7 @@ namespace Scout;
 /// <param name="excludeLineTerminators">Whether every consuming atom excludes the configured record terminator.</param>
 /// <param name="excludeCrLf">Whether exclusion treats CR and LF as one immutable record-terminator family.</param>
 /// <param name="excludedLineTerminator">The record byte excluded from consuming atoms, or <see langword="null" /> to use <paramref name="lineTerminator" />.</param>
+/// <param name="allowRawPatternSpecializations">Whether specializations may rescan the original pattern bytes.</param>
 internal readonly struct RegexCompileOptions(
     bool caseInsensitive,
     bool swapGreed,
@@ -27,7 +28,8 @@ internal readonly struct RegexCompileOptions(
     RegexSpecializationMode? specializationMode = null,
     bool excludeLineTerminators = false,
     bool? excludeCrLf = null,
-    byte? excludedLineTerminator = null)
+    byte? excludedLineTerminator = null,
+    bool allowRawPatternSpecializations = true)
 {
     /// <summary>
     /// Gets a value indicating whether matching ignores case.
@@ -90,6 +92,11 @@ internal readonly struct RegexCompileOptions(
     public byte ExcludedLineTerminator { get; } = excludedLineTerminator ?? lineTerminator;
 
     /// <summary>
+    /// Gets a value indicating whether specializations may rescan the original pattern bytes.
+    /// </summary>
+    public bool AllowRawPatternSpecializations { get; } = allowRawPatternSpecializations;
+
+    /// <summary>
     /// Applies scoped regex flags while preserving non-flag compilation policy.
     /// </summary>
     /// <param name="enabledFlags">The flags enabled by the scope.</param>
@@ -144,7 +151,8 @@ internal readonly struct RegexCompileOptions(
             SpecializationMode,
             ExcludeLineTerminators,
             ExcludeCrLf,
-            ExcludedLineTerminator);
+            ExcludedLineTerminator,
+            AllowRawPatternSpecializations);
     }
 
     /// <summary>
@@ -178,7 +186,8 @@ internal readonly struct RegexCompileOptions(
             SpecializationMode,
             exclude,
             excludeCrLf: exclude && ExcludeCrLf,
-            excludedLineTerminator: ExcludedLineTerminator);
+            excludedLineTerminator: ExcludedLineTerminator,
+            allowRawPatternSpecializations: AllowRawPatternSpecializations);
     }
 
     /// <summary>
@@ -200,7 +209,30 @@ internal readonly struct RegexCompileOptions(
             SpecializationMode,
             ExcludeLineTerminators,
             ExcludeCrLf,
-            ExcludedLineTerminator);
+            ExcludedLineTerminator,
+            AllowRawPatternSpecializations);
+    }
+
+    /// <summary>
+    /// Creates a copy that prevents specializations from rescanning the original pattern bytes.
+    /// </summary>
+    /// <returns>The updated compilation options.</returns>
+    public RegexCompileOptions WithoutRawPatternSpecializations()
+    {
+        return new RegexCompileOptions(
+            CaseInsensitive,
+            SwapGreed,
+            MultiLine,
+            DotMatchesNewline,
+            Crlf,
+            LineTerminator,
+            Utf8,
+            UnicodeClasses,
+            SpecializationMode,
+            ExcludeLineTerminators,
+            ExcludeCrLf,
+            ExcludedLineTerminator,
+            allowRawPatternSpecializations: false);
     }
 
     private static void ApplyFlag(

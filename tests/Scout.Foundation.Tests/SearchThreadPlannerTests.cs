@@ -58,14 +58,18 @@ public sealed class SearchThreadPlannerTests
     }
 
     /// <summary>
-    /// Verifies default macOS directory search fan-out balances hosted file I/O throughput and RSS.
+    /// Verifies default directory search fan-out applies the measured macOS ceiling.
     /// </summary>
     [Fact]
-    public void SearchWalkPlanningUsesMacOsDefaultDirectorySearchThreads()
+    public void SearchWalkPlanningUsesDefaultDirectorySearchThreads()
     {
         var lowArgs = new CliLowArgs();
         int upstreamDefault = Math.Min(Environment.ProcessorCount, 12);
-        int expected = OperatingSystem.IsMacOS() ? SearchWalkPlanning.GetMacOsDefaultSearchWalkThreadCount(upstreamDefault) : upstreamDefault;
+        int expected = OperatingSystem.IsMacOS()
+            ? SearchWalkPlanning.GetMacOsDefaultSearchWalkThreadCount(
+                upstreamDefault,
+                replacement: false)
+            : upstreamDefault;
 
         int threads = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
 
@@ -73,19 +77,49 @@ public sealed class SearchThreadPlannerTests
     }
 
     /// <summary>
-    /// Verifies default macOS directory search fan-out uses the measured hosted-runner cap.
+    /// Verifies macOS replacement searches use enough directory workers for capture rendering.
     /// </summary>
-    [Theory]
-    [InlineData(1, 1)]
-    [InlineData(2, 2)]
-    [InlineData(3, 3)]
-    [InlineData(4, 3)]
-    [InlineData(5, 3)]
-    [InlineData(6, 3)]
-    [InlineData(12, 3)]
-    public void SearchWalkPlanningUsesMacOsDefaultDirectorySearchThreadMatrix(int upstreamDefault, int expectedThreads)
+    [Fact]
+    public void SearchWalkPlanningUsesReplacementDirectorySearchThreads()
     {
-        int threads = SearchWalkPlanning.GetMacOsDefaultSearchWalkThreadCount(upstreamDefault);
+        var lowArgs = new CliLowArgs();
+        lowArgs.SetReplacement("$1"u8);
+        int upstreamDefault = Math.Min(Environment.ProcessorCount, 12);
+        int expected = OperatingSystem.IsMacOS()
+            ? SearchWalkPlanning.GetMacOsDefaultSearchWalkThreadCount(
+                upstreamDefault,
+                replacement: true)
+            : upstreamDefault;
+
+        int threads = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
+
+        Assert.Equal(expected, threads);
+    }
+
+    /// <summary>
+    /// Verifies the measured macOS directory-search ceilings for ordinary and replacement output.
+    /// </summary>
+    /// <param name="replacement">Whether replacement rendering is active.</param>
+    /// <param name="upstreamDefault">The platform-neutral planner result.</param>
+    /// <param name="expectedThreads">The expected macOS worker count.</param>
+    [Theory]
+    [InlineData(false, 1, 1)]
+    [InlineData(false, 2, 2)]
+    [InlineData(false, 3, 3)]
+    [InlineData(false, 4, 3)]
+    [InlineData(false, 12, 3)]
+    [InlineData(true, 1, 1)]
+    [InlineData(true, 3, 3)]
+    [InlineData(true, 6, 6)]
+    [InlineData(true, 12, 6)]
+    public void SearchWalkPlanningUsesMacOsDirectorySearchThreadMatrix(
+        bool replacement,
+        int upstreamDefault,
+        int expectedThreads)
+    {
+        int threads = SearchWalkPlanning.GetMacOsDefaultSearchWalkThreadCount(
+            upstreamDefault,
+            replacement);
 
         Assert.Equal(expectedThreads, threads);
     }
@@ -152,7 +186,7 @@ public sealed class SearchThreadPlannerTests
     }
 
     /// <summary>
-    /// Verifies explicit directory search thread counts bypass platform default caps.
+    /// Verifies explicit directory search thread counts are honored.
     /// </summary>
     [Fact]
     public void SearchWalkPlanningHonorsExplicitDirectorySearchThreads()

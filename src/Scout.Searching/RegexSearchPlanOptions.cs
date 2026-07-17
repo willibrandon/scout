@@ -71,6 +71,7 @@ internal readonly struct RegexSearchPlanOptions(
     /// <param name="candidateNullData">Whether NUL terminates records.</param>
     /// <param name="candidateMultiline">Whether matches may span records.</param>
     /// <param name="candidateMultilineDotall">Whether dot matches record terminators in multiline mode.</param>
+    /// <param name="candidatePreserveCrlfCarriageReturn">Whether line selection preserves CR while excluding LF.</param>
     /// <returns><see langword="true" /> when all semantic options are equal.</returns>
     internal bool IsCompatible(
         bool candidateAsciiCaseInsensitive,
@@ -79,7 +80,8 @@ internal readonly struct RegexSearchPlanOptions(
         bool candidateCrlf,
         bool candidateNullData,
         bool candidateMultiline,
-        bool candidateMultilineDotall)
+        bool candidateMultilineDotall,
+        bool candidatePreserveCrlfCarriageReturn = false)
     {
         return AsciiCaseInsensitive == candidateAsciiCaseInsensitive &&
             LineRegexp == candidateLineRegexp &&
@@ -87,6 +89,7 @@ internal readonly struct RegexSearchPlanOptions(
             Crlf == candidateCrlf &&
             NullData == candidateNullData &&
             Multiline == candidateMultiline &&
-            MultilineDotall == candidateMultilineDotall;
+            MultilineDotall == candidateMultilineDotall &&
+            PreserveCrlfCarriageReturn == candidatePreserveCrlfCarriageReturn;
     }
 }

@@ -140,6 +140,28 @@ public sealed class Pcre2SearchOperationsTests
         Assert.False((byteOptions & Pcre2CompileOptions.MatchInvalidUtf) != 0);
     }
 
+    /// <summary>
+    /// Verifies capture replay receives the same LF and CRLF-normalized subject as the original
+    /// line-oriented PCRE2 search.
+    /// </summary>
+    /// <param name="crlf">Whether CRLF-aware output is configured.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CaptureReplayUsesExactMatchLineNormalization(bool crlf)
+    {
+        ReadOnlyMemory<byte> lineTerminator = crlf
+            ? "\r\n"u8.ToArray()
+            : "\n"u8.ToArray();
+
+        Assert.Equal(
+            "foo"u8.ToArray(),
+            Pcre2SearchOperations.GetPcre2MatchLine("foo\n"u8, lineTerminator).ToArray());
+        Assert.Equal(
+            "foo"u8.ToArray(),
+            Pcre2SearchOperations.GetPcre2MatchLine("foo\r\n"u8, lineTerminator).ToArray());
+    }
+
     private static CliLowArgs ParseLowArgs(params string[] arguments)
     {
         var osArguments = new OsString[arguments.Length];

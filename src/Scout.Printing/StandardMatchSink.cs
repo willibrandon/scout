@@ -106,7 +106,7 @@ internal struct StandardMatchSink(
             _output.Write(_fieldSeparator.Span);
         }
 
-        if (matchColumn > 0)
+        if (matchColumn > 0 && !displayMatch.IsEmpty)
         {
             _color.WriteMatch(_output, displayMatch);
         }

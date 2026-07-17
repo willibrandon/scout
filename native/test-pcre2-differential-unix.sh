@@ -299,6 +299,8 @@ mkdir -p "$WORK"
 
 printf 'foobar\nfoo\nfoobarfoo\n' > "$WORK/pcre2-smoke.txt"
 printf 'barfoo\nfoobar\n' > "$WORK/pcre2-smoke-2.txt"
+printf 'foobar\nfoo\n' > "$WORK/pcre2-capture-lf"
+printf 'foobar\r\nfoo\r\n' > "$WORK/pcre2-capture-crlf"
 printf 'foo-bar\nfoobar\n' > "$WORK/pcre2-word.txt"
 cat > "$WORK/pcre2-context" <<'EOF'
 one
@@ -368,6 +370,15 @@ compare_case context exact -P -n -C1 'foo(?=bar)' pcre2-context
 compare_case passthru exact -P -n --passthru 'foo(?=bar)' pcre2-context
 compare_case context_only_matching exact -P -n -o -C1 'foo(?=bar)' pcre2-context
 compare_case context_replacement exact -P -n -r X -C1 'foo(?=bar)' pcre2-context
+compare_case numbered_capture_replacement exact -P -r '$2:$1' '(foo)(bar)' pcre2-smoke.txt
+compare_case named_capture_replacement exact -P -r '${right}:${left}' '(?<left>foo)(?<right>bar)' pcre2-smoke.txt
+compare_case unmatched_capture_replacement exact -P -r '$1:$2:${right}' '(?<left>foo)(?<right>bar)?' pcre2-smoke.txt
+compare_case duplicate_named_capture_replacement exact -P -r '${value}' '(?J)(?<value>foo)|(?<value>bar)' pcre2-smoke.txt
+compare_case reset_start_capture_replacement exact -P -r '$1:${tail}' '(foo)\K(?<tail>bar)' pcre2-smoke.txt
+compare_case lf_numbered_capture_replacement exact -P -r '$1:$2' '(foo)(bar)?$' pcre2-capture-lf
+compare_case lf_named_capture_replacement exact -P -r '${left}:${right}' '(?<left>foo)(?<right>bar)?$' pcre2-capture-lf
+compare_case crlf_numbered_capture_replacement exact -P --crlf -r '$1:$2' '(foo)(bar)?$' pcre2-capture-crlf
+compare_case crlf_named_capture_replacement exact -P --crlf -r '${left}:${right}' '(?<left>foo)(?<right>bar)?$' pcre2-capture-crlf
 compare_case only_matching_replacement exact -P -o -r X 'foo(?=bar)|foo' pcre2-smoke.txt
 compare_case only_matching_replacement_columns exact -P -n --column -o -r X 'foo(?=bar)|foo' pcre2-smoke.txt
 compare_case vimgrep_lookahead exact -P --vimgrep 'foo(?=bar)' pcre2-smoke.txt
@@ -394,6 +405,11 @@ compare_case json_multi_file mask-elapsed-sort-lines -P --json 'foo(?=bar)' pcre
 compare_case json_quiet mask-elapsed -P --json -q 'foo(?=bar)' pcre2-smoke.txt
 compare_case json_stats_lookahead mask-elapsed -P --json --stats 'foo(?=bar)' pcre2-smoke.txt
 compare_case json_replacement mask-elapsed -P --json -r X 'foo(?=bar)' pcre2-smoke.txt
+compare_case json_numbered_capture_replacement mask-elapsed -P --json -r '$2:$1' '(foo)(bar)' pcre2-smoke.txt
+compare_case json_named_capture_replacement mask-elapsed -P --json -r '${right}:${left}' '(?<left>foo)(?<right>bar)' pcre2-smoke.txt
+compare_case json_unmatched_capture_replacement mask-elapsed -P --json -r '$1:$2:${right}' '(?<left>foo)(?<right>bar)?' pcre2-smoke.txt
+compare_case json_duplicate_named_capture_replacement mask-elapsed -P --json -r '${value}' '(?J)(?<value>foo)|(?<value>bar)' pcre2-smoke.txt
+compare_case json_reset_start_capture_replacement mask-elapsed -P --json -r '$1:${tail}' '(foo)\K(?<tail>bar)' pcre2-smoke.txt
 compare_case json_only_matching_replacement mask-elapsed -P --json -o -r X 'foo(?=bar)' pcre2-smoke.txt
 compare_case json_context_lookahead mask-elapsed -P --json -C1 'foo(?=bar)' pcre2-context
 compare_case json_context_replacement mask-elapsed -P --json -r X -C1 'foo(?=bar)' pcre2-context

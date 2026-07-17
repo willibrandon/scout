@@ -7,8 +7,6 @@ namespace Scout;
 /// <param name="prefix">The optional path prefix.</param>
 /// <param name="fieldSeparator">The separator written between output fields.</param>
 /// <param name="replacement">The replacement template.</param>
-/// <param name="patterns">The ordered regex patterns.</param>
-/// <param name="asciiCaseInsensitive">Whether matching is ASCII case-insensitive.</param>
 /// <param name="lineNumber">Whether to write line numbers.</param>
 /// <param name="column">Whether to write columns.</param>
 /// <param name="byteOffset">Whether to write byte offsets.</param>
@@ -20,15 +18,14 @@ namespace Scout;
 /// <param name="byteOffsetOffset">The byte-offset adjustment applied to emitted matches.</param>
 /// <param name="color">The configured output colors.</param>
 /// <param name="lineTerminator">The output line terminator.</param>
-/// <param name="capturePlan">The optional authoritative capture plan.</param>
+/// <param name="searchPlan">The optional authoritative regex search plan.</param>
+/// <param name="captureProvider">An optional non-native authoritative capture provider.</param>
 /// <param name="streamPlainBodyDirectly">Whether plain replacement output may be streamed directly.</param>
 internal struct ReplacementLineSink(
     RawByteWriter output,
     OutputPath? prefix,
     ReadOnlyMemory<byte> fieldSeparator,
     ReadOnlyMemory<byte> replacement,
-    IReadOnlyList<byte[]> patterns,
-    bool asciiCaseInsensitive,
     bool lineNumber,
     bool column,
     bool byteOffset,
@@ -40,7 +37,8 @@ internal struct ReplacementLineSink(
     long byteOffsetOffset = 0,
     OutputColor color = default,
     ReadOnlyMemory<byte> lineTerminator = default,
-    ReplacementCapturePlan? capturePlan = null,
+    RegexSearchPlan? searchPlan = null,
+    IReplacementCaptureProvider? captureProvider = null,
     bool streamPlainBodyDirectly = false) : IMatchLineSink
 {
     private static readonly byte[] s_nullByte = [0];
@@ -49,12 +47,10 @@ internal struct ReplacementLineSink(
     private readonly OutputPath? _prefix = prefix;
     private readonly ReadOnlyMemory<byte> _fieldSeparator = fieldSeparator;
     private readonly ReadOnlyMemory<byte> _replacement = replacement;
-    private readonly IReadOnlyList<byte[]> _patterns = patterns;
-    private readonly ReplacementCapturePlan? _capturePlan = capturePlan;
+    private readonly IReplacementCaptureProvider? _captureProvider = captureProvider ?? searchPlan;
     private ReplacementTemplate? _template;
     private int[]? _captureSlotsBuffer;
     private readonly bool _streamPlainBodyDirectly = streamPlainBodyDirectly;
-    private readonly bool _asciiCaseInsensitive = asciiCaseInsensitive;
     private readonly bool _lineNumber = lineNumber;
     private readonly bool _column = column;
     private readonly bool _byteOffset = byteOffset;
@@ -68,6 +64,7 @@ internal struct ReplacementLineSink(
         lineTerminator.IsEmpty ? "\n"u8.ToArray() : lineTerminator;
     private readonly List<int> _starts = [];
     private readonly List<int> _lengths = [];
+    private readonly List<int> _searchStarts = [];
     private readonly List<long> _replacementColumns = [];
     private readonly List<int> _replacementLengths = [];
     private readonly OutputColor _color = color;
@@ -95,6 +92,54 @@ internal struct ReplacementLineSink(
         ReadOnlySpan<byte> line,
         ReadOnlySpan<byte> match)
     {
+        RecordMatchedLine(
+            lineNumber,
+            lineByteOffset,
+            matchByteOffset,
+            matchColumn,
+            line,
+            match,
+            checked((int)matchColumn - 1));
+    }
+
+    /// <summary>
+    /// Records one match together with the start of its successful engine search.
+    /// </summary>
+    /// <param name="lineNumber">The one-based line number.</param>
+    /// <param name="lineByteOffset">The zero-based byte offset of the line.</param>
+    /// <param name="matchByteOffset">The zero-based byte offset of the match.</param>
+    /// <param name="matchColumn">The one-based byte column of the match.</param>
+    /// <param name="line">The containing line bytes.</param>
+    /// <param name="match">The matching bytes.</param>
+    /// <param name="searchStart">The zero-based start of the successful engine search in <paramref name="line" />.</param>
+    internal void MatchedLineWithSearchStart(
+        long lineNumber,
+        long lineByteOffset,
+        long matchByteOffset,
+        long matchColumn,
+        ReadOnlySpan<byte> line,
+        ReadOnlySpan<byte> match,
+        int searchStart)
+    {
+        RecordMatchedLine(
+            lineNumber,
+            lineByteOffset,
+            matchByteOffset,
+            matchColumn,
+            line,
+            match,
+            searchStart);
+    }
+
+    private void RecordMatchedLine(
+        long lineNumber,
+        long lineByteOffset,
+        long matchByteOffset,
+        long matchColumn,
+        ReadOnlySpan<byte> line,
+        ReadOnlySpan<byte> match,
+        int searchStart)
+    {
         _ = matchByteOffset;
         if (_currentLine is not null && _currentLineNumber != lineNumber)
         {
@@ -110,7 +155,7 @@ internal struct ReplacementLineSink(
 
         if (_streamPlainBodyDirectly && CanWritePlainBodyDirectly())
         {
-            StreamPlainMatchedLine(lineNumber, lineByteOffset, matchColumn, line, match);
+            StreamPlainMatchedLine(lineNumber, lineByteOffset, matchColumn, line, match, searchStart);
             return;
         }
 
@@ -123,6 +168,7 @@ internal struct ReplacementLineSink(
 
         _starts.Add((int)matchColumn - 1);
         _lengths.Add(match.Length);
+        _searchStarts.Add(searchStart);
     }
 
     /// <summary>
@@ -196,17 +242,7 @@ internal struct ReplacementLineSink(
                 _byteOffsetOffset + _currentLineByteOffset,
                 _starts.Count > 0 ? _starts[0] + 1L : 1L);
             ReplacementTemplate activeTemplate = GetTemplate();
-            ReplacementFormatter.WriteReplacedLine(
-                _output,
-                _currentLine,
-                _starts,
-                _lengths,
-                _replacement.Span,
-                _patterns,
-                _asciiCaseInsensitive,
-                _capturePlan,
-                activeTemplate,
-                GetCaptureSlotsBuffer(activeTemplate));
+            WriteReplacedLine(activeTemplate);
             if (!HasInputTerminator(_currentLine))
             {
                 _output.Write(_lineTerminator.Span);
@@ -217,18 +253,7 @@ internal struct ReplacementLineSink(
         }
 
         ReplacementTemplate replacementTemplate = GetTemplate();
-        byte[] replacedLine = ReplacementFormatter.ReplaceLine(
-            _currentLine,
-            _starts,
-            _lengths,
-            _replacement.Span,
-            _patterns,
-            _asciiCaseInsensitive,
-            _replacementColumns,
-            _replacementLengths,
-            _capturePlan,
-            replacementTemplate,
-            GetCaptureSlotsBuffer(replacementTemplate));
+        byte[] replacedLine = ReplaceLine(replacementTemplate);
         int trimOffset = _trim ? GetTrimOffset(replacedLine) : 0;
         ReadOnlySpan<byte> displayLine = replacedLine.AsSpan(trimOffset);
         if (_vimgrep)
@@ -292,7 +317,8 @@ internal struct ReplacementLineSink(
         long lineByteOffset,
         long matchColumn,
         ReadOnlySpan<byte> line,
-        ReadOnlySpan<byte> match)
+        ReadOnlySpan<byte> match,
+        int searchStart)
     {
         int matchStart = checked((int)matchColumn - 1);
         if (!_streamingPlainLine)
@@ -321,30 +347,102 @@ internal struct ReplacementLineSink(
         }
 
         ReplacementTemplate activeTemplate = GetTemplate();
-        ReplacementFormatter.WriteExpanded(
-            _output,
+        if (_captureProvider is null)
+        {
+            ReplacementFormatter.WriteExpanded(
+                _output,
+                _replacement.Span,
+                line,
+                matchStart,
+                match.Length,
+                searchPlan: null,
+                activeTemplate,
+                GetCaptureSlotsBuffer(activeTemplate));
+        }
+        else
+        {
+            ReplacementFormatter.WriteExpanded(
+                _output,
+                _replacement.Span,
+                line,
+                matchStart,
+                match.Length,
+                _captureProvider,
+                searchStart,
+                activeTemplate,
+                GetCaptureSlotsBuffer(activeTemplate));
+        }
+
+        _currentLineWrittenUntil = matchStart + match.Length;
+    }
+
+    private byte[] ReplaceLine(ReplacementTemplate activeTemplate)
+    {
+        if (_captureProvider is null)
+        {
+            return ReplacementFormatter.ReplaceLine(
+                _currentLine,
+                _starts,
+                _lengths,
+                _replacement.Span,
+                _replacementColumns,
+                _replacementLengths,
+                searchPlan: null,
+                activeTemplate,
+                GetCaptureSlotsBuffer(activeTemplate));
+        }
+
+        return ReplacementFormatter.ReplaceLine(
+            _currentLine,
+            _starts,
+            _lengths,
             _replacement.Span,
-            line,
-            matchStart,
-            match.Length,
-            _patterns,
-            _asciiCaseInsensitive,
-            _capturePlan,
+            _replacementColumns,
+            _replacementLengths,
+            _captureProvider,
+            _searchStarts,
             activeTemplate,
             GetCaptureSlotsBuffer(activeTemplate));
-        _currentLineWrittenUntil = matchStart + match.Length;
+    }
+
+    private void WriteReplacedLine(ReplacementTemplate activeTemplate)
+    {
+        if (_captureProvider is null)
+        {
+            ReplacementFormatter.WriteReplacedLine(
+                _output,
+                _currentLine,
+                _starts,
+                _lengths,
+                _replacement.Span,
+                searchPlan: null,
+                activeTemplate,
+                GetCaptureSlotsBuffer(activeTemplate));
+            return;
+        }
+
+        ReplacementFormatter.WriteReplacedLine(
+            _output,
+            _currentLine,
+            _starts,
+            _lengths,
+            _replacement.Span,
+            _captureProvider,
+            _searchStarts,
+            activeTemplate,
+            GetCaptureSlotsBuffer(activeTemplate));
     }
 
     private ReplacementTemplate GetTemplate()
     {
         return _template ??= ReplacementTemplate.Create(
             _replacement.Span,
-            _capturePlan?.CaptureCount ?? 0);
+            _captureProvider?.CaptureCount ?? 0);
     }
 
     private int[] GetCaptureSlotsBuffer(ReplacementTemplate activeTemplate)
     {
-        int captureCount = Math.Max(activeTemplate.HighestCapture, _capturePlan?.CaptureCount ?? 0);
+        int captureCount = Math.Max(activeTemplate.HighestCapture, _captureProvider?.CaptureCount ?? 0);
         return _captureSlotsBuffer ??= new int[checked(2 * (captureCount + 1))];
     }
 
@@ -543,6 +641,7 @@ internal struct ReplacementLineSink(
         _currentLine = null;
         _starts.Clear();
         _lengths.Clear();
+        _searchStarts.Clear();
         _replacementColumns.Clear();
         _replacementLengths.Clear();
         _currentLineWrittenUntil = 0;

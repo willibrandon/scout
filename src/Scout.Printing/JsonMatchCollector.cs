@@ -5,27 +5,21 @@ namespace Scout;
 /// </summary>
 /// <param name="matches">The list that receives match spans.</param>
 /// <param name="replacement">The optional replacement template.</param>
-/// <param name="patterns">The ordered regex patterns.</param>
-/// <param name="asciiCaseInsensitive">Whether matching is ASCII case-insensitive.</param>
-/// <param name="capturePlan">The optional authoritative capture plan.</param>
+/// <param name="searchPlan">The optional authoritative regex search plan.</param>
 internal struct JsonMatchCollector(
     List<JsonMatchSpan> matches,
     ReadOnlyMemory<byte>? replacement,
-    IReadOnlyList<byte[]> patterns,
-    bool asciiCaseInsensitive,
-    ReplacementCapturePlan? capturePlan = null) : IMatchLineSink
+    RegexSearchPlan? searchPlan = null) : IMatchLineSink
 {
     private readonly List<JsonMatchSpan> _matches = matches;
     private readonly ReadOnlyMemory<byte>? _replacement = replacement;
-    private readonly IReadOnlyList<byte[]> _patterns = patterns;
-    private readonly ReplacementCapturePlan? _capturePlan = capturePlan;
+    private readonly RegexSearchPlan? _searchPlan = searchPlan;
     private readonly (
         ReplacementTemplate Template,
         int[] CaptureSlots)? _captureState =
         replacement is ReadOnlyMemory<byte> replacementValue
-            ? CreateCaptureState(replacementValue, capturePlan)
+            ? CreateCaptureState(replacementValue, searchPlan)
             : null;
-    private readonly bool _asciiCaseInsensitive = asciiCaseInsensitive;
 
     /// <summary>
     /// Adds one match and expands replacement metadata in its original containing-line context.
@@ -53,9 +47,7 @@ internal struct JsonMatchCollector(
                 line,
                 start,
                 match.Length,
-                _patterns,
-                _asciiCaseInsensitive,
-                _capturePlan,
+                _searchPlan,
                 captureState.Template,
                 captureState.CaptureSlots)
             : null;
@@ -66,12 +58,12 @@ internal struct JsonMatchCollector(
         ReplacementTemplate Template,
         int[] CaptureSlots) CreateCaptureState(
             ReadOnlyMemory<byte> replacement,
-            ReplacementCapturePlan? capturePlan)
+            RegexSearchPlan? searchPlan)
     {
         var template = ReplacementTemplate.Create(
             replacement.Span,
-            capturePlan?.CaptureCount ?? 0);
-        int captureCount = Math.Max(template.HighestCapture, capturePlan?.CaptureCount ?? 0);
+            searchPlan?.CaptureCount ?? 0);
+        int captureCount = Math.Max(template.HighestCapture, searchPlan?.CaptureCount ?? 0);
         return (
             template,
             new int[checked(2 * (captureCount + 1))]);

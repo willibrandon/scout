@@ -14,6 +14,7 @@ namespace Scout;
 /// <param name="requiredStartKind">The position constraint shared by every possible match.</param>
 /// <param name="requiredLineTerminator">The semantic line terminator for a line-start constraint.</param>
 /// <param name="requiredCrlf">Whether a line-start constraint uses CRLF-aware semantics.</param>
+/// <param name="endCandidatePredicate">The optional reversed-automaton end-boundary predicate.</param>
 internal sealed class RegexStartPredicate(
     bool[][] allowedBytes,
     byte[][][]? prefixesByFirstByte,
@@ -22,7 +23,8 @@ internal sealed class RegexStartPredicate(
     bool asciiCaseInsensitivePrefixes,
     RegexRequiredStartKind requiredStartKind,
     byte requiredLineTerminator,
-    bool requiredCrlf)
+    bool requiredCrlf,
+    RegexEndCandidatePredicate? endCandidatePredicate)
 {
     private const int MaxPredicateLength = 64;
     private const int MaxFirstByteVariants = 192;
@@ -37,6 +39,7 @@ internal sealed class RegexStartPredicate(
     private readonly RegexRequiredStartKind _requiredStartKind = requiredStartKind;
     private readonly byte _requiredLineTerminator = requiredLineTerminator;
     private readonly bool _requiredCrlf = requiredCrlf;
+    private readonly RegexEndCandidatePredicate? _endCandidatePredicate = endCandidatePredicate;
 
     /// <summary>
     /// Gets a value indicating whether every match must begin at a text or line boundary.
@@ -80,11 +83,13 @@ internal sealed class RegexStartPredicate(
                 requiredStartKind,
                 requiredLineTerminator,
                 requiredCrlf,
+                endCandidatePredicate: null,
                 out predicate) ||
             TryCreateRequiredStartOnly(
                 requiredStartKind,
                 requiredLineTerminator,
                 requiredCrlf,
+                endCandidatePredicate: null,
                 out predicate);
     }
 
@@ -109,6 +114,11 @@ internal sealed class RegexStartPredicate(
             out byte requiredLineTerminator,
             out bool requiredCrlf,
             out _);
+        RegexEndCandidatePredicate.TryCreate(
+            root,
+            options,
+            requiredStartKind,
+            out RegexEndCandidatePredicate? endCandidatePredicate);
         var allowed = new List<byte[]>();
         bool caseFoldMayNeedUnicodeScalars = options.CaseInsensitive && options.UnicodeClasses;
         bool hasPositionalPredicate = TryAppend(root, options, allowed, caseFoldMayNeedUnicodeScalars, out _) &&
@@ -122,6 +132,7 @@ internal sealed class RegexStartPredicate(
                     requiredStartKind,
                     requiredLineTerminator,
                     requiredCrlf,
+                    endCandidatePredicate,
                     out predicate))
             {
                 return true;
@@ -131,7 +142,8 @@ internal sealed class RegexStartPredicate(
                 allowed,
                 requiredStartKind,
                 requiredLineTerminator,
-                requiredCrlf);
+                requiredCrlf,
+                endCandidatePredicate);
             return true;
         }
 
@@ -142,6 +154,7 @@ internal sealed class RegexStartPredicate(
                 requiredStartKind,
                 requiredLineTerminator,
                 requiredCrlf,
+                endCandidatePredicate,
                 out predicate))
         {
             return true;
@@ -153,11 +166,13 @@ internal sealed class RegexStartPredicate(
                 requiredStartKind,
                 requiredLineTerminator,
                 requiredCrlf,
+                endCandidatePredicate,
                 out predicate) ||
             TryCreateRequiredStartOnly(
                 requiredStartKind,
                 requiredLineTerminator,
                 requiredCrlf,
+                endCandidatePredicate,
                 out predicate);
     }
 
@@ -170,6 +185,12 @@ internal sealed class RegexStartPredicate(
     public bool CanStartAt(ReadOnlySpan<byte> haystack, int start)
     {
         if (HasRequiredStart && !IsRequiredStart(haystack, start))
+        {
+            return false;
+        }
+
+        if (_endCandidatePredicate is not null &&
+            !_endCandidatePredicate.CanMatchAtNextBoundary(haystack, start))
         {
             return false;
         }
@@ -339,7 +360,8 @@ internal sealed class RegexStartPredicate(
         List<byte[]> allowedByteSets,
         RegexRequiredStartKind requiredStartKind,
         byte requiredLineTerminator,
-        bool requiredCrlf)
+        bool requiredCrlf,
+        RegexEndCandidatePredicate? endCandidatePredicate)
     {
         bool[][] allowedByteLookups = new bool[allowedByteSets.Count][];
         for (int index = 0; index < allowedByteSets.Count; index++)
@@ -362,7 +384,8 @@ internal sealed class RegexStartPredicate(
             asciiCaseInsensitivePrefixes: false,
             requiredStartKind,
             requiredLineTerminator,
-            requiredCrlf);
+            requiredCrlf,
+            endCandidatePredicate);
     }
 
     private static RegexStartPredicate CreatePrefixPredicate(
@@ -370,7 +393,8 @@ internal sealed class RegexStartPredicate(
         bool asciiCaseInsensitive,
         RegexRequiredStartKind requiredStartKind,
         byte requiredLineTerminator,
-        bool requiredCrlf)
+        bool requiredCrlf,
+        RegexEndCandidatePredicate? endCandidatePredicate)
     {
         bool[] singleBytePrefixes = new bool[256];
         bool[][] secondBytesByFirstByte = BuildSecondByteBuckets();
@@ -387,13 +411,15 @@ internal sealed class RegexStartPredicate(
             asciiCaseInsensitive,
             requiredStartKind,
             requiredLineTerminator,
-            requiredCrlf);
+            requiredCrlf,
+            endCandidatePredicate);
     }
 
     private static bool TryCreateRequiredStartOnly(
         RegexRequiredStartKind requiredStartKind,
         byte requiredLineTerminator,
         bool requiredCrlf,
+        RegexEndCandidatePredicate? endCandidatePredicate,
         out RegexStartPredicate? predicate)
     {
         if (requiredStartKind == RegexRequiredStartKind.None)
@@ -406,7 +432,8 @@ internal sealed class RegexStartPredicate(
             [],
             requiredStartKind,
             requiredLineTerminator,
-            requiredCrlf);
+            requiredCrlf,
+            endCandidatePredicate);
         return true;
     }
 
@@ -417,6 +444,7 @@ internal sealed class RegexStartPredicate(
         RegexRequiredStartKind requiredStartKind,
         byte requiredLineTerminator,
         bool requiredCrlf,
+        RegexEndCandidatePredicate? endCandidatePredicate,
         out RegexStartPredicate? predicate)
     {
         predicate = null;
@@ -469,7 +497,8 @@ internal sealed class RegexStartPredicate(
             asciiCaseInsensitive,
             requiredStartKind,
             requiredLineTerminator,
-            requiredCrlf);
+            requiredCrlf,
+            endCandidatePredicate);
         return true;
     }
 
@@ -934,6 +963,7 @@ internal sealed class RegexStartPredicate(
         RegexRequiredStartKind requiredStartKind,
         byte requiredLineTerminator,
         bool requiredCrlf,
+        RegexEndCandidatePredicate? endCandidatePredicate,
         out RegexStartPredicate? predicate)
     {
         var bytes = new List<byte>();
@@ -950,7 +980,8 @@ internal sealed class RegexStartPredicate(
             [bytes.ToArray()],
             requiredStartKind,
             requiredLineTerminator,
-            requiredCrlf);
+            requiredCrlf,
+            endCandidatePredicate);
         return true;
     }
 

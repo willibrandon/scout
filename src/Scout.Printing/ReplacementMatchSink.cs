@@ -7,8 +7,6 @@ namespace Scout;
 /// <param name="prefix">The optional path prefix.</param>
 /// <param name="fieldSeparator">The separator written between output fields.</param>
 /// <param name="replacement">The replacement template.</param>
-/// <param name="patterns">The ordered regex patterns.</param>
-/// <param name="asciiCaseInsensitive">Whether matching is ASCII case-insensitive.</param>
 /// <param name="lineNumber">Whether to write line numbers.</param>
 /// <param name="column">Whether to write columns.</param>
 /// <param name="byteOffset">Whether to write byte offsets.</param>
@@ -17,14 +15,12 @@ namespace Scout;
 /// <param name="byteOffsetOffset">The byte-offset adjustment applied to emitted matches.</param>
 /// <param name="color">The configured output colors.</param>
 /// <param name="lineTerminator">The output line terminator.</param>
-/// <param name="capturePlan">The optional authoritative capture plan.</param>
+/// <param name="searchPlan">The optional authoritative regex search plan.</param>
 internal struct ReplacementMatchSink(
     RawByteWriter output,
     OutputPath? prefix,
     ReadOnlyMemory<byte> fieldSeparator,
     ReadOnlyMemory<byte> replacement,
-    IReadOnlyList<byte[]> patterns,
-    bool asciiCaseInsensitive,
     bool lineNumber,
     bool column,
     bool byteOffset,
@@ -33,7 +29,7 @@ internal struct ReplacementMatchSink(
     long byteOffsetOffset = 0,
     OutputColor color = default,
     ReadOnlyMemory<byte> lineTerminator = default,
-    ReplacementCapturePlan? capturePlan = null) : IMatchLineSink
+    RegexSearchPlan? searchPlan = null) : IMatchLineSink
 {
     private static readonly byte[] s_nullByte = [0];
 
@@ -41,13 +37,11 @@ internal struct ReplacementMatchSink(
     private readonly OutputPath? _prefix = prefix;
     private readonly ReadOnlyMemory<byte> _fieldSeparator = fieldSeparator;
     private readonly ReadOnlyMemory<byte> _replacement = replacement;
-    private readonly IReadOnlyList<byte[]> _patterns = patterns;
-    private readonly ReplacementCapturePlan? _capturePlan = capturePlan;
+    private readonly RegexSearchPlan? _searchPlan = searchPlan;
     private readonly (
         ReplacementTemplate Template,
         int[] CaptureSlots) _captureState =
-        CreateCaptureState(replacement, capturePlan);
-    private readonly bool _asciiCaseInsensitive = asciiCaseInsensitive;
+        CreateCaptureState(replacement, searchPlan);
     private readonly bool _lineNumber = lineNumber;
     private readonly bool _column = column;
     private readonly bool _byteOffset = byteOffset;
@@ -89,9 +83,7 @@ internal struct ReplacementMatchSink(
             line,
             checked((int)matchColumn - 1),
             match.Length,
-            _patterns,
-            _asciiCaseInsensitive,
-            _capturePlan,
+            _searchPlan,
             _captureState.Template,
             _captureState.CaptureSlots);
         long adjustedColumn = matchColumn + _cumulativeDelta;
@@ -209,12 +201,12 @@ internal struct ReplacementMatchSink(
         ReplacementTemplate Template,
         int[] CaptureSlots) CreateCaptureState(
             ReadOnlyMemory<byte> replacement,
-            ReplacementCapturePlan? capturePlan)
+            RegexSearchPlan? searchPlan)
     {
         var template = ReplacementTemplate.Create(
             replacement.Span,
-            capturePlan?.CaptureCount ?? 0);
-        int captureCount = Math.Max(template.HighestCapture, capturePlan?.CaptureCount ?? 0);
+            searchPlan?.CaptureCount ?? 0);
+        int captureCount = Math.Max(template.HighestCapture, searchPlan?.CaptureCount ?? 0);
         return (
             template,
             new int[checked(2 * (captureCount + 1))]);

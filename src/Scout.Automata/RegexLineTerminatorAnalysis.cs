@@ -28,7 +28,7 @@ internal static class RegexLineTerminatorAnalysis
     /// </summary>
     /// <param name="root">The parsed syntax root.</param>
     /// <param name="options">The root compile options.</param>
-    /// <exception cref="FormatException">Thrown when the syntax explicitly consumes only an excluded terminator.</exception>
+    /// <exception cref="RegexLineTerminatorException">Thrown when the syntax explicitly consumes only an excluded terminator.</exception>
     public static void Validate(RegexSyntaxNode root, RegexCompileOptions options)
     {
         RegexLineTerminatorAnalysisResult result = Analyze(root, options, out int position);
@@ -40,7 +40,7 @@ internal static class RegexLineTerminatorAnalysis
         string message = result == RegexLineTerminatorAnalysisResult.ExplicitLiteral
             ? "an explicit line terminator is not allowed in a line-oriented regex"
             : "line-terminator exclusion makes a regex atom match nothing";
-        throw new FormatException($"{message} at byte offset {position}");
+        throw new RegexLineTerminatorException($"{message} at byte offset {position}");
     }
 
     private static RegexLineTerminatorAnalysisResult AnalyzeNode(

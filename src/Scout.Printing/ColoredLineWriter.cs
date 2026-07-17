@@ -1,8 +1,22 @@
 
 namespace Scout;
 
+/// <summary>
+/// Writes a line while applying match and line highlighting to reportable non-empty spans.
+/// </summary>
 internal static class ColoredLineWriter
 {
+    /// <summary>
+    /// Writes one line with the requested match ranges and optional whole-line highlighting.
+    /// </summary>
+    /// <param name="output">The output writer.</param>
+    /// <param name="line">The line bytes to write.</param>
+    /// <param name="starts">The zero-based match starts relative to <paramref name="line" />.</param>
+    /// <param name="lengths">The match lengths corresponding to <paramref name="starts" />.</param>
+    /// <param name="color">The configured output colors.</param>
+    /// <param name="maxLength">The maximum number of line bytes to write, or <c>-1</c> for the complete line.</param>
+    /// <param name="highlightLine">Whether to apply whole-line highlighting.</param>
+    /// <param name="lineTerminator">The optional line-terminator byte excluded from whole-line highlighting.</param>
     public static void Write(
         RawByteWriter output,
         ReadOnlySpan<byte> line,
@@ -39,6 +53,7 @@ internal static class ColoredLineWriter
             if (position < start)
             {
                 output.Write(line.Slice(position, Math.Min(start, limit) - position));
+                position = Math.Min(start, limit);
             }
 
             int matchEnd = Math.Min(start + length, limit);

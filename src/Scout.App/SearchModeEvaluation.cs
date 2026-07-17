@@ -16,7 +16,7 @@ internal static class SearchModeEvaluation
         ulong? maxCount,
         bool crlf,
         bool nullData,
-        RegexSearchPlan? regexPlan = null)
+        RegexSearchPlan regexPlan)
     {
         if (maxCount == 0)
         {

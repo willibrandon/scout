@@ -18,6 +18,7 @@ _ROUND_ROLES = (
     ("rg", "scout", "scout", "rg"),
     ("scout", "rg", "rg", "scout"),
 )
+_MAX_TIMER_RESOLUTION_REPLACEMENTS = 8
 
 
 def round_roles(round_number: int) -> tuple[str, ...]:
@@ -64,32 +65,11 @@ def aggregate_round_documents(
     round_ratios = []
 
     for round_number, document in enumerate(round_documents, start=1):
-        results = document.get("results")
-        roles = round_roles(round_number)
-        if not isinstance(results, list) or len(results) != len(roles):
-            raise ValueError(
-                f"round {round_number} must contain exactly four balanced results"
-            )
-
         round_wall_times = {"rg": [], "scout": []}
         for position, (role, result) in enumerate(
-            zip(roles, results), start=1
+            _validated_round_results(document, workload, round_number), start=1
         ):
-            if not isinstance(result, Mapping):
-                raise ValueError(
-                    f"round {round_number} position {position} is not a result object"
-                )
-
-            expected_name = sample_name(workload, round_number, position, role)
-            if result.get("command") != expected_name:
-                raise ValueError(
-                    f"round {round_number} position {position} expected "
-                    f"{expected_name!r}, got {result.get('command')!r}"
-                )
-
-            wall_time = _single_number(
-                result, "times", round_number, position, positive=True
-            )
+            wall_time = _wall_time(result, round_number, position, role)
             wall_times[role].append(wall_time)
             round_wall_times[role].append(wall_time)
             user_times[role].append(
@@ -190,6 +170,68 @@ def aggregate_round_documents(
             ),
         ],
     }
+
+
+def _validated_round_results(
+    document: Mapping[str, Any], workload: str, round_number: int
+) -> tuple[tuple[str, Mapping[str, Any]], ...]:
+    results = document.get("results")
+    roles = round_roles(round_number)
+    if not isinstance(results, list) or len(results) != len(roles):
+        raise ValueError(
+            f"round {round_number} must contain exactly four balanced results"
+        )
+
+    validated = []
+    for position, (role, result) in enumerate(zip(roles, results), start=1):
+        if not isinstance(result, Mapping):
+            raise ValueError(
+                f"round {round_number} position {position} is not a result object"
+            )
+
+        expected_name = sample_name(workload, round_number, position, role)
+        if result.get("command") != expected_name:
+            raise ValueError(
+                f"round {round_number} position {position} expected "
+                f"{expected_name!r}, got {result.get('command')!r}"
+            )
+        validated.append((role, result))
+
+    return tuple(validated)
+
+
+def _wall_time(
+    result: Mapping[str, Any], round_number: int, position: int, role: str
+) -> float:
+    wall_time = _single_number(result, "times", round_number, position)
+    if wall_time <= 0:
+        raise ValueError(
+            f"measured round {round_number} position {position} ({role}) "
+            f"reported {wall_time:g} seconds"
+        )
+
+    return wall_time
+
+
+def _timer_resolution_error(
+    document: Mapping[str, Any], workload: str, round_number: int
+) -> str | None:
+    for position, (role, result) in enumerate(
+        _validated_round_results(document, workload, round_number), start=1
+    ):
+        wall_time = _single_number(result, "times", round_number, position)
+        if wall_time < 0:
+            raise ValueError(
+                f"measured round {round_number} position {position} ({role}) "
+                f"reported an invalid negative wall time: {wall_time:g} seconds"
+            )
+        if wall_time == 0:
+            return (
+                f"measured round {round_number} position {position} ({role}) "
+                f"reported {wall_time:g} seconds"
+            )
+
+    return None
 
 
 def _single_number(
@@ -381,7 +423,8 @@ def run_interleaved(args: argparse.Namespace) -> None:
         stale_round.unlink()
 
     print(
-        f"Sampling: {args.warmup_rounds} warm-up + {args.rounds} measured "
+        f"Sampling target: {args.warmup_rounds} warm-up + "
+        f"{args.rounds} valid measured "
         "rounds (alternating ABBA/BAAB)",
         flush=True,
     )
@@ -397,24 +440,75 @@ def run_interleaved(args: argparse.Namespace) -> None:
         )
 
     raw_paths = []
+    discarded_paths = []
     round_documents = []
     for round_number in range(1, args.rounds + 1):
         raw_path = sample_directory / f"round-{round_number}.json"
-        _run_balanced_round(
-            args.hyperfine,
-            args.name,
-            round_number,
-            args.rg_command,
-            args.scout_command,
-            args.no_shell,
-            output=raw_path,
-        )
+        while True:
+            _run_balanced_round(
+                args.hyperfine,
+                args.name,
+                round_number,
+                args.rg_command,
+                args.scout_command,
+                args.no_shell,
+                output=raw_path,
+            )
+            round_document = _read_document(raw_path)
+            timer_resolution_error = _timer_resolution_error(
+                round_document,
+                args.name,
+                round_number,
+            )
+            if timer_resolution_error is not None:
+                discarded_number = len(discarded_paths) + 1
+                if discarded_number > _MAX_TIMER_RESOLUTION_REPLACEMENTS:
+                    failure_path = sample_directory / (
+                        f"round-{round_number}.timer-resolution-failure.json"
+                    )
+                    raw_path.replace(failure_path)
+                    raise ValueError(
+                        f"{timer_resolution_error}; unable to collect "
+                        f"{args.rounds} valid measured rounds after "
+                        f"{_MAX_TIMER_RESOLUTION_REPLACEMENTS} timer-resolution "
+                        f"replacements; final invalid sample saved to {failure_path}"
+                    )
+
+                discarded_path = sample_directory / (
+                    f"round-{round_number}.discarded-{discarded_number}.json"
+                )
+                raw_path.replace(discarded_path)
+                discarded_paths.append(str(discarded_path))
+                replacements = len(discarded_paths)
+                print(
+                    "  Timer-resolution sample discarded: "
+                    f"{timer_resolution_error}; replacing the entire balanced round "
+                    f"({replacements}/{_MAX_TIMER_RESOLUTION_REPLACEMENTS}).",
+                    flush=True,
+                )
+                continue
+            break
+
         raw_paths.append(str(raw_path))
-        round_documents.append(_read_document(raw_path))
+        round_documents.append(round_document)
 
     document = aggregate_round_documents(round_documents, args.name)
     document["sampling"]["raw_round_files"] = raw_paths
+    document["sampling"]["measured_round_attempts"] = (
+        args.rounds + len(discarded_paths)
+    )
+    document["sampling"]["timer_resolution_replacements"] = len(
+        discarded_paths
+    )
+    document["sampling"]["discarded_round_files"] = discarded_paths
     _write_document(output, document)
+    if discarded_paths:
+        noun = "round" if len(discarded_paths) == 1 else "rounds"
+        print(
+            f"Collected {args.rounds} valid measured rounds after replacing "
+            f"{len(discarded_paths)} invalid timer-resolution {noun}.",
+            flush=True,
+        )
     _print_cycle_summaries(document)
 
 

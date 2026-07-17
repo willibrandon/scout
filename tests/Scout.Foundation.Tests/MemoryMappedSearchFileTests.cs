@@ -130,11 +130,13 @@ public sealed class MemoryMappedSearchFileTests
                 foreach ((byte[] pattern, int matchesPerRecord) in cases)
                 {
                     byte[][] patterns = [pattern];
-                    RegexSearchPlan? regexPlan = null;
+                    var regexPlan = RegexSearchPlan.Create(
+                        patterns,
+                        new RegexSearchPlanOptions(asciiCaseInsensitive: false, crlf: true));
                     Assert.True(StandardSearchTargetOperations.TryCountMemoryMappedWindows(
                         mappedSearchFile,
                         patterns,
-                        ref regexPlan,
+                        regexPlan,
                         searchMode,
                         asciiCaseInsensitive: false,
                         invertMatch: false,
@@ -187,7 +189,9 @@ public sealed class MemoryMappedSearchFileTests
                 repeatedRecords,
                 "alpha bravo charl delta echoo foxtt\0"u8.ToArray());
             byte[][] patterns = [@"\b\w{5}\s+\w{5}\s+\w{5}\b"u8.ToArray()];
-            RegexSearchPlan? regexPlan = null;
+            var regexPlan = RegexSearchPlan.Create(
+                patterns,
+                new RegexSearchPlanOptions(asciiCaseInsensitive: false, crlf: true));
 
             Assert.True(MemoryMappedSearchFile.TryOpenFile(
                 path,
@@ -198,7 +202,7 @@ public sealed class MemoryMappedSearchFileTests
                 Assert.True(StandardSearchTargetOperations.TryCountMemoryMappedWindows(
                     mappedSearchFile,
                     patterns,
-                    ref regexPlan,
+                    regexPlan,
                     searchMode,
                     asciiCaseInsensitive: false,
                     invertMatch: false,
@@ -210,6 +214,62 @@ public sealed class MemoryMappedSearchFileTests
                     out long count,
                     out bool containsNul));
                 Assert.Equal((repeatedRecords + 1L) * matchesPerRecord, count);
+                Assert.True(containsNul);
+            }
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Verifies bounded mapped counting carries an exact common-prefix literal set across views
+    /// while its authoritative candidate scan reports a late NUL.
+    /// </summary>
+    [Fact]
+    public void BoundedMatchCountFusesCommonPrefixLiteralsAndLateNul()
+    {
+        string root = CreateTempDirectory();
+        try
+        {
+            const int repeatedRecords = 220_000;
+            string path = Path.Combine(root, "input.txt");
+            WriteRepeatedRecords(
+                path,
+                "ordinary source text\n"u8.ToArray(),
+                repeatedRecords,
+                "issue44_absent_pattern_063\0"u8.ToArray());
+            byte[][] patterns = Enumerable.Range(0, 64)
+                .Select(static index =>
+                    System.Text.Encoding.ASCII.GetBytes(
+                        $"issue44_absent_pattern_{index:D3}"))
+                .ToArray();
+            var regexPlan = RegexSearchPlan.Create(
+                patterns,
+                asciiCaseInsensitive: false);
+
+            Assert.True(MemoryMappedSearchFile.TryOpenFile(
+                path,
+                out MemoryMappedSearchFile? mappedSearchFile));
+            using (mappedSearchFile)
+            {
+                Assert.NotNull(mappedSearchFile);
+                Assert.True(StandardSearchTargetOperations.TryCountMemoryMappedWindows(
+                    mappedSearchFile,
+                    patterns,
+                    regexPlan,
+                    CliSearchMode.CountMatches,
+                    asciiCaseInsensitive: false,
+                    invertMatch: false,
+                    lineRegexp: false,
+                    wordRegexp: false,
+                    crlf: false,
+                    multiline: false,
+                    multilineDotall: false,
+                    out long count,
+                    out bool containsNul));
+                Assert.Equal(1, count);
                 Assert.True(containsNul);
             }
         }
@@ -232,7 +292,9 @@ public sealed class MemoryMappedSearchFileTests
             string path = Path.Combine(root, "input.txt");
             File.WriteAllBytes(path, new byte[(8 * 1024 * 1024) + 1]);
             byte[][] patterns = ["needle"u8.ToArray()];
-            RegexSearchPlan? regexPlan = null;
+            var regexPlan = RegexSearchPlan.Create(
+                patterns,
+                asciiCaseInsensitive: false);
 
             Assert.True(MemoryMappedSearchFile.TryOpenFile(
                 path,
@@ -243,7 +305,7 @@ public sealed class MemoryMappedSearchFileTests
                 Assert.False(StandardSearchTargetOperations.TryCountMemoryMappedWindows(
                     mappedSearchFile,
                     patterns,
-                    ref regexPlan,
+                    regexPlan,
                     CliSearchMode.CountMatches,
                     asciiCaseInsensitive: false,
                     invertMatch: false,
@@ -282,7 +344,9 @@ public sealed class MemoryMappedSearchFileTests
             string path = Path.Combine(root, "input.txt");
             File.WriteAllBytes(path, "foo\n"u8.ToArray());
             byte[][] patterns = [System.Text.Encoding.UTF8.GetBytes(pattern)];
-            RegexSearchPlan? regexPlan = null;
+            var regexPlan = RegexSearchPlan.Create(
+                patterns,
+                asciiCaseInsensitive: false);
 
             Assert.True(MemoryMappedSearchFile.TryOpenFile(
                 path,
@@ -293,7 +357,7 @@ public sealed class MemoryMappedSearchFileTests
                 Assert.False(StandardSearchTargetOperations.TryCountMemoryMappedWindows(
                     mappedSearchFile,
                     patterns,
-                    ref regexPlan,
+                    regexPlan,
                     searchMode,
                     asciiCaseInsensitive: false,
                     invertMatch: false,
@@ -328,7 +392,9 @@ public sealed class MemoryMappedSearchFileTests
             string path = Path.Combine(root, "input.txt");
             File.WriteAllBytes(path, "foo\nbar\n"u8.ToArray());
             byte[][] patterns = ["foo.*bar"u8.ToArray()];
-            RegexSearchPlan? regexPlan = null;
+            var regexPlan = RegexSearchPlan.Create(
+                patterns,
+                asciiCaseInsensitive: false);
 
             Assert.True(MemoryMappedSearchFile.TryOpenFile(
                 path,
@@ -339,7 +405,7 @@ public sealed class MemoryMappedSearchFileTests
                 Assert.False(StandardSearchTargetOperations.TryCountMemoryMappedWindows(
                     mappedSearchFile,
                     patterns,
-                    ref regexPlan,
+                    regexPlan,
                     searchMode,
                     asciiCaseInsensitive: false,
                     invertMatch: false,
@@ -350,7 +416,6 @@ public sealed class MemoryMappedSearchFileTests
                     multilineDotall: true,
                     out _,
                     out _));
-                Assert.Null(regexPlan);
             }
         }
         finally

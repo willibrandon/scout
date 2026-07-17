@@ -1,6 +1,9 @@
 
 namespace Scout;
 
+/// <summary>
+/// Coordinates command-line parsing, search-plan construction, and operation dispatch.
+/// </summary>
 internal static class ScoutApplication
 {
     internal static int Run(ReadOnlySpan<OsString> arguments, RawByteWriter output, RawByteWriter error)
@@ -281,18 +284,6 @@ internal static class ScoutApplication
             return Pcre2SearchOperations.Run(positional, firstPathIndex, patternsReadFromStandardInput, lowArgs, patterns, standardInput, standardInputIsReadable, standardOutputIsTerminal, output, diagnostics, logger);
         }
 
-        if (!lowArgs.Multiline && PatternPreparation.ContainsLineTerminator(patterns, lowArgs.NullData, lowArgs.FixedStrings))
-        {
-            diagnostics.ErrorMessage(new ScoutError(PatternPreparation.BuildLineTerminatorPatternError(lowArgs.NullData)).WithContext(ScoutErrorContext.ProgramContext()));
-            return ExitCode.Error;
-        }
-
-        if (!lowArgs.TextMode && !lowArgs.NullData && !lowArgs.FixedStrings && PatternPreparation.ContainsRegexNulLiteral(patterns))
-        {
-            diagnostics.ErrorMessage(new ScoutError("pattern contains \"\\0\" but it is impossible to match\n\nConsider enabling text mode with the --text flag (or -a for short). Otherwise,\nbinary detection is enabled and matching a NUL byte is impossible.").WithContext(ScoutErrorContext.ProgramContext()));
-            return ExitCode.Error;
-        }
-
         if (lowArgs.FixedStrings)
         {
             PatternPreparation.EscapeFixedStringPatterns(patterns);
@@ -329,10 +320,35 @@ internal static class ScoutApplication
             PatternPreparation.WrapNoUnicodePatterns(patterns);
         }
 
+        RegexSearchPlan regexPlan;
+        try
+        {
+            regexPlan = NativeRegexSearchPlanFactory.Create(patterns, lowArgs, asciiCaseInsensitive);
+        }
+        catch (RegexLineTerminatorException)
+        {
+            diagnostics.ErrorMessage(new ScoutError(PatternPreparation.BuildLineTerminatorPatternError(lowArgs.NullData)).WithContext(ScoutErrorContext.ProgramContext()));
+            return ExitCode.Error;
+        }
+        catch (FormatException exception)
+        {
+            diagnostics.ErrorMessage(new ScoutError(exception.Message).WithContext(ScoutErrorContext.ProgramContext()));
+            return ExitCode.Error;
+        }
+
+        if (!lowArgs.TextMode &&
+            !lowArgs.NullData &&
+            !lowArgs.FixedStrings &&
+            regexPlan.ContainsExplicitNul)
+        {
+            diagnostics.ErrorMessage(new ScoutError("pattern contains \"\\0\" but it is impossible to match\n\nConsider enabling text mode with the --text flag (or -a for short). Otherwise,\nbinary detection is enabled and matching a NUL byte is impossible.").WithContext(ScoutErrorContext.ProgramContext()));
+            return ExitCode.Error;
+        }
+
         SearchDiagnosticLogging.LogSearchConfiguration(logger, positional, firstPathIndex, lowArgs, patterns);
         if (lowArgs.SearchMode == CliSearchMode.Json)
         {
-            return JsonSearchOperations.Run(positional, firstPathIndex, patternsReadFromStandardInput, lowArgs, patterns, asciiCaseInsensitive, searchFileTypes!, output, diagnostics, logger, standardInput, standardInputIsReadable);
+            return JsonSearchOperations.Run(positional, firstPathIndex, patternsReadFromStandardInput, lowArgs, patterns, regexPlan, asciiCaseInsensitive, searchFileTypes!, output, diagnostics, logger, standardInput, standardInputIsReadable);
         }
 
         return StandardSearchOperations.Run(
@@ -341,6 +357,7 @@ internal static class ScoutApplication
             patternsReadFromStandardInput,
             lowArgs,
             patterns,
+            regexPlan,
             asciiCaseInsensitive,
             searchFileTypes!,
             output,

@@ -135,7 +135,7 @@ public sealed class RegexLineTerminatorExclusionTests
 
         Assert.Equal(RegexLineTerminatorAnalysisResult.ExplicitLiteral, result);
         Assert.Equal(3, position);
-        Assert.Throws<FormatException>(() => RegexAutomaton.CompileParsed(tree, options));
+        Assert.Throws<RegexLineTerminatorException>(() => RegexAutomaton.CompileParsed(tree, options));
     }
 
     /// <summary>
@@ -162,7 +162,7 @@ public sealed class RegexLineTerminatorExclusionTests
         Assert.Equal(
             RegexLineTerminatorAnalysisResult.ExplicitLiteral,
             RegexLineTerminatorAnalysis.Analyze(tree.Root, options, out _));
-        Assert.Throws<FormatException>(() => RegexAutomaton.CompileParsed(tree, options));
+        Assert.Throws<RegexLineTerminatorException>(() => RegexAutomaton.CompileParsed(tree, options));
     }
 
     /// <summary>
@@ -203,7 +203,7 @@ public sealed class RegexLineTerminatorExclusionTests
 
         Assert.Equal(RegexLineTerminatorAnalysisResult.EmptyAtom, result);
         Assert.Equal(0, position);
-        Assert.Throws<FormatException>(() => RegexAutomaton.CompileParsed(tree, options));
+        Assert.Throws<RegexLineTerminatorException>(() => RegexAutomaton.CompileParsed(tree, options));
     }
 
     /// <summary>

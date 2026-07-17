@@ -4365,6 +4365,38 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies native replacement and JSON metadata replay numbered, named, and unmatched captures.
+    /// </summary>
+    [Fact]
+    public void ReplaceAndJsonReplayNumberedNamedAndUnmatchedCaptures()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "foo\nfoobar\n");
+        const string replacement = "$0|$1|$2|$left|$right|$3";
+        const string pattern = "(?P<left>foo)(?P<right>bar)?";
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "-n", "-r", replacement, pattern, path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "-n", "-r", replacement, pattern, path);
+        (int jsonExitCode, byte[] jsonOutput, string jsonError) = RunScout(
+            "--json", "-r", replacement, pattern, path);
+        (int pinnedJsonExitCode, byte[] pinnedJsonOutput, string pinnedJsonError) = RunPinnedRipgrep(
+            "--json", "-r", replacement, pattern, path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(
+            "1:foo|foo||foo||\n2:foobar|foo|bar|foo|bar|\n"u8.ToArray(),
+            output);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+        Assert.Equal(pinnedJsonExitCode, jsonExitCode);
+        Assert.Equal(NormalizeJsonTimings(pinnedJsonOutput), NormalizeJsonTimings(jsonOutput));
+        Assert.Equal(pinnedJsonError, jsonError);
+    }
+
+    /// <summary>
     /// Verifies recursive replacement uses candidate-verified capture output without changing rg behavior.
     /// </summary>
     [Fact]
@@ -4431,10 +4463,10 @@ public sealed class ScoutApplicationTests
     /// Verifies replacement capture extraction handles held-out structural captures with the authoritative matcher.
     /// </summary>
     [Fact]
-    public void ReplacementCapturePlanCollectsHeldoutStructuralCaptures()
+    public void RegexSearchPlanCollectsHeldoutStructuralCaptures()
     {
         byte[][] patterns = [@"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)"u8.ToArray()];
-        var plan = ReplacementCapturePlan.TryCreate(patterns, asciiCaseInsensitive: false);
+        var plan = RegexSearchPlan.Create(patterns, asciiCaseInsensitive: false);
         int[] captureStarts = new int[3];
         int[] captureLengths = new int[3];
 
@@ -4449,20 +4481,18 @@ public sealed class ScoutApplicationTests
     /// Verifies absolute capture slots remain relative to the original record when CRLF is trimmed for replay.
     /// </summary>
     [Fact]
-    public void ReplacementCapturePlanPreservesAbsoluteSlotsWhenReplayTrimsCrlf()
+    public void RegexSearchPlanPreservesAbsoluteSlotsWhenReplayTrimsCrlf()
     {
         byte[][] patterns = [@"(foo)\z"u8.ToArray()];
         var options = new RegexSearchPlanOptions(
             asciiCaseInsensitive: false,
             crlf: true);
         var searchPlan = RegexSearchPlan.Create(patterns, options);
-        var capturePlan = ReplacementCapturePlan.TryCreate(patterns, options, searchPlan);
 
         Assert.NotNull(searchPlan);
-        Assert.NotNull(capturePlan);
-        int[] captureSlots = new int[capturePlan.CaptureSlotCount];
+        int[] captureSlots = new int[searchPlan.CaptureSlotCount];
 
-        Assert.True(capturePlan.TryCollectCaptureSlots(
+        Assert.True(searchPlan.TryCollectCaptureSlots(
             "xxfoo\r\n"u8,
             matchStart: 2,
             matchLength: 3,
@@ -4474,15 +4504,13 @@ public sealed class ScoutApplicationTests
     /// Verifies replacement capture extraction recognizes Scout's prepared no-Unicode wrapper.
     /// </summary>
     [Fact]
-    public void ReplacementCapturePlanCollectsHeldoutStructuralCapturesFromPreparedPattern()
+    public void RegexSearchPlanCollectsHeldoutStructuralCapturesFromPreparedPattern()
     {
         byte[][] patterns = [@"(?-u:\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*))"u8.ToArray()];
-        var plan = ReplacementCapturePlan.TryCreate(patterns, asciiCaseInsensitive: false);
+        var plan = RegexSearchPlan.Create(patterns, asciiCaseInsensitive: false);
         byte[] replacement = ReplacementFormatter.Expand(
             "$1 $2"u8,
             "struct Foo"u8,
-            patterns,
-            asciiCaseInsensitive: false,
             plan);
 
         Assert.NotNull(plan);
@@ -4499,7 +4527,7 @@ public sealed class ScoutApplicationTests
         [
             @"\b(?P<kind>struct|enum|union)\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?:\.(?P<suffix>h))?"u8.ToArray(),
         ];
-        var plan = ReplacementCapturePlan.TryCreate(patterns, asciiCaseInsensitive: false);
+        var plan = RegexSearchPlan.Create(patterns, asciiCaseInsensitive: false);
         Assert.NotNull(plan);
         var template = ReplacementTemplate.Create("$kind:$name:$suffix:$9"u8, plan.CaptureCount);
         int[] captureSlots = new int[Math.Max(
@@ -4515,8 +4543,6 @@ public sealed class ScoutApplicationTests
             haystack,
             matchStart: 3,
             matchLength: 10,
-            patterns,
-            asciiCaseInsensitive: false,
             plan,
             template,
             captureSlots);
@@ -4531,8 +4557,6 @@ public sealed class ScoutApplicationTests
                 haystack,
                 matchStart: 3,
                 matchLength: 10,
-                patterns,
-                asciiCaseInsensitive: false,
                 plan,
                 template,
                 captureSlots);
@@ -4547,8 +4571,6 @@ public sealed class ScoutApplicationTests
                 haystack,
                 matchStart: 3,
                 matchLength: 10,
-                patterns,
-                asciiCaseInsensitive: false,
                 plan,
                 template,
                 captureSlots);
@@ -4703,32 +4725,32 @@ public sealed class ScoutApplicationTests
     /// Verifies named captures retain their global indexes across repeated patterns.
     /// </summary>
     [Fact]
-    public void ReplacementCapturePlanExpandsGlobalNamedCaptures()
+    public void RegexSearchPlanExpandsGlobalNamedCaptures()
     {
         byte[][] patterns =
         [
             "(?P<left>a)"u8.ToArray(),
             "(?P<right>b)"u8.ToArray(),
         ];
-        var plan = ReplacementCapturePlan.TryCreate(patterns, asciiCaseInsensitive: false);
+        var plan = RegexSearchPlan.Create(patterns, asciiCaseInsensitive: false);
 
         Assert.NotNull(plan);
         Assert.Equal(
             "a|a|"u8.ToArray(),
-            ReplacementFormatter.Expand("$0|$left|$right"u8, "a"u8, patterns, false, plan));
+            ReplacementFormatter.Expand("$0|$left|$right"u8, "a"u8, plan));
         Assert.Equal(
             "b||b"u8.ToArray(),
-            ReplacementFormatter.Expand("$0|$left|$right"u8, "b"u8, patterns, false, plan));
+            ReplacementFormatter.Expand("$0|$left|$right"u8, "b"u8, plan));
     }
 
     /// <summary>
     /// Verifies captures are accepted only when the authoritative matcher associates the complete reported span.
     /// </summary>
     [Fact]
-    public void ReplacementCapturePlanRequiresFullSpanAssociation()
+    public void RegexSearchPlanRequiresFullSpanAssociation()
     {
         byte[][] patterns = ["(a)"u8.ToArray(), "(b)"u8.ToArray()];
-        var plan = ReplacementCapturePlan.TryCreate(patterns, asciiCaseInsensitive: false);
+        var plan = RegexSearchPlan.Create(patterns, asciiCaseInsensitive: false);
         int[] captureStarts = new int[3];
         int[] captureLengths = new int[3];
 
@@ -4742,7 +4764,7 @@ public sealed class ScoutApplicationTests
     /// Verifies duplicate names across repeated patterns are rejected by the combined syntax parser.
     /// </summary>
     [Fact]
-    public void ReplacementCapturePlanRejectsDuplicateNamesAcrossPatterns()
+    public void RegexSearchPlanRejectsDuplicateNamesAcrossPatterns()
     {
         byte[][] patterns =
         [
@@ -4751,7 +4773,7 @@ public sealed class ScoutApplicationTests
         ];
 
         FormatException exception = Assert.Throws<FormatException>(
-            () => ReplacementCapturePlan.TryCreate(patterns, asciiCaseInsensitive: false));
+            () => RegexSearchPlan.Create(patterns, asciiCaseInsensitive: false));
 
         Assert.Contains("duplicate capture group name", exception.Message, StringComparison.Ordinal);
     }
@@ -5763,6 +5785,67 @@ public sealed class ScoutApplicationTests
         Assert.Equal(pinnedExitCode, exitCode);
         Assert.Equal(NormalizeJsonTimings(pinnedOutput), NormalizeJsonTimings(output));
         Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies empty-line anchors select the same LF and CRLF records as ripgrep across
+    /// line-oriented output consumers.
+    /// </summary>
+    /// <param name="contents">The exact file contents.</param>
+    /// <param name="crlf">Whether CRLF-aware matching is enabled.</param>
+    [Theory]
+    [InlineData("abc\n\nx\n", false)]
+    [InlineData("abc\r\n\r\nx\r\n", false)]
+    [InlineData("abc\r\n\r\nx\r\n", true)]
+    public void EmptyLineAnchorsMatchRipgrepAcrossLineConsumers(
+        string contents,
+        bool crlf)
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllBytes(path, Encoding.ASCII.GetBytes(contents));
+        string[][] modes =
+        [
+            [],
+            ["-n"],
+            ["-c"],
+            ["--column"],
+            ["--json"],
+        ];
+
+        foreach (string pattern in new[] { "^$", "(?m)^$" })
+        {
+            for (int modeIndex = 0; modeIndex < modes.Length; modeIndex++)
+            {
+                string[] mode = modes[modeIndex];
+                var arguments = new List<string>();
+                if (crlf)
+                {
+                    arguments.Add("--crlf");
+                }
+
+                arguments.AddRange(mode);
+                arguments.Add(pattern);
+                arguments.Add(path);
+                (int exitCode, byte[] output, string error) = RunScout([.. arguments]);
+                (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) =
+                    RunPinnedRipgrep([.. arguments]);
+
+                Assert.Equal(pinnedExitCode, exitCode);
+                if (mode.Contains("--json", StringComparer.Ordinal))
+                {
+                    Assert.Equal(
+                        NormalizeJsonTimings(pinnedOutput),
+                        NormalizeJsonTimings(output));
+                }
+                else
+                {
+                    Assert.Equal(pinnedOutput, output);
+                }
+
+                Assert.Equal(pinnedError, error);
+            }
+        }
     }
 
     /// <summary>
@@ -7724,6 +7807,46 @@ public sealed class ScoutApplicationTests
         Assert.Equal(pinnedExitCode, exitCode);
         Assert.Equal(pinnedOutput, output);
         Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies parsed record-terminator syntax retains the command-line diagnostic for line-oriented searches.
+    /// </summary>
+    /// <param name="arguments">The command-line arguments containing the incompatible expression.</param>
+    [Theory]
+    [InlineData("\\n")]
+    [InlineData("[\\n]")]
+    [InlineData("--null-data \\x00")]
+    [InlineData("--null-data [\\x00]")]
+    public void ParsedRecordTerminatorUsesLineOrientedDiagnostic(string arguments)
+    {
+        ArgumentNullException.ThrowIfNull(arguments);
+        string[] splitArguments = arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        bool nullData = splitArguments[0] == "--null-data";
+
+        (int exitCode, byte[] output, string error) = RunScout(splitArguments);
+
+        Assert.Equal((int)ExitCode.Error, exitCode);
+        Assert.Empty(output);
+        Assert.Contains(PatternPreparation.BuildLineTerminatorPatternError(nullData), error, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Verifies parsed NUL-only atoms retain the binary-detection diagnostic.
+    /// </summary>
+    /// <param name="pattern">The expression containing an explicit NUL atom.</param>
+    [Theory]
+    [InlineData("\\x00")]
+    [InlineData("[\\x00]")]
+    public void ParsedExplicitNulUsesBinaryDetectionDiagnostic(string pattern)
+    {
+        ArgumentNullException.ThrowIfNull(pattern);
+
+        (int exitCode, byte[] output, string error) = RunScout(pattern);
+
+        Assert.Equal((int)ExitCode.Error, exitCode);
+        Assert.Empty(output);
+        Assert.Contains("pattern contains \"\\0\" but it is impossible to match", error, StringComparison.Ordinal);
     }
 
     private static void AssertFilesMatchPinned(params string[] arguments)

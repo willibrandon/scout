@@ -192,7 +192,7 @@ class HyperfineInterleavedTests(unittest.TestCase):
 
             self.assertEqual(4, run_round.call_count)
             self.assertEqual(
-                "Sampling: 2 warm-up + 2 measured rounds "
+                "Sampling target: 2 warm-up + 2 valid measured rounds "
                 "(alternating ABBA/BAAB)\n"
                 "  cycle    rg (s)  Scout (s)   ratio\n"
                 "      1    16.708     16.745    1.002x\n",
@@ -200,6 +200,175 @@ class HyperfineInterleavedTests(unittest.TestCase):
             )
             self.assertNotIn("warmup round 1/2", standard_output.getvalue())
             self.assertNotIn("measured round 1/2", standard_output.getvalue())
+
+    def test_run_replaces_timer_resolution_sample_and_keeps_valid_round_target(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output = Path(temporary_directory) / "result.json"
+            arguments = argparse.Namespace(
+                output=str(output),
+                warmup_rounds=2,
+                rounds=2,
+                hyperfine="hyperfine",
+                name="workload",
+                rg_command="rg command",
+                scout_command="scout command",
+                no_shell=False,
+            )
+            measured_attempts = 0
+
+            def write_round_document(
+                _hyperfine: str,
+                workload: str,
+                round_number: int,
+                _rg_command: str,
+                _scout_command: str,
+                _no_shell: bool,
+                output: Path | None,
+            ) -> None:
+                nonlocal measured_attempts
+                if output is None:
+                    return
+
+                measured_attempts += 1
+                document = self._round_document(workload, round_number)
+                if measured_attempts == 1:
+                    document["results"][3]["times"] = [0.0]
+                output.write_text(json.dumps(document), encoding="utf-8")
+
+            standard_output = io.StringIO()
+            with redirect_stdout(standard_output), patch(
+                "hyperfine_interleaved._run_balanced_round",
+                side_effect=write_round_document,
+            ) as run_round:
+                run_interleaved(arguments)
+
+            aggregate = json.loads(output.read_text(encoding="utf-8"))
+            sampling = aggregate["sampling"]
+            self.assertEqual(5, run_round.call_count)
+            self.assertEqual(2, sampling["rounds"])
+            self.assertEqual(3, sampling["measured_round_attempts"])
+            self.assertEqual(1, sampling["timer_resolution_replacements"])
+            self.assertEqual(2, len(sampling["raw_round_files"]))
+            self.assertEqual(1, len(sampling["discarded_round_files"]))
+            self.assertEqual(4, len(aggregate["results"][0]["times"]))
+            self.assertEqual(4, len(aggregate["results"][1]["times"]))
+            self.assertTrue(Path(sampling["discarded_round_files"][0]).exists())
+            self.assertIn(
+                "Timer-resolution sample discarded: measured round 1 position 4 "
+                "(rg) reported 0 seconds; replacing the entire balanced round "
+                "(1/8).",
+                standard_output.getvalue(),
+            )
+            self.assertIn(
+                "Collected 2 valid measured rounds after replacing 1 invalid "
+                "timer-resolution round.",
+                standard_output.getvalue(),
+            )
+
+    def test_run_stops_after_bounded_timer_resolution_replacements(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output = Path(temporary_directory) / "result.json"
+            arguments = argparse.Namespace(
+                output=str(output),
+                warmup_rounds=0,
+                rounds=2,
+                hyperfine="hyperfine",
+                name="workload",
+                rg_command="rg command",
+                scout_command="scout command",
+                no_shell=False,
+            )
+
+            def write_invalid_round(
+                _hyperfine: str,
+                workload: str,
+                round_number: int,
+                _rg_command: str,
+                _scout_command: str,
+                _no_shell: bool,
+                output: Path | None,
+            ) -> None:
+                document = self._round_document(workload, round_number)
+                document["results"][0]["times"] = [0.0]
+                if output is None:
+                    raise AssertionError("measured fixture requires an output path")
+                output.write_text(json.dumps(document), encoding="utf-8")
+
+            standard_output = io.StringIO()
+            with redirect_stdout(standard_output), patch(
+                "hyperfine_interleaved._MAX_TIMER_RESOLUTION_REPLACEMENTS", 2
+            ), patch(
+                "hyperfine_interleaved._run_balanced_round",
+                side_effect=write_invalid_round,
+            ) as run_round:
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "unable to collect 2 valid measured rounds after 2 "
+                    "timer-resolution replacements",
+                ):
+                    run_interleaved(arguments)
+
+            self.assertEqual(3, run_round.call_count)
+            self.assertEqual(
+                2,
+                standard_output.getvalue().count(
+                    "replacing the entire balanced round"
+                ),
+            )
+            sample_directory = output.with_name("result.samples")
+            self.assertTrue(
+                (sample_directory / "round-1.timer-resolution-failure.json").exists()
+            )
+            self.assertFalse(output.exists())
+
+    def test_run_rejects_negative_timing_without_replacement(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output = Path(temporary_directory) / "result.json"
+            arguments = argparse.Namespace(
+                output=str(output),
+                warmup_rounds=0,
+                rounds=2,
+                hyperfine="hyperfine",
+                name="workload",
+                rg_command="rg command",
+                scout_command="scout command",
+                no_shell=False,
+            )
+
+            def write_invalid_round(
+                _hyperfine: str,
+                workload: str,
+                round_number: int,
+                _rg_command: str,
+                _scout_command: str,
+                _no_shell: bool,
+                output: Path | None,
+            ) -> None:
+                document = self._round_document(workload, round_number)
+                document["results"][0]["times"] = [-0.001]
+                if output is None:
+                    raise AssertionError("measured fixture requires an output path")
+                output.write_text(json.dumps(document), encoding="utf-8")
+
+            standard_output = io.StringIO()
+            with redirect_stdout(standard_output), patch(
+                "hyperfine_interleaved._run_balanced_round",
+                side_effect=write_invalid_round,
+            ) as run_round:
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "reported an invalid negative wall time",
+                ):
+                    run_interleaved(arguments)
+
+            self.assertEqual(1, run_round.call_count)
+            self.assertNotIn(
+                "replacing the entire balanced round",
+                standard_output.getvalue(),
+            )
+            self.assertFalse(output.exists())
 
     def test_balanced_cycles_resist_drift_without_masking_regression(self) -> None:
         drift = [math.log(position + 1) for position in range(1, 25)]

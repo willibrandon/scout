@@ -1014,8 +1014,10 @@ list_workloads() {
         'large_bounded_unicode_class_no_match generated 5,000-candidate issue #32 scan in general mode, gate <= 1.50x' \
         'line_regex_word_boundary_general generated issue #37 prefilter-free word-boundary match count in general mode, gate <= 1.50x' \
         'line_regex_word_boundary_line_count_general generated issue #37 prefilter-free word-boundary line count in general mode, gate <= 1.50x' \
+        'line_regex_generated_record_word_boundary_general generated issue #37 exact GeneratedRecord word-boundary scan in general mode, gate <= 1.50x' \
         'line_regex_anchored_general  generated issue #37 anchored-line scan in general mode, gate <= 1.50x' \
         'line_regex_bounded_class_general generated issue #37 bounded-class scan in general mode, gate <= 1.50x' \
+        'line_regex_bounded_class_exact_general generated issue #37 exact bounded-class scan in general mode, gate <= 1.50x' \
         'shared_delegate_prefix_general generated issue #36 shared-prefix alternation in general mode, gate <= 1.50x' \
         'many_absent_regexp_general  generated issue #44 64-pattern -e scan in general mode, gate <= 1.50x' \
         'many_absent_pattern_file_general generated issue #44 64-pattern -f scan in general mode, gate <= 1.50x' \
@@ -1199,6 +1201,7 @@ Q_BOUNDED_ASSIGNMENT_INPUT="$(shell_quote "$OUT_DIR/bounded-assignment/no-match-
 Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN="$(shell_quote "$OUT_DIR/large-bounded-unicode-class/pattern.txt")"
 Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT="$(shell_quote "$OUT_DIR/large-bounded-unicode-class/no-match-5000.txt")"
 Q_LINE_REGEX_INPUT="$(shell_quote "$OUT_DIR/line-regex/paladin-like-200000.txt")"
+SHARED_DELEGATE_INPUTS="$Q_LINE_REGEX_INPUT $Q_LINE_REGEX_INPUT $Q_LINE_REGEX_INPUT $Q_LINE_REGEX_INPUT"
 Q_LINE_REGEX_ABSENT_PATTERNS="$(shell_quote "$OUT_DIR/line-regex/absent-patterns-64.txt")"
 LINE_REGEX_ABSENT_REGEXP_ARGUMENTS="$(make_absent_regexp_arguments "$OUT_DIR/line-regex/absent-patterns-64.txt")"
 RG_LINE_REGEX_PREFIX="$Q_RG --no-config --threads 1 --mmap --count-matches --no-messages"
@@ -1213,6 +1216,8 @@ RG_MANY_ABSENT_REGEXP_COMMAND="$(expect_no_match_command "$RG_LINE_REGEX_PREFIX 
 SCOUT_MANY_ABSENT_REGEXP_COMMAND="$(expect_no_match_command "$SCOUT_LINE_REGEX_PREFIX $LINE_REGEX_ABSENT_REGEXP_ARGUMENTS $Q_LINE_REGEX_INPUT" "Scout 64-pattern -e search")"
 RG_MANY_ABSENT_PATTERN_FILE_COMMAND="$(expect_no_match_command "$RG_LINE_REGEX_PREFIX -f $Q_LINE_REGEX_ABSENT_PATTERNS $Q_LINE_REGEX_INPUT" "rg 64-pattern -f search")"
 SCOUT_MANY_ABSENT_PATTERN_FILE_COMMAND="$(expect_no_match_command "$SCOUT_LINE_REGEX_PREFIX -f $Q_LINE_REGEX_ABSENT_PATTERNS $Q_LINE_REGEX_INPUT" "Scout 64-pattern -f search")"
+RG_LINE_REGEX_BOUNDED_CLASS_EXACT_COMMAND="$(expect_no_match_command "$RG_LINE_REGEX_PREFIX '^[A-Za-z_]{70,90}$' $Q_LINE_REGEX_INPUT" "rg exact bounded-class search")"
+SCOUT_LINE_REGEX_BOUNDED_CLASS_EXACT_COMMAND="$(expect_no_match_command "$SCOUT_LINE_REGEX_PREFIX '^[A-Za-z_]{70,90}$' $Q_LINE_REGEX_INPUT" "Scout exact bounded-class search")"
 OPENSUBTITLES_RUNS="$(gate_opensubtitles_runs)"
 OPENSUBTITLES_WARMUP="$(gate_opensubtitles_warmup)"
 TREE_RUNS="$(gate_tree_runs)"
@@ -1259,6 +1264,13 @@ run_pair \
     "$LINE_REGEX_RUNS" \
     "$LINE_REGEX_WARMUP"
 run_pair \
+    "line_regex_generated_record_word_boundary_general" \
+    "1.50" \
+    "$RG_LINE_REGEX_PREFIX '\\bGeneratedRecord\\b' $Q_LINE_REGEX_INPUT" \
+    "$SCOUT_LINE_REGEX_PREFIX '\\bGeneratedRecord\\b' $Q_LINE_REGEX_INPUT" \
+    "$LINE_REGEX_RUNS" \
+    "$LINE_REGEX_WARMUP"
+run_pair \
     "line_regex_anchored_general" \
     "1.50" \
     "$RG_LINE_REGEX_PREFIX '^internal sealed class GeneratedRecord\\r?$' $Q_LINE_REGEX_INPUT" \
@@ -1273,10 +1285,17 @@ run_pair \
     "$LINE_REGEX_RUNS" \
     "$LINE_REGEX_WARMUP"
 run_pair \
+    "line_regex_bounded_class_exact_general" \
+    "1.50" \
+    "$RG_LINE_REGEX_BOUNDED_CLASS_EXACT_COMMAND" \
+    "$SCOUT_LINE_REGEX_BOUNDED_CLASS_EXACT_COMMAND" \
+    "$LINE_REGEX_RUNS" \
+    "$LINE_REGEX_WARMUP"
+run_pair_no_shell \
     "shared_delegate_prefix_general" \
     "1.50" \
-    "$RG_LINE_REGEX_PREFIX 'delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler' $Q_LINE_REGEX_INPUT" \
-    "$SCOUT_LINE_REGEX_PREFIX 'delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler' $Q_LINE_REGEX_INPUT" \
+    "$RG_LINE_REGEX_PREFIX 'delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler' $SHARED_DELEGATE_INPUTS" \
+    "$SCOUT_LINE_REGEX_PREFIX 'delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler' $SHARED_DELEGATE_INPUTS" \
     "$LINE_REGEX_RUNS" \
     "$LINE_REGEX_WARMUP"
 run_pair \

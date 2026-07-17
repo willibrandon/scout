@@ -71,8 +71,10 @@ Current ablation collection:
 | `general` | `large_bounded_unicode_class_no_match` | Pending first release-gate sample | `<= 1.50x` | Generated issue #32 no-match scan over 5,000 candidates using the general automata implementation. |
 | `general` | `line_regex_word_boundary_general` | Pending first release-gate sample | `<= 1.50x` | Issue #37 prefilter-free word-boundary match count over the generated Paladin-like corpus. |
 | `general` | `line_regex_word_boundary_line_count_general` | Pending first release-gate sample | `<= 1.50x` | Issue #37 prefilter-free word-boundary line count over the generated Paladin-like corpus. |
+| `general` | `line_regex_generated_record_word_boundary_general` | Pending first release-gate sample | `<= 1.50x` | Issue #37 exact `\bGeneratedRecord\b` expression over the generated Paladin-like corpus. |
 | `general` | `line_regex_anchored_general` | Pending first release-gate sample | `<= 1.50x` | Issue #37 anchored CRLF declaration scan over the generated Paladin-like corpus. |
 | `general` | `line_regex_bounded_class_general` | Pending first release-gate sample | `<= 1.50x` | Issue #37 bounded ASCII identifier-class scan over the generated Paladin-like corpus. |
+| `general` | `line_regex_bounded_class_exact_general` | Pending first release-gate sample | `<= 1.50x` | Issue #37 exact `^[A-Za-z_]{70,90}$` expression over the generated Paladin-like corpus. |
 | `general` | `shared_delegate_prefix_general` | Pending first release-gate sample | `<= 1.50x` | Issue #36 shared-prefix alternation over four sparse delegate declarations. |
 | `general` | `many_absent_regexp_general` | Pending first release-gate sample | `<= 1.50x` | Issue #44 no-match scan with 64 repeated `-e` expressions. |
 | `general` | `many_absent_pattern_file_general` | Pending first release-gate sample | `<= 1.50x` | Issue #44 no-match scan with the same 64 expressions supplied through `-f`. |
