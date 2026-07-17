@@ -34,6 +34,7 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
         if (_prefilter?.UsesRequiredLiteralWindow == true)
         {
+            Span<RegexPrefilterState> prefilterState = stackalloc RegexPrefilterState[1] { default };
             Span<long> requiredRangeBuffer =
                 stackalloc long[RegexCandidateStartEnumerator.RequiredLiteralRangeBufferLength];
             var candidates = RegexCandidateStartEnumerator.RequiredLiteralRanges(
@@ -42,7 +43,8 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
                 haystack.Length,
                 _nfa.Utf8,
                 _prefilter,
-                requiredRangeBuffer);
+                requiredRangeBuffer,
+                prefilterState);
             while (candidates.MoveNext(out int start))
             {
                 if (TryMatchAt(haystack, start, requiredEnd: -1, _deferredAcceptSlots))
@@ -56,15 +58,16 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
 
         if (_prefilter is not null)
         {
-            for (int start = _prefilter.FindCandidate(haystack, startOffset);
-                 start >= 0;
-                 start = _prefilter.FindCandidate(haystack, start + 1))
+            Span<RegexPrefilterState> prefilterState = stackalloc RegexPrefilterState[1] { default };
+            var candidates = RegexCandidateStartEnumerator.ExactPrefix(
+                haystack,
+                startOffset,
+                haystack.Length,
+                _nfa.Utf8,
+                _prefilter,
+                prefilterState);
+            while (candidates.MoveNext(out int start))
             {
-                if (_nfa.Utf8 && !RegexByteClass.IsUtf8Boundary(haystack, start))
-                {
-                    continue;
-                }
-
                 if (TryMatchAt(haystack, start, requiredEnd: -1, _deferredAcceptSlots))
                 {
                     return ToCaptures(_deferredAcceptSlots);

@@ -8,7 +8,8 @@ namespace Scout;
 public sealed class LiteralLineSearcherTests
 {
     /// <summary>
-    /// Verifies inverted max-count lookahead is restricted to callers requesting an inspected extent.
+    /// Verifies inverted max-count lookahead is restricted to callers requesting an inspected extent
+    /// while the compiled plan remains the sole matching authority.
     /// </summary>
     [Fact]
     public void InvertedMaxCountLookaheadIsOptInForExtentSearch()
@@ -18,7 +19,7 @@ public sealed class LiteralLineSearcherTests
             patterns,
             asciiCaseInsensitive: false);
         var directSink = new CapturingLineSink();
-        patterns.ResetCandidateChecks();
+        patterns.ResetAccessCount();
 
         bool directMatched = LiteralLineSearcher.SearchWithRegexPlan(
             "bar\nfoo\nlast\n"u8,
@@ -31,10 +32,10 @@ public sealed class LiteralLineSearcherTests
 
         Assert.True(directMatched);
         Assert.Equal(1UL, directSink.MatchedLines);
-        Assert.Equal(1, patterns.CandidateChecks);
+        Assert.Equal(0, patterns.AccessCount);
 
         var extentSink = new CapturingLineSink();
-        patterns.ResetCandidateChecks();
+        patterns.ResetAccessCount();
         bool extentMatched =
             LiteralLineSearcher.SearchInvertedWithRegexPlanAndCountBytes(
                 "bar\nfoo\nlast\n"u8,
@@ -47,7 +48,7 @@ public sealed class LiteralLineSearcherTests
 
         Assert.True(extentMatched);
         Assert.Equal(1UL, extentSink.MatchedLines);
-        Assert.Equal(2, patterns.CandidateChecks);
+        Assert.Equal(0, patterns.AccessCount);
         Assert.Equal(8UL, searchedBytes);
     }
 

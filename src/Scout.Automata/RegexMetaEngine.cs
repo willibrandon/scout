@@ -2198,6 +2198,9 @@ internal sealed class RegexMetaEngine
             return unguardedFind(haystack, Math.Clamp(startAt, 0, haystack.Length));
         }
 
+        Span<RegexPrefilterState> prefilterState = prefilter is null
+            ? default
+            : stackalloc RegexPrefilterState[1] { default };
         return Find(
             haystack,
             startAt,
@@ -2206,7 +2209,8 @@ internal sealed class RegexMetaEngine
             reusablePikeVm: null,
             reusableAnchoredDfa: null,
             reusableUnanchoredDfa: null,
-            reusableUnanchoredDfaUsesAsciiProjection: false);
+            reusableUnanchoredDfaUsesAsciiProjection: false,
+            prefilterState);
     }
 
     /// <summary>
@@ -2359,6 +2363,10 @@ internal sealed class RegexMetaEngine
     /// <param name="usesAsciiProjection">
     /// Whether <paramref name="unanchoredDfa" /> requires ASCII authority checks.
     /// </param>
+    /// <param name="prefilterState">
+    /// The adaptive prefilter-effectiveness state for this search operation, or an empty span
+    /// when no prefilter is compiled.
+    /// </param>
     /// <param name="allowUnanchoredDfa">Whether the operation may activate an unanchored DFA.</param>
     /// <returns>The first match, or <see langword="null" /> when no match exists.</returns>
     internal RegexMatch? FindWithRunner(
@@ -2369,22 +2377,22 @@ internal sealed class RegexMetaEngine
         RegexLazyDfa? anchoredDfa,
         RegexUnanchoredLazyDfa? unanchoredDfa,
         bool usesAsciiProjection,
+        Span<RegexPrefilterState> prefilterState,
         bool allowUnanchoredDfa)
     {
         if (pikeVm is null && anchoredDfa is null && unanchoredDfa is null)
         {
-            return allowUnanchoredDfa
-                ? Find(haystack, startAt, startPredicate)
-                : Find(
-                    haystack,
-                    startAt,
-                    startPredicate,
-                    reachabilityCache: null,
-                    reusablePikeVm: null,
-                    reusableAnchoredDfa: null,
-                    reusableUnanchoredDfa: null,
-                    reusableUnanchoredDfaUsesAsciiProjection: false,
-                    allowUnanchoredDfa: false);
+            return Find(
+                haystack,
+                startAt,
+                startPredicate,
+                reachabilityCache: null,
+                reusablePikeVm: null,
+                reusableAnchoredDfa: null,
+                reusableUnanchoredDfa: null,
+                reusableUnanchoredDfaUsesAsciiProjection: false,
+                prefilterState,
+                allowUnanchoredDfa);
         }
 
         if (anchoredDfa is not null)
@@ -2394,7 +2402,8 @@ internal sealed class RegexMetaEngine
                 Math.Clamp(startAt, 0, haystack.Length),
                 reachabilityCache: null,
                 reusablePikeVm: null,
-                anchoredDfa);
+                anchoredDfa,
+                prefilterState);
         }
 
         return Find(
@@ -2406,6 +2415,7 @@ internal sealed class RegexMetaEngine
             anchoredDfa,
             unanchoredDfa,
             usesAsciiProjection,
+            prefilterState,
             allowUnanchoredDfa);
     }
 
@@ -2678,6 +2688,7 @@ internal sealed class RegexMetaEngine
         RegexLazyDfa? reusableAnchoredDfa,
         RegexUnanchoredLazyDfa? reusableUnanchoredDfa,
         bool reusableUnanchoredDfaUsesAsciiProjection,
+        Span<RegexPrefilterState> prefilterState,
         bool allowUnanchoredDfa = true)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
@@ -2910,7 +2921,8 @@ internal sealed class RegexMetaEngine
                 startOffset,
                 reachabilityCache,
                 reusablePikeVm,
-                reusableAnchoredDfa);
+                reusableAnchoredDfa,
+                prefilterState);
         }
 
         if (!hasRequiredStart && reusableUnanchoredDfa is not null)
@@ -2982,7 +2994,8 @@ internal sealed class RegexMetaEngine
                 startOffset,
                 reachabilityCache,
                 reusablePikeVm,
-                reusableAnchoredDfa);
+                reusableAnchoredDfa,
+                prefilterState);
         }
 
         if (pikeVmPool is not null)
@@ -3066,13 +3079,15 @@ internal sealed class RegexMetaEngine
     /// <param name="reusableAnchoredDfa">
     /// The anchored lazy DFA reserved for exact-start candidates, when applicable.
     /// </param>
+    /// <param name="prefilterState">The adaptive state for this search operation.</param>
     /// <returns>The first match, or <see langword="null" /> when no candidate matches.</returns>
     private RegexMatch? FindWithPrefilter(
         ReadOnlySpan<byte> haystack,
         int startOffset,
         Dictionary<(int State, int Position), bool>? reachabilityCache,
         PikeVm? reusablePikeVm,
-        RegexLazyDfa? reusableAnchoredDfa)
+        RegexLazyDfa? reusableAnchoredDfa,
+        Span<RegexPrefilterState> prefilterState)
     {
         if (prefilter!.UsesRequiredLiteralWindow)
         {
@@ -3081,7 +3096,8 @@ internal sealed class RegexMetaEngine
                 startOffset,
                 reachabilityCache,
                 reusablePikeVm,
-                reusableAnchoredDfa);
+                reusableAnchoredDfa,
+                prefilterState);
         }
 
         var exactCandidates = RegexCandidateStartEnumerator.ExactPrefix(
@@ -3089,7 +3105,8 @@ internal sealed class RegexMetaEngine
             startOffset,
             haystack.Length,
             utf8,
-            prefilter);
+            prefilter,
+            prefilterState);
         if (pikeVmPool is not null)
         {
             return FindWithPikeVm(haystack, ref exactCandidates, reusablePikeVm);
@@ -3121,13 +3138,15 @@ internal sealed class RegexMetaEngine
     /// <param name="reusableAnchoredDfa">
     /// The anchored lazy DFA reserved for exact-start candidates, when applicable.
     /// </param>
+    /// <param name="prefilterState">The adaptive state for this search operation.</param>
     /// <returns>The first match, or <see langword="null" /> when no candidate matches.</returns>
     private RegexMatch? FindWithRequiredLiteralPrefilter(
         ReadOnlySpan<byte> haystack,
         int startOffset,
         Dictionary<(int State, int Position), bool>? reachabilityCache,
         PikeVm? reusablePikeVm,
-        RegexLazyDfa? reusableAnchoredDfa)
+        RegexLazyDfa? reusableAnchoredDfa,
+        Span<RegexPrefilterState> prefilterState)
     {
         Span<long> requiredRangeBuffer =
             stackalloc long[RegexCandidateStartEnumerator.RequiredLiteralRangeBufferLength];
@@ -3137,7 +3156,8 @@ internal sealed class RegexMetaEngine
             haystack.Length,
             utf8,
             prefilter!,
-            requiredRangeBuffer);
+            requiredRangeBuffer,
+            prefilterState);
         if (pikeVmPool is not null)
         {
             return FindWithPikeVm(haystack, ref requiredCandidates, reusablePikeVm);
@@ -3265,6 +3285,7 @@ internal sealed class RegexMetaEngine
         Span<long> requiredRangeBuffer =
             stackalloc long[RegexCandidateStartEnumerator.RequiredLiteralRangeBufferLength];
         Span<bool> nulDetection = stackalloc bool[1] { false };
+        Span<RegexPrefilterState> prefilterState = stackalloc RegexPrefilterState[1] { default };
         var candidates = RegexCandidateStartEnumerator.RequiredLiteralRangesAndDetectNul(
             haystack,
             startAt: 0,
@@ -3272,7 +3293,8 @@ internal sealed class RegexMetaEngine
             utf8,
             prefilter,
             requiredRangeBuffer,
-            nulDetection);
+            nulDetection,
+            prefilterState);
         PikeVm? pikeVm = pikeVmPool?.Rent();
         RegexBoundedBacktracker? boundedBacktracker = pikeVm is null
             ? boundedBacktrackerPool?.Rent()
@@ -3956,6 +3978,7 @@ internal sealed class RegexMetaEngine
 
         try
         {
+            Span<RegexPrefilterState> prefilterState = stackalloc RegexPrefilterState[1] { default };
             if (prefilter.UsesRequiredLiteralWindow)
             {
                 Span<long> requiredRangeBuffer =
@@ -3966,7 +3989,8 @@ internal sealed class RegexMetaEngine
                     haystack.Length,
                     utf8,
                     prefilter,
-                    requiredRangeBuffer);
+                    requiredRangeBuffer,
+                    prefilterState);
                 total = IteratePrefilteredBoundedCandidates(
                     haystack,
                     startAt,
@@ -3981,7 +4005,8 @@ internal sealed class RegexMetaEngine
                     startAt,
                     haystack.Length,
                     utf8,
-                    prefilter);
+                    prefilter,
+                    prefilterState);
                 total = IteratePrefilteredBoundedCandidates(
                     haystack,
                     startAt,
@@ -4494,6 +4519,9 @@ internal sealed class RegexMetaEngine
         long total = 0;
         int offset = Math.Clamp(startAt, 0, haystack.Length);
         int suppressedEmptyStart = -1;
+        Span<RegexPrefilterState> prefilterState = prefilter is null
+            ? default
+            : stackalloc RegexPrefilterState[1] { default };
         Dictionary<(int State, int Position), bool>? reachabilityCache = lazyDfaPool is not null && prefilter is null ? [] : null;
         while (offset <= haystack.Length)
         {
@@ -4505,7 +4533,8 @@ internal sealed class RegexMetaEngine
                 reusablePikeVm: null,
                 reusableAnchoredDfa: null,
                 reusableUnanchoredDfa: null,
-                reusableUnanchoredDfaUsesAsciiProjection: false);
+                reusableUnanchoredDfaUsesAsciiProjection: false,
+                prefilterState);
             if (!match.HasValue)
             {
                 return total;

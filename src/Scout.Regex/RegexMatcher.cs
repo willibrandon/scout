@@ -6,11 +6,11 @@ namespace Scout;
 /// </summary>
 public sealed class RegexMatcher
 {
-    private readonly RegexAutomaton automaton;
+    private readonly RegexAutomaton _automaton;
 
     private RegexMatcher(RegexAutomaton automaton)
     {
-        this.automaton = automaton;
+        _automaton = automaton;
     }
 
     /// <summary>
@@ -30,7 +30,7 @@ public sealed class RegexMatcher
     /// <returns>The first match, or <see langword="null" /> when no match exists.</returns>
     public MatcherMatch? Find(ReadOnlySpan<byte> haystack)
     {
-        RegexMatch? match = automaton.Find(haystack);
+        RegexMatch? match = _automaton.Find(haystack);
         return match.HasValue ? new MatcherMatch(match.Value.Start, match.Value.Length) : null;
     }
 
@@ -41,7 +41,7 @@ public sealed class RegexMatcher
     /// <returns><see langword="true" /> when a match exists.</returns>
     public bool IsMatch(ReadOnlySpan<byte> haystack)
     {
-        return automaton.IsMatch(haystack);
+        return _automaton.IsMatch(haystack);
     }
 
     /// <summary>
@@ -54,12 +54,13 @@ public sealed class RegexMatcher
     public int ForEachMatch<TSink>(ReadOnlySpan<byte> haystack, ref TSink sink)
         where TSink : struct, IMatcherSink
     {
+        using RegexFindRunner runner = _automaton.RentFindRunner();
         int count = 0;
         int offset = 0;
         int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         while (offset <= haystack.Length)
         {
-            RegexMatch? regexMatch = automaton.Find(haystack, offset);
+            RegexMatch? regexMatch = runner.Find(haystack, offset);
             if (!regexMatch.HasValue)
             {
                 return count;
@@ -97,12 +98,13 @@ public sealed class RegexMatcher
         delegate* managed<void*, ReadOnlySpan<byte>, MatcherMatch, bool> callback,
         void* state)
     {
+        using RegexFindRunner runner = _automaton.RentFindRunner();
         int count = 0;
         int offset = 0;
         int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         while (offset <= haystack.Length)
         {
-            RegexMatch? regexMatch = automaton.Find(haystack, offset);
+            RegexMatch? regexMatch = runner.Find(haystack, offset);
             if (!regexMatch.HasValue)
             {
                 return count;

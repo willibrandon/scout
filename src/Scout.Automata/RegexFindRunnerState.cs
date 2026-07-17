@@ -1,12 +1,15 @@
 namespace Scout;
 
 /// <summary>
-/// Owns a lazily rented anchored or unanchored DFA shared by copies of one find runner.
+/// Owns adaptive prefilter state and any lazily rented DFA shared by copies of one find runner.
 /// </summary>
 /// <param name="automaton">The automaton that owns the runner pool and search guards.</param>
-internal sealed class RegexFindRunnerState(RegexAutomaton automaton)
+/// <param name="hasPrefilter">Whether the runner needs adaptive prefilter state.</param>
+internal sealed class RegexFindRunnerState(RegexAutomaton automaton, bool hasPrefilter)
 {
     private readonly RegexAutomaton _automaton = automaton;
+    private readonly bool _hasPrefilter = hasPrefilter;
+    private RegexPrefilterState _prefilterState;
     private RegexLazyDfa? _anchoredDfa;
     private long _anchoredDfaLeaseVersion;
     private RegexUnanchoredLazyDfa? _unanchoredDfa;
@@ -43,6 +46,23 @@ internal sealed class RegexFindRunnerState(RegexAutomaton automaton)
     /// Gets a value indicating whether the current DFA executes an ASCII projection.
     /// </summary>
     internal bool UsesAsciiProjection => _usesAsciiProjection;
+
+    /// <summary>
+    /// Gets the adaptive prefilter-effectiveness state for this search operation.
+    /// </summary>
+    internal Span<RegexPrefilterState> PrefilterState => _hasPrefilter
+        ? System.Runtime.InteropServices.MemoryMarshal.CreateSpan(ref _prefilterState, 1)
+        : default;
+
+    /// <summary>
+    /// Gets a value indicating whether this operation has permanently disabled its prefilter.
+    /// </summary>
+    internal bool IsPrefilterInert => _hasPrefilter && _prefilterState.IsInert;
+
+    /// <summary>
+    /// Gets the number of prefilter scans observed by this operation.
+    /// </summary>
+    internal long PrefilterSkipCount => _hasPrefilter ? _prefilterState.SkipCount : 0;
 
     /// <summary>
     /// Rents and retains the eligible anchored or unanchored DFA for the operation.

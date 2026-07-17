@@ -6,7 +6,7 @@ namespace Scout;
 /// <param name="automaton">The automaton that owns the runner pool and search guards.</param>
 /// <param name="pikeVm">The rented Pike VM, or <see langword="null" /> for another engine kind.</param>
 /// <param name="pikeVmLeaseVersion">The exclusive Pike VM lease generation.</param>
-/// <param name="state">The optional shared lazy-DFA state for this operation.</param>
+/// <param name="state">The optional mutable state shared by this operation.</param>
 /// <param name="allowUnanchoredDfa">Whether the operation may activate an unanchored DFA.</param>
 internal ref struct RegexFindRunner(
     RegexAutomaton automaton,
@@ -42,9 +42,24 @@ internal ref struct RegexFindRunner(
         _state?.UnanchoredDfaLeaseVersion ?? 0;
 
     /// <summary>
+    /// Gets the current Pike VM lease generation, or zero for another engine kind.
+    /// </summary>
+    internal readonly long PikeVmLeaseVersion => _pikeVmLeaseVersion;
+
+    /// <summary>
     /// Gets a value indicating whether the current DFA executes an ASCII projection.
     /// </summary>
     internal readonly bool UsesAsciiProjection => _state?.UsesAsciiProjection == true;
+
+    /// <summary>
+    /// Gets a value indicating whether this operation has permanently disabled its prefilter.
+    /// </summary>
+    internal readonly bool IsPrefilterInert => _state?.IsPrefilterInert == true;
+
+    /// <summary>
+    /// Gets the number of prefilter scans observed by this operation.
+    /// </summary>
+    internal readonly long PrefilterSkipCount => _state?.PrefilterSkipCount ?? 0;
 
     /// <summary>
     /// Determines whether another lease refers to the same mutable engine state.

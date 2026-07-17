@@ -297,7 +297,8 @@ public sealed class ContextSearchOperationsTests
     }
 
     /// <summary>
-    /// Verifies stop-on-nonmatch does not inspect an authoritative anchored-match tail.
+    /// Verifies stop-on-nonmatch does not retain an authoritative anchored-match tail or consult
+    /// the raw pattern list after plan construction.
     /// </summary>
     [Fact]
     public void BuildSearchResultStopsAuthoritativeCandidatesBeforeLargeTail()
@@ -316,7 +317,7 @@ public sealed class ContextSearchOperationsTests
             tailLine.CopyTo(bytes, offset);
         }
 
-        patterns.ResetCandidateChecks();
+        patterns.ResetAccessCount();
         ContextSearchResult result = ContextSearchOperations.BuildSearchResult(
             bytes,
             patterns,
@@ -329,7 +330,7 @@ public sealed class ContextSearchOperationsTests
             stopOnNonmatch: true,
             regexPlan);
 
-        Assert.Equal(2, patterns.CandidateChecks);
+        Assert.Equal(0, patterns.AccessCount);
         Assert.Equal(2, result.Lines.Count);
         Assert.True(result.Lines[0].SelectedMatch);
         Assert.False(result.Lines[1].SelectedMatch);

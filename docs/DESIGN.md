@@ -210,6 +210,8 @@ PikeVM-backed unanchored searches inject streamed prefilter candidates into one 
 
 For a uniquely proven inner literal with a finite prefix, the required-literal prefilter can reverse-match an ASCII projection of that prefix with pooled lazy-DFA runners before injecting starts. Non-ASCII windows, ambiguous provenance, unsupported positional syntax, and exhausted DFA budgets retain the conservative lookbehind range. The forward Thompson matcher remains authoritative, so this is a general reverse-inner strategy rather than a pattern recognizer.
 
+Each operation-scoped runner also measures prefilter effectiveness. After 40 scans, a cumulative average below 16 skipped bytes makes the prefilter inert for the remainder of that search and resumes the authoritative all-start stream, matching regex-automata's adaptive prefilter policy across independently sliced records.
+
 SIMD via `System.Runtime.Intrinsics`: shipped baseline is SSE2 + AVX2 (x64) and `AdvSimd`/NEON (arm64); AVX-512 paths are additive and `Avx512*.IsSupported`-gated, delivered before Release. Scalar fallback always present.
 
 **`Scout.Text.Regex`** (public package): the supported .NET-facing facade over the byte regex engine. It exposes `ByteRegex` and `ByteRegexSet` APIs that accept `ReadOnlySpan<byte>` haystacks, return byte offsets, preserve capture spans, and allow callers to choose optimized, general, or automata-only engine modes without depending on CLI internals. The package is Native-AOT-safe and targets `net9.0` and `net10.0`.

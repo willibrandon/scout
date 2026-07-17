@@ -3998,7 +3998,7 @@ public static class LiteralLineSearcher
     {
         matchStart = -1;
         matchLength = 0;
-        if (needles.Count == 0)
+        if (regexPlan is null && needles.Count == 0)
         {
             return false;
         }

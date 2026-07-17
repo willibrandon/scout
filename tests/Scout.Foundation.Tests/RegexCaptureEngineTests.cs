@@ -8,6 +8,74 @@ namespace Scout;
 public sealed class RegexCaptureEngineTests()
 {
     /// <summary>
+    /// Verifies capture search retains a later authoritative match after dense exact-prefix
+    /// false candidates.
+    /// </summary>
+    [Fact]
+    public void FindsCapturesAfterDenseExactPrefixFalseCandidates()
+    {
+        const string Pattern = "(?<prefix>abcdefgh(?:foo|bar))(?<digit>[0-9])";
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(Encoding.UTF8.GetBytes(Pattern));
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false);
+        var prefilter = RegexPrefilter.Compile(tree.Root, options);
+        Assert.NotNull(prefilter);
+        Assert.False(prefilter.UsesRequiredLiteralWindow);
+        RegexNfa nfa = RegexNfaCompiler.CompileCaptures(
+            tree.Root,
+            options,
+            tree.CaptureCount);
+        var engine = new RegexCaptureEngine(nfa, prefilter);
+        string falseCandidates = string.Concat(
+            Enumerable.Repeat("abcdefghfooX", RegexPrefilterState.MinimumSkipCount));
+        byte[] haystack = Encoding.UTF8.GetBytes(falseCandidates + "abcdefghbar7");
+
+        RegexCaptures? captures = engine.Find(haystack, startAt: 0);
+
+        Assert.NotNull(captures);
+        Assert.Equal(new RegexMatch(falseCandidates.Length, 12), captures.Match);
+        Assert.Equal(new RegexMatch(falseCandidates.Length, 11), captures.GetGroup(1));
+        Assert.Equal(new RegexMatch(falseCandidates.Length + 11, 1), captures.GetGroup(2));
+    }
+
+    /// <summary>
+    /// Verifies capture search retains a later authoritative match after dense required-literal
+    /// false candidates.
+    /// </summary>
+    [Fact]
+    public void FindsCapturesAfterDenseRequiredLiteralFalseCandidates()
+    {
+        const string Pattern = "(?:Z.{99}|Q)(?<word>needle)(?<tail>.)$";
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(Encoding.UTF8.GetBytes(Pattern));
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false);
+        var prefilter = RegexPrefilter.Compile(tree.Root, options);
+        Assert.NotNull(prefilter);
+        Assert.True(prefilter.UsesRequiredLiteralWindow);
+        RegexNfa nfa = RegexNfaCompiler.CompileCaptures(
+            tree.Root,
+            options,
+            tree.CaptureCount);
+        var engine = new RegexCaptureEngine(nfa, prefilter);
+        string falseCandidates = string.Concat(
+            Enumerable.Repeat("needle", RegexPrefilterState.MinimumSkipCount));
+        byte[] haystack = Encoding.UTF8.GetBytes(falseCandidates + "Qneedle!");
+
+        RegexCaptures? captures = engine.Find(haystack, startAt: 0);
+
+        Assert.NotNull(captures);
+        Assert.Equal(new RegexMatch(falseCandidates.Length, 8), captures.Match);
+        Assert.Equal(new RegexMatch(falseCandidates.Length + 1, 6), captures.GetGroup(1));
+        Assert.Equal(new RegexMatch(falseCandidates.Length + 7, 1), captures.GetGroup(2));
+    }
+
+    /// <summary>
     /// Verifies an earlier alternative wins when a later alternative reaches the same state with more captures.
     /// </summary>
     [Fact]

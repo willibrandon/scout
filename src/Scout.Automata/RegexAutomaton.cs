@@ -1436,10 +1436,13 @@ public sealed class RegexAutomaton
             this,
             pikeVm,
             pikeVm?.BeginRunnerLease() ?? 0,
-            allowUnanchoredDfa &&
-                (engine.CanRentFindAnchoredDfa ||
-                    engine.CanRentFindUnanchoredDfa && _startPredicate?.HasRequiredStart != true)
-                ? new RegexFindRunnerState(this)
+            engine.PrefilterKind != RegexPrefilterKind.None ||
+                allowUnanchoredDfa &&
+                    (engine.CanRentFindAnchoredDfa ||
+                        engine.CanRentFindUnanchoredDfa && _startPredicate?.HasRequiredStart != true)
+                ? new RegexFindRunnerState(
+                    this,
+                    engine.PrefilterKind != RegexPrefilterKind.None)
                 : null,
             allowUnanchoredDfa);
     }
@@ -1475,7 +1478,7 @@ public sealed class RegexAutomaton
     /// <param name="haystack">The haystack bytes.</param>
     /// <param name="startAt">The first byte offset to consider.</param>
     /// <param name="pikeVm">The operation-scoped Pike VM, or <see langword="null" />.</param>
-    /// <param name="state">The optional shared lazy-DFA state for this operation.</param>
+    /// <param name="state">The optional mutable state shared by this operation.</param>
     /// <param name="allowUnanchoredDfa">Whether the operation may activate an unanchored DFA.</param>
     /// <returns>The first match, or <see langword="null" /> when no match exists.</returns>
     internal RegexMatch? FindWithRunner(
@@ -1491,9 +1494,13 @@ public sealed class RegexAutomaton
         }
 
         RegexStartPredicate? startPredicate = GetStartPredicate();
-        state?.EnsureDfa(
-            haystack,
-            startPredicate?.HasRequiredStart == true);
+        if (allowUnanchoredDfa)
+        {
+            state?.EnsureDfa(
+                haystack,
+                startPredicate?.HasRequiredStart == true);
+        }
+
         return engine.FindWithRunner(
             haystack,
             startAt,
@@ -1502,6 +1509,7 @@ public sealed class RegexAutomaton
             state?.AnchoredDfa,
             state?.UnanchoredDfa,
             state?.UsesAsciiProjection == true,
+            state is null ? default : state.PrefilterState,
             allowUnanchoredDfa);
     }
 
