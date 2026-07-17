@@ -210,7 +210,7 @@ rid = "osx-arm64"
 environment = "github-actions"
 version = "5.8.3"
 path = "/opt/homebrew/bin/xz"
-sha256 = "995c8e2f72446f0d0e3a29f6c3d52286cfecedfc4ffb2b42d25c3ce1ad77034c"
+sha256 = "16b9994cca884ed2a66ba63736f1450049cbc6fd1d93076c51e5f0e7f7a71381"
 
 [[tool.macos]]
 name = "zstd"
@@ -218,7 +218,7 @@ rid = "osx-arm64"
 environment = "github-actions"
 version = "1.5.7"
 path = "/opt/homebrew/bin/zstd"
-sha256 = "aff8169fb421bb925fb16c44a7e0143fa2c7a941dc45cce76b15062a2ce54917"
+sha256 = "9b5676aae3cb048cf68e2b40c543d9523db3b4cb911b31861bd5f4fcb050c4b6"
 
 [[tool.macos]]
 name = "lz4"

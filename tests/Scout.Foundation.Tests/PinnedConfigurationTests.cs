@@ -2672,8 +2672,8 @@ public sealed partial class PinnedConfigurationTests
         [
             ("gzip", "Apple gzip 475", "/usr/bin/gzip", "A1983798AB66B3431190813540CB0EC691DCB8EE28DE36744B88FD8B91CD9FCD", "7BD218BC6B12FCED475163901547A796736F72F99533CBEC60EEA150ED21AFA3"),
             ("bzip2", "1.0.8", "/usr/bin/bzip2", "8DA4D460440E876D81875D814F3A0EEAD38BA0FB94FEF81A9BE87560A897DEE1", "14E28B6B7955CBD6CD2A8139CA41186A922143A4FA3715DDD8E331F41DB8FC80"),
-            ("xz", "5.8.2", "/opt/homebrew/bin/xz", "B7926EA19ABF39913EE064329261D03EC66271CF5EE4759E5A1A928A3E165540", "995C8E2F72446F0D0E3A29F6C3D52286CFECEDFC4FFB2B42D25C3CE1AD77034C"),
-            ("zstd", "1.5.7", "/opt/homebrew/bin/zstd", "AFF8169FB421BB925FB16C44A7E0143FA2C7A941DC45CCE76B15062A2CE54917", null),
+            ("xz", "5.8.2", "/opt/homebrew/bin/xz", "B7926EA19ABF39913EE064329261D03EC66271CF5EE4759E5A1A928A3E165540", "16B9994CCA884ED2A66BA63736F1450049CBC6FD1D93076C51E5F0E7F7A71381"),
+            ("zstd", "1.5.7", "/opt/homebrew/bin/zstd", "AFF8169FB421BB925FB16C44A7E0143FA2C7A941DC45CCE76B15062A2CE54917", "9B5676AAE3CB048CF68E2B40C543D9523DB3B4CB911B31861BD5F4FCB050C4B6"),
             ("lz4", "1.10.0", "/opt/homebrew/bin/lz4", "B7DCCDC84A76F0359C26C67393A6D50B4B073F8BF85078DCA7CCF877502B00E5", null),
             ("brotli", "1.2.0", "/opt/homebrew/bin/brotli", "528B0B00C1B2F8323E6185DC40D10F0324D21F9CBCCA6D8B549F6B2E49520ECF", null),
             ("uncompress", "Apple compress file_cmds-475", "/usr/bin/uncompress", "C2E461B27668BD63C4CBD85649F7C4CEB63FC2447BF657D231E0D9FD4F42A055", "AEC4BECD30850078AA28747CAA0C76227C9E848378377E37F98D531203FE6AA4"),
@@ -2714,11 +2714,13 @@ public sealed partial class PinnedConfigurationTests
         [
             ("osx-arm64", "gzip", "Apple gzip 479", "/usr/bin/gzip", "7bd218bc6b12fced475163901547a796736f72f99533cbec60eea150ed21afa3"),
             ("osx-arm64", "bzip2", "1.0.8", "/usr/bin/bzip2", "14e28b6b7955cbd6cd2a8139ca41186a922143a4fa3715ddd8e331f41db8fc80"),
-            ("osx-arm64", "xz", "5.8.3", "/opt/homebrew/bin/xz", "995c8e2f72446f0d0e3a29f6c3d52286cfecedfc4ffb2b42d25c3ce1ad77034c"),
+            ("osx-arm64", "xz", "5.8.3", "/opt/homebrew/bin/xz", "16b9994cca884ed2a66ba63736f1450049cbc6fd1d93076c51e5f0e7f7a71381"),
+            ("osx-arm64", "zstd", "1.5.7", "/opt/homebrew/bin/zstd", "9b5676aae3cb048cf68e2b40c543d9523db3b4cb911b31861bd5f4fcb050c4b6"),
             ("osx-arm64", "uncompress", "Apple compress file_cmds-479", "/usr/bin/uncompress", "aec4becd30850078aa28747caa0c76227c9e848378377e37f98d531203fe6aa4"),
             ("osx-x64", "gzip", "Apple gzip 479", "/usr/bin/gzip", "7bd218bc6b12fced475163901547a796736f72f99533cbec60eea150ed21afa3"),
             ("osx-x64", "bzip2", "1.0.8", "/usr/bin/bzip2", "14e28b6b7955cbd6cd2a8139ca41186a922143a4fa3715ddd8e331f41db8fc80"),
             ("osx-x64", "xz", "5.8.3", "/usr/local/bin/xz", "2ce7374ab7c6426659e3662a6a759df41e03e30bfd90898073bab1d77f7c51b2"),
+            ("osx-x64", "zstd", "1.5.7", "/usr/local/bin/zstd", "9f04cf059d3043bd5ac7260bda6ebea8c21d9981210c5e7331cd0871ba20b2f6"),
             ("osx-x64", "uncompress", "Apple compress file_cmds-479", "/usr/bin/uncompress", "aec4becd30850078aa28747caa0c76227c9e848378377e37f98d531203fe6aa4"),
         ];
 
@@ -2734,8 +2736,12 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("environment = \"%s\"", preflight, StringComparison.Ordinal);
         Assert.Equal("/opt/homebrew/bin/xz", ReadMacosToolValue(prerequisiteLock, "xz", "osx-arm64", "github-actions", "path"));
         Assert.Equal("/usr/local/bin/xz", ReadMacosToolValue(prerequisiteLock, "xz", "osx-x64", "github-actions", "path"));
-        Assert.Equal("995c8e2f72446f0d0e3a29f6c3d52286cfecedfc4ffb2b42d25c3ce1ad77034c", ReadMacosToolValue(prerequisiteLock, "xz", "osx-arm64", "github-actions", "sha256"));
+        Assert.Equal("/opt/homebrew/bin/zstd", ReadMacosToolValue(prerequisiteLock, "zstd", "osx-arm64", "github-actions", "path"));
+        Assert.Equal("/usr/local/bin/zstd", ReadMacosToolValue(prerequisiteLock, "zstd", "osx-x64", "github-actions", "path"));
+        Assert.Equal("16b9994cca884ed2a66ba63736f1450049cbc6fd1d93076c51e5f0e7f7a71381", ReadMacosToolValue(prerequisiteLock, "xz", "osx-arm64", "github-actions", "sha256"));
         Assert.Equal("2ce7374ab7c6426659e3662a6a759df41e03e30bfd90898073bab1d77f7c51b2", ReadMacosToolValue(prerequisiteLock, "xz", "osx-x64", "github-actions", "sha256"));
+        Assert.Equal("9b5676aae3cb048cf68e2b40c543d9523db3b4cb911b31861bd5f4fcb050c4b6", ReadMacosToolValue(prerequisiteLock, "zstd", "osx-arm64", "github-actions", "sha256"));
+        Assert.Equal("9f04cf059d3043bd5ac7260bda6ebea8c21d9981210c5e7331cd0871ba20b2f6", ReadMacosToolValue(prerequisiteLock, "zstd", "osx-x64", "github-actions", "sha256"));
 
         for (int index = 0; index < tools.Length; index++)
         {
