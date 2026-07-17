@@ -64,11 +64,19 @@ host_rid() {
 }
 
 oracle_environment() {
-    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
-        printf 'github-actions\n'
-    else
-        printf 'local\n'
+    if [ -n "${SCOUT_ORACLE_ENVIRONMENT:-}" ]; then
+        case "$SCOUT_ORACLE_ENVIRONMENT" in
+            github-actions|local)
+                printf '%s\n' "$SCOUT_ORACLE_ENVIRONMENT"
+                return
+                ;;
+            *)
+                fail "Unsupported SCOUT_ORACLE_ENVIRONMENT: $SCOUT_ORACLE_ENVIRONMENT"
+                ;;
+        esac
     fi
+
+    printf 'github-actions\n'
 }
 
 read_lock_rid_table_value() {

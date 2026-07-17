@@ -252,6 +252,7 @@ class HyperfineInterleavedTests(unittest.TestCase):
             )
             self.assertEqual(5, run_round.call_count)
             self.assertEqual(2, sampling["rounds"])
+            self.assertEqual(2, sampling["warmup_rounds"])
             self.assertEqual(3, sampling["measured_round_attempts"])
             self.assertEqual(1, sampling["timer_resolution_replacements"])
             self.assertEqual(2, len(sampling["raw_round_files"]))

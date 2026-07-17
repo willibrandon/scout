@@ -90,7 +90,6 @@ def evaluate_gate(
 def format_gate_report(
     evaluation: Mapping[str, Any],
     workload: str,
-    final_failure_context: str | None = None,
 ) -> str:
     """Format precise component diagnostics and one overall attempt result."""
     workload = workload.strip()
@@ -157,10 +156,7 @@ def format_gate_report(
     if not failures:
         lines.append(f"  Result: PASS ({workload})")
     else:
-        context = f" {final_failure_context.strip()}" if final_failure_context else ""
-        lines.append(
-            f"  Result: FAIL{context} ({workload}: {_format_dimensions(failures)})"
-        )
+        lines.append(f"  Result: FAIL ({workload}: {_format_dimensions(failures)})")
 
     return "\n".join(lines)
 
@@ -229,7 +225,7 @@ def _optional_cpu_summary(
             raise ValueError(f"{role} user and system CPU sample counts differ")
         medians[role] = statistics.median(
             user + system
-            for user, system in zip(user_samples, system_samples, strict=True)
+            for user, system in zip(user_samples, system_samples)
         )
 
     rg_seconds = medians["rg"]
@@ -304,7 +300,6 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--wall-limit", required=True, type=float)
     parser.add_argument("--scout-rss-floor", required=True, type=int)
     parser.add_argument("--workload", required=True)
-    parser.add_argument("--final-failure-context")
     return parser.parse_args(argv)
 
 
@@ -319,13 +314,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         evaluation = evaluate_gate(
             document, arguments.wall_limit, arguments.scout_rss_floor
         )
-        print(
-            format_gate_report(
-                evaluation,
-                arguments.workload,
-                arguments.final_failure_context,
-            )
-        )
+        print(format_gate_report(evaluation, arguments.workload))
         return gate_exit_code(evaluation)
     except (OSError, ValueError, json.JSONDecodeError) as error:
         print(f"Hyperfine gate reporting failed: {error}", file=sys.stderr)

@@ -1,4 +1,4 @@
-"""Shell-level tests for Hyperfine release-gate retry control flow."""
+"""Shell-level tests for Hyperfine release-gate control flow."""
 
 from __future__ import annotations
 
@@ -81,6 +81,9 @@ class HyperfineShellTests(unittest.TestCase):
         self.assertIn("$SCOUT_MANY_ABSENT_REGEXP_COMMAND", source)
         self.assertIn("$RG_MANY_ABSENT_PATTERN_FILE_COMMAND", source)
         self.assertIn("$SCOUT_MANY_ABSENT_PATTERN_FILE_COMMAND", source)
+        self.assertIn('GATE_MANY_ABSENT_INPUT_COUNT="16"', source)
+        self.assertIn("repeat_shell_argument", source)
+        self.assertIn("$MANY_ABSENT_INPUTS", source)
 
     def test_short_shared_delegate_gate_disables_shell_calibration(self) -> None:
         root = Path(__file__).resolve().parents[2]
@@ -118,6 +121,43 @@ class HyperfineShellTests(unittest.TestCase):
             block = source[start:end]
             self.assertEqual(2, block.count("--threads $GATE_TREE_THREADS"))
 
+    def test_generated_single_file_workloads_pin_one_thread(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "bench" / "run-hyperfine.sh").read_text(encoding="utf-8")
+
+        self.assertIn('GATE_GENERATED_THREADS="1"', source)
+        self.assertEqual(4, source.count("--threads $GATE_GENERATED_THREADS"))
+
+    def test_source_fingerprint_is_stable_for_unchanged_content(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        helper = root / "eng" / "source-fingerprint.sh"
+
+        first = subprocess.run(
+            [_SH, str(helper)], check=True, capture_output=True, text=True
+        ).stdout.strip()
+        second = subprocess.run(
+            [_SH, str(helper)], check=True, capture_output=True, text=True
+        ).stdout.strip()
+
+        self.assertEqual(first, second)
+        self.assertEqual(40, len(first))
+        self.assertTrue(all(character in "0123456789abcdef" for character in first))
+
+    def test_performance_harness_fingerprint_is_stable_for_unchanged_content(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        helper = root / "eng" / "performance-harness-fingerprint.sh"
+
+        first = subprocess.run(
+            [_SH, str(helper)], check=True, capture_output=True, text=True
+        ).stdout.strip()
+        second = subprocess.run(
+            [_SH, str(helper)], check=True, capture_output=True, text=True
+        ).stdout.strip()
+
+        self.assertEqual(first, second)
+        self.assertEqual(40, len(first))
+        self.assertTrue(all(character in "0123456789abcdef" for character in first))
+
     def test_focused_gate_option_is_validated_before_prerequisites(self) -> None:
         root = Path(__file__).resolve().parents[2]
         script = root / "bench" / "run-hyperfine.sh"
@@ -140,7 +180,7 @@ class HyperfineShellTests(unittest.TestCase):
         self.assertNotEqual(0, wrong_mode.returncode)
         self.assertIn("--workload requires --gate", wrong_mode.stderr)
 
-    def test_oracle_environment_can_match_hosted_gate_locally(self) -> None:
+    def test_gate_defaults_to_the_hosted_oracle_locally(self) -> None:
         root = Path(__file__).resolve().parents[2]
         source = (root / "bench" / "run-hyperfine.sh").read_text(encoding="utf-8")
         start = source.index("oracle_environment() {")
@@ -149,6 +189,7 @@ class HyperfineShellTests(unittest.TestCase):
         harness = f"""#!/bin/sh
 set -eu
 fail() {{ printf '%s\\n' "$1" >&2; exit 1; }}
+MODE=gate
 {function}
 oracle_environment
 """
@@ -157,7 +198,7 @@ oracle_environment
             path = Path(temporary_directory) / "oracle-environment.sh"
             path.write_bytes(harness.encode("utf-8"))
             environment = dict(os.environ)
-            environment["SCOUT_ORACLE_ENVIRONMENT"] = "github-actions"
+            environment.pop("SCOUT_ORACLE_ENVIRONMENT", None)
             result = subprocess.run(
                 [_SH, str(path)],
                 check=False,
@@ -170,41 +211,27 @@ oracle_environment
         self.assertEqual("github-actions", result.stdout.strip())
 
     def test_unselected_workload_does_not_sample_or_report(self) -> None:
-        result = self._run(scenario="always_fail", retries=2, selected="other")
+        result = self._run(scenario="fail", selected="other")
 
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual("", result.stdout)
 
-    def test_initial_failure_can_pass_on_first_retry(self) -> None:
-        result = self._run(scenario="retry_pass", retries=2)
-
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn("-- sample_workload retry 1/2 --", result.stdout)
-        self.assertNotIn("retry 2/2", result.stdout)
-        self.assertEqual(2, result.stdout.count("report:"))
-
-    def test_zero_retries_returns_the_initial_failure(self) -> None:
-        result = self._run(scenario="always_fail", retries=0)
+    def test_failure_is_final_without_resampling(self) -> None:
+        result = self._run(scenario="fail")
 
         self.assertEqual(1, result.returncode, result.stderr)
         self.assertNotIn("retry", result.stdout)
+        self.assertEqual(1, result.stdout.count("sample:"))
         self.assertEqual(1, result.stdout.count("report:"))
 
-    def test_final_failure_uses_singular_retry_context_and_nonzero_exit(self) -> None:
-        result = self._run(scenario="always_fail", retries=1)
+    def test_success_samples_once(self) -> None:
+        result = self._run(scenario="pass")
 
-        self.assertEqual(1, result.returncode, result.stderr)
-        self.assertIn("-- sample_workload retry 1/1 --", result.stdout)
-        self.assertIn(
-            "report:sample_workload|1.500|/tmp/gate/sample_workload.retry-1.json|"
-            "after the initial attempt and 1 retry",
-            result.stdout,
-        )
-        self.assertEqual(2, result.stdout.count("report:"))
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(1, result.stdout.count("sample:"))
+        self.assertEqual(1, result.stdout.count("report:"))
 
-    def _run(
-        self, scenario: str, retries: int, selected: str = ""
-    ) -> subprocess.CompletedProcess[str]:
+    def _run(self, scenario: str, selected: str = "") -> subprocess.CompletedProcess[str]:
         root = Path(__file__).resolve().parents[2]
         source = (root / "bench" / "run-hyperfine.sh").read_text(encoding="utf-8")
         start = source.index("run_pair_impl() {")
@@ -214,10 +241,13 @@ oracle_environment
 set -eu
 MODE=gate
 OUT_DIR=/tmp/gate
-GATE_RETRY_FAILED_WORKLOADS={retries}
+PYTHON=python_stub
+ROOT=/tmp
 WORKLOAD={selected!r}
 scenario={scenario}
-report_calls=0
+python_stub() {{
+    return 0
+}}
 workload_selected() {{
     [ -z "$WORKLOAD" ] || [ "$WORKLOAD" = "$1" ]
 }}
@@ -225,19 +255,15 @@ run_hyperfine_interleaved() {{
     printf 'sample:%s\\n' "$3"
 }}
 report_interleaved_gate() {{
-    report_calls=$((report_calls + 1))
     printf 'report:%s|%s|%s|%s\\n' "$1" "$2" "$3" "${{4:-}}"
-    if [ "$scenario" = retry_pass ] && [ "$report_calls" -gt 1 ]; then
-        return 0
-    fi
-    return 1
+    [ "$scenario" = pass ]
 }}
 {function}
 run_pair_impl sample_workload 1.500 'rg command' 'scout command' 6 6 0
 """
 
         with tempfile.TemporaryDirectory() as temporary_directory:
-            path = Path(temporary_directory) / "retry-harness.sh"
+            path = Path(temporary_directory) / "gate-harness.sh"
             path.write_bytes(harness.encode("utf-8"))
             return subprocess.run(
                 [_SH, str(path)],

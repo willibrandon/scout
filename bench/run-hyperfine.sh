@@ -2,6 +2,10 @@
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+export LANG=C
+export LC_ALL=C
+export TZ=UTC
+unset SCOUT_REGEX_SPECIALIZATION_MODE
 LOCK="$ROOT/tests/PREREQS.lock"
 MODE="smoke"
 WORKLOAD=""
@@ -10,22 +14,23 @@ RUNS_SPECIFIED="0"
 WARMUP="1"
 WARMUP_SPECIFIED="0"
 OUT_DIR="$ROOT/artifacts/bench/hyperfine"
-GATE_OPENSUBTITLES_RUNS="6"
-GATE_OPENSUBTITLES_WARMUP="6"
-GATE_TREE_RUNS="6"
-GATE_TREE_WARMUP="6"
-GATE_COLD_RUNS="6"
-GATE_COLD_WARMUP="6"
-GATE_BOUNDED_ASSIGNMENT_RUNS="6"
-GATE_BOUNDED_ASSIGNMENT_WARMUP="6"
-GATE_LARGE_BOUNDED_UNICODE_CLASS_RUNS="6"
-GATE_LARGE_BOUNDED_UNICODE_CLASS_WARMUP="6"
-GATE_LINE_REGEX_RUNS="6"
-GATE_LINE_REGEX_WARMUP="6"
+GATE_OPENSUBTITLES_RUNS="10"
+GATE_OPENSUBTITLES_WARMUP="2"
+GATE_TREE_RUNS="10"
+GATE_TREE_WARMUP="2"
+GATE_COLD_RUNS="10"
+GATE_COLD_WARMUP="2"
+GATE_BOUNDED_ASSIGNMENT_RUNS="10"
+GATE_BOUNDED_ASSIGNMENT_WARMUP="2"
+GATE_LARGE_BOUNDED_UNICODE_CLASS_RUNS="10"
+GATE_LARGE_BOUNDED_UNICODE_CLASS_WARMUP="2"
+GATE_LINE_REGEX_RUNS="10"
+GATE_LINE_REGEX_WARMUP="2"
+GATE_GENERATED_THREADS="1"
 GATE_LARGE_FILE_THREADS="4"
 GATE_TREE_THREADS="3"
 GATE_LARGE_FILE_SEGMENT_BUFFER_LENGTH="131072"
-GATE_RETRY_FAILED_WORKLOADS="${SCOUT_GATE_RETRY_FAILED_WORKLOADS:-2}"
+GATE_MANY_ABSENT_INPUT_COUNT="16"
 
 fail() {
     printf '%s\n' "$1" >&2
@@ -39,10 +44,10 @@ usage() {
         'Environment:' \
         '  SCOUT_BIN                         Native AOT scout binary. Defaults to artifacts/bin/<rid>/scout.' \
         '  SCOUT_RSS_BASELINE_BIN            Native AOT real binary for RSS-floor measurement. Defaults to sibling scout-real when present.' \
+        '  SCOUT_BUILD_PROVENANCE            Native build provenance sidecar. Defaults to <scout-real>.provenance.' \
         '  SCOUT_BENCH_OPENSUBTITLES_EN     OpenSubtitles en.txt path for --gate.' \
         '  SCOUT_BENCH_LINUX_TREE           Linux source tree path for --gate.' \
-        '  SCOUT_ORACLE_ENVIRONMENT          Pinned rg oracle environment: local or github-actions.' \
-        '  SCOUT_GATE_RETRY_FAILED_WORKLOADS Retry a failed gate workload this many times. Defaults to 2; set 0 to disable.' \
+        '  SCOUT_ORACLE_ENVIRONMENT          Pinned rg oracle environment: github-actions or local. Gate default: github-actions.' \
         '' \
         'The --gate mode requires frozen corpus hashes in tests/PREREQS.lock.' \
         'Use --gate --workload NAME to run one listed release-gate workload.'
@@ -117,7 +122,7 @@ oracle_environment() {
         esac
     fi
 
-    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+    if [ "$MODE" = "gate" ] || [ "${GITHUB_ACTIONS:-}" = "true" ]; then
         printf 'github-actions\n'
     else
         printf 'local\n'
@@ -295,6 +300,54 @@ sha256_file() {
     fi
 }
 
+read_provenance_value() {
+    provenance_path="$1"
+    provenance_key="$2"
+    awk -F= -v key="$provenance_key" '
+        $1 == key {
+            sub(/^[^=]*=/, "")
+            print
+            found = 1
+            exit
+        }
+        END {
+            if (!found) {
+                exit 1
+            }
+        }
+    ' "$provenance_path"
+}
+
+validate_scout_build_provenance() {
+    SCOUT_BUILD_PROVENANCE="$(printenv SCOUT_BUILD_PROVENANCE 2>/dev/null || true)"
+    if [ -z "$SCOUT_BUILD_PROVENANCE" ]; then
+        SCOUT_BUILD_PROVENANCE="$SCOUT_RSS_BASELINE_BIN.provenance"
+    fi
+    [ -f "$SCOUT_BUILD_PROVENANCE" ] ||
+        fail "Missing Scout build provenance: $SCOUT_BUILD_PROVENANCE. Rebuild with native/build-app-unix.sh."
+
+    SCOUT_SOURCE_COMMIT="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" source_commit)" ||
+        fail "Scout build provenance has no source commit."
+    SCOUT_SOURCE_FINGERPRINT="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" source_fingerprint)" ||
+        fail "Scout build provenance has no source fingerprint."
+    SCOUT_SOURCE_DIRTY="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" source_dirty)" ||
+        fail "Scout build provenance has no dirty-state marker."
+    SCOUT_BUILD_DOTNET_SDK="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" dotnet_sdk)" ||
+        fail "Scout build provenance has no .NET SDK."
+    SCOUT_BUILD_COMPILER="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" compiler)" ||
+        fail "Scout build provenance has no compiler."
+    expected_launcher_sha256="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" launcher_sha256)" ||
+        fail "Scout build provenance has no launcher hash."
+    expected_payload_sha256="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" payload_sha256)" ||
+        fail "Scout build provenance has no payload hash."
+
+    actual_source_fingerprint="$(sh "$ROOT/eng/source-fingerprint.sh")"
+    [ "$actual_source_fingerprint" = "$SCOUT_SOURCE_FINGERPRINT" ] ||
+        fail "Scout Native AOT payload is stale for the current source content. Rebuild with native/build-app-unix.sh."
+    check_file_hash "Scout launcher provenance" "$SCOUT_BIN" "$expected_launcher_sha256"
+    check_file_hash "Scout payload provenance" "$SCOUT_RSS_BASELINE_BIN" "$expected_payload_sha256"
+}
+
 sha256_stream() {
     if command -v shasum >/dev/null 2>&1; then
         shasum -a 256 | awk '{ print $1 }'
@@ -357,11 +410,22 @@ print_repro_manifest() {
     manifest_os="$(uname -s)"
     manifest_arch="$(uname -m)"
     manifest_cpu_count="$(logical_cpu_count)"
+    manifest_os_version="$(sw_vers -productVersion 2>/dev/null || uname -r)"
+    manifest_os_build="$(sw_vers -buildVersion 2>/dev/null || printf 'unknown')"
+    manifest_hardware_model="$(sysctl -n hw.model 2>/dev/null || printf 'unknown')"
+    manifest_runner_name="${RUNNER_NAME:-local}"
+    manifest_runner_image_os="${ImageOS:-local}"
+    manifest_runner_image_version="${ImageVersion:-local}"
     manifest_rg_version="$("$RG_BIN" --version | sed -n '1p')"
     manifest_rg_sha256="$(sha256_file "$RG_BIN")"
     manifest_scout_version="$("$SCOUT_BIN" --version | sed -n '1p')"
     manifest_scout_sha256="$(sha256_file "$SCOUT_BIN")"
+    manifest_scout_payload_sha256="$(sha256_file "$SCOUT_RSS_BASELINE_BIN")"
+    manifest_scout_provenance_sha256="$(sha256_file "$SCOUT_BUILD_PROVENANCE")"
     manifest_script_sha256="$(sha256_file "$ROOT/bench/run-hyperfine.sh")"
+    manifest_harness_fingerprint="$(sh "$ROOT/eng/performance-harness-fingerprint.sh")"
+    manifest_harness_commit="$(git -C "$ROOT" rev-parse HEAD)"
+    manifest_harness_dirty="$(performance_inputs_dirty)"
     manifest_hyperfine_version="$("$HYPERFINE" --version | sed -n '1p')"
     manifest_hyperfine_sha256="$(sha256_file "$HYPERFINE")"
     manifest_opensubtitles_sha256="$(read_corpus_value "opensubtitles-en" "sha256")"
@@ -369,17 +433,61 @@ print_repro_manifest() {
     manifest_selection="${WORKLOAD:-all gate workloads}"
 
     printf '\n== reproducibility ==\n'
-    printf 'host: %s/%s; logical CPUs: %s\n' "$manifest_os" "$manifest_arch" "$manifest_cpu_count"
+    printf 'host: %s %s (%s) on %s/%s; logical CPUs: %s\n' \
+        "$manifest_os" "$manifest_os_version" "$manifest_os_build" \
+        "$manifest_hardware_model" "$manifest_arch" "$manifest_cpu_count"
+    printf 'runner: %s; image OS=%s; image version=%s\n' \
+        "$manifest_runner_name" "$manifest_runner_image_os" "$manifest_runner_image_version"
     printf 'selection: %s\n' "$manifest_selection"
     printf 'rg: %s; sha256: %s; oracle environment: %s\n' \
         "$manifest_rg_version" "$manifest_rg_sha256" "$HOST_ORACLE_ENVIRONMENT"
-    printf 'Scout: %s; sha256: %s\n' "$manifest_scout_version" "$manifest_scout_sha256"
+    printf 'Scout: %s; launcher sha256: %s; payload sha256: %s\n' \
+        "$manifest_scout_version" "$manifest_scout_sha256" "$manifest_scout_payload_sha256"
+    printf 'Scout source: commit=%s; fingerprint=%s; dirty=%s\n' \
+        "$SCOUT_SOURCE_COMMIT" "$SCOUT_SOURCE_FINGERPRINT" "$SCOUT_SOURCE_DIRTY"
+    printf 'Scout build: .NET SDK %s; compiler=%s; provenance sha256=%s\n' \
+        "$SCOUT_BUILD_DOTNET_SDK" "$SCOUT_BUILD_COMPILER" "$manifest_scout_provenance_sha256"
     printf 'harness: script sha256=%s; %s sha256=%s\n' \
         "$manifest_script_sha256" "$manifest_hyperfine_version" "$manifest_hyperfine_sha256"
+    printf 'performance inputs: commit=%s; fingerprint=%s; dirty=%s\n' \
+        "$manifest_harness_commit" "$manifest_harness_fingerprint" "$manifest_harness_dirty"
     printf 'corpus pins: OpenSubtitles sha256=%s; Linux tree sha256=%s\n' \
         "$manifest_opensubtitles_sha256" "$manifest_linux_tree_sha256"
-    printf 'fixed threads: line regex=1; OpenSubtitles=4; Linux tree=%s\n' "$GATE_TREE_THREADS"
+    printf 'fixed threads: generated=%s; line regex=1; OpenSubtitles=4; Linux tree=%s\n' \
+        "$GATE_GENERATED_THREADS" "$GATE_TREE_THREADS"
+    printf 'sampling: OpenSubtitles=%s warm-up/%s measured; Linux tree=%s/%s; cold=%s/%s; generated=%s/%s; line regex=%s/%s\n' \
+        "$OPENSUBTITLES_WARMUP" "$OPENSUBTITLES_RUNS" \
+        "$TREE_WARMUP" "$TREE_RUNS" \
+        "$COLD_WARMUP" "$COLD_RUNS" \
+        "$BOUNDED_ASSIGNMENT_WARMUP" "$BOUNDED_ASSIGNMENT_RUNS" \
+        "$LINE_REGEX_WARMUP" "$LINE_REGEX_RUNS"
+    printf 'many-absent input arguments: %s\n' "$GATE_MANY_ABSENT_INPUT_COUNT"
+    if [ -n "$WORKLOAD" ]; then
+        printf 'scope: focused diagnosis; run --gate without --workload for the release-gate sequence\n'
+    else
+        printf 'scope: complete release-gate sequence\n'
+    fi
     printf 'commands: exact rg and Scout argv are stored in each aggregate JSON\n'
+}
+
+performance_inputs_dirty() {
+    if [ -n "$(git -C "$ROOT" status --porcelain=v1 --untracked-files=normal -- \
+        .github/workflows/release-gates.yml \
+        bench \
+        Directory.Build.props \
+        Directory.Build.rsp \
+        Directory.Build.targets \
+        Directory.Packages.props \
+        eng \
+        global.json \
+        native \
+        Scout.slnx \
+        src \
+        tests/PREREQS.lock)" ]; then
+        printf '1\n'
+    else
+        printf '0\n'
+    fi
 }
 
 shell_quote() {
@@ -545,9 +653,7 @@ make_smoke_corpus() {
 
 make_cold_tiny_corpus() {
     tiny_file="$OUT_DIR/cold-tiny.txt"
-    if [ ! -f "$tiny_file" ]; then
-        printf '%s\n' 'needle' > "$tiny_file"
-    fi
+    printf '%s\n' 'needle' > "$tiny_file"
 }
 
 make_bounded_assignment_corpus() {
@@ -602,6 +708,19 @@ make_line_regex_corpus() {
 
 make_absent_regexp_arguments() {
     awk '{ printf " -e %s", $0 }' "$1"
+}
+
+repeat_shell_argument() {
+    repeated_argument="$1"
+    repeated_count="$2"
+    repeated_arguments=""
+    repeated_index=0
+    while [ "$repeated_index" -lt "$repeated_count" ]; do
+        repeated_arguments="$repeated_arguments $repeated_argument"
+        repeated_index=$((repeated_index + 1))
+    done
+
+    printf '%s\n' "$repeated_arguments"
 }
 
 expect_no_match_command() {
@@ -912,23 +1031,13 @@ report_interleaved_gate() {
     report_gate_name="$1"
     report_gate_limit="$2"
     report_gate_json="$3"
-    report_gate_final_context="${4:-}"
     report_gate_status="0"
 
-    if [ -n "$report_gate_final_context" ]; then
-        "$PYTHON" "$ROOT/bench/hyperfine_gate.py" \
-            --input "$report_gate_json" \
-            --wall-limit "$report_gate_limit" \
-            --scout-rss-floor "$SCOUT_RSS_FLOOR" \
-            --workload "$report_gate_name" \
-            --final-failure-context "$report_gate_final_context" || report_gate_status="$?"
-    else
-        "$PYTHON" "$ROOT/bench/hyperfine_gate.py" \
-            --input "$report_gate_json" \
-            --wall-limit "$report_gate_limit" \
-            --scout-rss-floor "$SCOUT_RSS_FLOOR" \
-            --workload "$report_gate_name" || report_gate_status="$?"
-    fi
+    "$PYTHON" "$ROOT/bench/hyperfine_gate.py" \
+        --input "$report_gate_json" \
+        --wall-limit "$report_gate_limit" \
+        --scout-rss-floor "$SCOUT_RSS_FLOOR" \
+        --workload "$report_gate_name" || report_gate_status="$?"
 
     case "$report_gate_status" in
         0)
@@ -1026,36 +1135,22 @@ run_pair_impl() {
         printf '  Scout: %s\n' "$scout_command"
     fi
     if [ "$MODE" = "gate" ]; then
+        if [ "$name" != "cold_version" ]; then
+            printf 'Output equivalence:\n'
+            output_verification_mode=""
+            if [ "$no_shell" = "1" ]; then
+                output_verification_mode="--no-shell"
+            fi
+            "$PYTHON" "$ROOT/bench/verify_hyperfine_output.py" \
+                --workload "$name" \
+                --rg-command "$rg_command" \
+                --scout-command "$scout_command" \
+                --output "$OUT_DIR/$name.output.json" \
+                ${output_verification_mode:+"$output_verification_mode"}
+        fi
         run_hyperfine_interleaved "$no_shell" "$json" "$name" "$rg_command" "$scout_command" "$runs" "$warmup"
 
         if ! report_interleaved_gate "$name" "$gate" "$json"; then
-            if [ "$GATE_RETRY_FAILED_WORKLOADS" = "0" ]; then
-                return 1
-            fi
-
-            retry_attempt=0
-            while [ "$retry_attempt" -lt "$GATE_RETRY_FAILED_WORKLOADS" ]; do
-                retry_attempt=$((retry_attempt + 1))
-                retry_label="$name-retry-$retry_attempt"
-                retry_json="$OUT_DIR/$name.retry-$retry_attempt.json"
-
-                printf '\n-- %s retry %s/%s --\n' "$name" "$retry_attempt" "$GATE_RETRY_FAILED_WORKLOADS"
-                run_hyperfine_interleaved "$no_shell" "$retry_json" "$retry_label" "$rg_command" "$scout_command" "$runs" "$warmup"
-
-                retry_final_context=""
-                if [ "$retry_attempt" = "$GATE_RETRY_FAILED_WORKLOADS" ]; then
-                    retry_noun="retries"
-                    if [ "$GATE_RETRY_FAILED_WORKLOADS" = "1" ]; then
-                        retry_noun="retry"
-                    fi
-                    retry_final_context="after the initial attempt and $GATE_RETRY_FAILED_WORKLOADS $retry_noun"
-                fi
-
-                if report_interleaved_gate "$name" "$gate" "$retry_json" "$retry_final_context"; then
-                    return 0
-                fi
-            done
-
             return 1
         fi
         return
@@ -1214,12 +1309,6 @@ if [ -n "$WORKLOAD" ]; then
     is_gate_workload "$WORKLOAD" || fail "Unknown release-gate workload: $WORKLOAD. Run --list for valid names."
 fi
 
-case "$GATE_RETRY_FAILED_WORKLOADS" in
-    ''|*[!0-9]*)
-        fail "SCOUT_GATE_RETRY_FAILED_WORKLOADS must be a non-negative integer."
-        ;;
-esac
-
 case "$RUNS" in
     ''|*[!0-9]*|0*)
         fail "--runs must be a positive integer."
@@ -1243,6 +1332,10 @@ fi
 if [ "$MODE" = "list" ]; then
     list_workloads
     exit 0
+fi
+
+if [ "$MODE" = "gate" ] && [ -z "$WORKLOAD" ] && [ "$(performance_inputs_dirty)" != "0" ]; then
+    fail "The complete release-equivalent gate requires committed and clean performance inputs. Use --workload for dirty-tree diagnosis."
 fi
 
 RID="$(host_rid)"
@@ -1272,6 +1365,9 @@ Q_RG="$(shell_quote "$RG_BIN")"
 SCOUT_RSS_BASELINE_BIN="$(resolve_scout_rss_baseline_bin)"
 [ -x "$SCOUT_RSS_BASELINE_BIN" ] || fail "Missing executable Native AOT RSS baseline binary: $SCOUT_RSS_BASELINE_BIN"
 Q_SCOUT_RSS_BASELINE="$(shell_quote "$SCOUT_RSS_BASELINE_BIN")"
+if [ "$MODE" = "gate" ]; then
+    validate_scout_build_provenance
+fi
 RG_RSS_FLOOR="0"
 SCOUT_RSS_FLOOR="0"
 
@@ -1328,6 +1424,8 @@ fi
 make_cold_tiny_corpus
 Q_TINY="$(shell_quote "$OUT_DIR/cold-tiny.txt")"
 Q_OPEN=""
+Q_OPEN_DIRECTORY=""
+Q_OPEN_NAME=""
 Q_LINUX=""
 Q_BOUNDED_ASSIGNMENT_PATTERN=""
 Q_BOUNDED_ASSIGNMENT_INPUT=""
@@ -1335,6 +1433,7 @@ Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN=""
 Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT=""
 Q_LINE_REGEX_INPUT=""
 SHARED_DELEGATE_INPUTS=""
+MANY_ABSENT_INPUTS=""
 Q_LINE_REGEX_ABSENT_PATTERNS=""
 LINE_REGEX_ABSENT_REGEXP_ARGUMENTS=""
 
@@ -1342,6 +1441,8 @@ if workload_group_selected subtitles_en_literal subtitles_en_regex; then
     OPENSUBTITLES_EN="${SCOUT_BENCH_OPENSUBTITLES_EN:-}"
     OPENSUBTITLES_EN="$(require_gate_corpus_file "opensubtitles-en" "$OPENSUBTITLES_EN")"
     Q_OPEN="$(shell_quote "$OPENSUBTITLES_EN")"
+    Q_OPEN_DIRECTORY="$(shell_quote "$(dirname -- "$OPENSUBTITLES_EN")")"
+    Q_OPEN_NAME="$(shell_quote "$(basename -- "$OPENSUBTITLES_EN")")"
 fi
 
 if workload_group_selected \
@@ -1381,20 +1482,21 @@ if workload_group_selected \
     SHARED_DELEGATE_INPUTS="$Q_LINE_REGEX_INPUT $Q_LINE_REGEX_INPUT $Q_LINE_REGEX_INPUT $Q_LINE_REGEX_INPUT"
     Q_LINE_REGEX_ABSENT_PATTERNS="$(shell_quote "$OUT_DIR/line-regex/absent-patterns-64.txt")"
     LINE_REGEX_ABSENT_REGEXP_ARGUMENTS="$(make_absent_regexp_arguments "$OUT_DIR/line-regex/absent-patterns-64.txt")"
+    MANY_ABSENT_INPUTS="$(repeat_shell_argument "$Q_LINE_REGEX_INPUT" "$GATE_MANY_ABSENT_INPUT_COUNT")"
 fi
 
 RG_LINE_REGEX_PREFIX="$Q_RG --no-config --threads 1 --mmap --count-matches --no-messages"
 SCOUT_LINE_REGEX_PREFIX="env SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config --threads 1 --mmap --count-matches --no-messages"
 RG_LINE_REGEX_LINE_COUNT_PREFIX="$Q_RG --no-config --threads 1 --mmap --count --no-messages"
 SCOUT_LINE_REGEX_LINE_COUNT_PREFIX="env SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config --threads 1 --mmap --count --no-messages"
-RG_BOUNDED_ASSIGNMENT_COMMAND="$(expect_no_match_command "$Q_RG --no-config -U --count-matches --no-messages -f $Q_BOUNDED_ASSIGNMENT_PATTERN $Q_BOUNDED_ASSIGNMENT_INPUT" "rg bounded-assignment search")"
-SCOUT_BOUNDED_ASSIGNMENT_COMMAND="$(expect_no_match_command "$Q_SCOUT --no-config -U --count-matches --no-messages -f $Q_BOUNDED_ASSIGNMENT_PATTERN $Q_BOUNDED_ASSIGNMENT_INPUT" "Scout bounded-assignment search")"
-RG_LARGE_BOUNDED_UNICODE_CLASS_COMMAND="$(expect_no_match_command "$Q_RG --no-config -U --count-matches --no-messages -f $Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN $Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT" "rg large bounded Unicode-class search")"
-SCOUT_LARGE_BOUNDED_UNICODE_CLASS_COMMAND="$(expect_no_match_command "SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config -U --count-matches --no-messages -f $Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN $Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT" "Scout large bounded Unicode-class search")"
-RG_MANY_ABSENT_REGEXP_COMMAND="$(expect_no_match_command "$RG_LINE_REGEX_PREFIX $LINE_REGEX_ABSENT_REGEXP_ARGUMENTS $Q_LINE_REGEX_INPUT" "rg 64-pattern -e search")"
-SCOUT_MANY_ABSENT_REGEXP_COMMAND="$(expect_no_match_command "$SCOUT_LINE_REGEX_PREFIX $LINE_REGEX_ABSENT_REGEXP_ARGUMENTS $Q_LINE_REGEX_INPUT" "Scout 64-pattern -e search")"
-RG_MANY_ABSENT_PATTERN_FILE_COMMAND="$(expect_no_match_command "$RG_LINE_REGEX_PREFIX -f $Q_LINE_REGEX_ABSENT_PATTERNS $Q_LINE_REGEX_INPUT" "rg 64-pattern -f search")"
-SCOUT_MANY_ABSENT_PATTERN_FILE_COMMAND="$(expect_no_match_command "$SCOUT_LINE_REGEX_PREFIX -f $Q_LINE_REGEX_ABSENT_PATTERNS $Q_LINE_REGEX_INPUT" "Scout 64-pattern -f search")"
+RG_BOUNDED_ASSIGNMENT_COMMAND="$(expect_no_match_command "$Q_RG --no-config --threads $GATE_GENERATED_THREADS -U --count-matches --no-messages -f $Q_BOUNDED_ASSIGNMENT_PATTERN $Q_BOUNDED_ASSIGNMENT_INPUT" "rg bounded-assignment search")"
+SCOUT_BOUNDED_ASSIGNMENT_COMMAND="$(expect_no_match_command "$Q_SCOUT --no-config --threads $GATE_GENERATED_THREADS -U --count-matches --no-messages -f $Q_BOUNDED_ASSIGNMENT_PATTERN $Q_BOUNDED_ASSIGNMENT_INPUT" "Scout bounded-assignment search")"
+RG_LARGE_BOUNDED_UNICODE_CLASS_COMMAND="$(expect_no_match_command "$Q_RG --no-config --threads $GATE_GENERATED_THREADS -U --count-matches --no-messages -f $Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN $Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT" "rg large bounded Unicode-class search")"
+SCOUT_LARGE_BOUNDED_UNICODE_CLASS_COMMAND="$(expect_no_match_command "SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config --threads $GATE_GENERATED_THREADS -U --count-matches --no-messages -f $Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN $Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT" "Scout large bounded Unicode-class search")"
+RG_MANY_ABSENT_REGEXP_COMMAND="$(expect_no_match_command "$RG_LINE_REGEX_PREFIX $LINE_REGEX_ABSENT_REGEXP_ARGUMENTS $MANY_ABSENT_INPUTS" "rg 64-pattern -e search")"
+SCOUT_MANY_ABSENT_REGEXP_COMMAND="$(expect_no_match_command "$SCOUT_LINE_REGEX_PREFIX $LINE_REGEX_ABSENT_REGEXP_ARGUMENTS $MANY_ABSENT_INPUTS" "Scout 64-pattern -e search")"
+RG_MANY_ABSENT_PATTERN_FILE_COMMAND="$(expect_no_match_command "$RG_LINE_REGEX_PREFIX -f $Q_LINE_REGEX_ABSENT_PATTERNS $MANY_ABSENT_INPUTS" "rg 64-pattern -f search")"
+SCOUT_MANY_ABSENT_PATTERN_FILE_COMMAND="$(expect_no_match_command "$SCOUT_LINE_REGEX_PREFIX -f $Q_LINE_REGEX_ABSENT_PATTERNS $MANY_ABSENT_INPUTS" "Scout 64-pattern -f search")"
 RG_LINE_REGEX_BOUNDED_CLASS_EXACT_COMMAND="$(expect_no_match_command "$RG_LINE_REGEX_PREFIX '^[A-Za-z_]{70,90}$' $Q_LINE_REGEX_INPUT" "rg exact bounded-class search")"
 SCOUT_LINE_REGEX_BOUNDED_CLASS_EXACT_COMMAND="$(expect_no_match_command "$SCOUT_LINE_REGEX_PREFIX '^[A-Za-z_]{70,90}$' $Q_LINE_REGEX_INPUT" "Scout exact bounded-class search")"
 OPENSUBTITLES_RUNS="$(gate_opensubtitles_runs)"
@@ -1497,43 +1599,43 @@ run_pair \
 run_pair \
     "subtitles_en_literal" \
     "1.20" \
-    "$Q_RG --no-config --threads $GATE_LARGE_FILE_THREADS --mmap -n 'Sherlock Holmes' $Q_OPEN" \
-    "$Q_SCOUT --no-config --threads $GATE_LARGE_FILE_THREADS --mmap -n 'Sherlock Holmes' $Q_OPEN" \
+    "cd $Q_OPEN_DIRECTORY && $Q_RG --no-config --threads $GATE_LARGE_FILE_THREADS --mmap -n 'Sherlock Holmes' $Q_OPEN_NAME" \
+    "cd $Q_OPEN_DIRECTORY && $Q_SCOUT --no-config --threads $GATE_LARGE_FILE_THREADS --mmap -n 'Sherlock Holmes' $Q_OPEN_NAME" \
     "$OPENSUBTITLES_RUNS" \
     "$OPENSUBTITLES_WARMUP"
 run_pair \
     "subtitles_en_regex" \
     "1.20" \
-    "$Q_RG --no-config --threads $GATE_LARGE_FILE_THREADS -n '\\w{5}\\s+\\w{5}\\s+\\w{5}' $Q_OPEN" \
-    "$Q_SCOUT --no-config --threads $GATE_LARGE_FILE_THREADS -n '\\w{5}\\s+\\w{5}\\s+\\w{5}' $Q_OPEN" \
+    "cd $Q_OPEN_DIRECTORY && $Q_RG --no-config --threads $GATE_LARGE_FILE_THREADS -n '\\w{5}\\s+\\w{5}\\s+\\w{5}' $Q_OPEN_NAME" \
+    "cd $Q_OPEN_DIRECTORY && $Q_SCOUT --no-config --threads $GATE_LARGE_FILE_THREADS -n '\\w{5}\\s+\\w{5}\\s+\\w{5}' $Q_OPEN_NAME" \
     "$OPENSUBTITLES_RUNS" \
     "$OPENSUBTITLES_WARMUP"
 run_pair \
     "linux_recursive_literal" \
     "1.25" \
-    "$Q_RG --no-config --threads $GATE_TREE_THREADS -n 'PM_RESUME' $Q_LINUX" \
-    "$Q_SCOUT --no-config --threads $GATE_TREE_THREADS -n 'PM_RESUME' $Q_LINUX" \
+    "cd $Q_LINUX && $Q_RG --no-config --threads $GATE_TREE_THREADS -n 'PM_RESUME' ." \
+    "cd $Q_LINUX && $Q_SCOUT --no-config --threads $GATE_TREE_THREADS -n 'PM_RESUME' ." \
     "$TREE_RUNS" \
     "$TREE_WARMUP"
 run_pair \
     "linux_heldout_regex_general" \
     "1.50" \
-    "$Q_RG --no-config --threads $GATE_TREE_THREADS -n '\\b(?:struct|enum|union)\\s+[A-Za-z_][A-Za-z0-9_]*' $Q_LINUX" \
-    "env SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config --threads $GATE_TREE_THREADS -n '\\b(?:struct|enum|union)\\s+[A-Za-z_][A-Za-z0-9_]*' $Q_LINUX" \
+    "cd $Q_LINUX && $Q_RG --no-config --threads $GATE_TREE_THREADS -n '\\b(?:struct|enum|union)\\s+[A-Za-z_][A-Za-z0-9_]*' ." \
+    "cd $Q_LINUX && env SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config --threads $GATE_TREE_THREADS -n '\\b(?:struct|enum|union)\\s+[A-Za-z_][A-Za-z0-9_]*' ." \
     "$TREE_RUNS" \
     "$TREE_WARMUP"
 run_pair \
     "linux_heldout_capture_general" \
     "1.75" \
-    "$Q_RG --no-config --threads $GATE_TREE_THREADS -n --replace '\$1 \$2' '\\b(struct|enum|union)\\s+([A-Za-z_][A-Za-z0-9_]*)' $Q_LINUX" \
-    "env SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config --threads $GATE_TREE_THREADS -n --replace '\$1 \$2' '\\b(struct|enum|union)\\s+([A-Za-z_][A-Za-z0-9_]*)' $Q_LINUX" \
+    "cd $Q_LINUX && $Q_RG --no-config --threads $GATE_TREE_THREADS -n --replace '\$1 \$2' '\\b(struct|enum|union)\\s+([A-Za-z_][A-Za-z0-9_]*)' ." \
+    "cd $Q_LINUX && env SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config --threads $GATE_TREE_THREADS -n --replace '\$1 \$2' '\\b(struct|enum|union)\\s+([A-Za-z_][A-Za-z0-9_]*)' ." \
     "$TREE_RUNS" \
     "$TREE_WARMUP"
 run_pair \
     "linux_many_small_parallel" \
     "1.30" \
-    "$Q_RG --no-config --threads $GATE_TREE_THREADS -n 'struct' $Q_LINUX" \
-    "$Q_SCOUT --no-config --threads $GATE_TREE_THREADS -n 'struct' $Q_LINUX" \
+    "cd $Q_LINUX && $Q_RG --no-config --threads $GATE_TREE_THREADS -n 'struct' ." \
+    "cd $Q_LINUX && $Q_SCOUT --no-config --threads $GATE_TREE_THREADS -n 'struct' ." \
     "$TREE_RUNS" \
     "$TREE_WARMUP"
 run_pair_no_shell \

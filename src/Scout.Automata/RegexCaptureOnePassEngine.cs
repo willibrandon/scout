@@ -8,20 +8,30 @@ namespace Scout;
 internal sealed class RegexCaptureOnePassEngine(RegexNfa nfa)
 {
     private const int InitialCapacity = 16;
+    private const int MaximumCachedClosureStateFactor = 4;
     private const int MaximumCaptureSlotCount = 32;
     private const int MaximumStateCount = 4_096;
 
     private readonly RegexNfa _nfa = nfa;
-    private readonly List<RegexCaptureClosureFrame> _closureStack =
-        new(Math.Clamp(nfa.States.Count, 1, InitialCapacity));
-    private readonly List<int> _states = new(Math.Clamp(nfa.States.Count, 1, InitialCapacity));
+    private int[] _closureStates = new int[Math.Clamp(nfa.States.Count, 1, InitialCapacity)];
+    private uint[] _closurePositionMasks = new uint[Math.Clamp(nfa.States.Count, 1, InitialCapacity)];
+    private uint[] _closureClearMasks = new uint[Math.Clamp(nfa.States.Count, 1, InitialCapacity)];
+    private readonly int[] _dynamicStates = new int[nfa.States.Count];
+    private readonly uint[] _dynamicStatePositionMasks = new uint[nfa.States.Count];
+    private readonly uint[] _dynamicStateClearMasks = new uint[nfa.States.Count];
+    private readonly int[]?[] _closurePlanStates = new int[nfa.States.Count][];
+    private readonly uint[]?[] _closurePlanPositionMasks = new uint[nfa.States.Count][];
+    private readonly uint[]?[] _closurePlanClearMasks = new uint[nfa.States.Count][];
+    private readonly bool[] _closurePlanAttempted = new bool[nfa.States.Count];
     private readonly int[] _visited = new int[nfa.States.Count];
-    private readonly int _slotCount = checked(2 * (nfa.CaptureCount + 1));
     private readonly int[] _workingSlots = new int[checked(2 * (nfa.CaptureCount + 1))];
+    private readonly RegexLiteralRunTable _literalRuns = RegexLiteralRunTable.Create(nfa);
     private readonly ulong[] _asciiAtomMatches = CreateAsciiAtomMatches(nfa);
-    private int[] _stateSlots = new int[
-        checked(Math.Clamp(nfa.States.Count, 1, InitialCapacity) *
-        (2 * (nfa.CaptureCount + 1)))];
+    private int[] _states = [];
+    private uint[] _statePositionMasks = [];
+    private uint[] _stateClearMasks = [];
+    private int _cachedClosureStateCount;
+    private int _stateCount;
     private int _generation;
     private bool _disabled;
     private long _successfulReplayCount;
@@ -71,7 +81,7 @@ internal sealed class RegexCaptureOnePassEngine(RegexNfa nfa)
 
         _workingSlots.AsSpan().Fill(-1);
         _workingSlots[0] = start;
-        BuildClosure(_nfa.StartState, haystack, start, _workingSlots);
+        BuildClosure(_nfa.StartState, haystack, start);
 
         int position = start;
         while (position < end)
@@ -79,7 +89,7 @@ internal sealed class RegexCaptureOnePassEngine(RegexNfa nfa)
             int matchedIndex = -1;
             int target = -1;
             int consume = 0;
-            for (int index = 0; index < _states.Count; index++)
+            for (int index = 0; index < _stateCount; index++)
             {
                 int stateIndex = _states[index];
                 RegexNfaState state = _nfa.States[stateIndex];
@@ -122,20 +132,42 @@ internal sealed class RegexCaptureOnePassEngine(RegexNfa nfa)
                 return RegexCaptureOnePassResult.Fallback;
             }
 
-            ReadOnlySpan<int> slots = GetSlots(matchedIndex);
+            if (_literalRuns.TryGet(
+                _states[matchedIndex],
+                out ReadOnlySpan<byte> literalBytes,
+                out int literalSuccessor))
+            {
+                if (literalBytes.Length > end - position ||
+                    !haystack.Slice(position, literalBytes.Length).SequenceEqual(literalBytes))
+                {
+                    return RegexCaptureOnePassResult.Fallback;
+                }
+
+                target = literalSuccessor;
+                consume = literalBytes.Length;
+            }
+
+            ApplyCaptureActions(
+                _statePositionMasks[matchedIndex],
+                _stateClearMasks[matchedIndex],
+                position);
             position += consume;
-            BuildClosure(target, haystack, position, slots);
+            BuildClosure(target, haystack, position);
         }
 
-        for (int index = 0; index < _states.Count; index++)
+        for (int index = 0; index < _stateCount; index++)
         {
             if (_nfa.States[_states[index]].Kind != RegexNfaStateKind.Accept)
             {
                 continue;
             }
 
+            ApplyCaptureActions(
+                _statePositionMasks[index],
+                _stateClearMasks[index],
+                position);
             captureSlots.Fill(-1);
-            GetSlots(index).CopyTo(captureSlots);
+            _workingSlots.CopyTo(captureSlots);
             captureSlots[0] = start;
             captureSlots[1] = end;
             _successfulReplayCount++;
@@ -148,30 +180,35 @@ internal sealed class RegexCaptureOnePassEngine(RegexNfa nfa)
     private void BuildClosure(
         int stateIndex,
         ReadOnlySpan<byte> haystack,
-        int position,
-        ReadOnlySpan<int> slots)
+        int position)
     {
-        slots.CopyTo(_workingSlots);
-        _states.Clear();
-        _closureStack.Clear();
-        int generation = NextGeneration();
-        if (stateIndex >= 0)
+        int rootState = stateIndex;
+        if (TryUseClosurePlan(rootState))
         {
-            _closureStack.Add(RegexCaptureClosureFrame.Explore(stateIndex));
+            return;
         }
 
-        while (_closureStack.Count > 0)
+        bool buildClosurePlan = rootState >= 0 && !_closurePlanAttempted[rootState];
+        if (buildClosurePlan)
         {
-            int frameIndex = _closureStack.Count - 1;
-            RegexCaptureClosureFrame frame = _closureStack[frameIndex];
-            _closureStack.RemoveAt(frameIndex);
-            if (frame.Kind == RegexCaptureClosureFrameKind.RestoreSlot)
-            {
-                _workingSlots[frame.Slot] = frame.PreviousValue;
-                continue;
-            }
+            _closurePlanAttempted[rootState] = true;
+        }
 
-            stateIndex = frame.State;
+        _stateCount = 0;
+        int closureCount = 0;
+        int generation = NextGeneration();
+        bool sawPredicate = false;
+        if (stateIndex >= 0)
+        {
+            PushClosureState(ref closureCount, stateIndex, positionMask: 0, clearMask: 0);
+        }
+
+        while (closureCount > 0)
+        {
+            int frameIndex = --closureCount;
+            stateIndex = _closureStates[frameIndex];
+            uint positionMask = _closurePositionMasks[frameIndex];
+            uint clearMask = _closureClearMasks[frameIndex];
             if (_visited[stateIndex] == generation)
             {
                 continue;
@@ -186,42 +223,53 @@ internal sealed class RegexCaptureOnePassEngine(RegexNfa nfa)
                 case RegexNfaStateKind.LazyLoopSplit:
                     if (state.Alternative >= 0)
                     {
-                        _closureStack.Add(RegexCaptureClosureFrame.Explore(state.Alternative));
+                        PushClosureState(
+                            ref closureCount,
+                            state.Alternative,
+                            positionMask,
+                            clearMask);
                     }
 
                     if (state.Next >= 0)
                     {
-                        _closureStack.Add(RegexCaptureClosureFrame.Explore(state.Next));
+                        PushClosureState(
+                            ref closureCount,
+                            state.Next,
+                            positionMask,
+                            clearMask);
                     }
 
                     break;
                 case RegexNfaStateKind.CaptureStart:
                     int startSlot = checked(2 * state.CaptureIndex);
                     int endSlot = startSlot + 1;
-                    _closureStack.Add(
-                        RegexCaptureClosureFrame.Restore(startSlot, _workingSlots[startSlot]));
-                    _workingSlots[startSlot] = position;
-                    _closureStack.Add(
-                        RegexCaptureClosureFrame.Restore(endSlot, _workingSlots[endSlot]));
-                    _workingSlots[endSlot] = -1;
+                    SetPositionAction(ref positionMask, ref clearMask, startSlot);
+                    SetClearAction(ref positionMask, ref clearMask, endSlot);
                     if (state.Next >= 0)
                     {
-                        _closureStack.Add(RegexCaptureClosureFrame.Explore(state.Next));
+                        PushClosureState(
+                            ref closureCount,
+                            state.Next,
+                            positionMask,
+                            clearMask);
                     }
 
                     break;
                 case RegexNfaStateKind.CaptureEnd:
                     int slot = checked((2 * state.CaptureIndex) + 1);
-                    _closureStack.Add(
-                        RegexCaptureClosureFrame.Restore(slot, _workingSlots[slot]));
-                    _workingSlots[slot] = position;
+                    SetPositionAction(ref positionMask, ref clearMask, slot);
                     if (state.Next >= 0)
                     {
-                        _closureStack.Add(RegexCaptureClosureFrame.Explore(state.Next));
+                        PushClosureState(
+                            ref closureCount,
+                            state.Next,
+                            positionMask,
+                            clearMask);
                     }
 
                     break;
                 case RegexNfaStateKind.Predicate:
+                    sawPredicate = true;
                     if (RegexByteClass.PredicateMatches(
                             haystack,
                             position,
@@ -233,42 +281,131 @@ internal sealed class RegexCaptureOnePassEngine(RegexNfa nfa)
                             state.UnicodeClasses) &&
                         state.Next >= 0)
                     {
-                        _closureStack.Add(RegexCaptureClosureFrame.Explore(state.Next));
+                        PushClosureState(
+                            ref closureCount,
+                            state.Next,
+                            positionMask,
+                            clearMask);
                     }
 
                     break;
                 case RegexNfaStateKind.Atom:
                 case RegexNfaStateKind.Sparse:
                 case RegexNfaStateKind.Accept:
-                    AddState(stateIndex, _workingSlots);
+                    AddState(stateIndex, positionMask, clearMask);
                     break;
             }
         }
+
+        _states = _dynamicStates;
+        _statePositionMasks = _dynamicStatePositionMasks;
+        _stateClearMasks = _dynamicStateClearMasks;
+        if (buildClosurePlan && !sawPredicate)
+        {
+            CacheClosurePlan(rootState);
+        }
     }
 
-    private void AddState(int stateIndex, ReadOnlySpan<int> slots)
+    private void AddState(int stateIndex, uint positionMask, uint clearMask)
     {
-        int index = _states.Count;
-        EnsureSlotCapacity(index + 1);
-        slots.CopyTo(GetSlots(index));
-        _states.Add(stateIndex);
+        int index = _stateCount++;
+        _dynamicStates[index] = stateIndex;
+        _dynamicStatePositionMasks[index] = positionMask;
+        _dynamicStateClearMasks[index] = clearMask;
     }
 
-    private Span<int> GetSlots(int index)
+    private bool TryUseClosurePlan(int rootState)
     {
-        return _stateSlots.AsSpan(checked(index * _slotCount), _slotCount);
+        if (rootState < 0 ||
+            !_closurePlanAttempted[rootState] ||
+            _closurePlanStates[rootState] is not int[] states)
+        {
+            return false;
+        }
+
+        _states = states;
+        _statePositionMasks = _closurePlanPositionMasks[rootState]!;
+        _stateClearMasks = _closurePlanClearMasks[rootState]!;
+        _stateCount = states.Length;
+        return true;
     }
 
-    private void EnsureSlotCapacity(int rowCount)
+    private void CacheClosurePlan(int rootState)
     {
-        int requiredLength = checked(rowCount * _slotCount);
-        if (requiredLength <= _stateSlots.Length)
+        int maximumCachedStateCount = checked(
+            MaximumCachedClosureStateFactor * _nfa.States.Count);
+        if (_stateCount > maximumCachedStateCount - _cachedClosureStateCount)
         {
             return;
         }
 
-        int doubledLength = checked(_stateSlots.Length * 2);
-        Array.Resize(ref _stateSlots, Math.Max(requiredLength, doubledLength));
+        int[] states = _dynamicStates.AsSpan(0, _stateCount).ToArray();
+        uint[] positionMasks = _dynamicStatePositionMasks.AsSpan(0, _stateCount).ToArray();
+        uint[] clearMasks = _dynamicStateClearMasks.AsSpan(0, _stateCount).ToArray();
+        _closurePlanStates[rootState] = states;
+        _closurePlanPositionMasks[rootState] = positionMasks;
+        _closurePlanClearMasks[rootState] = clearMasks;
+        _cachedClosureStateCount += _stateCount;
+        _states = states;
+        _statePositionMasks = positionMasks;
+        _stateClearMasks = clearMasks;
+    }
+
+    private void PushClosureState(
+        ref int closureCount,
+        int stateIndex,
+        uint positionMask,
+        uint clearMask)
+    {
+        EnsureClosureCapacity(closureCount + 1);
+        _closureStates[closureCount] = stateIndex;
+        _closurePositionMasks[closureCount] = positionMask;
+        _closureClearMasks[closureCount] = clearMask;
+        closureCount++;
+    }
+
+    private void EnsureClosureCapacity(int requiredLength)
+    {
+        if (requiredLength <= _closureStates.Length)
+        {
+            return;
+        }
+
+        int newLength = Math.Max(requiredLength, checked(_closureStates.Length * 2));
+        Array.Resize(ref _closureStates, newLength);
+        Array.Resize(ref _closurePositionMasks, newLength);
+        Array.Resize(ref _closureClearMasks, newLength);
+    }
+
+    private void ApplyCaptureActions(uint positionMask, uint clearMask, int position)
+    {
+        while (positionMask != 0)
+        {
+            int slot = System.Numerics.BitOperations.TrailingZeroCount(positionMask);
+            _workingSlots[slot] = position;
+            positionMask &= positionMask - 1;
+        }
+
+        while (clearMask != 0)
+        {
+            int slot = System.Numerics.BitOperations.TrailingZeroCount(clearMask);
+            _workingSlots[slot] = -1;
+            clearMask &= clearMask - 1;
+        }
+    }
+
+    private static void SetPositionAction(ref uint positionMask, ref uint clearMask, int slot)
+    {
+        uint bit = 1U << slot;
+        positionMask |= bit;
+        clearMask &= ~bit;
+    }
+
+    private static void SetClearAction(ref uint positionMask, ref uint clearMask, int slot)
+    {
+        uint bit = 1U << slot;
+        clearMask |= bit;
+        positionMask &= ~bit;
     }
 
     private int NextGeneration()

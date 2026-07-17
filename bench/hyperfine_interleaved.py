@@ -498,6 +498,7 @@ def run_interleaved(args: argparse.Namespace) -> None:
         "scout": args.scout_command,
     }
     document["sampling"]["raw_round_files"] = raw_paths
+    document["sampling"]["warmup_rounds"] = args.warmup_rounds
     document["sampling"]["measured_round_attempts"] = (
         args.rounds + len(discarded_paths)
     )

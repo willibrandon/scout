@@ -206,35 +206,19 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.checkout_ref || github.sha }}
+      - name: Record performance checkout
+        id: performance-checkout
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.102
-      - name: Restore pinned ripgrep oracle archive
-        env:
-          SCOUT_HOST_RID: osx-arm64
-          SCOUT_ORACLE_ENVIRONMENT: github-actions
-        run: eng/restore-ripgrep-oracle.sh
-      - name: Restore
-        run: dotnet restore Scout.slnx
-      - name: Install pinned hyperfine
-        run: eng/setup-hyperfine.sh
-      - name: Fetch pinned corpora
-        run: eng/fetch-corpora.sh --all
-      - name: Preflight
-        timeout-minutes: 30
-        env:
-          SCOUT_HOST_RID: osx-arm64
-          SCOUT_ORACLE_ENVIRONMENT: github-actions
-        run: eng/preflight.sh
-      - name: Link native executable
-        run: native/build-app-unix.sh osx-arm64 --with-differentials
-      - name: Run hyperfine gates
-        run: bench/run-hyperfine.sh --gate
+      - name: Run performance gate
+        run: eng/run-performance-gate.sh
       - name: Upload hyperfine gate aggregates
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: hyperfine-gate-aggregates-${{ github.sha }}-${{ github.run_attempt }}
+          name: hyperfine-gate-aggregates-${{ steps.performance-checkout.outputs.sha }}-${{ github.run_attempt }}
           path: artifacts/bench/hyperfine/*.json
           if-no-files-found: warn
 

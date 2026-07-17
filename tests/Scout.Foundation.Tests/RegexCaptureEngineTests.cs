@@ -550,6 +550,84 @@ public sealed class RegexCaptureEngineTests()
     }
 
     /// <summary>
+    /// Verifies predicate-bearing closures are reevaluated for every authoritative span.
+    /// </summary>
+    [Fact]
+    public void ReevaluatesPredicateClosuresAcrossExactReplays()
+    {
+        RegexCaptureEngine engine = Compile(@"\b(foo)");
+        byte[] haystack = "foo xfoo foo"u8.ToArray();
+        int[] captureSlots = new int[4];
+
+        Assert.True(engine.TryReplayCaptures(haystack, 0, 3, captureSlots));
+        Assert.Equal([0, 3, 0, 3], captureSlots);
+        Assert.False(engine.TryReplayCaptures(haystack, 5, 8, captureSlots));
+        Assert.True(engine.TryReplayCaptures(haystack, 9, 12, captureSlots));
+        Assert.Equal([9, 12, 9, 12], captureSlots);
+        Assert.Equal(2, engine.OnePassReplayCount);
+        Assert.True(engine.IsOnePassReplayEnabled);
+    }
+
+    /// <summary>
+    /// Verifies cached literal branches retain independent participating-capture actions.
+    /// </summary>
+    [Fact]
+    public void CachedLiteralBranchesPreserveParticipatingCaptures()
+    {
+        RegexCaptureEngine engine = Compile("((foo)|(bar))");
+        int[] captureSlots = new int[8];
+
+        Assert.True(engine.TryReplayCaptures("foo"u8, 0, 3, captureSlots));
+        Assert.Equal([0, 3, 0, 3, 0, 3, -1, -1], captureSlots);
+        Assert.True(engine.TryReplayCaptures("bar"u8, 0, 3, captureSlots));
+        Assert.Equal([0, 3, 0, 3, -1, -1, 0, 3], captureSlots);
+        Assert.True(engine.TryReplayCaptures("foo"u8, 0, 3, captureSlots));
+        Assert.Equal([0, 3, 0, 3, 0, 3, -1, -1], captureSlots);
+        Assert.Equal(3, engine.OnePassReplayCount);
+        Assert.True(engine.IsOnePassReplayEnabled);
+    }
+
+    /// <summary>
+    /// Verifies a compiled literal run still observes the authoritative exclusive end.
+    /// </summary>
+    [Fact]
+    public void LiteralRunReplayHonorsAuthoritativeEnd()
+    {
+        RegexCaptureEngine engine = Compile("(foobar)");
+        int[] captureSlots = new int[4];
+
+        Assert.False(engine.TryReplayCaptures("foobar"u8, 0, 4, captureSlots));
+        Assert.False(engine.TryReplayCaptures("fooxar"u8, 0, 6, captureSlots));
+        Assert.True(engine.TryReplayCaptures("foobar"u8, 0, 6, captureSlots));
+        Assert.Equal([0, 6, 0, 6], captureSlots);
+        Assert.Equal(1, engine.OnePassReplayCount);
+        Assert.True(engine.IsOnePassReplayEnabled);
+    }
+
+    /// <summary>
+    /// Verifies the bounded one-pass engine applies capture actions through mask bit 31.
+    /// </summary>
+    [Fact]
+    public void OnePassReplaySupportsHighestCaptureActionBit()
+    {
+        string pattern = string.Concat(Enumerable.Repeat("()", 14)) + "(a)";
+        RegexCaptureEngine engine = Compile(pattern);
+        int[] captureSlots = new int[32];
+
+        Assert.True(engine.TryReplayCaptures("a"u8, 0, 1, captureSlots));
+        Assert.Equal([0, 1], captureSlots[..2]);
+        for (int captureIndex = 1; captureIndex <= 14; captureIndex++)
+        {
+            Assert.Equal(0, captureSlots[2 * captureIndex]);
+            Assert.Equal(0, captureSlots[(2 * captureIndex) + 1]);
+        }
+
+        Assert.Equal([0, 1], captureSlots[30..]);
+        Assert.Equal(1, engine.OnePassReplayCount);
+        Assert.True(engine.IsOnePassReplayEnabled);
+    }
+
+    /// <summary>
     /// Verifies concurrent exact-span replay rents independent mutable engines while sharing one automaton.
     /// </summary>
     [Fact]

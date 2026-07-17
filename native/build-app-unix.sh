@@ -65,6 +65,16 @@ read_msbuild_property() {
     ' "$ROOT/Directory.Build.props"
 }
 
+sha256_file() {
+    path="$1"
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$path" | awk '{ print $1 }'
+        return
+    fi
+
+    shasum -a 256 "$path" | awk '{ print $1 }'
+}
+
 if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
     printf 'usage: %s <rid> [--with-differentials|--smoke-only]\n' "$0" >&2
     exit 2
@@ -174,6 +184,37 @@ elif [ "$RID" = "osx-x64" ]; then
 else
     "$CC" -O2 -DSCOUT_LAUNCHER "${SCOUT_IDENTITY_CFLAGS[@]}" "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -o "$BIN/scout"
 fi
+
+SOURCE_COMMIT="$(git rev-parse HEAD)"
+SOURCE_FINGERPRINT="$(sh "$ROOT/eng/source-fingerprint.sh")"
+SOURCE_DIRTY="0"
+if [ -n "$(git status --porcelain=v1 --untracked-files=normal -- \
+    Directory.Build.props \
+    Directory.Build.rsp \
+    Directory.Build.targets \
+    Directory.Packages.props \
+    Scout.slnx \
+    global.json \
+    native \
+    src \
+    tests/PREREQS.lock)" ]; then
+    SOURCE_DIRTY="1"
+fi
+COMPILER_VERSION="$(cc --version | sed -n '1p')"
+PROVENANCE="$BIN/scout-real.provenance"
+{
+    printf 'format=1\n'
+    printf 'source_commit=%s\n' "$SOURCE_COMMIT"
+    printf 'source_fingerprint=%s\n' "$SOURCE_FINGERPRINT"
+    printf 'source_dirty=%s\n' "$SOURCE_DIRTY"
+    printf 'rid=%s\n' "$RID"
+    printf 'version=%s\n' "$SCOUT_VERSION"
+    printf 'dotnet_sdk=%s\n' "$(dotnet --version)"
+    printf 'compiler=%s\n' "$COMPILER_VERSION"
+    printf 'launcher_sha256=%s\n' "$(sha256_file "$BIN/scout")"
+    printf 'payload_sha256=%s\n' "$(sha256_file "$REAL_BIN")"
+} > "$PROVENANCE.tmp"
+mv "$PROVENANCE.tmp" "$PROVENANCE"
 
 "$BIN/scout" -V > "$BIN/version.out"
 printf '%s\n' "$SCOUT_SHORT_VERSION" > "$BIN/version.expected"

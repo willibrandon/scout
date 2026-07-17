@@ -34,24 +34,25 @@ bench/run-hyperfine.sh --smoke
 Release-gate run:
 
 ```sh
-eng/fetch-corpora.sh --all
-
-SCOUT_BIN=artifacts/bin/osx-arm64/scout \
-bench/run-hyperfine.sh --gate
+eng/run-performance-gate.sh
 ```
 
 Run one release-gate workload with the same sampling and limits:
 
 ```sh
-SCOUT_BIN=artifacts/bin/osx-arm64/scout \
-bench/run-hyperfine.sh --gate --workload linux_heldout_capture_general
+eng/run-performance-gate.sh --workload linux_heldout_capture_general
 ```
 
 The focused form validates the selected workload's corpus, measures the RSS
 floor required by its memory limit, and writes the same aggregate JSON as the
-full gate. `bench/run-hyperfine.sh --list` prints the accepted names.
-Set `SCOUT_ORACLE_ENVIRONMENT=github-actions` to use the hosted pinned rg
-binary during a local comparison when that oracle archive has been restored.
+full gate. It is a diagnostic run; the full `--gate` command executes the
+release-gate workload sequence. `bench/run-hyperfine.sh --list` prints the
+accepted names. Gate mode selects the hosted pinned rg binary by default.
+Set `SCOUT_ORACLE_ENVIRONMENT=local` for an explicit local-oracle comparison.
+The shared driver performs the same oracle restore, SDK restore, Hyperfine
+setup, corpus validation, preflight, Native AOT build, and gate invocation used
+by the workflow. A complete gate requires committed and clean performance
+inputs; a focused workload remains available while developing a change.
 
 GitHub's default `CI` workflow runs hosted cross-platform build, test, format,
 fuzz, and native link checks. After `CI` succeeds on `main`, it dispatches the
@@ -83,12 +84,14 @@ manifest. The committed lockfile now contains frozen hashes, so
 The script enforces the wall-time gates from `docs/DESIGN.md` with paired
 ABBA/BAAB cycles. One fresh Hyperfine process runs `rg`, Scout, Scout, `rg`; the
 next runs Scout, `rg`, `rg`, Scout. A cycle ratio is the geometric mean of those
-two round ratios, and the gate uses the median cycle ratio. Six valid measured
-rounds therefore provide twelve timing samples for each binary while balancing
-every command position as filesystem-cache and hosted-runner conditions change.
-Warmup rounds alternate in the same way. A zero-valued measured wall time is a
+two round ratios, and the gate uses the median cycle ratio. Ten valid measured
+rounds therefore provide twenty timing samples for each binary and five cycle
+ratios while balancing every command position as filesystem-cache and
+hosted-runner conditions change. Two warmup rounds alternate in the same way,
+preserving the previous total of twelve warmup and measured rounds while moving
+more observations into the prespecified result. A zero-valued measured wall time is a
 timer-resolution artifact, so the harness discards the entire balanced round
-and repeats the same ABBA or BAAB position schedule. It collects six valid
+and repeats the same ABBA or BAAB position schedule. It collects ten valid
 measured rounds, allows at most eight timer-resolution replacements per
 workload attempt, and records each discarded round for diagnosis.
 Raw per-round JSON and the aggregated wall, user CPU, system CPU, and RSS
@@ -96,12 +99,16 @@ samples remain in the output directory for diagnosis. The hosted performance
 job uploads the top-level aggregate JSON even when the gate fails, so the exact
 inputs to every completed attempt remain
 available without uploading the much larger per-round sample tree.
-Each aggregate records the exact rg and Scout command lines. The gate log begins
-with a compact reproducibility manifest containing the host OS and architecture,
-logical CPU count, binary versions and hashes, harness and Hyperfine hashes,
-frozen corpus hashes, selected workload, and fixed thread counts. A focused
-`--workload` run also prints its two commands in the log for direct local-to-CI
-comparison.
+Each aggregate records the exact rg and Scout command lines. The gate verifies
+that the Native AOT payload was built from the current source content. Its
+reproducibility manifest records the OS build, hardware model, logical CPU
+count, source fingerprint, build toolchain, launcher and payload hashes,
+performance-input commit and fingerprint, Hyperfine hash, frozen corpus hashes,
+selected workload, and fixed thread counts. A focused `--workload` run also
+prints its two commands.
+Before timing, the gate executes both commands once and compares a C-locale
+sorted-line SHA-256 digest. The digest, byte count, and line count are written
+to the uploaded workload output JSON.
 
 Each attempt prints the wall and RSS components as either within or exceeding
 their limits, followed by one overall result that names the workload and failed
@@ -111,11 +118,10 @@ dimensions. RSS is compared in exact bytes. Its report includes exact byte
 counts, three-decimal MiB values, the measured floor and formula, and signed
 headroom or excess so a close failure cannot look equal to its rounded limit.
 
-If a workload exceeds its timing or RSS gate, the script repeats only that
-workload up to two times and requires a retry to pass the same gates. This keeps
-stable regressions blocking without requiring a complete release-gate rerun for
-one noisy hosted-runner sample. Set `SCOUT_GATE_RETRY_FAILED_WORKLOADS=N` to
-change the retry count, or set it to `0` to disable retries.
+The shared release-equivalent driver requires the source, native build inputs,
+and complete performance harness to be committed and clean. Each workload has
+one prespecified warmup and measured sample set. A failed
+wall-time or RSS result remains the result for that gate invocation.
 
 The OpenSubtitles regex workload is a public benchmark workload. It pins
 `--threads 4` so the segmented regex path is measured against a stable worker
@@ -131,22 +137,26 @@ independent of the public OpenSubtitles pattern family. The non-capturing
 workload measures general alternation and prefilter behavior, and the
 replacement workload measures the same class of search through capture output.
 All four Linux-tree workloads pass `--threads 3` to both rg and Scout. The fixed
-worker count keeps local and hosted runs comparable when the machines expose
-different logical CPU counts.
+worker count makes search concurrency identical. The manifest records the host
+hardware and OS build; the hosted `macos-26` result is the release decision.
+Tree commands run from the corpus root with `.` as the argument, giving local
+and hosted runs the same output paths.
 
 The generated `bounded_assignment_no_match` workload uses issue #30's exact
 pattern and an 800-line input containing repeated `bitbucket` candidates but no
 credential. `-U --count-matches --no-messages` reproduces the reported CLI path
 while presenting the complete file to the regex engine as one haystack. A
 no-match exit code of `1` is normalized for hyperfine; an unexpected match or
-any search failure still fails the workload. Its median balanced-cycle ratio must
+any search failure still fails the workload. Both commands pin `--threads 1`.
+Its median balanced-cycle ratio must
 remain at or below 1.50x the pinned `rg` oracle.
 
 The generated `large_bounded_unicode_class_no_match` workload uses issue #32's
 exact `x[\w-]{50,1000}` pattern and 5,000 deterministic no-match candidates.
 Scout runs with `SCOUT_REGEX_SPECIALIZATION_MODE=general`, so the comparison
 measures the general automata implementation without domain or benchmark-family
-recognizers. Its median balanced-cycle ratio must remain at or below 1.50x the
+recognizers. Both commands pin `--threads 1`. Its median balanced-cycle ratio
+must remain at or below 1.50x the
 pinned `rg` oracle.
 
 The issue #37, #36, and #44 gates share a deterministic CRLF corpus made from
@@ -158,8 +168,10 @@ declaration expression, and both the CRLF-aware and exact
 `^[A-Za-z_]{70,90}$` identifier-class expressions. The issue #36 workload
 measures the original four-branch shared-prefix alternation across four
 sequential scans of the corpus, keeping each timed command above the host timer
-resolution. The issue #44 workloads search for the same 64 absent literals once
-through repeated `-e` arguments and once through a pattern file.
+resolution. The issue #44 workloads search for the same 64 absent literals
+through repeated `-e` arguments and a pattern file. Each timed command scans
+sixteen copies of the input argument, keeping the absent-pattern comparison
+above Hyperfine's short-command warning range.
 Every command pins `--threads 1 --mmap` and uses
 either `--count` or `--count-matches`. Scout runs with
 `SCOUT_REGEX_SPECIALIZATION_MODE=general` so these gates
@@ -176,8 +188,8 @@ Only the leading command supplies a clean RSS sample. Alternating rounds put rg
 and Scout first once per cycle, so neither measurement inherits the other
 process's peak.
 
-In gate mode, every workload uses six valid measured rounds and six warmup
-rounds by default. That produces twelve measured timing samples and three clean RSS
-samples per binary, plus twelve warmup executions per binary. An explicit gate
+In gate mode, every workload uses ten valid measured rounds and two warmup
+rounds by default. That produces twenty measured timing samples and five clean
+RSS samples per binary, plus four warmup executions per binary. An explicit gate
 `--runs` value must be even so every ABBA round has its BAAB partner. An explicit
 gate `--warmup` value must also be even; zero disables warmups.

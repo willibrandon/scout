@@ -82,41 +82,17 @@ class HyperfineGateTests(unittest.TestCase):
             scout_floor_bytes=10_485_760,
         )
 
-        report = format_gate_report(
-            evaluation,
-            "line_regex_word_boundary_general",
-            "after the initial attempt and 2 retries",
-        )
+        report = format_gate_report(evaluation, "line_regex_word_boundary_general")
 
         self.assertEqual(("wall", "RSS"), evaluation["failures"])
         self.assertIn("1.750000x exceeded 1.500000x limit", report)
         self.assertIn(
-            "Result: FAIL after the initial attempt and 2 retries "
-            "(line_regex_word_boundary_general: wall and RSS)",
+            "Result: FAIL (line_regex_word_boundary_general: wall and RSS)",
             report,
         )
         self.assertEqual(1, report.count("FAIL"))
         self.assertNotIn("PASS", report)
         self.assertEqual(12, gate_exit_code(evaluation))
-
-    def test_final_failure_uses_singular_retry_context(self) -> None:
-        evaluation = evaluate_gate(
-            self._document(1.75, 8_388_608, 20_971_520),
-            wall_limit=1.5,
-            scout_floor_bytes=10_485_760,
-        )
-
-        report = format_gate_report(
-            evaluation,
-            "cold_version",
-            "after the initial attempt and 1 retry",
-        )
-
-        self.assertIn(
-            "Result: FAIL after the initial attempt and 1 retry "
-            "(cold_version: wall)",
-            report,
-        )
 
     def test_exact_rss_limit_is_within_gate(self) -> None:
         evaluation = evaluate_gate(
