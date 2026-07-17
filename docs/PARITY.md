@@ -78,8 +78,8 @@ Current ablation collection:
 | `general` | `shared_delegate_prefix_general` | Pending first release-gate sample | `<= 1.50x` | Issue #36 shared-prefix alternation over four sparse delegate declarations. |
 | `general` | `many_absent_regexp_general` | Pending first release-gate sample | `<= 1.50x` | Issue #44 no-match scan with 64 repeated `-e` expressions. |
 | `general` | `many_absent_pattern_file_general` | Pending first release-gate sample | `<= 1.50x` | Issue #44 no-match scan with the same 64 expressions supplied through `-f`. |
-| `general` | `linux_heldout_regex_general` | `1.458x` release-gate retry | `<= 1.50x` | Held-out Linux-tree regex with domain, benchmark-family, and corpus-specific recognizers disabled. |
-| `general` | `linux_heldout_capture_general` | `1.520x` release gate | `<= 1.75x` | Held-out Linux-tree replacement workload through capture output with the same recognizers disabled. |
+| `general` | `linux_heldout_regex_general` | `1.458x` release-gate retry (2026-06-30) | `<= 1.50x` | Held-out Linux-tree regex with domain, benchmark-family, and corpus-specific recognizers disabled. |
+| `general` | `linux_heldout_capture_general` | `1.520x` release gate (2026-06-30) | `<= 1.75x` | Held-out Linux-tree replacement workload through capture output with the same recognizers disabled. |
 | `fallback` | Local diagnostic control. | Not release-gated. | N/A | Spot-checks core automata behavior without recognizer or guard acceleration; it is not used for a release-speed claim. |
 
 ### Native AOT fixed RSS floor for release RSS gates

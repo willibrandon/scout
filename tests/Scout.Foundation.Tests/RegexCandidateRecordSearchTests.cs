@@ -342,6 +342,78 @@ public sealed class RegexCandidateRecordSearchTests
     }
 
     /// <summary>
+    /// Verifies dense candidates hand off to record verification when a caller requires the
+    /// authoritative match column.
+    /// </summary>
+    [Fact]
+    public void DenseCandidateHandoffReportsAuthoritativeMatchColumn()
+    {
+        byte[][] patterns = [Encoding.ASCII.GetBytes(HeldOutPattern)];
+        RegexSearchPlan plan = CreateGeneralPlan(patterns);
+        var source = new StringBuilder();
+        for (int index = 0; index < RegexPrefilterState.MinimumSkipCount; index++)
+        {
+            source.Append("struct!\n");
+        }
+
+        source.Append("padding enum Result\n");
+        byte[] haystack = Encoding.ASCII.GetBytes(source.ToString());
+        var sink = new CapturingLineSink();
+
+        bool matched = LiteralLineSearcher.SearchWithRegexPlan(
+            haystack,
+            patterns,
+            plan,
+            ref sink,
+            requireMatchColumn: true);
+
+        Assert.True(matched);
+        Assert.Equal(1UL, sink.MatchedLines);
+        Assert.Equal(RegexPrefilterState.MinimumSkipCount + 1, sink.LineNumber);
+        Assert.Equal(9, sink.MatchColumn);
+        Assert.Equal("padding enum Result\n"u8.ToArray(), sink.Line.ToArray());
+    }
+
+    /// <summary>
+    /// Verifies dense candidates preserve searched-record accounting when unfiltered search
+    /// reaches a matching-line limit.
+    /// </summary>
+    [Fact]
+    public void DenseCandidateHandoffHonorsMatchingLineLimitAndSearchedLineCount()
+    {
+        byte[][] patterns = [Encoding.ASCII.GetBytes(HeldOutPattern)];
+        RegexSearchPlan plan = CreateGeneralPlan(patterns);
+        var source = new StringBuilder();
+        for (int index = 0; index < RegexPrefilterState.MinimumSkipCount; index++)
+        {
+            source.Append("struct!\n");
+        }
+
+        source.Append("miss\n");
+        source.Append("enum First\n");
+        source.Append("struct Second\n");
+        source.Append("union Third\n");
+        byte[] haystack = Encoding.ASCII.GetBytes(source.ToString());
+        var sink = new CapturingLineSink();
+
+        bool matched = LiteralLineSearcher.SearchWithRegexPlanAndCountLines(
+            haystack,
+            patterns,
+            plan,
+            ref sink,
+            out long searchedLines,
+            maxMatchingLines: 2,
+            requireMatchColumn: false);
+
+        Assert.True(matched);
+        Assert.Equal(2UL, sink.MatchedLines);
+        Assert.Equal(RegexPrefilterState.MinimumSkipCount + 3, sink.LineNumber);
+        Assert.Equal(RegexPrefilterState.MinimumSkipCount + 3, searchedLines);
+        Assert.Equal("struct Second\n"u8.ToArray(), sink.Line.ToArray());
+        Assert.True(plan.Matcher.HasAsciiProjectedMatchEndRunner);
+    }
+
+    /// <summary>
     /// Verifies candidate-record search preserves CRLF and NUL record boundaries.
     /// </summary>
     /// <param name="terminator">The record terminator text.</param>
