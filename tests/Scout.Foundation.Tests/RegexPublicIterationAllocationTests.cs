@@ -10,38 +10,71 @@ namespace Scout;
 /// </summary>
 public sealed class RegexPublicIterationAllocationTests
 {
-    private const int MeasurementIterations = 128;
+    private const int BaselineMeasurementIterations = 128;
+    private const int ScaledMeasurementIterations = 1_024;
+    private const int MeasurementSampleCount = 3;
+    private const long AllocationNoiseAllowance = 256;
 
     /// <summary>
-    /// Verifies one-shot public finds keep their adaptive state in stack storage.
+    /// Verifies repeated public finds retain stack-backed adaptive prefilter state.
     /// </summary>
     [Fact]
-    public void OneShotFindDoesNotAllocatePrefilterState()
+    public void OneShotFindPrefilterStateAllocationDoesNotGrowWithCallCount()
     {
-        var plan = RegexSearchPlan.Create(
-            ["abcdefgh(?:foo|bar)[0-9]"u8.ToArray()],
-            asciiCaseInsensitive: false);
+        RegexMatcher matcher = CreateRegexMatcher(out RegexAutomaton automaton);
         byte[] haystack = Encoding.UTF8.GetBytes(string.Concat(
-            Enumerable.Repeat("abcdefghfooX", RegexPrefilterState.MinimumSkipCount)));
+            Enumerable.Repeat("abcdefghfooX0", RegexPrefilterState.MinimumSkipCount)));
 
-        for (int index = 0; index < 4; index++)
+        Assert.NotEqual(RegexPrefilterKind.None, automaton.PrefilterKind);
+        using (RegexFindRunner runner = automaton.RentRecordFindRunner())
         {
-            _ = plan.Matcher.Find(haystack);
+            Assert.True(
+                runner.PikeVmLeaseVersion > 0,
+                "The allocation guard must exercise the pooled Pike VM engine.");
+            Assert.Null(runner.Find(haystack, startAt: 0));
+            Assert.True(
+                runner.IsPrefilterInert,
+                $"Expected dense false candidates to exercise adaptive prefilter state, but observed {runner.PrefilterSkipCount} scans without disabling it.");
+            Assert.True(
+                runner.PrefilterSkipCount >= RegexPrefilterState.MinimumSkipCount,
+                $"Expected at least {RegexPrefilterState.MinimumSkipCount} prefilter scans, but observed {runner.PrefilterSkipCount}.");
         }
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        RegexMatch? match = null;
-        for (int index = 0; index < MeasurementIterations; index++)
+        _ = MeasureOneShotFindAllocation(
+            matcher,
+            haystack,
+            ScaledMeasurementIterations);
+        _ = MeasureOneShotFindAllocation(
+            matcher,
+            haystack,
+            ScaledMeasurementIterations);
+
+        long baselineAllocation = long.MaxValue;
+        long scaledAllocation = long.MaxValue;
+        for (int sample = 0; sample < MeasurementSampleCount; sample++)
         {
-            match = plan.Matcher.Find(haystack);
+            bool measureScaledFirst = (sample & 1) != 0;
+            long firstAllocation = MeasureOneShotFindAllocation(
+                matcher,
+                haystack,
+                measureScaledFirst
+                    ? ScaledMeasurementIterations
+                    : BaselineMeasurementIterations);
+            long secondAllocation = MeasureOneShotFindAllocation(
+                matcher,
+                haystack,
+                measureScaledFirst
+                    ? BaselineMeasurementIterations
+                    : ScaledMeasurementIterations);
+            long baselineSample = measureScaledFirst ? secondAllocation : firstAllocation;
+            long scaledSample = measureScaledFirst ? firstAllocation : secondAllocation;
+            baselineAllocation = Math.Min(baselineAllocation, baselineSample);
+            scaledAllocation = Math.Min(scaledAllocation, scaledSample);
         }
 
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-
-        Assert.Null(match);
         Assert.True(
-            allocated <= 256,
-            $"Expected stack-backed one-shot prefilter state, but {allocated} bytes were allocated.");
+            scaledAllocation <= baselineAllocation + AllocationNoiseAllowance,
+            $"Expected stack-backed one-shot state: the minimum of {MeasurementSampleCount} samples was {baselineAllocation} bytes for {BaselineMeasurementIterations} finds and {scaledAllocation} bytes for {ScaledMeasurementIterations} finds.");
     }
 
     /// <summary>
@@ -148,6 +181,23 @@ public sealed class RegexPublicIterationAllocationTests
         count = regex.ForEachMatch(input, ref callbackCount, CountMatch);
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         Assert.Equal(count, callbackCount);
+        return allocated;
+    }
+
+    private static long MeasureOneShotFindAllocation(
+        RegexMatcher matcher,
+        ReadOnlySpan<byte> input,
+        int iterationCount)
+    {
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        MatcherMatch? match = null;
+        for (int index = 0; index < iterationCount; index++)
+        {
+            match = matcher.Find(input);
+        }
+
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        Assert.Null(match);
         return allocated;
     }
 
