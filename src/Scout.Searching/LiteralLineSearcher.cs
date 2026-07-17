@@ -911,6 +911,22 @@ public static class LiteralLineSearcher
             regexPlan,
             invertMatch: false,
             requireMatchColumn);
+        if (CanSearchIndependentRecords(regexPlan, invertMatch: false) &&
+            RegexPrefilterRecordSearcher.TrySearchLines(
+                haystack,
+                regexPlan,
+                ref sink,
+                out bool prefilteredMatched,
+                out long prefilteredSearchedLines,
+                countSearchedLines,
+                maxMatchingLines,
+                nullData,
+                requireMatchColumn))
+        {
+            searchedLines = prefilteredSearchedLines;
+            return prefilteredMatched;
+        }
+
         if (useForwardMatchEnds &&
             !regexPlan.Matcher.CanSearchWholeHaystackWithFullMatches)
         {

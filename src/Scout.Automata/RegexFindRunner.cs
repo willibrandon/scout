@@ -6,18 +6,24 @@ namespace Scout;
 /// <param name="automaton">The automaton that owns the runner pool and search guards.</param>
 /// <param name="pikeVm">The rented Pike VM, or <see langword="null" /> for another engine kind.</param>
 /// <param name="pikeVmLeaseVersion">The exclusive Pike VM lease generation.</param>
+/// <param name="onePassDfa">The rented one-pass DFA, or <see langword="null" /> for another engine kind.</param>
+/// <param name="onePassDfaLeaseVersion">The exclusive one-pass DFA lease generation.</param>
 /// <param name="state">The optional mutable state shared by this operation.</param>
 /// <param name="allowUnanchoredDfa">Whether the operation may activate an unanchored DFA.</param>
 internal ref struct RegexFindRunner(
     RegexAutomaton automaton,
     PikeVm? pikeVm,
     long pikeVmLeaseVersion,
+    RegexOnePassDfa? onePassDfa,
+    long onePassDfaLeaseVersion,
     RegexFindRunnerState? state,
     bool allowUnanchoredDfa)
 {
     private RegexAutomaton? _automaton = automaton;
     private PikeVm? _pikeVm = pikeVm;
     private long _pikeVmLeaseVersion = pikeVmLeaseVersion;
+    private RegexOnePassDfa? _onePassDfa = onePassDfa;
+    private long _onePassDfaLeaseVersion = onePassDfaLeaseVersion;
     private RegexFindRunnerState? _state = state;
     private readonly bool _allowUnanchoredDfa = allowUnanchoredDfa;
 
@@ -27,6 +33,7 @@ internal ref struct RegexFindRunner(
     internal readonly bool IsInitialized =>
         _automaton is not null &&
         (_pikeVm is null || _pikeVm.IsRunnerLeaseActive(_pikeVmLeaseVersion)) &&
+        (_onePassDfa is null || _onePassDfa.IsRunnerLeaseActive(_onePassDfaLeaseVersion)) &&
         (_state is null || _state.IsActive);
 
     /// <summary>
@@ -45,6 +52,11 @@ internal ref struct RegexFindRunner(
     /// Gets the current Pike VM lease generation, or zero for another engine kind.
     /// </summary>
     internal readonly long PikeVmLeaseVersion => _pikeVmLeaseVersion;
+
+    /// <summary>
+    /// Gets the current one-pass DFA lease generation, or zero for another engine kind.
+    /// </summary>
+    internal readonly long OnePassDfaLeaseVersion => _onePassDfaLeaseVersion;
 
     /// <summary>
     /// Gets a value indicating whether the current DFA executes an ASCII projection.
@@ -66,11 +78,12 @@ internal ref struct RegexFindRunner(
     /// </summary>
     /// <param name="other">The other operation-scoped lease.</param>
     /// <returns>
-    /// <see langword="true" /> when both values refer to the same Pike VM or lazy-DFA state.
+    /// <see langword="true" /> when both values refer to the same mutable engine state.
     /// </returns>
     internal readonly bool SharesPooledStateWith(in RegexFindRunner other)
     {
         return _pikeVm is not null && ReferenceEquals(_pikeVm, other._pikeVm) ||
+            _onePassDfa is not null && ReferenceEquals(_onePassDfa, other._onePassDfa) ||
             _state is not null && ReferenceEquals(_state, other._state);
     }
 
@@ -85,6 +98,7 @@ internal ref struct RegexFindRunner(
         RegexAutomaton? automaton = _automaton;
         if (automaton is null ||
             _pikeVm is not null && !_pikeVm.IsRunnerLeaseActive(_pikeVmLeaseVersion) ||
+            _onePassDfa is not null && !_onePassDfa.IsRunnerLeaseActive(_onePassDfaLeaseVersion) ||
             _state is not null && !_state.IsActive)
         {
             throw new ObjectDisposedException(nameof(RegexFindRunner));
@@ -94,8 +108,38 @@ internal ref struct RegexFindRunner(
             haystack,
             startAt,
             _pikeVm,
+            _onePassDfa,
             _state,
             _allowUnanchoredDfa);
+    }
+
+    /// <summary>
+    /// Attempts an authoritative match anchored at one exact candidate start.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startAt">The exact candidate start.</param>
+    /// <param name="length">Receives the matched byte length.</param>
+    /// <returns><see langword="true" /> when the candidate matches.</returns>
+    internal readonly bool TryMatchAt(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        out int length)
+    {
+        RegexAutomaton? automaton = _automaton;
+        if (automaton is null ||
+            _pikeVm is not null && !_pikeVm.IsRunnerLeaseActive(_pikeVmLeaseVersion) ||
+            _onePassDfa is not null && !_onePassDfa.IsRunnerLeaseActive(_onePassDfaLeaseVersion) ||
+            _state is not null && !_state.IsActive)
+        {
+            throw new ObjectDisposedException(nameof(RegexFindRunner));
+        }
+
+        return automaton.TryMatchAtWithRunner(
+            haystack,
+            startAt,
+            _pikeVm,
+            _onePassDfa,
+            out length);
     }
 
     /// <summary>
@@ -106,12 +150,17 @@ internal ref struct RegexFindRunner(
         RegexAutomaton? automaton = _automaton;
         PikeVm? pikeVm = _pikeVm;
         long pikeVmLeaseVersion = _pikeVmLeaseVersion;
+        RegexOnePassDfa? onePassDfa = _onePassDfa;
+        long onePassDfaLeaseVersion = _onePassDfaLeaseVersion;
         RegexFindRunnerState? state = _state;
         _automaton = null;
         _pikeVm = null;
         _pikeVmLeaseVersion = 0;
+        _onePassDfa = null;
+        _onePassDfaLeaseVersion = 0;
         _state = null;
         automaton?.ReturnFindPikeVm(pikeVm, pikeVmLeaseVersion);
+        automaton?.ReturnFindOnePassDfa(onePassDfa, onePassDfaLeaseVersion);
         state?.Dispose();
     }
 }

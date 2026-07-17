@@ -308,6 +308,25 @@ internal sealed class RegexMetaEngine
     public RegexPrefilterKind PrefilterKind => prefilter?.Kind ?? RegexPrefilterKind.None;
 
     /// <summary>
+    /// Creates an adaptive prefilter runner for a long independent-record search that would
+    /// otherwise enter an unanchored DFA before consulting its syntax-derived prefilter.
+    /// </summary>
+    /// <param name="haystackLength">The complete search-window length.</param>
+    /// <param name="startPredicate">The optional conservative candidate-start predicate.</param>
+    /// <returns>The candidate-record prefilter runner, or an unavailable runner.</returns>
+    internal RegexPrefilterRunner CreateCandidateRecordPrefilterRunner(
+        int haystackLength,
+        RegexStartPredicate? startPredicate)
+    {
+        return (Kind is RegexEngineKind.PikeVm or RegexEngineKind.OnePassDfa) &&
+            prefilter is not null &&
+            startPredicate?.HasRequiredStart != true &&
+            !ShouldUsePrefilterBeforeUnanchoredDfa(Math.Max(0, haystackLength))
+                ? new RegexPrefilterRunner(prefilter)
+                : default;
+    }
+
+    /// <summary>
     /// Gets the maximum lookbehind window required by the selected literal prefilter.
     /// </summary>
     public int RequiredLiteralWindow => prefilter?.RequiredLiteralWindow ?? 0;
@@ -2207,6 +2226,7 @@ internal sealed class RegexMetaEngine
             startPredicate,
             reachabilityCache: null,
             reusablePikeVm: null,
+            reusableOnePassDfa: null,
             reusableAnchoredDfa: null,
             reusableUnanchoredDfa: null,
             reusableUnanchoredDfaUsesAsciiProjection: false,
@@ -2239,6 +2259,35 @@ internal sealed class RegexMetaEngine
             pikeVm.TryEndRunnerLease(leaseVersion))
         {
             pikeVmPool.Return(pikeVm);
+        }
+    }
+
+    /// <summary>
+    /// Rents a reusable one-pass DFA when it is the selected authoritative engine.
+    /// </summary>
+    /// <returns>The reusable runner, or <see langword="null" /> for another engine kind.</returns>
+    internal RegexOnePassDfa? RentFindOnePassDfa()
+    {
+        if (Kind != RegexEngineKind.OnePassDfa || onePassDfaPool is null)
+        {
+            return null;
+        }
+
+        return onePassDfaPool.Rent() ?? new RegexOnePassDfa(GetNfa());
+    }
+
+    /// <summary>
+    /// Returns a reusable one-pass DFA rented for repeated authoritative searches.
+    /// </summary>
+    /// <param name="onePassDfa">The runner to return, or <see langword="null" />.</param>
+    /// <param name="leaseVersion">The exclusive runner lease generation.</param>
+    internal void ReturnFindOnePassDfa(RegexOnePassDfa? onePassDfa, long leaseVersion)
+    {
+        if (onePassDfa is not null &&
+            onePassDfaPool is not null &&
+            onePassDfa.TryEndRunnerLease(leaseVersion))
+        {
+            onePassDfaPool.Return(onePassDfa);
         }
     }
 
@@ -2353,6 +2402,7 @@ internal sealed class RegexMetaEngine
     /// <param name="startAt">The first permitted match start.</param>
     /// <param name="startPredicate">An optional conservative candidate-start predicate.</param>
     /// <param name="pikeVm">The operation-scoped Pike VM, or <see langword="null" />.</param>
+    /// <param name="onePassDfa">The operation-scoped one-pass DFA, or <see langword="null" />.</param>
     /// <param name="anchoredDfa">
     /// The operation-scoped anchored lazy DFA for exact-start candidates, or
     /// <see langword="null" />.
@@ -2374,13 +2424,17 @@ internal sealed class RegexMetaEngine
         int startAt,
         RegexStartPredicate? startPredicate,
         PikeVm? pikeVm,
+        RegexOnePassDfa? onePassDfa,
         RegexLazyDfa? anchoredDfa,
         RegexUnanchoredLazyDfa? unanchoredDfa,
         bool usesAsciiProjection,
         Span<RegexPrefilterState> prefilterState,
         bool allowUnanchoredDfa)
     {
-        if (pikeVm is null && anchoredDfa is null && unanchoredDfa is null)
+        if (pikeVm is null &&
+            onePassDfa is null &&
+            anchoredDfa is null &&
+            unanchoredDfa is null)
         {
             return Find(
                 haystack,
@@ -2388,6 +2442,7 @@ internal sealed class RegexMetaEngine
                 startPredicate,
                 reachabilityCache: null,
                 reusablePikeVm: null,
+                reusableOnePassDfa: null,
                 reusableAnchoredDfa: null,
                 reusableUnanchoredDfa: null,
                 reusableUnanchoredDfaUsesAsciiProjection: false,
@@ -2402,8 +2457,9 @@ internal sealed class RegexMetaEngine
                 Math.Clamp(startAt, 0, haystack.Length),
                 reachabilityCache: null,
                 reusablePikeVm: null,
-                anchoredDfa,
-                prefilterState);
+                reusableOnePassDfa: onePassDfa,
+                reusableAnchoredDfa: anchoredDfa,
+                prefilterState: prefilterState);
         }
 
         return Find(
@@ -2412,11 +2468,47 @@ internal sealed class RegexMetaEngine
             startPredicate,
             reachabilityCache: null,
             pikeVm,
+            onePassDfa,
             anchoredDfa,
             unanchoredDfa,
             usesAsciiProjection,
             prefilterState,
             allowUnanchoredDfa);
+    }
+
+    /// <summary>
+    /// Attempts an authoritative match at one exact candidate start with reusable engine state.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="start">The exact candidate start.</param>
+    /// <param name="pikeVm">The operation-scoped Pike VM, or <see langword="null" />.</param>
+    /// <param name="onePassDfa">The operation-scoped one-pass DFA, or <see langword="null" />.</param>
+    /// <param name="length">Receives the accepted match length.</param>
+    /// <returns><see langword="true" /> when the candidate matches.</returns>
+    internal bool TryMatchAtWithRunner(
+        ReadOnlySpan<byte> haystack,
+        int start,
+        PikeVm? pikeVm,
+        RegexOnePassDfa? onePassDfa,
+        out int length)
+    {
+        if (utf8 && !RegexByteClass.IsUtf8Boundary(haystack, start))
+        {
+            length = 0;
+            return false;
+        }
+
+        if (pikeVm is not null)
+        {
+            return pikeVm.TryMatchAt(haystack, start, out length);
+        }
+
+        return TryMatchAt(
+            haystack,
+            start,
+            out length,
+            reachabilityCache: null,
+            reusableOnePassDfa: onePassDfa);
     }
 
     /// <summary>
@@ -2462,6 +2554,25 @@ internal sealed class RegexMetaEngine
     {
         if (startPredicate?.HasRequiredStart == true ||
             ShouldUsePrefilterBeforeUnanchoredDfa(haystack.Length))
+        {
+            return default;
+        }
+
+        return RentUnfilteredMatchEndRunner(haystack, startPredicate);
+    }
+
+    /// <summary>
+    /// Rents one forward unanchored DFA after an adaptive prefilter becomes inert at a safe
+    /// independent-record boundary.
+    /// </summary>
+    /// <param name="haystack">The complete search window.</param>
+    /// <param name="startPredicate">An optional conservative candidate-start predicate.</param>
+    /// <returns>The rented runner, or an unavailable runner when forward iteration is ineligible.</returns>
+    internal RegexMatchEndRunner RentUnfilteredMatchEndRunner(
+        ReadOnlySpan<byte> haystack,
+        RegexStartPredicate? startPredicate)
+    {
+        if (startPredicate?.HasRequiredStart == true)
         {
             return default;
         }
@@ -2685,6 +2796,7 @@ internal sealed class RegexMetaEngine
         RegexStartPredicate? startPredicate,
         Dictionary<(int State, int Position), bool>? reachabilityCache,
         PikeVm? reusablePikeVm,
+        RegexOnePassDfa? reusableOnePassDfa,
         RegexLazyDfa? reusableAnchoredDfa,
         RegexUnanchoredLazyDfa? reusableUnanchoredDfa,
         bool reusableUnanchoredDfaUsesAsciiProjection,
@@ -2921,6 +3033,7 @@ internal sealed class RegexMetaEngine
                 startOffset,
                 reachabilityCache,
                 reusablePikeVm,
+                reusableOnePassDfa,
                 reusableAnchoredDfa,
                 prefilterState);
         }
@@ -2994,6 +3107,7 @@ internal sealed class RegexMetaEngine
                 startOffset,
                 reachabilityCache,
                 reusablePikeVm,
+                reusableOnePassDfa,
                 reusableAnchoredDfa,
                 prefilterState);
         }
@@ -3017,7 +3131,12 @@ internal sealed class RegexMetaEngine
             startPredicate);
         while (fallbackCandidates.MoveNext(out int start))
         {
-            if (TryMatchAt(haystack, start, out int length, reachabilityCache))
+            if (TryMatchAt(
+                    haystack,
+                    start,
+                    out int length,
+                    reachabilityCache,
+                    reusableOnePassDfa))
             {
                 return new RegexMatch(start, length);
             }
@@ -3054,7 +3173,7 @@ internal sealed class RegexMetaEngine
     private static bool UsesExactStartRequiredLiteralPrefilter(RegexPrefilter? candidatePrefilter)
     {
         return candidatePrefilter?.UsesRequiredLiteralWindow == true &&
-            candidatePrefilter.RequiredLiteralWindow == 0;
+            candidatePrefilter.UsesExactStartCandidates;
     }
 
     /// <summary>
@@ -3064,9 +3183,7 @@ internal sealed class RegexMetaEngine
     /// <returns><see langword="true" /> when every reported candidate begins at its match start.</returns>
     private static bool UsesExactStartPrefilter(RegexPrefilter? candidatePrefilter)
     {
-        return candidatePrefilter is not null &&
-            (!candidatePrefilter.UsesRequiredLiteralWindow ||
-                candidatePrefilter.RequiredLiteralWindow == 0);
+        return candidatePrefilter?.UsesExactStartCandidates == true;
     }
 
     /// <summary>
@@ -3076,6 +3193,9 @@ internal sealed class RegexMetaEngine
     /// <param name="startOffset">The first permitted match start.</param>
     /// <param name="reachabilityCache">Optional shared NFA reachability state.</param>
     /// <param name="reusablePikeVm">The Pike VM reserved for this search operation, when applicable.</param>
+    /// <param name="reusableOnePassDfa">
+    /// The one-pass DFA reserved for this search operation, when applicable.
+    /// </param>
     /// <param name="reusableAnchoredDfa">
     /// The anchored lazy DFA reserved for exact-start candidates, when applicable.
     /// </param>
@@ -3086,6 +3206,7 @@ internal sealed class RegexMetaEngine
         int startOffset,
         Dictionary<(int State, int Position), bool>? reachabilityCache,
         PikeVm? reusablePikeVm,
+        RegexOnePassDfa? reusableOnePassDfa,
         RegexLazyDfa? reusableAnchoredDfa,
         Span<RegexPrefilterState> prefilterState)
     {
@@ -3096,6 +3217,7 @@ internal sealed class RegexMetaEngine
                 startOffset,
                 reachabilityCache,
                 reusablePikeVm,
+                reusableOnePassDfa,
                 reusableAnchoredDfa,
                 prefilterState);
         }
@@ -3114,9 +3236,10 @@ internal sealed class RegexMetaEngine
 
         while (exactCandidates.MoveNext(out int start))
         {
-            if (TryMatchAtWithReusableAnchoredDfa(
+            if (TryMatchAtWithReusableEngine(
                     haystack,
                     start,
+                    reusableOnePassDfa,
                     reusableAnchoredDfa,
                     reachabilityCache,
                     out int length))
@@ -3135,6 +3258,9 @@ internal sealed class RegexMetaEngine
     /// <param name="startOffset">The first permitted match start.</param>
     /// <param name="reachabilityCache">Optional shared NFA reachability state.</param>
     /// <param name="reusablePikeVm">The Pike VM reserved for this search operation, when applicable.</param>
+    /// <param name="reusableOnePassDfa">
+    /// The one-pass DFA reserved for this search operation, when applicable.
+    /// </param>
     /// <param name="reusableAnchoredDfa">
     /// The anchored lazy DFA reserved for exact-start candidates, when applicable.
     /// </param>
@@ -3145,6 +3271,7 @@ internal sealed class RegexMetaEngine
         int startOffset,
         Dictionary<(int State, int Position), bool>? reachabilityCache,
         PikeVm? reusablePikeVm,
+        RegexOnePassDfa? reusableOnePassDfa,
         RegexLazyDfa? reusableAnchoredDfa,
         Span<RegexPrefilterState> prefilterState)
     {
@@ -3165,9 +3292,10 @@ internal sealed class RegexMetaEngine
 
         while (requiredCandidates.MoveNext(out int start))
         {
-            if (TryMatchAtWithReusableAnchoredDfa(
+            if (TryMatchAtWithReusableEngine(
                     haystack,
                     start,
+                    reusableOnePassDfa,
                     reusableAnchoredDfa,
                     reachabilityCache,
                     out int length))
@@ -3180,17 +3308,19 @@ internal sealed class RegexMetaEngine
     }
 
     /// <summary>
-    /// Matches one exact-start candidate with a reusable anchored DFA and authoritative fallback.
+    /// Matches one exact-start candidate with a reusable engine and authoritative fallback.
     /// </summary>
     /// <param name="haystack">The bytes to search.</param>
     /// <param name="start">The exact candidate start.</param>
+    /// <param name="reusableOnePassDfa">The operation-scoped one-pass DFA, or <see langword="null" />.</param>
     /// <param name="reusableAnchoredDfa">The operation-scoped anchored DFA, or <see langword="null" />.</param>
     /// <param name="reachabilityCache">Optional shared NFA reachability state for fallback.</param>
     /// <param name="length">Receives the accepted match length.</param>
     /// <returns><see langword="true" /> when the candidate matches.</returns>
-    private bool TryMatchAtWithReusableAnchoredDfa(
+    private bool TryMatchAtWithReusableEngine(
         ReadOnlySpan<byte> haystack,
         int start,
+        RegexOnePassDfa? reusableOnePassDfa,
         RegexLazyDfa? reusableAnchoredDfa,
         Dictionary<(int State, int Position), bool>? reachabilityCache,
         out int length)
@@ -3207,6 +3337,16 @@ internal sealed class RegexMetaEngine
                 length = matched ? end - start : 0;
                 return matched;
             }
+        }
+
+        if (reusableOnePassDfa is not null)
+        {
+            return TryMatchAt(
+                haystack,
+                start,
+                out length,
+                reachabilityCache,
+                reusableOnePassDfa);
         }
 
         return TryMatchAt(haystack, start, out length, reachabilityCache);
@@ -4531,6 +4671,7 @@ internal sealed class RegexMetaEngine
                 startPredicate,
                 reachabilityCache,
                 reusablePikeVm: null,
+                reusableOnePassDfa: null,
                 reusableAnchoredDfa: null,
                 reusableUnanchoredDfa: null,
                 reusableUnanchoredDfaUsesAsciiProjection: false,
@@ -5088,7 +5229,8 @@ internal sealed class RegexMetaEngine
         ReadOnlySpan<byte> haystack,
         int start,
         out int length,
-        Dictionary<(int State, int Position), bool>? reachabilityCache = null)
+        Dictionary<(int State, int Position), bool>? reachabilityCache = null,
+        RegexOnePassDfa? reusableOnePassDfa = null)
     {
         if (empty is not null)
         {
@@ -5238,6 +5380,11 @@ internal sealed class RegexMetaEngine
         if (denseDfa is not null)
         {
             return denseDfa.TryMatchAt(haystack, start, out length);
+        }
+
+        if (reusableOnePassDfa is not null)
+        {
+            return reusableOnePassDfa.TryMatchAt(haystack, start, out length);
         }
 
         if (onePassDfaPool is not null)

@@ -9,11 +9,53 @@ internal sealed class RegexOnePassDfa(RegexNfa nfa)
     private readonly RegexNfa _nfa = nfa;
     private readonly PikeVm _fallback = new(nfa);
     private readonly RegexLiteralRunTable _literalRuns = RegexLiteralRunTable.Create(nfa);
+    private readonly ulong[] _asciiAtomMatches = CreateAsciiAtomMatches(nfa);
     private List<int> _current = [];
     private List<int> _next = [];
     private readonly int[] _visited = new int[nfa.States.Count];
     private readonly int[] _closedSplits = new int[nfa.States.Count];
     private int _threadScratchGeneration;
+    private long _runnerLeaseVersion;
+    private long _activeRunnerLeaseVersion;
+
+    /// <summary>
+    /// Begins an exclusive operation-scoped lease for this mutable runner.
+    /// </summary>
+    /// <returns>The generation token that owns the lease.</returns>
+    internal long BeginRunnerLease()
+    {
+        long leaseVersion = System.Threading.Interlocked.Increment(ref _runnerLeaseVersion);
+        System.Threading.Volatile.Write(ref _activeRunnerLeaseVersion, leaseVersion);
+        return leaseVersion;
+    }
+
+    /// <summary>
+    /// Determines whether a generation token still owns this mutable runner.
+    /// </summary>
+    /// <param name="leaseVersion">The generation token to verify.</param>
+    /// <returns><see langword="true" /> when the lease remains active.</returns>
+    internal bool IsRunnerLeaseActive(long leaseVersion)
+    {
+        return leaseVersion != 0 &&
+            System.Threading.Volatile.Read(ref _activeRunnerLeaseVersion) == leaseVersion;
+    }
+
+    /// <summary>
+    /// Attempts to end an exclusive operation-scoped lease exactly once.
+    /// </summary>
+    /// <param name="leaseVersion">The generation token returned when the lease began.</param>
+    /// <returns>
+    /// <see langword="true" /> when this call ended the current lease; otherwise,
+    /// <see langword="false" /> for a copied, stale, or already returned lease.
+    /// </returns>
+    internal bool TryEndRunnerLease(long leaseVersion)
+    {
+        return leaseVersion != 0 &&
+            System.Threading.Interlocked.CompareExchange(
+                ref _activeRunnerLeaseVersion,
+                value: 0,
+                comparand: leaseVersion) == leaseVersion;
+    }
 
     /// <summary>
     /// Determines whether an NFA can benefit from the one-pass engine.
@@ -130,7 +172,12 @@ internal sealed class RegexOnePassDfa(RegexNfa nfa)
             int candidateTarget;
             int candidateConsume;
             if (state.Kind == RegexNfaStateKind.Atom &&
-                state.TryGetAtomMatchLength(haystack, position, out candidateConsume))
+                TryGetAtomMatchLength(
+                    stateIndex,
+                    state,
+                    haystack,
+                    position,
+                    out candidateConsume))
             {
                 candidateTarget = state.Next;
             }
@@ -325,9 +372,15 @@ internal sealed class RegexOnePassDfa(RegexNfa nfa)
 
         for (int index = 0; index < acceptIndex; index++)
         {
-            RegexNfaState state = _nfa.States[threads[index]];
+            int stateIndex = threads[index];
+            RegexNfaState state = _nfa.States[stateIndex];
             if (state.Kind == RegexNfaStateKind.Atom &&
-                state.TryGetAtomMatchLength(haystack, position, out _))
+                TryGetAtomMatchLength(
+                    stateIndex,
+                    state,
+                    haystack,
+                    position,
+                    out _))
             {
                 return true;
             }
@@ -340,6 +393,60 @@ internal sealed class RegexOnePassDfa(RegexNfa nfa)
         }
 
         return false;
+    }
+
+    private bool TryGetAtomMatchLength(
+        int stateIndex,
+        RegexNfaState state,
+        ReadOnlySpan<byte> haystack,
+        int position,
+        out int length)
+    {
+        if ((uint)position < (uint)haystack.Length && haystack[position] <= 0x7F)
+        {
+            byte value = haystack[position];
+            int word = (stateIndex * 2) + (value >> 6);
+            if ((_asciiAtomMatches[word] & (1UL << (value & 0x3F))) != 0)
+            {
+                length = 1;
+                return true;
+            }
+
+            length = 0;
+            return false;
+        }
+
+        return state.TryGetAtomMatchLength(haystack, position, out length);
+    }
+
+    private static ulong[] CreateAsciiAtomMatches(RegexNfa nfa)
+    {
+        ulong[] matches = new ulong[checked(nfa.States.Count * 2)];
+        byte[] haystack = new byte[1];
+        for (int stateIndex = 0; stateIndex < nfa.States.Count; stateIndex++)
+        {
+            RegexNfaState state = nfa.States[stateIndex];
+            if (state.Kind != RegexNfaStateKind.Atom)
+            {
+                continue;
+            }
+
+            for (int value = 0; value <= 0x7F; value++)
+            {
+                haystack[0] = (byte)value;
+                if (state.TryGetAtomMatchLength(
+                        haystack,
+                        position: 0,
+                        out int length) &&
+                    length == 1)
+                {
+                    int word = (stateIndex * 2) + (value >> 6);
+                    matches[word] |= 1UL << (value & 0x3F);
+                }
+            }
+        }
+
+        return matches;
     }
 
     private int IndexOfAccept(List<int> threads)

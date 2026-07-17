@@ -1416,7 +1416,10 @@ public sealed class RegexAutomaton
     /// <returns>The operation-scoped runner.</returns>
     internal RegexFindRunner RentFindRunner()
     {
-        return RentFindRunner(allowUnanchoredDfa: true);
+        return RentFindRunner(
+            allowUnanchoredDfa: true,
+            retainOnePassDfa: false,
+            trackPrefilterState: true);
     }
 
     /// <summary>
@@ -1426,20 +1429,55 @@ public sealed class RegexAutomaton
     /// <returns>The operation-scoped record runner.</returns>
     internal RegexFindRunner RentRecordFindRunner()
     {
-        return RentFindRunner(allowUnanchoredDfa: false);
+        return RentFindRunner(
+            allowUnanchoredDfa: false,
+            retainOnePassDfa: false,
+            trackPrefilterState: true);
     }
 
-    private RegexFindRunner RentFindRunner(bool allowUnanchoredDfa)
+    /// <summary>
+    /// Rents a compact authoritative runner for syntax-selected candidate records.
+    /// </summary>
+    /// <returns>The operation-scoped candidate-record runner.</returns>
+    internal RegexFindRunner RentCandidateRecordFindRunner()
+    {
+        return RentFindRunner(
+            allowUnanchoredDfa: false,
+            retainOnePassDfa: true,
+            trackPrefilterState: false);
+    }
+
+    /// <summary>
+    /// Creates an adaptive syntax-derived prefilter runner for candidate-record search.
+    /// </summary>
+    /// <param name="haystackLength">The complete search-window length.</param>
+    /// <returns>The candidate-record runner, or an unavailable runner.</returns>
+    internal RegexPrefilterRunner CreateCandidateRecordPrefilterRunner(int haystackLength)
+    {
+        return engine.CreateCandidateRecordPrefilterRunner(
+            haystackLength,
+            GetStartPredicate());
+    }
+
+    private RegexFindRunner RentFindRunner(
+        bool allowUnanchoredDfa,
+        bool retainOnePassDfa,
+        bool trackPrefilterState)
     {
         PikeVm? pikeVm = engine.RentFindPikeVm();
+        RegexOnePassDfa? onePassDfa = retainOnePassDfa
+            ? engine.RentFindOnePassDfa()
+            : null;
         return new RegexFindRunner(
             this,
             pikeVm,
             pikeVm?.BeginRunnerLease() ?? 0,
-            engine.PrefilterKind != RegexPrefilterKind.None ||
+            onePassDfa,
+            onePassDfa?.BeginRunnerLease() ?? 0,
+            (trackPrefilterState && engine.PrefilterKind != RegexPrefilterKind.None ||
                 allowUnanchoredDfa &&
                     (engine.CanRentFindAnchoredDfa ||
-                        engine.CanRentFindUnanchoredDfa && _startPredicate?.HasRequiredStart != true)
+                        engine.CanRentFindUnanchoredDfa && _startPredicate?.HasRequiredStart != true))
                 ? new RegexFindRunnerState(
                     this,
                     engine.PrefilterKind != RegexPrefilterKind.None)
@@ -1478,6 +1516,7 @@ public sealed class RegexAutomaton
     /// <param name="haystack">The haystack bytes.</param>
     /// <param name="startAt">The first byte offset to consider.</param>
     /// <param name="pikeVm">The operation-scoped Pike VM, or <see langword="null" />.</param>
+    /// <param name="onePassDfa">The operation-scoped one-pass DFA, or <see langword="null" />.</param>
     /// <param name="state">The optional mutable state shared by this operation.</param>
     /// <param name="allowUnanchoredDfa">Whether the operation may activate an unanchored DFA.</param>
     /// <returns>The first match, or <see langword="null" /> when no match exists.</returns>
@@ -1485,6 +1524,7 @@ public sealed class RegexAutomaton
         ReadOnlySpan<byte> haystack,
         int startAt,
         PikeVm? pikeVm,
+        RegexOnePassDfa? onePassDfa,
         RegexFindRunnerState? state,
         bool allowUnanchoredDfa)
     {
@@ -1506,11 +1546,51 @@ public sealed class RegexAutomaton
             startAt,
             startPredicate,
             pikeVm,
+            onePassDfa,
             state?.AnchoredDfa,
             state?.UnanchoredDfa,
             state?.UsesAsciiProjection == true,
             state is null ? default : state.PrefilterState,
             allowUnanchoredDfa);
+    }
+
+    /// <summary>
+    /// Attempts an authoritative match at one exact candidate start with operation-scoped state.
+    /// </summary>
+    /// <param name="haystack">The haystack bytes.</param>
+    /// <param name="startAt">The exact candidate start.</param>
+    /// <param name="pikeVm">The operation-scoped Pike VM, or <see langword="null" />.</param>
+    /// <param name="onePassDfa">The operation-scoped one-pass DFA, or <see langword="null" />.</param>
+    /// <param name="length">Receives the matched byte length.</param>
+    /// <returns><see langword="true" /> when the candidate matches.</returns>
+    internal bool TryMatchAtWithRunner(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        PikeVm? pikeVm,
+        RegexOnePassDfa? onePassDfa,
+        out int length)
+    {
+        if ((uint)startAt > (uint)haystack.Length ||
+            hasSearchGuards && !CanSearch(haystack, startAt))
+        {
+            length = 0;
+            return false;
+        }
+
+        RegexStartPredicate? startPredicate = GetStartPredicate();
+        if (startPredicate is not null &&
+            !startPredicate.CanStartAt(haystack, startAt))
+        {
+            length = 0;
+            return false;
+        }
+
+        return engine.TryMatchAtWithRunner(
+            haystack,
+            startAt,
+            pikeVm,
+            onePassDfa,
+            out length);
     }
 
     /// <summary>
@@ -1521,6 +1601,18 @@ public sealed class RegexAutomaton
     internal void ReturnFindPikeVm(PikeVm? pikeVm, long pikeVmLeaseVersion)
     {
         engine.ReturnFindPikeVm(pikeVm, pikeVmLeaseVersion);
+    }
+
+    /// <summary>
+    /// Returns an operation-scoped one-pass DFA to this automaton's runner pool.
+    /// </summary>
+    /// <param name="onePassDfa">The one-pass DFA to return, or <see langword="null" />.</param>
+    /// <param name="onePassDfaLeaseVersion">The exclusive one-pass DFA lease generation.</param>
+    internal void ReturnFindOnePassDfa(
+        RegexOnePassDfa? onePassDfa,
+        long onePassDfaLeaseVersion)
+    {
+        engine.ReturnFindOnePassDfa(onePassDfa, onePassDfaLeaseVersion);
     }
 
     /// <summary>
@@ -1597,6 +1689,27 @@ public sealed class RegexAutomaton
         return engine.RentMatchEndRunner(
             haystack,
             startAt,
+            _startPredicate);
+    }
+
+    /// <summary>
+    /// Rents one forward unanchored DFA after a candidate-record prefilter becomes inert at a
+    /// safe record boundary.
+    /// </summary>
+    /// <param name="haystack">The complete search window.</param>
+    /// <param name="startAt">The first unsearched record boundary.</param>
+    /// <returns>The rented runner, or an unavailable runner when forward iteration is ineligible.</returns>
+    internal RegexMatchEndRunner RentUnfilteredMatchEndRunner(
+        ReadOnlySpan<byte> haystack,
+        int startAt)
+    {
+        if (hasSearchGuards && !CanSearch(haystack, startAt))
+        {
+            return default;
+        }
+
+        return engine.RentUnfilteredMatchEndRunner(
+            haystack,
             _startPredicate);
     }
 

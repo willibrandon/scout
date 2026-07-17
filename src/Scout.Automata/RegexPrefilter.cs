@@ -92,6 +92,12 @@ internal sealed class RegexPrefilter(
     public int RequiredLiteralWindow => UsesRequiredLiteralWindow ? _requiredLiteralWindow : 0;
 
     /// <summary>
+    /// Gets a value indicating whether every reported candidate is an exact match start.
+    /// </summary>
+    public bool UsesExactStartCandidates =>
+        !UsesRequiredLiteralWindow || RequiredLiteralWindow == 0;
+
+    /// <summary>
     /// Gets a value indicating whether required-literal ranges can use reverse-prefix narrowing.
     /// </summary>
     public bool UsesRequiredLiteralPrefixGate => _requiredLiteralPrefixGate is not null;

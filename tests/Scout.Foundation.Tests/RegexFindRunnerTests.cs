@@ -519,6 +519,89 @@ public sealed class RegexFindRunnerTests
     }
 
     /// <summary>
+    /// Verifies an independently bounded record runner retains one one-pass DFA across exact
+    /// candidate checks and subsequent authoritative searches.
+    /// </summary>
+    [Fact]
+    public void CandidateRecordRunnerReusesOnePassDfaAcrossExactChecksAndFinds()
+    {
+        RegexSearchPlan plan = CompileOnePassRecordPlan();
+        using RegexFindRunner runner = plan.Matcher.RentCandidateRecordFindRunner();
+        long leaseVersion = runner.OnePassDfaLeaseVersion;
+
+        bool matchedAtCandidate = runner.TryMatchAt(
+            "struct First\n"u8,
+            startAt: 0,
+            out int length);
+        RegexMatch? later = runner.Find("struct! enum Second\n"u8, startAt: 1);
+
+        Assert.True(leaseVersion > 0);
+        Assert.True(matchedAtCandidate);
+        Assert.Equal(12, length);
+        Assert.Equal(new RegexMatch(8, 11), later);
+        Assert.Equal(leaseVersion, runner.OnePassDfaLeaseVersion);
+        Assert.Equal(0, runner.AnchoredDfaLeaseVersion);
+        Assert.Equal(0, runner.UnanchoredDfaLeaseVersion);
+    }
+
+    /// <summary>
+    /// Verifies copied record runners cannot use or return the same mutable one-pass DFA after
+    /// one copy ends its generation lease.
+    /// </summary>
+    [Fact]
+    public void CopiedValueCannotUseOrReturnOnePassDfaTwice()
+    {
+        RegexSearchPlan plan = CompileOnePassRecordPlan();
+        RegexFindRunner runner = plan.Matcher.RentCandidateRecordFindRunner();
+        RegexFindRunner copy = runner;
+
+        Assert.True(runner.OnePassDfaLeaseVersion > 0);
+        Assert.True(runner.SharesPooledStateWith(copy));
+
+        runner.Dispose();
+
+        Assert.False(copy.IsInitialized);
+        ObjectDisposedException? exception = null;
+        try
+        {
+            _ = copy.TryMatchAt("struct First\n"u8, startAt: 0, out _);
+        }
+        catch (ObjectDisposedException caught)
+        {
+            exception = caught;
+        }
+
+        Assert.NotNull(exception);
+        Assert.Equal(nameof(RegexFindRunner), exception.ObjectName);
+
+        exception = null;
+        try
+        {
+            _ = copy.Find("struct First\n"u8, startAt: 0);
+        }
+        catch (ObjectDisposedException caught)
+        {
+            exception = caught;
+        }
+
+        Assert.NotNull(exception);
+        Assert.Equal(nameof(RegexFindRunner), exception.ObjectName);
+        copy.Dispose();
+
+        RegexFindRunner first = plan.Matcher.RentCandidateRecordFindRunner();
+        RegexFindRunner second = plan.Matcher.RentCandidateRecordFindRunner();
+        try
+        {
+            Assert.False(first.SharesPooledStateWith(second));
+        }
+        finally
+        {
+            first.Dispose();
+            second.Dispose();
+        }
+    }
+
+    /// <summary>
     /// Verifies a cache-limited operation-scoped unanchored DFA preserves authoritative results
     /// when lazy execution exhausts its budget.
     /// </summary>
@@ -601,6 +684,22 @@ public sealed class RegexFindRunnerTests
             new RegexSearchPlanOptions(asciiCaseInsensitive: false));
 
         Assert.NotNull(plan);
+        return plan;
+    }
+
+    private static RegexSearchPlan CompileOnePassRecordPlan()
+    {
+        byte[][] patterns =
+        [
+            @"\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*"u8.ToArray(),
+        ];
+        using RegexSpecializationModeScope scope =
+            RegexSpecializationModeDefaults.Use(RegexSpecializationMode.General);
+        var plan = RegexSearchPlan.Create(
+            patterns,
+            new RegexSearchPlanOptions(asciiCaseInsensitive: false));
+
+        Assert.Equal(RegexEngineKind.OnePassDfa, plan.Matcher.EngineKind);
         return plan;
     }
 
