@@ -120,9 +120,25 @@ internal static class SearchWalkPlanning
         return threadCount;
     }
 
-    internal static int GetLargeFileSearchThreadCount(CliLowArgs lowArgs, bool isOneFile = false)
+    /// <summary>
+    /// Gets the internal segment-worker count for a large-file search.
+    /// </summary>
+    /// <param name="lowArgs">The parsed search arguments.</param>
+    /// <param name="allowSegmentParallelism">
+    /// Whether the large file may use internal ordered segment workers.
+    /// </param>
+    /// <returns>The number of ordered segment workers to use.</returns>
+    internal static int GetLargeFileSearchThreadCount(
+        CliLowArgs lowArgs,
+        bool allowSegmentParallelism)
     {
-        // Large-file streaming uses ordered internal segment workers even when the search target is one file.
+        if (!allowSegmentParallelism)
+        {
+            return 1;
+        }
+
+        // With no outer file-level workers, ordered segment workers may use the requested
+        // search-wide thread budget.
         ulong resolvedThreads = SearchThreadPlanner.Resolve(lowArgs.Threads, lowArgs.SortMode is not null, isOneFile: false);
         if (resolvedThreads <= 1)
         {

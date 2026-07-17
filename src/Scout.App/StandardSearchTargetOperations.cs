@@ -108,7 +108,7 @@ internal static class StandardSearchTargetOperations
         {
             OutputPath outputPath = SearchOutputFormatting.CreateOutputPath(path, pathArgument.DisplayBytes, lowArgs, color);
             OutputPath? prefix = SearchOutputFormatting.GetFileSearchPrefix(lowArgs.SearchMode, prefixPaths, lowArgs.WithFilename, outputPath);
-            SearchFile(path, null, pattern, lowArgs, false, !multiplePaths, autoMmapEligible, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, regexPlan);
+            SearchFile(path, null, pattern, lowArgs, implicitSearch: false, allowSegmentParallelism: true, autoMmapEligible, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, regexPlan);
             return;
         }
 
@@ -354,6 +354,7 @@ internal static class StandardSearchTargetOperations
                     asciiCaseInsensitive,
                     lineNumber,
                     heading,
+                    allowSegmentParallelism: true,
                     literalPrecheckState,
                     ref wroteHeadingOutput,
                     ref fileMatched,
@@ -386,6 +387,7 @@ internal static class StandardSearchTargetOperations
                 asciiCaseInsensitive,
                 lineNumber,
                 heading,
+                allowSegmentParallelism: true,
                 literalPrecheckState,
                 ref wroteHeadingOutput,
                 ref matched,
@@ -497,6 +499,7 @@ internal static class StandardSearchTargetOperations
                         asciiCaseInsensitive,
                         lineNumber,
                         heading,
+                        allowSegmentParallelism: false,
                         literalPrecheckState,
                         ref fileWroteHeading,
                         ref fileMatched,
@@ -892,6 +895,7 @@ internal static class StandardSearchTargetOperations
         bool asciiCaseInsensitive,
         bool lineNumber,
         bool heading,
+        bool allowSegmentParallelism,
         DirectoryLiteralPrecheckState literalPrecheckState,
         ref bool wroteHeadingOutput,
         ref bool matched,
@@ -936,6 +940,7 @@ internal static class StandardSearchTargetOperations
             asciiCaseInsensitive,
             lineNumber,
             heading,
+            allowSegmentParallelism,
             ref wroteHeadingOutput,
             ref matched,
             ref errored,
@@ -1201,6 +1206,7 @@ internal static class StandardSearchTargetOperations
         bool asciiCaseInsensitive,
         bool lineNumber,
         bool heading,
+        bool allowSegmentParallelism,
         ref bool wroteHeadingOutput,
         ref bool matched,
         ref bool errored,
@@ -1215,7 +1221,7 @@ internal static class StandardSearchTargetOperations
             return;
         }
 
-        SearchFile(entry.FullPath, entry.KnownLength, pattern, lowArgs, implicitSearch: true, isOneFile: false, autoMmapEligible: false, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, regexPlan);
+        SearchFile(entry.FullPath, entry.KnownLength, pattern, lowArgs, implicitSearch: true, allowSegmentParallelism, autoMmapEligible: false, output, diagnostics, logger, prefix, separators, lineLimit, color, lowArgs.SearchMode, lowArgs.Vimgrep, lineNumber, SearchOutputFormatting.EffectiveColumn(lowArgs), lowArgs.ByteOffset, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.OnlyMatching, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.TextMode, lowArgs.Quiet, lowArgs.Trim, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.IncludeZero, lowArgs.NullPathTerminator, heading, ref wroteHeadingOutput, ref matched, ref errored, regexPlan);
     }
 
     private static void SearchDirectoryEntryFileWithStats(
@@ -1256,7 +1262,7 @@ internal static class StandardSearchTargetOperations
         IReadOnlyList<byte[]> pattern,
         CliLowArgs lowArgs,
         bool implicitSearch,
-        bool isOneFile,
+        bool allowSegmentParallelism,
         bool autoMmapEligible,
         RawByteWriter output,
         DiagnosticMessenger diagnostics,
@@ -1297,7 +1303,7 @@ internal static class StandardSearchTargetOperations
             pattern,
             lowArgs,
             implicitSearch,
-            isOneFile,
+            allowSegmentParallelism,
             output,
             diagnostics,
             logger,

@@ -142,45 +142,49 @@ public sealed class SearchThreadPlannerTests
     }
 
     /// <summary>
-    /// Verifies default large-file search planning does not inherit the constrained directory-walk cap.
+    /// Verifies an active file-level worker pool suppresses nested large-file segment workers.
     /// </summary>
     [Fact]
-    public void SearchWalkPlanningKeepsDefaultLargeFileSearchParallelismOnMacOs()
+    public void SearchWalkPlanningDisablesLargeFileSegmentWorkersUnderOuterParallelism()
+    {
+        var lowArgs = new CliLowArgs();
+
+        int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(
+            lowArgs,
+            allowSegmentParallelism: false);
+
+        Assert.Equal(1, threads);
+    }
+
+    /// <summary>
+    /// Verifies default serial large-file searches keep Scout's ordered internal segment workers.
+    /// </summary>
+    [Fact]
+    public void SearchWalkPlanningKeepsDefaultSerialLargeFileSearchParallelism()
     {
         var lowArgs = new CliLowArgs();
         int upstreamDefault = Math.Min(Environment.ProcessorCount, 12);
         int expected = OperatingSystem.IsMacOS() ? SearchWalkPlanning.GetMacOsDefaultLargeFileSearchThreadCount(upstreamDefault) : upstreamDefault;
 
-        int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(lowArgs);
+        int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(
+            lowArgs,
+            allowSegmentParallelism: true);
 
         Assert.Equal(expected, threads);
     }
 
     /// <summary>
-    /// Verifies default one-file large searches keep Scout's ordered internal segment workers.
+    /// Verifies serial large-file searches honor an explicit segment-worker count.
     /// </summary>
     [Fact]
-    public void SearchWalkPlanningKeepsDefaultOneFileLargeSearchParallelism()
-    {
-        var lowArgs = new CliLowArgs();
-        int upstreamDefault = Math.Min(Environment.ProcessorCount, 12);
-        int expected = OperatingSystem.IsMacOS() ? SearchWalkPlanning.GetMacOsDefaultLargeFileSearchThreadCount(upstreamDefault) : upstreamDefault;
-
-        int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(lowArgs, isOneFile: true);
-
-        Assert.Equal(expected, threads);
-    }
-
-    /// <summary>
-    /// Verifies explicit one-file large searches can use Scout's ordered internal segment workers.
-    /// </summary>
-    [Fact]
-    public void SearchWalkPlanningAllowsExplicitOneFileLargeSearchSegmentWorkers()
+    public void SearchWalkPlanningHonorsExplicitSerialLargeFileSearchThreads()
     {
         var lowArgs = new CliLowArgs();
         lowArgs.SetThreads(12);
 
-        int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(lowArgs, isOneFile: true);
+        int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(
+            lowArgs,
+            allowSegmentParallelism: true);
 
         Assert.Equal(12, threads);
     }
@@ -200,17 +204,19 @@ public sealed class SearchThreadPlannerTests
     }
 
     /// <summary>
-    /// Verifies explicit large-file search thread counts bypass platform default caps.
+    /// Verifies an explicit outer worker count does not create nested large-file workers.
     /// </summary>
     [Fact]
-    public void SearchWalkPlanningHonorsExplicitLargeFileSearchThreads()
+    public void SearchWalkPlanningSuppressesNestedWorkersWithExplicitOuterThreads()
     {
         var lowArgs = new CliLowArgs();
         lowArgs.SetThreads(12);
 
-        int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(lowArgs);
+        int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(
+            lowArgs,
+            allowSegmentParallelism: false);
 
-        Assert.Equal(12, threads);
+        Assert.Equal(1, threads);
     }
 
     /// <summary>

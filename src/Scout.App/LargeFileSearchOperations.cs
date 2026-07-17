@@ -26,7 +26,7 @@ internal static unsafe class LargeFileSearchOperations
         IReadOnlyList<byte[]> pattern,
         CliLowArgs lowArgs,
         bool implicitSearch,
-        bool isOneFile,
+        bool allowSegmentParallelism,
         RawByteWriter output,
         DiagnosticMessenger diagnostics,
         DiagnosticLogger logger,
@@ -92,7 +92,7 @@ internal static unsafe class LargeFileSearchOperations
                 nullPathTerminator,
                 lowArgs.StopOnNonmatch,
                 implicitSearch && !lowArgs.SearchBinaryFiles && !textMode,
-                SearchWalkPlanning.GetLargeFileSearchThreadCount(lowArgs, isOneFile),
+                SearchWalkPlanning.GetLargeFileSearchThreadCount(lowArgs, allowSegmentParallelism),
                 implicitSearch ? ImplicitSearchStreamingFileBufferLength : StreamingFileBufferLength,
                 implicitSearch ? ImplicitSearchStreamingFileBufferLength : ExplicitFastLiteralStreamingFileBufferLength,
                 regexPlan);
