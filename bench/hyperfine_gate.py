@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import statistics
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -38,6 +39,7 @@ def evaluate_gate(
         raise ValueError("aggregate document is missing results")
     rg_result = _result_for_role(results, "rg")
     scout_result = _result_for_role(results, "scout")
+    cpu_summary = _optional_cpu_summary(rg_result, scout_result)
     rg_memory = _memory_samples(rg_result, "rg")
     scout_memory = _memory_samples(scout_result, "Scout")
     if len(rg_memory) != len(scout_memory):
@@ -73,6 +75,7 @@ def evaluate_gate(
         "wall_ratio": wall_ratio,
         "wall_limit": wall_limit,
         "wall_within": wall_within,
+        "cpu_summary": cpu_summary,
         "rg_rss_twice": rg_rss_twice,
         "scout_rss_twice": scout_rss_twice,
         "scout_floor_bytes": scout_floor_bytes,
@@ -117,23 +120,38 @@ def format_gate_report(
             f"  wall  {wall_ratio:.6f}x {wall_relation} "
             f"{wall_limit:.6f}x limit; {wall_margin} +{wall_difference:.6f}x"
         ),
-        (
-            f"  RSS   Scout median {_format_quarter_bytes(scout_rss_four)} bytes "
-            f"({_quarters_to_mib(scout_rss_four):.3f} MiB) {rss_relation} limit "
-            f"{_format_quarter_bytes(limit_four)} bytes "
-            f"({_quarters_to_mib(limit_four):.3f} MiB)"
-        ),
-        (
-            f"        {rss_margin_name} +{_format_quarter_bytes(absolute_rss_margin_four)} "
-            f"bytes (+{_quarters_to_mib(absolute_rss_margin_four):.3f} MiB); "
-            f"median of {rss_sample_count} clean samples"
-        ),
-        (
-            f"        limit = 1.500x rg {_format_quarter_bytes(rg_rss_four)} bytes "
-            f"({_quarters_to_mib(rg_rss_four):.3f} MiB) + Scout floor "
-            f"{_format_quarter_bytes(floor_four)} bytes ({_quarters_to_mib(floor_four):.3f} MiB)"
-        ),
     ]
+
+    cpu_summary = evaluation.get("cpu_summary")
+    if isinstance(cpu_summary, Mapping):
+        lines.append(
+            f"  CPU   {float(cpu_summary['ratio']):.6f}x "
+            f"(Scout median {float(cpu_summary['scout_seconds']):.6f}s; "
+            f"rg {float(cpu_summary['rg_seconds']):.6f}s; diagnostic only)"
+        )
+
+    lines.extend(
+        [
+            (
+                f"  RSS   Scout median {_format_quarter_bytes(scout_rss_four)} bytes "
+                f"({_quarters_to_mib(scout_rss_four):.3f} MiB) {rss_relation} limit "
+                f"{_format_quarter_bytes(limit_four)} bytes "
+                f"({_quarters_to_mib(limit_four):.3f} MiB)"
+            ),
+            (
+                f"        {rss_margin_name} "
+                f"+{_format_quarter_bytes(absolute_rss_margin_four)} bytes "
+                f"(+{_quarters_to_mib(absolute_rss_margin_four):.3f} MiB); "
+                f"median of {rss_sample_count} clean samples"
+            ),
+            (
+                f"        limit = 1.500x rg {_format_quarter_bytes(rg_rss_four)} "
+                f"bytes ({_quarters_to_mib(rg_rss_four):.3f} MiB) + Scout floor "
+                f"{_format_quarter_bytes(floor_four)} bytes "
+                f"({_quarters_to_mib(floor_four):.3f} MiB)"
+            ),
+        ]
+    )
 
     failures = tuple(evaluation["failures"])
     if not failures:
@@ -186,6 +204,61 @@ def _memory_samples(result: Mapping[str, Any], role: str) -> list[int]:
         if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
             raise ValueError(f"{role} result has an invalid RSS sample")
         samples.append(value)
+
+    return samples
+
+
+def _optional_cpu_summary(
+    rg_result: Mapping[str, Any], scout_result: Mapping[str, Any]
+) -> dict[str, float] | None:
+    results = (("rg", rg_result), ("Scout", scout_result))
+    availability = [
+        ("user_times" in result, "system_times" in result)
+        for _, result in results
+    ]
+    if all(not user and not system for user, system in availability):
+        return None
+    if any(not user or not system for user, system in availability):
+        raise ValueError("aggregate CPU samples are incomplete")
+
+    medians: dict[str, float] = {}
+    for role, result in results:
+        user_samples = _cpu_samples(result, "user_times", role)
+        system_samples = _cpu_samples(result, "system_times", role)
+        if len(user_samples) != len(system_samples):
+            raise ValueError(f"{role} user and system CPU sample counts differ")
+        medians[role] = statistics.median(
+            user + system
+            for user, system in zip(user_samples, system_samples, strict=True)
+        )
+
+    rg_seconds = medians["rg"]
+    scout_seconds = medians["Scout"]
+    if rg_seconds <= 0:
+        return None
+
+    return {
+        "rg_seconds": rg_seconds,
+        "scout_seconds": scout_seconds,
+        "ratio": scout_seconds / rg_seconds,
+    }
+
+
+def _cpu_samples(
+    result: Mapping[str, Any], key: str, role: str
+) -> list[float]:
+    values = result.get(key)
+    if not isinstance(values, list) or not values:
+        raise ValueError(f"{role} result has no {key.replace('_', ' ')}")
+
+    samples = []
+    for value in values:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"{role} result has an invalid CPU sample")
+        number = float(value)
+        if not math.isfinite(number) or number < 0:
+            raise ValueError(f"{role} result has an invalid CPU sample")
+        samples.append(number)
 
     return samples
 

@@ -490,6 +490,43 @@ internal sealed class RegexSearchPlan(
             captureSlots);
     }
 
+    /// <summary>
+    /// Collects flattened capture slots through an operation-scoped replay runner.
+    /// </summary>
+    /// <param name="haystack">The complete record or haystack used by this plan.</param>
+    /// <param name="matchStart">The known match start in <paramref name="haystack" />.</param>
+    /// <param name="matchLength">The known match length.</param>
+    /// <param name="captureSlots">Receives absolute start and exclusive-end offsets.</param>
+    /// <param name="runner">The active operation-scoped capture runner.</param>
+    /// <returns><see langword="true" /> when the exact span can be replayed.</returns>
+    internal bool TryCollectCaptureSlots(
+        ReadOnlySpan<byte> haystack,
+        int matchStart,
+        int matchLength,
+        Span<int> captureSlots,
+        in RegexCaptureRunner runner)
+    {
+        ValidateMatchSpan(haystack, matchStart, matchLength);
+        if (captureSlots.Length < CaptureSlotCount)
+        {
+            throw new ArgumentException("The capture slot buffer is too small.", nameof(captureSlots));
+        }
+
+        int matchEnd = matchStart + matchLength;
+        ReadOnlySpan<byte> replayHaystack = GetCaptureReplayHaystack(haystack);
+        if (matchEnd > replayHaystack.Length)
+        {
+            captureSlots.Fill(-1);
+            return false;
+        }
+
+        return runner.TryReplayCaptures(
+            replayHaystack,
+            matchStart,
+            matchEnd,
+            captureSlots);
+    }
+
     /// <inheritdoc />
     bool IReplacementCaptureProvider.TryCollectCaptureSlots(
         ReadOnlySpan<byte> haystack,

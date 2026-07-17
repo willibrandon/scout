@@ -3234,10 +3234,12 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("rg 64-pattern -e search", script, StringComparison.Ordinal);
         Assert.Contains("rg 64-pattern -f search", script, StringComparison.Ordinal);
         Assert.Contains("GATE_LARGE_FILE_THREADS=\"4\"", script, StringComparison.Ordinal);
+        Assert.Contains("GATE_TREE_THREADS=\"3\"", script, StringComparison.Ordinal);
         Assert.Contains("GATE_LARGE_FILE_SEGMENT_BUFFER_LENGTH=\"131072\"", script, StringComparison.Ordinal);
         Assert.Contains("analyze_large_file_segments", script, StringComparison.Ordinal);
         Assert.Contains("segment balance", script, StringComparison.Ordinal);
         Assert.Contains("--threads $GATE_LARGE_FILE_THREADS", script, StringComparison.Ordinal);
+        Assert.Equal(8, script.Split("--threads $GATE_TREE_THREADS", StringSplitOptions.None).Length - 1);
         Assert.Contains("gate_opensubtitles_runs", script, StringComparison.Ordinal);
         Assert.Contains("gate_opensubtitles_warmup", script, StringComparison.Ordinal);
         Assert.Contains("GATE_TREE_RUNS=\"6\"", script, StringComparison.Ordinal);
@@ -3253,6 +3255,16 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains(@"\\b(struct|enum|union)\\s+([A-Za-z_][A-Za-z0-9_]*)", script, StringComparison.Ordinal);
         Assert.Contains(@"--replace '\$1 \$2'", script, StringComparison.Ordinal);
         Assert.Contains("median ratio", gateReporter, StringComparison.Ordinal);
+        Assert.Contains("cpu_summary", gateReporter, StringComparison.Ordinal);
+        Assert.Contains("diagnostic only", gateReporter, StringComparison.Ordinal);
+        Assert.Contains("--workload", script, StringComparison.Ordinal);
+        Assert.Contains("workload_selected", script, StringComparison.Ordinal);
+        Assert.Contains("print_repro_manifest", script, StringComparison.Ordinal);
+        Assert.Contains("logical CPUs", script, StringComparison.Ordinal);
+        Assert.Contains("exact rg and Scout argv", script, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_ORACLE_ENVIRONMENT", script, StringComparison.Ordinal);
+        Assert.Contains("github-actions|local", script, StringComparison.Ordinal);
+        Assert.Contains("document[\"commands\"]", interleaved, StringComparison.Ordinal);
         Assert.Contains("SCOUT_GATE_RETRY_FAILED_WORKLOADS", script, StringComparison.Ordinal);
         Assert.Contains("SCOUT_GATE_RETRY_FAILED_WORKLOADS:-2", script, StringComparison.Ordinal);
         Assert.Contains("must be a non-negative integer", script, StringComparison.Ordinal);
@@ -3289,6 +3301,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("three-decimal MiB", readme, StringComparison.Ordinal);
         Assert.Contains("signed", readme, StringComparison.Ordinal);
         Assert.Contains("top-level aggregate JSON", readme, StringComparison.Ordinal);
+        Assert.Contains("--gate --workload linux_heldout_capture_general", readme, StringComparison.Ordinal);
+        Assert.Contains("worker count keeps local", readme, StringComparison.Ordinal);
         Assert.Contains("all six hosted release RIDs", readme, StringComparison.Ordinal);
         Assert.Contains("timer-resolution artifact", readme, StringComparison.Ordinal);
         Assert.Contains("six valid", readme, StringComparison.Ordinal);

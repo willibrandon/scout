@@ -2411,6 +2411,11 @@ public sealed class RegexAutomaton
     internal int CaptureSlotCount => checked(2 * (captureCount + 1));
 
     /// <summary>
+    /// Gets a value indicating whether exact subcapture replay has initialized its runner pool.
+    /// </summary>
+    internal bool IsExactCaptureReplayInitialized => _exactCaptureEngineInitialized;
+
+    /// <summary>
     /// Replays capture groups for one known match span into caller-owned flattened slots.
     /// </summary>
     /// <param name="haystack">The complete haystack used by the authoritative match.</param>
@@ -2423,6 +2428,44 @@ public sealed class RegexAutomaton
         int startAt,
         int endAt,
         Span<int> captureSlots)
+    {
+        using RegexCaptureRunner runner = RentCaptureRunner();
+        return runner.TryReplayCaptures(haystack, startAt, endAt, captureSlots);
+    }
+
+    /// <summary>
+    /// Rents one exact-capture runner for an operation-scoped sequence of replays.
+    /// </summary>
+    /// <returns>The capture runner lease.</returns>
+    internal RegexCaptureRunner RentCaptureRunner()
+    {
+        RegexCaptureEngine? captureEngine = null;
+        long leaseVersion = 0;
+        if (captureCount > 0 && wholePatternCaptureIndex == 0)
+        {
+            EnsureExactCaptureEngine();
+            captureEngine = _exactCaptureEnginePool?.Rent();
+            leaseVersion = captureEngine?.BeginRunnerLease() ?? 0;
+        }
+
+        return new RegexCaptureRunner(this, captureEngine, leaseVersion);
+    }
+
+    /// <summary>
+    /// Replays one exact span through an operation-scoped capture runner.
+    /// </summary>
+    /// <param name="haystack">The complete haystack used by the authoritative match.</param>
+    /// <param name="startAt">The known match start.</param>
+    /// <param name="endAt">The known exclusive match end.</param>
+    /// <param name="captureSlots">Receives flattened capture start and end offsets.</param>
+    /// <param name="captureEngine">The engine owned by the active runner lease.</param>
+    /// <returns><see langword="true" /> when the exact span can be replayed.</returns>
+    internal bool TryReplayCapturesWithRunner(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        int endAt,
+        Span<int> captureSlots,
+        RegexCaptureEngine? captureEngine)
     {
         if ((uint)startAt > (uint)haystack.Length)
         {
@@ -2457,27 +2500,28 @@ public sealed class RegexAutomaton
             return true;
         }
 
-        EnsureExactCaptureEngine();
-        if (_exactCaptureEnginePool is null)
-        {
-            captureSlots.Fill(-1);
-            return false;
-        }
-
-        RegexCaptureEngine? captureEngine = _exactCaptureEnginePool.Rent();
         if (captureEngine is null)
         {
             captureSlots.Fill(-1);
             return false;
         }
 
-        try
+        return captureEngine.TryReplayCaptures(haystack, startAt, endAt, captureSlots);
+    }
+
+    /// <summary>
+    /// Returns an exact-capture runner lease to this automaton exactly once.
+    /// </summary>
+    /// <param name="captureEngine">The rented engine, or <see langword="null" />.</param>
+    /// <param name="leaseVersion">The exclusive runner generation.</param>
+    internal void ReturnCaptureRunner(
+        RegexCaptureEngine? captureEngine,
+        long leaseVersion)
+    {
+        if (captureEngine is not null &&
+            captureEngine.TryEndRunnerLease(leaseVersion))
         {
-            return captureEngine.TryReplayCaptures(haystack, startAt, endAt, captureSlots);
-        }
-        finally
-        {
-            _exactCaptureEnginePool.Return(captureEngine);
+            _exactCaptureEnginePool?.Return(captureEngine);
         }
     }
 

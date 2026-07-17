@@ -12,6 +12,8 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
     private readonly List<RegexCaptureClosureFrame> _closureStack = new(Math.Clamp(nfa.States.Count, 1, 16));
     private readonly int[] _initialSlots = new int[checked(2 * (nfa.CaptureCount + 1))];
     private readonly int[] _deferredAcceptSlots = new int[checked(2 * (nfa.CaptureCount + 1))];
+    private RegexCaptureOnePassEngine? _onePassEngine;
+    private bool _onePassInitializationAttempted;
     private readonly Dictionary<(int State, int Position), bool> _reachabilityCache = [];
     private readonly HashSet<(int State, int Position)> _reachabilityVisited = [];
     private readonly Stack<(int State, int Position)> _reachabilityPending = [];
@@ -21,6 +23,44 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
     private RegexCaptureActiveStates _next = new(
         nfa.States.Count,
         checked(2 * (nfa.CaptureCount + 1)));
+    private long _runnerLeaseVersion;
+    private long _activeRunnerLeaseVersion;
+
+    /// <summary>
+    /// Begins an exclusive operation-scoped lease for this mutable capture runner.
+    /// </summary>
+    /// <returns>The generation token that owns the lease.</returns>
+    internal long BeginRunnerLease()
+    {
+        long leaseVersion = System.Threading.Interlocked.Increment(ref _runnerLeaseVersion);
+        System.Threading.Volatile.Write(ref _activeRunnerLeaseVersion, leaseVersion);
+        return leaseVersion;
+    }
+
+    /// <summary>
+    /// Determines whether a generation token still owns this mutable capture runner.
+    /// </summary>
+    /// <param name="leaseVersion">The generation token to verify.</param>
+    /// <returns><see langword="true" /> when the lease remains active.</returns>
+    internal bool IsRunnerLeaseActive(long leaseVersion)
+    {
+        return leaseVersion != 0 &&
+            System.Threading.Volatile.Read(ref _activeRunnerLeaseVersion) == leaseVersion;
+    }
+
+    /// <summary>
+    /// Attempts to end an exclusive operation-scoped lease exactly once.
+    /// </summary>
+    /// <param name="leaseVersion">The generation token returned when the lease began.</param>
+    /// <returns><see langword="true" /> when this call ended the current lease.</returns>
+    internal bool TryEndRunnerLease(long leaseVersion)
+    {
+        return leaseVersion != 0 &&
+            System.Threading.Interlocked.CompareExchange(
+                ref _activeRunnerLeaseVersion,
+                value: 0,
+                comparand: leaseVersion) == leaseVersion;
+    }
 
     /// <summary>
     /// Finds the first match and its participating capture groups at or after a byte offset.
@@ -141,7 +181,39 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
             return false;
         }
 
+        RegexCaptureOnePassEngine? onePassEngine = GetOrCreateOnePassEngine();
+        if (onePassEngine is not null &&
+            onePassEngine.TryReplay(
+                haystack,
+                startOffset,
+                endOffset,
+                captureSlots) == RegexCaptureOnePassResult.Success)
+        {
+            return true;
+        }
+
         return TryMatchAt(haystack, startOffset, endOffset, captureSlots);
+    }
+
+    /// <summary>
+    /// Gets the number of exact spans replayed by the capture-aware one-pass engine.
+    /// </summary>
+    internal long OnePassReplayCount => _onePassEngine?.SuccessfulReplayCount ?? 0;
+
+    /// <summary>
+    /// Gets a value indicating whether the capture-aware one-pass engine remains enabled.
+    /// </summary>
+    internal bool IsOnePassReplayEnabled => _onePassEngine?.IsEnabled == true;
+
+    private RegexCaptureOnePassEngine? GetOrCreateOnePassEngine()
+    {
+        if (!_onePassInitializationAttempted)
+        {
+            _onePassEngine = RegexCaptureOnePassEngine.TryCreate(_nfa);
+            _onePassInitializationAttempted = true;
+        }
+
+        return _onePassEngine;
     }
 
     private bool TryMatchAt(

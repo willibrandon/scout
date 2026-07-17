@@ -1123,13 +1123,27 @@ internal static class StandardSearchByteOperations
             if (onlyMatching)
             {
                 var replacementMatchSink = new ReplacementMatchSink(output, prefix, separators.FieldMatch, replacementValue, lineNumber, column, byteOffset, nullPathTerminator, color: color, lineTerminator: separators.LineTerminator, searchPlan: regexPlan);
-                return LiteralLineSearcher.SearchMatchLinesWithRegexPlan(outputSpan, pattern, regexPlan, ref replacementMatchSink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
+                try
+                {
+                    return LiteralLineSearcher.SearchMatchLinesWithRegexPlan(outputSpan, pattern, regexPlan, ref replacementMatchSink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
+                }
+                finally
+                {
+                    replacementMatchSink.Dispose();
+                }
             }
 
             var replacementLineSink = new ReplacementLineSink(output, prefix, separators.FieldMatch, replacementValue, lineNumber, column, byteOffset, trim, nullPathTerminator, vimgrep, lineLimit, color: color, lineTerminator: separators.LineTerminator, searchPlan: regexPlan, streamPlainBodyDirectly: true);
-            bool matched = LiteralLineSearcher.SearchMatchLinesWithRegexPlan(outputSpan, pattern, regexPlan, ref replacementLineSink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
-            replacementLineSink.Flush();
-            return matched;
+            try
+            {
+                bool matched = LiteralLineSearcher.SearchMatchLinesWithRegexPlan(outputSpan, pattern, regexPlan, ref replacementLineSink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
+                replacementLineSink.Flush();
+                return matched;
+            }
+            finally
+            {
+                replacementLineSink.Dispose();
+            }
         }
 
         if (vimgrep && !invertMatch)
@@ -1339,17 +1353,34 @@ internal static class StandardSearchByteOperations
             {
                 var inner = new ReplacementMatchSink(output, prefix, separators.FieldMatch, replacementValue, lineNumber, column, byteOffset, nullPathTerminator, color: color, lineTerminator: separators.LineTerminator, searchPlan: regexPlan);
                 var sink = new RegexPlanCountingMatchLineSink<ReplacementMatchSink>(inner);
-                bool matched = LiteralLineSearcher.SearchMatchLinesWithRegexPlan(outputSpan, pattern, regexPlan, ref sink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
-                RecordMatchSinkMetrics(searchSpan.Length, maxCount, sink.MatchedLines, sink.Matches, sink.LastMatchedLineEnd, metrics);
-                return matched;
+                try
+                {
+                    bool matched = LiteralLineSearcher.SearchMatchLinesWithRegexPlan(outputSpan, pattern, regexPlan, ref sink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
+                    RecordMatchSinkMetrics(searchSpan.Length, maxCount, sink.MatchedLines, sink.Matches, sink.LastMatchedLineEnd, metrics);
+                    return matched;
+                }
+                finally
+                {
+                    ReplacementMatchSink completedSink = sink.Inner;
+                    completedSink.Dispose();
+                }
             }
 
             var replacementLineSink = new ReplacementLineSink(output, prefix, separators.FieldMatch, replacementValue, lineNumber, column, byteOffset, trim, nullPathTerminator, vimgrep, lineLimit, color: color, lineTerminator: separators.LineTerminator, searchPlan: regexPlan, streamPlainBodyDirectly: true);
             var countingReplacementSink = new RegexPlanCountingMatchLineSink<ReplacementLineSink>(replacementLineSink);
-            bool replacementMatched = LiteralLineSearcher.SearchMatchLinesWithRegexPlan(outputSpan, pattern, regexPlan, ref countingReplacementSink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
-            countingReplacementSink.Inner.Flush();
-            RecordMatchSinkMetrics(searchSpan.Length, maxCount, countingReplacementSink.MatchedLines, countingReplacementSink.Matches, countingReplacementSink.LastMatchedLineEnd, metrics);
-            return replacementMatched;
+            try
+            {
+                bool replacementMatched = LiteralLineSearcher.SearchMatchLinesWithRegexPlan(outputSpan, pattern, regexPlan, ref countingReplacementSink, asciiCaseInsensitive, lineRegexp, wordRegexp, maxCount, separators.Crlf, separators.NullData);
+                ReplacementLineSink completedSink = countingReplacementSink.Inner;
+                completedSink.Flush();
+                RecordMatchSinkMetrics(searchSpan.Length, maxCount, countingReplacementSink.MatchedLines, countingReplacementSink.Matches, countingReplacementSink.LastMatchedLineEnd, metrics);
+                return replacementMatched;
+            }
+            finally
+            {
+                ReplacementLineSink completedSink = countingReplacementSink.Inner;
+                completedSink.Dispose();
+            }
         }
 
         if (vimgrep && !invertMatch)

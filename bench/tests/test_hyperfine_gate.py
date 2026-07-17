@@ -35,6 +35,11 @@ class HyperfineGateTests(unittest.TestCase):
         self.assertEqual(("RSS",), evaluation["failures"])
         self.assertEqual(-65_536, evaluation["rss_margin_four"])
         self.assertIn("1.025000x within 1.500000x limit", report)
+        self.assertIn(
+            "CPU   1.000000x (Scout median 0.300000s; "
+            "rg 0.300000s; diagnostic only)",
+            report,
+        )
         self.assertIn("17072128 bytes (16.281 MiB)", report)
         self.assertIn("17055744 bytes (16.266 MiB)", report)
         self.assertIn("excess +16384 bytes (+0.016 MiB)", report)
@@ -238,6 +243,44 @@ class HyperfineGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "invalid RSS sample"):
             evaluate_gate(invalid, 1.5, 10_485_760)
 
+    def test_cpu_ratio_uses_median_combined_user_and_system_samples(self) -> None:
+        document = self._document(1.0, 4_194_304, 10_485_760)
+        document["results"][0]["user_times"] = [1.0, 2.0, 9.0]
+        document["results"][0]["system_times"] = [0.5, 0.5, 0.5]
+        document["results"][1]["user_times"] = [2.0, 5.0, 20.0]
+        document["results"][1]["system_times"] = [1.0, 1.0, 1.0]
+
+        evaluation = evaluate_gate(document, 1.5, 10_485_760)
+        report = format_gate_report(evaluation, "capture")
+
+        self.assertEqual(
+            {"rg_seconds": 2.5, "scout_seconds": 6.0, "ratio": 2.4},
+            evaluation["cpu_summary"],
+        )
+        self.assertIn(
+            "CPU   2.400000x (Scout median 6.000000s; "
+            "rg 2.500000s; diagnostic only)",
+            report,
+        )
+
+    def test_cpu_diagnostic_does_not_change_gate_outcome(self) -> None:
+        document = self._document(1.0, 4_194_304, 10_485_760)
+        document["results"][0]["user_times"] = [0.1, 0.1, 0.1]
+        document["results"][1]["user_times"] = [10.0, 10.0, 10.0]
+
+        evaluation = evaluate_gate(document, 1.5, 10_485_760)
+
+        self.assertGreater(evaluation["cpu_summary"]["ratio"], 20.0)
+        self.assertEqual((), evaluation["failures"])
+        self.assertEqual(0, gate_exit_code(evaluation))
+
+    def test_rejects_incomplete_cpu_samples(self) -> None:
+        document = self._document(1.0, 4_194_304, 10_485_760)
+        document["results"][1].pop("system_times")
+
+        with self.assertRaisesRegex(ValueError, "CPU samples are incomplete"):
+            evaluate_gate(document, 1.5, 10_485_760)
+
     @staticmethod
     def _document(
         wall_ratio: float, rg_memory: int, scout_memory: int
@@ -251,10 +294,14 @@ class HyperfineGateTests(unittest.TestCase):
                 {
                     "command": "rg:workload",
                     "memory_usage_byte": [rg_memory] * 3,
+                    "user_times": [0.2] * 3,
+                    "system_times": [0.1] * 3,
                 },
                 {
                     "command": "scout:workload",
                     "memory_usage_byte": [scout_memory] * 3,
+                    "user_times": [0.2] * 3,
+                    "system_times": [0.1] * 3,
                 },
             ],
         }

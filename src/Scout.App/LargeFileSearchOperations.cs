@@ -1922,24 +1922,33 @@ internal static unsafe class LargeFileSearchOperations
                 var countingSink =
                     new RegexPlanCountingMatchLineSink<ReplacementLineSink>(
                         replacementSink);
-                bool replacementMatched =
-                    LiteralLineSearcher.SearchMatchLinesWithRegexPlan(
-                        segment,
-                        pattern,
-                        regexPlan,
-                        ref countingSink,
-                        asciiCaseInsensitive,
-                        lineRegexp,
-                        wordRegexp,
-                        remainingMatches,
-                        separators.Crlf,
-                        separators.NullData);
-                countingSink.Inner.Flush();
-                matched |= replacementMatched;
-                matchedLines += countingSink.MatchedLines;
-                lineNumberValue += segmentLineCount;
-                return maxCount is ulong replacementLimit &&
-                    matchedLines >= replacementLimit;
+                try
+                {
+                    bool replacementMatched =
+                        LiteralLineSearcher.SearchMatchLinesWithRegexPlan(
+                            segment,
+                            pattern,
+                            regexPlan,
+                            ref countingSink,
+                            asciiCaseInsensitive,
+                            lineRegexp,
+                            wordRegexp,
+                            remainingMatches,
+                            separators.Crlf,
+                            separators.NullData);
+                    ReplacementLineSink completedSink = countingSink.Inner;
+                    completedSink.Flush();
+                    matched |= replacementMatched;
+                    matchedLines += countingSink.MatchedLines;
+                    lineNumberValue += segmentLineCount;
+                    return maxCount is ulong replacementLimit &&
+                        matchedLines >= replacementLimit;
+                }
+                finally
+                {
+                    ReplacementLineSink completedSink = countingSink.Inner;
+                    completedSink.Dispose();
+                }
             }
 
             var sink = new StandardSearchSink(

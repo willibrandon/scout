@@ -206,7 +206,9 @@ The CLI creates one `RegexSearchPlan` per search operation from the complete ord
 
 Finite bounded repetitions use a canonical common-exit Thompson topology: every optional skip branch targets the same continuation, consuming branches chain through the remaining copies, and split order alone encodes greedy or lazy priority. The forward and reversed compilers use the same construction.
 
-PikeVM-backed unanchored searches inject streamed prefilter candidates into one insertion-ordered active-state frontier. Capture replay stores ordered states and flat capture-slot rows in pooled runner-owned buffers, and an iterative closure stack uses restore frames while exploring capture boundaries. First arrival retains leftmost-first priority without cloning capture arrays at each transition. All mutable frontier, closure, capture, and reachability storage belongs to pooled runners, while the compiled regex remains immutable and safe for concurrent callers. This is the authoritative Thompson matcher—with full leftmost-first, anchor, UTF-8, and capture-replay semantics—not a pattern-family recognizer.
+PikeVM-backed unanchored searches inject streamed prefilter candidates into one insertion-ordered active-state frontier. An authoritative find first establishes the exact match bounds. Capture output then anchors replay to that span and tries a bounded capture-aware one-pass runner with at most 32 flattened slots and 4,096 NFA states. The runner follows the ordered epsilon closure while exactly one consuming transition matches; a second matching consumer yields to the general ordered-NFA replay before publishing capture slots. This mirrors `regex-automata`'s one-pass-first capture strategy while supporting Scout's variable-width UTF-8 atoms.
+
+The general replay engine stores ordered states and flat capture-slot rows in pooled runner-owned buffers, and an iterative closure stack uses restore frames while exploring capture boundaries. First arrival retains leftmost-first priority without cloning capture arrays at each transition. Replacement, context, JSON, and multiline rendering retain one exact-capture runner and one parsed replacement template for the complete operation. Whole-match references such as `$0` use the authoritative bounds directly. All mutable frontier, closure, capture, and reachability storage belongs to pooled runners, while the compiled regex remains immutable and safe for concurrent callers. The result is one authoritative Thompson pipeline with full leftmost-first, anchor, UTF-8, and capture-replay semantics.
 
 For a uniquely proven inner literal with a finite prefix, the required-literal prefilter can reverse-match an ASCII projection of that prefix with pooled lazy-DFA runners before injecting starts. Non-ASCII windows, ambiguous provenance, unsupported positional syntax, and exhausted DFA budgets retain the conservative lookbehind range. The forward Thompson matcher remains authoritative, so this is a general reverse-inner strategy rather than a pattern recognizer.
 
@@ -417,6 +419,10 @@ Each wall-time workload is sampled in alternating fresh `rg`, Scout, Scout, `rg`
 and Scout, `rg`, `rg`, Scout Hyperfine rounds. The two round ratios form one
 geometric cycle ratio, and the gate uses the median cycle ratio. This balances
 every command position and reduces filesystem-cache or hosted-runner phase bias.
+Linux-tree workload commands pass `--threads 3` to both tools, OpenSubtitles
+commands pass `--threads 4`, and generated line-regex commands pass
+`--threads 1`. Fixed concurrency makes the workload definition independent of
+the host's logical CPU count.
 Peak RSS uses only the first command in each fresh process because macOS reports
 child peak RSS cumulatively; alternating rounds provide one clean sample per tool
 in every cycle.

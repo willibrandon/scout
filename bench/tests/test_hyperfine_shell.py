@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import tempfile
@@ -100,6 +101,80 @@ class HyperfineShellTests(unittest.TestCase):
             source,
         )
 
+    def test_linux_tree_workloads_pin_three_threads_for_both_binaries(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "bench" / "run-hyperfine.sh").read_text(encoding="utf-8")
+
+        self.assertIn('GATE_TREE_THREADS="3"', source)
+        self.assertEqual(8, source.count("--threads $GATE_TREE_THREADS"))
+        for workload in (
+            "linux_recursive_literal",
+            "linux_heldout_regex_general",
+            "linux_heldout_capture_general",
+            "linux_many_small_parallel",
+        ):
+            start = source.index(f'    "{workload}" \\\n')
+            end = source.index("    \"$TREE_WARMUP\"", start)
+            block = source[start:end]
+            self.assertEqual(2, block.count("--threads $GATE_TREE_THREADS"))
+
+    def test_focused_gate_option_is_validated_before_prerequisites(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        script = root / "bench" / "run-hyperfine.sh"
+
+        invalid = subprocess.run(
+            [_SH, str(script), "--gate", "--workload", "not-a-workload"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        wrong_mode = subprocess.run(
+            [_SH, str(script), "--workload", "linux_heldout_capture_general"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertNotEqual(0, invalid.returncode)
+        self.assertIn("Unknown release-gate workload", invalid.stderr)
+        self.assertNotEqual(0, wrong_mode.returncode)
+        self.assertIn("--workload requires --gate", wrong_mode.stderr)
+
+    def test_oracle_environment_can_match_hosted_gate_locally(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "bench" / "run-hyperfine.sh").read_text(encoding="utf-8")
+        start = source.index("oracle_environment() {")
+        end = source.index("\nread_lock_rid_table_value() {", start)
+        function = source[start:end]
+        harness = f"""#!/bin/sh
+set -eu
+fail() {{ printf '%s\\n' "$1" >&2; exit 1; }}
+{function}
+oracle_environment
+"""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "oracle-environment.sh"
+            path.write_bytes(harness.encode("utf-8"))
+            environment = dict(os.environ)
+            environment["SCOUT_ORACLE_ENVIRONMENT"] = "github-actions"
+            result = subprocess.run(
+                [_SH, str(path)],
+                check=False,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("github-actions", result.stdout.strip())
+
+    def test_unselected_workload_does_not_sample_or_report(self) -> None:
+        result = self._run(scenario="always_fail", retries=2, selected="other")
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("", result.stdout)
+
     def test_initial_failure_can_pass_on_first_retry(self) -> None:
         result = self._run(scenario="retry_pass", retries=2)
 
@@ -127,7 +202,9 @@ class HyperfineShellTests(unittest.TestCase):
         )
         self.assertEqual(2, result.stdout.count("report:"))
 
-    def _run(self, scenario: str, retries: int) -> subprocess.CompletedProcess[str]:
+    def _run(
+        self, scenario: str, retries: int, selected: str = ""
+    ) -> subprocess.CompletedProcess[str]:
         root = Path(__file__).resolve().parents[2]
         source = (root / "bench" / "run-hyperfine.sh").read_text(encoding="utf-8")
         start = source.index("run_pair_impl() {")
@@ -138,8 +215,12 @@ set -eu
 MODE=gate
 OUT_DIR=/tmp/gate
 GATE_RETRY_FAILED_WORKLOADS={retries}
+WORKLOAD={selected!r}
 scenario={scenario}
 report_calls=0
+workload_selected() {{
+    [ -z "$WORKLOAD" ] || [ "$WORKLOAD" = "$1" ]
+}}
 run_hyperfine_interleaved() {{
     printf 'sample:%s\\n' "$3"
 }}

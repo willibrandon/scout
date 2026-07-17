@@ -4518,6 +4518,69 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies whole-match replacement uses authoritative bounds without initializing subcapture replay.
+    /// </summary>
+    [Fact]
+    public void ReplacementFormatterSkipsCaptureReplayForWholeMatchReferences()
+    {
+        byte[][] patterns =
+        [
+            @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)"u8.ToArray(),
+        ];
+        var plan = RegexSearchPlan.Create(patterns, asciiCaseInsensitive: false);
+
+        Assert.NotNull(plan);
+        Assert.False(plan.Matcher.IsExactCaptureReplayInitialized);
+        Assert.Equal(
+            "struct Foo|struct Foo"u8.ToArray(),
+            ReplacementFormatter.Expand(
+                "$0|${0}"u8,
+                "xx struct Foo yy"u8,
+                matchStart: 3,
+                matchLength: 10,
+                plan));
+        Assert.False(plan.Matcher.IsExactCaptureReplayInitialized);
+
+        Assert.Equal(
+            "struct Foo"u8.ToArray(),
+            ReplacementFormatter.Expand(
+                "$1 $2"u8,
+                "xx struct Foo yy"u8,
+                matchStart: 3,
+                matchLength: 10,
+                plan));
+        Assert.True(plan.Matcher.IsExactCaptureReplayInitialized);
+    }
+
+    /// <summary>
+    /// Verifies operation-scoped replacement replay retains predicates outside an output slice.
+    /// </summary>
+    [Fact]
+    public void RegexReplacementSessionUsesCompleteCaptureHaystack()
+    {
+        byte[][] patterns = [@"\B(foo)"u8.ToArray()];
+        var plan = RegexSearchPlan.Create(patterns, asciiCaseInsensitive: false);
+        byte[] haystack = "xfoo"u8.ToArray();
+        List<long> replacementColumns = [];
+        List<int> replacementLengths = [];
+
+        Assert.NotNull(plan);
+        using var session = new RegexReplacementSession("$1"u8.ToArray(), plan);
+        byte[] replaced = session.ReplaceLine(
+            haystack.AsSpan(1),
+            haystack,
+            lineStartInHaystack: 1,
+            starts: [0],
+            lengths: [3],
+            replacementColumns,
+            replacementLengths);
+
+        Assert.Equal("foo"u8.ToArray(), replaced);
+        Assert.Equal([1L], replacementColumns);
+        Assert.Equal([3], replacementLengths);
+    }
+
+    /// <summary>
     /// Verifies warmed capture replay expands named and optional captures directly without per-match allocations.
     /// </summary>
     [Fact]
@@ -4529,7 +4592,7 @@ public sealed class ScoutApplicationTests
         ];
         var plan = RegexSearchPlan.Create(patterns, asciiCaseInsensitive: false);
         Assert.NotNull(plan);
-        var template = ReplacementTemplate.Create("$kind:$name:$suffix:$9"u8, plan.CaptureCount);
+        var template = ReplacementTemplate.Create("$kind:$name:$suffix:$9"u8);
         int[] captureSlots = new int[Math.Max(
             plan.CaptureSlotCount,
             checked(2 * (template.HighestCapture + 1)))];

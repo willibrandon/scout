@@ -2904,25 +2904,32 @@ internal static class Pcre2SearchOperations
     {
         var captureProvider = new Pcre2ReplacementCaptureProvider(regex, separators.LineTerminator);
         var sink = new ReplacementLineSink(output, prefix, separators.FieldMatch, replacement, printLineNumber, printColumn, printByteOffset, trim, nullPathTerminator, vimgrep, lineLimit, color: color, lineTerminator: separators.LineTerminator, captureProvider: captureProvider);
-        int startOffset = 0;
-        while (startOffset <= matchLine.Length && regex.TryFind(matchLine, startOffset, out Pcre2Match match))
+        try
         {
-            if (Pcre2MatchSatisfies(matchLine, match, lineRegexp, wordRegexp))
+            int startOffset = 0;
+            while (startOffset <= matchLine.Length && regex.TryFind(matchLine, startOffset, out Pcre2Match match))
             {
-                sink.MatchedLineWithSearchStart(
-                    lineNumber,
-                    lineStart,
-                    lineStart + match.Start,
-                    match.Start + 1L,
-                    outputLine,
-                    matchLine.Slice(match.Start, match.Length),
-                    match.PatternStart);
+                if (Pcre2MatchSatisfies(matchLine, match, lineRegexp, wordRegexp))
+                {
+                    sink.MatchedLineWithSearchStart(
+                        lineNumber,
+                        lineStart,
+                        lineStart + match.Start,
+                        match.Start + 1L,
+                        outputLine,
+                        matchLine.Slice(match.Start, match.Length),
+                        match.PatternStart);
+                }
+
+                startOffset = AdvanceAfterPcre2Match(match, matchLine.Length);
             }
 
-            startOffset = AdvanceAfterPcre2Match(match, matchLine.Length);
+            sink.Flush();
         }
-
-        sink.Flush();
+        finally
+        {
+            sink.Dispose();
+        }
     }
 
     private static void GetPcre2LineSlices(
@@ -3054,50 +3061,58 @@ internal static class Pcre2SearchOperations
         ulong matchedLines = 0;
         var captureProvider = new Pcre2ReplacementCaptureProvider(regex, separators.LineTerminator);
         var sink = new ReplacementLineSink(output, prefix, separators.FieldMatch, replacement, lineNumber, column, byteOffset, trim, nullPathTerminator, vimgrep, lineLimit, color: color, lineTerminator: separators.LineTerminator, captureProvider: captureProvider);
-        while (lineStart < bytes.Length)
+        try
         {
-            GetPcre2LineSlices(bytes, lineStart, separators.LineTerminator, out ReadOnlySpan<byte> outputLine, out ReadOnlySpan<byte> matchLine, out int nextLineStart, out bool isLastLine);
-
-            int startOffset = 0;
-            bool lineMatched = false;
-            while (startOffset <= matchLine.Length && regex.TryFind(matchLine, startOffset, out Pcre2Match match))
+            while (lineStart < bytes.Length)
             {
-                if (Pcre2MatchSatisfies(matchLine, match, lineRegexp, wordRegexp))
+                GetPcre2LineSlices(bytes, lineStart, separators.LineTerminator, out ReadOnlySpan<byte> outputLine, out ReadOnlySpan<byte> matchLine, out int nextLineStart, out bool isLastLine);
+
+                int startOffset = 0;
+                bool lineMatched = false;
+                while (startOffset <= matchLine.Length && regex.TryFind(matchLine, startOffset, out Pcre2Match match))
                 {
-                    lineMatched = true;
-                    sink.MatchedLineWithSearchStart(
-                        currentLineNumber,
-                        lineStart,
-                        lineStart + match.Start,
-                        match.Start + 1L,
-                        outputLine,
-                        matchLine.Slice(match.Start, match.Length),
-                        match.PatternStart);
+                    if (Pcre2MatchSatisfies(matchLine, match, lineRegexp, wordRegexp))
+                    {
+                        lineMatched = true;
+                        sink.MatchedLineWithSearchStart(
+                            currentLineNumber,
+                            lineStart,
+                            lineStart + match.Start,
+                            match.Start + 1L,
+                            outputLine,
+                            matchLine.Slice(match.Start, match.Length),
+                            match.PatternStart);
+                    }
+
+                    startOffset = match.Length == 0 ? match.Start + 1 : match.Start + match.Length;
                 }
 
-                startOffset = match.Length == 0 ? match.Start + 1 : match.Start + match.Length;
-            }
+                if (lineMatched)
+                {
+                    matched = true;
+                    matchedLines++;
+                    if (maxCount is ulong limit && matchedLines >= limit)
+                    {
+                        break;
+                    }
+                }
 
-            if (lineMatched)
-            {
-                matched = true;
-                matchedLines++;
-                if (maxCount is ulong limit && matchedLines >= limit)
+                if (isLastLine)
                 {
                     break;
                 }
+
+                lineStart = nextLineStart;
+                currentLineNumber++;
             }
 
-            if (isLastLine)
-            {
-                break;
-            }
-
-            lineStart = nextLineStart;
-            currentLineNumber++;
+            sink.Flush();
+        }
+        finally
+        {
+            sink.Dispose();
         }
 
-        sink.Flush();
         return matched;
     }
 

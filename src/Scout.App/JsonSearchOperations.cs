@@ -397,6 +397,10 @@ internal static class JsonSearchOperations
         int groupEnd = -1;
         int groupLastLineStart = -1;
         var matches = new List<JsonMatchSpan>(capacity: 1);
+        using RegexReplacementSession? replacementSession =
+            replacement is ReadOnlyMemory<byte> replacementValue
+                ? new RegexReplacementSession(replacementValue, searchPlan)
+                : null;
         while (MultilineSearchOperations.TryFindNextMultilineMatch(bytes, searchPlan, ref offset, ref suppressedEmptyStart, out RegexMatch match))
         {
             bool selectionOnly = MultilineSearchOperations.IsSelectionOnlyEofMatch(bytes, match, offset);
@@ -432,14 +436,10 @@ internal static class JsonSearchOperations
 
             if (!omitSubmatch)
             {
-                byte[]? expandedReplacement = replacement is ReadOnlyMemory<byte> replacementValue
-                    ? ReplacementFormatter.Expand(
-                        replacementValue.Span,
-                        bytes,
-                        match.Start,
-                        match.Length,
-                        searchPlan)
-                    : null;
+                byte[]? expandedReplacement = replacementSession?.Expand(
+                    bytes,
+                    match.Start,
+                    match.Length);
                 matches.Add(new JsonMatchSpan(match.Start - groupStart, match.Start - groupStart + match.Length, expandedReplacement));
             }
 
@@ -483,6 +483,10 @@ internal static class JsonSearchOperations
             : MultilineSearchOperations.IncludeMultilineContextLines(bytes, lines, matches, included, beforeContext, afterContext, maxCount);
         ulong? renderedMatchLimit = passthru ? maxCount : null;
         var contextMatches = new List<JsonMatchSpan>(capacity: 0);
+        using RegexReplacementSession? replacementSession =
+            replacement is ReadOnlyMemory<byte> replacementValue
+                ? new RegexReplacementSession(replacementValue, searchPlan)
+                : null;
         for (int index = 0; index < lines.Count; index++)
         {
             if (!included[index])
@@ -493,7 +497,7 @@ internal static class JsonSearchOperations
             ContextLineInfo line = lines[index];
             if (line.SelectedMatch && MultilineSearchOperations.MultilineLineHasRenderedMatch(bytes, line, matches, renderedMatchLimit))
             {
-                if (TryWriteJsonMultilineMatchGroupStartingAtLine(bytes, lines, index, matches, renderedMatchLimit, replacement, searchPlan, writer, out int consumedLineIndex))
+                if (TryWriteJsonMultilineMatchGroupStartingAtLine(bytes, lines, index, matches, renderedMatchLimit, replacementSession, writer, out int consumedLineIndex))
                 {
                     index = Math.Max(index, consumedLineIndex);
                 }
@@ -563,8 +567,7 @@ internal static class JsonSearchOperations
         int lineIndex,
         List<RegexMatch> regexMatches,
         ulong? renderedMatchLimit,
-        ReadOnlyMemory<byte>? replacement,
-        RegexSearchPlan searchPlan,
+        RegexReplacementSession? replacementSession,
         JsonFileWriter writer,
         out int consumedLineIndex)
     {
@@ -607,14 +610,10 @@ internal static class JsonSearchOperations
 
             if (match.Length != 0 || match.Start != bytes.Length)
             {
-                byte[]? expandedReplacement = replacement is ReadOnlyMemory<byte> replacementValue
-                    ? ReplacementFormatter.Expand(
-                        replacementValue.Span,
-                        bytes,
-                        match.Start,
-                        match.Length,
-                        searchPlan)
-                    : null;
+                byte[]? expandedReplacement = replacementSession?.Expand(
+                    bytes,
+                    match.Start,
+                    match.Length);
                 matches.Add(new JsonMatchSpan(match.Start - groupStart, match.Start - groupStart + match.Length, expandedReplacement));
             }
         }
@@ -843,21 +842,28 @@ internal static class JsonSearchOperations
         ReadOnlyMemory<byte>? replacement)
     {
         var collector = new JsonMatchCollector(matches, replacement, searchPlan);
-        for (int index = 0; index < retainedMatches.Length; index++)
+        try
         {
-            ContextLineMatch match = retainedMatches[index];
-            if (ContextSearchOperations.IsSelectionOnlyRecordEndMatch(line, match))
+            for (int index = 0; index < retainedMatches.Length; index++)
             {
-                continue;
-            }
+                ContextLineMatch match = retainedMatches[index];
+                if (ContextSearchOperations.IsSelectionOnlyRecordEndMatch(line, match))
+                {
+                    continue;
+                }
 
-            collector.MatchedLine(
-                lineNumber: 1,
-                lineByteOffset: 0,
-                matchByteOffset: match.Start,
-                match.Column,
-                line,
-                line.Slice(match.Start, match.Length));
+                collector.MatchedLine(
+                    lineNumber: 1,
+                    lineByteOffset: 0,
+                    matchByteOffset: match.Start,
+                    match.Column,
+                    line,
+                    line.Slice(match.Start, match.Length));
+            }
+        }
+        finally
+        {
+            collector.Dispose();
         }
     }
 }

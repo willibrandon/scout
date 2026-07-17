@@ -29,7 +29,7 @@ internal struct ReplacementMatchSink(
     long byteOffsetOffset = 0,
     OutputColor color = default,
     ReadOnlyMemory<byte> lineTerminator = default,
-    RegexSearchPlan? searchPlan = null) : IMatchLineSink
+    RegexSearchPlan? searchPlan = null) : IMatchLineSink, IDisposable
 {
     private static readonly byte[] s_nullByte = [0];
 
@@ -38,6 +38,7 @@ internal struct ReplacementMatchSink(
     private readonly ReadOnlyMemory<byte> _fieldSeparator = fieldSeparator;
     private readonly ReadOnlyMemory<byte> _replacement = replacement;
     private readonly RegexSearchPlan? _searchPlan = searchPlan;
+    private RegexCaptureReplaySession? _captureSession;
     private readonly (
         ReplacementTemplate Template,
         int[] CaptureSlots) _captureState =
@@ -78,14 +79,26 @@ internal struct ReplacementMatchSink(
             _cumulativeDelta = 0;
         }
 
-        byte[] body = ReplacementFormatter.Expand(
-            _replacement.Span,
-            line,
-            checked((int)matchColumn - 1),
-            match.Length,
-            _searchPlan,
-            _captureState.Template,
-            _captureState.CaptureSlots);
+        int matchStart = checked((int)matchColumn - 1);
+        IReplacementCaptureProvider? captureProvider = GetCaptureProvider();
+        byte[] body = captureProvider is null
+            ? ReplacementFormatter.Expand(
+                _replacement.Span,
+                line,
+                matchStart,
+                match.Length,
+                searchPlan: null,
+                _captureState.Template,
+                _captureState.CaptureSlots)
+            : ReplacementFormatter.Expand(
+                _replacement.Span,
+                line,
+                matchStart,
+                match.Length,
+                captureProvider,
+                matchStart,
+                _captureState.Template,
+                _captureState.CaptureSlots);
         long adjustedColumn = matchColumn + _cumulativeDelta;
         long adjustedByteOffset = _byteOffsetOffset + lineByteOffset + adjustedColumn - 1;
         bool linked = false;
@@ -197,16 +210,35 @@ internal struct ReplacementMatchSink(
         }
     }
 
+    private IReplacementCaptureProvider? GetCaptureProvider()
+    {
+        if (!_captureState.Template.RequiresSubcaptures || _searchPlan is null)
+        {
+            return null;
+        }
+
+        return _captureSession ??= new RegexCaptureReplaySession(_searchPlan);
+    }
+
+    /// <summary>
+    /// Returns the operation-scoped capture runner when this sink used native subcaptures.
+    /// </summary>
+    public void Dispose()
+    {
+        _captureSession?.Dispose();
+        _captureSession = null;
+    }
+
     private static (
         ReplacementTemplate Template,
         int[] CaptureSlots) CreateCaptureState(
             ReadOnlyMemory<byte> replacement,
             RegexSearchPlan? searchPlan)
     {
-        var template = ReplacementTemplate.Create(
-            replacement.Span,
-            searchPlan?.CaptureCount ?? 0);
-        int captureCount = Math.Max(template.HighestCapture, searchPlan?.CaptureCount ?? 0);
+        var template = ReplacementTemplate.Create(replacement.Span);
+        int captureCount = template.RequiresSubcaptures
+            ? Math.Max(template.HighestCapture, searchPlan?.CaptureCount ?? 0)
+            : 0;
         return (
             template,
             new int[checked(2 * (captureCount + 1))]);

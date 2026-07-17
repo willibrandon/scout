@@ -493,6 +493,10 @@ def run_interleaved(args: argparse.Namespace) -> None:
         round_documents.append(round_document)
 
     document = aggregate_round_documents(round_documents, args.name)
+    document["commands"] = {
+        "rg": args.rg_command,
+        "scout": args.scout_command,
+    }
     document["sampling"]["raw_round_files"] = raw_paths
     document["sampling"]["measured_round_attempts"] = (
         args.rounds + len(discarded_paths)

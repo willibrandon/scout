@@ -118,13 +118,18 @@ public sealed class RegexCaptureEngineTests()
     public void RestoresNestedCapturesWhenEarlierPathFails()
     {
         RegexCaptureEngine engine = Compile("((a)|ab)c");
+        int[] captureSlots = new int[6];
 
         RegexCaptures? captures = engine.MatchAt("abc"u8, 0, 3);
+        bool replayed = engine.TryReplayCaptures("abc"u8, 0, 3, captureSlots);
 
         Assert.NotNull(captures);
         Assert.Equal(new RegexMatch(0, 3), captures.Match);
         Assert.Equal(new RegexMatch(0, 2), captures.GetGroup(1));
         Assert.Null(captures.GetGroup(2));
+        Assert.True(replayed);
+        Assert.Equal([0, 3, 0, 2, -1, -1], captureSlots);
+        Assert.False(engine.IsOnePassReplayEnabled);
     }
 
     /// <summary>
@@ -167,8 +172,10 @@ public sealed class RegexCaptureEngineTests()
         int captureLength)
     {
         RegexCaptureEngine engine = Compile(pattern);
+        int[] captureSlots = new int[4];
 
         RegexCaptures? captures = engine.MatchAt("aab"u8, 0, 3);
+        bool replayed = engine.TryReplayCaptures("aab"u8, 0, 3, captureSlots);
 
         Assert.NotNull(captures);
         Assert.Equal(new RegexMatch(0, 3), captures.Match);
@@ -176,6 +183,10 @@ public sealed class RegexCaptureEngineTests()
         Assert.NotNull(capture);
         Assert.Equal(captureStart, capture.Value.Start);
         Assert.Equal(captureLength, capture.Value.Length);
+        Assert.True(replayed);
+        Assert.Equal(
+            [0, 3, captureStart, captureStart + captureLength],
+            captureSlots);
     }
 
     /// <summary>
@@ -275,14 +286,24 @@ public sealed class RegexCaptureEngineTests()
     public void EvaluatesZeroWidthPredicatesAroundExactSpan()
     {
         RegexCaptureEngine engine = Compile("(?m)(^)(a+)($)");
+        int[] captureSlots = new int[8];
 
         RegexCaptures? captures = engine.MatchAt("x\na\nz"u8, 2, 3);
+        bool replayed = engine.TryReplayCaptures(
+            "x\na\nz"u8,
+            startAt: 2,
+            endAt: 3,
+            captureSlots);
 
         Assert.NotNull(captures);
         Assert.Equal(new RegexMatch(2, 1), captures.Match);
         Assert.Equal(new RegexMatch(2, 0), captures.GetGroup(1));
         Assert.Equal(new RegexMatch(2, 1), captures.GetGroup(2));
         Assert.Equal(new RegexMatch(3, 0), captures.GetGroup(3));
+        Assert.True(replayed);
+        Assert.Equal([2, 3, 2, 2, 2, 3, 3, 3], captureSlots);
+        Assert.Equal(1, engine.OnePassReplayCount);
+        Assert.True(engine.IsOnePassReplayEnabled);
     }
 
     /// <summary>
@@ -293,14 +314,23 @@ public sealed class RegexCaptureEngineTests()
     {
         RegexCaptureEngine engine = Compile("(?:(A¢€💩)|((?-u:..........)))");
         byte[] haystack = Encoding.UTF8.GetBytes("A¢€💩");
+        int[] captureSlots = new int[6];
 
         RegexCaptures? captures = engine.MatchAt(haystack, 0, haystack.Length);
+        bool replayed = engine.TryReplayCaptures(
+            haystack,
+            startAt: 0,
+            endAt: haystack.Length,
+            captureSlots);
 
         Assert.Equal(10, haystack.Length);
         Assert.NotNull(captures);
         Assert.Equal(new RegexMatch(0, haystack.Length), captures.Match);
         Assert.Equal(new RegexMatch(0, haystack.Length), captures.GetGroup(1));
         Assert.Null(captures.GetGroup(2));
+        Assert.True(replayed);
+        Assert.Equal([0, haystack.Length, 0, haystack.Length, -1, -1], captureSlots);
+        Assert.False(engine.IsOnePassReplayEnabled);
     }
 
     /// <summary>
@@ -351,7 +381,172 @@ public sealed class RegexCaptureEngineTests()
         Assert.True(replayed);
         Assert.Equal(13 * 1_024, checksum);
         Assert.Equal([3, 13, 3, 9, 10, 13], captureSlots);
+        Assert.Equal(1_056, engine.OnePassReplayCount);
+        Assert.True(engine.IsOnePassReplayEnabled);
         Assert.Equal(0, allocated);
+    }
+
+    /// <summary>
+    /// Verifies one-pass replay clears caller-owned slots beyond the compiled capture count.
+    /// </summary>
+    [Fact]
+    public void OnePassReplayClearsOversizedCaptureSlotBuffer()
+    {
+        RegexCaptureEngine engine = Compile(
+            @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)");
+        int[] captureSlots = Enumerable.Repeat(42, 20).ToArray();
+
+        bool replayed = engine.TryReplayCaptures(
+            "xx struct Foo yy"u8,
+            startAt: 3,
+            endAt: 13,
+            captureSlots);
+
+        Assert.True(replayed);
+        Assert.Equal([3, 13, 3, 9, 10, 13], captureSlots[..6]);
+        Assert.All(captureSlots[6..], value => Assert.Equal(-1, value));
+        Assert.Equal(1, engine.OnePassReplayCount);
+    }
+
+    /// <summary>
+    /// Verifies NFAs above the explicit capture-slot budget use the general replay engine.
+    /// </summary>
+    [Fact]
+    public void FallsBackWhenOnePassCaptureSlotBudgetIsExceeded()
+    {
+        string pattern = string.Concat(Enumerable.Repeat("()", 15)) + "(a)";
+        RegexCaptureEngine engine = Compile(pattern);
+        int[] captureSlots = new int[34];
+
+        bool replayed = engine.TryReplayCaptures("a"u8, 0, 1, captureSlots);
+
+        Assert.True(replayed);
+        Assert.Equal([0, 1], captureSlots[..2]);
+        for (int captureIndex = 1; captureIndex <= 15; captureIndex++)
+        {
+            Assert.Equal(0, captureSlots[2 * captureIndex]);
+            Assert.Equal(0, captureSlots[(2 * captureIndex) + 1]);
+        }
+
+        Assert.Equal([0, 1], captureSlots[32..]);
+        Assert.Equal(0, engine.OnePassReplayCount);
+        Assert.False(engine.IsOnePassReplayEnabled);
+    }
+
+    /// <summary>
+    /// Verifies a second matching consumer permanently yields exact replay to the ordered NFA.
+    /// </summary>
+    [Fact]
+    public void FallsBackWhenCaptureReplayIsNotOnePass()
+    {
+        RegexCaptureEngine engine = Compile("(a|a())");
+        int[] captureSlots = new int[6];
+
+        bool replayed = engine.TryReplayCaptures("a"u8, 0, 1, captureSlots);
+
+        Assert.True(replayed);
+        Assert.Equal([0, 1, 0, 1, -1, -1], captureSlots);
+        Assert.Equal(0, engine.OnePassReplayCount);
+        Assert.False(engine.IsOnePassReplayEnabled);
+    }
+
+    /// <summary>
+    /// Verifies an ambiguous prefix falls back before a shorter alternative can override exact bounds.
+    /// </summary>
+    [Fact]
+    public void FallsBackBeforeResolvingAmbiguousExactBounds()
+    {
+        RegexCaptureEngine engine = Compile("(a|ab)");
+        int[] captureSlots = new int[4];
+
+        bool replayed = engine.TryReplayCaptures("ab"u8, 0, 2, captureSlots);
+
+        Assert.True(replayed);
+        Assert.Equal([0, 2, 0, 2], captureSlots);
+        Assert.Equal(0, engine.OnePassReplayCount);
+        Assert.False(engine.IsOnePassReplayEnabled);
+    }
+
+    /// <summary>
+    /// Verifies one-pass replay supports deterministic variable-width Unicode atoms.
+    /// </summary>
+    [Fact]
+    public void ReplaysVariableWidthUnicodeCapturesInOnePass()
+    {
+        RegexCaptureEngine engine = Compile(@"(\s+)([A-Za-z_][A-Za-z0-9_]*)");
+        byte[] haystack = Encoding.UTF8.GetBytes("xx\u00A0Name");
+        int[] captureSlots = new int[6];
+
+        bool replayed = engine.TryReplayCaptures(haystack, 2, haystack.Length, captureSlots);
+
+        Assert.True(replayed);
+        Assert.Equal([2, 8, 2, 4, 4, 8], captureSlots);
+        Assert.Equal(1, engine.OnePassReplayCount);
+        Assert.True(engine.IsOnePassReplayEnabled);
+    }
+
+    /// <summary>
+    /// Verifies a deterministic capture replay follows authoritative ends past earlier lazy accepts.
+    /// </summary>
+    [Fact]
+    public void ReplaysLazyCaptureThroughEachRequestedEndInOnePass()
+    {
+        RegexCaptureEngine engine = Compile("(a+?)");
+        int[] captureSlots = new int[4];
+
+        Assert.True(engine.TryReplayCaptures("zzaaa!"u8, 2, 5, captureSlots));
+        Assert.Equal([2, 5, 2, 5], captureSlots);
+        Assert.True(engine.TryReplayCaptures("zzaaa!"u8, 2, 4, captureSlots));
+        Assert.Equal([2, 4, 2, 4], captureSlots);
+        Assert.Equal(2, engine.OnePassReplayCount);
+        Assert.True(engine.IsOnePassReplayEnabled);
+    }
+
+    /// <summary>
+    /// Verifies deterministic one-pass replay agrees with the ordered NFA across small haystacks.
+    /// </summary>
+    [Fact]
+    public void OnePassReplayMatchesGeneralEngineAcrossSmallHaystacks()
+    {
+        string[] patterns =
+        [
+            "((a+?))(b*)",
+            "(a*)(b?)",
+            "(a?)(b+)",
+            "(a|b)((?:a|b)*)",
+        ];
+
+        foreach (string pattern in patterns)
+        {
+            foreach (byte[] haystack in GenerateSmallHaystacks())
+            {
+                RegexCaptureEngine engine = Compile(pattern);
+                for (int start = 0; start <= haystack.Length; start++)
+                {
+                    for (int end = start; end <= haystack.Length; end++)
+                    {
+                        RegexCaptures? expected = engine.MatchAt(haystack, start, end);
+                        int groupCount = expected?.GroupCount ??
+                            RegexSyntaxParser.Parse(Encoding.UTF8.GetBytes(pattern)).CaptureCount + 1;
+                        int[] actualSlots = new int[checked(2 * groupCount)];
+
+                        bool replayed = engine.TryReplayCaptures(
+                            haystack,
+                            start,
+                            end,
+                            actualSlots);
+
+                        Assert.Equal(expected is not null, replayed);
+                        if (expected is not null)
+                        {
+                            AssertCaptureSlots(expected, actualSlots);
+                        }
+                    }
+                }
+
+                Assert.True(engine.IsOnePassReplayEnabled);
+            }
+        }
     }
 
     /// <summary>
@@ -383,6 +578,146 @@ public sealed class RegexCaptureEngineTests()
         Assert.Equal(0, failures);
     }
 
+    /// <summary>
+    /// Verifies one operation-scoped runner replays many exact spans without allocation.
+    /// </summary>
+    [Fact]
+    public void OperationScopedCaptureRunnerReplaysWithoutAllocating()
+    {
+        RegexAutomaton automaton = CompileAutomaton(
+            @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)");
+        byte[] haystack = "xx struct Foo yy"u8.ToArray();
+        int[] captureSlots = new int[automaton.CaptureSlotCount];
+        RegexCaptureRunner runner = automaton.RentCaptureRunner();
+        try
+        {
+            for (int index = 0; index < 32; index++)
+            {
+                Assert.True(runner.TryReplayCaptures(haystack, 3, 13, captureSlots));
+            }
+
+            bool replayed = true;
+            int checksum = 0;
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int index = 0; index < 1_024; index++)
+            {
+                replayed &= runner.TryReplayCaptures(haystack, 3, 13, captureSlots);
+                checksum += captureSlots[5];
+            }
+
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+            Assert.True(replayed);
+            Assert.Equal(13 * 1_024, checksum);
+            Assert.Equal([3, 13, 3, 9, 10, 13], captureSlots);
+            Assert.Equal(0, allocated);
+        }
+        finally
+        {
+            runner.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Verifies copied or disposed capture leases cannot return or reuse pooled state twice.
+    /// </summary>
+    [Fact]
+    public void CopiedCaptureRunnerLeaseReturnsPooledStateOnce()
+    {
+        RegexAutomaton automaton = CompileAutomaton("(a+)(b)");
+        RegexCaptureRunner runner = automaton.RentCaptureRunner();
+        RegexCaptureRunner copy = runner;
+        long leaseVersion = runner.LeaseVersion;
+
+        Assert.True(runner.IsInitialized);
+        Assert.True(copy.IsInitialized);
+        Assert.True(runner.SharesPooledStateWith(in copy));
+
+        runner.Dispose();
+
+        Assert.False(copy.IsInitialized);
+        Assert.Throws<ObjectDisposedException>(() =>
+            copy.TryReplayCaptures("aaab"u8, 0, 4, new int[6]));
+        copy.Dispose();
+
+        RegexCaptureRunner reused = automaton.RentCaptureRunner();
+        try
+        {
+            Assert.True(reused.IsInitialized);
+            Assert.True(reused.LeaseVersion > leaseVersion);
+            Assert.True(reused.TryReplayCaptures("aaab"u8, 0, 4, new int[6]));
+        }
+        finally
+        {
+            reused.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Verifies concurrent operation leases never share one mutable capture engine.
+    /// </summary>
+    [Fact]
+    public void ConcurrentCaptureRunnerLeasesUseIndependentState()
+    {
+        RegexAutomaton automaton = CompileAutomaton("(a+)(b)");
+        RegexCaptureRunner first = automaton.RentCaptureRunner();
+        RegexCaptureRunner second = automaton.RentCaptureRunner();
+        try
+        {
+            Assert.False(first.SharesPooledStateWith(in second));
+            Assert.True(first.TryReplayCaptures("aaab"u8, 0, 4, new int[6]));
+            Assert.True(second.TryReplayCaptures("aab"u8, 0, 3, new int[6]));
+        }
+        finally
+        {
+            first.Dispose();
+            second.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Verifies simultaneous long-lived capture leases execute on independent mutable engines.
+    /// </summary>
+    [Fact]
+    public async Task ConcurrentCaptureRunnerLeasesReplaySimultaneouslyAsync()
+    {
+        RegexAutomaton automaton = CompileAutomaton("(a+)(b)");
+        RegexCaptureRunner first = automaton.RentCaptureRunner();
+        RegexCaptureRunner second = automaton.RentCaptureRunner();
+        using var barrier = new Barrier(participantCount: 2);
+        try
+        {
+            Task<int[]> firstTask = Task.Run(() => Replay(first, "aaab"u8.ToArray()));
+            Task<int[]> secondTask = Task.Run(() => Replay(second, "aab"u8.ToArray()));
+
+            int[][] results = await Task.WhenAll(firstTask, secondTask).ConfigureAwait(true);
+
+            Assert.Equal([0, 4, 0, 3, 3, 4], results[0]);
+            Assert.Equal([0, 3, 0, 2, 2, 3], results[1]);
+        }
+        finally
+        {
+            first.Dispose();
+            second.Dispose();
+        }
+
+        int[] Replay(RegexCaptureRunner runner, byte[] haystack)
+        {
+            int[] captureSlots = new int[6];
+            barrier.SignalAndWait();
+            for (int index = 0; index < 1_024; index++)
+            {
+                Assert.True(runner.TryReplayCaptures(
+                    haystack,
+                    startAt: 0,
+                    endAt: haystack.Length,
+                    captureSlots));
+            }
+
+            return captureSlots;
+        }
+    }
+
     private static RegexCaptureEngine Compile(string pattern)
     {
         RegexSyntaxTree tree = RegexSyntaxParser.Parse(Encoding.UTF8.GetBytes(pattern));
@@ -393,5 +728,54 @@ public sealed class RegexCaptureEngineTests()
             dotMatchesNewline: false);
         RegexNfa nfa = RegexNfaCompiler.CompileCaptures(tree.Root, options, tree.CaptureCount);
         return new RegexCaptureEngine(nfa, prefilter: null);
+    }
+
+    private static RegexAutomaton CompileAutomaton(string pattern)
+    {
+        return RegexAutomaton.Compile(
+            Encoding.UTF8.GetBytes(pattern),
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: true,
+            unicodeClasses: true);
+    }
+
+    private static void AssertCaptureSlots(RegexCaptures expected, ReadOnlySpan<int> actual)
+    {
+        Assert.Equal(checked(2 * expected.GroupCount), actual.Length);
+        for (int index = 0; index < expected.GroupCount; index++)
+        {
+            RegexMatch? group = expected.GetGroup(index);
+            if (group.HasValue)
+            {
+                Assert.Equal(group.Value.Start, actual[2 * index]);
+                Assert.Equal(group.Value.End, actual[(2 * index) + 1]);
+            }
+            else
+            {
+                Assert.Equal(-1, actual[2 * index]);
+                Assert.Equal(-1, actual[(2 * index) + 1]);
+            }
+        }
+    }
+
+    private static IEnumerable<byte[]> GenerateSmallHaystacks()
+    {
+        yield return [];
+        for (int length = 1; length <= 4; length++)
+        {
+            int count = 1 << length;
+            for (int bits = 0; bits < count; bits++)
+            {
+                byte[] haystack = new byte[length];
+                for (int index = 0; index < length; index++)
+                {
+                    haystack[index] = (bits & (1 << index)) == 0 ? (byte)'a' : (byte)'b';
+                }
+
+                yield return haystack;
+            }
+        }
     }
 }

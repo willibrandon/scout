@@ -17,19 +17,36 @@ internal sealed class ReplacementTemplate(
 {
     private readonly ReplacementTemplatePart[] _parts = parts;
 
+    /// <summary>
+    /// Gets the highest numeric capture referenced by this replacement expression.
+    /// </summary>
     internal int HighestCapture { get; } = highestCapture;
 
+    /// <summary>
+    /// Gets a value indicating whether this expression references a named capture.
+    /// </summary>
     internal bool UsesNamedCaptureReferences { get; } = usesNamedCaptureReferences;
 
+    /// <summary>
+    /// Gets the number of literal bytes in this expression.
+    /// </summary>
     internal int LiteralLength { get; } = literalLength;
 
+    /// <summary>
+    /// Gets a value indicating whether expansion requires capture replay beyond the whole match.
+    /// </summary>
     internal bool RequiresSubcaptures => HighestCapture > 0 || UsesNamedCaptureReferences;
 
-    internal static ReplacementTemplate Create(ReadOnlySpan<byte> replacement, int captureCount = 0)
+    /// <summary>
+    /// Parses one replacement expression into reusable literal and capture parts.
+    /// </summary>
+    /// <param name="replacement">The replacement expression bytes.</param>
+    /// <returns>The parsed replacement expression.</returns>
+    internal static ReplacementTemplate Create(ReadOnlySpan<byte> replacement)
     {
         List<ReplacementTemplatePart> parts = [];
         List<byte> literal = [];
-        int highestCapture = captureCount;
+        int highestCapture = 0;
         bool usesNamedCaptureReferences = false;
         int literalLength = 0;
 

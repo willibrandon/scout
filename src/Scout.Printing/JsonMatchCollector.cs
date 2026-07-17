@@ -9,11 +9,12 @@ namespace Scout;
 internal struct JsonMatchCollector(
     List<JsonMatchSpan> matches,
     ReadOnlyMemory<byte>? replacement,
-    RegexSearchPlan? searchPlan = null) : IMatchLineSink
+    RegexSearchPlan? searchPlan = null) : IMatchLineSink, IDisposable
 {
     private readonly List<JsonMatchSpan> _matches = matches;
     private readonly ReadOnlyMemory<byte>? _replacement = replacement;
     private readonly RegexSearchPlan? _searchPlan = searchPlan;
+    private RegexCaptureReplaySession? _captureSession;
     private readonly (
         ReplacementTemplate Template,
         int[] CaptureSlots)? _captureState =
@@ -39,19 +40,51 @@ internal struct JsonMatchCollector(
         ReadOnlySpan<byte> match)
     {
         int start = checked((int)matchColumn - 1);
-        byte[]? expandedReplacement =
-            _replacement is ReadOnlyMemory<byte> replacementValue &&
-            _captureState is { } captureState
-            ? ReplacementFormatter.Expand(
-                replacementValue.Span,
-                line,
-                start,
-                match.Length,
-                _searchPlan,
-                captureState.Template,
-                captureState.CaptureSlots)
-            : null;
+        byte[]? expandedReplacement = null;
+        if (_replacement is ReadOnlyMemory<byte> replacementValue &&
+            _captureState is { } captureState)
+        {
+            IReplacementCaptureProvider? captureProvider = GetCaptureProvider(captureState.Template);
+            expandedReplacement = captureProvider is null
+                ? ReplacementFormatter.Expand(
+                    replacementValue.Span,
+                    line,
+                    start,
+                    match.Length,
+                    searchPlan: null,
+                    captureState.Template,
+                    captureState.CaptureSlots)
+                : ReplacementFormatter.Expand(
+                    replacementValue.Span,
+                    line,
+                    start,
+                    match.Length,
+                    captureProvider,
+                    start,
+                    captureState.Template,
+                    captureState.CaptureSlots);
+        }
+
         _matches.Add(new JsonMatchSpan(start, start + match.Length, expandedReplacement));
+    }
+
+    private IReplacementCaptureProvider? GetCaptureProvider(ReplacementTemplate template)
+    {
+        if (!template.RequiresSubcaptures || _searchPlan is null)
+        {
+            return null;
+        }
+
+        return _captureSession ??= new RegexCaptureReplaySession(_searchPlan);
+    }
+
+    /// <summary>
+    /// Returns the operation-scoped capture runner when this collector used native subcaptures.
+    /// </summary>
+    public void Dispose()
+    {
+        _captureSession?.Dispose();
+        _captureSession = null;
     }
 
     private static (
@@ -60,10 +93,10 @@ internal struct JsonMatchCollector(
             ReadOnlyMemory<byte> replacement,
             RegexSearchPlan? searchPlan)
     {
-        var template = ReplacementTemplate.Create(
-            replacement.Span,
-            searchPlan?.CaptureCount ?? 0);
-        int captureCount = Math.Max(template.HighestCapture, searchPlan?.CaptureCount ?? 0);
+        var template = ReplacementTemplate.Create(replacement.Span);
+        int captureCount = template.RequiresSubcaptures
+            ? Math.Max(template.HighestCapture, searchPlan?.CaptureCount ?? 0)
+            : 0;
         return (
             template,
             new int[checked(2 * (captureCount + 1))]);

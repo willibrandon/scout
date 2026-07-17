@@ -476,6 +476,10 @@ internal static class MultilineSearchOperations
             ? ContextSearchOperations.IncludePassthruLines(lines, included)
             : IncludeMultilineContextLines(outputBytes, lines, matches, included, beforeContext, afterContext, maxCount);
         var lineSink = new StandardSearchSink(output, prefix, separators.FieldMatch, separators.FieldContext, lineNumber, column, byteOffset, trim, nullPathTerminator, lineLimit, color, separators.LineTerminator);
+        using RegexReplacementSession? replacementSession =
+            replacement is ReadOnlyMemory<byte> replacementValue
+                ? new RegexReplacementSession(replacementValue, plan)
+                : null;
         int previousLineIndex = -1;
         bool wrote = false;
         ulong? renderedMatchLimit = passthru ? maxCount : null;
@@ -511,8 +515,7 @@ internal static class MultilineSearchOperations
                 nullPathTerminator,
                 vimgrep,
                 onlyMatching,
-                replacement,
-                plan,
+                replacementSession,
                 ref lineSink,
                 out int consumedLineIndex);
             previousLineIndex = Math.Max(previousLineIndex, consumedLineIndex);
@@ -618,8 +621,7 @@ internal static class MultilineSearchOperations
         bool nullPathTerminator,
         bool vimgrep,
         bool onlyMatching,
-        ReadOnlyMemory<byte>? replacement,
-        RegexSearchPlan searchPlan,
+        RegexReplacementSession? replacementSession,
         ref StandardSearchSink lineSink,
         out int consumedLineIndex)
     {
@@ -634,14 +636,14 @@ internal static class MultilineSearchOperations
             return true;
         }
 
-        if (replacement is ReadOnlyMemory<byte> replacementValue)
+        if (replacementSession is not null)
         {
             if (onlyMatching)
             {
-                return WriteMultilineOnlyMatchingReplacementsForContextLine(bytes, lines, lineIndex, matches, renderedMatchLimit, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, searchPlan, out consumedLineIndex);
+                return WriteMultilineOnlyMatchingReplacementsForContextLine(bytes, lines, lineIndex, matches, renderedMatchLimit, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementSession, out consumedLineIndex);
             }
 
-            return TryWriteMultilineContextReplacementRecord(bytes, lines, lineIndex, matches, renderedMatchLimit, discoveryMatchLimit, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementValue, searchPlan, out consumedLineIndex);
+            return TryWriteMultilineContextReplacementRecord(bytes, lines, lineIndex, matches, renderedMatchLimit, discoveryMatchLimit, output, separators, prefix, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementSession, out consumedLineIndex);
         }
 
         if (onlyMatching)
@@ -934,6 +936,7 @@ internal static class MultilineSearchOperations
         ReadOnlyMemory<byte> replacement,
         ulong? maxCount)
     {
+        using var replacementSession = new RegexReplacementSession(replacement, plan);
         ulong emitted = 0;
         int groupStart = -1;
         int groupEnd = -1;
@@ -944,7 +947,7 @@ internal static class MultilineSearchOperations
             GetMultilineReplacementRange(bytes, match, out int rangeStart, out int rangeEnd);
             if (groupStart >= 0 && rangeStart > groupEnd)
             {
-                WriteMultilineReplacementRecord(bytes, groupStart, groupEnd, groupMatches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacement, plan);
+                WriteMultilineReplacementRecord(bytes, groupStart, groupEnd, groupMatches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementSession);
                 groupMatches.Clear();
                 groupStart = -1;
                 groupEnd = -1;
@@ -971,7 +974,7 @@ internal static class MultilineSearchOperations
 
         if (groupStart >= 0)
         {
-            WriteMultilineReplacementRecord(bytes, groupStart, groupEnd, groupMatches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacement, plan);
+            WriteMultilineReplacementRecord(bytes, groupStart, groupEnd, groupMatches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementSession);
         }
     }
 
@@ -992,6 +995,7 @@ internal static class MultilineSearchOperations
         ReadOnlyMemory<byte> replacement,
         ulong? maxCount)
     {
+        using var replacementSession = new RegexReplacementSession(replacement, plan);
         ulong emitted = 0;
         for (int index = 0; index < matches.Count; index++)
         {
@@ -1010,12 +1014,10 @@ internal static class MultilineSearchOperations
             }
             else
             {
-                byte[] body = ReplacementFormatter.Expand(
-                    replacement.Span,
+                byte[] body = replacementSession.Expand(
                     bytes,
                     match.Start,
-                    match.Length,
-                    plan);
+                    match.Length);
                 WriteMultilineReplacementBody(body, match.Start, GetLineNumber(bytes, lineStart), match.Start - lineStart + 1L, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator);
             }
 
@@ -1043,8 +1045,7 @@ internal static class MultilineSearchOperations
         bool byteOffset,
         bool trim,
         bool nullPathTerminator,
-        ReadOnlyMemory<byte> replacement,
-        RegexSearchPlan searchPlan)
+        RegexReplacementSession replacementSession)
     {
         List<int> starts = [];
         List<int> lengths = [];
@@ -1063,14 +1064,14 @@ internal static class MultilineSearchOperations
 
         List<long> replacementColumns = [];
         List<int> replacementLengths = [];
-        byte[] body = ReplacementFormatter.ReplaceLine(
+        byte[] body = replacementSession.ReplaceLine(
             bytes[recordStart..recordEnd],
+            bytes,
+            recordStart,
             starts,
             lengths,
-            replacement.Span,
             replacementColumns,
-            replacementLengths,
-            searchPlan: searchPlan);
+            replacementLengths);
         int lineStart = GetLineStart(bytes, recordStart);
         long firstColumn = replacementColumns.Count > 0
             ? replacementColumns[0]
@@ -1660,8 +1661,7 @@ internal static class MultilineSearchOperations
         bool byteOffset,
         bool trim,
         bool nullPathTerminator,
-        ReadOnlyMemory<byte> replacement,
-        RegexSearchPlan searchPlan,
+        RegexReplacementSession replacementSession,
         out int consumedLineIndex)
     {
         ContextLineInfo line = lines[lineIndex];
@@ -1693,12 +1693,10 @@ internal static class MultilineSearchOperations
             }
             else
             {
-                byte[] body = ReplacementFormatter.Expand(
-                    replacement.Span,
+                byte[] body = replacementSession.Expand(
                     bytes,
                     match.Start,
-                    match.Length,
-                    searchPlan);
+                    match.Length);
                 WriteMultilineReplacementBody(body, match.Start, GetLineNumber(bytes, lineStart), match.Start - lineStart + 1L, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator);
             }
 
@@ -1727,8 +1725,7 @@ internal static class MultilineSearchOperations
         bool byteOffset,
         bool trim,
         bool nullPathTerminator,
-        ReadOnlyMemory<byte> replacement,
-        RegexSearchPlan searchPlan,
+        RegexReplacementSession replacementSession,
         out int consumedLineIndex)
     {
         ContextLineInfo line = lines[lineIndex];
@@ -1783,7 +1780,7 @@ internal static class MultilineSearchOperations
             return false;
         }
 
-        WriteMultilineReplacementRecord(bytes, groupStart, groupEnd, groupMatches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacement, searchPlan);
+        WriteMultilineReplacementRecord(bytes, groupStart, groupEnd, groupMatches, output, prefix, separators, lineLimit, color, lineNumber, column, byteOffset, trim, nullPathTerminator, replacementSession);
         int lastLineStart = GetLineStart(bytes, groupEnd > groupStart ? groupEnd - 1 : groupEnd);
         consumedLineIndex = Math.Max(consumedLineIndex, GetMultilineLineIndex(lines, lastLineStart));
         return true;

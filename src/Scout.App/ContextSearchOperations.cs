@@ -620,8 +620,16 @@ internal static class ContextSearchOperations
                     color,
                     separators.LineTerminator,
                     regexPlan);
-                ReplayMatches(lineBytes, matches, ref replacementLineSink);
-                replacementLineSink.Flush();
+                try
+                {
+                    ReplayMatches(lineBytes, matches, ref replacementLineSink);
+                    replacementLineSink.Flush();
+                }
+                finally
+                {
+                    replacementLineSink.Dispose();
+                }
+
                 return;
             }
 
@@ -711,8 +719,16 @@ internal static class ContextSearchOperations
                     color,
                     separators.LineTerminator,
                     regexPlan);
-                ReplayMatches(lineBytes, matches, ref replacementLineSink);
-                replacementLineSink.Flush();
+                try
+                {
+                    ReplayMatches(lineBytes, matches, ref replacementLineSink);
+                    replacementLineSink.Flush();
+                }
+                finally
+                {
+                    replacementLineSink.Dispose();
+                }
+
                 return;
             }
 
@@ -793,7 +809,14 @@ internal static class ContextSearchOperations
                 color,
                 lineTerminator,
                 regexPlan);
-            ReplayMatches(lineBytes, matches, ref replacementMatchSink);
+            try
+            {
+                ReplayMatches(lineBytes, matches, ref replacementMatchSink);
+            }
+            finally
+            {
+                replacementMatchSink.Dispose();
+            }
         }
         else
         {

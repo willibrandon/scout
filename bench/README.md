@@ -40,6 +40,19 @@ SCOUT_BIN=artifacts/bin/osx-arm64/scout \
 bench/run-hyperfine.sh --gate
 ```
 
+Run one release-gate workload with the same sampling and limits:
+
+```sh
+SCOUT_BIN=artifacts/bin/osx-arm64/scout \
+bench/run-hyperfine.sh --gate --workload linux_heldout_capture_general
+```
+
+The focused form validates the selected workload's corpus, measures the RSS
+floor required by its memory limit, and writes the same aggregate JSON as the
+full gate. `bench/run-hyperfine.sh --list` prints the accepted names.
+Set `SCOUT_ORACLE_ENVIRONMENT=github-actions` to use the hosted pinned rg
+binary during a local comparison when that oracle archive has been restored.
+
 GitHub's default `CI` workflow runs hosted cross-platform build, test, format,
 fuzz, and native link checks. After `CI` succeeds on `main`, it dispatches the
 `Release Gates` workflow with the exact successful commit SHA; the workflow can
@@ -83,13 +96,20 @@ samples remain in the output directory for diagnosis. The hosted performance
 job uploads the top-level aggregate JSON even when the gate fails, so the exact
 inputs to every completed attempt remain
 available without uploading the much larger per-round sample tree.
+Each aggregate records the exact rg and Scout command lines. The gate log begins
+with a compact reproducibility manifest containing the host OS and architecture,
+logical CPU count, binary versions and hashes, harness and Hyperfine hashes,
+frozen corpus hashes, selected workload, and fixed thread counts. A focused
+`--workload` run also prints its two commands in the log for direct local-to-CI
+comparison.
 
 Each attempt prints the wall and RSS components as either within or exceeding
 their limits, followed by one overall result that names the workload and failed
-component or components. RSS is compared in exact bytes. Its report includes
-exact byte counts, three-decimal MiB values, the measured floor and formula, and
-signed headroom or excess so a close failure cannot look equal to its rounded
-limit.
+component or components. The CPU line reports the ratio of median combined user
+and system time as supporting diagnostic data; wall time and RSS remain the gate
+dimensions. RSS is compared in exact bytes. Its report includes exact byte
+counts, three-decimal MiB values, the measured floor and formula, and signed
+headroom or excess so a close failure cannot look equal to its rounded limit.
 
 If a workload exceeds its timing or RSS gate, the script repeats only that
 workload up to two times and requires a retry to pass the same gates. This keeps
@@ -110,6 +130,9 @@ recognizers, so the gate continues to measure regex performance that is
 independent of the public OpenSubtitles pattern family. The non-capturing
 workload measures general alternation and prefilter behavior, and the
 replacement workload measures the same class of search through capture output.
+All four Linux-tree workloads pass `--threads 3` to both rg and Scout. The fixed
+worker count keeps local and hosted runs comparable when the machines expose
+different logical CPU counts.
 
 The generated `bounded_assignment_no_match` workload uses issue #30's exact
 pattern and an 800-line input containing repeated `bitbucket` candidates but no

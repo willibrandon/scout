@@ -4,6 +4,7 @@ set -eu
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 LOCK="$ROOT/tests/PREREQS.lock"
 MODE="smoke"
+WORKLOAD=""
 RUNS="3"
 RUNS_SPECIFIED="0"
 WARMUP="1"
@@ -22,6 +23,7 @@ GATE_LARGE_BOUNDED_UNICODE_CLASS_WARMUP="6"
 GATE_LINE_REGEX_RUNS="6"
 GATE_LINE_REGEX_WARMUP="6"
 GATE_LARGE_FILE_THREADS="4"
+GATE_TREE_THREADS="3"
 GATE_LARGE_FILE_SEGMENT_BUFFER_LENGTH="131072"
 GATE_RETRY_FAILED_WORKLOADS="${SCOUT_GATE_RETRY_FAILED_WORKLOADS:-2}"
 
@@ -32,16 +34,18 @@ fail() {
 
 usage() {
     printf '%s\n' \
-        'usage: bench/run-hyperfine.sh [--smoke|--gate|--list] [--runs N] [--warmup N] [--output-dir DIR]' \
+        'usage: bench/run-hyperfine.sh [--smoke|--gate|--list] [--workload NAME] [--runs N] [--warmup N] [--output-dir DIR]' \
         '' \
         'Environment:' \
         '  SCOUT_BIN                         Native AOT scout binary. Defaults to artifacts/bin/<rid>/scout.' \
         '  SCOUT_RSS_BASELINE_BIN            Native AOT real binary for RSS-floor measurement. Defaults to sibling scout-real when present.' \
         '  SCOUT_BENCH_OPENSUBTITLES_EN     OpenSubtitles en.txt path for --gate.' \
         '  SCOUT_BENCH_LINUX_TREE           Linux source tree path for --gate.' \
+        '  SCOUT_ORACLE_ENVIRONMENT          Pinned rg oracle environment: local or github-actions.' \
         '  SCOUT_GATE_RETRY_FAILED_WORKLOADS Retry a failed gate workload this many times. Defaults to 2; set 0 to disable.' \
         '' \
-        'The --gate mode requires frozen corpus hashes in tests/PREREQS.lock.'
+        'The --gate mode requires frozen corpus hashes in tests/PREREQS.lock.' \
+        'Use --gate --workload NAME to run one listed release-gate workload.'
 }
 
 strip_toml_value='
@@ -101,6 +105,18 @@ read_lock_table_value() {
 }
 
 oracle_environment() {
+    if [ -n "${SCOUT_ORACLE_ENVIRONMENT:-}" ]; then
+        case "$SCOUT_ORACLE_ENVIRONMENT" in
+            github-actions|local)
+                printf '%s\n' "$SCOUT_ORACLE_ENVIRONMENT"
+                return
+                ;;
+            *)
+                fail "Unsupported SCOUT_ORACLE_ENVIRONMENT for pinned ripgrep oracle: $SCOUT_ORACLE_ENVIRONMENT"
+                ;;
+        esac
+    fi
+
     if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
         printf 'github-actions\n'
     else
@@ -307,6 +323,63 @@ sha256_tree() {
             done
         fi | sed 's#  \./#  #'
     ) | sha256_stream
+}
+
+logical_cpu_count() {
+    if command -v getconf >/dev/null 2>&1; then
+        count="$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
+        case "$count" in
+            ''|*[!0-9]*)
+                ;;
+            *)
+                printf '%s\n' "$count"
+                return
+                ;;
+        esac
+    fi
+
+    if command -v sysctl >/dev/null 2>&1; then
+        count="$(sysctl -n hw.logicalcpu 2>/dev/null || true)"
+        case "$count" in
+            ''|*[!0-9]*)
+                ;;
+            *)
+                printf '%s\n' "$count"
+                return
+                ;;
+        esac
+    fi
+
+    printf 'unknown\n'
+}
+
+print_repro_manifest() {
+    manifest_os="$(uname -s)"
+    manifest_arch="$(uname -m)"
+    manifest_cpu_count="$(logical_cpu_count)"
+    manifest_rg_version="$("$RG_BIN" --version | sed -n '1p')"
+    manifest_rg_sha256="$(sha256_file "$RG_BIN")"
+    manifest_scout_version="$("$SCOUT_BIN" --version | sed -n '1p')"
+    manifest_scout_sha256="$(sha256_file "$SCOUT_BIN")"
+    manifest_script_sha256="$(sha256_file "$ROOT/bench/run-hyperfine.sh")"
+    manifest_hyperfine_version="$("$HYPERFINE" --version | sed -n '1p')"
+    manifest_hyperfine_sha256="$(sha256_file "$HYPERFINE")"
+    manifest_opensubtitles_sha256="$(read_corpus_value "opensubtitles-en" "sha256")"
+    manifest_linux_tree_sha256="$(read_corpus_value "linux-kernel" "tree_sha256")"
+    manifest_selection="${WORKLOAD:-all gate workloads}"
+
+    printf '\n== reproducibility ==\n'
+    printf 'host: %s/%s; logical CPUs: %s\n' "$manifest_os" "$manifest_arch" "$manifest_cpu_count"
+    printf 'selection: %s\n' "$manifest_selection"
+    printf 'rg: %s; sha256: %s; oracle environment: %s\n' \
+        "$manifest_rg_version" "$manifest_rg_sha256" "$HOST_ORACLE_ENVIRONMENT"
+    printf 'Scout: %s; sha256: %s\n' "$manifest_scout_version" "$manifest_scout_sha256"
+    printf 'harness: script sha256=%s; %s sha256=%s\n' \
+        "$manifest_script_sha256" "$manifest_hyperfine_version" "$manifest_hyperfine_sha256"
+    printf 'corpus pins: OpenSubtitles sha256=%s; Linux tree sha256=%s\n' \
+        "$manifest_opensubtitles_sha256" "$manifest_linux_tree_sha256"
+    printf 'fixed threads: line regex=1; OpenSubtitles=4; Linux tree=%s\n' "$GATE_TREE_THREADS"
+    printf 'commands: exact rg and Scout argv are stored in each aggregate JSON\n'
 }
 
 shell_quote() {
@@ -941,8 +1014,17 @@ run_pair_impl() {
     no_shell="$7"
     json="$OUT_DIR/$name.json"
 
+    if ! workload_selected "$name"; then
+        return 0
+    fi
+
     printf '\n== %s ==\n' "$name"
     printf 'Limits: wall %.3fx; RSS 1.500x rg + Native AOT floor\n' "$gate"
+    if [ -n "$WORKLOAD" ]; then
+        printf 'Commands:\n'
+        printf '  rg: %s\n' "$rg_command"
+        printf '  Scout: %s\n' "$scout_command"
+    fi
     if [ "$MODE" = "gate" ]; then
         run_hyperfine_interleaved "$no_shell" "$json" "$name" "$rg_command" "$scout_command" "$runs" "$warmup"
 
@@ -1004,6 +1086,54 @@ run_pair_no_shell() {
     run_pair_impl "$name" "$gate" "$rg_command" "$scout_command" "$runs" "$warmup" "1"
 }
 
+is_gate_workload() {
+    case "$1" in
+        bounded_assignment_no_match|\
+        large_bounded_unicode_class_no_match|\
+        line_regex_word_boundary_general|\
+        line_regex_word_boundary_line_count_general|\
+        line_regex_generated_record_word_boundary_general|\
+        line_regex_anchored_general|\
+        line_regex_bounded_class_general|\
+        line_regex_bounded_class_exact_general|\
+        shared_delegate_prefix_general|\
+        many_absent_regexp_general|\
+        many_absent_pattern_file_general|\
+        subtitles_en_literal|\
+        subtitles_en_regex|\
+        linux_recursive_literal|\
+        linux_heldout_regex_general|\
+        linux_heldout_capture_general|\
+        linux_many_small_parallel|\
+        cold_version|\
+        cold_tiny_search)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+workload_selected() {
+    [ -z "$WORKLOAD" ] || [ "$WORKLOAD" = "$1" ]
+}
+
+workload_group_selected() {
+    if [ -z "$WORKLOAD" ]; then
+        return 0
+    fi
+
+    while [ "$#" -gt 0 ]; do
+        if [ "$WORKLOAD" = "$1" ]; then
+            return 0
+        fi
+        shift
+    done
+
+    return 1
+}
+
 list_workloads() {
     printf '%s\n' \
         'smoke_large_literal          generated single file, no release gate' \
@@ -1046,6 +1176,12 @@ while [ "$#" -gt 0 ]; do
             MODE="list"
             shift
             ;;
+        --workload)
+            [ "$#" -ge 2 ] || fail "Missing value for --workload."
+            [ -z "$WORKLOAD" ] || fail "--workload may be specified only once."
+            WORKLOAD="$2"
+            shift 2
+            ;;
         --runs)
             [ "$#" -ge 2 ] || fail "Missing value for --runs."
             RUNS="$2"
@@ -1072,6 +1208,11 @@ while [ "$#" -gt 0 ]; do
             ;;
     esac
 done
+
+if [ -n "$WORKLOAD" ]; then
+    [ "$MODE" = "gate" ] || fail "--workload requires --gate."
+    is_gate_workload "$WORKLOAD" || fail "Unknown release-gate workload: $WORKLOAD. Run --list for valid names."
+fi
 
 case "$GATE_RETRY_FAILED_WORKLOADS" in
     ''|*[!0-9]*)
@@ -1185,25 +1326,63 @@ if [ "$MODE" = "smoke" ]; then
 fi
 
 make_cold_tiny_corpus
-make_bounded_assignment_corpus
-make_large_bounded_unicode_class_corpus
-make_line_regex_corpus
-OPENSUBTITLES_EN="${SCOUT_BENCH_OPENSUBTITLES_EN:-}"
-LINUX_TREE="${SCOUT_BENCH_LINUX_TREE:-}"
-OPENSUBTITLES_EN="$(require_gate_corpus_file "opensubtitles-en" "$OPENSUBTITLES_EN")"
-LINUX_TREE="$(require_gate_corpus_tree "linux-kernel" "$LINUX_TREE")"
-
-Q_OPEN="$(shell_quote "$OPENSUBTITLES_EN")"
-Q_LINUX="$(shell_quote "$LINUX_TREE")"
 Q_TINY="$(shell_quote "$OUT_DIR/cold-tiny.txt")"
-Q_BOUNDED_ASSIGNMENT_PATTERN="$(shell_quote "$OUT_DIR/bounded-assignment/pattern.txt")"
-Q_BOUNDED_ASSIGNMENT_INPUT="$(shell_quote "$OUT_DIR/bounded-assignment/no-match-800.txt")"
-Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN="$(shell_quote "$OUT_DIR/large-bounded-unicode-class/pattern.txt")"
-Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT="$(shell_quote "$OUT_DIR/large-bounded-unicode-class/no-match-5000.txt")"
-Q_LINE_REGEX_INPUT="$(shell_quote "$OUT_DIR/line-regex/paladin-like-200000.txt")"
-SHARED_DELEGATE_INPUTS="$Q_LINE_REGEX_INPUT $Q_LINE_REGEX_INPUT $Q_LINE_REGEX_INPUT $Q_LINE_REGEX_INPUT"
-Q_LINE_REGEX_ABSENT_PATTERNS="$(shell_quote "$OUT_DIR/line-regex/absent-patterns-64.txt")"
-LINE_REGEX_ABSENT_REGEXP_ARGUMENTS="$(make_absent_regexp_arguments "$OUT_DIR/line-regex/absent-patterns-64.txt")"
+Q_OPEN=""
+Q_LINUX=""
+Q_BOUNDED_ASSIGNMENT_PATTERN=""
+Q_BOUNDED_ASSIGNMENT_INPUT=""
+Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN=""
+Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT=""
+Q_LINE_REGEX_INPUT=""
+SHARED_DELEGATE_INPUTS=""
+Q_LINE_REGEX_ABSENT_PATTERNS=""
+LINE_REGEX_ABSENT_REGEXP_ARGUMENTS=""
+
+if workload_group_selected subtitles_en_literal subtitles_en_regex; then
+    OPENSUBTITLES_EN="${SCOUT_BENCH_OPENSUBTITLES_EN:-}"
+    OPENSUBTITLES_EN="$(require_gate_corpus_file "opensubtitles-en" "$OPENSUBTITLES_EN")"
+    Q_OPEN="$(shell_quote "$OPENSUBTITLES_EN")"
+fi
+
+if workload_group_selected \
+    linux_recursive_literal \
+    linux_heldout_regex_general \
+    linux_heldout_capture_general \
+    linux_many_small_parallel; then
+    LINUX_TREE="${SCOUT_BENCH_LINUX_TREE:-}"
+    LINUX_TREE="$(require_gate_corpus_tree "linux-kernel" "$LINUX_TREE")"
+    Q_LINUX="$(shell_quote "$LINUX_TREE")"
+fi
+
+if workload_selected bounded_assignment_no_match; then
+    make_bounded_assignment_corpus
+    Q_BOUNDED_ASSIGNMENT_PATTERN="$(shell_quote "$OUT_DIR/bounded-assignment/pattern.txt")"
+    Q_BOUNDED_ASSIGNMENT_INPUT="$(shell_quote "$OUT_DIR/bounded-assignment/no-match-800.txt")"
+fi
+
+if workload_selected large_bounded_unicode_class_no_match; then
+    make_large_bounded_unicode_class_corpus
+    Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN="$(shell_quote "$OUT_DIR/large-bounded-unicode-class/pattern.txt")"
+    Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT="$(shell_quote "$OUT_DIR/large-bounded-unicode-class/no-match-5000.txt")"
+fi
+
+if workload_group_selected \
+    line_regex_word_boundary_general \
+    line_regex_word_boundary_line_count_general \
+    line_regex_generated_record_word_boundary_general \
+    line_regex_anchored_general \
+    line_regex_bounded_class_general \
+    line_regex_bounded_class_exact_general \
+    shared_delegate_prefix_general \
+    many_absent_regexp_general \
+    many_absent_pattern_file_general; then
+    make_line_regex_corpus
+    Q_LINE_REGEX_INPUT="$(shell_quote "$OUT_DIR/line-regex/paladin-like-200000.txt")"
+    SHARED_DELEGATE_INPUTS="$Q_LINE_REGEX_INPUT $Q_LINE_REGEX_INPUT $Q_LINE_REGEX_INPUT $Q_LINE_REGEX_INPUT"
+    Q_LINE_REGEX_ABSENT_PATTERNS="$(shell_quote "$OUT_DIR/line-regex/absent-patterns-64.txt")"
+    LINE_REGEX_ABSENT_REGEXP_ARGUMENTS="$(make_absent_regexp_arguments "$OUT_DIR/line-regex/absent-patterns-64.txt")"
+fi
+
 RG_LINE_REGEX_PREFIX="$Q_RG --no-config --threads 1 --mmap --count-matches --no-messages"
 SCOUT_LINE_REGEX_PREFIX="env SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config --threads 1 --mmap --count-matches --no-messages"
 RG_LINE_REGEX_LINE_COUNT_PREFIX="$Q_RG --no-config --threads 1 --mmap --count --no-messages"
@@ -1231,8 +1410,11 @@ LARGE_BOUNDED_UNICODE_CLASS_WARMUP="$(gate_large_bounded_unicode_class_warmup)"
 LINE_REGEX_RUNS="$(gate_line_regex_runs)"
 LINE_REGEX_WARMUP="$(gate_line_regex_warmup)"
 
-printf '\n== corpus balance ==\n'
-analyze_large_file_segments "subtitles_en_regex" "$OPENSUBTITLES_EN" "$GATE_LARGE_FILE_SEGMENT_BUFFER_LENGTH" "$GATE_LARGE_FILE_THREADS"
+print_repro_manifest
+if workload_selected subtitles_en_regex; then
+    printf '\n== corpus balance ==\n'
+    analyze_large_file_segments "subtitles_en_regex" "$OPENSUBTITLES_EN" "$GATE_LARGE_FILE_SEGMENT_BUFFER_LENGTH" "$GATE_LARGE_FILE_THREADS"
+fi
 measure_rss_floor "$OPENSUBTITLES_RUNS" "$OPENSUBTITLES_WARMUP"
 
 run_pair \
@@ -1329,29 +1511,29 @@ run_pair \
 run_pair \
     "linux_recursive_literal" \
     "1.25" \
-    "$Q_RG --no-config -n 'PM_RESUME' $Q_LINUX" \
-    "$Q_SCOUT --no-config -n 'PM_RESUME' $Q_LINUX" \
+    "$Q_RG --no-config --threads $GATE_TREE_THREADS -n 'PM_RESUME' $Q_LINUX" \
+    "$Q_SCOUT --no-config --threads $GATE_TREE_THREADS -n 'PM_RESUME' $Q_LINUX" \
     "$TREE_RUNS" \
     "$TREE_WARMUP"
 run_pair \
     "linux_heldout_regex_general" \
     "1.50" \
-    "$Q_RG --no-config -n '\\b(?:struct|enum|union)\\s+[A-Za-z_][A-Za-z0-9_]*' $Q_LINUX" \
-    "env SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config -n '\\b(?:struct|enum|union)\\s+[A-Za-z_][A-Za-z0-9_]*' $Q_LINUX" \
+    "$Q_RG --no-config --threads $GATE_TREE_THREADS -n '\\b(?:struct|enum|union)\\s+[A-Za-z_][A-Za-z0-9_]*' $Q_LINUX" \
+    "env SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config --threads $GATE_TREE_THREADS -n '\\b(?:struct|enum|union)\\s+[A-Za-z_][A-Za-z0-9_]*' $Q_LINUX" \
     "$TREE_RUNS" \
     "$TREE_WARMUP"
 run_pair \
     "linux_heldout_capture_general" \
     "1.75" \
-    "$Q_RG --no-config -n --replace '\$1 \$2' '\\b(struct|enum|union)\\s+([A-Za-z_][A-Za-z0-9_]*)' $Q_LINUX" \
-    "env SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config -n --replace '\$1 \$2' '\\b(struct|enum|union)\\s+([A-Za-z_][A-Za-z0-9_]*)' $Q_LINUX" \
+    "$Q_RG --no-config --threads $GATE_TREE_THREADS -n --replace '\$1 \$2' '\\b(struct|enum|union)\\s+([A-Za-z_][A-Za-z0-9_]*)' $Q_LINUX" \
+    "env SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config --threads $GATE_TREE_THREADS -n --replace '\$1 \$2' '\\b(struct|enum|union)\\s+([A-Za-z_][A-Za-z0-9_]*)' $Q_LINUX" \
     "$TREE_RUNS" \
     "$TREE_WARMUP"
 run_pair \
     "linux_many_small_parallel" \
     "1.30" \
-    "$Q_RG --no-config -n 'struct' $Q_LINUX" \
-    "$Q_SCOUT --no-config -n 'struct' $Q_LINUX" \
+    "$Q_RG --no-config --threads $GATE_TREE_THREADS -n 'struct' $Q_LINUX" \
+    "$Q_SCOUT --no-config --threads $GATE_TREE_THREADS -n 'struct' $Q_LINUX" \
     "$TREE_RUNS" \
     "$TREE_WARMUP"
 run_pair_no_shell \

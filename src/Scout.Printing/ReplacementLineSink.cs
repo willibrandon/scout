@@ -39,7 +39,7 @@ internal struct ReplacementLineSink(
     ReadOnlyMemory<byte> lineTerminator = default,
     RegexSearchPlan? searchPlan = null,
     IReplacementCaptureProvider? captureProvider = null,
-    bool streamPlainBodyDirectly = false) : IMatchLineSink
+    bool streamPlainBodyDirectly = false) : IMatchLineSink, IDisposable
 {
     private static readonly byte[] s_nullByte = [0];
 
@@ -47,7 +47,9 @@ internal struct ReplacementLineSink(
     private readonly OutputPath? _prefix = prefix;
     private readonly ReadOnlyMemory<byte> _fieldSeparator = fieldSeparator;
     private readonly ReadOnlyMemory<byte> _replacement = replacement;
-    private readonly IReplacementCaptureProvider? _captureProvider = captureProvider ?? searchPlan;
+    private readonly RegexSearchPlan? _searchPlan = searchPlan;
+    private readonly IReplacementCaptureProvider? _externalCaptureProvider = captureProvider;
+    private RegexCaptureReplaySession? _captureSession;
     private ReplacementTemplate? _template;
     private int[]? _captureSlotsBuffer;
     private readonly bool _streamPlainBodyDirectly = streamPlainBodyDirectly;
@@ -347,7 +349,8 @@ internal struct ReplacementLineSink(
         }
 
         ReplacementTemplate activeTemplate = GetTemplate();
-        if (_captureProvider is null)
+        IReplacementCaptureProvider? captureProvider = GetCaptureProvider(activeTemplate);
+        if (captureProvider is null)
         {
             ReplacementFormatter.WriteExpanded(
                 _output,
@@ -367,7 +370,7 @@ internal struct ReplacementLineSink(
                 line,
                 matchStart,
                 match.Length,
-                _captureProvider,
+                captureProvider,
                 searchStart,
                 activeTemplate,
                 GetCaptureSlotsBuffer(activeTemplate));
@@ -378,7 +381,8 @@ internal struct ReplacementLineSink(
 
     private byte[] ReplaceLine(ReplacementTemplate activeTemplate)
     {
-        if (_captureProvider is null)
+        IReplacementCaptureProvider? captureProvider = GetCaptureProvider(activeTemplate);
+        if (captureProvider is null)
         {
             return ReplacementFormatter.ReplaceLine(
                 _currentLine,
@@ -399,7 +403,7 @@ internal struct ReplacementLineSink(
             _replacement.Span,
             _replacementColumns,
             _replacementLengths,
-            _captureProvider,
+            captureProvider,
             _searchStarts,
             activeTemplate,
             GetCaptureSlotsBuffer(activeTemplate));
@@ -407,7 +411,8 @@ internal struct ReplacementLineSink(
 
     private void WriteReplacedLine(ReplacementTemplate activeTemplate)
     {
-        if (_captureProvider is null)
+        IReplacementCaptureProvider? captureProvider = GetCaptureProvider(activeTemplate);
+        if (captureProvider is null)
         {
             ReplacementFormatter.WriteReplacedLine(
                 _output,
@@ -427,7 +432,7 @@ internal struct ReplacementLineSink(
             _starts,
             _lengths,
             _replacement.Span,
-            _captureProvider,
+            captureProvider,
             _searchStarts,
             activeTemplate,
             GetCaptureSlotsBuffer(activeTemplate));
@@ -435,15 +440,46 @@ internal struct ReplacementLineSink(
 
     private ReplacementTemplate GetTemplate()
     {
-        return _template ??= ReplacementTemplate.Create(
-            _replacement.Span,
-            _captureProvider?.CaptureCount ?? 0);
+        return _template ??= ReplacementTemplate.Create(_replacement.Span);
     }
 
     private int[] GetCaptureSlotsBuffer(ReplacementTemplate activeTemplate)
     {
-        int captureCount = Math.Max(activeTemplate.HighestCapture, _captureProvider?.CaptureCount ?? 0);
+        int captureCount = activeTemplate.RequiresSubcaptures
+            ? Math.Max(activeTemplate.HighestCapture, GetCaptureCount())
+            : 0;
         return _captureSlotsBuffer ??= new int[checked(2 * (captureCount + 1))];
+    }
+
+    private IReplacementCaptureProvider? GetCaptureProvider(ReplacementTemplate activeTemplate)
+    {
+        if (!activeTemplate.RequiresSubcaptures)
+        {
+            return null;
+        }
+
+        if (_externalCaptureProvider is not null)
+        {
+            return _externalCaptureProvider;
+        }
+
+        return _searchPlan is null
+            ? null
+            : _captureSession ??= new RegexCaptureReplaySession(_searchPlan);
+    }
+
+    private int GetCaptureCount()
+    {
+        return _externalCaptureProvider?.CaptureCount ?? _searchPlan?.CaptureCount ?? 0;
+    }
+
+    /// <summary>
+    /// Returns the operation-scoped capture runner when this sink used native subcaptures.
+    /// </summary>
+    public void Dispose()
+    {
+        _captureSession?.Dispose();
+        _captureSession = null;
     }
 
     private void WritePrefix(long outputLineNumber, long outputByteOffset, long outputColumn)

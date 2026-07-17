@@ -164,7 +164,7 @@ internal static class ReplacementFormatter
         ReplacementTemplate? template,
         int[]? captureSlotsBuffer)
     {
-        template ??= ReplacementTemplate.Create(replacement, captureProvider?.CaptureCount ?? 0);
+        template ??= ReplacementTemplate.Create(replacement);
         replacementColumns.Clear();
         replacementLengths?.Clear();
         var bytes = new List<byte>(line.Length);
@@ -241,7 +241,7 @@ internal static class ReplacementFormatter
         int[]? captureSlotsBuffer = null)
     {
         ArgumentNullException.ThrowIfNull(captureProvider);
-        template ??= ReplacementTemplate.Create(replacement, captureProvider.CaptureCount);
+        template ??= ReplacementTemplate.Create(replacement);
         var bytes = new List<byte>(template.LiteralLength + matchLength);
         AddExpanded(
             bytes,
@@ -275,7 +275,7 @@ internal static class ReplacementFormatter
         ReplacementTemplate? template = null,
         int[]? captureSlotsBuffer = null)
     {
-        template ??= ReplacementTemplate.Create(replacement, searchPlan?.CaptureCount ?? 0);
+        template ??= ReplacementTemplate.Create(replacement);
         var bytes = new List<byte>(template.LiteralLength + matchLength);
         AddExpanded(
             bytes,
@@ -375,7 +375,7 @@ internal static class ReplacementFormatter
         ReplacementTemplate? template,
         int[]? captureSlotsBuffer)
     {
-        template ??= ReplacementTemplate.Create(replacement, captureProvider?.CaptureCount ?? 0);
+        template ??= ReplacementTemplate.Create(replacement);
         int previous = 0;
         for (int index = 0; index < starts.Count; index++)
         {
@@ -506,7 +506,12 @@ internal static class ReplacementFormatter
         ReplacementTemplate? template,
         int[]? captureSlotsBuffer)
     {
-        template ??= ReplacementTemplate.Create(replacement, captureProvider?.CaptureCount ?? 0);
+        template ??= ReplacementTemplate.Create(replacement);
+        if (!template.RequiresSubcaptures)
+        {
+            captureProvider = null;
+        }
+
         int captureCount = Math.Max(template.HighestCapture, captureProvider?.CaptureCount ?? 0);
         int requiredLength = checked(2 * (captureCount + 1));
         int[] captureSlots = captureSlotsBuffer is not null && captureSlotsBuffer.Length >= requiredLength
@@ -540,6 +545,11 @@ internal static class ReplacementFormatter
         ReplacementTemplate template,
         int[]? captureSlotsBuffer)
     {
+        if (!template.RequiresSubcaptures)
+        {
+            captureProvider = null;
+        }
+
         int captureCount = Math.Max(template.HighestCapture, captureProvider?.CaptureCount ?? 0);
         int requiredLength = checked(2 * (captureCount + 1));
         int[] captureSlots = captureSlotsBuffer is not null && captureSlotsBuffer.Length >= requiredLength

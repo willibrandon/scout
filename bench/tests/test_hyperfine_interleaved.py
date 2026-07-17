@@ -246,6 +246,10 @@ class HyperfineInterleavedTests(unittest.TestCase):
 
             aggregate = json.loads(output.read_text(encoding="utf-8"))
             sampling = aggregate["sampling"]
+            self.assertEqual(
+                {"rg": "rg command", "scout": "scout command"},
+                aggregate["commands"],
+            )
             self.assertEqual(5, run_round.call_count)
             self.assertEqual(2, sampling["rounds"])
             self.assertEqual(3, sampling["measured_round_attempts"])
