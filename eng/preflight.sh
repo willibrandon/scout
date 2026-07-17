@@ -4,6 +4,7 @@ set -eu
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 LOCK="$ROOT/tests/PREREQS.lock"
 REFERENCE="${SCOUT_RIPGREP_REFERENCE:-/Users/brandon/src/ripgrep}"
+. "$ROOT/eng/sha256-set.sh"
 
 fail() {
     printf '%s\n' "$1" >&2
@@ -38,119 +39,53 @@ read_lock_value() {
     ' "$LOCK"
 }
 
-read_lock_named_table_value() {
-    awk -v header="[[${1}]]" -v name="$2" -v environment="$3" -v key="$4" "$strip_toml_value"'
-        function reset_table() {
-            in_table = 0
-            table_name = ""
-            table_environment = ""
-            table_value = ""
-        }
-        function maybe_emit() {
-            if (found) {
-                return
-            }
-            if (in_table && table_name == name && table_value != "" &&
-                ((environment == "" && table_environment == "") || (environment != "" && table_environment == environment))) {
-                print table_value
-                found = 1
-                exit 0
-            }
-        }
-        $0 == header {
-            maybe_emit()
-            in_table = 1
-            table_name = ""
-            table_environment = ""
-            table_value = ""
-            next
-        }
-        in_table && $0 ~ /^\[/ {
-            maybe_emit()
-            reset_table()
-        }
-        in_table && $0 ~ /^[[:space:]]*name[[:space:]]*=/ {
-            table_name = value_of($0)
-            next
-        }
-        in_table && $0 ~ /^[[:space:]]*environment[[:space:]]*=/ {
-            table_environment = value_of($0)
-            next
-        }
-        in_table && $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
-            table_value = value_of($0)
-            next
-        }
-        END {
-            maybe_emit()
-            if (!found) {
-                exit 1
-            }
-        }
-    ' "$LOCK"
-}
-
-read_lock_table_value() {
-    read_lock_named_table_value "$1" "$2" "" "$3"
-}
-
-read_lock_environment_table_value() {
-    read_lock_named_table_value "$1" "$2" "$3" "$4"
-}
-
 read_lock_macos_tool_value() {
-    name="$1"
-    key="$2"
-
-    if value="$(read_lock_rid_named_table_value "tool.macos" "$name" "$HOST_RID" "$HOST_ORACLE_ENVIRONMENT" "$key")"; then
-        printf '%s\n' "$value"
-        return 0
-    fi
-
-    if value="$(read_lock_rid_named_table_value "tool.macos" "$name" "$HOST_RID" "" "$key")"; then
-        printf '%s\n' "$value"
-        return 0
-    fi
-
-    if value="$(read_lock_environment_table_value "tool.macos" "$name" "$HOST_ORACLE_ENVIRONMENT" "$key")"; then
-        printf '%s\n' "$value"
-        return 0
-    fi
-
-    read_lock_table_value "tool.macos" "$name" "$key"
-}
-
-read_lock_rid_named_table_value() {
-    awk -v header="[[${1}]]" -v name="$2" -v rid="$3" -v environment="$4" -v key="$5" "$strip_toml_value"'
+    awk -v name="$1" -v rid="$HOST_RID" -v environment="$HOST_ORACLE_ENVIRONMENT" -v key="$2" "$strip_toml_value"'
         function reset_table() {
             in_table = 0
             table_name = ""
             table_rid = ""
             table_environment = ""
             table_value = ""
+            table_has_value = 0
         }
-        function maybe_emit() {
-            if (found) {
+        function maybe_select(    score) {
+            if (!in_table || table_name != name) {
                 return
             }
-            if (in_table && table_name == name && table_rid == rid && table_value != "" &&
-                ((environment == "" && table_environment == "") || (environment != "" && table_environment == environment))) {
-                print table_value
-                found = 1
-                exit 0
+
+            score = 0
+            if (table_rid == rid && table_environment == environment) {
+                score = 4
+            } else if (table_rid == rid && table_environment == "") {
+                score = 3
+            } else if (table_rid == "" && table_environment == environment) {
+                score = 2
+            } else if (table_rid == "" && table_environment == "") {
+                score = 1
+            }
+
+            if (score > selected_score) {
+                selected_score = score
+                selected_value = table_value
+                selected_has_value = table_has_value
+                duplicate = 0
+            } else if (score != 0 && score == selected_score) {
+                duplicate = 1
             }
         }
-        $0 == header {
-            maybe_emit()
+        $0 == "[[tool.macos]]" {
+            maybe_select()
             in_table = 1
             table_name = ""
             table_rid = ""
             table_environment = ""
             table_value = ""
+            table_has_value = 0
             next
         }
         in_table && $0 ~ /^\[/ {
-            maybe_emit()
+            maybe_select()
             reset_table()
         }
         in_table && $0 ~ /^[[:space:]]*name[[:space:]]*=/ {
@@ -167,13 +102,16 @@ read_lock_rid_named_table_value() {
         }
         in_table && $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
             table_value = value_of($0)
+            table_has_value = 1
             next
         }
         END {
-            maybe_emit()
-            if (!found) {
+            maybe_select()
+            if (selected_score == 0 || !selected_has_value || duplicate) {
                 exit 1
             }
+
+            print selected_value
         }
     ' "$LOCK"
 }
@@ -430,19 +368,26 @@ check_macos_tool_hash() {
     name="$1"
     path="$(read_lock_macos_tool_value "$name" "path")" || fail "Missing macOS tool path for $name in tests/PREREQS.lock."
     version="$(read_lock_macos_tool_value "$name" "version")" || fail "Missing macOS tool version for $name in tests/PREREQS.lock."
-    sha256="$(read_lock_macos_tool_value "$name" "sha256")" || fail "Missing macOS tool hash for $name in tests/PREREQS.lock."
+    sha256_set="$(read_lock_macos_tool_value "$name" "sha256")" || fail "Missing macOS tool hash for $name in tests/PREREQS.lock."
 
-    require_literal "$sha256" "macOS tool $name sha256"
+    approved_sha256_values="$(decode_sha256_set "$sha256_set")" || fail "macOS tool $name sha256 must be a literal lowercase SHA-256 or nonempty array of unique literal lowercase SHA-256 values in tests/PREREQS.lock."
     [ -f "$path" ] || fail "Missing macOS tool $name: $path"
 
     actual_sha256="$(sha256_file "$path")"
-    if [ "$actual_sha256" = "$sha256" ]; then
+    if sha256_set_contains "$sha256_set" "$actual_sha256"; then
         return
+    else
+        membership_status=$?
     fi
 
-    printf 'Expected macOS tool %s sha256 %s, got %s\n' "$name" "$sha256" "$actual_sha256" >&2
-    printf 'Hosted macOS replacement block for %s:\n' "$name" >&2
-    printf '[[tool.macos]]\nname = "%s"\nenvironment = "%s"\nversion = "%s"\npath = "%s"\nsha256 = "%s"\n\n' "$name" "$HOST_ORACLE_ENVIRONMENT" "$version" "$path" "$actual_sha256" >&2
+    [ "$membership_status" -eq 1 ] || fail "Calculated macOS tool $name sha256 is not a literal lowercase SHA-256: $actual_sha256"
+
+    printf 'macOS tool hash mismatch: name=%s rid=%s environment=%s\n' "$name" "$HOST_RID" "$HOST_ORACLE_ENVIRONMENT" >&2
+    printf '  version: %s\n  path: %s\n  expected sha256 (one of):\n' "$version" "$path" >&2
+    printf '%s\n' "$approved_sha256_values" | while IFS= read -r approved_sha256; do
+        printf '    %s\n' "$approved_sha256" >&2
+    done
+    printf '  actual sha256:\n    %s\n' "$actual_sha256" >&2
     MACOS_TOOL_FAILURES=1
 }
 

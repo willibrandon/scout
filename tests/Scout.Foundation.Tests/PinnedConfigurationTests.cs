@@ -2668,38 +2668,36 @@ public sealed partial class PinnedConfigurationTests
     [Fact]
     public void MacosDecompressionToolsMatchPinnedHashes()
     {
-        (string Name, string Version, string Path, string LocalSha256, string? HostedSha256)[] tools =
+        (string Name, string Version, string Path, string LocalSha256)[] tools =
         [
-            ("gzip", "Apple gzip 475", "/usr/bin/gzip", "A1983798AB66B3431190813540CB0EC691DCB8EE28DE36744B88FD8B91CD9FCD", "7BD218BC6B12FCED475163901547A796736F72F99533CBEC60EEA150ED21AFA3"),
-            ("bzip2", "1.0.8", "/usr/bin/bzip2", "8DA4D460440E876D81875D814F3A0EEAD38BA0FB94FEF81A9BE87560A897DEE1", "14E28B6B7955CBD6CD2A8139CA41186A922143A4FA3715DDD8E331F41DB8FC80"),
-            ("xz", "5.8.2", "/opt/homebrew/bin/xz", "B7926EA19ABF39913EE064329261D03EC66271CF5EE4759E5A1A928A3E165540", "16B9994CCA884ED2A66BA63736F1450049CBC6FD1D93076C51E5F0E7F7A71381"),
-            ("zstd", "1.5.7", "/opt/homebrew/bin/zstd", "AFF8169FB421BB925FB16C44A7E0143FA2C7A941DC45CCE76B15062A2CE54917", "9B5676AAE3CB048CF68E2B40C543D9523DB3B4CB911B31861BD5F4FCB050C4B6"),
-            ("lz4", "1.10.0", "/opt/homebrew/bin/lz4", "B7DCCDC84A76F0359C26C67393A6D50B4B073F8BF85078DCA7CCF877502B00E5", null),
-            ("brotli", "1.2.0", "/opt/homebrew/bin/brotli", "528B0B00C1B2F8323E6185DC40D10F0324D21F9CBCCA6D8B549F6B2E49520ECF", null),
-            ("uncompress", "Apple compress file_cmds-475", "/usr/bin/uncompress", "C2E461B27668BD63C4CBD85649F7C4CEB63FC2447BF657D231E0D9FD4F42A055", "AEC4BECD30850078AA28747CAA0C76227C9E848378377E37F98D531203FE6AA4"),
+            ("gzip", "Apple gzip 475", "/usr/bin/gzip", "A1983798AB66B3431190813540CB0EC691DCB8EE28DE36744B88FD8B91CD9FCD"),
+            ("bzip2", "1.0.8", "/usr/bin/bzip2", "8DA4D460440E876D81875D814F3A0EEAD38BA0FB94FEF81A9BE87560A897DEE1"),
+            ("xz", "5.8.2", "/opt/homebrew/bin/xz", "B7926EA19ABF39913EE064329261D03EC66271CF5EE4759E5A1A928A3E165540"),
+            ("zstd", "1.5.7", "/opt/homebrew/bin/zstd", "AFF8169FB421BB925FB16C44A7E0143FA2C7A941DC45CCE76B15062A2CE54917"),
+            ("lz4", "1.10.0", "/opt/homebrew/bin/lz4", "B7DCCDC84A76F0359C26C67393A6D50B4B073F8BF85078DCA7CCF877502B00E5"),
+            ("brotli", "1.2.0", "/opt/homebrew/bin/brotli", "528B0B00C1B2F8323E6185DC40D10F0324D21F9CBCCA6D8B549F6B2E49520ECF"),
+            ("uncompress", "Apple compress file_cmds-475", "/usr/bin/uncompress", "C2E461B27668BD63C4CBD85649F7C4CEB63FC2447BF657D231E0D9FD4F42A055"),
         ];
 
         string root = FindRepositoryRoot();
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
         for (int index = 0; index < tools.Length; index++)
         {
-            (string name, string version, string path, string localSha256, string? hostedSha256) = tools[index];
+            (string name, string version, string path, string localSha256) = tools[index];
             Assert.Contains("name = \"" + name + "\"", prerequisiteLock, StringComparison.Ordinal);
             Assert.Contains("version = \"" + version + "\"", prerequisiteLock, StringComparison.Ordinal);
             Assert.Contains("path = \"" + path + "\"", prerequisiteLock, StringComparison.Ordinal);
             Assert.Contains("sha256 = \"" + localSha256.ToLowerInvariant() + "\"", prerequisiteLock, StringComparison.Ordinal);
-            if (hostedSha256 is not null)
-            {
-                Assert.Contains("sha256 = \"" + hostedSha256.ToLowerInvariant() + "\"", prerequisiteLock, StringComparison.Ordinal);
-            }
 
             if (OperatingSystem.IsMacOS())
             {
                 string hostPath = ReadMacosToolValue(prerequisiteLock, name, "path");
-                string hostSha256 = ReadMacosToolValue(prerequisiteLock, name, "sha256").ToUpperInvariant();
+                string[] hostSha256Values = ReadMacosToolSha256Values(prerequisiteLock, name)
+                    .Select(value => value.ToUpperInvariant())
+                    .ToArray();
                 Assert.True(File.Exists(hostPath), "Missing macOS prerequisite tool: " + hostPath);
                 byte[] hash = SHA256.HashData(File.ReadAllBytes(hostPath));
-                Assert.Equal(hostSha256, Convert.ToHexString(hash));
+                Assert.Contains(Convert.ToHexString(hash), hostSha256Values);
             }
         }
     }
@@ -2710,53 +2708,98 @@ public sealed partial class PinnedConfigurationTests
     [Fact]
     public void HostedMacosDecompressionToolHashesArePinned()
     {
-        (string Rid, string Name, string Version, string Path, string Sha256)[] tools =
+        (string Rid, string Name, string Version, string Path, string[] Sha256Values)[] tools =
         [
-            ("osx-arm64", "gzip", "Apple gzip 479", "/usr/bin/gzip", "7bd218bc6b12fced475163901547a796736f72f99533cbec60eea150ed21afa3"),
-            ("osx-arm64", "bzip2", "1.0.8", "/usr/bin/bzip2", "14e28b6b7955cbd6cd2a8139ca41186a922143a4fa3715ddd8e331f41db8fc80"),
-            ("osx-arm64", "xz", "5.8.3", "/opt/homebrew/bin/xz", "16b9994cca884ed2a66ba63736f1450049cbc6fd1d93076c51e5f0e7f7a71381"),
-            ("osx-arm64", "zstd", "1.5.7", "/opt/homebrew/bin/zstd", "9b5676aae3cb048cf68e2b40c543d9523db3b4cb911b31861bd5f4fcb050c4b6"),
-            ("osx-arm64", "uncompress", "Apple compress file_cmds-479", "/usr/bin/uncompress", "aec4becd30850078aa28747caa0c76227c9e848378377e37f98d531203fe6aa4"),
-            ("osx-x64", "gzip", "Apple gzip 479", "/usr/bin/gzip", "7bd218bc6b12fced475163901547a796736f72f99533cbec60eea150ed21afa3"),
-            ("osx-x64", "bzip2", "1.0.8", "/usr/bin/bzip2", "14e28b6b7955cbd6cd2a8139ca41186a922143a4fa3715ddd8e331f41db8fc80"),
-            ("osx-x64", "xz", "5.8.3", "/usr/local/bin/xz", "2ce7374ab7c6426659e3662a6a759df41e03e30bfd90898073bab1d77f7c51b2"),
-            ("osx-x64", "zstd", "1.5.7", "/usr/local/bin/zstd", "9f04cf059d3043bd5ac7260bda6ebea8c21d9981210c5e7331cd0871ba20b2f6"),
-            ("osx-x64", "uncompress", "Apple compress file_cmds-479", "/usr/bin/uncompress", "aec4becd30850078aa28747caa0c76227c9e848378377e37f98d531203fe6aa4"),
+            ("osx-arm64", "gzip", "Apple gzip 479", "/usr/bin/gzip", ["7bd218bc6b12fced475163901547a796736f72f99533cbec60eea150ed21afa3"]),
+            ("osx-arm64", "bzip2", "1.0.8", "/usr/bin/bzip2", ["14e28b6b7955cbd6cd2a8139ca41186a922143a4fa3715ddd8e331f41db8fc80"]),
+            ("osx-arm64", "xz", "5.8.3", "/opt/homebrew/bin/xz", ["16b9994cca884ed2a66ba63736f1450049cbc6fd1d93076c51e5f0e7f7a71381", "995c8e2f72446f0d0e3a29f6c3d52286cfecedfc4ffb2b42d25c3ce1ad77034c"]),
+            ("osx-arm64", "zstd", "1.5.7", "/opt/homebrew/bin/zstd", ["9b5676aae3cb048cf68e2b40c543d9523db3b4cb911b31861bd5f4fcb050c4b6", "aff8169fb421bb925fb16c44a7e0143fa2c7a941dc45cce76b15062a2ce54917"]),
+            ("osx-arm64", "uncompress", "Apple compress file_cmds-479", "/usr/bin/uncompress", ["aec4becd30850078aa28747caa0c76227c9e848378377e37f98d531203fe6aa4"]),
+            ("osx-x64", "gzip", "Apple gzip 479", "/usr/bin/gzip", ["7bd218bc6b12fced475163901547a796736f72f99533cbec60eea150ed21afa3"]),
+            ("osx-x64", "bzip2", "1.0.8", "/usr/bin/bzip2", ["14e28b6b7955cbd6cd2a8139ca41186a922143a4fa3715ddd8e331f41db8fc80"]),
+            ("osx-x64", "xz", "5.8.3", "/usr/local/bin/xz", ["2ce7374ab7c6426659e3662a6a759df41e03e30bfd90898073bab1d77f7c51b2"]),
+            ("osx-x64", "zstd", "1.5.7", "/usr/local/bin/zstd", ["9f04cf059d3043bd5ac7260bda6ebea8c21d9981210c5e7331cd0871ba20b2f6"]),
+            ("osx-x64", "uncompress", "Apple compress file_cmds-479", "/usr/bin/uncompress", ["aec4becd30850078aa28747caa0c76227c9e848378377e37f98d531203fe6aa4"]),
         ];
 
         string root = FindRepositoryRoot();
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
         string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
 
-        Assert.Contains("read_lock_rid_named_table_value()", preflight, StringComparison.Ordinal);
-        Assert.Contains("read_lock_environment_table_value()", preflight, StringComparison.Ordinal);
         Assert.Contains("read_lock_macos_tool_value()", preflight, StringComparison.Ordinal);
-        Assert.Contains("read_lock_rid_named_table_value \"tool.macos\" \"$name\" \"$HOST_RID\" \"$HOST_ORACLE_ENVIRONMENT\" \"$key\"", preflight, StringComparison.Ordinal);
-        Assert.Contains("read_lock_environment_table_value \"tool.macos\" \"$name\" \"$HOST_ORACLE_ENVIRONMENT\" \"$key\"", preflight, StringComparison.Ordinal);
-        Assert.Contains("environment = \"%s\"", preflight, StringComparison.Ordinal);
+        Assert.Contains("selected_has_value = table_has_value", preflight, StringComparison.Ordinal);
+        Assert.Contains("selected_score == 0 || !selected_has_value || duplicate", preflight, StringComparison.Ordinal);
+        Assert.Contains(". \"$ROOT/eng/sha256-set.sh\"", preflight, StringComparison.Ordinal);
+        Assert.Contains("sha256_set_contains \"$sha256_set\" \"$actual_sha256\"", preflight, StringComparison.Ordinal);
+        Assert.Contains("expected sha256 (one of):", preflight, StringComparison.Ordinal);
+        Assert.DoesNotContain("replacement block", preflight, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("/opt/homebrew/bin/xz", ReadMacosToolValue(prerequisiteLock, "xz", "osx-arm64", "github-actions", "path"));
         Assert.Equal("/usr/local/bin/xz", ReadMacosToolValue(prerequisiteLock, "xz", "osx-x64", "github-actions", "path"));
         Assert.Equal("/opt/homebrew/bin/zstd", ReadMacosToolValue(prerequisiteLock, "zstd", "osx-arm64", "github-actions", "path"));
         Assert.Equal("/usr/local/bin/zstd", ReadMacosToolValue(prerequisiteLock, "zstd", "osx-x64", "github-actions", "path"));
-        Assert.Equal("16b9994cca884ed2a66ba63736f1450049cbc6fd1d93076c51e5f0e7f7a71381", ReadMacosToolValue(prerequisiteLock, "xz", "osx-arm64", "github-actions", "sha256"));
-        Assert.Equal("2ce7374ab7c6426659e3662a6a759df41e03e30bfd90898073bab1d77f7c51b2", ReadMacosToolValue(prerequisiteLock, "xz", "osx-x64", "github-actions", "sha256"));
-        Assert.Equal("9b5676aae3cb048cf68e2b40c543d9523db3b4cb911b31861bd5f4fcb050c4b6", ReadMacosToolValue(prerequisiteLock, "zstd", "osx-arm64", "github-actions", "sha256"));
-        Assert.Equal("9f04cf059d3043bd5ac7260bda6ebea8c21d9981210c5e7331cd0871ba20b2f6", ReadMacosToolValue(prerequisiteLock, "zstd", "osx-x64", "github-actions", "sha256"));
 
         for (int index = 0; index < tools.Length; index++)
         {
-            (string rid, string name, string version, string path, string sha256) = tools[index];
-            string block = string.Join(
-                "\n",
-                "[[tool.macos]]",
-                "name = \"" + name + "\"",
-                "rid = \"" + rid + "\"",
-                "environment = \"github-actions\"",
-                "version = \"" + version + "\"",
-                "path = \"" + path + "\"",
-                "sha256 = \"" + sha256 + "\"");
-            Assert.Contains(block, prerequisiteLock, StringComparison.Ordinal);
+            (string rid, string name, string version, string path, string[] sha256Values) = tools[index];
+            Assert.Equal(version, ReadMacosToolValue(prerequisiteLock, name, rid, "github-actions", "version"));
+            Assert.Equal(path, ReadMacosToolValue(prerequisiteLock, name, rid, "github-actions", "path"));
+            Assert.Equal(sha256Values, ReadMacosToolSha256Values(prerequisiteLock, name, rid, "github-actions"));
         }
+    }
+
+    /// <summary>
+    /// Verifies multi-hash macOS tool pins are literal and limited to the rolling hosted arm64 images that require them.
+    /// </summary>
+    [Fact]
+    public void MacosToolHashSetsAreNarrowlyScopedAndLiteral()
+    {
+        string root = FindRepositoryRoot();
+        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        int multipleHashTableCount = 0;
+
+        foreach (Dictionary<string, string> table in EnumerateTomlArrayTables(prerequisiteLock, "tool.macos"))
+        {
+            Assert.True(table.TryGetValue("sha256", out string? rawSha256));
+            string[] sha256Values = ParseTomlStringValues(rawSha256!);
+            Assert.NotEmpty(sha256Values);
+            Assert.Equal(sha256Values.Length, sha256Values.Distinct(StringComparer.Ordinal).Count());
+            Assert.All(sha256Values, value => Assert.Matches(Sha256HexPattern(), value));
+
+            if (sha256Values.Length == 1)
+            {
+                continue;
+            }
+
+            multipleHashTableCount++;
+            Assert.Equal("osx-arm64", table["rid"]);
+            Assert.Equal("github-actions", table["environment"]);
+            Assert.True(table["name"] is "xz" or "zstd");
+            Assert.Equal(2, sha256Values.Length);
+        }
+
+        Assert.Equal(2, multipleHashTableCount);
+    }
+
+    /// <summary>
+    /// Verifies a macOS tool hash set is selected from one specificity row without mixing fallback values.
+    /// </summary>
+    [Fact]
+    public void MacosToolHashSetSelectionDoesNotMixFallbackRows()
+    {
+        const string DefaultSha256 = "995c8e2f72446f0d0e3a29f6c3d52286cfecedfc4ffb2b42d25c3ce1ad77034c";
+        string toml = string.Join(
+            "\n",
+            "[[tool.macos]]",
+            "name = \"xz\"",
+            "sha256 = [\"" + DefaultSha256 + "\"]",
+            string.Empty,
+            "[[tool.macos]]",
+            "name = \"xz\"",
+            "rid = \"osx-arm64\"",
+            "environment = \"github-actions\"",
+            "version = \"5.8.3\"");
+
+        Assert.Throws<InvalidOperationException>(() => ReadMacosToolSha256Values(toml, "xz", "osx-arm64", "github-actions"));
     }
 
     /// <summary>
@@ -3017,27 +3060,65 @@ public sealed partial class PinnedConfigurationTests
         string root = FindRepositoryRoot();
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
         string oracle = File.ReadAllText(Path.Combine(root, "tests", "Scout.Testing", "PinnedRipgrepOracle.cs"));
-        MatchCollection matches = PrerequisiteHashAssignmentPattern().Matches(prerequisiteLock);
         var violations = new List<string>();
+        int assignmentCount = 0;
+        int arrayAssignmentCount = 0;
 
         Assert.Contains("IsLowercaseSha256(expectedSha256)", oracle, StringComparison.Ordinal);
         Assert.Contains("SCOUT_ORACLE_ENVIRONMENT", oracle, StringComparison.Ordinal);
         Assert.DoesNotContain("StartsWith(\"resolved@", oracle, StringComparison.Ordinal);
-        Assert.NotEmpty(matches);
-        foreach (Match match in matches)
+        using var reader = new StringReader(prerequisiteLock);
+        while (reader.ReadLine() is { } line)
         {
-            string key = match.Groups["key"].Value;
-            string value = match.Groups["value"].Value;
-            bool isLiteral = key.EndsWith("_digest", StringComparison.Ordinal)
-                ? Sha256DigestPattern().IsMatch(value)
-                : Sha256HexPattern().IsMatch(value);
-
-            if (!isLiteral)
+            int equalsIndex = line.IndexOf('=');
+            if (equalsIndex < 0)
             {
-                violations.Add(key + " = \"" + value + "\"");
+                continue;
+            }
+
+            string key = line.Substring(0, equalsIndex).Trim();
+            if (!key.EndsWith("sha256", StringComparison.Ordinal) &&
+                !key.EndsWith("digest", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            assignmentCount++;
+            string rawValue = line.Substring(equalsIndex + 1).Trim();
+            if (rawValue.Length == 0 || rawValue[0] is not ('"' or '['))
+            {
+                violations.Add(line.Trim());
+                continue;
+            }
+
+            if (rawValue[0] == '[')
+            {
+                arrayAssignmentCount++;
+            }
+
+            string[] values = ParseTomlStringValues(rawValue);
+            if ((key.EndsWith("_digest", StringComparison.Ordinal) && values.Length != 1) ||
+                values.Length != values.Distinct(StringComparer.Ordinal).Count())
+            {
+                violations.Add(line.Trim());
+                continue;
+            }
+
+            for (int valueIndex = 0; valueIndex < values.Length; valueIndex++)
+            {
+                string value = values[valueIndex];
+                bool isLiteral = key.EndsWith("_digest", StringComparison.Ordinal)
+                    ? Sha256DigestPattern().IsMatch(value)
+                    : Sha256HexPattern().IsMatch(value);
+                if (!isLiteral)
+                {
+                    violations.Add(key + " = \"" + value + "\"");
+                }
             }
         }
 
+        Assert.True(assignmentCount > 0);
+        Assert.Equal(2, arrayAssignmentCount);
         Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
     }
 
@@ -3685,9 +3766,6 @@ public sealed partial class PinnedConfigurationTests
     [GeneratedRegex(@"\[\[package\]\]\s+name = ""(?<name>[^""]+)""\s+version = ""(?<version>[^""]+)""", RegexOptions.CultureInvariant)]
     private static partial Regex CargoLockPackagePattern();
 
-    [GeneratedRegex(@"(?m)^\s*(?<key>[A-Za-z0-9_]*(?:sha256|digest))\s*=\s*""(?<value>[^""]*)""\s*$", RegexOptions.CultureInvariant)]
-    private static partial Regex PrerequisiteHashAssignmentPattern();
-
     [GeneratedRegex(@"^[0-9a-f]{64}$", RegexOptions.CultureInvariant)]
     private static partial Regex Sha256HexPattern();
 
@@ -3801,44 +3879,133 @@ public sealed partial class PinnedConfigurationTests
         throw new InvalidOperationException("Missing top-level TOML value: " + key);
     }
 
+    /// <summary>
+    /// Reads a value from the single macOS tool row selected for the current host.
+    /// </summary>
     private static string ReadMacosToolValue(string toml, string name, string key)
     {
         return ReadMacosToolValue(toml, name, CurrentHostRid(), CurrentOracleEnvironment(), key);
     }
 
-    private static string ReadMacosToolValue(string toml, string name, string rid, string environment, string key)
+    /// <summary>
+    /// Reads the SHA-256 values from the selected macOS tool row for the current host.
+    /// </summary>
+    private static string[] ReadMacosToolSha256Values(string toml, string name)
     {
-        if (TryReadMacosToolValue(toml, name, rid, environment, key, out string? exactRidEnvironmentValue))
-        {
-            return exactRidEnvironmentValue!;
-        }
-
-        if (TryReadMacosToolValue(toml, name, rid, string.Empty, key, out string? exactRidValue))
-        {
-            return exactRidValue!;
-        }
-
-        if (TryReadMacosToolValue(toml, name, string.Empty, environment, key, out string? environmentValue))
-        {
-            return environmentValue!;
-        }
-
-        if (TryReadMacosToolValue(toml, name, string.Empty, string.Empty, key, out string? defaultValue))
-        {
-            return defaultValue!;
-        }
-
-        throw new InvalidOperationException("Missing macOS tool TOML value: " + name + "." + key);
+        return ReadMacosToolSha256Values(toml, name, CurrentHostRid(), CurrentOracleEnvironment());
     }
 
-    private static bool TryReadMacosToolValue(
+    /// <summary>
+    /// Reads the SHA-256 values from the single macOS tool row selected by RID and environment specificity.
+    /// </summary>
+    private static string[] ReadMacosToolSha256Values(string toml, string name, string rid, string environment)
+    {
+        return ParseTomlStringValues(ReadMacosToolValue(toml, name, rid, environment, "sha256"));
+    }
+
+    /// <summary>
+    /// Parses a TOML string or single-line string array without broadening the accepted values.
+    /// </summary>
+    private static string[] ParseTomlStringValues(string rawValue)
+    {
+        string value = rawValue.Trim();
+        if (value.Length == 0 || value[0] != '[')
+        {
+            if (value.StartsWith('"') || value.EndsWith('"'))
+            {
+                if (value.Length < 2 || value[0] != '"' || value[value.Length - 1] != '"')
+                {
+                    throw new InvalidOperationException("Malformed TOML string value: " + rawValue);
+                }
+
+                value = value.Substring(1, value.Length - 2);
+            }
+
+            return [value];
+        }
+
+        if (value.Length < 2 || value[value.Length - 1] != ']')
+        {
+            throw new InvalidOperationException("Malformed TOML string array: " + rawValue);
+        }
+
+        string content = value.Substring(1, value.Length - 2).Trim();
+        if (content.Length == 0)
+        {
+            throw new InvalidOperationException("TOML string array must not be empty.");
+        }
+
+        string[] elements = content.Split(',');
+        for (int index = 0; index < elements.Length; index++)
+        {
+            string element = elements[index].Trim();
+            if (element.Length < 2 ||
+                element[0] != '"' ||
+                element[element.Length - 1] != '"' ||
+                element.IndexOf('"', 1, element.Length - 2) >= 0)
+            {
+                throw new InvalidOperationException("Malformed TOML string array element: " + element);
+            }
+
+            elements[index] = element.Substring(1, element.Length - 2);
+        }
+
+        return elements;
+    }
+
+    /// <summary>
+    /// Reads a value from the single macOS tool row selected by RID and environment specificity.
+    /// </summary>
+    private static string ReadMacosToolValue(string toml, string name, string rid, string environment, string key)
+    {
+        Dictionary<string, string> table = ReadMacosToolTable(toml, name, rid, environment);
+        if (table.TryGetValue(key, out string? value))
+        {
+            return value;
+        }
+
+        throw new InvalidOperationException("Missing value in selected macOS tool TOML row: " + name + "." + key);
+    }
+
+    /// <summary>
+    /// Selects one complete macOS tool row using RID and environment specificity.
+    /// </summary>
+    private static Dictionary<string, string> ReadMacosToolTable(string toml, string name, string rid, string environment)
+    {
+        if (TryReadMacosToolTable(toml, name, rid, environment, out Dictionary<string, string>? exactRidEnvironmentTable))
+        {
+            return exactRidEnvironmentTable!;
+        }
+
+        if (TryReadMacosToolTable(toml, name, rid, string.Empty, out Dictionary<string, string>? exactRidTable))
+        {
+            return exactRidTable!;
+        }
+
+        if (TryReadMacosToolTable(toml, name, string.Empty, environment, out Dictionary<string, string>? environmentTable))
+        {
+            return environmentTable!;
+        }
+
+        if (TryReadMacosToolTable(toml, name, string.Empty, string.Empty, out Dictionary<string, string>? defaultTable))
+        {
+            return defaultTable!;
+        }
+
+        throw new InvalidOperationException("Missing macOS tool TOML row: " + name);
+    }
+
+    /// <summary>
+    /// Finds a unique macOS tool row at one exact RID and environment scope.
+    /// </summary>
+    private static bool TryReadMacosToolTable(
         string toml,
         string name,
         string rid,
         string environment,
-        string key,
-        out string? value)
+        out Dictionary<string, string>? selectedTable)
     {
+        selectedTable = null;
         foreach (Dictionary<string, string> table in EnumerateTomlArrayTables(toml, "tool.macos"))
         {
             if (!table.TryGetValue("name", out string? tableName) ||
@@ -3855,14 +4022,15 @@ public sealed partial class PinnedConfigurationTests
                 continue;
             }
 
-            if (table.TryGetValue(key, out value))
+            if (selectedTable is not null)
             {
-                return true;
+                throw new InvalidOperationException("Duplicate macOS tool TOML row: " + name);
             }
+
+            selectedTable = table;
         }
 
-        value = null;
-        return false;
+        return selectedTable is not null;
     }
 
     private static IEnumerable<Dictionary<string, string>> EnumerateTomlArrayTables(string toml, string tableName)
