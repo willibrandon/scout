@@ -3316,6 +3316,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("SCOUT_ORACLE_ENVIRONMENT", script, StringComparison.Ordinal);
         Assert.Contains("SCOUT_TOOL_ENVIRONMENT", script, StringComparison.Ordinal);
         Assert.Contains("host-tool environment", script, StringComparison.Ordinal);
+        Assert.Contains("export SCOUT_HOST_RID=\"$RID\"", script, StringComparison.Ordinal);
+        Assert.Contains("export SCOUT_ORACLE_ENVIRONMENT=\"$HOST_ORACLE_ENVIRONMENT\"", script, StringComparison.Ordinal);
+        Assert.Contains("export SCOUT_TOOL_ENVIRONMENT=\"$HOST_TOOL_ENVIRONMENT\"", script, StringComparison.Ordinal);
         Assert.Contains("github-actions|local", script, StringComparison.Ordinal);
         Assert.Contains("document[\"commands\"]", interleaved, StringComparison.Ordinal);
         Assert.Contains("verify_hyperfine_output.py", script, StringComparison.Ordinal);
@@ -3410,6 +3413,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("test_failure_is_final_without_resampling", gateShellTests, StringComparison.Ordinal);
         Assert.Contains("test_success_samples_once", gateShellTests, StringComparison.Ordinal);
         Assert.Contains("test_gate_defaults_to_the_hosted_oracle_locally", gateShellTests, StringComparison.Ordinal);
+        Assert.Contains("test_resolved_environments_are_exported_to_subprocess_helpers", gateShellTests, StringComparison.Ordinal);
         Assert.Contains("test_host_tools_select_the_environment_that_executes_the_gate", gateShellTests, StringComparison.Ordinal);
         Assert.Contains("test_issue_44_absent_pattern_gates_remain_in_the_release_suite", gateShellTests, StringComparison.Ordinal);
         Assert.Contains("-m unittest discover -s \"$ROOT/bench/tests\"", preflight, StringComparison.Ordinal);

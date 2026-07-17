@@ -210,6 +210,26 @@ oracle_environment
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual("github-actions", result.stdout.strip())
 
+    def test_resolved_environments_are_exported_to_subprocess_helpers(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "bench" / "run-hyperfine.sh").read_text(encoding="utf-8")
+        resolution = source.index('HOST_ORACLE_ENVIRONMENT="$(oracle_environment)"')
+        oracle_export = source.index(
+            'export SCOUT_ORACLE_ENVIRONMENT="$HOST_ORACLE_ENVIRONMENT"',
+            resolution,
+        )
+        oracle_read = source.index(
+            'RG_VALUE="$(read_ripgrep_oracle_value "path" "ripgrep_rg_path")"',
+            resolution,
+        )
+
+        self.assertLess(resolution, oracle_export)
+        self.assertLess(oracle_export, oracle_read)
+        self.assertIn('export SCOUT_HOST_RID="$RID"', source)
+        self.assertIn(
+            'export SCOUT_TOOL_ENVIRONMENT="$HOST_TOOL_ENVIRONMENT"', source
+        )
+
     def test_host_tools_select_the_environment_that_executes_the_gate(self) -> None:
         root = Path(__file__).resolve().parents[2]
         source = (root / "bench" / "run-hyperfine.sh").read_text(encoding="utf-8")
