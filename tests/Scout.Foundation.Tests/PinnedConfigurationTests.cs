@@ -2674,13 +2674,13 @@ public sealed partial class PinnedConfigurationTests
     {
         (string Name, string Version, string Path, string LocalSha256)[] tools =
         [
-            ("gzip", "Apple gzip 475", "/usr/bin/gzip", "A1983798AB66B3431190813540CB0EC691DCB8EE28DE36744B88FD8B91CD9FCD"),
-            ("bzip2", "1.0.8", "/usr/bin/bzip2", "8DA4D460440E876D81875D814F3A0EEAD38BA0FB94FEF81A9BE87560A897DEE1"),
+            ("gzip", "Apple gzip 479", "/usr/bin/gzip", "C78F313867A6978148F989C8E758FB7A9BA7FF324F0B359B2053F5172F970BE5"),
+            ("bzip2", "1.0.8", "/usr/bin/bzip2", "C9C5D486EE877F9104363EE0FE20539D4C1FBBB76F2F322D5E871F40AAF6CE26"),
             ("xz", "5.8.2", "/opt/homebrew/bin/xz", "B7926EA19ABF39913EE064329261D03EC66271CF5EE4759E5A1A928A3E165540"),
             ("zstd", "1.5.7", "/opt/homebrew/bin/zstd", "AFF8169FB421BB925FB16C44A7E0143FA2C7A941DC45CCE76B15062A2CE54917"),
             ("lz4", "1.10.0", "/opt/homebrew/bin/lz4", "B7DCCDC84A76F0359C26C67393A6D50B4B073F8BF85078DCA7CCF877502B00E5"),
             ("brotli", "1.2.0", "/opt/homebrew/bin/brotli", "528B0B00C1B2F8323E6185DC40D10F0324D21F9CBCCA6D8B549F6B2E49520ECF"),
-            ("uncompress", "Apple compress file_cmds-475", "/usr/bin/uncompress", "C2E461B27668BD63C4CBD85649F7C4CEB63FC2447BF657D231E0D9FD4F42A055"),
+            ("uncompress", "Apple compress file_cmds-479", "/usr/bin/uncompress", "BF8CB1CEFEDFBF86FBB38DD42278FCAD8FE020F3B8989897F1A0B2187AABDDA5"),
         ];
 
         string root = FindRepositoryRoot();
@@ -2974,7 +2974,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("eng/setup-hyperfine.sh\"", performanceGate, StringComparison.Ordinal);
         Assert.DoesNotContain("brew install hyperfine", workflow, StringComparison.Ordinal);
         Assert.Contains("HOST_RID=\"$(host_rid)\"", script, StringComparison.Ordinal);
-        Assert.Contains("HOST_ORACLE_ENVIRONMENT=\"$(oracle_environment)\"", script, StringComparison.Ordinal);
+        Assert.Contains("HOST_TOOL_ENVIRONMENT=\"$(tool_environment)\"", script, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_TOOL_ENVIRONMENT", performanceGate, StringComparison.Ordinal);
+        Assert.Contains("GITHUB_ACTIONS", performanceGate, StringComparison.Ordinal);
         Assert.Contains("read_lock_rid_table_value()", script, StringComparison.Ordinal);
         Assert.Contains("read_lock_environment_table_value()", script, StringComparison.Ordinal);
         Assert.Contains("read_macos_tool_value()", script, StringComparison.Ordinal);
@@ -3190,7 +3192,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("SCOUT_CORPORA_DIR", performanceGate, StringComparison.Ordinal);
         Assert.Contains("SCOUT_RELEASE_VERSION", performanceGate, StringComparison.Ordinal);
         Assert.Contains("SCOUT_BIN", performanceGate, StringComparison.Ordinal);
-        Assert.Contains("SCOUT_ORACLE_ENVIRONMENT", setupHyperfine, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_TOOL_ENVIRONMENT", setupHyperfine, StringComparison.Ordinal);
+        Assert.Contains("HOST_TOOL_ENVIRONMENT", preflight, StringComparison.Ordinal);
+        Assert.Contains("tool_environment()", preflight, StringComparison.Ordinal);
         Assert.Contains("printf 'github-actions", setupHyperfine, StringComparison.Ordinal);
         Assert.Contains("measure_rss_floor", script, StringComparison.Ordinal);
         Assert.Contains("$Q_RG --no-config --mmap -n 'needle' $Q_TINY", script, StringComparison.Ordinal);
@@ -3310,6 +3314,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("image version=", script, StringComparison.Ordinal);
         Assert.Contains("exact rg and Scout argv", script, StringComparison.Ordinal);
         Assert.Contains("SCOUT_ORACLE_ENVIRONMENT", script, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_TOOL_ENVIRONMENT", script, StringComparison.Ordinal);
+        Assert.Contains("host-tool environment", script, StringComparison.Ordinal);
         Assert.Contains("github-actions|local", script, StringComparison.Ordinal);
         Assert.Contains("document[\"commands\"]", interleaved, StringComparison.Ordinal);
         Assert.Contains("verify_hyperfine_output.py", script, StringComparison.Ordinal);
@@ -3404,6 +3410,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("test_failure_is_final_without_resampling", gateShellTests, StringComparison.Ordinal);
         Assert.Contains("test_success_samples_once", gateShellTests, StringComparison.Ordinal);
         Assert.Contains("test_gate_defaults_to_the_hosted_oracle_locally", gateShellTests, StringComparison.Ordinal);
+        Assert.Contains("test_host_tools_select_the_environment_that_executes_the_gate", gateShellTests, StringComparison.Ordinal);
         Assert.Contains("test_issue_44_absent_pattern_gates_remain_in_the_release_suite", gateShellTests, StringComparison.Ordinal);
         Assert.Contains("-m unittest discover -s \"$ROOT/bench/tests\"", preflight, StringComparison.Ordinal);
         Assert.Contains("uses ten valid measured rounds and two warmup", readme, StringComparison.Ordinal);

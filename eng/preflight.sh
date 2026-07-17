@@ -40,7 +40,7 @@ read_lock_value() {
 }
 
 read_lock_macos_tool_value() {
-    awk -v name="$1" -v rid="$HOST_RID" -v environment="$HOST_ORACLE_ENVIRONMENT" -v key="$2" "$strip_toml_value"'
+    awk -v name="$1" -v rid="$HOST_RID" -v environment="$HOST_TOOL_ENVIRONMENT" -v key="$2" "$strip_toml_value"'
         function reset_table() {
             in_table = 0
             table_name = ""
@@ -165,6 +165,26 @@ oracle_environment() {
                 ;;
             *)
                 fail "Unsupported SCOUT_ORACLE_ENVIRONMENT for pinned ripgrep oracle: $SCOUT_ORACLE_ENVIRONMENT"
+                ;;
+        esac
+    fi
+
+    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+        printf 'github-actions\n'
+    else
+        printf 'local\n'
+    fi
+}
+
+tool_environment() {
+    if [ -n "${SCOUT_TOOL_ENVIRONMENT:-}" ]; then
+        case "$SCOUT_TOOL_ENVIRONMENT" in
+            github-actions|local)
+                printf '%s\n' "$SCOUT_TOOL_ENVIRONMENT"
+                return
+                ;;
+            *)
+                fail "Unsupported SCOUT_TOOL_ENVIRONMENT: $SCOUT_TOOL_ENVIRONMENT"
                 ;;
         esac
     fi
@@ -382,7 +402,7 @@ check_macos_tool_hash() {
 
     [ "$membership_status" -eq 1 ] || fail "Calculated macOS tool $name sha256 is not a literal lowercase SHA-256: $actual_sha256"
 
-    printf 'macOS tool hash mismatch: name=%s rid=%s environment=%s\n' "$name" "$HOST_RID" "$HOST_ORACLE_ENVIRONMENT" >&2
+    printf 'macOS tool hash mismatch: name=%s rid=%s environment=%s\n' "$name" "$HOST_RID" "$HOST_TOOL_ENVIRONMENT" >&2
     printf '  version: %s\n  path: %s\n  expected sha256 (one of):\n' "$version" "$path" >&2
     printf '%s\n' "$approved_sha256_values" | while IFS= read -r approved_sha256; do
         printf '    %s\n' "$approved_sha256" >&2
@@ -454,6 +474,7 @@ EXPECTED_RIPGREP="$(read_lock_value "ripgrep_commit")" || fail "Missing ripgrep_
 require_literal "$EXPECTED_RIPGREP" "ripgrep_commit"
 HOST_RID="$(host_rid)"
 HOST_ORACLE_ENVIRONMENT="$(oracle_environment)"
+HOST_TOOL_ENVIRONMENT="$(tool_environment)"
 
 RG_PROFILE="$(read_oracle_value "profile" "ripgrep_rg_profile")" || fail "Missing ripgrep_oracle.profile for $HOST_RID in tests/PREREQS.lock."
 expect_equal "ripgrep build profile" "release-lto" "$RG_PROFILE"

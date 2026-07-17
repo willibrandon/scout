@@ -210,6 +210,47 @@ oracle_environment
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual("github-actions", result.stdout.strip())
 
+    def test_host_tools_select_the_environment_that_executes_the_gate(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "bench" / "run-hyperfine.sh").read_text(encoding="utf-8")
+        start = source.index("tool_environment() {")
+        end = source.index("\nread_lock_rid_table_value() {", start)
+        function = source[start:end]
+        harness = f"""#!/bin/sh
+set -eu
+fail() {{ printf '%s\\n' "$1" >&2; exit 1; }}
+{function}
+tool_environment
+"""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "tool-environment.sh"
+            path.write_bytes(harness.encode("utf-8"))
+            local_environment = dict(os.environ)
+            local_environment.pop("GITHUB_ACTIONS", None)
+            local_environment.pop("SCOUT_TOOL_ENVIRONMENT", None)
+            hosted_environment = dict(local_environment)
+            hosted_environment["GITHUB_ACTIONS"] = "true"
+            local = subprocess.run(
+                [_SH, str(path)],
+                check=False,
+                capture_output=True,
+                text=True,
+                env=local_environment,
+            )
+            hosted = subprocess.run(
+                [_SH, str(path)],
+                check=False,
+                capture_output=True,
+                text=True,
+                env=hosted_environment,
+            )
+
+        self.assertEqual(0, local.returncode, local.stderr)
+        self.assertEqual("local", local.stdout.strip())
+        self.assertEqual(0, hosted.returncode, hosted.stderr)
+        self.assertEqual("github-actions", hosted.stdout.strip())
+
     def test_unselected_workload_does_not_sample_or_report(self) -> None:
         result = self._run(scenario="fail", selected="other")
 

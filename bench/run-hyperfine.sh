@@ -48,6 +48,7 @@ usage() {
         '  SCOUT_BENCH_OPENSUBTITLES_EN     OpenSubtitles en.txt path for --gate.' \
         '  SCOUT_BENCH_LINUX_TREE           Linux source tree path for --gate.' \
         '  SCOUT_ORACLE_ENVIRONMENT          Pinned rg oracle environment: github-actions or local. Gate default: github-actions.' \
+        '  SCOUT_TOOL_ENVIRONMENT            Pinned host-tool environment: github-actions or local. Defaults from the host.' \
         '' \
         'The --gate mode requires frozen corpus hashes in tests/PREREQS.lock.' \
         'Use --gate --workload NAME to run one listed release-gate workload.'
@@ -123,6 +124,26 @@ oracle_environment() {
     fi
 
     if [ "$MODE" = "gate" ] || [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+        printf 'github-actions\n'
+    else
+        printf 'local\n'
+    fi
+}
+
+tool_environment() {
+    if [ -n "${SCOUT_TOOL_ENVIRONMENT:-}" ]; then
+        case "$SCOUT_TOOL_ENVIRONMENT" in
+            github-actions|local)
+                printf '%s\n' "$SCOUT_TOOL_ENVIRONMENT"
+                return
+                ;;
+            *)
+                fail "Unsupported SCOUT_TOOL_ENVIRONMENT for pinned host tools: $SCOUT_TOOL_ENVIRONMENT"
+                ;;
+        esac
+    fi
+
+    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
         printf 'github-actions\n'
     else
         printf 'local\n'
@@ -242,7 +263,7 @@ read_macos_tool_value() {
     name="$1"
     key="$2"
 
-    if value="$(read_lock_rid_table_value "tool.macos" "$name" "$RID" "$HOST_ORACLE_ENVIRONMENT" "$key")"; then
+    if value="$(read_lock_rid_table_value "tool.macos" "$name" "$RID" "$HOST_TOOL_ENVIRONMENT" "$key")"; then
         printf '%s\n' "$value"
         return 0
     fi
@@ -252,7 +273,7 @@ read_macos_tool_value() {
         return 0
     fi
 
-    if value="$(read_lock_environment_table_value "tool.macos" "$name" "$HOST_ORACLE_ENVIRONMENT" "$key")"; then
+    if value="$(read_lock_environment_table_value "tool.macos" "$name" "$HOST_TOOL_ENVIRONMENT" "$key")"; then
         printf '%s\n' "$value"
         return 0
     fi
@@ -441,6 +462,7 @@ print_repro_manifest() {
     printf 'selection: %s\n' "$manifest_selection"
     printf 'rg: %s; sha256: %s; oracle environment: %s\n' \
         "$manifest_rg_version" "$manifest_rg_sha256" "$HOST_ORACLE_ENVIRONMENT"
+    printf 'host-tool environment: %s\n' "$HOST_TOOL_ENVIRONMENT"
     printf 'Scout: %s; launcher sha256: %s; payload sha256: %s\n' \
         "$manifest_scout_version" "$manifest_scout_sha256" "$manifest_scout_payload_sha256"
     printf 'Scout source: commit=%s; fingerprint=%s; dirty=%s\n' \
@@ -1340,6 +1362,7 @@ fi
 
 RID="$(host_rid)"
 HOST_ORACLE_ENVIRONMENT="$(oracle_environment)"
+HOST_TOOL_ENVIRONMENT="$(tool_environment)"
 DEFAULT_SCOUT_BIN="$ROOT/artifacts/bin/$RID/scout"
 SCOUT_BIN="${SCOUT_BIN:-$DEFAULT_SCOUT_BIN}"
 RG_VALUE="$(read_ripgrep_oracle_value "path" "ripgrep_rg_path")" || fail "Missing ripgrep oracle path in tests/PREREQS.lock."

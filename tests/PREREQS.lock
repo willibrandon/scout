@@ -148,15 +148,15 @@ result = "PASS; needs libRuntime.VxsortEnabled.a"
 
 [[tool.macos]]
 name = "gzip"
-version = "Apple gzip 475"
+version = "Apple gzip 479"
 path = "/usr/bin/gzip"
-sha256 = "a1983798ab66b3431190813540cb0ec691dcb8ee28de36744b88fd8b91cd9fcd"
+sha256 = "c78f313867a6978148f989c8e758fb7a9ba7ff324f0b359b2053f5172f970be5"
 
 [[tool.macos]]
 name = "bzip2"
 version = "1.0.8"
 path = "/usr/bin/bzip2"
-sha256 = "8da4d460440e876d81875d814f3a0eead38ba0fb94fef81a9be87560a897dee1"
+sha256 = "c9c5d486ee877f9104363ee0fe20539d4c1fbbb76f2f322d5e871f40aaf6ce26"
 
 [[tool.macos]]
 name = "xz"
@@ -184,9 +184,9 @@ sha256 = "528b0b00c1b2f8323e6185dc40d10f0324d21f9cbcca6d8b549f6b2e49520ecf"
 
 [[tool.macos]]
 name = "uncompress"
-version = "Apple compress file_cmds-475"
+version = "Apple compress file_cmds-479"
 path = "/usr/bin/uncompress"
-sha256 = "c2e461b27668bd63c4cbd85649f7c4ceb63fc2447bf657d231e0d9fd4f42a055"
+sha256 = "bf8cb1cefedfbf86fbb38dd42278fcad8fe020f3b8989897f1a0b2187aabdda5"
 
 [[tool.macos]]
 name = "gzip"

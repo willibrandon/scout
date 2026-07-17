@@ -53,6 +53,9 @@ The shared driver performs the same oracle restore, SDK restore, Hyperfine
 setup, corpus validation, preflight, Native AOT build, and gate invocation used
 by the workflow. A complete gate requires committed and clean performance
 inputs; a focused workload remains available while developing a change.
+The rg oracle is the hosted release-LTO binary in both environments. Host tools
+use the frozen local or GitHub Actions hash set for the machine that executes
+the driver; decompressed corpus hashes and the Hyperfine version remain fixed.
 
 GitHub's default `CI` workflow runs hosted cross-platform build, test, format,
 fuzz, and native link checks. After `CI` succeeds on `main`, it dispatches the

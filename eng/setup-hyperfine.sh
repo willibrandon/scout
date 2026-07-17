@@ -63,20 +63,24 @@ host_rid() {
     esac
 }
 
-oracle_environment() {
-    if [ -n "${SCOUT_ORACLE_ENVIRONMENT:-}" ]; then
-        case "$SCOUT_ORACLE_ENVIRONMENT" in
+tool_environment() {
+    if [ -n "${SCOUT_TOOL_ENVIRONMENT:-}" ]; then
+        case "$SCOUT_TOOL_ENVIRONMENT" in
             github-actions|local)
-                printf '%s\n' "$SCOUT_ORACLE_ENVIRONMENT"
+                printf '%s\n' "$SCOUT_TOOL_ENVIRONMENT"
                 return
                 ;;
             *)
-                fail "Unsupported SCOUT_ORACLE_ENVIRONMENT: $SCOUT_ORACLE_ENVIRONMENT"
+                fail "Unsupported SCOUT_TOOL_ENVIRONMENT: $SCOUT_TOOL_ENVIRONMENT"
                 ;;
         esac
     fi
 
-    printf 'github-actions\n'
+    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+        printf 'github-actions\n'
+    else
+        printf 'local\n'
+    fi
 }
 
 read_lock_rid_table_value() {
@@ -192,7 +196,7 @@ read_macos_tool_value() {
     name="$1"
     key="$2"
 
-    if value="$(read_lock_rid_table_value "tool.macos" "$name" "$HOST_RID" "$HOST_ORACLE_ENVIRONMENT" "$key")"; then
+    if value="$(read_lock_rid_table_value "tool.macos" "$name" "$HOST_RID" "$HOST_TOOL_ENVIRONMENT" "$key")"; then
         printf '%s\n' "$value"
         return 0
     fi
@@ -202,7 +206,7 @@ read_macos_tool_value() {
         return 0
     fi
 
-    if value="$(read_lock_environment_table_value "tool.macos" "$name" "$HOST_ORACLE_ENVIRONMENT" "$key")"; then
+    if value="$(read_lock_environment_table_value "tool.macos" "$name" "$HOST_TOOL_ENVIRONMENT" "$key")"; then
         printf '%s\n' "$value"
         return 0
     fi
@@ -344,7 +348,7 @@ require_command brew
 require_command sed
 
 HOST_RID="$(host_rid)"
-HOST_ORACLE_ENVIRONMENT="$(oracle_environment)"
+HOST_TOOL_ENVIRONMENT="$(tool_environment)"
 NAME="hyperfine"
 VERSION="$(read_macos_tool_value "$NAME" "version")" || fail "Missing macOS hyperfine version in tests/PREREQS.lock."
 PATH_VALUE="$(read_macos_tool_value "$NAME" "path")" || fail "Missing macOS hyperfine path in tests/PREREQS.lock."

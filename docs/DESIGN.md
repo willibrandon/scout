@@ -435,6 +435,9 @@ clean performance inputs, records the complete harness fingerprint, and runs
 the same harness command. The two absent-pattern workloads batch sixteen input
 arguments per command so their measured duration stays above Hyperfine's
 short-command range.
+The driver selects the hosted release-LTO rg oracle everywhere and validates
+host utilities against the frozen local or GitHub Actions hash set matching the
+executing OS image. Both paths verify identical decompressed corpus hashes.
 Peak RSS uses only the first command in each fresh process because macOS reports
 child peak RSS cumulatively; alternating rounds provide one clean sample per tool
 in every cycle.
@@ -951,7 +954,7 @@ On x64 the link additionally needs `libRuntime.VxsortEnabled.a` (the GC's AVX2/A
 
 **This file exists in the repo at `tests/PREREQS.lock`.** It is not a sketch — the values below were measured on this machine and the authoritative copy is the file; this appendix summarizes it.
 
-**Literal-and-final today** (measured/known): the ripgrep commit and release-LTO reference `rg` binary hash; the .NET SDK/runtime that built the verified spikes (`10.0.102`/`10.0.2`); the macOS host (`macOS 26.3.1`, `arm64`, `Apple clang 17.0.0 (clang-1700.6.4.2)`, `cargo 1.91.1`); the PCRE2 binding/sys/C-library versions, tag, and upstream commit; the macOS decompression tool versions and binary hash sets (`gzip` Apple gzip 475, `bzip2` 1.0.8, `xz` 5.8.2, `zstd` 1.5.7, `lz4` 1.10.0, `brotli` 1.2.0, `uncompress` Apple compress file_cmds-475 — all read from the host, plus hosted RID/environment selections); the Linux `debian:bookworm-slim` index/amd64/arm64 digests plus pinned-snapshot decompressor package versions and binary hashes; the macOS `hyperfine` 1.20.0 Homebrew source checksum, bottle checksum, and binary hash; the OpenSubtitles archive hash (`7c169ffa7742fd7f670c176ba8c290b74bcc650784e585e2ef60061376c8fff1`) and decompressed `en.txt` hash (`a84b1e0c66645c429ff356510dc872d5d9cca1c5a02a21d6eee3cff24d4781bb`); the linux-kernel benchmark source archive hash (`8779f9318fb896f64f7a876d7ff9c152925e82c17690281eb1ec6ce587275054`) and extracted-tree manifest hash (`c104036f61aa7eba26da621738424e2e35f2c12372858abc345c39bbd9ecd116`); and the **real spike-binary hashes**:
+**Literal-and-final today** (measured/known): the ripgrep commit and release-LTO reference `rg` binary hash; the .NET SDK/runtime that built the verified spikes (`10.0.102`/`10.0.2`); the macOS host (`macOS 26.5.2`, `arm64`, `Apple clang 17.0.0 (clang-1700.6.4.2)`, `cargo 1.92.0`); the PCRE2 binding/sys/C-library versions, tag, and upstream commit; the macOS decompression tool versions and binary hash sets (`gzip` Apple gzip 479, `bzip2` 1.0.8, `xz` 5.8.2, `zstd` 1.5.7, `lz4` 1.10.0, `brotli` 1.2.0, `uncompress` Apple compress file_cmds-479 — all read from the host, plus hosted RID/environment selections); the Linux `debian:bookworm-slim` index/amd64/arm64 digests plus pinned-snapshot decompressor package versions and binary hashes; the macOS `hyperfine` 1.20.0 Homebrew source checksum, bottle checksum, and binary hash; the OpenSubtitles archive hash (`7c169ffa7742fd7f670c176ba8c290b74bcc650784e585e2ef60061376c8fff1`) and decompressed `en.txt` hash (`a84b1e0c66645c429ff356510dc872d5d9cca1c5a02a21d6eee3cff24d4781bb`); the linux-kernel benchmark source archive hash (`8779f9318fb896f64f7a876d7ff9c152925e82c17690281eb1ec6ce587275054`) and extracted-tree manifest hash (`c104036f61aa7eba26da621738424e2e35f2c12372858abc345c39bbd9ecd116`); and the **real spike-binary hashes**:
 
 ```toml
 [[spike_artifact]]

@@ -26,6 +26,11 @@ esac
 
 export SCOUT_HOST_RID="osx-arm64"
 export SCOUT_ORACLE_ENVIRONMENT="github-actions"
+if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+    export SCOUT_TOOL_ENVIRONMENT="github-actions"
+else
+    export SCOUT_TOOL_ENVIRONMENT="local"
+fi
 
 performance_inputs="$(git status --porcelain=v1 --untracked-files=normal -- \
     .github/workflows/release-gates.yml \
