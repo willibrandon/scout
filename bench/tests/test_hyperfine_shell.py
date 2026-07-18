@@ -18,6 +18,68 @@ _GIT = shutil.which("git")
 class HyperfineShellTests(unittest.TestCase):
     """Exercise the real run_pair_impl function with deterministic test doubles."""
 
+    def test_complete_gate_delegates_to_the_release_equivalent_driver(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        source = root / "bench" / "run-hyperfine.sh"
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_root = Path(temporary_directory)
+            temporary_bench = temporary_root / "bench"
+            temporary_eng = temporary_root / "eng"
+            temporary_bench.mkdir()
+            temporary_eng.mkdir()
+            temporary_script = temporary_bench / "run-hyperfine.sh"
+            temporary_script.write_bytes(source.read_bytes())
+            driver = temporary_eng / "run-performance-gate.sh"
+            driver.write_text(
+                "#!/bin/sh\nprintf '<%s>\\n' \"$@\"\n",
+                encoding="utf-8",
+            )
+            driver.chmod(0o755)
+
+            result = subprocess.run(
+                [_SH, str(temporary_script), "--gate"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("<--gate>", result.stdout.strip())
+
+    def test_release_driver_isolates_and_sanitizes_the_native_build(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        driver = (root / "eng" / "run-performance-gate.sh").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('worktree add --detach "$PERFORMANCE_WORKTREE" HEAD', driver)
+        self.assertIn('worktree remove --force "$PERFORMANCE_WORKTREE"', driver)
+        self.assertIn('ln -s "$ROOT/artifacts/corpora"', driver)
+        self.assertIn("copy_gate_aggregates", driver)
+        self.assertIn("    CFLAGS \\\n", driver)
+        self.assertIn("    LDFLAGS \\\n", driver)
+        self.assertIn(
+            'SCOUT_PERFORMANCE_GATE_INNER=1 '
+            '"$PERFORMANCE_WORKTREE/bench/run-hyperfine.sh"',
+            driver,
+        )
+
+    def test_release_driver_rejects_custom_sampling_before_host_setup(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        driver = root / "eng" / "run-performance-gate.sh"
+
+        result = subprocess.run(
+            [_SH, str(driver), "--gate", "--runs", "2"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(2, result.returncode)
+        self.assertIn("accepts only --gate", result.stderr)
+        self.assertNotIn("requires macOS arm64", result.stderr)
+
     def test_word_boundary_gate_exercises_prefilter_free_count_lanes(self) -> None:
         root = Path(__file__).resolve().parents[2]
         source = (root / "bench" / "run-hyperfine.sh").read_text(encoding="utf-8")

@@ -429,7 +429,8 @@ the host's logical CPU count.
 Before timing, each rg/Scout command pair produces a C-locale sorted-line
 digest; differing output fails the workload. The gate accepts one prespecified
 sample set, so a failed attempt remains failed. The shared local/CI driver
-restores the hosted oracle, verifies corpora and tools, rebuilds Native AOT,
+restores the hosted oracle, verifies corpora and tools, builds Native AOT from a
+fresh detached worktree,
 checks the build's source fingerprint and payload hash, requires committed and
 clean performance inputs, records the complete harness fingerprint, and runs
 the same harness command. The two absent-pattern workloads batch sixteen input

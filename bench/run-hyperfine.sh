@@ -2,6 +2,28 @@
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+
+if [ "${SCOUT_PERFORMANCE_GATE_INNER:-}" = "1" ]; then
+    unset SCOUT_PERFORMANCE_GATE_INNER
+else
+    release_gate_requested="0"
+    focused_gate_requested="0"
+    for argument in "$@"; do
+        case "$argument" in
+            --gate)
+                release_gate_requested="1"
+                ;;
+            --workload)
+                focused_gate_requested="1"
+                ;;
+        esac
+    done
+
+    if [ "$release_gate_requested" = "1" ] && [ "$focused_gate_requested" = "0" ]; then
+        exec "$ROOT/eng/run-performance-gate.sh" "$@"
+    fi
+fi
+
 export LANG=C
 export LC_ALL=C
 export TZ=UTC

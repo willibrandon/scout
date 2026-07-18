@@ -71,4 +71,20 @@ public sealed class ByteCounterTests
         Assert.Equal(4, ByteCounter.CountAndFindFirst(haystack, (byte)'\n', (byte)'x', out int missing));
         Assert.Equal(-1, missing);
     }
+
+    /// <summary>
+    /// Counts a large input while locating a find byte in the scalar tail.
+    /// </summary>
+    [Fact]
+    public void CountAndFindFirstHandlesLargeInputAndScalarTail()
+    {
+        byte[] haystack = new byte[(1024 * 1024) + 3];
+        Array.Fill(haystack, (byte)'\n');
+        haystack[^1] = 0;
+
+        long count = ByteCounter.CountAndFindFirst(haystack, (byte)'\n', 0, out int firstFound);
+
+        Assert.Equal((long)haystack.Length - 1, count);
+        Assert.Equal(haystack.Length - 1, firstFound);
+    }
 }

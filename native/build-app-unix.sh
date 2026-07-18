@@ -119,7 +119,7 @@ case "$RID" in
 esac
 
 "$ROOT/native/pcre2/build-unix.sh" "$RID"
-dotnet publish "$ROOT/src/Scout.App/Scout.App.csproj" -r "$RID" -c Release -p:NativeLib=Static -p:VersionPrefix="$SCOUT_VERSION" -p:Version="$SCOUT_VERSION" -o "$OUT"
+dotnet publish "$ROOT/src/Scout.App/Scout.App.csproj" -r "$RID" -c Release -p:NativeLib=Static -p:VersionPrefix="$SCOUT_VERSION" -p:Version="$SCOUT_VERSION" -o "$OUT" --disable-build-servers
 mkdir -p "$BIN"
 
 RT="$HOME/.nuget/packages/microsoft.netcore.app.runtime.nativeaot.$RID/10.0.2/runtimes/$RID/native"

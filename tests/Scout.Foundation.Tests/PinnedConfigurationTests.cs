@@ -3194,7 +3194,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("safe.directory=\"$ROOT\"", nativeBuild, StringComparison.Ordinal);
         Assert.Contains("safe.directory=\"$ROOT\"", script, StringComparison.Ordinal);
         Assert.Contains("test_source_fingerprint_handles_a_different_repository_owner", gateShellTests, StringComparison.Ordinal);
-        Assert.Contains("accepts only an optional --workload NAME diagnostic", performanceGate, StringComparison.Ordinal);
+        Assert.Contains("accepts only --gate and an optional --workload NAME diagnostic", performanceGate, StringComparison.Ordinal);
+        Assert.Contains("worktree add --detach", performanceGate, StringComparison.Ordinal);
+        Assert.Contains("worktree remove --force", performanceGate, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_PERFORMANCE_GATE_INNER=1", performanceGate, StringComparison.Ordinal);
         Assert.Contains("SCOUT_CORPORA_DIR", performanceGate, StringComparison.Ordinal);
         Assert.Contains("SCOUT_RELEASE_VERSION", performanceGate, StringComparison.Ordinal);
         Assert.Contains("SCOUT_BIN", performanceGate, StringComparison.Ordinal);
@@ -3501,6 +3504,11 @@ public sealed partial class PinnedConfigurationTests
         string pcre2 = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "Pcre2SearchOperations.cs"));
         string json = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "JsonSearchOperations.cs"));
         string upstream = File.ReadAllText(Path.Combine(root, "src", "Scout.Automata", "UPSTREAM.md"));
+        int advSimdCombinedStart = byteCounter.IndexOf("private static long CountAndFindFirstAdvSimd", StringComparison.Ordinal);
+        Assert.True(advSimdCombinedStart >= 0);
+        int advSimdCombinedEnd = byteCounter.IndexOf("private static Vector128<uint> WidenAdvSimdLaneCounts", advSimdCombinedStart, StringComparison.Ordinal);
+        Assert.True(advSimdCombinedEnd > advSimdCombinedStart);
+        string advSimdCombined = byteCounter[advSimdCombinedStart..advSimdCombinedEnd];
 
         Assert.Contains("Avx512BW.IsSupported", byteCounter, StringComparison.Ordinal);
         Assert.Contains("Avx2.IsSupported", byteCounter, StringComparison.Ordinal);
@@ -3508,6 +3516,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("AdvSimd.IsSupported", byteCounter, StringComparison.Ordinal);
         Assert.Contains("CountVector512", byteCounter, StringComparison.Ordinal);
         Assert.Contains("BitOperations.PopCount", byteCounter, StringComparison.Ordinal);
+        Assert.Contains("findMatches |= Vector128.Equals", advSimdCombined, StringComparison.Ordinal);
+        Assert.DoesNotContain("ExtractMostSignificantBits", advSimdCombined, StringComparison.Ordinal);
         Assert.Contains("ByteCounter.Count(bytes, (byte)'\\n')", multiline, StringComparison.Ordinal);
         Assert.Contains("CountLineTerminators", pcre2, StringComparison.Ordinal);
         Assert.Contains("ByteCounter.Count(bytes, GetPcre2LineTerminatorByte(lineTerminator))", pcre2, StringComparison.Ordinal);

@@ -34,7 +34,7 @@ bench/run-hyperfine.sh --smoke
 Release-gate run:
 
 ```sh
-eng/run-performance-gate.sh
+bench/run-hyperfine.sh --gate
 ```
 
 Run one release-gate workload with the same sampling and limits:
@@ -49,10 +49,14 @@ full gate. It is a diagnostic run; the full `--gate` command executes the
 release-gate workload sequence. `bench/run-hyperfine.sh --list` prints the
 accepted names. Gate mode selects the hosted pinned rg binary by default.
 Set `SCOUT_ORACLE_ENVIRONMENT=local` for an explicit local-oracle comparison.
-The shared driver performs the same oracle restore, SDK restore, Hyperfine
-setup, corpus validation, preflight, Native AOT build, and gate invocation used
-by the workflow. A complete gate requires committed and clean performance
-inputs; a focused workload remains available while developing a change.
+The complete `--gate` form delegates to the shared driver used by the workflow.
+The driver performs the oracle restore, SDK restore, Hyperfine setup, corpus
+validation, preflight, clean Native AOT build, and gate invocation. A complete
+gate requires committed and clean performance inputs; a focused workload remains
+available while developing a change.
+The build runs from a detached worktree at the selected commit. Pinned corpus and
+oracle caches are shared after verification, while build and benchmark outputs
+remain isolated and the aggregate JSON is copied back when the run ends.
 The rg oracle is the hosted release-LTO binary in both environments. Host tools
 use the frozen local or GitHub Actions hash set for the machine that executes
 the driver; decompressed corpus hashes and the Hyperfine version remain fixed.
