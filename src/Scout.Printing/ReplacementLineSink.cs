@@ -42,6 +42,7 @@ internal struct ReplacementLineSink(
     bool streamPlainBodyDirectly = false) : IMatchLineSink, IDisposable
 {
     private static readonly byte[] s_nullByte = [0];
+    private static readonly byte[] s_lineFeed = [(byte)'\n'];
 
     private readonly RawByteWriter _output = output ?? throw new ArgumentNullException(nameof(output));
     private readonly OutputPath? _prefix = prefix;
@@ -63,19 +64,20 @@ internal struct ReplacementLineSink(
     private readonly long _lineNumberOffset = lineNumberOffset;
     private readonly long _byteOffsetOffset = byteOffsetOffset;
     private readonly ReadOnlyMemory<byte> _lineTerminator =
-        lineTerminator.IsEmpty ? "\n"u8.ToArray() : lineTerminator;
-    private readonly List<int> _starts = [];
-    private readonly List<int> _lengths = [];
-    private readonly List<int> _searchStarts = [];
-    private readonly List<long> _replacementColumns = [];
-    private readonly List<int> _replacementLengths = [];
+        lineTerminator.IsEmpty ? s_lineFeed : lineTerminator;
     private readonly OutputColor _color = color;
+    private ReplacementLineAccumulator? _accumulator;
     private byte[]? _currentLine;
     private long _currentLineNumber;
     private long _currentLineByteOffset;
     private int _currentLineWrittenUntil;
     private bool _streamingPlainLine;
     private bool _selectionOnly;
+
+    /// <summary>
+    /// Gets a value indicating whether buffered-line accumulator storage has been initialized.
+    /// </summary>
+    internal readonly bool IsAccumulatorInitialized => _accumulator is not null;
 
     /// <summary>
     /// Records one match and its original containing-line context.
@@ -168,9 +170,10 @@ internal struct ReplacementLineSink(
             _currentLineByteOffset = lineByteOffset;
         }
 
-        _starts.Add((int)matchColumn - 1);
-        _lengths.Add(match.Length);
-        _searchStarts.Add(searchStart);
+        ReplacementLineAccumulator accumulator = GetAccumulator();
+        accumulator.Starts.Add((int)matchColumn - 1);
+        accumulator.Lengths.Add(match.Length);
+        accumulator.SearchStarts.Add(searchStart);
     }
 
     /// <summary>
@@ -239,10 +242,11 @@ internal struct ReplacementLineSink(
 
         if (CanWritePlainBodyDirectly())
         {
+            ReplacementLineAccumulator accumulator = GetAccumulator();
             WritePrefix(
                 _currentLineNumber + _lineNumberOffset,
                 _byteOffsetOffset + _currentLineByteOffset,
-                _starts.Count > 0 ? _starts[0] + 1L : 1L);
+                accumulator.Starts.Count > 0 ? accumulator.Starts[0] + 1L : 1L);
             ReplacementTemplate activeTemplate = GetTemplate();
             WriteReplacedLine(activeTemplate);
             if (!HasInputTerminator(_currentLine))
@@ -258,14 +262,15 @@ internal struct ReplacementLineSink(
         byte[] replacedLine = ReplaceLine(replacementTemplate);
         int trimOffset = _trim ? GetTrimOffset(replacedLine) : 0;
         ReadOnlySpan<byte> displayLine = replacedLine.AsSpan(trimOffset);
+        ReplacementLineAccumulator activeAccumulator = GetAccumulator();
         if (_vimgrep)
         {
-            for (int index = 0; index < _replacementColumns.Count; index++)
+            for (int index = 0; index < activeAccumulator.ReplacementColumns.Count; index++)
             {
                 WritePrefix(
                     _currentLineNumber + _lineNumberOffset,
-                    _byteOffsetOffset + _currentLineByteOffset + _replacementColumns[index] - 1,
-                    _replacementColumns[index]);
+                    _byteOffsetOffset + _currentLineByteOffset + activeAccumulator.ReplacementColumns[index] - 1,
+                    activeAccumulator.ReplacementColumns[index]);
                 WriteBody(displayLine, trimOffset, index);
             }
         }
@@ -274,7 +279,7 @@ internal struct ReplacementLineSink(
             WritePrefix(
                 _currentLineNumber + _lineNumberOffset,
                 _byteOffsetOffset + _currentLineByteOffset,
-                _replacementColumns[0]);
+                activeAccumulator.ReplacementColumns[0]);
             WriteBody(displayLine, trimOffset);
         }
 
@@ -381,16 +386,17 @@ internal struct ReplacementLineSink(
 
     private byte[] ReplaceLine(ReplacementTemplate activeTemplate)
     {
+        ReplacementLineAccumulator accumulator = GetAccumulator();
         IReplacementCaptureProvider? captureProvider = GetCaptureProvider(activeTemplate);
         if (captureProvider is null)
         {
             return ReplacementFormatter.ReplaceLine(
                 _currentLine,
-                _starts,
-                _lengths,
+                accumulator.Starts,
+                accumulator.Lengths,
                 _replacement.Span,
-                _replacementColumns,
-                _replacementLengths,
+                accumulator.ReplacementColumns,
+                accumulator.ReplacementLengths,
                 searchPlan: null,
                 activeTemplate,
                 GetCaptureSlotsBuffer(activeTemplate));
@@ -398,27 +404,28 @@ internal struct ReplacementLineSink(
 
         return ReplacementFormatter.ReplaceLine(
             _currentLine,
-            _starts,
-            _lengths,
+            accumulator.Starts,
+            accumulator.Lengths,
             _replacement.Span,
-            _replacementColumns,
-            _replacementLengths,
+            accumulator.ReplacementColumns,
+            accumulator.ReplacementLengths,
             captureProvider,
-            _searchStarts,
+            accumulator.SearchStarts,
             activeTemplate,
             GetCaptureSlotsBuffer(activeTemplate));
     }
 
     private void WriteReplacedLine(ReplacementTemplate activeTemplate)
     {
+        ReplacementLineAccumulator accumulator = GetAccumulator();
         IReplacementCaptureProvider? captureProvider = GetCaptureProvider(activeTemplate);
         if (captureProvider is null)
         {
             ReplacementFormatter.WriteReplacedLine(
                 _output,
                 _currentLine,
-                _starts,
-                _lengths,
+                accumulator.Starts,
+                accumulator.Lengths,
                 _replacement.Span,
                 searchPlan: null,
                 activeTemplate,
@@ -429,11 +436,11 @@ internal struct ReplacementLineSink(
         ReplacementFormatter.WriteReplacedLine(
             _output,
             _currentLine,
-            _starts,
-            _lengths,
+            accumulator.Starts,
+            accumulator.Lengths,
             _replacement.Span,
             captureProvider,
-            _searchStarts,
+            accumulator.SearchStarts,
             activeTemplate,
             GetCaptureSlotsBuffer(activeTemplate));
     }
@@ -558,7 +565,9 @@ internal struct ReplacementLineSink(
             else
             {
                 _output.Write("[Omitted long line with "u8);
-                OutputColor.WriteNumber(_output, _replacementColumns.Count);
+                OutputColor.WriteNumber(
+                    _output,
+                    GetAccumulator().ReplacementColumns.Count);
                 _output.Write(" matches]"u8);
             }
 
@@ -595,16 +604,17 @@ internal struct ReplacementLineSink(
 
     private void WriteColoredBody(ReadOnlySpan<byte> displayLine, int trimOffset, int highlightedReplacementIndex)
     {
+        ReplacementLineAccumulator accumulator = GetAccumulator();
         List<int> displayStarts = [];
         List<int> displayLengths = [];
         int startIndex = highlightedReplacementIndex >= 0 ? highlightedReplacementIndex : 0;
         int endIndex = highlightedReplacementIndex >= 0
             ? highlightedReplacementIndex + 1
-            : _replacementColumns.Count;
+            : accumulator.ReplacementColumns.Count;
         for (int index = startIndex; index < endIndex; index++)
         {
-            int start = (int)_replacementColumns[index] - 1 - trimOffset;
-            int length = _replacementLengths[index];
+            int start = (int)accumulator.ReplacementColumns[index] - 1 - trimOffset;
+            int length = accumulator.ReplacementLengths[index];
             if (start + length <= 0)
             {
                 continue;
@@ -638,11 +648,12 @@ internal struct ReplacementLineSink(
 
     private long CountMatchesAfterPreview()
     {
+        ReplacementLineAccumulator accumulator = GetAccumulator();
         long count = 0;
         ulong columns = _lineLimit.MaxColumns.GetValueOrDefault();
-        for (int index = 0; index < _replacementColumns.Count; index++)
+        for (int index = 0; index < accumulator.ReplacementColumns.Count; index++)
         {
-            if ((ulong)_replacementColumns[index] > columns)
+            if ((ulong)accumulator.ReplacementColumns[index] > columns)
             {
                 count++;
             }
@@ -675,13 +686,14 @@ internal struct ReplacementLineSink(
     private void ResetLineState()
     {
         _currentLine = null;
-        _starts.Clear();
-        _lengths.Clear();
-        _searchStarts.Clear();
-        _replacementColumns.Clear();
-        _replacementLengths.Clear();
+        _accumulator?.Clear();
         _currentLineWrittenUntil = 0;
         _streamingPlainLine = false;
         _selectionOnly = false;
+    }
+
+    private ReplacementLineAccumulator GetAccumulator()
+    {
+        return _accumulator ??= new ReplacementLineAccumulator();
     }
 }
