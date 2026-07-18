@@ -2059,47 +2059,56 @@ internal static unsafe class LargeFileSearchOperations
             return searchSegmentsInParallel;
         }
 
-        LargeFileSegmentSearchResult ProcessBufferedSegment(nint segmentAddress, int segmentLength, long segmentStartOffset, long segmentLineNumber)
+        LargeFileSegmentSearchResult ProcessBufferedSegment(
+            nint segmentAddress,
+            int segmentLength,
+            long segmentStartOffset,
+            long segmentLineNumber,
+            LargeFileSegmentMatchPool matchPool)
         {
             ReadOnlySpan<byte> segment = new((void*)segmentAddress, segmentLength);
-            var sink = new LargeFileSegmentMatchSink();
-            if (fastLiteralPattern is not null)
+            var sink = new LargeFileSegmentMatchSink(matchPool);
+            try
             {
-                bool literalSegmentMatched = SearchFastLiteralBufferedSegment(
-                    segment,
-                    fastLiteralPattern.Value.Span,
-                    ref sink);
+                bool segmentMatched;
+                if (fastLiteralPattern is not null)
+                {
+                    segmentMatched = SearchFastLiteralBufferedSegment(
+                        segment,
+                        fastLiteralPattern.Value.Span,
+                        ref sink);
+                }
+                else
+                {
+                    segmentMatched = LiteralLineSearcher.SearchWithRegexPlan(
+                        segment,
+                        pattern,
+                        regexPlan,
+                        ref sink,
+                        asciiCaseInsensitive,
+                        invertMatch: false,
+                        lineRegexp: false,
+                        wordRegexp: false,
+                        maxMatchingLines: null,
+                        crlf: false,
+                        nullData: false,
+                        requireMatchColumn: column || prefix?.HasHyperlink == true);
+                }
+
                 return new LargeFileSegmentSearchResult(
-                    literalSegmentMatched,
+                    segmentMatched,
                     sink.MatchedLines,
                     segmentAddress,
                     segmentLength,
                     segmentStartOffset,
                     segmentLineNumber,
-                    sink.Matches);
+                    sink.DetachMatches());
             }
-
-            bool segmentMatched = LiteralLineSearcher.SearchWithRegexPlan(
-                segment,
-                pattern,
-                regexPlan,
-                ref sink,
-                asciiCaseInsensitive,
-                invertMatch: false,
-                lineRegexp: false,
-                wordRegexp: false,
-                maxMatchingLines: null,
-                crlf: false,
-                nullData: false,
-                requireMatchColumn: column || prefix?.HasHyperlink == true);
-            return new LargeFileSegmentSearchResult(
-                segmentMatched,
-                sink.MatchedLines,
-                segmentAddress,
-                segmentLength,
-                segmentStartOffset,
-                segmentLineNumber,
-                sink.Matches);
+            catch
+            {
+                sink.ReturnMatches();
+                throw;
+            }
         }
 
         bool SearchFastLiteralBufferedSegment(
@@ -2142,6 +2151,7 @@ internal static unsafe class LargeFileSearchOperations
                 threadCount,
                 1,
                 SearchWalkPlanning.MaximumLargeFileSegmentWorkerCount);
+            var matchPool = new LargeFileSegmentMatchPool(parallelism);
             using var workItems = new BlockingCollection<(long Sequence, nint SegmentAddress, int SegmentLength, long SegmentStartOffset, long SegmentLineNumber)>(parallelism);
             using var completedItems = new BlockingCollection<(long Sequence, LargeFileSegmentSearchResult Result, Exception? Error)>(parallelism);
             var completedBySequence = new Dictionary<long, LargeFileSegmentSearchResult>();
@@ -2151,6 +2161,15 @@ internal static unsafe class LargeFileSearchOperations
             long nextSequence = 0;
             long nextDrainSequence = 0;
             int pendingCount = 0;
+
+            void ReleaseResult(LargeFileSegmentSearchResult result)
+            {
+                NativeMemory.Free((void*)result.SegmentAddress);
+                if (result.Matches is not null)
+                {
+                    matchPool.Return(result.Matches);
+                }
+            }
 
             void DrainResult(LargeFileSegmentSearchResult result)
             {
@@ -2190,7 +2209,7 @@ internal static unsafe class LargeFileSearchOperations
                 }
                 finally
                 {
-                    NativeMemory.Free((void*)result.SegmentAddress);
+                    ReleaseResult(result);
                 }
             }
 
@@ -2198,9 +2217,9 @@ internal static unsafe class LargeFileSearchOperations
             {
                 while (completedBySequence.Remove(nextDrainSequence, out LargeFileSegmentSearchResult result))
                 {
-                    DrainResult(result);
                     nextDrainSequence++;
                     pendingCount--;
+                    DrainResult(result);
                 }
             }
 
@@ -2224,7 +2243,8 @@ internal static unsafe class LargeFileSearchOperations
                 Exception? workerError = null;
                 while (pendingCount != 0)
                 {
-                    workerError ??= ReceiveOne();
+                    Exception? receivedError = ReceiveOne();
+                    workerError ??= receivedError;
                 }
 
                 for (int index = 0; index < workers.Length; index++)
@@ -2244,7 +2264,7 @@ internal static unsafe class LargeFileSearchOperations
                 pendingCount -= completedBySequence.Count;
                 foreach (LargeFileSegmentSearchResult result in completedBySequence.Values)
                 {
-                    NativeMemory.Free((void*)result.SegmentAddress);
+                    ReleaseResult(result);
                 }
 
                 completedBySequence.Clear();
@@ -2254,7 +2274,7 @@ internal static unsafe class LargeFileSearchOperations
                     pendingCount--;
                     if (completed.Error is null)
                     {
-                        NativeMemory.Free((void*)completed.Result.SegmentAddress);
+                        ReleaseResult(completed.Result);
                     }
                 }
 
@@ -2303,29 +2323,34 @@ internal static unsafe class LargeFileSearchOperations
                         {
                             foreach ((long sequence, nint segmentAddress, int segmentLength, long segmentStartOffset, long segmentLineNumber) in work.GetConsumingEnumerable())
                             {
+                                LargeFileSegmentSearchResult segmentResult = default;
+                                bool resultCreated = false;
                                 try
                                 {
-                                    LargeFileSegmentSearchResult segmentResult = ProcessBufferedSegment(segmentAddress, segmentLength, segmentStartOffset, segmentLineNumber);
+                                    segmentResult = ProcessBufferedSegment(
+                                        segmentAddress,
+                                        segmentLength,
+                                        segmentStartOffset,
+                                        segmentLineNumber,
+                                        matchPool);
+                                    resultCreated = true;
                                     completed.Add((sequence, segmentResult, null));
                                 }
-                                catch (IOException exception)
+                                catch (Exception exception) when (
+                                    exception is IOException or
+                                    UnauthorizedAccessException or
+                                    InvalidOperationException or
+                                    ArgumentException)
                                 {
-                                    NativeMemory.Free((void*)segmentAddress);
-                                    completed.Add((sequence, default, exception));
-                                }
-                                catch (UnauthorizedAccessException exception)
-                                {
-                                    NativeMemory.Free((void*)segmentAddress);
-                                    completed.Add((sequence, default, exception));
-                                }
-                                catch (InvalidOperationException exception)
-                                {
-                                    NativeMemory.Free((void*)segmentAddress);
-                                    completed.Add((sequence, default, exception));
-                                }
-                                catch (ArgumentException exception)
-                                {
-                                    NativeMemory.Free((void*)segmentAddress);
+                                    if (resultCreated)
+                                    {
+                                        ReleaseResult(segmentResult);
+                                    }
+                                    else
+                                    {
+                                        NativeMemory.Free((void*)segmentAddress);
+                                    }
+
                                     completed.Add((sequence, default, exception));
                                 }
                             }
