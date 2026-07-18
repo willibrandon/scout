@@ -80,6 +80,12 @@ class PerformanceEnvironmentTests(unittest.TestCase):
 
     def test_sanitize_overwrites_poisoned_dotnet_and_nuget_settings(self) -> None:
         environment = dict(os.environ)
+        for variable in (
+            "SCOUT_PERFORMANCE_GATE_RUNNER_NAME",
+            "SCOUT_PERFORMANCE_GATE_IMAGE_OS",
+            "SCOUT_PERFORMANCE_GATE_IMAGE_VERSION",
+        ):
+            environment.pop(variable, None)
         environment.update(
             {
                 "DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE": "0",
