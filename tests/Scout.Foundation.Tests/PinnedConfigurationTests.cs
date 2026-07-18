@@ -32,6 +32,52 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies the macOS performance gate provisions its SDK from the exact pinned archive.
+    /// </summary>
+    [Fact]
+    public void PerformanceGateProvisionsIsolatedPinnedSdk()
+    {
+        string root = FindRepositoryRoot();
+        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
+        string setupSdk = File.ReadAllText(Path.Combine(root, "eng", "setup-dotnet-performance-sdk.sh"));
+        string performanceEnvironment = File.ReadAllText(Path.Combine(root, "eng", "performance-environment.sh"));
+        string performanceGate = File.ReadAllText(Path.Combine(root, "eng", "run-performance-gate.sh"));
+        string releaseGateWorkflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "release-gates.yml"));
+        int performanceJobStart = releaseGateWorkflow.IndexOf("  performance-gate:\n", StringComparison.Ordinal);
+        Assert.True(performanceJobStart >= 0);
+        int performanceJobEnd = releaseGateWorkflow.IndexOf("\n  native-linux-x64:", performanceJobStart, StringComparison.Ordinal);
+        Assert.True(performanceJobEnd > performanceJobStart);
+        string performanceJob = releaseGateWorkflow[performanceJobStart..performanceJobEnd];
+
+        Assert.Contains("[[dotnet_sdk_archive]]", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("dotnet_host_runtime = \"10.0.10\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("nativeaot_runtime_framework = \"10.0.2\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("rid = \"osx-arm64\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("url = \"https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.102/dotnet-sdk-10.0.102-osx-arm64.tar.gz\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("sha512 = \"5adb12a72ccfd327fe94ce99104ee7b9b56dbe40e354440a0b28313a4996ff34cc8560d605c1f30c247d364ae429de55d8c3b30ea19da04a716a059eb62b98ed\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("[[dotnet_runtime_archive]]", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("url = \"https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.10/dotnet-runtime-10.0.10-osx-arm64.tar.gz\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("sha512 = \"79cbc64bfeb806d5f2a9e0a2a2ed336c7aa275b0438bbd88d36236a1b6203950546b49ff307cc5067c89434ffe22c021a594b2f8adad71146a5ece825652bd85\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("verify_archive_sha512", setupSdk, StringComparison.Ordinal);
+        Assert.Contains("--list-sdks", setupSdk, StringComparison.Ordinal);
+        Assert.Contains("--list-runtimes", setupSdk, StringComparison.Ordinal);
+        Assert.Contains("sdk_base_path", setupSdk, StringComparison.Ordinal);
+        Assert.Contains("$dotnet_root/sdk/$EXPECTED_SDK", setupSdk, StringComparison.Ordinal);
+        Assert.Contains("rm -rf -- \"$EXTRACTED_ROOT/host/fxr\" \"$EXTRACTED_ROOT/shared\"", setupSdk, StringComparison.Ordinal);
+        Assert.Contains("verify_sdk \"$EXTRACTED_ROOT\"", setupSdk, StringComparison.Ordinal);
+        Assert.Contains("verify_sdk \"$INSTALL_ROOT\"", setupSdk, StringComparison.Ordinal);
+        Assert.Contains("DOTNET_ROOT=\"$PERFORMANCE_STATE_PARENT/dotnet\"", performanceGate, StringComparison.Ordinal);
+        Assert.Contains("NUGET_PACKAGES=\"$PERFORMANCE_STATE_PARENT/nuget/packages\"", performanceGate, StringComparison.Ordinal);
+        Assert.Contains("cd \"$PERFORMANCE_WORKTREE\"", performanceGate, StringComparison.Ordinal);
+        Assert.Contains("setup-dotnet-performance-sdk.sh", performanceGate, StringComparison.Ordinal);
+        Assert.DoesNotContain("type -P dotnet", performanceGate, StringComparison.Ordinal);
+        Assert.DoesNotContain("SCOUT_PERFORMANCE_GATE_DOTNET_COMMAND", performanceGate, StringComparison.Ordinal);
+        Assert.DoesNotContain("SCOUT_PERFORMANCE_GATE_DOTNET_COMMAND", performanceEnvironment, StringComparison.Ordinal);
+        Assert.DoesNotContain("actions/setup-dotnet", performanceJob, StringComparison.Ordinal);
+        Assert.Contains("run: bench/run-hyperfine.sh --gate", performanceJob, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies the solution uses the SDK's XML solution format.
     /// </summary>
     [Fact]
@@ -163,8 +209,25 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("runner: windows-11-arm", workflow, StringComparison.Ordinal);
         Assert.Contains("bench/run-hyperfine.sh\" --gate", performanceGate, StringComparison.Ordinal);
         Assert.Contains("runs-on: macos-26", releaseGateWorkflow, StringComparison.Ordinal);
-        Assert.Contains("Run performance gate", releaseGateWorkflow, StringComparison.Ordinal);
-        Assert.Contains("eng/run-performance-gate.sh", releaseGateWorkflow, StringComparison.Ordinal);
+        string[] releaseGateWorkflowLines = releaseGateWorkflow.Split('\n');
+        int performanceStepIndex = Array.FindIndex(
+            releaseGateWorkflowLines,
+            line => string.Equals(
+                line.Trim(),
+                "- name: Run performance gate",
+                StringComparison.Ordinal));
+        Assert.True(
+            performanceStepIndex >= 0 && performanceStepIndex + 1 < releaseGateWorkflowLines.Length,
+            "The release workflow must contain the performance gate step.");
+        Assert.Equal(
+            "run: bench/run-hyperfine.sh --gate",
+            releaseGateWorkflowLines[performanceStepIndex + 1].Trim());
+        Assert.Single(
+            releaseGateWorkflowLines,
+            line => string.Equals(
+                line.Trim(),
+                "run: bench/run-hyperfine.sh --gate",
+                StringComparison.Ordinal));
         Assert.Contains("id: performance-checkout", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("steps.performance-checkout.outputs.sha", releaseGateWorkflow, StringComparison.Ordinal);
         Assert.Contains("eng/setup-hyperfine.sh\"", performanceGate, StringComparison.Ordinal);
@@ -325,7 +388,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("SCOUT_HOST_RID", preflight, StringComparison.Ordinal);
         Assert.Contains("SCOUT_ORACLE_ENVIRONMENT", preflight, StringComparison.Ordinal);
         Assert.Contains("mark_root_safe_for_git", preflight, StringComparison.Ordinal);
-        Assert.Contains("git config --global --add safe.directory \"$ROOT\"", preflight, StringComparison.Ordinal);
+        Assert.Contains("GIT_CONFIG_KEY_0=\"safe.directory\"", preflight, StringComparison.Ordinal);
+        Assert.Contains("GIT_CONFIG_VALUE_0=\"$ROOT\"", preflight, StringComparison.Ordinal);
+        Assert.DoesNotContain("git config --global", preflight, StringComparison.Ordinal);
         Assert.Contains("read_oracle_value \"archive_path\" \"ripgrep_oracle_archive_path\"", preflight, StringComparison.Ordinal);
         Assert.Contains("check_file_hash \"pinned ripgrep oracle archive\"", preflight, StringComparison.Ordinal);
         Assert.Contains("HAS_RIPGREP_SOURCE_CHECKOUT=0", preflight, StringComparison.Ordinal);
@@ -901,19 +966,30 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
-    /// Verifies Scout's internal source generator is not treated as a versioned analyzer package.
+    /// Verifies Scout's analyzer diagnostics are tracked as shipped rules.
     /// </summary>
     [Fact]
-    public void SourceGeneratorDoesNotTrackAnalyzerPackageReleases()
+    public void SourceGeneratorTracksAnalyzerReleases()
     {
         string root = FindRepositoryRoot();
         string sourceGeneratorDirectory = Path.Combine(root, "src", "Scout.SourceGen");
+        string project = File.ReadAllText(Path.Combine(sourceGeneratorDirectory, "Scout.SourceGen.csproj"));
+        string shipped = File.ReadAllText(Path.Combine(sourceGeneratorDirectory, "AnalyzerReleases.Shipped.md"));
+        string unshipped = File.ReadAllText(Path.Combine(sourceGeneratorDirectory, "AnalyzerReleases.Unshipped.md"));
         string editorConfig = File.ReadAllText(Path.Combine(root, ".editorconfig"));
 
-        Assert.False(File.Exists(Path.Combine(sourceGeneratorDirectory, "AnalyzerReleases.Shipped.md")));
-        Assert.False(File.Exists(Path.Combine(sourceGeneratorDirectory, "AnalyzerReleases.Unshipped.md")));
-        Assert.Contains("[src/Scout.SourceGen/*.cs]", editorConfig, StringComparison.Ordinal);
-        Assert.Contains("dotnet_diagnostic.RS2008.severity = suggestion", editorConfig, StringComparison.Ordinal);
+        Assert.Contains("<AdditionalFiles Include=\"AnalyzerReleases.Shipped.md\" />", project, StringComparison.Ordinal);
+        Assert.Contains("<AdditionalFiles Include=\"AnalyzerReleases.Unshipped.md\" />", project, StringComparison.Ordinal);
+        Assert.Contains("## Release 0.1.0", shipped, StringComparison.Ordinal);
+        Assert.Contains("SCOUT0001 | Scout.Structure | Error | OneTypePerFileAnalyzer", shipped, StringComparison.Ordinal);
+        Assert.Contains("SCOUT0002 | Scout.Structure | Error | OneTypePerFileAnalyzer", shipped, StringComparison.Ordinal);
+        Assert.Contains("SCOUT0003 | Scout.Structure | Error | NamespaceFolderAnalyzer", shipped, StringComparison.Ordinal);
+        Assert.Contains("SCOUT0004 | Scout.Structure | Error | NoSkippedTestsAnalyzer", shipped, StringComparison.Ordinal);
+        Assert.Contains("SCOUT0005 | Scout.Structure | Error | FlagCatalogSourceGenerator", shipped, StringComparison.Ordinal);
+        Assert.Contains("SCOUT0006 | Scout.Structure | Error | FlagCatalogSourceGenerator", shipped, StringComparison.Ordinal);
+        Assert.Contains("### New Rules", unshipped, StringComparison.Ordinal);
+        Assert.DoesNotContain("SCOUT000", unshipped, StringComparison.Ordinal);
+        Assert.DoesNotContain("dotnet_diagnostic.RS2008", editorConfig, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1642,6 +1718,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("scout-$RID.tar.gz", unixPackageScript, StringComparison.Ordinal);
         Assert.Contains("scout-$Rid.zip", windowsPackageScript, StringComparison.Ordinal);
         Assert.Contains("binary = \"scout\"", unixPackageScript, StringComparison.Ordinal);
+        Assert.Contains("nativeaot_runtime_framework = \"10.0.2\"", unixPackageScript, StringComparison.Ordinal);
+        Assert.Contains("nativeaot_runtime_framework = \"10.0.2\"", windowsPackageScript, StringComparison.Ordinal);
         Assert.Contains("'binary = \"scout.exe\"'", windowsPackageScript, StringComparison.Ordinal);
         Assert.DoesNotContain("binary = \"sc\"", unixPackageScript, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("'binary = \"sc.exe\"'", windowsPackageScript, StringComparison.OrdinalIgnoreCase);
@@ -2385,6 +2463,7 @@ public sealed partial class PinnedConfigurationTests
         string buildScript = File.ReadAllText(Path.Combine(root, "native", "pcre2", "build-unix.sh"));
         string windowsBuildScript = File.ReadAllText(Path.Combine(root, "native", "pcre2", "build-windows.ps1"));
         string appBuildScript = File.ReadAllText(Path.Combine(root, "native", "build-app-unix.sh"));
+        string toolchainScript = File.ReadAllText(Path.Combine(root, "native", "toolchain-unix.sh"));
         string windowsAppBuildScript = File.ReadAllText(Path.Combine(root, "native", "build-app-windows.ps1"));
         string differentialScript = File.ReadAllText(Path.Combine(root, "native", "test-pcre2-differential-unix.sh"));
         string oracleReader = File.ReadAllText(Path.Combine(root, "eng", "read-ripgrep-oracle.sh"));
@@ -2435,17 +2514,23 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("/DSUPPORT_PCRE2_8=1", windowsBuildScript, StringComparison.Ordinal);
         Assert.Contains("/DSUPPORT_UNICODE=1", windowsBuildScript, StringComparison.Ordinal);
         Assert.Contains("/DSUPPORT_JIT=1", windowsBuildScript, StringComparison.Ordinal);
-        Assert.Contains("osx-arm64|osx-x64|linux-x64|linux-arm64", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("osx-arm64|osx-x64)", toolchainScript, StringComparison.Ordinal);
+        Assert.Contains("linux-x64|linux-arm64)", toolchainScript, StringComparison.Ordinal);
         Assert.DoesNotContain("not implemented", appBuildScript, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("\"$ROOT/native/pcre2/build-unix.sh\" \"$RID\"", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("REAL_BIN=\"$BIN/scout-real\"", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-DSCOUT_LAUNCHER", appBuildScript, StringComparison.Ordinal);
-        Assert.Contains("clang -arch arm64 -O2 -DSCOUT_LAUNCHER", appBuildScript, StringComparison.Ordinal);
-        Assert.Contains("clang -arch x86_64 -O2 -DSCOUT_LAUNCHER", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("configure_native_toolchain \"$ROOT\" \"$RID\"", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("select_native_xcode_developer_dir", toolchainScript, StringComparison.Ordinal);
+        Assert.Contains("NATIVE_CC=\"$(/usr/bin/xcrun --find clang)\"", toolchainScript, StringComparison.Ordinal);
+        Assert.Contains("export CC LD AR RANLIB STRIP NM SDKROOT MACOSX_DEPLOYMENT_TARGET PATH", toolchainScript, StringComparison.Ordinal);
+        Assert.Contains("\"$NATIVE_CC\" \"${SCOUT_MACOS_LINK_FLAGS[@]}\" -O2 -DSCOUT_LAUNCHER", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("-isysroot \"$NATIVE_SDKROOT\"", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("\"-fuse-ld=$NATIVE_LD\"", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("artifacts/native/pcre2/$RID/lib/libpcre2-8.a", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-Wl,-force_load,\"$PCRE2_LIB\"", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("strip_macos_binary()", appBuildScript, StringComparison.Ordinal);
-        Assert.Contains("strip -x \"$path\"", appBuildScript, StringComparison.Ordinal);
+        Assert.Contains("\"$NATIVE_STRIP\" -x \"$path\"", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("strip_macos_binary \"$REAL_BIN\"", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("strip_macos_binary \"$BIN/scout\"", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("-Wl,--whole-archive \"$PCRE2_LIB\" -Wl,--no-whole-archive", appBuildScript, StringComparison.Ordinal);
@@ -2959,7 +3044,7 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
-    /// Verifies hosted release gates install hyperfine from checksum-verified pinned Homebrew artifacts.
+    /// Verifies the performance gate restores Hyperfine from its checksum-pinned bottle.
     /// </summary>
     [Fact]
     public void HostedReleaseGatesProvisionPinnedHyperfine()
@@ -2968,35 +3053,43 @@ public sealed partial class PinnedConfigurationTests
         string workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "release-gates.yml"));
         string script = File.ReadAllText(Path.Combine(root, "eng", "setup-hyperfine.sh"));
         string performanceGate = File.ReadAllText(Path.Combine(root, "eng", "run-performance-gate.sh"));
+        string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
+        string benchmark = File.ReadAllText(Path.Combine(root, "bench", "run-hyperfine.sh"));
 
-        Assert.Contains("Run performance gate", workflow, StringComparison.Ordinal);
-        Assert.Contains("eng/run-performance-gate.sh", workflow, StringComparison.Ordinal);
-        Assert.Contains("eng/setup-hyperfine.sh\"", performanceGate, StringComparison.Ordinal);
-        Assert.DoesNotContain("brew install hyperfine", workflow, StringComparison.Ordinal);
-        Assert.Contains("HOST_RID=\"$(host_rid)\"", script, StringComparison.Ordinal);
-        Assert.Contains("HOST_TOOL_ENVIRONMENT=\"$(tool_environment)\"", script, StringComparison.Ordinal);
-        Assert.Contains("SCOUT_TOOL_ENVIRONMENT", performanceGate, StringComparison.Ordinal);
-        Assert.Contains("GITHUB_ACTIONS", performanceGate, StringComparison.Ordinal);
-        Assert.Contains("read_lock_rid_table_value()", script, StringComparison.Ordinal);
-        Assert.Contains("read_lock_environment_table_value()", script, StringComparison.Ordinal);
-        Assert.Contains("read_macos_tool_value()", script, StringComparison.Ordinal);
-        Assert.Contains("read_macos_tool_value \"$NAME\" \"version\"", script, StringComparison.Ordinal);
-        Assert.Contains("read_macos_tool_value \"$NAME\" \"source_url\"", script, StringComparison.Ordinal);
-        Assert.Contains("read_macos_tool_value \"$NAME\" \"source_sha256\"", script, StringComparison.Ordinal);
-        Assert.Contains("read_macos_tool_value \"$NAME\" \"bottle_tag\"", script, StringComparison.Ordinal);
-        Assert.Contains("read_macos_tool_value \"$NAME\" \"bottle_url\"", script, StringComparison.Ordinal);
-        Assert.Contains("read_macos_tool_value \"$NAME\" \"bottle_sha256\"", script, StringComparison.Ordinal);
-        Assert.Contains("read_macos_tool_value \"$NAME\" \"sha256\"", script, StringComparison.Ordinal);
-        Assert.Contains("brew info --json=v2 \"$NAME\"", script, StringComparison.Ordinal);
-        Assert.Contains("verify_homebrew_metadata", script, StringComparison.Ordinal);
-        Assert.Contains("retry_command()", script, StringComparison.Ordinal);
-        Assert.Contains("retry_command brew fetch --formula --build-from-source \"$NAME\"", script, StringComparison.Ordinal);
-        Assert.Contains("check_file_hash \"hyperfine source archive\"", script, StringComparison.Ordinal);
-        Assert.Contains("retry_command brew fetch --formula --bottle-tag=\"$BOTTLE_TAG\" \"$NAME\"", script, StringComparison.Ordinal);
-        Assert.Contains("brew --cache --formula --bottle-tag=\"$BOTTLE_TAG\" \"$NAME\"", script, StringComparison.Ordinal);
-        Assert.Contains("check_file_hash \"hyperfine bottle archive\"", script, StringComparison.Ordinal);
-        Assert.Contains("check_file_hash \"macOS tool hyperfine\"", script, StringComparison.Ordinal);
-        Assert.Contains("version_matches \"$PATH_VALUE\" \"$VERSION\"", script, StringComparison.Ordinal);
+        string[] workflowLines = workflow.Split('\n');
+        int performanceStepIndex = Array.FindIndex(
+            workflowLines,
+            line => string.Equals(
+                line.Trim(),
+                "- name: Run performance gate",
+                StringComparison.Ordinal));
+        Assert.True(
+            performanceStepIndex >= 0 && performanceStepIndex + 1 < workflowLines.Length,
+            "The release workflow must contain the performance gate step.");
+        Assert.Equal(
+            "run: bench/run-hyperfine.sh --gate",
+            workflowLines[performanceStepIndex + 1].Trim());
+        Assert.Single(
+            workflowLines,
+            line => string.Equals(
+                line.Trim(),
+                "run: bench/run-hyperfine.sh --gate",
+                StringComparison.Ordinal));
+        Assert.DoesNotContain("eng/setup-hyperfine.sh", workflow, StringComparison.Ordinal);
+        Assert.Contains("eng/setup-hyperfine.sh\" \"$PERFORMANCE_STATE_PARENT/hyperfine\"", performanceGate, StringComparison.Ordinal);
+        Assert.Contains("export SCOUT_HYPERFINE_BIN", performanceGate, StringComparison.Ordinal);
+        Assert.Contains("Usage: eng/setup-hyperfine.sh INSTALL_ROOT", script, StringComparison.Ordinal);
+        Assert.Contains("/usr/bin/curl", script, StringComparison.Ordinal);
+        Assert.Contains("verify_hash \"macOS hyperfine bottle\"", script, StringComparison.Ordinal);
+        Assert.Contains("/usr/bin/tar -xOf \"$BOTTLE_ARCHIVE\" \"$BOTTLE_MEMBER\"", script, StringComparison.Ordinal);
+        Assert.Contains("verify_hash \"macOS hyperfine binary\"", script, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_HYPERFINE_BIN must be an absolute path", preflight, StringComparison.Ordinal);
+        Assert.Contains("check_file_hash \"macOS tool hyperfine\"", preflight, StringComparison.Ordinal);
+        Assert.Contains("configured_path=\"${SCOUT_HYPERFINE_BIN:-}\"", benchmark, StringComparison.Ordinal);
+        Assert.Contains("check_file_hash \"hyperfine\" \"$configured_path\"", benchmark, StringComparison.Ordinal);
+        Assert.Contains("check_tool_version \"hyperfine\" \"$configured_path\"", benchmark, StringComparison.Ordinal);
+        Assert.Contains("unset SCOUT_HYPERFINE_BIN", benchmark, StringComparison.Ordinal);
+        Assert.DoesNotContain("brew", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("continue-on-error", script, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -3145,6 +3238,10 @@ public sealed partial class PinnedConfigurationTests
         string outputVerifierTests = File.ReadAllText(Path.Combine(root, "bench", "tests", "test_verify_hyperfine_output.py"));
         string interleaved = File.ReadAllText(Path.Combine(root, "bench", "hyperfine_interleaved.py"));
         string interleavedTests = File.ReadAllText(Path.Combine(root, "bench", "tests", "test_hyperfine_interleaved.py"));
+        string performanceInputVerifier = File.ReadAllText(Path.Combine(root, "bench", "verify_performance_inputs.py"));
+        string performanceInputVerifierTests = File.ReadAllText(Path.Combine(root, "bench", "tests", "test_verify_performance_inputs.py"));
+        string performanceManifestWriter = File.ReadAllText(Path.Combine(root, "bench", "write_performance_manifest.py"));
+        string performanceManifestWriterTests = File.ReadAllText(Path.Combine(root, "bench", "tests", "test_write_performance_manifest.py"));
         string readme = File.ReadAllText(Path.Combine(root, "bench", "README.md"));
         string design = File.ReadAllText(Path.Combine(root, "docs", "DESIGN.md"));
         string parity = File.ReadAllText(Path.Combine(root, "docs", "PARITY.md"));
@@ -3153,8 +3250,11 @@ public sealed partial class PinnedConfigurationTests
         string sourceFingerprint = File.ReadAllText(Path.Combine(root, "eng", "source-fingerprint.sh"));
         string harnessFingerprint = File.ReadAllText(Path.Combine(root, "eng", "performance-harness-fingerprint.sh"));
         string performanceGate = File.ReadAllText(Path.Combine(root, "eng", "run-performance-gate.sh"));
+        string performanceEnvironment = File.ReadAllText(Path.Combine(root, "eng", "performance-environment.sh"));
         string nativeBuild = File.ReadAllText(Path.Combine(root, "native", "build-app-unix.sh"));
+        string nativePublish = File.ReadAllText(Path.Combine(root, "native", "publish-app-unix.sh"));
         string releaseWorkflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "release-gates.yml"));
+        string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
 
         Assert.Contains("subtitles_en_literal", script, StringComparison.Ordinal);
         Assert.Contains("subtitles_en_regex", script, StringComparison.Ordinal);
@@ -3175,6 +3275,34 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("SCOUT_BUILD_PROVENANCE", script, StringComparison.Ordinal);
         Assert.Contains("source_fingerprint", nativeBuild, StringComparison.Ordinal);
         Assert.Contains("payload_sha256", nativeBuild, StringComparison.Ordinal);
+        Assert.Contains("publish_native_app \"$ROOT\" \"$RID\" \"$SCOUT_VERSION\" \"$OUT\"", nativeBuild, StringComparison.Ordinal);
+        Assert.Contains("dotnet publish \"$project\"", nativePublish, StringComparison.Ordinal);
+        Assert.Contains("-p:RestoreDisableParallel=true", nativePublish, StringComparison.Ordinal);
+        Assert.Contains("-m:1", nativePublish, StringComparison.Ordinal);
+        Assert.DoesNotContain("dotnet restore \"$project\"", nativePublish, StringComparison.Ordinal);
+        Assert.DoesNotContain("--no-restore", nativePublish, StringComparison.Ordinal);
+        Assert.Contains("-getProperty:RuntimeFrameworkVersion", nativePublish, StringComparison.Ordinal);
+        Assert.Contains("Microsoft.NETCore.App.Runtime.NativeAOT.$rid", nativePublish, StringComparison.Ordinal);
+        Assert.DoesNotContain("-p:PublishAot=true", nativePublish, StringComparison.Ordinal);
+        Assert.DoesNotContain("-p:_IsPublishing=true", nativePublish, StringComparison.Ordinal);
+        Assert.DoesNotContain("/10.0.2/runtimes/", nativeBuild, StringComparison.Ordinal);
+        Assert.Contains("$NATIVEAOT_RUNTIME_FRAMEWORK_VERSION/runtimes/", nativeBuild, StringComparison.Ordinal);
+        Assert.Contains("Missing NativeAOT runtime pack directory", nativeBuild, StringComparison.Ordinal);
+        Assert.Contains("runtime_framework_version=%s", nativeBuild, StringComparison.Ordinal);
+        Assert.Contains("NUGET_PACKAGES_ROOT=", nativeBuild, StringComparison.Ordinal);
+        Assert.Contains("EXPECTED_APPLE_CLANG", preflight, StringComparison.Ordinal);
+        Assert.Contains("ACTUAL_APPLE_CLANG", preflight, StringComparison.Ordinal);
+        Assert.Contains("archive_path", preflight, StringComparison.Ordinal);
+        Assert.Contains("archive_sha256", preflight, StringComparison.Ordinal);
+        Assert.Contains("sanitize_performance_environment", performanceGate, StringComparison.Ordinal);
+        Assert.Contains("COMPlus_", performanceEnvironment, StringComparison.Ordinal);
+        Assert.Contains("DOTNET_", performanceEnvironment, StringComparison.Ordinal);
+        Assert.Contains("GIT_", performanceEnvironment, StringComparison.Ordinal);
+        Assert.Contains("NUGET_", performanceEnvironment, StringComparison.Ordinal);
+        Assert.Contains("export NUGET_PACKAGES=\"$PERFORMANCE_STATE_PARENT/nuget/packages\"", performanceGate, StringComparison.Ordinal);
+        Assert.Contains("dotnet restore \"$PERFORMANCE_WORKTREE/Scout.slnx\" --disable-build-servers", performanceGate, StringComparison.Ordinal);
+        Assert.Contains("\"$PERFORMANCE_WORKTREE/eng/fetch-corpora.sh\" --all --verify-lock", performanceGate, StringComparison.Ordinal);
+        Assert.DoesNotContain("ln -s \"$ROOT/artifacts/corpora\"", performanceGate, StringComparison.Ordinal);
         Assert.Contains("read-tree --empty", sourceFingerprint, StringComparison.Ordinal);
         Assert.Contains("write-tree", sourceFingerprint, StringComparison.Ordinal);
         Assert.Contains("safe.directory=\"$ROOT\"", sourceFingerprint, StringComparison.Ordinal);
@@ -3198,13 +3326,30 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("worktree add --detach", performanceGate, StringComparison.Ordinal);
         Assert.Contains("worktree remove --force", performanceGate, StringComparison.Ordinal);
         Assert.Contains("SCOUT_PERFORMANCE_GATE_INNER=1", performanceGate, StringComparison.Ordinal);
-        Assert.Contains("SCOUT_CORPORA_DIR", performanceGate, StringComparison.Ordinal);
-        Assert.Contains("SCOUT_RELEASE_VERSION", performanceGate, StringComparison.Ordinal);
-        Assert.Contains("SCOUT_BIN", performanceGate, StringComparison.Ordinal);
-        Assert.Contains("SCOUT_TOOL_ENVIRONMENT", setupHyperfine, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_[A-Za-z0-9_]*", performanceEnvironment, StringComparison.Ordinal);
+        Assert.Contains("unset \"$variable\"", performanceEnvironment, StringComparison.Ordinal);
+        Assert.Contains("INSTALL_ROOT must not already exist", setupHyperfine, StringComparison.Ordinal);
         Assert.Contains("HOST_TOOL_ENVIRONMENT", preflight, StringComparison.Ordinal);
         Assert.Contains("tool_environment()", preflight, StringComparison.Ordinal);
-        Assert.Contains("printf 'github-actions", setupHyperfine, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_HYPERFINE_BIN", preflight, StringComparison.Ordinal);
+        Assert.Contains("dotnet build-server shutdown", performanceGate, StringComparison.Ordinal);
+        Assert.Contains("setup-hyperfine.sh\" \"$PERFORMANCE_STATE_PARENT/hyperfine", performanceGate, StringComparison.Ordinal);
+        Assert.Contains("verify_generated_performance_inputs", script, StringComparison.Ordinal);
+        Assert.Contains("verify_performance_inputs.py", script, StringComparison.Ordinal);
+        Assert.Contains("generated-performance-inputs.json", script, StringComparison.Ordinal);
+        Assert.Contains("[[performance_input]]", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Equal(7, prerequisiteLock.Split("[[performance_input]]", StringSplitOptions.None).Length - 1);
+        Assert.Contains("Verify a complete generated input set and atomically record its identity", performanceInputVerifier, StringComparison.Ordinal);
+        Assert.Contains("test_input_names_must_exactly_match_the_lock", performanceInputVerifierTests, StringComparison.Ordinal);
+        Assert.Contains("test_manifest_is_deterministic_for_reordered_arguments", performanceInputVerifierTests, StringComparison.Ordinal);
+        Assert.Contains("write_performance_manifest.py", script, StringComparison.Ordinal);
+        Assert.Contains("reproducibility.json", script, StringComparison.Ordinal);
+        Assert.Contains("read_performance_manifest", interleaved, StringComparison.Ordinal);
+        Assert.Contains("document[\"reproducibility\"]", interleaved, StringComparison.Ordinal);
+        Assert.Contains("\"reproducibility\": reproducibility", outputVerifier, StringComparison.Ordinal);
+        Assert.Contains("write_performance_manifest", performanceManifestWriter, StringComparison.Ordinal);
+        Assert.Contains("read_performance_manifest", performanceManifestWriter, StringComparison.Ordinal);
+        Assert.Contains("test_reader_rejects_malformed_or_unsupported_documents", performanceManifestWriterTests, StringComparison.Ordinal);
         Assert.Contains("measure_rss_floor", script, StringComparison.Ordinal);
         Assert.Contains("$Q_RG --no-config --mmap -n 'needle' $Q_TINY", script, StringComparison.Ordinal);
         Assert.Contains("$Q_SCOUT_RSS_BASELINE --no-config --mmap -n 'needle' $Q_TINY", script, StringComparison.Ordinal);
@@ -3285,8 +3430,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains(@"^[A-Za-z_]{70,90}\\r?$", script, StringComparison.Ordinal);
         Assert.Contains(@"^[A-Za-z_]{70,90}$", script, StringComparison.Ordinal);
         Assert.Contains("delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent", script, StringComparison.Ordinal);
-        Assert.Contains("rg 64-pattern -e search", script, StringComparison.Ordinal);
-        Assert.Contains("rg 64-pattern -f search", script, StringComparison.Ordinal);
+        Assert.Contains("RG_MANY_ABSENT_REGEXP_COMMAND", script, StringComparison.Ordinal);
+        Assert.Contains("RG_MANY_ABSENT_PATTERN_FILE_COMMAND", script, StringComparison.Ordinal);
         Assert.Contains("GATE_LARGE_FILE_THREADS=\"4\"", script, StringComparison.Ordinal);
         Assert.Contains("GATE_GENERATED_THREADS=\"1\"", script, StringComparison.Ordinal);
         Assert.Contains("GATE_TREE_THREADS=\"3\"", script, StringComparison.Ordinal);
@@ -3296,8 +3441,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("--threads $GATE_LARGE_FILE_THREADS", script, StringComparison.Ordinal);
         Assert.Equal(8, script.Split("--threads $GATE_TREE_THREADS", StringSplitOptions.None).Length - 1);
         Assert.Contains("--threads $GATE_GENERATED_THREADS", script, StringComparison.Ordinal);
-        Assert.Contains("cd $Q_LINUX &&", script, StringComparison.Ordinal);
-        Assert.Contains("cd $Q_OPEN_DIRECTORY &&", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("cd $Q_LINUX &&", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("cd $Q_OPEN_DIRECTORY &&", script, StringComparison.Ordinal);
+        Assert.Contains("$LINUX_TREE", script, StringComparison.Ordinal);
+        Assert.Contains("$OPEN_DIRECTORY", script, StringComparison.Ordinal);
         Assert.Contains("gate_opensubtitles_runs", script, StringComparison.Ordinal);
         Assert.Contains("gate_opensubtitles_warmup", script, StringComparison.Ordinal);
         Assert.Contains("GATE_TREE_RUNS=\"10\"", script, StringComparison.Ordinal);
@@ -3319,7 +3466,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("workload_selected", script, StringComparison.Ordinal);
         Assert.Contains("print_repro_manifest", script, StringComparison.Ordinal);
         Assert.Contains("logical CPUs", script, StringComparison.Ordinal);
-        Assert.Contains("ImageVersion", script, StringComparison.Ordinal);
+        Assert.Contains("SCOUT_PERFORMANCE_GATE_IMAGE_VERSION", script, StringComparison.Ordinal);
+        Assert.Contains("ImageVersion", performanceEnvironment, StringComparison.Ordinal);
         Assert.Contains("image version=", script, StringComparison.Ordinal);
         Assert.Contains("exact rg and Scout argv", script, StringComparison.Ordinal);
         Assert.Contains("SCOUT_ORACLE_ENVIRONMENT", script, StringComparison.Ordinal);
@@ -3330,14 +3478,23 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("export SCOUT_TOOL_ENVIRONMENT=\"$HOST_TOOL_ENVIRONMENT\"", script, StringComparison.Ordinal);
         Assert.Contains("github-actions|local", script, StringComparison.Ordinal);
         Assert.Contains("document[\"commands\"]", interleaved, StringComparison.Ordinal);
+        Assert.Contains("document[\"command_argv\"]", interleaved, StringComparison.Ordinal);
+        Assert.Contains("document[\"execution_mode\"] = \"direct\"", interleaved, StringComparison.Ordinal);
+        Assert.Contains("--expected-exit-code", script, StringComparison.Ordinal);
+        Assert.Contains("--working-directory", script, StringComparison.Ordinal);
+        Assert.Contains("--performance-input-manifest", script, StringComparison.Ordinal);
+        Assert.Contains("--output-policy", script, StringComparison.Ordinal);
+        Assert.Contains("\"independent\"", script, StringComparison.Ordinal);
         Assert.Contains("verify_hyperfine_output.py", script, StringComparison.Ordinal);
-        Assert.Contains("output_verification_mode", script, StringComparison.Ordinal);
-        Assert.Contains("--no-shell", outputVerifier, StringComparison.Ordinal);
+        Assert.DoesNotContain("output_verification_mode", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("--no-shell", outputVerifier, StringComparison.Ordinal);
+        Assert.Contains("shlex.split(command)", outputVerifier, StringComparison.Ordinal);
         Assert.Contains("execution_mode", outputVerifier, StringComparison.Ordinal);
         Assert.Contains("C-locale sorted lines", outputVerifier, StringComparison.Ordinal);
         Assert.Contains("test_equal_line_multisets_match_across_ordering", outputVerifierTests, StringComparison.Ordinal);
         Assert.Contains("test_different_output_is_recorded_as_a_mismatch", outputVerifierTests, StringComparison.Ordinal);
-        Assert.Contains("test_direct_execution_uses_the_command_argv_without_a_shell", outputVerifierTests, StringComparison.Ordinal);
+        Assert.Contains("test_direct_execution_uses_explicit_cwd_and_environment", outputVerifierTests, StringComparison.Ordinal);
+        Assert.Contains("test_independent_output_policy_records_intentional_difference", outputVerifierTests, StringComparison.Ordinal);
         Assert.Contains("sorted-line SHA-256 digest", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("SCOUT_GATE_RETRY_FAILED_WORKLOADS", script, StringComparison.Ordinal);
         Assert.DoesNotContain("retry_attempt", script, StringComparison.Ordinal);
@@ -3353,7 +3510,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("twenty timing samples", readme, StringComparison.Ordinal);
         Assert.Contains("Raw per-round JSON", readme, StringComparison.Ordinal);
         Assert.Contains("one prespecified warmup and measured sample set", readme, StringComparison.Ordinal);
-        Assert.Contains("remains the result", readme, StringComparison.Ordinal);
+        Assert.Contains("prints all failed workload names", readme, StringComparison.Ordinal);
         Assert.Contains("It pins", readme, StringComparison.Ordinal);
         Assert.Contains("OpenSubtitles regex workload is a public benchmark workload", readme, StringComparison.Ordinal);
         Assert.Contains("Linux held-out regex workloads run Scout with", readme, StringComparison.Ordinal);
@@ -3370,8 +3527,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("one overall result", readme, StringComparison.Ordinal);
         Assert.Contains("three-decimal MiB", readme, StringComparison.Ordinal);
         Assert.Contains("signed", readme, StringComparison.Ordinal);
-        Assert.Contains("top-level aggregate JSON", readme, StringComparison.Ordinal);
-        Assert.Contains("eng/run-performance-gate.sh --workload linux_heldout_capture_general", readme, StringComparison.Ordinal);
+        Assert.Contains("aggregate, output-verification, and raw per-round JSON", readme, StringComparison.Ordinal);
+        Assert.Contains("bench/run-hyperfine.sh --gate --workload linux_heldout_capture_general", readme, StringComparison.Ordinal);
         Assert.Contains("worker count makes search concurrency identical", readme, StringComparison.Ordinal);
         Assert.Contains("hosted `macos-26` result is the release decision", readme, StringComparison.Ordinal);
         Assert.Contains("all six hosted release RIDs", readme, StringComparison.Ordinal);
@@ -3419,7 +3576,9 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("test_even_rss_sample_medians_preserve_half_and_quarter_bytes", gateReporterTests, StringComparison.Ordinal);
         Assert.Contains("test_final_failure_names_both_dimensions_once", gateReporterTests, StringComparison.Ordinal);
         Assert.Contains("--workload", gateReporter, StringComparison.Ordinal);
-        Assert.Contains("test_failure_is_final_without_resampling", gateShellTests, StringComparison.Ordinal);
+        Assert.Contains("test_performance_failure_is_recorded_without_resampling", gateShellTests, StringComparison.Ordinal);
+        Assert.Contains("test_performance_failure_does_not_skip_later_workloads", gateShellTests, StringComparison.Ordinal);
+        Assert.Contains("test_infrastructure_failure_stops_the_gate_immediately", gateShellTests, StringComparison.Ordinal);
         Assert.Contains("test_success_samples_once", gateShellTests, StringComparison.Ordinal);
         Assert.Contains("test_gate_defaults_to_the_hosted_oracle_locally", gateShellTests, StringComparison.Ordinal);
         Assert.Contains("test_resolved_environments_are_exported_to_subprocess_helpers", gateShellTests, StringComparison.Ordinal);
@@ -3459,6 +3618,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("Missing pinned hyperfine path in tests/PREREQS.lock.", script, StringComparison.Ordinal);
         Assert.Contains("check_file_hash \"hyperfine\" \"$pinned_path\" \"$pinned_sha256\"", script, StringComparison.Ordinal);
         Assert.Contains("check_tool_version \"hyperfine\" \"$pinned_path\" \"hyperfine $pinned_version\"", script, StringComparison.Ordinal);
+        Assert.Contains("check_file_hash \"hyperfine\" \"$configured_path\" \"$pinned_sha256\"", script, StringComparison.Ordinal);
+        Assert.Contains("check_tool_version \"hyperfine\" \"$configured_path\" \"hyperfine $pinned_version\"", script, StringComparison.Ordinal);
         Assert.DoesNotContain("read_lock_table_value \"tool.macos\" \"hyperfine\" \"path\")\" || HYPERFINE=\"$(command -v hyperfine", script, StringComparison.Ordinal);
         Assert.Contains("Upload hyperfine gate aggregates", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("if: ${{ always() }}", releaseWorkflow, StringComparison.Ordinal);

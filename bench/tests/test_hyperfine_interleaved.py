@@ -6,6 +6,7 @@ import argparse
 import io
 import json
 import math
+import os
 import statistics
 import sys
 import tempfile
@@ -56,16 +57,29 @@ class HyperfineInterleavedTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             balanced_schedule(5)
 
-    def test_even_round_invocation_uses_baab_order_and_no_shell_mode(self) -> None:
-        with patch("hyperfine_interleaved.subprocess.run") as run:
+    def test_even_round_invocation_uses_baab_order_and_direct_mode(self) -> None:
+        environment = {"LC_ALL": "C"}
+        injected = {
+            "DOTNET_PROCESSOR_COUNT": "99",
+            "COMPlus_GCHeapCount": "99",
+            "MallocNanoZone": "1",
+            "GIT_CONFIG_GLOBAL": "injected",
+            "XDG_CONFIG_HOME": "injected",
+            "GITHUB_ACTIONS": "true",
+        }
+        with patch.dict(os.environ, injected), patch(
+            "hyperfine_interleaved.subprocess.run"
+        ) as run:
             _run_balanced_round(
                 "hyperfine",
                 "workload",
                 2,
                 "rg command",
                 "scout command",
-                no_shell=True,
+                expected_exit_code=0,
+                working_directory=Path(__file__).resolve().parents[2],
                 output=None,
+                environment=environment,
             )
 
         arguments = run.call_args.args[0]
@@ -92,7 +106,90 @@ class HyperfineInterleavedTests(unittest.TestCase):
             ],
             arguments,
         )
-        run.assert_called_once_with(arguments, check=True)
+        run.assert_called_once_with(
+            arguments,
+            check=True,
+            cwd=Path(__file__).resolve().parents[2],
+            env=environment,
+        )
+        self.assertTrue(set(injected).isdisjoint(run.call_args.kwargs["env"]))
+
+    def test_nonzero_exit_contract_is_enforced_during_warmup_and_measurement(
+        self,
+    ) -> None:
+        with patch("hyperfine_interleaved.subprocess.run") as run:
+            _run_balanced_round(
+                "hyperfine",
+                "no-match",
+                1,
+                "rg command",
+                "scout command",
+                expected_exit_code=1,
+                working_directory=Path(__file__).resolve().parents[2],
+                output=None,
+                environment={"LC_ALL": "C"},
+            )
+
+        arguments = run.call_args.args[0]
+        self.assertIn("--ignore-failure=1", arguments)
+        self.assertNotIn("--ignore-failure", arguments)
+
+    def test_run_creates_one_environment_for_every_hyperfine_process(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output = Path(temporary_directory) / "result.json"
+            arguments = self._run_arguments(output, warmup_rounds=2)
+            environment = {"HOME": "isolated"}
+            sampled_environments: list[object] = []
+
+            def write_round_document(
+                _hyperfine: str,
+                workload: str,
+                round_number: int,
+                _rg_command: str,
+                _scout_command: str,
+                _expected_exit_code: int,
+                _working_directory: Path,
+                output: Path | None,
+                environment: object,
+            ) -> None:
+                sampled_environments.append(environment)
+                self.assertEqual(environment_fixture, environment)
+                if output is not None:
+                    output.write_text(
+                        json.dumps(self._round_document(workload, round_number)),
+                        encoding="utf-8",
+                    )
+
+            environment_fixture = environment
+            with redirect_stdout(io.StringIO()), patch(
+                "hyperfine_interleaved.create_benchmark_environment",
+                return_value=environment,
+            ) as create_environment, patch(
+                "hyperfine_interleaved._run_balanced_round",
+                side_effect=write_round_document,
+            ) as run_round:
+                run_interleaved(arguments)
+
+            aggregate = json.loads(output.read_text(encoding="utf-8"))
+
+        create_environment.assert_called_once_with(output)
+        self.assertEqual(4, run_round.call_count)
+        self.assertEqual(4, len(sampled_environments))
+        self.assertTrue(
+            all(
+                sampled_environment is sampled_environments[0]
+                for sampled_environment in sampled_environments
+            )
+        )
+        self.assertEqual(environment, aggregate["environment"])
+        self.assertEqual(
+            "fixture",
+            aggregate["reproducibility"]["values"]["host.os"],
+        )
+        self.assertEqual(
+            str(Path(__file__).resolve().parents[2]),
+            aggregate["working_directory"],
+        )
 
     def test_command_line_requires_complete_measured_and_warmup_cycles(self) -> None:
         arguments = [
@@ -110,6 +207,14 @@ class HyperfineInterleavedTests(unittest.TestCase):
             "0",
             "--output",
             "result.json",
+            "--working-directory",
+            ".",
+            "--performance-input-manifest",
+            "inputs.json",
+            "--reproducibility-manifest",
+            "reproducibility.json",
+            "--expected-exit-code",
+            "0",
         ]
 
         parsed = _parse_args(arguments)
@@ -133,16 +238,7 @@ class HyperfineInterleavedTests(unittest.TestCase):
             unrelated = sample_directory / "notes.txt"
             stale_round.write_text("stale", encoding="utf-8")
             unrelated.write_text("keep", encoding="utf-8")
-            arguments = argparse.Namespace(
-                output=str(output),
-                warmup_rounds=0,
-                rounds=2,
-                hyperfine="hyperfine",
-                name="workload",
-                rg_command="rg command",
-                scout_command="scout command",
-                no_shell=False,
-            )
+            arguments = self._run_arguments(output)
 
             with redirect_stdout(io.StringIO()), patch(
                 "hyperfine_interleaved._run_balanced_round",
@@ -157,16 +253,7 @@ class HyperfineInterleavedTests(unittest.TestCase):
     def test_run_prints_one_compact_summary_without_per_round_chatter(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             output = Path(temporary_directory) / "result.json"
-            arguments = argparse.Namespace(
-                output=str(output),
-                warmup_rounds=2,
-                rounds=2,
-                hyperfine="hyperfine",
-                name="workload",
-                rg_command="rg command",
-                scout_command="scout command",
-                no_shell=False,
-            )
+            arguments = self._run_arguments(output, warmup_rounds=2)
 
             def write_round_document(
                 _hyperfine: str,
@@ -174,8 +261,10 @@ class HyperfineInterleavedTests(unittest.TestCase):
                 round_number: int,
                 _rg_command: str,
                 _scout_command: str,
-                _no_shell: bool,
+                _expected_exit_code: int,
+                _working_directory: Path,
                 output: Path | None,
+                environment: object,
             ) -> None:
                 if output is not None:
                     output.write_text(
@@ -206,16 +295,7 @@ class HyperfineInterleavedTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             output = Path(temporary_directory) / "result.json"
-            arguments = argparse.Namespace(
-                output=str(output),
-                warmup_rounds=2,
-                rounds=2,
-                hyperfine="hyperfine",
-                name="workload",
-                rg_command="rg command",
-                scout_command="scout command",
-                no_shell=False,
-            )
+            arguments = self._run_arguments(output, warmup_rounds=2)
             measured_attempts = 0
 
             def write_round_document(
@@ -224,8 +304,10 @@ class HyperfineInterleavedTests(unittest.TestCase):
                 round_number: int,
                 _rg_command: str,
                 _scout_command: str,
-                _no_shell: bool,
+                _expected_exit_code: int,
+                _working_directory: Path,
                 output: Path | None,
+                environment: object,
             ) -> None:
                 nonlocal measured_attempts
                 if output is None:
@@ -275,16 +357,7 @@ class HyperfineInterleavedTests(unittest.TestCase):
     def test_run_stops_after_bounded_timer_resolution_replacements(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             output = Path(temporary_directory) / "result.json"
-            arguments = argparse.Namespace(
-                output=str(output),
-                warmup_rounds=0,
-                rounds=2,
-                hyperfine="hyperfine",
-                name="workload",
-                rg_command="rg command",
-                scout_command="scout command",
-                no_shell=False,
-            )
+            arguments = self._run_arguments(output)
 
             def write_invalid_round(
                 _hyperfine: str,
@@ -292,8 +365,10 @@ class HyperfineInterleavedTests(unittest.TestCase):
                 round_number: int,
                 _rg_command: str,
                 _scout_command: str,
-                _no_shell: bool,
+                _expected_exit_code: int,
+                _working_directory: Path,
                 output: Path | None,
+                environment: object,
             ) -> None:
                 document = self._round_document(workload, round_number)
                 document["results"][0]["times"] = [0.0]
@@ -331,16 +406,7 @@ class HyperfineInterleavedTests(unittest.TestCase):
     def test_run_rejects_negative_timing_without_replacement(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             output = Path(temporary_directory) / "result.json"
-            arguments = argparse.Namespace(
-                output=str(output),
-                warmup_rounds=0,
-                rounds=2,
-                hyperfine="hyperfine",
-                name="workload",
-                rg_command="rg command",
-                scout_command="scout command",
-                no_shell=False,
-            )
+            arguments = self._run_arguments(output)
 
             def write_invalid_round(
                 _hyperfine: str,
@@ -348,8 +414,10 @@ class HyperfineInterleavedTests(unittest.TestCase):
                 round_number: int,
                 _rg_command: str,
                 _scout_command: str,
-                _no_shell: bool,
+                _expected_exit_code: int,
+                _working_directory: Path,
                 output: Path | None,
+                environment: object,
             ) -> None:
                 document = self._round_document(workload, round_number)
                 document["results"][0]["times"] = [-0.001]
@@ -464,6 +532,55 @@ class HyperfineInterleavedTests(unittest.TestCase):
             with self.subTest(documents=documents):
                 with self.assertRaises(ValueError):
                     aggregate_round_documents(documents, "workload")
+
+    def test_aggregation_requires_the_declared_exit_code(self) -> None:
+        documents = [
+            self._round_document("workload", round_number)
+            for round_number in (1, 2)
+        ]
+        for document in documents:
+            for result in document["results"]:
+                result["exit_codes"] = [1]
+
+        aggregate = aggregate_round_documents(
+            documents, "workload", expected_exit_code=1
+        )
+        self.assertEqual([1, 1, 1, 1], aggregate["results"][0]["exit_codes"])
+
+        documents[0]["results"][0]["exit_codes"] = [2]
+        with self.assertRaisesRegex(ValueError, "expected exit 1, got 2"):
+            aggregate_round_documents(
+                documents, "workload", expected_exit_code=1
+            )
+
+    @staticmethod
+    def _run_arguments(
+        output: Path, *, warmup_rounds: int = 0
+    ) -> argparse.Namespace:
+        input_manifest = output.with_name("performance-inputs.json")
+        input_manifest.write_text(
+            '{"inputs":[{"name":"fixture","bytes":1,"sha256":"x"}]}\n',
+            encoding="utf-8",
+        )
+        reproducibility_manifest = output.with_name("reproducibility.json")
+        reproducibility_manifest.write_text(
+            '{"schema_version":1,"values":{"host.os":"fixture"}}\n',
+            encoding="utf-8",
+        )
+        return argparse.Namespace(
+            output=str(output),
+            warmup_rounds=warmup_rounds,
+            rounds=2,
+            hyperfine="hyperfine",
+            name="workload",
+            rg_command="rg command",
+            scout_command="scout command",
+            expected_exit_code=0,
+            working_directory=Path(__file__).resolve().parents[2],
+            performance_input_manifest=input_manifest,
+            reproducibility_manifest=reproducibility_manifest,
+            environment=[],
+        )
 
     @staticmethod
     def _drifted_ratio(

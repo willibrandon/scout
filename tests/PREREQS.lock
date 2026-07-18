@@ -1,8 +1,20 @@
 ripgrep_commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"
 dotnet_sdk = "10.0.102"
-dotnet_runtime = "10.0.2"
-macos_host = "macOS 26.3.1 arm64"
+dotnet_host_runtime = "10.0.10"
+nativeaot_runtime_framework = "10.0.2"
+macos_host = "macOS 26 arm64"
+xcode_version = "26.3"
+xcode_build = "17C529"
+macos_sdk = "26.2"
+macos_deployment_target = "14.0"
 apple_clang = "17.0.0 (clang-1700.6.4.2)"
+apple_ld = "@(#)PROGRAM:ld PROJECT:ld-1230.1"
+apple_clang_sha256 = "15339439a6be4a9d33d281ec040a7e0092190b1c8d7de5f94d824b50ffae0769"
+apple_ld_sha256 = "d24bf72261b0a8832fa87e841b8e9a857620bb789c78cef4ad97bb2dbd6e1d29"
+apple_ar_sha256 = "eeb07a36180749a4915663753be2efb6d21d054c277e768574884c0b519bc191"
+apple_ranlib_sha256 = "c5afad0501511b74a065dcbc011ed4da2f93df3e29973820bd0a9267cfab31f8"
+apple_strip_sha256 = "3d3d5ce28f1d5f6b7381ee5b436ab3d4c15237c74378adb0482a0aceabbdd5ef"
+apple_nm_sha256 = "cfa9a0e784e4195570f224001c9c46893d73023e4278ce6311cb907f8163a51a"
 cargo = "1.91.1"
 linux_snapshot = "2026-05-31"
 ripgrep_rg_profile = "release-lto"
@@ -13,6 +25,16 @@ ripgrep_pcre2_rg_features = "pcre2"
 ripgrep_pcre2_rg_path = "/Users/brandon/src/ripgrep/target/pcre2/release-lto/rg"
 ripgrep_pcre2_rg_sha256 = "49d486acea41e80f9a17834944677cf70bdbaeff12dc186c6d8630770d81bbe9"
 ripgrep_pcre2_reported_version = "PCRE2 10.45 is available (JIT is available)"
+
+[[dotnet_sdk_archive]]
+rid = "osx-arm64"
+url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.102/dotnet-sdk-10.0.102-osx-arm64.tar.gz"
+sha512 = "5adb12a72ccfd327fe94ce99104ee7b9b56dbe40e354440a0b28313a4996ff34cc8560d605c1f30c247d364ae429de55d8c3b30ea19da04a716a059eb62b98ed"
+
+[[dotnet_runtime_archive]]
+rid = "osx-arm64"
+url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.10/dotnet-runtime-10.0.10-osx-arm64.tar.gz"
+sha512 = "79cbc64bfeb806d5f2a9e0a2a2ed336c7aa275b0438bbd88d36236a1b6203950546b49ff307cc5067c89434ffe22c021a594b2f8adad71146a5ece825652bd85"
 
 [[ripgrep_oracle]]
 rid = "osx-arm64"
@@ -518,6 +540,41 @@ archive_path = "artifacts/corpora/linux/linux-84e57d292203a45c96dbcb2e6be9dd8096
 archive_sha256 = "8779f9318fb896f64f7a876d7ff9c152925e82c17690281eb1ec6ce587275054"
 tree_path = "artifacts/corpora/linux/linux-84e57d292203a45c96dbcb2e6be9dd80961d981a"
 tree_sha256 = "c104036f61aa7eba26da621738424e2e35f2c12372858abc345c39bbd9ecd116"
+
+[[performance_input]]
+name = "cold-tiny"
+bytes = "7"
+sha256 = "d29210777777dac0b3d12f6a656a073c9ba717cf6932dbc01b0cc6dc1e7779b8"
+
+[[performance_input]]
+name = "bounded-assignment-pattern"
+bytes = "146"
+sha256 = "9d692cc80ecb13a95cd3755c87cf53725b34ffcd8465dc8569ca0bbeeb55bbef"
+
+[[performance_input]]
+name = "bounded-assignment-no-match-800"
+bytes = "40000"
+sha256 = "70568b7e7a1580f32d61d0785b76abf111623288c574091ac9654674bf071c74"
+
+[[performance_input]]
+name = "large-bounded-unicode-class-pattern"
+bytes = "16"
+sha256 = "968f2535227a76ff31466a423f6d9c4d584dd8d159fe1dd4b17c329ace78da12"
+
+[[performance_input]]
+name = "large-bounded-unicode-class-no-match-5000"
+bytes = "80000"
+sha256 = "2954a476e27d4ce1a6a69b643e223c9d62c7358f6fbb618854a28779e6cada6e"
+
+[[performance_input]]
+name = "line-regex-paladin-like-200000"
+bytes = "49800346"
+sha256 = "18e7d61cb635b66a84d5eb8b1cabce6fc0d8c0a0d52b15321b8077848d8f7dc0"
+
+[[performance_input]]
+name = "line-regex-absent-patterns-64"
+bytes = "1728"
+sha256 = "f157dc1dd99f25ce745f124832411defcf614a4698513831c86839ed6069e033"
 
 [[corpus]]
 name = "ripgrep-4857d6fa-tests-binary-rs"

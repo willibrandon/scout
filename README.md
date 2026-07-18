@@ -156,11 +156,26 @@ Wall-time ratio is Scout ÷ ripgrep; below 1.0 is faster than ripgrep.
 | Cold start (`--version`) | ≤1.00× |
 | Cold start (tiny search) | ≤1.00× |
 
-The hosted Release Gates workflow is the source of truth for observed ratios. It pairs fresh
-`rg`, Scout, Scout, `rg` and Scout, `rg`, `rg`, Scout Hyperfine rounds, then compares the median
-paired-cycle geometric Scout/rg ratio. Alternating command positions reduce order, cache,
-and runner-phase bias. Resident memory carries the managed runtime's fixed image cost above
-ripgrep's; the accounting is documented in `docs/PARITY.md`.
+Run the release-equivalent gate on macOS arm64 from a committed, clean tree:
+
+```sh
+bench/run-hyperfine.sh --gate
+```
+
+The driver builds from a detached worktree and keeps NuGet packages in a disposable state
+directory outside that worktree. It provisions the Hyperfine binary from the versioned and
+hash-verified bottle recorded in `tests/PREREQS.lock`. Generated benchmark inputs are also
+locked and verified. Every aggregate embeds their manifest together with the host, runner
+image, process state, binary hashes, and Native AOT build provenance.
+
+The hosted Release Gates workflow invokes this same command and is the source of truth for
+observed ratios. It pairs fresh `rg`, Scout, Scout, `rg` and Scout, `rg`, `rg`, Scout
+Hyperfine rounds, then compares the median paired-cycle geometric Scout/rg ratio. Alternating
+command positions reduce order, cache, and runner-phase bias. Each timed process uses direct
+argument execution with an explicit working directory, environment, and expected exit code.
+The gate evaluates every selected workload, collects performance-limit failures in its final
+summary, and stops immediately on infrastructure errors. Resident memory carries the managed
+runtime's fixed image cost above ripgrep's; the accounting is documented in `docs/PARITY.md`.
 
 ## License
 

@@ -41,9 +41,7 @@ expect_contains() {
 
 strip_macos_binary() {
     path="$1"
-    if command -v strip >/dev/null 2>&1; then
-        strip -x "$path"
-    fi
+    "$NATIVE_STRIP" -x "$path"
 }
 
 read_msbuild_property() {
@@ -75,6 +73,25 @@ sha256_file() {
     shasum -a 256 "$path" | awk '{ print $1 }'
 }
 
+dotnet_host_version() {
+    dotnet --info | awk '
+        /^Host:/ {
+            in_host = 1
+            next
+        }
+        in_host && /^[[:space:]]*Version:/ {
+            print $2
+            found = 1
+            exit
+        }
+        END {
+            if (!found) {
+                exit 1
+            }
+        }
+    '
+}
+
 if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
     printf 'usage: %s <rid> [--with-differentials|--smoke-only]\n' "$0" >&2
     exit 2
@@ -83,6 +100,8 @@ fi
 RID="$1"
 DIFFERENTIAL_MODE="${2:---with-differentials}"
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+. "$ROOT/native/publish-app-unix.sh"
+. "$ROOT/native/toolchain-unix.sh"
 OUT="$ROOT/artifacts/app/$RID"
 BIN="$ROOT/artifacts/bin/$RID"
 REAL_BIN="$BIN/scout-real"
@@ -109,23 +128,41 @@ case "$DIFFERENTIAL_MODE" in
         ;;
 esac
 
+configure_native_toolchain "$ROOT" "$RID"
+SCOUT_MACOS_LINK_FLAGS=()
 case "$RID" in
-    osx-arm64|osx-x64|linux-x64|linux-arm64)
+    osx-arm64)
+        SCOUT_MACOS_LINK_FLAGS=(
+            -arch arm64
+            -isysroot "$NATIVE_SDKROOT"
+            "-mmacosx-version-min=$NATIVE_MACOS_DEPLOYMENT_TARGET"
+            "-fuse-ld=$NATIVE_LD"
+        )
         ;;
-    *)
-        printf 'RID %s is not supported by this Unix app linker.\n' "$RID" >&2
-        exit 1
+    osx-x64)
+        SCOUT_MACOS_LINK_FLAGS=(
+            -arch x86_64
+            -isysroot "$NATIVE_SDKROOT"
+            "-mmacosx-version-min=$NATIVE_MACOS_DEPLOYMENT_TARGET"
+            "-fuse-ld=$NATIVE_LD"
+        )
         ;;
 esac
 
 "$ROOT/native/pcre2/build-unix.sh" "$RID"
-dotnet publish "$ROOT/src/Scout.App/Scout.App.csproj" -r "$RID" -c Release -p:NativeLib=Static -p:VersionPrefix="$SCOUT_VERSION" -p:Version="$SCOUT_VERSION" -o "$OUT" --disable-build-servers
+publish_native_app "$ROOT" "$RID" "$SCOUT_VERSION" "$OUT"
 mkdir -p "$BIN"
 
-RT="$HOME/.nuget/packages/microsoft.netcore.app.runtime.nativeaot.$RID/10.0.2/runtimes/$RID/native"
+NUGET_PACKAGES_ROOT="${NUGET_PACKAGES:-$HOME/.nuget/packages}"
+RT="$NUGET_PACKAGES_ROOT/microsoft.netcore.app.runtime.nativeaot.$RID/$NATIVEAOT_RUNTIME_FRAMEWORK_VERSION/runtimes/$RID/native"
+if [ ! -d "$RT" ]; then
+    printf 'Missing NativeAOT runtime pack directory %s.\n' "$RT" >&2
+    exit 1
+fi
 
 if [ "$RID" = "osx-arm64" ]; then
-    clang "${SCOUT_IDENTITY_CFLAGS[@]}" "$ROOT/native/entry/scout_main.c" \
+    "$NATIVE_CC" "${SCOUT_MACOS_LINK_FLAGS[@]}" \
+        "${SCOUT_IDENTITY_CFLAGS[@]}" "$ROOT/native/entry/scout_main.c" \
         "$OUT/scout.a" \
         "$RT/libbootstrapperdll.o" "$RT/libaotminipal.a" \
         "$RT/libRuntime.WorkstationGC.a" "$RT/libeventpipe-disabled.a" "$RT/libstandalonegc-disabled.a" \
@@ -139,7 +176,8 @@ if [ "$RID" = "osx-arm64" ]; then
         -o "$REAL_BIN"
     strip_macos_binary "$REAL_BIN"
 elif [ "$RID" = "osx-x64" ]; then
-    clang -arch x86_64 "${SCOUT_IDENTITY_CFLAGS[@]}" "$ROOT/native/entry/scout_main.c" \
+    "$NATIVE_CC" "${SCOUT_MACOS_LINK_FLAGS[@]}" \
+        "${SCOUT_IDENTITY_CFLAGS[@]}" "$ROOT/native/entry/scout_main.c" \
         "$OUT/scout.a" \
         "$RT/libbootstrapperdll.o" "$RT/libaotminipal.a" \
         "$RT/libRuntime.WorkstationGC.a" "$RT/libRuntime.VxsortEnabled.a" \
@@ -154,13 +192,12 @@ elif [ "$RID" = "osx-x64" ]; then
         -o "$REAL_BIN"
     strip_macos_binary "$REAL_BIN"
 elif [ "$RID" = "linux-x64" ] || [ "$RID" = "linux-arm64" ]; then
-    CC="${CC:-cc}"
     VXSORT_ARCHIVE=
     if [ -f "$RT/libRuntime.VxsortEnabled.a" ]; then
         VXSORT_ARCHIVE="$RT/libRuntime.VxsortEnabled.a"
     fi
 
-    "$CC" "${SCOUT_IDENTITY_CFLAGS[@]}" "$ROOT/native/entry/scout_main.c" \
+    "$NATIVE_CC" "${SCOUT_IDENTITY_CFLAGS[@]}" "$ROOT/native/entry/scout_main.c" \
         -Wl,--start-group \
         "$OUT/scout.a" \
         "$RT/libbootstrapperdll.o" "$RT/libaotminipal.a" \
@@ -176,19 +213,26 @@ elif [ "$RID" = "linux-x64" ] || [ "$RID" = "linux-arm64" ]; then
 fi
 
 if [ "$RID" = "osx-arm64" ]; then
-    clang -arch arm64 -O2 -DSCOUT_LAUNCHER "${SCOUT_IDENTITY_CFLAGS[@]}" "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -Wl,-dead_strip -Wl,-dead_strip_dylibs -o "$BIN/scout"
+    "$NATIVE_CC" "${SCOUT_MACOS_LINK_FLAGS[@]}" -O2 -DSCOUT_LAUNCHER \
+        "${SCOUT_IDENTITY_CFLAGS[@]}" "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" \
+        -Wl,-dead_strip -Wl,-dead_strip_dylibs -o "$BIN/scout"
     strip_macos_binary "$BIN/scout"
 elif [ "$RID" = "osx-x64" ]; then
-    clang -arch x86_64 -O2 -DSCOUT_LAUNCHER "${SCOUT_IDENTITY_CFLAGS[@]}" "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -Wl,-dead_strip -Wl,-dead_strip_dylibs -o "$BIN/scout"
+    "$NATIVE_CC" "${SCOUT_MACOS_LINK_FLAGS[@]}" -O2 -DSCOUT_LAUNCHER \
+        "${SCOUT_IDENTITY_CFLAGS[@]}" "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" \
+        -Wl,-dead_strip -Wl,-dead_strip_dylibs -o "$BIN/scout"
     strip_macos_binary "$BIN/scout"
 else
-    "$CC" -O2 -DSCOUT_LAUNCHER "${SCOUT_IDENTITY_CFLAGS[@]}" "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -o "$BIN/scout"
+    "$NATIVE_CC" -O2 -DSCOUT_LAUNCHER "${SCOUT_IDENTITY_CFLAGS[@]}" "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -o "$BIN/scout"
 fi
 
 SOURCE_COMMIT="$(git -c safe.directory="$ROOT" -C "$ROOT" rev-parse HEAD)"
 SOURCE_FINGERPRINT="$(sh "$ROOT/eng/source-fingerprint.sh")"
 SOURCE_DIRTY="0"
 if [ -n "$(git -c safe.directory="$ROOT" -C "$ROOT" status --porcelain=v1 --untracked-files=normal -- \
+    .editorconfig \
+    .gitattributes \
+    .globalconfig \
     Directory.Build.props \
     Directory.Build.rsp \
     Directory.Build.targets \
@@ -196,11 +240,29 @@ if [ -n "$(git -c safe.directory="$ROOT" -C "$ROOT" status --porcelain=v1 --untr
     Scout.slnx \
     global.json \
     native \
+    NuGet.Config \
     src \
     tests/PREREQS.lock)" ]; then
     SOURCE_DIRTY="1"
 fi
-COMPILER_VERSION="$(cc --version | sed -n '1p')"
+COMPILER_VERSION="$(native_compiler_version "$NATIVE_CC")"
+DOTNET_HOST_RUNTIME="$(dotnet_host_version)"
+NATIVE_COMPILER_SHA256=""
+NATIVE_LINKER_SHA256=""
+NATIVE_ARCHIVER_SHA256=""
+NATIVE_RANLIB_SHA256=""
+NATIVE_STRIP_SHA256=""
+NATIVE_NM_SHA256=""
+NATIVE_LINKER_VERSION=""
+if [[ "$RID" == osx-* ]]; then
+    NATIVE_COMPILER_SHA256="$(sha256_file "$NATIVE_CC")"
+    NATIVE_LINKER_SHA256="$(sha256_file "$NATIVE_LD")"
+    NATIVE_ARCHIVER_SHA256="$(sha256_file "$NATIVE_AR")"
+    NATIVE_RANLIB_SHA256="$(sha256_file "$NATIVE_RANLIB")"
+    NATIVE_STRIP_SHA256="$(sha256_file "$NATIVE_STRIP")"
+    NATIVE_NM_SHA256="$(sha256_file "$NATIVE_NM")"
+    NATIVE_LINKER_VERSION="$(native_linker_version "$NATIVE_LD")"
+fi
 PROVENANCE="$BIN/scout-real.provenance"
 {
     printf 'format=1\n'
@@ -209,8 +271,21 @@ PROVENANCE="$BIN/scout-real.provenance"
     printf 'source_dirty=%s\n' "$SOURCE_DIRTY"
     printf 'rid=%s\n' "$RID"
     printf 'version=%s\n' "$SCOUT_VERSION"
+    printf 'runtime_framework_version=%s\n' "$NATIVEAOT_RUNTIME_FRAMEWORK_VERSION"
     printf 'dotnet_sdk=%s\n' "$(dotnet --version)"
+    printf 'dotnet_host_runtime=%s\n' "$DOTNET_HOST_RUNTIME"
     printf 'compiler=%s\n' "$COMPILER_VERSION"
+    printf 'compiler_sha256=%s\n' "$NATIVE_COMPILER_SHA256"
+    printf 'xcode_version=%s\n' "$NATIVE_XCODE_VERSION"
+    printf 'xcode_build=%s\n' "$NATIVE_XCODE_BUILD"
+    printf 'macos_sdk=%s\n' "$NATIVE_MACOS_SDK_VERSION"
+    printf 'macos_deployment_target=%s\n' "$NATIVE_MACOS_DEPLOYMENT_TARGET"
+    printf 'linker=%s\n' "$NATIVE_LINKER_VERSION"
+    printf 'linker_sha256=%s\n' "$NATIVE_LINKER_SHA256"
+    printf 'archiver_sha256=%s\n' "$NATIVE_ARCHIVER_SHA256"
+    printf 'ranlib_sha256=%s\n' "$NATIVE_RANLIB_SHA256"
+    printf 'strip_sha256=%s\n' "$NATIVE_STRIP_SHA256"
+    printf 'nm_sha256=%s\n' "$NATIVE_NM_SHA256"
     printf 'launcher_sha256=%s\n' "$(sha256_file "$BIN/scout")"
     printf 'payload_sha256=%s\n' "$(sha256_file "$REAL_BIN")"
 } > "$PROVENANCE.tmp"
@@ -354,7 +429,7 @@ for symbol in \
     pcre2_match_data_create_from_pattern_8 \
     pcre2_match_data_free_8; do
     exported_symbol="$PCRE2_SYMBOL_PREFIX$symbol"
-    if ! nm -g "$REAL_BIN" | grep " $exported_symbol$" >/dev/null; then
+    if ! "$NATIVE_NM" -g "$REAL_BIN" | grep " $exported_symbol$" >/dev/null; then
         printf 'Missing native PCRE2 symbol %s in %s.\n' "$exported_symbol" "$REAL_BIN" >&2
         exit 1
     fi

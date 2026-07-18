@@ -40,7 +40,7 @@ bench/run-hyperfine.sh --gate
 Run one release-gate workload with the same sampling and limits:
 
 ```sh
-eng/run-performance-gate.sh --workload linux_heldout_capture_general
+bench/run-hyperfine.sh --gate --workload linux_heldout_capture_general
 ```
 
 The focused form validates the selected workload's corpus, measures the RSS
@@ -48,18 +48,28 @@ floor required by its memory limit, and writes the same aggregate JSON as the
 full gate. It is a diagnostic run; the full `--gate` command executes the
 release-gate workload sequence. `bench/run-hyperfine.sh --list` prints the
 accepted names. Gate mode selects the hosted pinned rg binary by default.
-Set `SCOUT_ORACLE_ENVIRONMENT=local` for an explicit local-oracle comparison.
-The complete `--gate` form delegates to the shared driver used by the workflow.
-The driver performs the oracle restore, SDK restore, Hyperfine setup, corpus
-validation, preflight, clean Native AOT build, and gate invocation. A complete
-gate requires committed and clean performance inputs; a focused workload remains
-available while developing a change.
-The build runs from a detached worktree at the selected commit. Pinned corpus and
-oracle caches are shared after verification, while build and benchmark outputs
-remain isolated and the aggregate JSON is copied back when the run ends.
+The workflow and local release gate both invoke `bench/run-hyperfine.sh --gate`.
+Every gate form delegates to a shared driver that restores the oracle,
+provisions the SHA-512-pinned macOS arm64 .NET SDK in disposable state,
+validates the exact SDK and runtime inventory, restores the checksum-pinned
+Hyperfine bottle into disposable state, validates the corpora, runs preflight,
+builds Native AOT, and invokes the gate. A complete
+gate requires committed and clean performance inputs; a focused workload uses
+the same release-equivalent preparation while developing a change.
+Both complete and focused shared-driver runs use the hosted pinned rg oracle and
+the lockfile corpus paths.
+The build runs from a detached worktree at the selected commit. Pinned corpus
+archives and the oracle cache are shared. Corpus files, the Linux tree, build
+outputs, and benchmark outputs are created inside that worktree; NuGet packages
+use disposable state outside it. The aggregate JSON and raw per-round sample
+directories are copied back when the run ends.
+Oracle restoration, corpus materialization, and build orchestration use fresh
+home, temporary, XDG, .NET CLI, and Python user state for every run. The driver
+selects the pinned host-tool set, then clears inherited CI, runner, Homebrew,
+Git, native-toolchain, .NET, NuGet, allocator, and Python configuration.
 The rg oracle is the hosted release-LTO binary in both environments. Host tools
 use the frozen local or GitHub Actions hash set for the machine that executes
-the driver; decompressed corpus hashes and the Hyperfine version remain fixed.
+the driver; decompressed corpus hashes and the Hyperfine binary remain fixed.
 
 GitHub's default `CI` workflow runs hosted cross-platform build, test, format,
 fuzz, and native link checks. After `CI` succeeds on `main`, it dispatches the
@@ -75,9 +85,10 @@ The hyperfine performance gate runs on GitHub-hosted `macos-26` arm64. The
 pinned CI runner labels are `ubuntu-24.04, ubuntu-24.04-arm, macos-26-intel,
 macos-26, windows-2025-vs2026, and windows-11-arm`; those are the only labels
 the configuration allows. The workflow restores the captured pinned release-LTO `rg` oracle
-archive for the hosted RID, installs hyperfine with Homebrew where
-required, fetches the pinned corpora into `artifacts/corpora`, and verifies every frozen hash from
-`tests/PREREQS.lock` before measuring. Cancelled, failed, or stale CI
+archive for the hosted RID. The performance driver restores the exact locked
+Hyperfine bottle into its private state, fetches the pinned corpora into
+`artifacts/corpora`, and verifies every frozen hash from `tests/PREREQS.lock`
+before measuring. Cancelled, failed, or stale CI
 completions do not queue release work. It does not require any personal machine,
 privately managed runner, or repository secret.
 
@@ -85,8 +96,8 @@ privately managed runner, or repository secret.
 `tests/PREREQS.lock` after it downloads OpenSubtitles and the pinned Linux
 archive, hashes the decompressed `en.txt`, and hashes the extracted Linux tree
 manifest. The committed lockfile now contains frozen hashes, so
-`run-hyperfine.sh` can use the lockfile paths by default, or
-`SCOUT_BENCH_OPENSUBTITLES_EN` and `SCOUT_BENCH_LINUX_TREE` can override them.
+the shared driver verifies the archives, materializes fresh corpus contents,
+and uses the lockfile paths.
 
 The script enforces the wall-time gates from `docs/DESIGN.md` with paired
 ABBA/BAAB cycles. One fresh Hyperfine process runs `rg`, Scout, Scout, `rg`; the
@@ -103,11 +114,19 @@ measured rounds, allows at most eight timer-resolution replacements per
 workload attempt, and records each discarded round for diagnosis.
 Raw per-round JSON and the aggregated wall, user CPU, system CPU, and RSS
 samples remain in the output directory for diagnosis. The hosted performance
-job uploads the top-level aggregate JSON even when the gate fails, so the exact
-inputs to every completed attempt remain
-available without uploading the much larger per-round sample tree.
-Each aggregate records the exact rg and Scout command lines. The gate verifies
-that the Native AOT payload was built from the current source content. Its
+job uploads the aggregate, output-verification, and raw per-round JSON even when
+the gate fails, so the exact inputs and samples from every completed attempt
+remain available.
+Each aggregate records the exact rg and Scout argument vectors, working
+directory, allowlisted environment, and expected exit code. Hyperfine invokes
+the timed commands directly instead of starting a shell. Generated benchmark
+inputs are required to match the complete byte counts and SHA-256 hashes in
+`tests/PREREQS.lock`; their deterministic manifest is embedded in every output
+verification and timing aggregate. The same artifacts embed a deterministic
+reproducibility manifest with the macOS build, hardware model, runner image,
+process state, binary hashes, build provenance, and pinned toolchain. The gate
+verifies that the Native AOT
+payload was built from the current source content. Its
 reproducibility manifest records the OS build, hardware model, logical CPU
 count, source fingerprint, build toolchain, launcher and payload hashes,
 performance-input commit and fingerprint, Hyperfine hash, frozen corpus hashes,
@@ -115,7 +134,14 @@ selected workload, and fixed thread counts. A focused `--workload` run also
 prints its two commands.
 Before timing, the gate executes both commands once and compares a C-locale
 sorted-line SHA-256 digest. The digest, byte count, and line count are written
-to the uploaded workload output JSON.
+to the uploaded workload output JSON. Search workloads require equivalent
+output. The cold-version workload records each program's version output
+independently because the product names and versions differ.
+Both verification and timing run with a fresh home and temporary directory and
+an allowlisted locale, timezone, and system path. Developer Git ignores, rg
+configuration, .NET runtime knobs, allocator diagnostics, and runner-specific
+environment variables therefore cannot change the searched files or measured
+processes.
 
 Each attempt prints the wall and RSS components as either within or exceeding
 their limits, followed by one overall result that names the workload and failed
@@ -127,8 +153,10 @@ headroom or excess so a close failure cannot look equal to its rounded limit.
 
 The shared release-equivalent driver requires the source, native build inputs,
 and complete performance harness to be committed and clean. Each workload has
-one prespecified warmup and measured sample set. A failed
-wall-time or RSS result remains the result for that gate invocation.
+one prespecified warmup and measured sample set. The full gate evaluates every
+workload after a performance-limit failure and prints all failed workload names
+in its final summary. An output, sampling, build, or other infrastructure error
+stops the gate immediately.
 
 The OpenSubtitles regex workload is a public benchmark workload. It pins
 `--threads 4` so the segmented regex path is measured against a stable worker

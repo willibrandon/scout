@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import shlex
 import statistics
 import subprocess
 import sys
@@ -13,12 +14,19 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from benchmark_environment import (
+    add_benchmark_environment_assignments,
+    create_benchmark_environment,
+)
+from write_performance_manifest import read_performance_manifest
+
 
 _ROUND_ROLES = (
     ("rg", "scout", "scout", "rg"),
     ("scout", "rg", "rg", "scout"),
 )
 _MAX_TIMER_RESOLUTION_REPLACEMENTS = 8
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 def round_roles(round_number: int) -> tuple[str, ...]:
@@ -49,7 +57,9 @@ def sample_name(workload: str, round_number: int, position: int, role: str) -> s
 
 
 def aggregate_round_documents(
-    round_documents: Sequence[Mapping[str, Any]], workload: str
+    round_documents: Sequence[Mapping[str, Any]],
+    workload: str,
+    expected_exit_code: int = 0,
 ) -> dict[str, Any]:
     """Validate and aggregate raw one-run Hyperfine ABBA/BAAB documents."""
     if not round_documents:
@@ -79,7 +89,12 @@ def aggregate_round_documents(
                 _number(result, "system", round_number, position, non_negative=True)
             )
             exit_codes[role].append(
-                _single_exit_code(result, round_number, position)
+                _single_exit_code(
+                    result,
+                    round_number,
+                    position,
+                    expected_exit_code,
+                )
             )
 
             # Darwin reports RUSAGE_CHILDREN peak RSS cumulatively within one
@@ -214,11 +229,20 @@ def _wall_time(
 
 
 def _timer_resolution_error(
-    document: Mapping[str, Any], workload: str, round_number: int
+    document: Mapping[str, Any],
+    workload: str,
+    round_number: int,
+    expected_exit_code: int,
 ) -> str | None:
     for position, (role, result) in enumerate(
         _validated_round_results(document, workload, round_number), start=1
     ):
+        _single_exit_code(
+            result,
+            round_number,
+            position,
+            expected_exit_code,
+        )
         wall_time = _single_number(result, "times", round_number, position)
         if wall_time < 0:
             raise ValueError(
@@ -302,7 +326,10 @@ def _validated_number(
 
 
 def _single_exit_code(
-    result: Mapping[str, Any], round_number: int, position: int
+    result: Mapping[str, Any],
+    round_number: int,
+    position: int,
+    expected_exit_code: int,
 ) -> int:
     value = result.get("exit_codes")
     if (
@@ -310,10 +337,14 @@ def _single_exit_code(
         or len(value) != 1
         or isinstance(value[0], bool)
         or not isinstance(value[0], int)
-        or value[0] != 0
     ):
         raise ValueError(
-            f"round {round_number} position {position} did not exit successfully"
+            f"round {round_number} position {position} has an invalid exit code"
+        )
+    if value[0] != expected_exit_code:
+        raise ValueError(
+            f"round {round_number} position {position} expected exit "
+            f"{expected_exit_code}, got {value[0]}"
         )
 
     return value[0]
@@ -350,12 +381,14 @@ def _run_balanced_round(
     round_number: int,
     rg_command: str,
     scout_command: str,
-    no_shell: bool,
+    expected_exit_code: int,
+    working_directory: Path,
     output: Path | None,
+    environment: Mapping[str, str],
 ) -> None:
-    arguments = [hyperfine, "--style", "none", "--runs", "1"]
-    if no_shell:
-        arguments.append("-N")
+    arguments = [hyperfine, "--style", "none", "--runs", "1", "-N"]
+    if expected_exit_code != 0:
+        arguments.append(f"--ignore-failure={expected_exit_code}")
     if output is not None:
         output.unlink(missing_ok=True)
         arguments.extend(("--export-json", str(output)))
@@ -370,7 +403,12 @@ def _run_balanced_round(
             )
         )
 
-    subprocess.run(arguments, check=True)
+    subprocess.run(
+        arguments,
+        check=True,
+        cwd=working_directory,
+        env=environment,
+    )
 
 
 def _read_document(path: Path) -> Mapping[str, Any]:
@@ -417,6 +455,28 @@ def run_interleaved(args: argparse.Namespace) -> None:
     """Run balanced warmup and measured cycles, then write aggregate JSON."""
     output = Path(args.output)
     output.unlink(missing_ok=True)
+    environment = add_benchmark_environment_assignments(
+        create_benchmark_environment(output), args.environment
+    )
+    working_directory = Path(args.working_directory).resolve(strict=True)
+    if not working_directory.is_dir():
+        raise ValueError(
+            f"working directory is not a directory: {working_directory}"
+        )
+    performance_input_manifest = Path(
+        args.performance_input_manifest
+    ).resolve(strict=True)
+    performance_inputs = _read_document(performance_input_manifest).get(
+        "inputs"
+    )
+    if not isinstance(performance_inputs, list) or not performance_inputs:
+        raise ValueError(
+            "generated performance-input manifest must contain a nonempty "
+            "inputs array"
+        )
+    reproducibility = read_performance_manifest(
+        Path(args.reproducibility_manifest)
+    )
     sample_directory = output.with_name(f"{output.stem}.samples")
     sample_directory.mkdir(parents=True, exist_ok=True)
     for stale_round in sample_directory.glob("round-*.json"):
@@ -435,8 +495,10 @@ def run_interleaved(args: argparse.Namespace) -> None:
             warmup_round,
             args.rg_command,
             args.scout_command,
-            args.no_shell,
+            args.expected_exit_code,
+            working_directory,
             output=None,
+            environment=environment,
         )
 
     raw_paths = []
@@ -451,14 +513,17 @@ def run_interleaved(args: argparse.Namespace) -> None:
                 round_number,
                 args.rg_command,
                 args.scout_command,
-                args.no_shell,
+                args.expected_exit_code,
+                working_directory,
                 output=raw_path,
+                environment=environment,
             )
             round_document = _read_document(raw_path)
             timer_resolution_error = _timer_resolution_error(
                 round_document,
                 args.name,
                 round_number,
+                args.expected_exit_code,
             )
             if timer_resolution_error is not None:
                 discarded_number = len(discarded_paths) + 1
@@ -492,11 +557,25 @@ def run_interleaved(args: argparse.Namespace) -> None:
         raw_paths.append(str(raw_path))
         round_documents.append(round_document)
 
-    document = aggregate_round_documents(round_documents, args.name)
+    document = aggregate_round_documents(
+        round_documents,
+        args.name,
+        args.expected_exit_code,
+    )
     document["commands"] = {
         "rg": args.rg_command,
         "scout": args.scout_command,
     }
+    document["command_argv"] = {
+        "rg": shlex.split(args.rg_command),
+        "scout": shlex.split(args.scout_command),
+    }
+    document["execution_mode"] = "direct"
+    document["expected_exit_code"] = args.expected_exit_code
+    document["performance_inputs"] = performance_inputs
+    document["reproducibility"] = reproducibility
+    document["environment"] = dict(environment)
+    document["working_directory"] = str(working_directory)
     document["sampling"]["raw_round_files"] = raw_paths
     document["sampling"]["warmup_rounds"] = args.warmup_rounds
     document["sampling"]["measured_round_attempts"] = (
@@ -549,6 +628,13 @@ def _non_negative_even_integer(value: str) -> int:
     return number
 
 
+def _exit_code(value: str) -> int:
+    number = int(value)
+    if number < 0 or number > 255:
+        raise argparse.ArgumentTypeError("must be between 0 and 255")
+    return number
+
+
 def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -564,7 +650,17 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
         "--warmup-rounds", required=True, type=_non_negative_even_integer
     )
     parser.add_argument("--output", required=True)
-    parser.add_argument("--no-shell", action="store_true")
+    parser.add_argument("--working-directory", required=True, type=Path)
+    parser.add_argument(
+        "--performance-input-manifest", required=True, type=Path
+    )
+    parser.add_argument(
+        "--reproducibility-manifest", required=True, type=Path
+    )
+    parser.add_argument(
+        "--expected-exit-code", required=True, type=_exit_code
+    )
+    parser.add_argument("--environment", action="append", default=[])
     return parser.parse_args(argv)
 
 

@@ -13,10 +13,14 @@ trap cleanup EXIT HUP INT TERM
 
 GIT_INDEX_FILE="$temporary_index" git -c safe.directory="$ROOT" -C "$ROOT" read-tree --empty
 GIT_INDEX_FILE="$temporary_index" git -c safe.directory="$ROOT" -c core.safecrlf=false -C "$ROOT" add -A -- \
+    .editorconfig \
+    .gitattributes \
+    .globalconfig \
     Directory.Build.props \
     Directory.Build.rsp \
     Directory.Build.targets \
     Directory.Packages.props \
+    NuGet.Config \
     Scout.slnx \
     global.json \
     native \

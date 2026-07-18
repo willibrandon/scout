@@ -79,7 +79,7 @@ binary = "scout"
 real_binary = "scout-real"
 rid = "$RID"
 ripgrep_commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"
-dotnet_runtime = "10.0.2"
+nativeaot_runtime_framework = "10.0.2"
 pcre2 = "10.46"
 parity = "behavioral parity; identity is Scout-specific (see PARITY.md)"
 EOF

@@ -1,26 +1,29 @@
-#!/usr/bin/env sh
+#!/bin/sh
 set -eu
 
-ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+ROOT="$(CDPATH= cd -- "$(/usr/bin/dirname -- "$0")/.." && pwd)"
 
 if [ "${SCOUT_PERFORMANCE_GATE_INNER:-}" = "1" ]; then
     unset SCOUT_PERFORMANCE_GATE_INNER
 else
     release_gate_requested="0"
-    focused_gate_requested="0"
     for argument in "$@"; do
         case "$argument" in
             --gate)
                 release_gate_requested="1"
                 ;;
-            --workload)
-                focused_gate_requested="1"
-                ;;
         esac
     done
 
-    if [ "$release_gate_requested" = "1" ] && [ "$focused_gate_requested" = "0" ]; then
-        exec "$ROOT/eng/run-performance-gate.sh" "$@"
+    if [ "$release_gate_requested" = "1" ]; then
+        unset \
+            BASH_ENV \
+            ENV \
+            SCOUT_PERFORMANCE_GATE_BOOTSTRAPPED \
+            SCOUT_PERFORMANCE_GATE_DOTNET_COMMAND \
+            SCOUT_PERFORMANCE_GATE_TOOL_ENVIRONMENT
+        exec /usr/bin/env -u BASHOPTS -u SHELLOPTS \
+            "$ROOT/eng/run-performance-gate.sh" "$@"
     fi
 fi
 
@@ -53,6 +56,11 @@ GATE_LARGE_FILE_THREADS="4"
 GATE_TREE_THREADS="3"
 GATE_LARGE_FILE_SEGMENT_BUFFER_LENGTH="131072"
 GATE_MANY_ABSENT_INPUT_COUNT="16"
+PERFORMANCE_GATE_FAILED_STATUS="10"
+PERFORMANCE_INPUT_MANIFEST=""
+PERFORMANCE_REPRO_MANIFEST=""
+FAILED_GATE_WORKLOADS=""
+FAILED_GATE_COUNT="0"
 
 fail() {
     printf '%s\n' "$1" >&2
@@ -69,6 +77,7 @@ usage() {
         '  SCOUT_BUILD_PROVENANCE            Native build provenance sidecar. Defaults to <scout-real>.provenance.' \
         '  SCOUT_BENCH_OPENSUBTITLES_EN     OpenSubtitles en.txt path for --gate.' \
         '  SCOUT_BENCH_LINUX_TREE           Linux source tree path for --gate.' \
+        '  SCOUT_HYPERFINE_BIN               Absolute Hyperfine binary. Hash and version must match tests/PREREQS.lock.' \
         '  SCOUT_ORACLE_ENVIRONMENT          Pinned rg oracle environment: github-actions or local. Gate default: github-actions.' \
         '  SCOUT_TOOL_ENVIRONMENT            Pinned host-tool environment: github-actions or local. Defaults from the host.' \
         '' \
@@ -377,8 +386,34 @@ validate_scout_build_provenance() {
         fail "Scout build provenance has no dirty-state marker."
     SCOUT_BUILD_DOTNET_SDK="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" dotnet_sdk)" ||
         fail "Scout build provenance has no .NET SDK."
+    SCOUT_BUILD_DOTNET_HOST_RUNTIME="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" dotnet_host_runtime)" ||
+        fail "Scout build provenance has no .NET host runtime."
+    SCOUT_BUILD_NATIVEAOT_RUNTIME="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" runtime_framework_version)" ||
+        fail "Scout build provenance has no Native AOT runtime framework."
     SCOUT_BUILD_COMPILER="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" compiler)" ||
         fail "Scout build provenance has no compiler."
+    SCOUT_BUILD_COMPILER_SHA256="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" compiler_sha256)" ||
+        fail "Scout build provenance has no compiler hash."
+    SCOUT_BUILD_XCODE_VERSION="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" xcode_version)" ||
+        fail "Scout build provenance has no Xcode version."
+    SCOUT_BUILD_XCODE_BUILD="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" xcode_build)" ||
+        fail "Scout build provenance has no Xcode build."
+    SCOUT_BUILD_MACOS_SDK="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" macos_sdk)" ||
+        fail "Scout build provenance has no macOS SDK."
+    SCOUT_BUILD_MACOS_DEPLOYMENT_TARGET="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" macos_deployment_target)" ||
+        fail "Scout build provenance has no macOS deployment target."
+    SCOUT_BUILD_LINKER="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" linker)" ||
+        fail "Scout build provenance has no linker."
+    SCOUT_BUILD_LINKER_SHA256="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" linker_sha256)" ||
+        fail "Scout build provenance has no linker hash."
+    SCOUT_BUILD_ARCHIVER_SHA256="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" archiver_sha256)" ||
+        fail "Scout build provenance has no archiver hash."
+    SCOUT_BUILD_RANLIB_SHA256="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" ranlib_sha256)" ||
+        fail "Scout build provenance has no ranlib hash."
+    SCOUT_BUILD_STRIP_SHA256="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" strip_sha256)" ||
+        fail "Scout build provenance has no strip hash."
+    SCOUT_BUILD_NM_SHA256="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" nm_sha256)" ||
+        fail "Scout build provenance has no nm hash."
     expected_launcher_sha256="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" launcher_sha256)" ||
         fail "Scout build provenance has no launcher hash."
     expected_payload_sha256="$(read_provenance_value "$SCOUT_BUILD_PROVENANCE" payload_sha256)" ||
@@ -387,6 +422,38 @@ validate_scout_build_provenance() {
     actual_source_fingerprint="$(sh "$ROOT/eng/source-fingerprint.sh")"
     [ "$actual_source_fingerprint" = "$SCOUT_SOURCE_FINGERPRINT" ] ||
         fail "Scout Native AOT payload is stale for the current source content. Rebuild with native/build-app-unix.sh."
+    [ "$SCOUT_SOURCE_DIRTY" = "0" ] ||
+        fail "Scout Native AOT payload was built from dirty source inputs."
+    [ "$SCOUT_BUILD_DOTNET_SDK" = "$(read_lock_value dotnet_sdk)" ] ||
+        fail "Scout Native AOT payload was built by an unpinned .NET SDK."
+    [ "$SCOUT_BUILD_DOTNET_HOST_RUNTIME" = "$(read_lock_value dotnet_host_runtime)" ] ||
+        fail "Scout Native AOT payload was built by an unpinned .NET host runtime."
+    [ "$SCOUT_BUILD_NATIVEAOT_RUNTIME" = "$(read_lock_value nativeaot_runtime_framework)" ] ||
+        fail "Scout Native AOT payload was built with an unpinned runtime framework."
+    [ "$SCOUT_BUILD_XCODE_VERSION" = "$(read_lock_value xcode_version)" ] ||
+        fail "Scout Native AOT payload was built by an unpinned Xcode version."
+    [ "$SCOUT_BUILD_XCODE_BUILD" = "$(read_lock_value xcode_build)" ] ||
+        fail "Scout Native AOT payload was built by an unpinned Xcode build."
+    [ "$SCOUT_BUILD_MACOS_SDK" = "$(read_lock_value macos_sdk)" ] ||
+        fail "Scout Native AOT payload was built against an unpinned macOS SDK."
+    [ "$SCOUT_BUILD_MACOS_DEPLOYMENT_TARGET" = "$(read_lock_value macos_deployment_target)" ] ||
+        fail "Scout Native AOT payload has an unpinned macOS deployment target."
+    [ "$SCOUT_BUILD_COMPILER" = "Apple clang version $(read_lock_value apple_clang)" ] ||
+        fail "Scout Native AOT payload was built by an unpinned Apple Clang."
+    [ "$SCOUT_BUILD_LINKER" = "$(read_lock_value apple_ld)" ] ||
+        fail "Scout Native AOT payload was linked by an unpinned Apple ld."
+    [ "$SCOUT_BUILD_COMPILER_SHA256" = "$(read_lock_value apple_clang_sha256)" ] ||
+        fail "Scout Native AOT compiler hash does not match the prerequisite lock."
+    [ "$SCOUT_BUILD_LINKER_SHA256" = "$(read_lock_value apple_ld_sha256)" ] ||
+        fail "Scout Native AOT linker hash does not match the prerequisite lock."
+    [ "$SCOUT_BUILD_ARCHIVER_SHA256" = "$(read_lock_value apple_ar_sha256)" ] ||
+        fail "Scout Native AOT archiver hash does not match the prerequisite lock."
+    [ "$SCOUT_BUILD_RANLIB_SHA256" = "$(read_lock_value apple_ranlib_sha256)" ] ||
+        fail "Scout Native AOT ranlib hash does not match the prerequisite lock."
+    [ "$SCOUT_BUILD_STRIP_SHA256" = "$(read_lock_value apple_strip_sha256)" ] ||
+        fail "Scout Native AOT strip hash does not match the prerequisite lock."
+    [ "$SCOUT_BUILD_NM_SHA256" = "$(read_lock_value apple_nm_sha256)" ] ||
+        fail "Scout Native AOT nm hash does not match the prerequisite lock."
     check_file_hash "Scout launcher provenance" "$SCOUT_BIN" "$expected_launcher_sha256"
     check_file_hash "Scout payload provenance" "$SCOUT_RSS_BASELINE_BIN" "$expected_payload_sha256"
 }
@@ -456,9 +523,12 @@ print_repro_manifest() {
     manifest_os_version="$(sw_vers -productVersion 2>/dev/null || uname -r)"
     manifest_os_build="$(sw_vers -buildVersion 2>/dev/null || printf 'unknown')"
     manifest_hardware_model="$(sysctl -n hw.model 2>/dev/null || printf 'unknown')"
-    manifest_runner_name="${RUNNER_NAME:-local}"
-    manifest_runner_image_os="${ImageOS:-local}"
-    manifest_runner_image_version="${ImageVersion:-local}"
+    manifest_runner_name="${SCOUT_PERFORMANCE_GATE_RUNNER_NAME:-local}"
+    manifest_runner_image_os="${SCOUT_PERFORMANCE_GATE_IMAGE_OS:-local}"
+    manifest_runner_image_version="${SCOUT_PERFORMANCE_GATE_IMAGE_VERSION:-local}"
+    manifest_process_umask="${PERFORMANCE_PROCESS_UMASK:-unmanaged}"
+    manifest_process_soft_nofile="${PERFORMANCE_PROCESS_SOFT_NOFILE:-unmanaged}"
+    manifest_process_nice="${PERFORMANCE_PROCESS_NICE:-unmanaged}"
     manifest_rg_version="$("$RG_BIN" --version | sed -n '1p')"
     manifest_rg_sha256="$(sha256_file "$RG_BIN")"
     manifest_scout_version="$("$SCOUT_BIN" --version | sed -n '1p')"
@@ -473,7 +543,64 @@ print_repro_manifest() {
     manifest_hyperfine_sha256="$(sha256_file "$HYPERFINE")"
     manifest_opensubtitles_sha256="$(read_corpus_value "opensubtitles-en" "sha256")"
     manifest_linux_tree_sha256="$(read_corpus_value "linux-kernel" "tree_sha256")"
+    manifest_performance_inputs_sha256="$(sha256_file "$PERFORMANCE_INPUT_MANIFEST")"
     manifest_selection="${WORKLOAD:-all gate workloads}"
+    PERFORMANCE_REPRO_MANIFEST="$OUT_DIR/reproducibility.json"
+
+    "$PYTHON" "$ROOT/bench/write_performance_manifest.py" \
+        --output "$PERFORMANCE_REPRO_MANIFEST" \
+        --value "host.os=$manifest_os" \
+        --value "host.os_version=$manifest_os_version" \
+        --value "host.os_build=$manifest_os_build" \
+        --value "host.architecture=$manifest_arch" \
+        --value "host.hardware_model=$manifest_hardware_model" \
+        --value "host.logical_cpu_count=$manifest_cpu_count" \
+        --value "runner.name=$manifest_runner_name" \
+        --value "runner.image_os=$manifest_runner_image_os" \
+        --value "runner.image_version=$manifest_runner_image_version" \
+        --value "process.umask=$manifest_process_umask" \
+        --value "process.soft_nofile=$manifest_process_soft_nofile" \
+        --value "process.nice=$manifest_process_nice" \
+        --value "selection.workload=$manifest_selection" \
+        --value "source.commit=$SCOUT_SOURCE_COMMIT" \
+        --value "source.fingerprint=$SCOUT_SOURCE_FINGERPRINT" \
+        --value "source.dirty=$SCOUT_SOURCE_DIRTY" \
+        --value "harness.commit=$manifest_harness_commit" \
+        --value "harness.fingerprint=$manifest_harness_fingerprint" \
+        --value "harness.dirty=$manifest_harness_dirty" \
+        --value "harness.script_sha256=$manifest_script_sha256" \
+        --value "generated_inputs.manifest_sha256=$manifest_performance_inputs_sha256" \
+        --value "oracle.environment=$HOST_ORACLE_ENVIRONMENT" \
+        --value "host_tools.environment=$HOST_TOOL_ENVIRONMENT" \
+        --value "tool.rg_version=$manifest_rg_version" \
+        --value "tool.rg_sha256=$manifest_rg_sha256" \
+        --value "tool.scout_version=$manifest_scout_version" \
+        --value "tool.scout_launcher_sha256=$manifest_scout_sha256" \
+        --value "tool.scout_payload_sha256=$manifest_scout_payload_sha256" \
+        --value "tool.scout_provenance_sha256=$manifest_scout_provenance_sha256" \
+        --value "tool.hyperfine_version=$manifest_hyperfine_version" \
+        --value "tool.hyperfine_sha256=$manifest_hyperfine_sha256" \
+        --value "toolchain.dotnet_sdk=$SCOUT_BUILD_DOTNET_SDK" \
+        --value "toolchain.dotnet_host_runtime=$SCOUT_BUILD_DOTNET_HOST_RUNTIME" \
+        --value "toolchain.nativeaot_runtime=$SCOUT_BUILD_NATIVEAOT_RUNTIME" \
+        --value "toolchain.xcode_version=$SCOUT_BUILD_XCODE_VERSION" \
+        --value "toolchain.xcode_build=$SCOUT_BUILD_XCODE_BUILD" \
+        --value "toolchain.macos_sdk=$SCOUT_BUILD_MACOS_SDK" \
+        --value "toolchain.macos_deployment_target=$SCOUT_BUILD_MACOS_DEPLOYMENT_TARGET" \
+        --value "toolchain.compiler=$SCOUT_BUILD_COMPILER" \
+        --value "toolchain.compiler_sha256=$SCOUT_BUILD_COMPILER_SHA256" \
+        --value "toolchain.linker=$SCOUT_BUILD_LINKER" \
+        --value "toolchain.linker_sha256=$SCOUT_BUILD_LINKER_SHA256" \
+        --value "toolchain.archiver_sha256=$SCOUT_BUILD_ARCHIVER_SHA256" \
+        --value "toolchain.ranlib_sha256=$SCOUT_BUILD_RANLIB_SHA256" \
+        --value "toolchain.strip_sha256=$SCOUT_BUILD_STRIP_SHA256" \
+        --value "toolchain.nm_sha256=$SCOUT_BUILD_NM_SHA256" \
+        --value "corpus.opensubtitles_sha256=$manifest_opensubtitles_sha256" \
+        --value "corpus.linux_tree_sha256=$manifest_linux_tree_sha256" \
+        --value "threads.generated=$GATE_GENERATED_THREADS" \
+        --value "threads.line_regex=1" \
+        --value "threads.opensubtitles=$GATE_LARGE_FILE_THREADS" \
+        --value "threads.linux_tree=$GATE_TREE_THREADS"
 
     printf '\n== reproducibility ==\n'
     printf 'host: %s %s (%s) on %s/%s; logical CPUs: %s\n' \
@@ -481,6 +608,8 @@ print_repro_manifest() {
         "$manifest_hardware_model" "$manifest_arch" "$manifest_cpu_count"
     printf 'runner: %s; image OS=%s; image version=%s\n' \
         "$manifest_runner_name" "$manifest_runner_image_os" "$manifest_runner_image_version"
+    printf 'process state: umask=%s; soft nofile=%s; nice=%s\n' \
+        "$manifest_process_umask" "$manifest_process_soft_nofile" "$manifest_process_nice"
     printf 'selection: %s\n' "$manifest_selection"
     printf 'rg: %s; sha256: %s; oracle environment: %s\n' \
         "$manifest_rg_version" "$manifest_rg_sha256" "$HOST_ORACLE_ENVIRONMENT"
@@ -489,14 +618,23 @@ print_repro_manifest() {
         "$manifest_scout_version" "$manifest_scout_sha256" "$manifest_scout_payload_sha256"
     printf 'Scout source: commit=%s; fingerprint=%s; dirty=%s\n' \
         "$SCOUT_SOURCE_COMMIT" "$SCOUT_SOURCE_FINGERPRINT" "$SCOUT_SOURCE_DIRTY"
-    printf 'Scout build: .NET SDK %s; compiler=%s; provenance sha256=%s\n' \
-        "$SCOUT_BUILD_DOTNET_SDK" "$SCOUT_BUILD_COMPILER" "$manifest_scout_provenance_sha256"
+    printf 'Scout build: .NET SDK %s; host runtime %s; Native AOT runtime %s; Xcode %s (%s); macOS SDK %s; deployment target %s\n' \
+        "$SCOUT_BUILD_DOTNET_SDK" "$SCOUT_BUILD_DOTNET_HOST_RUNTIME" "$SCOUT_BUILD_NATIVEAOT_RUNTIME" \
+        "$SCOUT_BUILD_XCODE_VERSION" "$SCOUT_BUILD_XCODE_BUILD" \
+        "$SCOUT_BUILD_MACOS_SDK" "$SCOUT_BUILD_MACOS_DEPLOYMENT_TARGET"
+    printf 'Scout native tools: compiler=%s [%s]; linker=%s [%s]; provenance sha256=%s\n' \
+        "$SCOUT_BUILD_COMPILER" "$SCOUT_BUILD_COMPILER_SHA256" \
+        "$SCOUT_BUILD_LINKER" "$SCOUT_BUILD_LINKER_SHA256" \
+        "$manifest_scout_provenance_sha256"
     printf 'harness: script sha256=%s; %s sha256=%s\n' \
         "$manifest_script_sha256" "$manifest_hyperfine_version" "$manifest_hyperfine_sha256"
     printf 'performance inputs: commit=%s; fingerprint=%s; dirty=%s\n' \
         "$manifest_harness_commit" "$manifest_harness_fingerprint" "$manifest_harness_dirty"
     printf 'corpus pins: OpenSubtitles sha256=%s; Linux tree sha256=%s\n' \
         "$manifest_opensubtitles_sha256" "$manifest_linux_tree_sha256"
+    printf 'generated inputs: %s; manifest sha256=%s\n' \
+        "$PERFORMANCE_INPUT_MANIFEST" "$manifest_performance_inputs_sha256"
+    printf 'reproducibility manifest: %s\n' "$PERFORMANCE_REPRO_MANIFEST"
     printf 'fixed threads: generated=%s; line regex=1; OpenSubtitles=4; Linux tree=%s\n' \
         "$GATE_GENERATED_THREADS" "$GATE_TREE_THREADS"
     printf 'sampling: OpenSubtitles=%s warm-up/%s measured; Linux tree=%s/%s; cold=%s/%s; generated=%s/%s; line regex=%s/%s\n' \
@@ -516,6 +654,9 @@ print_repro_manifest() {
 
 performance_inputs_dirty() {
     if [ -n "$(git -c safe.directory="$ROOT" -C "$ROOT" status --porcelain=v1 --untracked-files=normal -- \
+        .editorconfig \
+        .gitattributes \
+        .globalconfig \
         .github/workflows/release-gates.yml \
         bench \
         Directory.Build.props \
@@ -525,6 +666,7 @@ performance_inputs_dirty() {
         eng \
         global.json \
         native \
+        NuGet.Config \
         Scout.slnx \
         src \
         tests/PREREQS.lock)" ]; then
@@ -620,6 +762,24 @@ resolve_hyperfine() {
     pinned_path="$(read_macos_tool_value "hyperfine" "path")" || pinned_path=""
     pinned_sha256="$(read_macos_tool_value "hyperfine" "sha256")" || pinned_sha256=""
     pinned_version="$(read_macos_tool_value "hyperfine" "version")" || pinned_version=""
+    configured_path="${SCOUT_HYPERFINE_BIN:-}"
+
+    if [ -n "$configured_path" ]; then
+        case "$configured_path" in
+            /*)
+                ;;
+            *)
+                fail "SCOUT_HYPERFINE_BIN must be an absolute path."
+                ;;
+        esac
+        [ -n "$pinned_sha256" ] || fail "Missing pinned hyperfine hash in tests/PREREQS.lock."
+        [ -n "$pinned_version" ] || fail "Missing pinned hyperfine version in tests/PREREQS.lock."
+        [ -x "$configured_path" ] || fail "SCOUT_HYPERFINE_BIN is not executable: $configured_path"
+        check_file_hash "hyperfine" "$configured_path" "$pinned_sha256"
+        check_tool_version "hyperfine" "$configured_path" "hyperfine $pinned_version"
+        printf '%s\n' "$configured_path"
+        return
+    fi
 
     if [ "$MODE" = "gate" ]; then
         [ -n "$pinned_path" ] || fail "Missing pinned hyperfine path in tests/PREREQS.lock."
@@ -750,6 +910,20 @@ make_line_regex_corpus() {
     }' > "$line_regex_absent_patterns"
 }
 
+verify_generated_performance_inputs() {
+    PERFORMANCE_INPUT_MANIFEST="$OUT_DIR/generated-performance-inputs.json"
+    "$PYTHON" "$ROOT/bench/verify_performance_inputs.py" \
+        --lock "$LOCK" \
+        --output "$PERFORMANCE_INPUT_MANIFEST" \
+        --input "cold-tiny=$OUT_DIR/cold-tiny.txt" \
+        --input "bounded-assignment-pattern=$OUT_DIR/bounded-assignment/pattern.txt" \
+        --input "bounded-assignment-no-match-800=$OUT_DIR/bounded-assignment/no-match-800.txt" \
+        --input "large-bounded-unicode-class-pattern=$OUT_DIR/large-bounded-unicode-class/pattern.txt" \
+        --input "large-bounded-unicode-class-no-match-5000=$OUT_DIR/large-bounded-unicode-class/no-match-5000.txt" \
+        --input "line-regex-paladin-like-200000=$OUT_DIR/line-regex/paladin-like-200000.txt" \
+        --input "line-regex-absent-patterns-64=$OUT_DIR/line-regex/absent-patterns-64.txt"
+}
+
 make_absent_regexp_arguments() {
     awk '{ printf " -e %s", $0 }' "$1"
 }
@@ -871,13 +1045,15 @@ measure_rss_floor() {
 
     printf '\n== rss_floor ==\n'
     run_hyperfine_interleaved \
-        "1" \
         "$json" \
         "rss_floor" \
         "$Q_RG --no-config --mmap -n 'needle' $Q_TINY" \
         "$Q_SCOUT_RSS_BASELINE --no-config --mmap -n 'needle' $Q_TINY" \
         "$runs" \
-        "$warmup"
+        "$warmup" \
+        "$ROOT" \
+        "0" \
+        ""
 
     RG_RSS_FLOOR="$(hyperfine_json_median_memory "$json" 1)" || fail "Could not read rg RSS floor from $json."
     SCOUT_RSS_FLOOR="$(hyperfine_json_median_memory "$json" 2)" || fail "Could not read scout RSS floor from $json."
@@ -1088,7 +1264,7 @@ report_interleaved_gate() {
             return 0
             ;;
         10|11|12)
-            return 1
+            return "$PERFORMANCE_GATE_FAILED_STATUS"
             ;;
         *)
             fail "Could not evaluate the Hyperfine gate from $report_gate_json."
@@ -1126,35 +1302,138 @@ run_hyperfine_pair() {
 }
 
 run_hyperfine_interleaved() {
-    no_shell="$1"
-    interleaved_json="$2"
-    interleaved_name="$3"
-    interleaved_rg_command="$4"
-    interleaved_scout_command="$5"
-    interleaved_runs="$6"
-    interleaved_warmup="$7"
+    interleaved_json="$1"
+    interleaved_name="$2"
+    interleaved_rg_command="$3"
+    interleaved_scout_command="$4"
+    interleaved_runs="$5"
+    interleaved_warmup="$6"
+    interleaved_working_directory="$7"
+    interleaved_expected_exit_code="$8"
+    interleaved_environment="${9:-}"
 
-    if [ "$no_shell" = "1" ]; then
+    set -- \
         "$PYTHON" "$ROOT/bench/hyperfine_interleaved.py" \
-            --hyperfine "$HYPERFINE" \
-            --name "$interleaved_name" \
-            --rg-command "$interleaved_rg_command" \
-            --scout-command "$interleaved_scout_command" \
-            --rounds "$interleaved_runs" \
-            --warmup-rounds "$interleaved_warmup" \
-            --output "$interleaved_json" \
-            --no-shell
-        return
-    fi
-
-    "$PYTHON" "$ROOT/bench/hyperfine_interleaved.py" \
         --hyperfine "$HYPERFINE" \
         --name "$interleaved_name" \
         --rg-command "$interleaved_rg_command" \
         --scout-command "$interleaved_scout_command" \
         --rounds "$interleaved_runs" \
         --warmup-rounds "$interleaved_warmup" \
-        --output "$interleaved_json"
+        --output "$interleaved_json" \
+        --working-directory "$interleaved_working_directory" \
+        --expected-exit-code "$interleaved_expected_exit_code" \
+        --performance-input-manifest "$PERFORMANCE_INPUT_MANIFEST" \
+        --reproducibility-manifest "$PERFORMANCE_REPRO_MANIFEST"
+    if [ -n "$interleaved_environment" ]; then
+        set -- "$@" --environment "$interleaved_environment"
+    fi
+    "$@"
+}
+
+run_gate_pair_impl() {
+    gate_name="$1"
+    gate_limit="$2"
+    gate_rg_command="$3"
+    gate_scout_command="$4"
+    gate_runs="$5"
+    gate_warmup="$6"
+    gate_working_directory="$7"
+    gate_expected_exit_code="$8"
+    gate_environment="${9:-}"
+    gate_output_policy="${10:-equivalent}"
+    gate_json="$OUT_DIR/$gate_name.json"
+
+    case "$gate_output_policy" in
+        equivalent|independent)
+            ;;
+        *)
+            fail "Unsupported output policy for $gate_name: $gate_output_policy."
+            ;;
+    esac
+
+    printf '\n== %s ==\n' "$gate_name"
+    printf 'Limits: wall %.3fx; RSS 1.500x rg + Native AOT floor\n' "$gate_limit"
+    if [ -n "$WORKLOAD" ]; then
+        printf 'Commands:\n'
+        printf '  working directory: %s\n' "$gate_working_directory"
+        if [ -n "$gate_environment" ]; then
+            printf '  environment: %s\n' "$gate_environment"
+        fi
+        printf '  expected exit code: %s\n' "$gate_expected_exit_code"
+        printf '  output policy: %s\n' "$gate_output_policy"
+        printf '  rg: %s\n' "$gate_rg_command"
+        printf '  Scout: %s\n' "$gate_scout_command"
+    fi
+
+    printf 'Output equivalence:\n'
+    set -- \
+        "$PYTHON" "$ROOT/bench/verify_hyperfine_output.py" \
+        --workload "$gate_name" \
+        --rg-command "$gate_rg_command" \
+        --scout-command "$gate_scout_command" \
+        --output "$OUT_DIR/$gate_name.output.json" \
+        --working-directory "$gate_working_directory" \
+        --expected-exit-code "$gate_expected_exit_code" \
+        --output-policy "$gate_output_policy" \
+        --performance-input-manifest "$PERFORMANCE_INPUT_MANIFEST" \
+        --reproducibility-manifest "$PERFORMANCE_REPRO_MANIFEST"
+    if [ -n "$gate_environment" ]; then
+        set -- "$@" --environment "$gate_environment"
+    fi
+    if ! "$@"; then
+        fail "Output verification failed for $gate_name."
+    fi
+    if ! run_hyperfine_interleaved \
+        "$gate_json" \
+        "$gate_name" \
+        "$gate_rg_command" \
+        "$gate_scout_command" \
+        "$gate_runs" \
+        "$gate_warmup" \
+        "$gate_working_directory" \
+        "$gate_expected_exit_code" \
+        "$gate_environment"; then
+        fail "Hyperfine sampling failed for $gate_name."
+    fi
+
+    gate_report_status="0"
+    report_interleaved_gate \
+        "$gate_name" "$gate_limit" "$gate_json" || gate_report_status="$?"
+    case "$gate_report_status" in
+        0)
+            return 0
+            ;;
+        "$PERFORMANCE_GATE_FAILED_STATUS")
+            return "$PERFORMANCE_GATE_FAILED_STATUS"
+            ;;
+        *)
+            fail "Could not evaluate the Hyperfine gate from $gate_json."
+            ;;
+    esac
+}
+
+run_gate_pair() {
+    gate_name="$1"
+    if ! workload_selected "$gate_name"; then
+        return 0
+    fi
+
+    set +e
+    run_gate_pair_impl "$@"
+    gate_status="$?"
+    set -e
+    case "$gate_status" in
+        0)
+            ;;
+        "$PERFORMANCE_GATE_FAILED_STATUS")
+            FAILED_GATE_COUNT=$((FAILED_GATE_COUNT + 1))
+            FAILED_GATE_WORKLOADS="$FAILED_GATE_WORKLOADS $gate_name"
+            ;;
+        *)
+            exit "$gate_status"
+            ;;
+    esac
 }
 
 run_pair_impl() {
@@ -1167,6 +1446,8 @@ run_pair_impl() {
     no_shell="$7"
     json="$OUT_DIR/$name.json"
 
+    [ "$MODE" = "smoke" ] || fail "Internal error: smoke pair used outside smoke mode."
+
     if ! workload_selected "$name"; then
         return 0
     fi
@@ -1178,28 +1459,6 @@ run_pair_impl() {
         printf '  rg: %s\n' "$rg_command"
         printf '  Scout: %s\n' "$scout_command"
     fi
-    if [ "$MODE" = "gate" ]; then
-        if [ "$name" != "cold_version" ]; then
-            printf 'Output equivalence:\n'
-            output_verification_mode=""
-            if [ "$no_shell" = "1" ]; then
-                output_verification_mode="--no-shell"
-            fi
-            "$PYTHON" "$ROOT/bench/verify_hyperfine_output.py" \
-                --workload "$name" \
-                --rg-command "$rg_command" \
-                --scout-command "$scout_command" \
-                --output "$OUT_DIR/$name.output.json" \
-                ${output_verification_mode:+"$output_verification_mode"}
-        fi
-        run_hyperfine_interleaved "$no_shell" "$json" "$name" "$rg_command" "$scout_command" "$runs" "$warmup"
-
-        if ! report_interleaved_gate "$name" "$gate" "$json"; then
-            return 1
-        fi
-        return
-    fi
-
     run_hyperfine_pair "$no_shell" "$json" "rg:$name" "$rg_command" "scout:$name" "$scout_command" "$runs" "$warmup"
 }
 
@@ -1394,6 +1653,7 @@ RG_VALUE="$(read_ripgrep_oracle_value "path" "ripgrep_rg_path")" || fail "Missin
 RG_BIN="$(resolve_repo_path "$RG_VALUE")"
 RG_SHA256="$(read_ripgrep_oracle_value "sha256" "ripgrep_rg_sha256")" || fail "Missing ripgrep oracle sha256 in tests/PREREQS.lock."
 HYPERFINE="$(resolve_hyperfine)"
+unset SCOUT_HYPERFINE_BIN
 PYTHON=""
 if [ "$MODE" = "gate" ]; then
     PYTHON="$(resolve_python)"
@@ -1470,26 +1730,30 @@ if [ "$MODE" = "smoke" ]; then
 fi
 
 make_cold_tiny_corpus
+make_bounded_assignment_corpus
+make_large_bounded_unicode_class_corpus
+make_line_regex_corpus
+verify_generated_performance_inputs
+
 Q_TINY="$(shell_quote "$OUT_DIR/cold-tiny.txt")"
-Q_OPEN=""
-Q_OPEN_DIRECTORY=""
+OPEN_DIRECTORY="$ROOT"
 Q_OPEN_NAME=""
-Q_LINUX=""
-Q_BOUNDED_ASSIGNMENT_PATTERN=""
-Q_BOUNDED_ASSIGNMENT_INPUT=""
-Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN=""
-Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT=""
-Q_LINE_REGEX_INPUT=""
-SHARED_DELEGATE_INPUTS=""
-MANY_ABSENT_INPUTS=""
-Q_LINE_REGEX_ABSENT_PATTERNS=""
-LINE_REGEX_ABSENT_REGEXP_ARGUMENTS=""
+LINUX_TREE="$ROOT"
+Q_BOUNDED_ASSIGNMENT_PATTERN="$(shell_quote "$OUT_DIR/bounded-assignment/pattern.txt")"
+Q_BOUNDED_ASSIGNMENT_INPUT="$(shell_quote "$OUT_DIR/bounded-assignment/no-match-800.txt")"
+Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN="$(shell_quote "$OUT_DIR/large-bounded-unicode-class/pattern.txt")"
+Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT="$(shell_quote "$OUT_DIR/large-bounded-unicode-class/no-match-5000.txt")"
+Q_LINE_REGEX_INPUT="$(shell_quote "$OUT_DIR/line-regex/paladin-like-200000.txt")"
+SHARED_DELEGATE_INPUTS="$Q_LINE_REGEX_INPUT $Q_LINE_REGEX_INPUT $Q_LINE_REGEX_INPUT $Q_LINE_REGEX_INPUT"
+Q_LINE_REGEX_ABSENT_PATTERNS="$(shell_quote "$OUT_DIR/line-regex/absent-patterns-64.txt")"
+LINE_REGEX_ABSENT_REGEXP_ARGUMENTS="$(make_absent_regexp_arguments "$OUT_DIR/line-regex/absent-patterns-64.txt")"
+MANY_ABSENT_INPUTS="$(repeat_shell_argument "$Q_LINE_REGEX_INPUT" "$GATE_MANY_ABSENT_INPUT_COUNT")"
+GENERAL_REGEX_ENVIRONMENT="SCOUT_REGEX_SPECIALIZATION_MODE=general"
 
 if workload_group_selected subtitles_en_literal subtitles_en_regex; then
     OPENSUBTITLES_EN="${SCOUT_BENCH_OPENSUBTITLES_EN:-}"
     OPENSUBTITLES_EN="$(require_gate_corpus_file "opensubtitles-en" "$OPENSUBTITLES_EN")"
-    Q_OPEN="$(shell_quote "$OPENSUBTITLES_EN")"
-    Q_OPEN_DIRECTORY="$(shell_quote "$(dirname -- "$OPENSUBTITLES_EN")")"
+    OPEN_DIRECTORY="$(dirname -- "$OPENSUBTITLES_EN")"
     Q_OPEN_NAME="$(shell_quote "$(basename -- "$OPENSUBTITLES_EN")")"
 fi
 
@@ -1500,53 +1764,22 @@ if workload_group_selected \
     linux_many_small_parallel; then
     LINUX_TREE="${SCOUT_BENCH_LINUX_TREE:-}"
     LINUX_TREE="$(require_gate_corpus_tree "linux-kernel" "$LINUX_TREE")"
-    Q_LINUX="$(shell_quote "$LINUX_TREE")"
-fi
-
-if workload_selected bounded_assignment_no_match; then
-    make_bounded_assignment_corpus
-    Q_BOUNDED_ASSIGNMENT_PATTERN="$(shell_quote "$OUT_DIR/bounded-assignment/pattern.txt")"
-    Q_BOUNDED_ASSIGNMENT_INPUT="$(shell_quote "$OUT_DIR/bounded-assignment/no-match-800.txt")"
-fi
-
-if workload_selected large_bounded_unicode_class_no_match; then
-    make_large_bounded_unicode_class_corpus
-    Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN="$(shell_quote "$OUT_DIR/large-bounded-unicode-class/pattern.txt")"
-    Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT="$(shell_quote "$OUT_DIR/large-bounded-unicode-class/no-match-5000.txt")"
-fi
-
-if workload_group_selected \
-    line_regex_word_boundary_general \
-    line_regex_word_boundary_line_count_general \
-    line_regex_generated_record_word_boundary_general \
-    line_regex_anchored_general \
-    line_regex_bounded_class_general \
-    line_regex_bounded_class_exact_general \
-    shared_delegate_prefix_general \
-    many_absent_regexp_general \
-    many_absent_pattern_file_general; then
-    make_line_regex_corpus
-    Q_LINE_REGEX_INPUT="$(shell_quote "$OUT_DIR/line-regex/paladin-like-200000.txt")"
-    SHARED_DELEGATE_INPUTS="$Q_LINE_REGEX_INPUT $Q_LINE_REGEX_INPUT $Q_LINE_REGEX_INPUT $Q_LINE_REGEX_INPUT"
-    Q_LINE_REGEX_ABSENT_PATTERNS="$(shell_quote "$OUT_DIR/line-regex/absent-patterns-64.txt")"
-    LINE_REGEX_ABSENT_REGEXP_ARGUMENTS="$(make_absent_regexp_arguments "$OUT_DIR/line-regex/absent-patterns-64.txt")"
-    MANY_ABSENT_INPUTS="$(repeat_shell_argument "$Q_LINE_REGEX_INPUT" "$GATE_MANY_ABSENT_INPUT_COUNT")"
 fi
 
 RG_LINE_REGEX_PREFIX="$Q_RG --no-config --threads 1 --mmap --count-matches --no-messages"
-SCOUT_LINE_REGEX_PREFIX="env SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config --threads 1 --mmap --count-matches --no-messages"
+SCOUT_LINE_REGEX_PREFIX="$Q_SCOUT --no-config --threads 1 --mmap --count-matches --no-messages"
 RG_LINE_REGEX_LINE_COUNT_PREFIX="$Q_RG --no-config --threads 1 --mmap --count --no-messages"
-SCOUT_LINE_REGEX_LINE_COUNT_PREFIX="env SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config --threads 1 --mmap --count --no-messages"
-RG_BOUNDED_ASSIGNMENT_COMMAND="$(expect_no_match_command "$Q_RG --no-config --threads $GATE_GENERATED_THREADS -U --count-matches --no-messages -f $Q_BOUNDED_ASSIGNMENT_PATTERN $Q_BOUNDED_ASSIGNMENT_INPUT" "rg bounded-assignment search")"
-SCOUT_BOUNDED_ASSIGNMENT_COMMAND="$(expect_no_match_command "$Q_SCOUT --no-config --threads $GATE_GENERATED_THREADS -U --count-matches --no-messages -f $Q_BOUNDED_ASSIGNMENT_PATTERN $Q_BOUNDED_ASSIGNMENT_INPUT" "Scout bounded-assignment search")"
-RG_LARGE_BOUNDED_UNICODE_CLASS_COMMAND="$(expect_no_match_command "$Q_RG --no-config --threads $GATE_GENERATED_THREADS -U --count-matches --no-messages -f $Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN $Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT" "rg large bounded Unicode-class search")"
-SCOUT_LARGE_BOUNDED_UNICODE_CLASS_COMMAND="$(expect_no_match_command "SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config --threads $GATE_GENERATED_THREADS -U --count-matches --no-messages -f $Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN $Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT" "Scout large bounded Unicode-class search")"
-RG_MANY_ABSENT_REGEXP_COMMAND="$(expect_no_match_command "$RG_LINE_REGEX_PREFIX $LINE_REGEX_ABSENT_REGEXP_ARGUMENTS $MANY_ABSENT_INPUTS" "rg 64-pattern -e search")"
-SCOUT_MANY_ABSENT_REGEXP_COMMAND="$(expect_no_match_command "$SCOUT_LINE_REGEX_PREFIX $LINE_REGEX_ABSENT_REGEXP_ARGUMENTS $MANY_ABSENT_INPUTS" "Scout 64-pattern -e search")"
-RG_MANY_ABSENT_PATTERN_FILE_COMMAND="$(expect_no_match_command "$RG_LINE_REGEX_PREFIX -f $Q_LINE_REGEX_ABSENT_PATTERNS $MANY_ABSENT_INPUTS" "rg 64-pattern -f search")"
-SCOUT_MANY_ABSENT_PATTERN_FILE_COMMAND="$(expect_no_match_command "$SCOUT_LINE_REGEX_PREFIX -f $Q_LINE_REGEX_ABSENT_PATTERNS $MANY_ABSENT_INPUTS" "Scout 64-pattern -f search")"
-RG_LINE_REGEX_BOUNDED_CLASS_EXACT_COMMAND="$(expect_no_match_command "$RG_LINE_REGEX_PREFIX '^[A-Za-z_]{70,90}$' $Q_LINE_REGEX_INPUT" "rg exact bounded-class search")"
-SCOUT_LINE_REGEX_BOUNDED_CLASS_EXACT_COMMAND="$(expect_no_match_command "$SCOUT_LINE_REGEX_PREFIX '^[A-Za-z_]{70,90}$' $Q_LINE_REGEX_INPUT" "Scout exact bounded-class search")"
+SCOUT_LINE_REGEX_LINE_COUNT_PREFIX="$Q_SCOUT --no-config --threads 1 --mmap --count --no-messages"
+RG_BOUNDED_ASSIGNMENT_COMMAND="$Q_RG --no-config --threads $GATE_GENERATED_THREADS -U --count-matches --no-messages -f $Q_BOUNDED_ASSIGNMENT_PATTERN $Q_BOUNDED_ASSIGNMENT_INPUT"
+SCOUT_BOUNDED_ASSIGNMENT_COMMAND="$Q_SCOUT --no-config --threads $GATE_GENERATED_THREADS -U --count-matches --no-messages -f $Q_BOUNDED_ASSIGNMENT_PATTERN $Q_BOUNDED_ASSIGNMENT_INPUT"
+RG_LARGE_BOUNDED_UNICODE_CLASS_COMMAND="$Q_RG --no-config --threads $GATE_GENERATED_THREADS -U --count-matches --no-messages -f $Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN $Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT"
+SCOUT_LARGE_BOUNDED_UNICODE_CLASS_COMMAND="$Q_SCOUT --no-config --threads $GATE_GENERATED_THREADS -U --count-matches --no-messages -f $Q_LARGE_BOUNDED_UNICODE_CLASS_PATTERN $Q_LARGE_BOUNDED_UNICODE_CLASS_INPUT"
+RG_MANY_ABSENT_REGEXP_COMMAND="$RG_LINE_REGEX_PREFIX $LINE_REGEX_ABSENT_REGEXP_ARGUMENTS $MANY_ABSENT_INPUTS"
+SCOUT_MANY_ABSENT_REGEXP_COMMAND="$SCOUT_LINE_REGEX_PREFIX $LINE_REGEX_ABSENT_REGEXP_ARGUMENTS $MANY_ABSENT_INPUTS"
+RG_MANY_ABSENT_PATTERN_FILE_COMMAND="$RG_LINE_REGEX_PREFIX -f $Q_LINE_REGEX_ABSENT_PATTERNS $MANY_ABSENT_INPUTS"
+SCOUT_MANY_ABSENT_PATTERN_FILE_COMMAND="$SCOUT_LINE_REGEX_PREFIX -f $Q_LINE_REGEX_ABSENT_PATTERNS $MANY_ABSENT_INPUTS"
+RG_LINE_REGEX_BOUNDED_CLASS_EXACT_COMMAND="$RG_LINE_REGEX_PREFIX '^[A-Za-z_]{70,90}$' $Q_LINE_REGEX_INPUT"
+SCOUT_LINE_REGEX_BOUNDED_CLASS_EXACT_COMMAND="$SCOUT_LINE_REGEX_PREFIX '^[A-Za-z_]{70,90}$' $Q_LINE_REGEX_INPUT"
 OPENSUBTITLES_RUNS="$(gate_opensubtitles_runs)"
 OPENSUBTITLES_WARMUP="$(gate_opensubtitles_warmup)"
 TREE_RUNS="$(gate_tree_runs)"
@@ -1567,136 +1800,206 @@ if workload_selected subtitles_en_regex; then
 fi
 measure_rss_floor "$OPENSUBTITLES_RUNS" "$OPENSUBTITLES_WARMUP"
 
-run_pair \
+run_gate_pair \
     "bounded_assignment_no_match" \
     "1.50" \
     "$RG_BOUNDED_ASSIGNMENT_COMMAND" \
     "$SCOUT_BOUNDED_ASSIGNMENT_COMMAND" \
     "$BOUNDED_ASSIGNMENT_RUNS" \
-    "$BOUNDED_ASSIGNMENT_WARMUP"
-run_pair \
+    "$BOUNDED_ASSIGNMENT_WARMUP" \
+    "$ROOT" \
+    "1" \
+    ""
+run_gate_pair \
     "large_bounded_unicode_class_no_match" \
     "1.50" \
     "$RG_LARGE_BOUNDED_UNICODE_CLASS_COMMAND" \
     "$SCOUT_LARGE_BOUNDED_UNICODE_CLASS_COMMAND" \
     "$LARGE_BOUNDED_UNICODE_CLASS_RUNS" \
-    "$LARGE_BOUNDED_UNICODE_CLASS_WARMUP"
-run_pair \
+    "$LARGE_BOUNDED_UNICODE_CLASS_WARMUP" \
+    "$ROOT" \
+    "1" \
+    "$GENERAL_REGEX_ENVIRONMENT"
+run_gate_pair \
     "line_regex_word_boundary_general" \
     "1.50" \
     "$RG_LINE_REGEX_PREFIX '\\b\\w{5}\\s+\\w{5}\\s+\\w{5}\\b' $Q_LINE_REGEX_INPUT" \
     "$SCOUT_LINE_REGEX_PREFIX '\\b\\w{5}\\s+\\w{5}\\s+\\w{5}\\b' $Q_LINE_REGEX_INPUT" \
     "$LINE_REGEX_RUNS" \
-    "$LINE_REGEX_WARMUP"
-run_pair \
+    "$LINE_REGEX_WARMUP" \
+    "$ROOT" \
+    "0" \
+    "$GENERAL_REGEX_ENVIRONMENT"
+run_gate_pair \
     "line_regex_word_boundary_line_count_general" \
     "1.50" \
     "$RG_LINE_REGEX_LINE_COUNT_PREFIX '\\b\\w{5}\\s+\\w{5}\\s+\\w{5}\\b' $Q_LINE_REGEX_INPUT" \
     "$SCOUT_LINE_REGEX_LINE_COUNT_PREFIX '\\b\\w{5}\\s+\\w{5}\\s+\\w{5}\\b' $Q_LINE_REGEX_INPUT" \
     "$LINE_REGEX_RUNS" \
-    "$LINE_REGEX_WARMUP"
-run_pair \
+    "$LINE_REGEX_WARMUP" \
+    "$ROOT" \
+    "0" \
+    "$GENERAL_REGEX_ENVIRONMENT"
+run_gate_pair \
     "line_regex_generated_record_word_boundary_general" \
     "1.50" \
     "$RG_LINE_REGEX_PREFIX '\\bGeneratedRecord\\b' $Q_LINE_REGEX_INPUT" \
     "$SCOUT_LINE_REGEX_PREFIX '\\bGeneratedRecord\\b' $Q_LINE_REGEX_INPUT" \
     "$LINE_REGEX_RUNS" \
-    "$LINE_REGEX_WARMUP"
-run_pair \
+    "$LINE_REGEX_WARMUP" \
+    "$ROOT" \
+    "0" \
+    "$GENERAL_REGEX_ENVIRONMENT"
+run_gate_pair \
     "line_regex_anchored_general" \
     "1.50" \
     "$RG_LINE_REGEX_PREFIX '^internal sealed class GeneratedRecord\\r?$' $Q_LINE_REGEX_INPUT" \
     "$SCOUT_LINE_REGEX_PREFIX '^internal sealed class GeneratedRecord\\r?$' $Q_LINE_REGEX_INPUT" \
     "$LINE_REGEX_RUNS" \
-    "$LINE_REGEX_WARMUP"
-run_pair \
+    "$LINE_REGEX_WARMUP" \
+    "$ROOT" \
+    "0" \
+    "$GENERAL_REGEX_ENVIRONMENT"
+run_gate_pair \
     "line_regex_bounded_class_general" \
     "1.50" \
     "$RG_LINE_REGEX_PREFIX '^[A-Za-z_]{70,90}\\r?$' $Q_LINE_REGEX_INPUT" \
     "$SCOUT_LINE_REGEX_PREFIX '^[A-Za-z_]{70,90}\\r?$' $Q_LINE_REGEX_INPUT" \
     "$LINE_REGEX_RUNS" \
-    "$LINE_REGEX_WARMUP"
-run_pair \
+    "$LINE_REGEX_WARMUP" \
+    "$ROOT" \
+    "0" \
+    "$GENERAL_REGEX_ENVIRONMENT"
+run_gate_pair \
     "line_regex_bounded_class_exact_general" \
     "1.50" \
     "$RG_LINE_REGEX_BOUNDED_CLASS_EXACT_COMMAND" \
     "$SCOUT_LINE_REGEX_BOUNDED_CLASS_EXACT_COMMAND" \
     "$LINE_REGEX_RUNS" \
-    "$LINE_REGEX_WARMUP"
-run_pair_no_shell \
+    "$LINE_REGEX_WARMUP" \
+    "$ROOT" \
+    "1" \
+    "$GENERAL_REGEX_ENVIRONMENT"
+run_gate_pair \
     "shared_delegate_prefix_general" \
     "1.50" \
     "$RG_LINE_REGEX_PREFIX 'delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler' $SHARED_DELEGATE_INPUTS" \
     "$SCOUT_LINE_REGEX_PREFIX 'delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler' $SHARED_DELEGATE_INPUTS" \
     "$LINE_REGEX_RUNS" \
-    "$LINE_REGEX_WARMUP"
-run_pair \
+    "$LINE_REGEX_WARMUP" \
+    "$ROOT" \
+    "0" \
+    "$GENERAL_REGEX_ENVIRONMENT"
+run_gate_pair \
     "many_absent_regexp_general" \
     "1.50" \
     "$RG_MANY_ABSENT_REGEXP_COMMAND" \
     "$SCOUT_MANY_ABSENT_REGEXP_COMMAND" \
     "$LINE_REGEX_RUNS" \
-    "$LINE_REGEX_WARMUP"
-run_pair \
+    "$LINE_REGEX_WARMUP" \
+    "$ROOT" \
+    "1" \
+    "$GENERAL_REGEX_ENVIRONMENT"
+run_gate_pair \
     "many_absent_pattern_file_general" \
     "1.50" \
     "$RG_MANY_ABSENT_PATTERN_FILE_COMMAND" \
     "$SCOUT_MANY_ABSENT_PATTERN_FILE_COMMAND" \
     "$LINE_REGEX_RUNS" \
-    "$LINE_REGEX_WARMUP"
-run_pair \
+    "$LINE_REGEX_WARMUP" \
+    "$ROOT" \
+    "1" \
+    "$GENERAL_REGEX_ENVIRONMENT"
+run_gate_pair \
     "subtitles_en_literal" \
     "1.20" \
-    "cd $Q_OPEN_DIRECTORY && $Q_RG --no-config --threads $GATE_LARGE_FILE_THREADS --mmap -n 'Sherlock Holmes' $Q_OPEN_NAME" \
-    "cd $Q_OPEN_DIRECTORY && $Q_SCOUT --no-config --threads $GATE_LARGE_FILE_THREADS --mmap -n 'Sherlock Holmes' $Q_OPEN_NAME" \
+    "$Q_RG --no-config --threads $GATE_LARGE_FILE_THREADS --mmap -n 'Sherlock Holmes' $Q_OPEN_NAME" \
+    "$Q_SCOUT --no-config --threads $GATE_LARGE_FILE_THREADS --mmap -n 'Sherlock Holmes' $Q_OPEN_NAME" \
     "$OPENSUBTITLES_RUNS" \
-    "$OPENSUBTITLES_WARMUP"
-run_pair \
+    "$OPENSUBTITLES_WARMUP" \
+    "$OPEN_DIRECTORY" \
+    "0" \
+    ""
+run_gate_pair \
     "subtitles_en_regex" \
     "1.20" \
-    "cd $Q_OPEN_DIRECTORY && $Q_RG --no-config --threads $GATE_LARGE_FILE_THREADS -n '\\w{5}\\s+\\w{5}\\s+\\w{5}' $Q_OPEN_NAME" \
-    "cd $Q_OPEN_DIRECTORY && $Q_SCOUT --no-config --threads $GATE_LARGE_FILE_THREADS -n '\\w{5}\\s+\\w{5}\\s+\\w{5}' $Q_OPEN_NAME" \
+    "$Q_RG --no-config --threads $GATE_LARGE_FILE_THREADS -n '\\w{5}\\s+\\w{5}\\s+\\w{5}' $Q_OPEN_NAME" \
+    "$Q_SCOUT --no-config --threads $GATE_LARGE_FILE_THREADS -n '\\w{5}\\s+\\w{5}\\s+\\w{5}' $Q_OPEN_NAME" \
     "$OPENSUBTITLES_RUNS" \
-    "$OPENSUBTITLES_WARMUP"
-run_pair \
+    "$OPENSUBTITLES_WARMUP" \
+    "$OPEN_DIRECTORY" \
+    "0" \
+    ""
+run_gate_pair \
     "linux_recursive_literal" \
     "1.25" \
-    "cd $Q_LINUX && $Q_RG --no-config --threads $GATE_TREE_THREADS -n 'PM_RESUME' ." \
-    "cd $Q_LINUX && $Q_SCOUT --no-config --threads $GATE_TREE_THREADS -n 'PM_RESUME' ." \
+    "$Q_RG --no-config --threads $GATE_TREE_THREADS -n 'PM_RESUME' ." \
+    "$Q_SCOUT --no-config --threads $GATE_TREE_THREADS -n 'PM_RESUME' ." \
     "$TREE_RUNS" \
-    "$TREE_WARMUP"
-run_pair \
+    "$TREE_WARMUP" \
+    "$LINUX_TREE" \
+    "0" \
+    ""
+run_gate_pair \
     "linux_heldout_regex_general" \
     "1.50" \
-    "cd $Q_LINUX && $Q_RG --no-config --threads $GATE_TREE_THREADS -n '\\b(?:struct|enum|union)\\s+[A-Za-z_][A-Za-z0-9_]*' ." \
-    "cd $Q_LINUX && env SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config --threads $GATE_TREE_THREADS -n '\\b(?:struct|enum|union)\\s+[A-Za-z_][A-Za-z0-9_]*' ." \
+    "$Q_RG --no-config --threads $GATE_TREE_THREADS -n '\\b(?:struct|enum|union)\\s+[A-Za-z_][A-Za-z0-9_]*' ." \
+    "$Q_SCOUT --no-config --threads $GATE_TREE_THREADS -n '\\b(?:struct|enum|union)\\s+[A-Za-z_][A-Za-z0-9_]*' ." \
     "$TREE_RUNS" \
-    "$TREE_WARMUP"
-run_pair \
+    "$TREE_WARMUP" \
+    "$LINUX_TREE" \
+    "0" \
+    "$GENERAL_REGEX_ENVIRONMENT"
+run_gate_pair \
     "linux_heldout_capture_general" \
     "1.75" \
-    "cd $Q_LINUX && $Q_RG --no-config --threads $GATE_TREE_THREADS -n --replace '\$1 \$2' '\\b(struct|enum|union)\\s+([A-Za-z_][A-Za-z0-9_]*)' ." \
-    "cd $Q_LINUX && env SCOUT_REGEX_SPECIALIZATION_MODE=general $Q_SCOUT --no-config --threads $GATE_TREE_THREADS -n --replace '\$1 \$2' '\\b(struct|enum|union)\\s+([A-Za-z_][A-Za-z0-9_]*)' ." \
+    "$Q_RG --no-config --threads $GATE_TREE_THREADS -n --replace '\$1 \$2' '\\b(struct|enum|union)\\s+([A-Za-z_][A-Za-z0-9_]*)' ." \
+    "$Q_SCOUT --no-config --threads $GATE_TREE_THREADS -n --replace '\$1 \$2' '\\b(struct|enum|union)\\s+([A-Za-z_][A-Za-z0-9_]*)' ." \
     "$TREE_RUNS" \
-    "$TREE_WARMUP"
-run_pair \
+    "$TREE_WARMUP" \
+    "$LINUX_TREE" \
+    "0" \
+    "$GENERAL_REGEX_ENVIRONMENT"
+run_gate_pair \
     "linux_many_small_parallel" \
     "1.30" \
-    "cd $Q_LINUX && $Q_RG --no-config --threads $GATE_TREE_THREADS -n 'struct' ." \
-    "cd $Q_LINUX && $Q_SCOUT --no-config --threads $GATE_TREE_THREADS -n 'struct' ." \
+    "$Q_RG --no-config --threads $GATE_TREE_THREADS -n 'struct' ." \
+    "$Q_SCOUT --no-config --threads $GATE_TREE_THREADS -n 'struct' ." \
     "$TREE_RUNS" \
-    "$TREE_WARMUP"
-run_pair_no_shell \
+    "$TREE_WARMUP" \
+    "$LINUX_TREE" \
+    "0" \
+    ""
+run_gate_pair \
     "cold_version" \
     "1.00" \
     "$Q_RG --no-config --version" \
     "$Q_SCOUT --no-config --version" \
     "$COLD_RUNS" \
-    "$COLD_WARMUP"
-run_pair_no_shell \
+    "$COLD_WARMUP" \
+    "$ROOT" \
+    "0" \
+    "" \
+    "independent"
+run_gate_pair \
     "cold_tiny_search" \
     "1.00" \
     "$Q_RG --no-config 'needle' $Q_TINY" \
     "$Q_SCOUT --no-config 'needle' $Q_TINY" \
     "$COLD_RUNS" \
-    "$COLD_WARMUP"
+    "$COLD_WARMUP" \
+    "$ROOT" \
+    "0" \
+    ""
+
+printf '\n== release gate summary ==\n'
+if [ "$FAILED_GATE_COUNT" -ne 0 ]; then
+    printf 'Result: FAIL (%s workload performance limit%s exceeded)\n' \
+        "$FAILED_GATE_COUNT" \
+        "$(if [ "$FAILED_GATE_COUNT" -eq 1 ]; then printf ''; else printf 's'; fi)"
+    for failed_gate_workload in $FAILED_GATE_WORKLOADS; do
+        printf '  %s\n' "$failed_gate_workload"
+    done
+    exit 1
+fi
+printf 'Result: PASS (all selected workload performance limits were met)\n'

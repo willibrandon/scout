@@ -16,16 +16,32 @@ INCLUDE="$OUT/include"
 
 case "$RID" in
     osx-arm64)
-        CC="${CC:-clang}"
-        TARGET_CFLAGS="-arch arm64 -mmacosx-version-min=14.0"
+        : "${CC:?The macOS PCRE2 build requires the selected compiler.}"
+        : "${AR:?The macOS PCRE2 build requires the selected archiver.}"
+        : "${RANLIB:?The macOS PCRE2 build requires the selected archive indexer.}"
+        : "${SDKROOT:?The macOS PCRE2 build requires the selected SDK.}"
+        : "${MACOSX_DEPLOYMENT_TARGET:?The macOS PCRE2 build requires a deployment target.}"
+        set -- \
+            -arch arm64 \
+            -isysroot "$SDKROOT" \
+            "-mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
         ;;
     osx-x64)
-        CC="${CC:-clang}"
-        TARGET_CFLAGS="-arch x86_64 -mmacosx-version-min=14.0"
+        : "${CC:?The macOS PCRE2 build requires the selected compiler.}"
+        : "${AR:?The macOS PCRE2 build requires the selected archiver.}"
+        : "${RANLIB:?The macOS PCRE2 build requires the selected archive indexer.}"
+        : "${SDKROOT:?The macOS PCRE2 build requires the selected SDK.}"
+        : "${MACOSX_DEPLOYMENT_TARGET:?The macOS PCRE2 build requires a deployment target.}"
+        set -- \
+            -arch x86_64 \
+            -isysroot "$SDKROOT" \
+            "-mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
         ;;
     linux-x64|linux-arm64)
         CC="${CC:-cc}"
-        TARGET_CFLAGS=""
+        AR="${AR:-ar}"
+        RANLIB="${RANLIB:-ranlib}"
+        set --
         ;;
     *)
         printf 'RID %s is not supported by this PCRE2 build script.\n' "$RID" >&2
@@ -44,7 +60,7 @@ for source in "$SRC"/src/*.c; do
             ;;
     esac
 
-    "$CC" $TARGET_CFLAGS \
+    "$CC" "$@" \
         -O2 \
         -fPIC \
         -DPCRE2_CODE_UNIT_WIDTH=8 \
@@ -64,8 +80,8 @@ for source in "$SRC"/src/*.c; do
         -o "$OBJ/${name%.c}.o"
 done
 
-ZERO_AR_DATE=1 ar crs "$LIB/libpcre2-8.a" "$OBJ"/*.o
-ranlib "$LIB/libpcre2-8.a"
+ZERO_AR_DATE=1 "$AR" crs "$LIB/libpcre2-8.a" "$OBJ"/*.o
+"$RANLIB" "$LIB/libpcre2-8.a"
 cp "$SRC/include/pcre2.h" "$INCLUDE/pcre2.h"
 
 printf 'built %s\n' "$LIB/libpcre2-8.a"

@@ -5,6 +5,7 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 LOCK="$ROOT/tests/PREREQS.lock"
 REFERENCE="${SCOUT_RIPGREP_REFERENCE:-/Users/brandon/src/ripgrep}"
 . "$ROOT/eng/sha256-set.sh"
+. "$ROOT/native/toolchain-unix.sh"
 
 fail() {
     printf '%s\n' "$1" >&2
@@ -379,9 +380,9 @@ check_file_hash() {
 }
 
 mark_root_safe_for_git() {
-    if command -v git >/dev/null 2>&1; then
-        git config --global --add safe.directory "$ROOT" 2>/dev/null || true
-    fi
+    export GIT_CONFIG_COUNT="1"
+    export GIT_CONFIG_KEY_0="safe.directory"
+    export GIT_CONFIG_VALUE_0="$ROOT"
 }
 
 check_macos_tool_hash() {
@@ -414,6 +415,9 @@ check_macos_tool_hash() {
 check_pinned_path_corpora() {
     awk "$strip_toml_value"'
         function flush() {
+            if (in_corpus && archive_path != "" && archive_sha256 != "") {
+                print name " archive|" archive_path "|" archive_sha256
+            }
             if (in_corpus && path != "" && sha256 != "") {
                 print name "|" path "|" sha256
             }
@@ -422,6 +426,8 @@ check_pinned_path_corpora() {
             flush()
             in_corpus = 1
             name = ""
+            archive_path = ""
+            archive_sha256 = ""
             path = ""
             sha256 = ""
             next
@@ -433,6 +439,14 @@ check_pinned_path_corpora() {
         }
         in_corpus && $0 ~ /^[[:space:]]*name[[:space:]]*=/ {
             name = value_of($0)
+            next
+        }
+        in_corpus && $0 ~ /^[[:space:]]*archive_path[[:space:]]*=/ {
+            archive_path = value_of($0)
+            next
+        }
+        in_corpus && $0 ~ /^[[:space:]]*archive_sha256[[:space:]]*=/ {
+            archive_sha256 = value_of($0)
             next
         }
         in_corpus && $0 ~ /^[[:space:]]*path[[:space:]]*=/ {
@@ -457,6 +471,13 @@ EXPECTED_SDK="$(read_lock_value "dotnet_sdk")" || fail "Missing dotnet_sdk in te
 require_literal "$EXPECTED_SDK" "dotnet_sdk"
 ACTUAL_SDK="$(dotnet --version)"
 expect_equal ".NET SDK" "$EXPECTED_SDK" "$ACTUAL_SDK"
+EXPECTED_DOTNET_HOST_RUNTIME="$(read_lock_value "dotnet_host_runtime")" || fail "Missing dotnet_host_runtime in tests/PREREQS.lock."
+require_literal "$EXPECTED_DOTNET_HOST_RUNTIME" "dotnet_host_runtime"
+ACTUAL_DOTNET_HOST_RUNTIME="$(dotnet --info | awk '
+    $1 == "Host:" { in_host = 1; next }
+    in_host && $1 == "Version:" { print $2; exit }
+')"
+expect_equal ".NET host runtime" "$EXPECTED_DOTNET_HOST_RUNTIME" "$ACTUAL_DOTNET_HOST_RUNTIME"
 
 mark_root_safe_for_git
 "$ROOT/eng/check-msbuild-warning-gates.sh" "$ROOT/artifacts/preflight/msbuild-warning-gates"
@@ -521,6 +542,47 @@ ACTUAL_PCRE2_VERSION="$( ( "$RG_PCRE2_PATH" --pcre2-version || true ) | sed -n '
 expect_equal "PCRE2 reference rg PCRE2 version" "$EXPECTED_PCRE2_VERSION" "$ACTUAL_PCRE2_VERSION"
 
 if [ "$(uname -s)" = "Darwin" ]; then
+    EXPECTED_MACOS_HOST="$(read_lock_value "macos_host")" || fail "Missing macos_host in tests/PREREQS.lock."
+    EXPECTED_MACOS_MAJOR="$(printf '%s\n' "$EXPECTED_MACOS_HOST" | sed -n 's/^macOS \([0-9][0-9]*\) arm64$/\1/p')"
+    [ -n "$EXPECTED_MACOS_MAJOR" ] || fail "macos_host must use the supported-family form: macOS MAJOR arm64."
+    ACTUAL_MACOS_VERSION="$(/usr/bin/sw_vers -productVersion)"
+    ACTUAL_MACOS_MAJOR="${ACTUAL_MACOS_VERSION%%.*}"
+    expect_equal "macOS major version" "$EXPECTED_MACOS_MAJOR" "$ACTUAL_MACOS_MAJOR"
+    case "$HOST_RID:$(uname -m)" in
+        osx-arm64:arm64|osx-x64:x86_64)
+            ;;
+        *)
+            fail "Host architecture does not match $HOST_RID: $(uname -m)"
+            ;;
+    esac
+
+    EXPECTED_XCODE_VERSION="$(read_lock_value "xcode_version")" || fail "Missing xcode_version in tests/PREREQS.lock."
+    EXPECTED_XCODE_BUILD="$(read_lock_value "xcode_build")" || fail "Missing xcode_build in tests/PREREQS.lock."
+    EXPECTED_MACOS_SDK="$(read_lock_value "macos_sdk")" || fail "Missing macos_sdk in tests/PREREQS.lock."
+    EXPECTED_MACOS_DEPLOYMENT_TARGET="$(read_lock_value "macos_deployment_target")" || fail "Missing macos_deployment_target in tests/PREREQS.lock."
+    EXPECTED_APPLE_CLANG="$(read_lock_value "apple_clang")" || fail "Missing apple_clang in tests/PREREQS.lock."
+    EXPECTED_APPLE_LD="$(read_lock_value "apple_ld")" || fail "Missing apple_ld in tests/PREREQS.lock."
+
+    configure_native_toolchain "$ROOT" "$HOST_RID"
+    XCODE_IDENTITY="$(native_xcode_identity "$NATIVE_DEVELOPER_DIR")"
+    ACTUAL_XCODE_VERSION="$(printf '%s\n' "$XCODE_IDENTITY" | sed -n 's/^Xcode //p')"
+    ACTUAL_XCODE_BUILD="$(printf '%s\n' "$XCODE_IDENTITY" | sed -n 's/^Build version //p')"
+    ACTUAL_MACOS_SDK="$(DEVELOPER_DIR="$NATIVE_DEVELOPER_DIR" /usr/bin/xcrun --sdk macosx --show-sdk-version)"
+    ACTUAL_APPLE_CLANG="$(native_compiler_version "$NATIVE_CC" | sed -n 's/^Apple clang version //p')"
+    ACTUAL_APPLE_LD="$(native_linker_version "$NATIVE_LD")"
+    expect_equal "Xcode" "$EXPECTED_XCODE_VERSION" "$ACTUAL_XCODE_VERSION"
+    expect_equal "Xcode build" "$EXPECTED_XCODE_BUILD" "$ACTUAL_XCODE_BUILD"
+    expect_equal "macOS SDK" "$EXPECTED_MACOS_SDK" "$ACTUAL_MACOS_SDK"
+    expect_equal "macOS deployment target" "$EXPECTED_MACOS_DEPLOYMENT_TARGET" "$NATIVE_MACOS_DEPLOYMENT_TARGET"
+    expect_equal "Apple Clang" "$EXPECTED_APPLE_CLANG" "$ACTUAL_APPLE_CLANG"
+    expect_equal "Apple ld" "$EXPECTED_APPLE_LD" "$ACTUAL_APPLE_LD"
+    check_file_hash "Apple clang" "$NATIVE_CC" "$(read_lock_value "apple_clang_sha256")"
+    check_file_hash "Apple ld" "$NATIVE_LD" "$(read_lock_value "apple_ld_sha256")"
+    check_file_hash "Apple ar" "$NATIVE_AR" "$(read_lock_value "apple_ar_sha256")"
+    check_file_hash "Apple ranlib" "$NATIVE_RANLIB" "$(read_lock_value "apple_ranlib_sha256")"
+    check_file_hash "Apple strip" "$NATIVE_STRIP" "$(read_lock_value "apple_strip_sha256")"
+    check_file_hash "Apple nm" "$NATIVE_NM" "$(read_lock_value "apple_nm_sha256")"
+
     MACOS_TOOL_FAILURES=0
     check_macos_tool_hash "gzip"
     check_macos_tool_hash "bzip2"
@@ -530,12 +592,22 @@ if [ "$(uname -s)" = "Darwin" ]; then
     check_macos_tool_hash "brotli"
     check_macos_tool_hash "uncompress"
 
-    HYPERFINE_PATH="$(read_lock_macos_tool_value "hyperfine" "path")" || fail "Missing macOS hyperfine path in tests/PREREQS.lock."
-    HYPERFINE_VERSION="$(read_lock_macos_tool_value "hyperfine" "version")" || fail "Missing macOS hyperfine version in tests/PREREQS.lock."
-    HYPERFINE_SHA256="$(read_lock_macos_tool_value "hyperfine" "sha256")" || fail "Missing macOS hyperfine hash in tests/PREREQS.lock."
-    check_file_hash "macOS tool hyperfine" "$HYPERFINE_PATH" "$HYPERFINE_SHA256"
-    ACTUAL_HYPERFINE_VERSION="$("$HYPERFINE_PATH" --version | sed -n '1p')"
-    expect_equal "hyperfine version" "hyperfine $HYPERFINE_VERSION" "$ACTUAL_HYPERFINE_VERSION"
+    if [ -n "${SCOUT_HYPERFINE_BIN:-}" ]; then
+        case "$SCOUT_HYPERFINE_BIN" in
+            /*)
+                HYPERFINE_PATH="$SCOUT_HYPERFINE_BIN"
+                ;;
+            *)
+                fail "SCOUT_HYPERFINE_BIN must be an absolute path."
+                ;;
+        esac
+        HYPERFINE_VERSION="$(read_lock_macos_tool_value "hyperfine" "version")" || fail "Missing macOS hyperfine version in tests/PREREQS.lock."
+        HYPERFINE_SHA256="$(read_lock_macos_tool_value "hyperfine" "sha256")" || fail "Missing macOS hyperfine hash in tests/PREREQS.lock."
+        check_file_hash "macOS tool hyperfine" "$HYPERFINE_PATH" "$HYPERFINE_SHA256"
+        [ -x "$HYPERFINE_PATH" ] || fail "macOS tool hyperfine is not executable: $HYPERFINE_PATH"
+        ACTUAL_HYPERFINE_VERSION="$("$HYPERFINE_PATH" --version | sed -n '1p')"
+        expect_equal "hyperfine version" "hyperfine $HYPERFINE_VERSION" "$ACTUAL_HYPERFINE_VERSION"
+    fi
 
     if [ "$MACOS_TOOL_FAILURES" -ne 0 ]; then
         fail "One or more macOS tool hashes do not match tests/PREREQS.lock."
