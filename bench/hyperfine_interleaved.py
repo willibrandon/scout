@@ -25,6 +25,8 @@ _ROUND_ROLES = (
     ("rg", "scout", "scout", "rg"),
     ("scout", "rg", "rg", "scout"),
 )
+_HYPERFINE_IGNORED_EXIT_WARNING = "  Warning: Ignoring non-zero exit code."
+_HYPERFINE_WARNING_SEPARATOR = " "
 _MAX_TIMER_RESOLUTION_REPLACEMENTS = 8
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
@@ -258,6 +260,23 @@ def _timer_resolution_error(
     return None
 
 
+def _validate_round_exit_codes(
+    document: Mapping[str, Any],
+    workload: str,
+    round_number: int,
+    expected_exit_code: int,
+) -> None:
+    for position, (_, result) in enumerate(
+        _validated_round_results(document, workload, round_number), start=1
+    ):
+        _single_exit_code(
+            result,
+            round_number,
+            position,
+            expected_exit_code,
+        )
+
+
 def _single_number(
     result: Mapping[str, Any],
     key: str,
@@ -403,12 +422,50 @@ def _run_balanced_round(
             )
         )
 
-    subprocess.run(
-        arguments,
-        check=True,
-        cwd=working_directory,
-        env=environment,
-    )
+    try:
+        completed = subprocess.run(
+            arguments,
+            check=True,
+            cwd=working_directory,
+            env=environment,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+        )
+    except subprocess.CalledProcessError as error:
+        _write_hyperfine_stderr(error.stderr, expected_exit_code)
+        raise
+
+    _write_hyperfine_stderr(completed.stderr, expected_exit_code)
+
+
+def _write_hyperfine_stderr(stderr: str | None, expected_exit_code: int) -> None:
+    if not stderr:
+        return
+
+    if expected_exit_code == 0:
+        sys.stderr.write(stderr)
+        sys.stderr.flush()
+        return
+
+    filtered_lines: list[str] = []
+    for line in stderr.splitlines(keepends=True):
+        line_without_ending = line.removesuffix("\n").removesuffix("\r")
+        if line_without_ending == _HYPERFINE_IGNORED_EXIT_WARNING:
+            if filtered_lines:
+                preceding_line = (
+                    filtered_lines[-1].removesuffix("\n").removesuffix("\r")
+                )
+                if preceding_line == _HYPERFINE_WARNING_SEPARATOR:
+                    filtered_lines.pop()
+            continue
+
+        filtered_lines.append(line)
+
+    filtered = "".join(filtered_lines)
+    if filtered:
+        sys.stderr.write(filtered)
+        sys.stderr.flush()
 
 
 def _read_document(path: Path) -> Mapping[str, Any]:
@@ -481,6 +538,8 @@ def run_interleaved(args: argparse.Namespace) -> None:
     sample_directory.mkdir(parents=True, exist_ok=True)
     for stale_round in sample_directory.glob("round-*.json"):
         stale_round.unlink()
+    for stale_round in sample_directory.glob("warmup-round-*.json"):
+        stale_round.unlink()
 
     print(
         f"Sampling target: {args.warmup_rounds} warm-up + "
@@ -489,17 +548,32 @@ def run_interleaved(args: argparse.Namespace) -> None:
         flush=True,
     )
     for warmup_round in range(1, args.warmup_rounds + 1):
+        warmup_workload = f"{args.name}:warmup"
+        warmup_path = sample_directory / f"warmup-round-{warmup_round}.json"
         _run_balanced_round(
             args.hyperfine,
-            f"{args.name}:warmup",
+            warmup_workload,
             warmup_round,
             args.rg_command,
             args.scout_command,
             args.expected_exit_code,
             working_directory,
-            output=None,
+            output=warmup_path,
             environment=environment,
         )
+        warmup_document = _read_document(warmup_path)
+        try:
+            _validate_round_exit_codes(
+                warmup_document,
+                warmup_workload,
+                warmup_round,
+                args.expected_exit_code,
+            )
+        except ValueError as error:
+            raise ValueError(
+                f"{error}; invalid warmup sample retained at {warmup_path}"
+            ) from error
+        warmup_path.unlink()
 
     raw_paths = []
     discarded_paths = []

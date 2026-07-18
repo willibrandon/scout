@@ -7,9 +7,13 @@ namespace Scout;
 /// </summary>
 internal static class SearchWalkPlanning
 {
+    /// <summary>
+    /// Gets the maximum number of ordered workers used to search segments of one large file.
+    /// </summary>
+    internal const int MaximumLargeFileSegmentWorkerCount = 3;
+
     private const int MacOsDefaultSearchWalkThreadCount = 3;
     private const int MacOsDefaultReplacementSearchWalkThreadCount = 6;
-    private const int MacOsDefaultLargeFileSearchThreadCount = 4;
     private static readonly UTF8Encoding s_utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
     internal static int RunTypeList(CliLowArgs lowArgs, RawByteWriter output, DiagnosticMessenger diagnostics)
@@ -151,12 +155,17 @@ internal static class SearchWalkPlanning
             return GetMacOsDefaultLargeFileSearchThreadCount(threadCount);
         }
 
-        return threadCount;
+        return Math.Min(threadCount, MaximumLargeFileSegmentWorkerCount);
     }
 
+    /// <summary>
+    /// Bounds the default macOS large-file worker count to the ordered segment limit.
+    /// </summary>
+    /// <param name="threadCount">The platform-neutral search-wide thread count.</param>
+    /// <returns>The number of ordered segment workers to use.</returns>
     internal static int GetMacOsDefaultLargeFileSearchThreadCount(int threadCount)
     {
-        return Math.Min(threadCount, MacOsDefaultLargeFileSearchThreadCount);
+        return Math.Min(threadCount, MaximumLargeFileSegmentWorkerCount);
     }
 
     internal static int GetMacOsDefaultSearchWalkThreadCount(

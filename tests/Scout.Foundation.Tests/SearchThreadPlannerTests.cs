@@ -125,15 +125,15 @@ public sealed class SearchThreadPlannerTests
     }
 
     /// <summary>
-    /// Verifies default macOS large-file search fan-out keeps enough workers for segmented regex throughput.
+    /// Verifies default macOS large-file search fan-out respects the ordered segment-worker bound.
     /// </summary>
     [Theory]
     [InlineData(1, 1)]
     [InlineData(2, 2)]
     [InlineData(3, 3)]
-    [InlineData(4, 4)]
-    [InlineData(5, 4)]
-    [InlineData(12, 4)]
+    [InlineData(4, 3)]
+    [InlineData(5, 3)]
+    [InlineData(12, 3)]
     public void SearchWalkPlanningCapsMacOsDefaultLargeFileSearchThreads(int upstreamDefault, int expectedThreads)
     {
         int threads = SearchWalkPlanning.GetMacOsDefaultLargeFileSearchThreadCount(upstreamDefault);
@@ -164,7 +164,9 @@ public sealed class SearchThreadPlannerTests
     {
         var lowArgs = new CliLowArgs();
         int upstreamDefault = Math.Min(Environment.ProcessorCount, 12);
-        int expected = OperatingSystem.IsMacOS() ? SearchWalkPlanning.GetMacOsDefaultLargeFileSearchThreadCount(upstreamDefault) : upstreamDefault;
+        int expected = Math.Min(
+            upstreamDefault,
+            SearchWalkPlanning.MaximumLargeFileSegmentWorkerCount);
 
         int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(
             lowArgs,
@@ -174,19 +176,28 @@ public sealed class SearchThreadPlannerTests
     }
 
     /// <summary>
-    /// Verifies serial large-file searches honor an explicit segment-worker count.
+    /// Verifies serial large-file searches bound an explicit segment-worker count.
     /// </summary>
-    [Fact]
-    public void SearchWalkPlanningHonorsExplicitSerialLargeFileSearchThreads()
+    /// <param name="requestedThreads">The requested search-wide thread count.</param>
+    /// <param name="expectedThreads">The expected ordered segment-worker count.</param>
+    [Theory]
+    [InlineData(1UL, 1)]
+    [InlineData(2UL, 2)]
+    [InlineData(3UL, 3)]
+    [InlineData(4UL, 3)]
+    [InlineData(12UL, 3)]
+    public void SearchWalkPlanningBoundsExplicitSerialLargeFileSearchThreads(
+        ulong requestedThreads,
+        int expectedThreads)
     {
         var lowArgs = new CliLowArgs();
-        lowArgs.SetThreads(12);
+        lowArgs.SetThreads(requestedThreads);
 
         int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(
             lowArgs,
             allowSegmentParallelism: true);
 
-        Assert.Equal(12, threads);
+        Assert.Equal(expectedThreads, threads);
     }
 
     /// <summary>

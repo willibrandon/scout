@@ -13,7 +13,7 @@ internal static unsafe class LargeFileSearchOperations
     private const int StreamingFileStreamBufferLength = 1;
     private const int ImplicitSearchStreamingFileBufferLength = 64 * 1024;
     private const int ExplicitRegexStreamingFileBufferLength = StreamingFileBufferLength;
-    private const int ExplicitFastLiteralStreamingFileBufferLength = 6 * 1024 * 1024;
+    private const int ExplicitFastLiteralStreamingFileBufferLength = 4 * 1024 * 1024;
     private const int ExplicitParallelLiteralStreamingFileBufferLength = 256 * 1024;
     private const int FastLiteralLineIndexBlockLength = 32 * 1024;
     private const long ImplicitSearchStreamingFileThreshold = 65_536;
@@ -2138,7 +2138,10 @@ internal static unsafe class LargeFileSearchOperations
 
         bool SearchSegmentsInParallel()
         {
-            int parallelism = Math.Clamp(threadCount, 1, 4);
+            int parallelism = Math.Clamp(
+                threadCount,
+                1,
+                SearchWalkPlanning.MaximumLargeFileSegmentWorkerCount);
             using var workItems = new BlockingCollection<(long Sequence, nint SegmentAddress, int SegmentLength, long SegmentStartOffset, long SegmentLineNumber)>(parallelism);
             using var completedItems = new BlockingCollection<(long Sequence, LargeFileSegmentSearchResult Result, Exception? Error)>(parallelism);
             var completedBySequence = new Dictionary<long, LargeFileSegmentSearchResult>();

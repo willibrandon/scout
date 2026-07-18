@@ -8,6 +8,7 @@ import json
 import math
 import os
 import statistics
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -68,7 +69,8 @@ class HyperfineInterleavedTests(unittest.TestCase):
             "GITHUB_ACTIONS": "true",
         }
         with patch.dict(os.environ, injected), patch(
-            "hyperfine_interleaved.subprocess.run"
+            "hyperfine_interleaved.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 0, stderr=""),
         ) as run:
             _run_balanced_round(
                 "hyperfine",
@@ -111,13 +113,19 @@ class HyperfineInterleavedTests(unittest.TestCase):
             check=True,
             cwd=Path(__file__).resolve().parents[2],
             env=environment,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
         )
         self.assertTrue(set(injected).isdisjoint(run.call_args.kwargs["env"]))
 
-    def test_nonzero_exit_contract_is_enforced_during_warmup_and_measurement(
+    def test_nonzero_exit_contract_configures_exact_hyperfine_allowlist(
         self,
     ) -> None:
-        with patch("hyperfine_interleaved.subprocess.run") as run:
+        with patch(
+            "hyperfine_interleaved.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 0, stderr=""),
+        ) as run:
             _run_balanced_round(
                 "hyperfine",
                 "no-match",
@@ -133,6 +141,68 @@ class HyperfineInterleavedTests(unittest.TestCase):
         arguments = run.call_args.args[0]
         self.assertIn("--ignore-failure=1", arguments)
         self.assertNotIn("--ignore-failure", arguments)
+
+    def test_expected_nonzero_warning_is_hidden_without_hiding_diagnostics(
+        self,
+    ) -> None:
+        hyperfine_stderr = (
+            " \n"
+            "  Warning: Ignoring non-zero exit code.\n"
+            "retained Hyperfine diagnostic\n"
+            " \n"
+            "  Warning: Ignoring non-zero exit code.\n"
+        )
+        standard_error = io.StringIO()
+        with redirect_stderr(standard_error), patch(
+            "hyperfine_interleaved.subprocess.run",
+            return_value=subprocess.CompletedProcess(
+                [], 0, stderr=hyperfine_stderr
+            ),
+        ):
+            _run_balanced_round(
+                "hyperfine",
+                "no-match",
+                1,
+                "rg command",
+                "scout command",
+                expected_exit_code=1,
+                working_directory=Path(__file__).resolve().parents[2],
+                output=None,
+                environment={"LC_ALL": "C"},
+            )
+
+        self.assertEqual(
+            "retained Hyperfine diagnostic\n", standard_error.getvalue()
+        )
+
+    def test_unexpected_hyperfine_failure_preserves_diagnostics(self) -> None:
+        standard_error = io.StringIO()
+        with redirect_stderr(standard_error), patch(
+            "hyperfine_interleaved.subprocess.run",
+            side_effect=subprocess.CalledProcessError(
+                1,
+                ["hyperfine"],
+                stderr=(
+                    " \n"
+                    "  Warning: Ignoring non-zero exit code.\n"
+                    "unexpected exit code 2\n"
+                ),
+            ),
+        ):
+            with self.assertRaises(subprocess.CalledProcessError):
+                _run_balanced_round(
+                    "hyperfine",
+                    "no-match",
+                    1,
+                    "rg command",
+                    "scout command",
+                    expected_exit_code=1,
+                    working_directory=Path(__file__).resolve().parents[2],
+                    output=None,
+                    environment={"LC_ALL": "C"},
+                )
+
+        self.assertEqual("unexpected exit code 2\n", standard_error.getvalue())
 
     def test_run_creates_one_environment_for_every_hyperfine_process(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -235,8 +305,10 @@ class HyperfineInterleavedTests(unittest.TestCase):
             sample_directory = Path(temporary_directory) / "result.samples"
             sample_directory.mkdir()
             stale_round = sample_directory / "round-99.json"
+            stale_warmup = sample_directory / "warmup-round-99.json"
             unrelated = sample_directory / "notes.txt"
             stale_round.write_text("stale", encoding="utf-8")
+            stale_warmup.write_text("stale", encoding="utf-8")
             unrelated.write_text("keep", encoding="utf-8")
             arguments = self._run_arguments(output)
 
@@ -248,7 +320,87 @@ class HyperfineInterleavedTests(unittest.TestCase):
                     run_interleaved(arguments)
 
             self.assertFalse(stale_round.exists())
+            self.assertFalse(stale_warmup.exists())
             self.assertTrue(unrelated.exists())
+
+    def test_run_rejects_unexpected_zero_exit_during_nonzero_warmup(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output = Path(temporary_directory) / "result.json"
+            arguments = self._run_arguments(
+                output, warmup_rounds=2, expected_exit_code=1
+            )
+
+            def write_warmup_document(
+                _hyperfine: str,
+                workload: str,
+                round_number: int,
+                _rg_command: str,
+                _scout_command: str,
+                _expected_exit_code: int,
+                _working_directory: Path,
+                output: Path | None,
+                environment: object,
+            ) -> None:
+                if output is None:
+                    raise AssertionError("warmup validation requires an output path")
+                output.write_text(
+                    json.dumps(self._round_document(workload, round_number)),
+                    encoding="utf-8",
+                )
+
+            with redirect_stdout(io.StringIO()), patch(
+                "hyperfine_interleaved._run_balanced_round",
+                side_effect=write_warmup_document,
+            ) as run_round:
+                with self.assertRaisesRegex(ValueError, "expected exit 1, got 0"):
+                    run_interleaved(arguments)
+
+            self.assertEqual(1, run_round.call_count)
+            self.assertTrue(
+                (output.with_name("result.samples") / "warmup-round-1.json").exists()
+            )
+            self.assertFalse(
+                (output.with_name("result.samples") / "warmup-round-2.json").exists()
+            )
+            self.assertFalse(output.exists())
+
+    def test_run_accepts_expected_nonzero_exit_during_warmup(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output = Path(temporary_directory) / "result.json"
+            arguments = self._run_arguments(
+                output, warmup_rounds=2, expected_exit_code=1
+            )
+
+            def write_round_document(
+                _hyperfine: str,
+                workload: str,
+                round_number: int,
+                _rg_command: str,
+                _scout_command: str,
+                _expected_exit_code: int,
+                _working_directory: Path,
+                output: Path | None,
+                environment: object,
+            ) -> None:
+                if output is None:
+                    raise AssertionError("exit validation requires an output path")
+                document = self._round_document(workload, round_number)
+                for result in document["results"]:
+                    result["exit_codes"] = [1]
+                output.write_text(json.dumps(document), encoding="utf-8")
+
+            with redirect_stdout(io.StringIO()), patch(
+                "hyperfine_interleaved._run_balanced_round",
+                side_effect=write_round_document,
+            ) as run_round:
+                run_interleaved(arguments)
+
+            aggregate = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(4, run_round.call_count)
+            self.assertEqual([1, 1, 1, 1], aggregate["results"][0]["exit_codes"])
+            self.assertFalse(
+                (output.with_name("result.samples") / "warmup-round-1.json").exists()
+            )
 
     def test_run_prints_one_compact_summary_without_per_round_chatter(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -311,6 +463,13 @@ class HyperfineInterleavedTests(unittest.TestCase):
             ) -> None:
                 nonlocal measured_attempts
                 if output is None:
+                    return
+
+                if workload.endswith(":warmup"):
+                    output.write_text(
+                        json.dumps(self._round_document(workload, round_number)),
+                        encoding="utf-8",
+                    )
                     return
 
                 measured_attempts += 1
@@ -555,7 +714,7 @@ class HyperfineInterleavedTests(unittest.TestCase):
 
     @staticmethod
     def _run_arguments(
-        output: Path, *, warmup_rounds: int = 0
+        output: Path, *, warmup_rounds: int = 0, expected_exit_code: int = 0
     ) -> argparse.Namespace:
         input_manifest = output.with_name("performance-inputs.json")
         input_manifest.write_text(
@@ -575,7 +734,7 @@ class HyperfineInterleavedTests(unittest.TestCase):
             name="workload",
             rg_command="rg command",
             scout_command="scout command",
-            expected_exit_code=0,
+            expected_exit_code=expected_exit_code,
             working_directory=Path(__file__).resolve().parents[2],
             performance_input_manifest=input_manifest,
             reproducibility_manifest=reproducibility_manifest,
