@@ -11,8 +11,8 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-GIT_INDEX_FILE="$temporary_index" git read-tree --empty
-GIT_INDEX_FILE="$temporary_index" git -c core.safecrlf=false add -A -- \
+GIT_INDEX_FILE="$temporary_index" git -c safe.directory="$ROOT" -C "$ROOT" read-tree --empty
+GIT_INDEX_FILE="$temporary_index" git -c safe.directory="$ROOT" -c core.safecrlf=false -C "$ROOT" add -A -- \
     Directory.Build.props \
     Directory.Build.rsp \
     Directory.Build.targets \
@@ -22,4 +22,4 @@ GIT_INDEX_FILE="$temporary_index" git -c core.safecrlf=false add -A -- \
     native \
     src \
     tests/PREREQS.lock
-GIT_INDEX_FILE="$temporary_index" git write-tree
+GIT_INDEX_FILE="$temporary_index" git -c safe.directory="$ROOT" -C "$ROOT" write-tree

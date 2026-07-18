@@ -445,7 +445,7 @@ print_repro_manifest() {
     manifest_scout_provenance_sha256="$(sha256_file "$SCOUT_BUILD_PROVENANCE")"
     manifest_script_sha256="$(sha256_file "$ROOT/bench/run-hyperfine.sh")"
     manifest_harness_fingerprint="$(sh "$ROOT/eng/performance-harness-fingerprint.sh")"
-    manifest_harness_commit="$(git -C "$ROOT" rev-parse HEAD)"
+    manifest_harness_commit="$(git -c safe.directory="$ROOT" -C "$ROOT" rev-parse HEAD)"
     manifest_harness_dirty="$(performance_inputs_dirty)"
     manifest_hyperfine_version="$("$HYPERFINE" --version | sed -n '1p')"
     manifest_hyperfine_sha256="$(sha256_file "$HYPERFINE")"
@@ -493,7 +493,7 @@ print_repro_manifest() {
 }
 
 performance_inputs_dirty() {
-    if [ -n "$(git -C "$ROOT" status --porcelain=v1 --untracked-files=normal -- \
+    if [ -n "$(git -c safe.directory="$ROOT" -C "$ROOT" status --porcelain=v1 --untracked-files=normal -- \
         .github/workflows/release-gates.yml \
         bench \
         Directory.Build.props \

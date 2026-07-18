@@ -185,10 +185,10 @@ else
     "$CC" -O2 -DSCOUT_LAUNCHER "${SCOUT_IDENTITY_CFLAGS[@]}" "$ROOT/native/entry/scout_main.c" "$PCRE2_LIB" -o "$BIN/scout"
 fi
 
-SOURCE_COMMIT="$(git rev-parse HEAD)"
+SOURCE_COMMIT="$(git -c safe.directory="$ROOT" -C "$ROOT" rev-parse HEAD)"
 SOURCE_FINGERPRINT="$(sh "$ROOT/eng/source-fingerprint.sh")"
 SOURCE_DIRTY="0"
-if [ -n "$(git status --porcelain=v1 --untracked-files=normal -- \
+if [ -n "$(git -c safe.directory="$ROOT" -C "$ROOT" status --porcelain=v1 --untracked-files=normal -- \
     Directory.Build.props \
     Directory.Build.rsp \
     Directory.Build.targets \

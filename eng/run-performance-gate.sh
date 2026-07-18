@@ -32,7 +32,7 @@ else
     export SCOUT_TOOL_ENVIRONMENT="local"
 fi
 
-performance_inputs="$(git status --porcelain=v1 --untracked-files=normal -- \
+performance_inputs="$(git -c safe.directory="$ROOT" -C "$ROOT" status --porcelain=v1 --untracked-files=normal -- \
     .github/workflows/release-gates.yml \
     bench \
     Directory.Build.props \

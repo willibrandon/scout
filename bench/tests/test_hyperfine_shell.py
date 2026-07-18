@@ -11,6 +11,7 @@ from pathlib import Path
 
 
 _SH = shutil.which("sh")
+_GIT = shutil.which("git")
 
 
 @unittest.skipUnless(_SH, "requires a POSIX shell")
@@ -142,6 +143,39 @@ class HyperfineShellTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(40, len(first))
         self.assertTrue(all(character in "0123456789abcdef" for character in first))
+
+    def test_source_fingerprint_handles_a_different_repository_owner(self) -> None:
+        if not _GIT:
+            self.skipTest("requires Git")
+
+        root = Path(__file__).resolve().parents[2]
+        helper = root / "eng" / "source-fingerprint.sh"
+        environment = dict(os.environ)
+        environment["GIT_TEST_ASSUME_DIFFERENT_OWNER"] = "1"
+        probe = subprocess.run(
+            [_GIT, "-C", str(root), "rev-parse", "HEAD"],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
+        if probe.returncode == 0 or "dubious ownership" not in probe.stderr:
+            self.skipTest("Git does not support different-owner simulation")
+
+        result = subprocess.run(
+            [_SH, str(helper)],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
+        fingerprint = result.stdout.strip()
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(40, len(fingerprint))
+        self.assertTrue(
+            all(character in "0123456789abcdef" for character in fingerprint)
+        )
 
     def test_performance_harness_fingerprint_is_stable_for_unchanged_content(self) -> None:
         root = Path(__file__).resolve().parents[2]
