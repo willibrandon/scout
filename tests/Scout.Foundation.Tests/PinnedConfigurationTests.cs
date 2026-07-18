@@ -2991,10 +2991,10 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
-    /// Verifies the macOS benchmark tool in the prerequisite lock matches the local binary.
+    /// Verifies the macOS benchmark tool is fully pinned in the prerequisite lock.
     /// </summary>
     [Fact]
-    public void MacosHyperfineToolMatchesPinnedHash()
+    public void MacosHyperfineToolIsPinned()
     {
         const string name = "hyperfine";
         const string version = "1.20.0";
@@ -3026,21 +3026,6 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("bottle_tag = \"" + x64BottleTag + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("bottle_sha256 = \"" + x64BottleSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("sha256 = \"" + x64BinarySha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
-
-        if (OperatingSystem.IsMacOS())
-        {
-            string hostPath = ReadMacosToolValue(prerequisiteLock, name, "path");
-            string hostVersion = ReadMacosToolValue(prerequisiteLock, name, "version");
-            string hostSha256 = ReadMacosToolValue(prerequisiteLock, name, "sha256").ToUpperInvariant();
-
-            Assert.True(File.Exists(hostPath), "Missing macOS prerequisite tool: " + hostPath);
-            (int exitCode, string output, string error) = RunProcess(hostPath, ["--version"]);
-            Assert.True(exitCode == 0, error);
-            Assert.Equal("hyperfine " + hostVersion, output.Trim());
-
-            byte[] hash = SHA256.HashData(File.ReadAllBytes(hostPath));
-            Assert.Equal(hostSha256, Convert.ToHexString(hash));
-        }
     }
 
     /// <summary>

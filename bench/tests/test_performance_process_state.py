@@ -39,6 +39,7 @@ class PerformanceProcessStateTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual("#!/bin/bash", source.splitlines()[0])
         self.assertIn('/bin/ps -o nice= -p "$$"', source)
+        self.assertIn('/usr/bin/renice "$1" -p "$$"', source)
         self.assertIn("/usr/bin/awk", source)
         self.assertNotIn("${PERFORMANCE_PROCESS_", source)
 
@@ -247,6 +248,54 @@ class PerformanceProcessStateTests(unittest.TestCase):
         self.assertNotEqual(0, result.returncode)
         self.assertIn("could not read its process nice priority", result.stderr)
 
+    def test_negative_inherited_nice_is_normalized_to_zero(self) -> None:
+        result = self._run_helper(
+            f"{self._process_state_test_seams(initial_nice='-10')}"
+            "configure_performance_process_state\n"
+            "printf 'actual=%s\\nrecorded=%s\\n' "
+            '"$(parse_performance_nice_output '
+            "\"$(read_performance_nice_output)\")\" "
+            '"$PERFORMANCE_PROCESS_NICE"\n'
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(["actual=0", "recorded=0"], result.stdout.splitlines())
+
+    def test_nice_normalization_failure_is_reported(self) -> None:
+        result = self._run_helper(
+            f"{self._process_state_test_seams(initial_nice='-10')}"
+            "set_performance_nice() { return 1; }\n"
+            "configure_performance_process_state\n"
+        )
+
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn(
+            "could not normalize process nice priority -10 to 0", result.stderr
+        )
+
+    def test_nice_normalization_is_verified_after_the_setter_returns(self) -> None:
+        result = self._run_helper(
+            f"{self._process_state_test_seams(initial_nice='-10')}"
+            "set_performance_nice() { return 0; }\n"
+            "configure_performance_process_state\n"
+        )
+
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("requires process nice priority 0; found -10", result.stderr)
+
+    def test_positive_inherited_nice_is_rejected(self) -> None:
+        result = self._run_helper(
+            f"{self._process_state_test_seams(initial_nice='5')}"
+            "configure_performance_process_state\n"
+        )
+
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn(
+            "cannot normalize inherited process nice priority 5 to 0 "
+            "without raising priority",
+            result.stderr,
+        )
+
     def test_inherited_environment_cannot_override_recorded_state(self) -> None:
         environment = dict(os.environ)
         environment.update(
@@ -298,14 +347,19 @@ class PerformanceProcessStateTests(unittest.TestCase):
         )
 
     @staticmethod
-    def _process_state_test_seams(initial_nofile: str = "4096") -> str:
+    def _process_state_test_seams(
+        initial_nofile: str = "4096", initial_nice: str = "0"
+    ) -> str:
         return (
             f"performance_test_soft_nofile={initial_nofile}\n"
+            f"performance_test_nice={shlex.quote(initial_nice)}\n"
             "set_performance_soft_nofile() { "
             'performance_test_soft_nofile="$1"; }\n'
             "read_performance_soft_nofile() { "
             'printf \'%s\\n\' "$performance_test_soft_nofile"; }\n'
-            "read_performance_nice_output() { printf '  0\\n'; }\n"
+            "set_performance_nice() { performance_test_nice=\"$1\"; }\n"
+            "read_performance_nice_output() { "
+            "printf '  %s\\n' \"$performance_test_nice\"; }\n"
         )
 
 

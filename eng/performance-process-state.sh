@@ -5,7 +5,7 @@ performance_process_state_fail() {
     return 1
 }
 
-verify_performance_nice_output() {
+parse_performance_nice_output() {
     performance_nice_output="$1"
     performance_nice="$(
         printf '%s\n' "$performance_nice_output" | /usr/bin/awk '
@@ -27,9 +27,16 @@ verify_performance_nice_output() {
         '
     )" || {
         performance_process_state_fail \
-            "Could not parse the process nice priority as exactly 0."
+            "Could not parse the process nice priority as an integer."
         return 1
     }
+
+    printf '%s\n' "$performance_nice"
+}
+
+verify_performance_nice_output() {
+    performance_nice="$(parse_performance_nice_output "$1")" ||
+        return 1
 
     [ "$performance_nice" = "0" ] || {
         performance_process_state_fail \
@@ -50,6 +57,10 @@ read_performance_soft_nofile() {
 
 read_performance_nice_output() {
     /bin/ps -o nice= -p "$$"
+}
+
+set_performance_nice() {
+    /usr/bin/renice "$1" -p "$$" >/dev/null
 }
 
 configure_performance_process_state() {
@@ -80,6 +91,26 @@ configure_performance_process_state() {
     performance_nice_output="$(read_performance_nice_output)" || {
         performance_process_state_fail \
             "The performance gate could not read its process nice priority with /bin/ps."
+        return 1
+    }
+    performance_nice="$(parse_performance_nice_output "$performance_nice_output")" ||
+        return 1
+
+    if [ "$performance_nice" -lt 0 ]; then
+        if ! set_performance_nice 0; then
+            performance_process_state_fail \
+                "The performance gate could not normalize process nice priority $performance_nice to 0."
+            return 1
+        fi
+    elif [ "$performance_nice" -gt 0 ]; then
+        performance_process_state_fail \
+            "The performance gate cannot normalize inherited process nice priority $performance_nice to 0 without raising priority."
+        return 1
+    fi
+
+    performance_nice_output="$(read_performance_nice_output)" || {
+        performance_process_state_fail \
+            "The performance gate could not verify its normalized process nice priority with /bin/ps."
         return 1
     }
     performance_nice="$(verify_performance_nice_output "$performance_nice_output")" ||

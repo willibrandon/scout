@@ -1017,12 +1017,13 @@ select_native_xcode_developer_dir 26.3 17C529 "$2"
                 f'read_provenance_value "$SCOUT_BUILD_PROVENANCE" {key}', gate
             )
 
+    @unittest.skipUnless(_BASH, "requires Bash")
     def test_release_driver_rejects_custom_sampling_before_host_setup(self) -> None:
         root = Path(__file__).resolve().parents[2]
         driver = root / "eng" / "run-performance-gate.sh"
 
         result = subprocess.run(
-            [_SH, str(driver), "--gate", "--runs", "2"],
+            [_BASH, str(driver), "--gate", "--runs", "2"],
             check=False,
             capture_output=True,
             text=True,
