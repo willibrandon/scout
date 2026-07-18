@@ -1,144 +1,246 @@
-
 namespace Scout;
 
-internal struct ReplacementMatchSink : IMatchSink
+/// <summary>
+/// Writes each match after expanding a replacement template against the match's containing line.
+/// </summary>
+/// <param name="output">The output writer.</param>
+/// <param name="prefix">The optional path prefix.</param>
+/// <param name="fieldSeparator">The separator written between output fields.</param>
+/// <param name="replacement">The replacement template.</param>
+/// <param name="lineNumber">Whether to write line numbers.</param>
+/// <param name="column">Whether to write columns.</param>
+/// <param name="byteOffset">Whether to write byte offsets.</param>
+/// <param name="nullPathTerminator">Whether to terminate path fields with a NUL byte.</param>
+/// <param name="lineNumberOffset">The line-number offset applied to emitted matches.</param>
+/// <param name="byteOffsetOffset">The byte-offset adjustment applied to emitted matches.</param>
+/// <param name="color">The configured output colors.</param>
+/// <param name="lineTerminator">The output line terminator.</param>
+/// <param name="searchPlan">The optional authoritative regex search plan.</param>
+internal struct ReplacementMatchSink(
+    RawByteWriter output,
+    OutputPath? prefix,
+    ReadOnlyMemory<byte> fieldSeparator,
+    ReadOnlyMemory<byte> replacement,
+    bool lineNumber,
+    bool column,
+    bool byteOffset,
+    bool nullPathTerminator,
+    long lineNumberOffset = 0,
+    long byteOffsetOffset = 0,
+    OutputColor color = default,
+    ReadOnlyMemory<byte> lineTerminator = default,
+    RegexSearchPlan? searchPlan = null) : IMatchLineSink, IDisposable
 {
-    private static readonly byte[] NullByte = [0];
+    private static readonly byte[] s_nullByte = [0];
 
-    private readonly RawByteWriter output;
-    private readonly OutputPath? prefix;
-    private readonly ReadOnlyMemory<byte> fieldSeparator;
-    private readonly ReadOnlyMemory<byte> replacement;
-    private readonly IReadOnlyList<byte[]> patterns;
-    private readonly ReplacementCapturePlan? capturePlan;
-    private readonly ReplacementTemplate template;
-    private readonly int[] captureStarts;
-    private readonly int[] captureLengths;
-    private readonly Dictionary<string, int>? captureNames;
-    private readonly bool asciiCaseInsensitive;
-    private readonly bool lineNumber;
-    private readonly bool column;
-    private readonly bool byteOffset;
-    private readonly bool nullPathTerminator;
-    private readonly long lineNumberOffset;
-    private readonly long byteOffsetOffset;
-    private readonly OutputColor color;
-    private readonly ReadOnlyMemory<byte> lineTerminator;
-    private long currentLineNumber;
-    private long cumulativeDelta;
+    private readonly RawByteWriter _output = output ?? throw new ArgumentNullException(nameof(output));
+    private readonly OutputPath? _prefix = prefix;
+    private readonly ReadOnlyMemory<byte> _fieldSeparator = fieldSeparator;
+    private readonly ReadOnlyMemory<byte> _replacement = replacement;
+    private readonly RegexSearchPlan? _searchPlan = searchPlan;
+    private RegexCaptureReplaySession? _captureSession;
+    private readonly (
+        ReplacementTemplate Template,
+        int[] CaptureSlots) _captureState =
+        CreateCaptureState(replacement, searchPlan);
+    private readonly bool _lineNumber = lineNumber;
+    private readonly bool _column = column;
+    private readonly bool _byteOffset = byteOffset;
+    private readonly bool _nullPathTerminator = nullPathTerminator;
+    private readonly long _lineNumberOffset = lineNumberOffset;
+    private readonly long _byteOffsetOffset = byteOffsetOffset;
+    private readonly OutputColor _color = color;
+    private readonly ReadOnlyMemory<byte> _lineTerminator =
+        lineTerminator.IsEmpty ? "\n"u8.ToArray() : lineTerminator;
+    private long _currentLineNumber;
+    private long _cumulativeDelta;
 
-    public ReplacementMatchSink(
-        RawByteWriter output,
-        OutputPath? prefix,
-        ReadOnlyMemory<byte> fieldSeparator,
-        ReadOnlyMemory<byte> replacement,
-        IReadOnlyList<byte[]> patterns,
-        bool asciiCaseInsensitive,
-        bool lineNumber,
-        bool column,
-        bool byteOffset,
-        bool nullPathTerminator,
-        long lineNumberOffset = 0,
-        long byteOffsetOffset = 0,
-        OutputColor color = default,
-        ReadOnlyMemory<byte> lineTerminator = default,
-        ReplacementCapturePlan? capturePlan = null)
+    /// <summary>
+    /// Expands and writes one match using its original containing-line context.
+    /// </summary>
+    /// <param name="lineNumber">The one-based line number.</param>
+    /// <param name="lineByteOffset">The zero-based byte offset of the line.</param>
+    /// <param name="matchByteOffset">The zero-based byte offset of the match.</param>
+    /// <param name="matchColumn">The one-based byte column of the match.</param>
+    /// <param name="line">The containing line bytes.</param>
+    /// <param name="match">The matching bytes.</param>
+    public void MatchedLine(
+        long lineNumber,
+        long lineByteOffset,
+        long matchByteOffset,
+        long matchColumn,
+        ReadOnlySpan<byte> line,
+        ReadOnlySpan<byte> match)
     {
-        ArgumentNullException.ThrowIfNull(output);
-        this.output = output;
-        this.prefix = prefix;
-        this.fieldSeparator = fieldSeparator;
-        this.replacement = replacement;
-        this.patterns = patterns;
-        this.capturePlan = capturePlan;
-        template = ReplacementTemplate.Create(replacement.Span, patterns);
-        captureStarts = new int[Math.Max(1, template.HighestCapture + 1)];
-        captureLengths = new int[Math.Max(1, template.HighestCapture + 1)];
-        captureNames = template.UsesNamedCaptureReferences
-            ? new Dictionary<string, int>(StringComparer.Ordinal)
-            : null;
-        this.asciiCaseInsensitive = asciiCaseInsensitive;
-        this.lineNumber = lineNumber;
-        this.column = column;
-        this.byteOffset = byteOffset;
-        this.nullPathTerminator = nullPathTerminator;
-        this.lineNumberOffset = lineNumberOffset;
-        this.byteOffsetOffset = byteOffsetOffset;
-        this.color = color;
-        this.lineTerminator = lineTerminator.IsEmpty ? "\n"u8.ToArray() : lineTerminator;
-        currentLineNumber = 0;
-        cumulativeDelta = 0;
-    }
-
-    public void Matched(long lineNumber, long byteOffset, long matchColumn, ReadOnlySpan<byte> match)
-    {
-        if (currentLineNumber != lineNumber)
+        _ = matchByteOffset;
+        if (_currentLineNumber != lineNumber)
         {
-            currentLineNumber = lineNumber;
-            cumulativeDelta = 0;
+            _currentLineNumber = lineNumber;
+            _cumulativeDelta = 0;
         }
 
-        byte[] body = ReplacementFormatter.Expand(
-            replacement.Span,
-            match,
-            patterns,
-            asciiCaseInsensitive,
-            capturePlan,
-            template,
-            captureStarts,
-            captureLengths,
-            captureNames);
-        long adjustedColumn = matchColumn + cumulativeDelta;
-        long lineStart = byteOffset - (matchColumn - 1);
-        long adjustedByteOffset = byteOffsetOffset + lineStart + adjustedColumn - 1;
+        int matchStart = checked((int)matchColumn - 1);
+        IReplacementCaptureProvider? captureProvider = GetCaptureProvider();
+        byte[] body = captureProvider is null
+            ? ReplacementFormatter.Expand(
+                _replacement.Span,
+                line,
+                matchStart,
+                match.Length,
+                searchPlan: null,
+                _captureState.Template,
+                _captureState.CaptureSlots)
+            : ReplacementFormatter.Expand(
+                _replacement.Span,
+                line,
+                matchStart,
+                match.Length,
+                captureProvider,
+                matchStart,
+                _captureState.Template,
+                _captureState.CaptureSlots);
+        long adjustedColumn = matchColumn + _cumulativeDelta;
+        long adjustedByteOffset = _byteOffsetOffset + lineByteOffset + adjustedColumn - 1;
         bool linked = false;
-        bool hasLineNumber = this.lineNumber;
-        bool hasColumn = column;
-        bool hasByteOffset = this.byteOffset;
+        bool hasLineNumber = _lineNumber;
+        bool hasColumn = _column;
+        bool hasByteOffset = _byteOffset;
 
-        if (prefix is not null)
+        if (_prefix is not null)
         {
-            linked = prefix.BeginHyperlink(output, lineNumber + lineNumberOffset, adjustedColumn);
-            color.WritePath(output, prefix.Display);
+            linked = _prefix.BeginHyperlink(_output, lineNumber + _lineNumberOffset, adjustedColumn);
+            _color.WritePath(_output, _prefix.Display);
             if (!hasLineNumber && !hasColumn && !hasByteOffset)
             {
-                OutputPath.EndHyperlink(output, ref linked);
+                OutputPath.EndHyperlink(_output, ref linked);
             }
 
-            output.Write(nullPathTerminator ? NullByte : fieldSeparator.Span);
+            _output.Write(_nullPathTerminator ? s_nullByte : _fieldSeparator.Span);
         }
 
         if (hasLineNumber)
         {
-            color.WriteLineNumber(output, lineNumber + lineNumberOffset);
+            _color.WriteLineNumber(_output, lineNumber + _lineNumberOffset);
             if (!hasColumn && !hasByteOffset)
             {
-                OutputPath.EndHyperlink(output, ref linked);
+                OutputPath.EndHyperlink(_output, ref linked);
             }
 
-            output.Write(fieldSeparator.Span);
+            _output.Write(_fieldSeparator.Span);
         }
 
         if (hasColumn)
         {
-            color.WriteNumberField(output, adjustedColumn);
+            _color.WriteNumberField(_output, adjustedColumn);
             if (!hasByteOffset)
             {
-                OutputPath.EndHyperlink(output, ref linked);
+                OutputPath.EndHyperlink(_output, ref linked);
             }
 
-            output.Write(fieldSeparator.Span);
+            _output.Write(_fieldSeparator.Span);
         }
 
         if (hasByteOffset)
         {
-            color.WriteNumberField(output, adjustedByteOffset);
-            OutputPath.EndHyperlink(output, ref linked);
-            output.Write(fieldSeparator.Span);
+            _color.WriteNumberField(_output, adjustedByteOffset);
+            OutputPath.EndHyperlink(_output, ref linked);
+            _output.Write(_fieldSeparator.Span);
         }
 
-        color.WriteMatch(output, body);
-        output.Write(lineTerminator.Span);
-        cumulativeDelta += body.Length - match.Length;
+        _color.WriteMatch(_output, body);
+        _output.Write(_lineTerminator.Span);
+        _cumulativeDelta += body.Length - match.Length;
+    }
+
+    /// <summary>
+    /// Writes an unchanged selected line when the line completed without a reportable replacement span.
+    /// </summary>
+    /// <param name="lineNumber">The one-based line number.</param>
+    /// <param name="lineByteOffset">The zero-based line byte offset.</param>
+    /// <param name="line">The completed line.</param>
+    public void FinishLine(long lineNumber, long lineByteOffset, ReadOnlySpan<byte> line)
+    {
+        if (_currentLineNumber == lineNumber)
+        {
+            return;
+        }
+
+        _currentLineNumber = lineNumber;
+        _cumulativeDelta = 0;
+        bool linked = false;
+        bool hasLineNumber = _lineNumber;
+        bool hasByteOffset = _byteOffset;
+        if (_prefix is not null)
+        {
+            linked = _prefix.BeginHyperlink(
+                _output,
+                lineNumber + _lineNumberOffset,
+                column: null);
+            _color.WritePath(_output, _prefix.Display);
+            if (!hasLineNumber && !hasByteOffset)
+            {
+                OutputPath.EndHyperlink(_output, ref linked);
+            }
+
+            _output.Write(_nullPathTerminator ? s_nullByte : _fieldSeparator.Span);
+        }
+
+        if (hasLineNumber)
+        {
+            _color.WriteLineNumber(_output, lineNumber + _lineNumberOffset);
+            if (!hasByteOffset)
+            {
+                OutputPath.EndHyperlink(_output, ref linked);
+            }
+
+            _output.Write(_fieldSeparator.Span);
+        }
+
+        if (hasByteOffset)
+        {
+            _color.WriteNumberField(_output, lineByteOffset + _byteOffsetOffset);
+            OutputPath.EndHyperlink(_output, ref linked);
+            _output.Write(_fieldSeparator.Span);
+        }
+
+        _output.Write(line);
+        if (line.IsEmpty || line[^1] != (byte)'\n')
+        {
+            _output.Write(_lineTerminator.Span);
+        }
+    }
+
+    private IReplacementCaptureProvider? GetCaptureProvider()
+    {
+        if (!_captureState.Template.RequiresSubcaptures || _searchPlan is null)
+        {
+            return null;
+        }
+
+        return _captureSession ??= new RegexCaptureReplaySession(_searchPlan);
+    }
+
+    /// <summary>
+    /// Returns the operation-scoped capture runner when this sink used native subcaptures.
+    /// </summary>
+    public void Dispose()
+    {
+        _captureSession?.Dispose();
+        _captureSession = null;
+    }
+
+    private static (
+        ReplacementTemplate Template,
+        int[] CaptureSlots) CreateCaptureState(
+            ReadOnlyMemory<byte> replacement,
+            RegexSearchPlan? searchPlan)
+    {
+        var template = ReplacementTemplate.Create(replacement.Span);
+        int captureCount = template.RequiresSubcaptures
+            ? Math.Max(template.HighestCapture, searchPlan?.CaptureCount ?? 0)
+            : 0;
+        return (
+            template,
+            new int[checked(2 * (captureCount + 1))]);
     }
 }

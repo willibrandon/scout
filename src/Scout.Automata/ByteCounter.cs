@@ -262,6 +262,7 @@ public static class ByteCounter
         var findVector = Vector128.Create(findNeedle);
         Vector128<uint> counts = Vector128<uint>.Zero;
         Vector128<byte> laneCounts = Vector128<byte>.Zero;
+        Vector128<byte> findMatches = Vector128<byte>.Zero;
         firstFound = -1;
         int offset = 0;
         int vectorLimit = haystack.Length - (haystack.Length % Vector128<byte>.Count);
@@ -271,11 +272,7 @@ public static class ByteCounter
             var block = Vector128.LoadUnsafe(ref reference, (nuint)offset);
             var matches = Vector128.ShiftRightLogical(Vector128.Equals(block, countVector), 7);
             laneCounts += matches;
-            uint findMask = AdvSimd.CompareEqual(block, findVector).ExtractMostSignificantBits();
-            if (findMask != 0 && firstFound < 0)
-            {
-                firstFound = offset + BitOperations.TrailingZeroCount(findMask);
-            }
+            findMatches |= Vector128.Equals(block, findVector);
 
             batchCount++;
             offset += Vector128<byte>.Count;
@@ -297,6 +294,11 @@ public static class ByteCounter
             counts.GetElement(1) +
             counts.GetElement(2) +
             counts.GetElement(3);
+        if (!Vector128.EqualsAll(findMatches, Vector128<byte>.Zero))
+        {
+            firstFound = haystack[..vectorLimit].IndexOf(findNeedle);
+        }
+
         return count + CountAndFindFirstScalar(haystack, countNeedle, findNeedle, offset, ref firstFound);
     }
 

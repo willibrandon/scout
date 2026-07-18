@@ -7,11 +7,11 @@ namespace Scout.Text.Regex;
 /// </summary>
 public sealed class ByteRegex
 {
-    private readonly RegexAutomaton automaton;
+    private readonly RegexAutomaton _automaton;
 
     private ByteRegex(RegexAutomaton automaton)
     {
-        this.automaton = automaton;
+        _automaton = automaton;
     }
 
     /// <summary>
@@ -64,7 +64,7 @@ public sealed class ByteRegex
     /// <returns><see langword="true" /> when a match exists.</returns>
     public bool IsMatch(ReadOnlySpan<byte> input)
     {
-        return automaton.IsMatch(input);
+        return _automaton.IsMatch(input);
     }
 
     /// <summary>
@@ -76,7 +76,7 @@ public sealed class ByteRegex
     public ByteRegexMatch? Find(ReadOnlySpan<byte> input, int startAt = 0)
     {
         ThrowIfNegative(startAt);
-        RegexMatch? match = automaton.Find(input, startAt);
+        RegexMatch? match = _automaton.Find(input, startAt);
         return match.HasValue ? ByteRegexMatch.FromRegexMatch(match.Value) : null;
     }
 
@@ -89,7 +89,7 @@ public sealed class ByteRegex
     public ByteRegexCaptures? FindCaptures(ReadOnlySpan<byte> input, int startAt = 0)
     {
         ThrowIfNegative(startAt);
-        RegexCaptures? captures = automaton.FindCaptures(input, startAt);
+        RegexCaptures? captures = _automaton.FindCaptures(input, startAt);
         return captures is null ? null : new ByteRegexCaptures(captures);
     }
 
@@ -102,7 +102,7 @@ public sealed class ByteRegex
     public long Count(ReadOnlySpan<byte> input, int startAt = 0)
     {
         ThrowIfNegative(startAt);
-        return automaton.CountMatches(input, startAt);
+        return _automaton.CountMatches(input, startAt);
     }
 
     /// <summary>
@@ -120,12 +120,13 @@ public sealed class ByteRegex
     {
         ArgumentNullException.ThrowIfNull(callback);
 
+        using RegexFindRunner runner = _automaton.RentFindRunner();
         int count = 0;
         int offset = 0;
         int suppressedEmptyStart = MatchIterator.NoSuppressedEmptyStart;
         while (offset <= input.Length)
         {
-            RegexMatch? regexMatch = automaton.Find(input, offset);
+            RegexMatch? regexMatch = runner.Find(input, offset);
             if (!regexMatch.HasValue)
             {
                 return count;

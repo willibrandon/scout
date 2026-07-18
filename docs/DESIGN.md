@@ -202,11 +202,17 @@ Rationale unchanged and reaffirmed: the BCL engine is UTF-16/`char`/`string`-bas
 
 **`Scout.Automata`** (port of `regex-automata`): **all engines up front** — Thompson NFA compiler (UTF-8 automata over bytes), PikeVM, hybrid (lazy) DFA, dense & sparse DFA, one-pass DFA, bounded backtracker, meta strategy selection, and prefilters (`Memmem`, `AhoCorasick`, `Teddy`). `PatternSet`/multi-regex for globset & ignore.
 
+The CLI creates one `RegexSearchPlan` per search operation from the complete ordered pattern set. The plan combines and parses the patterns once, derives record scope, line-terminator rules, literal acceleration, conservative prefilters, and capture mappings from that syntax tree, and owns the authoritative matcher. Each input buffer produces one ordered match stream whose spans are replayed by standard, context, JSON, vimgrep, statistics, and replacement output. Exact literal sets remain on the literal-set engine and can use a syntax-proven common-prefix scanner; captured exact alternatives retain ordered pattern identity through a parsed `PatternSet`.
+
 Finite bounded repetitions use a canonical common-exit Thompson topology: every optional skip branch targets the same continuation, consuming branches chain through the remaining copies, and split order alone encodes greedy or lazy priority. The forward and reversed compilers use the same construction.
 
-PikeVM-backed unanchored searches inject streamed prefilter candidates into one insertion-ordered active-state frontier. Capture replay stores ordered states and flat capture-slot rows in pooled runner-owned buffers, and an iterative closure stack uses restore frames while exploring capture boundaries. First arrival retains leftmost-first priority without cloning capture arrays at each transition. All mutable frontier, closure, capture, and reachability storage belongs to pooled runners, while the compiled regex remains immutable and safe for concurrent callers. This is the authoritative Thompson matcher—with full leftmost-first, anchor, UTF-8, and capture-replay semantics—not a pattern-family recognizer.
+PikeVM-backed unanchored searches inject streamed prefilter candidates into one insertion-ordered active-state frontier. An authoritative find first establishes the exact match bounds. Capture output then anchors replay to that span and tries a bounded capture-aware one-pass runner with at most 32 flattened slots and 4,096 NFA states. The runner compiles predicate-free ordered epsilon closures into reusable state lists with compact capture actions, consumes deterministic literal runs as one transition, and evaluates predicate-bearing closures against each haystack position. Exactly one consuming transition may match; a second matching consumer yields to the general ordered-NFA replay before publishing capture slots. This mirrors `regex-automata`'s one-pass transition-and-capture-action strategy while supporting Scout's variable-width UTF-8 atoms.
+
+The general replay engine stores ordered states and flat capture-slot rows in pooled runner-owned buffers, and an iterative closure stack uses restore frames while exploring capture boundaries. First arrival retains leftmost-first priority without cloning capture arrays at each transition. Replacement, context, JSON, and multiline rendering retain one exact-capture runner and one parsed replacement template for the complete operation. Whole-match references such as `$0` use the authoritative bounds directly. All mutable frontier, closure, capture, and reachability storage belongs to pooled runners, while the compiled regex remains immutable and safe for concurrent callers. The result is one authoritative Thompson pipeline with full leftmost-first, anchor, UTF-8, and capture-replay semantics.
 
 For a uniquely proven inner literal with a finite prefix, the required-literal prefilter can reverse-match an ASCII projection of that prefix with pooled lazy-DFA runners before injecting starts. Non-ASCII windows, ambiguous provenance, unsupported positional syntax, and exhausted DFA budgets retain the conservative lookbehind range. The forward Thompson matcher remains authoritative, so this is a general reverse-inner strategy rather than a pattern recognizer.
+
+Each operation-scoped runner also measures prefilter effectiveness across its monotonically advancing candidate scans. After 40 scans, a cumulative average below 16 skipped bytes makes the prefilter inert for the remainder of that search and resumes the authoritative all-start stream at the next safe record boundary.
 
 SIMD via `System.Runtime.Intrinsics`: shipped baseline is SSE2 + AVX2 (x64) and `AdvSimd`/NEON (arm64); AVX-512 paths are additive and `Avx512*.IsSupported`-gated, delivered before Release. Scalar fallback always present.
 
@@ -247,9 +253,9 @@ Stdin readability heuristics (Unix `fstat`, Windows `GetFileType`); output buffe
 
 ### 4.8 Ignore / walker (`Scout.Ignore` / `Scout.IO.Ignore`)
 
-#### 4.8.1 Parallelism semantics (corrected & specified, per Codex)
+#### 4.8.1 Parallelism semantics
 Exact replication of upstream:
-- **Default thread count** = `available_parallelism().map_or(1, get).min(12)` — the cap of **12** is confirmed at `crates/core/flags/hiargs.rs:173`; overridable by `-j/--threads`. Scout preserves that planner result, but caps default macOS directory-search fan-out at 3 workers because hosted macOS file I/O regresses sharply above that point; explicit `-j/--threads` values still bypass the platform default cap.
+- **Default thread count** = `available_parallelism().map_or(1, get).min(12)` — the cap of **12** is confirmed at `crates/core/flags/hiargs.rs:173`; overridable by `-j/--threads`. On macOS, Scout caps ordinary directory searches at three workers and replacement searches at six workers to balance file-search RSS with capture-rendering throughput. Explicit `-j/--threads` values bypass these default ceilings.
 - **Forced single-file output semantics** follow upstream: sorted output still forces `threads = 1`, and normal single-file/stdin dispatch preserves ordered output for the single subject. Scout adds an internal large-file segmented search worker path for eligible unsorted single-file scans; it is not a directory-walk parallelism surface, emits segments in byte order, and is pinned separately because it is required to keep Native AOT regex throughput within the §9 gate.
 - **Work-stealing** parallel walker (port of `crossbeam-deque` semantics) with per-thread `Sink`/`Printer`. Per-file output remains internally ordered and uncorrupted, but upstream does not promise stable inter-file order for default parallel directory walks. Exact byte gates therefore use sorted/forced-serial searches; differential cases over default or explicit parallel output normalize path order.
 
@@ -382,8 +388,8 @@ Six layers, all required. **No-skip policy (hard):** a skipped, ignored, or quar
 
 **Pinning mechanism (the source of truth) — deterministic by construction:**
 - **Linux** CI runs inside a container built `FROM debian:bookworm-slim` with **all `apt` installs routed through the pinned `snapshot.debian.org` date `2026-05-31`** (`deb http://snapshot.debian.org/archive/debian/20260531T000000Z bookworm main`). Pinning the snapshot date makes **every** package version a deterministic function of that date — exact versions are not invented, they are *resolved* from the snapshot and then frozen into `tests/PREREQS.lock` (Appendix B). The built image is referenced by **content digest** thereafter.
-- **macOS/Windows** runners install tools from checksum-verified archives at versions recorded in the manifest.
-- **`tests/PREREQS.lock`** is the frozen record: the base-image digest, the snapshot date, and **every tool's exact resolved version + SHA-256**. CI verifies each entry before running and **fails on any missing/mismatch** (no silent skips). The literal digests/versions/SHAs are *captured at first image build and corpus fetch* and committed to `PREREQS.lock` — the same "inputs pinned in the plan, resulting hashes captured at inception, verified in CI" pattern used for the SDK patch (§5.1) and the PCRE2 commit SHA (§4.3). The plan pins the **inputs that fully determine** the versions; the lockfile holds the **resulting literals**.
+- **macOS** runner tools are selected by name, RID, and environment with exact versions and paths. A scalar SHA-256 pins a byte-identical binary; a finite SHA-256 set records the byte-distinct binaries supplied concurrently by rolling hosted-runner images for that same selection. **Windows** runners install tools from checksum-verified archives at versions recorded in the manifest.
+- **`tests/PREREQS.lock`** is the frozen record: the base-image digest, the snapshot date, and **every tool's exact resolved version plus its literal SHA-256 value or finite SHA-256 set**. CI verifies each entry before running and **fails on any missing/mismatch** (no silent skips). The literal digests/versions/SHAs are *captured at first image build and corpus fetch* and committed to `PREREQS.lock` — the same "inputs pinned in the plan, resulting hashes captured at inception, verified in CI" pattern used for the SDK patch (§5.1) and the PCRE2 commit SHA (§4.3). The plan pins the **inputs that fully determine** the versions; the lockfile holds the **resulting literals**.
 
 **Decompression tools** for the `-z`/`--pre` matrix — exactly the set upstream invokes, **derived mechanically from the default command table in `crates/cli/src/decompress.rs`** at the pin (not a guessed list): `gzip`, `bzip2`, `xz` (for both `xz` and `lzma` streams), `zstd`, `lz4`, `brotli`, and `uncompress` (`ncompress` on Linux), plus any others present in that table. Each resolves to a single exact version via the pinned snapshot date and is frozen in `PREREQS.lock`.
 
@@ -413,6 +419,26 @@ Each wall-time workload is sampled in alternating fresh `rg`, Scout, Scout, `rg`
 and Scout, `rg`, `rg`, Scout Hyperfine rounds. The two round ratios form one
 geometric cycle ratio, and the gate uses the median cycle ratio. This balances
 every command position and reduces filesystem-cache or hosted-runner phase bias.
+Two balanced warmup rounds precede ten measured rounds, yielding five cycle
+ratios and five clean RSS samples per tool within the same total round budget.
+Linux-tree workload commands pass `--threads 3` to both tools, OpenSubtitles
+commands pass `--threads 4`, and generated line-regex commands pass
+`--threads 1`; generated single-file issue workloads also pass `--threads 1`.
+Fixed concurrency makes the workload definition independent of
+the host's logical CPU count.
+Before timing, each rg/Scout command pair produces a C-locale sorted-line
+digest; differing output fails the workload. The gate accepts one prespecified
+sample set, so a failed attempt remains failed. The shared local/CI driver
+restores the hosted oracle, verifies corpora and tools, builds Native AOT from a
+fresh detached worktree,
+checks the build's source fingerprint and payload hash, requires committed and
+clean performance inputs, records the complete harness fingerprint, and runs
+the same harness command. The two absent-pattern workloads batch sixteen input
+arguments per command so their measured duration stays above Hyperfine's
+short-command range.
+The driver selects the hosted release-LTO rg oracle everywhere and validates
+host utilities against the frozen local or GitHub Actions hash set matching the
+executing OS image. Both paths verify identical decompressed corpus hashes.
 Peak RSS uses only the first command in each fresh process because macOS reports
 child peak RSS cumulatively; alternating rounds provide one clean sample per tool
 in every cycle.
@@ -487,13 +513,13 @@ Flag tables, help/man text, and shell completions are generated deterministicall
 - **SIMD baseline** = SSE2 + AVX2 (x64) and `AdvSimd`/NEON (arm64) as the shipped baseline; **AVX-512 paths are included and additive**, gated by `Avx512*.IsSupported`, and delivered **before** Release — not deferred past v1.
 - **Dependency dispositions** = every lockfile crate — including `anyhow` (error/stderr parity, §4.10.1) — has a port or explicit replace/none rationale (§3.2.1).
 - **Native entry** = AOT static library + platform C entry driver (runtime self-initializes on first managed call — §4.1.1). **Executed and PASSED locally on osx-arm64 and osx-x64** (0xFF argv byte round-tripped; Appendix A transcript), with the same spike reproduced by GitHub-hosted CI on all six release RIDs before the byte-boundary blocker is treated as closed for the commit under test.
-- **CI prerequisites** = digest-pinned container + `tests/PREREQS.lock` (tool versions + SHA-256), corpora by SHA-256, reference `rg` archive captured from the pinned commit with archive and binary hashes recorded (§8.5).
+- **CI prerequisites** = digest-pinned container + `tests/PREREQS.lock` (tool versions + literal SHA-256 values or narrowly scoped finite sets), corpora by SHA-256, reference `rg` archive captured from the pinned commit with archive and binary hashes recorded (§8.5).
 - **Third-party notices** = per-dependency license reproduction in `THIRD-PARTY-NOTICES.md` (decided sufficient; ripgrep's own dual license + each ported crate's license + PCRE2 BSD).
 - **No-skip** = zero skipped/waived tests at Release (§8).
 
 **Open for reviewer sign-off:** none. All previously open *design* items are decided above.
 
-**Inception-captured values (not design decisions; pinned-inputs in plan, literals captured at first build/fetch, verified in CI):** the SDK patch level (`global.json`), the PCRE2 upstream commit SHA (`native/pcre2/UPSTREAM`), the reference `rg` binary hash, macOS decompression tool hashes, Linux base-image/tool hashes, regex/encoding corpus hashes, and the remaining external corpus SHA-256 values (`tests/PREREQS.lock`, §8.5, Appendix B). The literal values that already exist are committed in `tests/PREREQS.lock`.
+**Inception-captured values (not design decisions; pinned-inputs in plan, literals captured at first build/fetch, verified in CI):** the SDK patch level (`global.json`), the PCRE2 upstream commit SHA (`native/pcre2/UPSTREAM`), the reference `rg` binary hash, macOS decompression tool hash sets, Linux base-image/tool hashes, regex/encoding corpus hashes, and the remaining external corpus SHA-256 values (`tests/PREREQS.lock`, §8.5, Appendix B). The literal values that already exist are committed in `tests/PREREQS.lock`.
 
 **Implementation-risk gate (CI-wired for all 6 RIDs; local transcripts cover 2 of 6):** the native-entry byte-boundary mechanism was **actually executed and PASSED on osx-arm64 (native) and osx-x64 (cross-compiled, run under Rosetta)** with .NET SDK 10.0.102; Appendix A holds both local transcripts (`0xFF` argv byte round-tripped verbatim on each). The only local per-arch link delta was the x64-only `libRuntime.VxsortEnabled.a`. The complete cross-platform proof is the GitHub-hosted CI matrix: `spike/build-unix.sh` runs on `osx-arm64`, `osx-x64`, `linux-x64`, and `linux-arm64`; `spike/build-windows.ps1` runs on `win-x64` and `win-arm64`; the native app link scripts run after the spike. The byte-boundary claim is treated as fully proven only by a green CI run for the commit under test. *(Correction of record: an earlier version of this line wrongly stated this environment had no .NET SDK and the spike had not run — false. The SDK is installed and the spike ran and passed on both macOS architectures.)*
 
@@ -929,7 +955,7 @@ On x64 the link additionally needs `libRuntime.VxsortEnabled.a` (the GC's AVX2/A
 
 **This file exists in the repo at `tests/PREREQS.lock`.** It is not a sketch — the values below were measured on this machine and the authoritative copy is the file; this appendix summarizes it.
 
-**Literal-and-final today** (measured/known): the ripgrep commit and release-LTO reference `rg` binary hash; the .NET SDK/runtime that built the verified spikes (`10.0.102`/`10.0.2`); the macOS host (`macOS 26.3.1`, `arm64`, `Apple clang 17.0.0 (clang-1700.6.4.2)`, `cargo 1.91.1`); the PCRE2 binding/sys/C-library versions, tag, and upstream commit; the macOS decompression tool versions and binary hashes (`gzip` Apple gzip 475, `bzip2` 1.0.8, `xz` 5.8.2, `zstd` 1.5.7, `lz4` 1.10.0, `brotli` 1.2.0, `uncompress` Apple compress file_cmds-475 — all read from the host); the Linux `debian:bookworm-slim` index/amd64/arm64 digests plus pinned-snapshot decompressor package versions and binary hashes; the macOS `hyperfine` 1.20.0 Homebrew source checksum, bottle checksum, and binary hash; the OpenSubtitles archive hash (`7c169ffa7742fd7f670c176ba8c290b74bcc650784e585e2ef60061376c8fff1`) and decompressed `en.txt` hash (`a84b1e0c66645c429ff356510dc872d5d9cca1c5a02a21d6eee3cff24d4781bb`); the linux-kernel benchmark source archive hash (`8779f9318fb896f64f7a876d7ff9c152925e82c17690281eb1ec6ce587275054`) and extracted-tree manifest hash (`c104036f61aa7eba26da621738424e2e35f2c12372858abc345c39bbd9ecd116`); and the **real spike-binary hashes**:
+**Literal-and-final today** (measured/known): the ripgrep commit and release-LTO reference `rg` binary hash; the .NET SDK/runtime that built the verified spikes (`10.0.102`/`10.0.2`); the macOS host (`macOS 26.5.2`, `arm64`, `Apple clang 17.0.0 (clang-1700.6.4.2)`, `cargo 1.92.0`); the PCRE2 binding/sys/C-library versions, tag, and upstream commit; the macOS decompression tool versions and binary hash sets (`gzip` Apple gzip 479, `bzip2` 1.0.8, `xz` 5.8.2, `zstd` 1.5.7, `lz4` 1.10.0, `brotli` 1.2.0, `uncompress` Apple compress file_cmds-479 — all read from the host, plus hosted RID/environment selections); the Linux `debian:bookworm-slim` index/amd64/arm64 digests plus pinned-snapshot decompressor package versions and binary hashes; the macOS `hyperfine` 1.20.0 Homebrew source checksum, bottle checksum, and binary hash; the OpenSubtitles archive hash (`7c169ffa7742fd7f670c176ba8c290b74bcc650784e585e2ef60061376c8fff1`) and decompressed `en.txt` hash (`a84b1e0c66645c429ff356510dc872d5d9cca1c5a02a21d6eee3cff24d4781bb`); the linux-kernel benchmark source archive hash (`8779f9318fb896f64f7a876d7ff9c152925e82c17690281eb1ec6ce587275054`) and extracted-tree manifest hash (`c104036f61aa7eba26da621738424e2e35f2c12372858abc345c39bbd9ecd116`); and the **real spike-binary hashes**:
 
 ```toml
 [[spike_artifact]]
@@ -947,6 +973,6 @@ result = "PASS; needs libRuntime.VxsortEnabled.a"
 
 **No remaining `resolved@*` values:** `tests/PREREQS.lock` now contains literal hashes for both external benchmark corpora. `eng/fetch-corpora.sh` fetches those inputs, writes the cached artifacts under `artifacts/corpora`, and prints the replacement lockfile blocks with literal hashes.
 
-This is the same discipline already applied to the SDK patch (§5.1), PCRE2 commit (§4.3), reference `rg`, regex/encoding corpora, and local macOS decompression tools: pin the determining **inputs** now, capture the resulting **hash** at inception, verify forever after.
+This is the same discipline already applied to the SDK patch (§5.1), PCRE2 commit (§4.3), reference `rg`, regex/encoding corpora, and macOS decompression tools: pin the determining **inputs**, capture each resulting **hash**, and verify exact membership thereafter.
 
 > Library names/extra link libraries (`Scout.Entry.a`/`.lib`, runtime archive set) are finalized against the pinned SDK's ILCompiler output during the M0 spike; the shape above is the contract.

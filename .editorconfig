@@ -52,10 +52,6 @@ dotnet_diagnostic.VSTHRD115.severity = error
 dotnet_diagnostic.VSTHRD200.severity = error
 dotnet_diagnostic.VSTHRD201.severity = error
 
-[src/Scout.SourceGen/*.cs]
-# Scout.SourceGen is internal build infrastructure, not a versioned analyzer package.
-dotnet_diagnostic.RS2008.severity = suggestion
-
 [tests/**/*.cs]
 dotnet_code_quality.CA1515.output_kind = DynamicallyLinkedLibrary
 

@@ -55,12 +55,12 @@ guards, leaving only the core NFA/DFA engine selection.
 The OpenSubtitles regex workload remains a public benchmark workload. The
 release gate also includes `bounded_assignment_no_match`, the generated issue
 #30 regression; `large_bounded_unicode_class_no_match`, the generated issue #32
-regression running in general mode; `linux_heldout_regex_general`, a Linux-tree regex
-workload that runs Scout with `SCOUT_REGEX_SPECIALIZATION_MODE=general`, and
+regression running in general mode; generated general-mode line-search gates for
+issues #37, #36, and #44; `linux_heldout_regex_general`, a Linux-tree regex
+workload that runs Scout with `SCOUT_REGEX_SPECIALIZATION_MODE=general`; and
 `linux_heldout_capture_general`, a replacement workload over the same held-out
-pattern family that exercises capture output. Those held-out gates compare
-Scout against the pinned `rg` and are independent of benchmark-specific fast
-paths.
+pattern family that exercises capture output. These gates compare Scout against
+the pinned `rg` and are independent of benchmark-specific fast paths.
 
 Current ablation collection:
 
@@ -69,8 +69,17 @@ Current ablation collection:
 | `default` | `subtitles_en_regex` | `0.797x` release gate | `<= 1.20x` | Public benchmark workload under normal release behavior. |
 | `default` | `bounded_assignment_no_match` | Pending first release-gate sample | `<= 1.50x` | Generated issue #30 no-match scan over 800 repeated required-literal candidates. |
 | `general` | `large_bounded_unicode_class_no_match` | Pending first release-gate sample | `<= 1.50x` | Generated issue #32 no-match scan over 5,000 candidates using the general automata implementation. |
-| `general` | `linux_heldout_regex_general` | `1.458x` release-gate retry | `<= 1.50x` | Held-out Linux-tree regex with domain, benchmark-family, and corpus-specific recognizers disabled. |
-| `general` | `linux_heldout_capture_general` | `1.520x` release gate | `<= 1.75x` | Held-out Linux-tree replacement workload through capture output with the same recognizers disabled. |
+| `general` | `line_regex_word_boundary_general` | Pending first release-gate sample | `<= 1.50x` | Issue #37 prefilter-free word-boundary match count over the generated Paladin-like corpus. |
+| `general` | `line_regex_word_boundary_line_count_general` | Pending first release-gate sample | `<= 1.50x` | Issue #37 prefilter-free word-boundary line count over the generated Paladin-like corpus. |
+| `general` | `line_regex_generated_record_word_boundary_general` | Pending first release-gate sample | `<= 1.50x` | Issue #37 exact `\bGeneratedRecord\b` expression over the generated Paladin-like corpus. |
+| `general` | `line_regex_anchored_general` | Pending first release-gate sample | `<= 1.50x` | Issue #37 anchored CRLF declaration scan over the generated Paladin-like corpus. |
+| `general` | `line_regex_bounded_class_general` | Pending first release-gate sample | `<= 1.50x` | Issue #37 bounded ASCII identifier-class scan over the generated Paladin-like corpus. |
+| `general` | `line_regex_bounded_class_exact_general` | Pending first release-gate sample | `<= 1.50x` | Issue #37 exact `^[A-Za-z_]{70,90}$` expression over the generated Paladin-like corpus. |
+| `general` | `shared_delegate_prefix_general` | Pending first release-gate sample | `<= 1.50x` | Issue #36 shared-prefix alternation over four sparse delegate declarations. |
+| `general` | `many_absent_regexp_general` | Pending first release-gate sample | `<= 1.50x` | Issue #44 no-match scan with 64 repeated `-e` expressions. |
+| `general` | `many_absent_pattern_file_general` | Pending first release-gate sample | `<= 1.50x` | Issue #44 no-match scan with the same 64 expressions supplied through `-f`. |
+| `general` | `linux_heldout_regex_general` | `1.458x` release-gate retry (2026-06-30) | `<= 1.50x` | Held-out Linux-tree regex with domain, benchmark-family, and corpus-specific recognizers disabled. |
+| `general` | `linux_heldout_capture_general` | `1.520x` release gate (2026-06-30) | `<= 1.75x` | Held-out Linux-tree replacement workload through capture output with the same recognizers disabled. |
 | `fallback` | Local diagnostic control. | Not release-gated. | N/A | Spot-checks core automata behavior without recognizer or guard acceleration; it is not used for a release-speed claim. |
 
 ### Native AOT fixed RSS floor for release RSS gates
@@ -104,3 +113,9 @@ Hyperfine processes so macOS does not carry one child's cumulative peak into the
 other measurement. The fixed runtime/image floor is measured per run instead of
 hidden behind a magic constant. Every peak-RSS gate then requires
 `scout <= (rg * 1.5) + measured_scout_native_aot_floor`.
+
+The reporter performs this comparison in exact bytes and shows exact byte
+counts, three-decimal MiB values, and signed headroom or excess. Each attempt
+ends with one overall result naming the workload and wall time, RSS, or both when
+it fails. The hosted job retains every completed attempt's top-level aggregate
+JSON even when the gate step fails.

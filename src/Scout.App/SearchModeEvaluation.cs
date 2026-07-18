@@ -1,5 +1,8 @@
 namespace Scout;
 
+/// <summary>
+/// Evaluates quiet search modes without producing formatted output.
+/// </summary>
 internal static class SearchModeEvaluation
 {
     internal static bool SearchQuiet(
@@ -12,7 +15,8 @@ internal static class SearchModeEvaluation
         bool wordRegexp,
         ulong? maxCount,
         bool crlf,
-        bool nullData)
+        bool nullData,
+        RegexSearchPlan regexPlan)
     {
         if (maxCount == 0)
         {
@@ -21,19 +25,59 @@ internal static class SearchModeEvaluation
 
         if (searchMode == CliSearchMode.FilesWithoutMatch)
         {
-            return !LiteralLineSearcher.HasMatch(bytes, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, crlf, nullData);
+            return !LiteralLineSearcher.HasMatchWithRegexPlan(
+                bytes,
+                pattern,
+                regexPlan,
+                asciiCaseInsensitive,
+                invertMatch,
+                lineRegexp,
+                wordRegexp,
+                maxCount,
+                crlf,
+                nullData);
         }
 
         if (searchMode == CliSearchMode.CountMatches)
         {
-            return LiteralLineSearcher.CountMatches(bytes, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, crlf, nullData) > 0;
+            return LiteralLineSearcher.CountMatchesWithRegexPlan(
+                bytes,
+                pattern,
+                regexPlan,
+                asciiCaseInsensitive,
+                invertMatch,
+                lineRegexp,
+                wordRegexp,
+                maxCount,
+                crlf,
+                nullData) > 0;
         }
 
         if (searchMode == CliSearchMode.Count)
         {
-            return LiteralLineSearcher.CountMatchingLines(bytes, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, crlf, nullData) > 0;
+            return LiteralLineSearcher.CountMatchingLinesWithRegexPlan(
+                bytes,
+                pattern,
+                regexPlan,
+                asciiCaseInsensitive,
+                invertMatch,
+                lineRegexp,
+                wordRegexp,
+                maxCount,
+                crlf,
+                nullData) > 0;
         }
 
-        return LiteralLineSearcher.HasMatch(bytes, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, maxCount, crlf, nullData);
+        return LiteralLineSearcher.HasMatchWithRegexPlan(
+            bytes,
+            pattern,
+            regexPlan,
+            asciiCaseInsensitive,
+            invertMatch,
+            lineRegexp,
+            wordRegexp,
+            maxCount,
+            crlf,
+            nullData);
     }
 }

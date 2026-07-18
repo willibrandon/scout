@@ -1,0 +1,28 @@
+#!/bin/sh
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+cd "$ROOT"
+
+temporary_index="$(mktemp "${TMPDIR:-/tmp}/scout-performance-index.XXXXXX")"
+rm -f "$temporary_index"
+cleanup() {
+    rm -f "$temporary_index"
+}
+trap cleanup EXIT HUP INT TERM
+
+GIT_INDEX_FILE="$temporary_index" git -c safe.directory="$ROOT" -C "$ROOT" read-tree --empty
+GIT_INDEX_FILE="$temporary_index" git -c safe.directory="$ROOT" -c core.safecrlf=false -C "$ROOT" add -A -- \
+    .editorconfig \
+    .gitattributes \
+    .globalconfig \
+    .github/workflows/release-gates.yml \
+    bench \
+    Directory.Build.rsp \
+    eng \
+    global.json \
+    native/build-app-unix.sh \
+    NuGet.Config \
+    Scout.slnx \
+    tests/PREREQS.lock
+GIT_INDEX_FILE="$temporary_index" git -c safe.directory="$ROOT" -C "$ROOT" write-tree

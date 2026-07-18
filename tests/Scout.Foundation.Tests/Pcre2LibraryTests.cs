@@ -6,6 +6,25 @@ namespace Scout;
 public sealed class Pcre2LibraryTests
 {
     /// <summary>
+    /// Verifies managed PCRE2 spans retain pre-<c>\K</c> starts and reject unsupported reversed spans.
+    /// </summary>
+    [Fact]
+    public void MatchConstructionHandlesResetStartsWithoutUnsignedUnderflow()
+    {
+        Pcre2Match match = Pcre2Regex.CreateMatch(
+            start: 3,
+            end: 6,
+            patternStart: 0);
+
+        Assert.Equal(3, match.Start);
+        Assert.Equal(3, match.Length);
+        Assert.Equal(0, match.PatternStart);
+        Pcre2Exception exception = Assert.Throws<Pcre2Exception>(
+            () => Pcre2Regex.CreateMatch(start: 2, end: 1, patternStart: 0));
+        Assert.Contains("start after its exclusive end", exception.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies the current PCRE2 runtime state matches the pinned non-PCRE2 reference build.
     /// </summary>
     [Fact]

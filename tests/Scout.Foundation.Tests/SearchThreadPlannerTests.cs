@@ -58,14 +58,18 @@ public sealed class SearchThreadPlannerTests
     }
 
     /// <summary>
-    /// Verifies default macOS directory search fan-out balances hosted file I/O throughput and RSS.
+    /// Verifies default directory search fan-out applies the measured macOS ceiling.
     /// </summary>
     [Fact]
-    public void SearchWalkPlanningUsesMacOsDefaultDirectorySearchThreads()
+    public void SearchWalkPlanningUsesDefaultDirectorySearchThreads()
     {
         var lowArgs = new CliLowArgs();
         int upstreamDefault = Math.Min(Environment.ProcessorCount, 12);
-        int expected = OperatingSystem.IsMacOS() ? SearchWalkPlanning.GetMacOsDefaultSearchWalkThreadCount(upstreamDefault) : upstreamDefault;
+        int expected = OperatingSystem.IsMacOS()
+            ? SearchWalkPlanning.GetMacOsDefaultSearchWalkThreadCount(
+                upstreamDefault,
+                replacement: false)
+            : upstreamDefault;
 
         int threads = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
 
@@ -73,7 +77,55 @@ public sealed class SearchThreadPlannerTests
     }
 
     /// <summary>
-    /// Verifies default macOS directory search fan-out uses the measured hosted-runner cap.
+    /// Verifies macOS replacement searches use enough directory workers for capture rendering.
+    /// </summary>
+    [Fact]
+    public void SearchWalkPlanningUsesReplacementDirectorySearchThreads()
+    {
+        var lowArgs = new CliLowArgs();
+        lowArgs.SetReplacement("$1"u8);
+        int upstreamDefault = Math.Min(Environment.ProcessorCount, 12);
+        int expected = OperatingSystem.IsMacOS()
+            ? SearchWalkPlanning.GetMacOsDefaultSearchWalkThreadCount(
+                upstreamDefault,
+                replacement: true)
+            : upstreamDefault;
+
+        int threads = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
+
+        Assert.Equal(expected, threads);
+    }
+
+    /// <summary>
+    /// Verifies the measured macOS directory-search ceilings for ordinary and replacement output.
+    /// </summary>
+    /// <param name="replacement">Whether replacement rendering is active.</param>
+    /// <param name="upstreamDefault">The platform-neutral planner result.</param>
+    /// <param name="expectedThreads">The expected macOS worker count.</param>
+    [Theory]
+    [InlineData(false, 1, 1)]
+    [InlineData(false, 2, 2)]
+    [InlineData(false, 3, 3)]
+    [InlineData(false, 4, 3)]
+    [InlineData(false, 12, 3)]
+    [InlineData(true, 1, 1)]
+    [InlineData(true, 3, 3)]
+    [InlineData(true, 6, 6)]
+    [InlineData(true, 12, 6)]
+    public void SearchWalkPlanningUsesMacOsDirectorySearchThreadMatrix(
+        bool replacement,
+        int upstreamDefault,
+        int expectedThreads)
+    {
+        int threads = SearchWalkPlanning.GetMacOsDefaultSearchWalkThreadCount(
+            upstreamDefault,
+            replacement);
+
+        Assert.Equal(expectedThreads, threads);
+    }
+
+    /// <summary>
+    /// Verifies default macOS large-file search fan-out respects the ordered segment-worker bound.
     /// </summary>
     [Theory]
     [InlineData(1, 1)]
@@ -81,25 +133,7 @@ public sealed class SearchThreadPlannerTests
     [InlineData(3, 3)]
     [InlineData(4, 3)]
     [InlineData(5, 3)]
-    [InlineData(6, 3)]
     [InlineData(12, 3)]
-    public void SearchWalkPlanningUsesMacOsDefaultDirectorySearchThreadMatrix(int upstreamDefault, int expectedThreads)
-    {
-        int threads = SearchWalkPlanning.GetMacOsDefaultSearchWalkThreadCount(upstreamDefault);
-
-        Assert.Equal(expectedThreads, threads);
-    }
-
-    /// <summary>
-    /// Verifies default macOS large-file search fan-out keeps enough workers for segmented regex throughput.
-    /// </summary>
-    [Theory]
-    [InlineData(1, 1)]
-    [InlineData(2, 2)]
-    [InlineData(3, 3)]
-    [InlineData(4, 4)]
-    [InlineData(5, 4)]
-    [InlineData(12, 4)]
     public void SearchWalkPlanningCapsMacOsDefaultLargeFileSearchThreads(int upstreamDefault, int expectedThreads)
     {
         int threads = SearchWalkPlanning.GetMacOsDefaultLargeFileSearchThreadCount(upstreamDefault);
@@ -108,51 +142,66 @@ public sealed class SearchThreadPlannerTests
     }
 
     /// <summary>
-    /// Verifies default large-file search planning does not inherit the constrained directory-walk cap.
+    /// Verifies an active file-level worker pool suppresses nested large-file segment workers.
     /// </summary>
     [Fact]
-    public void SearchWalkPlanningKeepsDefaultLargeFileSearchParallelismOnMacOs()
+    public void SearchWalkPlanningDisablesLargeFileSegmentWorkersUnderOuterParallelism()
+    {
+        var lowArgs = new CliLowArgs();
+
+        int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(
+            lowArgs,
+            allowSegmentParallelism: false);
+
+        Assert.Equal(1, threads);
+    }
+
+    /// <summary>
+    /// Verifies default serial large-file searches keep Scout's ordered internal segment workers.
+    /// </summary>
+    [Fact]
+    public void SearchWalkPlanningKeepsDefaultSerialLargeFileSearchParallelism()
     {
         var lowArgs = new CliLowArgs();
         int upstreamDefault = Math.Min(Environment.ProcessorCount, 12);
-        int expected = OperatingSystem.IsMacOS() ? SearchWalkPlanning.GetMacOsDefaultLargeFileSearchThreadCount(upstreamDefault) : upstreamDefault;
+        int expected = Math.Min(
+            upstreamDefault,
+            SearchWalkPlanning.MaximumLargeFileSegmentWorkerCount);
 
-        int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(lowArgs);
+        int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(
+            lowArgs,
+            allowSegmentParallelism: true);
 
         Assert.Equal(expected, threads);
     }
 
     /// <summary>
-    /// Verifies default one-file large searches keep Scout's ordered internal segment workers.
+    /// Verifies serial large-file searches bound an explicit segment-worker count.
     /// </summary>
-    [Fact]
-    public void SearchWalkPlanningKeepsDefaultOneFileLargeSearchParallelism()
+    /// <param name="requestedThreads">The requested search-wide thread count.</param>
+    /// <param name="expectedThreads">The expected ordered segment-worker count.</param>
+    [Theory]
+    [InlineData(1UL, 1)]
+    [InlineData(2UL, 2)]
+    [InlineData(3UL, 3)]
+    [InlineData(4UL, 3)]
+    [InlineData(12UL, 3)]
+    public void SearchWalkPlanningBoundsExplicitSerialLargeFileSearchThreads(
+        ulong requestedThreads,
+        int expectedThreads)
     {
         var lowArgs = new CliLowArgs();
-        int upstreamDefault = Math.Min(Environment.ProcessorCount, 12);
-        int expected = OperatingSystem.IsMacOS() ? SearchWalkPlanning.GetMacOsDefaultLargeFileSearchThreadCount(upstreamDefault) : upstreamDefault;
+        lowArgs.SetThreads(requestedThreads);
 
-        int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(lowArgs, isOneFile: true);
+        int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(
+            lowArgs,
+            allowSegmentParallelism: true);
 
-        Assert.Equal(expected, threads);
+        Assert.Equal(expectedThreads, threads);
     }
 
     /// <summary>
-    /// Verifies explicit one-file large searches can use Scout's ordered internal segment workers.
-    /// </summary>
-    [Fact]
-    public void SearchWalkPlanningAllowsExplicitOneFileLargeSearchSegmentWorkers()
-    {
-        var lowArgs = new CliLowArgs();
-        lowArgs.SetThreads(12);
-
-        int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(lowArgs, isOneFile: true);
-
-        Assert.Equal(12, threads);
-    }
-
-    /// <summary>
-    /// Verifies explicit directory search thread counts bypass platform default caps.
+    /// Verifies explicit directory search thread counts are honored.
     /// </summary>
     [Fact]
     public void SearchWalkPlanningHonorsExplicitDirectorySearchThreads()
@@ -166,17 +215,19 @@ public sealed class SearchThreadPlannerTests
     }
 
     /// <summary>
-    /// Verifies explicit large-file search thread counts bypass platform default caps.
+    /// Verifies an explicit outer worker count does not create nested large-file workers.
     /// </summary>
     [Fact]
-    public void SearchWalkPlanningHonorsExplicitLargeFileSearchThreads()
+    public void SearchWalkPlanningSuppressesNestedWorkersWithExplicitOuterThreads()
     {
         var lowArgs = new CliLowArgs();
         lowArgs.SetThreads(12);
 
-        int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(lowArgs);
+        int threads = SearchWalkPlanning.GetLargeFileSearchThreadCount(
+            lowArgs,
+            allowSegmentParallelism: false);
 
-        Assert.Equal(12, threads);
+        Assert.Equal(1, threads);
     }
 
     /// <summary>

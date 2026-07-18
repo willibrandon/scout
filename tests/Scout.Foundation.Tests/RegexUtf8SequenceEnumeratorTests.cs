@@ -54,6 +54,46 @@ public sealed class RegexUtf8SequenceEnumeratorTests()
         Assert.Equal(0x10FFFF, previousEnd);
     }
 
+    /// <summary>
+    /// Verifies unaligned ranges remain contiguous while crossing UTF-8 and surrogate boundaries.
+    /// </summary>
+    /// <param name="start">The first valid scalar.</param>
+    /// <param name="end">The last valid scalar.</param>
+    [Theory]
+    [InlineData(0x01, 0x7E)]
+    [InlineData(0x81, 0x7FE)]
+    [InlineData(0x801, 0xD7FE)]
+    [InlineData(0xD7F0, 0xE010)]
+    [InlineData(0xE001, 0xFFFE)]
+    [InlineData(0x10001, 0x10FFFE)]
+    [InlineData(0x81, 0x10FFFE)]
+    public void EmitsUnalignedScalarRanges(int start, int end)
+    {
+        var enumerator = new RegexUtf8SequenceEnumerator(start, end);
+        var sequences = new List<RegexUtf8ByteSequence>();
+
+        while (enumerator.MoveNext(out RegexUtf8ByteSequence sequence))
+        {
+            sequences.Add(sequence);
+        }
+
+        Assert.NotEmpty(sequences);
+        int previousEnd = start - 1;
+        for (int sequenceIndex = 0; sequenceIndex < sequences.Count; sequenceIndex++)
+        {
+            RegexUtf8ByteSequence sequence = sequences[sequenceIndex];
+            int sequenceStart = DecodeBoundary(sequence, useEnd: false);
+            int sequenceEnd = DecodeBoundary(sequence, useEnd: true);
+            int expectedStart = previousEnd == 0xD7FF ? 0xE000 : previousEnd + 1;
+
+            Assert.Equal(expectedStart, sequenceStart);
+            Assert.True(sequenceStart <= sequenceEnd);
+            previousEnd = sequenceEnd;
+        }
+
+        Assert.Equal(end, previousEnd);
+    }
+
     private static int CompareBoundaries(
         RegexUtf8ByteSequence left,
         bool leftUseEnd,

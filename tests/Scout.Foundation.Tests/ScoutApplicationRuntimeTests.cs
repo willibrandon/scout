@@ -30,6 +30,171 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
+    /// Verifies JSON replay suppresses a selection-only empty span at the physical end of an unterminated record.
+    /// </summary>
+    /// <param name="pattern">The expression that can produce an empty match at record end.</param>
+    /// <param name="contents">The complete file contents.</param>
+    [Theory]
+    [InlineData("(?:)*", "abc")]
+    [InlineData("||", "abc")]
+    [InlineData("a*", "abc")]
+    [InlineData("(?:)*", "abc\n")]
+    [InlineData("(?:)*", "abc\ndef")]
+    public void JsonZeroWidthRecordEndReplayMatchesPinnedRipgrep(
+        string pattern,
+        string contents)
+    {
+        ArgumentNullException.ThrowIfNull(pattern);
+        ArgumentNullException.ThrowIfNull(contents);
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, contents);
+        string[] arguments = ["-U", "--json", "-o", pattern, path];
+
+        (int exitCode, byte[] output, string error) = RunScout(arguments);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) =
+            RunPinnedRipgrep(arguments);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(
+            NormalizeJsonTimings(pinnedOutput),
+            NormalizeJsonTimings(output));
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies standard context renderers suppress selection-only empty spans retained at physical EOF.
+    /// </summary>
+    /// <param name="modeArguments">The rendering mode arguments placed before the pattern.</param>
+    /// <param name="pattern">The expression that produces the selection-only terminal match.</param>
+    [Theory]
+    [InlineData("-n -o -C1", "(?:)*")]
+    [InlineData("-n -r X -C1", "(?:)*")]
+    [InlineData("--vimgrep -C1", "$")]
+    [InlineData("--color=always -n -C1", "$")]
+    public void StandardZeroWidthRecordEndReplayMatchesPinnedRipgrep(
+        string modeArguments,
+        string pattern)
+    {
+        ArgumentNullException.ThrowIfNull(modeArguments);
+        ArgumentNullException.ThrowIfNull(pattern);
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "abc");
+        string[] mode = modeArguments.Split(
+            ' ',
+            StringSplitOptions.RemoveEmptyEntries);
+        string[] arguments = [.. mode, pattern, path];
+
+        (int exitCode, byte[] output, string error) = RunScout(arguments);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) =
+            RunPinnedRipgrep(arguments);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies absolute-start output replays reportable spans against the original input prefix.
+    /// </summary>
+    [Fact]
+    public void AbsoluteStartAnchorOutputUsesOriginalInputPrefix()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "a\nb\n");
+
+        (int columnExitCode, byte[] columnOutput, string columnError) =
+            RunScout("-n", "--column", @"\A", path);
+        (int onlyExitCode, byte[] onlyOutput, string onlyError) =
+            RunScout("-n", "-o", @"\A", path);
+        (int replaceExitCode, byte[] replaceOutput, string replaceError) =
+            RunScout("-n", "-r", "X", @"\A", path);
+
+        Assert.Equal(0, columnExitCode);
+        Assert.Equal("1:1:a\n2:b\n"u8.ToArray(), columnOutput);
+        Assert.Equal(string.Empty, columnError);
+        Assert.Equal(0, onlyExitCode);
+        Assert.Equal("1:\n2:b\n"u8.ToArray(), onlyOutput);
+        Assert.Equal(string.Empty, onlyError);
+        Assert.Equal(0, replaceExitCode);
+        Assert.Equal("1:Xa\n2:b\n"u8.ToArray(), replaceOutput);
+        Assert.Equal(string.Empty, replaceError);
+    }
+
+    /// <summary>
+    /// Verifies physical-EOF matches select their record without adding a rendered match span.
+    /// </summary>
+    /// <param name="pattern">The end-asserted expression.</param>
+    [Theory]
+    [InlineData("$")]
+    [InlineData(@"\z")]
+    public void UnterminatedEndAnchorReplayMatchesPinnedRipgrep(string pattern)
+    {
+        ArgumentNullException.ThrowIfNull(pattern);
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "a\nb");
+        string[][] arguments =
+        [
+            ["-n", "-o", pattern, path],
+            ["-n", "--column", pattern, path],
+            ["-n", "-C1", pattern, path],
+            ["-n", "-v", "-C1", pattern, path],
+            ["--color=always", "-n", pattern, path],
+            ["--color=always", "-n", "-o", pattern, path],
+            ["--count-matches", pattern, path],
+        ];
+
+        for (int index = 0; index < arguments.Length; index++)
+        {
+            (int exitCode, byte[] output, string error) = RunScout(arguments[index]);
+            (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) =
+                RunPinnedRipgrep(arguments[index]);
+
+            Assert.Equal(pinnedExitCode, exitCode);
+            Assert.Equal(pinnedOutput, output);
+            Assert.Equal(pinnedError, error);
+        }
+
+        File.WriteAllText(path, "abc");
+        (int singleExitCode, byte[] singleOutput, string singleError) =
+            RunScout("--count-matches", pattern, path);
+        (int pinnedSingleExitCode, byte[] pinnedSingleOutput, string pinnedSingleError) =
+            RunPinnedRipgrep("--count-matches", pattern, path);
+        Assert.Equal(pinnedSingleExitCode, singleExitCode);
+        Assert.Equal(pinnedSingleOutput, singleOutput);
+        Assert.Equal(pinnedSingleError, singleError);
+    }
+
+    /// <summary>
+    /// Verifies occurrence counting retains reportable empty matches when physical EOF also selects the record.
+    /// </summary>
+    /// <param name="pattern">The expression with a reportable empty match and a physical-end match.</param>
+    [Theory]
+    [InlineData(@"\A|\z")]
+    [InlineData(@"(?:\A)?")]
+    [InlineData(@"(?:\z)?")]
+    [InlineData("(?:)*")]
+    public void UnterminatedEmptyMatchCountsMatchPinnedRipgrep(string pattern)
+    {
+        ArgumentNullException.ThrowIfNull(pattern);
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "a");
+
+        (int exitCode, byte[] output, string error) =
+            RunScout("--count-matches", pattern, path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) =
+            RunPinnedRipgrep("--count-matches", pattern, path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies default multi-threaded JSON directory search emits the same messages as ripgrep.
     /// </summary>
     [Fact]
@@ -117,6 +282,46 @@ public sealed class ScoutApplicationRuntimeTests
 
         (int exitCode, byte[] output, string error) = RunScout("--json", "-r", "$left:$right:$0", "(?P<left>foo)|(?P<right>bar)", path);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--json", "-r", "$left:$right:$0", "(?P<left>foo)|(?P<right>bar)", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(NormalizeJsonTimings(pinnedOutput), NormalizeJsonTimings(output));
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies JSON replacement metadata uses global names across repeated patterns.
+    /// </summary>
+    [Fact]
+    public void JsonOutputReplacementMetadataExpandsRepeatedPatternCaptures()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "a\nb\n");
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--json", "-r", "$0|$left|$right", "-e", "(?P<left>a)", "-e", "(?P<right>b)", path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "--json", "-r", "$0|$left|$right", "-e", "(?P<left>a)", "-e", "(?P<right>b)", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(NormalizeJsonTimings(pinnedOutput), NormalizeJsonTimings(output));
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies JSON replacement captures retain their original record-boundary context.
+    /// </summary>
+    [Fact]
+    public void JsonOutputReplacementMetadataRetainsBoundaryContext()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "xfooy\n");
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--json", "-r", "<$1>", @"\B(foo)\B", path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "--json", "-r", "<$1>", @"\B(foo)\B", path);
 
         Assert.Equal(pinnedExitCode, exitCode);
         Assert.Equal(NormalizeJsonTimings(pinnedOutput), NormalizeJsonTimings(output));
@@ -395,6 +600,41 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
+    /// Verifies a record crossing the binary-safe block boundary follows ripgrep in standard,
+    /// replacement, file-listing, and quiet modes.
+    /// </summary>
+    [Fact]
+    public void ImplicitBinaryCrossBlockRecordMatchesPinnedRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        byte[] bytes = new byte[70_002];
+        Array.Fill(bytes, (byte)'x');
+        "needle"u8.CopyTo(bytes.AsSpan(65_520));
+        bytes[70_000] = 0;
+        bytes[70_001] = (byte)'\n';
+        File.WriteAllBytes(path, bytes);
+        string[][] cases =
+        [
+            ["--no-config", "needle", root],
+            ["--no-config", "--replace", "found", "needle", root],
+            ["--no-config", "--files-with-matches", "needle", root],
+            ["--no-config", "--quiet", "needle", root],
+        ];
+
+        for (int index = 0; index < cases.Length; index++)
+        {
+            (int exitCode, byte[] output, string error) = RunScout(cases[index]);
+            (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) =
+                RunPinnedRipgrep(cases[index]);
+
+            Assert.Equal(pinnedExitCode, exitCode);
+            Assert.Equal(pinnedOutput, output);
+            Assert.Equal(pinnedError, error);
+        }
+    }
+
+    /// <summary>
     /// Verifies PCRE2 stats search uses the same binary-safe prefix for matching and stats.
     /// </summary>
     [Fact]
@@ -538,6 +778,43 @@ public sealed class ScoutApplicationRuntimeTests
 
         Assert.Equal(pinnedExitCode, exitCode);
         Assert.Equal(NormalizeStatsTimings(pinnedOutput), NormalizeStatsTimings(output));
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies stats and output share ripgrep's counts across rendering and summary modes.
+    /// </summary>
+    /// <param name="modeArguments">The mode arguments placed before the pattern.</param>
+    [Theory]
+    [InlineData("-o")]
+    [InlineData("-r replacement")]
+    [InlineData("--color=always")]
+    [InlineData("-v")]
+    [InlineData("--count-matches")]
+    [InlineData("-l")]
+    [InlineData("-L")]
+    [InlineData("-L -v")]
+    [InlineData("-C1")]
+    public void StatsRenderingAndSummaryModesMatchPinnedRipgrep(
+        string modeArguments)
+    {
+        ArgumentNullException.ThrowIfNull(modeArguments);
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "alpha alpha\nbeta\nalpha\n");
+        string[] mode = modeArguments.Split(
+            ' ',
+            StringSplitOptions.RemoveEmptyEntries);
+        string[] arguments = ["--stats", .. mode, "alpha", path];
+
+        (int exitCode, byte[] output, string error) = RunScout(arguments);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) =
+            RunPinnedRipgrep(arguments);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(
+            NormalizeStatsTimings(pinnedOutput),
+            NormalizeStatsTimings(output));
         Assert.Equal(pinnedError, error);
     }
 
@@ -733,6 +1010,581 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
+    /// Verifies explicit mmap count-matches search preserves ripgrep-compatible binary handling.
+    /// </summary>
+    [Fact]
+    public void MmapCountMatchesHandlesBinaryInputLikeRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        File.WriteAllBytes(path, "needle\0needle\n"u8.ToArray());
+
+        (int exitCode, byte[] output, string error) = RunScout("--no-config", "--mmap", "--count-matches", "^needle$", path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-config", "--mmap", "--count-matches", "^needle$", path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies explicit mapped output derives binary handling and every renderer from one selected-line search.
+    /// </summary>
+    [Fact]
+    public void MmapStandardRenderersHandleSelectedBinaryLinesLikeRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        byte[] lateUnselectedBinary = new byte[70_000 + "binary\0data\nneedle\n"u8.Length];
+        lateUnselectedBinary.AsSpan(0, 70_000).Fill((byte)'x');
+        lateUnselectedBinary[69_999] = (byte)'\n';
+        "binary\0data\nneedle\n"u8.CopyTo(lateUnselectedBinary.AsSpan(70_000));
+        byte[] lateSelectedBinary = new byte[70_000 + "needle\0binary\n"u8.Length];
+        lateSelectedBinary.AsSpan(0, 70_000).Fill((byte)'x');
+        lateSelectedBinary[69_999] = (byte)'\n';
+        "needle\0binary\n"u8.CopyTo(lateSelectedBinary.AsSpan(70_000));
+        byte[] lateAfterContextBinary = new byte[70_001];
+        lateAfterContextBinary.AsSpan().Fill((byte)'x');
+        "needle\n"u8.CopyTo(lateAfterContextBinary);
+        lateAfterContextBinary[69_000] = 0;
+        lateAfterContextBinary[70_000] = (byte)'\n';
+        byte[] lateBeforeContextBinary = new byte[70_008];
+        lateAfterContextBinary.CopyTo(lateBeforeContextBinary, 0);
+        "needle\n"u8.CopyTo(lateBeforeContextBinary.AsSpan(70_001));
+        var cases = new (byte[] Bytes, string[] Options, bool Stats)[]
+        {
+            ("binary\0data\nneedle\n"u8.ToArray(), ["-n"], false),
+            ("binary\0data\nneedle\n"u8.ToArray(), ["-n", "--only-matching"], false),
+            ("binary\0data\nneedle\n"u8.ToArray(), ["-n", "--replace", "found"], false),
+            ("binary\0data\nneedle\n"u8.ToArray(), ["-n", "--color", "always"], false),
+            ("binary\0data\nneedle\n"u8.ToArray(), ["--vimgrep"], false),
+            ("binary\0data\nneedle\nafter\n"u8.ToArray(), ["-n", "--context", "1"], false),
+            ("binary\0data\nneedle\n"u8.ToArray(), ["-n", "--heading"], false),
+            ("binary\0data\nneedle\n"u8.ToArray(), ["-n", "--stats"], true),
+            ("needle\0binary\nafter\n"u8.ToArray(), ["-n"], false),
+            ("before\nneedle\0binary\nafter\n"u8.ToArray(), ["-n", "--context", "1"], false),
+            ("needle\nother\0binary\n"u8.ToArray(), ["-n", "--invert-match"], false),
+            ("needle\nneedle\0binary\n"u8.ToArray(), ["-n", "--max-count", "1"], false),
+            ("needle\nother\nneedle\0binary\n"u8.ToArray(), ["-n", "--stop-on-nonmatch"], false),
+            ("needle\nother\nneedle\n"u8.ToArray(), ["-n"], false),
+            (lateUnselectedBinary, ["-n"], false),
+            (lateSelectedBinary, ["-n"], false),
+            (lateAfterContextBinary, ["-n", "--after-context", "1"], false),
+            (lateBeforeContextBinary, ["-n", "--before-context", "1"], false),
+            (lateAfterContextBinary, ["-n", "--passthru"], false),
+            (lateBeforeContextBinary, ["-n", "--before-context", "1", "--max-count", "1"], false),
+        };
+
+        for (int caseIndex = 0; caseIndex < cases.Length; caseIndex++)
+        {
+            (byte[] bytes, string[] options, bool stats) = cases[caseIndex];
+            File.WriteAllBytes(path, bytes);
+            string[] arguments = ["--no-config", "--mmap", .. options, "needle", path];
+            (int exitCode, byte[] output, string error) = RunScout(arguments);
+            (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) =
+                RunPinnedRipgrep(arguments);
+
+            Assert.True(
+                pinnedExitCode == exitCode,
+                $"Case {caseIndex} expected exit code {pinnedExitCode}, got {exitCode}; " +
+                $"rg output: {Encoding.UTF8.GetString(pinnedOutput)}; " +
+                $"Scout output: {Encoding.UTF8.GetString(output)}; " +
+                $"rg error: {pinnedError}; Scout error: {error}.");
+            if (stats)
+            {
+                Assert.Equal(
+                    NormalizeStatsTimings(pinnedOutput),
+                    NormalizeStatsTimings(output));
+            }
+            else
+            {
+                string pinnedOutputText = Encoding.UTF8.GetString(pinnedOutput);
+                string outputText = Encoding.UTF8.GetString(output);
+                Assert.True(
+                    pinnedOutputText == outputText,
+                    $"Case {caseIndex} expected output {pinnedOutputText}; " +
+                    $"got {outputText}.");
+            }
+
+            Assert.Equal(pinnedError, error);
+        }
+    }
+
+    /// <summary>
+    /// Verifies buffered binary match, context, limit, stop, and statistics callbacks follow ripgrep's event order.
+    /// </summary>
+    [Fact]
+    public void BufferedStandardRenderersHandleBinaryEventsLikeRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        byte[] earlyBinary = "binary\0data\nneedle\n"u8.ToArray();
+        byte[] lateBinary = new byte[70_008];
+        lateBinary.AsSpan().Fill((byte)'x');
+        "needle\n"u8.CopyTo(lateBinary);
+        lateBinary[69_000] = 0;
+        lateBinary[70_000] = (byte)'\n';
+        "needle\n"u8.CopyTo(lateBinary.AsSpan(70_001));
+        byte[] fillBoundaryBinary = new byte[65_562];
+        fillBoundaryBinary.AsSpan().Fill((byte)'x');
+        "needle\n"u8.CopyTo(fillBoundaryBinary);
+        "needle"u8.CopyTo(fillBoundaryBinary.AsSpan(65_530));
+        fillBoundaryBinary[65_540] = (byte)'\n';
+        fillBoundaryBinary[65_550] = 0;
+        fillBoundaryBinary[^1] = (byte)'\n';
+        var cases = new (byte[] Bytes, string[] Options)[]
+        {
+            (earlyBinary, ["-n"]),
+            (earlyBinary, ["-n", "--after-context", "1"]),
+            (earlyBinary, ["-n", "--before-context", "1"]),
+            (earlyBinary, ["-n", "--context", "1"]),
+            (earlyBinary, ["-n", "--passthru"]),
+            ("needle\nother\0binary\n"u8.ToArray(), ["-n", "--invert-match"]),
+            (lateBinary, ["-n", "--only-matching"]),
+            (lateBinary, ["-n", "--replace", "found"]),
+            (lateBinary, ["-n", "--color", "always"]),
+            (lateBinary, ["--vimgrep"]),
+            (lateBinary, ["-n", "--heading"]),
+            (lateBinary, ["-n", "--before-context", "1"]),
+            (lateBinary, ["-n", "--before-context", "2"]),
+            (lateBinary, ["-n", "--context", "1"]),
+            (lateBinary, ["-n", "--before-context", "1", "--after-context", "2"]),
+            (lateBinary, ["-n", "--passthru"]),
+            (lateBinary, ["-n", "--before-context", "1", "--max-count", "1"]),
+            (lateBinary, ["-n", "--after-context", "1", "--max-count", "1"]),
+            (lateBinary, ["-n", "--before-context", "1", "--stop-on-nonmatch"]),
+            (fillBoundaryBinary, ["-n", "--only-matching"]),
+        };
+
+        for (int caseIndex = 0; caseIndex < cases.Length; caseIndex++)
+        {
+            (byte[] bytes, string[] options) = cases[caseIndex];
+            File.WriteAllBytes(path, bytes);
+            string[] arguments =
+                ["--no-config", "--no-mmap", "--stats", .. options, "needle", path];
+            (int exitCode, byte[] output, string error) = RunScout(arguments);
+            (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) =
+                RunPinnedRipgrep(arguments);
+
+            Assert.True(
+                pinnedExitCode == exitCode,
+                $"Case {caseIndex} expected exit code {pinnedExitCode}, got {exitCode}; " +
+                $"rg output: {Encoding.UTF8.GetString(pinnedOutput)}; " +
+                $"Scout output: {Encoding.UTF8.GetString(output)}; " +
+                $"rg error: {pinnedError}; Scout error: {error}.");
+            Assert.Equal(
+                NormalizeStatsTimings(pinnedOutput),
+                NormalizeStatsTimings(output));
+            Assert.Equal(pinnedError, error);
+        }
+    }
+
+    /// <summary>
+    /// Verifies explicit mmap count-matches search evaluates a text file directly from its mapped slice.
+    /// </summary>
+    [Fact]
+    public void MmapCountMatchesUsesMappedSlice()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "alpha\nneedle\nneedle\n");
+
+        (int exitCode, byte[] output, string error) = RunScout("--no-config", "--trace", "--mmap", "--count-matches", "needle", path);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("2\n"u8.ToArray(), output);
+        Assert.Contains("searching via memory map", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Verifies the issue 37 shared-prefix regex counts text directly from an explicit mapping.
+    /// </summary>
+    [Fact]
+    public void MmapCountMatchesUsesMappedSliceForSharedDelegatePrefix()
+    {
+        const string pattern =
+            "delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|" +
+            "delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler";
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.cs");
+        File.WriteAllText(path, "public delegate void UpdateEDIEvent(string value);\n");
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--no-config",
+            "--trace",
+            "--mmap",
+            "--count-matches",
+            pattern,
+            path);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("1\n"u8.ToArray(), output);
+        Assert.Contains("searching via memory map", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Verifies the issue 37 mapped fast path falls back to ripgrep-compatible binary handling.
+    /// </summary>
+    [Fact]
+    public void MmapCountMatchesHandlesBinarySharedDelegatePrefixLikeRipgrep()
+    {
+        const string pattern =
+            "delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|" +
+            "delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler";
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        File.WriteAllBytes(
+            path,
+            "public delegate void UpdateEDIEvent(string value);\0tail"u8.ToArray());
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            pattern,
+            path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            pattern,
+            path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies mapped counting with a large exact common-prefix pattern file retains binary parity.
+    /// </summary>
+    [Fact]
+    public void MmapCountMatchesHandlesBinaryCommonPrefixLiteralSetLikeRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string patternPath = Path.Combine(root, "patterns.txt");
+        string inputPath = Path.Combine(root, "input.dat");
+        string[] patterns = Enumerable.Range(0, 64)
+            .Select(static index => $"issue44_absent_pattern_{index:D3}")
+            .ToArray();
+        File.WriteAllText(
+            patternPath,
+            string.Join('\n', patterns) + "\n",
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        File.WriteAllBytes(
+            inputPath,
+            "issue44_absent_pattern_063\0tail"u8.ToArray());
+        string[] arguments =
+        [
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            "-f",
+            patternPath,
+            inputPath,
+        ];
+
+        (int exitCode, byte[] output, string error) = RunScout(arguments);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) =
+            RunPinnedRipgrep(arguments);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies nullable regexes retain ripgrep-compatible explicit-mmap count semantics.
+    /// </summary>
+    [Fact]
+    public void MmapCountMatchesHandlesNullableRegexLikeRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "bbb\n");
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            "a*",
+            path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            "a*",
+            path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies options that require the regular count path retain explicit-mmap parity.
+    /// </summary>
+    [Fact]
+    public void MmapCountMatchesPreservesFallbackOptionSemanticsLikeRipgrep()
+    {
+        const string pattern =
+            "delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|" +
+            "delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler";
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.cs");
+        File.WriteAllText(
+            path,
+            "public delegate void UpdateEDIEvent(string first);\n" +
+            "public sealed class Unrelated;\n" +
+            "public delegate void UpdateEDIEvent(string second);\n");
+        string[][] optionSets =
+        [
+            ["--quiet"],
+            ["--multiline"],
+            ["--stop-on-nonmatch"],
+        ];
+
+        foreach (string[] options in optionSets)
+        {
+            string[] arguments =
+            [
+                "--no-config",
+                "--mmap",
+                "--count-matches",
+                .. options,
+                pattern,
+                path,
+            ];
+            (int exitCode, byte[] output, string error) = RunScout(arguments);
+            (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) =
+                RunPinnedRipgrep(arguments);
+
+            Assert.Equal(pinnedExitCode, exitCode);
+            Assert.Equal(pinnedOutput, output);
+            Assert.Equal(pinnedError, error);
+        }
+    }
+
+    /// <summary>
+    /// Verifies bounded mapped counting preserves matches and limits across a view boundary.
+    /// </summary>
+    [Fact]
+    public void MmapCountMatchesHandlesWindowBoundaryLikeRipgrep()
+    {
+        const int windowLength = 4 * 1024 * 1024;
+        const string pattern =
+            "delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|" +
+            "delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler";
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.cs");
+        byte[] bytes = new byte[windowLength + 256];
+        bytes.AsSpan().Fill((byte)'x');
+        "delegate void UpdateEDIEvent(string first);\n"u8.CopyTo(bytes);
+        "delegate void UpdateEDIEvent(string boundary);\n"u8.CopyTo(
+            bytes.AsSpan(windowLength - 4));
+        "delegate void UpdateEDIEvent(string final);\n"u8.CopyTo(
+            bytes.AsSpan(windowLength + 128));
+        File.WriteAllBytes(path, bytes);
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--no-config",
+            "--trace",
+            "--mmap",
+            "--count-matches",
+            pattern,
+            path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            pattern,
+            path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal("3\n"u8.ToArray(), output);
+        Assert.Empty(pinnedError);
+        Assert.Contains("searching via memory map", error, StringComparison.Ordinal);
+
+        (exitCode, output, error) = RunScout(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            "--max-count",
+            "1",
+            pattern,
+            path);
+        (pinnedExitCode, pinnedOutput, pinnedError) = RunPinnedRipgrep(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            "--max-count",
+            "1",
+            pattern,
+            path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies general line-regex plans preserve counts across bounded mapped views.
+    /// </summary>
+    /// <param name="pattern">The regex pattern.</param>
+    /// <param name="matchingLine">A complete matching line.</param>
+    [Theory]
+    [InlineData(@"\bGeneratedRecord\b", "internal sealed class GeneratedRecord\r\n")]
+    [InlineData(@"^internal sealed class GeneratedRecord\r?$", "internal sealed class GeneratedRecord\r\n")]
+    [InlineData(@"^[A-Za-z_]{70,90}\r?$", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\n")]
+    public void MmapCountMatchesHandlesGeneralRegexAcrossWindowBoundaryLikeRipgrep(
+        string pattern,
+        string matchingLine)
+    {
+        const int windowLength = 4 * 1024 * 1024;
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        byte[] bytes = new byte[windowLength + 256];
+        bytes.AsSpan().Fill((byte)'x');
+        int lineStart = windowLength - 11;
+        bytes[lineStart - 1] = (byte)'\n';
+        Encoding.UTF8.GetBytes(matchingLine).CopyTo(bytes, lineStart);
+        File.WriteAllBytes(path, bytes);
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--no-config",
+            "--trace",
+            "--mmap",
+            "--count-matches",
+            pattern,
+            path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            pattern,
+            path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal("1\n"u8.ToArray(), output);
+        Assert.Empty(pinnedError);
+        Assert.Contains("searching via memory map", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Verifies bounded mapped counting observes binary data beyond its first view.
+    /// </summary>
+    /// <param name="countOption">Whether matching records or individual matches are counted.</param>
+    /// <param name="pattern">The regex pattern.</param>
+    /// <param name="matchingLine">A complete matching line.</param>
+    [Theory]
+    [InlineData("--count-matches", @"^[A-Za-z_]{70,90}\r?$", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\n")]
+    [InlineData("--count-matches", "delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent|delegate .*SetProgressBarValue|delegate .*ShowCheckboxMessageBoxHandler", "public delegate void UpdateEDIEvent(string value);\n")]
+    [InlineData("--count", @"\b\w{5}\s+\w{5}\s+\w{5}\b", "alpha bravo charl delta echoo foxtt\n")]
+    public void MmapCountHandlesBinaryAfterWindowLikeRipgrep(
+        string countOption,
+        string pattern,
+        string matchingLine)
+    {
+        const int windowLength = 6 * 1024 * 1024;
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        byte[] bytes = new byte[windowLength + 256];
+        bytes.AsSpan().Fill((byte)'x');
+        Encoding.UTF8.GetBytes(matchingLine).CopyTo(bytes, 0);
+        bytes[windowLength + 128] = 0;
+        File.WriteAllBytes(path, bytes);
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--no-config",
+            "--mmap",
+            countOption,
+            pattern,
+            path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "--no-config",
+            "--mmap",
+            countOption,
+            pattern,
+            path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies an oversized incomplete line leaves bounded mapped counting without changing results.
+    /// </summary>
+    [Fact]
+    public void MmapCountMatchesHandlesOversizedPendingLineLikeRipgrep()
+    {
+        const int fileLength = (8 * 1024 * 1024) + 256;
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        byte[] bytes = new byte[fileLength];
+        bytes.AsSpan().Fill((byte)'x');
+        File.WriteAllBytes(path, bytes);
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            @"\bGeneratedRecord\b",
+            path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            @"\bGeneratedRecord\b",
+            path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies a large BOM-encoded input bypasses raw bounded mapped counting.
+    /// </summary>
+    [Fact]
+    public void MmapCountMatchesHandlesLargeBomInputLikeRipgrep()
+    {
+        const int fileLength = (6 * 1024 * 1024) + 2;
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        byte[] bytes = new byte[fileLength];
+        bytes[0] = 0xFF;
+        bytes[1] = 0xFE;
+        for (int index = 2; index < bytes.Length; index += 2)
+        {
+            bytes[index] = (byte)'x';
+        }
+
+        byte[] encodedNeedle = System.Text.Encoding.Unicode.GetBytes("needle\n");
+        encodedNeedle.CopyTo(bytes, 2);
+        File.WriteAllBytes(path, bytes);
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            "needle",
+            path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "--no-config",
+            "--mmap",
+            "--count-matches",
+            "needle",
+            path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies explicit files larger than the managed array limit use the streaming reader path.
     /// </summary>
     [Fact]
@@ -752,6 +1604,119 @@ public sealed class ScoutApplicationRuntimeTests
         Assert.Equal(pinnedExitCode, exitCode);
         Assert.Equal(pinnedOutput, output);
         Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies capture replacement streams files that cannot fit in a managed byte array.
+    /// </summary>
+    [Fact]
+    public void LargeExplicitCaptureReplacementStreamsLikeRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "large.txt");
+        using (var stream = new FileStream(
+            path,
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.Read))
+        {
+            stream.Write("struct Foo\n"u8);
+            stream.SetLength((long)int.MaxValue + 4096);
+        }
+
+        string pattern = @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)";
+        string[] arguments =
+        [
+            "--no-config",
+            "--mmap",
+            "-a",
+            "-m",
+            "1",
+            "-n",
+            "--replace",
+            "$1 $2",
+            pattern,
+            path,
+        ];
+
+        (int exitCode, byte[] output, string error) = RunScout(arguments);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) =
+            RunPinnedRipgrep(arguments);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies a binary-safe prefix beyond the managed-array limit streams capture replacement
+    /// without buffering the complete prefix.
+    /// </summary>
+    [Fact]
+    public void LargeBinarySafePrefixCaptureReplacementUsesBoundedBuffers()
+    {
+        const long BinaryOffset = (long)int.MaxValue + 65_537;
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "large.bin");
+        using (var stream = new FileStream(
+            path,
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.Read))
+        {
+            stream.Write("struct Foo\n"u8);
+            stream.SetLength(BinaryOffset + 1);
+            stream.Position = BinaryOffset - 1;
+            stream.WriteByte((byte)'\n');
+        }
+
+        byte[][] patterns =
+        [
+            @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)"u8.ToArray(),
+        ];
+        RegexSearchPlan regexPlan = RegexSearchPlan.Create(
+            patterns,
+            asciiCaseInsensitive: false)!;
+        using var output = new MemoryStream();
+        var writer = new RawByteWriter(output);
+        var separators = new OutputSeparators(
+            ":"u8.ToArray(),
+            "-"u8.ToArray(),
+            "--"u8.ToArray(),
+            contextEnabled: false,
+            "\n"u8.ToArray());
+
+        bool matched = LargeFileSearchOperations.SearchStreamingBinarySafePrefix(
+            path,
+            BinaryOffset,
+            patterns,
+            writer,
+            prefix: null,
+            separators,
+            new OutputLineLimit(maxColumns: null, preview: false),
+            new OutputColor(enabled: false),
+            CliSearchMode.Standard,
+            lineNumber: true,
+            column: false,
+            byteOffset: true,
+            asciiCaseInsensitive: false,
+            invertMatch: false,
+            lineRegexp: false,
+            wordRegexp: false,
+            replacement: "$1 $2"u8.ToArray(),
+            maxCount: 1,
+            quiet: false,
+            trim: false,
+            nullPathTerminator: false,
+            threadCount: 1,
+            bufferLength: 65_536,
+            regexPlan);
+        writer.Flush();
+
+        Assert.True(matched);
+        Assert.Equal(
+            $"1:0:struct Foo\nWARNING: stopped searching binary file after match (found \"\\0\" byte around offset {BinaryOffset})\n",
+            Encoding.UTF8.GetString(output.ToArray()));
     }
 
     /// <summary>
@@ -781,7 +1746,7 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
-    /// Verifies implicit parallel streaming reuses planned automata for regex patterns.
+    /// Verifies implicit parallel streaming shares one planned automaton for regex patterns.
     /// </summary>
     [Fact]
     public void LargeImplicitDirectoryRegexSearchesLikeRipgrep()
@@ -799,8 +1764,60 @@ public sealed class ScoutApplicationRuntimeTests
         }
 
         string pattern = @"\b(?:struct|enum|union)\s+[A-Za-z_][A-Za-z0-9_]*";
-        (int exitCode, byte[] output, string error) = RunScout("--no-config", "--threads", "2", "-n", pattern, root);
-        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-config", "--threads", "2", "-n", pattern, root);
+        (int exitCode, byte[] output, string error) = RunScout("--no-config", "--threads", "4", "-n", pattern, root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-config", "--threads", "4", "-n", pattern, root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies bounded recursive replacement preserves captures and offsets across streaming
+    /// segment boundaries, including the final unterminated record.
+    /// </summary>
+    [Fact]
+    public void LargeImplicitCaptureReplacementStreamsAcrossSegmentsLikeRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "large.txt");
+        using (var writer = new StreamWriter(
+            path,
+            append: false,
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
+        {
+            writer.WriteLine("struct Before");
+            for (int index = 0; index < 10_000; index++)
+            {
+                writer.WriteLine("ordinary source text");
+            }
+
+            writer.WriteLine("enum AcrossBoundary");
+            for (int index = 0; index < 10_000; index++)
+            {
+                writer.WriteLine("more ordinary source text");
+            }
+
+            writer.Write("union FinalRecord");
+        }
+
+        string pattern = @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)";
+        string[] arguments =
+        [
+            "--no-config",
+            "--threads",
+            "4",
+            "-n",
+            "--byte-offset",
+            "--replace",
+            "$1 $2",
+            pattern,
+            root,
+        ];
+
+        (int exitCode, byte[] output, string error) = RunScout(arguments);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) =
+            RunPinnedRipgrep(arguments);
 
         Assert.Equal(pinnedExitCode, exitCode);
         Assert.Equal(pinnedOutput, output);
@@ -1347,10 +2364,95 @@ public sealed class ScoutApplicationRuntimeTests
     {
         string root = CreateTempDirectory();
         string path = Path.Combine(root, "input.txt");
-        File.WriteAllBytes(path, CreateLargeCountMatchesMaxCountInput());
+        File.WriteAllBytes(path, CreateLargeTextCountMatchesMaxCountInput());
 
         (int exitCode, byte[] output, string error) = RunScout("--no-mmap", "--count-matches", "-m", "3", "needle", root);
         (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep("--no-mmap", "--count-matches", "-m", "3", "needle", root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies streamed general-regex counting applies max-count to matching lines while counting every match on those lines.
+    /// </summary>
+    [Fact]
+    public void LargeGeneralRegexCountMatchesMaxCountUsesMatchingLines()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllBytes(path, CreateLargeTextCountMatchesMaxCountInput());
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--no-mmap",
+            "--count-matches",
+            "-m",
+            "3",
+            @"n\w+dle",
+            root);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "--no-mmap",
+            "--count-matches",
+            "-m",
+            "3",
+            @"n\w+dle",
+            root);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies streamed CRLF records count authoritative matches once before stop-on-nonmatch terminates the search.
+    /// </summary>
+    [Fact]
+    public void LargeGeneralRegexCountMatchesCrlfStopOnNonmatchMatchesPinnedRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllBytes(path, CreateLargeCrlfStopOnNonmatchInput());
+
+        string[] arguments =
+        [
+            "--no-mmap",
+            "--crlf",
+            "--stop-on-nonmatch",
+            "--count-matches",
+            @"n\w+dle",
+            root,
+        ];
+        (int exitCode, byte[] output, string error) = RunScout(arguments);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
+    /// Verifies streamed NUL-delimited records retain authoritative match counts across buffer boundaries.
+    /// </summary>
+    [Fact]
+    public void LargeGeneralRegexCountMatchesNullDataMatchesPinnedRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        File.WriteAllBytes(path, CreateLargeNullDataCountMatchesInput());
+
+        string[] arguments =
+        [
+            "--no-mmap",
+            "--null-data",
+            "--count-matches",
+            "-m",
+            "2",
+            @"n\w+dle",
+            root,
+        ];
+        (int exitCode, byte[] output, string error) = RunScout(arguments);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(arguments);
 
         Assert.Equal(pinnedExitCode, exitCode);
         Assert.Equal(pinnedOutput, output);
@@ -1550,6 +2652,98 @@ public sealed class ScoutApplicationRuntimeTests
         Assert.Equal(pinnedPassthruExitCode, passthruExitCode);
         Assert.Equal(pinnedPassthruOutput, passthruOutput);
         Assert.Equal(pinnedPassthruError, passthruError);
+    }
+
+    /// <summary>
+    /// Verifies multiline stop-on-nonmatch excludes a match at the first omitted line across renderers.
+    /// </summary>
+    [Fact]
+    public void MultilineStopOnNonmatchBoundaryMatchesPinnedRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "hit\nmiss\nnext\n");
+        string[][] optionSets =
+        [
+            ["-n"],
+            ["-n", "--color", "always"],
+            ["-n", "--replace", "X"],
+        ];
+
+        for (int index = 0; index < optionSets.Length; index++)
+        {
+            string[] arguments =
+            [
+                "--no-config",
+                "--multiline",
+                "--stop-on-nonmatch",
+                .. optionSets[index],
+                "hit|(?m:^next)",
+                path,
+            ];
+            (int exitCode, byte[] output, string error) = RunScout(arguments);
+            (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) =
+                RunPinnedRipgrep(arguments);
+
+            Assert.Equal(pinnedExitCode, exitCode);
+            Assert.Equal(pinnedOutput, output);
+            Assert.Equal(pinnedError, error);
+        }
+    }
+
+    /// <summary>
+    /// Verifies positive multiline max-count retains complete, coalesced physical-line blocks.
+    /// </summary>
+    [Fact]
+    public void MultilineMaxCountMatchBlocksMatchPinnedRipgrep()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        var cases = new (string Contents, string Pattern, string[] Options, bool Stats)[]
+        {
+            ("foo foo\nfoo\nnever\nmatches\n", "foo|never\\nmatches", ["--stats", "-m", "1"], true),
+            ("foo foo\nfoo\nnever\nmatches\n", "foo|never\\nmatches", ["-n", "-m", "1", "--replace", "X"], false),
+            ("foo\nbar\nfoo\nbar\n", "foo\\nbar", ["--stats", "-m", "1"], true),
+            ("one\nxxfoo\nbarxx\nfoo\n", "foo\\nbar|foo", ["--stats", "-C", "1", "-m", "1"], true),
+            ("foo\nbar\nfoo\nbar\n", "foo\\nbar", ["-n", "-m", "1"], false),
+            ("foo\nbar\nfoo\nbar\n", "foo\\nbar", ["-n", "-m", "1", "--color", "always"], false),
+            ("foo\nbar\nfoo\nbar\n", "foo\\nbar", ["-n", "-m", "1", "--replace", "X"], false),
+            ("foo\nbar\nafter\nfoo\nbar\ntail\n", "foo\\nbar", ["-n", "-m", "1", "--after-context", "1"], false),
+            ("aa\nbb\ncc\ndd\ntail\n", "aa\\nbb|cc\\ndd", ["-n", "-m", "2", "--replace", "X"], false),
+            ("aa\nbb\ncc\ndd\ntail\n", "aa\\nbb|cc\\ndd", ["-n", "-m", "2", "--context", "1"], false),
+        };
+
+        for (int index = 0; index < cases.Length; index++)
+        {
+            (string contents, string pattern, string[] options, bool stats) =
+                cases[index];
+            File.WriteAllText(path, contents);
+            string[] arguments =
+            [
+                "--no-config",
+                "--multiline",
+                .. options,
+                pattern,
+                path,
+            ];
+            (int exitCode, byte[] output, string error) = RunScout(arguments);
+            (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) =
+                RunPinnedRipgrep(arguments);
+
+            Assert.Equal(pinnedExitCode, exitCode);
+            if (stats)
+            {
+                Assert.Equal(
+                    NormalizeStatsTimings(pinnedOutput),
+                    NormalizeStatsTimings(output));
+            }
+            else
+            {
+                Assert.Equal(pinnedOutput, output);
+            }
+
+            Assert.Equal(pinnedError, error);
+        }
     }
 
     /// <summary>
@@ -1932,6 +3126,35 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
+    /// Verifies NUL record terminators are excluded when replaying end-anchored replacement captures.
+    /// </summary>
+    [Fact]
+    public void NullDataReplacementReplaysEndAnchoredCapturesAgainstRecordContent()
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.dat");
+        File.WriteAllBytes(path, "a\0b\0"u8.ToArray());
+
+        (int exitCode, byte[] output, string error) = RunScout(
+            "--null-data",
+            "--replace",
+            "<$x>",
+            "(?<x>a)$",
+            path);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) = RunPinnedRipgrep(
+            "--null-data",
+            "--replace",
+            "<$x>",
+            "(?<x>a)$",
+            path);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal("<a>\0"u8.ToArray(), output);
+        Assert.Equal(pinnedOutput, output);
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies CRLF and NUL data modes use ripgrep's positive-flag last-wins behavior.
     /// </summary>
     [Fact]
@@ -2056,6 +3279,33 @@ public sealed class ScoutApplicationRuntimeTests
         stream.Write("needle needle "u8);
         stream.Write(new byte[300_000]);
         stream.Write("\nneedle needle\nneedle needle\nneedle needle\n"u8);
+        return stream.ToArray();
+    }
+
+    private static byte[] CreateLargeCrlfStopOnNonmatchInput()
+    {
+        using MemoryStream stream = new();
+        stream.Write("needle needle\r\nneedle\r\nstop\r\nneedle needle\r\n"u8);
+        WriteRepeated(stream, (byte)'x', 70_000);
+        stream.Write("\r\n"u8);
+        return stream.ToArray();
+    }
+
+    private static byte[] CreateLargeTextCountMatchesMaxCountInput()
+    {
+        using MemoryStream stream = new();
+        stream.Write("needle needle "u8);
+        WriteRepeated(stream, (byte)'x', 300_000);
+        stream.Write("\nneedle needle\nneedle needle\nneedle needle\n"u8);
+        return stream.ToArray();
+    }
+
+    private static byte[] CreateLargeNullDataCountMatchesInput()
+    {
+        using MemoryStream stream = new();
+        stream.Write("needle needle\0"u8);
+        WriteRepeated(stream, (byte)'x', 70_000);
+        stream.Write("\0needle\0needle needle\0"u8);
         return stream.ToArray();
     }
 

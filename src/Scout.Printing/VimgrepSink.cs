@@ -1,77 +1,68 @@
-
 namespace Scout;
 
-internal struct VimgrepSink : IMatchLineSink
+/// <summary>
+/// Writes vimgrep records for reportable matches and selection-only lines.
+/// </summary>
+/// <param name="output">The output writer.</param>
+/// <param name="prefix">The optional path prefix.</param>
+/// <param name="fieldSeparator">The output field separator.</param>
+/// <param name="lineNumber">Whether to write line numbers.</param>
+/// <param name="column">Whether to write match columns.</param>
+/// <param name="byteOffset">Whether to write byte offsets.</param>
+/// <param name="onlyMatching">Whether to write only matching bytes.</param>
+/// <param name="trim">Whether to trim leading ASCII whitespace.</param>
+/// <param name="nullPathTerminator">Whether path prefixes use a NUL terminator.</param>
+/// <param name="lineLimit">The output line-length policy.</param>
+/// <param name="color">The configured output colors.</param>
+/// <param name="lineTerminator">The output record terminator.</param>
+/// <param name="lineNumberOffset">The line-number adjustment.</param>
+/// <param name="byteOffsetOffset">The byte-offset adjustment.</param>
+internal struct VimgrepSink(
+    RawByteWriter output,
+    OutputPath? prefix,
+    ReadOnlyMemory<byte> fieldSeparator,
+    bool lineNumber,
+    bool column,
+    bool byteOffset,
+    bool onlyMatching,
+    bool trim,
+    bool nullPathTerminator,
+    OutputLineLimit lineLimit,
+    OutputColor color,
+    ReadOnlyMemory<byte> lineTerminator,
+    long lineNumberOffset = 0,
+    long byteOffsetOffset = 0) : IMatchLineSink
 {
-    private static readonly byte[] NullByte = [0];
+    private static readonly byte[] s_nullByte = [0];
 
-    private readonly RawByteWriter output;
-    private readonly OutputPath? prefix;
-    private readonly ReadOnlyMemory<byte> fieldSeparator;
-    private readonly bool lineNumber;
-    private readonly bool column;
-    private readonly bool byteOffset;
-    private readonly bool onlyMatching;
-    private readonly bool trim;
-    private readonly bool nullPathTerminator;
-    private readonly OutputLineLimit lineLimit;
-    private readonly IReadOnlyList<byte[]> pattern;
-    private readonly bool asciiCaseInsensitive;
-    private readonly bool lineRegexp;
-    private readonly bool wordRegexp;
-    private readonly bool crlf;
-    private readonly bool nullData;
-    private readonly OutputColor color;
-    private readonly ReadOnlyMemory<byte> lineTerminator;
-    private readonly long lineNumberOffset;
-    private readonly long byteOffsetOffset;
+    private readonly RawByteWriter _output = output ?? throw new ArgumentNullException(nameof(output));
+    private readonly OutputPath? _prefix = prefix;
+    private readonly ReadOnlyMemory<byte> _fieldSeparator = fieldSeparator;
+    private readonly bool _lineNumber = lineNumber;
+    private readonly bool _column = column;
+    private readonly bool _byteOffset = byteOffset;
+    private readonly bool _onlyMatching = onlyMatching;
+    private readonly bool _trim = trim;
+    private readonly bool _nullPathTerminator = nullPathTerminator;
+    private readonly OutputLineLimit _lineLimit = lineLimit;
+    private readonly OutputColor _color = color;
+    private readonly ReadOnlyMemory<byte> _lineTerminator = lineTerminator;
+    private readonly long _lineNumberOffset = lineNumberOffset;
+    private readonly long _byteOffsetOffset = byteOffsetOffset;
+    private List<int>? _deferredMatchStarts;
+    private List<long>? _deferredMatchColumns;
+    private List<int>? _deferredMatchLengths;
+    private long _lastMatchedLineNumber;
 
-    public VimgrepSink(
-        RawByteWriter output,
-        OutputPath? prefix,
-        ReadOnlyMemory<byte> fieldSeparator,
-        bool lineNumber,
-        bool column,
-        bool byteOffset,
-        bool onlyMatching,
-        bool trim,
-        bool nullPathTerminator,
-        OutputLineLimit lineLimit,
-        IReadOnlyList<byte[]> pattern,
-        bool asciiCaseInsensitive,
-        bool lineRegexp,
-        bool wordRegexp,
-        bool crlf,
-        bool nullData,
-        OutputColor color,
-        ReadOnlyMemory<byte> lineTerminator,
-        long lineNumberOffset = 0,
-        long byteOffsetOffset = 0)
-    {
-        ArgumentNullException.ThrowIfNull(output);
-        ArgumentNullException.ThrowIfNull(pattern);
-        this.output = output;
-        this.prefix = prefix;
-        this.fieldSeparator = fieldSeparator;
-        this.lineNumber = lineNumber;
-        this.column = column;
-        this.byteOffset = byteOffset;
-        this.onlyMatching = onlyMatching;
-        this.trim = trim;
-        this.nullPathTerminator = nullPathTerminator;
-        this.lineLimit = lineLimit;
-        this.pattern = pattern;
-        this.asciiCaseInsensitive = asciiCaseInsensitive;
-        this.lineRegexp = lineRegexp;
-        this.wordRegexp = wordRegexp;
-        this.crlf = crlf;
-        this.nullData = nullData;
-        this.color = color;
-        this.lineTerminator = lineTerminator;
-        this.lineNumberOffset = lineNumberOffset;
-        this.byteOffsetOffset = byteOffsetOffset;
-    }
-
+    /// <summary>
+    /// Writes one reportable match with its containing line.
+    /// </summary>
+    /// <param name="lineNumber">The one-based line number.</param>
+    /// <param name="lineByteOffset">The zero-based line byte offset.</param>
+    /// <param name="matchByteOffset">The zero-based match byte offset.</param>
+    /// <param name="matchColumn">The one-based match column.</param>
+    /// <param name="line">The containing line.</param>
+    /// <param name="match">The matching bytes.</param>
     public void MatchedLine(
         long lineNumber,
         long lineByteOffset,
@@ -80,94 +71,199 @@ internal struct VimgrepSink : IMatchLineSink
         ReadOnlySpan<byte> line,
         ReadOnlySpan<byte> match)
     {
-        _ = lineByteOffset;
-        lineNumber += lineNumberOffset;
-        matchByteOffset += byteOffsetOffset;
-        ReadOnlySpan<byte> body = onlyMatching ? match : line;
-        int trimOffset = trim ? GetTrimOffset(body) : 0;
+        _lastMatchedLineNumber = lineNumber;
+        if (ShouldDeferLine(line))
+        {
+            (_deferredMatchStarts ??= []).Add(
+                checked((int)(matchByteOffset - lineByteOffset)));
+            (_deferredMatchColumns ??= []).Add(matchColumn);
+            (_deferredMatchLengths ??= []).Add(match.Length);
+            return;
+        }
+
+        WriteMatchedLine(
+            lineNumber,
+            matchByteOffset,
+            matchColumn,
+            line,
+            match,
+            lineMatchCount: 0,
+            matchesAfterPreview: 0);
+    }
+
+    private void WriteMatchedLine(
+        long lineNumber,
+        long matchByteOffset,
+        long matchColumn,
+        ReadOnlySpan<byte> line,
+        ReadOnlySpan<byte> match,
+        long lineMatchCount,
+        long matchesAfterPreview)
+    {
+        lineNumber += _lineNumberOffset;
+        matchByteOffset += _byteOffsetOffset;
+        ReadOnlySpan<byte> body = _onlyMatching && matchColumn > 0 ? match : line;
+        int trimOffset = _trim ? GetTrimOffset(body) : 0;
         ReadOnlySpan<byte> displayBody = body[trimOffset..];
         bool linked = false;
-        bool hasLineNumber = this.lineNumber;
-        bool hasColumn = column && matchColumn > 0;
-        bool hasByteOffset = byteOffset;
+        bool hasLineNumber = _lineNumber;
+        bool hasColumn = _column && matchColumn > 0;
+        bool hasByteOffset = _byteOffset;
 
-        if (prefix is not null)
+        if (_prefix is not null)
         {
-            linked = prefix.BeginHyperlink(output, lineNumber, matchColumn > 0 ? matchColumn : null);
-            color.WritePath(output, prefix.Display);
+            linked = _prefix.BeginHyperlink(_output, lineNumber, matchColumn > 0 ? matchColumn : null);
+            _color.WritePath(_output, _prefix.Display);
             if (!hasLineNumber && !hasColumn && !hasByteOffset)
             {
-                OutputPath.EndHyperlink(output, ref linked);
+                OutputPath.EndHyperlink(_output, ref linked);
             }
 
-            output.Write(nullPathTerminator ? NullByte : fieldSeparator.Span);
+            _output.Write(_nullPathTerminator ? s_nullByte : _fieldSeparator.Span);
         }
 
         if (hasLineNumber)
         {
-            color.WriteLineNumber(output, lineNumber);
+            _color.WriteLineNumber(_output, lineNumber);
             if (!hasColumn && !hasByteOffset)
             {
-                OutputPath.EndHyperlink(output, ref linked);
+                OutputPath.EndHyperlink(_output, ref linked);
             }
 
-            output.Write(fieldSeparator.Span);
+            _output.Write(_fieldSeparator.Span);
         }
 
         if (hasColumn)
         {
-            color.WriteNumberField(output, matchColumn);
+            _color.WriteNumberField(_output, matchColumn);
             if (!hasByteOffset)
             {
-                OutputPath.EndHyperlink(output, ref linked);
+                OutputPath.EndHyperlink(_output, ref linked);
             }
 
-            output.Write(fieldSeparator.Span);
+            _output.Write(_fieldSeparator.Span);
         }
 
         if (hasByteOffset)
         {
-            color.WriteNumberField(output, matchByteOffset);
-            OutputPath.EndHyperlink(output, ref linked);
-            output.Write(fieldSeparator.Span);
+            _color.WriteNumberField(_output, matchByteOffset);
+            OutputPath.EndHyperlink(_output, ref linked);
+            _output.Write(_fieldSeparator.Span);
         }
 
-        WriteBody(displayBody, line, matchColumn - 1 - trimOffset, match.Length);
+        WriteBody(
+            displayBody,
+            matchColumn - 1 - trimOffset,
+            match.Length,
+            lineMatchCount,
+            matchesAfterPreview);
     }
 
-    private void WriteBody(ReadOnlySpan<byte> displayBody, ReadOnlySpan<byte> line, long matchStart, int matchLength)
+    /// <summary>
+    /// Writes a selected line when no reportable match was emitted before the line completed.
+    /// </summary>
+    /// <param name="lineNumber">The one-based line number.</param>
+    /// <param name="lineByteOffset">The zero-based line byte offset.</param>
+    /// <param name="line">The completed line.</param>
+    public void FinishLine(long lineNumber, long lineByteOffset, ReadOnlySpan<byte> line)
     {
-        if (!onlyMatching && lineLimit.IsExceeded(displayBody))
+        if (_deferredMatchStarts is { Count: > 0 } matchStarts)
         {
-            if (lineLimit.Preview)
+            List<long> matchColumns = _deferredMatchColumns!;
+            List<int> matchLengths = _deferredMatchLengths!;
+            int trimOffset = _trim ? GetTrimOffset(line) : 0;
+            int previewLength = _lineLimit.GetPreviewLength(line[trimOffset..]);
+            long matchesAfterPreview = CountDeferredMatchesAtOrAfter(previewLength);
+            long lineMatchCount = matchStarts.Count;
+            for (int index = 0; index < matchStarts.Count; index++)
             {
-                ulong columns = lineLimit.MaxColumns.GetValueOrDefault();
-                long remainingMatches = LiteralLineSearcher.CountLineMatchesAfterColumn(line, pattern, columns, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf, nullData);
-                WriteHighlightedBody(displayBody[..lineLimit.GetPreviewLength(displayBody)], matchStart, matchLength);
-                output.Write(" [... "u8);
-                OutputColor.WriteNumber(output, remainingMatches);
-                output.Write(" more match"u8);
-                if (remainingMatches != 1)
-                {
-                    output.Write("es"u8);
-                }
-
-                output.Write("]"u8);
-            }
-            else
-            {
-                output.Write("[Omitted long line with "u8);
-                OutputColor.WriteNumber(output, LiteralLineSearcher.CountLineMatches(line, pattern, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf, nullData));
-                output.Write(" matches]"u8);
+                int matchStart = matchStarts[index];
+                int matchLength = matchLengths[index];
+                WriteMatchedLine(
+                    lineNumber,
+                    lineByteOffset + matchStart,
+                    matchColumns[index],
+                    line,
+                    line.Slice(matchStart, matchLength),
+                    lineMatchCount,
+                    matchesAfterPreview);
             }
 
-            output.Write(lineTerminator.Span);
+            matchStarts.Clear();
+            matchColumns.Clear();
+            matchLengths.Clear();
             return;
         }
 
-        if (onlyMatching)
+        if (_lastMatchedLineNumber != lineNumber)
         {
-            color.WriteMatch(output, displayBody);
+            WriteMatchedLine(
+                lineNumber,
+                lineByteOffset,
+                matchColumn: 0,
+                line,
+                line,
+                lineMatchCount: 0,
+                matchesAfterPreview: 0);
+        }
+    }
+
+    private void WriteBody(
+        ReadOnlySpan<byte> displayBody,
+        long matchStart,
+        int matchLength,
+        long lineMatchCount,
+        long matchesAfterPreview)
+    {
+        if ((_onlyMatching || matchStart < 0) &&
+            _lineLimit.IsExceeded(displayBody))
+        {
+            if (_lineLimit.Preview)
+            {
+                _output.Write(displayBody[.._lineLimit.GetPreviewLength(displayBody)]);
+                _output.Write(" [... omitted end of long line]"u8);
+            }
+            else
+            {
+                _output.Write("[Omitted long matching line]"u8);
+            }
+
+            _output.Write(_lineTerminator.Span);
+            return;
+        }
+
+        if (!_onlyMatching && _lineLimit.IsExceeded(displayBody))
+        {
+            if (_lineLimit.Preview)
+            {
+                WriteHighlightedBody(
+                    displayBody[.._lineLimit.GetPreviewLength(displayBody)],
+                    matchStart,
+                    matchLength);
+                _output.Write(" [... "u8);
+                OutputColor.WriteNumber(_output, matchesAfterPreview);
+                _output.Write(" more match"u8);
+                if (matchesAfterPreview != 1)
+                {
+                    _output.Write("es"u8);
+                }
+
+                _output.Write("]"u8);
+            }
+            else
+            {
+                _output.Write("[Omitted long line with "u8);
+                OutputColor.WriteNumber(_output, lineMatchCount);
+                _output.Write(" matches]"u8);
+            }
+
+            _output.Write(_lineTerminator.Span);
+            return;
+        }
+
+        if (_onlyMatching && matchStart >= 0)
+        {
+            _color.WriteMatch(_output, displayBody);
         }
         else
         {
@@ -176,21 +272,47 @@ internal struct VimgrepSink : IMatchLineSink
 
         if (!HasInputTerminator(displayBody))
         {
-            output.Write(lineTerminator.Span);
+            _output.Write(_lineTerminator.Span);
         }
+    }
+
+    private bool ShouldDeferLine(ReadOnlySpan<byte> line)
+    {
+        if (_deferredMatchStarts is { Count: > 0 })
+        {
+            return true;
+        }
+
+        int trimOffset = _trim ? GetTrimOffset(line) : 0;
+        return _lineLimit.IsExceeded(line[trimOffset..]);
+    }
+
+    private long CountDeferredMatchesAtOrAfter(int start)
+    {
+        long count = 0;
+        List<int> matchStarts = _deferredMatchStarts!;
+        for (int index = 0; index < matchStarts.Count; index++)
+        {
+            if (matchStarts[index] >= start)
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     private void WriteHighlightedBody(ReadOnlySpan<byte> displayBody, long matchStart, int matchLength)
     {
-        if (!color.Enabled || matchStart < 0 || matchStart >= displayBody.Length)
+        if (!_color.Enabled || matchStart < 0 || matchStart >= displayBody.Length)
         {
-            output.Write(displayBody);
+            _output.Write(displayBody);
             return;
         }
 
         int start = (int)matchStart;
         int length = Math.Min(matchLength, displayBody.Length - start);
-        ColoredLineWriter.Write(output, displayBody, [start], [length], color);
+        ColoredLineWriter.Write(_output, displayBody, [start], [length], _color);
     }
 
     private bool HasInputTerminator(ReadOnlySpan<byte> bytes)
@@ -203,12 +325,7 @@ internal struct VimgrepSink : IMatchLineSink
 
     private bool IsNullLineTerminator()
     {
-        return lineTerminator.Length == 1 && lineTerminator.Span[0] == 0;
-    }
-
-    private static ReadOnlySpan<byte> TrimLeadingAsciiWhitespace(ReadOnlySpan<byte> bytes)
-    {
-        return bytes[GetTrimOffset(bytes)..];
+        return _lineTerminator.Length == 1 && _lineTerminator.Span[0] == 0;
     }
 
     private static int GetTrimOffset(ReadOnlySpan<byte> bytes)
@@ -226,5 +343,4 @@ internal struct VimgrepSink : IMatchLineSink
     {
         return value is (byte)' ' or (byte)'\t' or (byte)'\n' or (byte)'\v' or (byte)'\f' or (byte)'\r';
     }
-
 }

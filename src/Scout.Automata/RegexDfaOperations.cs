@@ -1,7 +1,15 @@
 namespace Scout;
 
+/// <summary>
+/// Provides shared closure, transition, and reachability operations for DFA-style runners.
+/// </summary>
 internal static class RegexDfaOperations
 {
+    /// <summary>
+    /// Determines whether an NFA can use byte-oriented DFA operations.
+    /// </summary>
+    /// <param name="nfa">The NFA to inspect.</param>
+    /// <returns><see langword="true" /> when every state is supported.</returns>
     public static bool CanCompile(RegexNfa nfa)
     {
         for (int index = 0; index < nfa.States.Count; index++)
@@ -17,6 +25,12 @@ internal static class RegexDfaOperations
         return true;
     }
 
+    /// <summary>
+    /// Computes the ordered epsilon closure for a state.
+    /// </summary>
+    /// <param name="nfa">The source NFA.</param>
+    /// <param name="stateIndex">The starting state index.</param>
+    /// <returns>The ordered closure state indexes.</returns>
     public static int[] Closure(RegexNfa nfa, int stateIndex)
     {
         var threads = new List<int>();
@@ -24,6 +38,12 @@ internal static class RegexDfaOperations
         return threads.ToArray();
     }
 
+    /// <summary>
+    /// Computes an epsilon closure that stops after the first accepting path.
+    /// </summary>
+    /// <param name="nfa">The source NFA.</param>
+    /// <param name="stateIndex">The starting state index.</param>
+    /// <returns>The leftmost-first closure state indexes.</returns>
     public static int[] ClosureLeftmost(RegexNfa nfa, int stateIndex)
     {
         var threads = new List<int>();
@@ -31,6 +51,13 @@ internal static class RegexDfaOperations
         return threads.ToArray();
     }
 
+    /// <summary>
+    /// Moves an ordered NFA state set through one byte and closes the resulting states.
+    /// </summary>
+    /// <param name="nfa">The source NFA.</param>
+    /// <param name="nfaStates">The current ordered state indexes.</param>
+    /// <param name="value">The byte to consume.</param>
+    /// <returns>The next ordered state indexes.</returns>
     public static int[] Move(RegexNfa nfa, int[] nfaStates, byte value)
     {
         var next = new List<int>();
@@ -40,15 +67,7 @@ internal static class RegexDfaOperations
         {
             RegexNfaState nfaState = nfa.States[nfaStates[index]];
             if (nfaState.Kind == RegexNfaStateKind.Atom &&
-                RegexByteClass.AtomMatches(
-                    value,
-                    nfaState.AtomKind,
-                    nfaState.Value.Span,
-                    nfaState.CaseInsensitive,
-                    nfaState.MultiLine,
-                    nfaState.DotMatchesNewline,
-                    nfaState.Crlf,
-                    nfaState.LineTerminator))
+                nfaState.AtomMatches(value))
             {
                 AddThread(nfa, nfaState.Next, next, visited, closedSplits);
             }
@@ -62,6 +81,13 @@ internal static class RegexDfaOperations
         return next.ToArray();
     }
 
+    /// <summary>
+    /// Moves a leftmost-first NFA state set through one byte.
+    /// </summary>
+    /// <param name="nfa">The source NFA.</param>
+    /// <param name="nfaStates">The current ordered state indexes.</param>
+    /// <param name="value">The byte to consume.</param>
+    /// <returns>The next leftmost-first state indexes.</returns>
     public static int[] MoveLeftmost(RegexNfa nfa, int[] nfaStates, byte value)
     {
         var next = new List<int>();
@@ -71,15 +97,7 @@ internal static class RegexDfaOperations
         {
             RegexNfaState nfaState = nfa.States[nfaStates[index]];
             if (nfaState.Kind == RegexNfaStateKind.Atom &&
-                RegexByteClass.AtomMatches(
-                    value,
-                    nfaState.AtomKind,
-                    nfaState.Value.Span,
-                    nfaState.CaseInsensitive,
-                    nfaState.MultiLine,
-                    nfaState.DotMatchesNewline,
-                    nfaState.Crlf,
-                    nfaState.LineTerminator) &&
+                nfaState.AtomMatches(value) &&
                 AddThreadLeftmost(nfa, nfaState.Next, next, visited, closedSplits))
             {
                 break;
@@ -96,6 +114,16 @@ internal static class RegexDfaOperations
         return next.ToArray();
     }
 
+    /// <summary>
+    /// Determines whether a consumer ordered before an accepting state can still match.
+    /// </summary>
+    /// <param name="nfa">The source NFA.</param>
+    /// <param name="threads">The current ordered state indexes.</param>
+    /// <param name="acceptIndex">The index of the accepting state in <paramref name="threads" />.</param>
+    /// <param name="haystack">The complete haystack bytes.</param>
+    /// <param name="position">The current byte position.</param>
+    /// <param name="reachabilityCache">An optional reusable reachability cache.</param>
+    /// <returns><see langword="true" /> when an earlier consumer can reach acceptance.</returns>
     public static bool HasEarlierConsumer(
         RegexNfa nfa,
         int[] threads,
@@ -113,20 +141,7 @@ internal static class RegexDfaOperations
         {
             RegexNfaState state = nfa.States[threads[index]];
             if (state.Kind != RegexNfaStateKind.Atom ||
-                !RegexByteClass.TryGetAtomMatchLength(
-                    haystack,
-                    position,
-                    state.AtomKind,
-                    state.Value.Span,
-                    state.CaseInsensitive,
-                    state.MultiLine,
-                    state.DotMatchesNewline,
-                    state.Crlf,
-                    state.LineTerminator,
-                    state.UnicodeClasses,
-                    state.RequiresUtf8ScalarMatch,
-                    state.CanUseAsciiScalarFastPath,
-                    out int consume))
+                !state.TryGetAtomMatchLength(haystack, position, out int consume))
             {
                 continue;
             }
@@ -179,6 +194,17 @@ internal static class RegexDfaOperations
         };
     }
 
+    /// <summary>
+    /// Determines whether a state can reach acceptance from a haystack position.
+    /// </summary>
+    /// <param name="nfa">The source NFA.</param>
+    /// <param name="stateIndex">The starting state index.</param>
+    /// <param name="haystack">The complete haystack bytes.</param>
+    /// <param name="position">The starting byte position.</param>
+    /// <param name="cache">An optional reusable result cache.</param>
+    /// <param name="visited">An optional reusable visited set.</param>
+    /// <param name="pending">An optional reusable traversal stack.</param>
+    /// <returns><see langword="true" /> when an accepting state is reachable.</returns>
     public static bool CanReachAccept(
         RegexNfa nfa,
         int stateIndex,
@@ -263,20 +289,7 @@ internal static class RegexDfaOperations
                     break;
 
                 case RegexNfaStateKind.Atom:
-                    if (RegexByteClass.TryGetAtomMatchLength(
-                            haystack,
-                            current.Position,
-                            state.AtomKind,
-                            state.Value.Span,
-                            state.CaseInsensitive,
-                            state.MultiLine,
-                            state.DotMatchesNewline,
-                            state.Crlf,
-                            state.LineTerminator,
-                            state.UnicodeClasses,
-                            state.RequiresUtf8ScalarMatch,
-                            state.CanUseAsciiScalarFastPath,
-                            out int consume))
+                    if (state.TryGetAtomMatchLength(haystack, current.Position, out int consume))
                     {
                         pending.Push((state.Next, current.Position + consume));
                     }
@@ -302,6 +315,12 @@ internal static class RegexDfaOperations
         return false;
     }
 
+    /// <summary>
+    /// Finds the first accepting state in an ordered state set.
+    /// </summary>
+    /// <param name="nfa">The source NFA.</param>
+    /// <param name="threads">The ordered state indexes.</param>
+    /// <returns>The accepting state position, or <c>-1</c> when none is present.</returns>
     public static int IndexOfAccept(RegexNfa nfa, int[] threads)
     {
         for (int index = 0; index < threads.Length; index++)

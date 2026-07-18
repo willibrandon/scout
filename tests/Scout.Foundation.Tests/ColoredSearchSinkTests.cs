@@ -7,6 +7,37 @@ namespace Scout;
 public sealed class ColoredSearchSinkTests
 {
     /// <summary>
+    /// Verifies an empty match after line content preserves that content exactly once.
+    /// </summary>
+    [Fact]
+    public void EmptyMatchPreservesLineContentOnce()
+    {
+        using MemoryStream output = new();
+        var writer = new RawByteWriter(output);
+        var color = new OutputColor(enabled: true);
+        var sink = new ColoredSearchSink(
+            writer,
+            prefix: null,
+            ":"u8.ToArray(),
+            lineNumber: true,
+            column: false,
+            byteOffset: false,
+            trim: false,
+            nullPathTerminator: false,
+            new OutputLineLimit(null, preview: false),
+            color,
+            "\n"u8.ToArray());
+        ReadOnlySpan<byte> line = "a\n"u8;
+
+        sink.MatchedLine(1, 0, 1, 2, line, []);
+        sink.Flush();
+
+        Assert.Equal(
+            "\u001b[0m\u001b[32m1\u001b[0m:a\n",
+            System.Text.Encoding.UTF8.GetString(output.ToArray()));
+    }
+
+    /// <summary>
     /// Verifies match byte offsets are interpreted relative to their containing lines.
     /// </summary>
     [Fact]

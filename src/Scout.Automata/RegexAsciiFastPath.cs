@@ -1,7 +1,18 @@
 namespace Scout;
 
+/// <summary>
+/// Builds byte-oriented DFA projections for syntax whose ASCII behavior is equivalent.
+/// </summary>
 internal static class RegexAsciiFastPath
 {
+    /// <summary>
+    /// Attempts to compile an ASCII-only projection of a parsed regex.
+    /// </summary>
+    /// <param name="pattern">The original regex pattern.</param>
+    /// <param name="root">The parsed syntax root.</param>
+    /// <param name="options">The original compilation options.</param>
+    /// <param name="nfa">Receives the projected NFA when compilation succeeds.</param>
+    /// <returns><see langword="true" /> when the projection is safe and DFA-compatible.</returns>
     public static bool TryCompileNfa(
         ReadOnlySpan<byte> pattern,
         RegexSyntaxNode root,
@@ -16,17 +27,9 @@ internal static class RegexAsciiFastPath
             return false;
         }
 
-        var asciiOptions = new RegexCompileOptions(
-            options.CaseInsensitive,
-            options.SwapGreed,
-            options.MultiLine,
-            options.DotMatchesNewline,
-            options.Crlf,
-            options.LineTerminator,
-            utf8: false,
-            unicodeClasses: false);
+        RegexCompileOptions asciiOptions = options.WithAsciiSemantics();
         RegexNfa candidate = RegexNfaCompiler.Compile(root, asciiOptions);
-        if (!RegexDfaOperations.CanCompile(candidate))
+        if (!RegexUnanchoredDenseDfa.CanCompile(candidate))
         {
             return false;
         }
@@ -52,16 +55,6 @@ internal static class RegexAsciiFastPath
     {
         switch (node.Kind)
         {
-            case RegexSyntaxKind.StartAnchor:
-            case RegexSyntaxKind.EndAnchor:
-            case RegexSyntaxKind.AbsoluteStartAnchor:
-            case RegexSyntaxKind.AbsoluteEndAnchor:
-            case RegexSyntaxKind.WordBoundary:
-            case RegexSyntaxKind.NotWordBoundary:
-            case RegexSyntaxKind.WordStartBoundary:
-            case RegexSyntaxKind.WordEndBoundary:
-            case RegexSyntaxKind.WordStartHalfBoundary:
-            case RegexSyntaxKind.WordEndHalfBoundary:
             case RegexSyntaxKind.UnicodePropertyClass:
             case RegexSyntaxKind.NotUnicodePropertyClass:
                 return true;

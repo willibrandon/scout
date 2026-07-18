@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Scout;
 
 /// <summary>
@@ -23,6 +25,47 @@ internal sealed class RegexLazyDfa(
     private RegexDfaBudget _budget = budget;
     private readonly RegexLazyDfaState _startState = startState;
     private readonly bool _leftmostPrune = leftmostPrune;
+    private long _runnerLeaseGeneration;
+    private long _activeRunnerLease;
+
+    /// <summary>
+    /// Begins an exclusive pooled-runner lease and returns its monotonically increasing token.
+    /// </summary>
+    /// <returns>The nonzero token that identifies the new lease.</returns>
+    internal long BeginRunnerLease()
+    {
+        long token;
+        do
+        {
+            token = System.Threading.Interlocked.Increment(ref _runnerLeaseGeneration);
+        }
+        while (token == 0);
+
+        System.Threading.Interlocked.Exchange(ref _activeRunnerLease, token);
+        return token;
+    }
+
+    /// <summary>
+    /// Determines whether a token still owns the active pooled-runner lease.
+    /// </summary>
+    /// <param name="token">The lease token to verify.</param>
+    /// <returns><see langword="true" /> when the token still owns this runner.</returns>
+    internal bool IsRunnerLeaseActive(long token)
+    {
+        return token != 0 &&
+            System.Threading.Volatile.Read(ref _activeRunnerLease) == token;
+    }
+
+    /// <summary>
+    /// Atomically ends a pooled-runner lease when its token still identifies the active lease.
+    /// </summary>
+    /// <param name="token">The token returned by <see cref="BeginRunnerLease" />.</param>
+    /// <returns><see langword="true" /> only for the first successful end of the active lease.</returns>
+    internal bool TryEndRunnerLease(long token)
+    {
+        return token != 0 &&
+            System.Threading.Interlocked.CompareExchange(ref _activeRunnerLease, 0, token) == token;
+    }
 
     /// <summary>
     /// Attempts to create a general lazy DFA within a byte budget.
@@ -538,6 +581,7 @@ internal sealed class RegexLazyDfa(
         return false;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private bool TryTransition(RegexLazyDfaState state, byte value, out RegexLazyDfaState nextState)
     {
         if (state.TryGetTransition(value, out RegexLazyDfaState? existing))
@@ -546,7 +590,17 @@ internal sealed class RegexLazyDfa(
             return true;
         }
 
-        if (!_budget.TryReserve(RegexDfaBudget.SparseTransitionBytes) ||
+        return TryCreateTransition(state, value, out nextState);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private bool TryCreateTransition(
+        RegexLazyDfaState state,
+        byte value,
+        out RegexLazyDfaState nextState)
+    {
+        if (!_budget.TryReserveLazyTransition(
+                state.WouldAllocateDenseTransitionTable(value)) ||
             !TryIntern(_nfa, _states, ref _budget, Move(state.NfaStates, value), out RegexLazyDfaState? created))
         {
             nextState = state;
@@ -618,6 +672,12 @@ internal sealed class RegexLazyDfa(
         if (state.AcceleratorComputed)
         {
             return state.TryGetAccelerator(out needles);
+        }
+
+        if (!state.HasObservedSelfLoop)
+        {
+            needles = [];
+            return false;
         }
 
         var acceleratorNeedles = new List<byte>(MaxAcceleratorNeedles);

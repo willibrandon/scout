@@ -12,6 +12,8 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
     private readonly List<RegexCaptureClosureFrame> _closureStack = new(Math.Clamp(nfa.States.Count, 1, 16));
     private readonly int[] _initialSlots = new int[checked(2 * (nfa.CaptureCount + 1))];
     private readonly int[] _deferredAcceptSlots = new int[checked(2 * (nfa.CaptureCount + 1))];
+    private RegexCaptureOnePassEngine? _onePassEngine;
+    private bool _onePassInitializationAttempted;
     private readonly Dictionary<(int State, int Position), bool> _reachabilityCache = [];
     private readonly HashSet<(int State, int Position)> _reachabilityVisited = [];
     private readonly Stack<(int State, int Position)> _reachabilityPending = [];
@@ -21,6 +23,44 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
     private RegexCaptureActiveStates _next = new(
         nfa.States.Count,
         checked(2 * (nfa.CaptureCount + 1)));
+    private long _runnerLeaseVersion;
+    private long _activeRunnerLeaseVersion;
+
+    /// <summary>
+    /// Begins an exclusive operation-scoped lease for this mutable capture runner.
+    /// </summary>
+    /// <returns>The generation token that owns the lease.</returns>
+    internal long BeginRunnerLease()
+    {
+        long leaseVersion = System.Threading.Interlocked.Increment(ref _runnerLeaseVersion);
+        System.Threading.Volatile.Write(ref _activeRunnerLeaseVersion, leaseVersion);
+        return leaseVersion;
+    }
+
+    /// <summary>
+    /// Determines whether a generation token still owns this mutable capture runner.
+    /// </summary>
+    /// <param name="leaseVersion">The generation token to verify.</param>
+    /// <returns><see langword="true" /> when the lease remains active.</returns>
+    internal bool IsRunnerLeaseActive(long leaseVersion)
+    {
+        return leaseVersion != 0 &&
+            System.Threading.Volatile.Read(ref _activeRunnerLeaseVersion) == leaseVersion;
+    }
+
+    /// <summary>
+    /// Attempts to end an exclusive operation-scoped lease exactly once.
+    /// </summary>
+    /// <param name="leaseVersion">The generation token returned when the lease began.</param>
+    /// <returns><see langword="true" /> when this call ended the current lease.</returns>
+    internal bool TryEndRunnerLease(long leaseVersion)
+    {
+        return leaseVersion != 0 &&
+            System.Threading.Interlocked.CompareExchange(
+                ref _activeRunnerLeaseVersion,
+                value: 0,
+                comparand: leaseVersion) == leaseVersion;
+    }
 
     /// <summary>
     /// Finds the first match and its participating capture groups at or after a byte offset.
@@ -34,6 +74,7 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
         if (_prefilter?.UsesRequiredLiteralWindow == true)
         {
+            Span<RegexPrefilterState> prefilterState = stackalloc RegexPrefilterState[1] { default };
             Span<long> requiredRangeBuffer =
                 stackalloc long[RegexCandidateStartEnumerator.RequiredLiteralRangeBufferLength];
             var candidates = RegexCandidateStartEnumerator.RequiredLiteralRanges(
@@ -42,12 +83,13 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
                 haystack.Length,
                 _nfa.Utf8,
                 _prefilter,
-                requiredRangeBuffer);
+                requiredRangeBuffer,
+                prefilterState);
             while (candidates.MoveNext(out int start))
             {
-                if (TryMatchAt(haystack, start, requiredEnd: -1, out RegexCaptures? captures))
+                if (TryMatchAt(haystack, start, requiredEnd: -1, _deferredAcceptSlots))
                 {
-                    return captures;
+                    return ToCaptures(_deferredAcceptSlots);
                 }
             }
 
@@ -56,18 +98,19 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
 
         if (_prefilter is not null)
         {
-            for (int start = _prefilter.FindCandidate(haystack, startOffset);
-                 start >= 0;
-                 start = _prefilter.FindCandidate(haystack, start + 1))
+            Span<RegexPrefilterState> prefilterState = stackalloc RegexPrefilterState[1] { default };
+            var candidates = RegexCandidateStartEnumerator.ExactPrefix(
+                haystack,
+                startOffset,
+                haystack.Length,
+                _nfa.Utf8,
+                _prefilter,
+                prefilterState);
+            while (candidates.MoveNext(out int start))
             {
-                if (_nfa.Utf8 && !RegexByteClass.IsUtf8Boundary(haystack, start))
+                if (TryMatchAt(haystack, start, requiredEnd: -1, _deferredAcceptSlots))
                 {
-                    continue;
-                }
-
-                if (TryMatchAt(haystack, start, requiredEnd: -1, out RegexCaptures? captures))
-                {
-                    return captures;
+                    return ToCaptures(_deferredAcceptSlots);
                 }
             }
 
@@ -81,9 +124,9 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
                 continue;
             }
 
-            if (TryMatchAt(haystack, start, requiredEnd: -1, out RegexCaptures? captures))
+            if (TryMatchAt(haystack, start, requiredEnd: -1, _deferredAcceptSlots))
             {
-                return captures;
+                return ToCaptures(_deferredAcceptSlots);
             }
         }
 
@@ -106,17 +149,80 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
             return null;
         }
 
-        return TryMatchAt(haystack, startOffset, endOffset, out RegexCaptures? captures)
-            ? captures
+        return TryMatchAt(haystack, startOffset, endOffset, _deferredAcceptSlots)
+            ? ToCaptures(_deferredAcceptSlots)
             : null;
+    }
+
+    /// <summary>
+    /// Replays captures for an anchored match into caller-owned flattened start and exclusive-end slots.
+    /// </summary>
+    /// <param name="haystack">The complete haystack bytes used to evaluate predicates.</param>
+    /// <param name="startAt">The anchored match start.</param>
+    /// <param name="endAt">The required exclusive match end.</param>
+    /// <param name="captureSlots">Receives absolute start and exclusive-end offsets for every capture.</param>
+    /// <returns><see langword="true" /> when the exact span can be replayed.</returns>
+    internal bool TryReplayCaptures(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        int endAt,
+        Span<int> captureSlots)
+    {
+        if (captureSlots.Length < _initialSlots.Length)
+        {
+            throw new ArgumentException("The capture slot buffer is too small.", nameof(captureSlots));
+        }
+
+        int startOffset = Math.Clamp(startAt, 0, haystack.Length);
+        int endOffset = Math.Clamp(endAt, startOffset, haystack.Length);
+        if (_nfa.Utf8 && !RegexByteClass.IsUtf8Boundary(haystack, startOffset))
+        {
+            captureSlots.Fill(-1);
+            return false;
+        }
+
+        RegexCaptureOnePassEngine? onePassEngine = GetOrCreateOnePassEngine();
+        if (onePassEngine is not null &&
+            onePassEngine.TryReplay(
+                haystack,
+                startOffset,
+                endOffset,
+                captureSlots) == RegexCaptureOnePassResult.Success)
+        {
+            return true;
+        }
+
+        return TryMatchAt(haystack, startOffset, endOffset, captureSlots);
+    }
+
+    /// <summary>
+    /// Gets the number of exact spans replayed by the capture-aware one-pass engine.
+    /// </summary>
+    internal long OnePassReplayCount => _onePassEngine?.SuccessfulReplayCount ?? 0;
+
+    /// <summary>
+    /// Gets a value indicating whether the capture-aware one-pass engine remains enabled.
+    /// </summary>
+    internal bool IsOnePassReplayEnabled => _onePassEngine?.IsEnabled == true;
+
+    private RegexCaptureOnePassEngine? GetOrCreateOnePassEngine()
+    {
+        if (!_onePassInitializationAttempted)
+        {
+            _onePassEngine = RegexCaptureOnePassEngine.TryCreate(_nfa);
+            _onePassInitializationAttempted = true;
+        }
+
+        return _onePassEngine;
     }
 
     private bool TryMatchAt(
         ReadOnlySpan<byte> haystack,
         int start,
         int requiredEnd,
-        out RegexCaptures? captures)
+        Span<int> captureSlots)
     {
+        captureSlots.Fill(-1);
         bool exactEnd = requiredEnd >= 0;
         Array.Fill(_initialSlots, -1);
         _initialSlots[0] = start;
@@ -142,7 +248,11 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
                 {
                     if (position == requiredEnd)
                     {
-                        captures = ToCaptures(_current.GetSlots(acceptIndex), start, position);
+                        CopyCaptureSlots(
+                            _current.GetSlots(acceptIndex),
+                            start,
+                            position,
+                            captureSlots);
                         return true;
                     }
                 }
@@ -153,7 +263,11 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
                     deferredAcceptEnd = position;
                     if (!HasEarlierConsumer(_current, acceptIndex, haystack, position))
                     {
-                        captures = ToCaptures(_deferredAcceptSlots, start, position);
+                        CopyCaptureSlots(
+                            _deferredAcceptSlots,
+                            start,
+                            position,
+                            captureSlots);
                         return true;
                     }
                 }
@@ -179,20 +293,7 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
 
                 RegexNfaState state = _nfa.States[thread.State];
                 if (state.Kind == RegexNfaStateKind.Atom &&
-                    RegexByteClass.TryGetAtomMatchLength(
-                        haystack,
-                        position,
-                        state.AtomKind,
-                        state.Value.Span,
-                        state.CaseInsensitive,
-                        state.MultiLine,
-                        state.DotMatchesNewline,
-                        state.Crlf,
-                        state.LineTerminator,
-                        state.UnicodeClasses,
-                        state.RequiresUtf8ScalarMatch,
-                        state.CanUseAsciiScalarFastPath,
-                        out int consume) &&
+                    state.TryGetAtomMatchLength(haystack, position, out int consume) &&
                     (!exactEnd || consume <= requiredEnd - position))
                 {
                     AddThread(
@@ -221,11 +322,14 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
 
         if (hasDeferredAccept)
         {
-            captures = ToCaptures(_deferredAcceptSlots, start, deferredAcceptEnd);
+            CopyCaptureSlots(
+                _deferredAcceptSlots,
+                start,
+                deferredAcceptEnd,
+                captureSlots);
             return true;
         }
 
-        captures = null;
         return false;
     }
 
@@ -345,20 +449,7 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
 
             RegexNfaState state = _nfa.States[thread.State];
             if (state.Kind == RegexNfaStateKind.Atom &&
-                RegexByteClass.TryGetAtomMatchLength(
-                    haystack,
-                    position,
-                    state.AtomKind,
-                    state.Value.Span,
-                    state.CaseInsensitive,
-                    state.MultiLine,
-                    state.DotMatchesNewline,
-                    state.Crlf,
-                    state.LineTerminator,
-                    state.UnicodeClasses,
-                    state.RequiresUtf8ScalarMatch,
-                    state.CanUseAsciiScalarFastPath,
-                    out int consume) &&
+                state.TryGetAtomMatchLength(haystack, position, out int consume) &&
                 RegexDfaOperations.CanReachAccept(
                     _nfa,
                     state.Next,
@@ -415,9 +506,20 @@ internal sealed class RegexCaptureEngine(RegexNfa nfa, RegexPrefilter? prefilter
         return position;
     }
 
-    private static RegexCaptures ToCaptures(ReadOnlySpan<int> slots, int start, int end)
+    private static void CopyCaptureSlots(
+        ReadOnlySpan<int> source,
+        int start,
+        int end,
+        Span<int> destination)
     {
-        var match = new RegexMatch(start, end - start);
+        source.CopyTo(destination);
+        destination[0] = start;
+        destination[1] = end;
+    }
+
+    private static RegexCaptures ToCaptures(ReadOnlySpan<int> slots)
+    {
+        var match = new RegexMatch(slots[0], slots[1] - slots[0]);
         var groups = new RegexMatch?[slots.Length / 2];
         groups[0] = match;
         for (int index = 1; index < groups.Length; index++)

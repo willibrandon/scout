@@ -1,22 +1,36 @@
 namespace Scout;
 
-internal sealed class RegexLengthGuard
+/// <summary>
+/// Rejects searches whose remaining byte length cannot satisfy the regex syntax.
+/// </summary>
+/// <param name="minimumBytes">The minimum number of bytes that any match can consume.</param>
+/// <param name="maximumBytes">The maximum number of bytes that any match can consume.</param>
+/// <param name="startAnchored">Whether the match must start at the beginning of the haystack.</param>
+/// <param name="endAnchored">Whether the match must end at the end of the haystack.</param>
+internal sealed class RegexLengthGuard(
+    int minimumBytes,
+    int maximumBytes,
+    bool startAnchored,
+    bool endAnchored)
 {
     private const int Infinite = int.MaxValue;
 
-    private readonly int minimumBytes;
-    private readonly int maximumBytes;
-    private readonly bool startAnchored;
-    private readonly bool endAnchored;
+    private readonly int _minimumBytes = minimumBytes;
+    private readonly int _maximumBytes = maximumBytes;
+    private readonly bool _startAnchored = startAnchored;
+    private readonly bool _endAnchored = endAnchored;
 
-    private RegexLengthGuard(int minimumBytes, int maximumBytes, bool startAnchored, bool endAnchored)
-    {
-        this.minimumBytes = minimumBytes;
-        this.maximumBytes = maximumBytes;
-        this.startAnchored = startAnchored;
-        this.endAnchored = endAnchored;
-    }
+    /// <summary>
+    /// Gets the minimum number of bytes that any match can consume.
+    /// </summary>
+    internal int MinimumBytes => _minimumBytes;
 
+    /// <summary>
+    /// Creates a length guard when the syntax provides a useful bound.
+    /// </summary>
+    /// <param name="root">The parsed regex syntax.</param>
+    /// <param name="options">The compilation options in effect at the root.</param>
+    /// <returns>A length guard, or <see langword="null" /> when no useful bound is available.</returns>
     public static RegexLengthGuard? TryCreate(RegexSyntaxNode root, RegexCompileOptions options)
     {
         if (!TryAnalyze(root, options, out RegexLengthRange range))
@@ -40,23 +54,29 @@ internal sealed class RegexLengthGuard
             hasMaximumGuard && TryGetTrailingEndAnchor(root, options, out _));
     }
 
+    /// <summary>
+    /// Determines whether the remaining haystack can satisfy the known length bounds.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startAt">The first permitted match start.</param>
+    /// <returns><see langword="true" /> when a match remains possible.</returns>
     public bool CanSearch(ReadOnlySpan<byte> haystack, int startAt)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
-        if (haystack.Length - startOffset < minimumBytes)
+        if (haystack.Length - startOffset < _minimumBytes)
         {
             return false;
         }
 
-        if (startAnchored && startOffset != 0)
+        if (_startAnchored && startOffset != 0)
         {
             return false;
         }
 
-        return !startAnchored ||
-            !endAnchored ||
-            maximumBytes == Infinite ||
-            haystack.Length <= maximumBytes;
+        return !_startAnchored ||
+            !_endAnchored ||
+            _maximumBytes == Infinite ||
+            haystack.Length <= _maximumBytes;
     }
 
     private static bool TryAnalyze(RegexSyntaxNode node, RegexCompileOptions options, out RegexLengthRange range)
@@ -184,17 +204,6 @@ internal sealed class RegexLengthGuard
         ReadOnlySpan<byte> value = atom.Value.Span;
         if (RequiresUtf8LengthRange(atom.Kind, value, options))
         {
-            if (RegexUtf8ByteCompiler.TryGetUtf8ByteLengthRange(
-                    atom.Kind,
-                    value,
-                    options,
-                    out int minimumBytes,
-                    out int maximumBytes))
-            {
-                range = new RegexLengthRange(minimumBytes, maximumBytes);
-                return true;
-            }
-
             range = new RegexLengthRange(1, 4);
             return true;
         }

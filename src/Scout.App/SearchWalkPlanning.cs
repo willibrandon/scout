@@ -2,11 +2,19 @@ using System.Text;
 
 namespace Scout;
 
+/// <summary>
+/// Plans directory walks and their search parallelism.
+/// </summary>
 internal static class SearchWalkPlanning
 {
+    /// <summary>
+    /// Gets the maximum number of ordered workers used to search segments of one large file.
+    /// </summary>
+    internal const int MaximumLargeFileSegmentWorkerCount = 3;
+
     private const int MacOsDefaultSearchWalkThreadCount = 3;
-    private const int MacOsDefaultLargeFileSearchThreadCount = 4;
-    private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
+    private const int MacOsDefaultReplacementSearchWalkThreadCount = 6;
+    private static readonly UTF8Encoding s_utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
     internal static int RunTypeList(CliLowArgs lowArgs, RawByteWriter output, DiagnosticMessenger diagnostics)
     {
@@ -18,7 +26,7 @@ internal static class SearchWalkPlanning
 
         foreach (FileTypeDefinition definition in fileTypes!.Definitions)
         {
-            output.Write(Utf8.GetBytes(definition.Name));
+            output.Write(s_utf8.GetBytes(definition.Name));
             output.Write(": "u8);
             for (int index = 0; index < definition.Globs.Count; index++)
             {
@@ -27,7 +35,7 @@ internal static class SearchWalkPlanning
                     output.Write(", "u8);
                 }
 
-                output.Write(Utf8.GetBytes(definition.Globs[index]));
+                output.Write(s_utf8.GetBytes(definition.Globs[index]));
             }
 
             output.Write("\n"u8);
@@ -103,18 +111,38 @@ internal static class SearchWalkPlanning
             return 1;
         }
 
-        int threadCount = resolvedThreads > int.MaxValue ? int.MaxValue : (int)resolvedThreads;
+        int threadCount = resolvedThreads > int.MaxValue
+            ? int.MaxValue
+            : (int)resolvedThreads;
         if (lowArgs.Threads is null && OperatingSystem.IsMacOS())
         {
-            return GetMacOsDefaultSearchWalkThreadCount(threadCount);
+            return GetMacOsDefaultSearchWalkThreadCount(
+                threadCount,
+                lowArgs.Replacement is not null);
         }
 
         return threadCount;
     }
 
-    internal static int GetLargeFileSearchThreadCount(CliLowArgs lowArgs, bool isOneFile = false)
+    /// <summary>
+    /// Gets the internal segment-worker count for a large-file search.
+    /// </summary>
+    /// <param name="lowArgs">The parsed search arguments.</param>
+    /// <param name="allowSegmentParallelism">
+    /// Whether the large file may use internal ordered segment workers.
+    /// </param>
+    /// <returns>The number of ordered segment workers to use.</returns>
+    internal static int GetLargeFileSearchThreadCount(
+        CliLowArgs lowArgs,
+        bool allowSegmentParallelism)
     {
-        // Large-file streaming uses ordered internal segment workers even when the search target is one file.
+        if (!allowSegmentParallelism)
+        {
+            return 1;
+        }
+
+        // With no outer file-level workers, ordered segment workers may use the requested
+        // search-wide thread budget.
         ulong resolvedThreads = SearchThreadPlanner.Resolve(lowArgs.Threads, lowArgs.SortMode is not null, isOneFile: false);
         if (resolvedThreads <= 1)
         {
@@ -127,22 +155,32 @@ internal static class SearchWalkPlanning
             return GetMacOsDefaultLargeFileSearchThreadCount(threadCount);
         }
 
-        return threadCount;
+        return Math.Min(threadCount, MaximumLargeFileSegmentWorkerCount);
     }
 
-    internal static int GetMacOsDefaultSearchWalkThreadCount(int threadCount)
+    /// <summary>
+    /// Bounds the default macOS large-file worker count to the ordered segment limit.
+    /// </summary>
+    /// <param name="threadCount">The platform-neutral search-wide thread count.</param>
+    /// <returns>The number of ordered segment workers to use.</returns>
+    internal static int GetMacOsDefaultLargeFileSearchThreadCount(int threadCount)
+    {
+        return Math.Min(threadCount, MaximumLargeFileSegmentWorkerCount);
+    }
+
+    internal static int GetMacOsDefaultSearchWalkThreadCount(
+        int threadCount,
+        bool replacement)
     {
         if (threadCount <= 1)
         {
             return 1;
         }
 
-        return Math.Min(threadCount, MacOsDefaultSearchWalkThreadCount);
-    }
-
-    internal static int GetMacOsDefaultLargeFileSearchThreadCount(int threadCount)
-    {
-        return Math.Min(threadCount, MacOsDefaultLargeFileSearchThreadCount);
+        int maximumThreadCount = replacement
+            ? MacOsDefaultReplacementSearchWalkThreadCount
+            : MacOsDefaultSearchWalkThreadCount;
+        return Math.Min(threadCount, maximumThreadCount);
     }
 
     internal static bool TryBuildFileTypeMatcher(CliLowArgs lowArgs, out FileTypeMatcher? fileTypes, out ScoutError? error)

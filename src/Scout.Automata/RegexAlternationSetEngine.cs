@@ -1,5 +1,8 @@
 namespace Scout;
 
+/// <summary>
+/// Executes an ordered regex alternation through a fully accelerated pattern set.
+/// </summary>
 internal sealed class RegexAlternationSetEngine
 {
     private const int MinimumAlternativeCount = 16;
@@ -16,8 +19,27 @@ internal sealed class RegexAlternationSetEngine
         this.captureCount = captureCount;
     }
 
+    /// <summary>
+    /// Gets a value indicating whether whole-branch captures can be synthesized from pattern identity.
+    /// </summary>
     public bool CanSynthesizeCaptures => wholeBranchCaptureByPattern is not null;
 
+    /// <summary>
+    /// Gets a value indicating whether this engine searches an AST-proven exact-literal set through
+    /// its common prefix.
+    /// </summary>
+    internal bool UsesCommonPrefixLiteralScanner =>
+        patternSet.UsesCommonPrefixLiteralAccelerator;
+
+    /// <summary>
+    /// Creates an accelerated engine from a parsed and raw ordered alternation.
+    /// </summary>
+    /// <param name="pattern">The original pattern bytes.</param>
+    /// <param name="root">The parsed regex root.</param>
+    /// <param name="captureCount">The total number of capturing groups.</param>
+    /// <param name="options">The effective compile options.</param>
+    /// <param name="engine">Receives the accelerated engine.</param>
+    /// <returns><see langword="true" /> when every alternative can be accelerated.</returns>
     public static bool TryCreate(
         ReadOnlySpan<byte> pattern,
         RegexSyntaxNode root,
@@ -54,6 +76,48 @@ internal sealed class RegexAlternationSetEngine
 
         int[]? wholeBranchCaptureByPattern = captureCount == alternatives.Length &&
             TryCreateWholeBranchCaptureMap(root, alternatives.Length, out int[]? map)
+            ? map
+            : null;
+        engine = new RegexAlternationSetEngine(
+            patternSet,
+            wholeBranchCaptureByPattern,
+            captureCount);
+        return true;
+    }
+
+    /// <summary>
+    /// Creates a pattern-set engine when parsed syntax proves that every ordered alternative is
+    /// an exact non-empty literal.
+    /// </summary>
+    /// <param name="root">The parsed regex root.</param>
+    /// <param name="captureCount">The total number of capturing groups.</param>
+    /// <param name="options">The effective compile options.</param>
+    /// <param name="engine">Receives the parsed pattern-set engine.</param>
+    /// <returns><see langword="true" /> when parsed syntax selected a fully accelerated pattern set.</returns>
+    public static bool TryCreateParsedLiteralAlternatives(
+        RegexSyntaxNode root,
+        int captureCount,
+        RegexCompileOptions options,
+        out RegexAlternationSetEngine? engine)
+    {
+        engine = null;
+        if (!TryCollectParsedAlternatives(
+                root,
+                flattenNestedAlternatives: true,
+                out IReadOnlyList<RegexSyntaxNode> parsedAlternatives) ||
+            parsedAlternatives.Count is < MinimumAlternativeCount or > MaximumAlternativeCount ||
+            !PatternSet.TryCompileParsedLiteralAlternatives(
+                parsedAlternatives,
+                options,
+                out PatternSet? patternSet) ||
+            patternSet is null ||
+            !patternSet.CanAccelerateEveryPattern)
+        {
+            return false;
+        }
+
+        int[]? wholeBranchCaptureByPattern = captureCount == parsedAlternatives.Count &&
+            TryCreateWholeBranchCaptureMap(root, parsedAlternatives.Count, out int[]? map)
             ? map
             : null;
         engine = new RegexAlternationSetEngine(
@@ -135,6 +199,15 @@ internal sealed class RegexAlternationSetEngine
         }
     }
 
+    /// <summary>
+    /// Creates an ordered pattern set that can synthesize one whole-branch capture.
+    /// </summary>
+    /// <param name="pattern">The original pattern bytes.</param>
+    /// <param name="root">The parsed regex root.</param>
+    /// <param name="captureCount">The total number of capturing groups.</param>
+    /// <param name="options">The effective compile options.</param>
+    /// <param name="engine">Receives the capture-aware pattern-set engine.</param>
+    /// <returns><see langword="true" /> when the whole-branch capture map is available.</returns>
     public static bool TryCreateSyntheticCaptures(
         ReadOnlySpan<byte> pattern,
         RegexSyntaxNode root,
@@ -169,11 +242,23 @@ internal sealed class RegexAlternationSetEngine
         return true;
     }
 
+    /// <summary>
+    /// Finds the leftmost ordered match at or after a byte offset.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startAt">The first permitted match start.</param>
+    /// <returns>The selected match, or <see langword="null" />.</returns>
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
         return patternSet.Find(haystack, startAt)?.Match;
     }
 
+    /// <summary>
+    /// Finds an ordered match beginning at an exact byte offset.
+    /// </summary>
+    /// <param name="haystack">The bytes to inspect.</param>
+    /// <param name="startAt">The exact match start.</param>
+    /// <returns>The selected match, or <see langword="null" />.</returns>
     public RegexMatch? MatchAt(ReadOnlySpan<byte> haystack, int startAt)
     {
         PatternSetMatch? match = patternSet.Find(haystack, startAt);
@@ -182,16 +267,52 @@ internal sealed class RegexAlternationSetEngine
             : null;
     }
 
+    /// <summary>
+    /// Counts ordered non-overlapping matches at or after a byte offset.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startAt">The first permitted match start.</param>
+    /// <returns>The number of matches.</returns>
     public long CountMatches(ReadOnlySpan<byte> haystack, int startAt)
     {
         return patternSet.CountMatches(haystack, startAt);
     }
 
+    /// <summary>
+    /// Attempts to count exact-literal matches while the parsed pattern set detects NUL bytes.
+    /// </summary>
+    /// <param name="haystack">The complete bytes to search.</param>
+    /// <param name="count">Receives the non-overlapping match count.</param>
+    /// <param name="containsNul">Receives whether the complete haystack contains a NUL byte.</param>
+    /// <returns><see langword="true" /> when one authoritative pattern-set scan produced both results.</returns>
+    internal bool TryCountMatchesAndDetectNul(
+        ReadOnlySpan<byte> haystack,
+        out long count,
+        out bool containsNul)
+    {
+        return patternSet.TryCountMatchesAndDetectNul(
+            haystack,
+            out count,
+            out containsNul);
+    }
+
+    /// <summary>
+    /// Sums ordered non-overlapping match lengths at or after a byte offset.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startAt">The first permitted match start.</param>
+    /// <returns>The sum of match lengths.</returns>
     public long SumMatchSpans(ReadOnlySpan<byte> haystack, int startAt)
     {
         return patternSet.SumMatchSpans(haystack, startAt);
     }
 
+    /// <summary>
+    /// Finds a match and synthesizes its whole-pattern and winning-branch captures.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startAt">The first permitted match start.</param>
+    /// <returns>The synthesized captures, or <see langword="null" />.</returns>
     public RegexCaptures? FindSyntheticCaptures(ReadOnlySpan<byte> haystack, int startAt)
     {
         if (wholeBranchCaptureByPattern is null)

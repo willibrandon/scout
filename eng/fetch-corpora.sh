@@ -3,6 +3,7 @@ set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 OUT_DIR="${SCOUT_CORPORA_DIR:-$ROOT/artifacts/corpora}"
+LOCK="$ROOT/tests/PREREQS.lock"
 
 OPENSUBTITLES_URL="https://object.pouta.csc.fi/OPUS-OpenSubtitles/v2016/mono/en.txt.gz"
 LINUX_COMMIT="84e57d292203a45c96dbcb2e6be9dd80961d981a"
@@ -11,6 +12,7 @@ LINUX_ARCHIVE_URL="https://codeload.github.com/BurntSushi/linux/tar.gz/$LINUX_CO
 FETCH_OPENSUBTITLES=0
 FETCH_LINUX=0
 SELECTED=0
+VERIFY_LOCK=0
 
 fail() {
     printf '%s\n' "$1" >&2
@@ -19,10 +21,12 @@ fail() {
 
 usage() {
     printf '%s\n' \
-        'usage: eng/fetch-corpora.sh [--all|--opensubtitles|--linux] [--output-dir DIR]' \
+        'usage: eng/fetch-corpora.sh [--all|--opensubtitles|--linux] [--output-dir DIR] [--verify-lock]' \
         '' \
         'Fetches the external corpora required by docs/DESIGN.md and prints' \
         'replacement [[corpus]] TOML blocks for tests/PREREQS.lock.' \
+        'Use --verify-lock to reject an archive before reading or extracting it' \
+        'when its SHA-256 differs from the named corpus lock entry.' \
         '' \
         'Default output directory: artifacts/corpora'
 }
@@ -164,11 +168,21 @@ download_file() {
     mv "$download_tmp" "$download_path"
 }
 
+verify_archive() {
+    corpus_name="$1"
+    archive_path="$2"
+
+    if [ "$VERIFY_LOCK" -eq 1 ]; then
+        sh "$ROOT/eng/verify-corpus-archive.sh" "$LOCK" "$corpus_name" "$archive_path"
+    fi
+}
+
 prepare_opensubtitles() {
     opensub_archive="$OUT_DIR/opensubtitles/en.txt.gz"
     opensub_path="$OUT_DIR/opensubtitles/en.txt"
 
     download_file "$OPENSUBTITLES_URL" "$opensub_archive" "OpenSubtitles en.txt.gz"
+    verify_archive "opensubtitles-en" "$opensub_archive"
 
     if [ ! -f "$opensub_path" ]; then
         opensub_tmp="$opensub_path.tmp"
@@ -204,6 +218,7 @@ prepare_linux() {
     linux_tree="$OUT_DIR/linux/linux-$LINUX_COMMIT"
 
     download_file "$LINUX_ARCHIVE_URL" "$linux_archive" "Linux kernel archive"
+    verify_archive "linux-kernel" "$linux_archive"
 
     if [ ! -d "$linux_tree" ]; then
         mkdir -p "$(dirname -- "$linux_tree")"
@@ -259,6 +274,10 @@ while [ "$#" -gt 0 ]; do
             [ "$#" -ge 2 ] || fail "Missing value for --output-dir."
             OUT_DIR="$2"
             shift 2
+            ;;
+        --verify-lock)
+            VERIFY_LOCK=1
+            shift
             ;;
         -h|--help)
             usage

@@ -2,33 +2,51 @@ using System.Text;
 
 namespace Scout;
 
-internal sealed class ReplacementTemplate
+/// <summary>
+/// Holds the parsed literal and capture references in a replacement expression.
+/// </summary>
+/// <param name="parts">The parsed replacement parts.</param>
+/// <param name="highestCapture">The highest capture index needed by the expression.</param>
+/// <param name="usesNamedCaptureReferences">Whether the expression contains a named reference.</param>
+/// <param name="literalLength">The total length of literal replacement bytes.</param>
+internal sealed class ReplacementTemplate(
+    ReplacementTemplatePart[] parts,
+    int highestCapture,
+    bool usesNamedCaptureReferences,
+    int literalLength)
 {
-    private readonly ReplacementTemplatePart[] parts;
+    private readonly ReplacementTemplatePart[] _parts = parts;
 
-    private ReplacementTemplate(
-        ReplacementTemplatePart[] parts,
-        int highestCapture,
-        bool usesNamedCaptureReferences,
-        int literalLength)
-    {
-        this.parts = parts;
-        HighestCapture = highestCapture;
-        UsesNamedCaptureReferences = usesNamedCaptureReferences;
-        LiteralLength = literalLength;
-    }
+    /// <summary>
+    /// Gets the highest numeric capture referenced by this replacement expression.
+    /// </summary>
+    internal int HighestCapture { get; } = highestCapture;
 
-    public int HighestCapture { get; }
+    /// <summary>
+    /// Gets a value indicating whether this expression references a named capture.
+    /// </summary>
+    internal bool UsesNamedCaptureReferences { get; } = usesNamedCaptureReferences;
 
-    public bool UsesNamedCaptureReferences { get; }
+    /// <summary>
+    /// Gets the number of literal bytes in this expression.
+    /// </summary>
+    internal int LiteralLength { get; } = literalLength;
 
-    public int LiteralLength { get; }
+    /// <summary>
+    /// Gets a value indicating whether expansion requires capture replay beyond the whole match.
+    /// </summary>
+    internal bool RequiresSubcaptures => HighestCapture > 0 || UsesNamedCaptureReferences;
 
-    public static ReplacementTemplate Create(ReadOnlySpan<byte> replacement, IReadOnlyList<byte[]> patterns)
+    /// <summary>
+    /// Parses one replacement expression into reusable literal and capture parts.
+    /// </summary>
+    /// <param name="replacement">The replacement expression bytes.</param>
+    /// <returns>The parsed replacement expression.</returns>
+    internal static ReplacementTemplate Create(ReadOnlySpan<byte> replacement)
     {
         List<ReplacementTemplatePart> parts = [];
         List<byte> literal = [];
-        int highestCapture = CountHighestCaptureIndex(patterns);
+        int highestCapture = 0;
         bool usesNamedCaptureReferences = false;
         int literalLength = 0;
 
@@ -137,106 +155,63 @@ internal sealed class ReplacementTemplate
         return new ReplacementTemplate(parts.ToArray(), highestCapture, usesNamedCaptureReferences, literalLength);
     }
 
-    public void AddExpanded(
+    internal void AddExpanded(
         List<byte> bytes,
-        ReadOnlySpan<byte> matched,
-        int[] captureStarts,
-        int[] captureLengths,
-        Dictionary<string, int>? captureNames)
+        ReadOnlySpan<byte> haystack,
+        ReadOnlySpan<int> captureSlots,
+        IReadOnlyDictionary<string, int>? captureNames)
     {
-        for (int index = 0; index < parts.Length; index++)
+        for (int index = 0; index < _parts.Length; index++)
         {
-            ReplacementTemplatePart part = parts[index];
+            ReplacementTemplatePart part = _parts[index];
             if (part.IsLiteral)
             {
                 Add(bytes, part.Literal);
             }
             else if (part.CaptureIndex >= 0)
             {
-                AddCapture(bytes, matched, captureStarts, captureLengths, part.CaptureIndex);
+                AddCapture(bytes, haystack, captureSlots, part.CaptureIndex);
             }
             else if (part.CaptureName is not null &&
                 captureNames is not null &&
                 captureNames.TryGetValue(part.CaptureName, out int captureIndex))
             {
-                AddCapture(bytes, matched, captureStarts, captureLengths, captureIndex);
+                AddCapture(bytes, haystack, captureSlots, captureIndex);
             }
         }
     }
 
-    public void AddExpanded(
-        List<byte> bytes,
-        ReadOnlySpan<byte> matched,
-        int firstCaptureIndex,
-        int firstCaptureStart,
-        int firstCaptureLength,
-        int secondCaptureIndex,
-        int secondCaptureStart,
-        int secondCaptureLength)
-    {
-        for (int index = 0; index < parts.Length; index++)
-        {
-            ReplacementTemplatePart part = parts[index];
-            if (part.IsLiteral)
-            {
-                Add(bytes, part.Literal);
-            }
-            else if (part.CaptureIndex == 0)
-            {
-                Add(bytes, matched);
-            }
-            else if (part.CaptureIndex == firstCaptureIndex)
-            {
-                Add(bytes, matched.Slice(firstCaptureStart, firstCaptureLength));
-            }
-            else if (part.CaptureIndex == secondCaptureIndex)
-            {
-                Add(bytes, matched.Slice(secondCaptureStart, secondCaptureLength));
-            }
-        }
-    }
-
-    public void WriteExpanded(
+    /// <summary>
+    /// Writes the expanded replacement directly from caller-owned capture slots.
+    /// </summary>
+    /// <param name="output">The destination byte writer.</param>
+    /// <param name="haystack">The complete haystack containing the capture spans.</param>
+    /// <param name="captureSlots">The absolute start and exclusive-end offsets for every capture.</param>
+    /// <param name="captureNames">The immutable capture indexes keyed by name.</param>
+    internal void WriteExpanded(
         RawByteWriter output,
-        ReadOnlySpan<byte> matched,
-        int firstCaptureIndex,
-        int firstCaptureStart,
-        int firstCaptureLength,
-        int secondCaptureIndex,
-        int secondCaptureStart,
-        int secondCaptureLength)
+        ReadOnlySpan<byte> haystack,
+        ReadOnlySpan<int> captureSlots,
+        IReadOnlyDictionary<string, int>? captureNames)
     {
-        for (int index = 0; index < parts.Length; index++)
+        for (int index = 0; index < _parts.Length; index++)
         {
-            ReplacementTemplatePart part = parts[index];
+            ReplacementTemplatePart part = _parts[index];
             if (part.IsLiteral)
             {
                 output.Write(part.Literal);
             }
-            else if (part.CaptureIndex == 0)
+            else if (part.CaptureIndex >= 0)
             {
-                output.Write(matched);
+                WriteCapture(output, haystack, captureSlots, part.CaptureIndex);
             }
-            else if (part.CaptureIndex == firstCaptureIndex)
+            else if (part.CaptureName is not null &&
+                captureNames is not null &&
+                captureNames.TryGetValue(part.CaptureName, out int captureIndex))
             {
-                output.Write(matched.Slice(firstCaptureStart, firstCaptureLength));
-            }
-            else if (part.CaptureIndex == secondCaptureIndex)
-            {
-                output.Write(matched.Slice(secondCaptureStart, secondCaptureLength));
+                WriteCapture(output, haystack, captureSlots, captureIndex);
             }
         }
-    }
-
-    private static int CountHighestCaptureIndex(IReadOnlyList<byte[]> patterns)
-    {
-        int highest = 0;
-        for (int index = 0; index < patterns.Count; index++)
-        {
-            highest = Math.Max(highest, ReplacementFormatter.CountCapturingGroups(patterns[index]));
-        }
-
-        return highest;
     }
 
     private static void AppendLiteral(List<ReplacementTemplatePart> parts, List<byte> literal)
@@ -284,24 +259,67 @@ internal sealed class ReplacementTemplate
 
     private static void AddCapture(
         List<byte> bytes,
-        ReadOnlySpan<byte> matched,
-        int[] captureStarts,
-        int[] captureLengths,
+        ReadOnlySpan<byte> haystack,
+        ReadOnlySpan<int> captureSlots,
         int captureIndex)
     {
-        if ((uint)captureIndex >= (uint)captureStarts.Length)
+        if (!TryGetCaptureRange(
+            haystack.Length,
+            captureSlots,
+            captureIndex,
+            out int start,
+            out int length))
         {
             return;
         }
 
-        int start = captureStarts[captureIndex];
-        int length = captureLengths[captureIndex];
-        if (start < 0 || length < 0 || start + length > matched.Length)
+        Add(bytes, haystack.Slice(start, length));
+    }
+
+    private static void WriteCapture(
+        RawByteWriter output,
+        ReadOnlySpan<byte> haystack,
+        ReadOnlySpan<int> captureSlots,
+        int captureIndex)
+    {
+        if (!TryGetCaptureRange(
+            haystack.Length,
+            captureSlots,
+            captureIndex,
+            out int start,
+            out int length))
         {
             return;
         }
 
-        Add(bytes, matched.Slice(start, length));
+        output.Write(haystack.Slice(start, length));
+    }
+
+    private static bool TryGetCaptureRange(
+        int haystackLength,
+        ReadOnlySpan<int> captureSlots,
+        int captureIndex,
+        out int start,
+        out int length)
+    {
+        if ((uint)captureIndex >= (uint)(captureSlots.Length / 2))
+        {
+            start = -1;
+            length = 0;
+            return false;
+        }
+
+        int slot = 2 * captureIndex;
+        start = captureSlots[slot];
+        int end = captureSlots[slot + 1];
+        if (start < 0 || end < start || end > haystackLength)
+        {
+            length = 0;
+            return false;
+        }
+
+        length = end - start;
+        return true;
     }
 
     private static bool IsCaptureName(ReadOnlySpan<byte> capture)

@@ -58,6 +58,12 @@ public sealed class PatternSet
 
     internal bool UsesLiteralAccelerator => literalAccelerator is not null;
 
+    /// <summary>
+    /// Gets a value indicating whether exact literals use a compiler-proven common-prefix scan.
+    /// </summary>
+    internal bool UsesCommonPrefixLiteralAccelerator =>
+        literalAccelerator?.UsesCommonPrefixScanner == true;
+
     internal bool UsesBoundaryLiteralAccelerator => boundaryLiteralAccelerator is not null;
 
     internal bool UsesRequiredLiteralAccelerator => requiredLiteralAccelerator is not null;
@@ -102,6 +108,43 @@ public sealed class PatternSet
         out PatternSet? patternSet)
     {
         return TryCompile(patterns, parsedRoots, options, dfaSizeLimit: null, requireFullAcceleration: true, useLeanAutomata: true, out patternSet);
+    }
+
+    /// <summary>
+    /// Compiles an accelerated ordered set selected exclusively from parsed syntax alternatives.
+    /// </summary>
+    /// <param name="parsedRoots">The ordered parsed alternatives.</param>
+    /// <param name="options">The effective compile options.</param>
+    /// <param name="patternSet">Receives the compiled pattern set.</param>
+    /// <returns><see langword="true" /> when every parsed alternative is an exact non-empty literal.</returns>
+    internal static bool TryCompileParsedLiteralAlternatives(
+        IReadOnlyList<RegexSyntaxNode> parsedRoots,
+        RegexCompileOptions options,
+        out PatternSet? patternSet)
+    {
+        ArgumentNullException.ThrowIfNull(parsedRoots);
+        patternSet = null;
+        byte[][] literalPatterns = new byte[parsedRoots.Count][];
+        for (int index = 0; index < parsedRoots.Count; index++)
+        {
+            RegexSyntaxNode parsedRoot = parsedRoots[index] ??
+                throw new ArgumentNullException(nameof(parsedRoots));
+            if (!TryGetLiteralPattern(parsedRoot, out byte[] literal) || literal.Length == 0)
+            {
+                return false;
+            }
+
+            literalPatterns[index] = literal;
+        }
+
+        return TryCompile(
+            literalPatterns,
+            parsedRoots,
+            options,
+            dfaSizeLimit: null,
+            requireFullAcceleration: true,
+            useLeanAutomata: true,
+            out patternSet);
     }
 
     /// <summary>
@@ -285,7 +328,8 @@ public sealed class PatternSet
         bool useBoundedRequiredLiteralLookBehind,
         out PatternSetPatternPlan plan)
     {
-        if (TryGetRawLiteralPattern(pattern, out byte[] rawLiteral) &&
+        if (parsedRoot is null &&
+            TryGetRawLiteralPattern(pattern, out byte[] rawLiteral) &&
             TryPrepareLiteralPatterns(rawLiteral, options, out byte[][] rawLiteralPatterns))
         {
             plan = new PatternSetPatternPlan(tree: null, rawLiteralPatterns, requiredLiterals: null, requiredLiteralLookBehind: 0);
@@ -433,6 +477,33 @@ public sealed class PatternSet
         }
 
         return IterateNonOverlapping(haystack, startAt, sumSpans: false);
+    }
+
+    /// <summary>
+    /// Attempts to count exact-literal matches while the selected common-prefix scan detects NUL bytes.
+    /// </summary>
+    /// <param name="haystack">The complete bytes to search.</param>
+    /// <param name="count">Receives the non-overlapping match count.</param>
+    /// <param name="containsNul">Receives whether the complete haystack contains a NUL byte.</param>
+    /// <returns><see langword="true" /> when one authoritative literal scan produced both results.</returns>
+    internal bool TryCountMatchesAndDetectNul(
+        ReadOnlySpan<byte> haystack,
+        out long count,
+        out bool containsNul)
+    {
+        if (literalAccelerator is not null &&
+            boundaryLiteralAccelerator is null &&
+            automata.Length == 0)
+        {
+            return literalAccelerator.TryCountMatchesAndDetectNul(
+                haystack,
+                out count,
+                out containsNul);
+        }
+
+        count = 0;
+        containsNul = false;
+        return false;
     }
 
     /// <summary>

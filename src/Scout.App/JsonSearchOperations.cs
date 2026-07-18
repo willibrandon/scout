@@ -2,9 +2,12 @@ using System.Collections.Concurrent;
 
 namespace Scout;
 
+/// <summary>
+/// Coordinates JSON-formatted searches across standard input, files, and directories.
+/// </summary>
 internal static class JsonSearchOperations
 {
-    private static readonly byte[] StandardInputPath = "<stdin>"u8.ToArray();
+    private static readonly byte[] s_standardInputPath = "<stdin>"u8.ToArray();
 
     internal static int Run(
         IReadOnlyList<OsString> positional,
@@ -12,6 +15,7 @@ internal static class JsonSearchOperations
         bool patternsReadFromStandardInput,
         CliLowArgs lowArgs,
         IReadOnlyList<byte[]> pattern,
+        RegexSearchPlan regexPlan,
         bool asciiCaseInsensitive,
         FileTypeMatcher fileTypes,
         RawByteWriter output,
@@ -33,7 +37,7 @@ internal static class JsonSearchOperations
             (patternsReadFromStandardInput || !standardInputIsReadable);
         if (positional.Count == firstPathIndex && !useDefaultCurrentDirectory)
         {
-            matched = SearchJsonStandardInput(pattern, standardInput, lowArgs, asciiCaseInsensitive, summary, output);
+            matched = SearchJsonStandardInput(pattern, regexPlan, standardInput, lowArgs, asciiCaseInsensitive, summary, output);
             summary.WriteSummary(output);
             output.Flush();
             return matched ? ExitCode.Success : ExitCode.NoMatch;
@@ -61,7 +65,7 @@ internal static class JsonSearchOperations
         for (int index = 0; index < paths.Count; index++)
         {
             bool defaultRoot = useDefaultCurrentDirectory && index == 0;
-            SearchJsonPath(paths[index], pattern, standardInput, defaultRoot, paths.Count > 1, autoMmapEligible, lowArgs, fileTypes, asciiCaseInsensitive, summary, output, diagnostics, logger, ref matched, ref errored);
+            SearchJsonPath(paths[index], pattern, regexPlan, standardInput, defaultRoot, paths.Count > 1, autoMmapEligible, lowArgs, fileTypes, asciiCaseInsensitive, summary, output, diagnostics, logger, ref matched, ref errored);
         }
 
         summary.WriteSummary(output);
@@ -71,6 +75,7 @@ internal static class JsonSearchOperations
 
     private static bool SearchJsonStandardInput(
         IReadOnlyList<byte[]> pattern,
+        RegexSearchPlan regexPlan,
         Stream standardInput,
         CliLowArgs lowArgs,
         bool asciiCaseInsensitive,
@@ -78,12 +83,13 @@ internal static class JsonSearchOperations
         RawByteWriter output)
     {
         byte[] bytes = SearchFileContentReader.ReadSearchStream(standardInput, lowArgs.EncodingMode);
-        return SearchJsonBytes(bytes, pattern, output, StandardInputPath, summary, lowArgs.TextMode, searchBinaryAsText: false, lowArgs.Quiet, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.Crlf, lowArgs.NullData, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch);
+        return SearchJsonBytes(bytes, pattern, regexPlan, output, s_standardInputPath, summary, lowArgs.TextMode, searchBinaryAsText: false, lowArgs.Quiet, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Crlf, lowArgs.NullData, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch);
     }
 
     private static void SearchJsonPath(
         SearchPathArgument pathArgument,
         IReadOnlyList<byte[]> pattern,
+        RegexSearchPlan regexPlan,
         Stream standardInput,
         bool defaultRoot,
         bool multiplePaths,
@@ -101,14 +107,14 @@ internal static class JsonSearchOperations
         string? path = pathArgument.Text;
         if (pathArgument.IsRawUnixPath)
         {
-            SearchJsonRawUnixFile(pathArgument, pattern, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, logger, ref matched, ref errored);
+            SearchJsonRawUnixFile(pathArgument, pattern, regexPlan, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, logger, ref matched, ref errored);
             return;
         }
 
         path ??= pathArgument.DisplayText;
         if (path == "-")
         {
-            matched |= SearchJsonStandardInput(pattern, standardInput, lowArgs, asciiCaseInsensitive, summary, output);
+            matched |= SearchJsonStandardInput(pattern, regexPlan, standardInput, lowArgs, asciiCaseInsensitive, summary, output);
             return;
         }
 
@@ -117,7 +123,7 @@ internal static class JsonSearchOperations
             int threadCount = SearchWalkPlanning.GetSearchWalkThreadCount(lowArgs);
             if (threadCount > 1)
             {
-                SearchJsonDirectoryParallel(path, pattern, defaultRoot, lowArgs, fileTypes, asciiCaseInsensitive, summary, output, diagnostics, logger, threadCount, ref matched, ref errored);
+                SearchJsonDirectoryParallel(path, pattern, regexPlan, defaultRoot, lowArgs, fileTypes, asciiCaseInsensitive, summary, output, diagnostics, logger, threadCount, ref matched, ref errored);
                 return;
             }
 
@@ -125,7 +131,7 @@ internal static class JsonSearchOperations
             foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(path, lowArgs, fileTypes, diagnostics, logger))
             {
                 byte[] displayPath = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(path, fullRoot, entry, defaultRoot, pathSeparator: null);
-                SearchJsonDirectoryEntryFile(entry, displayPath, pattern, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, logger, ref matched, ref errored);
+                SearchJsonDirectoryEntryFile(entry, displayPath, pattern, regexPlan, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, logger, ref matched, ref errored);
             }
 
             return;
@@ -133,7 +139,7 @@ internal static class JsonSearchOperations
 
         if (File.Exists(path))
         {
-            SearchJsonFile(path, pathArgument.DisplayBytes, pattern, autoMmapEligible, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, logger, ref matched, ref errored);
+            SearchJsonFile(path, pathArgument.DisplayBytes, pattern, regexPlan, autoMmapEligible, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, logger, ref matched, ref errored);
             return;
         }
 
@@ -144,6 +150,7 @@ internal static class JsonSearchOperations
     private static void SearchJsonDirectoryParallel(
         string root,
         IReadOnlyList<byte[]> pattern,
+        RegexSearchPlan regexPlan,
         bool defaultRoot,
         CliLowArgs lowArgs,
         FileTypeMatcher fileTypes,
@@ -187,7 +194,7 @@ internal static class JsonSearchOperations
                 bool fileMatched = false;
                 bool fileErrored = false;
                 byte[] displayPath = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, pathSeparator: null);
-                SearchJsonDirectoryEntryFile(entry, displayPath, pattern, lowArgs, asciiCaseInsensitive, fileSummary, writer, diagnostics, logger, ref fileMatched, ref fileErrored);
+                SearchJsonDirectoryEntryFile(entry, displayPath, pattern, regexPlan, lowArgs, asciiCaseInsensitive, fileSummary, writer, diagnostics, logger, ref fileMatched, ref fileErrored);
                 writer.Flush();
                 if (fileMatched)
                 {
@@ -227,6 +234,7 @@ internal static class JsonSearchOperations
         string path,
         byte[] displayPath,
         IReadOnlyList<byte[]> pattern,
+        RegexSearchPlan regexPlan,
         bool autoMmapEligible,
         CliLowArgs lowArgs,
         bool asciiCaseInsensitive,
@@ -244,12 +252,13 @@ internal static class JsonSearchOperations
         }
 
         SearchDiagnosticLogging.LogTraceSearchPath(logger, path, readKind);
-        matched |= SearchJsonBytes(bytes, pattern, output, displayPath, summary, lowArgs.TextMode, SearchesBinaryAsText(readKind), lowArgs.Quiet, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.Crlf, lowArgs.NullData, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch);
+        matched |= SearchJsonBytes(bytes, pattern, regexPlan, output, displayPath, summary, lowArgs.TextMode, SearchesBinaryAsText(readKind), lowArgs.Quiet, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Crlf, lowArgs.NullData, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch);
     }
 
     private static void SearchJsonRawUnixFile(
         SearchPathArgument path,
         IReadOnlyList<byte[]> pattern,
+        RegexSearchPlan regexPlan,
         CliLowArgs lowArgs,
         bool asciiCaseInsensitive,
         JsonSearchSummary summary,
@@ -266,13 +275,14 @@ internal static class JsonSearchOperations
         }
 
         SearchDiagnosticLogging.LogTraceSearchPath(logger, path.DisplayText, SearchFileReadKind.Buffered);
-        matched |= SearchJsonBytes(bytes, pattern, output, path.DisplayBytes, summary, lowArgs.TextMode, searchBinaryAsText: false, lowArgs.Quiet, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Multiline, lowArgs.MultilineDotall, lowArgs.Crlf, lowArgs.NullData, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch);
+        matched |= SearchJsonBytes(bytes, pattern, regexPlan, output, path.DisplayBytes, summary, lowArgs.TextMode, searchBinaryAsText: false, lowArgs.Quiet, asciiCaseInsensitive, lowArgs.InvertMatch, lowArgs.LineRegexp, lowArgs.WordRegexp, lowArgs.Crlf, lowArgs.NullData, lowArgs.Replacement, lowArgs.MaxCount, lowArgs.BeforeContext, lowArgs.AfterContext, lowArgs.Passthru, lowArgs.StopOnNonmatch);
     }
 
     private static void SearchJsonDirectoryEntryFile(
         DirEntry entry,
         byte[] displayPath,
         IReadOnlyList<byte[]> pattern,
+        RegexSearchPlan regexPlan,
         CliLowArgs lowArgs,
         bool asciiCaseInsensitive,
         JsonSearchSummary summary,
@@ -285,16 +295,17 @@ internal static class JsonSearchOperations
         if (entry.IsRawUnixPath)
         {
             var path = SearchPathArgument.FromUnixBytes(entry.UnixPathBytes, displayPath);
-            SearchJsonRawUnixFile(path, pattern, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, logger, ref matched, ref errored);
+            SearchJsonRawUnixFile(path, pattern, regexPlan, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, logger, ref matched, ref errored);
             return;
         }
 
-        SearchJsonFile(entry.FullPath, displayPath, pattern, false, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, logger, ref matched, ref errored);
+        SearchJsonFile(entry.FullPath, displayPath, pattern, regexPlan, false, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, logger, ref matched, ref errored);
     }
 
     private static bool SearchJsonBytes(
         byte[] bytes,
         IReadOnlyList<byte[]> pattern,
+        RegexSearchPlan regexPlan,
         RawByteWriter output,
         byte[] path,
         JsonSearchSummary summary,
@@ -305,8 +316,6 @@ internal static class JsonSearchOperations
         bool invertMatch,
         bool lineRegexp,
         bool wordRegexp,
-        bool multiline,
-        bool multilineDotall,
         bool crlf,
         bool nullData,
         ReadOnlyMemory<byte>? replacement,
@@ -319,9 +328,9 @@ internal static class JsonSearchOperations
         int binaryOffset = textMode || nullData ? -1 : bytes.AsSpan().IndexOf((byte)0);
         byte[] searchBytes = BinaryDetection.GetSearchBytes(bytes, textMode || searchBinaryAsText, nullData);
         var writer = new JsonFileWriter(output, path, quiet, binaryOffset);
-        bool matched = multiline && (nullData || PatternPreparation.ShouldUseJsonMultilineRegex(pattern, multilineDotall)) && TrySearchJsonMultilineBytes(searchBytes, pattern, writer, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, multilineDotall, crlf, nullData, replacement, maxCount, beforeContext, afterContext, passthru, stopOnNonmatch, out bool multilineMatched)
+        bool matched = regexPlan.Options.Multiline && TrySearchJsonMultilineBytes(searchBytes, regexPlan, writer, invertMatch, nullData, replacement, maxCount, beforeContext, afterContext, passthru, stopOnNonmatch, out bool multilineMatched)
             ? multilineMatched
-            : SearchJsonLines(searchBytes, pattern, writer, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, crlf, nullData, replacement, maxCount, beforeContext, afterContext, passthru, stopOnNonmatch);
+            : SearchJsonLines(searchBytes, pattern, regexPlan, writer, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, crlf, nullData, replacement, maxCount, beforeContext, afterContext, passthru, stopOnNonmatch);
         ulong bytesSearched = searchBinaryAsText && binaryOffset >= 0 ? (ulong)binaryOffset : (ulong)bytes.Length;
         writer.Finish(bytesSearched, summary);
         return matched;
@@ -334,14 +343,9 @@ internal static class JsonSearchOperations
 
     private static bool TrySearchJsonMultilineBytes(
         ReadOnlySpan<byte> bytes,
-        IReadOnlyList<byte[]> patterns,
+        RegexSearchPlan searchPlan,
         JsonFileWriter writer,
-        bool asciiCaseInsensitive,
         bool invertMatch,
-        bool lineRegexp,
-        bool wordRegexp,
-        bool multilineDotall,
-        bool crlf,
         bool nullData,
         ReadOnlyMemory<byte>? replacement,
         ulong? maxCount,
@@ -353,7 +357,7 @@ internal static class JsonSearchOperations
     {
         matched = false;
         bool contextOutputRequested = beforeContext > 0 || afterContext > 0 || passthru;
-        if (crlf || (nullData && contextOutputRequested))
+        if (nullData && contextOutputRequested)
         {
             return false;
         }
@@ -366,25 +370,21 @@ internal static class JsonSearchOperations
         if (invertMatch)
         {
             matched = contextOutputRequested
-                ? SearchJsonMultilineInvertedContextBytes(bytes, patterns, writer, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount, beforeContext, afterContext, passthru)
-                : WriteJsonMultilineInvertedMatches(bytes, patterns, writer, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, maxCount);
+                ? SearchJsonMultilineInvertedContextBytes(bytes, searchPlan, writer, maxCount, beforeContext, afterContext, passthru)
+                : WriteJsonMultilineInvertedMatches(bytes, searchPlan, writer, maxCount);
             return true;
         }
 
         matched = contextOutputRequested
-            ? SearchJsonMultilineContextBytes(bytes, patterns, writer, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, replacement, maxCount, beforeContext, afterContext, passthru, stopOnNonmatch)
-            : SearchJsonMultilineMatchBytes(bytes, patterns, writer, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, nullData, replacement, maxCount);
+            ? SearchJsonMultilineContextBytes(bytes, searchPlan, writer, replacement, maxCount, beforeContext, afterContext, passthru, stopOnNonmatch)
+            : SearchJsonMultilineMatchBytes(bytes, searchPlan, writer, nullData, replacement, maxCount);
         return true;
     }
 
     private static bool SearchJsonMultilineMatchBytes(
         ReadOnlySpan<byte> bytes,
-        IReadOnlyList<byte[]> patterns,
+        RegexSearchPlan searchPlan,
         JsonFileWriter writer,
-        bool asciiCaseInsensitive,
-        bool lineRegexp,
-        bool wordRegexp,
-        bool multilineDotall,
         bool nullData,
         ReadOnlyMemory<byte>? replacement,
         ulong? maxCount)
@@ -397,8 +397,13 @@ internal static class JsonSearchOperations
         int groupEnd = -1;
         int groupLastLineStart = -1;
         var matches = new List<JsonMatchSpan>(capacity: 1);
-        while (MultilineSearchOperations.TryFindNextMultilineMatch(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall, ref offset, ref suppressedEmptyStart, out RegexMatch match))
+        using RegexReplacementSession? replacementSession =
+            replacement is ReadOnlyMemory<byte> replacementValue
+                ? new RegexReplacementSession(replacementValue, searchPlan)
+                : null;
+        while (MultilineSearchOperations.TryFindNextMultilineMatch(bytes, searchPlan, ref offset, ref suppressedEmptyStart, out RegexMatch match))
         {
+            bool selectionOnly = MultilineSearchOperations.IsSelectionOnlyEofMatch(bytes, match, offset);
             bool omitSubmatch = match.Length == 0 && match.Start == bytes.Length;
             int firstLineStart = GetJsonMultilineLineStart(bytes, match.Start, nullData);
             if (omitSubmatch && firstLineStart >= bytes.Length)
@@ -431,17 +436,21 @@ internal static class JsonSearchOperations
 
             if (!omitSubmatch)
             {
-                byte[]? expandedReplacement = replacement is ReadOnlyMemory<byte> replacementValue
-                    ? ReplacementFormatter.Expand(replacementValue.Span, bytes.Slice(match.Start, match.Length), patterns, asciiCaseInsensitive)
-                    : null;
+                byte[]? expandedReplacement = replacementSession?.Expand(
+                    bytes,
+                    match.Start,
+                    match.Length);
                 matches.Add(new JsonMatchSpan(match.Start - groupStart, match.Start - groupStart + match.Length, expandedReplacement));
             }
 
-            emitted++;
-            if (maxCount is ulong limit && emitted >= limit)
+            if (!selectionOnly)
             {
-                WriteJsonMultilineMatchGroup(bytes, writer, groupStart, groupEnd, groupLastLineStart, matches, nullData);
-                return matched;
+                emitted++;
+                if (maxCount is ulong limit && emitted >= limit)
+                {
+                    WriteJsonMultilineMatchGroup(bytes, writer, groupStart, groupEnd, groupLastLineStart, matches, nullData);
+                    return matched;
+                }
             }
 
             offset = MultilineSearchOperations.AdvanceAfterReportedMultilineMatch(match, bytes.Length, ref suppressedEmptyStart);
@@ -457,12 +466,8 @@ internal static class JsonSearchOperations
 
     private static bool SearchJsonMultilineContextBytes(
         ReadOnlySpan<byte> bytes,
-        IReadOnlyList<byte[]> patterns,
+        RegexSearchPlan searchPlan,
         JsonFileWriter writer,
-        bool asciiCaseInsensitive,
-        bool lineRegexp,
-        bool wordRegexp,
-        bool multilineDotall,
         ReadOnlyMemory<byte>? replacement,
         ulong? maxCount,
         ulong beforeContext,
@@ -470,7 +475,7 @@ internal static class JsonSearchOperations
         bool passthru,
         bool stopOnNonmatch)
     {
-        List<RegexMatch> matches = MultilineSearchOperations.CollectMultilineMatches(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall);
+        List<RegexMatch> matches = MultilineSearchOperations.CollectMultilineMatches(bytes, searchPlan);
         List<ContextLineInfo> lines = MultilineSearchOperations.BuildMultilineContextLines(bytes, matches, stopOnNonmatch);
         bool[] included = new bool[lines.Count];
         bool matched = passthru
@@ -478,6 +483,10 @@ internal static class JsonSearchOperations
             : MultilineSearchOperations.IncludeMultilineContextLines(bytes, lines, matches, included, beforeContext, afterContext, maxCount);
         ulong? renderedMatchLimit = passthru ? maxCount : null;
         var contextMatches = new List<JsonMatchSpan>(capacity: 0);
+        using RegexReplacementSession? replacementSession =
+            replacement is ReadOnlyMemory<byte> replacementValue
+                ? new RegexReplacementSession(replacementValue, searchPlan)
+                : null;
         for (int index = 0; index < lines.Count; index++)
         {
             if (!included[index])
@@ -488,7 +497,7 @@ internal static class JsonSearchOperations
             ContextLineInfo line = lines[index];
             if (line.SelectedMatch && MultilineSearchOperations.MultilineLineHasRenderedMatch(bytes, line, matches, renderedMatchLimit))
             {
-                if (TryWriteJsonMultilineMatchGroupStartingAtLine(bytes, lines, index, matches, renderedMatchLimit, replacement, patterns, asciiCaseInsensitive, writer, out int consumedLineIndex))
+                if (TryWriteJsonMultilineMatchGroupStartingAtLine(bytes, lines, index, matches, renderedMatchLimit, replacementSession, writer, out int consumedLineIndex))
                 {
                     index = Math.Max(index, consumedLineIndex);
                 }
@@ -504,18 +513,14 @@ internal static class JsonSearchOperations
 
     private static bool SearchJsonMultilineInvertedContextBytes(
         ReadOnlySpan<byte> bytes,
-        IReadOnlyList<byte[]> patterns,
+        RegexSearchPlan searchPlan,
         JsonFileWriter writer,
-        bool asciiCaseInsensitive,
-        bool lineRegexp,
-        bool wordRegexp,
-        bool multilineDotall,
         ulong? maxCount,
         ulong beforeContext,
         ulong afterContext,
         bool passthru)
     {
-        List<ContextLineInfo> lines = MultilineSearchOperations.BuildMultilineInvertedLines(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall);
+        List<ContextLineInfo> lines = MultilineSearchOperations.BuildMultilineInvertedLines(bytes, searchPlan);
         bool[] included = new bool[lines.Count];
         bool matched = passthru
             ? ContextSearchOperations.IncludePassthruLines(lines, included)
@@ -562,9 +567,7 @@ internal static class JsonSearchOperations
         int lineIndex,
         List<RegexMatch> regexMatches,
         ulong? renderedMatchLimit,
-        ReadOnlyMemory<byte>? replacement,
-        IReadOnlyList<byte[]> patterns,
-        bool asciiCaseInsensitive,
+        RegexReplacementSession? replacementSession,
         JsonFileWriter writer,
         out int consumedLineIndex)
     {
@@ -605,10 +608,14 @@ internal static class JsonSearchOperations
                 groupLastLineStart = lastLineStart;
             }
 
-            byte[]? expandedReplacement = replacement is ReadOnlyMemory<byte> replacementValue
-                ? ReplacementFormatter.Expand(replacementValue.Span, bytes.Slice(match.Start, match.Length), patterns, asciiCaseInsensitive)
-                : null;
-            matches.Add(new JsonMatchSpan(match.Start - groupStart, match.Start - groupStart + match.Length, expandedReplacement));
+            if (match.Length != 0 || match.Start != bytes.Length)
+            {
+                byte[]? expandedReplacement = replacementSession?.Expand(
+                    bytes,
+                    match.Start,
+                    match.Length);
+                matches.Add(new JsonMatchSpan(match.Start - groupStart, match.Start - groupStart + match.Length, expandedReplacement));
+            }
         }
 
         if (groupStart < 0)
@@ -715,15 +722,11 @@ internal static class JsonSearchOperations
 
     private static bool WriteJsonMultilineInvertedMatches(
         ReadOnlySpan<byte> bytes,
-        IReadOnlyList<byte[]> patterns,
+        RegexSearchPlan searchPlan,
         JsonFileWriter writer,
-        bool asciiCaseInsensitive,
-        bool lineRegexp,
-        bool wordRegexp,
-        bool multilineDotall,
         ulong? maxCount)
     {
-        List<ContextLineInfo> lines = MultilineSearchOperations.BuildMultilineInvertedLines(bytes, patterns, asciiCaseInsensitive, lineRegexp, wordRegexp, multilineDotall);
+        List<ContextLineInfo> lines = MultilineSearchOperations.BuildMultilineInvertedLines(bytes, searchPlan);
         var matches = new List<JsonMatchSpan>(capacity: 0);
         ulong emitted = 0;
         bool matched = false;
@@ -750,6 +753,7 @@ internal static class JsonSearchOperations
     private static bool SearchJsonLines(
         byte[] bytes,
         IReadOnlyList<byte[]> pattern,
+        RegexSearchPlan searchPlan,
         JsonFileWriter writer,
         bool asciiCaseInsensitive,
         bool invertMatch,
@@ -764,7 +768,18 @@ internal static class JsonSearchOperations
         bool passthru,
         bool stopOnNonmatch)
     {
-        List<ContextLineInfo> lines = ContextSearchOperations.BuildLines(bytes, pattern, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, crlf, nullData, stopOnNonmatch);
+        ContextSearchResult searchResult = ContextSearchOperations.BuildSearchResult(
+            bytes,
+            pattern,
+            asciiCaseInsensitive,
+            invertMatch,
+            lineRegexp,
+            wordRegexp,
+            crlf,
+            nullData,
+            stopOnNonmatch,
+            searchPlan);
+        List<ContextLineInfo> lines = searchResult.Lines;
         if (lines.Count == 0)
         {
             return false;
@@ -789,7 +804,12 @@ internal static class JsonSearchOperations
                 matches.Clear();
                 if (!invertMatch)
                 {
-                    CollectJsonMatches(lineBytes, pattern, matches, replacement, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf, nullData);
+                    CollectJsonMatches(
+                        lineBytes,
+                        searchResult.GetMatches(line),
+                        searchPlan,
+                        matches,
+                        replacement);
                 }
 
                 writer.WriteMatchLine(line.LineNumber, line.Start, lineBytes, matches);
@@ -799,7 +819,12 @@ internal static class JsonSearchOperations
                 matches.Clear();
                 if (invertMatch && line.OriginalMatch)
                 {
-                    CollectJsonMatches(lineBytes, pattern, matches, replacement, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf, nullData);
+                    CollectJsonMatches(
+                        lineBytes,
+                        searchResult.GetMatches(line),
+                        searchPlan,
+                        matches,
+                        replacement);
                 }
 
                 writer.WriteContextLine(line.LineNumber, line.Start, lineBytes, matches);
@@ -811,19 +836,34 @@ internal static class JsonSearchOperations
 
     private static void CollectJsonMatches(
         ReadOnlySpan<byte> line,
-        IReadOnlyList<byte[]> pattern,
+        ReadOnlySpan<ContextLineMatch> retainedMatches,
+        RegexSearchPlan searchPlan,
         List<JsonMatchSpan> matches,
-        ReadOnlyMemory<byte>? replacement,
-        bool asciiCaseInsensitive,
-        bool lineRegexp,
-        bool wordRegexp,
-        bool crlf,
-        bool nullData)
+        ReadOnlyMemory<byte>? replacement)
     {
-        ReplacementCapturePlan? replacementCapturePlan = replacement.HasValue
-            ? ReplacementCapturePlan.TryCreate(pattern, asciiCaseInsensitive)
-            : null;
-        var collector = new JsonMatchCollector(matches, replacement, pattern, asciiCaseInsensitive, replacementCapturePlan);
-        LiteralLineSearcher.SearchMatchLines(line, pattern, ref collector, asciiCaseInsensitive, lineRegexp, wordRegexp, crlf: crlf, nullData: nullData);
+        var collector = new JsonMatchCollector(matches, replacement, searchPlan);
+        try
+        {
+            for (int index = 0; index < retainedMatches.Length; index++)
+            {
+                ContextLineMatch match = retainedMatches[index];
+                if (ContextSearchOperations.IsSelectionOnlyRecordEndMatch(line, match))
+                {
+                    continue;
+                }
+
+                collector.MatchedLine(
+                    lineNumber: 1,
+                    lineByteOffset: 0,
+                    matchByteOffset: match.Start,
+                    match.Column,
+                    line,
+                    line.Slice(match.Start, match.Length));
+            }
+        }
+        finally
+        {
+            collector.Dispose();
+        }
     }
 }

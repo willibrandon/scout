@@ -11,6 +11,8 @@ namespace Scout;
 /// <param name="prefilter">The prefilter used by prefix and required-literal modes.</param>
 /// <param name="startPredicate">The predicate used by the every-start mode.</param>
 /// <param name="requiredRangeBuffer">Scratch storage for ordered required-literal ranges.</param>
+/// <param name="nulDetection">Optional one-element storage that records observed NUL bytes.</param>
+/// <param name="prefilterState">Adaptive effectiveness state shared by this search operation.</param>
 internal ref struct RegexCandidateStartEnumerator(
     ReadOnlySpan<byte> haystack,
     RegexCandidateStartMode mode,
@@ -19,7 +21,9 @@ internal ref struct RegexCandidateStartEnumerator(
     bool utf8,
     RegexPrefilter? prefilter,
     RegexStartPredicate? startPredicate,
-    Span<long> requiredRangeBuffer)
+    Span<long> requiredRangeBuffer,
+    Span<bool> nulDetection,
+    Span<RegexPrefilterState> prefilterState)
 {
     /// <summary>
     /// The stack scratch length required by the ordered required-literal range stream.
@@ -30,6 +34,8 @@ internal ref struct RegexCandidateStartEnumerator(
     private readonly RegexCandidateStartMode _mode = mode;
     private readonly RegexPrefilter? _prefilter = prefilter;
     private readonly RegexStartPredicate? _startPredicate = startPredicate;
+    private readonly Span<RegexPrefilterState> _prefilterState = prefilterState;
+    private readonly bool _hasRequiredStart = startPredicate?.HasRequiredStart ?? false;
     private readonly bool _utf8 = utf8;
     private readonly int _startAt = Math.Clamp(startAt, 0, haystack.Length);
     private readonly int _maxStart = Math.Clamp(maxStart, 0, haystack.Length);
@@ -37,9 +43,12 @@ internal ref struct RegexCandidateStartEnumerator(
     private int _rangeEnd = Math.Clamp(startAt, 0, haystack.Length) - 1;
     private int _requiredSearchAt = Math.Clamp(startAt, 0, haystack.Length);
     private int _pendingRequiredAt = -1;
+    private int _lastReturnedStart = Math.Clamp(startAt, 0, haystack.Length) - 1;
     private Span<long> _requiredRangeBuffer = requiredRangeBuffer;
+    private Span<bool> _nulDetection = nulDetection;
     private int _requiredRangeCount;
     private bool _requiredGateDisabled;
+    private bool _prefilterBypassed;
 
     /// <summary>
     /// Creates an enumerator that considers every legal match start.
@@ -65,7 +74,9 @@ internal ref struct RegexCandidateStartEnumerator(
             utf8,
             prefilter: null,
             startPredicate,
-            requiredRangeBuffer: default);
+            requiredRangeBuffer: default,
+            nulDetection: default,
+            prefilterState: default);
     }
 
     /// <summary>
@@ -76,13 +87,15 @@ internal ref struct RegexCandidateStartEnumerator(
     /// <param name="maxStart">The last permitted match start.</param>
     /// <param name="utf8">Whether candidates must begin on UTF-8 boundaries.</param>
     /// <param name="prefilter">The prefix prefilter used to locate candidates.</param>
+    /// <param name="prefilterState">Adaptive effectiveness state for this search operation.</param>
     /// <returns>An exact-prefix candidate enumerator.</returns>
     public static RegexCandidateStartEnumerator ExactPrefix(
         ReadOnlySpan<byte> haystack,
         int startAt,
         int maxStart,
         bool utf8,
-        RegexPrefilter prefilter)
+        RegexPrefilter prefilter,
+        Span<RegexPrefilterState> prefilterState = default)
     {
         return new RegexCandidateStartEnumerator(
             haystack,
@@ -92,7 +105,9 @@ internal ref struct RegexCandidateStartEnumerator(
             utf8,
             prefilter,
             startPredicate: null,
-            requiredRangeBuffer: default);
+            requiredRangeBuffer: default,
+            nulDetection: default,
+            prefilterState);
     }
 
     /// <summary>
@@ -104,6 +119,7 @@ internal ref struct RegexCandidateStartEnumerator(
     /// <param name="utf8">Whether candidates must begin on UTF-8 boundaries.</param>
     /// <param name="prefilter">The required-literal prefilter used to form ranges.</param>
     /// <param name="requiredRangeBuffer">Stack scratch used to order narrowed ranges.</param>
+    /// <param name="prefilterState">Adaptive effectiveness state for this search operation.</param>
     /// <returns>A required-literal-range candidate enumerator.</returns>
     public static RegexCandidateStartEnumerator RequiredLiteralRanges(
         ReadOnlySpan<byte> haystack,
@@ -111,7 +127,8 @@ internal ref struct RegexCandidateStartEnumerator(
         int maxStart,
         bool utf8,
         RegexPrefilter prefilter,
-        Span<long> requiredRangeBuffer)
+        Span<long> requiredRangeBuffer,
+        Span<RegexPrefilterState> prefilterState = default)
     {
         return new RegexCandidateStartEnumerator(
             haystack,
@@ -121,7 +138,45 @@ internal ref struct RegexCandidateStartEnumerator(
             utf8,
             prefilter,
             startPredicate: null,
-            requiredRangeBuffer);
+            requiredRangeBuffer,
+            nulDetection: default,
+            prefilterState);
+    }
+
+    /// <summary>
+    /// Creates a required-literal range enumerator that detects NUL bytes in the same scan.
+    /// </summary>
+    /// <param name="haystack">The bytes being searched.</param>
+    /// <param name="startAt">The first permitted match start.</param>
+    /// <param name="maxStart">The last permitted match start.</param>
+    /// <param name="utf8">Whether candidates must begin on UTF-8 boundaries.</param>
+    /// <param name="prefilter">The required-literal prefilter used to form ranges.</param>
+    /// <param name="requiredRangeBuffer">Stack scratch used to order narrowed ranges.</param>
+    /// <param name="nulDetection">One-element storage that records observed NUL bytes.</param>
+    /// <param name="prefilterState">Adaptive effectiveness state for this search operation.</param>
+    /// <returns>A required-literal-range candidate enumerator.</returns>
+    public static RegexCandidateStartEnumerator RequiredLiteralRangesAndDetectNul(
+        ReadOnlySpan<byte> haystack,
+        int startAt,
+        int maxStart,
+        bool utf8,
+        RegexPrefilter prefilter,
+        Span<long> requiredRangeBuffer,
+        Span<bool> nulDetection,
+        Span<RegexPrefilterState> prefilterState = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(nulDetection.Length, 1);
+        return new RegexCandidateStartEnumerator(
+            haystack,
+            RegexCandidateStartMode.RequiredLiteralRanges,
+            startAt,
+            maxStart,
+            utf8,
+            prefilter,
+            startPredicate: null,
+            requiredRangeBuffer,
+            nulDetection,
+            prefilterState);
     }
 
     /// <summary>
@@ -140,14 +195,29 @@ internal ref struct RegexCandidateStartEnumerator(
         };
     }
 
+    /// <summary>
+    /// Gets a value indicating whether this enumerator has active required-literal ranges
+    /// in its caller-provided scratch buffer.
+    /// </summary>
+    internal readonly bool HasBufferedRequiredRanges => _requiredRangeCount > 0;
+
     private bool MoveNextEvery(out int start)
     {
         while (_nextStart <= _maxStart)
         {
-            int candidate = _nextStart++;
+            int candidate = _hasRequiredStart
+                ? _startPredicate!.FindNextRequiredStart(_haystack, _nextStart, _maxStart)
+                : _nextStart;
+            if (candidate < 0)
+            {
+                break;
+            }
+
+            _nextStart = candidate + 1;
             if (IsUtf8Boundary(candidate) &&
                 (_startPredicate is null || _startPredicate.CanStartAt(_haystack, candidate)))
             {
+                _lastReturnedStart = candidate;
                 start = candidate;
                 return true;
             }
@@ -159,9 +229,21 @@ internal ref struct RegexCandidateStartEnumerator(
 
     private bool MoveNextExactPrefix(out int start)
     {
+        if (ShouldBypassPrefilter())
+        {
+            return MoveNextUnfiltered(out start);
+        }
+
         while (_nextStart <= _maxStart)
         {
-            int candidate = _prefilter!.FindCandidate(_haystack, _nextStart);
+            int searchAt = _nextStart;
+            int candidate = _prefilter!.FindCandidate(_haystack, searchAt);
+            if (!_prefilterState.IsEmpty)
+            {
+                _prefilterState[0].RecordSkip(candidate < 0
+                    ? _haystack.Length - searchAt
+                    : candidate - searchAt);
+            }
             if (candidate < 0 || candidate > _maxStart)
             {
                 break;
@@ -170,8 +252,14 @@ internal ref struct RegexCandidateStartEnumerator(
             _nextStart = candidate + 1;
             if (IsUtf8Boundary(candidate))
             {
+                _lastReturnedStart = candidate;
                 start = candidate;
                 return true;
+            }
+
+            if (ShouldBypassPrefilter())
+            {
+                return MoveNextUnfiltered(out start);
             }
         }
 
@@ -183,11 +271,17 @@ internal ref struct RegexCandidateStartEnumerator(
     {
         while (true)
         {
+            if (ShouldBypassPrefilter())
+            {
+                return MoveNextUnfiltered(out start);
+            }
+
             while (_nextStart <= _rangeEnd)
             {
                 int candidate = _nextStart++;
                 if (IsUtf8Boundary(candidate) && _prefilter!.CanStartAt(_haystack, candidate))
                 {
+                    _lastReturnedStart = candidate;
                     start = candidate;
                     return true;
                 }
@@ -195,6 +289,11 @@ internal ref struct RegexCandidateStartEnumerator(
 
             if (!TryLoadNextRequiredLiteralRange())
             {
+                if (ShouldBypassPrefilter())
+                {
+                    return MoveNextUnfiltered(out start);
+                }
+
                 start = -1;
                 return false;
             }
@@ -430,20 +529,85 @@ internal ref struct RegexCandidateStartEnumerator(
 
     private int FindNextRequiredLiteral()
     {
+        if (!_prefilterState.IsEmpty && !_prefilterState[0].IsEffective)
+        {
+            return -1;
+        }
+
         if (_requiredSearchAt >= _haystack.Length)
         {
             return -1;
         }
 
-        int requiredAt = _prefilter!.FindRequiredLiteral(_haystack, _requiredSearchAt);
+        int searchAt = _requiredSearchAt;
+        int requiredAt = _nulDetection.IsEmpty
+            ? _prefilter!.FindRequiredLiteral(_haystack, searchAt)
+            : _prefilter!.FindRequiredLiteralAndDetectNul(
+                _haystack,
+                searchAt,
+                ref _nulDetection[0]);
         if (requiredAt < 0)
         {
             _requiredSearchAt = _haystack.Length;
+            if (!_prefilterState.IsEmpty)
+            {
+                _prefilterState[0].RecordSkip(Math.Max(0, _haystack.Length - searchAt));
+            }
+
             return -1;
+        }
+
+        if (!_prefilterState.IsEmpty)
+        {
+            _prefilterState[0].RecordSkip(Math.Max(0, requiredAt - searchAt));
         }
 
         _requiredSearchAt = requiredAt + 1;
         return requiredAt;
+    }
+
+    private bool ShouldBypassPrefilter()
+    {
+        if (_prefilterBypassed)
+        {
+            return true;
+        }
+
+        if (_prefilterState.IsEmpty || _prefilterState[0].IsEffective)
+        {
+            return false;
+        }
+
+        _prefilterBypassed = true;
+        _requiredRangeCount = 0;
+        _pendingRequiredAt = -1;
+        _nextStart = Math.Max(_startAt, _lastReturnedStart + 1);
+        _rangeEnd = _nextStart - 1;
+        if (!_nulDetection.IsEmpty &&
+            !_nulDetection[0] &&
+            _haystack.IndexOf((byte)0) >= 0)
+        {
+            _nulDetection[0] = true;
+        }
+
+        return true;
+    }
+
+    private bool MoveNextUnfiltered(out int start)
+    {
+        while (_nextStart <= _maxStart)
+        {
+            int candidate = _nextStart++;
+            if (IsUtf8Boundary(candidate))
+            {
+                _lastReturnedStart = candidate;
+                start = candidate;
+                return true;
+            }
+        }
+
+        start = -1;
+        return false;
     }
 
     private bool IsUtf8Boundary(int position)

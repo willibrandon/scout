@@ -4,28 +4,36 @@ namespace Scout;
 /// <summary>
 /// Represents a PCRE2 match span.
 /// </summary>
-public readonly struct Pcre2Match : IEquatable<Pcre2Match>
+/// <param name="start">The zero-based start offset.</param>
+/// <param name="length">The match length.</param>
+public readonly struct Pcre2Match(int start, int length) : IEquatable<Pcre2Match>
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="Pcre2Match" /> struct.
+    /// Initializes a match span with the pattern start retained before any <c>\K</c> adjustment.
     /// </summary>
-    /// <param name="start">The zero-based start offset.</param>
-    /// <param name="length">The match length.</param>
-    public Pcre2Match(int start, int length)
+    /// <param name="start">The zero-based reported match start.</param>
+    /// <param name="length">The reported match length.</param>
+    /// <param name="patternStart">The zero-based start of the successful pattern match.</param>
+    internal Pcre2Match(int start, int length, int patternStart)
+        : this(start, length)
     {
-        Start = start;
-        Length = length;
+        PatternStart = patternStart;
     }
 
     /// <summary>
     /// Gets the zero-based start offset.
     /// </summary>
-    public int Start { get; }
+    public int Start { get; } = start;
 
     /// <summary>
     /// Gets the match length.
     /// </summary>
-    public int Length { get; }
+    public int Length { get; } = length;
+
+    /// <summary>
+    /// Gets the start of the successful PCRE2 pattern match before any <c>\K</c> adjustment.
+    /// </summary>
+    internal int PatternStart { get; } = start;
 
     /// <inheritdoc />
     public bool Equals(Pcre2Match other)
