@@ -14,7 +14,7 @@ public sealed class StandardInputProcessTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task MatchingRedirectedInputIsSearchedAtPipeEndOfFile(
+    public async Task MatchingRedirectedInputIsSearchedAtPipeEndOfFileAsync(
         bool explicitStandardInput)
     {
         byte[] input = "ScoutScout\r\n"u8.ToArray();
@@ -41,7 +41,7 @@ public sealed class StandardInputProcessTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task NonmatchingRedirectedInputReturnsNoMatchAtPipeEndOfFile(
+    public async Task NonmatchingRedirectedInputReturnsNoMatchAtPipeEndOfFileAsync(
         bool explicitStandardInput)
     {
         byte[] input = "NoMatch\r\n"u8.ToArray();

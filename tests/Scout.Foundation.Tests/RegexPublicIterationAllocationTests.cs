@@ -95,17 +95,40 @@ public sealed class RegexPublicIterationAllocationTests
             '|',
             Enumerable.Repeat("abcdefghfoo1", RegexPrefilterState.MinimumSkipCount * 2)));
 
-        _ = MeasureIterationAllocation(regex, oneMatch, out _);
-        _ = MeasureIterationAllocation(regex, manyMatches, out _);
+        for (int warmup = 0; warmup < 2; warmup++)
+        {
+            _ = MeasureIterationAllocation(regex, oneMatch, out _);
+            _ = MeasureIterationAllocation(regex, manyMatches, out _);
+        }
 
-        long oneMatchAllocation = MeasureIterationAllocation(regex, oneMatch, out int oneCount);
-        long manyMatchAllocation = MeasureIterationAllocation(regex, manyMatches, out int manyCount);
+        int expectedManyCount = RegexPrefilterState.MinimumSkipCount * 2;
+        long oneMatchAllocation = long.MaxValue;
+        long manyMatchAllocation = long.MaxValue;
+        for (int sample = 0; sample < MeasurementSampleCount; sample++)
+        {
+            bool measureManyFirst = (sample & 1) != 0;
+            long firstAllocation = MeasureIterationAllocation(
+                regex,
+                measureManyFirst ? manyMatches : oneMatch,
+                out int firstCount);
+            long secondAllocation = MeasureIterationAllocation(
+                regex,
+                measureManyFirst ? oneMatch : manyMatches,
+                out int secondCount);
+            int oneCount = measureManyFirst ? secondCount : firstCount;
+            int manyCount = measureManyFirst ? firstCount : secondCount;
+            long oneMatchSample = measureManyFirst ? secondAllocation : firstAllocation;
+            long manyMatchSample = measureManyFirst ? firstAllocation : secondAllocation;
 
-        Assert.Equal(1, oneCount);
-        Assert.Equal(RegexPrefilterState.MinimumSkipCount * 2, manyCount);
+            Assert.Equal(1, oneCount);
+            Assert.Equal(expectedManyCount, manyCount);
+            oneMatchAllocation = Math.Min(oneMatchAllocation, oneMatchSample);
+            manyMatchAllocation = Math.Min(manyMatchAllocation, manyMatchSample);
+        }
+
         Assert.True(
-            manyMatchAllocation <= oneMatchAllocation + 256,
-            $"Expected operation-scoped iteration state, but one match allocated {oneMatchAllocation} bytes and many matches allocated {manyMatchAllocation} bytes.");
+            manyMatchAllocation <= oneMatchAllocation + AllocationNoiseAllowance,
+            $"Expected operation-scoped iteration state: the minimum of {MeasurementSampleCount} samples was {oneMatchAllocation} bytes for one match and {manyMatchAllocation} bytes for {expectedManyCount} matches.");
     }
 
     /// <summary>
