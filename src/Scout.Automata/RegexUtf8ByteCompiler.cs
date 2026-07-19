@@ -77,7 +77,7 @@ internal static class RegexUtf8ByteCompiler
     /// <param name="trie">Receives the reusable trie.</param>
     /// <returns><see langword="true" /> when at least one valid scalar was compiled.</returns>
     public static bool TryCreateFromRanges(
-        List<RegexScalarRange> ranges,
+        IReadOnlyList<RegexScalarRange> ranges,
         bool reversed,
         out RegexUtf8ByteTrie? trie)
     {
@@ -196,7 +196,7 @@ internal static class RegexUtf8ByteCompiler
     /// <param name="start">Receives the compiled start state.</param>
     /// <returns><see langword="true" /> when the compact form applies.</returns>
     public static bool TryCompileCompactFromRanges(
-        List<RegexScalarRange> ranges,
+        IReadOnlyList<RegexScalarRange> ranges,
         bool reversed,
         int next,
         RegexAddByteClassState addByteClass,
@@ -218,7 +218,7 @@ internal static class RegexUtf8ByteCompiler
     /// </summary>
     /// <param name="ranges">The normalized scalar ranges.</param>
     /// <returns><see langword="true" /> when at least one range exists and every scalar is ASCII.</returns>
-    public static bool CanLowerToAsciiByteClass(List<RegexScalarRange> ranges)
+    public static bool CanLowerToAsciiByteClass(IReadOnlyList<RegexScalarRange> ranges)
     {
         if (ranges.Count == 0)
         {
@@ -244,7 +244,7 @@ internal static class RegexUtf8ByteCompiler
     /// <param name="byteRanges">Receives the inclusive byte-range pairs.</param>
     /// <returns><see langword="true" /> when every scalar is ASCII.</returns>
     public static bool TryGetAsciiByteRanges(
-        List<RegexScalarRange> ranges,
+        IReadOnlyList<RegexScalarRange> ranges,
         out byte[] byteRanges)
     {
         byteRanges = [];
@@ -307,7 +307,7 @@ internal static class RegexUtf8ByteCompiler
     /// <param name="start">Receives the compiled start state.</param>
     /// <returns><see langword="true" /> when the reverse range-sequence path applies.</returns>
     public static bool TryCompileRangeSequencesFromRanges(
-        List<RegexScalarRange> ranges,
+        IReadOnlyList<RegexScalarRange> ranges,
         bool reversed,
         int next,
         RegexAddByteClassState addByteClass,
@@ -1331,7 +1331,7 @@ internal static class RegexUtf8ByteCompiler
     }
 
     private static bool TryCreateMinimizedForwardTrie(
-        List<RegexScalarRange> ranges,
+        IReadOnlyList<RegexScalarRange> ranges,
         out RegexUtf8ByteTrie? trie)
     {
         List<RegexScalarRange> normalized = [.. ranges];
@@ -1370,7 +1370,9 @@ internal static class RegexUtf8ByteCompiler
         AddComplementAgainst(ranges, excluded, source);
     }
 
-    private static bool TryGetAsciiRangesWhenAllNonAsciiScalarsMatch(List<RegexScalarRange> ranges, out byte[] asciiRanges)
+    private static bool TryGetAsciiRangesWhenAllNonAsciiScalarsMatch(
+        IReadOnlyList<RegexScalarRange> ranges,
+        out byte[] asciiRanges)
     {
         asciiRanges = [];
         if (!ContainsRange(ranges, 0x80, SurrogateStart - 1) ||
@@ -1595,7 +1597,7 @@ internal static class RegexUtf8ByteCompiler
         maximum = Math.Max(maximum, length);
     }
 
-    private static bool ContainsRange(List<RegexScalarRange> ranges, int start, int end)
+    private static bool ContainsRange(IReadOnlyList<RegexScalarRange> ranges, int start, int end)
     {
         int cursor = start;
         for (int index = 0; index < ranges.Count; index++)
@@ -1621,26 +1623,7 @@ internal static class RegexUtf8ByteCompiler
         return false;
     }
 
-    private static bool ContainsScalar(List<RegexScalarRange> ranges, int scalar)
-    {
-        for (int index = 0; index < ranges.Count; index++)
-        {
-            RegexScalarRange range = ranges[index];
-            if (scalar < range.Start)
-            {
-                return false;
-            }
-
-            if (scalar <= range.End)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static long EstimateScalarCount(List<RegexScalarRange> ranges)
+    private static long EstimateScalarCount(IReadOnlyList<RegexScalarRange> ranges)
     {
         long count = 0;
         for (int index = 0; index < ranges.Count; index++)

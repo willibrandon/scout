@@ -27,8 +27,6 @@ internal sealed class RegexUnanchoredLazyDfaFactory(
     private readonly ulong _dfaSizeLimit = dfaSizeLimit;
     private readonly RegexNfaConstructionBudget _constructionBudget =
         constructionBudget ?? new RegexNfaConstructionBudget(dfaSizeLimit);
-    private readonly bool _constructionEligible = forwardNfaIsUnanchored ||
-        RegexNfaCompiler.EstimateUnanchoredConstruction(root, options).ForwardFits(dfaSizeLimit);
     private readonly object _forwardInitializationLock = new();
     private readonly object _reverseInitializationLock = new();
     private RegexNfa? _forwardNfa = forwardNfaIsUnanchored ? nfa : null;
@@ -129,8 +127,7 @@ internal sealed class RegexUnanchoredLazyDfaFactory(
             _forwardInitializationCount++;
             try
             {
-                if (_constructionEligible &&
-                    RegexUnanchoredLazyDfa.TryCompileForwardNfa(
+                if (RegexUnanchoredLazyDfa.TryCompileForwardNfa(
                         _nfa!,
                         _root!,
                         _options,
