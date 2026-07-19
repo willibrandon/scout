@@ -25,6 +25,15 @@ dotnet run -c Release --project bench/Scout.Benchmarks -- \
 This microbenchmark is intentionally not a hyperfine Release Gate workload;
 process startup would obscure the in-process capture replay being measured.
 
+`GitleaksRuleCompilationBenchmarks` tracks issue #49's exact Coinbase access-token
+rule. It measures fresh compilation and managed allocation in optimized, general,
+and automata-only modes. Run it directly with:
+
+```sh
+dotnet run -c Release --project bench/Scout.Benchmarks -- \
+  --filter '*GitleaksRuleCompilationBenchmarks*'
+```
+
 Smoke run:
 
 ```sh

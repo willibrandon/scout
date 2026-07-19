@@ -22,6 +22,9 @@ internal sealed class RegexNfaCompiler(
     private readonly Dictionary<RegexNfaControlCacheKey, int> _controlStateCache = [];
     private readonly Dictionary<RegexNfaSparseCacheKey, int> _sparseStateCache = [];
     private readonly Dictionary<(RegexUtf8ByteTrie Trie, int Next), int> _utf8ByteTrieStateCache = [];
+    private Dictionary<(RegexScalarAtomPlan Plan, bool Reversed), RegexUtf8ByteTrie?>? _authoritativeUtf8ByteTrieCache;
+    private RegexScalarAtomPlanCache? _scalarAtomPlanCache;
+    private HashSet<RegexScalarRange[]>? _reservedScalarRangePayloads;
     private readonly bool _includeCaptures = includeCaptures;
     private readonly int _captureCount = captureCount;
     private readonly bool _expandUtf8Atoms = expandUtf8Atoms;
@@ -196,9 +199,18 @@ internal sealed class RegexNfaCompiler(
         RegexSyntaxNode root,
         RegexCompileOptions options)
     {
-        ulong forward = EstimateNodeStateCount(root, options, reversed: false);
+        var scalarAtomPlanCache = new RegexScalarAtomPlanCache();
+        ulong forward = EstimateNodeStateCount(
+            root,
+            options,
+            reversed: false,
+            scalarAtomPlanCache);
         forward = RegexNfaConstructionBudget.SaturatingAdd(forward, 3);
-        ulong reverse = EstimateNodeStateCount(root, options, reversed: true);
+        ulong reverse = EstimateNodeStateCount(
+            root,
+            options,
+            reversed: true,
+            scalarAtomPlanCache);
         reverse = RegexNfaConstructionBudget.SaturatingAdd(reverse, 1);
         return new RegexNfaConstructionEstimate(forward, reverse);
     }
@@ -206,20 +218,38 @@ internal sealed class RegexNfaCompiler(
     private static ulong EstimateNodeStateCount(
         RegexSyntaxNode node,
         RegexCompileOptions options,
-        bool reversed)
+        bool reversed,
+        RegexScalarAtomPlanCache scalarAtomPlanCache)
     {
         return node switch
         {
             RegexEmptyNode => 0,
-            RegexSequenceNode sequence => EstimateSequenceStateCount(sequence, options, reversed),
-            RegexAlternationNode alternation => EstimateAlternationStateCount(alternation, options, reversed),
+            RegexSequenceNode sequence => EstimateSequenceStateCount(
+                sequence,
+                options,
+                reversed,
+                scalarAtomPlanCache),
+            RegexAlternationNode alternation => EstimateAlternationStateCount(
+                alternation,
+                options,
+                reversed,
+                scalarAtomPlanCache),
             RegexGroupNode group => EstimateNodeStateCount(
                 group.Child,
                 options.Apply(group.EnabledFlags, group.DisabledFlags),
-                reversed),
-            RegexRepetitionNode repetition => EstimateRepetitionStateCount(repetition, options, reversed),
+                reversed,
+                scalarAtomPlanCache),
+            RegexRepetitionNode repetition => EstimateRepetitionStateCount(
+                repetition,
+                options,
+                reversed,
+                scalarAtomPlanCache),
             RegexInlineFlagsNode => 0,
-            RegexAtomNode atom => EstimateAtomStateCount(atom, options, reversed),
+            RegexAtomNode atom => EstimateAtomStateCount(
+                atom,
+                options,
+                reversed,
+                scalarAtomPlanCache),
             _ => 0,
         };
     }
@@ -227,7 +257,8 @@ internal sealed class RegexNfaCompiler(
     private static ulong EstimateSequenceStateCount(
         RegexSequenceNode sequence,
         RegexCompileOptions options,
-        bool reversed)
+        bool reversed,
+        RegexScalarAtomPlanCache scalarAtomPlanCache)
     {
         ulong count = 0;
         RegexCompileOptions currentOptions = options;
@@ -242,7 +273,11 @@ internal sealed class RegexNfaCompiler(
 
             count = RegexNfaConstructionBudget.SaturatingAdd(
                 count,
-                EstimateNodeStateCount(child, currentOptions, reversed));
+                EstimateNodeStateCount(
+                    child,
+                    currentOptions,
+                    reversed,
+                    scalarAtomPlanCache));
         }
 
         return count;
@@ -251,7 +286,8 @@ internal sealed class RegexNfaCompiler(
     private static ulong EstimateAlternationStateCount(
         RegexAlternationNode alternation,
         RegexCompileOptions options,
-        bool reversed)
+        bool reversed,
+        RegexScalarAtomPlanCache scalarAtomPlanCache)
     {
         ulong count = alternation.Alternatives.Count > 0
             ? (ulong)alternation.Alternatives.Count - 1
@@ -260,7 +296,11 @@ internal sealed class RegexNfaCompiler(
         {
             count = RegexNfaConstructionBudget.SaturatingAdd(
                 count,
-                EstimateNodeStateCount(alternation.Alternatives[index], options, reversed));
+                EstimateNodeStateCount(
+                    alternation.Alternatives[index],
+                    options,
+                    reversed,
+                    scalarAtomPlanCache));
         }
 
         return count;
@@ -269,9 +309,14 @@ internal sealed class RegexNfaCompiler(
     private static ulong EstimateRepetitionStateCount(
         RegexRepetitionNode repetition,
         RegexCompileOptions options,
-        bool reversed)
+        bool reversed,
+        RegexScalarAtomPlanCache scalarAtomPlanCache)
     {
-        ulong childCount = EstimateNodeStateCount(repetition.Child, options, reversed);
+        ulong childCount = EstimateNodeStateCount(
+            repetition.Child,
+            options,
+            reversed,
+            scalarAtomPlanCache);
         if (!repetition.Maximum.HasValue)
         {
             ulong copies = RegexNfaConstructionBudget.SaturatingAdd(
@@ -292,7 +337,8 @@ internal sealed class RegexNfaCompiler(
     private static ulong EstimateAtomStateCount(
         RegexAtomNode atom,
         RegexCompileOptions options,
-        bool reversed)
+        bool reversed,
+        RegexScalarAtomPlanCache scalarAtomPlanCache)
     {
         RegexSyntaxKind kind = reversed ? ReverseAtomKind(atom.Kind) : atom.Kind;
         bool authoritative = HasAuthoritativeScalarSemantics(atom);
@@ -318,7 +364,24 @@ internal sealed class RegexNfaCompiler(
             return CountUtf8TrieStates(sharedTrie!);
         }
 
-        if (!RegexUtf8ByteCompiler.TryBuildNormalizedScalarRanges(atom, options, out List<RegexScalarRange> ranges))
+        IReadOnlyList<RegexScalarRange> ranges;
+        if (authoritative)
+        {
+            if (!scalarAtomPlanCache.TryGet(atom, options, out RegexScalarAtomPlan? plan))
+            {
+                return 1;
+            }
+
+            ranges = plan!.Ranges;
+        }
+        else if (RegexUtf8ByteCompiler.TryBuildNormalizedScalarRanges(
+                     atom,
+                     options,
+                     out List<RegexScalarRange> builtRanges))
+        {
+            ranges = builtRanges;
+        }
+        else
         {
             return 1;
         }
@@ -731,7 +794,7 @@ internal sealed class RegexNfaCompiler(
             scalarRangesUseUtf8: scalarRangesUseUtf8);
     }
 
-    private static RegexScalarRange[]? TryGetRetainedScalarRanges(
+    private RegexScalarRange[]? TryGetRetainedScalarRanges(
         RegexAtomNode atom,
         RegexCompileOptions options,
         out bool useUtf8)
@@ -742,13 +805,13 @@ internal sealed class RegexNfaCompiler(
             return null;
         }
 
-        if (!RegexUtf8ByteCompiler.TryBuildNormalizedScalarRanges(atom, options, out List<RegexScalarRange> ranges))
+        if (!ScalarAtomPlanCache.TryGet(atom, options, out RegexScalarAtomPlan? plan))
         {
             return null;
         }
 
         useUtf8 = AuthoritativeScalarRangesUseUtf8(atom, options);
-        return ranges.ToArray();
+        return plan!.Ranges;
     }
 
     private static bool HasAuthoritativeScalarSemantics(RegexAtomNode atom)
@@ -796,6 +859,14 @@ internal sealed class RegexNfaCompiler(
             return false;
         }
 
+        RegexScalarAtomPlan? authoritativePlan = null;
+        if (authoritative &&
+            !ScalarAtomPlanCache.TryGet(atom, options, out authoritativePlan))
+        {
+            start = -1;
+            return false;
+        }
+
         if (!authoritative &&
             !RegexByteClass.RequiresUtf8ScalarMatch(
                 kind,
@@ -825,20 +896,40 @@ internal sealed class RegexNfaCompiler(
         string? key = authoritative
             ? null
             : RegexUtf8ByteCompiler.CreateCacheKey(kind, atom.Value.Span, options, reversed);
-        if (key is not null && _utf8ByteTrieCache.TryGetValue(key, out RegexUtf8ByteTrie? trie))
+        RegexUtf8ByteTrie? trie;
+        if (key is not null && _utf8ByteTrieCache.TryGetValue(key, out trie))
         {
             _cacheStates = !_includeCaptures;
             start = CompileUtf8ByteTrie(trie, next);
             return true;
         }
 
-        if (!RegexUtf8ByteCompiler.TryBuildNormalizedScalarRanges(atom, options, out List<RegexScalarRange> ranges))
+        IReadOnlyList<RegexScalarRange> ranges;
+        byte[]? asciiByteRanges;
+        if (authoritative)
+        {
+            ranges = authoritativePlan!.Ranges;
+            asciiByteRanges = authoritativePlan.AsciiByteRanges;
+        }
+        else if (RegexUtf8ByteCompiler.TryBuildNormalizedScalarRanges(
+                     atom,
+                     options,
+                     out List<RegexScalarRange> builtRanges))
+        {
+            ranges = builtRanges;
+            asciiByteRanges = RegexUtf8ByteCompiler.TryGetAsciiByteRanges(
+                builtRanges,
+                out byte[] builtAsciiByteRanges)
+                    ? builtAsciiByteRanges
+                    : null;
+        }
+        else
         {
             start = -1;
             return false;
         }
 
-        if (RegexUtf8ByteCompiler.TryGetAsciiByteRanges(ranges, out byte[] asciiByteRanges))
+        if (asciiByteRanges is not null)
         {
             start = AddSourceByteClass(asciiByteRanges, next);
             return true;
@@ -854,20 +945,39 @@ internal sealed class RegexNfaCompiler(
             return true;
         }
 
-        if (!RegexUtf8ByteCompiler.TryCreateFromRanges(ranges, reversed, out trie))
+        if (authoritative)
+        {
+            (RegexScalarAtomPlan Plan, bool Reversed) planKey = (authoritativePlan!, reversed);
+            Dictionary<(RegexScalarAtomPlan Plan, bool Reversed), RegexUtf8ByteTrie?> trieCache =
+                _authoritativeUtf8ByteTrieCache ??= [];
+            if (!trieCache.TryGetValue(planKey, out trie))
+            {
+                _ = RegexUtf8ByteCompiler.TryCreateFromRanges(ranges, reversed, out trie);
+                trieCache.Add(planKey, trie);
+            }
+        }
+        else if (RegexUtf8ByteCompiler.TryCreateFromRanges(ranges, reversed, out trie))
+        {
+            _utf8ByteTrieCache.Add(key!, trie!);
+        }
+        else
+        {
+            trie = null;
+        }
+
+        if (trie is null)
         {
             start = -1;
             return false;
         }
 
-        if (key is not null)
-        {
-            _utf8ByteTrieCache.Add(key, trie!);
-        }
         _cacheStates = !_includeCaptures;
-        start = CompileUtf8ByteTrie(trie!, next);
+        start = CompileUtf8ByteTrie(trie, next);
         return true;
     }
+
+    private RegexScalarAtomPlanCache ScalarAtomPlanCache =>
+        _scalarAtomPlanCache ??= new RegexScalarAtomPlanCache();
 
     private int CompileUtf8ByteTrie(RegexUtf8ByteTrie trie, int next)
     {
@@ -1004,11 +1114,17 @@ internal sealed class RegexNfaCompiler(
         ulong reservationCheckpoint = 0)
     {
         byte effectiveExcludedLineTerminator = excludedLineTerminator ?? lineTerminator;
+        ulong scalarPayloadBytes = _constructionBudget is not null &&
+            scalarRanges is not null &&
+            (_reservedScalarRangePayloads ??= new HashSet<RegexScalarRange[]>(
+                ReferenceEqualityComparer.Instance)).Add(scalarRanges)
+                ? RegexNfaConstructionBudget.SaturatingMultiply(
+                    (ulong)scalarRanges.Length,
+                    (ulong)(sizeof(int) * 2))
+                : 0;
         ulong payloadBytes = RegexNfaConstructionBudget.SaturatingAdd(
             (ulong)value.Length,
-            RegexNfaConstructionBudget.SaturatingMultiply(
-                (ulong)(scalarRanges?.Length ?? 0),
-                (ulong)(sizeof(int) * 2)));
+            scalarPayloadBytes);
         if (_cacheStates && scalarRanges is null)
         {
             var key = RegexNfaAtomCacheKey.Create(

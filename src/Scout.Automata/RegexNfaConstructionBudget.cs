@@ -47,10 +47,22 @@ internal sealed class RegexNfaConstructionBudget(ulong sizeLimit)
     internal static ulong EstimateRetainedBytes(RegexNfa nfa)
     {
         ulong estimatedBytes = 0;
+        HashSet<RegexScalarRange[]>? scalarRangePayloads = null;
         for (int index = 0; index < nfa.States.Count; index++)
         {
             RegexNfaState state = nfa.States[index];
             ulong payloadBytes = (ulong)state.Value.Length;
+            if (state.ScalarRanges is not null &&
+                (scalarRangePayloads ??= new HashSet<RegexScalarRange[]>(
+                    ReferenceEqualityComparer.Instance)).Add(state.ScalarRanges))
+            {
+                payloadBytes = SaturatingAdd(
+                    payloadBytes,
+                    SaturatingMultiply(
+                        (ulong)state.ScalarRanges.Length,
+                        (ulong)(sizeof(int) * 2)));
+            }
+
             payloadBytes = SaturatingAdd(
                 payloadBytes,
                 EstimateSparsePayloadBytes(state.SparseTransitions.Length));
