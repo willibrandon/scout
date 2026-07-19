@@ -323,6 +323,11 @@ internal sealed class RegexNfaCompiler(
             return 1;
         }
 
+        if (RegexUtf8ByteCompiler.CanLowerToAsciiByteClass(ranges))
+        {
+            return 1;
+        }
+
         ulong count = 0;
         int AddByteClass(ReadOnlySpan<byte> value, int next)
         {
@@ -831,6 +836,12 @@ internal sealed class RegexNfaCompiler(
         {
             start = -1;
             return false;
+        }
+
+        if (RegexUtf8ByteCompiler.TryGetAsciiByteRanges(ranges, out byte[] asciiByteRanges))
+        {
+            start = AddSourceByteClass(asciiByteRanges, next);
+            return true;
         }
 
         if (RegexUtf8ByteCompiler.TryCompileCompactFromRanges(ranges, reversed, next, AddSourceByteClass, AddSplit, out start))

@@ -1,10 +1,15 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.Arm;
 using System.Runtime.Intrinsics.X86;
 
 namespace Scout;
 
+/// <summary>
+/// Finds and counts exact matches for small sets of literals by applying three-byte Teddy fingerprints.
+/// </summary>
 internal sealed class RegexShortLiteralSetScanner
 {
     private const int BucketCount = 8;
@@ -12,27 +17,33 @@ internal sealed class RegexShortLiteralSetScanner
     private const int MinimumLiteralCount = 2;
     private const int MaximumLiteralCount = 8;
 
-    private readonly byte[][] literals;
-    private readonly int[][] buckets;
-    private readonly Vector128<byte>[] lowMasks128 = new Vector128<byte>[MaskLength];
-    private readonly Vector128<byte>[] highMasks128 = new Vector128<byte>[MaskLength];
-    private readonly Vector256<byte>[] lowMasks256 = new Vector256<byte>[MaskLength];
-    private readonly Vector256<byte>[] highMasks256 = new Vector256<byte>[MaskLength];
-    private readonly Vector512<byte>[] lowMasks512 = new Vector512<byte>[MaskLength];
-    private readonly Vector512<byte>[] highMasks512 = new Vector512<byte>[MaskLength];
+    private readonly byte[][] _literals;
+    private readonly int[][] _buckets;
+    private readonly Vector128<byte>[] _lowMasks128 = new Vector128<byte>[MaskLength];
+    private readonly Vector128<byte>[] _highMasks128 = new Vector128<byte>[MaskLength];
+    private readonly Vector256<byte>[] _lowMasks256 = new Vector256<byte>[MaskLength];
+    private readonly Vector256<byte>[] _highMasks256 = new Vector256<byte>[MaskLength];
+    private readonly Vector512<byte>[] _lowMasks512 = new Vector512<byte>[MaskLength];
+    private readonly Vector512<byte>[] _highMasks512 = new Vector512<byte>[MaskLength];
 
     private RegexShortLiteralSetScanner(IReadOnlyList<byte[]> literals)
     {
-        this.literals = new byte[literals.Count][];
+        _literals = new byte[literals.Count][];
         for (int index = 0; index < literals.Count; index++)
         {
-            this.literals[index] = literals[index].ToArray();
+            _literals[index] = literals[index].ToArray();
         }
 
-        buckets = BuildBuckets(this.literals);
+        _buckets = BuildBuckets(_literals);
         BuildMasks();
     }
 
+    /// <summary>
+    /// Attempts to create a scanner for the specified literals.
+    /// </summary>
+    /// <param name="literals">The literals to scan for in regex preference order.</param>
+    /// <param name="scanner">Receives the scanner when the literals are supported.</param>
+    /// <returns><see langword="true" /> when the scanner was created.</returns>
     public static bool TryCreate(IReadOnlyList<byte[]> literals, out RegexShortLiteralSetScanner? scanner)
     {
         scanner = null;
@@ -62,6 +73,12 @@ internal sealed class RegexShortLiteralSetScanner
         return true;
     }
 
+    /// <summary>
+    /// Finds the next source-ordered literal match.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startAt">The first byte offset to inspect.</param>
+    /// <returns>The next candidate, or <see langword="null" /> when no literal matches.</returns>
     public RegexLiteralSetCandidate? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
         int searchAt = Math.Clamp(startAt, 0, haystack.Length);
@@ -84,6 +101,13 @@ internal sealed class RegexShortLiteralSetScanner
         return null;
     }
 
+    /// <summary>
+    /// Counts non-overlapping matches or sums their byte lengths.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startAt">The first byte offset to inspect.</param>
+    /// <param name="sumSpans">Whether to sum match lengths instead of counting matches.</param>
+    /// <returns>The match count or total matched byte length.</returns>
     public long CountOrSum(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
@@ -100,6 +124,11 @@ internal sealed class RegexShortLiteralSetScanner
         if (Ssse3.IsSupported && haystack.Length - startOffset >= Vector128<byte>.Count + MaskLength - 1)
         {
             return CountOrSumVector128(haystack, startOffset, sumSpans);
+        }
+
+        if (AdvSimd.Arm64.IsSupported && haystack.Length - startOffset >= Vector128<byte>.Count + MaskLength - 1)
+        {
+            return CountOrSumVector128AdvSimd(haystack, startOffset, sumSpans);
         }
 
         return CountOrSumScalar(haystack, startOffset, sumSpans, total: 0);
@@ -349,6 +378,36 @@ internal sealed class RegexShortLiteralSetScanner
         return CountOrSumScalar(haystack, Math.Max(nextAllowedStart, offset - MaskLength + 1), sumSpans, total);
     }
 
+    private long CountOrSumVector128AdvSimd(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int nextAllowedStart = startAt;
+        int offset = startAt;
+        int vectorEnd = haystack.Length - Vector128<byte>.Count - MaskLength + 1;
+        long total = 0;
+        while (offset <= vectorEnd)
+        {
+            Vector128<byte> candidates = CandidateVector128AdvSimd(ref reference, offset);
+            if (Vector128.Equals(candidates, Vector128<byte>.Zero).ExtractMostSignificantBits() != ushort.MaxValue)
+            {
+                for (int lane = 0; lane < 2; lane++)
+                {
+                    CountOrSumCandidateChunk(
+                        haystack,
+                        offset + lane * 8,
+                        candidates.AsUInt64().GetElement(lane),
+                        sumSpans,
+                        ref total,
+                        ref nextAllowedStart);
+                }
+            }
+
+            offset += Vector128<byte>.Count;
+        }
+
+        return CountOrSumScalar(haystack, Math.Max(nextAllowedStart, offset), sumSpans, total);
+    }
+
     private long CountOrSumScalar(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans, long total)
     {
         int searchAt = startAt;
@@ -422,6 +481,11 @@ internal sealed class RegexShortLiteralSetScanner
         if (Ssse3.IsSupported && haystack.Length - startAt >= Vector128<byte>.Count + MaskLength - 1)
         {
             return FindCandidateVector128(haystack, startAt, out bucketBits);
+        }
+
+        if (AdvSimd.Arm64.IsSupported && haystack.Length - startAt >= Vector128<byte>.Count + MaskLength - 1)
+        {
+            return FindCandidateVector128AdvSimd(haystack, startAt, out bucketBits);
         }
 
         return FindCandidateScalar(haystack, startAt, out bucketBits);
@@ -508,6 +572,25 @@ internal sealed class RegexShortLiteralSetScanner
         return FindCandidateScalar(haystack, Math.Max(startAt, offset - MaskLength + 1), out bucketBits);
     }
 
+    private int FindCandidateVector128AdvSimd(ReadOnlySpan<byte> haystack, int startAt, out byte bucketBits)
+    {
+        ref byte reference = ref MemoryMarshal.GetReference(haystack);
+        int offset = startAt;
+        int vectorEnd = haystack.Length - Vector128<byte>.Count - MaskLength + 1;
+        while (offset <= vectorEnd)
+        {
+            Vector128<byte> candidates = CandidateVector128AdvSimd(ref reference, offset);
+            if (TryGetFirstCandidate(candidates, offset, out int candidateStart, out bucketBits))
+            {
+                return candidateStart;
+            }
+
+            offset += Vector128<byte>.Count;
+        }
+
+        return FindCandidateScalar(haystack, offset, out bucketBits);
+    }
+
     private int FindCandidateScalar(ReadOnlySpan<byte> haystack, int startAt, out byte bucketBits)
     {
         for (int position = startAt; position <= haystack.Length - MaskLength; position++)
@@ -544,8 +627,8 @@ internal sealed class RegexShortLiteralSetScanner
         Vector512<byte> lowNibbles = chunk & lowNibbleMask;
         Vector512<byte> highNibbles = Avx512BW.ShiftRightLogical(chunk.AsUInt16(), 4).AsByte() & lowNibbleMask;
 
-        return Avx512BW.Shuffle(lowMasks512[byteIndex], lowNibbles) &
-            Avx512BW.Shuffle(highMasks512[byteIndex], highNibbles);
+        return Avx512BW.Shuffle(_lowMasks512[byteIndex], lowNibbles) &
+            Avx512BW.Shuffle(_highMasks512[byteIndex], highNibbles);
     }
 
     private Vector256<byte> CandidateVector256(
@@ -558,14 +641,14 @@ internal sealed class RegexShortLiteralSetScanner
         Vector256<byte> highNibbles = Avx2.And(Avx2.ShiftRightLogical(chunk.AsUInt16(), 4).AsByte(), lowNibbleMask);
 
         Vector256<byte> candidate0 = Avx2.And(
-            Avx2.Shuffle(lowMasks256[0], lowNibbles),
-            Avx2.Shuffle(highMasks256[0], highNibbles));
+            Avx2.Shuffle(_lowMasks256[0], lowNibbles),
+            Avx2.Shuffle(_highMasks256[0], highNibbles));
         Vector256<byte> candidate1 = Avx2.And(
-            Avx2.Shuffle(lowMasks256[1], lowNibbles),
-            Avx2.Shuffle(highMasks256[1], highNibbles));
+            Avx2.Shuffle(_lowMasks256[1], lowNibbles),
+            Avx2.Shuffle(_highMasks256[1], highNibbles));
         Vector256<byte> candidate2 = Avx2.And(
-            Avx2.Shuffle(lowMasks256[2], lowNibbles),
-            Avx2.Shuffle(highMasks256[2], highNibbles));
+            Avx2.Shuffle(_lowMasks256[2], lowNibbles),
+            Avx2.Shuffle(_highMasks256[2], highNibbles));
 
         Vector256<byte> aligned0 = ShiftInTwoBytes(candidate0, previous0);
         Vector256<byte> aligned1 = ShiftInOneByte(candidate1, previous1);
@@ -585,14 +668,14 @@ internal sealed class RegexShortLiteralSetScanner
         Vector128<byte> highNibbles = Sse2.And(Sse2.ShiftRightLogical(chunk.AsUInt16(), 4).AsByte(), lowNibbleMask);
 
         Vector128<byte> candidate0 = Sse2.And(
-            Ssse3.Shuffle(lowMasks128[0], lowNibbles),
-            Ssse3.Shuffle(highMasks128[0], highNibbles));
+            Ssse3.Shuffle(_lowMasks128[0], lowNibbles),
+            Ssse3.Shuffle(_highMasks128[0], highNibbles));
         Vector128<byte> candidate1 = Sse2.And(
-            Ssse3.Shuffle(lowMasks128[1], lowNibbles),
-            Ssse3.Shuffle(highMasks128[1], highNibbles));
+            Ssse3.Shuffle(_lowMasks128[1], lowNibbles),
+            Ssse3.Shuffle(_highMasks128[1], highNibbles));
         Vector128<byte> candidate2 = Sse2.And(
-            Ssse3.Shuffle(lowMasks128[2], lowNibbles),
-            Ssse3.Shuffle(highMasks128[2], highNibbles));
+            Ssse3.Shuffle(_lowMasks128[2], lowNibbles),
+            Ssse3.Shuffle(_highMasks128[2], highNibbles));
 
         Vector128<byte> aligned0 = Ssse3.AlignRight(candidate0, previous0, 14);
         Vector128<byte> aligned1 = Ssse3.AlignRight(candidate1, previous1, 15);
@@ -600,6 +683,31 @@ internal sealed class RegexShortLiteralSetScanner
         previous1 = candidate1;
 
         return Sse2.And(Sse2.And(aligned0, aligned1), candidate2);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private Vector128<byte> CandidateVector128AdvSimd(ref byte reference, int offset)
+    {
+        Vector128<byte> first = CandidateByteVector128AdvSimd(
+            Vector128.LoadUnsafe(ref reference, (nuint)offset),
+            byteIndex: 0);
+        Vector128<byte> second = CandidateByteVector128AdvSimd(
+            Vector128.LoadUnsafe(ref reference, (nuint)(offset + 1)),
+            byteIndex: 1);
+        Vector128<byte> third = CandidateByteVector128AdvSimd(
+            Vector128.LoadUnsafe(ref reference, (nuint)(offset + 2)),
+            byteIndex: 2);
+        return first & second & third;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private Vector128<byte> CandidateByteVector128AdvSimd(Vector128<byte> input, int byteIndex)
+    {
+        var nibbleMask = Vector128.Create((byte)0x0F);
+        Vector128<byte> lowNibbles = input & nibbleMask;
+        Vector128<byte> highNibbles = (input >>> 4) & nibbleMask;
+        return AdvSimd.Arm64.VectorTableLookup(_lowMasks128[byteIndex], lowNibbles) &
+            AdvSimd.Arm64.VectorTableLookup(_highMasks128[byteIndex], highNibbles);
     }
 
     private static Vector256<byte> ShiftInOneByte(Vector256<byte> current, Vector256<byte> previous)
@@ -653,7 +761,7 @@ internal sealed class RegexShortLiteralSetScanner
         out int candidateStart,
         out byte bucketBits)
     {
-        if (Sse2.CompareEqual(candidates, Vector128<byte>.Zero).ExtractMostSignificantBits() == 0xFFFF)
+        if (Vector128.Equals(candidates, Vector128<byte>.Zero).ExtractMostSignificantBits() == ushort.MaxValue)
         {
             candidateStart = -1;
             bucketBits = 0;
@@ -692,11 +800,11 @@ internal sealed class RegexShortLiteralSetScanner
         {
             int bucket = BitOperations.TrailingZeroCount(remainingBuckets);
             remainingBuckets &= remainingBuckets - 1;
-            int[] literalIds = buckets[bucket];
+            int[] literalIds = _buckets[bucket];
             for (int index = 0; index < literalIds.Length; index++)
             {
                 int literalId = literalIds[index];
-                byte[] literal = literals[literalId];
+                byte[] literal = _literals[literalId];
                 if (literal.Length > haystack.Length - start ||
                     haystack[start + literal.Length - 1] != literal[^1] ||
                     !haystack.Slice(start, literal.Length).SequenceEqual(literal))
@@ -719,12 +827,12 @@ internal sealed class RegexShortLiteralSetScanner
     private byte ExactPrefixBucketBits(ReadOnlySpan<byte> haystack)
     {
         byte bits = 0;
-        for (int bucket = 0; bucket < buckets.Length; bucket++)
+        for (int bucket = 0; bucket < _buckets.Length; bucket++)
         {
-            int[] literalIds = buckets[bucket];
+            int[] literalIds = _buckets[bucket];
             for (int index = 0; index < literalIds.Length; index++)
             {
-                if (haystack[..MaskLength].SequenceEqual(literals[literalIds[index]].AsSpan(0, MaskLength)))
+                if (haystack[..MaskLength].SequenceEqual(_literals[literalIds[index]].AsSpan(0, MaskLength)))
                 {
                     bits |= (byte)(1 << bucket);
                     break;
@@ -743,24 +851,24 @@ internal sealed class RegexShortLiteralSetScanner
         {
             Array.Clear(low);
             Array.Clear(high);
-            for (int bucket = 0; bucket < buckets.Length; bucket++)
+            for (int bucket = 0; bucket < _buckets.Length; bucket++)
             {
-                int[] literalIds = buckets[bucket];
+                int[] literalIds = _buckets[bucket];
                 for (int index = 0; index < literalIds.Length; index++)
                 {
                     int literalId = literalIds[index];
-                    AddMaskByte(low, high, bucket, literals[literalId][byteIndex]);
+                    AddMaskByte(low, high, bucket, _literals[literalId][byteIndex]);
                 }
             }
 
             ref byte lowReference = ref MemoryMarshal.GetArrayDataReference(low);
             ref byte highReference = ref MemoryMarshal.GetArrayDataReference(high);
-            lowMasks128[byteIndex] = Vector128.LoadUnsafe(ref lowReference);
-            highMasks128[byteIndex] = Vector128.LoadUnsafe(ref highReference);
-            lowMasks256[byteIndex] = Vector256.LoadUnsafe(ref lowReference);
-            highMasks256[byteIndex] = Vector256.LoadUnsafe(ref highReference);
-            lowMasks512[byteIndex] = Vector512.LoadUnsafe(ref lowReference);
-            highMasks512[byteIndex] = Vector512.LoadUnsafe(ref highReference);
+            _lowMasks128[byteIndex] = Vector128.LoadUnsafe(ref lowReference);
+            _highMasks128[byteIndex] = Vector128.LoadUnsafe(ref highReference);
+            _lowMasks256[byteIndex] = Vector256.LoadUnsafe(ref lowReference);
+            _highMasks256[byteIndex] = Vector256.LoadUnsafe(ref highReference);
+            _lowMasks512[byteIndex] = Vector512.LoadUnsafe(ref lowReference);
+            _highMasks512[byteIndex] = Vector512.LoadUnsafe(ref highReference);
         }
     }
 

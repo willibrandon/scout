@@ -214,6 +214,57 @@ internal static class RegexUtf8ByteCompiler
     }
 
     /// <summary>
+    /// Reports whether normalized scalar ranges can be represented by one ASCII byte class.
+    /// </summary>
+    /// <param name="ranges">The normalized scalar ranges.</param>
+    /// <returns><see langword="true" /> when at least one range exists and every scalar is ASCII.</returns>
+    public static bool CanLowerToAsciiByteClass(List<RegexScalarRange> ranges)
+    {
+        if (ranges.Count == 0)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < ranges.Count; index++)
+        {
+            RegexScalarRange range = ranges[index];
+            if (range.Start < 0 || range.End > 0x7F)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Attempts to represent normalized scalar ranges as one byte-class payload.
+    /// </summary>
+    /// <param name="ranges">The normalized scalar ranges.</param>
+    /// <param name="byteRanges">Receives the inclusive byte-range pairs.</param>
+    /// <returns><see langword="true" /> when every scalar is ASCII.</returns>
+    public static bool TryGetAsciiByteRanges(
+        List<RegexScalarRange> ranges,
+        out byte[] byteRanges)
+    {
+        byteRanges = [];
+        if (!CanLowerToAsciiByteClass(ranges))
+        {
+            return false;
+        }
+
+        byteRanges = new byte[ranges.Count * 2];
+        for (int index = 0; index < ranges.Count; index++)
+        {
+            RegexScalarRange range = ranges[index];
+            byteRanges[index * 2] = (byte)range.Start;
+            byteRanges[(index * 2) + 1] = (byte)range.End;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Attempts to lower a large reverse atom as decomposed UTF-8 range sequences.
     /// </summary>
     /// <param name="kind">The syntax atom kind.</param>
