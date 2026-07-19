@@ -94,6 +94,10 @@ Require-Tool "link.exe"
 
 & (Join-Path $Root "native\pcre2\build-windows.ps1") $Rid
 dotnet publish (Join-Path $Root "src\Scout.App\Scout.App.csproj") -r $Rid -c Release -p:NativeLib=Static "-p:VersionPrefix=$ScoutVersion" "-p:Version=$ScoutVersion" -o $Out
+if ($LASTEXITCODE -ne 0) {
+    throw "dotnet publish failed for $Rid."
+}
+
 New-Item -ItemType Directory -Force -Path $Bin | Out-Null
 
 $DriverObject = Join-Path $Out "scout_wmain.obj"
@@ -175,6 +179,8 @@ $ExpectedMultiOutput = @(
 if ($LASTEXITCODE -ne 0 -or ($MultiOutput -join "`n") -ne ($ExpectedMultiOutput -join "`n")) {
     throw "Unexpected PCRE2 multi-file output: $MultiOutput"
 }
+
+& (Join-Path $Root "native\test-standard-input-windows.ps1") -ScoutPath $OutputExe
 
 if ($DifferentialMode -eq "WithDifferentials") {
     $bash = Get-Command "bash" -ErrorAction SilentlyContinue

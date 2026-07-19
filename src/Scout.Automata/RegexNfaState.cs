@@ -1,3 +1,6 @@
+using System.Buffers;
+using System.Text;
+
 namespace Scout;
 
 /// <summary>
@@ -20,6 +23,8 @@ namespace Scout;
 /// <param name="excludeLineTerminators">Whether consuming atoms exclude configured record terminators.</param>
 /// <param name="excludeCrLf">Whether exclusion treats CR and LF as one record-terminator family.</param>
 /// <param name="excludedLineTerminator">The record byte excluded from consuming atoms, or <see langword="null" /> to use <paramref name="lineTerminator" />.</param>
+/// <param name="scalarRanges">The authoritative scalar ranges retained by a compact atom.</param>
+/// <param name="scalarRangesUseUtf8">Whether retained scalar ranges consume UTF-8 encoded scalars.</param>
 internal sealed class RegexNfaState(
     RegexNfaStateKind kind,
     RegexSyntaxKind atomKind,
@@ -37,7 +42,9 @@ internal sealed class RegexNfaState(
     RegexNfaSparseTransition[]? sparseTransitions = null,
     bool excludeLineTerminators = false,
     bool excludeCrLf = false,
-    byte? excludedLineTerminator = null)
+    byte? excludedLineTerminator = null,
+    RegexScalarRange[]? scalarRanges = null,
+    bool scalarRangesUseUtf8 = false)
 {
     /// <summary>
     /// Gets the state operation.
@@ -125,21 +132,33 @@ internal sealed class RegexNfaState(
     public byte ExcludedLineTerminator { get; } = excludedLineTerminator ?? lineTerminator;
 
     /// <summary>
+    /// Gets the authoritative scalar ranges retained by this compact atom.
+    /// </summary>
+    public RegexScalarRange[]? ScalarRanges { get; } = scalarRanges;
+
+    /// <summary>
+    /// Gets a value indicating whether retained scalar ranges consume UTF-8 encoded scalars.
+    /// </summary>
+    public bool ScalarRangesUseUtf8 { get; } = scalarRangesUseUtf8;
+
+    /// <summary>
     /// Gets a value indicating whether the atom requires scalar decoding.
     /// </summary>
-    public bool RequiresUtf8ScalarMatch { get; } = RegexByteClass.RequiresUtf8ScalarMatch(
-        atomKind,
-        value.Span,
-        utf8,
-        caseInsensitive,
-        unicodeClasses);
+    public bool RequiresUtf8ScalarMatch { get; } = scalarRangesUseUtf8 ||
+        RegexByteClass.RequiresUtf8ScalarMatch(
+            atomKind,
+            value.Span,
+            utf8,
+            caseInsensitive,
+            unicodeClasses);
 
     /// <summary>
     /// Gets a value indicating whether ASCII can bypass scalar decoding.
     /// </summary>
-    public bool CanUseAsciiScalarFastPath { get; } = RegexByteClass.CanUseAsciiScalarFastPath(
-        atomKind,
-        value.Span);
+    public bool CanUseAsciiScalarFastPath { get; } = scalarRanges is not null ||
+        RegexByteClass.CanUseAsciiScalarFastPath(
+            atomKind,
+            value.Span);
 
     /// <summary>
     /// Reports whether this state's atom matches one byte.
@@ -148,16 +167,25 @@ internal sealed class RegexNfaState(
     /// <returns><see langword="true" /> when the state consumes the byte.</returns>
     public bool AtomMatches(byte value)
     {
-        return !IsExcludedLineTerminator(value) &&
-            RegexByteClass.AtomMatches(
-                value,
-                AtomKind,
-                Value.Span,
-                CaseInsensitive,
-                MultiLine,
-                DotMatchesNewline,
-                Crlf,
-                LineTerminator);
+        if (IsExcludedLineTerminator(value))
+        {
+            return false;
+        }
+
+        if (ScalarRanges is not null)
+        {
+            return ContainsScalar(ScalarRanges, value);
+        }
+
+        return RegexByteClass.AtomMatches(
+            value,
+            AtomKind,
+            Value.Span,
+            CaseInsensitive,
+            MultiLine,
+            DotMatchesNewline,
+            Crlf,
+            LineTerminator);
     }
 
     /// <summary>
@@ -173,6 +201,29 @@ internal sealed class RegexNfaState(
         if (position >= haystack.Length || IsExcludedLineTerminator(haystack[position]))
         {
             return false;
+        }
+
+        if (ScalarRanges is not null)
+        {
+            int scalar = haystack[position];
+            int consumed = 1;
+            if (ScalarRangesUseUtf8 && scalar >= 0x80)
+            {
+                if (Rune.DecodeFromUtf8(haystack[position..], out Rune rune, out consumed) != OperationStatus.Done)
+                {
+                    return false;
+                }
+
+                scalar = rune.Value;
+            }
+
+            if (!ContainsScalar(ScalarRanges, scalar))
+            {
+                return false;
+            }
+
+            length = consumed;
+            return true;
         }
 
         if (AtomKind == RegexSyntaxKind.Literal &&
@@ -237,5 +288,30 @@ internal sealed class RegexNfaState(
         return ExcludeLineTerminators &&
             (value == ExcludedLineTerminator ||
                 ExcludeCrLf && value is (byte)'\r' or (byte)'\n');
+    }
+
+    private static bool ContainsScalar(RegexScalarRange[] ranges, int scalar)
+    {
+        int low = 0;
+        int high = ranges.Length - 1;
+        while (low <= high)
+        {
+            int middle = low + ((high - low) / 2);
+            RegexScalarRange range = ranges[middle];
+            if (scalar < range.Start)
+            {
+                high = middle - 1;
+            }
+            else if (scalar > range.End)
+            {
+                low = middle + 1;
+            }
+            else
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

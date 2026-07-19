@@ -255,7 +255,6 @@ public sealed class RegexSyntaxParserTests
     [InlineData("(")]
     [InlineData("[[:alpha:]")]
     [InlineData("(?P<1bad>a)")]
-    [InlineData(@"\u{100}")]
     [InlineData("*")]
     [InlineData("+")]
     [InlineData("?")]
@@ -268,4 +267,59 @@ public sealed class RegexSyntaxParserTests
 
         Assert.Contains("byte offset", exception.Message, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// Verifies chained quantifiers remain nested repetition syntax.
+    /// </summary>
+    [Fact]
+    public void ParsesChainedQuantifiersAsNestedRepetitions()
+    {
+        RegexRepetitionNode outer = Assert.IsType<RegexRepetitionNode>(RegexSyntaxParser.Parse("t{1,2}+"u8).Root);
+        Assert.Equal(1, outer.Minimum);
+        Assert.Null(outer.Maximum);
+
+        RegexRepetitionNode inner = Assert.IsType<RegexRepetitionNode>(outer.Child);
+        Assert.Equal(1, inner.Minimum);
+        Assert.Equal(2, inner.Maximum);
+        Assert.Equal((byte)'t', Assert.IsType<RegexAtomNode>(inner.Child).Value.Span[0]);
+    }
+
+    /// <summary>
+    /// Verifies unknown alphanumeric escapes, backreferences, and invalid scalars are rejected.
+    /// </summary>
+    [Theory]
+    [InlineData(@"\q")]
+    [InlineData(@"\1")]
+    [InlineData(@"\K")]
+    [InlineData(@"\R")]
+    [InlineData(@"\X")]
+    [InlineData(@"\x{}")]
+    [InlineData(@"\uD800")]
+    [InlineData(@"\U00110000")]
+    [InlineData(@"\p{NotAUnicodeProperty}")]
+    public void RejectsUnsupportedEscapesAndInvalidScalars(string pattern)
+    {
+        FormatException exception = Assert.Throws<FormatException>(
+            () => RegexSyntaxParser.Parse(Encoding.ASCII.GetBytes(pattern)));
+
+        Assert.Contains("byte offset", exception.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Verifies extended mode ignores syntax whitespace in escapes and repetition counts.
+    /// </summary>
+    [Fact]
+    public void ParsesExtendedWhitespaceWithinEscapesAndRepetitions()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse("(?x)\\x 4 1 { 1 , 2 } \\p{ Latin }"u8);
+
+        RegexSequenceNode root = Assert.IsType<RegexSequenceNode>(tree.Root);
+        Assert.Equal(3, root.Nodes.Count);
+        Assert.IsType<RegexInlineFlagsNode>(root.Nodes[0]);
+        RegexRepetitionNode repetition = Assert.IsType<RegexRepetitionNode>(root.Nodes[1]);
+        Assert.Equal(1, repetition.Minimum);
+        Assert.Equal(2, repetition.Maximum);
+        Assert.Equal(RegexSyntaxKind.UnicodePropertyClass, root.Nodes[2].Kind);
+    }
+
 }

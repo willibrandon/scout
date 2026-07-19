@@ -59,7 +59,10 @@ internal static class RegexAsciiFastPath
             case RegexSyntaxKind.NotUnicodePropertyClass:
                 return true;
             case RegexSyntaxKind.CharacterClass:
-                return RegexByteClass.ContainsUnicodePropertyClassToken(((RegexAtomNode)node).Value.Span);
+                var atom = (RegexAtomNode)node;
+                return RegexByteClass.ContainsUnicodePropertyClassToken(atom.Value.Span) ||
+                    atom.CharacterClass is not null &&
+                    ClassSetContainsNonAsciiScalar(atom.CharacterClass.Expression);
             case RegexSyntaxKind.Sequence:
                 var sequence = (RegexSequenceNode)node;
                 for (int index = 0; index < sequence.Nodes.Count; index++)
@@ -102,5 +105,36 @@ internal static class RegexAsciiFastPath
     private static bool ContainsUnicodeFlag(string flags)
     {
         return flags.Contains('u', StringComparison.Ordinal);
+    }
+
+    private static bool ClassSetContainsNonAsciiScalar(RegexClassSetNode node)
+    {
+        switch (node.Kind)
+        {
+            case RegexClassSetKind.Literal:
+                return node.Scalar > 0x7F;
+            case RegexClassSetKind.Range:
+                return node.Scalar > 0x7F || node.RangeEnd > 0x7F;
+            case RegexClassSetKind.Atom:
+                return node.UnicodeProperty is not null;
+            case RegexClassSetKind.Bracketed:
+                return node.Bracketed is not null &&
+                    ClassSetContainsNonAsciiScalar(node.Bracketed.Expression);
+            case RegexClassSetKind.Union:
+                for (int index = 0; index < node.Items.Count; index++)
+                {
+                    if (ClassSetContainsNonAsciiScalar(node.Items[index]))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            case RegexClassSetKind.Binary:
+                return node.Left is not null && ClassSetContainsNonAsciiScalar(node.Left) ||
+                    node.Right is not null && ClassSetContainsNonAsciiScalar(node.Right);
+            default:
+                return false;
+        }
     }
 }

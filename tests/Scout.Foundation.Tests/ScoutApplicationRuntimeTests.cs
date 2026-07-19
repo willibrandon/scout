@@ -819,6 +819,73 @@ public sealed class ScoutApplicationRuntimeTests
     }
 
     /// <summary>
+    /// Verifies context separators at the stats boundary follow ripgrep's resolved output mode.
+    /// </summary>
+    /// <param name="contextOption">The context option to exercise.</param>
+    /// <param name="scenario">The search subject and execution-mode scenario.</param>
+    [Theory]
+    [InlineData("-A1", "one-file-j2")]
+    [InlineData("-A1", "files-j1")]
+    [InlineData("-A1", "directory-j1")]
+    [InlineData("-A1", "files-sort")]
+    [InlineData("-A1", "directory-sort")]
+    [InlineData("-A1", "files-j2")]
+    [InlineData("-A1", "directory-j2")]
+    [InlineData("-B1", "one-file-j2")]
+    [InlineData("-B1", "files-j1")]
+    [InlineData("-B1", "directory-j1")]
+    [InlineData("-B1", "files-sort")]
+    [InlineData("-B1", "directory-sort")]
+    [InlineData("-B1", "files-j2")]
+    [InlineData("-B1", "directory-j2")]
+    [InlineData("-C1", "one-file-j2")]
+    [InlineData("-C1", "files-j1")]
+    [InlineData("-C1", "directory-j1")]
+    [InlineData("-C1", "files-sort")]
+    [InlineData("-C1", "directory-sort")]
+    [InlineData("-C1", "files-j2")]
+    [InlineData("-C1", "directory-j2")]
+    public void ContextStatsExecutionModesMatchPinnedRipgrep(
+        string contextOption,
+        string scenario)
+    {
+        ArgumentNullException.ThrowIfNull(contextOption);
+        ArgumentNullException.ThrowIfNull(scenario);
+        string root = CreateTempDirectory();
+        string firstPath = Path.Combine(root, "first.txt");
+        string secondPath = Path.Combine(root, "second.txt");
+        File.WriteAllText(firstPath, "before\nneedle\nafter\n");
+        File.WriteAllText(secondPath, "before\nmiss\nafter\n");
+        string[] subjects = scenario.StartsWith("one-file", StringComparison.Ordinal)
+            ? [firstPath]
+            : scenario.StartsWith("directory", StringComparison.Ordinal)
+                ? [root]
+                : [firstPath, secondPath];
+        string[] execution = scenario.EndsWith("j1", StringComparison.Ordinal)
+            ? ["--threads", "1"]
+            : scenario.EndsWith("j2", StringComparison.Ordinal)
+                ? ["--threads", "2"]
+                : ["--sort=path"];
+        string[] arguments =
+        [
+            "--no-config",
+            "--stats",
+            .. execution,
+            contextOption,
+            "needle",
+            .. subjects,
+        ];
+
+        (int exitCode, byte[] output, string error) = RunScout(arguments);
+        (int pinnedExitCode, byte[] pinnedOutput, string pinnedError) =
+            RunPinnedRipgrep(arguments);
+
+        Assert.Equal(pinnedExitCode, exitCode);
+        Assert.Equal(NormalizeStatsTimings(pinnedOutput), NormalizeStatsTimings(output));
+        Assert.Equal(pinnedError, error);
+    }
+
+    /// <summary>
     /// Verifies no-stats disables an earlier stats flag.
     /// </summary>
     [Fact]

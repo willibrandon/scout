@@ -294,18 +294,25 @@ internal sealed class RegexLiteralSetEngine
     /// <param name="root">The parsed syntax root.</param>
     /// <param name="options">The effective compile options.</param>
     /// <param name="engine">Receives the literal-set engine.</param>
+    /// <param name="allowCharacterClasses">Whether finite character classes may be expanded into literals.</param>
     /// <returns><see langword="true" /> when every alternative is a non-empty literal with compatible case semantics.</returns>
     public static bool TryCreate(
         RegexSyntaxNode root,
         RegexCompileOptions options,
-        out RegexLiteralSetEngine? engine)
+        out RegexLiteralSetEngine? engine,
+        bool allowCharacterClasses = true)
     {
         engine = null;
-        var literals = new List<byte[]>();
-        bool? asciiCaseInsensitive = null;
-        bool? literalUnicodeClasses = null;
-        if (!TryCollectLiteralBranches(root, options, literals, ref asciiCaseInsensitive, ref literalUnicodeClasses) ||
-            literals.Count < MinimumLiteralCount)
+        if (!RegexFiniteLiteralExtractor.TryExtract(
+                root,
+                options,
+                out List<byte[]> literals,
+                out bool? asciiCaseInsensitive,
+                out bool? literalUnicodeClasses,
+                out bool containsCharacterClass) ||
+            (containsCharacterClass && !allowCharacterClasses) ||
+            literals.Count < MinimumLiteralCount ||
+            literals.Exists(static literal => literal.Length == 0))
         {
             return false;
         }
@@ -1367,170 +1374,6 @@ internal sealed class RegexLiteralSetEngine
         return best;
     }
 
-    private static bool TryCollectLiteralBranches(
-        RegexSyntaxNode node,
-        RegexCompileOptions options,
-        List<byte[]> literals,
-        ref bool? asciiCaseInsensitive,
-        ref bool? literalUnicodeClasses)
-    {
-        node = UnwrapTransparentGroups(node);
-        if (node is RegexAlternationNode alternation)
-        {
-            for (int index = 0; index < alternation.Alternatives.Count; index++)
-            {
-                if (!TryCollectLiteralBranches(
-                    alternation.Alternatives[index],
-                    options,
-                    literals,
-                    ref asciiCaseInsensitive,
-                    ref literalUnicodeClasses))
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        var literal = new List<byte>();
-        return TryAppendLiteral(node, options, literal, ref asciiCaseInsensitive, ref literalUnicodeClasses) &&
-            literal.Count > 0 &&
-            AddLiteral(literals, literal.ToArray());
-    }
-
-    private static bool TryAppendLiteral(
-        RegexSyntaxNode node,
-        RegexCompileOptions options,
-        List<byte> literal,
-        ref bool? asciiCaseInsensitive,
-        ref bool? literalUnicodeClasses)
-    {
-        node = UnwrapTransparentGroups(node);
-        switch (node.Kind)
-        {
-            case RegexSyntaxKind.Empty:
-                return true;
-            case RegexSyntaxKind.Literal:
-                if (!SetCaseMode(options, ref asciiCaseInsensitive, ref literalUnicodeClasses))
-                {
-                    return false;
-                }
-
-                literal.AddRange(((RegexAtomNode)node).Value.ToArray());
-                return true;
-            case RegexSyntaxKind.Sequence:
-                return TryAppendLiteralSequence(
-                    (RegexSequenceNode)node,
-                    options,
-                    literal,
-                    ref asciiCaseInsensitive,
-                    ref literalUnicodeClasses);
-            case RegexSyntaxKind.CapturingGroup:
-            case RegexSyntaxKind.NonCapturingGroup:
-                var group = (RegexGroupNode)node;
-                return TryAppendLiteral(
-                    group.Child,
-                    options.Apply(group.EnabledFlags, group.DisabledFlags),
-                    literal,
-                    ref asciiCaseInsensitive,
-                    ref literalUnicodeClasses);
-            case RegexSyntaxKind.Repetition:
-                return TryAppendLiteralRepetition(
-                    (RegexRepetitionNode)node,
-                    options,
-                    literal,
-                    ref asciiCaseInsensitive,
-                    ref literalUnicodeClasses);
-            default:
-                return false;
-        }
-    }
-
-    private static bool TryAppendLiteralSequence(
-        RegexSequenceNode node,
-        RegexCompileOptions options,
-        List<byte> literal,
-        ref bool? asciiCaseInsensitive,
-        ref bool? literalUnicodeClasses)
-    {
-        RegexCompileOptions currentOptions = options;
-        for (int index = 0; index < node.Nodes.Count; index++)
-        {
-            RegexSyntaxNode child = node.Nodes[index];
-            if (child is RegexInlineFlagsNode flags)
-            {
-                currentOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
-                continue;
-            }
-
-            if (!TryAppendLiteral(child, currentOptions, literal, ref asciiCaseInsensitive, ref literalUnicodeClasses))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static bool TryAppendLiteralRepetition(
-        RegexRepetitionNode node,
-        RegexCompileOptions options,
-        List<byte> literal,
-        ref bool? asciiCaseInsensitive,
-        ref bool? literalUnicodeClasses)
-    {
-        if (node.Maximum != node.Minimum)
-        {
-            return false;
-        }
-
-        for (int count = 0; count < node.Minimum; count++)
-        {
-            if (!TryAppendLiteral(node.Child, options, literal, ref asciiCaseInsensitive, ref literalUnicodeClasses))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static bool SetCaseMode(
-        RegexCompileOptions options,
-        ref bool? asciiCaseInsensitive,
-        ref bool? literalUnicodeClasses)
-    {
-        if (asciiCaseInsensitive.HasValue && asciiCaseInsensitive.Value != options.CaseInsensitive)
-        {
-            return false;
-        }
-
-        asciiCaseInsensitive = options.CaseInsensitive;
-        if (options.CaseInsensitive)
-        {
-            if (literalUnicodeClasses.HasValue && literalUnicodeClasses.Value != options.UnicodeClasses)
-            {
-                return false;
-            }
-
-            literalUnicodeClasses = options.UnicodeClasses;
-        }
-
-        return true;
-    }
-
-    private static bool AddLiteral(List<byte[]> literals, byte[] literal)
-    {
-        if (literal.Length == 0)
-        {
-            return false;
-        }
-
-        literals.Add(literal);
-        return true;
-    }
-
     private static byte[][] CopyByteArrays(IReadOnlyList<byte[]> values)
     {
         byte[][] copy = new byte[values.Count][];
@@ -1916,18 +1759,6 @@ internal sealed class RegexLiteralSetEngine
     {
         searchPatterns.Add(pattern);
         searchPatternLiteralIds.Add(literalId);
-    }
-
-    private static RegexSyntaxNode UnwrapTransparentGroups(RegexSyntaxNode node)
-    {
-        while (node is RegexGroupNode group &&
-            string.IsNullOrEmpty(group.EnabledFlags) &&
-            string.IsNullOrEmpty(group.DisabledFlags))
-        {
-            node = group.Child;
-        }
-
-        return node;
     }
 
     private bool TryMatchLiteralAt(ReadOnlySpan<byte> haystack, int start, int literalId, out int length)

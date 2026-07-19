@@ -311,6 +311,7 @@ last
 EOF
 printf 'foo\nbar\n' > "$WORK/lookbehind"
 printf 'For the Doctor Watsons of this world, as opposed to the Sherlock\n' > "$WORK/sherlock"
+printf 'ScoutScout\nScoutRegex\nX\né\n' > "$WORK/issue39-auto"
 printf 'foo 42\nxoyz\ncat\tdog\n' > "$WORK/ip1.txt"
 printf 'foo 42\nxoyz\ncat\tdog\nfoo' > "$WORK/ip2.txt"
 mkdir -p "$WORK/pcre2-dir/sub"
@@ -364,6 +365,7 @@ compare_case null_data_multiline_context exact -P --null-data --multiline -n -C1
 compare_case basic_lookahead_multi_file sort-lines -P -n 'foo(?=bar)' pcre2-smoke.txt pcre2-smoke-2.txt
 compare_case recursive_lookahead sort-lines -P -n 'foo(?=bar)' pcre2-dir
 compare_case recursive_lookahead_threads sort-lines -P --threads 4 -n 'foo(?=bar)' pcre2-dir
+compare_case auto_recursive_lookahead_threads sort-lines --engine=auto --threads 4 -n 'foo(?=bar)' pcre2-dir
 compare_case line_regexp exact -P -x 'foo(?=bar)bar' pcre2-smoke.txt
 compare_case word_regexp exact -P -w 'foo(?=-)' pcre2-word.txt
 compare_case context exact -P -n -C1 'foo(?=bar)' pcre2-context
@@ -399,6 +401,10 @@ compare_stdin_case vimgrep_count_stdin exact "$WORK/pcre2-smoke.txt" -P --vimgre
 compare_stdin_case explicit_stdin_lookahead exact "$WORK/pcre2-smoke.txt" -P 'foo(?=bar)' -
 compare_stdin_case implicit_stdin_lookahead exact "$WORK/pcre2-smoke.txt" -P 'foo(?=bar)'
 compare_case f1155_auto_hybrid_regex exact --no-pcre2 --auto-hybrid-regex '(?<=the )Sherlock' sherlock
+compare_case issue39_auto_numbered_backreference exact --engine=auto '(Scout)\1' issue39-auto
+compare_case issue39_auto_named_backreference exact --engine=auto '(?<word>Scout)\k<word>' issue39-auto
+compare_case issue39_auto_reset_start exact --engine=auto 'Scout\KRegex' issue39-auto
+compare_case issue39_auto_grapheme exact --engine=auto -o '\X' issue39-auto
 compare_case json_lookahead mask-elapsed -P --json 'foo(?=bar)' pcre2-smoke.txt
 compare_case json_lookahead_only_matching mask-elapsed -P --json -o 'foo(?=bar)' pcre2-smoke.txt
 compare_case json_multi_file mask-elapsed-sort-lines -P --json 'foo(?=bar)' pcre2-smoke.txt pcre2-smoke-2.txt

@@ -2,12 +2,22 @@ using System.Runtime.CompilerServices;
 
 namespace Scout;
 
+/// <summary>
+/// Executes the canonical extended Unicode grapheme-cluster expression.
+/// </summary>
 internal sealed class RegexUnicodeGraphemeClusterEngine
 {
     private RegexUnicodeGraphemeClusterEngine()
     {
     }
 
+    /// <summary>
+    /// Creates the structural grapheme-cluster engine when the parsed syntax is canonical.
+    /// </summary>
+    /// <param name="root">The parsed syntax root.</param>
+    /// <param name="options">The effective compile options.</param>
+    /// <param name="engine">Receives the structural engine.</param>
+    /// <returns><see langword="true" /> when the syntax represents extended grapheme clusters.</returns>
     public static bool TryCreate(
         RegexSyntaxNode root,
         RegexCompileOptions options,
@@ -29,6 +39,12 @@ internal sealed class RegexUnicodeGraphemeClusterEngine
         return true;
     }
 
+    /// <summary>
+    /// Finds the next extended grapheme cluster at or after an offset.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startAt">The first permitted match start.</param>
+    /// <returns>The next grapheme-cluster match, or <see langword="null" />.</returns>
     public static RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
         int position = Math.Clamp(startAt, 0, haystack.Length);
@@ -45,6 +61,12 @@ internal sealed class RegexUnicodeGraphemeClusterEngine
         return null;
     }
 
+    /// <summary>
+    /// Matches one extended grapheme cluster at an exact offset.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startAt">The required match start.</param>
+    /// <returns>The grapheme-cluster match, or <see langword="null" />.</returns>
     public static RegexMatch? MatchAt(ReadOnlySpan<byte> haystack, int startAt)
     {
         int position = Math.Clamp(startAt, 0, haystack.Length);
@@ -53,16 +75,35 @@ internal sealed class RegexUnicodeGraphemeClusterEngine
             : null;
     }
 
+    /// <summary>
+    /// Counts non-overlapping extended grapheme clusters at or after an offset.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startAt">The first permitted match start.</param>
+    /// <returns>The number of grapheme-cluster matches.</returns>
     public static long CountMatches(ReadOnlySpan<byte> haystack, int startAt)
     {
         return CountOrSum(haystack, startAt, sumSpans: false);
     }
 
+    /// <summary>
+    /// Sums the byte lengths of non-overlapping extended grapheme clusters.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startAt">The first permitted match start.</param>
+    /// <returns>The sum of matched byte lengths.</returns>
     public static long SumMatchSpans(ReadOnlySpan<byte> haystack, int startAt)
     {
         return CountOrSum(haystack, startAt, sumSpans: true);
     }
 
+    /// <summary>
+    /// Attempts to measure one extended grapheme cluster at an exact offset.
+    /// </summary>
+    /// <param name="haystack">The bytes to inspect.</param>
+    /// <param name="start">The required match start.</param>
+    /// <param name="length">Receives the matched byte length.</param>
+    /// <returns><see langword="true" /> when a grapheme cluster starts at the offset.</returns>
     public static bool TryMatchAt(ReadOnlySpan<byte> haystack, int start, out int length)
     {
         length = 0;
@@ -646,7 +687,7 @@ internal sealed class RegexUnicodeGraphemeClusterEngine
         node = UnwrapTransparentGroups(node);
         return node is RegexAtomNode { Kind: RegexSyntaxKind.CharacterClass } atom &&
             TryReadClassPropertySet(
-                atom.Value.Span,
+                atom.CharacterClass,
                 negated: true,
                 RegexUnicodePropertyKind.GraphemeClusterBreakControl,
                 RegexUnicodePropertyKind.GraphemeClusterBreakCr,
@@ -664,15 +705,15 @@ internal sealed class RegexUnicodeGraphemeClusterEngine
     {
         node = UnwrapTransparentGroups(node);
         return node is RegexAtomNode { Kind: RegexSyntaxKind.CharacterClass } atom &&
-            TryReadClassPropertySet(atom.Value.Span, negated: false, kinds);
+            TryReadClassPropertySet(atom.CharacterClass, negated: false, kinds);
     }
 
     private static bool TryReadClassPropertySet(
-        ReadOnlySpan<byte> expression,
+        RegexCharacterClass? characterClass,
         bool negated,
         params RegexUnicodePropertyKind[] kinds)
     {
-        if (negated != (expression.Length > 0 && expression[0] == (byte)'^'))
+        if (characterClass is null || characterClass.Negated != negated)
         {
             return false;
         }
@@ -680,40 +721,14 @@ internal sealed class RegexUnicodeGraphemeClusterEngine
         Span<bool> matched = kinds.Length <= 8
             ? stackalloc bool[kinds.Length]
             : new bool[kinds.Length];
-        int index = negated ? 1 : 0;
         int tokenCount = 0;
-        while (index < expression.Length)
+        if (!TryReadClassPropertySetNode(
+                characterClass.Expression,
+                kinds,
+                matched,
+                ref tokenCount))
         {
-            if (!RegexByteClass.TryReadClassToken(
-                    expression,
-                    ref index,
-                    out RegexSyntaxKind tokenKind,
-                    out byte literal,
-                    out bool tokenNegated) ||
-                tokenNegated ||
-                tokenKind != RegexSyntaxKind.UnicodePropertyClass)
-            {
-                return false;
-            }
-
-            var actual = (RegexUnicodePropertyKind)literal;
-            int matchIndex = -1;
-            for (int kindIndex = 0; kindIndex < kinds.Length; kindIndex++)
-            {
-                if (kinds[kindIndex] == actual)
-                {
-                    matchIndex = kindIndex;
-                    break;
-                }
-            }
-
-            if (matchIndex < 0 || matched[matchIndex])
-            {
-                return false;
-            }
-
-            matched[matchIndex] = true;
-            tokenCount++;
+            return false;
         }
 
         if (tokenCount != kinds.Length)
@@ -729,6 +744,55 @@ internal sealed class RegexUnicodeGraphemeClusterEngine
             }
         }
 
+        return true;
+    }
+
+    private static bool TryReadClassPropertySetNode(
+        RegexClassSetNode node,
+        ReadOnlySpan<RegexUnicodePropertyKind> kinds,
+        Span<bool> matched,
+        ref int tokenCount)
+    {
+        if (node.Kind == RegexClassSetKind.Union)
+        {
+            for (int index = 0; index < node.Items.Count; index++)
+            {
+                if (!TryReadClassPropertySetNode(node.Items[index], kinds, matched, ref tokenCount))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        RegexUnicodeProperty? property = node.UnicodeProperty;
+        if (node.Kind != RegexClassSetKind.Atom ||
+            node.Negated ||
+            node.AtomKind != RegexSyntaxKind.UnicodePropertyClass ||
+            property is null ||
+            property.Family != RegexUnicodePropertyFamily.Property)
+        {
+            return false;
+        }
+
+        int matchIndex = -1;
+        for (int kindIndex = 0; kindIndex < kinds.Length; kindIndex++)
+        {
+            if (kinds[kindIndex] == property.PropertyKind)
+            {
+                matchIndex = kindIndex;
+                break;
+            }
+        }
+
+        if (matchIndex < 0 || matched[matchIndex])
+        {
+            return false;
+        }
+
+        matched[matchIndex] = true;
+        tokenCount++;
         return true;
     }
 

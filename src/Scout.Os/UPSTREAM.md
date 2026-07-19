@@ -22,3 +22,7 @@ commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"
 The implementation owns Unix raw byte paths, raw `getcwd`, directory iteration,
 raw standard streams, Windows UTF-16 boundaries, and direct `LibraryImport`
 declarations for the exact OS APIs Scout uses.
+
+Windows raw standard-input reads follow the .NET runtime console-stream boundary:
+`ERROR_BROKEN_PIPE` and `ERROR_NO_DATA` report pipe EOF after the writer closes.
+Broken downstream output pipes retain their independent graceful-exit handling.

@@ -1109,6 +1109,35 @@ select_native_xcode_developer_dir 26.3 17C529 "$2"
         self.assertIn("repeat_shell_argument", source)
         self.assertIn("$MANY_ABSENT_INPUTS", source)
 
+    def test_issue_46_nested_literal_gates_remain_in_the_release_suite(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "bench" / "run-hyperfine.sh").read_text(encoding="utf-8")
+
+        self.assertIn('printf "internal sealed class PaladinRecord\\r\\n"', source)
+        self.assertIn('printf "internal sealed class PaladinValue\\r\\n"', source)
+        self.assertIn('GATE_NESTED_LITERAL_MATCH_INPUT_COUNT="2"', source)
+        self.assertIn('GATE_NESTED_LITERAL_NO_MATCH_INPUT_COUNT="4"', source)
+        self.assertIn('"nested_literal_alternation_match_general"', source)
+        self.assertIn('"nested_literal_alternation_no_match_general"', source)
+        self.assertIn("'(?:Generated|Paladin(?:Record|Value))'", source)
+        self.assertIn("'(?:Absent|Missing(?:Two|Three))'", source)
+        self.assertIn("$NESTED_LITERAL_MATCH_INPUTS", source)
+        self.assertIn("$NESTED_LITERAL_NO_MATCH_INPUTS", source)
+
+        match_gate = source.index(
+            '    "nested_literal_alternation_match_general" \\\n'
+        )
+        no_match_gate = source.index(
+            '    "nested_literal_alternation_no_match_general" \\\n'
+        )
+        next_gate = source.index("\nrun_gate_pair \\\n", no_match_gate + 1)
+        match_block = source[match_gate:no_match_gate]
+        no_match_block = source[no_match_gate:next_gate]
+        self.assertIn('    "0" \\\n', match_block)
+        self.assertIn('    "1" \\\n', no_match_block)
+        self.assertIn('"$GENERAL_REGEX_ENVIRONMENT"', match_block)
+        self.assertIn('"$GENERAL_REGEX_ENVIRONMENT"', no_match_block)
+
     def test_short_shared_delegate_gate_uses_direct_execution(self) -> None:
         root = Path(__file__).resolve().parents[2]
         source = (root / "bench" / "run-hyperfine.sh").read_text(encoding="utf-8")

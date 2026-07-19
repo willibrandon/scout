@@ -194,9 +194,10 @@ recognizers. Both commands pin `--threads 1`. Its median balanced-cycle ratio
 must remain at or below 1.50x the
 pinned `rg` oracle.
 
-The issue #37, #36, and #44 gates share a deterministic CRLF corpus made from
-200,000 Paladin-like four-line records, followed by the four delegate
-declarations from the issue #36 reproduction. The issue #37 workloads measure
+The issue #37, #36, #44, and #46 gates share a deterministic CRLF corpus made
+from 200,000 Paladin-like four-line records, followed by `PaladinRecord` and
+`PaladinValue` sentinels and the four delegate declarations from the issue #36
+reproduction. The issue #37 workloads measure
 the prefilter-free `\b\w{5}\s+\w{5}\s+\w{5}\b` expression through both line
 and match counting, the exact `\bGeneratedRecord\b` expression, the anchored
 declaration expression, and both the CRLF-aware and exact
@@ -206,7 +207,10 @@ sequential scans of the corpus, keeping each timed command above the host timer
 resolution. The issue #44 workloads search for the same 64 absent literals
 through repeated `-e` arguments and a pattern file. Each timed command scans
 sixteen copies of the input argument, keeping the absent-pattern comparison
-above Hyperfine's short-command warning range.
+above Hyperfine's short-command warning range. The issue #46 workloads use the
+exact nested finite-language match and no-match expressions. Their commands
+scan two and four copies respectively so both paths stay above host timer
+resolution.
 Every command pins `--threads 1 --mmap` and uses
 either `--count` or `--count-matches`. Scout runs with
 `SCOUT_REGEX_SPECIALIZATION_MODE=general` so these gates

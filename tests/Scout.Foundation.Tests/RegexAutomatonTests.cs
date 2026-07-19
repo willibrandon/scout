@@ -8052,6 +8052,116 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies generated Script and Script_Extensions aliases cover scripts outside the legacy subset.
+    /// </summary>
+    [Fact]
+    public void UnicodeScriptAliasesUseCompletePinnedTables()
+    {
+        Assert.Equal(new RegexMatch(0, 3), RegexAutomaton.Compile(@"\p{Latin}+"u8).Find("abcδ"u8));
+        Assert.Equal(new RegexMatch(0, 3), RegexAutomaton.Compile(@"\p{Latn}+"u8).Find("abcδ"u8));
+        Assert.Equal(new RegexMatch(0, 3), RegexAutomaton.Compile(@"\p{sc=Latin}+"u8).Find("abcδ"u8));
+        Assert.Equal(new RegexMatch(0, 3), RegexAutomaton.Compile(@"\p{scx=Latn}+"u8).Find("abcδ"u8));
+        Assert.Equal(new RegexMatch(0, 3), RegexAutomaton.Compile(@"\p{Han}"u8).Find("漢"u8));
+        Assert.Equal(new RegexMatch(0, 3), RegexAutomaton.Compile(@"\p{Hani}"u8).Find("漢"u8));
+    }
+
+    /// <summary>
+    /// Verifies bracket classes implement regex-syntax set algebra and edge-token rules.
+    /// </summary>
+    [Fact]
+    public void CharacterClassesImplementSetAlgebra()
+    {
+        Assert.Equal(new RegexMatch(6, 4), RegexAutomaton.Compile("[a-z--aeiou]+"u8).Find("aeiou bcdf"u8));
+        Assert.Equal(new RegexMatch(3, 1), RegexAutomaton.Compile("[a-f~~d-z]+"u8).Find("defg"u8));
+        Assert.Equal(new RegexMatch(1, 3), RegexAutomaton.Compile("[a-c[0-2]]+"u8).Find("x2ba"u8));
+        Assert.Equal(new RegexMatch(0, 1), RegexAutomaton.Compile("[a-z--d-f&&e-z]+"u8).Find("g"u8));
+        Assert.Null(RegexAutomaton.Compile("[a-z--d-f&&e-z]+"u8).Find("f"u8));
+        Assert.Null(RegexAutomaton.Compile("[&&]"u8).Find("&"u8));
+        Assert.Equal(new RegexMatch(0, 1), RegexAutomaton.Compile("[--]"u8).Find("-"u8));
+        Assert.Equal(new RegexMatch(0, 1), RegexAutomaton.Compile("[]]"u8).Find("]"u8));
+        Assert.Equal(new RegexMatch(0, 1), RegexAutomaton.Compile("(?x)[& &]"u8).Find("&"u8));
+        Assert.Equal(
+            new RegexMatch(0, 5),
+            RegexAutomaton.Compile(@"[\w&&\p{Latin}]+"u8).Find("Latin_123"u8));
+    }
+
+    /// <summary>
+    /// Verifies case folding is applied to set operands before set operations.
+    /// </summary>
+    [Fact]
+    public void CharacterClassSetOperationsApplyCaseFoldingToOperands()
+    {
+        var automaton = RegexAutomaton.Compile(
+            "[A-Z--AEIOU]+"u8,
+            caseInsensitive: true,
+            multiLine: false,
+            dotMatchesNewline: false);
+
+        Assert.Equal(new RegexMatch(6, 4), automaton.Find("aeiou bcdf"u8));
+    }
+
+    /// <summary>
+    /// Verifies scalar escape forms and byte-mode fixed hexadecimal escapes follow regex-syntax semantics.
+    /// </summary>
+    [Fact]
+    public void ScalarEscapesPreserveUnicodeAndByteModeSemantics()
+    {
+        Assert.Equal(new RegexMatch(0, 2), RegexAutomaton.Compile(@"\x{100}"u8).Find("Ā"u8));
+        Assert.Equal(new RegexMatch(0, 2), RegexAutomaton.Compile(@"\u0100"u8).Find("Ā"u8));
+        Assert.Equal(new RegexMatch(0, 4), RegexAutomaton.Compile(@"\U0001F600"u8).Find("😀"u8));
+
+        var byteMode = RegexAutomaton.Compile(
+            @"(?-u)\xFF"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false);
+        Assert.Equal(new RegexMatch(0, 1), byteMode.Find([0xFF]));
+        Assert.Null(byteMode.Find([0xC3, 0xBF]));
+
+        var byteClass = RegexAutomaton.Compile(
+            @"(?-u)[\xFF]"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false);
+        Assert.Equal(new RegexMatch(0, 1), byteClass.Find([0xFF]));
+        Assert.Null(byteClass.Find([0xC3, 0xBF]));
+
+        var unicodeScalarInByteMode = RegexAutomaton.Compile(
+            @"(?-u)\x{FF}"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false);
+        Assert.Equal(new RegexMatch(0, 2), unicodeScalarInByteMode.Find([0xC3, 0xBF]));
+
+        Assert.Throws<FormatException>(() => RegexAutomaton.Compile(
+            @"(?-u)[\x{FF}]"u8,
+            caseInsensitive: false,
+            multiLine: false,
+            dotMatchesNewline: false));
+    }
+
+    /// <summary>
+    /// Verifies extended-mode whitespace is ignored within scalar, property, and repetition syntax.
+    /// </summary>
+    [Fact]
+    public void ExtendedModeIgnoresWhitespaceWithinRegexSyntax()
+    {
+        var automaton = RegexAutomaton.Compile("(?x)^ \\x 4 1 { 2 } \\p{ Latin } $"u8);
+
+        Assert.Equal(new RegexMatch(0, 3), automaton.Find("AAa"u8));
+    }
+
+    /// <summary>
+    /// Verifies chained quantifiers repeat the preceding repetition expression.
+    /// </summary>
+    [Fact]
+    public void ChainedQuantifiersUseNestedRepetitionSemantics()
+    {
+        Assert.Equal(new RegexMatch(0, 3), RegexAutomaton.Compile("^t{1,2}+$"u8).Find("ttt"u8));
+        Assert.Equal(new RegexMatch(0, 7), RegexAutomaton.Compile("^Scout++$"u8).Find("Scouttt"u8));
+    }
+
+    /// <summary>
     /// Verifies bracket classes can contain regex-syntax Unicode property tokens.
     /// </summary>
     [Fact]
@@ -8219,6 +8329,37 @@ public sealed class RegexAutomatonTests
         Assert.Equal(new RegexMatch(0, 2), RegexAutomaton.Compile(@"[[:alpha:]]"u8).Find("\u0345"u8));
         Assert.Equal(new RegexMatch(0, 2), RegexAutomaton.Compile(@"[[:alnum:]]"u8).Find("\u0345"u8));
         Assert.Null(RegexAutomaton.Compile(@"[[:alpha:]]"u8, caseInsensitive: false, multiLine: false, dotMatchesNewline: false, unicodeClasses: false).Find("\u0345"u8));
+    }
+
+    /// <summary>
+    /// Verifies every regex-syntax POSIX class name is represented by structured class syntax.
+    /// </summary>
+    [Theory]
+    [InlineData("[[:ascii:]]", "A", true)]
+    [InlineData("[[:ascii:]]", "é", false)]
+    [InlineData("[[:blank:]]", "\t", true)]
+    [InlineData("[[:blank:]]", "x", false)]
+    [InlineData("[[:cntrl:]]", "\u001F", true)]
+    [InlineData("[[:cntrl:]]", "A", false)]
+    [InlineData("[[:graph:]]", "!", true)]
+    [InlineData("[[:graph:]]", " ", false)]
+    [InlineData("[[:lower:]]", "a", true)]
+    [InlineData("[[:lower:]]", "A", false)]
+    [InlineData("[[:print:]]", " ", true)]
+    [InlineData("[[:print:]]", "\n", false)]
+    [InlineData("[[:punct:]]", "!", true)]
+    [InlineData("[[:punct:]]", "A", false)]
+    [InlineData("[[:upper:]]", "A", true)]
+    [InlineData("[[:upper:]]", "a", false)]
+    [InlineData("[[:xdigit:]]", "F", true)]
+    [InlineData("[[:xdigit:]]", "G", false)]
+    public void SupportsCompletePosixClassNames(string pattern, string haystack, bool expected)
+    {
+        RegexMatch? match = RegexAutomaton
+            .Compile(System.Text.Encoding.ASCII.GetBytes(pattern))
+            .Find(System.Text.Encoding.UTF8.GetBytes(haystack));
+
+        Assert.Equal(expected, match.HasValue);
     }
 
     /// <summary>

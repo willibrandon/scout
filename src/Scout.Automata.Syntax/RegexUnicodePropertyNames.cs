@@ -1,4 +1,3 @@
-
 namespace Scout;
 
 /// <summary>
@@ -6,6 +5,61 @@ namespace Scout;
 /// </summary>
 public static class RegexUnicodePropertyNames
 {
+    /// <summary>
+    /// Resolves a Unicode property query to its generated table descriptor.
+    /// </summary>
+    internal static bool TryGetProperty(ReadOnlySpan<byte> name, out RegexUnicodeProperty? property)
+    {
+        property = null;
+        if (TryGetKind(name, out RegexUnicodePropertyKind propertyKind))
+        {
+            property = new RegexUnicodeProperty(
+                RegexUnicodePropertyFamily.Property,
+                propertyKind,
+                RegexUnicodeScriptKind.None);
+            return true;
+        }
+
+        int separator = FindPropertySeparator(name);
+        if (separator >= 0)
+        {
+            ReadOnlySpan<byte> propertyName = name[..separator];
+            ReadOnlySpan<byte> propertyValue = name[(separator + 1)..];
+            RegexUnicodePropertyFamily family;
+            if (NameEquals(propertyName, "script") || NameEquals(propertyName, "sc"))
+            {
+                family = RegexUnicodePropertyFamily.Script;
+            }
+            else if (NameEquals(propertyName, "scriptextensions") || NameEquals(propertyName, "scx"))
+            {
+                family = RegexUnicodePropertyFamily.ScriptExtensions;
+            }
+            else
+            {
+                return false;
+            }
+
+            if (!RegexUnicodeScriptNames.TryGetKind(propertyValue, out RegexUnicodeScriptKind namedScript))
+            {
+                return false;
+            }
+
+            property = new RegexUnicodeProperty(family, RegexUnicodePropertyKind.None, namedScript);
+            return true;
+        }
+
+        if (!RegexUnicodeScriptNames.TryGetKind(name, out RegexUnicodeScriptKind script))
+        {
+            return false;
+        }
+
+        property = new RegexUnicodeProperty(
+            RegexUnicodePropertyFamily.Script,
+            RegexUnicodePropertyKind.None,
+            script);
+        return true;
+    }
+
     /// <summary>
     /// Determines whether a Unicode property name identifies a pinned Scout property table.
     /// </summary>

@@ -295,7 +295,9 @@ internal sealed class RegexNfaCompiler(
         bool reversed)
     {
         RegexSyntaxKind kind = reversed ? ReverseAtomKind(atom.Kind) : atom.Kind;
-        if (!RegexByteClass.RequiresUtf8ScalarMatch(
+        bool authoritative = HasAuthoritativeScalarSemantics(atom);
+        if (!authoritative &&
+            !RegexByteClass.RequiresUtf8ScalarMatch(
                 kind,
                 atom.Value.Span,
                 options.Utf8,
@@ -305,7 +307,8 @@ internal sealed class RegexNfaCompiler(
             return 1;
         }
 
-        if (RegexUtf8ByteCompiler.TryGetSharedTrie(
+        if (!authoritative &&
+            RegexUtf8ByteCompiler.TryGetSharedTrie(
                 kind,
                 atom.Value.Span,
                 options,
@@ -315,11 +318,7 @@ internal sealed class RegexNfaCompiler(
             return CountUtf8TrieStates(sharedTrie!);
         }
 
-        if (!RegexUtf8ByteCompiler.TryBuildNormalizedScalarRanges(
-                kind,
-                atom.Value.Span,
-                options,
-                out List<RegexScalarRange> ranges))
+        if (!RegexUtf8ByteCompiler.TryBuildNormalizedScalarRanges(atom, options, out List<RegexScalarRange> ranges))
         {
             return 1;
         }
@@ -669,11 +668,12 @@ internal sealed class RegexNfaCompiler(
 
     private int CompileAtom(RegexAtomNode node, int next, RegexCompileOptions options)
     {
-        if (TryCompileUtf8ByteAtom(node.Kind, node.Value.Span, next, options, reversed: false, out int utf8Start))
+        if (TryCompileUtf8ByteAtom(node, node.Kind, next, options, reversed: false, out int utf8Start))
         {
             return utf8Start;
         }
 
+        RegexScalarRange[]? scalarRanges = TryGetRetainedScalarRanges(node, options, out bool scalarRangesUseUtf8);
         RegexNfaStateKind stateKind = IsPredicate(node.Kind) ? RegexNfaStateKind.Predicate : RegexNfaStateKind.Atom;
         return AddAtomState(
             stateKind,
@@ -690,17 +690,20 @@ internal sealed class RegexNfaCompiler(
             alternative: -1,
             excludeLineTerminators: options.ExcludeLineTerminators,
             excludeCrLf: options.ExcludeCrLf,
-            excludedLineTerminator: options.ExcludedLineTerminator);
+            excludedLineTerminator: options.ExcludedLineTerminator,
+            scalarRanges: scalarRanges,
+            scalarRangesUseUtf8: scalarRangesUseUtf8);
     }
 
     private int CompileAtomReversed(RegexAtomNode node, int next, RegexCompileOptions options)
     {
         RegexSyntaxKind kind = ReverseAtomKind(node.Kind);
-        if (TryCompileUtf8ByteAtom(kind, node.Value.Span, next, options, reversed: true, out int utf8Start))
+        if (TryCompileUtf8ByteAtom(node, kind, next, options, reversed: true, out int utf8Start))
         {
             return utf8Start;
         }
 
+        RegexScalarRange[]? scalarRanges = TryGetRetainedScalarRanges(node, options, out bool scalarRangesUseUtf8);
         ReadOnlyMemory<byte> value = kind == RegexSyntaxKind.Literal ? ReverseBytes(node.Value) : node.Value;
         RegexNfaStateKind stateKind = IsPredicate(kind) ? RegexNfaStateKind.Predicate : RegexNfaStateKind.Atom;
         return AddAtomState(
@@ -718,12 +721,57 @@ internal sealed class RegexNfaCompiler(
             alternative: -1,
             excludeLineTerminators: options.ExcludeLineTerminators,
             excludeCrLf: options.ExcludeCrLf,
-            excludedLineTerminator: options.ExcludedLineTerminator);
+            excludedLineTerminator: options.ExcludedLineTerminator,
+            scalarRanges: scalarRanges,
+            scalarRangesUseUtf8: scalarRangesUseUtf8);
+    }
+
+    private static RegexScalarRange[]? TryGetRetainedScalarRanges(
+        RegexAtomNode atom,
+        RegexCompileOptions options,
+        out bool useUtf8)
+    {
+        useUtf8 = false;
+        if (!HasAuthoritativeScalarSemantics(atom))
+        {
+            return null;
+        }
+
+        if (!RegexUtf8ByteCompiler.TryBuildNormalizedScalarRanges(atom, options, out List<RegexScalarRange> ranges))
+        {
+            return null;
+        }
+
+        useUtf8 = AuthoritativeScalarRangesUseUtf8(atom, options);
+        return ranges.ToArray();
+    }
+
+    private static bool HasAuthoritativeScalarSemantics(RegexAtomNode atom)
+    {
+        return atom.CharacterClass is not null ||
+            atom.UnicodeProperty is not null ||
+            atom.Kind == RegexSyntaxKind.Literal &&
+            atom.LiteralKind is RegexLiteralKind.HexFixed
+                or RegexLiteralKind.HexBrace
+                or RegexLiteralKind.UnicodeShort
+                or RegexLiteralKind.UnicodeLong;
+    }
+
+    private static bool AuthoritativeScalarRangesUseUtf8(RegexAtomNode atom, RegexCompileOptions options)
+    {
+        if (atom.Kind == RegexSyntaxKind.Literal && atom.Scalar >= 0)
+        {
+            return options.Utf8 ||
+                options.UnicodeClasses ||
+                atom.LiteralKind != RegexLiteralKind.HexFixed;
+        }
+
+        return options.Utf8 || options.UnicodeClasses;
     }
 
     private bool TryCompileUtf8ByteAtom(
+        RegexAtomNode atom,
         RegexSyntaxKind kind,
-        ReadOnlySpan<byte> value,
         int next,
         RegexCompileOptions options,
         bool reversed,
@@ -735,29 +783,51 @@ internal sealed class RegexNfaCompiler(
             return false;
         }
 
-        if (!RegexByteClass.RequiresUtf8ScalarMatch(kind, value, options.Utf8, options.CaseInsensitive, options.UnicodeClasses))
+        bool authoritative = HasAuthoritativeScalarSemantics(atom);
+        bool scalarRangesUseUtf8 = AuthoritativeScalarRangesUseUtf8(atom, options);
+        if (authoritative && !scalarRangesUseUtf8)
+        {
+            start = -1;
+            return false;
+        }
+
+        if (!authoritative &&
+            !RegexByteClass.RequiresUtf8ScalarMatch(
+                kind,
+                atom.Value.Span,
+                options.Utf8,
+                options.CaseInsensitive,
+                options.UnicodeClasses))
         {
             start = -1;
             return false;
         }
 
         int AddSourceByteClass(ReadOnlySpan<byte> ranges, int target) => AddByteClass(ranges, target, options.Utf8);
-        if (RegexUtf8ByteCompiler.TryGetSharedTrie(kind, value, options, reversed, out RegexUtf8ByteTrie? sharedTrie))
+        if (!authoritative &&
+            RegexUtf8ByteCompiler.TryGetSharedTrie(
+                kind,
+                atom.Value.Span,
+                options,
+                reversed,
+                out RegexUtf8ByteTrie? sharedTrie))
         {
             _cacheStates = !_includeCaptures;
             start = CompileUtf8ByteTrie(sharedTrie!, next);
             return true;
         }
 
-        string key = RegexUtf8ByteCompiler.CreateCacheKey(kind, value, options, reversed);
-        if (_utf8ByteTrieCache.TryGetValue(key, out RegexUtf8ByteTrie? trie))
+        string? key = authoritative
+            ? null
+            : RegexUtf8ByteCompiler.CreateCacheKey(kind, atom.Value.Span, options, reversed);
+        if (key is not null && _utf8ByteTrieCache.TryGetValue(key, out RegexUtf8ByteTrie? trie))
         {
             _cacheStates = !_includeCaptures;
             start = CompileUtf8ByteTrie(trie, next);
             return true;
         }
 
-        if (!RegexUtf8ByteCompiler.TryBuildNormalizedScalarRanges(kind, value, options, out List<RegexScalarRange> ranges))
+        if (!RegexUtf8ByteCompiler.TryBuildNormalizedScalarRanges(atom, options, out List<RegexScalarRange> ranges))
         {
             start = -1;
             return false;
@@ -779,7 +849,10 @@ internal sealed class RegexNfaCompiler(
             return false;
         }
 
-        _utf8ByteTrieCache.Add(key, trie!);
+        if (key is not null)
+        {
+            _utf8ByteTrieCache.Add(key, trie!);
+        }
         _cacheStates = !_includeCaptures;
         start = CompileUtf8ByteTrie(trie!, next);
         return true;
@@ -914,11 +987,18 @@ internal sealed class RegexNfaCompiler(
         bool excludeLineTerminators = false,
         bool excludeCrLf = false,
         byte? excludedLineTerminator = null,
+        RegexScalarRange[]? scalarRanges = null,
+        bool scalarRangesUseUtf8 = false,
         bool payloadReserved = false,
         ulong reservationCheckpoint = 0)
     {
         byte effectiveExcludedLineTerminator = excludedLineTerminator ?? lineTerminator;
-        if (_cacheStates)
+        ulong payloadBytes = RegexNfaConstructionBudget.SaturatingAdd(
+            (ulong)value.Length,
+            RegexNfaConstructionBudget.SaturatingMultiply(
+                (ulong)(scalarRanges?.Length ?? 0),
+                (ulong)(sizeof(int) * 2)));
+        if (_cacheStates && scalarRanges is null)
         {
             var key = RegexNfaAtomCacheKey.Create(
                 stateKind,
@@ -949,7 +1029,7 @@ internal sealed class RegexNfaCompiler(
             int cachedState = _states.Count;
             if (!payloadReserved)
             {
-                _constructionBudget?.ReserveState((ulong)value.Length);
+                _constructionBudget?.ReserveState(payloadBytes);
             }
 
             _states.Add(new RegexNfaState(
@@ -967,7 +1047,9 @@ internal sealed class RegexNfaCompiler(
                 alternative,
                 excludeLineTerminators: excludeLineTerminators,
                 excludeCrLf: excludeCrLf,
-                excludedLineTerminator: effectiveExcludedLineTerminator));
+                excludedLineTerminator: effectiveExcludedLineTerminator,
+                scalarRanges: scalarRanges,
+                scalarRangesUseUtf8: scalarRangesUseUtf8));
             _atomStateCache.Add(key, cachedState);
             return cachedState;
         }
@@ -975,7 +1057,7 @@ internal sealed class RegexNfaCompiler(
         int state = _states.Count;
         if (!payloadReserved)
         {
-            _constructionBudget?.ReserveState((ulong)value.Length);
+            _constructionBudget?.ReserveState(payloadBytes);
         }
 
         _states.Add(new RegexNfaState(
@@ -993,7 +1075,9 @@ internal sealed class RegexNfaCompiler(
             alternative,
             excludeLineTerminators: excludeLineTerminators,
             excludeCrLf: excludeCrLf,
-            excludedLineTerminator: effectiveExcludedLineTerminator));
+            excludedLineTerminator: effectiveExcludedLineTerminator,
+            scalarRanges: scalarRanges,
+            scalarRangesUseUtf8: scalarRangesUseUtf8));
         return state;
     }
 

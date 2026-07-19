@@ -2053,10 +2053,10 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("RegexUnicodeTables.IsScript", regexByteClass, StringComparison.Ordinal);
         Assert.Contains("RegexUnicodeTables.IsScriptExtension", regexByteClass, StringComparison.Ordinal);
         Assert.Contains("RegexUnicodeTables.IsSimpleCaseFold", regexByteClass, StringComparison.Ordinal);
-        Assert.Contains("TryParseUnicodePropertyClass", regexSyntaxParseState, StringComparison.Ordinal);
+        Assert.Contains("ParseUnicodePropertyClass", regexSyntaxParseState, StringComparison.Ordinal);
         Assert.Contains("public static bool TryGetKind", regexUnicodePropertyNames, StringComparison.Ordinal);
         Assert.Contains("public static bool NameEquals", regexUnicodePropertyNames, StringComparison.Ordinal);
-        Assert.Contains("RegexUnicodePropertyNames.TryGetKind", regexSyntaxParseState, StringComparison.Ordinal);
+        Assert.Contains("RegexUnicodePropertyNames.TryGetProperty", regexSyntaxParseState, StringComparison.Ordinal);
         Assert.Contains("RegexUnicodePropertyNames.TryGetKind", regexByteClass, StringComparison.Ordinal);
         Assert.DoesNotContain("TryParseUnicodeAnyClass", regexSyntaxParseState, StringComparison.Ordinal);
         Assert.Contains("UppercaseLetter", regexUnicodePropertyKind, StringComparison.Ordinal);
@@ -2610,6 +2610,11 @@ public sealed partial class PinnedConfigurationTests
 
         Assert.Contains("ripgrep_pcre2_reported_version = \"" + expectedPcre2ReportedVersion + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("compare_case f1155_auto_hybrid_regex exact --no-pcre2 --auto-hybrid-regex '(?<=the )Sherlock'", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case auto_recursive_lookahead_threads sort-lines --engine=auto --threads 4 -n 'foo(?=bar)' pcre2-dir", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case issue39_auto_numbered_backreference exact --engine=auto '(Scout)\\1' issue39-auto", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case issue39_auto_named_backreference exact --engine=auto '(?<word>Scout)\\k<word>' issue39-auto", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case issue39_auto_reset_start exact --engine=auto 'Scout\\KRegex' issue39-auto", differentialScript, StringComparison.Ordinal);
+        Assert.Contains("compare_case issue39_auto_grapheme exact --engine=auto -o '\\X' issue39-auto", differentialScript, StringComparison.Ordinal);
         Assert.Contains("run_tool_stdin()", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case fixed_literal exact -P -F -n 'foo(?=bar)' pcre2-fixed", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case fixed_literal_json mask-elapsed -P -F --json 'foo(?=bar)' pcre2-fixed", differentialScript, StringComparison.Ordinal);
@@ -3384,10 +3389,14 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("line_regex_anchored_general", script, StringComparison.Ordinal);
         Assert.Contains("line_regex_bounded_class_general", script, StringComparison.Ordinal);
         Assert.Contains("line_regex_bounded_class_exact_general", script, StringComparison.Ordinal);
+        Assert.Contains("nested_literal_alternation_match_general", script, StringComparison.Ordinal);
+        Assert.Contains("nested_literal_alternation_no_match_general", script, StringComparison.Ordinal);
         Assert.Contains("shared_delegate_prefix_general", script, StringComparison.Ordinal);
         Assert.Contains("many_absent_regexp_general", script, StringComparison.Ordinal);
         Assert.Contains("many_absent_pattern_file_general", script, StringComparison.Ordinal);
         Assert.Contains("GATE_MANY_ABSENT_INPUT_COUNT=\"16\"", script, StringComparison.Ordinal);
+        Assert.Contains("GATE_NESTED_LITERAL_MATCH_INPUT_COUNT=\"2\"", script, StringComparison.Ordinal);
+        Assert.Contains("GATE_NESTED_LITERAL_NO_MATCH_INPUT_COUNT=\"4\"", script, StringComparison.Ordinal);
         Assert.Contains("repeat_shell_argument", script, StringComparison.Ordinal);
         Assert.Contains("$MANY_ABSENT_INPUTS", script, StringComparison.Ordinal);
         Assert.Contains("expect_no_match_command", script, StringComparison.Ordinal);
@@ -3403,6 +3412,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("for (i = 0; i < 64; i++)", script, StringComparison.Ordinal);
         Assert.Contains("alpha bravo charl delta eagle foxtt and unrelated symbols.", script, StringComparison.Ordinal);
         Assert.Contains("internal sealed class GeneratedRecord\\r\\n", script, StringComparison.Ordinal);
+        Assert.Contains("internal sealed class PaladinRecord\\r\\n", script, StringComparison.Ordinal);
+        Assert.Contains("internal sealed class PaladinValue\\r\\n", script, StringComparison.Ordinal);
         Assert.Contains("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_abcdefghijklmnopqrstuvwxyz_", script, StringComparison.Ordinal);
         Assert.Contains("ShowCheckboxMessageBoxHandler", script, StringComparison.Ordinal);
         Assert.Contains("make_absent_regexp_arguments", script, StringComparison.Ordinal);
@@ -3414,6 +3425,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains(@"^internal sealed class GeneratedRecord\\r?$", script, StringComparison.Ordinal);
         Assert.Contains(@"^[A-Za-z_]{70,90}\\r?$", script, StringComparison.Ordinal);
         Assert.Contains(@"^[A-Za-z_]{70,90}$", script, StringComparison.Ordinal);
+        Assert.Contains("(?:Generated|Paladin(?:Record|Value))", script, StringComparison.Ordinal);
+        Assert.Contains("(?:Absent|Missing(?:Two|Three))", script, StringComparison.Ordinal);
         Assert.Contains("delegate .*ShowMessageBoxHandler|delegate .*UpdateEDIEvent", script, StringComparison.Ordinal);
         Assert.Contains("RG_MANY_ABSENT_REGEXP_COMMAND", script, StringComparison.Ordinal);
         Assert.Contains("RG_MANY_ABSENT_PATTERN_FILE_COMMAND", script, StringComparison.Ordinal);
@@ -3569,6 +3582,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("test_resolved_environments_are_exported_to_subprocess_helpers", gateShellTests, StringComparison.Ordinal);
         Assert.Contains("test_host_tools_select_the_environment_that_executes_the_gate", gateShellTests, StringComparison.Ordinal);
         Assert.Contains("test_issue_44_absent_pattern_gates_remain_in_the_release_suite", gateShellTests, StringComparison.Ordinal);
+        Assert.Contains("test_issue_46_nested_literal_gates_remain_in_the_release_suite", gateShellTests, StringComparison.Ordinal);
         Assert.Contains("-m unittest discover -s \"$ROOT/bench/tests\"", preflight, StringComparison.Ordinal);
         Assert.Contains("uses ten valid measured rounds and two warmup", readme, StringComparison.Ordinal);
         Assert.Contains("twenty measured timing samples and five clean", readme, StringComparison.Ordinal);
@@ -3583,6 +3597,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("line_regex_anchored_general", parity, StringComparison.Ordinal);
         Assert.Contains("line_regex_bounded_class_general", parity, StringComparison.Ordinal);
         Assert.Contains("line_regex_bounded_class_exact_general", parity, StringComparison.Ordinal);
+        Assert.Contains("nested_literal_alternation_match_general", parity, StringComparison.Ordinal);
+        Assert.Contains("nested_literal_alternation_no_match_general", parity, StringComparison.Ordinal);
         Assert.Contains("shared_delegate_prefix_general", parity, StringComparison.Ordinal);
         Assert.Contains("many_absent_regexp_general", parity, StringComparison.Ordinal);
         Assert.Contains("many_absent_pattern_file_general", parity, StringComparison.Ordinal);
