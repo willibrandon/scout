@@ -214,6 +214,57 @@ internal static class RegexUtf8ByteCompiler
     }
 
     /// <summary>
+    /// Reports whether normalized scalar ranges can be represented by one ASCII byte class.
+    /// </summary>
+    /// <param name="ranges">The normalized scalar ranges.</param>
+    /// <returns><see langword="true" /> when at least one range exists and every scalar is ASCII.</returns>
+    public static bool CanLowerToAsciiByteClass(List<RegexScalarRange> ranges)
+    {
+        if (ranges.Count == 0)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < ranges.Count; index++)
+        {
+            RegexScalarRange range = ranges[index];
+            if (range.Start < 0 || range.End > 0x7F)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Attempts to represent normalized scalar ranges as one byte-class payload.
+    /// </summary>
+    /// <param name="ranges">The normalized scalar ranges.</param>
+    /// <param name="byteRanges">Receives the inclusive byte-range pairs.</param>
+    /// <returns><see langword="true" /> when every scalar is ASCII.</returns>
+    public static bool TryGetAsciiByteRanges(
+        List<RegexScalarRange> ranges,
+        out byte[] byteRanges)
+    {
+        byteRanges = [];
+        if (!CanLowerToAsciiByteClass(ranges))
+        {
+            return false;
+        }
+
+        byteRanges = new byte[ranges.Count * 2];
+        for (int index = 0; index < ranges.Count; index++)
+        {
+            RegexScalarRange range = ranges[index];
+            byteRanges[index * 2] = (byte)range.Start;
+            byteRanges[(index * 2) + 1] = (byte)range.End;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Attempts to lower a large reverse atom as decomposed UTF-8 range sequences.
     /// </summary>
     /// <param name="kind">The syntax atom kind.</param>
@@ -315,6 +366,306 @@ internal static class RegexUtf8ByteCompiler
         }
 
         return ranges.Count != 0;
+    }
+
+    /// <summary>
+    /// Attempts to build sorted, merged scalar ranges from one parsed syntax atom.
+    /// </summary>
+    /// <param name="atom">The parsed atom carrying authoritative syntax semantics.</param>
+    /// <param name="options">The effective compile options.</param>
+    /// <param name="ranges">Receives the normalized scalar ranges.</param>
+    /// <returns><see langword="true" /> when the atom has a supported scalar-set representation.</returns>
+    internal static bool TryBuildNormalizedScalarRanges(
+        RegexAtomNode atom,
+        RegexCompileOptions options,
+        out List<RegexScalarRange> ranges)
+    {
+        ArgumentNullException.ThrowIfNull(atom);
+
+        bool lowered;
+        if (atom.CharacterClass is not null)
+        {
+            ranges = [];
+            lowered = TryAddCharacterClassRanges(ranges, atom.CharacterClass, options);
+        }
+        else if (atom.UnicodeProperty is not null)
+        {
+            ranges = [];
+            if (!options.UnicodeClasses)
+            {
+                return true;
+            }
+
+            lowered = TryAddUnicodePropertyRanges(
+                ranges,
+                atom.UnicodeProperty,
+                options.CaseInsensitive,
+                atom.Kind == RegexSyntaxKind.NotUnicodePropertyClass);
+        }
+        else if (atom.Kind == RegexSyntaxKind.Literal && atom.Scalar >= 0)
+        {
+            ranges = [];
+            lowered = TryAddLiteralScalarRanges(
+                ranges,
+                atom.Scalar,
+                options.CaseInsensitive,
+                options.UnicodeClasses);
+        }
+        else
+        {
+            return TryBuildNormalizedScalarRanges(atom.Kind, atom.Value.Span, options, out ranges);
+        }
+
+        if (!lowered)
+        {
+            ranges = [];
+            return false;
+        }
+
+        Normalize(ranges);
+        if (options.ExcludeLineTerminators)
+        {
+            RemoveLineTerminators(ranges, options.ExcludeCrLf, options.ExcludedLineTerminator);
+        }
+
+        return true;
+    }
+
+    private static bool TryAddCharacterClassRanges(
+        List<RegexScalarRange> ranges,
+        RegexCharacterClass characterClass,
+        RegexCompileOptions options)
+    {
+        if (!TryAddClassSetRanges(ranges, characterClass.Expression, options))
+        {
+            return false;
+        }
+
+        if (characterClass.Negated)
+        {
+            ComplementInPlace(ranges);
+        }
+
+        return true;
+    }
+
+    private static bool TryAddClassSetRanges(
+        List<RegexScalarRange> ranges,
+        RegexClassSetNode node,
+        RegexCompileOptions options)
+    {
+        switch (node.Kind)
+        {
+            case RegexClassSetKind.Empty:
+                return true;
+            case RegexClassSetKind.Literal:
+                ValidateClassScalar(node.Scalar, node.LiteralKind, options);
+                return TryAddLiteralScalarRanges(
+                    ranges,
+                    node.Scalar,
+                    options.CaseInsensitive,
+                    options.UnicodeClasses);
+            case RegexClassSetKind.Range:
+                ValidateClassScalar(node.Scalar, node.LiteralKind, options);
+                ValidateClassScalar(node.RangeEnd, node.RangeEndLiteralKind, options);
+                AddClassRangeRanges(
+                    ranges,
+                    node.Scalar,
+                    node.RangeEnd,
+                    options.CaseInsensitive,
+                    options.UnicodeClasses);
+                return true;
+            case RegexClassSetKind.Atom:
+                return TryAddClassAtomRanges(ranges, node, options);
+            case RegexClassSetKind.Bracketed:
+                if (node.Bracketed is null ||
+                    !TryAddCharacterClassRanges(ranges, node.Bracketed, options))
+                {
+                    return false;
+                }
+
+                return true;
+            case RegexClassSetKind.Union:
+                for (int index = 0; index < node.Items.Count; index++)
+                {
+                    if (!TryAddClassSetRanges(ranges, node.Items[index], options))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            case RegexClassSetKind.Binary:
+                return TryAddBinaryClassSetRanges(ranges, node, options);
+            default:
+                return false;
+        }
+    }
+
+    private static bool TryAddClassAtomRanges(
+        List<RegexScalarRange> ranges,
+        RegexClassSetNode node,
+        RegexCompileOptions options)
+    {
+        RegexSyntaxKind atomKind = node.AtomKind;
+        bool negated = node.Negated;
+        if (atomKind is RegexSyntaxKind.NotDigitClass
+            or RegexSyntaxKind.NotWordClass
+            or RegexSyntaxKind.NotWhitespaceClass
+            or RegexSyntaxKind.NotUnicodePropertyClass)
+        {
+            negated = !negated;
+            atomKind = atomKind switch
+            {
+                RegexSyntaxKind.NotDigitClass => RegexSyntaxKind.DigitClass,
+                RegexSyntaxKind.NotWordClass => RegexSyntaxKind.WordClass,
+                RegexSyntaxKind.NotWhitespaceClass => RegexSyntaxKind.WhitespaceClass,
+                _ => RegexSyntaxKind.UnicodePropertyClass,
+            };
+        }
+
+        int startCount = ranges.Count;
+        bool added = atomKind switch
+        {
+            RegexSyntaxKind.DigitClass => AddDigitRanges(ranges, options.UnicodeClasses),
+            RegexSyntaxKind.WordClass => AddWordRanges(ranges, options.UnicodeClasses),
+            RegexSyntaxKind.WhitespaceClass => AddWhitespaceRanges(ranges, options.UnicodeClasses),
+            RegexSyntaxKind.LetterClass => AddLetterRanges(ranges, options.UnicodeClasses),
+            RegexSyntaxKind.AlphanumericClass => AddAlphanumericRanges(ranges, options.UnicodeClasses),
+            RegexSyntaxKind.AnyClass => AddAnyScalarRanges(ranges),
+            RegexSyntaxKind.UnicodePropertyClass when node.UnicodeProperty is not null =>
+                options.UnicodeClasses && TryAddUnicodePropertyRanges(
+                    ranges,
+                    node.UnicodeProperty,
+                    options.CaseInsensitive,
+                    negated: false),
+            _ => false,
+        };
+        if (!added)
+        {
+            if (atomKind == RegexSyntaxKind.UnicodePropertyClass && !options.UnicodeClasses)
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        if (negated)
+        {
+            List<RegexScalarRange> atomRanges = ranges.GetRange(startCount, ranges.Count - startCount);
+            ranges.RemoveRange(startCount, ranges.Count - startCount);
+            ComplementInPlace(atomRanges);
+            ranges.AddRange(atomRanges);
+        }
+
+        return true;
+    }
+
+    private static bool TryAddBinaryClassSetRanges(
+        List<RegexScalarRange> ranges,
+        RegexClassSetNode node,
+        RegexCompileOptions options)
+    {
+        if (node.Left is null || node.Right is null)
+        {
+            return false;
+        }
+
+        var left = new List<RegexScalarRange>();
+        var right = new List<RegexScalarRange>();
+        if (!TryAddClassSetRanges(left, node.Left, options) ||
+            !TryAddClassSetRanges(right, node.Right, options))
+        {
+            return false;
+        }
+
+        Normalize(left);
+        Normalize(right);
+        switch (node.BinaryOperator)
+        {
+            case RegexClassSetBinaryOperator.Intersection:
+                IntersectInPlace(left, right);
+                break;
+            case RegexClassSetBinaryOperator.Difference:
+                ExceptInPlace(left, right);
+                break;
+            case RegexClassSetBinaryOperator.SymmetricDifference:
+                List<RegexScalarRange> leftOnly = [.. left];
+                List<RegexScalarRange> rightOnly = [.. right];
+                ExceptInPlace(leftOnly, right);
+                ExceptInPlace(rightOnly, left);
+                left = leftOnly;
+                left.AddRange(rightOnly);
+                Normalize(left);
+                break;
+        }
+
+        ranges.AddRange(left);
+        return true;
+    }
+
+    private static void ValidateClassScalar(
+        int scalar,
+        RegexLiteralKind literalKind,
+        RegexCompileOptions options)
+    {
+        if (options.Utf8 || options.UnicodeClasses || scalar <= 0x7F ||
+            literalKind == RegexLiteralKind.HexFixed && scalar <= byte.MaxValue)
+        {
+            return;
+        }
+
+        throw new FormatException("Unicode not allowed here");
+    }
+
+    private static bool TryAddUnicodePropertyRanges(
+        List<RegexScalarRange> ranges,
+        RegexUnicodeProperty property,
+        bool caseInsensitive,
+        bool negated)
+    {
+        switch (property.Family)
+        {
+            case RegexUnicodePropertyFamily.Property:
+                RegexUnicodePropertyKind kind = property.PropertyKind;
+                if (caseInsensitive &&
+                    kind is RegexUnicodePropertyKind.CasedLetter
+                        or RegexUnicodePropertyKind.LowercaseLetter
+                        or RegexUnicodePropertyKind.TitlecaseLetter
+                        or RegexUnicodePropertyKind.UppercaseLetter)
+                {
+                    AddTableRanges(ranges, RegexUnicodeTables.GetGeneralCategoryRanges(RegexUnicodePropertyKind.CasedLetter));
+                }
+                else
+                {
+                    AddTableRanges(ranges, RegexUnicodeTables.GetGeneralCategoryRanges(kind));
+                    AddTableRanges(ranges, RegexUnicodeTables.GetBooleanPropertyRanges(kind));
+                    AddTableRanges(ranges, RegexUnicodeTables.GetBreakPropertyRanges(kind));
+                    AddTableRanges(ranges, RegexUnicodeTables.GetScriptRanges(kind));
+                    AddTableRanges(ranges, RegexUnicodeTables.GetScriptExtensionRanges(kind));
+                }
+
+                break;
+            case RegexUnicodePropertyFamily.Script:
+                AddTableRanges(ranges, RegexUnicodeTables.GetScriptRanges(property.ScriptKind));
+                break;
+            case RegexUnicodePropertyFamily.ScriptExtensions:
+                AddTableRanges(ranges, RegexUnicodeTables.GetScriptExtensionRanges(property.ScriptKind));
+                break;
+        }
+
+        if (caseInsensitive)
+        {
+            AddSimpleCaseFoldClosure(ranges);
+        }
+
+        if (negated)
+        {
+            ComplementInPlace(ranges);
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -616,9 +967,24 @@ internal static class RegexUtf8ByteCompiler
             return false;
         }
 
-        if (!caseInsensitive || !unicodeClasses)
+        if (!caseInsensitive)
         {
             AddRange(ranges, scalar, scalar);
+            return true;
+        }
+
+        if (!unicodeClasses)
+        {
+            AddRange(ranges, scalar, scalar);
+            if (scalar is >= 'A' and <= 'Z')
+            {
+                AddRange(ranges, scalar + ('a' - 'A'), scalar + ('a' - 'A'));
+            }
+            else if (scalar is >= 'a' and <= 'z')
+            {
+                AddRange(ranges, scalar - ('a' - 'A'), scalar - ('a' - 'A'));
+            }
+
             return true;
         }
 
@@ -651,58 +1017,91 @@ internal static class RegexUtf8ByteCompiler
         bool caseInsensitive,
         bool unicodeClasses)
     {
-        if (start <= byte.MaxValue && end <= byte.MaxValue)
-        {
-            byte foldedStart = FoldMaybe((byte)start, caseInsensitive);
-            byte foldedEnd = FoldMaybe((byte)end, caseInsensitive);
-            for (int value = 0; value <= 0x7F; value++)
-            {
-                byte foldedValue = FoldMaybe((byte)value, caseInsensitive);
-                if (foldedStart <= foldedValue && foldedValue <= foldedEnd)
-                {
-                    AddRange(ranges, value, value);
-                }
-            }
-
-            if (!caseInsensitive || !unicodeClasses)
-            {
-                return;
-            }
-
-            for (byte candidate = (byte)'a'; candidate <= (byte)'z'; candidate++)
-            {
-                if (foldedStart > candidate || candidate > foldedEnd)
-                {
-                    continue;
-                }
-
-                List<Rune> equivalents = [];
-                RegexUnicodeTables.AddSimpleCaseFoldEquivalents(new Rune(candidate), equivalents);
-                for (int index = 0; index < equivalents.Count; index++)
-                {
-                    AddRange(ranges, equivalents[index].Value, equivalents[index].Value);
-                }
-            }
-
-            return;
-        }
-
         AddRange(ranges, start, end);
-        if (!caseInsensitive || !unicodeClasses)
+        if (!caseInsensitive)
         {
             return;
         }
 
-        int asciiEnd = Math.Min(end, (byte)'z');
-        for (int candidate = Math.Max(start, (byte)'a'); candidate <= asciiEnd; candidate++)
+        if (unicodeClasses)
         {
-            List<Rune> equivalents = [];
-            RegexUnicodeTables.AddSimpleCaseFoldEquivalents(new Rune(candidate), equivalents);
-            for (int index = 0; index < equivalents.Count; index++)
+            AddSimpleCaseFoldClosure(ranges);
+            return;
+        }
+
+        for (int offset = 0; offset < 26; offset++)
+        {
+            int upper = 'A' + offset;
+            int lower = 'a' + offset;
+            if (start <= upper && upper <= end)
             {
-                AddRange(ranges, equivalents[index].Value, equivalents[index].Value);
+                AddRange(ranges, lower, lower);
+            }
+
+            if (start <= lower && lower <= end)
+            {
+                AddRange(ranges, upper, upper);
             }
         }
+    }
+
+    private static void AddSimpleCaseFoldClosure(List<RegexScalarRange> ranges)
+    {
+        Normalize(ranges);
+        var added = new HashSet<int>();
+        ReadOnlySpan<int> pairs = RegexUnicodeTables.SimpleCaseFoldPairs;
+        bool changed;
+        do
+        {
+            changed = false;
+            for (int index = 0; index < pairs.Length; index += 2)
+            {
+                int first = pairs[index];
+                int second = pairs[index + 1];
+                bool containsFirst = added.Contains(first) || ContainsScalar(ranges, first);
+                bool containsSecond = added.Contains(second) || ContainsScalar(ranges, second);
+                if (containsFirst)
+                {
+                    changed |= added.Add(second);
+                }
+
+                if (containsSecond)
+                {
+                    changed |= added.Add(first);
+                }
+            }
+        }
+        while (changed);
+
+        foreach (int scalar in added)
+        {
+            AddRange(ranges, scalar, scalar);
+        }
+    }
+
+    private static bool ContainsScalar(IReadOnlyList<RegexScalarRange> ranges, int scalar)
+    {
+        int low = 0;
+        int high = ranges.Count - 1;
+        while (low <= high)
+        {
+            int middle = low + ((high - low) / 2);
+            RegexScalarRange range = ranges[middle];
+            if (scalar < range.Start)
+            {
+                high = middle - 1;
+            }
+            else if (scalar > range.End)
+            {
+                low = middle + 1;
+            }
+            else
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool TryReadEscapedHexScalar(ReadOnlySpan<byte> expression, ref int index, byte escaped, out int scalar)
@@ -1319,6 +1718,16 @@ internal static class RegexUtf8ByteCompiler
 
         ranges.Clear();
         ranges.AddRange(result);
+    }
+
+    private static void ExceptInPlace(List<RegexScalarRange> ranges, List<RegexScalarRange> other)
+    {
+        Normalize(other);
+        RegexScalarRange[] excluded = other.ToArray();
+        Normalize(ranges);
+        RegexScalarRange[] source = ranges.ToArray();
+        ranges.Clear();
+        AddComplementAgainst(ranges, excluded, source);
     }
 
     private static void AddComplementAgainst(

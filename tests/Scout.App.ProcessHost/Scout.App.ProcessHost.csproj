@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Scout.App\Scout.App.csproj" />
+    <ProjectReference Include="..\..\src\Scout.Os\Scout.Os.csproj" />
+  </ItemGroup>
+
+</Project>

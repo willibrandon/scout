@@ -131,6 +131,8 @@ class PerformanceProcessStateTests(unittest.TestCase):
                 "BOUNDED_ASSIGNMENT_WARMUP=6\nBOUNDED_ASSIGNMENT_RUNS=6\n"
                 "LINE_REGEX_WARMUP=6\nLINE_REGEX_RUNS=6\n"
                 "GATE_MANY_ABSENT_INPUT_COUNT=16\n"
+                "GATE_NESTED_LITERAL_MATCH_INPUT_COUNT=2\n"
+                "GATE_NESTED_LITERAL_NO_MATCH_INPUT_COUNT=4\n"
                 "SCOUT_SOURCE_COMMIT=commit\nSCOUT_SOURCE_FINGERPRINT=fingerprint\n"
                 "SCOUT_SOURCE_DIRTY=0\nSCOUT_BUILD_DOTNET_SDK=10.0.102\n"
                 "SCOUT_BUILD_DOTNET_HOST_RUNTIME=10.0.9\n"

@@ -56,6 +56,8 @@ GATE_LARGE_FILE_THREADS="4"
 GATE_TREE_THREADS="3"
 GATE_LARGE_FILE_SEGMENT_BUFFER_LENGTH="131072"
 GATE_MANY_ABSENT_INPUT_COUNT="16"
+GATE_NESTED_LITERAL_MATCH_INPUT_COUNT="2"
+GATE_NESTED_LITERAL_NO_MATCH_INPUT_COUNT="4"
 PERFORMANCE_GATE_FAILED_STATUS="10"
 PERFORMANCE_INPUT_MANIFEST=""
 PERFORMANCE_REPRO_MANIFEST=""
@@ -643,7 +645,10 @@ print_repro_manifest() {
         "$COLD_WARMUP" "$COLD_RUNS" \
         "$BOUNDED_ASSIGNMENT_WARMUP" "$BOUNDED_ASSIGNMENT_RUNS" \
         "$LINE_REGEX_WARMUP" "$LINE_REGEX_RUNS"
-    printf 'many-absent input arguments: %s\n' "$GATE_MANY_ABSENT_INPUT_COUNT"
+    printf 'repeated input arguments: many-absent=%s; nested-literal-match=%s; nested-literal-no-match=%s\n' \
+        "$GATE_MANY_ABSENT_INPUT_COUNT" \
+        "$GATE_NESTED_LITERAL_MATCH_INPUT_COUNT" \
+        "$GATE_NESTED_LITERAL_NO_MATCH_INPUT_COUNT"
     if [ -n "$WORKLOAD" ]; then
         printf 'scope: focused diagnosis; run --gate without --workload for the release-gate sequence\n'
     else
@@ -898,6 +903,8 @@ make_line_regex_corpus() {
             printf "internal sealed class OtherRecord { private readonly int _state; }\r\n"
         }
 
+        printf "internal sealed class PaladinRecord\r\n"
+        printf "internal sealed class PaladinValue\r\n"
         printf "    public delegate bool ShowMessageBoxHandler(string message, string caption, bool buttons);\r\n"
         printf "    public delegate bool ShowCheckboxMessageBoxHandler(string message, string caption, bool buttons);\r\n"
         printf "    public delegate void SetProgressBarValue(int percentComplete, int currentValue);\r\n"
@@ -1494,6 +1501,8 @@ is_gate_workload() {
         line_regex_anchored_general|\
         line_regex_bounded_class_general|\
         line_regex_bounded_class_exact_general|\
+        nested_literal_alternation_match_general|\
+        nested_literal_alternation_no_match_general|\
         shared_delegate_prefix_general|\
         many_absent_regexp_general|\
         many_absent_pattern_file_general|\
@@ -1546,6 +1555,8 @@ list_workloads() {
         'line_regex_anchored_general  generated issue #37 anchored-line scan in general mode, gate <= 1.50x' \
         'line_regex_bounded_class_general generated issue #37 bounded-class scan in general mode, gate <= 1.50x' \
         'line_regex_bounded_class_exact_general generated issue #37 exact bounded-class scan in general mode, gate <= 1.50x' \
+        'nested_literal_alternation_match_general generated issue #46 nested finite-language match scan in general mode, gate <= 1.50x' \
+        'nested_literal_alternation_no_match_general generated issue #46 nested finite-language no-match scan in general mode, gate <= 1.50x' \
         'shared_delegate_prefix_general generated issue #36 shared-prefix alternation in general mode, gate <= 1.50x' \
         'many_absent_regexp_general  generated issue #44 64-pattern -e scan in general mode, gate <= 1.50x' \
         'many_absent_pattern_file_general generated issue #44 64-pattern -f scan in general mode, gate <= 1.50x' \
@@ -1748,6 +1759,8 @@ SHARED_DELEGATE_INPUTS="$Q_LINE_REGEX_INPUT $Q_LINE_REGEX_INPUT $Q_LINE_REGEX_IN
 Q_LINE_REGEX_ABSENT_PATTERNS="$(shell_quote "$OUT_DIR/line-regex/absent-patterns-64.txt")"
 LINE_REGEX_ABSENT_REGEXP_ARGUMENTS="$(make_absent_regexp_arguments "$OUT_DIR/line-regex/absent-patterns-64.txt")"
 MANY_ABSENT_INPUTS="$(repeat_shell_argument "$Q_LINE_REGEX_INPUT" "$GATE_MANY_ABSENT_INPUT_COUNT")"
+NESTED_LITERAL_MATCH_INPUTS="$(repeat_shell_argument "$Q_LINE_REGEX_INPUT" "$GATE_NESTED_LITERAL_MATCH_INPUT_COUNT")"
+NESTED_LITERAL_NO_MATCH_INPUTS="$(repeat_shell_argument "$Q_LINE_REGEX_INPUT" "$GATE_NESTED_LITERAL_NO_MATCH_INPUT_COUNT")"
 GENERAL_REGEX_ENVIRONMENT="SCOUT_REGEX_SPECIALIZATION_MODE=general"
 
 if workload_group_selected subtitles_en_literal subtitles_en_regex; then
@@ -1875,6 +1888,26 @@ run_gate_pair \
     "1.50" \
     "$RG_LINE_REGEX_BOUNDED_CLASS_EXACT_COMMAND" \
     "$SCOUT_LINE_REGEX_BOUNDED_CLASS_EXACT_COMMAND" \
+    "$LINE_REGEX_RUNS" \
+    "$LINE_REGEX_WARMUP" \
+    "$ROOT" \
+    "1" \
+    "$GENERAL_REGEX_ENVIRONMENT"
+run_gate_pair \
+    "nested_literal_alternation_match_general" \
+    "1.50" \
+    "$RG_LINE_REGEX_PREFIX '(?:Generated|Paladin(?:Record|Value))' $NESTED_LITERAL_MATCH_INPUTS" \
+    "$SCOUT_LINE_REGEX_PREFIX '(?:Generated|Paladin(?:Record|Value))' $NESTED_LITERAL_MATCH_INPUTS" \
+    "$LINE_REGEX_RUNS" \
+    "$LINE_REGEX_WARMUP" \
+    "$ROOT" \
+    "0" \
+    "$GENERAL_REGEX_ENVIRONMENT"
+run_gate_pair \
+    "nested_literal_alternation_no_match_general" \
+    "1.50" \
+    "$RG_LINE_REGEX_PREFIX '(?:Absent|Missing(?:Two|Three))' $NESTED_LITERAL_NO_MATCH_INPUTS" \
+    "$SCOUT_LINE_REGEX_PREFIX '(?:Absent|Missing(?:Two|Three))' $NESTED_LITERAL_NO_MATCH_INPUTS" \
     "$LINE_REGEX_RUNS" \
     "$LINE_REGEX_WARMUP" \
     "$ROOT" \

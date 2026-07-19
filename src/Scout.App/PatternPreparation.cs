@@ -266,14 +266,34 @@ internal static class PatternPreparation
     /// <returns><see langword="true" /> when every repetition is valid.</returns>
     public static bool TryValidateRegexRepetitionExpressions(List<byte[]> patterns, DiagnosticMessenger diagnostics)
     {
+        if (TryValidateRegexRepetitionExpressions(patterns, out ScoutError? error))
+        {
+            return true;
+        }
+
+        diagnostics.ErrorMessage(error!.WithContext(ScoutErrorContext.ProgramContext()));
+        return false;
+    }
+
+    /// <summary>
+    /// Validates that repetition operators have preceding expressions without emitting a diagnostic.
+    /// </summary>
+    /// <param name="patterns">The patterns to validate.</param>
+    /// <param name="error">Receives the parse error.</param>
+    /// <returns><see langword="true" /> when every repetition is valid.</returns>
+    internal static bool TryValidateRegexRepetitionExpressions(
+        IReadOnlyList<byte[]> patterns,
+        out ScoutError? error)
+    {
+        error = null;
         for (int index = 0; index < patterns.Count; index++)
         {
             if (TryFindMissingRepetitionExpression(patterns[index], out int offset))
             {
-                diagnostics.ErrorMessage(new ScoutError(BuildRegexParseError(
+                error = new ScoutError(BuildRegexParseError(
                     patterns[index],
                     offset,
-                    "repetition operator missing expression")).WithContext(ScoutErrorContext.ProgramContext()));
+                    "repetition operator missing expression"));
                 return false;
             }
         }
@@ -290,6 +310,28 @@ internal static class PatternPreparation
     /// <returns><see langword="true" /> when the estimated compiled size is within the limit.</returns>
     public static bool TryValidateRegexSizeLimit(List<byte[]> patterns, CliLowArgs lowArgs, DiagnosticMessenger diagnostics)
     {
+        if (TryValidateRegexSizeLimit(patterns, lowArgs, out ScoutError? error))
+        {
+            return true;
+        }
+
+        diagnostics.ErrorMessage(error!.WithContext(ScoutErrorContext.ProgramContext()));
+        return false;
+    }
+
+    /// <summary>
+    /// Validates the configured compiled-regex size limit without emitting a diagnostic.
+    /// </summary>
+    /// <param name="patterns">The patterns to estimate.</param>
+    /// <param name="lowArgs">The parsed low-level arguments.</param>
+    /// <param name="error">Receives the validation error.</param>
+    /// <returns><see langword="true" /> when the estimated compiled size is within the limit.</returns>
+    internal static bool TryValidateRegexSizeLimit(
+        List<byte[]> patterns,
+        CliLowArgs lowArgs,
+        out ScoutError? error)
+    {
+        error = null;
         if (lowArgs.RegexSizeLimit is not ulong limit)
         {
             return true;
@@ -301,7 +343,7 @@ internal static class PatternPreparation
             compiledSize = SaturatingAdd(compiledSize, EstimateCompiledRegexSize(patterns[index], lowArgs.Unicode));
             if (compiledSize > limit)
             {
-                diagnostics.ErrorMessage(new ScoutError($"compiled regex exceeds size limit of {limit}").WithContext(ScoutErrorContext.ProgramContext()));
+                error = new ScoutError($"compiled regex exceeds size limit of {limit}");
                 return false;
             }
         }

@@ -429,6 +429,136 @@ public sealed class ScoutApplicationTests
     }
 
     /// <summary>
+    /// Verifies auto selection dispatches through the native matcher retained during planning.
+    /// </summary>
+    [Fact]
+    public void AutoRegexDispatchesSuccessfulNativePlan()
+    {
+        using MemoryStream input = new("alpha\nneedle\nomega\n"u8.ToArray());
+        using MemoryStream output = new();
+        using MemoryStream error = new();
+        var outputWriter = new RawByteWriter(output);
+        var errorWriter = new RawByteWriter(error);
+        OsString[] arguments =
+        [
+            OsString.FromUnixBytes("scout"u8),
+            OsString.FromUnixBytes("--engine=auto"u8),
+            OsString.FromUnixBytes("needle"u8),
+            OsString.FromUnixBytes("-"u8),
+        ];
+
+        int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter, input);
+
+        Assert.Equal(ExitCode.Success, exitCode);
+        Assert.Equal("needle\n"u8.ToArray(), output.ToArray());
+        Assert.Empty(error.ToArray());
+    }
+
+    /// <summary>
+    /// Verifies auto selection reports both engine errors after native construction fails.
+    /// </summary>
+    [Fact]
+    public void AutoRegexReportsBothEngineConstructionFailures()
+    {
+        using MemoryStream input = new("a\n"u8.ToArray());
+        using MemoryStream output = new();
+        using MemoryStream error = new();
+        var outputWriter = new RawByteWriter(output);
+        var errorWriter = new RawByteWriter(error);
+        OsString[] arguments =
+        [
+            OsString.FromUnixBytes("scout"u8),
+            OsString.FromUnixBytes("--engine=auto"u8),
+            OsString.FromUnixBytes("(?=a)a"u8),
+            OsString.FromUnixBytes("-"u8),
+        ];
+
+        int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter, input);
+        string diagnostic = Utf8(error.ToArray());
+
+        Assert.Equal(ExitCode.Error, exitCode);
+        Assert.Empty(output.ToArray());
+        Assert.StartsWith(
+            "scout: regex could not be compiled with either the default regex engine or with PCRE2.",
+            diagnostic,
+            StringComparison.Ordinal);
+        Assert.Contains("default regex engine error:\n", diagnostic, StringComparison.Ordinal);
+        Assert.Contains("PCRE2 regex engine error:\n", diagnostic, StringComparison.Ordinal);
+        Assert.Contains(Pcre2Library.UnavailableErrorMessage, diagnostic, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Verifies unsupported native escapes and invalid Unicode scalars return ordinary compile diagnostics.
+    /// </summary>
+    /// <param name="pattern">The invalid default-engine pattern.</param>
+    [Theory]
+    [InlineData(@"\q")]
+    [InlineData(@"\1")]
+    [InlineData(@"\K")]
+    [InlineData(@"\R")]
+    [InlineData(@"\X")]
+    [InlineData(@"\x{}")]
+    [InlineData(@"\uD800")]
+    [InlineData(@"\U00110000")]
+    [InlineData(@"\p{NotAUnicodeProperty}")]
+    public void DefaultRegexRejectsUnsupportedEscapesWithoutUnhandledFailures(string pattern)
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "Scout\n");
+
+        (int exitCode, byte[] output, string error) = RunScout(pattern, path);
+
+        Assert.Equal(ExitCode.Error, exitCode);
+        Assert.Empty(output);
+        Assert.StartsWith("scout: ", error, StringComparison.Ordinal);
+        Assert.Contains("byte offset", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Verifies multiline analysis reports invalid Unicode scalars without an unhandled exception.
+    /// </summary>
+    /// <param name="pattern">The expression containing an invalid Unicode scalar.</param>
+    [Theory]
+    [InlineData(@"\uD800")]
+    [InlineData(@"\U00110000")]
+    [InlineData(@"\x{110000}")]
+    public void MultilineRegexRejectsInvalidScalarsWithoutUnhandledFailures(string pattern)
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "Scout\n");
+
+        (int exitCode, byte[] output, string error) = RunScout("-U", pattern, path);
+
+        Assert.Equal(ExitCode.Error, exitCode);
+        Assert.Empty(output);
+        Assert.StartsWith("scout: ", error, StringComparison.Ordinal);
+        Assert.Contains("byte offset", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Verifies malformed nested character classes fail instead of being flattened.
+    /// </summary>
+    /// <param name="pattern">The malformed nested class expression.</param>
+    [Theory]
+    [InlineData("[a-c[0-2]")]
+    [InlineData("[[a-z]")]
+    public void DefaultRegexRejectsMalformedNestedCharacterClasses(string pattern)
+    {
+        string root = CreateTempDirectory();
+        string path = Path.Combine(root, "input.txt");
+        File.WriteAllText(path, "abc012\n");
+
+        (int exitCode, byte[] output, string error) = RunScout(pattern, path);
+
+        Assert.Equal(ExitCode.Error, exitCode);
+        Assert.Empty(output);
+        Assert.Contains("unclosed character class", error, StringComparison.Ordinal);
+        Assert.Contains("byte offset", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies default regex mode supports byte character classes and escaped metacharacters.
     /// </summary>
     [Fact]

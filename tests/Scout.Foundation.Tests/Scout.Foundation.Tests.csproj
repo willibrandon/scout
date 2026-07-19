@@ -22,6 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Scout.App.ProcessHost\Scout.App.ProcessHost.csproj" />
     <ProjectReference Include="..\..\src\Scout.Bytes\Scout.Bytes.csproj" />
     <ProjectReference Include="..\..\src\Scout.Automata.Syntax\Scout.Automata.Syntax.csproj" />
     <ProjectReference Include="..\..\src\Scout.Automata\Scout.Automata.csproj" />

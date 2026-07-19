@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 
 namespace Scout;
@@ -145,7 +146,7 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
             }
 
             RegexSyntaxNode node = ParseAtom();
-            if (TryParseRepetition(node, out RegexSyntaxNode repeated))
+            while (TryParseRepetition(node, out RegexSyntaxNode repeated))
             {
                 node = repeated;
             }
@@ -165,7 +166,7 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
     {
         int position = _index;
         byte token = Pattern[_index++];
-        if (token is (byte)'?' or (byte)'*' or (byte)'+')
+        if (token is (byte)'?' or (byte)'*' or (byte)'+' or (byte)'{')
         {
             Throw("repetition operator missing expression");
         }
@@ -185,14 +186,18 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
     private RegexAtomNode ParseLiteral(int position, byte token)
     {
         if (token > 0x7F &&
-            Rune.DecodeFromUtf8(Pattern[position..], out _, out int length) == OperationStatus.Done &&
+            Rune.DecodeFromUtf8(Pattern[position..], out Rune rune, out int length) == OperationStatus.Done &&
             length > 1)
         {
             _index = position + length;
-            return new RegexAtomNode(RegexSyntaxKind.Literal, Pattern.Slice(position, length).ToArray(), position);
+            return new RegexAtomNode(
+                RegexSyntaxKind.Literal,
+                Pattern.Slice(position, length).ToArray(),
+                position,
+                rune.Value);
         }
 
-        return new RegexAtomNode(RegexSyntaxKind.Literal, new[] { token }, position);
+        return new RegexAtomNode(RegexSyntaxKind.Literal, new[] { token }, position, token);
     }
 
     private RegexSyntaxNode ParseGroup(int position)
@@ -399,93 +404,446 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
         scoped = false;
     }
 
-    private RegexSyntaxNode ParseClass(int position)
+    private RegexAtomNode ParseClass(int position)
     {
         int expressionStart = _index;
-        if (_extendedMode)
+        RegexCharacterClass characterClass = ParseBracketedClass(depth: 1);
+        int expressionLength = (_index - 1) - expressionStart;
+        return new RegexAtomNode(
+            RegexSyntaxKind.CharacterClass,
+            _pattern.Slice(expressionStart, expressionLength),
+            position,
+            characterClass: characterClass);
+    }
+
+    private RegexCharacterClass ParseBracketedClass(int depth)
+    {
+        const int nestingLimit = 250;
+        if (depth > nestingLimit)
         {
-            var expression = new List<byte>();
-            while (_index < Pattern.Length)
-            {
-                byte value = Pattern[_index];
-                if (value == (byte)'\\' && _index + 1 < Pattern.Length)
-                {
-                    expression.Add(value);
-                    expression.Add(Pattern[_index + 1]);
-                    _index += 2;
-                    continue;
-                }
-
-                if (value == (byte)'[' &&
-                    _index + 1 < Pattern.Length &&
-                    Pattern[_index + 1] == (byte)':' &&
-                    TryFindPosixClassEnd(_index + 2, out int posixClassEnd))
-                {
-                    expression.AddRange(Pattern[_index..(posixClassEnd + 1)].ToArray());
-                    _index = posixClassEnd + 1;
-                    continue;
-                }
-
-                if (value == (byte)']')
-                {
-                    _index++;
-                    return new RegexAtomNode(RegexSyntaxKind.CharacterClass, expression.ToArray(), position);
-                }
-
-                if (IsExtendedWhitespaceByte(value))
-                {
-                    _index++;
-                    continue;
-                }
-
-                if (value == (byte)'#')
-                {
-                    _index++;
-                    while (_index < Pattern.Length && Pattern[_index] != (byte)'\n')
-                    {
-                        _index++;
-                    }
-
-                    continue;
-                }
-
-                expression.Add(value);
-                _index++;
-            }
-
-            Throw("unclosed character class");
-            return new RegexEmptyNode(position);
+            Throw("character class nesting limit exceeded");
         }
 
-        while (_index < Pattern.Length)
+        SkipClassWhitespace();
+        if (_index >= Pattern.Length)
         {
-            if (Pattern[_index] == (byte)'\\')
-            {
-                _index += 2;
-                continue;
-            }
+            Throw("unclosed character class");
+        }
 
-            if (Pattern[_index] == (byte)'[' &&
-                _index + 1 < Pattern.Length &&
-                Pattern[_index + 1] == (byte)':' &&
-                TryFindPosixClassEnd(_index + 2, out int posixClassEnd))
+        bool negated = Pattern[_index] == (byte)'^';
+        if (negated)
+        {
+            _index++;
+            SkipClassWhitespace();
+        }
+
+        var union = new List<RegexClassSetNode>();
+        while (_index < Pattern.Length && Pattern[_index] == (byte)'-')
+        {
+            union.Add(new RegexClassSetNode(RegexClassSetKind.Literal, scalar: '-'));
+            _index++;
+            SkipClassWhitespace();
+        }
+
+        if (union.Count == 0 && _index < Pattern.Length && Pattern[_index] == (byte)']')
+        {
+            union.Add(new RegexClassSetNode(RegexClassSetKind.Literal, scalar: ']'));
+            _index++;
+            SkipClassWhitespace();
+        }
+
+        RegexClassSetNode? left = null;
+        RegexClassSetBinaryOperator? pendingOperator = null;
+        while (true)
+        {
+            SkipClassWhitespace();
+            if (_index >= Pattern.Length)
             {
-                _index = posixClassEnd + 1;
-                continue;
+                Throw("unclosed character class");
             }
 
             if (Pattern[_index] == (byte)']')
             {
-                ReadOnlyMemory<byte> expression = _pattern.Slice(expressionStart, _index - expressionStart);
                 _index++;
-                return new RegexAtomNode(RegexSyntaxKind.CharacterClass, expression, position);
+                RegexClassSetNode expression = CompleteClassUnion(union);
+                if (pendingOperator.HasValue)
+                {
+                    expression = new RegexClassSetNode(
+                        RegexClassSetKind.Binary,
+                        left: left,
+                        right: expression,
+                        binaryOperator: pendingOperator.Value);
+                }
+
+                return new RegexCharacterClass(negated, expression);
+            }
+
+            if (TryParseClassSetOperator(out RegexClassSetBinaryOperator binaryOperator))
+            {
+                RegexClassSetNode expression = CompleteClassUnion(union);
+                if (pendingOperator.HasValue)
+                {
+                    expression = new RegexClassSetNode(
+                        RegexClassSetKind.Binary,
+                        left: left,
+                        right: expression,
+                        binaryOperator: pendingOperator.Value);
+                }
+
+                left = expression;
+                pendingOperator = binaryOperator;
+                union.Clear();
+                continue;
+            }
+
+            union.Add(ParseClassSetRangeOrItem(depth));
+        }
+    }
+
+    private RegexClassSetNode ParseClassSetRangeOrItem(int depth)
+    {
+        RegexClassSetNode start = ParseClassSetItem(depth);
+        SkipClassWhitespace();
+        if (_index >= Pattern.Length || Pattern[_index] != (byte)'-')
+        {
+            return start;
+        }
+
+        byte? next = PeekClassSignificantByte(_index + 1);
+        if (next is (byte)']' or (byte)'-' || !next.HasValue)
+        {
+            return start;
+        }
+
+        _index++;
+        SkipClassWhitespace();
+        RegexClassSetNode end = ParseClassSetItem(depth);
+        if (start.Kind != RegexClassSetKind.Literal || end.Kind != RegexClassSetKind.Literal)
+        {
+            Throw("character class range endpoint is not a literal");
+        }
+
+        if (start.Scalar > end.Scalar)
+        {
+            Throw("character class range is invalid");
+        }
+
+        return new RegexClassSetNode(
+            RegexClassSetKind.Range,
+            scalar: start.Scalar,
+            rangeEnd: end.Scalar,
+            literalKind: start.LiteralKind,
+            rangeEndLiteralKind: end.LiteralKind);
+    }
+
+    private RegexClassSetNode ParseClassSetItem(int depth)
+    {
+        if (_index >= Pattern.Length)
+        {
+            Throw("unclosed character class");
+        }
+
+        if (Pattern[_index] == (byte)'\\')
+        {
+            int escapePosition = _index++;
+            RegexSyntaxNode escaped = ParseEscape(escapePosition);
+            if (escaped is not RegexAtomNode parsedAtom)
+            {
+                Throw("invalid escape in character class");
+                return new RegexClassSetNode(RegexClassSetKind.Empty);
+            }
+
+            RegexAtomNode atom = parsedAtom;
+
+            if (atom.Kind == RegexSyntaxKind.Literal)
+            {
+                return new RegexClassSetNode(
+                    RegexClassSetKind.Literal,
+                    scalar: atom.Scalar,
+                    literalKind: atom.LiteralKind);
+            }
+
+            if (atom.Kind is RegexSyntaxKind.DigitClass
+                or RegexSyntaxKind.NotDigitClass
+                or RegexSyntaxKind.WordClass
+                or RegexSyntaxKind.NotWordClass
+                or RegexSyntaxKind.WhitespaceClass
+                or RegexSyntaxKind.NotWhitespaceClass
+                or RegexSyntaxKind.AnyClass
+                or RegexSyntaxKind.UnicodePropertyClass
+                or RegexSyntaxKind.NotUnicodePropertyClass)
+            {
+                return new RegexClassSetNode(
+                    RegexClassSetKind.Atom,
+                    atomKind: atom.Kind,
+                    unicodeProperty: atom.UnicodeProperty);
+            }
+
+            Throw("invalid escape in character class");
+        }
+
+        if (Pattern[_index] == (byte)'[')
+        {
+            if (TryParsePosixClassNode(out RegexClassSetNode? posix))
+            {
+                return posix!;
+            }
+
+            if (_index + 1 < Pattern.Length && Pattern[_index + 1] == (byte)':')
+            {
+                Throw("invalid ASCII character class");
             }
 
             _index++;
+            return new RegexClassSetNode(
+                RegexClassSetKind.Bracketed,
+                bracketed: ParseBracketedClass(depth + 1));
         }
 
-        Throw("unclosed character class");
-        return new RegexEmptyNode(position);
+        int position = _index;
+        byte token = Pattern[_index++];
+        if (token <= 0x7F)
+        {
+            return new RegexClassSetNode(RegexClassSetKind.Literal, scalar: token);
+        }
+
+        if (Rune.DecodeFromUtf8(Pattern[position..], out Rune rune, out int length) != OperationStatus.Done)
+        {
+            Throw("invalid UTF-8 scalar in character class");
+        }
+
+        _index = position + length;
+        return new RegexClassSetNode(RegexClassSetKind.Literal, scalar: rune.Value);
+    }
+
+    private bool TryParseClassSetOperator(out RegexClassSetBinaryOperator binaryOperator)
+    {
+        binaryOperator = RegexClassSetBinaryOperator.Intersection;
+        if (_index + 1 >= Pattern.Length || Pattern[_index] != Pattern[_index + 1])
+        {
+            return false;
+        }
+
+        binaryOperator = Pattern[_index] switch
+        {
+            (byte)'&' => RegexClassSetBinaryOperator.Intersection,
+            (byte)'-' => RegexClassSetBinaryOperator.Difference,
+            (byte)'~' => RegexClassSetBinaryOperator.SymmetricDifference,
+            _ => binaryOperator,
+        };
+        if (Pattern[_index] != (byte)'&' &&
+            Pattern[_index] != (byte)'-' &&
+            Pattern[_index] != (byte)'~')
+        {
+            return false;
+        }
+
+        _index += 2;
+        return true;
+    }
+
+    private bool TryParsePosixClassNode(out RegexClassSetNode? node)
+    {
+        node = null;
+        int start = _index;
+        if (_index + 4 >= Pattern.Length ||
+            Pattern[_index] != (byte)'[' ||
+            Pattern[_index + 1] != (byte)':')
+        {
+            return false;
+        }
+
+        int nameStart = _index + 2;
+        bool negated = nameStart < Pattern.Length && Pattern[nameStart] == (byte)'^';
+        if (negated)
+        {
+            nameStart++;
+        }
+
+        int nameEnd = nameStart;
+        while (nameEnd + 1 < Pattern.Length &&
+            !(Pattern[nameEnd] == (byte)':' && Pattern[nameEnd + 1] == (byte)']'))
+        {
+            nameEnd++;
+        }
+
+        if (nameEnd == nameStart || nameEnd + 1 >= Pattern.Length ||
+            !TryCreatePosixClassNode(
+                Pattern[nameStart..nameEnd],
+                negated,
+                out RegexClassSetNode? expression))
+        {
+            _index = start;
+            return false;
+        }
+
+        _index = nameEnd + 2;
+        node = expression;
+        return true;
+    }
+
+    private static bool TryCreatePosixClassNode(
+        ReadOnlySpan<byte> name,
+        bool negated,
+        out RegexClassSetNode? node)
+    {
+        if (TryGetPosixClassKind(name, out RegexSyntaxKind atomKind))
+        {
+            node = new RegexClassSetNode(
+                RegexClassSetKind.Atom,
+                atomKind: atomKind,
+                negated: negated);
+            return true;
+        }
+
+        RegexClassSetNode? expression = null;
+        if (name.SequenceEqual("ascii"u8))
+        {
+            expression = CreateClassRange(0, 0x7F);
+        }
+        else if (name.SequenceEqual("blank"u8))
+        {
+            expression = CreateClassUnion(CreateClassLiteral('\t'), CreateClassLiteral(' '));
+        }
+        else if (name.SequenceEqual("cntrl"u8))
+        {
+            expression = CreateClassUnion(CreateClassRange(0, 0x1F), CreateClassLiteral(0x7F));
+        }
+        else if (name.SequenceEqual("graph"u8))
+        {
+            expression = CreateClassRange('!', '~');
+        }
+        else if (name.SequenceEqual("lower"u8))
+        {
+            expression = CreateClassRange('a', 'z');
+        }
+        else if (name.SequenceEqual("print"u8))
+        {
+            expression = CreateClassRange(' ', '~');
+        }
+        else if (name.SequenceEqual("punct"u8))
+        {
+            expression = CreateClassUnion(
+                CreateClassRange('!', '/'),
+                CreateClassRange(':', '@'),
+                CreateClassRange('[', '`'),
+                CreateClassRange('{', '~'));
+        }
+        else if (name.SequenceEqual("upper"u8))
+        {
+            expression = CreateClassRange('A', 'Z');
+        }
+        else if (name.SequenceEqual("xdigit"u8))
+        {
+            expression = CreateClassUnion(
+                CreateClassRange('0', '9'),
+                CreateClassRange('A', 'F'),
+                CreateClassRange('a', 'f'));
+        }
+
+        if (expression is null)
+        {
+            node = null;
+            return false;
+        }
+
+        node = new RegexClassSetNode(
+            RegexClassSetKind.Bracketed,
+            bracketed: new RegexCharacterClass(negated, expression));
+        return true;
+    }
+
+    private static bool TryGetPosixClassKind(ReadOnlySpan<byte> name, out RegexSyntaxKind atomKind)
+    {
+        atomKind = RegexSyntaxKind.Empty;
+        if (name.SequenceEqual("digit"u8))
+        {
+            atomKind = RegexSyntaxKind.DigitClass;
+        }
+        else if (name.SequenceEqual("word"u8))
+        {
+            atomKind = RegexSyntaxKind.WordClass;
+        }
+        else if (name.SequenceEqual("space"u8))
+        {
+            atomKind = RegexSyntaxKind.WhitespaceClass;
+        }
+        else if (name.SequenceEqual("alpha"u8))
+        {
+            atomKind = RegexSyntaxKind.LetterClass;
+        }
+        else if (name.SequenceEqual("alnum"u8))
+        {
+            atomKind = RegexSyntaxKind.AlphanumericClass;
+        }
+
+        return atomKind != RegexSyntaxKind.Empty;
+    }
+
+    private static RegexClassSetNode CreateClassLiteral(int scalar)
+    {
+        return new RegexClassSetNode(RegexClassSetKind.Literal, scalar: scalar);
+    }
+
+    private static RegexClassSetNode CreateClassRange(int start, int end)
+    {
+        return new RegexClassSetNode(RegexClassSetKind.Range, scalar: start, rangeEnd: end);
+    }
+
+    private static RegexClassSetNode CreateClassUnion(params RegexClassSetNode[] nodes)
+    {
+        return new RegexClassSetNode(RegexClassSetKind.Union, items: nodes);
+    }
+
+    private static RegexClassSetNode CompleteClassUnion(List<RegexClassSetNode> union)
+    {
+        return union.Count switch
+        {
+            0 => new RegexClassSetNode(RegexClassSetKind.Empty),
+            1 => union[0],
+            _ => new RegexClassSetNode(RegexClassSetKind.Union, items: union.ToArray()),
+        };
+    }
+
+    private byte? PeekClassSignificantByte(int index)
+    {
+        while (index < Pattern.Length)
+        {
+            byte value = Pattern[index];
+            if (!_extendedMode)
+            {
+                return value;
+            }
+
+            if (IsExtendedWhitespaceByte(value))
+            {
+                index++;
+                continue;
+            }
+
+            if (value == (byte)'#')
+            {
+                index++;
+                while (index < Pattern.Length && Pattern[index] != (byte)'\n')
+                {
+                    index++;
+                }
+
+                continue;
+            }
+
+            return value;
+        }
+
+        return null;
+    }
+
+    private void SkipClassWhitespace()
+    {
+        if (_extendedMode)
+        {
+            SkipExtendedPatternWhitespace();
+        }
     }
 
     private RegexSyntaxNode ParseEscape(int position)
@@ -501,88 +859,156 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
             return new RegexAtomNode(boundaryKind, ReadOnlyMemory<byte>.Empty, position);
         }
 
-        if (TryParseByteEscape(position, escaped, out RegexSyntaxNode escapedNode))
+        if (escaped is (byte)'x' or (byte)'u' or (byte)'U')
         {
-            return escapedNode;
+            return ParseHexEscape(position, escaped);
         }
 
-        if ((escaped == (byte)'p' || escaped == (byte)'P') &&
-            TryParseUnicodePropertyClass(position, negated: escaped == (byte)'P', out RegexSyntaxNode propertyNode))
+        if (escaped is (byte)'p' or (byte)'P')
         {
-            return propertyNode;
+            return ParseUnicodePropertyClass(position, negated: escaped == (byte)'P');
         }
 
-        return escaped switch
+        RegexSyntaxNode? recognized = escaped switch
         {
             (byte)'A' => new RegexAtomNode(RegexSyntaxKind.AbsoluteStartAnchor, ReadOnlyMemory<byte>.Empty, position),
             (byte)'z' => new RegexAtomNode(RegexSyntaxKind.AbsoluteEndAnchor, ReadOnlyMemory<byte>.Empty, position),
             (byte)'b' => new RegexAtomNode(RegexSyntaxKind.WordBoundary, ReadOnlyMemory<byte>.Empty, position),
             (byte)'B' => new RegexAtomNode(RegexSyntaxKind.NotWordBoundary, ReadOnlyMemory<byte>.Empty, position),
+            (byte)'<' => new RegexAtomNode(RegexSyntaxKind.WordStartBoundary, ReadOnlyMemory<byte>.Empty, position),
+            (byte)'>' => new RegexAtomNode(RegexSyntaxKind.WordEndBoundary, ReadOnlyMemory<byte>.Empty, position),
             (byte)'d' => new RegexAtomNode(RegexSyntaxKind.DigitClass, ReadOnlyMemory<byte>.Empty, position),
             (byte)'D' => new RegexAtomNode(RegexSyntaxKind.NotDigitClass, ReadOnlyMemory<byte>.Empty, position),
             (byte)'w' => new RegexAtomNode(RegexSyntaxKind.WordClass, ReadOnlyMemory<byte>.Empty, position),
             (byte)'W' => new RegexAtomNode(RegexSyntaxKind.NotWordClass, ReadOnlyMemory<byte>.Empty, position),
             (byte)'s' => new RegexAtomNode(RegexSyntaxKind.WhitespaceClass, ReadOnlyMemory<byte>.Empty, position),
             (byte)'S' => new RegexAtomNode(RegexSyntaxKind.NotWhitespaceClass, ReadOnlyMemory<byte>.Empty, position),
-            (byte)'n' => new RegexAtomNode(RegexSyntaxKind.Literal, new[] { (byte)'\n' }, position),
-            (byte)'t' => new RegexAtomNode(RegexSyntaxKind.Literal, new[] { (byte)'\t' }, position),
-            (byte)'r' => new RegexAtomNode(RegexSyntaxKind.Literal, new[] { (byte)'\r' }, position),
-            (byte)'f' => new RegexAtomNode(RegexSyntaxKind.Literal, new[] { (byte)'\f' }, position),
-            _ => new RegexAtomNode(RegexSyntaxKind.Literal, new[] { escaped }, position),
+            (byte)'a' => CreateEscapedLiteral(position, 0x07, RegexLiteralKind.Special),
+            (byte)'f' => CreateEscapedLiteral(position, 0x0C, RegexLiteralKind.Special),
+            (byte)'t' => CreateEscapedLiteral(position, '\t', RegexLiteralKind.Special),
+            (byte)'n' => CreateEscapedLiteral(position, '\n', RegexLiteralKind.Special),
+            (byte)'r' => CreateEscapedLiteral(position, '\r', RegexLiteralKind.Special),
+            (byte)'v' => CreateEscapedLiteral(position, 0x0B, RegexLiteralKind.Special),
+            _ => null,
         };
+        if (recognized is not null)
+        {
+            return recognized;
+        }
+
+        if (IsEscapablePunctuation(escaped))
+        {
+            RegexLiteralKind literalKind = IsRegexMetaByte(escaped)
+                ? RegexLiteralKind.Meta
+                : RegexLiteralKind.Superfluous;
+            return CreateEscapedLiteral(position, escaped, literalKind);
+        }
+
+        if (IsAsciiDigitByte(escaped))
+        {
+            Throw("backreferences are not supported");
+        }
+
+        Throw("unrecognized escape");
+        return new RegexEmptyNode(position);
     }
 
-    private bool TryParseUnicodePropertyClass(int position, bool negated, out RegexSyntaxNode node)
+    private RegexAtomNode ParseUnicodePropertyClass(int position, bool negated)
     {
-        node = new RegexEmptyNode(position);
-        int start = _index;
+        if (_extendedMode)
+        {
+            SkipExtendedPatternWhitespace();
+        }
+
         ReadOnlySpan<byte> name;
+        byte[]? normalizedName = null;
         if (_index < Pattern.Length && Pattern[_index] == (byte)'{')
         {
             int nameStart = _index + 1;
             int nameEnd = nameStart;
-            while (nameEnd < Pattern.Length && Pattern[nameEnd] != (byte)'}')
+            if (_extendedMode)
             {
-                nameEnd++;
+                _index = nameStart;
+                var bytes = new List<byte>();
+                while (_index < Pattern.Length && Pattern[_index] != (byte)'}')
+                {
+                    int beforeWhitespace = _index;
+                    SkipExtendedPatternWhitespace();
+                    if (_index != beforeWhitespace)
+                    {
+                        continue;
+                    }
+
+                    bytes.Add(Pattern[_index++]);
+                }
+
+                nameEnd = _index;
+                normalizedName = bytes.ToArray();
+            }
+            else
+            {
+                while (nameEnd < Pattern.Length && Pattern[nameEnd] != (byte)'}')
+                {
+                    nameEnd++;
+                }
             }
 
-            if (nameEnd >= Pattern.Length || nameEnd == nameStart)
+            if (nameEnd >= Pattern.Length)
             {
-                _index = start;
-                return false;
+                Throw("unclosed Unicode property class");
             }
 
-            name = Pattern[nameStart..nameEnd];
+            if (nameEnd == nameStart || normalizedName is { Length: 0 })
+            {
+                Throw("empty Unicode property class");
+            }
+
+            name = normalizedName is null ? Pattern[nameStart..nameEnd] : normalizedName;
             _index = nameEnd + 1;
         }
         else
         {
             if (_index >= Pattern.Length)
             {
-                return false;
+                Throw("missing Unicode property class name");
             }
 
             name = Pattern.Slice(_index, 1);
             _index++;
         }
 
-        if (!negated && RegexUnicodePropertyNames.NameEquals(name, "any"))
+        if (RegexUnicodePropertyNames.NameEquals(name, "any"))
         {
-            node = new RegexAtomNode(RegexSyntaxKind.AnyClass, ReadOnlyMemory<byte>.Empty, position);
-            return true;
+            if (!negated)
+            {
+                return new RegexAtomNode(RegexSyntaxKind.AnyClass, ReadOnlyMemory<byte>.Empty, position);
+            }
+
+            var emptyProperty = new RegexUnicodeProperty(
+                RegexUnicodePropertyFamily.Property,
+                RegexUnicodePropertyKind.None,
+                RegexUnicodeScriptKind.None);
+            return new RegexAtomNode(
+                RegexSyntaxKind.UnicodePropertyClass,
+                ReadOnlyMemory<byte>.Empty,
+                position,
+                unicodeProperty: emptyProperty);
         }
 
-        if (!RegexUnicodePropertyNames.TryGetKind(name, out RegexUnicodePropertyKind propertyKind))
+        if (!RegexUnicodePropertyNames.TryGetProperty(name, out RegexUnicodeProperty? property))
         {
-            _index = start;
-            return false;
+            Throw("Unicode property not found");
         }
 
-        node = new RegexAtomNode(
+        ReadOnlyMemory<byte> value = property!.Family == RegexUnicodePropertyFamily.Property &&
+            property.PropertyKind <= (RegexUnicodePropertyKind)byte.MaxValue
+                ? new[] { (byte)property.PropertyKind }
+                : ReadOnlyMemory<byte>.Empty;
+        return new RegexAtomNode(
             negated ? RegexSyntaxKind.NotUnicodePropertyClass : RegexSyntaxKind.UnicodePropertyClass,
-            new[] { (byte)propertyKind },
-            position);
-        return true;
+            value,
+            position,
+            unicodeProperty: property);
     }
 
     private bool TryParseNamedWordBoundary(out RegexSyntaxKind boundaryKind)
@@ -619,71 +1045,172 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
         return false;
     }
 
-    private bool TryParseByteEscape(int position, byte escaped, out RegexSyntaxNode escapedNode)
+    private RegexAtomNode ParseHexEscape(int position, byte escaped)
     {
-        escapedNode = new RegexEmptyNode(position);
-        if (escaped == (byte)'x')
+        if (_extendedMode)
         {
-            if (_index + 1 < Pattern.Length &&
-                TryReadHexByte(Pattern[_index], Pattern[_index + 1], out byte literal))
+            SkipExtendedPatternWhitespace();
+        }
+
+        RegexLiteralKind literalKind;
+        int scalar;
+        if (_index < Pattern.Length && Pattern[_index] == (byte)'{')
+        {
+            literalKind = RegexLiteralKind.HexBrace;
+            scalar = ParseBracedHexScalar();
+        }
+        else
+        {
+            int digits = escaped switch
             {
-                _index += 2;
-                escapedNode = new RegexAtomNode(RegexSyntaxKind.Literal, new[] { literal }, position);
-                return true;
-            }
-
-            return TryParseBracedByteEscape(position, out escapedNode);
+                (byte)'x' => 2,
+                (byte)'u' => 4,
+                _ => 8,
+            };
+            literalKind = escaped switch
+            {
+                (byte)'x' => RegexLiteralKind.HexFixed,
+                (byte)'u' => RegexLiteralKind.UnicodeShort,
+                _ => RegexLiteralKind.UnicodeLong,
+            };
+            scalar = ParseFixedHexScalar(digits);
         }
 
-        if (escaped == (byte)'u')
+        if (!Rune.IsValid(scalar))
         {
-            return TryParseBracedByteEscape(position, out escapedNode);
+            Throw("hexadecimal escape is not a Unicode scalar value");
         }
 
-        return false;
+        return CreateEscapedLiteral(position, scalar, literalKind);
     }
 
-    private bool TryParseBracedByteEscape(int position, out RegexSyntaxNode escapedNode)
+    private int ParseBracedHexScalar()
     {
-        escapedNode = new RegexEmptyNode(position);
-        if (_index >= Pattern.Length || Pattern[_index] != (byte)'{')
-        {
-            return false;
-        }
-
         _index++;
         int value = 0;
         int digits = 0;
-        while (_index < Pattern.Length && Pattern[_index] != (byte)'}')
+        while (true)
         {
+            if (_extendedMode)
+            {
+                SkipExtendedPatternWhitespace();
+            }
+
+            if (_index >= Pattern.Length || Pattern[_index] == (byte)'}')
+            {
+                break;
+            }
+
             if (!TryGetHexValue(Pattern[_index], out int digit))
             {
                 Throw("invalid hexadecimal escape");
             }
 
-            value = (value * 16) + digit;
-            if (value > byte.MaxValue)
+            if (value > (0x10FFFF - digit) / 16)
             {
-                Throw("hexadecimal escape exceeds one byte");
+                Throw("hexadecimal escape is not a Unicode scalar value");
             }
 
+            value = (value * 16) + digit;
             digits++;
             _index++;
         }
 
-        if (digits == 0 || _index >= Pattern.Length || Pattern[_index] != (byte)'}')
+        if (digits == 0)
+        {
+            Throw("hexadecimal escape is empty");
+        }
+
+        if (_index >= Pattern.Length || Pattern[_index] != (byte)'}')
         {
             Throw("unclosed hexadecimal escape");
         }
 
         _index++;
-        escapedNode = new RegexAtomNode(RegexSyntaxKind.Literal, new[] { (byte)value }, position);
-        return true;
+        return value;
+    }
+
+    private int ParseFixedHexScalar(int digitCount)
+    {
+        int value = 0;
+        for (int digitIndex = 0; digitIndex < digitCount; digitIndex++)
+        {
+            if (_extendedMode)
+            {
+                SkipExtendedPatternWhitespace();
+            }
+
+            int digit = 0;
+            if (_index >= Pattern.Length || !TryGetHexValue(Pattern[_index], out digit))
+            {
+                Throw("invalid hexadecimal escape");
+            }
+
+            value = (value * 16) + digit;
+            _index++;
+        }
+
+        return value;
+    }
+
+    private static RegexAtomNode CreateEscapedLiteral(int position, int scalar, RegexLiteralKind literalKind)
+    {
+        byte[] value = EncodeScalar(scalar);
+        return new RegexAtomNode(
+            RegexSyntaxKind.Literal,
+            value,
+            position,
+            scalar,
+            literalKind);
+    }
+
+    private static byte[] EncodeScalar(int scalar)
+    {
+        Span<byte> buffer = stackalloc byte[4];
+        int length = new Rune(scalar).EncodeToUtf8(buffer);
+        return buffer[..length].ToArray();
+    }
+
+    private static bool IsEscapablePunctuation(byte value)
+    {
+        return value <= 0x7F &&
+            !IsAsciiDigitByte(value) &&
+            !(value is >= (byte)'A' and <= (byte)'Z') &&
+            !(value is >= (byte)'a' and <= (byte)'z') &&
+            value != (byte)'<' &&
+            value != (byte)'>';
+    }
+
+    private static bool IsRegexMetaByte(byte value)
+    {
+        return value is (byte)'\\'
+            or (byte)'.'
+            or (byte)'+'
+            or (byte)'*'
+            or (byte)'?'
+            or (byte)'('
+            or (byte)')'
+            or (byte)'|'
+            or (byte)'['
+            or (byte)']'
+            or (byte)'{'
+            or (byte)'}'
+            or (byte)'^'
+            or (byte)'$'
+            or (byte)'#'
+            or (byte)'&'
+            or (byte)'-'
+            or (byte)'~';
     }
 
     private bool TryParseRepetition(RegexSyntaxNode child, out RegexSyntaxNode repetition)
     {
         repetition = child;
+        if (_extendedMode)
+        {
+            SkipExtendedPatternWhitespace();
+        }
+
         if (_index >= Pattern.Length)
         {
             return false;
@@ -716,16 +1243,17 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
         }
         else if (token == (byte)'{')
         {
-            if (!TryParseCountedRepetition(out minimum, out maximum))
-            {
-                return false;
-            }
-
+            ParseCountedRepetition(out minimum, out maximum);
             ThrowIfInlineFlagsRepeat(child);
         }
         else
         {
             return false;
+        }
+
+        if (_extendedMode)
+        {
+            SkipExtendedPatternWhitespace();
         }
 
         bool lazy = false;
@@ -773,21 +1301,28 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
         }
     }
 
-    private bool TryParseCountedRepetition(out int minimum, out int? maximum)
+    private void ParseCountedRepetition(out int minimum, out int? maximum)
     {
-        int start = _index;
         _index++;
+        if (_extendedMode)
+        {
+            SkipExtendedPatternWhitespace();
+        }
+
         if (!TryReadDecimal(out minimum))
         {
-            _index = start;
-            maximum = null;
-            return false;
+            Throw("repetition quantifier expects a valid decimal");
         }
 
         maximum = minimum;
         if (_index < Pattern.Length && Pattern[_index] == (byte)',')
         {
             _index++;
+            if (_extendedMode)
+            {
+                SkipExtendedPatternWhitespace();
+            }
+
             maximum = null;
             if (_index < Pattern.Length && IsAsciiDigitByte(Pattern[_index]))
             {
@@ -802,8 +1337,7 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
 
         if (_index >= Pattern.Length || Pattern[_index] != (byte)'}')
         {
-            _index = start;
-            return false;
+            Throw("unclosed repetition quantifier");
         }
 
         if (maximum.HasValue && maximum.Value < minimum)
@@ -812,7 +1346,6 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
         }
 
         _index++;
-        return true;
     }
 
     private bool TryReadDecimal(out int value)
@@ -832,38 +1365,13 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
             }
 
             _index++;
+            if (_extendedMode)
+            {
+                SkipExtendedPatternWhitespace();
+            }
         }
 
         return _index > start;
-    }
-
-    private bool TryFindPosixClassEnd(int searchIndex, out int classEnd)
-    {
-        while (searchIndex + 1 < Pattern.Length)
-        {
-            if (Pattern[searchIndex] == (byte)':' && Pattern[searchIndex + 1] == (byte)']')
-            {
-                classEnd = searchIndex + 1;
-                return true;
-            }
-
-            searchIndex++;
-        }
-
-        classEnd = -1;
-        return false;
-    }
-
-    private static bool TryReadHexByte(byte high, byte low, out byte value)
-    {
-        value = 0;
-        if (!TryGetHexValue(high, out int highValue) || !TryGetHexValue(low, out int lowValue))
-        {
-            return false;
-        }
-
-        value = (byte)((highValue << 4) | lowValue);
-        return true;
     }
 
     private static bool TryGetHexValue(byte value, out int digit)
@@ -920,6 +1428,7 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
             value == (byte)'_';
     }
 
+    [DoesNotReturn]
     private void Throw(string message)
     {
         throw new FormatException($"{message} at byte offset {_index}");

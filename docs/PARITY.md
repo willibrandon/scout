@@ -56,7 +56,7 @@ The OpenSubtitles regex workload remains a public benchmark workload. The
 release gate also includes `bounded_assignment_no_match`, the generated issue
 #30 regression; `large_bounded_unicode_class_no_match`, the generated issue #32
 regression running in general mode; generated general-mode line-search gates for
-issues #37, #36, and #44; `linux_heldout_regex_general`, a Linux-tree regex
+issues #37, #36, #44, and #46; `linux_heldout_regex_general`, a Linux-tree regex
 workload that runs Scout with `SCOUT_REGEX_SPECIALIZATION_MODE=general`; and
 `linux_heldout_capture_general`, a replacement workload over the same held-out
 pattern family that exercises capture output. These gates compare Scout against
@@ -75,6 +75,8 @@ Current ablation collection:
 | `general` | `line_regex_anchored_general` | Pending first release-gate sample | `<= 1.50x` | Issue #37 anchored CRLF declaration scan over the generated Paladin-like corpus. |
 | `general` | `line_regex_bounded_class_general` | Pending first release-gate sample | `<= 1.50x` | Issue #37 bounded ASCII identifier-class scan over the generated Paladin-like corpus. |
 | `general` | `line_regex_bounded_class_exact_general` | Pending first release-gate sample | `<= 1.50x` | Issue #37 exact `^[A-Za-z_]{70,90}$` expression over the generated Paladin-like corpus. |
+| `general` | `nested_literal_alternation_match_general` | Pending first release-gate sample | `<= 1.50x` | Issue #46 nested finite literal-language match scan over the generated Paladin-like corpus. |
+| `general` | `nested_literal_alternation_no_match_general` | Pending first release-gate sample | `<= 1.50x` | Issue #46 nested finite literal-language no-match scan over repeated generated inputs. |
 | `general` | `shared_delegate_prefix_general` | Pending first release-gate sample | `<= 1.50x` | Issue #36 shared-prefix alternation over four sparse delegate declarations. |
 | `general` | `many_absent_regexp_general` | Pending first release-gate sample | `<= 1.50x` | Issue #44 no-match scan with 64 repeated `-e` expressions. |
 | `general` | `many_absent_pattern_file_general` | Pending first release-gate sample | `<= 1.50x` | Issue #44 no-match scan with the same 64 expressions supplied through `-f`. |

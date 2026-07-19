@@ -7,9 +7,9 @@ namespace Scout;
 /// </summary>
 internal static class StandardSearchOperations
 {
-    private static readonly byte[] NullByte = [0];
-    private static readonly byte[] LineFeed = [(byte)'\n'];
-    private static readonly byte[] CrlfLineTerminator = [(byte)'\r', (byte)'\n'];
+    private static readonly byte[] _nullByte = [0];
+    private static readonly byte[] _lineFeed = [(byte)'\n'];
+    private static readonly byte[] _crlfLineTerminator = [(byte)'\r', (byte)'\n'];
 
     internal static int Run(
         IReadOnlyList<OsString> positional,
@@ -78,10 +78,18 @@ internal static class StandardSearchOperations
             lowArgs,
             standardOutputIsTerminal,
             SearchOutputFormatting.ShouldUseAutomaticLineNumberTarget(useDefaultCurrentDirectory, explicitPathArgumentCount, paths));
-        bool prefixPaths = lowArgs.Vimgrep || paths.Count > 1 || SearchPathArgument.ContainsDirectory(paths);
+        bool containsDirectory = SearchPathArgument.ContainsDirectory(paths);
+        bool prefixPaths = lowArgs.Vimgrep || paths.Count > 1 || containsDirectory;
         bool autoMmapEligible = SearchPathArgument.IsAutoMmapEligible(paths);
         bool pathHeading = ShouldUseHeading(lowArgs, standardOutputIsTerminal, prefixPaths);
         bool interPathContextSeparator = ShouldWriteInterFileContextSeparator(lowArgs, pathHeading, separators);
+        bool isOneFile = !useDefaultCurrentDirectory &&
+            paths.Count == 1 &&
+            !containsDirectory;
+        bool usesParallelOutputBuffering = SearchThreadPlanner.Resolve(
+            lowArgs.Threads,
+            lowArgs.SortMode is not null,
+            isOneFile) > 1;
         bool wroteContextBody = false;
         for (int index = 0; index < paths.Count; index++)
         {
@@ -128,7 +136,7 @@ internal static class StandardSearchOperations
 
         if (stats)
         {
-            if (prefixPaths && interPathContextSeparator && wroteContextBody)
+            if (usesParallelOutputBuffering && interPathContextSeparator && wroteContextBody)
             {
                 output.Write(separators.Context.Span);
                 output.Write(separators.LineTerminator.Span);
@@ -168,7 +176,7 @@ internal static class StandardSearchOperations
             lowArgs.FieldContextSeparator,
             lowArgs.ContextSeparator,
             lowArgs.ContextSeparatorEnabled,
-            lowArgs.NullData ? NullByte : lowArgs.Crlf ? CrlfLineTerminator : LineFeed);
+            lowArgs.NullData ? _nullByte : lowArgs.Crlf ? _crlfLineTerminator : _lineFeed);
     }
 
     private static OutputLineLimit GetOutputLineLimit(CliLowArgs lowArgs)

@@ -290,7 +290,11 @@ public sealed class RegexAutomaton
                 captureCount: 0);
         }
 
-        RegexLiteralSetEngine.TryCreate(tree.Root, options, out RegexLiteralSetEngine? literalSet);
+        RegexLiteralSetEngine.TryCreate(
+            tree.Root,
+            options,
+            out RegexLiteralSetEngine? literalSet,
+            allowCharacterClasses: false);
         if (literalSet is not null && tree.CaptureCount == 0)
         {
             return new RegexAutomaton(
@@ -329,8 +333,34 @@ public sealed class RegexAutomaton
                 wholePatternCaptureIndex);
         }
 
+        RegexUnicodeGraphemeClusterEngine.TryCreate(
+            tree.Root,
+            options,
+            out RegexUnicodeGraphemeClusterEngine? authoritativeUnicodeGraphemeCluster);
+        if (authoritativeUnicodeGraphemeCluster is not null)
+        {
+            return new RegexAutomaton(
+                RegexMetaEngine.CompileUnicodeGraphemeCluster(
+                    authoritativeUnicodeGraphemeCluster,
+                    options.Utf8,
+                    () => CompileGeneralNfa(tree.Root, options, utf8ByteTrieCache)),
+                startPredicate: null,
+                lengthGuard: null,
+                requiredByteSetGuard: null,
+                requiredLiteralAnySetGuard: null,
+                syntheticCaptureAlternationSet: null,
+                tree.CaptureCount > 0 ? tree.Pattern : default,
+                tree.CaptureCount > 0 ? tree.Root : null,
+                options,
+                capturePrefilter: null,
+                tree.CaptureCount,
+                wholePatternCaptureIndex);
+        }
+
+        bool requiresAuthoritativeLowering = RequiresAuthoritativeLowering(tree.Root, options);
+
         RegexAlternationSetEngine? alternationSet = null;
-        if (options.AllowRawPatternSpecializations)
+        if (!requiresAuthoritativeLowering && options.AllowRawPatternSpecializations)
         {
             RegexAlternationSetEngine.TryCreate(
                 tree.Pattern.Span,
@@ -360,12 +390,17 @@ public sealed class RegexAutomaton
                 wholePatternCaptureIndex);
         }
 
-        RegexDelimitedCaptureEngine.TryCreate(
-            tree.Root,
-            options,
-            tree.CaptureCount,
-            out RegexDelimitedCaptureEngine? earlyDelimitedCapture,
-            compactFields: true);
+        RegexDelimitedCaptureEngine? earlyDelimitedCapture = null;
+        if (!requiresAuthoritativeLowering)
+        {
+            RegexDelimitedCaptureEngine.TryCreate(
+                tree.Root,
+                options,
+                tree.CaptureCount,
+                out earlyDelimitedCapture,
+                compactFields: true);
+        }
+
         if (earlyDelimitedCapture is not null)
         {
             return new RegexAutomaton(
@@ -386,11 +421,16 @@ public sealed class RegexAutomaton
                 wholePatternCaptureIndex);
         }
 
-        RegexStructuredLogCaptureEngine.TryCreate(
-            tree.Root,
-            options,
-            tree.CaptureCount,
-            out RegexStructuredLogCaptureEngine? earlyStructuredLogCapture);
+        RegexStructuredLogCaptureEngine? earlyStructuredLogCapture = null;
+        if (!requiresAuthoritativeLowering)
+        {
+            RegexStructuredLogCaptureEngine.TryCreate(
+                tree.Root,
+                options,
+                tree.CaptureCount,
+                out earlyStructuredLogCapture);
+        }
+
         if (earlyStructuredLogCapture is not null)
         {
             return new RegexAutomaton(
@@ -452,6 +492,38 @@ public sealed class RegexAutomaton
                 wholePatternCaptureIndex);
         }
 
+        if (requiresAuthoritativeLowering)
+        {
+            RegexLiteralSetEngine.TryCreate(
+                tree.Root,
+                options,
+                out RegexLiteralSetEngine? authoritativeLiteralSet);
+            if (authoritativeLiteralSet is not null && tree.CaptureCount == 0)
+            {
+                return new RegexAutomaton(
+                    RegexMetaEngine.CompileLiteralSet(authoritativeLiteralSet, options.Utf8),
+                    startPredicate: null,
+                    lengthGuard: null,
+                    requiredByteSetGuard: null,
+                    requiredLiteralAnySetGuard: null,
+                    syntheticCaptureAlternationSet: null,
+                    capturePattern: default,
+                    captureRoot: null,
+                    captureOptions: default,
+                    capturePrefilter: null,
+                    captureCount: 0);
+            }
+
+            return CompileParsedFallback(
+                tree,
+                options.WithoutRawPatternSpecializations(),
+                dfaSizeLimit,
+                compilePrefilter: false,
+                compileSearchGuards: false,
+                utf8ByteTrieCache,
+                compileLengthGuard: true);
+        }
+
         RegexFixedWordWhitespaceSequenceEngine.TryCreate(
             tree.Root,
             options,
@@ -462,27 +534,6 @@ public sealed class RegexAutomaton
                 RegexMetaEngine.CompileFixedWordWhitespaceSequence(
                     fixedWordWhitespaceSequence,
                     options.Utf8),
-                startPredicate: null,
-                lengthGuard: null,
-                requiredByteSetGuard: null,
-                requiredLiteralAnySetGuard: null,
-                syntheticCaptureAlternationSet: null,
-                tree.CaptureCount > 0 ? tree.Pattern : default,
-                tree.CaptureCount > 0 ? tree.Root : null,
-                options,
-                capturePrefilter: null,
-                tree.CaptureCount,
-                wholePatternCaptureIndex);
-        }
-
-        RegexUnicodeGraphemeClusterEngine.TryCreate(tree.Root, options, out RegexUnicodeGraphemeClusterEngine? unicodeGraphemeCluster);
-        if (unicodeGraphemeCluster is not null)
-        {
-            return new RegexAutomaton(
-                RegexMetaEngine.CompileUnicodeGraphemeCluster(
-                    unicodeGraphemeCluster,
-                    options.Utf8,
-                    () => CompileGeneralNfa(tree.Root, options, utf8ByteTrieCache)),
                 startPredicate: null,
                 lengthGuard: null,
                 requiredByteSetGuard: null,
@@ -755,7 +806,8 @@ public sealed class RegexAutomaton
         ulong? dfaSizeLimit,
         bool compilePrefilter,
         bool compileSearchGuards,
-        Dictionary<string, RegexUtf8ByteTrie>? utf8ByteTrieCache)
+        Dictionary<string, RegexUtf8ByteTrie>? utf8ByteTrieCache,
+        bool compileLengthGuard = false)
     {
         RegexStartPrefixSet? startPrefixSet = null;
         RegexPrefilter? prefilter = compileSearchGuards && compilePrefilter
@@ -786,7 +838,7 @@ public sealed class RegexAutomaton
             precompiledAsciiFastNfa: asciiFastNfa);
         RegexStartPredicate? startPredicate = null;
         RegexStartPredicateFactory? startPredicateFactory = null;
-        RegexLengthGuard? lengthGuard = compileSearchGuards
+        RegexLengthGuard? lengthGuard = compileSearchGuards || compileLengthGuard
             ? RegexLengthGuard.TryCreate(tree.Root, options)
             : null;
         if (compileSearchGuards && ShouldCompileStartPredicate(metaEngine.Kind, prefilter))
@@ -860,6 +912,121 @@ public sealed class RegexAutomaton
                 root,
                 options,
                 compactScalarFallbackNfaStateThreshold) >= compactScalarFallbackNfaStateThreshold;
+    }
+
+    /// <summary>
+    /// Reports whether a syntax subtree requires the authoritative scalar-set lowering path.
+    /// </summary>
+    private static bool RequiresAuthoritativeLowering(
+        RegexSyntaxNode node,
+        RegexCompileOptions options)
+    {
+        return node switch
+        {
+            RegexAtomNode atom => AtomRequiresAuthoritativeLowering(atom, options),
+            RegexGroupNode group => RequiresAuthoritativeLowering(
+                group.Child,
+                options.Apply(group.EnabledFlags, group.DisabledFlags)),
+            RegexSequenceNode sequence => SequenceRequiresAuthoritativeLowering(sequence, options),
+            RegexAlternationNode alternation => AnyRequiresAuthoritativeLowering(
+                alternation.Alternatives,
+                options),
+            RegexRepetitionNode repetition => repetition.Child is RegexRepetitionNode ||
+                RequiresAuthoritativeLowering(repetition.Child, options),
+            _ => false,
+        };
+    }
+
+    private static bool SequenceRequiresAuthoritativeLowering(
+        RegexSequenceNode sequence,
+        RegexCompileOptions options)
+    {
+        RegexCompileOptions currentOptions = options;
+        for (int index = 0; index < sequence.Nodes.Count; index++)
+        {
+            RegexSyntaxNode child = sequence.Nodes[index];
+            if (child is RegexInlineFlagsNode flags)
+            {
+                currentOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
+            }
+            else if (RequiresAuthoritativeLowering(child, currentOptions))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool AnyRequiresAuthoritativeLowering(
+        IReadOnlyList<RegexSyntaxNode> nodes,
+        RegexCompileOptions options)
+    {
+        for (int index = 0; index < nodes.Count; index++)
+        {
+            if (RequiresAuthoritativeLowering(nodes[index], options))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool AtomRequiresAuthoritativeLowering(
+        RegexAtomNode atom,
+        RegexCompileOptions options)
+    {
+        if (atom.UnicodeProperty is { Family: not RegexUnicodePropertyFamily.Property })
+        {
+            return true;
+        }
+
+        if (atom.Kind == RegexSyntaxKind.Literal &&
+            atom.LiteralKind == RegexLiteralKind.HexFixed &&
+            !options.Utf8 &&
+            !options.UnicodeClasses)
+        {
+            return true;
+        }
+
+        return atom.CharacterClass is not null &&
+            ClassSetRequiresAuthoritativeLowering(atom.CharacterClass.Expression);
+    }
+
+    private static bool ClassSetRequiresAuthoritativeLowering(RegexClassSetNode node)
+    {
+        switch (node.Kind)
+        {
+            case RegexClassSetKind.Empty:
+            case RegexClassSetKind.Binary:
+            case RegexClassSetKind.Bracketed:
+                return true;
+            case RegexClassSetKind.Atom:
+                return node.UnicodeProperty is { Family: not RegexUnicodePropertyFamily.Property };
+            case RegexClassSetKind.Literal:
+            case RegexClassSetKind.Range:
+                return node.Scalar > 0x7F ||
+                    node.RangeEnd > 0x7F ||
+                    node.LiteralKind is RegexLiteralKind.HexBrace
+                    or RegexLiteralKind.UnicodeShort
+                    or RegexLiteralKind.UnicodeLong ||
+                    node.RangeEndLiteralKind is RegexLiteralKind.HexBrace
+                        or RegexLiteralKind.UnicodeShort
+                        or RegexLiteralKind.UnicodeLong;
+            case RegexClassSetKind.Union:
+                for (int index = 0; index < node.Items.Count; index++)
+                {
+                    if (ClassSetRequiresAuthoritativeLowering(node.Items[index]))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            default:
+                return false;
+        }
     }
 
     /// <summary>
@@ -1002,21 +1169,29 @@ public sealed class RegexAutomaton
         RegexCompileOptions options,
         int limit)
     {
-        if (!RegexByteClass.RequiresUtf8ScalarMatch(
-            atom.Kind,
-            atom.Value.Span,
-            options.Utf8,
-            options.CaseInsensitive,
-            options.UnicodeClasses))
+        bool authoritative = atom.CharacterClass is not null ||
+            atom.UnicodeProperty is not null ||
+            atom.Kind == RegexSyntaxKind.Literal &&
+            atom.LiteralKind is RegexLiteralKind.HexFixed
+                or RegexLiteralKind.HexBrace
+                or RegexLiteralKind.UnicodeShort
+                or RegexLiteralKind.UnicodeLong;
+        if (!authoritative &&
+            !RegexByteClass.RequiresUtf8ScalarMatch(
+                atom.Kind,
+                atom.Value.Span,
+                options.Utf8,
+                options.CaseInsensitive,
+                options.UnicodeClasses))
         {
             return 0;
         }
 
-        if (!RegexUtf8ByteCompiler.TryBuildNormalizedScalarRanges(
-            atom.Kind,
-            atom.Value.Span,
-            options,
-            out List<RegexScalarRange> ranges))
+        if (!options.Utf8 && !options.UnicodeClasses ||
+            !RegexUtf8ByteCompiler.TryBuildNormalizedScalarRanges(
+                atom,
+                options,
+                out List<RegexScalarRange> ranges))
         {
             return 0;
         }

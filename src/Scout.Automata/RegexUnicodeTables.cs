@@ -7,6 +7,9 @@ using System.Text;
 
 namespace Scout;
 
+/// <summary>
+/// Provides generated Unicode property, script, and case-fold tables.
+/// </summary>
 internal static class RegexUnicodeTables
 {
     private static readonly Lazy<Dictionary<int, int[]>> SimpleCaseFoldEquivalents = new(BuildSimpleCaseFoldEquivalents);
@@ -166,6 +169,8 @@ internal static class RegexUnicodeTables
 
     internal static ReadOnlySpan<int> AlphabeticRanges => Alphabetic;
 
+    internal static ReadOnlySpan<int> SimpleCaseFoldPairs => SimpleCaseFold;
+
     internal static ReadOnlySpan<int> GetGeneralCategoryRanges(RegexUnicodePropertyKind kind)
     {
         return kind switch
@@ -268,6 +273,362 @@ internal static class RegexUnicodeTables
         {
             RegexUnicodePropertyKind.ScriptExtensionCyrillic => ScriptExtensionCyrillic,
             RegexUnicodePropertyKind.ScriptExtensionGreek => ScriptExtensionGreek,
+            _ => [],
+        };
+    }
+
+    internal static ReadOnlySpan<int> GetScriptRanges(RegexUnicodeScriptKind kind)
+    {
+        return kind switch
+        {
+            RegexUnicodeScriptKind.Adlam => ScriptAdlam,
+            RegexUnicodeScriptKind.Ahom => ScriptAhom,
+            RegexUnicodeScriptKind.AnatolianHieroglyphs => ScriptAnatolianHieroglyphs,
+            RegexUnicodeScriptKind.Arabic => ScriptArabic,
+            RegexUnicodeScriptKind.Armenian => ScriptArmenian,
+            RegexUnicodeScriptKind.Avestan => ScriptAvestan,
+            RegexUnicodeScriptKind.Balinese => ScriptBalinese,
+            RegexUnicodeScriptKind.Bamum => ScriptBamum,
+            RegexUnicodeScriptKind.BassaVah => ScriptBassaVah,
+            RegexUnicodeScriptKind.Batak => ScriptBatak,
+            RegexUnicodeScriptKind.Bengali => ScriptBengali,
+            RegexUnicodeScriptKind.Bhaiksuki => ScriptBhaiksuki,
+            RegexUnicodeScriptKind.Bopomofo => ScriptBopomofo,
+            RegexUnicodeScriptKind.Brahmi => ScriptBrahmi,
+            RegexUnicodeScriptKind.Braille => ScriptBraille,
+            RegexUnicodeScriptKind.Buginese => ScriptBuginese,
+            RegexUnicodeScriptKind.Buhid => ScriptBuhid,
+            RegexUnicodeScriptKind.CanadianAboriginal => ScriptCanadianAboriginal,
+            RegexUnicodeScriptKind.Carian => ScriptCarian,
+            RegexUnicodeScriptKind.CaucasianAlbanian => ScriptCaucasianAlbanian,
+            RegexUnicodeScriptKind.Chakma => ScriptChakma,
+            RegexUnicodeScriptKind.Cham => ScriptCham,
+            RegexUnicodeScriptKind.Cherokee => ScriptCherokee,
+            RegexUnicodeScriptKind.Chorasmian => ScriptChorasmian,
+            RegexUnicodeScriptKind.Common => ScriptCommon,
+            RegexUnicodeScriptKind.Coptic => ScriptCoptic,
+            RegexUnicodeScriptKind.Cuneiform => ScriptCuneiform,
+            RegexUnicodeScriptKind.Cypriot => ScriptCypriot,
+            RegexUnicodeScriptKind.CyproMinoan => ScriptCyproMinoan,
+            RegexUnicodeScriptKind.Cyrillic => ScriptCyrillic,
+            RegexUnicodeScriptKind.Deseret => ScriptDeseret,
+            RegexUnicodeScriptKind.Devanagari => ScriptDevanagari,
+            RegexUnicodeScriptKind.DivesAkuru => ScriptDivesAkuru,
+            RegexUnicodeScriptKind.Dogra => ScriptDogra,
+            RegexUnicodeScriptKind.Duployan => ScriptDuployan,
+            RegexUnicodeScriptKind.EgyptianHieroglyphs => ScriptEgyptianHieroglyphs,
+            RegexUnicodeScriptKind.Elbasan => ScriptElbasan,
+            RegexUnicodeScriptKind.Elymaic => ScriptElymaic,
+            RegexUnicodeScriptKind.Ethiopic => ScriptEthiopic,
+            RegexUnicodeScriptKind.Garay => ScriptGaray,
+            RegexUnicodeScriptKind.Georgian => ScriptGeorgian,
+            RegexUnicodeScriptKind.Glagolitic => ScriptGlagolitic,
+            RegexUnicodeScriptKind.Gothic => ScriptGothic,
+            RegexUnicodeScriptKind.Grantha => ScriptGrantha,
+            RegexUnicodeScriptKind.Greek => ScriptGreek,
+            RegexUnicodeScriptKind.Gujarati => ScriptGujarati,
+            RegexUnicodeScriptKind.GunjalaGondi => ScriptGunjalaGondi,
+            RegexUnicodeScriptKind.Gurmukhi => ScriptGurmukhi,
+            RegexUnicodeScriptKind.GurungKhema => ScriptGurungKhema,
+            RegexUnicodeScriptKind.Han => ScriptHan,
+            RegexUnicodeScriptKind.Hangul => ScriptHangul,
+            RegexUnicodeScriptKind.HanifiRohingya => ScriptHanifiRohingya,
+            RegexUnicodeScriptKind.Hanunoo => ScriptHanunoo,
+            RegexUnicodeScriptKind.Hatran => ScriptHatran,
+            RegexUnicodeScriptKind.Hebrew => ScriptHebrew,
+            RegexUnicodeScriptKind.Hiragana => ScriptHiragana,
+            RegexUnicodeScriptKind.ImperialAramaic => ScriptImperialAramaic,
+            RegexUnicodeScriptKind.Inherited => ScriptInherited,
+            RegexUnicodeScriptKind.InscriptionalPahlavi => ScriptInscriptionalPahlavi,
+            RegexUnicodeScriptKind.InscriptionalParthian => ScriptInscriptionalParthian,
+            RegexUnicodeScriptKind.Javanese => ScriptJavanese,
+            RegexUnicodeScriptKind.Kaithi => ScriptKaithi,
+            RegexUnicodeScriptKind.Kannada => ScriptKannada,
+            RegexUnicodeScriptKind.Katakana => ScriptKatakana,
+            RegexUnicodeScriptKind.Kawi => ScriptKawi,
+            RegexUnicodeScriptKind.KayahLi => ScriptKayahLi,
+            RegexUnicodeScriptKind.Kharoshthi => ScriptKharoshthi,
+            RegexUnicodeScriptKind.KhitanSmallScript => ScriptKhitanSmallScript,
+            RegexUnicodeScriptKind.Khmer => ScriptKhmer,
+            RegexUnicodeScriptKind.Khojki => ScriptKhojki,
+            RegexUnicodeScriptKind.Khudawadi => ScriptKhudawadi,
+            RegexUnicodeScriptKind.KiratRai => ScriptKiratRai,
+            RegexUnicodeScriptKind.Lao => ScriptLao,
+            RegexUnicodeScriptKind.Latin => ScriptLatin,
+            RegexUnicodeScriptKind.Lepcha => ScriptLepcha,
+            RegexUnicodeScriptKind.Limbu => ScriptLimbu,
+            RegexUnicodeScriptKind.LinearA => ScriptLinearA,
+            RegexUnicodeScriptKind.LinearB => ScriptLinearB,
+            RegexUnicodeScriptKind.Lisu => ScriptLisu,
+            RegexUnicodeScriptKind.Lycian => ScriptLycian,
+            RegexUnicodeScriptKind.Lydian => ScriptLydian,
+            RegexUnicodeScriptKind.Mahajani => ScriptMahajani,
+            RegexUnicodeScriptKind.Makasar => ScriptMakasar,
+            RegexUnicodeScriptKind.Malayalam => ScriptMalayalam,
+            RegexUnicodeScriptKind.Mandaic => ScriptMandaic,
+            RegexUnicodeScriptKind.Manichaean => ScriptManichaean,
+            RegexUnicodeScriptKind.Marchen => ScriptMarchen,
+            RegexUnicodeScriptKind.MasaramGondi => ScriptMasaramGondi,
+            RegexUnicodeScriptKind.Medefaidrin => ScriptMedefaidrin,
+            RegexUnicodeScriptKind.MeeteiMayek => ScriptMeeteiMayek,
+            RegexUnicodeScriptKind.MendeKikakui => ScriptMendeKikakui,
+            RegexUnicodeScriptKind.MeroiticCursive => ScriptMeroiticCursive,
+            RegexUnicodeScriptKind.MeroiticHieroglyphs => ScriptMeroiticHieroglyphs,
+            RegexUnicodeScriptKind.Miao => ScriptMiao,
+            RegexUnicodeScriptKind.Modi => ScriptModi,
+            RegexUnicodeScriptKind.Mongolian => ScriptMongolian,
+            RegexUnicodeScriptKind.Mro => ScriptMro,
+            RegexUnicodeScriptKind.Multani => ScriptMultani,
+            RegexUnicodeScriptKind.Myanmar => ScriptMyanmar,
+            RegexUnicodeScriptKind.Nabataean => ScriptNabataean,
+            RegexUnicodeScriptKind.NagMundari => ScriptNagMundari,
+            RegexUnicodeScriptKind.Nandinagari => ScriptNandinagari,
+            RegexUnicodeScriptKind.NewTaiLue => ScriptNewTaiLue,
+            RegexUnicodeScriptKind.Newa => ScriptNewa,
+            RegexUnicodeScriptKind.Nko => ScriptNko,
+            RegexUnicodeScriptKind.Nushu => ScriptNushu,
+            RegexUnicodeScriptKind.NyiakengPuachueHmong => ScriptNyiakengPuachueHmong,
+            RegexUnicodeScriptKind.Ogham => ScriptOgham,
+            RegexUnicodeScriptKind.OlChiki => ScriptOlChiki,
+            RegexUnicodeScriptKind.OlOnal => ScriptOlOnal,
+            RegexUnicodeScriptKind.OldHungarian => ScriptOldHungarian,
+            RegexUnicodeScriptKind.OldItalic => ScriptOldItalic,
+            RegexUnicodeScriptKind.OldNorthArabian => ScriptOldNorthArabian,
+            RegexUnicodeScriptKind.OldPermic => ScriptOldPermic,
+            RegexUnicodeScriptKind.OldPersian => ScriptOldPersian,
+            RegexUnicodeScriptKind.OldSogdian => ScriptOldSogdian,
+            RegexUnicodeScriptKind.OldSouthArabian => ScriptOldSouthArabian,
+            RegexUnicodeScriptKind.OldTurkic => ScriptOldTurkic,
+            RegexUnicodeScriptKind.OldUyghur => ScriptOldUyghur,
+            RegexUnicodeScriptKind.Oriya => ScriptOriya,
+            RegexUnicodeScriptKind.Osage => ScriptOsage,
+            RegexUnicodeScriptKind.Osmanya => ScriptOsmanya,
+            RegexUnicodeScriptKind.PahawhHmong => ScriptPahawhHmong,
+            RegexUnicodeScriptKind.Palmyrene => ScriptPalmyrene,
+            RegexUnicodeScriptKind.PauCinHau => ScriptPauCinHau,
+            RegexUnicodeScriptKind.PhagsPa => ScriptPhagsPa,
+            RegexUnicodeScriptKind.Phoenician => ScriptPhoenician,
+            RegexUnicodeScriptKind.PsalterPahlavi => ScriptPsalterPahlavi,
+            RegexUnicodeScriptKind.Rejang => ScriptRejang,
+            RegexUnicodeScriptKind.Runic => ScriptRunic,
+            RegexUnicodeScriptKind.Samaritan => ScriptSamaritan,
+            RegexUnicodeScriptKind.Saurashtra => ScriptSaurashtra,
+            RegexUnicodeScriptKind.Sharada => ScriptSharada,
+            RegexUnicodeScriptKind.Shavian => ScriptShavian,
+            RegexUnicodeScriptKind.Siddham => ScriptSiddham,
+            RegexUnicodeScriptKind.Signwriting => ScriptSignwriting,
+            RegexUnicodeScriptKind.Sinhala => ScriptSinhala,
+            RegexUnicodeScriptKind.Sogdian => ScriptSogdian,
+            RegexUnicodeScriptKind.SoraSompeng => ScriptSoraSompeng,
+            RegexUnicodeScriptKind.Soyombo => ScriptSoyombo,
+            RegexUnicodeScriptKind.Sundanese => ScriptSundanese,
+            RegexUnicodeScriptKind.Sunuwar => ScriptSunuwar,
+            RegexUnicodeScriptKind.SylotiNagri => ScriptSylotiNagri,
+            RegexUnicodeScriptKind.Syriac => ScriptSyriac,
+            RegexUnicodeScriptKind.Tagalog => ScriptTagalog,
+            RegexUnicodeScriptKind.Tagbanwa => ScriptTagbanwa,
+            RegexUnicodeScriptKind.TaiLe => ScriptTaiLe,
+            RegexUnicodeScriptKind.TaiTham => ScriptTaiTham,
+            RegexUnicodeScriptKind.TaiViet => ScriptTaiViet,
+            RegexUnicodeScriptKind.Takri => ScriptTakri,
+            RegexUnicodeScriptKind.Tamil => ScriptTamil,
+            RegexUnicodeScriptKind.Tangsa => ScriptTangsa,
+            RegexUnicodeScriptKind.Tangut => ScriptTangut,
+            RegexUnicodeScriptKind.Telugu => ScriptTelugu,
+            RegexUnicodeScriptKind.Thaana => ScriptThaana,
+            RegexUnicodeScriptKind.Thai => ScriptThai,
+            RegexUnicodeScriptKind.Tibetan => ScriptTibetan,
+            RegexUnicodeScriptKind.Tifinagh => ScriptTifinagh,
+            RegexUnicodeScriptKind.Tirhuta => ScriptTirhuta,
+            RegexUnicodeScriptKind.Todhri => ScriptTodhri,
+            RegexUnicodeScriptKind.Toto => ScriptToto,
+            RegexUnicodeScriptKind.TuluTigalari => ScriptTuluTigalari,
+            RegexUnicodeScriptKind.Ugaritic => ScriptUgaritic,
+            RegexUnicodeScriptKind.Vai => ScriptVai,
+            RegexUnicodeScriptKind.Vithkuqi => ScriptVithkuqi,
+            RegexUnicodeScriptKind.Wancho => ScriptWancho,
+            RegexUnicodeScriptKind.WarangCiti => ScriptWarangCiti,
+            RegexUnicodeScriptKind.Yezidi => ScriptYezidi,
+            RegexUnicodeScriptKind.Yi => ScriptYi,
+            RegexUnicodeScriptKind.ZanabazarSquare => ScriptZanabazarSquare,
+            _ => [],
+        };
+    }
+
+    internal static ReadOnlySpan<int> GetScriptExtensionRanges(RegexUnicodeScriptKind kind)
+    {
+        return kind switch
+        {
+            RegexUnicodeScriptKind.Adlam => ScriptExtensionAdlam,
+            RegexUnicodeScriptKind.Ahom => ScriptExtensionAhom,
+            RegexUnicodeScriptKind.AnatolianHieroglyphs => ScriptExtensionAnatolianHieroglyphs,
+            RegexUnicodeScriptKind.Arabic => ScriptExtensionArabic,
+            RegexUnicodeScriptKind.Armenian => ScriptExtensionArmenian,
+            RegexUnicodeScriptKind.Avestan => ScriptExtensionAvestan,
+            RegexUnicodeScriptKind.Balinese => ScriptExtensionBalinese,
+            RegexUnicodeScriptKind.Bamum => ScriptExtensionBamum,
+            RegexUnicodeScriptKind.BassaVah => ScriptExtensionBassaVah,
+            RegexUnicodeScriptKind.Batak => ScriptExtensionBatak,
+            RegexUnicodeScriptKind.Bengali => ScriptExtensionBengali,
+            RegexUnicodeScriptKind.Bhaiksuki => ScriptExtensionBhaiksuki,
+            RegexUnicodeScriptKind.Bopomofo => ScriptExtensionBopomofo,
+            RegexUnicodeScriptKind.Brahmi => ScriptExtensionBrahmi,
+            RegexUnicodeScriptKind.Braille => ScriptExtensionBraille,
+            RegexUnicodeScriptKind.Buginese => ScriptExtensionBuginese,
+            RegexUnicodeScriptKind.Buhid => ScriptExtensionBuhid,
+            RegexUnicodeScriptKind.CanadianAboriginal => ScriptExtensionCanadianAboriginal,
+            RegexUnicodeScriptKind.Carian => ScriptExtensionCarian,
+            RegexUnicodeScriptKind.CaucasianAlbanian => ScriptExtensionCaucasianAlbanian,
+            RegexUnicodeScriptKind.Chakma => ScriptExtensionChakma,
+            RegexUnicodeScriptKind.Cham => ScriptExtensionCham,
+            RegexUnicodeScriptKind.Cherokee => ScriptExtensionCherokee,
+            RegexUnicodeScriptKind.Chorasmian => ScriptExtensionChorasmian,
+            RegexUnicodeScriptKind.Common => ScriptExtensionCommon,
+            RegexUnicodeScriptKind.Coptic => ScriptExtensionCoptic,
+            RegexUnicodeScriptKind.Cuneiform => ScriptExtensionCuneiform,
+            RegexUnicodeScriptKind.Cypriot => ScriptExtensionCypriot,
+            RegexUnicodeScriptKind.CyproMinoan => ScriptExtensionCyproMinoan,
+            RegexUnicodeScriptKind.Cyrillic => ScriptExtensionCyrillic,
+            RegexUnicodeScriptKind.Deseret => ScriptExtensionDeseret,
+            RegexUnicodeScriptKind.Devanagari => ScriptExtensionDevanagari,
+            RegexUnicodeScriptKind.DivesAkuru => ScriptExtensionDivesAkuru,
+            RegexUnicodeScriptKind.Dogra => ScriptExtensionDogra,
+            RegexUnicodeScriptKind.Duployan => ScriptExtensionDuployan,
+            RegexUnicodeScriptKind.EgyptianHieroglyphs => ScriptExtensionEgyptianHieroglyphs,
+            RegexUnicodeScriptKind.Elbasan => ScriptExtensionElbasan,
+            RegexUnicodeScriptKind.Elymaic => ScriptExtensionElymaic,
+            RegexUnicodeScriptKind.Ethiopic => ScriptExtensionEthiopic,
+            RegexUnicodeScriptKind.Garay => ScriptExtensionGaray,
+            RegexUnicodeScriptKind.Georgian => ScriptExtensionGeorgian,
+            RegexUnicodeScriptKind.Glagolitic => ScriptExtensionGlagolitic,
+            RegexUnicodeScriptKind.Gothic => ScriptExtensionGothic,
+            RegexUnicodeScriptKind.Grantha => ScriptExtensionGrantha,
+            RegexUnicodeScriptKind.Greek => ScriptExtensionGreek,
+            RegexUnicodeScriptKind.Gujarati => ScriptExtensionGujarati,
+            RegexUnicodeScriptKind.GunjalaGondi => ScriptExtensionGunjalaGondi,
+            RegexUnicodeScriptKind.Gurmukhi => ScriptExtensionGurmukhi,
+            RegexUnicodeScriptKind.GurungKhema => ScriptExtensionGurungKhema,
+            RegexUnicodeScriptKind.Han => ScriptExtensionHan,
+            RegexUnicodeScriptKind.Hangul => ScriptExtensionHangul,
+            RegexUnicodeScriptKind.HanifiRohingya => ScriptExtensionHanifiRohingya,
+            RegexUnicodeScriptKind.Hanunoo => ScriptExtensionHanunoo,
+            RegexUnicodeScriptKind.Hatran => ScriptExtensionHatran,
+            RegexUnicodeScriptKind.Hebrew => ScriptExtensionHebrew,
+            RegexUnicodeScriptKind.Hiragana => ScriptExtensionHiragana,
+            RegexUnicodeScriptKind.ImperialAramaic => ScriptExtensionImperialAramaic,
+            RegexUnicodeScriptKind.Inherited => ScriptExtensionInherited,
+            RegexUnicodeScriptKind.InscriptionalPahlavi => ScriptExtensionInscriptionalPahlavi,
+            RegexUnicodeScriptKind.InscriptionalParthian => ScriptExtensionInscriptionalParthian,
+            RegexUnicodeScriptKind.Javanese => ScriptExtensionJavanese,
+            RegexUnicodeScriptKind.Kaithi => ScriptExtensionKaithi,
+            RegexUnicodeScriptKind.Kannada => ScriptExtensionKannada,
+            RegexUnicodeScriptKind.Katakana => ScriptExtensionKatakana,
+            RegexUnicodeScriptKind.Kawi => ScriptExtensionKawi,
+            RegexUnicodeScriptKind.KayahLi => ScriptExtensionKayahLi,
+            RegexUnicodeScriptKind.Kharoshthi => ScriptExtensionKharoshthi,
+            RegexUnicodeScriptKind.KhitanSmallScript => ScriptExtensionKhitanSmallScript,
+            RegexUnicodeScriptKind.Khmer => ScriptExtensionKhmer,
+            RegexUnicodeScriptKind.Khojki => ScriptExtensionKhojki,
+            RegexUnicodeScriptKind.Khudawadi => ScriptExtensionKhudawadi,
+            RegexUnicodeScriptKind.KiratRai => ScriptExtensionKiratRai,
+            RegexUnicodeScriptKind.Lao => ScriptExtensionLao,
+            RegexUnicodeScriptKind.Latin => ScriptExtensionLatin,
+            RegexUnicodeScriptKind.Lepcha => ScriptExtensionLepcha,
+            RegexUnicodeScriptKind.Limbu => ScriptExtensionLimbu,
+            RegexUnicodeScriptKind.LinearA => ScriptExtensionLinearA,
+            RegexUnicodeScriptKind.LinearB => ScriptExtensionLinearB,
+            RegexUnicodeScriptKind.Lisu => ScriptExtensionLisu,
+            RegexUnicodeScriptKind.Lycian => ScriptExtensionLycian,
+            RegexUnicodeScriptKind.Lydian => ScriptExtensionLydian,
+            RegexUnicodeScriptKind.Mahajani => ScriptExtensionMahajani,
+            RegexUnicodeScriptKind.Makasar => ScriptExtensionMakasar,
+            RegexUnicodeScriptKind.Malayalam => ScriptExtensionMalayalam,
+            RegexUnicodeScriptKind.Mandaic => ScriptExtensionMandaic,
+            RegexUnicodeScriptKind.Manichaean => ScriptExtensionManichaean,
+            RegexUnicodeScriptKind.Marchen => ScriptExtensionMarchen,
+            RegexUnicodeScriptKind.MasaramGondi => ScriptExtensionMasaramGondi,
+            RegexUnicodeScriptKind.Medefaidrin => ScriptExtensionMedefaidrin,
+            RegexUnicodeScriptKind.MeeteiMayek => ScriptExtensionMeeteiMayek,
+            RegexUnicodeScriptKind.MendeKikakui => ScriptExtensionMendeKikakui,
+            RegexUnicodeScriptKind.MeroiticCursive => ScriptExtensionMeroiticCursive,
+            RegexUnicodeScriptKind.MeroiticHieroglyphs => ScriptExtensionMeroiticHieroglyphs,
+            RegexUnicodeScriptKind.Miao => ScriptExtensionMiao,
+            RegexUnicodeScriptKind.Modi => ScriptExtensionModi,
+            RegexUnicodeScriptKind.Mongolian => ScriptExtensionMongolian,
+            RegexUnicodeScriptKind.Mro => ScriptExtensionMro,
+            RegexUnicodeScriptKind.Multani => ScriptExtensionMultani,
+            RegexUnicodeScriptKind.Myanmar => ScriptExtensionMyanmar,
+            RegexUnicodeScriptKind.Nabataean => ScriptExtensionNabataean,
+            RegexUnicodeScriptKind.NagMundari => ScriptExtensionNagMundari,
+            RegexUnicodeScriptKind.Nandinagari => ScriptExtensionNandinagari,
+            RegexUnicodeScriptKind.NewTaiLue => ScriptExtensionNewTaiLue,
+            RegexUnicodeScriptKind.Newa => ScriptExtensionNewa,
+            RegexUnicodeScriptKind.Nko => ScriptExtensionNko,
+            RegexUnicodeScriptKind.Nushu => ScriptExtensionNushu,
+            RegexUnicodeScriptKind.NyiakengPuachueHmong => ScriptExtensionNyiakengPuachueHmong,
+            RegexUnicodeScriptKind.Ogham => ScriptExtensionOgham,
+            RegexUnicodeScriptKind.OlChiki => ScriptExtensionOlChiki,
+            RegexUnicodeScriptKind.OlOnal => ScriptExtensionOlOnal,
+            RegexUnicodeScriptKind.OldHungarian => ScriptExtensionOldHungarian,
+            RegexUnicodeScriptKind.OldItalic => ScriptExtensionOldItalic,
+            RegexUnicodeScriptKind.OldNorthArabian => ScriptExtensionOldNorthArabian,
+            RegexUnicodeScriptKind.OldPermic => ScriptExtensionOldPermic,
+            RegexUnicodeScriptKind.OldPersian => ScriptExtensionOldPersian,
+            RegexUnicodeScriptKind.OldSogdian => ScriptExtensionOldSogdian,
+            RegexUnicodeScriptKind.OldSouthArabian => ScriptExtensionOldSouthArabian,
+            RegexUnicodeScriptKind.OldTurkic => ScriptExtensionOldTurkic,
+            RegexUnicodeScriptKind.OldUyghur => ScriptExtensionOldUyghur,
+            RegexUnicodeScriptKind.Oriya => ScriptExtensionOriya,
+            RegexUnicodeScriptKind.Osage => ScriptExtensionOsage,
+            RegexUnicodeScriptKind.Osmanya => ScriptExtensionOsmanya,
+            RegexUnicodeScriptKind.PahawhHmong => ScriptExtensionPahawhHmong,
+            RegexUnicodeScriptKind.Palmyrene => ScriptExtensionPalmyrene,
+            RegexUnicodeScriptKind.PauCinHau => ScriptExtensionPauCinHau,
+            RegexUnicodeScriptKind.PhagsPa => ScriptExtensionPhagsPa,
+            RegexUnicodeScriptKind.Phoenician => ScriptExtensionPhoenician,
+            RegexUnicodeScriptKind.PsalterPahlavi => ScriptExtensionPsalterPahlavi,
+            RegexUnicodeScriptKind.Rejang => ScriptExtensionRejang,
+            RegexUnicodeScriptKind.Runic => ScriptExtensionRunic,
+            RegexUnicodeScriptKind.Samaritan => ScriptExtensionSamaritan,
+            RegexUnicodeScriptKind.Saurashtra => ScriptExtensionSaurashtra,
+            RegexUnicodeScriptKind.Sharada => ScriptExtensionSharada,
+            RegexUnicodeScriptKind.Shavian => ScriptExtensionShavian,
+            RegexUnicodeScriptKind.Siddham => ScriptExtensionSiddham,
+            RegexUnicodeScriptKind.Signwriting => ScriptExtensionSignwriting,
+            RegexUnicodeScriptKind.Sinhala => ScriptExtensionSinhala,
+            RegexUnicodeScriptKind.Sogdian => ScriptExtensionSogdian,
+            RegexUnicodeScriptKind.SoraSompeng => ScriptExtensionSoraSompeng,
+            RegexUnicodeScriptKind.Soyombo => ScriptExtensionSoyombo,
+            RegexUnicodeScriptKind.Sundanese => ScriptExtensionSundanese,
+            RegexUnicodeScriptKind.Sunuwar => ScriptExtensionSunuwar,
+            RegexUnicodeScriptKind.SylotiNagri => ScriptExtensionSylotiNagri,
+            RegexUnicodeScriptKind.Syriac => ScriptExtensionSyriac,
+            RegexUnicodeScriptKind.Tagalog => ScriptExtensionTagalog,
+            RegexUnicodeScriptKind.Tagbanwa => ScriptExtensionTagbanwa,
+            RegexUnicodeScriptKind.TaiLe => ScriptExtensionTaiLe,
+            RegexUnicodeScriptKind.TaiTham => ScriptExtensionTaiTham,
+            RegexUnicodeScriptKind.TaiViet => ScriptExtensionTaiViet,
+            RegexUnicodeScriptKind.Takri => ScriptExtensionTakri,
+            RegexUnicodeScriptKind.Tamil => ScriptExtensionTamil,
+            RegexUnicodeScriptKind.Tangsa => ScriptExtensionTangsa,
+            RegexUnicodeScriptKind.Tangut => ScriptExtensionTangut,
+            RegexUnicodeScriptKind.Telugu => ScriptExtensionTelugu,
+            RegexUnicodeScriptKind.Thaana => ScriptExtensionThaana,
+            RegexUnicodeScriptKind.Thai => ScriptExtensionThai,
+            RegexUnicodeScriptKind.Tibetan => ScriptExtensionTibetan,
+            RegexUnicodeScriptKind.Tifinagh => ScriptExtensionTifinagh,
+            RegexUnicodeScriptKind.Tirhuta => ScriptExtensionTirhuta,
+            RegexUnicodeScriptKind.Todhri => ScriptExtensionTodhri,
+            RegexUnicodeScriptKind.Toto => ScriptExtensionToto,
+            RegexUnicodeScriptKind.TuluTigalari => ScriptExtensionTuluTigalari,
+            RegexUnicodeScriptKind.Ugaritic => ScriptExtensionUgaritic,
+            RegexUnicodeScriptKind.Vai => ScriptExtensionVai,
+            RegexUnicodeScriptKind.Vithkuqi => ScriptExtensionVithkuqi,
+            RegexUnicodeScriptKind.Wancho => ScriptExtensionWancho,
+            RegexUnicodeScriptKind.WarangCiti => ScriptExtensionWarangCiti,
+            RegexUnicodeScriptKind.Yezidi => ScriptExtensionYezidi,
+            RegexUnicodeScriptKind.Yi => ScriptExtensionYi,
+            RegexUnicodeScriptKind.ZanabazarSquare => ScriptExtensionZanabazarSquare,
             _ => [],
         };
     }
@@ -9153,6 +9514,434 @@ internal static class RegexUnicodeTables
         0x00FF64, 0x00FF64,
     ];
 
+    private static ReadOnlySpan<int> ScriptAdlam =>
+    [
+        0x01E900, 0x01E94B,
+        0x01E950, 0x01E959,
+        0x01E95E, 0x01E95F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptAhom =>
+    [
+        0x011700, 0x01171A,
+        0x01171D, 0x01172B,
+        0x011730, 0x011746,
+    ];
+
+    private static ReadOnlySpan<int> ScriptAnatolianHieroglyphs =>
+    [
+        0x014400, 0x014646,
+    ];
+
+    private static ReadOnlySpan<int> ScriptArabic =>
+    [
+        0x000600, 0x000604,
+        0x000606, 0x00060B,
+        0x00060D, 0x00061A,
+        0x00061C, 0x00061E,
+        0x000620, 0x00063F,
+        0x000641, 0x00064A,
+        0x000656, 0x00066F,
+        0x000671, 0x0006DC,
+        0x0006DE, 0x0006FF,
+        0x000750, 0x00077F,
+        0x000870, 0x00088E,
+        0x000890, 0x000891,
+        0x000897, 0x0008E1,
+        0x0008E3, 0x0008FF,
+        0x00FB50, 0x00FBC2,
+        0x00FBD3, 0x00FD3D,
+        0x00FD40, 0x00FD8F,
+        0x00FD92, 0x00FDC7,
+        0x00FDCF, 0x00FDCF,
+        0x00FDF0, 0x00FDFF,
+        0x00FE70, 0x00FE74,
+        0x00FE76, 0x00FEFC,
+        0x010E60, 0x010E7E,
+        0x010EC2, 0x010EC4,
+        0x010EFC, 0x010EFF,
+        0x01EE00, 0x01EE03,
+        0x01EE05, 0x01EE1F,
+        0x01EE21, 0x01EE22,
+        0x01EE24, 0x01EE24,
+        0x01EE27, 0x01EE27,
+        0x01EE29, 0x01EE32,
+        0x01EE34, 0x01EE37,
+        0x01EE39, 0x01EE39,
+        0x01EE3B, 0x01EE3B,
+        0x01EE42, 0x01EE42,
+        0x01EE47, 0x01EE47,
+        0x01EE49, 0x01EE49,
+        0x01EE4B, 0x01EE4B,
+        0x01EE4D, 0x01EE4F,
+        0x01EE51, 0x01EE52,
+        0x01EE54, 0x01EE54,
+        0x01EE57, 0x01EE57,
+        0x01EE59, 0x01EE59,
+        0x01EE5B, 0x01EE5B,
+        0x01EE5D, 0x01EE5D,
+        0x01EE5F, 0x01EE5F,
+        0x01EE61, 0x01EE62,
+        0x01EE64, 0x01EE64,
+        0x01EE67, 0x01EE6A,
+        0x01EE6C, 0x01EE72,
+        0x01EE74, 0x01EE77,
+        0x01EE79, 0x01EE7C,
+        0x01EE7E, 0x01EE7E,
+        0x01EE80, 0x01EE89,
+        0x01EE8B, 0x01EE9B,
+        0x01EEA1, 0x01EEA3,
+        0x01EEA5, 0x01EEA9,
+        0x01EEAB, 0x01EEBB,
+        0x01EEF0, 0x01EEF1,
+    ];
+
+    private static ReadOnlySpan<int> ScriptArmenian =>
+    [
+        0x000531, 0x000556,
+        0x000559, 0x00058A,
+        0x00058D, 0x00058F,
+        0x00FB13, 0x00FB17,
+    ];
+
+    private static ReadOnlySpan<int> ScriptAvestan =>
+    [
+        0x010B00, 0x010B35,
+        0x010B39, 0x010B3F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptBalinese =>
+    [
+        0x001B00, 0x001B4C,
+        0x001B4E, 0x001B7F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptBamum =>
+    [
+        0x00A6A0, 0x00A6F7,
+        0x016800, 0x016A38,
+    ];
+
+    private static ReadOnlySpan<int> ScriptBassaVah =>
+    [
+        0x016AD0, 0x016AED,
+        0x016AF0, 0x016AF5,
+    ];
+
+    private static ReadOnlySpan<int> ScriptBatak =>
+    [
+        0x001BC0, 0x001BF3,
+        0x001BFC, 0x001BFF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptBengali =>
+    [
+        0x000980, 0x000983,
+        0x000985, 0x00098C,
+        0x00098F, 0x000990,
+        0x000993, 0x0009A8,
+        0x0009AA, 0x0009B0,
+        0x0009B2, 0x0009B2,
+        0x0009B6, 0x0009B9,
+        0x0009BC, 0x0009C4,
+        0x0009C7, 0x0009C8,
+        0x0009CB, 0x0009CE,
+        0x0009D7, 0x0009D7,
+        0x0009DC, 0x0009DD,
+        0x0009DF, 0x0009E3,
+        0x0009E6, 0x0009FE,
+    ];
+
+    private static ReadOnlySpan<int> ScriptBhaiksuki =>
+    [
+        0x011C00, 0x011C08,
+        0x011C0A, 0x011C36,
+        0x011C38, 0x011C45,
+        0x011C50, 0x011C6C,
+    ];
+
+    private static ReadOnlySpan<int> ScriptBopomofo =>
+    [
+        0x0002EA, 0x0002EB,
+        0x003105, 0x00312F,
+        0x0031A0, 0x0031BF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptBrahmi =>
+    [
+        0x011000, 0x01104D,
+        0x011052, 0x011075,
+        0x01107F, 0x01107F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptBraille =>
+    [
+        0x002800, 0x0028FF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptBuginese =>
+    [
+        0x001A00, 0x001A1B,
+        0x001A1E, 0x001A1F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptBuhid =>
+    [
+        0x001740, 0x001753,
+    ];
+
+    private static ReadOnlySpan<int> ScriptCanadianAboriginal =>
+    [
+        0x001400, 0x00167F,
+        0x0018B0, 0x0018F5,
+        0x011AB0, 0x011ABF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptCarian =>
+    [
+        0x0102A0, 0x0102D0,
+    ];
+
+    private static ReadOnlySpan<int> ScriptCaucasianAlbanian =>
+    [
+        0x010530, 0x010563,
+        0x01056F, 0x01056F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptChakma =>
+    [
+        0x011100, 0x011134,
+        0x011136, 0x011147,
+    ];
+
+    private static ReadOnlySpan<int> ScriptCham =>
+    [
+        0x00AA00, 0x00AA36,
+        0x00AA40, 0x00AA4D,
+        0x00AA50, 0x00AA59,
+        0x00AA5C, 0x00AA5F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptCherokee =>
+    [
+        0x0013A0, 0x0013F5,
+        0x0013F8, 0x0013FD,
+        0x00AB70, 0x00ABBF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptChorasmian =>
+    [
+        0x010FB0, 0x010FCB,
+    ];
+
+    private static ReadOnlySpan<int> ScriptCommon =>
+    [
+        0x000000, 0x000040,
+        0x00005B, 0x000060,
+        0x00007B, 0x0000A9,
+        0x0000AB, 0x0000B9,
+        0x0000BB, 0x0000BF,
+        0x0000D7, 0x0000D7,
+        0x0000F7, 0x0000F7,
+        0x0002B9, 0x0002DF,
+        0x0002E5, 0x0002E9,
+        0x0002EC, 0x0002FF,
+        0x000374, 0x000374,
+        0x00037E, 0x00037E,
+        0x000385, 0x000385,
+        0x000387, 0x000387,
+        0x000605, 0x000605,
+        0x00060C, 0x00060C,
+        0x00061B, 0x00061B,
+        0x00061F, 0x00061F,
+        0x000640, 0x000640,
+        0x0006DD, 0x0006DD,
+        0x0008E2, 0x0008E2,
+        0x000964, 0x000965,
+        0x000E3F, 0x000E3F,
+        0x000FD5, 0x000FD8,
+        0x0010FB, 0x0010FB,
+        0x0016EB, 0x0016ED,
+        0x001735, 0x001736,
+        0x001802, 0x001803,
+        0x001805, 0x001805,
+        0x001CD3, 0x001CD3,
+        0x001CE1, 0x001CE1,
+        0x001CE9, 0x001CEC,
+        0x001CEE, 0x001CF3,
+        0x001CF5, 0x001CF7,
+        0x001CFA, 0x001CFA,
+        0x002000, 0x00200B,
+        0x00200E, 0x002064,
+        0x002066, 0x002070,
+        0x002074, 0x00207E,
+        0x002080, 0x00208E,
+        0x0020A0, 0x0020C0,
+        0x002100, 0x002125,
+        0x002127, 0x002129,
+        0x00212C, 0x002131,
+        0x002133, 0x00214D,
+        0x00214F, 0x00215F,
+        0x002189, 0x00218B,
+        0x002190, 0x002429,
+        0x002440, 0x00244A,
+        0x002460, 0x0027FF,
+        0x002900, 0x002B73,
+        0x002B76, 0x002B95,
+        0x002B97, 0x002BFF,
+        0x002E00, 0x002E5D,
+        0x002FF0, 0x003004,
+        0x003006, 0x003006,
+        0x003008, 0x003020,
+        0x003030, 0x003037,
+        0x00303C, 0x00303F,
+        0x00309B, 0x00309C,
+        0x0030A0, 0x0030A0,
+        0x0030FB, 0x0030FC,
+        0x003190, 0x00319F,
+        0x0031C0, 0x0031E5,
+        0x0031EF, 0x0031EF,
+        0x003220, 0x00325F,
+        0x00327F, 0x0032CF,
+        0x0032FF, 0x0032FF,
+        0x003358, 0x0033FF,
+        0x004DC0, 0x004DFF,
+        0x00A700, 0x00A721,
+        0x00A788, 0x00A78A,
+        0x00A830, 0x00A839,
+        0x00A92E, 0x00A92E,
+        0x00A9CF, 0x00A9CF,
+        0x00AB5B, 0x00AB5B,
+        0x00AB6A, 0x00AB6B,
+        0x00FD3E, 0x00FD3F,
+        0x00FE10, 0x00FE19,
+        0x00FE30, 0x00FE52,
+        0x00FE54, 0x00FE66,
+        0x00FE68, 0x00FE6B,
+        0x00FEFF, 0x00FEFF,
+        0x00FF01, 0x00FF20,
+        0x00FF3B, 0x00FF40,
+        0x00FF5B, 0x00FF65,
+        0x00FF70, 0x00FF70,
+        0x00FF9E, 0x00FF9F,
+        0x00FFE0, 0x00FFE6,
+        0x00FFE8, 0x00FFEE,
+        0x00FFF9, 0x00FFFD,
+        0x010100, 0x010102,
+        0x010107, 0x010133,
+        0x010137, 0x01013F,
+        0x010190, 0x01019C,
+        0x0101D0, 0x0101FC,
+        0x0102E1, 0x0102FB,
+        0x01BCA0, 0x01BCA3,
+        0x01CC00, 0x01CCF9,
+        0x01CD00, 0x01CEB3,
+        0x01CF50, 0x01CFC3,
+        0x01D000, 0x01D0F5,
+        0x01D100, 0x01D126,
+        0x01D129, 0x01D166,
+        0x01D16A, 0x01D17A,
+        0x01D183, 0x01D184,
+        0x01D18C, 0x01D1A9,
+        0x01D1AE, 0x01D1EA,
+        0x01D2C0, 0x01D2D3,
+        0x01D2E0, 0x01D2F3,
+        0x01D300, 0x01D356,
+        0x01D360, 0x01D378,
+        0x01D400, 0x01D454,
+        0x01D456, 0x01D49C,
+        0x01D49E, 0x01D49F,
+        0x01D4A2, 0x01D4A2,
+        0x01D4A5, 0x01D4A6,
+        0x01D4A9, 0x01D4AC,
+        0x01D4AE, 0x01D4B9,
+        0x01D4BB, 0x01D4BB,
+        0x01D4BD, 0x01D4C3,
+        0x01D4C5, 0x01D505,
+        0x01D507, 0x01D50A,
+        0x01D50D, 0x01D514,
+        0x01D516, 0x01D51C,
+        0x01D51E, 0x01D539,
+        0x01D53B, 0x01D53E,
+        0x01D540, 0x01D544,
+        0x01D546, 0x01D546,
+        0x01D54A, 0x01D550,
+        0x01D552, 0x01D6A5,
+        0x01D6A8, 0x01D7CB,
+        0x01D7CE, 0x01D7FF,
+        0x01EC71, 0x01ECB4,
+        0x01ED01, 0x01ED3D,
+        0x01F000, 0x01F02B,
+        0x01F030, 0x01F093,
+        0x01F0A0, 0x01F0AE,
+        0x01F0B1, 0x01F0BF,
+        0x01F0C1, 0x01F0CF,
+        0x01F0D1, 0x01F0F5,
+        0x01F100, 0x01F1AD,
+        0x01F1E6, 0x01F1FF,
+        0x01F201, 0x01F202,
+        0x01F210, 0x01F23B,
+        0x01F240, 0x01F248,
+        0x01F250, 0x01F251,
+        0x01F260, 0x01F265,
+        0x01F300, 0x01F6D7,
+        0x01F6DC, 0x01F6EC,
+        0x01F6F0, 0x01F6FC,
+        0x01F700, 0x01F776,
+        0x01F77B, 0x01F7D9,
+        0x01F7E0, 0x01F7EB,
+        0x01F7F0, 0x01F7F0,
+        0x01F800, 0x01F80B,
+        0x01F810, 0x01F847,
+        0x01F850, 0x01F859,
+        0x01F860, 0x01F887,
+        0x01F890, 0x01F8AD,
+        0x01F8B0, 0x01F8BB,
+        0x01F8C0, 0x01F8C1,
+        0x01F900, 0x01FA53,
+        0x01FA60, 0x01FA6D,
+        0x01FA70, 0x01FA7C,
+        0x01FA80, 0x01FA89,
+        0x01FA8F, 0x01FAC6,
+        0x01FACE, 0x01FADC,
+        0x01FADF, 0x01FAE9,
+        0x01FAF0, 0x01FAF8,
+        0x01FB00, 0x01FB92,
+        0x01FB94, 0x01FBF9,
+        0x0E0001, 0x0E0001,
+        0x0E0020, 0x0E007F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptCoptic =>
+    [
+        0x0003E2, 0x0003EF,
+        0x002C80, 0x002CF3,
+        0x002CF9, 0x002CFF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptCuneiform =>
+    [
+        0x012000, 0x012399,
+        0x012400, 0x01246E,
+        0x012470, 0x012474,
+        0x012480, 0x012543,
+    ];
+
+    private static ReadOnlySpan<int> ScriptCypriot =>
+    [
+        0x010800, 0x010805,
+        0x010808, 0x010808,
+        0x01080A, 0x010835,
+        0x010837, 0x010838,
+        0x01083C, 0x01083C,
+        0x01083F, 0x01083F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptCyproMinoan =>
+    [
+        0x012F90, 0x012FF2,
+    ];
+
     private static ReadOnlySpan<int> ScriptCyrillic =>
     [
         0x000400, 0x000484,
@@ -9165,6 +9954,157 @@ internal static class RegexUnicodeTables
         0x00FE2E, 0x00FE2F,
         0x01E030, 0x01E06D,
         0x01E08F, 0x01E08F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptDeseret =>
+    [
+        0x010400, 0x01044F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptDevanagari =>
+    [
+        0x000900, 0x000950,
+        0x000955, 0x000963,
+        0x000966, 0x00097F,
+        0x00A8E0, 0x00A8FF,
+        0x011B00, 0x011B09,
+    ];
+
+    private static ReadOnlySpan<int> ScriptDivesAkuru =>
+    [
+        0x011900, 0x011906,
+        0x011909, 0x011909,
+        0x01190C, 0x011913,
+        0x011915, 0x011916,
+        0x011918, 0x011935,
+        0x011937, 0x011938,
+        0x01193B, 0x011946,
+        0x011950, 0x011959,
+    ];
+
+    private static ReadOnlySpan<int> ScriptDogra =>
+    [
+        0x011800, 0x01183B,
+    ];
+
+    private static ReadOnlySpan<int> ScriptDuployan =>
+    [
+        0x01BC00, 0x01BC6A,
+        0x01BC70, 0x01BC7C,
+        0x01BC80, 0x01BC88,
+        0x01BC90, 0x01BC99,
+        0x01BC9C, 0x01BC9F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptEgyptianHieroglyphs =>
+    [
+        0x013000, 0x013455,
+        0x013460, 0x0143FA,
+    ];
+
+    private static ReadOnlySpan<int> ScriptElbasan =>
+    [
+        0x010500, 0x010527,
+    ];
+
+    private static ReadOnlySpan<int> ScriptElymaic =>
+    [
+        0x010FE0, 0x010FF6,
+    ];
+
+    private static ReadOnlySpan<int> ScriptEthiopic =>
+    [
+        0x001200, 0x001248,
+        0x00124A, 0x00124D,
+        0x001250, 0x001256,
+        0x001258, 0x001258,
+        0x00125A, 0x00125D,
+        0x001260, 0x001288,
+        0x00128A, 0x00128D,
+        0x001290, 0x0012B0,
+        0x0012B2, 0x0012B5,
+        0x0012B8, 0x0012BE,
+        0x0012C0, 0x0012C0,
+        0x0012C2, 0x0012C5,
+        0x0012C8, 0x0012D6,
+        0x0012D8, 0x001310,
+        0x001312, 0x001315,
+        0x001318, 0x00135A,
+        0x00135D, 0x00137C,
+        0x001380, 0x001399,
+        0x002D80, 0x002D96,
+        0x002DA0, 0x002DA6,
+        0x002DA8, 0x002DAE,
+        0x002DB0, 0x002DB6,
+        0x002DB8, 0x002DBE,
+        0x002DC0, 0x002DC6,
+        0x002DC8, 0x002DCE,
+        0x002DD0, 0x002DD6,
+        0x002DD8, 0x002DDE,
+        0x00AB01, 0x00AB06,
+        0x00AB09, 0x00AB0E,
+        0x00AB11, 0x00AB16,
+        0x00AB20, 0x00AB26,
+        0x00AB28, 0x00AB2E,
+        0x01E7E0, 0x01E7E6,
+        0x01E7E8, 0x01E7EB,
+        0x01E7ED, 0x01E7EE,
+        0x01E7F0, 0x01E7FE,
+    ];
+
+    private static ReadOnlySpan<int> ScriptGaray =>
+    [
+        0x010D40, 0x010D65,
+        0x010D69, 0x010D85,
+        0x010D8E, 0x010D8F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptGeorgian =>
+    [
+        0x0010A0, 0x0010C5,
+        0x0010C7, 0x0010C7,
+        0x0010CD, 0x0010CD,
+        0x0010D0, 0x0010FA,
+        0x0010FC, 0x0010FF,
+        0x001C90, 0x001CBA,
+        0x001CBD, 0x001CBF,
+        0x002D00, 0x002D25,
+        0x002D27, 0x002D27,
+        0x002D2D, 0x002D2D,
+    ];
+
+    private static ReadOnlySpan<int> ScriptGlagolitic =>
+    [
+        0x002C00, 0x002C5F,
+        0x01E000, 0x01E006,
+        0x01E008, 0x01E018,
+        0x01E01B, 0x01E021,
+        0x01E023, 0x01E024,
+        0x01E026, 0x01E02A,
+    ];
+
+    private static ReadOnlySpan<int> ScriptGothic =>
+    [
+        0x010330, 0x01034A,
+    ];
+
+    private static ReadOnlySpan<int> ScriptGrantha =>
+    [
+        0x011300, 0x011303,
+        0x011305, 0x01130C,
+        0x01130F, 0x011310,
+        0x011313, 0x011328,
+        0x01132A, 0x011330,
+        0x011332, 0x011333,
+        0x011335, 0x011339,
+        0x01133C, 0x011344,
+        0x011347, 0x011348,
+        0x01134B, 0x01134D,
+        0x011350, 0x011350,
+        0x011357, 0x011357,
+        0x01135D, 0x011363,
+        0x011366, 0x01136C,
+        0x011370, 0x011374,
     ];
 
     private static ReadOnlySpan<int> ScriptGreek =>
@@ -9207,6 +10147,1500 @@ internal static class RegexUnicodeTables
         0x01D200, 0x01D245,
     ];
 
+    private static ReadOnlySpan<int> ScriptGujarati =>
+    [
+        0x000A81, 0x000A83,
+        0x000A85, 0x000A8D,
+        0x000A8F, 0x000A91,
+        0x000A93, 0x000AA8,
+        0x000AAA, 0x000AB0,
+        0x000AB2, 0x000AB3,
+        0x000AB5, 0x000AB9,
+        0x000ABC, 0x000AC5,
+        0x000AC7, 0x000AC9,
+        0x000ACB, 0x000ACD,
+        0x000AD0, 0x000AD0,
+        0x000AE0, 0x000AE3,
+        0x000AE6, 0x000AF1,
+        0x000AF9, 0x000AFF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptGunjalaGondi =>
+    [
+        0x011D60, 0x011D65,
+        0x011D67, 0x011D68,
+        0x011D6A, 0x011D8E,
+        0x011D90, 0x011D91,
+        0x011D93, 0x011D98,
+        0x011DA0, 0x011DA9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptGurmukhi =>
+    [
+        0x000A01, 0x000A03,
+        0x000A05, 0x000A0A,
+        0x000A0F, 0x000A10,
+        0x000A13, 0x000A28,
+        0x000A2A, 0x000A30,
+        0x000A32, 0x000A33,
+        0x000A35, 0x000A36,
+        0x000A38, 0x000A39,
+        0x000A3C, 0x000A3C,
+        0x000A3E, 0x000A42,
+        0x000A47, 0x000A48,
+        0x000A4B, 0x000A4D,
+        0x000A51, 0x000A51,
+        0x000A59, 0x000A5C,
+        0x000A5E, 0x000A5E,
+        0x000A66, 0x000A76,
+    ];
+
+    private static ReadOnlySpan<int> ScriptGurungKhema =>
+    [
+        0x016100, 0x016139,
+    ];
+
+    private static ReadOnlySpan<int> ScriptHan =>
+    [
+        0x002E80, 0x002E99,
+        0x002E9B, 0x002EF3,
+        0x002F00, 0x002FD5,
+        0x003005, 0x003005,
+        0x003007, 0x003007,
+        0x003021, 0x003029,
+        0x003038, 0x00303B,
+        0x003400, 0x004DBF,
+        0x004E00, 0x009FFF,
+        0x00F900, 0x00FA6D,
+        0x00FA70, 0x00FAD9,
+        0x016FE2, 0x016FE3,
+        0x016FF0, 0x016FF1,
+        0x020000, 0x02A6DF,
+        0x02A700, 0x02B739,
+        0x02B740, 0x02B81D,
+        0x02B820, 0x02CEA1,
+        0x02CEB0, 0x02EBE0,
+        0x02EBF0, 0x02EE5D,
+        0x02F800, 0x02FA1D,
+        0x030000, 0x03134A,
+        0x031350, 0x0323AF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptHangul =>
+    [
+        0x001100, 0x0011FF,
+        0x00302E, 0x00302F,
+        0x003131, 0x00318E,
+        0x003200, 0x00321E,
+        0x003260, 0x00327E,
+        0x00A960, 0x00A97C,
+        0x00AC00, 0x00D7A3,
+        0x00D7B0, 0x00D7C6,
+        0x00D7CB, 0x00D7FB,
+        0x00FFA0, 0x00FFBE,
+        0x00FFC2, 0x00FFC7,
+        0x00FFCA, 0x00FFCF,
+        0x00FFD2, 0x00FFD7,
+        0x00FFDA, 0x00FFDC,
+    ];
+
+    private static ReadOnlySpan<int> ScriptHanifiRohingya =>
+    [
+        0x010D00, 0x010D27,
+        0x010D30, 0x010D39,
+    ];
+
+    private static ReadOnlySpan<int> ScriptHanunoo =>
+    [
+        0x001720, 0x001734,
+    ];
+
+    private static ReadOnlySpan<int> ScriptHatran =>
+    [
+        0x0108E0, 0x0108F2,
+        0x0108F4, 0x0108F5,
+        0x0108FB, 0x0108FF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptHebrew =>
+    [
+        0x000591, 0x0005C7,
+        0x0005D0, 0x0005EA,
+        0x0005EF, 0x0005F4,
+        0x00FB1D, 0x00FB36,
+        0x00FB38, 0x00FB3C,
+        0x00FB3E, 0x00FB3E,
+        0x00FB40, 0x00FB41,
+        0x00FB43, 0x00FB44,
+        0x00FB46, 0x00FB4F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptHiragana =>
+    [
+        0x003041, 0x003096,
+        0x00309D, 0x00309F,
+        0x01B001, 0x01B11F,
+        0x01B132, 0x01B132,
+        0x01B150, 0x01B152,
+        0x01F200, 0x01F200,
+    ];
+
+    private static ReadOnlySpan<int> ScriptImperialAramaic =>
+    [
+        0x010840, 0x010855,
+        0x010857, 0x01085F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptInherited =>
+    [
+        0x000300, 0x00036F,
+        0x000485, 0x000486,
+        0x00064B, 0x000655,
+        0x000670, 0x000670,
+        0x000951, 0x000954,
+        0x001AB0, 0x001ACE,
+        0x001CD0, 0x001CD2,
+        0x001CD4, 0x001CE0,
+        0x001CE2, 0x001CE8,
+        0x001CED, 0x001CED,
+        0x001CF4, 0x001CF4,
+        0x001CF8, 0x001CF9,
+        0x001DC0, 0x001DFF,
+        0x00200C, 0x00200D,
+        0x0020D0, 0x0020F0,
+        0x00302A, 0x00302D,
+        0x003099, 0x00309A,
+        0x00FE00, 0x00FE0F,
+        0x00FE20, 0x00FE2D,
+        0x0101FD, 0x0101FD,
+        0x0102E0, 0x0102E0,
+        0x01133B, 0x01133B,
+        0x01CF00, 0x01CF2D,
+        0x01CF30, 0x01CF46,
+        0x01D167, 0x01D169,
+        0x01D17B, 0x01D182,
+        0x01D185, 0x01D18B,
+        0x01D1AA, 0x01D1AD,
+        0x0E0100, 0x0E01EF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptInscriptionalPahlavi =>
+    [
+        0x010B60, 0x010B72,
+        0x010B78, 0x010B7F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptInscriptionalParthian =>
+    [
+        0x010B40, 0x010B55,
+        0x010B58, 0x010B5F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptJavanese =>
+    [
+        0x00A980, 0x00A9CD,
+        0x00A9D0, 0x00A9D9,
+        0x00A9DE, 0x00A9DF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptKaithi =>
+    [
+        0x011080, 0x0110C2,
+        0x0110CD, 0x0110CD,
+    ];
+
+    private static ReadOnlySpan<int> ScriptKannada =>
+    [
+        0x000C80, 0x000C8C,
+        0x000C8E, 0x000C90,
+        0x000C92, 0x000CA8,
+        0x000CAA, 0x000CB3,
+        0x000CB5, 0x000CB9,
+        0x000CBC, 0x000CC4,
+        0x000CC6, 0x000CC8,
+        0x000CCA, 0x000CCD,
+        0x000CD5, 0x000CD6,
+        0x000CDD, 0x000CDE,
+        0x000CE0, 0x000CE3,
+        0x000CE6, 0x000CEF,
+        0x000CF1, 0x000CF3,
+    ];
+
+    private static ReadOnlySpan<int> ScriptKatakana =>
+    [
+        0x0030A1, 0x0030FA,
+        0x0030FD, 0x0030FF,
+        0x0031F0, 0x0031FF,
+        0x0032D0, 0x0032FE,
+        0x003300, 0x003357,
+        0x00FF66, 0x00FF6F,
+        0x00FF71, 0x00FF9D,
+        0x01AFF0, 0x01AFF3,
+        0x01AFF5, 0x01AFFB,
+        0x01AFFD, 0x01AFFE,
+        0x01B000, 0x01B000,
+        0x01B120, 0x01B122,
+        0x01B155, 0x01B155,
+        0x01B164, 0x01B167,
+    ];
+
+    private static ReadOnlySpan<int> ScriptKawi =>
+    [
+        0x011F00, 0x011F10,
+        0x011F12, 0x011F3A,
+        0x011F3E, 0x011F5A,
+    ];
+
+    private static ReadOnlySpan<int> ScriptKayahLi =>
+    [
+        0x00A900, 0x00A92D,
+        0x00A92F, 0x00A92F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptKharoshthi =>
+    [
+        0x010A00, 0x010A03,
+        0x010A05, 0x010A06,
+        0x010A0C, 0x010A13,
+        0x010A15, 0x010A17,
+        0x010A19, 0x010A35,
+        0x010A38, 0x010A3A,
+        0x010A3F, 0x010A48,
+        0x010A50, 0x010A58,
+    ];
+
+    private static ReadOnlySpan<int> ScriptKhitanSmallScript =>
+    [
+        0x016FE4, 0x016FE4,
+        0x018B00, 0x018CD5,
+        0x018CFF, 0x018CFF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptKhmer =>
+    [
+        0x001780, 0x0017DD,
+        0x0017E0, 0x0017E9,
+        0x0017F0, 0x0017F9,
+        0x0019E0, 0x0019FF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptKhojki =>
+    [
+        0x011200, 0x011211,
+        0x011213, 0x011241,
+    ];
+
+    private static ReadOnlySpan<int> ScriptKhudawadi =>
+    [
+        0x0112B0, 0x0112EA,
+        0x0112F0, 0x0112F9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptKiratRai =>
+    [
+        0x016D40, 0x016D79,
+    ];
+
+    private static ReadOnlySpan<int> ScriptLao =>
+    [
+        0x000E81, 0x000E82,
+        0x000E84, 0x000E84,
+        0x000E86, 0x000E8A,
+        0x000E8C, 0x000EA3,
+        0x000EA5, 0x000EA5,
+        0x000EA7, 0x000EBD,
+        0x000EC0, 0x000EC4,
+        0x000EC6, 0x000EC6,
+        0x000EC8, 0x000ECE,
+        0x000ED0, 0x000ED9,
+        0x000EDC, 0x000EDF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptLatin =>
+    [
+        0x000041, 0x00005A,
+        0x000061, 0x00007A,
+        0x0000AA, 0x0000AA,
+        0x0000BA, 0x0000BA,
+        0x0000C0, 0x0000D6,
+        0x0000D8, 0x0000F6,
+        0x0000F8, 0x0002B8,
+        0x0002E0, 0x0002E4,
+        0x001D00, 0x001D25,
+        0x001D2C, 0x001D5C,
+        0x001D62, 0x001D65,
+        0x001D6B, 0x001D77,
+        0x001D79, 0x001DBE,
+        0x001E00, 0x001EFF,
+        0x002071, 0x002071,
+        0x00207F, 0x00207F,
+        0x002090, 0x00209C,
+        0x00212A, 0x00212B,
+        0x002132, 0x002132,
+        0x00214E, 0x00214E,
+        0x002160, 0x002188,
+        0x002C60, 0x002C7F,
+        0x00A722, 0x00A787,
+        0x00A78B, 0x00A7CD,
+        0x00A7D0, 0x00A7D1,
+        0x00A7D3, 0x00A7D3,
+        0x00A7D5, 0x00A7DC,
+        0x00A7F2, 0x00A7FF,
+        0x00AB30, 0x00AB5A,
+        0x00AB5C, 0x00AB64,
+        0x00AB66, 0x00AB69,
+        0x00FB00, 0x00FB06,
+        0x00FF21, 0x00FF3A,
+        0x00FF41, 0x00FF5A,
+        0x010780, 0x010785,
+        0x010787, 0x0107B0,
+        0x0107B2, 0x0107BA,
+        0x01DF00, 0x01DF1E,
+        0x01DF25, 0x01DF2A,
+    ];
+
+    private static ReadOnlySpan<int> ScriptLepcha =>
+    [
+        0x001C00, 0x001C37,
+        0x001C3B, 0x001C49,
+        0x001C4D, 0x001C4F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptLimbu =>
+    [
+        0x001900, 0x00191E,
+        0x001920, 0x00192B,
+        0x001930, 0x00193B,
+        0x001940, 0x001940,
+        0x001944, 0x00194F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptLinearA =>
+    [
+        0x010600, 0x010736,
+        0x010740, 0x010755,
+        0x010760, 0x010767,
+    ];
+
+    private static ReadOnlySpan<int> ScriptLinearB =>
+    [
+        0x010000, 0x01000B,
+        0x01000D, 0x010026,
+        0x010028, 0x01003A,
+        0x01003C, 0x01003D,
+        0x01003F, 0x01004D,
+        0x010050, 0x01005D,
+        0x010080, 0x0100FA,
+    ];
+
+    private static ReadOnlySpan<int> ScriptLisu =>
+    [
+        0x00A4D0, 0x00A4FF,
+        0x011FB0, 0x011FB0,
+    ];
+
+    private static ReadOnlySpan<int> ScriptLycian =>
+    [
+        0x010280, 0x01029C,
+    ];
+
+    private static ReadOnlySpan<int> ScriptLydian =>
+    [
+        0x010920, 0x010939,
+        0x01093F, 0x01093F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptMahajani =>
+    [
+        0x011150, 0x011176,
+    ];
+
+    private static ReadOnlySpan<int> ScriptMakasar =>
+    [
+        0x011EE0, 0x011EF8,
+    ];
+
+    private static ReadOnlySpan<int> ScriptMalayalam =>
+    [
+        0x000D00, 0x000D0C,
+        0x000D0E, 0x000D10,
+        0x000D12, 0x000D44,
+        0x000D46, 0x000D48,
+        0x000D4A, 0x000D4F,
+        0x000D54, 0x000D63,
+        0x000D66, 0x000D7F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptMandaic =>
+    [
+        0x000840, 0x00085B,
+        0x00085E, 0x00085E,
+    ];
+
+    private static ReadOnlySpan<int> ScriptManichaean =>
+    [
+        0x010AC0, 0x010AE6,
+        0x010AEB, 0x010AF6,
+    ];
+
+    private static ReadOnlySpan<int> ScriptMarchen =>
+    [
+        0x011C70, 0x011C8F,
+        0x011C92, 0x011CA7,
+        0x011CA9, 0x011CB6,
+    ];
+
+    private static ReadOnlySpan<int> ScriptMasaramGondi =>
+    [
+        0x011D00, 0x011D06,
+        0x011D08, 0x011D09,
+        0x011D0B, 0x011D36,
+        0x011D3A, 0x011D3A,
+        0x011D3C, 0x011D3D,
+        0x011D3F, 0x011D47,
+        0x011D50, 0x011D59,
+    ];
+
+    private static ReadOnlySpan<int> ScriptMedefaidrin =>
+    [
+        0x016E40, 0x016E9A,
+    ];
+
+    private static ReadOnlySpan<int> ScriptMeeteiMayek =>
+    [
+        0x00AAE0, 0x00AAF6,
+        0x00ABC0, 0x00ABED,
+        0x00ABF0, 0x00ABF9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptMendeKikakui =>
+    [
+        0x01E800, 0x01E8C4,
+        0x01E8C7, 0x01E8D6,
+    ];
+
+    private static ReadOnlySpan<int> ScriptMeroiticCursive =>
+    [
+        0x0109A0, 0x0109B7,
+        0x0109BC, 0x0109CF,
+        0x0109D2, 0x0109FF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptMeroiticHieroglyphs =>
+    [
+        0x010980, 0x01099F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptMiao =>
+    [
+        0x016F00, 0x016F4A,
+        0x016F4F, 0x016F87,
+        0x016F8F, 0x016F9F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptModi =>
+    [
+        0x011600, 0x011644,
+        0x011650, 0x011659,
+    ];
+
+    private static ReadOnlySpan<int> ScriptMongolian =>
+    [
+        0x001800, 0x001801,
+        0x001804, 0x001804,
+        0x001806, 0x001819,
+        0x001820, 0x001878,
+        0x001880, 0x0018AA,
+        0x011660, 0x01166C,
+    ];
+
+    private static ReadOnlySpan<int> ScriptMro =>
+    [
+        0x016A40, 0x016A5E,
+        0x016A60, 0x016A69,
+        0x016A6E, 0x016A6F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptMultani =>
+    [
+        0x011280, 0x011286,
+        0x011288, 0x011288,
+        0x01128A, 0x01128D,
+        0x01128F, 0x01129D,
+        0x01129F, 0x0112A9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptMyanmar =>
+    [
+        0x001000, 0x00109F,
+        0x00A9E0, 0x00A9FE,
+        0x00AA60, 0x00AA7F,
+        0x0116D0, 0x0116E3,
+    ];
+
+    private static ReadOnlySpan<int> ScriptNabataean =>
+    [
+        0x010880, 0x01089E,
+        0x0108A7, 0x0108AF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptNagMundari =>
+    [
+        0x01E4D0, 0x01E4F9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptNandinagari =>
+    [
+        0x0119A0, 0x0119A7,
+        0x0119AA, 0x0119D7,
+        0x0119DA, 0x0119E4,
+    ];
+
+    private static ReadOnlySpan<int> ScriptNewTaiLue =>
+    [
+        0x001980, 0x0019AB,
+        0x0019B0, 0x0019C9,
+        0x0019D0, 0x0019DA,
+        0x0019DE, 0x0019DF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptNewa =>
+    [
+        0x011400, 0x01145B,
+        0x01145D, 0x011461,
+    ];
+
+    private static ReadOnlySpan<int> ScriptNko =>
+    [
+        0x0007C0, 0x0007FA,
+        0x0007FD, 0x0007FF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptNushu =>
+    [
+        0x016FE1, 0x016FE1,
+        0x01B170, 0x01B2FB,
+    ];
+
+    private static ReadOnlySpan<int> ScriptNyiakengPuachueHmong =>
+    [
+        0x01E100, 0x01E12C,
+        0x01E130, 0x01E13D,
+        0x01E140, 0x01E149,
+        0x01E14E, 0x01E14F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptOgham =>
+    [
+        0x001680, 0x00169C,
+    ];
+
+    private static ReadOnlySpan<int> ScriptOlChiki =>
+    [
+        0x001C50, 0x001C7F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptOlOnal =>
+    [
+        0x01E5D0, 0x01E5FA,
+        0x01E5FF, 0x01E5FF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptOldHungarian =>
+    [
+        0x010C80, 0x010CB2,
+        0x010CC0, 0x010CF2,
+        0x010CFA, 0x010CFF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptOldItalic =>
+    [
+        0x010300, 0x010323,
+        0x01032D, 0x01032F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptOldNorthArabian =>
+    [
+        0x010A80, 0x010A9F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptOldPermic =>
+    [
+        0x010350, 0x01037A,
+    ];
+
+    private static ReadOnlySpan<int> ScriptOldPersian =>
+    [
+        0x0103A0, 0x0103C3,
+        0x0103C8, 0x0103D5,
+    ];
+
+    private static ReadOnlySpan<int> ScriptOldSogdian =>
+    [
+        0x010F00, 0x010F27,
+    ];
+
+    private static ReadOnlySpan<int> ScriptOldSouthArabian =>
+    [
+        0x010A60, 0x010A7F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptOldTurkic =>
+    [
+        0x010C00, 0x010C48,
+    ];
+
+    private static ReadOnlySpan<int> ScriptOldUyghur =>
+    [
+        0x010F70, 0x010F89,
+    ];
+
+    private static ReadOnlySpan<int> ScriptOriya =>
+    [
+        0x000B01, 0x000B03,
+        0x000B05, 0x000B0C,
+        0x000B0F, 0x000B10,
+        0x000B13, 0x000B28,
+        0x000B2A, 0x000B30,
+        0x000B32, 0x000B33,
+        0x000B35, 0x000B39,
+        0x000B3C, 0x000B44,
+        0x000B47, 0x000B48,
+        0x000B4B, 0x000B4D,
+        0x000B55, 0x000B57,
+        0x000B5C, 0x000B5D,
+        0x000B5F, 0x000B63,
+        0x000B66, 0x000B77,
+    ];
+
+    private static ReadOnlySpan<int> ScriptOsage =>
+    [
+        0x0104B0, 0x0104D3,
+        0x0104D8, 0x0104FB,
+    ];
+
+    private static ReadOnlySpan<int> ScriptOsmanya =>
+    [
+        0x010480, 0x01049D,
+        0x0104A0, 0x0104A9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptPahawhHmong =>
+    [
+        0x016B00, 0x016B45,
+        0x016B50, 0x016B59,
+        0x016B5B, 0x016B61,
+        0x016B63, 0x016B77,
+        0x016B7D, 0x016B8F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptPalmyrene =>
+    [
+        0x010860, 0x01087F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptPauCinHau =>
+    [
+        0x011AC0, 0x011AF8,
+    ];
+
+    private static ReadOnlySpan<int> ScriptPhagsPa =>
+    [
+        0x00A840, 0x00A877,
+    ];
+
+    private static ReadOnlySpan<int> ScriptPhoenician =>
+    [
+        0x010900, 0x01091B,
+        0x01091F, 0x01091F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptPsalterPahlavi =>
+    [
+        0x010B80, 0x010B91,
+        0x010B99, 0x010B9C,
+        0x010BA9, 0x010BAF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptRejang =>
+    [
+        0x00A930, 0x00A953,
+        0x00A95F, 0x00A95F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptRunic =>
+    [
+        0x0016A0, 0x0016EA,
+        0x0016EE, 0x0016F8,
+    ];
+
+    private static ReadOnlySpan<int> ScriptSamaritan =>
+    [
+        0x000800, 0x00082D,
+        0x000830, 0x00083E,
+    ];
+
+    private static ReadOnlySpan<int> ScriptSaurashtra =>
+    [
+        0x00A880, 0x00A8C5,
+        0x00A8CE, 0x00A8D9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptSharada =>
+    [
+        0x011180, 0x0111DF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptShavian =>
+    [
+        0x010450, 0x01047F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptSiddham =>
+    [
+        0x011580, 0x0115B5,
+        0x0115B8, 0x0115DD,
+    ];
+
+    private static ReadOnlySpan<int> ScriptSignwriting =>
+    [
+        0x01D800, 0x01DA8B,
+        0x01DA9B, 0x01DA9F,
+        0x01DAA1, 0x01DAAF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptSinhala =>
+    [
+        0x000D81, 0x000D83,
+        0x000D85, 0x000D96,
+        0x000D9A, 0x000DB1,
+        0x000DB3, 0x000DBB,
+        0x000DBD, 0x000DBD,
+        0x000DC0, 0x000DC6,
+        0x000DCA, 0x000DCA,
+        0x000DCF, 0x000DD4,
+        0x000DD6, 0x000DD6,
+        0x000DD8, 0x000DDF,
+        0x000DE6, 0x000DEF,
+        0x000DF2, 0x000DF4,
+        0x0111E1, 0x0111F4,
+    ];
+
+    private static ReadOnlySpan<int> ScriptSogdian =>
+    [
+        0x010F30, 0x010F59,
+    ];
+
+    private static ReadOnlySpan<int> ScriptSoraSompeng =>
+    [
+        0x0110D0, 0x0110E8,
+        0x0110F0, 0x0110F9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptSoyombo =>
+    [
+        0x011A50, 0x011AA2,
+    ];
+
+    private static ReadOnlySpan<int> ScriptSundanese =>
+    [
+        0x001B80, 0x001BBF,
+        0x001CC0, 0x001CC7,
+    ];
+
+    private static ReadOnlySpan<int> ScriptSunuwar =>
+    [
+        0x011BC0, 0x011BE1,
+        0x011BF0, 0x011BF9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptSylotiNagri =>
+    [
+        0x00A800, 0x00A82C,
+    ];
+
+    private static ReadOnlySpan<int> ScriptSyriac =>
+    [
+        0x000700, 0x00070D,
+        0x00070F, 0x00074A,
+        0x00074D, 0x00074F,
+        0x000860, 0x00086A,
+    ];
+
+    private static ReadOnlySpan<int> ScriptTagalog =>
+    [
+        0x001700, 0x001715,
+        0x00171F, 0x00171F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptTagbanwa =>
+    [
+        0x001760, 0x00176C,
+        0x00176E, 0x001770,
+        0x001772, 0x001773,
+    ];
+
+    private static ReadOnlySpan<int> ScriptTaiLe =>
+    [
+        0x001950, 0x00196D,
+        0x001970, 0x001974,
+    ];
+
+    private static ReadOnlySpan<int> ScriptTaiTham =>
+    [
+        0x001A20, 0x001A5E,
+        0x001A60, 0x001A7C,
+        0x001A7F, 0x001A89,
+        0x001A90, 0x001A99,
+        0x001AA0, 0x001AAD,
+    ];
+
+    private static ReadOnlySpan<int> ScriptTaiViet =>
+    [
+        0x00AA80, 0x00AAC2,
+        0x00AADB, 0x00AADF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptTakri =>
+    [
+        0x011680, 0x0116B9,
+        0x0116C0, 0x0116C9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptTamil =>
+    [
+        0x000B82, 0x000B83,
+        0x000B85, 0x000B8A,
+        0x000B8E, 0x000B90,
+        0x000B92, 0x000B95,
+        0x000B99, 0x000B9A,
+        0x000B9C, 0x000B9C,
+        0x000B9E, 0x000B9F,
+        0x000BA3, 0x000BA4,
+        0x000BA8, 0x000BAA,
+        0x000BAE, 0x000BB9,
+        0x000BBE, 0x000BC2,
+        0x000BC6, 0x000BC8,
+        0x000BCA, 0x000BCD,
+        0x000BD0, 0x000BD0,
+        0x000BD7, 0x000BD7,
+        0x000BE6, 0x000BFA,
+        0x011FC0, 0x011FF1,
+        0x011FFF, 0x011FFF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptTangsa =>
+    [
+        0x016A70, 0x016ABE,
+        0x016AC0, 0x016AC9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptTangut =>
+    [
+        0x016FE0, 0x016FE0,
+        0x017000, 0x0187F7,
+        0x018800, 0x018AFF,
+        0x018D00, 0x018D08,
+    ];
+
+    private static ReadOnlySpan<int> ScriptTelugu =>
+    [
+        0x000C00, 0x000C0C,
+        0x000C0E, 0x000C10,
+        0x000C12, 0x000C28,
+        0x000C2A, 0x000C39,
+        0x000C3C, 0x000C44,
+        0x000C46, 0x000C48,
+        0x000C4A, 0x000C4D,
+        0x000C55, 0x000C56,
+        0x000C58, 0x000C5A,
+        0x000C5D, 0x000C5D,
+        0x000C60, 0x000C63,
+        0x000C66, 0x000C6F,
+        0x000C77, 0x000C7F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptThaana =>
+    [
+        0x000780, 0x0007B1,
+    ];
+
+    private static ReadOnlySpan<int> ScriptThai =>
+    [
+        0x000E01, 0x000E3A,
+        0x000E40, 0x000E5B,
+    ];
+
+    private static ReadOnlySpan<int> ScriptTibetan =>
+    [
+        0x000F00, 0x000F47,
+        0x000F49, 0x000F6C,
+        0x000F71, 0x000F97,
+        0x000F99, 0x000FBC,
+        0x000FBE, 0x000FCC,
+        0x000FCE, 0x000FD4,
+        0x000FD9, 0x000FDA,
+    ];
+
+    private static ReadOnlySpan<int> ScriptTifinagh =>
+    [
+        0x002D30, 0x002D67,
+        0x002D6F, 0x002D70,
+        0x002D7F, 0x002D7F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptTirhuta =>
+    [
+        0x011480, 0x0114C7,
+        0x0114D0, 0x0114D9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptTodhri =>
+    [
+        0x0105C0, 0x0105F3,
+    ];
+
+    private static ReadOnlySpan<int> ScriptToto =>
+    [
+        0x01E290, 0x01E2AE,
+    ];
+
+    private static ReadOnlySpan<int> ScriptTuluTigalari =>
+    [
+        0x011380, 0x011389,
+        0x01138B, 0x01138B,
+        0x01138E, 0x01138E,
+        0x011390, 0x0113B5,
+        0x0113B7, 0x0113C0,
+        0x0113C2, 0x0113C2,
+        0x0113C5, 0x0113C5,
+        0x0113C7, 0x0113CA,
+        0x0113CC, 0x0113D5,
+        0x0113D7, 0x0113D8,
+        0x0113E1, 0x0113E2,
+    ];
+
+    private static ReadOnlySpan<int> ScriptUgaritic =>
+    [
+        0x010380, 0x01039D,
+        0x01039F, 0x01039F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptVai =>
+    [
+        0x00A500, 0x00A62B,
+    ];
+
+    private static ReadOnlySpan<int> ScriptVithkuqi =>
+    [
+        0x010570, 0x01057A,
+        0x01057C, 0x01058A,
+        0x01058C, 0x010592,
+        0x010594, 0x010595,
+        0x010597, 0x0105A1,
+        0x0105A3, 0x0105B1,
+        0x0105B3, 0x0105B9,
+        0x0105BB, 0x0105BC,
+    ];
+
+    private static ReadOnlySpan<int> ScriptWancho =>
+    [
+        0x01E2C0, 0x01E2F9,
+        0x01E2FF, 0x01E2FF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptWarangCiti =>
+    [
+        0x0118A0, 0x0118F2,
+        0x0118FF, 0x0118FF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptYezidi =>
+    [
+        0x010E80, 0x010EA9,
+        0x010EAB, 0x010EAD,
+        0x010EB0, 0x010EB1,
+    ];
+
+    private static ReadOnlySpan<int> ScriptYi =>
+    [
+        0x00A000, 0x00A48C,
+        0x00A490, 0x00A4C6,
+    ];
+
+    private static ReadOnlySpan<int> ScriptZanabazarSquare =>
+    [
+        0x011A00, 0x011A47,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionAdlam =>
+    [
+        0x00061F, 0x00061F,
+        0x000640, 0x000640,
+        0x00204F, 0x00204F,
+        0x002E41, 0x002E41,
+        0x01E900, 0x01E94B,
+        0x01E950, 0x01E959,
+        0x01E95E, 0x01E95F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionAhom =>
+    [
+        0x011700, 0x01171A,
+        0x01171D, 0x01172B,
+        0x011730, 0x011746,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionAnatolianHieroglyphs =>
+    [
+        0x014400, 0x014646,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionArabic =>
+    [
+        0x000600, 0x000604,
+        0x000606, 0x0006DC,
+        0x0006DE, 0x0006FF,
+        0x000750, 0x00077F,
+        0x000870, 0x00088E,
+        0x000890, 0x000891,
+        0x000897, 0x0008E1,
+        0x0008E3, 0x0008FF,
+        0x00204F, 0x00204F,
+        0x002E41, 0x002E41,
+        0x00FB50, 0x00FBC2,
+        0x00FBD3, 0x00FD8F,
+        0x00FD92, 0x00FDC7,
+        0x00FDCF, 0x00FDCF,
+        0x00FDF0, 0x00FDFF,
+        0x00FE70, 0x00FE74,
+        0x00FE76, 0x00FEFC,
+        0x0102E0, 0x0102FB,
+        0x010E60, 0x010E7E,
+        0x010EC2, 0x010EC4,
+        0x010EFC, 0x010EFF,
+        0x01EE00, 0x01EE03,
+        0x01EE05, 0x01EE1F,
+        0x01EE21, 0x01EE22,
+        0x01EE24, 0x01EE24,
+        0x01EE27, 0x01EE27,
+        0x01EE29, 0x01EE32,
+        0x01EE34, 0x01EE37,
+        0x01EE39, 0x01EE39,
+        0x01EE3B, 0x01EE3B,
+        0x01EE42, 0x01EE42,
+        0x01EE47, 0x01EE47,
+        0x01EE49, 0x01EE49,
+        0x01EE4B, 0x01EE4B,
+        0x01EE4D, 0x01EE4F,
+        0x01EE51, 0x01EE52,
+        0x01EE54, 0x01EE54,
+        0x01EE57, 0x01EE57,
+        0x01EE59, 0x01EE59,
+        0x01EE5B, 0x01EE5B,
+        0x01EE5D, 0x01EE5D,
+        0x01EE5F, 0x01EE5F,
+        0x01EE61, 0x01EE62,
+        0x01EE64, 0x01EE64,
+        0x01EE67, 0x01EE6A,
+        0x01EE6C, 0x01EE72,
+        0x01EE74, 0x01EE77,
+        0x01EE79, 0x01EE7C,
+        0x01EE7E, 0x01EE7E,
+        0x01EE80, 0x01EE89,
+        0x01EE8B, 0x01EE9B,
+        0x01EEA1, 0x01EEA3,
+        0x01EEA5, 0x01EEA9,
+        0x01EEAB, 0x01EEBB,
+        0x01EEF0, 0x01EEF1,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionArmenian =>
+    [
+        0x000308, 0x000308,
+        0x000531, 0x000556,
+        0x000559, 0x00058A,
+        0x00058D, 0x00058F,
+        0x00FB13, 0x00FB17,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionAvestan =>
+    [
+        0x0000B7, 0x0000B7,
+        0x002E30, 0x002E31,
+        0x010B00, 0x010B35,
+        0x010B39, 0x010B3F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionBalinese =>
+    [
+        0x001B00, 0x001B4C,
+        0x001B4E, 0x001B7F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionBamum =>
+    [
+        0x00A6A0, 0x00A6F7,
+        0x016800, 0x016A38,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionBassaVah =>
+    [
+        0x016AD0, 0x016AED,
+        0x016AF0, 0x016AF5,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionBatak =>
+    [
+        0x001BC0, 0x001BF3,
+        0x001BFC, 0x001BFF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionBengali =>
+    [
+        0x0002BC, 0x0002BC,
+        0x000951, 0x000952,
+        0x000964, 0x000965,
+        0x000980, 0x000983,
+        0x000985, 0x00098C,
+        0x00098F, 0x000990,
+        0x000993, 0x0009A8,
+        0x0009AA, 0x0009B0,
+        0x0009B2, 0x0009B2,
+        0x0009B6, 0x0009B9,
+        0x0009BC, 0x0009C4,
+        0x0009C7, 0x0009C8,
+        0x0009CB, 0x0009CE,
+        0x0009D7, 0x0009D7,
+        0x0009DC, 0x0009DD,
+        0x0009DF, 0x0009E3,
+        0x0009E6, 0x0009FE,
+        0x001CD0, 0x001CD0,
+        0x001CD2, 0x001CD2,
+        0x001CD5, 0x001CD6,
+        0x001CD8, 0x001CD8,
+        0x001CE1, 0x001CE1,
+        0x001CEA, 0x001CEA,
+        0x001CED, 0x001CED,
+        0x001CF2, 0x001CF2,
+        0x001CF5, 0x001CF7,
+        0x00A8F1, 0x00A8F1,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionBhaiksuki =>
+    [
+        0x011C00, 0x011C08,
+        0x011C0A, 0x011C36,
+        0x011C38, 0x011C45,
+        0x011C50, 0x011C6C,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionBopomofo =>
+    [
+        0x0002C7, 0x0002C7,
+        0x0002C9, 0x0002CB,
+        0x0002D9, 0x0002D9,
+        0x0002EA, 0x0002EB,
+        0x003001, 0x003003,
+        0x003008, 0x003011,
+        0x003013, 0x00301F,
+        0x00302A, 0x00302D,
+        0x003030, 0x003030,
+        0x003037, 0x003037,
+        0x0030FB, 0x0030FB,
+        0x003105, 0x00312F,
+        0x0031A0, 0x0031BF,
+        0x00FE45, 0x00FE46,
+        0x00FF61, 0x00FF65,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionBrahmi =>
+    [
+        0x011000, 0x01104D,
+        0x011052, 0x011075,
+        0x01107F, 0x01107F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionBraille =>
+    [
+        0x002800, 0x0028FF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionBuginese =>
+    [
+        0x001A00, 0x001A1B,
+        0x001A1E, 0x001A1F,
+        0x00A9CF, 0x00A9CF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionBuhid =>
+    [
+        0x001735, 0x001736,
+        0x001740, 0x001753,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionCanadianAboriginal =>
+    [
+        0x001400, 0x00167F,
+        0x0018B0, 0x0018F5,
+        0x011AB0, 0x011ABF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionCarian =>
+    [
+        0x0000B7, 0x0000B7,
+        0x00205A, 0x00205A,
+        0x00205D, 0x00205D,
+        0x002E31, 0x002E31,
+        0x0102A0, 0x0102D0,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionCaucasianAlbanian =>
+    [
+        0x000304, 0x000304,
+        0x000331, 0x000331,
+        0x00035E, 0x00035E,
+        0x010530, 0x010563,
+        0x01056F, 0x01056F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionChakma =>
+    [
+        0x0009E6, 0x0009EF,
+        0x001040, 0x001049,
+        0x011100, 0x011134,
+        0x011136, 0x011147,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionCham =>
+    [
+        0x00AA00, 0x00AA36,
+        0x00AA40, 0x00AA4D,
+        0x00AA50, 0x00AA59,
+        0x00AA5C, 0x00AA5F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionCherokee =>
+    [
+        0x000300, 0x000302,
+        0x000304, 0x000304,
+        0x00030B, 0x00030C,
+        0x000323, 0x000324,
+        0x000330, 0x000331,
+        0x0013A0, 0x0013F5,
+        0x0013F8, 0x0013FD,
+        0x00AB70, 0x00ABBF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionChorasmian =>
+    [
+        0x010FB0, 0x010FCB,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionCommon =>
+    [
+        0x000000, 0x000040,
+        0x00005B, 0x000060,
+        0x00007B, 0x0000A9,
+        0x0000AB, 0x0000B6,
+        0x0000B8, 0x0000B9,
+        0x0000BB, 0x0000BF,
+        0x0000D7, 0x0000D7,
+        0x0000F7, 0x0000F7,
+        0x0002B9, 0x0002BB,
+        0x0002BD, 0x0002C6,
+        0x0002C8, 0x0002C8,
+        0x0002CC, 0x0002CC,
+        0x0002CE, 0x0002D6,
+        0x0002D8, 0x0002D8,
+        0x0002DA, 0x0002DF,
+        0x0002E5, 0x0002E9,
+        0x0002EC, 0x0002FF,
+        0x00037E, 0x00037E,
+        0x000385, 0x000385,
+        0x000387, 0x000387,
+        0x000605, 0x000605,
+        0x0006DD, 0x0006DD,
+        0x0008E2, 0x0008E2,
+        0x000E3F, 0x000E3F,
+        0x000FD5, 0x000FD8,
+        0x002000, 0x00200B,
+        0x00200E, 0x00202E,
+        0x002030, 0x00204E,
+        0x002050, 0x002059,
+        0x00205B, 0x00205C,
+        0x00205E, 0x002064,
+        0x002066, 0x002070,
+        0x002074, 0x00207E,
+        0x002080, 0x00208E,
+        0x0020A0, 0x0020C0,
+        0x002100, 0x002125,
+        0x002127, 0x002129,
+        0x00212C, 0x002131,
+        0x002133, 0x00214D,
+        0x00214F, 0x00215F,
+        0x002189, 0x00218B,
+        0x002190, 0x002429,
+        0x002440, 0x00244A,
+        0x002460, 0x0027FF,
+        0x002900, 0x002B73,
+        0x002B76, 0x002B95,
+        0x002B97, 0x002BFF,
+        0x002E00, 0x002E16,
+        0x002E18, 0x002E2F,
+        0x002E32, 0x002E3B,
+        0x002E3D, 0x002E40,
+        0x002E42, 0x002E42,
+        0x002E44, 0x002E5D,
+        0x003000, 0x003000,
+        0x003004, 0x003004,
+        0x003012, 0x003012,
+        0x003020, 0x003020,
+        0x003036, 0x003036,
+        0x003248, 0x00325F,
+        0x00327F, 0x00327F,
+        0x0032B1, 0x0032BF,
+        0x0032CC, 0x0032CF,
+        0x003371, 0x00337A,
+        0x003380, 0x0033DF,
+        0x0033FF, 0x0033FF,
+        0x004DC0, 0x004DFF,
+        0x00A708, 0x00A721,
+        0x00A788, 0x00A78A,
+        0x00AB5B, 0x00AB5B,
+        0x00AB6A, 0x00AB6B,
+        0x00FE10, 0x00FE19,
+        0x00FE30, 0x00FE44,
+        0x00FE47, 0x00FE52,
+        0x00FE54, 0x00FE66,
+        0x00FE68, 0x00FE6B,
+        0x00FEFF, 0x00FEFF,
+        0x00FF01, 0x00FF20,
+        0x00FF3B, 0x00FF40,
+        0x00FF5B, 0x00FF60,
+        0x00FFE0, 0x00FFE6,
+        0x00FFE8, 0x00FFEE,
+        0x00FFF9, 0x00FFFD,
+        0x010190, 0x01019C,
+        0x0101D0, 0x0101FC,
+        0x01CC00, 0x01CCF9,
+        0x01CD00, 0x01CEB3,
+        0x01CF50, 0x01CFC3,
+        0x01D000, 0x01D0F5,
+        0x01D100, 0x01D126,
+        0x01D129, 0x01D166,
+        0x01D16A, 0x01D17A,
+        0x01D183, 0x01D184,
+        0x01D18C, 0x01D1A9,
+        0x01D1AE, 0x01D1EA,
+        0x01D2C0, 0x01D2D3,
+        0x01D2E0, 0x01D2F3,
+        0x01D300, 0x01D356,
+        0x01D372, 0x01D378,
+        0x01D400, 0x01D454,
+        0x01D456, 0x01D49C,
+        0x01D49E, 0x01D49F,
+        0x01D4A2, 0x01D4A2,
+        0x01D4A5, 0x01D4A6,
+        0x01D4A9, 0x01D4AC,
+        0x01D4AE, 0x01D4B9,
+        0x01D4BB, 0x01D4BB,
+        0x01D4BD, 0x01D4C3,
+        0x01D4C5, 0x01D505,
+        0x01D507, 0x01D50A,
+        0x01D50D, 0x01D514,
+        0x01D516, 0x01D51C,
+        0x01D51E, 0x01D539,
+        0x01D53B, 0x01D53E,
+        0x01D540, 0x01D544,
+        0x01D546, 0x01D546,
+        0x01D54A, 0x01D550,
+        0x01D552, 0x01D6A5,
+        0x01D6A8, 0x01D7CB,
+        0x01D7CE, 0x01D7FF,
+        0x01EC71, 0x01ECB4,
+        0x01ED01, 0x01ED3D,
+        0x01F000, 0x01F02B,
+        0x01F030, 0x01F093,
+        0x01F0A0, 0x01F0AE,
+        0x01F0B1, 0x01F0BF,
+        0x01F0C1, 0x01F0CF,
+        0x01F0D1, 0x01F0F5,
+        0x01F100, 0x01F1AD,
+        0x01F1E6, 0x01F1FF,
+        0x01F201, 0x01F202,
+        0x01F210, 0x01F23B,
+        0x01F240, 0x01F248,
+        0x01F260, 0x01F265,
+        0x01F300, 0x01F6D7,
+        0x01F6DC, 0x01F6EC,
+        0x01F6F0, 0x01F6FC,
+        0x01F700, 0x01F776,
+        0x01F77B, 0x01F7D9,
+        0x01F7E0, 0x01F7EB,
+        0x01F7F0, 0x01F7F0,
+        0x01F800, 0x01F80B,
+        0x01F810, 0x01F847,
+        0x01F850, 0x01F859,
+        0x01F860, 0x01F887,
+        0x01F890, 0x01F8AD,
+        0x01F8B0, 0x01F8BB,
+        0x01F8C0, 0x01F8C1,
+        0x01F900, 0x01FA53,
+        0x01FA60, 0x01FA6D,
+        0x01FA70, 0x01FA7C,
+        0x01FA80, 0x01FA89,
+        0x01FA8F, 0x01FAC6,
+        0x01FACE, 0x01FADC,
+        0x01FADF, 0x01FAE9,
+        0x01FAF0, 0x01FAF8,
+        0x01FB00, 0x01FB92,
+        0x01FB94, 0x01FBF9,
+        0x0E0001, 0x0E0001,
+        0x0E0020, 0x0E007F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionCoptic =>
+    [
+        0x0000B7, 0x0000B7,
+        0x000300, 0x000300,
+        0x000304, 0x000305,
+        0x000307, 0x000307,
+        0x000374, 0x000375,
+        0x0003E2, 0x0003EF,
+        0x002C80, 0x002CF3,
+        0x002CF9, 0x002CFF,
+        0x002E17, 0x002E17,
+        0x0102E0, 0x0102FB,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionCuneiform =>
+    [
+        0x012000, 0x012399,
+        0x012400, 0x01246E,
+        0x012470, 0x012474,
+        0x012480, 0x012543,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionCypriot =>
+    [
+        0x010100, 0x010102,
+        0x010107, 0x010133,
+        0x010137, 0x01013F,
+        0x010800, 0x010805,
+        0x010808, 0x010808,
+        0x01080A, 0x010835,
+        0x010837, 0x010838,
+        0x01083C, 0x01083C,
+        0x01083F, 0x01083F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionCyproMinoan =>
+    [
+        0x010100, 0x010101,
+        0x012F90, 0x012FF2,
+    ];
+
     private static ReadOnlySpan<int> ScriptExtensionCyrillic =>
     [
         0x0002BC, 0x0002BC,
@@ -9227,6 +11661,201 @@ internal static class RegexUnicodeTables
         0x00FE2E, 0x00FE2F,
         0x01E030, 0x01E06D,
         0x01E08F, 0x01E08F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionDeseret =>
+    [
+        0x010400, 0x01044F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionDevanagari =>
+    [
+        0x0002BC, 0x0002BC,
+        0x000900, 0x000952,
+        0x000955, 0x00097F,
+        0x001CD0, 0x001CF6,
+        0x001CF8, 0x001CF9,
+        0x0020F0, 0x0020F0,
+        0x00A830, 0x00A839,
+        0x00A8E0, 0x00A8FF,
+        0x011B00, 0x011B09,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionDivesAkuru =>
+    [
+        0x011900, 0x011906,
+        0x011909, 0x011909,
+        0x01190C, 0x011913,
+        0x011915, 0x011916,
+        0x011918, 0x011935,
+        0x011937, 0x011938,
+        0x01193B, 0x011946,
+        0x011950, 0x011959,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionDogra =>
+    [
+        0x000964, 0x00096F,
+        0x00A830, 0x00A839,
+        0x011800, 0x01183B,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionDuployan =>
+    [
+        0x0000B7, 0x0000B7,
+        0x000307, 0x000308,
+        0x00030A, 0x00030A,
+        0x000323, 0x000324,
+        0x002E3C, 0x002E3C,
+        0x01BC00, 0x01BC6A,
+        0x01BC70, 0x01BC7C,
+        0x01BC80, 0x01BC88,
+        0x01BC90, 0x01BC99,
+        0x01BC9C, 0x01BCA3,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionEgyptianHieroglyphs =>
+    [
+        0x013000, 0x013455,
+        0x013460, 0x0143FA,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionElbasan =>
+    [
+        0x0000B7, 0x0000B7,
+        0x000305, 0x000305,
+        0x010500, 0x010527,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionElymaic =>
+    [
+        0x010FE0, 0x010FF6,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionEthiopic =>
+    [
+        0x00030E, 0x00030E,
+        0x001200, 0x001248,
+        0x00124A, 0x00124D,
+        0x001250, 0x001256,
+        0x001258, 0x001258,
+        0x00125A, 0x00125D,
+        0x001260, 0x001288,
+        0x00128A, 0x00128D,
+        0x001290, 0x0012B0,
+        0x0012B2, 0x0012B5,
+        0x0012B8, 0x0012BE,
+        0x0012C0, 0x0012C0,
+        0x0012C2, 0x0012C5,
+        0x0012C8, 0x0012D6,
+        0x0012D8, 0x001310,
+        0x001312, 0x001315,
+        0x001318, 0x00135A,
+        0x00135D, 0x00137C,
+        0x001380, 0x001399,
+        0x002D80, 0x002D96,
+        0x002DA0, 0x002DA6,
+        0x002DA8, 0x002DAE,
+        0x002DB0, 0x002DB6,
+        0x002DB8, 0x002DBE,
+        0x002DC0, 0x002DC6,
+        0x002DC8, 0x002DCE,
+        0x002DD0, 0x002DD6,
+        0x002DD8, 0x002DDE,
+        0x00AB01, 0x00AB06,
+        0x00AB09, 0x00AB0E,
+        0x00AB11, 0x00AB16,
+        0x00AB20, 0x00AB26,
+        0x00AB28, 0x00AB2E,
+        0x01E7E0, 0x01E7E6,
+        0x01E7E8, 0x01E7EB,
+        0x01E7ED, 0x01E7EE,
+        0x01E7F0, 0x01E7FE,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionGaray =>
+    [
+        0x00060C, 0x00060C,
+        0x00061B, 0x00061B,
+        0x00061F, 0x00061F,
+        0x010D40, 0x010D65,
+        0x010D69, 0x010D85,
+        0x010D8E, 0x010D8F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionGeorgian =>
+    [
+        0x0000B7, 0x0000B7,
+        0x000589, 0x000589,
+        0x0010A0, 0x0010C5,
+        0x0010C7, 0x0010C7,
+        0x0010CD, 0x0010CD,
+        0x0010D0, 0x0010FF,
+        0x001C90, 0x001CBA,
+        0x001CBD, 0x001CBF,
+        0x00205A, 0x00205A,
+        0x002D00, 0x002D25,
+        0x002D27, 0x002D27,
+        0x002D2D, 0x002D2D,
+        0x002E31, 0x002E31,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionGlagolitic =>
+    [
+        0x0000B7, 0x0000B7,
+        0x000303, 0x000303,
+        0x000305, 0x000305,
+        0x000484, 0x000484,
+        0x000487, 0x000487,
+        0x000589, 0x000589,
+        0x0010FB, 0x0010FB,
+        0x00205A, 0x00205A,
+        0x002C00, 0x002C5F,
+        0x002E43, 0x002E43,
+        0x00A66F, 0x00A66F,
+        0x01E000, 0x01E006,
+        0x01E008, 0x01E018,
+        0x01E01B, 0x01E021,
+        0x01E023, 0x01E024,
+        0x01E026, 0x01E02A,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionGothic =>
+    [
+        0x0000B7, 0x0000B7,
+        0x000304, 0x000305,
+        0x000308, 0x000308,
+        0x000331, 0x000331,
+        0x010330, 0x01034A,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionGrantha =>
+    [
+        0x000951, 0x000952,
+        0x000964, 0x000965,
+        0x000BE6, 0x000BF3,
+        0x001CD0, 0x001CD0,
+        0x001CD2, 0x001CD3,
+        0x001CF2, 0x001CF4,
+        0x001CF8, 0x001CF9,
+        0x0020F0, 0x0020F0,
+        0x011300, 0x011303,
+        0x011305, 0x01130C,
+        0x01130F, 0x011310,
+        0x011313, 0x011328,
+        0x01132A, 0x011330,
+        0x011332, 0x011333,
+        0x011335, 0x011339,
+        0x01133B, 0x011344,
+        0x011347, 0x011348,
+        0x01134B, 0x01134D,
+        0x011350, 0x011350,
+        0x011357, 0x011357,
+        0x01135D, 0x011363,
+        0x011366, 0x01136C,
+        0x011370, 0x011374,
+        0x011FD0, 0x011FD1,
+        0x011FD3, 0x011FD3,
     ];
 
     private static ReadOnlySpan<int> ScriptExtensionGreek =>
@@ -9275,6 +11904,1291 @@ internal static class RegexUnicodeTables
         0x010140, 0x01018E,
         0x0101A0, 0x0101A0,
         0x01D200, 0x01D245,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionGujarati =>
+    [
+        0x000951, 0x000952,
+        0x000964, 0x000965,
+        0x000A81, 0x000A83,
+        0x000A85, 0x000A8D,
+        0x000A8F, 0x000A91,
+        0x000A93, 0x000AA8,
+        0x000AAA, 0x000AB0,
+        0x000AB2, 0x000AB3,
+        0x000AB5, 0x000AB9,
+        0x000ABC, 0x000AC5,
+        0x000AC7, 0x000AC9,
+        0x000ACB, 0x000ACD,
+        0x000AD0, 0x000AD0,
+        0x000AE0, 0x000AE3,
+        0x000AE6, 0x000AF1,
+        0x000AF9, 0x000AFF,
+        0x00A830, 0x00A839,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionGunjalaGondi =>
+    [
+        0x0000B7, 0x0000B7,
+        0x000964, 0x000965,
+        0x011D60, 0x011D65,
+        0x011D67, 0x011D68,
+        0x011D6A, 0x011D8E,
+        0x011D90, 0x011D91,
+        0x011D93, 0x011D98,
+        0x011DA0, 0x011DA9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionGurmukhi =>
+    [
+        0x000951, 0x000952,
+        0x000964, 0x000965,
+        0x000A01, 0x000A03,
+        0x000A05, 0x000A0A,
+        0x000A0F, 0x000A10,
+        0x000A13, 0x000A28,
+        0x000A2A, 0x000A30,
+        0x000A32, 0x000A33,
+        0x000A35, 0x000A36,
+        0x000A38, 0x000A39,
+        0x000A3C, 0x000A3C,
+        0x000A3E, 0x000A42,
+        0x000A47, 0x000A48,
+        0x000A4B, 0x000A4D,
+        0x000A51, 0x000A51,
+        0x000A59, 0x000A5C,
+        0x000A5E, 0x000A5E,
+        0x000A66, 0x000A76,
+        0x00A830, 0x00A839,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionGurungKhema =>
+    [
+        0x000965, 0x000965,
+        0x016100, 0x016139,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionHan =>
+    [
+        0x0000B7, 0x0000B7,
+        0x002E80, 0x002E99,
+        0x002E9B, 0x002EF3,
+        0x002F00, 0x002FD5,
+        0x002FF0, 0x002FFF,
+        0x003001, 0x003003,
+        0x003005, 0x003011,
+        0x003013, 0x00301F,
+        0x003021, 0x00302D,
+        0x003030, 0x003030,
+        0x003037, 0x00303F,
+        0x0030FB, 0x0030FB,
+        0x003190, 0x00319F,
+        0x0031C0, 0x0031E5,
+        0x0031EF, 0x0031EF,
+        0x003220, 0x003247,
+        0x003280, 0x0032B0,
+        0x0032C0, 0x0032CB,
+        0x0032FF, 0x0032FF,
+        0x003358, 0x003370,
+        0x00337B, 0x00337F,
+        0x0033E0, 0x0033FE,
+        0x003400, 0x004DBF,
+        0x004E00, 0x009FFF,
+        0x00A700, 0x00A707,
+        0x00F900, 0x00FA6D,
+        0x00FA70, 0x00FAD9,
+        0x00FE45, 0x00FE46,
+        0x00FF61, 0x00FF65,
+        0x016FE2, 0x016FE3,
+        0x016FF0, 0x016FF1,
+        0x01D360, 0x01D371,
+        0x01F250, 0x01F251,
+        0x020000, 0x02A6DF,
+        0x02A700, 0x02B739,
+        0x02B740, 0x02B81D,
+        0x02B820, 0x02CEA1,
+        0x02CEB0, 0x02EBE0,
+        0x02EBF0, 0x02EE5D,
+        0x02F800, 0x02FA1D,
+        0x030000, 0x03134A,
+        0x031350, 0x0323AF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionHangul =>
+    [
+        0x001100, 0x0011FF,
+        0x003001, 0x003003,
+        0x003008, 0x003011,
+        0x003013, 0x00301F,
+        0x00302E, 0x003030,
+        0x003037, 0x003037,
+        0x0030FB, 0x0030FB,
+        0x003131, 0x00318E,
+        0x003200, 0x00321E,
+        0x003260, 0x00327E,
+        0x00A960, 0x00A97C,
+        0x00AC00, 0x00D7A3,
+        0x00D7B0, 0x00D7C6,
+        0x00D7CB, 0x00D7FB,
+        0x00FE45, 0x00FE46,
+        0x00FF61, 0x00FF65,
+        0x00FFA0, 0x00FFBE,
+        0x00FFC2, 0x00FFC7,
+        0x00FFCA, 0x00FFCF,
+        0x00FFD2, 0x00FFD7,
+        0x00FFDA, 0x00FFDC,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionHanifiRohingya =>
+    [
+        0x00060C, 0x00060C,
+        0x00061B, 0x00061B,
+        0x00061F, 0x00061F,
+        0x000640, 0x000640,
+        0x0006D4, 0x0006D4,
+        0x010D00, 0x010D27,
+        0x010D30, 0x010D39,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionHanunoo =>
+    [
+        0x001720, 0x001736,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionHatran =>
+    [
+        0x0108E0, 0x0108F2,
+        0x0108F4, 0x0108F5,
+        0x0108FB, 0x0108FF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionHebrew =>
+    [
+        0x000307, 0x000308,
+        0x000591, 0x0005C7,
+        0x0005D0, 0x0005EA,
+        0x0005EF, 0x0005F4,
+        0x00FB1D, 0x00FB36,
+        0x00FB38, 0x00FB3C,
+        0x00FB3E, 0x00FB3E,
+        0x00FB40, 0x00FB41,
+        0x00FB43, 0x00FB44,
+        0x00FB46, 0x00FB4F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionHiragana =>
+    [
+        0x003001, 0x003003,
+        0x003008, 0x003011,
+        0x003013, 0x00301F,
+        0x003030, 0x003035,
+        0x003037, 0x003037,
+        0x00303C, 0x00303D,
+        0x003041, 0x003096,
+        0x003099, 0x0030A0,
+        0x0030FB, 0x0030FC,
+        0x00FE45, 0x00FE46,
+        0x00FF61, 0x00FF65,
+        0x00FF70, 0x00FF70,
+        0x00FF9E, 0x00FF9F,
+        0x01B001, 0x01B11F,
+        0x01B132, 0x01B132,
+        0x01B150, 0x01B152,
+        0x01F200, 0x01F200,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionImperialAramaic =>
+    [
+        0x010840, 0x010855,
+        0x010857, 0x01085F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionInherited =>
+    [
+        0x00030F, 0x00030F,
+        0x000312, 0x000312,
+        0x000314, 0x00031F,
+        0x000321, 0x000322,
+        0x000326, 0x00032C,
+        0x00032F, 0x00032F,
+        0x000332, 0x000341,
+        0x000343, 0x000344,
+        0x000346, 0x000357,
+        0x000359, 0x00035D,
+        0x00035F, 0x000362,
+        0x000953, 0x000954,
+        0x001AB0, 0x001ACE,
+        0x001DC2, 0x001DF7,
+        0x001DF9, 0x001DF9,
+        0x001DFB, 0x001DFF,
+        0x00200C, 0x00200D,
+        0x0020D0, 0x0020EF,
+        0x00FE00, 0x00FE0F,
+        0x00FE20, 0x00FE2D,
+        0x0101FD, 0x0101FD,
+        0x01CF00, 0x01CF2D,
+        0x01CF30, 0x01CF46,
+        0x01D167, 0x01D169,
+        0x01D17B, 0x01D182,
+        0x01D185, 0x01D18B,
+        0x01D1AA, 0x01D1AD,
+        0x0E0100, 0x0E01EF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionInscriptionalPahlavi =>
+    [
+        0x010B60, 0x010B72,
+        0x010B78, 0x010B7F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionInscriptionalParthian =>
+    [
+        0x010B40, 0x010B55,
+        0x010B58, 0x010B5F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionJavanese =>
+    [
+        0x00A980, 0x00A9CD,
+        0x00A9CF, 0x00A9D9,
+        0x00A9DE, 0x00A9DF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionKaithi =>
+    [
+        0x000966, 0x00096F,
+        0x002E31, 0x002E31,
+        0x00A830, 0x00A839,
+        0x011080, 0x0110C2,
+        0x0110CD, 0x0110CD,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionKannada =>
+    [
+        0x000951, 0x000952,
+        0x000964, 0x000965,
+        0x000C80, 0x000C8C,
+        0x000C8E, 0x000C90,
+        0x000C92, 0x000CA8,
+        0x000CAA, 0x000CB3,
+        0x000CB5, 0x000CB9,
+        0x000CBC, 0x000CC4,
+        0x000CC6, 0x000CC8,
+        0x000CCA, 0x000CCD,
+        0x000CD5, 0x000CD6,
+        0x000CDD, 0x000CDE,
+        0x000CE0, 0x000CE3,
+        0x000CE6, 0x000CEF,
+        0x000CF1, 0x000CF3,
+        0x001CD0, 0x001CD0,
+        0x001CD2, 0x001CD3,
+        0x001CDA, 0x001CDA,
+        0x001CF2, 0x001CF2,
+        0x001CF4, 0x001CF4,
+        0x00A830, 0x00A835,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionKatakana =>
+    [
+        0x000305, 0x000305,
+        0x000323, 0x000323,
+        0x003001, 0x003003,
+        0x003008, 0x003011,
+        0x003013, 0x00301F,
+        0x003030, 0x003035,
+        0x003037, 0x003037,
+        0x00303C, 0x00303D,
+        0x003099, 0x00309C,
+        0x0030A0, 0x0030FF,
+        0x0031F0, 0x0031FF,
+        0x0032D0, 0x0032FE,
+        0x003300, 0x003357,
+        0x00FE45, 0x00FE46,
+        0x00FF61, 0x00FF9F,
+        0x01AFF0, 0x01AFF3,
+        0x01AFF5, 0x01AFFB,
+        0x01AFFD, 0x01AFFE,
+        0x01B000, 0x01B000,
+        0x01B120, 0x01B122,
+        0x01B155, 0x01B155,
+        0x01B164, 0x01B167,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionKawi =>
+    [
+        0x011F00, 0x011F10,
+        0x011F12, 0x011F3A,
+        0x011F3E, 0x011F5A,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionKayahLi =>
+    [
+        0x00A900, 0x00A92F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionKharoshthi =>
+    [
+        0x010A00, 0x010A03,
+        0x010A05, 0x010A06,
+        0x010A0C, 0x010A13,
+        0x010A15, 0x010A17,
+        0x010A19, 0x010A35,
+        0x010A38, 0x010A3A,
+        0x010A3F, 0x010A48,
+        0x010A50, 0x010A58,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionKhitanSmallScript =>
+    [
+        0x016FE4, 0x016FE4,
+        0x018B00, 0x018CD5,
+        0x018CFF, 0x018CFF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionKhmer =>
+    [
+        0x001780, 0x0017DD,
+        0x0017E0, 0x0017E9,
+        0x0017F0, 0x0017F9,
+        0x0019E0, 0x0019FF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionKhojki =>
+    [
+        0x000AE6, 0x000AEF,
+        0x00A830, 0x00A839,
+        0x011200, 0x011211,
+        0x011213, 0x011241,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionKhudawadi =>
+    [
+        0x000964, 0x000965,
+        0x00A830, 0x00A839,
+        0x0112B0, 0x0112EA,
+        0x0112F0, 0x0112F9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionKiratRai =>
+    [
+        0x016D40, 0x016D79,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionLao =>
+    [
+        0x000E81, 0x000E82,
+        0x000E84, 0x000E84,
+        0x000E86, 0x000E8A,
+        0x000E8C, 0x000EA3,
+        0x000EA5, 0x000EA5,
+        0x000EA7, 0x000EBD,
+        0x000EC0, 0x000EC4,
+        0x000EC6, 0x000EC6,
+        0x000EC8, 0x000ECE,
+        0x000ED0, 0x000ED9,
+        0x000EDC, 0x000EDF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionLatin =>
+    [
+        0x000041, 0x00005A,
+        0x000061, 0x00007A,
+        0x0000AA, 0x0000AA,
+        0x0000B7, 0x0000B7,
+        0x0000BA, 0x0000BA,
+        0x0000C0, 0x0000D6,
+        0x0000D8, 0x0000F6,
+        0x0000F8, 0x0002B8,
+        0x0002BC, 0x0002BC,
+        0x0002C7, 0x0002C7,
+        0x0002C9, 0x0002CB,
+        0x0002CD, 0x0002CD,
+        0x0002D7, 0x0002D7,
+        0x0002D9, 0x0002D9,
+        0x0002E0, 0x0002E4,
+        0x000300, 0x00030E,
+        0x000310, 0x000311,
+        0x000313, 0x000313,
+        0x000320, 0x000320,
+        0x000323, 0x000325,
+        0x00032D, 0x00032E,
+        0x000330, 0x000331,
+        0x000358, 0x000358,
+        0x00035E, 0x00035E,
+        0x000363, 0x00036F,
+        0x000485, 0x000486,
+        0x000951, 0x000952,
+        0x0010FB, 0x0010FB,
+        0x001D00, 0x001D25,
+        0x001D2C, 0x001D5C,
+        0x001D62, 0x001D65,
+        0x001D6B, 0x001D77,
+        0x001D79, 0x001DBE,
+        0x001DF8, 0x001DF8,
+        0x001E00, 0x001EFF,
+        0x00202F, 0x00202F,
+        0x002071, 0x002071,
+        0x00207F, 0x00207F,
+        0x002090, 0x00209C,
+        0x0020F0, 0x0020F0,
+        0x00212A, 0x00212B,
+        0x002132, 0x002132,
+        0x00214E, 0x00214E,
+        0x002160, 0x002188,
+        0x002C60, 0x002C7F,
+        0x002E17, 0x002E17,
+        0x00A700, 0x00A707,
+        0x00A722, 0x00A787,
+        0x00A78B, 0x00A7CD,
+        0x00A7D0, 0x00A7D1,
+        0x00A7D3, 0x00A7D3,
+        0x00A7D5, 0x00A7DC,
+        0x00A7F2, 0x00A7FF,
+        0x00A92E, 0x00A92E,
+        0x00AB30, 0x00AB5A,
+        0x00AB5C, 0x00AB64,
+        0x00AB66, 0x00AB69,
+        0x00FB00, 0x00FB06,
+        0x00FF21, 0x00FF3A,
+        0x00FF41, 0x00FF5A,
+        0x010780, 0x010785,
+        0x010787, 0x0107B0,
+        0x0107B2, 0x0107BA,
+        0x01DF00, 0x01DF1E,
+        0x01DF25, 0x01DF2A,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionLepcha =>
+    [
+        0x001C00, 0x001C37,
+        0x001C3B, 0x001C49,
+        0x001C4D, 0x001C4F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionLimbu =>
+    [
+        0x000965, 0x000965,
+        0x001900, 0x00191E,
+        0x001920, 0x00192B,
+        0x001930, 0x00193B,
+        0x001940, 0x001940,
+        0x001944, 0x00194F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionLinearA =>
+    [
+        0x010107, 0x010133,
+        0x010600, 0x010736,
+        0x010740, 0x010755,
+        0x010760, 0x010767,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionLinearB =>
+    [
+        0x010000, 0x01000B,
+        0x01000D, 0x010026,
+        0x010028, 0x01003A,
+        0x01003C, 0x01003D,
+        0x01003F, 0x01004D,
+        0x010050, 0x01005D,
+        0x010080, 0x0100FA,
+        0x010100, 0x010102,
+        0x010107, 0x010133,
+        0x010137, 0x01013F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionLisu =>
+    [
+        0x0002BC, 0x0002BC,
+        0x0002CD, 0x0002CD,
+        0x00300A, 0x00300B,
+        0x00A4D0, 0x00A4FF,
+        0x011FB0, 0x011FB0,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionLycian =>
+    [
+        0x00205A, 0x00205A,
+        0x010280, 0x01029C,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionLydian =>
+    [
+        0x0000B7, 0x0000B7,
+        0x002E31, 0x002E31,
+        0x010920, 0x010939,
+        0x01093F, 0x01093F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionMahajani =>
+    [
+        0x0000B7, 0x0000B7,
+        0x000964, 0x00096F,
+        0x00A830, 0x00A839,
+        0x011150, 0x011176,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionMakasar =>
+    [
+        0x011EE0, 0x011EF8,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionMalayalam =>
+    [
+        0x000951, 0x000952,
+        0x000964, 0x000965,
+        0x000D00, 0x000D0C,
+        0x000D0E, 0x000D10,
+        0x000D12, 0x000D44,
+        0x000D46, 0x000D48,
+        0x000D4A, 0x000D4F,
+        0x000D54, 0x000D63,
+        0x000D66, 0x000D7F,
+        0x001CDA, 0x001CDA,
+        0x001CF2, 0x001CF2,
+        0x00A830, 0x00A832,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionMandaic =>
+    [
+        0x000640, 0x000640,
+        0x000840, 0x00085B,
+        0x00085E, 0x00085E,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionManichaean =>
+    [
+        0x000640, 0x000640,
+        0x010AC0, 0x010AE6,
+        0x010AEB, 0x010AF6,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionMarchen =>
+    [
+        0x011C70, 0x011C8F,
+        0x011C92, 0x011CA7,
+        0x011CA9, 0x011CB6,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionMasaramGondi =>
+    [
+        0x000964, 0x000965,
+        0x011D00, 0x011D06,
+        0x011D08, 0x011D09,
+        0x011D0B, 0x011D36,
+        0x011D3A, 0x011D3A,
+        0x011D3C, 0x011D3D,
+        0x011D3F, 0x011D47,
+        0x011D50, 0x011D59,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionMedefaidrin =>
+    [
+        0x016E40, 0x016E9A,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionMeeteiMayek =>
+    [
+        0x00AAE0, 0x00AAF6,
+        0x00ABC0, 0x00ABED,
+        0x00ABF0, 0x00ABF9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionMendeKikakui =>
+    [
+        0x01E800, 0x01E8C4,
+        0x01E8C7, 0x01E8D6,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionMeroiticCursive =>
+    [
+        0x0109A0, 0x0109B7,
+        0x0109BC, 0x0109CF,
+        0x0109D2, 0x0109FF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionMeroiticHieroglyphs =>
+    [
+        0x00205D, 0x00205D,
+        0x010980, 0x01099F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionMiao =>
+    [
+        0x016F00, 0x016F4A,
+        0x016F4F, 0x016F87,
+        0x016F8F, 0x016F9F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionModi =>
+    [
+        0x00A830, 0x00A839,
+        0x011600, 0x011644,
+        0x011650, 0x011659,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionMongolian =>
+    [
+        0x001800, 0x001819,
+        0x001820, 0x001878,
+        0x001880, 0x0018AA,
+        0x00202F, 0x00202F,
+        0x003001, 0x003002,
+        0x003008, 0x00300B,
+        0x011660, 0x01166C,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionMro =>
+    [
+        0x016A40, 0x016A5E,
+        0x016A60, 0x016A69,
+        0x016A6E, 0x016A6F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionMultani =>
+    [
+        0x000A66, 0x000A6F,
+        0x011280, 0x011286,
+        0x011288, 0x011288,
+        0x01128A, 0x01128D,
+        0x01128F, 0x01129D,
+        0x01129F, 0x0112A9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionMyanmar =>
+    [
+        0x001000, 0x00109F,
+        0x00A92E, 0x00A92E,
+        0x00A9E0, 0x00A9FE,
+        0x00AA60, 0x00AA7F,
+        0x0116D0, 0x0116E3,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionNabataean =>
+    [
+        0x010880, 0x01089E,
+        0x0108A7, 0x0108AF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionNagMundari =>
+    [
+        0x01E4D0, 0x01E4F9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionNandinagari =>
+    [
+        0x000964, 0x000965,
+        0x000CE6, 0x000CEF,
+        0x001CE9, 0x001CE9,
+        0x001CF2, 0x001CF2,
+        0x001CFA, 0x001CFA,
+        0x00A830, 0x00A835,
+        0x0119A0, 0x0119A7,
+        0x0119AA, 0x0119D7,
+        0x0119DA, 0x0119E4,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionNewTaiLue =>
+    [
+        0x001980, 0x0019AB,
+        0x0019B0, 0x0019C9,
+        0x0019D0, 0x0019DA,
+        0x0019DE, 0x0019DF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionNewa =>
+    [
+        0x011400, 0x01145B,
+        0x01145D, 0x011461,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionNko =>
+    [
+        0x00060C, 0x00060C,
+        0x00061B, 0x00061B,
+        0x00061F, 0x00061F,
+        0x0007C0, 0x0007FA,
+        0x0007FD, 0x0007FF,
+        0x00FD3E, 0x00FD3F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionNushu =>
+    [
+        0x016FE1, 0x016FE1,
+        0x01B170, 0x01B2FB,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionNyiakengPuachueHmong =>
+    [
+        0x01E100, 0x01E12C,
+        0x01E130, 0x01E13D,
+        0x01E140, 0x01E149,
+        0x01E14E, 0x01E14F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionOgham =>
+    [
+        0x001680, 0x00169C,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionOlChiki =>
+    [
+        0x001C50, 0x001C7F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionOlOnal =>
+    [
+        0x000964, 0x000965,
+        0x01E5D0, 0x01E5FA,
+        0x01E5FF, 0x01E5FF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionOldHungarian =>
+    [
+        0x00205A, 0x00205A,
+        0x00205D, 0x00205D,
+        0x002E31, 0x002E31,
+        0x002E41, 0x002E41,
+        0x010C80, 0x010CB2,
+        0x010CC0, 0x010CF2,
+        0x010CFA, 0x010CFF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionOldItalic =>
+    [
+        0x010300, 0x010323,
+        0x01032D, 0x01032F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionOldNorthArabian =>
+    [
+        0x010A80, 0x010A9F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionOldPermic =>
+    [
+        0x0000B7, 0x0000B7,
+        0x000300, 0x000300,
+        0x000306, 0x000308,
+        0x000313, 0x000313,
+        0x000483, 0x000483,
+        0x010350, 0x01037A,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionOldPersian =>
+    [
+        0x0103A0, 0x0103C3,
+        0x0103C8, 0x0103D5,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionOldSogdian =>
+    [
+        0x010F00, 0x010F27,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionOldSouthArabian =>
+    [
+        0x010A60, 0x010A7F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionOldTurkic =>
+    [
+        0x00205A, 0x00205A,
+        0x002E30, 0x002E30,
+        0x010C00, 0x010C48,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionOldUyghur =>
+    [
+        0x000640, 0x000640,
+        0x010AF2, 0x010AF2,
+        0x010F70, 0x010F89,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionOriya =>
+    [
+        0x000951, 0x000952,
+        0x000964, 0x000965,
+        0x000B01, 0x000B03,
+        0x000B05, 0x000B0C,
+        0x000B0F, 0x000B10,
+        0x000B13, 0x000B28,
+        0x000B2A, 0x000B30,
+        0x000B32, 0x000B33,
+        0x000B35, 0x000B39,
+        0x000B3C, 0x000B44,
+        0x000B47, 0x000B48,
+        0x000B4B, 0x000B4D,
+        0x000B55, 0x000B57,
+        0x000B5C, 0x000B5D,
+        0x000B5F, 0x000B63,
+        0x000B66, 0x000B77,
+        0x001CDA, 0x001CDA,
+        0x001CF2, 0x001CF2,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionOsage =>
+    [
+        0x000301, 0x000301,
+        0x000304, 0x000304,
+        0x00030B, 0x00030B,
+        0x000358, 0x000358,
+        0x0104B0, 0x0104D3,
+        0x0104D8, 0x0104FB,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionOsmanya =>
+    [
+        0x010480, 0x01049D,
+        0x0104A0, 0x0104A9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionPahawhHmong =>
+    [
+        0x016B00, 0x016B45,
+        0x016B50, 0x016B59,
+        0x016B5B, 0x016B61,
+        0x016B63, 0x016B77,
+        0x016B7D, 0x016B8F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionPalmyrene =>
+    [
+        0x010860, 0x01087F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionPauCinHau =>
+    [
+        0x011AC0, 0x011AF8,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionPhagsPa =>
+    [
+        0x001802, 0x001803,
+        0x001805, 0x001805,
+        0x00202F, 0x00202F,
+        0x003002, 0x003002,
+        0x00A840, 0x00A877,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionPhoenician =>
+    [
+        0x010900, 0x01091B,
+        0x01091F, 0x01091F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionPsalterPahlavi =>
+    [
+        0x000640, 0x000640,
+        0x010B80, 0x010B91,
+        0x010B99, 0x010B9C,
+        0x010BA9, 0x010BAF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionRejang =>
+    [
+        0x00A930, 0x00A953,
+        0x00A95F, 0x00A95F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionRunic =>
+    [
+        0x0016A0, 0x0016F8,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionSamaritan =>
+    [
+        0x000800, 0x00082D,
+        0x000830, 0x00083E,
+        0x002E31, 0x002E31,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionSaurashtra =>
+    [
+        0x00A880, 0x00A8C5,
+        0x00A8CE, 0x00A8D9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionSharada =>
+    [
+        0x000951, 0x000951,
+        0x001CD7, 0x001CD7,
+        0x001CD9, 0x001CD9,
+        0x001CDC, 0x001CDD,
+        0x001CE0, 0x001CE0,
+        0x00A830, 0x00A835,
+        0x00A838, 0x00A838,
+        0x011180, 0x0111DF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionShavian =>
+    [
+        0x0000B7, 0x0000B7,
+        0x010450, 0x01047F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionSiddham =>
+    [
+        0x011580, 0x0115B5,
+        0x0115B8, 0x0115DD,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionSignwriting =>
+    [
+        0x01D800, 0x01DA8B,
+        0x01DA9B, 0x01DA9F,
+        0x01DAA1, 0x01DAAF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionSinhala =>
+    [
+        0x000964, 0x000965,
+        0x000D81, 0x000D83,
+        0x000D85, 0x000D96,
+        0x000D9A, 0x000DB1,
+        0x000DB3, 0x000DBB,
+        0x000DBD, 0x000DBD,
+        0x000DC0, 0x000DC6,
+        0x000DCA, 0x000DCA,
+        0x000DCF, 0x000DD4,
+        0x000DD6, 0x000DD6,
+        0x000DD8, 0x000DDF,
+        0x000DE6, 0x000DEF,
+        0x000DF2, 0x000DF4,
+        0x001CF2, 0x001CF2,
+        0x0111E1, 0x0111F4,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionSogdian =>
+    [
+        0x000640, 0x000640,
+        0x010F30, 0x010F59,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionSoraSompeng =>
+    [
+        0x0110D0, 0x0110E8,
+        0x0110F0, 0x0110F9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionSoyombo =>
+    [
+        0x011A50, 0x011AA2,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionSundanese =>
+    [
+        0x001B80, 0x001BBF,
+        0x001CC0, 0x001CC7,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionSunuwar =>
+    [
+        0x000300, 0x000301,
+        0x000303, 0x000303,
+        0x00030D, 0x00030D,
+        0x000310, 0x000310,
+        0x00032D, 0x00032D,
+        0x000331, 0x000331,
+        0x011BC0, 0x011BE1,
+        0x011BF0, 0x011BF9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionSylotiNagri =>
+    [
+        0x000964, 0x000965,
+        0x0009E6, 0x0009EF,
+        0x00A800, 0x00A82C,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionSyriac =>
+    [
+        0x000303, 0x000304,
+        0x000307, 0x000308,
+        0x00030A, 0x00030A,
+        0x000320, 0x000320,
+        0x000323, 0x000325,
+        0x00032D, 0x00032E,
+        0x000330, 0x000330,
+        0x00060C, 0x00060C,
+        0x00061B, 0x00061C,
+        0x00061F, 0x00061F,
+        0x000640, 0x000640,
+        0x00064B, 0x000655,
+        0x000670, 0x000670,
+        0x000700, 0x00070D,
+        0x00070F, 0x00074A,
+        0x00074D, 0x00074F,
+        0x000860, 0x00086A,
+        0x001DF8, 0x001DF8,
+        0x001DFA, 0x001DFA,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionTagalog =>
+    [
+        0x001700, 0x001715,
+        0x00171F, 0x00171F,
+        0x001735, 0x001736,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionTagbanwa =>
+    [
+        0x001735, 0x001736,
+        0x001760, 0x00176C,
+        0x00176E, 0x001770,
+        0x001772, 0x001773,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionTaiLe =>
+    [
+        0x000300, 0x000301,
+        0x000307, 0x000308,
+        0x00030C, 0x00030C,
+        0x001040, 0x001049,
+        0x001950, 0x00196D,
+        0x001970, 0x001974,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionTaiTham =>
+    [
+        0x001A20, 0x001A5E,
+        0x001A60, 0x001A7C,
+        0x001A7F, 0x001A89,
+        0x001A90, 0x001A99,
+        0x001AA0, 0x001AAD,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionTaiViet =>
+    [
+        0x00AA80, 0x00AAC2,
+        0x00AADB, 0x00AADF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionTakri =>
+    [
+        0x000964, 0x000965,
+        0x00A830, 0x00A839,
+        0x011680, 0x0116B9,
+        0x0116C0, 0x0116C9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionTamil =>
+    [
+        0x000951, 0x000952,
+        0x000964, 0x000965,
+        0x000B82, 0x000B83,
+        0x000B85, 0x000B8A,
+        0x000B8E, 0x000B90,
+        0x000B92, 0x000B95,
+        0x000B99, 0x000B9A,
+        0x000B9C, 0x000B9C,
+        0x000B9E, 0x000B9F,
+        0x000BA3, 0x000BA4,
+        0x000BA8, 0x000BAA,
+        0x000BAE, 0x000BB9,
+        0x000BBE, 0x000BC2,
+        0x000BC6, 0x000BC8,
+        0x000BCA, 0x000BCD,
+        0x000BD0, 0x000BD0,
+        0x000BD7, 0x000BD7,
+        0x000BE6, 0x000BFA,
+        0x001CDA, 0x001CDA,
+        0x00A8F3, 0x00A8F3,
+        0x011301, 0x011301,
+        0x011303, 0x011303,
+        0x01133B, 0x01133C,
+        0x011FC0, 0x011FF1,
+        0x011FFF, 0x011FFF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionTangsa =>
+    [
+        0x016A70, 0x016ABE,
+        0x016AC0, 0x016AC9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionTangut =>
+    [
+        0x002FF0, 0x002FFF,
+        0x0031EF, 0x0031EF,
+        0x016FE0, 0x016FE0,
+        0x017000, 0x0187F7,
+        0x018800, 0x018AFF,
+        0x018D00, 0x018D08,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionTelugu =>
+    [
+        0x000951, 0x000952,
+        0x000964, 0x000965,
+        0x000C00, 0x000C0C,
+        0x000C0E, 0x000C10,
+        0x000C12, 0x000C28,
+        0x000C2A, 0x000C39,
+        0x000C3C, 0x000C44,
+        0x000C46, 0x000C48,
+        0x000C4A, 0x000C4D,
+        0x000C55, 0x000C56,
+        0x000C58, 0x000C5A,
+        0x000C5D, 0x000C5D,
+        0x000C60, 0x000C63,
+        0x000C66, 0x000C6F,
+        0x000C77, 0x000C7F,
+        0x001CDA, 0x001CDA,
+        0x001CF2, 0x001CF2,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionThaana =>
+    [
+        0x00060C, 0x00060C,
+        0x00061B, 0x00061C,
+        0x00061F, 0x00061F,
+        0x000660, 0x000669,
+        0x000780, 0x0007B1,
+        0x00FDF2, 0x00FDF2,
+        0x00FDFD, 0x00FDFD,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionThai =>
+    [
+        0x0002BC, 0x0002BC,
+        0x0002D7, 0x0002D7,
+        0x000303, 0x000303,
+        0x000331, 0x000331,
+        0x000E01, 0x000E3A,
+        0x000E40, 0x000E5B,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionTibetan =>
+    [
+        0x000F00, 0x000F47,
+        0x000F49, 0x000F6C,
+        0x000F71, 0x000F97,
+        0x000F99, 0x000FBC,
+        0x000FBE, 0x000FCC,
+        0x000FCE, 0x000FD4,
+        0x000FD9, 0x000FDA,
+        0x003008, 0x00300B,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionTifinagh =>
+    [
+        0x000302, 0x000302,
+        0x000304, 0x000304,
+        0x000307, 0x000307,
+        0x000309, 0x000309,
+        0x002D30, 0x002D67,
+        0x002D6F, 0x002D70,
+        0x002D7F, 0x002D7F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionTirhuta =>
+    [
+        0x000951, 0x000952,
+        0x000964, 0x000965,
+        0x001CF2, 0x001CF2,
+        0x00A830, 0x00A839,
+        0x011480, 0x0114C7,
+        0x0114D0, 0x0114D9,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionTodhri =>
+    [
+        0x000301, 0x000301,
+        0x000304, 0x000304,
+        0x000307, 0x000307,
+        0x000311, 0x000311,
+        0x000313, 0x000313,
+        0x00035E, 0x00035E,
+        0x0105C0, 0x0105F3,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionToto =>
+    [
+        0x0002BC, 0x0002BC,
+        0x01E290, 0x01E2AE,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionTuluTigalari =>
+    [
+        0x000CE6, 0x000CEF,
+        0x001CF2, 0x001CF2,
+        0x001CF4, 0x001CF4,
+        0x00A830, 0x00A835,
+        0x00A8F1, 0x00A8F1,
+        0x011380, 0x011389,
+        0x01138B, 0x01138B,
+        0x01138E, 0x01138E,
+        0x011390, 0x0113B5,
+        0x0113B7, 0x0113C0,
+        0x0113C2, 0x0113C2,
+        0x0113C5, 0x0113C5,
+        0x0113C7, 0x0113CA,
+        0x0113CC, 0x0113D5,
+        0x0113D7, 0x0113D8,
+        0x0113E1, 0x0113E2,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionUgaritic =>
+    [
+        0x010380, 0x01039D,
+        0x01039F, 0x01039F,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionVai =>
+    [
+        0x00A500, 0x00A62B,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionVithkuqi =>
+    [
+        0x010570, 0x01057A,
+        0x01057C, 0x01058A,
+        0x01058C, 0x010592,
+        0x010594, 0x010595,
+        0x010597, 0x0105A1,
+        0x0105A3, 0x0105B1,
+        0x0105B3, 0x0105B9,
+        0x0105BB, 0x0105BC,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionWancho =>
+    [
+        0x01E2C0, 0x01E2F9,
+        0x01E2FF, 0x01E2FF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionWarangCiti =>
+    [
+        0x0118A0, 0x0118F2,
+        0x0118FF, 0x0118FF,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionYezidi =>
+    [
+        0x00060C, 0x00060C,
+        0x00061B, 0x00061B,
+        0x00061F, 0x00061F,
+        0x000660, 0x000669,
+        0x010E80, 0x010EA9,
+        0x010EAB, 0x010EAD,
+        0x010EB0, 0x010EB1,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionYi =>
+    [
+        0x003001, 0x003002,
+        0x003008, 0x003011,
+        0x003014, 0x00301B,
+        0x0030FB, 0x0030FB,
+        0x00A000, 0x00A48C,
+        0x00A490, 0x00A4C6,
+        0x00FF61, 0x00FF65,
+    ];
+
+    private static ReadOnlySpan<int> ScriptExtensionZanabazarSquare =>
+    [
+        0x011A00, 0x011A47,
     ];
 
     private static ReadOnlySpan<int> GeneralCategoryCasedLetter =>

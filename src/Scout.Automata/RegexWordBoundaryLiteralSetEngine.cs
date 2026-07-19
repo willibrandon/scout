@@ -1,20 +1,22 @@
 namespace Scout;
 
+/// <summary>
+/// Executes finite literal languages whose matches are constrained by word boundaries.
+/// </summary>
 internal sealed class RegexWordBoundaryLiteralSetEngine
 {
-    private const int MaxLiteralCount = 4096;
-    private const int MaxLiteralLength = 128;
-    private const int MaxClassLiteralCount = 32;
+    private const int MaxLiteralCount = 250;
+    private const int MaxLiteralLength = 100;
 
-    private readonly AhoCorasickAutomaton automaton;
-    private readonly byte[][] literals;
-    private readonly int[][] literalIndexesByFirstByte;
-    private readonly RegexCompileOptions leadingBoundaryOptions;
-    private readonly RegexCompileOptions trailingBoundaryOptions;
-    private readonly RegexCompileOptions suffixWhitespaceOptions;
-    private readonly int maxLiteralLength;
-    private readonly bool asciiBoundaryFastPath;
-    private readonly bool hasIdentifierSuffix;
+    private readonly AhoCorasickAutomaton _automaton;
+    private readonly byte[][] _literals;
+    private readonly int[][] _literalIndexesByFirstByte;
+    private readonly RegexCompileOptions _leadingBoundaryOptions;
+    private readonly RegexCompileOptions _trailingBoundaryOptions;
+    private readonly RegexCompileOptions _suffixWhitespaceOptions;
+    private readonly int _maxLiteralLength;
+    private readonly bool _asciiBoundaryFastPath;
+    private readonly bool _hasIdentifierSuffix;
 
     private RegexWordBoundaryLiteralSetEngine(
         IReadOnlyList<byte[]> literals,
@@ -24,27 +26,34 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
         bool hasIdentifierSuffix,
         bool takeLiteralOwnership)
     {
-        this.literals = new byte[literals.Count][];
+        _literals = new byte[literals.Count][];
         for (int index = 0; index < literals.Count; index++)
         {
-            this.literals[index] = takeLiteralOwnership
+            _literals[index] = takeLiteralOwnership
                 ? literals[index]
                 : literals[index].ToArray();
-            maxLiteralLength = Math.Max(maxLiteralLength, this.literals[index].Length);
+            _maxLiteralLength = Math.Max(_maxLiteralLength, _literals[index].Length);
         }
 
-        this.leadingBoundaryOptions = leadingBoundaryOptions;
-        this.trailingBoundaryOptions = trailingBoundaryOptions;
-        this.suffixWhitespaceOptions = suffixWhitespaceOptions;
-        this.hasIdentifierSuffix = hasIdentifierSuffix;
-        asciiBoundaryFastPath = !leadingBoundaryOptions.Utf8 &&
+        _leadingBoundaryOptions = leadingBoundaryOptions;
+        _trailingBoundaryOptions = trailingBoundaryOptions;
+        _suffixWhitespaceOptions = suffixWhitespaceOptions;
+        _hasIdentifierSuffix = hasIdentifierSuffix;
+        _asciiBoundaryFastPath = !leadingBoundaryOptions.Utf8 &&
             !leadingBoundaryOptions.UnicodeClasses &&
             !trailingBoundaryOptions.Utf8 &&
             !trailingBoundaryOptions.UnicodeClasses;
-        literalIndexesByFirstByte = BuildLiteralBuckets(this.literals);
-        automaton = AhoCorasickAutomaton.Create(this.literals, AhoCorasickMatchKind.Standard);
+        _literalIndexesByFirstByte = BuildLiteralBuckets(_literals);
+        _automaton = AhoCorasickAutomaton.Create(_literals, AhoCorasickMatchKind.Standard);
     }
 
+    /// <summary>
+    /// Creates a word-boundary literal-set engine from compiler-proven syntax.
+    /// </summary>
+    /// <param name="root">The parsed syntax root.</param>
+    /// <param name="options">The effective compile options.</param>
+    /// <param name="engine">Receives the specialized engine.</param>
+    /// <returns><see langword="true" /> when the syntax is an eligible finite literal language.</returns>
     public static bool TryCreate(
         RegexSyntaxNode root,
         RegexCompileOptions options,
@@ -95,16 +104,22 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
         return true;
     }
 
+    /// <summary>
+    /// Finds the leftmost-first bounded literal match at or after an offset.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startAt">The first permitted match start.</param>
+    /// <returns>The selected match, or <see langword="null" /> when no literal matches.</returns>
     public RegexMatch? Find(ReadOnlySpan<byte> haystack, int startAt)
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
-        AhoCorasickOverlappingEnumerator matches = automaton.EnumerateOverlapping(haystack[startOffset..]);
+        AhoCorasickOverlappingEnumerator matches = _automaton.EnumerateOverlapping(haystack[startOffset..]);
         RegexLiteralSetCandidate? best = null;
         while (matches.MoveNext())
         {
             AhoCorasickMatch match = matches.Current;
             if (best.HasValue &&
-                startOffset + match.End > best.Value.Match.Start + maxLiteralLength)
+                startOffset + match.End > best.Value.Match.Start + _maxLiteralLength)
             {
                 break;
             }
@@ -122,6 +137,12 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
         return best.HasValue ? best.Value.Match : null;
     }
 
+    /// <summary>
+    /// Matches a bounded literal at an exact offset.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startAt">The required match start.</param>
+    /// <returns>The selected match, or <see langword="null" /> when no literal matches.</returns>
     public RegexMatch? MatchAt(ReadOnlySpan<byte> haystack, int startAt)
     {
         int start = Math.Clamp(startAt, 0, haystack.Length);
@@ -130,11 +151,11 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
             return null;
         }
 
-        ReadOnlySpan<int> candidates = literalIndexesByFirstByte[haystack[start]];
+        ReadOnlySpan<int> candidates = _literalIndexesByFirstByte[haystack[start]];
         for (int index = 0; index < candidates.Length; index++)
         {
             int literalId = candidates[index];
-            byte[] literal = literals[literalId];
+            byte[] literal = _literals[literalId];
             if (literal.Length <= haystack.Length - start &&
                 haystack.Slice(start, literal.Length).SequenceEqual(literal) &&
                 TryResolveMatch(haystack, new RegexLiteralSetCandidate(literalId, new RegexMatch(start, literal.Length)), out RegexMatch match))
@@ -146,11 +167,23 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
         return null;
     }
 
+    /// <summary>
+    /// Counts non-overlapping bounded literal matches at or after an offset.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startAt">The first permitted match start.</param>
+    /// <returns>The number of matches.</returns>
     public long CountMatches(ReadOnlySpan<byte> haystack, int startAt)
     {
         return CountOrSum(haystack, startAt, sumSpans: false);
     }
 
+    /// <summary>
+    /// Sums the byte lengths of non-overlapping bounded literal matches at or after an offset.
+    /// </summary>
+    /// <param name="haystack">The bytes to search.</param>
+    /// <param name="startAt">The first permitted match start.</param>
+    /// <returns>The sum of match lengths.</returns>
     public long SumMatchSpans(ReadOnlySpan<byte> haystack, int startAt)
     {
         return CountOrSum(haystack, startAt, sumSpans: true);
@@ -161,7 +194,7 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
         int nextAllowedStart = startOffset;
         long total = 0;
-        AhoCorasickOverlappingEnumerator matches = automaton.EnumerateOverlapping(haystack[startOffset..]);
+        AhoCorasickOverlappingEnumerator matches = _automaton.EnumerateOverlapping(haystack[startOffset..]);
         while (matches.MoveNext())
         {
             AhoCorasickMatch ahoMatch = matches.Current;
@@ -186,7 +219,7 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
     private bool TryResolveMatch(ReadOnlySpan<byte> haystack, RegexLiteralSetCandidate candidate, out RegexMatch match)
     {
         RegexMatch literalMatch = candidate.Match;
-        if (!hasIdentifierSuffix)
+        if (!_hasIdentifierSuffix)
         {
             match = literalMatch;
             return HasWordBoundaries(haystack, literalMatch.Start, literalMatch.Length);
@@ -213,7 +246,7 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
             return false;
         }
 
-        if (asciiBoundaryFastPath ||
+        if (_asciiBoundaryFastPath ||
             HasAsciiBoundaryContext(haystack, start, end))
         {
             return start == 0 || !IsAsciiWord(haystack[start - 1]);
@@ -223,11 +256,11 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
             haystack,
             start,
             RegexSyntaxKind.WordBoundary,
-            leadingBoundaryOptions.MultiLine,
-            leadingBoundaryOptions.Crlf,
-            leadingBoundaryOptions.LineTerminator,
-            leadingBoundaryOptions.Utf8,
-            leadingBoundaryOptions.UnicodeClasses);
+            _leadingBoundaryOptions.MultiLine,
+            _leadingBoundaryOptions.Crlf,
+            _leadingBoundaryOptions.LineTerminator,
+            _leadingBoundaryOptions.Utf8,
+            _leadingBoundaryOptions.UnicodeClasses);
     }
 
     private bool TryConsumeIdentifierSuffix(ReadOnlySpan<byte> haystack, int start, out int end)
@@ -278,13 +311,13 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
                 position,
                 RegexSyntaxKind.WhitespaceClass,
                 ReadOnlySpan<byte>.Empty,
-                suffixWhitespaceOptions.CaseInsensitive,
-                suffixWhitespaceOptions.MultiLine,
-                suffixWhitespaceOptions.DotMatchesNewline,
-                suffixWhitespaceOptions.Crlf,
-                suffixWhitespaceOptions.LineTerminator,
-                suffixWhitespaceOptions.Utf8,
-                suffixWhitespaceOptions.UnicodeClasses,
+                _suffixWhitespaceOptions.CaseInsensitive,
+                _suffixWhitespaceOptions.MultiLine,
+                _suffixWhitespaceOptions.DotMatchesNewline,
+                _suffixWhitespaceOptions.Crlf,
+                _suffixWhitespaceOptions.LineTerminator,
+                _suffixWhitespaceOptions.Utf8,
+                _suffixWhitespaceOptions.UnicodeClasses,
                 out length);
     }
 
@@ -298,7 +331,7 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
             return false;
         }
 
-        if (asciiBoundaryFastPath ||
+        if (_asciiBoundaryFastPath ||
             HasAsciiBoundaryContext(haystack, start, end))
         {
             return HasAsciiWordBoundaries(haystack, start, end);
@@ -309,20 +342,20 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
                 haystack,
                 start,
                 RegexSyntaxKind.WordBoundary,
-                leadingBoundaryOptions.MultiLine,
-                leadingBoundaryOptions.Crlf,
-                leadingBoundaryOptions.LineTerminator,
-                leadingBoundaryOptions.Utf8,
-                leadingBoundaryOptions.UnicodeClasses) &&
+                _leadingBoundaryOptions.MultiLine,
+                _leadingBoundaryOptions.Crlf,
+                _leadingBoundaryOptions.LineTerminator,
+                _leadingBoundaryOptions.Utf8,
+                _leadingBoundaryOptions.UnicodeClasses) &&
             RegexByteClass.PredicateMatches(
                 haystack,
                 end,
                 RegexSyntaxKind.WordBoundary,
-                trailingBoundaryOptions.MultiLine,
-                trailingBoundaryOptions.Crlf,
-                trailingBoundaryOptions.LineTerminator,
-                trailingBoundaryOptions.Utf8,
-                trailingBoundaryOptions.UnicodeClasses);
+                _trailingBoundaryOptions.MultiLine,
+                _trailingBoundaryOptions.Crlf,
+                _trailingBoundaryOptions.LineTerminator,
+                _trailingBoundaryOptions.Utf8,
+                _trailingBoundaryOptions.UnicodeClasses);
     }
 
     private static bool HasAsciiBoundaryContext(ReadOnlySpan<byte> haystack, int start, int end)
@@ -541,260 +574,48 @@ internal sealed class RegexWordBoundaryLiteralSetEngine
         RegexCompileOptions options,
         List<byte[]> literals)
     {
-        List<byte[]> expanded = [Array.Empty<byte>()];
-        if (!TryExpand(node, options, expanded))
+        if (!RegexFiniteLiteralExtractor.TryExtract(
+                node,
+                options,
+                out List<byte[]> expanded,
+                out bool? caseInsensitive,
+                out _,
+                out _) ||
+            caseInsensitive == true)
         {
             return false;
         }
 
         for (int index = 0; index < expanded.Count; index++)
         {
-            AddLiteral(literals, expanded[index]);
-        }
-
-        return true;
-    }
-
-    private static bool TryExpand(RegexSyntaxNode node, RegexCompileOptions options, List<byte[]> outputs)
-    {
-        if (!TryUnwrapWithOptions(node, options, out node, out options) ||
-            options.CaseInsensitive)
-        {
-            return false;
-        }
-
-        switch (node)
-        {
-            case RegexEmptyNode:
-                return true;
-            case RegexInlineFlagsNode flags:
-                return !options.Apply(flags.EnabledFlags, flags.DisabledFlags).CaseInsensitive;
-            case RegexAtomNode { Kind: RegexSyntaxKind.Literal } atom:
-                return AppendBytes(outputs, atom.Value.Span);
-            case RegexAtomNode { Kind: RegexSyntaxKind.CharacterClass } atom:
-                return AppendCharacterClass(outputs, atom.Value.Span, options);
-            case RegexSequenceNode sequence:
-                return ExpandSequence(sequence, options, outputs);
-            case RegexAlternationNode alternation:
-                return ExpandAlternation(alternation, options, outputs);
-            case RegexRepetitionNode repetition:
-                return ExpandRepetition(repetition, options, outputs);
-            default:
-                return false;
-        }
-    }
-
-    private static bool ExpandSequence(RegexSequenceNode sequence, RegexCompileOptions options, List<byte[]> outputs)
-    {
-        for (int index = 0; index < sequence.Nodes.Count; index++)
-        {
-            if (!TryExpand(sequence.Nodes[index], options, outputs))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static bool ExpandAlternation(RegexAlternationNode alternation, RegexCompileOptions options, List<byte[]> outputs)
-    {
-        List<byte[]> prefixes = Copy(outputs);
-        outputs.Clear();
-        for (int index = 0; index < alternation.Alternatives.Count; index++)
-        {
-            List<byte[]> branch = Copy(prefixes);
-            if (!TryExpand(alternation.Alternatives[index], options, branch))
+            byte[] literal = expanded[index];
+            if (literal.Length == 0)
             {
                 return false;
             }
 
-            if (!AppendAll(outputs, branch))
+            bool exists = false;
+            for (int literalIndex = 0; literalIndex < literals.Count; literalIndex++)
             {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static bool ExpandRepetition(RegexRepetitionNode repetition, RegexCompileOptions options, List<byte[]> outputs)
-    {
-        if (repetition.Maximum is null ||
-            repetition.Maximum.Value < repetition.Minimum ||
-            repetition.Maximum.Value > 4)
-        {
-            return false;
-        }
-
-        List<byte[]> repeatedOnce = [Array.Empty<byte>()];
-        if (!TryExpand(repetition.Child, options, repeatedOnce) ||
-            repeatedOnce.Count == 0)
-        {
-            return false;
-        }
-
-        int minimum = repetition.Minimum;
-        int maximum = repetition.Maximum.Value;
-        List<byte[]> expanded = [];
-        if (repetition.Lazy)
-        {
-            for (int count = minimum; count <= maximum; count++)
-            {
-                if (!AppendRepetitionCount(outputs, repeatedOnce, count, expanded))
+                if (literals[literalIndex].AsSpan().SequenceEqual(literal))
                 {
-                    return false;
+                    exists = true;
+                    break;
                 }
             }
-        }
-        else
-        {
-            for (int count = maximum; count >= minimum; count--)
+
+            if (!exists)
             {
-                if (!AppendRepetitionCount(outputs, repeatedOnce, count, expanded))
-                {
-                    return false;
-                }
-            }
-        }
-
-        outputs.Clear();
-        return AppendAll(outputs, expanded);
-    }
-
-    private static bool AppendRepetitionCount(
-        List<byte[]> prefixes,
-        List<byte[]> repeatedOnce,
-        int count,
-        List<byte[]> outputs)
-    {
-        List<byte[]> repeated = [Array.Empty<byte>()];
-        for (int index = 0; index < count; index++)
-        {
-            if (!AppendVariants(repeated, repeatedOnce))
-            {
-                return false;
-            }
-        }
-
-        List<byte[]> branch = Copy(prefixes);
-        if (!AppendVariants(branch, repeated))
-        {
-            return false;
-        }
-
-        return AppendAll(outputs, branch);
-    }
-
-    private static bool AppendCharacterClass(
-        List<byte[]> outputs,
-        ReadOnlySpan<byte> expression,
-        RegexCompileOptions options)
-    {
-        var variants = new List<byte[]>();
-        for (int value = 0; value <= 0x7F; value++)
-        {
-            if (!RegexByteClass.AtomMatches(
-                    (byte)value,
-                    RegexSyntaxKind.CharacterClass,
-                    expression,
-                    options.CaseInsensitive,
-                    options.MultiLine,
-                    options.DotMatchesNewline,
-                    options.Crlf,
-                    options.LineTerminator) ||
-                !IsAsciiWord((byte)value))
-            {
-                continue;
-            }
-
-            variants.Add([(byte)value]);
-            if (variants.Count > MaxClassLiteralCount)
-            {
-                return false;
-            }
-        }
-
-        return variants.Count > 0 && AppendVariants(outputs, variants);
-    }
-
-    private static bool AppendBytes(List<byte[]> outputs, ReadOnlySpan<byte> bytes)
-    {
-        if (bytes.IsEmpty || !IsAsciiWordLiteral(bytes))
-        {
-            return false;
-        }
-
-        var variants = new List<byte[]> { bytes.ToArray() };
-        return AppendVariants(outputs, variants);
-    }
-
-    private static bool AppendVariants(List<byte[]> outputs, List<byte[]> variants)
-    {
-        var expanded = new List<byte[]>();
-        for (int outputIndex = 0; outputIndex < outputs.Count; outputIndex++)
-        {
-            byte[] prefix = outputs[outputIndex];
-            for (int variantIndex = 0; variantIndex < variants.Count; variantIndex++)
-            {
-                byte[] variant = variants[variantIndex];
-                if (prefix.Length + variant.Length > MaxLiteralLength)
+                if (literals.Count >= MaxLiteralCount)
                 {
                     return false;
                 }
 
-                byte[] combined = new byte[prefix.Length + variant.Length];
-                prefix.CopyTo(combined, 0);
-                variant.CopyTo(combined, prefix.Length);
-                expanded.Add(combined);
-                if (expanded.Count > MaxLiteralCount)
-                {
-                    return false;
-                }
-            }
-        }
-
-        outputs.Clear();
-        outputs.AddRange(expanded);
-        return true;
-    }
-
-    private static bool AppendAll(List<byte[]> destination, List<byte[]> source)
-    {
-        for (int index = 0; index < source.Count; index++)
-        {
-            destination.Add(source[index]);
-            if (destination.Count > MaxLiteralCount)
-            {
-                return false;
+                literals.Add(literal);
             }
         }
 
         return true;
-    }
-
-    private static List<byte[]> Copy(List<byte[]> source)
-    {
-        var copy = new List<byte[]>(source.Count);
-        for (int index = 0; index < source.Count; index++)
-        {
-            copy.Add(source[index].ToArray());
-        }
-
-        return copy;
-    }
-
-    private static void AddLiteral(List<byte[]> literals, byte[] literal)
-    {
-        for (int index = 0; index < literals.Count; index++)
-        {
-            if (literals[index].AsSpan().SequenceEqual(literal))
-            {
-                return;
-            }
-        }
-
-        literals.Add(literal);
     }
 
     private static bool TryGetWordBoundaryOptions(

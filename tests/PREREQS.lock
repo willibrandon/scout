@@ -568,8 +568,8 @@ sha256 = "2954a476e27d4ce1a6a69b643e223c9d62c7358f6fbb618854a28779e6cada6e"
 
 [[performance_input]]
 name = "line-regex-paladin-like-200000"
-bytes = "49800346"
-sha256 = "18e7d61cb635b66a84d5eb8b1cabce6fc0d8c0a0d52b15321b8077848d8f7dc0"
+bytes = "49800419"
+sha256 = "f9c5f93baa2554553b23d190e5df55b5daf2f1d23167df5fe40214283b1a4d3a"
 
 [[performance_input]]
 name = "line-regex-absent-patterns-64"

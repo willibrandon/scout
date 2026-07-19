@@ -2,7 +2,7 @@
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-VERSION="$(cat "$ROOT/upstream/UNICODE-VERSION")"
+VERSION="$(tr -d '\r\n' < "$ROOT/upstream/UNICODE-VERSION")"
 ARCHIVE="$ROOT/upstream/ucd/UCD-$VERSION.zip"
 EXPECTED_SHA256="c86dd81f2b14a43b0cc064aa5f89aa7241386801e35c59c7984e579832634eb2"
 TABLES="$ROOT/upstream/regex-syntax-0.8.8/unicode_tables"
@@ -44,24 +44,8 @@ require_archive_entry() {
         fail "Vendored UCD archive is missing $entry."
 }
 
-is_windows_shell() {
-    case "$(uname -s 2>/dev/null || printf unknown)" in
-        MINGW*|MSYS*|CYGWIN*)
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
-    esac
-}
-
 normalize_windows_text_file() {
     path="$1"
-
-    if ! is_windows_shell; then
-        return 0
-    fi
-
     normalized="$path.lf"
     sed 's/\r$//' "$path" > "$normalized"
     mv "$normalized" "$path"
@@ -122,13 +106,29 @@ rm -rf "$TMP"
 mkdir -p "$TMP"
 generated="$TMP/RegexUnicodeTables.generated.cs"
 actual="$TMP/RegexUnicodeTables.actual.cs"
+generated_script_kind="$TMP/RegexUnicodeScriptKind.generated.cs"
+actual_script_kind="$TMP/RegexUnicodeScriptKind.actual.cs"
+generated_script_names="$TMP/RegexUnicodeScriptNames.generated.cs"
+actual_script_names="$TMP/RegexUnicodeScriptNames.actual.cs"
 "$PYTHON" "$ROOT/eng/generate-regex-unicode-tables.py" > "$generated"
+"$PYTHON" "$ROOT/eng/generate-regex-unicode-tables.py" script-kind > "$generated_script_kind"
+"$PYTHON" "$ROOT/eng/generate-regex-unicode-tables.py" script-names > "$generated_script_names"
 cp "$ROOT/src/Scout.Automata/RegexUnicodeTables.cs" "$actual"
+cp "$ROOT/src/Scout.Automata.Syntax/RegexUnicodeScriptKind.cs" "$actual_script_kind"
+cp "$ROOT/src/Scout.Automata.Syntax/RegexUnicodeScriptNames.cs" "$actual_script_names"
 normalize_windows_text_file "$generated"
 normalize_windows_text_file "$actual"
+normalize_windows_text_file "$generated_script_kind"
+normalize_windows_text_file "$actual_script_kind"
+normalize_windows_text_file "$generated_script_names"
+normalize_windows_text_file "$actual_script_names"
 [ -f "$generated" ] || fail "Unicode verifier did not create generated output: $generated"
 [ -f "$actual" ] || fail "Unicode verifier did not create actual output: $actual"
 cmp "$generated" "$actual" >/dev/null ||
     fail "src/Scout.Automata/RegexUnicodeTables.cs is stale; run eng/generate-regex-unicode-tables.py."
+cmp "$generated_script_kind" "$actual_script_kind" >/dev/null ||
+    fail "src/Scout.Automata.Syntax/RegexUnicodeScriptKind.cs is stale; run eng/generate-regex-unicode-tables.py script-kind."
+cmp "$generated_script_names" "$actual_script_names" >/dev/null ||
+    fail "src/Scout.Automata.Syntax/RegexUnicodeScriptNames.cs is stale; run eng/generate-regex-unicode-tables.py script-names."
 
 printf 'Scout Unicode data and generated table provenance match Unicode %s.\n' "$VERSION"

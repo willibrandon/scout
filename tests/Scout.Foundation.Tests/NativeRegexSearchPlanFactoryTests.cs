@@ -197,6 +197,8 @@ public sealed class NativeRegexSearchPlanFactoryTests
     {
         string root = FindRepositoryRoot();
         string application = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "ScoutApplication.cs"));
+        string enginePlanner = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "RegexEnginePlanner.cs"));
+        string pcre2Operations = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "Pcre2SearchOperations.cs"));
         string[] downstreamFiles =
         [
             "StandardSearchOperations.cs",
@@ -208,7 +210,12 @@ public sealed class NativeRegexSearchPlanFactoryTests
             "JsonSearchOperations.cs",
         ];
 
-        Assert.Equal(1, CountOccurrences(application, "NativeRegexSearchPlanFactory.Create("));
+        Assert.Equal(0, CountOccurrences(application, "NativeRegexSearchPlanFactory.Create("));
+        Assert.Equal(1, CountOccurrences(enginePlanner, "NativeRegexSearchPlanFactory.Create("));
+        Assert.DoesNotContain("ShouldAutoUse", pcre2Operations, StringComparison.Ordinal);
+        Assert.DoesNotContain("DefaultRegexCompileFails", pcre2Operations, StringComparison.Ordinal);
+        Assert.Contains("plan.Regex", pcre2Operations, StringComparison.Ordinal);
+        Assert.Contains("retainedRegexClaimed", pcre2Operations, StringComparison.Ordinal);
         for (int index = 0; index < downstreamFiles.Length; index++)
         {
             string source = File.ReadAllText(Path.Combine(root, "src", "Scout.App", downstreamFiles[index]));

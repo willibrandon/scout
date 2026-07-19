@@ -9,7 +9,7 @@ public static partial class RawStandardStreams
 {
     private const int UnixBrokenPipe = 32;
     private const int WindowsBrokenPipe = 109;
-    private const int WindowsPipeNotConnected = 232;
+    private const int WindowsNoData = 232;
     private const int StandardInputFileDescriptor = 0;
     private const int StandardOutputFileDescriptor = 1;
     private const int StandardErrorFileDescriptor = 2;
@@ -54,8 +54,18 @@ public static partial class RawStandardStreams
         ArgumentNullException.ThrowIfNull(exception);
         int error = exception.HResult & 0xffff;
         return OperatingSystem.IsWindows()
-            ? error is WindowsBrokenPipe or WindowsPipeNotConnected
+            ? error is WindowsBrokenPipe or WindowsNoData
             : error == UnixBrokenPipe;
+    }
+
+    /// <summary>
+    /// Determines whether a failed Windows standard-input read represents normal pipe EOF.
+    /// </summary>
+    /// <param name="error">The Win32 error returned by <c>ReadFile</c>.</param>
+    /// <returns><see langword="true" /> when the read reached the end of a closing or closed pipe.</returns>
+    internal static bool IsWindowsStandardInputEndOfFile(int error)
+    {
+        return error is WindowsBrokenPipe or WindowsNoData;
     }
 
     internal static int GetIoErrorHResult(int error)

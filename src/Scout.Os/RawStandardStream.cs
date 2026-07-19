@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 
 namespace Scout;
@@ -6,39 +7,44 @@ namespace Scout;
 /// <summary>
 /// Wraps a process standard stream without initializing text-oriented console state.
 /// </summary>
-internal sealed unsafe partial class RawStandardStream : Stream
+/// <param name="windowsHandle">The Windows standard-stream handle.</param>
+/// <param name="unixFileDescriptor">The Unix standard-stream file descriptor.</param>
+/// <param name="access">The permitted stream access.</param>
+internal sealed unsafe partial class RawStandardStream(
+    IntPtr windowsHandle,
+    int unixFileDescriptor,
+    FileAccess access) : Stream
 {
-    private readonly IntPtr windowsHandle;
-    private readonly int unixFileDescriptor;
-    private readonly bool canRead;
-    private readonly bool canWrite;
+    private readonly IntPtr _windowsHandle = windowsHandle;
+    private readonly int _unixFileDescriptor = unixFileDescriptor;
+    private readonly bool _canRead = access == FileAccess.Read || access == FileAccess.ReadWrite;
+    private readonly bool _canWrite = access == FileAccess.Write || access == FileAccess.ReadWrite;
 
-    public RawStandardStream(IntPtr windowsHandle, int unixFileDescriptor, FileAccess access)
-    {
-        this.windowsHandle = windowsHandle;
-        this.unixFileDescriptor = unixFileDescriptor;
-        canRead = access == FileAccess.Read || access == FileAccess.ReadWrite;
-        canWrite = access == FileAccess.Write || access == FileAccess.ReadWrite;
-    }
+    /// <inheritdoc />
+    public override bool CanRead => _canRead;
 
-    public override bool CanRead => canRead;
-
+    /// <inheritdoc />
     public override bool CanSeek => false;
 
-    public override bool CanWrite => canWrite;
+    /// <inheritdoc />
+    public override bool CanWrite => _canWrite;
 
+    /// <inheritdoc />
     public override long Length => throw new NotSupportedException();
 
+    /// <inheritdoc />
     public override long Position
     {
         get => throw new NotSupportedException();
         set => throw new NotSupportedException();
     }
 
+    /// <inheritdoc />
     public override void Flush()
     {
     }
 
+    /// <inheritdoc />
     public override int Read(byte[] buffer, int offset, int count)
     {
         ArgumentNullException.ThrowIfNull(buffer);
@@ -52,6 +58,7 @@ internal sealed unsafe partial class RawStandardStream : Stream
         return Read(buffer.AsSpan(offset, count));
     }
 
+    /// <inheritdoc />
     public override int Read(Span<byte> buffer)
     {
         if (!CanRead)
@@ -72,16 +79,19 @@ internal sealed unsafe partial class RawStandardStream : Stream
         }
     }
 
+    /// <inheritdoc />
     public override long Seek(long offset, SeekOrigin origin)
     {
         throw new NotSupportedException();
     }
 
+    /// <inheritdoc />
     public override void SetLength(long value)
     {
         throw new NotSupportedException();
     }
 
+    /// <inheritdoc />
     public override void Write(byte[] buffer, int offset, int count)
     {
         ArgumentNullException.ThrowIfNull(buffer);
@@ -95,6 +105,7 @@ internal sealed unsafe partial class RawStandardStream : Stream
         Write(buffer.AsSpan(offset, count));
     }
 
+    /// <inheritdoc />
     public override void Write(ReadOnlySpan<byte> buffer)
     {
         if (!CanWrite)
@@ -129,10 +140,11 @@ internal sealed unsafe partial class RawStandardStream : Stream
 
     private int ReadUnix(byte* buffer, int length)
     {
-        nint result = Read(unixFileDescriptor, buffer, (nuint)length);
+        nint result = Read(_unixFileDescriptor, buffer, (nuint)length);
         if (result < 0)
         {
-            ThrowLastIoException();
+            int error = Marshal.GetLastPInvokeError();
+            ThrowIoException(error);
         }
 
         return checked((int)result);
@@ -140,10 +152,11 @@ internal sealed unsafe partial class RawStandardStream : Stream
 
     private int WriteUnix(byte* buffer, int length)
     {
-        nint result = Write(unixFileDescriptor, buffer, (nuint)length);
+        nint result = Write(_unixFileDescriptor, buffer, (nuint)length);
         if (result < 0)
         {
-            ThrowLastIoException();
+            int error = Marshal.GetLastPInvokeError();
+            ThrowIoException(error);
         }
 
         return checked((int)result);
@@ -151,9 +164,15 @@ internal sealed unsafe partial class RawStandardStream : Stream
 
     private int ReadWindows(byte* buffer, int length)
     {
-        if (ReadFile(windowsHandle, buffer, length, out int bytesRead, IntPtr.Zero) == 0)
+        if (ReadFile(_windowsHandle, buffer, length, out int bytesRead, IntPtr.Zero) == 0)
         {
-            ThrowLastIoException();
+            int error = Marshal.GetLastPInvokeError();
+            if (RawStandardStreams.IsWindowsStandardInputEndOfFile(error))
+            {
+                return 0;
+            }
+
+            ThrowIoException(error);
         }
 
         return bytesRead;
@@ -161,17 +180,18 @@ internal sealed unsafe partial class RawStandardStream : Stream
 
     private int WriteWindows(byte* buffer, int length)
     {
-        if (WriteFile(windowsHandle, buffer, length, out int bytesWritten, IntPtr.Zero) == 0)
+        if (WriteFile(_windowsHandle, buffer, length, out int bytesWritten, IntPtr.Zero) == 0)
         {
-            ThrowLastIoException();
+            int error = Marshal.GetLastPInvokeError();
+            ThrowIoException(error);
         }
 
         return bytesWritten;
     }
 
-    private static void ThrowLastIoException()
+    [DoesNotReturn]
+    private static void ThrowIoException(int error)
     {
-        int error = Marshal.GetLastPInvokeError();
         throw new IOException(new Win32Exception(error).Message, RawStandardStreams.GetIoErrorHResult(error));
     }
 

@@ -330,7 +330,7 @@ public sealed class RegexPrefilterStateTests
     private static RegexSearchPlan CreateExactPrefixPlan()
     {
         return RegexSearchPlan.Create(
-            ["abcdefgh(?:foo|bar)[0-9]"u8.ToArray()],
+            ["abcdefgh(?:foo|bar)[0-9]+"u8.ToArray()],
             asciiCaseInsensitive: false);
     }
 

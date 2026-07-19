@@ -274,97 +274,56 @@ internal static class ScoutApplication
             }
         }
 
-        if (lowArgs.RegexEngine == CliRegexEngine.Pcre2)
+        RegexEnginePlan? enginePlan = null;
+        try
         {
-            return Pcre2SearchOperations.Run(positional, firstPathIndex, patternsReadFromStandardInput, lowArgs, patterns, standardInput, standardInputIsReadable, standardOutputIsTerminal, output, diagnostics, logger);
-        }
-
-        if (Pcre2SearchOperations.ShouldAutoUse(lowArgs, patterns))
-        {
-            return Pcre2SearchOperations.Run(positional, firstPathIndex, patternsReadFromStandardInput, lowArgs, patterns, standardInput, standardInputIsReadable, standardOutputIsTerminal, output, diagnostics, logger);
-        }
-
-        if (lowArgs.FixedStrings)
-        {
-            PatternPreparation.EscapeFixedStringPatterns(patterns);
-        }
-        else
-        {
-            if (!PatternPreparation.TryValidateRegexRepetitionExpressions(patterns, diagnostics))
+            if (!RegexEnginePlanner.TryCreate(patterns, lowArgs, out enginePlan, out ScoutError? engineError))
             {
+                diagnostics.ErrorMessage(engineError!.WithContext(ScoutErrorContext.ProgramContext()));
                 return ExitCode.Error;
             }
 
-            PatternPreparation.WrapRegexPatterns(patterns);
-        }
+            RegexEnginePlan selectedEnginePlan = enginePlan!;
+            if (selectedEnginePlan.UsesPcre2)
+            {
+                return Pcre2SearchOperations.Run(positional, firstPathIndex, patternsReadFromStandardInput, lowArgs, selectedEnginePlan.Pcre2Plan!, standardInput, standardInputIsReadable, standardOutputIsTerminal, output, diagnostics, logger);
+            }
 
-        if (!PatternPreparation.TryValidateRegexSizeLimit(patterns, lowArgs, diagnostics))
-        {
-            return ExitCode.Error;
-        }
+            if (!SearchWalkPlanning.TryBuildFileTypeMatcher(lowArgs, out FileTypeMatcher? searchFileTypes, out ScoutError? searchError))
+            {
+                diagnostics.ErrorMessage(searchError!.WithContext(ScoutErrorContext.ProgramContext()));
+                return ExitCode.Error;
+            }
 
-        if (!SearchWalkPlanning.TryBuildFileTypeMatcher(lowArgs, out FileTypeMatcher? searchFileTypes, out ScoutError? searchError))
-        {
-            diagnostics.ErrorMessage(searchError!.WithContext(ScoutErrorContext.ProgramContext()));
-            return ExitCode.Error;
-        }
+            List<byte[]> preparedPatterns = selectedEnginePlan.Patterns;
+            RegexSearchPlan regexPlan = selectedEnginePlan.NativePlan!;
+            bool asciiCaseInsensitive = selectedEnginePlan.AsciiCaseInsensitive;
 
-        bool asciiCaseInsensitive = PatternPreparation.IsAsciiCaseInsensitive(patterns, lowArgs.CaseMode);
-        if (!lowArgs.Unicode && asciiCaseInsensitive)
-        {
-            PatternPreparation.WrapNonAsciiPatterns(patterns);
-        }
+            SearchDiagnosticLogging.LogSearchConfiguration(logger, positional, firstPathIndex, lowArgs, preparedPatterns);
+            if (lowArgs.SearchMode == CliSearchMode.Json)
+            {
+                return JsonSearchOperations.Run(positional, firstPathIndex, patternsReadFromStandardInput, lowArgs, preparedPatterns, regexPlan, asciiCaseInsensitive, searchFileTypes!, output, diagnostics, logger, standardInput, standardInputIsReadable);
+            }
 
-        if (!lowArgs.FixedStrings && !lowArgs.Unicode)
-        {
-            PatternPreparation.WrapNoUnicodePatterns(patterns);
+            return StandardSearchOperations.Run(
+                positional,
+                firstPathIndex,
+                patternsReadFromStandardInput,
+                lowArgs,
+                preparedPatterns,
+                regexPlan,
+                asciiCaseInsensitive,
+                searchFileTypes!,
+                output,
+                diagnostics,
+                logger,
+                standardInput,
+                standardInputIsReadable,
+                standardOutputIsTerminal);
         }
-
-        RegexSearchPlan regexPlan;
-        try
+        finally
         {
-            regexPlan = NativeRegexSearchPlanFactory.Create(patterns, lowArgs, asciiCaseInsensitive);
+            enginePlan?.Dispose();
         }
-        catch (RegexLineTerminatorException)
-        {
-            diagnostics.ErrorMessage(new ScoutError(PatternPreparation.BuildLineTerminatorPatternError(lowArgs.NullData)).WithContext(ScoutErrorContext.ProgramContext()));
-            return ExitCode.Error;
-        }
-        catch (FormatException exception)
-        {
-            diagnostics.ErrorMessage(new ScoutError(exception.Message).WithContext(ScoutErrorContext.ProgramContext()));
-            return ExitCode.Error;
-        }
-
-        if (!lowArgs.TextMode &&
-            !lowArgs.NullData &&
-            !lowArgs.FixedStrings &&
-            regexPlan.ContainsExplicitNul)
-        {
-            diagnostics.ErrorMessage(new ScoutError("pattern contains \"\\0\" but it is impossible to match\n\nConsider enabling text mode with the --text flag (or -a for short). Otherwise,\nbinary detection is enabled and matching a NUL byte is impossible.").WithContext(ScoutErrorContext.ProgramContext()));
-            return ExitCode.Error;
-        }
-
-        SearchDiagnosticLogging.LogSearchConfiguration(logger, positional, firstPathIndex, lowArgs, patterns);
-        if (lowArgs.SearchMode == CliSearchMode.Json)
-        {
-            return JsonSearchOperations.Run(positional, firstPathIndex, patternsReadFromStandardInput, lowArgs, patterns, regexPlan, asciiCaseInsensitive, searchFileTypes!, output, diagnostics, logger, standardInput, standardInputIsReadable);
-        }
-
-        return StandardSearchOperations.Run(
-            positional,
-            firstPathIndex,
-            patternsReadFromStandardInput,
-            lowArgs,
-            patterns,
-            regexPlan,
-            asciiCaseInsensitive,
-            searchFileTypes!,
-            output,
-            diagnostics,
-            logger,
-            standardInput,
-            standardInputIsReadable,
-            standardOutputIsTerminal);
     }
 }
