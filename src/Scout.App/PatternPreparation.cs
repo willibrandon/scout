@@ -617,10 +617,16 @@ internal static class PatternPreparation
         return next - 1;
     }
 
-    private static string BuildRegexParseError(ReadOnlySpan<byte> pattern, int offset, string error)
+    internal static string BuildRegexParseError(
+        ReadOnlySpan<byte> pattern,
+        int offset,
+        string error,
+        bool wrapPattern = true)
     {
-        string displayPattern = "(?:" + BuildRegexErrorPatternDisplay(pattern) + ")";
-        string caret = new string(' ', 4 + 3 + Math.Max(offset, 0)) + "^";
+        string patternDisplay = BuildRegexErrorPatternDisplay(pattern);
+        string displayPattern = wrapPattern ? "(?:" + patternDisplay + ")" : patternDisplay;
+        int displayOffset = Math.Max(offset, 0) + (wrapPattern ? 3 : 0);
+        string caret = new string(' ', 4 + displayOffset) + "^";
         return "regex parse error:\n    " + displayPattern + "\n" + caret + "\nerror: " + error;
     }
 

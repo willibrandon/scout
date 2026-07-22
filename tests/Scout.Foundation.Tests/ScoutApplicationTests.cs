@@ -511,8 +511,8 @@ public sealed class ScoutApplicationTests
 
         Assert.Equal(ExitCode.Error, exitCode);
         Assert.Empty(output);
-        Assert.StartsWith("scout: ", error, StringComparison.Ordinal);
-        Assert.Contains("byte offset", error, StringComparison.Ordinal);
+        Assert.StartsWith("scout: regex parse error:\n    (?:", error, StringComparison.Ordinal);
+        Assert.Contains("\nerror: ", error, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -533,8 +533,8 @@ public sealed class ScoutApplicationTests
 
         Assert.Equal(ExitCode.Error, exitCode);
         Assert.Empty(output);
-        Assert.StartsWith("scout: ", error, StringComparison.Ordinal);
-        Assert.Contains("byte offset", error, StringComparison.Ordinal);
+        Assert.StartsWith("scout: regex parse error:\n    (?:", error, StringComparison.Ordinal);
+        Assert.Contains("\nerror: ", error, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -555,7 +555,7 @@ public sealed class ScoutApplicationTests
         Assert.Equal(ExitCode.Error, exitCode);
         Assert.Empty(output);
         Assert.Contains("unclosed character class", error, StringComparison.Ordinal);
-        Assert.Contains("byte offset", error, StringComparison.Ordinal);
+        Assert.StartsWith("scout: regex parse error:\n    (?:", error, StringComparison.Ordinal);
     }
 
     /// <summary>

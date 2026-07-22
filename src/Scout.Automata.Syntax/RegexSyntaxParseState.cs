@@ -9,6 +9,9 @@ namespace Scout;
 /// </summary>
 internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
 {
+    private const string PatternDataKey = "Scout.RegexSyntaxPattern";
+    private const string ByteOffsetDataKey = "Scout.RegexSyntaxByteOffset";
+    private const string ParseErrorDataKey = "Scout.RegexSyntaxError";
     private readonly HashSet<string> _captureNames = new(StringComparer.Ordinal);
     private readonly ReadOnlyMemory<byte> _pattern = pattern;
     private int _captureCount;
@@ -258,7 +261,7 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
             RegexSyntaxNode child = ParseAlternation(stopAtGroupEnd: true);
             if (_index >= Pattern.Length || Pattern[_index] != (byte)')')
             {
-                Throw("unclosed group");
+                Throw("unclosed group", position);
             }
 
             _index++;
@@ -1431,6 +1434,16 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
     [DoesNotReturn]
     private void Throw(string message)
     {
-        throw new FormatException($"{message} at byte offset {_index}");
+        Throw(message, _index);
+    }
+
+    [DoesNotReturn]
+    private void Throw(string message, int byteOffset)
+    {
+        var exception = new FormatException($"{message} at byte offset {byteOffset}");
+        exception.Data[PatternDataKey] = _pattern.ToArray();
+        exception.Data[ByteOffsetDataKey] = byteOffset;
+        exception.Data[ParseErrorDataKey] = message;
+        throw exception;
     }
 }
