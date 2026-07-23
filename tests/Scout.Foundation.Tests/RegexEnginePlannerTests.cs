@@ -138,6 +138,25 @@ public sealed class RegexEnginePlannerTests
     }
 
     /// <summary>
+    /// Verifies native syntax errors include the complete compiled expression and error location.
+    /// </summary>
+    [Fact]
+    public void DefaultEngineFormatsUnclosedGroupParseDiagnostic()
+    {
+        const string Pattern = "StartAsync(|DevServerHost|server-2022|CollectionUrl|DevServer.*Process";
+        CliLowArgs lowArgs = ParseLowArgs("--engine=default", Pattern);
+
+        ScoutError error = GetPlanningError([System.Text.Encoding.UTF8.GetBytes(Pattern)], lowArgs);
+
+        Assert.Equal(
+            "regex parse error:\n" +
+            "    (?:StartAsync(|DevServerHost|server-2022|CollectionUrl|DevServer.*Process)\n" +
+            "    ^\n" +
+            "error: unclosed group",
+            error.Message);
+    }
+
+    /// <summary>
     /// Verifies explicit PCRE2 selection reports the linked-runtime diagnostic directly.
     /// </summary>
     [Fact]

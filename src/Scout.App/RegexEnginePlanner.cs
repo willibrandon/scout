@@ -6,6 +6,9 @@ namespace Scout;
 internal static class RegexEnginePlanner
 {
     private const string ErrorDivider = "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~";
+    private const string SyntaxPatternDataKey = "Scout.RegexSyntaxPattern";
+    private const string SyntaxByteOffsetDataKey = "Scout.RegexSyntaxByteOffset";
+    private const string SyntaxErrorDataKey = "Scout.RegexSyntaxError";
 
     /// <summary>
     /// Compiles the requested engine and retains the successful matcher for dispatch.
@@ -147,6 +150,19 @@ internal static class RegexEnginePlanner
             error = new ScoutError(PatternPreparation.BuildLineTerminatorPatternError(lowArgs.NullData));
             return false;
         }
+        catch (FormatException exception) when (TryGetSyntaxDiagnostic(
+            exception,
+            out byte[]? pattern,
+            out int byteOffset,
+            out string? parseError))
+        {
+            error = new ScoutError(PatternPreparation.BuildRegexParseError(
+                pattern!,
+                byteOffset,
+                parseError!,
+                wrapPattern: false));
+            return false;
+        }
         catch (FormatException exception)
         {
             error = new ScoutError(exception.Message);
@@ -220,6 +236,18 @@ internal static class RegexEnginePlanner
         }
 
         return cloned;
+    }
+
+    private static bool TryGetSyntaxDiagnostic(
+        FormatException exception,
+        out byte[]? pattern,
+        out int byteOffset,
+        out string? parseError)
+    {
+        pattern = exception.Data[SyntaxPatternDataKey] as byte[];
+        byteOffset = exception.Data[SyntaxByteOffsetDataKey] is int offset ? offset : -1;
+        parseError = exception.Data[SyntaxErrorDataKey] as string;
+        return pattern is not null && byteOffset >= 0 && !string.IsNullOrEmpty(parseError);
     }
 
     private static byte[] BuildPcre2Pattern(List<byte[]> patterns)
