@@ -2804,15 +2804,15 @@ public sealed partial class PinnedConfigurationTests
     {
         (string Rid, string Name, string Version, string Path, string[] Sha256Values)[] tools =
         [
-            ("osx-arm64", "gzip", "Apple gzip 479", "/usr/bin/gzip", ["7bd218bc6b12fced475163901547a796736f72f99533cbec60eea150ed21afa3"]),
-            ("osx-arm64", "bzip2", "1.0.8", "/usr/bin/bzip2", ["14e28b6b7955cbd6cd2a8139ca41186a922143a4fa3715ddd8e331f41db8fc80"]),
+            ("osx-arm64", "gzip", "Apple gzip 479", "/usr/bin/gzip", ["7bd218bc6b12fced475163901547a796736f72f99533cbec60eea150ed21afa3", "c78f313867a6978148f989c8e758fb7a9ba7ff324f0b359b2053f5172f970be5"]),
+            ("osx-arm64", "bzip2", "1.0.8", "/usr/bin/bzip2", ["14e28b6b7955cbd6cd2a8139ca41186a922143a4fa3715ddd8e331f41db8fc80", "c9c5d486ee877f9104363ee0fe20539d4c1fbbb76f2f322d5e871f40aaf6ce26"]),
             ("osx-arm64", "xz", "5.8.3", "/opt/homebrew/bin/xz", ["16b9994cca884ed2a66ba63736f1450049cbc6fd1d93076c51e5f0e7f7a71381", "995c8e2f72446f0d0e3a29f6c3d52286cfecedfc4ffb2b42d25c3ce1ad77034c"]),
             ("osx-arm64", "zstd", "1.5.7", "/opt/homebrew/bin/zstd", ["9b5676aae3cb048cf68e2b40c543d9523db3b4cb911b31861bd5f4fcb050c4b6", "aff8169fb421bb925fb16c44a7e0143fa2c7a941dc45cce76b15062a2ce54917"]),
-            ("osx-arm64", "uncompress", "Apple compress file_cmds-479", "/usr/bin/uncompress", ["aec4becd30850078aa28747caa0c76227c9e848378377e37f98d531203fe6aa4"]),
+            ("osx-arm64", "uncompress", "Apple compress file_cmds-479", "/usr/bin/uncompress", ["aec4becd30850078aa28747caa0c76227c9e848378377e37f98d531203fe6aa4", "bf8cb1cefedfbf86fbb38dd42278fcad8fe020f3b8989897f1a0b2187aabdda5"]),
             ("osx-x64", "gzip", "Apple gzip 479", "/usr/bin/gzip", ["7bd218bc6b12fced475163901547a796736f72f99533cbec60eea150ed21afa3"]),
             ("osx-x64", "bzip2", "1.0.8", "/usr/bin/bzip2", ["14e28b6b7955cbd6cd2a8139ca41186a922143a4fa3715ddd8e331f41db8fc80"]),
-            ("osx-x64", "xz", "5.8.3", "/usr/local/bin/xz", ["2ce7374ab7c6426659e3662a6a759df41e03e30bfd90898073bab1d77f7c51b2"]),
-            ("osx-x64", "zstd", "1.5.7", "/usr/local/bin/zstd", ["9f04cf059d3043bd5ac7260bda6ebea8c21d9981210c5e7331cd0871ba20b2f6"]),
+            ("osx-x64", "xz", "5.8.3", "/usr/local/bin/xz", ["2ce7374ab7c6426659e3662a6a759df41e03e30bfd90898073bab1d77f7c51b2", "0b7b7bfc8f9d41b22b9a7d10ee4f56093cefea18a257c4c299a52186ac1a8921"]),
+            ("osx-x64", "zstd", "1.5.7", "/usr/local/bin/zstd", ["9f04cf059d3043bd5ac7260bda6ebea8c21d9981210c5e7331cd0871ba20b2f6", "267e9edb1b0b3284ede3484116f0ab6865cb4fee514774826fdaf514feb7d321"]),
             ("osx-x64", "uncompress", "Apple compress file_cmds-479", "/usr/bin/uncompress", ["aec4becd30850078aa28747caa0c76227c9e848378377e37f98d531203fe6aa4"]),
         ];
 
@@ -2842,14 +2842,25 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
-    /// Verifies multi-hash macOS tool pins are literal and limited to the rolling hosted arm64 images that require them.
+    /// Verifies multi-hash macOS tool pins are literal and limited to the exact rolling hosted image rows that require them.
     /// </summary>
     [Fact]
     public void MacosToolHashSetsAreNarrowlyScopedAndLiteral()
     {
         string root = FindRepositoryRoot();
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
-        int multipleHashTableCount = 0;
+        var expectedMultipleHashTables = new Dictionary<(string Rid, string Environment, string Name), int>
+        {
+            [("osx-arm64", "github-actions", "gzip")] = 2,
+            [("osx-arm64", "github-actions", "bzip2")] = 2,
+            [("osx-arm64", "github-actions", "xz")] = 2,
+            [("osx-arm64", "github-actions", "zstd")] = 2,
+            [("osx-arm64", "github-actions", "uncompress")] = 2,
+            [("osx-x64", "github-actions", "xz")] = 2,
+            [("osx-x64", "github-actions", "zstd")] = 2,
+        };
+        var observedMultipleHashTables =
+            new HashSet<(string Rid, string Environment, string Name)>();
 
         foreach (Dictionary<string, string> table in EnumerateTomlArrayTables(prerequisiteLock, "tool.macos"))
         {
@@ -2864,14 +2875,24 @@ public sealed partial class PinnedConfigurationTests
                 continue;
             }
 
-            multipleHashTableCount++;
-            Assert.Equal("osx-arm64", table["rid"]);
-            Assert.Equal("github-actions", table["environment"]);
-            Assert.True(table["name"] is "xz" or "zstd");
-            Assert.Equal(2, sha256Values.Length);
+            Assert.True(table.TryGetValue("rid", out string? rid));
+            Assert.True(table.TryGetValue("environment", out string? environment));
+            Assert.True(table.TryGetValue("name", out string? name));
+            (string Rid, string Environment, string Name) key =
+                (Rid: rid!, Environment: environment!, Name: name!);
+            Assert.True(
+                expectedMultipleHashTables.TryGetValue(key, out int expectedCardinality),
+                $"Unexpected multi-hash macOS tool row: {key}.");
+            Assert.Equal(expectedCardinality, sha256Values.Length);
+            Assert.True(
+                observedMultipleHashTables.Add(key),
+                $"Duplicate multi-hash macOS tool row: {key}.");
         }
 
-        Assert.Equal(2, multipleHashTableCount);
+        Assert.Equal(expectedMultipleHashTables.Count, observedMultipleHashTables.Count);
+        Assert.All(
+            expectedMultipleHashTables.Keys,
+            key => Assert.Contains(key, observedMultipleHashTables));
     }
 
     /// <summary>
@@ -3209,7 +3230,7 @@ public sealed partial class PinnedConfigurationTests
         }
 
         Assert.True(assignmentCount > 0);
-        Assert.Equal(2, arrayAssignmentCount);
+        Assert.Equal(7, arrayAssignmentCount);
         Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
     }
 
