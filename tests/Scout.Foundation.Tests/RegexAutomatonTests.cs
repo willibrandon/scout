@@ -5147,6 +5147,55 @@ public sealed class RegexAutomatonTests
     }
 
     /// <summary>
+    /// Verifies ASCII-projected prefiltering preserves authoritative Unicode match and capture semantics.
+    /// </summary>
+    [Fact]
+    public void AsciiProjectedPrefilterPreservesAuthoritativeUnicodeMatchesAndCaptures()
+    {
+        const string Pattern = """(?i)[a-z.-]{0,50}?(?:marker)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|:)[\x60'"\s=]{0,5}([a-z0-9_-]{96})(?:[\x60'"\s;]|\\[nr]|$)""";
+        string capturedValue = new('q', 96);
+        string asciiPrefix = new('a', 50);
+        string unicodePrefix = $"{new string('a', 49)}K";
+        byte[] asciiHaystack = System.Text.Encoding.UTF8.GetBytes($"{asciiPrefix}marker = {capturedValue}");
+        byte[] unicodeHaystack = System.Text.Encoding.UTF8.GetBytes($"{unicodePrefix}marker = {capturedValue}");
+        byte[] capturedBytes = System.Text.Encoding.ASCII.GetBytes(capturedValue);
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(System.Text.Encoding.ASCII.GetBytes(Pattern));
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            utf8: true,
+            unicodeClasses: true);
+        var automaton = RegexAutomaton.CompileParsedAuthoritative(tree, options);
+        RegexMetaEngine engine = GetMetaEngine(automaton);
+
+        RegexCaptures? asciiCaptures = automaton.FindCaptures(asciiHaystack);
+        RegexCaptures? unicodeCaptures = automaton.FindCaptures(unicodeHaystack);
+
+        Assert.True(
+            engine.HasAsciiFastPrefilter,
+            $"Expected an ASCII fast prefilter for {engine.Kind} with " +
+            $"{GetEngineNfaStateCount(automaton)} NFA states.");
+        Assert.True(
+            engine.GetSelectedRequiredLiteralWindow(asciiHaystack) <
+            automaton.RequiredLiteralWindow);
+        Assert.Equal(
+            automaton.RequiredLiteralWindow,
+            engine.GetSelectedRequiredLiteralWindow(unicodeHaystack));
+        Assert.NotNull(asciiCaptures);
+        Assert.Equal(new RegexMatch(0, asciiHaystack.Length), asciiCaptures.Match);
+        Assert.Equal(
+            new RegexMatch(asciiHaystack.AsSpan().IndexOf(capturedBytes), capturedBytes.Length),
+            asciiCaptures.GetGroup(1));
+        Assert.NotNull(unicodeCaptures);
+        Assert.Equal(new RegexMatch(0, unicodeHaystack.Length), unicodeCaptures.Match);
+        Assert.Equal(
+            new RegexMatch(unicodeHaystack.AsSpan().IndexOf(capturedBytes), capturedBytes.Length),
+            unicodeCaptures.GetGroup(1));
+    }
+
+    /// <summary>
     /// Verifies compiled case-sensitive required-literal prefilters do not fold candidates.
     /// </summary>
     [Fact]

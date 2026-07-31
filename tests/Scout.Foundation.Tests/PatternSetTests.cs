@@ -1,3 +1,5 @@
+using Scout.Text.Regex;
+
 namespace Scout;
 
 /// <summary>
@@ -187,6 +189,39 @@ public sealed class PatternSetTests
         Assert.Equal([0, 1, 2], matches);
         Assert.True(set.IsMatch("abc123"u8));
         Assert.False(set.IsMatch("123"u8));
+    }
+
+    /// <summary>
+    /// Verifies mixed pattern-set membership agrees with independently compiled regexes.
+    /// </summary>
+    [Fact]
+    public void MatchingPatternIdsAgreeWithIndependentRegexesForMixedPatternSet()
+    {
+        string[] patternTexts =
+        [
+            "needle",
+            "prefix-[a-z]+-suffix",
+            @"[0-9]{2}",
+            "missing-[a-z]+",
+            "prefix",
+            "prefix-(?:value|other)-suffix",
+        ];
+        byte[][] patterns = [.. patternTexts.Select(System.Text.Encoding.UTF8.GetBytes)];
+        byte[] haystack = "xxprefix-value-suffix yy needle zz 42"u8.ToArray();
+        var set = PatternSet.Compile(patterns);
+        int[] expectedPatternIds = patternTexts
+            .Select((pattern, patternId) => (Regex: ByteRegex.Compile(pattern), PatternId: patternId))
+            .Where(candidate => candidate.Regex.IsMatch(haystack))
+            .Select(candidate => candidate.PatternId)
+            .ToArray();
+
+        IReadOnlyList<int> actualPatternIds = set.MatchingPatternIds(haystack);
+
+        Assert.True(set.UsesLiteralAccelerator);
+        Assert.True(set.UsesRequiredLiteralAccelerator);
+        Assert.Equal([0, 1, 2, 4, 5], expectedPatternIds);
+        Assert.Equal([0, 1, 2, 4, 5], actualPatternIds);
+        Assert.Equal(expectedPatternIds, actualPatternIds);
     }
 
     /// <summary>

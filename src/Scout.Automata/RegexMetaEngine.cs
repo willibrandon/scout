@@ -78,6 +78,7 @@ internal sealed class RegexMetaEngine
     private readonly RegexScalarRunEngine? scalarRun;
     private readonly RegexAsciiWordBoundaryEngine? asciiWordBoundary;
     private readonly RegexPrefilter? prefilter;
+    private readonly RegexPrefilter? asciiFastPrefilter;
     private readonly Func<RegexNfa>? nfaFactory;
     private readonly object nfaInitializationLock = new();
     private RegexRunnerPool<RegexUnanchoredLazyDfa>? _unanchoredLazyDfaPool;
@@ -111,6 +112,7 @@ internal sealed class RegexMetaEngine
         RegexDotStarClassFallbackEngine? dotStarClassFallback,
         RegexPrefilter? prefilter,
         bool utf8,
+        RegexPrefilter? asciiFastPrefilter = null,
         RegexLazyDfa? asciiFastDfa = null,
         Func<RegexUnanchoredLazyDfa?>? asciiFastUnanchoredDfaFactory = null,
         RegexScalarRunEngine? scalarRun = null,
@@ -224,6 +226,7 @@ internal sealed class RegexMetaEngine
         this.scalarRun = scalarRun;
         this.asciiWordBoundary = asciiWordBoundary;
         this.prefilter = prefilter;
+        this.asciiFastPrefilter = asciiFastPrefilter;
         this.utf8 = utf8;
         _usesParsedPatternSet = usesParsedPatternSet;
         unguardedFind = prefilter is null ? CreateUnguardedFind() : null;
@@ -306,6 +309,22 @@ internal sealed class RegexMetaEngine
     /// Gets the selected prefilter kind.
     /// </summary>
     public RegexPrefilterKind PrefilterKind => prefilter?.Kind ?? RegexPrefilterKind.None;
+
+    /// <summary>
+    /// Gets a value indicating whether a narrower syntax-derived prefilter is available for
+    /// all-ASCII haystacks.
+    /// </summary>
+    internal bool HasAsciiFastPrefilter => asciiFastPrefilter is not null;
+
+    /// <summary>
+    /// Gets the required-literal window selected for a haystack.
+    /// </summary>
+    /// <param name="haystack">The complete search input.</param>
+    /// <returns>The selected conservative lookbehind window, or zero without a prefilter.</returns>
+    internal int GetSelectedRequiredLiteralWindow(ReadOnlySpan<byte> haystack)
+    {
+        return SelectPrefilter(haystack)?.RequiredLiteralWindow ?? 0;
+    }
 
     /// <summary>
     /// Creates an adaptive prefilter runner for a long independent-record search that would
@@ -1799,6 +1818,11 @@ internal sealed class RegexMetaEngine
                     asciiFastUnanchoredDenseDfa: incompatibleAsciiFastUnanchoredDenseDfa);
             }
 
+            RegexPrefilter? incompatibleAsciiFastPrefilter = TryCompileAsciiFastPrefilter(
+                incompatibleAsciiFastNfa,
+                root,
+                options,
+                prefilter);
             Func<RegexLazyDfa?>? asciiFastDfaFactory = CreateAsciiFastDfaFactory(
                 incompatibleAsciiFastNfa,
                 effectiveDfaSizeLimit);
@@ -1827,6 +1851,7 @@ internal sealed class RegexMetaEngine
                 dotStarClassFallback: null,
                 prefilter,
                 nfa.Utf8,
+                asciiFastPrefilter: incompatibleAsciiFastPrefilter,
                 asciiFastDfa: asciiFastDfa,
                 asciiFastDfaFactory: asciiFastDfaFactory,
                 asciiFastUnanchoredDfaFactory: incompatibleAsciiFastUnanchoredDfaFactory,
@@ -2203,6 +2228,44 @@ internal sealed class RegexMetaEngine
     }
 
     /// <summary>
+    /// Compiles a narrower syntax-derived prefilter for inputs proven to contain only ASCII
+    /// bytes. The projected NFA is the proof that ASCII byte semantics preserve the original
+    /// pattern on such inputs; authoritative matching still uses the original engine.
+    /// </summary>
+    /// <param name="asciiFastNfa">The safely compiled ASCII projection.</param>
+    /// <param name="root">The original parsed syntax tree.</param>
+    /// <param name="options">The original root compilation options.</param>
+    /// <param name="authoritativePrefilter">The prefilter compiled with authoritative semantics.</param>
+    /// <returns>A strictly narrower ASCII prefilter, or <see langword="null" />.</returns>
+    private static RegexPrefilter? TryCompileAsciiFastPrefilter(
+        RegexNfa? asciiFastNfa,
+        RegexSyntaxNode? root,
+        RegexCompileOptions? options,
+        RegexPrefilter? authoritativePrefilter)
+    {
+        if (asciiFastNfa is null ||
+            root is null ||
+            !options.HasValue ||
+            authoritativePrefilter is null ||
+            authoritativePrefilter.RequiredLiteralWindow == 0)
+        {
+            return null;
+        }
+
+        var candidate = RegexPrefilter.Compile(
+            root,
+            options.Value.WithAsciiSemantics());
+        if (candidate is null)
+        {
+            return null;
+        }
+
+        return candidate.RequiredLiteralWindow < authoritativePrefilter.RequiredLiteralWindow
+            ? candidate
+            : null;
+    }
+
+    /// <summary>
     /// Finds the first leftmost match at or after a byte offset.
     /// </summary>
     /// <param name="haystack">The bytes to search.</param>
@@ -2217,7 +2280,7 @@ internal sealed class RegexMetaEngine
             return unguardedFind(haystack, Math.Clamp(startAt, 0, haystack.Length));
         }
 
-        Span<RegexPrefilterState> prefilterState = prefilter is null
+        Span<RegexPrefilterState> prefilterState = prefilter is null && asciiFastPrefilter is null
             ? default
             : stackalloc RegexPrefilterState[1] { default };
         return Find(
@@ -2452,9 +2515,13 @@ internal sealed class RegexMetaEngine
 
         if (anchoredDfa is not null)
         {
+            RegexPrefilter activePrefilter = SelectPrefilter(haystack)
+                ?? throw new InvalidOperationException(
+                    "An anchored prefilter runner requires a compiled prefilter.");
             return FindWithPrefilter(
                 haystack,
                 Math.Clamp(startAt, 0, haystack.Length),
+                activePrefilter,
                 reachabilityCache: null,
                 reusablePikeVm: null,
                 reusableOnePassDfa: onePassDfa,
@@ -2805,6 +2872,7 @@ internal sealed class RegexMetaEngine
     {
         int startOffset = Math.Clamp(startAt, 0, haystack.Length);
         bool hasRequiredStart = startPredicate?.HasRequiredStart == true;
+        RegexPrefilter? activePrefilter = SelectPrefilter(haystack);
         if (empty is not null)
         {
             return empty.Find(haystack, startOffset);
@@ -3026,11 +3094,12 @@ internal sealed class RegexMetaEngine
         }
 
         if (reusableAnchoredDfa is not null ||
-            ShouldUsePrefilterBeforeUnanchoredDfa(haystack.Length))
+            ShouldUsePrefilterBeforeUnanchoredDfa(haystack.Length, activePrefilter))
         {
             return FindWithPrefilter(
                 haystack,
                 startOffset,
+                activePrefilter!,
                 reachabilityCache,
                 reusablePikeVm,
                 reusableOnePassDfa,
@@ -3100,11 +3169,12 @@ internal sealed class RegexMetaEngine
             }
         }
 
-        if (prefilter is not null)
+        if (activePrefilter is not null)
         {
             return FindWithPrefilter(
                 haystack,
                 startOffset,
+                activePrefilter,
                 reachabilityCache,
                 reusablePikeVm,
                 reusableOnePassDfa,
@@ -3152,16 +3222,44 @@ internal sealed class RegexMetaEngine
     /// <returns><see langword="true" /> when prefiltering should run first.</returns>
     private bool ShouldUsePrefilterBeforeUnanchoredDfa(int haystackLength)
     {
-        if (prefilter is null)
+        return ShouldUsePrefilterBeforeUnanchoredDfa(haystackLength, prefilter);
+    }
+
+    /// <summary>
+    /// Determines whether one selected syntax-derived prefilter should run before unanchored DFA
+    /// search.
+    /// </summary>
+    /// <param name="haystackLength">The number of bytes in the haystack.</param>
+    /// <param name="candidatePrefilter">The prefilter selected for this haystack.</param>
+    /// <returns><see langword="true" /> when prefiltering should run first.</returns>
+    private bool ShouldUsePrefilterBeforeUnanchoredDfa(
+        int haystackLength,
+        RegexPrefilter? candidatePrefilter)
+    {
+        if (candidatePrefilter is null)
         {
             return false;
         }
 
-        return UsesExactStartRequiredLiteralPrefilter(prefilter) ||
+        return UsesExactStartRequiredLiteralPrefilter(candidatePrefilter) ||
             haystackLength < UnanchoredLazyDfaHaystackThreshold ||
             !HasPrimaryUnanchoredDfaRunner &&
                 !HasAsciiFastUnanchoredDfaRunner &&
                 _asciiFastUnanchoredDenseDfa is null;
+    }
+
+    /// <summary>
+    /// Selects the authoritative-semantics prefilter unless the whole haystack proves that the
+    /// narrower ASCII projection is equivalent.
+    /// </summary>
+    /// <param name="haystack">The complete search input.</param>
+    /// <returns>The syntax-derived prefilter to use for this search.</returns>
+    private RegexPrefilter? SelectPrefilter(ReadOnlySpan<byte> haystack)
+    {
+        return asciiFastPrefilter is not null &&
+            IsAsciiRange(haystack, 0, haystack.Length)
+            ? asciiFastPrefilter
+            : prefilter;
     }
 
     /// <summary>
@@ -3191,6 +3289,7 @@ internal sealed class RegexMetaEngine
     /// </summary>
     /// <param name="haystack">The bytes to search.</param>
     /// <param name="startOffset">The first permitted match start.</param>
+    /// <param name="activePrefilter">The syntax-derived prefilter selected for this haystack.</param>
     /// <param name="reachabilityCache">Optional shared NFA reachability state.</param>
     /// <param name="reusablePikeVm">The Pike VM reserved for this search operation, when applicable.</param>
     /// <param name="reusableOnePassDfa">
@@ -3204,17 +3303,19 @@ internal sealed class RegexMetaEngine
     private RegexMatch? FindWithPrefilter(
         ReadOnlySpan<byte> haystack,
         int startOffset,
+        RegexPrefilter activePrefilter,
         Dictionary<(int State, int Position), bool>? reachabilityCache,
         PikeVm? reusablePikeVm,
         RegexOnePassDfa? reusableOnePassDfa,
         RegexLazyDfa? reusableAnchoredDfa,
         Span<RegexPrefilterState> prefilterState)
     {
-        if (prefilter!.UsesRequiredLiteralWindow)
+        if (activePrefilter.UsesRequiredLiteralWindow)
         {
             return FindWithRequiredLiteralPrefilter(
                 haystack,
                 startOffset,
+                activePrefilter,
                 reachabilityCache,
                 reusablePikeVm,
                 reusableOnePassDfa,
@@ -3227,7 +3328,7 @@ internal sealed class RegexMetaEngine
             startOffset,
             haystack.Length,
             utf8,
-            prefilter,
+            activePrefilter,
             prefilterState);
         if (pikeVmPool is not null)
         {
@@ -3256,6 +3357,7 @@ internal sealed class RegexMetaEngine
     /// </summary>
     /// <param name="haystack">The bytes to search.</param>
     /// <param name="startOffset">The first permitted match start.</param>
+    /// <param name="activePrefilter">The syntax-derived prefilter selected for this haystack.</param>
     /// <param name="reachabilityCache">Optional shared NFA reachability state.</param>
     /// <param name="reusablePikeVm">The Pike VM reserved for this search operation, when applicable.</param>
     /// <param name="reusableOnePassDfa">
@@ -3269,6 +3371,7 @@ internal sealed class RegexMetaEngine
     private RegexMatch? FindWithRequiredLiteralPrefilter(
         ReadOnlySpan<byte> haystack,
         int startOffset,
+        RegexPrefilter activePrefilter,
         Dictionary<(int State, int Position), bool>? reachabilityCache,
         PikeVm? reusablePikeVm,
         RegexOnePassDfa? reusableOnePassDfa,
@@ -3282,7 +3385,7 @@ internal sealed class RegexMetaEngine
             startOffset,
             haystack.Length,
             utf8,
-            prefilter!,
+            activePrefilter,
             requiredRangeBuffer,
             prefilterState);
         if (pikeVmPool is not null)
