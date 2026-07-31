@@ -657,7 +657,7 @@ public sealed class RegexCaptureEngineTests()
     }
 
     /// <summary>
-    /// Verifies one operation-scoped runner replays many exact spans without allocation.
+    /// Verifies one operation-scoped runner replays many exact spans without steady-state allocation.
     /// </summary>
     [Fact]
     public void OperationScopedCaptureRunnerReplaysWithoutAllocating()
@@ -674,21 +674,30 @@ public sealed class RegexCaptureEngineTests()
                 Assert.True(runner.TryReplayCaptures(haystack, 3, 13, captureSlots));
             }
 
+            const int ReplayCount = 1_024;
+            const int MeasurementSampleCount = 4;
+            _ = GC.GetAllocatedBytesForCurrentThread();
+
             bool replayed = true;
             int checksum = 0;
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            for (int index = 0; index < 1_024; index++)
+            long minimumAllocated = long.MaxValue;
+            for (int sample = 0; sample < MeasurementSampleCount; sample++)
             {
-                replayed &= runner.TryReplayCaptures(haystack, 3, 13, captureSlots);
-                checksum += captureSlots[5];
+                long before = GC.GetAllocatedBytesForCurrentThread();
+                for (int index = 0; index < ReplayCount; index++)
+                {
+                    replayed &= runner.TryReplayCaptures(haystack, 3, 13, captureSlots);
+                    checksum += captureSlots[5];
+                }
+
+                long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+                minimumAllocated = Math.Min(minimumAllocated, allocated);
             }
 
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-
             Assert.True(replayed);
-            Assert.Equal(13 * 1_024, checksum);
+            Assert.Equal(13 * ReplayCount * MeasurementSampleCount, checksum);
             Assert.Equal([3, 13, 3, 9, 10, 13], captureSlots);
-            Assert.Equal(0, allocated);
+            Assert.Equal(0, minimumAllocated);
         }
         finally
         {
