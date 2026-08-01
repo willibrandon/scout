@@ -15,7 +15,7 @@ internal sealed class RegexLazyDfa(
     Dictionary<RegexDfaStateKey, RegexLazyDfaState> states,
     RegexLazyDfaState startState,
     RegexDfaBudget budget,
-    bool leftmostPrune)
+    bool leftmostPrune) : IRegexLazyDfaDirection
 {
     private const int MaxAcceleratorNeedles = 3;
 

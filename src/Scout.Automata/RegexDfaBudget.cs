@@ -24,6 +24,14 @@ internal struct RegexDfaBudget(ulong limit)
         (3UL + 256UL) * (ulong)IntPtr.Size;
 
     /// <summary>
+    /// Estimates one managed reference table with a caller-selected entry count.
+    /// </summary>
+    public static ulong EstimateDenseReferenceTransitionTableBytes(int entryCount)
+    {
+        return checked((3UL + (ulong)entryCount) * (ulong)IntPtr.Size);
+    }
+
+    /// <summary>
     /// Estimates the retained storage of one DFA state.
     /// </summary>
     /// <param name="nfaStateCount">The number of NFA-state indexes retained by the state.</param>
@@ -44,11 +52,16 @@ internal struct RegexDfaBudget(ulong limit)
     /// <param name="allocatesDenseReferenceTable">
     /// Whether the transition promotes its state to a 256-entry reference table.
     /// </param>
+    /// <param name="denseReferenceCount">The number of references in the promoted table.</param>
     /// <returns><see langword="true" /> when the complete reservation fits within the limit.</returns>
-    public bool TryReserveLazyTransition(bool allocatesDenseReferenceTable)
+    public bool TryReserveLazyTransition(
+        bool allocatesDenseReferenceTable,
+        int denseReferenceCount = 256)
     {
         ulong bytes = SparseTransitionBytes +
-            (allocatesDenseReferenceTable ? DenseReferenceTransitionTableBytes : 0);
+            (allocatesDenseReferenceTable
+                ? EstimateDenseReferenceTransitionTableBytes(denseReferenceCount)
+                : 0);
         return TryReserve(bytes);
     }
 

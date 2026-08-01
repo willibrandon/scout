@@ -499,11 +499,11 @@ public sealed class RegexUnanchoredDenseDfaTests
     }
 
     /// <summary>
-    /// Verifies bounded look-around determinization can decline a small NFA with an exponential
-    /// state set without publishing a projected runner or weakening the Unicode fallback.
+    /// Verifies a look-around NFA that exceeds eager dense limits can use the bounded lazy
+    /// projection without weakening the Unicode fallback.
     /// </summary>
     [Fact]
-    public void LookaroundStateExplosionRetainsAuthoritativeFallback()
+    public void LookaroundDenseStateExplosionUsesBoundedLazyProjection()
     {
         byte[] pattern = @"\b\w*a[ab]{6}\b"u8.ToArray();
         RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
@@ -545,10 +545,17 @@ public sealed class RegexUnanchoredDenseDfaTests
             dfaSizeLimit: GenerousDfaSizeLimit,
             compilePrefilter: false);
         Assert.Null(GetDenseProjection(GetMetaEngine(automaton)));
-        Assert.False(automaton.HasAsciiProjectedMatchEndRunner);
+        Assert.True(automaton.HasAsciiProjectedMatchEndRunner);
         using RegexMatchEndRunner runner = automaton.RentAsciiProjectedMatchEndRunner(
             activationLength: 8_192);
-        Assert.False(runner.IsAvailable);
+        Assert.True(runner.IsAvailable);
+        Assert.True(runner.TryFindEnd(
+            "baaaaaaa"u8,
+            startAt: 0,
+            out int end,
+            out bool completed));
+        Assert.True(completed);
+        Assert.Equal(8, end);
         Assert.Equal(1, automaton.CountMatches("ébaaaaaaaé baaaaaaa"u8));
     }
 
