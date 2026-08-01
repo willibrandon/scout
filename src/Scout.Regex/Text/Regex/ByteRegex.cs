@@ -26,17 +26,22 @@ public sealed class ByteRegex
         ByteRegexOptions resolvedOptions = options ?? new ByteRegexOptions();
         try
         {
-            return new ByteRegex(RegexAutomaton.Compile(
-                pattern,
+            var compileOptions = new RegexCompileOptions(
                 resolvedOptions.AsciiCaseInsensitive,
+                swapGreed: false,
                 resolvedOptions.MultiLine,
                 resolvedOptions.DotMatchesNewline,
                 resolvedOptions.Crlf,
                 resolvedOptions.LineTerminator,
                 resolvedOptions.Utf8,
                 resolvedOptions.UnicodeClasses,
-                resolvedOptions.DfaSizeLimit,
-                resolvedOptions.ToSpecializationMode()));
+                resolvedOptions.ToSpecializationMode(),
+                matchInvalidUtf8: resolvedOptions.MatchInvalidUtf8);
+            RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
+            return new ByteRegex(RegexAutomaton.CompileParsed(
+                tree,
+                compileOptions,
+                resolvedOptions.DfaSizeLimit));
         }
         catch (FormatException exception)
         {

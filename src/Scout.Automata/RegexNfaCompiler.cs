@@ -760,7 +760,8 @@ internal sealed class RegexNfaCompiler(
             excludeCrLf: options.ExcludeCrLf,
             excludedLineTerminator: options.ExcludedLineTerminator,
             scalarRanges: scalarRanges,
-            scalarRangesUseUtf8: scalarRangesUseUtf8);
+            scalarRangesUseUtf8: scalarRangesUseUtf8,
+            matchInvalidUtf8: options.MatchInvalidUtf8);
     }
 
     private int CompileAtomReversed(RegexAtomNode node, int next, RegexCompileOptions options)
@@ -791,7 +792,8 @@ internal sealed class RegexNfaCompiler(
             excludeCrLf: options.ExcludeCrLf,
             excludedLineTerminator: options.ExcludedLineTerminator,
             scalarRanges: scalarRanges,
-            scalarRangesUseUtf8: scalarRangesUseUtf8);
+            scalarRangesUseUtf8: scalarRangesUseUtf8,
+            matchInvalidUtf8: options.MatchInvalidUtf8);
     }
 
     private RegexScalarRange[]? TryGetRetainedScalarRanges(
@@ -1110,6 +1112,7 @@ internal sealed class RegexNfaCompiler(
         byte? excludedLineTerminator = null,
         RegexScalarRange[]? scalarRanges = null,
         bool scalarRangesUseUtf8 = false,
+        bool matchInvalidUtf8 = false,
         bool payloadReserved = false,
         ulong reservationCheckpoint = 0)
     {
@@ -1176,7 +1179,8 @@ internal sealed class RegexNfaCompiler(
                 excludeCrLf: excludeCrLf,
                 excludedLineTerminator: effectiveExcludedLineTerminator,
                 scalarRanges: scalarRanges,
-                scalarRangesUseUtf8: scalarRangesUseUtf8));
+                scalarRangesUseUtf8: scalarRangesUseUtf8,
+                matchInvalidUtf8: matchInvalidUtf8));
             _atomStateCache.Add(key, cachedState);
             return cachedState;
         }
@@ -1204,7 +1208,8 @@ internal sealed class RegexNfaCompiler(
             excludeCrLf: excludeCrLf,
             excludedLineTerminator: effectiveExcludedLineTerminator,
             scalarRanges: scalarRanges,
-            scalarRangesUseUtf8: scalarRangesUseUtf8));
+            scalarRangesUseUtf8: scalarRangesUseUtf8,
+            matchInvalidUtf8: matchInvalidUtf8));
         return state;
     }
 

@@ -63,6 +63,10 @@ internal sealed class RegexScalarRunEngine
             return false;
         }
 
+        bool observesInvalidUtf8 = RegexInvalidUtf8Analysis.CanObserveReplacementScalar(
+            scalarRunNode!,
+            effectiveOptions);
+
         int minimum;
         int maximum;
         bool lazy;
@@ -102,13 +106,20 @@ internal sealed class RegexScalarRunEngine
             return false;
         }
 
-        bool unicodeLowerOrUpperFastPath = IsUnicodeLowerOrUpperFastPath(atoms, effectiveOptions);
-        bool singleDotAllScalarFastPath = IsSingleDotAllScalarFastPath(atoms, effectiveOptions, minimum, maximum, lazy);
-        TryCreateUnicodePropertyFastPath(
-            atoms,
-            effectiveOptions,
-            out int[]? unicodePropertyRanges,
-            out byte[]? unicodePropertyFirstBytes);
+        bool unicodeLowerOrUpperFastPath = !observesInvalidUtf8 &&
+            IsUnicodeLowerOrUpperFastPath(atoms, effectiveOptions);
+        bool singleDotAllScalarFastPath = !observesInvalidUtf8 &&
+            IsSingleDotAllScalarFastPath(atoms, effectiveOptions, minimum, maximum, lazy);
+        int[]? unicodePropertyRanges = null;
+        byte[]? unicodePropertyFirstBytes = null;
+        if (!observesInvalidUtf8)
+        {
+            TryCreateUnicodePropertyFastPath(
+                atoms,
+                effectiveOptions,
+                out unicodePropertyRanges,
+                out unicodePropertyFirstBytes);
+        }
         engine = new RegexScalarRunEngine(
             atoms,
             effectiveOptions,
@@ -643,8 +654,15 @@ internal sealed class RegexScalarRunEngine
                 options.DotMatchesNewline,
                 options.Crlf,
                 options.LineTerminator,
-                options.Utf8,
                 options.UnicodeClasses,
+                RegexByteClass.RequiresUtf8ScalarMatch(
+                    atom.Kind,
+                    atom.Value,
+                    options.Utf8,
+                    options.CaseInsensitive,
+                    options.UnicodeClasses),
+                RegexByteClass.CanUseAsciiScalarFastPath(atom.Kind, atom.Value),
+                options.MatchInvalidUtf8,
                 out scalarLength))
             {
                 return true;

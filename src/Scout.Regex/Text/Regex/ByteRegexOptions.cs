@@ -41,6 +41,12 @@ public sealed class ByteRegexOptions
     public bool UnicodeClasses { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets a value indicating whether each malformed UTF-8 byte is matched as
+    /// <see cref="System.Text.Rune.ReplacementChar" /> by Unicode scalar operations.
+    /// </summary>
+    public bool MatchInvalidUtf8 { get; set; }
+
+    /// <summary>
     /// Gets or sets the maximum DFA cache size in bytes, or <see langword="null" /> for Scout's default.
     /// </summary>
     public ulong? DfaSizeLimit { get; set; }

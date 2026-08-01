@@ -34,6 +34,8 @@ var options = new ByteRegexOptions
 ByteRegex regex = ByteRegex.Compile(@"error:\s+([A-Z0-9_]+)", options);
 ```
 
+Set `MatchInvalidUtf8 = true` when Unicode scalar operations should treat each malformed or truncated UTF-8 byte as one `U+FFFD`, following Go's byte-regexp behavior. The default remains ripgrep-compatible. Matches and captures always retain offsets into the original bytes; valid encoded `U+FFFD` remains three bytes, and raw byte mode is unchanged.
+
 `ByteRegexSet` compiles ordered multi-pattern searches:
 
 ```csharp
