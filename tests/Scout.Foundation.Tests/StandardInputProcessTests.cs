@@ -5,6 +5,7 @@ namespace Scout;
 /// <summary>
 /// Verifies standard-input behavior through real managed child-process pipes.
 /// </summary>
+[Collection(ApplicationProcessStateGroup.Name)]
 public sealed class StandardInputProcessTests
 {
     /// <summary>
