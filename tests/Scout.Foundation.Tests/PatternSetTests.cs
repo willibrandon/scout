@@ -513,6 +513,38 @@ public sealed class PatternSetTests
     }
 
     /// <summary>
+    /// Verifies malformed matching keeps required-literal acceleration for zero-width boundaries.
+    /// </summary>
+    [Fact]
+    public void InvalidUtf8BoundaryPatternUsesRequiredLiteralAccelerator()
+    {
+        const string pattern =
+            @"(?u:\b|\B)(?-u:\b)ey[a-zA-Z0-9]{17,}\.ey[a-zA-Z0-9/\\_-]{17,}\.(?:[a-zA-Z0-9/\\_-]{10,}={0,2})?";
+        byte[] patternBytes = System.Text.Encoding.UTF8.GetBytes(pattern);
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: false,
+            dotMatchesNewline: false,
+            matchInvalidUtf8: true);
+
+        Assert.True(PatternSet.CanPreflightAccelerateEveryPattern([patternBytes], options));
+
+        var set = PatternSet.Compile([patternBytes], options, dfaSizeLimit: null);
+        string token = $"ey{new string('A', 17)}.ey{new string('B', 17)}.{new string('C', 10)}";
+        byte[] tokenBytes = System.Text.Encoding.ASCII.GetBytes(token);
+        byte[] input = GC.AllocateUninitializedArray<byte>(tokenBytes.Length + 1);
+        input[0] = 0xFF;
+        tokenBytes.CopyTo(input, 1);
+
+        Assert.True(set.UsesRequiredLiteralAccelerator);
+        Assert.True(set.RequiredLiteralAcceleratorCoversAll);
+        Assert.Equal(
+            new PatternSetMatch(0, new RegexMatch(1, tokenBytes.Length)),
+            set.Find(input));
+    }
+
+    /// <summary>
     /// Verifies the alternation preflight accepts only sets that can avoid per-branch fallback search.
     /// </summary>
     [Fact]

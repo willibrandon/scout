@@ -244,7 +244,7 @@ public sealed class PatternSet
             }
 
             containsInvalidUtf8SensitivePattern |= plans[index].Tree is not null &&
-                RegexInvalidUtf8Analysis.CanObserveReplacementScalar(plans[index].Tree!.Root, options);
+                RegexInvalidUtf8Analysis.RequiresReplacementScalarConsumption(plans[index].Tree!.Root, options);
         }
 
         var automata = new List<RegexAutomaton>();
@@ -358,7 +358,7 @@ public sealed class PatternSet
             invalidUtf8AnalyzedTree = parsedRoot is null
                 ? RegexSyntaxParser.Parse(pattern)
                 : new RegexSyntaxTree(pattern, parsedRoot, captureCount: 0);
-            if (RegexInvalidUtf8Analysis.CanObserveReplacementScalar(
+            if (RegexInvalidUtf8Analysis.RequiresReplacementScalarConsumption(
                     invalidUtf8AnalyzedTree.Root,
                     options))
             {

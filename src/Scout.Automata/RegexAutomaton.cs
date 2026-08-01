@@ -178,7 +178,7 @@ public sealed class RegexAutomaton
             RegexLineTerminatorAnalysis.Validate(tree.Root, options);
         }
 
-        if (RegexInvalidUtf8Analysis.CanObserveReplacementScalar(tree.Root, options))
+        if (RegexInvalidUtf8Analysis.RequiresReplacementScalarConsumption(tree.Root, options))
         {
             return CompileParsedInvalidUtf8(tree, options, dfaSizeLimit, utf8ByteTrieCache);
         }
