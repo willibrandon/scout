@@ -1,16 +1,16 @@
 namespace Scout;
 
 /// <summary>
-/// Determines whether a syntax tree can observe the replacement scalar supplied for malformed UTF-8.
+/// Determines whether a syntax tree must consume the replacement scalar supplied for malformed UTF-8.
 /// </summary>
 internal static class RegexInvalidUtf8Analysis
 {
     private const int ReplacementScalar = 0xFFFD;
 
     /// <summary>
-    /// Reports whether enabling malformed UTF-8 matching can change this expression's result.
+    /// Reports whether malformed UTF-8 matching requires replacement-scalar consumption.
     /// </summary>
-    public static bool CanObserveReplacementScalar(
+    public static bool RequiresReplacementScalarConsumption(
         RegexSyntaxNode node,
         RegexCompileOptions options)
     {
@@ -20,27 +20,27 @@ internal static class RegexInvalidUtf8Analysis
         }
 
         var scalarPlans = new RegexScalarAtomPlanCache();
-        return CanObserveReplacementScalar(node, options, scalarPlans);
+        return RequiresReplacementScalarConsumption(node, options, scalarPlans);
     }
 
-    private static bool CanObserveReplacementScalar(
+    private static bool RequiresReplacementScalarConsumption(
         RegexSyntaxNode node,
         RegexCompileOptions options,
         RegexScalarAtomPlanCache scalarPlans)
     {
         return node switch
         {
-            RegexAtomNode atom => AtomCanObserveReplacementScalar(atom, options, scalarPlans),
-            RegexGroupNode group => CanObserveReplacementScalar(
+            RegexAtomNode atom => AtomRequiresReplacementScalarConsumption(atom, options, scalarPlans),
+            RegexGroupNode group => RequiresReplacementScalarConsumption(
                 group.Child,
                 options.Apply(group.EnabledFlags, group.DisabledFlags),
                 scalarPlans),
-            RegexSequenceNode sequence => SequenceCanObserveReplacementScalar(sequence, options, scalarPlans),
-            RegexAlternationNode alternation => AnyCanObserveReplacementScalar(
+            RegexSequenceNode sequence => SequenceRequiresReplacementScalarConsumption(sequence, options, scalarPlans),
+            RegexAlternationNode alternation => AnyRequiresReplacementScalarConsumption(
                 alternation.Alternatives,
                 options,
                 scalarPlans),
-            RegexRepetitionNode repetition => CanObserveReplacementScalar(
+            RegexRepetitionNode repetition => RequiresReplacementScalarConsumption(
                 repetition.Child,
                 options,
                 scalarPlans),
@@ -48,7 +48,7 @@ internal static class RegexInvalidUtf8Analysis
         };
     }
 
-    private static bool SequenceCanObserveReplacementScalar(
+    private static bool SequenceRequiresReplacementScalarConsumption(
         RegexSequenceNode sequence,
         RegexCompileOptions options,
         RegexScalarAtomPlanCache scalarPlans)
@@ -61,7 +61,7 @@ internal static class RegexInvalidUtf8Analysis
             {
                 currentOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
             }
-            else if (CanObserveReplacementScalar(child, currentOptions, scalarPlans))
+            else if (RequiresReplacementScalarConsumption(child, currentOptions, scalarPlans))
             {
                 return true;
             }
@@ -70,14 +70,14 @@ internal static class RegexInvalidUtf8Analysis
         return false;
     }
 
-    private static bool AnyCanObserveReplacementScalar(
+    private static bool AnyRequiresReplacementScalarConsumption(
         IReadOnlyList<RegexSyntaxNode> nodes,
         RegexCompileOptions options,
         RegexScalarAtomPlanCache scalarPlans)
     {
         for (int index = 0; index < nodes.Count; index++)
         {
-            if (CanObserveReplacementScalar(nodes[index], options, scalarPlans))
+            if (RequiresReplacementScalarConsumption(nodes[index], options, scalarPlans))
             {
                 return true;
             }
@@ -86,7 +86,7 @@ internal static class RegexInvalidUtf8Analysis
         return false;
     }
 
-    private static bool AtomCanObserveReplacementScalar(
+    private static bool AtomRequiresReplacementScalarConsumption(
         RegexAtomNode atom,
         RegexCompileOptions options,
         RegexScalarAtomPlanCache scalarPlans)
@@ -96,16 +96,8 @@ internal static class RegexInvalidUtf8Analysis
             return false;
         }
 
-        if (atom.Kind is RegexSyntaxKind.WordBoundary
-            or RegexSyntaxKind.NotWordBoundary
-            or RegexSyntaxKind.WordStartBoundary
-            or RegexSyntaxKind.WordEndBoundary
-            or RegexSyntaxKind.WordStartHalfBoundary
-            or RegexSyntaxKind.WordEndHalfBoundary)
-        {
-            return options.UnicodeClasses;
-        }
-
+        // Zero-width predicates carry MatchInvalidUtf8 into their NFA states and evaluate
+        // malformed context in place. Only consuming scalar atoms need the compact scalar path.
         if (!RegexByteClass.RequiresUtf8ScalarMatch(
                 atom.Kind,
                 atom.Value.Span,

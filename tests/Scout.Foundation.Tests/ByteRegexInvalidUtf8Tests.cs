@@ -14,7 +14,10 @@ public sealed class ByteRegexInvalidUtf8Tests
     private const int OracleInputLength = 97;
     private const int LargeAllocationInputLength = 2 * 1024 * 1024;
     private const int InvalidByteStride = 4096;
+    private const int Issue58RegressionInputLength = 1024 * 1024;
     private const long AllocationScalingSlack = 64 * 1024;
+    private const string Issue58Pattern =
+        @"(?u:\b|\B)(?-u:\b)ey[a-zA-Z0-9]{17,}\.ey[a-zA-Z0-9/\\_-]{17,}\.(?:[a-zA-Z0-9/\\_-]{10,}={0,2})?";
 
     /// <summary>
     /// Verifies replacement matching is opt-in and the existing default still ignores malformed bytes.
@@ -151,6 +154,85 @@ public sealed class ByteRegexInvalidUtf8Tests
         Assert.Equal(
             new ByteRegexMatch(0, 2),
             invalidPair.Find(new byte[] { 0xFF, 0xC3 }));
+    }
+
+    /// <summary>
+    /// Verifies every Unicode word predicate evaluates malformed context without scalar consumption.
+    /// </summary>
+    [Theory]
+    [InlineData(ByteRegexEngineMode.Optimized)]
+    [InlineData(ByteRegexEngineMode.General)]
+    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    public void UnicodeWordPredicatesUseInPlaceMalformedContext(ByteRegexEngineMode engineMode)
+    {
+        byte[] mixed = [(byte)'a', 0xFF, (byte)'b'];
+        ByteRegexOptions options = CreateOptions(engineMode);
+
+        Assert.Equal(
+            [new ByteRegexMatch(0, 0), new ByteRegexMatch(2, 0)],
+            CollectMatches(ByteRegex.Compile(@"\b{start}", options), mixed));
+        Assert.Equal(
+            [new ByteRegexMatch(1, 0), new ByteRegexMatch(3, 0)],
+            CollectMatches(ByteRegex.Compile(@"\b{end}", options), mixed));
+        Assert.Equal(
+            [new ByteRegexMatch(0, 0), new ByteRegexMatch(2, 0)],
+            CollectMatches(ByteRegex.Compile(@"\b{start-half}", options), mixed));
+        Assert.Equal(
+            [new ByteRegexMatch(1, 0), new ByteRegexMatch(3, 0)],
+            CollectMatches(ByteRegex.Compile(@"\b{end-half}", options), mixed));
+        Assert.Equal(
+            [new ByteRegexMatch(0, 0), new ByteRegexMatch(1, 0), new ByteRegexMatch(2, 0)],
+            CollectMatches(ByteRegex.Compile(@"\B", options), [0xFF, 0xC3]));
+    }
+
+    /// <summary>
+    /// Verifies boundary alternation keeps observable capture participation on malformed input.
+    /// </summary>
+    [Theory]
+    [InlineData(ByteRegexEngineMode.Optimized)]
+    [InlineData(ByteRegexEngineMode.General)]
+    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    public void BoundaryAlternationPreservesCapturesOnMalformedInput(ByteRegexEngineMode engineMode)
+    {
+        var regex = ByteRegex.Compile(@"(?u:(\b)|(\B))(?-u:.)", CreateOptions(engineMode));
+
+        ByteRegexCaptures? boundary = regex.FindCaptures("a"u8);
+        ByteRegexCaptures? nonBoundary = regex.FindCaptures([0xFF]);
+
+        Assert.NotNull(boundary);
+        Assert.Equal(new ByteRegexMatch(0, 1), boundary.Match);
+        Assert.Equal(new ByteRegexMatch(0, 0), boundary.GetGroup(1));
+        Assert.Null(boundary.GetGroup(2));
+        Assert.NotNull(nonBoundary);
+        Assert.Equal(new ByteRegexMatch(0, 1), nonBoundary.Match);
+        Assert.Null(nonBoundary.GetGroup(1));
+        Assert.Equal(new ByteRegexMatch(0, 0), nonBoundary.GetGroup(2));
+    }
+
+    /// <summary>
+    /// Verifies the reported boundary-prefixed pattern avoids false matches without losing valid matches.
+    /// </summary>
+    [Theory]
+    [InlineData(ByteRegexEngineMode.Optimized)]
+    [InlineData(ByteRegexEngineMode.General)]
+    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    public void Issue58BoundaryPrefixMatchesThroughSyntheticMalformedInput(ByteRegexEngineMode engineMode)
+    {
+        byte[] noMatch = CreateIssue58NoMatchInput(Issue58RegressionInputLength);
+        byte[] positive = CreateIssue58PositiveInput();
+        var defaultRegex = ByteRegex.Compile(
+            Issue58Pattern,
+            new ByteRegexOptions { EngineMode = engineMode });
+        var optInRegex = ByteRegex.Compile(Issue58Pattern, CreateOptions(engineMode));
+
+        Assert.Null(defaultRegex.Find(noMatch));
+        Assert.Null(optInRegex.Find(noMatch));
+        Assert.Equal(0, defaultRegex.Count(noMatch));
+        Assert.Equal(defaultRegex.Count(noMatch), optInRegex.Count(noMatch));
+
+        ByteRegexMatch expected = new(1, positive.Length - 1);
+        Assert.Equal(expected, defaultRegex.Find(positive));
+        Assert.Equal(expected, optInRegex.Find(positive));
     }
 
     /// <summary>
@@ -577,6 +659,29 @@ public sealed class ByteRegexInvalidUtf8Tests
             input[index] = 0xFF;
         }
 
+        return input;
+    }
+
+    private static byte[] CreateIssue58NoMatchInput(int length)
+    {
+        byte[] input = GC.AllocateUninitializedArray<byte>(length);
+        input.AsSpan().Fill(0xFF);
+        ReadOnlySpan<byte> candidate = "api_key = invalid-candidate "u8;
+        for (int offset = 0; offset <= input.Length - candidate.Length; offset += InvalidByteStride)
+        {
+            candidate.CopyTo(input.AsSpan(offset));
+        }
+
+        return input;
+    }
+
+    private static byte[] CreateIssue58PositiveInput()
+    {
+        string token = $"ey{new string('A', 17)}.ey{new string('B', 17)}.{new string('C', 10)}";
+        byte[] tokenBytes = Encoding.ASCII.GetBytes(token);
+        byte[] input = GC.AllocateUninitializedArray<byte>(tokenBytes.Length + 1);
+        input[0] = 0xFF;
+        tokenBytes.CopyTo(input, 1);
         return input;
     }
 

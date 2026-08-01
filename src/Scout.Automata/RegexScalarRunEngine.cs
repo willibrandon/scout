@@ -63,7 +63,7 @@ internal sealed class RegexScalarRunEngine
             return false;
         }
 
-        bool observesInvalidUtf8 = RegexInvalidUtf8Analysis.CanObserveReplacementScalar(
+        bool consumesReplacementScalar = RegexInvalidUtf8Analysis.RequiresReplacementScalarConsumption(
             scalarRunNode!,
             effectiveOptions);
 
@@ -106,13 +106,13 @@ internal sealed class RegexScalarRunEngine
             return false;
         }
 
-        bool unicodeLowerOrUpperFastPath = !observesInvalidUtf8 &&
+        bool unicodeLowerOrUpperFastPath = !consumesReplacementScalar &&
             IsUnicodeLowerOrUpperFastPath(atoms, effectiveOptions);
-        bool singleDotAllScalarFastPath = !observesInvalidUtf8 &&
+        bool singleDotAllScalarFastPath = !consumesReplacementScalar &&
             IsSingleDotAllScalarFastPath(atoms, effectiveOptions, minimum, maximum, lazy);
         int[]? unicodePropertyRanges = null;
         byte[]? unicodePropertyFirstBytes = null;
-        if (!observesInvalidUtf8)
+        if (!consumesReplacementScalar)
         {
             TryCreateUnicodePropertyFastPath(
                 atoms,
