@@ -38,6 +38,24 @@ internal static class RegexLookaroundDfaOperations
     }
 
     /// <summary>
+    /// Reports whether an NFA contains a byte-oriented word assertion.
+    /// </summary>
+    internal static bool ContainsWordPredicate(RegexNfa nfa)
+    {
+        ArgumentNullException.ThrowIfNull(nfa);
+        for (int index = 0; index < nfa.States.Count; index++)
+        {
+            RegexNfaState state = nfa.States[index];
+            if (state.Kind == RegexNfaStateKind.Predicate && IsWordPredicate(state.AtomKind))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Builds equivalence classes for the byte preceding the next transition.
     /// </summary>
     internal static int BuildPreviousContexts(

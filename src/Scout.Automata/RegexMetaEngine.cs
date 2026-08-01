@@ -2085,6 +2085,7 @@ internal sealed class RegexMetaEngine
             exceedsConstructionLimit ||
             root is null ||
             !options.HasValue ||
+            RegexLookaroundDfaOperations.ContainsWordPredicate(asciiFastNfa) ||
             !RegexUnanchoredLazyDfa.CanCompileForwardNfa(asciiFastNfa, root, asciiOptions))
         {
             return null;

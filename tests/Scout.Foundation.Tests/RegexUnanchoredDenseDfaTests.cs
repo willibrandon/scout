@@ -499,11 +499,11 @@ public sealed class RegexUnanchoredDenseDfaTests
     }
 
     /// <summary>
-    /// Verifies a look-around NFA that exceeds eager dense limits can use the bounded lazy
-    /// projection without weakening the Unicode fallback.
+    /// Verifies a word-assertion NFA that exceeds eager dense limits retains the authoritative
+    /// fallback instead of publishing a slower projected lazy runner.
     /// </summary>
     [Fact]
-    public void LookaroundDenseStateExplosionUsesBoundedLazyProjection()
+    public void WordAssertionDenseStateExplosionRetainsAuthoritativeFallback()
     {
         byte[] pattern = @"\b\w*a[ab]{6}\b"u8.ToArray();
         RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
@@ -545,18 +545,55 @@ public sealed class RegexUnanchoredDenseDfaTests
             dfaSizeLimit: GenerousDfaSizeLimit,
             compilePrefilter: false);
         Assert.Null(GetDenseProjection(GetMetaEngine(automaton)));
-        Assert.True(automaton.HasAsciiProjectedMatchEndRunner);
+        Assert.False(automaton.HasAsciiProjectedMatchEndRunner);
         using RegexMatchEndRunner runner = automaton.RentAsciiProjectedMatchEndRunner(
             activationLength: 8_192);
-        Assert.True(runner.IsAvailable);
-        Assert.True(runner.TryFindEnd(
-            "baaaaaaa"u8,
-            startAt: 0,
-            out int end,
-            out bool completed));
-        Assert.True(completed);
-        Assert.Equal(8, end);
+        Assert.False(runner.IsAvailable);
         Assert.Equal(1, automaton.CountMatches("ébaaaaaaaé baaaaaaa"u8));
+    }
+
+    /// <summary>
+    /// Verifies the capture workload that exposed the regression retains its eager projected
+    /// match-end DFA without publishing a projected lazy full-match runner.
+    /// </summary>
+    [Fact]
+    public void WordBoundaryCaptureKeepsDenseMatchEndsWithoutLazyFullMatchProjection()
+    {
+        byte[] pattern = @"\b(struct|enum|union)\s+([A-Za-z_][A-Za-z0-9_]*)"u8.ToArray();
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
+        var options = new RegexCompileOptions(
+            caseInsensitive: false,
+            swapGreed: false,
+            multiLine: true,
+            dotMatchesNewline: false,
+            utf8: false,
+            unicodeClasses: true,
+            specializationMode: RegexSpecializationMode.General,
+            excludeLineTerminators: true);
+        Assert.True(RegexAsciiFastPath.TryCompileNfa(
+            pattern,
+            tree.Root,
+            options,
+            out RegexNfa? projectedNfa));
+        RegexNfa unanchored = RegexUnanchoredLazyDfa.CreateUnanchoredForwardNfa(projectedNfa!);
+        Assert.True(RegexUnanchoredDenseDfa.TryCompile(
+            unanchored,
+            stateLimit: 64,
+            GenerousDfaSizeLimit,
+            out RegexUnanchoredDenseDfa? projectedDfa));
+        Assert.NotNull(projectedDfa);
+
+        var automaton = RegexAutomaton.CompileParsed(
+            tree,
+            options,
+            dfaSizeLimit: GenerousDfaSizeLimit,
+            compilePrefilter: true);
+
+        RegexMetaEngine engine = GetMetaEngine(automaton);
+        Assert.NotNull(GetDenseProjection(engine));
+        Assert.Null(GetLazyProjectionFactory(engine));
+        Assert.True(automaton.HasAsciiProjectedMatchEndRunner);
+        Assert.Equal(new RegexMatch(1, 13), automaton.Find("!struct Widget!"u8, startAt: 0));
     }
 
     private static RegexUnanchoredDenseDfa CompileDense(string pattern)
@@ -612,6 +649,17 @@ public sealed class RegexUnanchoredDenseDfaTests
         return (RegexUnanchoredDenseDfa?)typeof(RegexMetaEngine)
             .GetField(
                 "_asciiFastUnanchoredDenseDfa",
+                System.Reflection.BindingFlags.NonPublic |
+                    System.Reflection.BindingFlags.Instance)!
+            .GetValue(engine);
+    }
+
+    private static Func<RegexUnanchoredLazyDfa?>? GetLazyProjectionFactory(
+        RegexMetaEngine engine)
+    {
+        return (Func<RegexUnanchoredLazyDfa?>?)typeof(RegexMetaEngine)
+            .GetField(
+                "_asciiFastUnanchoredDfaFactory",
                 System.Reflection.BindingFlags.NonPublic |
                     System.Reflection.BindingFlags.Instance)!
             .GetValue(engine);
