@@ -832,7 +832,7 @@ internal sealed class PikeVm(RegexNfa nfa)
                     break;
                 case RegexNfaStateKind.Predicate:
                     RegexNfaState state = _states[stateIndex];
-                    if (RegexByteClass.PredicateMatches(haystack, position, state.AtomKind, state.MultiLine, state.Crlf, state.LineTerminator, state.Utf8, state.UnicodeClasses))
+                    if (state.PredicateMatches(haystack, position))
                     {
                         int predicateNext = _nextStates[stateIndex];
                         if (predicateNext >= 0)
@@ -899,7 +899,7 @@ internal sealed class PikeVm(RegexNfa nfa)
                     break;
                 case RegexNfaStateKind.Predicate:
                     RegexNfaState state = _states[stateIndex];
-                    if (RegexByteClass.PredicateMatches(haystack, position, state.AtomKind, state.MultiLine, state.Crlf, state.LineTerminator, state.Utf8, state.UnicodeClasses))
+                    if (state.PredicateMatches(haystack, position))
                     {
                         int predicateNext = _nextStates[stateIndex];
                         if (predicateNext >= 0)
@@ -957,7 +957,7 @@ internal sealed class PikeVm(RegexNfa nfa)
                     PushClosureState(state.Next);
                     break;
                 case RegexNfaStateKind.Predicate:
-                    if (RegexByteClass.PredicateMatches(haystack, position, state.AtomKind, state.MultiLine, state.Crlf, state.LineTerminator, state.Utf8, state.UnicodeClasses))
+                    if (state.PredicateMatches(haystack, position))
                     {
                         PushClosureState(state.Next);
                     }

@@ -268,15 +268,7 @@ internal static class RegexDfaOperations
                     break;
 
                 case RegexNfaStateKind.Predicate:
-                    if (RegexByteClass.PredicateMatches(
-                            haystack,
-                            current.Position,
-                            state.AtomKind,
-                            state.MultiLine,
-                            state.Crlf,
-                            state.LineTerminator,
-                            state.Utf8,
-                            state.UnicodeClasses))
+                    if (state.PredicateMatches(haystack, current.Position))
                     {
                         pending.Push((state.Next, current.Position));
                     }

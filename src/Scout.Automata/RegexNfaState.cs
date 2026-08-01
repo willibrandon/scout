@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Text;
 
 namespace Scout;
@@ -25,6 +24,7 @@ namespace Scout;
 /// <param name="excludedLineTerminator">The record byte excluded from consuming atoms, or <see langword="null" /> to use <paramref name="lineTerminator" />.</param>
 /// <param name="scalarRanges">The authoritative scalar ranges retained by a compact atom.</param>
 /// <param name="scalarRangesUseUtf8">Whether retained scalar ranges consume UTF-8 encoded scalars.</param>
+/// <param name="matchInvalidUtf8">Whether malformed UTF-8 bytes decode as replacement scalars.</param>
 internal sealed class RegexNfaState(
     RegexNfaStateKind kind,
     RegexSyntaxKind atomKind,
@@ -44,7 +44,8 @@ internal sealed class RegexNfaState(
     bool excludeCrLf = false,
     byte? excludedLineTerminator = null,
     RegexScalarRange[]? scalarRanges = null,
-    bool scalarRangesUseUtf8 = false)
+    bool scalarRangesUseUtf8 = false,
+    bool matchInvalidUtf8 = false)
 {
     /// <summary>
     /// Gets the state operation.
@@ -142,6 +143,11 @@ internal sealed class RegexNfaState(
     public bool ScalarRangesUseUtf8 { get; } = scalarRangesUseUtf8;
 
     /// <summary>
+    /// Gets a value indicating whether malformed UTF-8 bytes decode as replacement scalars.
+    /// </summary>
+    public bool MatchInvalidUtf8 { get; } = matchInvalidUtf8;
+
+    /// <summary>
     /// Gets a value indicating whether the atom requires scalar decoding.
     /// </summary>
     public bool RequiresUtf8ScalarMatch { get; } = scalarRangesUseUtf8 ||
@@ -209,7 +215,12 @@ internal sealed class RegexNfaState(
             int consumed = 1;
             if (ScalarRangesUseUtf8 && scalar >= 0x80)
             {
-                if (Rune.DecodeFromUtf8(haystack[position..], out Rune rune, out consumed) != OperationStatus.Done)
+                if (!RegexByteClass.TryDecodeUtf8Scalar(
+                        haystack,
+                        position,
+                        MatchInvalidUtf8,
+                        out Rune rune,
+                        out consumed))
                 {
                     return false;
                 }
@@ -252,7 +263,25 @@ internal sealed class RegexNfaState(
             UnicodeClasses,
             RequiresUtf8ScalarMatch,
             CanUseAsciiScalarFastPath,
+            MatchInvalidUtf8,
             out length);
+    }
+
+    /// <summary>
+    /// Reports whether this state's zero-width predicate matches at a byte position.
+    /// </summary>
+    public bool PredicateMatches(ReadOnlySpan<byte> haystack, int position)
+    {
+        return RegexByteClass.PredicateMatches(
+            haystack,
+            position,
+            AtomKind,
+            MultiLine,
+            Crlf,
+            LineTerminator,
+            Utf8,
+            UnicodeClasses,
+            MatchInvalidUtf8);
     }
 
     /// <summary>

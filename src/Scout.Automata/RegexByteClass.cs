@@ -102,6 +102,7 @@ internal static class RegexByteClass
             unicodeClasses,
             requiresUtf8ScalarMatch,
             canUseAsciiScalarFastPath,
+            matchInvalidUtf8: false,
             out length);
     }
 
@@ -120,6 +121,7 @@ internal static class RegexByteClass
     /// <param name="unicodeClasses">Whether character classes use Unicode semantics.</param>
     /// <param name="requiresUtf8ScalarMatch">Whether the atom requires scalar decoding.</param>
     /// <param name="canUseAsciiScalarFastPath">Whether ASCII can bypass scalar decoding.</param>
+    /// <param name="matchInvalidUtf8">Whether malformed bytes decode as replacement scalars.</param>
     /// <param name="length">Receives the consumed byte length.</param>
     /// <returns><see langword="true" /> when the atom matches.</returns>
     public static bool TryGetAtomMatchLength(
@@ -135,6 +137,7 @@ internal static class RegexByteClass
         bool unicodeClasses,
         bool requiresUtf8ScalarMatch,
         bool canUseAsciiScalarFastPath,
+        bool matchInvalidUtf8,
         out int length)
     {
         length = 0;
@@ -166,7 +169,12 @@ internal static class RegexByteClass
             }
 
             if (!IsUtf8Boundary(haystack, position) ||
-                !TryDecodeUtf8Scalar(haystack, position, out Rune rune, out length) ||
+                !TryDecodeUtf8Scalar(
+                    haystack,
+                    position,
+                    matchInvalidUtf8,
+                    out Rune rune,
+                    out length) ||
                 !AtomMatches(
                     rune,
                     kind,
@@ -207,7 +215,9 @@ internal static class RegexByteClass
         return kind switch
         {
             RegexSyntaxKind.Literal => expression.Length == 1 && expression[0] <= 0x7F,
-            RegexSyntaxKind.CharacterClass => IsAscii(expression) && !ContainsUnicodePropertyClassToken(expression),
+            RegexSyntaxKind.CharacterClass => IsAscii(expression) &&
+                !ContainsScalarClassToken(expression) &&
+                !ContainsUnicodePropertyClassToken(expression),
             RegexSyntaxKind.UnicodePropertyClass or RegexSyntaxKind.NotUnicodePropertyClass => false,
             _ => true,
         };
@@ -267,6 +277,32 @@ internal static class RegexByteClass
         bool utf8,
         bool unicodeClasses)
     {
+        return PredicateMatches(
+            haystack,
+            position,
+            kind,
+            multiLine,
+            crlf,
+            lineTerminator,
+            utf8,
+            unicodeClasses,
+            matchInvalidUtf8: false);
+    }
+
+    /// <summary>
+    /// Reports whether a zero-width predicate matches with an explicit malformed UTF-8 policy.
+    /// </summary>
+    public static bool PredicateMatches(
+        ReadOnlySpan<byte> haystack,
+        int position,
+        RegexSyntaxKind kind,
+        bool multiLine,
+        bool crlf,
+        byte lineTerminator,
+        bool utf8,
+        bool unicodeClasses,
+        bool matchInvalidUtf8)
+    {
         bool useUnicodeWord = unicodeClasses;
         if ((utf8 || useUnicodeWord) && IsBoundaryPredicate(kind) && !IsUtf8Boundary(haystack, position))
         {
@@ -280,7 +316,11 @@ internal static class RegexByteClass
             RegexSyntaxKind.AbsoluteStartAnchor => position == 0,
             RegexSyntaxKind.AbsoluteEndAnchor => position == haystack.Length,
             RegexSyntaxKind.WordBoundary => IsRegexWordBoundary(haystack, position, useUnicodeWord),
-            RegexSyntaxKind.NotWordBoundary => IsRegexNotWordBoundary(haystack, position, useUnicodeWord),
+            RegexSyntaxKind.NotWordBoundary => IsRegexNotWordBoundary(
+                haystack,
+                position,
+                useUnicodeWord,
+                matchInvalidUtf8),
             RegexSyntaxKind.WordStartBoundary => IsRegexWordStartBoundary(haystack, position, useUnicodeWord),
             RegexSyntaxKind.WordEndBoundary => IsRegexWordEndBoundary(haystack, position, useUnicodeWord),
             RegexSyntaxKind.WordStartHalfBoundary => IsRegexWordStartHalfBoundary(haystack, position, useUnicodeWord),
@@ -475,8 +515,38 @@ internal static class RegexByteClass
 
     private static bool TryDecodeUtf8Scalar(ReadOnlySpan<byte> bytes, int position, out Rune rune, out int length)
     {
+        return TryDecodeUtf8Scalar(
+            bytes,
+            position,
+            matchInvalidUtf8: false,
+            out rune,
+            out length);
+    }
+
+    /// <summary>
+    /// Decodes one scalar, optionally treating a malformed non-empty input byte as U+FFFD.
+    /// </summary>
+    internal static bool TryDecodeUtf8Scalar(
+        ReadOnlySpan<byte> bytes,
+        int position,
+        bool matchInvalidUtf8,
+        out Rune rune,
+        out int length)
+    {
         OperationStatus status = Rune.DecodeFromUtf8(bytes[position..], out rune, out length);
-        return status == OperationStatus.Done;
+        if (status == OperationStatus.Done)
+        {
+            return true;
+        }
+
+        if (matchInvalidUtf8 && position < bytes.Length)
+        {
+            rune = Rune.ReplacementChar;
+            length = 1;
+            return true;
+        }
+
+        return false;
     }
 
     internal static bool TryGetUtf8ScalarLength(ReadOnlySpan<byte> bytes, int position, out int length)
@@ -1531,17 +1601,25 @@ internal static class RegexByteClass
         return leftIsWord != rightIsWord;
     }
 
-    private static bool IsRegexNotWordBoundary(ReadOnlySpan<byte> haystack, int position, bool unicodeWord)
+    private static bool IsRegexNotWordBoundary(
+        ReadOnlySpan<byte> haystack,
+        int position,
+        bool unicodeWord,
+        bool matchInvalidUtf8)
     {
-        return IsRegexWordContextValid(haystack, position, unicodeWord) &&
+        return IsRegexWordContextValid(haystack, position, unicodeWord, matchInvalidUtf8) &&
             !IsRegexWordBoundary(haystack, position, unicodeWord);
     }
 
-    private static bool IsRegexWordContextValid(ReadOnlySpan<byte> haystack, int position, bool unicodeWord)
+    private static bool IsRegexWordContextValid(
+        ReadOnlySpan<byte> haystack,
+        int position,
+        bool unicodeWord,
+        bool matchInvalidUtf8)
     {
         return !unicodeWord ||
-            IsValidRegexWordContextBefore(haystack, position) &&
-            IsValidRegexWordContextAt(haystack, position);
+            IsValidRegexWordContextBefore(haystack, position, matchInvalidUtf8) &&
+            IsValidRegexWordContextAt(haystack, position, matchInvalidUtf8);
     }
 
     private static bool IsRegexWordStartBoundary(ReadOnlySpan<byte> haystack, int position, bool unicodeWord)
@@ -1613,7 +1691,10 @@ internal static class RegexByteClass
             IsRegexWordRune(rune, unicodeClasses: true);
     }
 
-    private static bool IsValidRegexWordContextBefore(ReadOnlySpan<byte> haystack, int position)
+    private static bool IsValidRegexWordContextBefore(
+        ReadOnlySpan<byte> haystack,
+        int position,
+        bool matchInvalidUtf8)
     {
         if (position <= 0)
         {
@@ -1630,13 +1711,16 @@ internal static class RegexByteClass
             }
         }
 
-        return false;
+        return matchInvalidUtf8;
     }
 
-    private static bool IsValidRegexWordContextAt(ReadOnlySpan<byte> haystack, int position)
+    private static bool IsValidRegexWordContextAt(
+        ReadOnlySpan<byte> haystack,
+        int position,
+        bool matchInvalidUtf8)
     {
         return position >= haystack.Length ||
-            TryDecodeUtf8Scalar(haystack, position, out _, out _);
+            TryDecodeUtf8Scalar(haystack, position, matchInvalidUtf8, out _, out _);
     }
 
     private static bool IsRegexDigitRune(Rune value, bool unicodeClasses)

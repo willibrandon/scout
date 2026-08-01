@@ -178,6 +178,11 @@ public sealed class RegexAutomaton
             RegexLineTerminatorAnalysis.Validate(tree.Root, options);
         }
 
+        if (RegexInvalidUtf8Analysis.CanObserveReplacementScalar(tree.Root, options))
+        {
+            return CompileParsedInvalidUtf8(tree, options, dfaSizeLimit, utf8ByteTrieCache);
+        }
+
         if (options.SpecializationMode == RegexSpecializationMode.Fallback)
         {
             return CompileParsedFallback(
@@ -870,6 +875,50 @@ public sealed class RegexAutomaton
             tree.CaptureCount,
             wholePatternCaptureIndex,
             startPredicateFactory);
+    }
+
+    /// <summary>
+    /// Compiles replacement-sensitive expressions over compact scalar states. No byte-DFA,
+    /// recognizer, or prefilter may stand in for the per-byte malformed UTF-8 semantics.
+    /// </summary>
+    private static RegexAutomaton CompileParsedInvalidUtf8(
+        RegexSyntaxTree tree,
+        RegexCompileOptions options,
+        ulong? dfaSizeLimit,
+        Dictionary<string, RegexUtf8ByteTrie>? utf8ByteTrieCache)
+    {
+        RegexNfa nfa = RegexNfaCompiler.CompileWithCompactScalarAtoms(
+            tree.Root,
+            options.WithoutRawPatternSpecializations(),
+            utf8ByteTrieCache);
+        RegexScalarRunEngine? scalarRun = null;
+        if (options.SpecializationMode != RegexSpecializationMode.Fallback)
+        {
+            RegexScalarRunEngine.TryCreate(tree.Root, options, out scalarRun);
+        }
+        var metaEngine = RegexMetaEngine.Compile(
+            nfa,
+            prefilter: null,
+            dfaSizeLimit,
+            literalSet: null,
+            alternationSet: null,
+            scalarRun: scalarRun);
+        int wholePatternCaptureIndex = TryGetWholePatternCaptureIndex(
+            tree.Root,
+            tree.CaptureCount);
+        return new RegexAutomaton(
+            metaEngine,
+            startPredicate: null,
+            lengthGuard: null,
+            requiredByteSetGuard: null,
+            requiredLiteralAnySetGuard: null,
+            syntheticCaptureAlternationSet: null,
+            tree.CaptureCount > 0 ? tree.Pattern : default,
+            tree.CaptureCount > 0 ? tree.Root : null,
+            options,
+            capturePrefilter: null,
+            tree.CaptureCount,
+            wholePatternCaptureIndex);
     }
 
     /// <summary>

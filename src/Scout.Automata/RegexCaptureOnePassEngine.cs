@@ -270,15 +270,7 @@ internal sealed class RegexCaptureOnePassEngine(RegexNfa nfa)
                     break;
                 case RegexNfaStateKind.Predicate:
                     sawPredicate = true;
-                    if (RegexByteClass.PredicateMatches(
-                            haystack,
-                            position,
-                            state.AtomKind,
-                            state.MultiLine,
-                            state.Crlf,
-                            state.LineTerminator,
-                            state.Utf8,
-                            state.UnicodeClasses) &&
+                    if (state.PredicateMatches(haystack, position) &&
                         state.Next >= 0)
                     {
                         PushClosureState(

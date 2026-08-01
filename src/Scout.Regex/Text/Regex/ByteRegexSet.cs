@@ -32,17 +32,21 @@ public sealed class ByteRegexSet
         ByteRegexOptions resolvedOptions = options ?? new ByteRegexOptions();
         try
         {
-            return new ByteRegexSet(PatternSet.Compile(
-                patterns,
+            var compileOptions = new RegexCompileOptions(
                 resolvedOptions.AsciiCaseInsensitive,
+                swapGreed: false,
                 resolvedOptions.MultiLine,
                 resolvedOptions.DotMatchesNewline,
                 resolvedOptions.Crlf,
                 resolvedOptions.LineTerminator,
                 resolvedOptions.Utf8,
                 resolvedOptions.UnicodeClasses,
-                resolvedOptions.DfaSizeLimit,
-                resolvedOptions.ToSpecializationMode()));
+                resolvedOptions.ToSpecializationMode(),
+                matchInvalidUtf8: resolvedOptions.MatchInvalidUtf8);
+            return new ByteRegexSet(PatternSet.Compile(
+                patterns,
+                compileOptions,
+                resolvedOptions.DfaSizeLimit));
         }
         catch (FormatException exception)
         {

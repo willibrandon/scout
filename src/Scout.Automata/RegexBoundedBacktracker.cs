@@ -127,15 +127,7 @@ internal sealed class RegexBoundedBacktracker(RegexNfa nfa)
                     stateIndex = sparseNext;
                     break;
                 case RegexNfaStateKind.Predicate:
-                    if (!RegexByteClass.PredicateMatches(
-                        haystack,
-                        position,
-                        state.AtomKind,
-                        state.MultiLine,
-                        state.Crlf,
-                        state.LineTerminator,
-                        state.Utf8,
-                        state.UnicodeClasses))
+                    if (!state.PredicateMatches(haystack, position))
                     {
                         length = 0;
                         return false;
@@ -213,15 +205,7 @@ internal sealed class RegexBoundedBacktracker(RegexNfa nfa)
                         stateIndex = sparseNext;
                         break;
                     case RegexNfaStateKind.Predicate:
-                        if (!RegexByteClass.PredicateMatches(
-                            haystack,
-                            position,
-                            state.AtomKind,
-                            state.MultiLine,
-                            state.Crlf,
-                            state.LineTerminator,
-                            state.Utf8,
-                            state.UnicodeClasses))
+                        if (!state.PredicateMatches(haystack, position))
                         {
                             stateIndex = -1;
                             break;

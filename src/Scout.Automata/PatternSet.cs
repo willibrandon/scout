@@ -192,6 +192,25 @@ public sealed class PatternSet
         return patternSet!;
     }
 
+    /// <summary>
+    /// Compiles an ordered set with an internal option policy supplied by the public facade.
+    /// </summary>
+    internal static PatternSet Compile(
+        IReadOnlyList<byte[]> patterns,
+        RegexCompileOptions options,
+        ulong? dfaSizeLimit)
+    {
+        TryCompile(
+            patterns,
+            parsedRoots: null,
+            options,
+            dfaSizeLimit,
+            requireFullAcceleration: false,
+            useLeanAutomata: false,
+            out PatternSet? patternSet);
+        return patternSet!;
+    }
+
     private static bool TryCompile(
         IReadOnlyList<byte[]> patterns,
         IReadOnlyList<RegexSyntaxNode>? parsedRoots,
@@ -209,6 +228,7 @@ public sealed class PatternSet
         }
 
         var plans = new PatternSetPatternPlan[patterns.Count];
+        bool containsInvalidUtf8SensitivePattern = false;
         for (int index = 0; index < patterns.Count; index++)
         {
             byte[] pattern = patterns[index] ?? throw new ArgumentNullException(nameof(patterns));
@@ -222,6 +242,9 @@ public sealed class PatternSet
             {
                 return false;
             }
+
+            containsInvalidUtf8SensitivePattern |= plans[index].Tree is not null &&
+                RegexInvalidUtf8Analysis.CanObserveReplacementScalar(plans[index].Tree!.Root, options);
         }
 
         var automata = new List<RegexAutomaton>();
@@ -301,7 +324,8 @@ public sealed class PatternSet
                 compiledAutomata.Length,
                 compiledAutomata,
                 requiredLiteralGuards);
-        bool coversEveryByteWithPositiveWidth = DetectEveryBytePositiveWidthCoverage(patterns, plans, options);
+        bool coversEveryByteWithPositiveWidth = !containsInvalidUtf8SensitivePattern &&
+            DetectEveryBytePositiveWidthCoverage(patterns, plans, options);
         int[]? wholePatternCaptureIndexesByPatternId = BuildWholePatternCaptureIndexes(plans);
         patternSet = new PatternSet(
             patterns.Count,
@@ -328,6 +352,31 @@ public sealed class PatternSet
         bool useBoundedRequiredLiteralLookBehind,
         out PatternSetPatternPlan plan)
     {
+        RegexSyntaxTree? invalidUtf8AnalyzedTree = null;
+        if (options.MatchInvalidUtf8)
+        {
+            invalidUtf8AnalyzedTree = parsedRoot is null
+                ? RegexSyntaxParser.Parse(pattern)
+                : new RegexSyntaxTree(pattern, parsedRoot, captureCount: 0);
+            if (RegexInvalidUtf8Analysis.CanObserveReplacementScalar(
+                    invalidUtf8AnalyzedTree.Root,
+                    options))
+            {
+                if (requireAcceleration)
+                {
+                    plan = default;
+                    return false;
+                }
+
+                plan = new PatternSetPatternPlan(
+                    invalidUtf8AnalyzedTree,
+                    literalPatterns: null,
+                    requiredLiterals: null,
+                    requiredLiteralLookBehind: 0);
+                return true;
+            }
+        }
+
         if (parsedRoot is null &&
             TryGetRawLiteralPattern(pattern, out byte[] rawLiteral) &&
             TryPrepareLiteralPatterns(rawLiteral, options, out byte[][] rawLiteralPatterns))
@@ -336,9 +385,9 @@ public sealed class PatternSet
             return true;
         }
 
-        RegexSyntaxTree tree = parsedRoot is null
+        RegexSyntaxTree tree = invalidUtf8AnalyzedTree ?? (parsedRoot is null
             ? RegexSyntaxParser.Parse(pattern)
-            : new RegexSyntaxTree(pattern, parsedRoot, captureCount: 0);
+            : new RegexSyntaxTree(pattern, parsedRoot, captureCount: 0));
         if (TryGetLiteralPattern(tree.Root, out byte[] literal) &&
             literal.Length != 0 &&
             TryPrepareLiteralPatterns(literal, options, out byte[][] preparedLiteralPatterns))
