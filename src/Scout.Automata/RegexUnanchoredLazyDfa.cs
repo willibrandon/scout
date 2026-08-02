@@ -387,12 +387,20 @@ internal sealed class RegexUnanchoredLazyDfa(
         out RegexUnanchoredLazyDfa? dfa)
     {
         dfa = null;
-        if (!TryCreateDirection(forwardNfa, dfaSizeLimit, out IRegexLazyDfaDirection? forwardDfa))
+        if (!TryCreateDirection(
+                forwardNfa,
+                dfaSizeLimit,
+                RegexDfaMatchKind.LeftmostFirst,
+                out IRegexLazyDfaDirection? forwardDfa))
         {
             return false;
         }
 
-        if (!TryCreateDirection(reverseNfa, dfaSizeLimit, out IRegexLazyDfaDirection? reverseDfa))
+        if (!TryCreateDirection(
+                reverseNfa,
+                dfaSizeLimit,
+                RegexDfaMatchKind.All,
+                out IRegexLazyDfaDirection? reverseDfa))
         {
             return false;
         }
@@ -410,6 +418,7 @@ internal sealed class RegexUnanchoredLazyDfa(
     internal static bool TryCreateDirection(
         RegexNfa nfa,
         ulong dfaSizeLimit,
+        RegexDfaMatchKind matchKind,
         out IRegexLazyDfaDirection? dfa)
     {
         if (RegexDfaOperations.CanCompile(nfa))
@@ -417,7 +426,7 @@ internal sealed class RegexUnanchoredLazyDfa(
             bool created = RegexLazyDfa.TryCreate(
                 nfa,
                 dfaSizeLimit,
-                leftmostPrune: true,
+                matchKind,
                 out RegexLazyDfa? byteDfa);
             dfa = byteDfa;
             return created;
@@ -426,6 +435,7 @@ internal sealed class RegexUnanchoredLazyDfa(
         if (RegexLookaroundLazyDfa.TryCreate(
                 nfa,
                 dfaSizeLimit,
+                matchKind,
                 out RegexLookaroundLazyDfa? contextualDfa))
         {
             dfa = contextualDfa;

@@ -23,6 +23,10 @@ public sealed class RegexLookaroundLazyDfaTests
     [InlineData("\\bfoo\\b", "xfoo foo foo!", false, false)]
     [InlineData("\\Bfoo\\B", "xfoox foo", false, false)]
     [InlineData("\\<foo\\>", "xfoo foo foo!", false, false)]
+    [InlineData("(?i)[a-z]{0,50}?key[a-z]{0,20}=([a-z]{10,20})(?:\"|$)", "PublicKeyToken=abcdefghijklmnop\"", false, false)]
+    [InlineData("(?i)[a-z]{0,50}?key[a-z]{0,20}=([a-z]{10,20})\"", "PublicKeyToken=abcdefghijklmnop\"", false, false)]
+    [InlineData("(?:|Public)Key", "PublicKey Key", false, false)]
+    [InlineData("(?i)[a-z]{0,50}key", "PublicKey Key", false, false)]
     public void PairedSearchMatchesPikeVmAtEveryStartOffset(
         string pattern,
         string haystackText,
@@ -77,6 +81,56 @@ public sealed class RegexLookaroundLazyDfaTests
             out bool gaveUp));
         Assert.Equal(-1, end);
         Assert.True(gaveUp);
+    }
+
+    /// <summary>
+    /// Verifies an all-path contextual reverse search reports cache exhaustion instead of
+    /// publishing a provisional match start.
+    /// </summary>
+    [Fact]
+    public void ReverseAllTransitionBudgetExhaustionReportsGiveUp()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse("foo$"u8);
+        RegexCompileOptions options = CreateOptions(multiLine: false, crlf: false);
+        RegexNfa reversed = RegexNfaCompiler.CompileReversed(tree.Root, options);
+        Assert.True(RegexLookaroundLazyDfa.TryCreate(
+            reversed,
+            dfaSizeLimit: 96,
+            RegexDfaMatchKind.All,
+            out RegexLookaroundLazyDfa? dfa));
+
+        Assert.False(dfa!.TryFindStartReverse(
+            "foo"u8,
+            start: 0,
+            end: 3,
+            reachabilityCache: null,
+            out int matchStart,
+            out bool gaveUp));
+        Assert.Equal(-1, matchStart);
+        Assert.True(gaveUp);
+    }
+
+    /// <summary>
+    /// Verifies span aggregation uses complete leftmost matches reconstructed by the reverse DFA.
+    /// </summary>
+    [Fact]
+    public void PairedSearchSumsCompleteLeftmostSpans()
+    {
+        const string Pattern = "(?i)[a-z]{0,50}?key[a-z]{0,20}=([a-z]{10,20})(?:\"|$)";
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse(
+            System.Text.Encoding.ASCII.GetBytes(Pattern));
+        RegexCompileOptions options = CreateOptions(multiLine: false, crlf: false);
+        RegexNfa nfa = RegexNfaCompiler.Compile(tree.Root, options);
+        Assert.True(RegexUnanchoredLazyDfa.TryCreate(
+            nfa,
+            tree.Root,
+            options,
+            GenerousDfaSizeLimit,
+            out RegexUnanchoredLazyDfa? dfa));
+        byte[] haystack = "PublicKeyToken=abcdefghijklmnop\" PublicKeyToken=qrstuvwxyzabcdef\""u8.ToArray();
+
+        Assert.True(dfa!.TrySumMatchSpans(haystack, startAt: 0, out long spanSum));
+        Assert.Equal(64, spanSum);
     }
 
     /// <summary>

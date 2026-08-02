@@ -13,6 +13,8 @@ The engine is backed by Scout's automata implementation and is designed for Nati
 
 Compiled `ByteRegex` and `ByteRegexSet` instances are safe to share across threads for matching. Callback state passed to iteration APIs remains caller-owned.
 
+Unanchored searches use leftmost-first semantics: the earliest possible start is selected before greedy or lazy repetition determines the preferred match at that start. Match and capture offsets remain consistent across PikeVM and DFA execution.
+
 Malformed UTF-8 does not participate in Unicode scalar matches by default, matching ripgrep's behavior. Callers that process Go-style byte text can opt into one replacement scalar per malformed byte:
 
 ```csharp

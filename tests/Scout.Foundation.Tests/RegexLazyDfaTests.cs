@@ -108,15 +108,115 @@ public sealed class RegexLazyDfaTests()
         Assert.Same(denseTransitions[(byte)'a'], denseTransitions[(byte)'b']);
     }
 
+    /// <summary>
+    /// Verifies reverse all-match execution continues past a higher-priority empty alternative
+    /// to recover the earliest accepted start.
+    /// </summary>
+    [Fact]
+    public void ReverseAllFindsEarliestStartAcrossEmptyAlternative()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse("(?:|Public)Key"u8);
+        RegexCompileOptions options = CreateOptions();
+        RegexNfa reversed = RegexNfaCompiler.CompileReversed(tree.Root, options);
+
+        Assert.True(RegexLazyDfa.TryCreate(
+            reversed,
+            dfaSizeLimit: 1_024 * 1_024,
+            RegexDfaMatchKind.All,
+            out RegexLazyDfa? dfa));
+        Assert.True(dfa!.TryFindStartReverse(
+            "PublicKey"u8,
+            start: 0,
+            end: 9,
+            out int matchStart,
+            out bool gaveUp));
+
+        Assert.False(gaveUp);
+        Assert.Equal(0, matchStart);
+    }
+
+    /// <summary>
+    /// Verifies reverse all-match execution reports transition-budget exhaustion.
+    /// </summary>
+    [Fact]
+    public void ReverseAllTransitionBudgetExhaustionReportsGiveUp()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse("(?:|Public)Key"u8);
+        RegexCompileOptions options = CreateOptions();
+        RegexNfa reversed = RegexNfaCompiler.CompileReversed(tree.Root, options);
+        int[] startStates = RegexDfaOperations.Closure(reversed, reversed.StartState);
+        ulong startStateBudget = RegexDfaBudget.EstimateStateBytes(
+            startStates.Length,
+            denseTransitions: false);
+
+        Assert.True(RegexLazyDfa.TryCreate(
+            reversed,
+            startStateBudget,
+            RegexDfaMatchKind.All,
+            out RegexLazyDfa? dfa));
+        Assert.False(dfa!.TryFindStartReverse(
+            "PublicKey"u8,
+            start: 0,
+            end: 9,
+            out int matchStart,
+            out bool gaveUp));
+
+        Assert.True(gaveUp);
+        Assert.Equal(-1, matchStart);
+    }
+
+    /// <summary>
+    /// Verifies a paired search rejects a start reconstructed by a reverse DFA that exhausts its
+    /// transition budget, allowing the caller to rerun the authoritative engine.
+    /// </summary>
+    [Fact]
+    public void PairedReverseBudgetExhaustionRequiresAuthoritativeFallback()
+    {
+        RegexSyntaxTree tree = RegexSyntaxParser.Parse("(?:|Public)Key"u8);
+        RegexCompileOptions options = CreateOptions();
+        RegexNfa forwardNfa = RegexNfaCompiler.CompileUnanchored(tree.Root, options);
+        RegexNfa reverseNfa = RegexNfaCompiler.CompileReversed(tree.Root, options);
+        int[] reverseStartStates = RegexDfaOperations.Closure(
+            reverseNfa,
+            reverseNfa.StartState);
+        ulong reverseStartBudget = RegexDfaBudget.EstimateStateBytes(
+            reverseStartStates.Length,
+            denseTransitions: false);
+        Assert.True(RegexUnanchoredLazyDfa.TryCreateDirection(
+            forwardNfa,
+            dfaSizeLimit: 1_024 * 1_024,
+            RegexDfaMatchKind.LeftmostFirst,
+            out IRegexLazyDfaDirection? forward));
+        Assert.True(RegexUnanchoredLazyDfa.TryCreateDirection(
+            reverseNfa,
+            reverseStartBudget,
+            RegexDfaMatchKind.All,
+            out IRegexLazyDfaDirection? reverse));
+        var paired = new RegexUnanchoredLazyDfa(forward!, reverse!, reverseFactory: null);
+
+        Assert.False(paired.TryFind(
+            "PublicKey"u8,
+            startAt: 0,
+            out RegexMatch match,
+            out bool gaveUp));
+
+        Assert.True(gaveUp);
+        Assert.Equal(default, match);
+    }
+
     private static RegexNfa CompileNfa(ReadOnlySpan<byte> pattern)
     {
         RegexSyntaxTree tree = RegexSyntaxParser.Parse(pattern);
-        var options = new RegexCompileOptions(
+        return RegexNfaCompiler.Compile(tree.Root, CreateOptions());
+    }
+
+    private static RegexCompileOptions CreateOptions()
+    {
+        return new RegexCompileOptions(
             caseInsensitive: false,
             swapGreed: false,
             multiLine: false,
             dotMatchesNewline: false);
-        return RegexNfaCompiler.Compile(tree.Root, options);
     }
 
     private static PikeVm? GetFallback(RegexLazyDfa dfa)

@@ -9,13 +9,13 @@ namespace Scout;
 /// <param name="states">The interned DFA states.</param>
 /// <param name="startState">The DFA start state.</param>
 /// <param name="budget">The remaining transition-storage budget.</param>
-/// <param name="leftmostPrune">Whether closures retain only leftmost-priority states.</param>
+/// <param name="matchKind">The match policy applied while constructing DFA states.</param>
 internal sealed class RegexLazyDfa(
     RegexNfa nfa,
     Dictionary<RegexDfaStateKey, RegexLazyDfaState> states,
     RegexLazyDfaState startState,
     RegexDfaBudget budget,
-    bool leftmostPrune) : IRegexLazyDfaDirection
+    RegexDfaMatchKind matchKind) : IRegexLazyDfaDirection
 {
     private const int MaxAcceleratorNeedles = 3;
 
@@ -24,7 +24,7 @@ internal sealed class RegexLazyDfa(
     private readonly Dictionary<RegexDfaStateKey, RegexLazyDfaState> _states = states;
     private RegexDfaBudget _budget = budget;
     private readonly RegexLazyDfaState _startState = startState;
-    private readonly bool _leftmostPrune = leftmostPrune;
+    private readonly RegexDfaMatchKind _matchKind = matchKind;
     private long _runnerLeaseGeneration;
     private long _activeRunnerLease;
 
@@ -76,22 +76,26 @@ internal sealed class RegexLazyDfa(
     /// <returns><see langword="true"/> when the start state fits within the budget.</returns>
     public static bool TryCreate(RegexNfa nfa, ulong dfaSizeLimit, out RegexLazyDfa? dfa)
     {
-        return TryCreate(nfa, dfaSizeLimit, leftmostPrune: false, out dfa);
+        return TryCreate(nfa, dfaSizeLimit, RegexDfaMatchKind.All, out dfa);
     }
 
     /// <summary>
-    /// Attempts to create a lazy DFA with optional leftmost-priority pruning.
+    /// Attempts to create a lazy DFA with one explicit match policy.
     /// </summary>
     /// <param name="nfa">The NFA to execute.</param>
     /// <param name="dfaSizeLimit">The maximum estimated DFA storage in bytes.</param>
-    /// <param name="leftmostPrune">Whether closures retain only leftmost-priority states.</param>
+    /// <param name="matchKind">The match policy applied while constructing DFA states.</param>
     /// <param name="dfa">Receives the lazy DFA when successful.</param>
     /// <returns><see langword="true"/> when the start state fits within the budget.</returns>
-    public static bool TryCreate(RegexNfa nfa, ulong dfaSizeLimit, bool leftmostPrune, out RegexLazyDfa? dfa)
+    public static bool TryCreate(
+        RegexNfa nfa,
+        ulong dfaSizeLimit,
+        RegexDfaMatchKind matchKind,
+        out RegexLazyDfa? dfa)
     {
         var budget = new RegexDfaBudget(dfaSizeLimit);
         var states = new Dictionary<RegexDfaStateKey, RegexLazyDfaState>();
-        int[] startNfaStates = leftmostPrune
+        int[] startNfaStates = matchKind == RegexDfaMatchKind.LeftmostFirst
             ? RegexDfaOperations.ClosureLeftmost(nfa, nfa.StartState)
             : RegexDfaOperations.Closure(nfa, nfa.StartState);
         if (!TryIntern(nfa, states, ref budget, startNfaStates, out RegexLazyDfaState? startState))
@@ -100,7 +104,7 @@ internal sealed class RegexLazyDfa(
             return false;
         }
 
-        dfa = new RegexLazyDfa(nfa, states, startState!, budget, leftmostPrune);
+        dfa = new RegexLazyDfa(nfa, states, startState!, budget, matchKind);
         return true;
     }
 
@@ -174,7 +178,7 @@ internal sealed class RegexLazyDfa(
         out int end,
         out bool gaveUp)
     {
-        if (_leftmostPrune)
+        if (_matchKind == RegexDfaMatchKind.LeftmostFirst)
         {
             return TryFindEndLeftmost(haystack, start, out end, out gaveUp);
         }
@@ -191,7 +195,7 @@ internal sealed class RegexLazyDfa(
     }
 
     /// <summary>
-    /// Attempts to find a match start by running a leftmost-pruned DFA in reverse.
+    /// Attempts to find a match start by running the configured DFA in reverse.
     /// </summary>
     /// <param name="haystack">The bytes being searched.</param>
     /// <param name="start">The earliest permitted start.</param>
@@ -255,14 +259,19 @@ internal sealed class RegexLazyDfa(
         out bool gaveUp)
     {
         _ = reachabilityCache;
-        if (_leftmostPrune)
+        if (_matchKind == RegexDfaMatchKind.LeftmostFirst)
         {
             return TryFindStartReverseLeftmost(haystack, start, end, out matchStart, out gaveUp);
         }
 
-        gaveUp = false;
-        matchStart = 0;
-        return false;
+        bool found = TryFindStartBoundsReverse(
+            haystack,
+            start,
+            end,
+            out matchStart,
+            out _,
+            out gaveUp);
+        return found;
     }
 
     /// <summary>
@@ -614,7 +623,7 @@ internal sealed class RegexLazyDfa(
 
     private int[] Move(int[] nfaStates, byte value)
     {
-        return _leftmostPrune
+        return _matchKind == RegexDfaMatchKind.LeftmostFirst
             ? RegexDfaOperations.MoveLeftmost(_nfa, nfaStates, value)
             : RegexDfaOperations.Move(_nfa, nfaStates, value);
     }
@@ -636,7 +645,7 @@ internal sealed class RegexLazyDfa(
         out int acceleratedPosition)
     {
         acceleratedPosition = position;
-        if (!allowLeftmost && _leftmostPrune ||
+        if (!allowLeftmost && _matchKind == RegexDfaMatchKind.LeftmostFirst ||
             position >= haystack.Length ||
             !TryGetOrCreateAccelerator(state, out byte[] needles))
         {

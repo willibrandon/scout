@@ -1977,7 +1977,11 @@ internal sealed class RegexMetaEngine
                     options,
                     effectiveDfaSizeLimit);
         Func<RegexLazyDfa?> anchoredLeftmostDfaFactory = () =>
-            RegexLazyDfa.TryCreate(nfa, effectiveDfaSizeLimit, leftmostPrune: true, out RegexLazyDfa? anchoredLeftmostDfa)
+            RegexLazyDfa.TryCreate(
+                nfa,
+                effectiveDfaSizeLimit,
+                RegexDfaMatchKind.LeftmostFirst,
+                out RegexLazyDfa? anchoredLeftmostDfa)
                 ? anchoredLeftmostDfa
                 : null;
         return new RegexMetaEngine(

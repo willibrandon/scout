@@ -65,6 +65,7 @@ internal sealed class RegexUnanchoredLazyDfaFactory(
             !RegexUnanchoredLazyDfa.TryCreateDirection(
                 forwardNfa,
                 _dfaSizeLimit,
+                RegexDfaMatchKind.LeftmostFirst,
                 out IRegexLazyDfaDirection? forwardDfa))
         {
             return null;
@@ -98,6 +99,7 @@ internal sealed class RegexUnanchoredLazyDfaFactory(
         if (RegexUnanchoredLazyDfa.TryCreateDirection(
                 reverseNfa,
                 _dfaSizeLimit,
+                RegexDfaMatchKind.All,
                 out IRegexLazyDfaDirection? reverseDfa))
         {
             System.Threading.Volatile.Write(ref _reverseAvailability, ReverseAvailable);
