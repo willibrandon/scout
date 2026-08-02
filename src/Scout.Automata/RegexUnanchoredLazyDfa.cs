@@ -7,12 +7,12 @@ namespace Scout;
 /// <param name="reverse">The optional initialized reverse DFA.</param>
 /// <param name="reverseFactory">The optional factory that lazily creates the reverse DFA.</param>
 internal sealed class RegexUnanchoredLazyDfa(
-    RegexLazyDfa forward,
-    RegexLazyDfa? reverse,
+    IRegexLazyDfaDirection forward,
+    IRegexLazyDfaDirection? reverse,
     RegexUnanchoredLazyDfaFactory? reverseFactory)
 {
-    private readonly RegexLazyDfa _forward = forward;
-    private RegexLazyDfa? _reverse = reverse;
+    private readonly IRegexLazyDfaDirection _forward = forward;
+    private IRegexLazyDfaDirection? _reverse = reverse;
     private readonly RegexUnanchoredLazyDfaFactory? _reverseFactory = reverseFactory;
     private long _runnerLeaseGeneration;
     private long _activeRunnerLease;
@@ -98,8 +98,8 @@ internal sealed class RegexUnanchoredLazyDfa(
             return false;
         }
 
-        if (!RegexDfaOperations.CanCompile(forwardNfa!) ||
-            !RegexDfaOperations.CanCompile(reverseNfa!) ||
+        if (!RegexLookaroundDfaOperations.CanCompile(forwardNfa!) ||
+            !RegexLookaroundDfaOperations.CanCompile(reverseNfa!) ||
             !constructionBudget.CanRetain(forwardNfa!, reverseNfa!))
         {
             return false;
@@ -194,7 +194,7 @@ internal sealed class RegexUnanchoredLazyDfa(
         }
 
         RegexNfa candidateForwardNfa = CreateUnanchoredForwardNfa(nfa);
-        if (!RegexDfaOperations.CanCompile(candidateForwardNfa))
+        if (!RegexLookaroundDfaOperations.CanCompile(candidateForwardNfa))
         {
             return false;
         }
@@ -232,7 +232,7 @@ internal sealed class RegexUnanchoredLazyDfa(
             constructionBudget.ReserveState(payloadBytes: 0);
             constructionBudget.ReserveState(payloadBytes: 0);
             RegexNfa candidateForwardNfa = CreateUnanchoredForwardNfa(nfa);
-            if (!RegexDfaOperations.CanCompile(candidateForwardNfa))
+            if (!RegexLookaroundDfaOperations.CanCompile(candidateForwardNfa))
             {
                 constructionBudget.Restore(checkpoint);
                 return false;
@@ -261,7 +261,7 @@ internal sealed class RegexUnanchoredLazyDfa(
         RegexCompileOptions options)
     {
         return CanCompileSyntax(root, options) &&
-            RegexDfaOperations.CanCompile(nfa);
+            RegexLookaroundDfaOperations.CanCompile(nfa);
     }
 
     /// <summary>
@@ -275,10 +275,9 @@ internal sealed class RegexUnanchoredLazyDfa(
         RegexSyntaxNode root,
         RegexCompileOptions options)
     {
-        return !options.Utf8 &&
-            !CanMatchEmpty(root) &&
+        return !CanMatchEmpty(root) &&
             !HasNullableRepetition(root) &&
-            !ContainsDfaUnsupportedPredicate(root);
+            !ContainsContextuallyUnsupportedPredicate(root, options);
     }
 
     /// <summary>
@@ -334,7 +333,7 @@ internal sealed class RegexUnanchoredLazyDfa(
         }
 
         RegexNfa candidateReverseNfa = RegexNfaCompiler.CompileReversed(root, options);
-        if (!RegexDfaOperations.CanCompile(candidateReverseNfa))
+        if (!RegexLookaroundDfaOperations.CanCompile(candidateReverseNfa))
         {
             return false;
         }
@@ -364,7 +363,7 @@ internal sealed class RegexUnanchoredLazyDfa(
                 options,
                 constructionBudget,
                 out RegexNfa? candidateReverseNfa) ||
-            !RegexDfaOperations.CanCompile(candidateReverseNfa!))
+            !RegexLookaroundDfaOperations.CanCompile(candidateReverseNfa!))
         {
             return false;
         }
@@ -388,20 +387,12 @@ internal sealed class RegexUnanchoredLazyDfa(
         out RegexUnanchoredLazyDfa? dfa)
     {
         dfa = null;
-        if (!RegexLazyDfa.TryCreate(
-                forwardNfa,
-                dfaSizeLimit,
-                leftmostPrune: true,
-                out RegexLazyDfa? forwardDfa))
+        if (!TryCreateDirection(forwardNfa, dfaSizeLimit, out IRegexLazyDfaDirection? forwardDfa))
         {
             return false;
         }
 
-        if (!RegexLazyDfa.TryCreate(
-                reverseNfa,
-                dfaSizeLimit,
-                leftmostPrune: true,
-                out RegexLazyDfa? reverseDfa))
+        if (!TryCreateDirection(reverseNfa, dfaSizeLimit, out IRegexLazyDfaDirection? reverseDfa))
         {
             return false;
         }
@@ -411,6 +402,38 @@ internal sealed class RegexUnanchoredLazyDfa(
             reverseDfa!,
             reverseFactory: null);
         return true;
+    }
+
+    /// <summary>
+    /// Creates the predicate-free runner when possible, otherwise the contextual runner.
+    /// </summary>
+    internal static bool TryCreateDirection(
+        RegexNfa nfa,
+        ulong dfaSizeLimit,
+        out IRegexLazyDfaDirection? dfa)
+    {
+        if (RegexDfaOperations.CanCompile(nfa))
+        {
+            bool created = RegexLazyDfa.TryCreate(
+                nfa,
+                dfaSizeLimit,
+                leftmostPrune: true,
+                out RegexLazyDfa? byteDfa);
+            dfa = byteDfa;
+            return created;
+        }
+
+        if (RegexLookaroundLazyDfa.TryCreate(
+                nfa,
+                dfaSizeLimit,
+                out RegexLookaroundLazyDfa? contextualDfa))
+        {
+            dfa = contextualDfa;
+            return true;
+        }
+
+        dfa = null;
+        return false;
     }
 
     /// <summary>
@@ -442,7 +465,12 @@ internal sealed class RegexUnanchoredLazyDfa(
     /// <returns><see langword="true" /> when a match end is found.</returns>
     public bool TryFindEnd(ReadOnlySpan<byte> haystack, int startAt, out int end, out bool gaveUp)
     {
-        return _forward.TryFindEnd(haystack, startAt, out end, out gaveUp);
+        return _forward.TryFindEnd(
+            haystack,
+            startAt,
+            reachabilityCache: null,
+            out end,
+            out gaveUp);
     }
 
     /// <summary>
@@ -479,7 +507,7 @@ internal sealed class RegexUnanchoredLazyDfa(
             return false;
         }
 
-        RegexLazyDfa? reverseDfa = _reverse ??= _reverseFactory?.CreateReverseDfa();
+        IRegexLazyDfaDirection? reverseDfa = _reverse ??= _reverseFactory?.CreateReverseDfa();
         if (reverseDfa is null)
         {
             gaveUp = true;
@@ -540,6 +568,7 @@ internal sealed class RegexUnanchoredLazyDfa(
                 bool found = _forward.TryFindEnd(
                     haystack,
                     offset,
+                    reachabilityCache: null,
                     out int end,
                     out bool forwardGaveUp);
                 if (!found || forwardGaveUp)
@@ -614,46 +643,84 @@ internal sealed class RegexUnanchoredLazyDfa(
     }
 
     /// <summary>
-    /// Reports whether a syntax subtree contains a zero-width predicate that byte DFA
-    /// execution cannot compile.
+    /// Reports whether a syntax subtree contains a predicate whose effective semantics need
+    /// more than the adjacent byte context retained by the contextual DFA.
     /// </summary>
-    private static bool ContainsDfaUnsupportedPredicate(RegexSyntaxNode node)
+    private static bool ContainsContextuallyUnsupportedPredicate(
+        RegexSyntaxNode node,
+        RegexCompileOptions options)
     {
         return node switch
         {
-            RegexAtomNode atom => atom.Kind is RegexSyntaxKind.StartAnchor
-                or RegexSyntaxKind.EndAnchor
-                or RegexSyntaxKind.AbsoluteStartAnchor
-                or RegexSyntaxKind.AbsoluteEndAnchor
-                or RegexSyntaxKind.WordBoundary
-                or RegexSyntaxKind.NotWordBoundary
-                or RegexSyntaxKind.WordStartBoundary
-                or RegexSyntaxKind.WordEndBoundary
-                or RegexSyntaxKind.WordStartHalfBoundary
-                or RegexSyntaxKind.WordEndHalfBoundary,
-            RegexGroupNode group => ContainsDfaUnsupportedPredicate(group.Child),
-            RegexSequenceNode sequence => AnyContainsDfaUnsupportedPredicate(sequence.Nodes),
-            RegexAlternationNode alternation => AnyContainsDfaUnsupportedPredicate(alternation.Alternatives),
+            RegexAtomNode atom => IsWordPredicate(atom.Kind) &&
+                (options.Utf8 || options.UnicodeClasses),
+            RegexGroupNode group => ContainsContextuallyUnsupportedPredicate(
+                group.Child,
+                options.Apply(group.EnabledFlags, group.DisabledFlags)),
+            RegexSequenceNode sequence => ContainsContextuallyUnsupportedPredicate(
+                sequence,
+                options),
+            RegexAlternationNode alternation => AnyContainsContextuallyUnsupportedPredicate(
+                alternation.Alternatives,
+                options),
             RegexRepetitionNode { Maximum: 0 } => false,
-            RegexRepetitionNode repetition => ContainsDfaUnsupportedPredicate(repetition.Child),
+            RegexRepetitionNode repetition => ContainsContextuallyUnsupportedPredicate(
+                repetition.Child,
+                options),
             _ => false,
         };
     }
 
     /// <summary>
-    /// Reports whether any syntax node in a collection contains a DFA-unsupported predicate.
+    /// Applies sequence-scoped flags while looking for unsupported predicates.
     /// </summary>
-    private static bool AnyContainsDfaUnsupportedPredicate(IReadOnlyList<RegexSyntaxNode> nodes)
+    private static bool ContainsContextuallyUnsupportedPredicate(
+        RegexSequenceNode sequence,
+        RegexCompileOptions options)
     {
-        for (int index = 0; index < nodes.Count; index++)
+        RegexCompileOptions currentOptions = options;
+        for (int index = 0; index < sequence.Nodes.Count; index++)
         {
-            if (ContainsDfaUnsupportedPredicate(nodes[index]))
+            RegexSyntaxNode child = sequence.Nodes[index];
+            if (child is RegexInlineFlagsNode flags)
+            {
+                currentOptions = currentOptions.Apply(flags.EnabledFlags, flags.DisabledFlags);
+            }
+            else if (ContainsContextuallyUnsupportedPredicate(child, currentOptions))
             {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Reports whether any syntax branch contains a contextually unsupported predicate.
+    /// </summary>
+    private static bool AnyContainsContextuallyUnsupportedPredicate(
+        IReadOnlyList<RegexSyntaxNode> nodes,
+        RegexCompileOptions options)
+    {
+        for (int index = 0; index < nodes.Count; index++)
+        {
+            if (ContainsContextuallyUnsupportedPredicate(nodes[index], options))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsWordPredicate(RegexSyntaxKind kind)
+    {
+        return kind is RegexSyntaxKind.WordBoundary
+            or RegexSyntaxKind.NotWordBoundary
+            or RegexSyntaxKind.WordStartBoundary
+            or RegexSyntaxKind.WordEndBoundary
+            or RegexSyntaxKind.WordStartHalfBoundary
+            or RegexSyntaxKind.WordEndHalfBoundary;
     }
 
     private static bool CanMatchEmpty(RegexSyntaxNode node)

@@ -62,11 +62,10 @@ internal sealed class RegexUnanchoredLazyDfaFactory(
         EnsureForwardInitialized();
         RegexNfa? forwardNfa = _forwardNfa;
         if (forwardNfa is null ||
-            !RegexLazyDfa.TryCreate(
+            !RegexUnanchoredLazyDfa.TryCreateDirection(
                 forwardNfa,
                 _dfaSizeLimit,
-                leftmostPrune: true,
-                out RegexLazyDfa? forwardDfa))
+                out IRegexLazyDfaDirection? forwardDfa))
         {
             return null;
         }
@@ -81,7 +80,7 @@ internal sealed class RegexUnanchoredLazyDfaFactory(
     /// Creates an independent mutable reverse DFA, compiling its shared NFA on first demand.
     /// </summary>
     /// <returns>The reverse DFA, or <see langword="null" /> when reverse execution is ineligible.</returns>
-    internal RegexLazyDfa? CreateReverseDfa()
+    internal IRegexLazyDfaDirection? CreateReverseDfa()
     {
         if (IsReverseUnavailable)
         {
@@ -96,11 +95,10 @@ internal sealed class RegexUnanchoredLazyDfaFactory(
             return null;
         }
 
-        if (RegexLazyDfa.TryCreate(
+        if (RegexUnanchoredLazyDfa.TryCreateDirection(
                 reverseNfa,
                 _dfaSizeLimit,
-                leftmostPrune: true,
-                out RegexLazyDfa? reverseDfa))
+                out IRegexLazyDfaDirection? reverseDfa))
         {
             System.Threading.Volatile.Write(ref _reverseAvailability, ReverseAvailable);
             return reverseDfa;

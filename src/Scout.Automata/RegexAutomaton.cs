@@ -1954,7 +1954,7 @@ public sealed class RegexAutomaton
     /// unanchored-DFA runner.
     /// </summary>
     internal bool CanSearchWholeHaystackWithFullMatches =>
-        _startPredicate?.HasRequiredStart == true ||
+        GetStartPredicate()?.HasRequiredStart == true ||
         engine.CanSearchWholeHaystackWithFullMatches;
 
     /// <summary>

@@ -34,6 +34,16 @@ dotnet run -c Release --project bench/Scout.Benchmarks -- \
   --filter '*GitleaksRuleCompilationBenchmarks*'
 ```
 
+`GitleaksEndAssertionBenchmarks` tracks issue #61's exact generic API-key rule
+and 4 MiB candidate corpus. It compares warmed `FindCaptures` searches through
+the authoritative PikeVM and bounded contextual lazy DFA for both ASCII and
+regularly spaced malformed UTF-8 input in general mode. Run it with:
+
+```sh
+dotnet run -c Release --project bench/Scout.Benchmarks -- \
+  --filter '*GitleaksEndAssertionBenchmarks*'
+```
+
 Smoke run:
 
 ```sh

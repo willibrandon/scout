@@ -48,7 +48,7 @@ internal sealed class RegexExpandedUnanchoredLazyDfaFactory(
                 options,
                 constructionBudget,
                 out RegexNfa? forwardNfa) ||
-            !RegexDfaOperations.CanCompile(forwardNfa!))
+            !RegexLookaroundDfaOperations.CanCompile(forwardNfa!))
         {
             return null;
         }
