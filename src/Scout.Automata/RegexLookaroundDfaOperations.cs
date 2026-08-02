@@ -130,6 +130,7 @@ internal static class RegexLookaroundDfaOperations
         byte previousContext,
         int current,
         byte[] contextRepresentatives,
+        RegexDfaMatchKind matchKind,
         out int[] consumers,
         out bool accepting)
     {
@@ -137,6 +138,26 @@ internal static class RegexLookaroundDfaOperations
         bool[] visited = new bool[nfa.States.Count];
         bool[] closedSplits = new bool[nfa.States.Count];
         accepting = false;
+        if (matchKind == RegexDfaMatchKind.All)
+        {
+            for (int index = 0; index < roots.Length; index++)
+            {
+                AddContextualThreadAll(
+                    nfa,
+                    roots[index],
+                    previousContext,
+                    current,
+                    contextRepresentatives,
+                    threads,
+                    visited,
+                    closedSplits,
+                    ref accepting);
+            }
+
+            consumers = threads.ToArray();
+            return;
+        }
+
         for (int index = 0; index < roots.Length; index++)
         {
             if (AddContextualThreadLeftmost(
@@ -155,6 +176,154 @@ internal static class RegexLookaroundDfaOperations
         }
 
         consumers = threads.ToArray();
+    }
+
+    private static void AddContextualThreadAll(
+        RegexNfa nfa,
+        int stateIndex,
+        byte previousContext,
+        int current,
+        byte[] contextRepresentatives,
+        List<int> threads,
+        bool[] visited,
+        bool[] closedSplits,
+        ref bool accepting)
+    {
+        if (stateIndex < 0)
+        {
+            return;
+        }
+
+        if (visited[stateIndex])
+        {
+            AddClosedSplitExitAll(
+                nfa,
+                stateIndex,
+                previousContext,
+                current,
+                contextRepresentatives,
+                threads,
+                visited,
+                closedSplits,
+                ref accepting);
+            return;
+        }
+
+        visited[stateIndex] = true;
+        RegexNfaState state = nfa.States[stateIndex];
+        switch (state.Kind)
+        {
+            case RegexNfaStateKind.Accept:
+                accepting = true;
+                break;
+            case RegexNfaStateKind.Split:
+            case RegexNfaStateKind.GreedyLoopSplit:
+            case RegexNfaStateKind.LazyLoopSplit:
+                AddContextualThreadAll(
+                    nfa,
+                    state.Next,
+                    previousContext,
+                    current,
+                    contextRepresentatives,
+                    threads,
+                    visited,
+                    closedSplits,
+                    ref accepting);
+                AddContextualThreadAll(
+                    nfa,
+                    state.Alternative,
+                    previousContext,
+                    current,
+                    contextRepresentatives,
+                    threads,
+                    visited,
+                    closedSplits,
+                    ref accepting);
+                break;
+            case RegexNfaStateKind.Predicate:
+                if (PredicateMatches(
+                    state,
+                    previousContext,
+                    current,
+                    contextRepresentatives))
+                {
+                    AddContextualThreadAll(
+                        nfa,
+                        state.Next,
+                        previousContext,
+                        current,
+                        contextRepresentatives,
+                        threads,
+                        visited,
+                        closedSplits,
+                        ref accepting);
+                }
+
+                break;
+            case RegexNfaStateKind.CaptureStart:
+            case RegexNfaStateKind.CaptureEnd:
+                AddContextualThreadAll(
+                    nfa,
+                    state.Next,
+                    previousContext,
+                    current,
+                    contextRepresentatives,
+                    threads,
+                    visited,
+                    closedSplits,
+                    ref accepting);
+                break;
+            default:
+                threads.Add(stateIndex);
+                break;
+        }
+    }
+
+    private static void AddClosedSplitExitAll(
+        RegexNfa nfa,
+        int stateIndex,
+        byte previousContext,
+        int current,
+        byte[] contextRepresentatives,
+        List<int> threads,
+        bool[] visited,
+        bool[] closedSplits,
+        ref bool accepting)
+    {
+        RegexNfaState state = nfa.States[stateIndex];
+        if (closedSplits[stateIndex])
+        {
+            return;
+        }
+
+        closedSplits[stateIndex] = true;
+        switch (state.Kind)
+        {
+            case RegexNfaStateKind.GreedyLoopSplit:
+                AddContextualThreadAll(
+                    nfa,
+                    state.Alternative,
+                    previousContext,
+                    current,
+                    contextRepresentatives,
+                    threads,
+                    visited,
+                    closedSplits,
+                    ref accepting);
+                break;
+            case RegexNfaStateKind.LazyLoopSplit:
+                AddContextualThreadAll(
+                    nfa,
+                    state.Next,
+                    previousContext,
+                    current,
+                    contextRepresentatives,
+                    threads,
+                    visited,
+                    closedSplits,
+                    ref accepting);
+                break;
+        }
     }
 
     /// <summary>

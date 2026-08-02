@@ -15,6 +15,7 @@ public sealed class ByteRegexApiTests
     private const long RepeatedBoundedAssignmentAllocationLimit = 64 * 1024;
     private const int ConcurrentSearchIterations = 64;
     private const int ConcurrentHaystackCount = 8;
+    private const string LazyPrefixAssignmentPattern = "(?i)[a-z]{0,50}?key[a-z]{0,20}=([a-z]{10,20})(?:\"|$)";
     private const string BoundedAssignmentPattern = "(?i)[\\w.-]{0,50}?(?:adafruit)(?:[ \\t\\w.-]{0,20})[\\s'\"]{0,3}(?:=|>|:{1,3}=|\\|\\||:|=>|\\?=|,)[\\x60'\"\\s=]{0,5}([a-z0-9_-]{32})(?:[\\x60'\"\\s;]|\\\\[nr]|$)";
     private const string RepeatedBoundedAssignmentPattern = "(?i)[\\w.-]{0,50}?(?:bitbucket)(?:[ \\t\\w.-]{0,20})[\\s'\"]{0,3}(?:=|>|:{1,3}=|\\|\\||:|=>|\\?=|,)[\\x60'\"\\s=]{0,5}([a-z0-9]{32})(?:[\\x60'\"\\s;]|\\\\[nr]|$)";
 
@@ -52,6 +53,71 @@ public sealed class ByteRegexApiTests
         Assert.Equal(new ByteRegexMatch(2, 3), captures.GetGroup(1));
         Assert.Equal(new ByteRegexMatch(5, 3), captures.GetGroup(2));
         Assert.Equal(3, captures.ParticipatingCount());
+    }
+
+    /// <summary>
+    /// Verifies a reverse DFA retains the earliest start when a lazy prefix can also accept later.
+    /// </summary>
+    [Fact]
+    public void LazyPrefixDfaMatchesPikeVmWholeSpanAndCaptures()
+    {
+        byte[] input = Encoding.ASCII.GetBytes(
+            new string(' ', RegexMetaEngine.UnanchoredLazyDfaHaystackThreshold) +
+            "PublicKeyToken=abcdefghijklmnop\"");
+        var dfa = ByteRegex.Compile(
+            LazyPrefixAssignmentPattern,
+            new ByteRegexOptions
+            {
+                DfaSizeLimit = 16UL * 1024UL * 1024UL,
+                EngineMode = ByteRegexEngineMode.General,
+                MatchInvalidUtf8 = true,
+            });
+        var pikeVm = ByteRegex.Compile(
+            LazyPrefixAssignmentPattern,
+            new ByteRegexOptions
+            {
+                DfaSizeLimit = 1,
+                EngineMode = ByteRegexEngineMode.General,
+                MatchInvalidUtf8 = true,
+            });
+        var expectedMatch = new ByteRegexMatch(4096, 32);
+        var expectedCapture = new ByteRegexMatch(4111, 16);
+
+        Assert.Equal(expectedMatch, dfa.Find(input));
+        Assert.Equal(expectedMatch, pikeVm.Find(input));
+        ByteRegexCaptures dfaCaptures = Assert.IsType<ByteRegexCaptures>(dfa.FindCaptures(input));
+        ByteRegexCaptures pikeVmCaptures = Assert.IsType<ByteRegexCaptures>(pikeVm.FindCaptures(input));
+        Assert.Equal(expectedMatch, dfaCaptures.Match);
+        Assert.Equal(expectedCapture, dfaCaptures.GetGroup(1));
+        Assert.Equal(pikeVmCaptures.Match, dfaCaptures.Match);
+        Assert.Equal(pikeVmCaptures.GetGroup(1), dfaCaptures.GetGroup(1));
+    }
+
+    /// <summary>
+    /// Verifies non-overlapping iteration advances from complete leftmost spans.
+    /// </summary>
+    [Fact]
+    public void LazyPrefixDfaIterationReportsCompleteLeftmostSpans()
+    {
+        byte[] input = Encoding.ASCII.GetBytes(
+            new string(' ', RegexMetaEngine.UnanchoredLazyDfaHaystackThreshold) +
+            "PublicKeyToken=abcdefghijklmnop\" PublicKeyToken=qrstuvwxyzabcdef\"");
+        var regex = ByteRegex.Compile(
+            LazyPrefixAssignmentPattern,
+            new ByteRegexOptions
+            {
+                DfaSizeLimit = 16UL * 1024UL * 1024UL,
+                EngineMode = ByteRegexEngineMode.General,
+                MatchInvalidUtf8 = true,
+            });
+        var matches = new List<ByteRegexMatch>();
+
+        int count = regex.ForEachMatch(input, ref matches, AddMatch);
+
+        Assert.Equal(2, count);
+        Assert.Equal(
+            [new ByteRegexMatch(4096, 32), new ByteRegexMatch(4129, 32)],
+            matches);
     }
 
     /// <summary>

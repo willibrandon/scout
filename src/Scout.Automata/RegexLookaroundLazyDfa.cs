@@ -14,11 +14,16 @@ internal sealed class RegexLookaroundLazyDfa : IRegexLazyDfaDirection
     private readonly byte[] _byteClasses = new byte[256];
     private readonly byte[] _byteClassRepresentatives = new byte[256];
     private readonly int _byteClassCount;
+    private readonly RegexDfaMatchKind _matchKind;
     private RegexDfaBudget _budget;
 
-    private RegexLookaroundLazyDfa(RegexNfa nfa, ulong dfaSizeLimit)
+    private RegexLookaroundLazyDfa(
+        RegexNfa nfa,
+        ulong dfaSizeLimit,
+        RegexDfaMatchKind matchKind)
     {
         _nfa = nfa;
+        _matchKind = matchKind;
         _budget = new RegexDfaBudget(dfaSizeLimit);
         _ = RegexLookaroundDfaOperations.BuildPreviousContexts(
             nfa,
@@ -39,13 +44,30 @@ internal sealed class RegexLookaroundLazyDfa : IRegexLazyDfaDirection
         ulong dfaSizeLimit,
         out RegexLookaroundLazyDfa? dfa)
     {
+        return TryCreate(nfa, dfaSizeLimit, RegexDfaMatchKind.LeftmostFirst, out dfa);
+    }
+
+    /// <summary>
+    /// Creates a contextual runner with one explicit match policy.
+    /// </summary>
+    /// <param name="nfa">The NFA to execute.</param>
+    /// <param name="dfaSizeLimit">The maximum estimated DFA storage in bytes.</param>
+    /// <param name="matchKind">The match policy applied while constructing DFA states.</param>
+    /// <param name="dfa">Receives the contextual lazy DFA when successful.</param>
+    /// <returns><see langword="true" /> when the first start state fits in the DFA budget.</returns>
+    internal static bool TryCreate(
+        RegexNfa nfa,
+        ulong dfaSizeLimit,
+        RegexDfaMatchKind matchKind,
+        out RegexLookaroundLazyDfa? dfa)
+    {
         if (!RegexLookaroundDfaOperations.CanCompile(nfa))
         {
             dfa = null;
             return false;
         }
 
-        var candidate = new RegexLookaroundLazyDfa(nfa, dfaSizeLimit);
+        var candidate = new RegexLookaroundLazyDfa(nfa, dfaSizeLimit, matchKind);
         if (!candidate.TryGetStartState(
             RegexLookaroundDfaOperations.StartContext,
             out _))
@@ -217,6 +239,7 @@ internal sealed class RegexLookaroundLazyDfa : IRegexLazyDfaDirection
             state.PreviousContext,
             value,
             _contextRepresentatives,
+            _matchKind,
             out int[] consumers,
             out bool accepting);
         int[] nextRoots = RegexLookaroundDfaOperations.MoveWithoutClosure(
@@ -250,6 +273,7 @@ internal sealed class RegexLookaroundLazyDfa : IRegexLazyDfaDirection
             state.PreviousContext,
             RegexLookaroundDfaOperations.EndOfInput,
             _contextRepresentatives,
+            _matchKind,
             out _,
             out bool accepting);
         if (!_budget.TryReserveLazyTransition(allocatesDenseReferenceTable: false) ||
