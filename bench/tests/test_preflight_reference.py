@@ -70,12 +70,13 @@ class PreflightReferenceTests(unittest.TestCase):
     def run_checks(self, *, executable: str = "rg", archive: bool = False) -> subprocess.CompletedProcess[str]:
         oracle_path = self.checkout / "target/release-lto" / executable
         oracle_path.parent.mkdir(parents=True, exist_ok=True)
-        lock = f'ripgrep_commit = "{self.release}"\nripgrep_rg_path = "{oracle_path.as_posix()}"\n'
+        oracle_relative_path = oracle_path.relative_to(self.root).as_posix()
+        lock = f'ripgrep_commit = "{self.release}"\nripgrep_rg_path = "{oracle_relative_path}"\n'
         if archive:
             archive_path = self.root / "reference.zip"
             archive_path.write_bytes(b"reference archive fixture")
             digest = hashlib.sha256(archive_path.read_bytes()).hexdigest()
-            lock += f'ripgrep_oracle_archive_path = "{archive_path.as_posix()}"\n'
+            lock += 'ripgrep_oracle_archive_path = "reference.zip"\n'
             lock += f'ripgrep_oracle_archive_sha256 = "{digest}"\n'
         (self.root / "tests/PREREQS.lock").write_text(lock, encoding="utf-8")
         environment = os.environ.copy()
