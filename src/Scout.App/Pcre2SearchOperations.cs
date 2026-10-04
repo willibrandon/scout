@@ -247,7 +247,9 @@ internal static class Pcre2SearchOperations
         }
 
         string fullRoot = Path.GetFullPath(root);
-        foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics, logger))
+        List<DirEntry> entries = SearchWalkPlanning.GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics, logger, out bool walkErrored);
+        errored |= walkErrored;
+        foreach (DirEntry entry in entries)
         {
             byte[] displayPath = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(root, fullRoot, entry, defaultRoot, lowArgs.PathSeparator);
             SearchPcre2DirectoryEntryFile(entry, displayPath, lowArgs, regex, jsonSummary, collectStats, ref stats, output, diagnostics, logger, separators, lineLimit, color, lineNumber, heading, ref wroteHeadingOutput, ref matched, ref errored);
@@ -320,7 +322,7 @@ internal static class Pcre2SearchOperations
 
         try
         {
-            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger).Threads(threadCount).BuildParallel().Run(() => entry =>
+            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger, () => Interlocked.Exchange(ref erroredFlag, 1)).Threads(threadCount).BuildParallel().Run(() => entry =>
             {
                 if (!entry.IsFile)
                 {

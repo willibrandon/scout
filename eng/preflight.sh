@@ -512,6 +512,7 @@ if ARCHIVE_PATH_VALUE="$(read_oracle_value "archive_path" "ripgrep_oracle_archiv
     check_file_hash "pinned ripgrep oracle archive" "$ARCHIVE_PATH" "$ARCHIVE_SHA256"
     HAS_RIPGREP_SOURCE_CHECKOUT=0
 else
+    REFERENCE="$(derive_reference_from_oracle_path "$RG_PATH")"
     ACTUAL_RIPGREP="$(git -C "$REFERENCE" rev-parse "$EXPECTED_RIPGREP^{commit}")"
     expect_equal "ripgrep commit" "$EXPECTED_RIPGREP" "$ACTUAL_RIPGREP"
     HAS_RIPGREP_SOURCE_CHECKOUT=1
