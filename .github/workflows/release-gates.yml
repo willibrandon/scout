@@ -32,6 +32,37 @@ env:
   LINUX_SNAPSHOT_URL: "http://snapshot.debian.org/archive/debian/20260531T000000Z"
 
 jobs:
+  focused-benchmarks:
+    name: interval compilation and traversal benchmarks
+    if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
+    runs-on: macos-26
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.102
+      - name: Restore release reference
+        run: eng/restore-ripgrep-oracle.sh
+      - name: Verify output and measure compilation and traversal
+        env:
+          SCOUT_TEST_RIPGREP_PATH: ${{ github.workspace }}/artifacts/ripgrep-oracle/osx-arm64/ripgrep/target/release-lto/rg
+        run: |
+          mkdir -p artifacts/bench/upstream
+          git rev-parse HEAD > artifacts/bench/upstream/commit.txt
+          dotnet run --project bench/Scout.Benchmarks/Scout.Benchmarks.csproj -c Release -- \
+            --filter '*Upstream*' --job short --exporters json --artifacts artifacts/bench/upstream \
+            | tee artifacts/bench/upstream/run.log
+          python3 eng/verify-upstream-benchmarks.py artifacts/bench/upstream
+      - name: Upload benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: upstream-benchmarks
+          path: artifacts/bench/upstream
+
   library-packages:
     name: package consumers (${{ matrix.rid }})
     if: ${{ inputs.gate == '' || inputs.gate == 'all' }}

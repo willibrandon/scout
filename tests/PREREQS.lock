@@ -62,6 +62,7 @@ pcre2_profile = "release-lto"
 pcre2_features = "pcre2"
 pcre2_path = "artifacts/ripgrep-oracle/osx-arm64/ripgrep/target/pcre2/release-lto/rg"
 pcre2_sha256 = "f840586145d1e870426227b31d4fa8086641c72801d81775058a7e0392c7efc5"
+pcre2_reported_version = "PCRE2 10.45 is available (JIT is available)"
 
 [[ripgrep_oracle]]
 rid = "osx-x64"
@@ -75,6 +76,7 @@ pcre2_profile = "release-lto"
 pcre2_features = "pcre2"
 pcre2_path = "artifacts/ripgrep-oracle/osx-x64/ripgrep/target/pcre2/release-lto/rg"
 pcre2_sha256 = "026944087c35cbd437e6beaf99354b43eaeb0af0183fb5b5cf819b50e3085ec4"
+pcre2_reported_version = "PCRE2 10.45 is available (JIT is available)"
 
 [[ripgrep_oracle]]
 rid = "linux-x64"
@@ -88,6 +90,7 @@ pcre2_profile = "release-lto"
 pcre2_features = "pcre2"
 pcre2_path = "artifacts/ripgrep-oracle/linux-x64/ripgrep/target/pcre2/release-lto/rg"
 pcre2_sha256 = "b95aedd760505771e4b00a4842380d9e1a51a71a7d7be58ba84aa97d6d829c0f"
+pcre2_reported_version = "PCRE2 10.45 is available (JIT is available)"
 
 [[ripgrep_oracle]]
 rid = "linux-arm64"
@@ -101,6 +104,7 @@ pcre2_profile = "release-lto"
 pcre2_features = "pcre2"
 pcre2_path = "artifacts/ripgrep-oracle/linux-arm64/ripgrep/target/pcre2/release-lto/rg"
 pcre2_sha256 = "ba9dbdb86604a81ef1cd1f7ea97088860c8a1279f7436ba09bc45ba3f870a31c"
+pcre2_reported_version = "PCRE2 10.45 is available (JIT is available)"
 
 [[ripgrep_oracle]]
 rid = "win-x64"
@@ -114,6 +118,7 @@ pcre2_profile = "release-lto"
 pcre2_features = "pcre2"
 pcre2_path = "artifacts/ripgrep-oracle/win-x64/ripgrep/target/pcre2/release-lto/rg.exe"
 pcre2_sha256 = "6f1cb44fc9e2bd0c1801f300a24da1748070ada7e12cac55d360d7f4ddff7a1d"
+pcre2_reported_version = "PCRE2 10.45 is available (JIT is available)"
 
 [[ripgrep_oracle]]
 rid = "win-arm64"
@@ -127,6 +132,7 @@ pcre2_profile = "release-lto"
 pcre2_features = "pcre2"
 pcre2_path = "artifacts/ripgrep-oracle/win-arm64/ripgrep/target/pcre2/release-lto/rg.exe"
 pcre2_sha256 = "142f39beae12595f6b9b13d0b0fae08d9f48f52b2e0031c8de60891d9ad53be0"
+pcre2_reported_version = "PCRE2 10.45 is available (JIT is available)"
 
 [[ripgrep_oracle]]
 rid = "win-x64"
@@ -140,6 +146,7 @@ pcre2_profile = "release-lto"
 pcre2_features = "pcre2"
 pcre2_path = "artifacts/ripgrep-oracle/win-x64/ripgrep/target/pcre2/release-lto/rg.exe"
 pcre2_sha256 = "6f1cb44fc9e2bd0c1801f300a24da1748070ada7e12cac55d360d7f4ddff7a1d"
+pcre2_reported_version = "PCRE2 10.45 is available (JIT is available)"
 
 [[ripgrep_oracle]]
 rid = "osx-arm64"
@@ -151,6 +158,7 @@ pcre2_profile = "release-lto"
 pcre2_features = "pcre2"
 pcre2_path = "artifacts/preparation/issue-66/ripgrep/target/pcre2/release-lto/rg"
 pcre2_sha256 = "5783a7e37d69c543be5527eaf72e385f7f79f52b9f7f0f67e1244844c371175b"
+pcre2_reported_version = "PCRE2 10.45 is available (JIT is available)"
 
 [linux_container]
 base_image = "debian:bookworm-slim"
