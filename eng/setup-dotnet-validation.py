@@ -38,7 +38,15 @@ def main() -> None:
                 source.extractall(destination)
         else:
             with tarfile.open(archive) as source:
-                source.extractall(destination, filter="data")
+                if hasattr(tarfile, "data_filter"):
+                    source.extractall(destination, filter="data")
+                else:
+                    # Older supported Python builds lack extraction filters. These archives
+                    # have already passed SHA-512 verification against the recorded source.
+                    for member in source.getmembers():
+                        if not (destination / member.name).resolve().is_relative_to(destination.resolve()):
+                            raise RuntimeError("Archive contains a path outside its destination")
+                    source.extractall(destination)
         if kind == "dotnet_sdk_archive":
             # The SDK's bundled runtime is replaced by the existing validation runtime.
             shutil.rmtree(destination / "host/fxr")

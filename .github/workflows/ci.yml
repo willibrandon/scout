@@ -413,6 +413,8 @@ jobs:
       actions: write
       contents: read
     needs:
+      - library-packages
+      - linux-musl-arm64
       - portable-build-linux
       - linux-arm64-host
       - portable-build-host

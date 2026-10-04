@@ -6,7 +6,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <MSBuildTreatWarningsAsErrors>true</MSBuildTreatWarningsAsErrors>
+    <AnalysisLevel>10.0</AnalysisLevel>
+    <AnalysisMode>AllEnabledByDefault</AnalysisMode>
     <IsAotCompatible>true</IsAotCompatible>
+    <TrimMode>full</TrimMode>
+    <ILLinkTreatWarningsAsErrors>true</ILLinkTreatWarningsAsErrors>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <SuppressTrimAnalysisWarnings>false</SuppressTrimAnalysisWarnings>
     <InvariantGlobalization>true</InvariantGlobalization>
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
     <NuGetAudit>true</NuGetAudit>

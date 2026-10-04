@@ -3,7 +3,7 @@ set -eu
 
 [ -e /lib/ld-musl-aarch64.so.1 ] || { printf 'This gate requires Alpine ARM64.\n' >&2; exit 1; }
 apk add --no-cache bash binutils brotli build-base bzip2 clang curl fish git gzip \
-    icu-libs lz4 ncompress openssl-dev python3 tar unzip xz zlib-dev zsh zstd
+    icu-libs lz4 openssl-dev python3 tar unzip xz zlib-dev zsh zstd
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 mkdir -p "$ROOT/artifacts/prereqs/linux-musl-arm64"
