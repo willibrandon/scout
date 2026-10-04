@@ -1,0 +1,5 @@
+name: Scout CodeQL configuration
+
+# Run the full suite without path or query exclusions. Every finding fails the workflow.
+queries:
+  - uses: security-and-quality

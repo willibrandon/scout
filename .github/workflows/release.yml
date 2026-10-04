@@ -34,6 +34,10 @@ jobs:
           - { rid: win-arm64, runner: windows-11-arm, vsarch: arm64 }
     steps:
       - uses: actions/checkout@v6
+      - name: Use the Windows build drive for NuGet caches
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: eng/setup-windows-nuget-cache.ps1
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: |
@@ -331,6 +335,10 @@ jobs:
       SCOUT_RELEASE_VERSION: ${{ needs.validate.outputs.version }}
     steps:
       - uses: actions/checkout@v6
+      - name: Use the Windows build drive for NuGet caches
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: eng/setup-windows-nuget-cache.ps1
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.102
