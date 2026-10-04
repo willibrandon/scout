@@ -18,6 +18,8 @@ $SUDO apt-get install -y --no-install-recommends \
     ca-certificates \
     clang \
     curl \
+    fish \
+    zsh \
     git \
     gzip \
     lz4 \

@@ -980,6 +980,10 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
             _index++;
         }
 
+        // The comparison operator and the outer escape each negate the query.
+        // In particular, \P{gc!=Separator} is a double negation.
+        name = RegexUnicodePropertyNames.NormalizeComparison(name, ref negated);
+
         if (RegexUnicodePropertyNames.NameEquals(name, "any"))
         {
             if (!negated)

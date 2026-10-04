@@ -7,7 +7,7 @@ projects.
 
 ```text
 name = "Scout.SourceGen"
-commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"
+commit = "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f"
 role = "source generators and repository policy analyzers"
 
 name = "Microsoft.CodeAnalysis.CSharp"

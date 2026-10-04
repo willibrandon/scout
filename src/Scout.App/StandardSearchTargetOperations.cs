@@ -1481,7 +1481,7 @@ internal static class StandardSearchTargetOperations
         MemoryMappedSearchFile? mappedSearchFile = null;
         try
         {
-            if (!MemoryMappedSearchFile.TryOpenFile(path, out mappedSearchFile))
+            if (!MemoryMappedSearchFile.TryOpenFile(path, out mappedSearchFile, logger))
             {
                 return false;
             }

@@ -9,6 +9,47 @@ namespace Scout;
 public sealed unsafe partial class RawUnixDirectoryTests
 {
     /// <summary>
+    /// Verifies a terminal native read error retains entries read before the failure.
+    /// </summary>
+    [Fact]
+    public void BufferedEnumerationRetainsEntriesBeforeReadFailure()
+    {
+        byte[] record = new byte[64];
+        int nameOffset = OperatingSystem.IsMacOS() ? 21 : 19;
+        BitConverter.TryWriteBytes(record.AsSpan(16), (ushort)record.Length);
+        if (OperatingSystem.IsMacOS())
+        {
+            BitConverter.TryWriteBytes(record.AsSpan(18), (ushort)5);
+            record[20] = (byte)RawUnixDirectoryEntryType.RegularFile;
+        }
+        else
+        {
+            record[18] = (byte)RawUnixDirectoryEntryType.RegularFile;
+        }
+
+        "entry"u8.CopyTo(record.AsSpan(nameOffset));
+        fixed (byte* pointer = record)
+        {
+            nint address = (nint)pointer;
+            int reads = 0;
+            (RawUnixDirectoryEntry[] entries, IOException? error) = RawUnixDirectory.EnumerateOpenDirectory(
+                0,
+                "/root"u8,
+                _ =>
+                {
+                    Marshal.SetLastPInvokeError(reads++ == 0 ? 0 : 5);
+                    return reads == 1 ? address : 0;
+                });
+            RawUnixDirectoryEntry entry = Assert.Single(entries);
+            Assert.Equal("entry"u8.ToArray(), entry.Name.ToArray());
+            Assert.Equal("/root/entry"u8.ToArray(), entry.FullPath.ToArray());
+            Assert.NotNull(error);
+            System.ComponentModel.Win32Exception cause = Assert.IsType<System.ComponentModel.Win32Exception>(error.InnerException);
+            Assert.Equal(5, cause.NativeErrorCode);
+        }
+    }
+
+    /// <summary>
     /// Verifies directory entries preserve raw name and full path bytes.
     /// </summary>
     [Fact]

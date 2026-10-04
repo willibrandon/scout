@@ -70,12 +70,7 @@ public sealed class FileWalker
 
     private WalkBuilder CreateBuilder(List<string> roots)
     {
-        WalkBuilder builder = new(roots[0]);
-        for (int index = 1; index < roots.Count; index++)
-        {
-            builder.Add(roots[index]);
-        }
-
+        var builder = WalkBuilder.FromPaths(roots);
         ApplyOptions(builder);
         return builder;
     }
@@ -99,7 +94,8 @@ public sealed class FileWalker
             .Overrides(options.Overrides)
             .FileTypes(options.FileTypes)
             .Threads(options.Threads)
-            .Diagnostics(options.Diagnostics);
+            .Diagnostics(options.Diagnostics)
+            .ErrorHandler(options.ErrorHandler);
 
         switch (options.Sort)
         {

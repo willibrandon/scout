@@ -4,8 +4,8 @@ This project ports ripgrep's `grep-matcher` workspace crate.
 
 ```text
 name = "grep-matcher"
-version = "0.1.8"
-commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"
+version = "0.1.9"
+commit = "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f"
 path = "crates/matcher"
 ```
 

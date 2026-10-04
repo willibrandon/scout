@@ -34,15 +34,15 @@ Scout currently runs in a **strict byte-identical-to-ripgrep regime** (`docs/PAR
 
 ### 1.1 Version — must be release-grade .NET version identity (review fix H3)
 
-Today the version is a hardcoded literal `"ripgrep 15.1.0 (rev 4857d6fa67)"` in **two** places — `src/Scout.App/VersionOutput.cs:9,14` (managed) and `native/entry/scout_main.c:27` (native launcher) — and `Directory.Build.props` sets **only** `AssemblyName` (`:49`); there is **no** `<Version>`, `<FileVersion>`, `<AssemblyInformationalVersion>`, `<Product>`, `<Company>`, `<RepositoryUrl>`, or package manifest.
+Today the version is a hardcoded literal `"ripgrep 15.2.0 (rev e89fff89ac)"` in **two** places — `src/Scout.App/VersionOutput.cs:9,14` (managed) and `native/entry/scout_main.c:27` (native launcher) — and `Directory.Build.props` sets **only** `AssemblyName` (`:49`); there is **no** `<Version>`, `<FileVersion>`, `<AssemblyInformationalVersion>`, `<Product>`, `<Company>`, `<RepositoryUrl>`, or package manifest.
 
 **A single `SCOUT_VERSION` constant is insufficient.** .NET release identity requires all of these to **agree**, centralized in `Directory.Build.props` and flowed to the native launcher via a `-D` compile define:
 
 | Property | Value (example) |
 |---|---|
-| `Version` / `VersionPrefix` | `0.6.1` (Scout's own SemVer, decoupled from ripgrep 15.1.0) |
+| `Version` / `VersionPrefix` | `0.6.1` (Scout's own SemVer, decoupled from ripgrep 15.2.0) |
 | `AssemblyVersion` / `FileVersion` | derived from `Version` |
-| `AssemblyInformationalVersion` | `0.6.1+ripgrep.15.1.0.4857d6fa67` (SemVer build metadata carries the upstream coordinate) |
+| `AssemblyInformationalVersion` | `0.6.1+ripgrep.15.2.0.e89fff89ac` (SemVer build metadata carries the upstream coordinate) |
 | `Product` | `Scout` |
 | `Company` / `Authors` | project owner |
 | `Description` | `Scout — a feature-complete port of ripgrep to .NET Native AOT` |
@@ -51,7 +51,7 @@ Today the version is a hardcoded literal `"ripgrep 15.1.0 (rev 4857d6fa67)"` in 
 
 **`--version` banner** (managed `VersionOutput.cs:9,14` + native `scout_main.c:27`, kept in lockstep) — derive from the informational version:
 ```
-scout 0.6.1 (ripgrep 15.1.0 compatible, rev 4857d6fa67)
+scout 0.6.1 (ripgrep 15.2.0 compatible, rev e89fff89ac)
 ```
 The `simd(compile):…` / `features:…` body (`VersionOutput.cs:21-52`) is format scaffolding `rg` also emits — keep the **format**; only the leading identity token changes. The upstream `rev` is sourced from the pin table (provenance), not Scout's own version.
 
@@ -137,15 +137,15 @@ Even though current `--help` is served from blobs (so these aren't rendered toda
 
 ## 4. PRESERVE — porting machinery (TIER-3) + tripwires
 
-Anchor: pinned commit `4857d6fa67db69a95cd4b6f2adda5d807d4d0119`. Keep: `upstream/` (Cargo.lock, `ripgrep-4857d6fa/tests/**`, `regex-syntax-0.8.8/unicode_tables/**`, `regex-1.12.2/testdata/**`, `encoding_rs-0.8.35/**`, `ucd/UCD-16.0.0.zip`, `UNICODE-VERSION`); 20 `src/*/UPSTREAM.md`; the pin (`PinnedConfigurationTests.cs:16`, `UPSTREAM-SYNC.md`, `PREREQS.lock`); oracle harness (`PinnedRipgrepOracle.cs`, `DifferentialRunner.cs`, `eng/setup|capture|restore-ripgrep-oracle.*`, `oracle-capture.yml`); ported tests (`PortedRgTests.catalog`, `PortedRgTestSourceGenerator.cs`, `RegexCorpusLoader.cs:8`); preflight HEAD-equals-pin (`eng/preflight.sh:493-505`).
+Anchor: pinned commit `e89fff89ac9af12e8d4ce9d5fd07beb408ca730f`. Keep: `upstream/` (Cargo.lock, `ripgrep-e89fff89/tests/**`, `regex-syntax-0.8.11/unicode_tables/**`, `regex-1.13.0/testdata/**`, `encoding_rs-0.8.35/**`, `ucd/UCD-16.0.0.zip`, `UNICODE-VERSION`); 20 `src/*/UPSTREAM.md`; the pin (`PinnedConfigurationTests.cs:16`, `UPSTREAM-SYNC.md`, `PREREQS.lock`); oracle harness (`PinnedRipgrepOracle.cs`, `DifferentialRunner.cs`, `eng/setup|capture|restore-ripgrep-oracle.*`, `oracle-capture.yml`); ported tests (`PortedRgTests.catalog`, `PortedRgTestSourceGenerator.cs`, `RegexCorpusLoader.cs:8`); preflight HEAD-equals-pin (`eng/preflight.sh:493-505`).
 
 **Tripwires (naive find/replace breaks porting):**
 1. Oracle binary name is `rg` (`capture-ripgrep-oracle.sh` builds `--bin rg`; restore and tests keep `*/target/*/rg` lookups).
 2. `crates/.../*.rs` in `--debug` are a **live parity contract** today (byte-compared), not comments — they move only via the §1.4 rewrite that also moves gate #2.
 3. Log targets `rg::`/`grep_regex::`/`grep_searcher::` — same as #2.
 4. `RIPGREP_CONFIG_PATH` is the parity contract; `SCOUT_CONFIG_PATH` is currently **forbidden** by `PinnedConfigurationTests.cs:763` + `DESIGN.md:266` (D1 updates both).
-5. `upstream/regex-1.12.2/testdata` path string (`regex-1.12.2` = upstream coordinate).
-6. Vendored dir names `ripgrep-4857d6fa/`, `regex-syntax-0.8.8/`, etc. (version/commit coordinates).
+5. `upstream/regex-1.13.0/testdata` path string (`regex-1.13.0` = upstream coordinate).
+6. Vendored dir names `ripgrep-e89fff89/`, `regex-syntax-0.8.11/`, etc. (version/commit coordinates).
 7. `SCOUT_RIPGREP_SOURCE_ROOT`/`SCOUT_RIPGREP_REFERENCE` keep the `RIPGREP` token (they locate the reference checkout/oracle). The **debug-path** use goes away (§1.4); the **oracle/reference** use stays.
 8. `UPSTREAM.md` crate names + checksums asserted verbatim (`name = "ripgrep"` stays).
 9. `THIRD-PARTY-NOTICES.md` / `UPSTREAM-SYNC.md` inventory rows assert "ripgrep" as provenance.
@@ -212,7 +212,7 @@ This change **intentionally breaks the old byte-parity assumptions** while tests
 ```sh
 S=artifacts/bin/osx-arm64/scout            # HEAD-accurate build via native/build-app-unix.sh osx-arm64
 # Version (identity banner; rev present because Scout matches the pinned post-tag commit):
-"$S" -V                                     # → ripgrep 15.1.0 (rev 4857d6fa67)
+"$S" -V                                     # → ripgrep 15.2.0 (rev e89fff89ac)
 # Error program prefix:
 "$S" --bogus 2>&1                           # → rg: unrecognized flag --bogus
 # Debug source-locations (the .rs leak) + leaked absolute path:

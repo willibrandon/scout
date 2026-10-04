@@ -143,7 +143,7 @@ configure_native_toolchain() {
             PATH="$NATIVE_TOOLCHAIN_BIN:$PATH"
             export CC LD AR RANLIB STRIP NM SDKROOT MACOSX_DEPLOYMENT_TARGET PATH
             ;;
-        linux-x64|linux-arm64)
+        linux-x64|linux-arm64|linux-musl-arm64)
             NATIVE_XCODE_VERSION=""
             NATIVE_XCODE_BUILD=""
             NATIVE_MACOS_SDK_VERSION=""

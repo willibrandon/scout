@@ -38,6 +38,18 @@ internal sealed class DifferentialCase
 
     public Action<RgTestDirectory>? BeforeRun { get; }
 
+    public Func<RgTestDirectory, IReadOnlyDictionary<string, string?>>? EnvironmentFactory { get; private init; }
+
+    public DifferentialCase WithEnvironment(Func<RgTestDirectory, IReadOnlyDictionary<string, string?>> factory)
+    {
+        ArgumentNullException.ThrowIfNull(factory);
+        return new DifferentialCase(requestedComparisonMode, RelativeWorkingDirectory, StandardInput,
+            RelativeConfigPath, BeforeRun, argumentFactory, arguments ?? [])
+        {
+            EnvironmentFactory = factory,
+        };
+    }
+
     public DifferentialComparisonMode ComparisonMode { get; }
 
     public byte[]? StandardInput { get; }

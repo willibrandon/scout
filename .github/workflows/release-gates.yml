@@ -32,6 +32,78 @@ env:
   LINUX_SNAPSHOT_URL: "http://snapshot.debian.org/archive/debian/20260531T000000Z"
 
 jobs:
+  library-packages:
+    name: package consumers (${{ matrix.rid }})
+    if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: linux-x64, runner: ubuntu-24.04 }
+          - { rid: linux-arm64, runner: ubuntu-24.04-arm }
+          - { rid: osx-x64, runner: macos-26-intel }
+          - { rid: osx-arm64, runner: macos-26 }
+          - { rid: win-x64, runner: windows-2025-vs2026, vsarch: x64 }
+          - { rid: win-arm64, runner: windows-11-arm, vsarch: arm64 }
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.102
+      - name: Install Linux AOT prerequisites
+        if: runner.os == 'Linux'
+        run: eng/install-linux-host-prereqs.sh
+      - name: Execute JIT, trimmed, and AOT NuGet consumers
+        if: runner.os != 'Windows'
+        run: python3 eng/verify-library-packages.py --rid ${{ matrix.rid }}
+      - name: Execute Windows JIT, trimmed, and AOT NuGet consumers
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=* delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath`) do set "VSINSTALL=%%i"
+          if not defined VSINSTALL (
+            echo Visual Studio installation not found.
+            exit /b 1
+          )
+          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=${{ matrix.vsarch }}
+          python eng/verify-library-packages.py --rid ${{ matrix.rid }}
+      - name: Upload package consumer receipts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-consumers-${{ matrix.rid }}
+          path: artifacts/package-consumers/${{ matrix.rid }}
+
+  linux-musl-arm64:
+    name: Alpine ARM64 native and package gates
+    if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
+      - name: Build, execute, and package on musl ARM64
+        run: |
+          docker run --rm -v "$PWD:/scout" -w /scout \
+            -e GITHUB_ACTIONS=true \
+            mcr.microsoft.com/dotnet/sdk:10.0.102-alpine3.22-arm64v8@sha256:3686e722179cbe27f0a4ade4e8677aaf4c2f64a103dc160d5ff4592ce0afed02 \
+            sh -c 'apk add --no-cache bash && bash eng/run-musl-gates.sh'
+      - name: Upload musl validation receipts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: musl-arm64-gates
+          path: |
+            artifacts/prereqs/linux-musl-arm64
+            artifacts/package-consumers/linux-musl-arm64/results.json
+
   full-tests-linux:
     name: full pinned Linux tests
     if: ${{ inputs.gate == '' || inputs.gate == 'all' }}
@@ -65,6 +137,8 @@ jobs:
             ca-certificates \
             clang \
             curl \
+            fish \
+            zsh \
             git \
             gzip \
             libc6="$LINUX_LIBC_VERSION" \
@@ -90,7 +164,12 @@ jobs:
         run: eng/verify-linux-prereqs.sh ${{ matrix.rid }}
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: 10.0.102
+          dotnet-version: |
+            9.0.x
+            10.0.102
+      - name: Set up verified validation SDK and runtimes
+        shell: bash
+        run: python3 eng/setup-dotnet-validation.py --rid ${{ matrix.rid }}
       - name: Restore pinned ripgrep oracle archive
         env:
           SCOUT_HOST_RID: ${{ matrix.rid }}
@@ -110,6 +189,15 @@ jobs:
         run: dotnet test Scout.slnx --no-restore
       - name: Native pinned differentials
         run: native/build-app-unix.sh ${{ matrix.rid }} --with-differentials
+      - name: Run complete native CLI differential suite
+        env:
+          SCOUT_TEST_EXECUTABLE_PATH: ${{ github.workspace }}/artifacts/bin/${{ matrix.rid }}/scout
+        run: dotnet test tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore
+      - name: Verify Unix shell completions
+        shell: bash
+        run: |
+          if [ "$(uname -s)" = Darwin ]; then brew list fish >/dev/null 2>&1 || brew install fish; fi
+          python3 eng/verify-completions.py --scout artifacts/bin/${{ matrix.rid }}/scout --shell bash --shell zsh --shell fish
 
   full-tests-macos:
     name: full pinned macOS tests
@@ -130,7 +218,12 @@ jobs:
           ref: ${{ inputs.checkout_ref || github.sha }}
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: 10.0.102
+          dotnet-version: |
+            9.0.x
+            10.0.102
+      - name: Set up verified validation SDK and runtimes
+        shell: bash
+        run: python3 eng/setup-dotnet-validation.py --rid ${{ matrix.rid }}
       - name: Restore pinned ripgrep oracle archive
         env:
           SCOUT_HOST_RID: ${{ matrix.rid }}
@@ -150,6 +243,15 @@ jobs:
         run: dotnet test Scout.slnx --no-restore
       - name: Native pinned differentials
         run: native/build-app-unix.sh ${{ matrix.rid }} --with-differentials
+      - name: Run complete native CLI differential suite
+        env:
+          SCOUT_TEST_EXECUTABLE_PATH: ${{ github.workspace }}/artifacts/bin/${{ matrix.rid }}/scout
+        run: dotnet test tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore
+      - name: Verify Unix shell completions
+        shell: bash
+        run: |
+          if [ "$(uname -s)" = Darwin ]; then brew list fish >/dev/null 2>&1 || brew install fish; fi
+          python3 eng/verify-completions.py --scout artifacts/bin/${{ matrix.rid }}/scout --shell bash --shell zsh --shell fish
 
   full-tests-windows:
     name: full pinned Windows tests
@@ -173,7 +275,12 @@ jobs:
         run: eng/install-windows-host-prereqs.ps1
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: 10.0.102
+          dotnet-version: |
+            9.0.x
+            10.0.102
+      - name: Set up verified validation SDK and runtimes
+        shell: bash
+        run: python eng/setup-dotnet-validation.py --rid ${{ matrix.rid }}
       - name: Restore pinned ripgrep oracle archive
         shell: pwsh
         env:
@@ -244,6 +351,8 @@ jobs:
             ca-certificates \
             clang \
             curl \
+            fish \
+            zsh \
             git \
             gzip \
             libc6="$LINUX_LIBC_VERSION" \
@@ -268,11 +377,18 @@ jobs:
         run: eng/verify-linux-prereqs.sh linux-x64
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: 10.0.102
+          dotnet-version: |
+            9.0.x
+            10.0.102
       - name: Native entry spike
         run: spike/build-unix.sh linux-x64
       - name: Native executable smoke
         run: native/build-app-unix.sh linux-x64 --smoke-only
+      - name: Verify Unix shell completions
+        shell: bash
+        run: |
+          if [ "$(uname -s)" = Darwin ]; then brew list fish >/dev/null 2>&1 || brew install fish; fi
+          python3 eng/verify-completions.py --scout artifacts/bin/linux-x64/scout --shell bash --shell zsh --shell fish
 
   native-linux-arm64:
     name: release native Linux gate (linux-arm64)
@@ -288,11 +404,18 @@ jobs:
         run: eng/install-linux-host-prereqs.sh
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: 10.0.102
+          dotnet-version: |
+            9.0.x
+            10.0.102
       - name: Native entry spike
         run: spike/build-unix.sh linux-arm64
       - name: Native executable smoke
         run: native/build-app-unix.sh linux-arm64 --smoke-only
+      - name: Verify Unix shell completions
+        shell: bash
+        run: |
+          if [ "$(uname -s)" = Darwin ]; then brew list fish >/dev/null 2>&1 || brew install fish; fi
+          python3 eng/verify-completions.py --scout artifacts/bin/linux-arm64/scout --shell bash --shell zsh --shell fish
 
   native-macos:
     name: release native macOS gate
@@ -313,11 +436,18 @@ jobs:
           ref: ${{ inputs.checkout_ref || github.sha }}
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: 10.0.102
+          dotnet-version: |
+            9.0.x
+            10.0.102
       - name: Native entry spike
         run: spike/build-unix.sh ${{ matrix.rid }}
       - name: Native executable smoke
         run: native/build-app-unix.sh ${{ matrix.rid }} --smoke-only
+      - name: Verify Unix shell completions
+        shell: bash
+        run: |
+          if [ "$(uname -s)" = Darwin ]; then brew list fish >/dev/null 2>&1 || brew install fish; fi
+          python3 eng/verify-completions.py --scout artifacts/bin/${{ matrix.rid }}/scout --shell bash --shell zsh --shell fish
 
   native-windows:
     name: release native Windows gate
@@ -343,7 +473,9 @@ jobs:
         run: eng/install-windows-host-prereqs.ps1
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: 10.0.102
+          dotnet-version: |
+            9.0.x
+            10.0.102
       - name: Restore pinned ripgrep oracle archive
         shell: pwsh
         env:
@@ -361,3 +493,8 @@ jobs:
           call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=${{ matrix.vsarch }}
           pwsh -NoProfile -ExecutionPolicy Bypass -File spike/build-windows.ps1 ${{ matrix.rid }}
           pwsh -NoProfile -ExecutionPolicy Bypass -File native/build-app-windows.ps1 ${{ matrix.rid }} -DifferentialMode WithDifferentials
+          python eng/verify-completions.py --scout artifacts/bin/${{ matrix.rid }}/scout.exe --shell powershell
+      - name: Run complete Windows native CLI differential suite
+        env:
+          SCOUT_TEST_EXECUTABLE_PATH: ${{ github.workspace }}/artifacts/bin/${{ matrix.rid }}/scout.exe
+        run: dotnet test tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore

@@ -5,11 +5,53 @@ namespace Scout;
 
 internal static class PortedRgTests
 {
-    private static readonly string UpstreamDataDirectory = Path.Combine(FindRepositoryRoot(), "upstream", "ripgrep-4857d6fa", "tests", "data");
+    private static readonly string UpstreamDataDirectory = Path.Combine(FindRepositoryRoot(), "upstream", "ripgrep-e89fff89", "tests", "data");
     private static readonly string UpstreamSherlockNulPath = Path.Combine(UpstreamDataDirectory, "sherlock-nul.txt");
 
     private static readonly PortedRgTestCase[] Cases =
         [
+            new(
+                "tests/misc.rs",
+                "ignore_git_multi_root_order",
+                dir =>
+                {
+                    dir.CreateDirectory(".git");
+                    dir.CreateFile(".gitignore", "src/invalid\n");
+                    dir.CreateFile("src/invalid", "this\n");
+                    dir.CreateFile("src/valid", "this\n");
+                    dir.CreateFile("tests/valid", "this\n");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--files-with-matches", "this", "src", "tests"),
+                DifferentialCase.Exact("--path-separator", "/", "--files-with-matches", "this", "tests", "src"),
+                DifferentialCase.Exact("-j1", "--path-separator", "/", "--files-with-matches", "this", "src", "tests")),
+            new(
+                "tests/misc.rs",
+                "ignore_rgignore_multi_root_order",
+                dir =>
+                {
+                    dir.CreateFile(".rgignore", "beta/**/*.svg\n");
+                    dir.CreateFile("alpha/a.txt", "AWS\n");
+                    dir.CreateFile("beta/x.svg", "AWS\n");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--files-with-matches", "AWS", "alpha", "beta"),
+                DifferentialCase.Exact("--path-separator", "/", "--files-with-matches", "AWS", "beta", "alpha"),
+                DifferentialCase.Exact("-j1", "--path-separator", "/", "--files-with-matches", "AWS", "alpha", "beta")),
+            new(
+                "tests/regression.rs",
+                "r3275_git_global_config_env",
+                dir =>
+                {
+                    dir.CreateFile(".git", string.Empty);
+                    dir.CreateFile("foo/foo1", string.Empty);
+                    dir.CreateFile("foo/foo2", string.Empty);
+                    dir.CreateFile("global-excludes-nonstandard", "foo2\n");
+                    dir.CreateFile("global-config-nonstandard", "[core]\n\texcludesFile = global-excludes-nonstandard\n");
+                },
+                DifferentialCase.Exact("--path-separator", "/", "--files", "foo")
+                    .WithEnvironment(dir => new Dictionary<string, string?>(StringComparer.Ordinal)
+                    {
+                        ["GIT_CONFIG_GLOBAL"] = Path.Combine(dir.RootPath, "global-config-nonstandard"),
+                    })),
             new(
                 "tests/regression.rs",
                 "r16",

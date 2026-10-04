@@ -56,10 +56,22 @@ public static class SearchFileReader
         bool allowMemoryMap,
         long? knownLength)
     {
+        return Read(path, encodingKind, mmapMode, allowMemoryMap, knownLength, default);
+    }
+
+    internal static SearchFileReadResult Read(
+        string path,
+        SearchEncodingKind encodingKind,
+        SearchMmapMode mmapMode,
+        bool allowMemoryMap,
+        long? knownLength,
+        DiagnosticLogger logger,
+        Func<nint, nuint, int>? advise = null)
+    {
         ArgumentException.ThrowIfNullOrEmpty(path);
 
         if (ShouldTryMemoryMap(mmapMode, allowMemoryMap) &&
-            TryReadMemoryMapped(path, encodingKind, out byte[] mappedBytes))
+            TryReadMemoryMapped(path, encodingKind, logger, advise, out byte[] mappedBytes))
         {
             return new SearchFileReadResult(mappedBytes, SearchFileReadKind.MemoryMapped);
         }
@@ -131,7 +143,8 @@ public static class SearchFileReader
             FileOptions.SequentialScan);
     }
 
-    private static bool TryReadMemoryMapped(string path, SearchEncodingKind encodingKind, out byte[] bytes)
+    private static bool TryReadMemoryMapped(string path, SearchEncodingKind encodingKind, DiagnosticLogger logger,
+        Func<nint, nuint, int>? advise, out byte[] bytes)
     {
         bytes = [];
         try
@@ -147,7 +160,7 @@ public static class SearchFileReader
                 throw new IOException("file is too large to search in memory");
             }
 
-            bytes = ReadMemoryMapped(path, length, encodingKind);
+            bytes = ReadMemoryMapped(path, length, encodingKind, logger, advise);
             return true;
         }
         catch (ArgumentException)
@@ -172,7 +185,8 @@ public static class SearchFileReader
         }
     }
 
-    private static unsafe byte[] ReadMemoryMapped(string path, long length, SearchEncodingKind encodingKind)
+    private static unsafe byte[] ReadMemoryMapped(string path, long length, SearchEncodingKind encodingKind, DiagnosticLogger logger,
+        Func<nint, nuint, int>? advise)
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         using var mappedFile = MemoryMappedFile.CreateFromFile(
@@ -191,6 +205,12 @@ public static class SearchFileReader
         handle.AcquirePointer(ref pointer);
         try
         {
+            if (!NativeMemoryAdvice.TrySequential(pointer, checked((nuint)handle.ByteLength), out int error, advise))
+            {
+                logger.Debug("scout::searcher", "src/Scout.Searching/SearchFileReader.cs",
+                    $"{path}: madvise failed: {new System.ComponentModel.Win32Exception(error).Message} (os error {error})");
+            }
+
             ReadOnlySpan<byte> mappedBytes = new(pointer + accessor.PointerOffset, checked((int)length));
             return SearchEncoding.Decode(mappedBytes, encodingKind);
         }

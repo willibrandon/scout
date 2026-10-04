@@ -168,6 +168,11 @@ internal static class PinnedRipgrepOracle
 
         if (OperatingSystem.IsLinux())
         {
+            if (architecture == "arm64" && File.Exists("/lib/ld-musl-aarch64.so.1"))
+            {
+                return "linux-musl-arm64";
+            }
+
             return "linux-" + architecture;
         }
 

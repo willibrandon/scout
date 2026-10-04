@@ -29,6 +29,8 @@ public sealed class Walk : IEnumerable<DirEntry>
     private readonly IgnoreRuleSet explicitIgnoreRules;
     private readonly string[] customIgnoreFileNames;
     private readonly DiagnosticLogger logger;
+    private readonly Func<WalkException, WalkState>? errorHandler;
+    private readonly Func<DirEntry, WalkDirectoryReadResult>? directoryReader;
 
     internal Walk(
         string[] paths,
@@ -50,7 +52,9 @@ public sealed class Walk : IEnumerable<DirEntry>
         FileTypeMatcher fileTypes,
         IgnoreRuleSet explicitIgnoreRules,
         string[] customIgnoreFileNames,
-        DiagnosticLogger logger)
+        DiagnosticLogger logger,
+        Func<WalkException, WalkState>? errorHandler,
+        Func<DirEntry, WalkDirectoryReadResult>? directoryReader)
     {
         this.paths = paths;
         this.minDepth = minDepth;
@@ -72,13 +76,30 @@ public sealed class Walk : IEnumerable<DirEntry>
         this.explicitIgnoreRules = explicitIgnoreRules;
         this.customIgnoreFileNames = customIgnoreFileNames;
         this.logger = logger;
+        this.errorHandler = errorHandler;
+        this.directoryReader = directoryReader;
+    }
+
+    /// <summary>
+    /// Creates a walk from a sequence of roots. Empty sequences yield no entries.
+    /// </summary>
+    /// <param name="paths">The root paths, copied exactly once.</param>
+    /// <returns>The configured walk.</returns>
+    public static Walk FromPaths(IEnumerable<string> paths)
+    {
+        return WalkBuilder.FromPaths(paths).Build();
     }
 
     /// <inheritdoc />
     public IEnumerator<DirEntry> GetEnumerator()
     {
+        WalkRunState runState = CreateRunState();
         foreach (WalkWorkItem item in CreateInitialWorkItems())
         {
+            if (runState.IsQuitRequested)
+            {
+                yield break;
+            }
             if (item.Path.TextPath == "-")
             {
                 yield return DirEntry.Stdin();
@@ -91,7 +112,8 @@ public sealed class Walk : IEnumerable<DirEntry>
                 item.Ancestors,
                 item.IgnoreStack,
                 item.RootDevice,
-                item.IsRoot))
+                item.IsRoot,
+                runState))
             {
                 yield return entry;
             }
@@ -110,14 +132,20 @@ public sealed class Walk : IEnumerable<DirEntry>
         HashSet<FileIdentity> ancestors,
         IgnoreStack ignoreStack,
         FileSystemDevice rootDevice,
-        bool isRoot)
+        bool isRoot,
+        WalkRunState runState)
     {
-        if (!TryEvaluateEntry(path, depth, ancestors, ignoreStack, rootDevice, isRoot, out WalkEntryState state))
+        if (runState.IsQuitRequested || !TryEvaluateEntry(path, depth, ancestors, ignoreStack, rootDevice, isRoot, runState, out WalkEntryState state))
         {
             yield break;
         }
 
         DirEntry entry = state.Entry;
+        if (runState.IsQuitRequested)
+        {
+            yield break;
+        }
+
         if (state.ShouldYield)
         {
             yield return entry;
@@ -131,15 +159,22 @@ public sealed class Walk : IEnumerable<DirEntry>
         bool added = followLinks && !entry.Identity.IsEmpty && ancestors.Add(entry.Identity);
         try
         {
-            WalkPath[] children = EnumerateChildren(entry);
+            WalkDirectoryReadResult result = ReadChildren(entry);
+            WalkPath[] children = result.Entries;
             IgnoreStack childIgnoreStack = CreateChildIgnoreStack(entry, state.IgnoreStack, children);
             foreach (WalkPath childPath in children)
             {
-                foreach (DirEntry childEntry in Enumerate(childPath, depth + 1, ancestors, childIgnoreStack, rootDevice, isRoot: false))
+                if (runState.IsQuitRequested)
+                {
+                    yield break;
+                }
+                foreach (DirEntry childEntry in Enumerate(childPath, depth + 1, ancestors, childIgnoreStack, rootDevice, isRoot: false, runState))
                 {
                     yield return childEntry;
                 }
             }
+
+            runState.ReportErrors(result.Errors);
         }
         finally
         {
@@ -189,30 +224,17 @@ public sealed class Walk : IEnumerable<DirEntry>
         IgnoreStack ignoreStack,
         FileSystemDevice rootDevice,
         bool isRoot,
+        WalkRunState runState,
         out WalkEntryState state)
     {
         DirEntry entry;
         try
         {
-            entry = CreateEntry(path, depth);
+            entry = CreateEntry(path, depth, runState);
         }
-        catch (FileNotFoundException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            state = default;
-            return false;
-        }
-        catch (DirectoryNotFoundException)
-        {
-            state = default;
-            return false;
-        }
-        catch (IOException)
-        {
-            state = default;
-            return false;
-        }
-        catch (UnauthorizedAccessException)
-        {
+            runState.ReportError(CreateError(path, depth, exception));
             state = default;
             return false;
         }
@@ -281,15 +303,17 @@ public sealed class Walk : IEnumerable<DirEntry>
     /// <param name="directory">The directory being descended into.</param>
     /// <param name="ignoreStack">The ignore stack inherited by the directory.</param>
     /// <param name="children">The directory's already-enumerated children.</param>
+    /// <param name="entriesKnown">Whether directory enumeration supplied the complete entry inventory.</param>
     /// <returns>The ignore stack to use when evaluating <paramref name="children" />.</returns>
     internal IgnoreStack CreateChildIgnoreStack(
         DirEntry directory,
         IgnoreStack ignoreStack,
-        ReadOnlySpan<WalkPath> children)
+        ReadOnlySpan<WalkPath> children,
+        bool entriesKnown = true)
     {
         return directory.IsRawUnixPath
             ? ignoreStack
-            : ignoreStack.AddDirectory(
+            : entriesKnown ? ignoreStack.AddDirectory(
                 directory.FullPath,
                 children,
                 dotIgnore,
@@ -298,7 +322,9 @@ public sealed class Walk : IEnumerable<DirEntry>
                 requireGit,
                 ignoreCaseInsensitive,
                 customIgnoreFileNames,
-                logger);
+                logger) : ignoreStack.AddDirectory(
+                    directory.FullPath, dotIgnore, gitIgnore, gitExclude, requireGit,
+                    ignoreCaseInsensitive, customIgnoreFileNames, logger);
     }
 
     private bool ShouldYield(DirEntry entry, bool isRoot)
@@ -366,11 +392,11 @@ public sealed class Walk : IEnumerable<DirEntry>
         return rootDevice.Equals(device);
     }
 
-    private DirEntry CreateEntry(WalkPath path, int depth)
+    private DirEntry CreateEntry(WalkPath path, int depth, WalkRunState runState)
     {
         if (!followLinks && path.HasUsableUnixFileType)
         {
-            return CreateEntryFromUnixDirectoryType(path, depth);
+            return CreateEntryFromUnixDirectoryType(path, depth, runState);
         }
 
         return path.IsRawUnixPath
@@ -378,7 +404,7 @@ public sealed class Walk : IEnumerable<DirEntry>
             : CreateTextEntry(path.TextPath, depth);
     }
 
-    private static DirEntry CreateEntryFromUnixDirectoryType(WalkPath path, int depth)
+    private static DirEntry CreateEntryFromUnixDirectoryType(WalkPath path, int depth, WalkRunState runState)
     {
         bool isDirectory = path.IsKnownUnixDirectory;
         bool isSymbolicLink = path.IsKnownUnixSymbolicLink;
@@ -400,7 +426,8 @@ public sealed class Walk : IEnumerable<DirEntry>
             resolvedFullPath: null,
             path.IsRawUnixPath ? path.UnixPathBytes.ToArray() : null,
             path.IsRawUnixPath ? path.UnixFileNameBytes.ToArray() : null,
-            deferMetadata: true);
+            deferMetadata: true,
+            runState: runState);
     }
 
     private DirEntry CreateTextEntry(string path, int depth)
@@ -485,28 +512,41 @@ public sealed class Walk : IEnumerable<DirEntry>
 
     internal WalkPath[] EnumerateChildren(DirEntry entry)
     {
+        WalkDirectoryReadResult result = ReadChildren(entry);
+        CreateRunState().ReportErrors(result.Errors);
+        return result.Entries;
+    }
+
+    internal WalkDirectoryReadResult ReadChildren(DirEntry entry)
+    {
+        if (directoryReader is not null)
+        {
+            return directoryReader(entry);
+        }
+
         if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
         {
             return EnumerateUnixChildren(entry);
         }
 
-        string[] children = Directory.GetFileSystemEntries(entry.ResolvedFullPath);
-        List<WalkPath>? paths = null;
-        for (int index = 0; index < children.Length; index++)
+        List<WalkPath> paths = [];
+        WalkException[] errors = [];
+        try
         {
-            string child = children[index];
-            (paths ??= new List<WalkPath>(children.Length)).Add(WalkPath.FromText(child));
+            foreach (string child in Directory.EnumerateFileSystemEntries(entry.ResolvedFullPath))
+            {
+                paths.Add(WalkPath.FromText(child));
+            }
         }
-
-        if (paths is null)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            return [];
+            errors = [new WalkException(OsString.FromText(entry.FullPath), entry.Depth + (paths.Count == 0 ? 0 : 1), exception)];
         }
 
         Sort(paths);
         if (entry.ResolvedFullPath == entry.FullPath)
         {
-            return paths.ToArray();
+            return new WalkDirectoryReadResult(paths.ToArray(), errors);
         }
 
         for (int index = 0; index < paths.Count; index++)
@@ -518,7 +558,7 @@ public sealed class Walk : IEnumerable<DirEntry>
             }
         }
 
-        return paths.ToArray();
+        return new WalkDirectoryReadResult(paths.ToArray(), errors);
     }
 
     /// <summary>
@@ -531,17 +571,15 @@ public sealed class Walk : IEnumerable<DirEntry>
         return followLinks && !entry.Identity.IsEmpty;
     }
 
-    private WalkPath[] EnumerateUnixChildren(DirEntry entry)
+    private WalkDirectoryReadResult EnumerateUnixChildren(DirEntry entry)
     {
         byte[] parentPath = entry.IsRawUnixPath
             ? entry.UnixPathBytes.ToArray()
             : Encoding.UTF8.GetBytes(entry.ResolvedFullPath);
-        RawUnixDirectoryEntry[] rawEntries = RawUnixDirectory.Enumerate(parentPath);
-        if (rawEntries.Length == 0)
-        {
-            return [];
-        }
-
+        (RawUnixDirectoryEntry[]? entries, IOException? error) = RawUnixDirectory.ReadEntries(parentPath);
+        RawUnixDirectoryEntry[] rawEntries = entries ?? [];
+        WalkException[] errors = error is null ? [] : [new WalkException(
+            OsString.FromUnixBytes(parentPath), entry.Depth + (entries is null ? 0 : 1), error)];
         var paths = new List<WalkPath>(rawEntries.Length);
         for (int index = 0; index < rawEntries.Length; index++)
         {
@@ -557,7 +595,20 @@ public sealed class Walk : IEnumerable<DirEntry>
         }
 
         Sort(paths);
-        return paths.ToArray();
+        return new WalkDirectoryReadResult(paths.ToArray(), errors);
+    }
+
+    internal WalkRunState CreateRunState()
+    {
+        return new WalkRunState(errorHandler);
+    }
+
+    private static WalkException CreateError(WalkPath path, int depth, Exception exception)
+    {
+        return exception as WalkException ?? new WalkException(
+            path.IsRawUnixPath ? OsString.FromUnixBytes(path.UnixPathBytes) : OsString.FromText(path.TextPath),
+            depth,
+            exception);
     }
 
     private static bool TryDecodeUtf8(ReadOnlySpan<byte> bytes, out string text)

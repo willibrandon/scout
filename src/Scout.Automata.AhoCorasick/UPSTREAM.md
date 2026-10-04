@@ -5,9 +5,9 @@ This project ports the Rust `aho-corasick` crate pinned by
 
 ```text
 name = "aho-corasick"
-version = "1.1.3"
-checksum = "8e60d3430d3a69478ad0993f19238d2df97c507009a52b3c10addcd7f6bcb916"
-commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"
+version = "1.1.4"
+checksum = "ddd31a130427c27518df266943a5308ed92d4b226cc639f5a8f1002816174301"
+commit = "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f"
 ```
 
 The implementation establishes byte-preserving automaton construction,

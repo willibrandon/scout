@@ -2,7 +2,7 @@
 set -eu
 
 if [ "$#" -ne 1 ]; then
-    printf 'usage: %s <osx-arm64|osx-x64|linux-x64|linux-arm64>\n' "$0" >&2
+    printf 'usage: %s <osx-arm64|osx-x64|linux-x64|linux-arm64|linux-musl-arm64>\n' "$0" >&2
     exit 2
 fi
 
@@ -11,7 +11,7 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 OUT="$ROOT/spike/out/$RID"
 
 case "$RID" in
-    osx-arm64|osx-x64|linux-x64|linux-arm64)
+    osx-arm64|osx-x64|linux-x64|linux-arm64|linux-musl-arm64)
         ;;
     *)
         printf 'RID %s is not supported by this Unix spike linker.\n' "$RID" >&2
@@ -46,7 +46,7 @@ elif [ "$RID" = "osx-x64" ]; then
         -lc++ -lobjc -lz \
         -framework Foundation -framework Security -framework GSS -framework CryptoKit -framework Network \
         -o "$OUT/scout-spike"
-elif [ "$RID" = "linux-x64" ] || [ "$RID" = "linux-arm64" ]; then
+elif [ "$RID" = "linux-x64" ] || [ "$RID" = "linux-arm64" ] || [ "$RID" = "linux-musl-arm64" ]; then
     CC="${CC:-cc}"
     VXSORT_ARCHIVE=
     if [ -f "$RT/libRuntime.VxsortEnabled.a" ]; then

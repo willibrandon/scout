@@ -16,9 +16,24 @@ public static class CliParser
     {
         var lowArgs = new CliLowArgs();
 
+        bool positionalOnly = false;
         for (int index = 0; index < arguments.Length; index++)
         {
             OsString argument = arguments[index];
+            if (positionalOnly)
+            {
+                lowArgs.AddPositional(argument);
+                continue;
+            }
+
+            if (argument.IsUnixBytes
+                ? argument.AsUnixBytes().SequenceEqual("--"u8)
+                : argument.AsWindowsString() == "--")
+            {
+                positionalOnly = true;
+                continue;
+            }
+
             if (TryParseSpecialMode(argument, out CliSpecialMode specialMode))
             {
                 return CliParseResult.Special(specialMode);

@@ -78,3 +78,25 @@ foreach (FileWalkEntry entry in new FileWalker(options).Enumerate("."))
 ```
 
 The walker understands `.ignore`, `.gitignore`, `.git/info/exclude`, global gitignore files, overrides, file types, hidden-file filtering, symbolic-link policy, and the lower-level parallel traversal model used by the `scout` CLI.
+
+`WalkBuilder.FromPaths(paths)` copies and validates a collection of roots once;
+`Walk.FromPaths(paths)` creates its serial walk directly. Empty collections and
+`new WalkBuilder()` yield no entries. Each root keeps its own ignore context.
+
+```csharp
+Walk walk = WalkBuilder.FromPaths(["src", "tests"])
+    .ErrorHandler(error =>
+    {
+        Console.Error.WriteLine($"{error.Path}: {error.Message}");
+        return WalkState.Continue;
+    })
+    .Build();
+```
+
+Filesystem failures throw `WalkException` by default. Its `Path` preserves raw
+Unix bytes, `Depth` is relative to the traversal root, and `InnerException`
+retains the filesystem cause. An optional `ErrorHandler` on `WalkBuilder` or
+`FileWalkerOptions` receives the same exception: `Continue` and `Skip` skip the
+failed operation, and `Quit` ends the walk. Lazy metadata failures follow this
+policy as well. Parallel error handlers can run concurrently and must protect
+their own shared state.

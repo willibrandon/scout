@@ -37,95 +37,108 @@ url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.10/dotnet-runtime
 sha512 = "79cbc64bfeb806d5f2a9e0a2a2ed336c7aa275b0438bbd88d36236a1b6203950546b49ff307cc5067c89434ffe22c021a594b2f8adad71146a5ece825652bd85"
 
 [[ripgrep_oracle]]
+rid = "linux-musl-arm64"
+environment = "github-actions"
+archive_path = "tests/oracles/ripgrep/linux-musl-arm64.zip"
+archive_sha256 = "b6e871f5e63317b79fc1a68ff39e8acc289e2d5cff082cea888f3cb4ee7bd380"
+profile = "release-lto"
+path = "artifacts/ripgrep-oracle/linux-musl-arm64/ripgrep/target/release-lto/rg"
+sha256 = "f62fafb7987d2f5e6f946187083c14a5127545821df4e78b6963cc4583e92718"
+pcre2_profile = "release-lto"
+pcre2_features = "pcre2"
+pcre2_path = "artifacts/ripgrep-oracle/linux-musl-arm64/ripgrep/target/pcre2/release-lto/rg"
+pcre2_sha256 = "8c45b60e15b8a1f843fb8c08edce99c81c5119bbe55134d416f6e7e99c1ff91a"
+
+[[ripgrep_oracle]]
 rid = "osx-arm64"
 environment = "github-actions"
 archive_path = "tests/oracles/ripgrep/osx-arm64.zip"
-archive_sha256 = "ca957b7fca6b58fb056f030859d5b7e6414bb37936478a7320a114c73274853f"
+archive_sha256 = "5c83fb0f4653e5c7c1ea03246656a09c1d6936321976e8ea2593f8b5d5c9dfa2"
 profile = "release-lto"
 path = "artifacts/ripgrep-oracle/osx-arm64/ripgrep/target/release-lto/rg"
-sha256 = "e73f0e779d12d2f106b814c0168fdac0ecd94d8d1b9dc9c2e413f51a5d98773c"
+sha256 = "1710e3f03da4e82bec551f5b9e2b1341646e66ae6278a762831696fbf8e3e8e7"
 pcre2_profile = "release-lto"
 pcre2_features = "pcre2"
 pcre2_path = "artifacts/ripgrep-oracle/osx-arm64/ripgrep/target/pcre2/release-lto/rg"
-pcre2_sha256 = "f70d897d9cd1a361f136a7f631ca01a9c693124c839656ea1a1a2fac18467363"
+pcre2_sha256 = "f840586145d1e870426227b31d4fa8086641c72801d81775058a7e0392c7efc5"
 
 [[ripgrep_oracle]]
 rid = "osx-x64"
 environment = "github-actions"
 archive_path = "tests/oracles/ripgrep/osx-x64.zip"
-archive_sha256 = "8416132f8df09c234aa9eae4bda1c986d1875655c95df03e2816ae80945c5649"
+archive_sha256 = "c043d2d1178aa10cd83ac85e0df2c915a4eaf013e9640642fd0ce0e942f66980"
 profile = "release-lto"
 path = "artifacts/ripgrep-oracle/osx-x64/ripgrep/target/release-lto/rg"
-sha256 = "c44615baad18aeb7e4ed8f145c0c74df54bffe2136b38c501a144d664dd28683"
+sha256 = "858d705aea738b018e92b1a900c2611237df2598fe2538f5630fe4b525a5a027"
 pcre2_profile = "release-lto"
 pcre2_features = "pcre2"
 pcre2_path = "artifacts/ripgrep-oracle/osx-x64/ripgrep/target/pcre2/release-lto/rg"
-pcre2_sha256 = "6c1306b2d604d259e5ba15478eb2742b79ff746a6763354e99f077c6c0b962ac"
+pcre2_sha256 = "026944087c35cbd437e6beaf99354b43eaeb0af0183fb5b5cf819b50e3085ec4"
 
 [[ripgrep_oracle]]
 rid = "linux-x64"
 environment = "github-actions"
 archive_path = "tests/oracles/ripgrep/linux-x64.zip"
-archive_sha256 = "82ead198640ed8b34753c635ccb44b90b4f8bca69f121f682afc1215d0581610"
+archive_sha256 = "c065c34e256f170a037508428458c3a14e579d23a155568bbf7d10d9249f59c3"
 profile = "release-lto"
 path = "artifacts/ripgrep-oracle/linux-x64/ripgrep/target/release-lto/rg"
-sha256 = "72867b9f6264ce775d3d7a9a5467f8a7eac027072556d72b09b929ada166481f"
+sha256 = "35574a03f422fc8277b071fd413d7e67278dc9cbcbbdce4188d1b0042a36d5bc"
 pcre2_profile = "release-lto"
 pcre2_features = "pcre2"
 pcre2_path = "artifacts/ripgrep-oracle/linux-x64/ripgrep/target/pcre2/release-lto/rg"
-pcre2_sha256 = "da2c2a9028c8c6262846e80162fa1ecfc05e9d1c1f3cea8c2f4deb3512865cd8"
+pcre2_sha256 = "b95aedd760505771e4b00a4842380d9e1a51a71a7d7be58ba84aa97d6d829c0f"
 
 [[ripgrep_oracle]]
 rid = "linux-arm64"
 environment = "github-actions"
 archive_path = "tests/oracles/ripgrep/linux-arm64.zip"
-archive_sha256 = "a6d3a5bf087f0e63fd2c6e7a237b344f6dcdf72fb5c3180a1f7f4382d80db1fd"
+archive_sha256 = "a922cb279cfe253f03f1c0b77f5c0ea4af1830bb4f9a922ef4d8d974fde67375"
 profile = "release-lto"
 path = "artifacts/ripgrep-oracle/linux-arm64/ripgrep/target/release-lto/rg"
-sha256 = "66b647fead60eb0bd793dd6ddde779e4797bb6e3160d8a7087377784b7ed372d"
+sha256 = "b9d59568a0e6cc96f5a6f3ba251cbf28d51300f614141f34c3099b28d90f4bcb"
 pcre2_profile = "release-lto"
 pcre2_features = "pcre2"
 pcre2_path = "artifacts/ripgrep-oracle/linux-arm64/ripgrep/target/pcre2/release-lto/rg"
-pcre2_sha256 = "6f67dc71baf7200c25f2cb70ed2c541a9b4edd93c1ae9414d076816d1e1df77b"
+pcre2_sha256 = "ba9dbdb86604a81ef1cd1f7ea97088860c8a1279f7436ba09bc45ba3f870a31c"
 
 [[ripgrep_oracle]]
 rid = "win-x64"
 environment = "github-actions"
 archive_path = "tests/oracles/ripgrep/win-x64.zip"
-archive_sha256 = "d197b5a2bfe174d90d2fddf167cc65d4b2272e158cf8f6ac16b9902d613e2993"
+archive_sha256 = "71d0e798045a5adc96e75840f1ef32ed5ad15a2648969ebf75901c86ac45e34b"
 profile = "release-lto"
 path = "artifacts/ripgrep-oracle/win-x64/ripgrep/target/release-lto/rg.exe"
-sha256 = "fe41d3c694b071f1c2b02f6bcd5e290032d13003ec303a1deab9cdf8b47353ba"
+sha256 = "8878b7f7729d30fcf388e963a92a10acf5ae44ae9b15ef597ce129346bdb1040"
 pcre2_profile = "release-lto"
 pcre2_features = "pcre2"
 pcre2_path = "artifacts/ripgrep-oracle/win-x64/ripgrep/target/pcre2/release-lto/rg.exe"
-pcre2_sha256 = "57153890221954c2ded22c9176f4233975cf1f10f83966539c2dcdf0ff4bc339"
+pcre2_sha256 = "6f1cb44fc9e2bd0c1801f300a24da1748070ada7e12cac55d360d7f4ddff7a1d"
 
 [[ripgrep_oracle]]
 rid = "win-arm64"
 environment = "github-actions"
 archive_path = "tests/oracles/ripgrep/win-arm64.zip"
-archive_sha256 = "4d0eed840c250237718816e0f8bd5fa69102def4b824675eacb4b88d27090ce6"
+archive_sha256 = "0bce651ae9f9315fa0c9d685ea57ea25b0ecbd006088f9a584e9cb4ad479239f"
 profile = "release-lto"
 path = "artifacts/ripgrep-oracle/win-arm64/ripgrep/target/release-lto/rg.exe"
-sha256 = "17fe68feb940d7b96031efac8094e0376c5e3d109e87d4577de493a2abe94cd2"
+sha256 = "8bf779c30a7dca98c9cbcdebbace2d305601ea19ab9f9d41d66365f53c36eb85"
 pcre2_profile = "release-lto"
 pcre2_features = "pcre2"
 pcre2_path = "artifacts/ripgrep-oracle/win-arm64/ripgrep/target/pcre2/release-lto/rg.exe"
-pcre2_sha256 = "a5891179d4c8aa2dc61a337f27d27cbea0349f760c696acb0d6abf4aa1f05329"
+pcre2_sha256 = "142f39beae12595f6b9b13d0b0fae08d9f48f52b2e0031c8de60891d9ad53be0"
 
 [[ripgrep_oracle]]
 rid = "win-x64"
 environment = "local"
 archive_path = "tests/oracles/ripgrep/win-x64.zip"
-archive_sha256 = "d197b5a2bfe174d90d2fddf167cc65d4b2272e158cf8f6ac16b9902d613e2993"
+archive_sha256 = "71d0e798045a5adc96e75840f1ef32ed5ad15a2648969ebf75901c86ac45e34b"
 profile = "release-lto"
 path = "artifacts/ripgrep-oracle/win-x64/ripgrep/target/release-lto/rg.exe"
-sha256 = "fe41d3c694b071f1c2b02f6bcd5e290032d13003ec303a1deab9cdf8b47353ba"
+sha256 = "8878b7f7729d30fcf388e963a92a10acf5ae44ae9b15ef597ce129346bdb1040"
 pcre2_profile = "release-lto"
 pcre2_features = "pcre2"
 pcre2_path = "artifacts/ripgrep-oracle/win-x64/ripgrep/target/pcre2/release-lto/rg.exe"
-pcre2_sha256 = "57153890221954c2ded22c9176f4233975cf1f10f83966539c2dcdf0ff4bc339"
+pcre2_sha256 = "6f1cb44fc9e2bd0c1801f300a24da1748070ada7e12cac55d360d7f4ddff7a1d"
 
 [[ripgrep_oracle]]
 rid = "osx-arm64"
@@ -184,7 +197,7 @@ sha256 = "c9c5d486ee877f9104363ee0fe20539d4c1fbbb76f2f322d5e871f40aaf6ce26"
 name = "xz"
 version = "5.8.2"
 path = "/opt/homebrew/bin/xz"
-sha256 = "b7926ea19abf39913ee064329261d03ec66271cf5ee4759e5a1a928a3e165540"
+sha256 = "2abc3832c2f4fc60cbd44fac5cc242de24f123d7fbaf18206060684f84aa5e3f"
 
 [[tool.macos]]
 name = "zstd"
@@ -604,7 +617,7 @@ sha256 = "27d0ee206b162f26f718e526a2f303ad587db76703648ba06c1ee3cb2877d3ee"
 [[corpus]]
 name = "ripgrep-e89fff89-tests-misc-rs"
 path = "upstream/ripgrep-e89fff89/tests/misc.rs"
-sha256 = "b44867c413b4bd6d22ea5c3a3842167534e152a8b9982122d3aa682488256faa"
+sha256 = "4fe2caae7e791339a154172b65a54905d1660a1d8869a790309076818264f335"
 
 [[corpus]]
 name = "ripgrep-e89fff89-tests-multiline-rs"
@@ -614,7 +627,7 @@ sha256 = "2c1b987f0fe60905e9cfe4edc19738f7693b12f79661d4b66252f4295e03d03d"
 [[corpus]]
 name = "ripgrep-e89fff89-tests-regression-rs"
 path = "upstream/ripgrep-e89fff89/tests/regression.rs"
-sha256 = "22d1778677e2668e5351d6d8e4d48424db11d3a699ea270be06e9bd7b7a07ec3"
+sha256 = "77e84eb6c056a968e160c841681d471089ad62c924094fe4c0d769df271c9a78"
 
 [[corpus]]
 name = "ripgrep-e89fff89-tests-tests-rs"
@@ -624,7 +637,7 @@ sha256 = "b262a442a4b986f38ef6ddcf3c059a934d770fa07a9a9296545be15aa67cb18f"
 [[corpus]]
 name = "ripgrep-e89fff89-tests-util-rs"
 path = "upstream/ripgrep-e89fff89/tests/util.rs"
-sha256 = "2049d1250d408a08fcf968bc8659d90b36f98b7d4bf14aa51fd5dcbfbba74c79"
+sha256 = "1ad1581ae80a35b5aec02eeaca61d36699009d3a52d57ede18f314bdf488fda1"
 
 [[corpus]]
 name = "ripgrep-e89fff89-tests-data-sherlock-nul-txt"
@@ -920,3 +933,98 @@ sha256 = "cb6d50b0c11bad1d1f1fcc02d779672a8b9a2509cbbafdc6392aceb49c8b4268"
 name = "encoding-rs-0.8.35-labels"
 path = "upstream/encoding_rs-0.8.35/src/test_labels_names.rs"
 sha256 = "23a2e11b02b3b8d15fb5613a625e3edb2c61e70e3c581abfd638719a4088200d"
+
+[[dotnet_sdk_archive]]
+rid = "linux-x64"
+url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.102/dotnet-sdk-10.0.102-linux-x64.tar.gz"
+sha512 = "7adf40e8e5547970391cfbe474c3874c6918ce3575ac398f376c78502134e1c8a2fa3da9aca281fdaeda81671f56c851ebe9e74c5b57c5a298bd45deba63565d"
+
+[[dotnet_sdk_archive]]
+rid = "linux-arm64"
+url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.102/dotnet-sdk-10.0.102-linux-arm64.tar.gz"
+sha512 = "1254141153d29b5b926e0e7b0b172a25f9c096b8ed6a182f54062c5e0b41384b30e10e2bf1ebe86ed0f58f4ff762203acd83bcf23fefb59c07af45332d794700"
+
+[[dotnet_sdk_archive]]
+rid = "linux-musl-arm64"
+url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.102/dotnet-sdk-10.0.102-linux-musl-arm64.tar.gz"
+sha512 = "10be1f3f2516fbc1049ad8fcb00bd12bbb16a2d20f708b6cd0177cd8775d01e9dec10ec1fbe4b570d7c82b158cb745d77e8ec66ff0b9f56327778562ba1a77be"
+
+[[dotnet_sdk_archive]]
+rid = "osx-x64"
+url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.102/dotnet-sdk-10.0.102-osx-x64.tar.gz"
+sha512 = "5420d5cabdb7aa4c0e1a85907474dac873d20ccc5bf2810680f0a4d1fc9de948e9b7be15f3464fcde6be811c85b4ce290ecb6585f892077f10f40daaed03249e"
+
+[[dotnet_sdk_archive]]
+rid = "win-x64"
+url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.102/dotnet-sdk-10.0.102-win-x64.zip"
+sha512 = "086bb7cfced5d2f531233307502fc8ce3de08850d3891e4d812542314904e1edf4b313a1a3710be1fc2ac9fecea8d511766346a6ac9f24c2b81a2ea0bedeaf16"
+
+[[dotnet_sdk_archive]]
+rid = "win-arm64"
+url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.102/dotnet-sdk-10.0.102-win-arm64.zip"
+sha512 = "a68c5c855ba81c6898cf40225ece3e5c0f93cd3c3c2b5451e6acd39de87d2a896ca7ca5e718dc46ce0daf171903dd18bfd9c684dd51813a3f47b2bd886ccddcc"
+
+[[dotnet_runtime_archive]]
+rid = "linux-x64"
+url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.10/dotnet-runtime-10.0.10-linux-x64.tar.gz"
+sha512 = "74b2b41ee177fe72da02741d5ba30e8a3c5ead44151d7a72a04ed81a0a933e827f5f8cfcc048ba4e8de5aeb7651953761b7586277d0bcce2e01323ca29ccb813"
+
+[[dotnet_runtime_archive]]
+rid = "linux-arm64"
+url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.10/dotnet-runtime-10.0.10-linux-arm64.tar.gz"
+sha512 = "3ea2ac626fdb0f26bb52f02584ae5e68ee88c275e740b34d93918ad380985d0dbfa1632c017658dfddc5fba396114b62748efc11b25897877814a4a4c5022edc"
+
+[[dotnet_runtime_archive]]
+rid = "linux-musl-arm64"
+url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.10/dotnet-runtime-10.0.10-linux-musl-arm64.tar.gz"
+sha512 = "1e97ed072922547b5849a9693beee47d30bce255c944769499fe2865ba9fe5f8d38b1896de2fb6d339017298dca118a744a52815c78a8cd36fb96c7118e18bef"
+
+[[dotnet_runtime_archive]]
+rid = "osx-x64"
+url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.10/dotnet-runtime-10.0.10-osx-x64.tar.gz"
+sha512 = "4269fde5d17bee092f47fb63387c0bb1ab58b21d4af8eb0ead118b51d677fc7dada9b8f46cf3d1e25449c07f7e0350938cd741e882ed43bf6ab1541dccd489da"
+
+[[dotnet_runtime_archive]]
+rid = "win-x64"
+url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.10/dotnet-runtime-10.0.10-win-x64.zip"
+sha512 = "2161dfa1cf027cdc074de7195b5f206b17ebd829ae415b9e7c9ee5f06d3952b6583030022dbe0d6e9221b5c577c411d7cd5322241f6d2299d9c886641215699b"
+
+[[dotnet_runtime_archive]]
+rid = "win-arm64"
+url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.10/dotnet-runtime-10.0.10-win-arm64.zip"
+sha512 = "69f575e8a612adcb360689b0c4099c097e58ce48905b9ab2c109855513e0acda0e688cd40326b7ba3eef8b26b793589cf2a4c68423f73d3d4c8f9e3dc4c254c4"
+
+[[dotnet_library_runtime_archive]]
+rid = "linux-x64"
+url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.20/dotnet-runtime-9.0.20-linux-x64.tar.gz"
+sha512 = "aaa63e9156fcc9d1c51e15fb38e3c5388a7721ef1b64065c8865b03133906e9de967ae33903c198c6acb9aa8bbae373e9001405074009c2ef2a0bb6e54b509a5"
+
+[[dotnet_library_runtime_archive]]
+rid = "linux-arm64"
+url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.20/dotnet-runtime-9.0.20-linux-arm64.tar.gz"
+sha512 = "73e2736de18c84e1e5aab71872fd8d48bf58bf7ee1f781a28089308db8d7d3f309700347afdb4ce3e7959a2a6cc54b0d1e46e5aa4cf14d9d87ea0d2a4496f589"
+
+[[dotnet_library_runtime_archive]]
+rid = "linux-musl-arm64"
+url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.20/dotnet-runtime-9.0.20-linux-musl-arm64.tar.gz"
+sha512 = "b34bf4d6b40df1d8c1cf525b477185ab1862b47883be85d77a0d5f0cc3c7983ac20845b3cf2d8fa1e72cfe3bb5590350c027399a38c82e4453e4438fdb853b6c"
+
+[[dotnet_library_runtime_archive]]
+rid = "osx-x64"
+url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.20/dotnet-runtime-9.0.20-osx-x64.tar.gz"
+sha512 = "b633e36f30af40d1f8114e6e377f93551286105ff4bb9f88713555983399edba7cca21ec7b86f74a6c1debb898c8ec63ecdb214b38866c56b63fac3ff8c3fd02"
+
+[[dotnet_library_runtime_archive]]
+rid = "osx-arm64"
+url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.20/dotnet-runtime-9.0.20-osx-arm64.tar.gz"
+sha512 = "5bb676b5bac2656eb7e8c847532505007b2154df0f6682e31b1681e35d1b757ca201559677c7e2bb197a6b7563bc584d7fcefb26344a9f8f2a390b41136a2702"
+
+[[dotnet_library_runtime_archive]]
+rid = "win-x64"
+url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.20/dotnet-runtime-9.0.20-win-x64.zip"
+sha512 = "6f7241fab7a8003813c3c8a59005e368fe53525e3cf08ab1cc052103f2f422af6bd1b20b838c283283a8a709d52a6aea2379686fe6cb07cc0fa7119f2ef2b2bf"
+
+[[dotnet_library_runtime_archive]]
+rid = "win-arm64"
+url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.20/dotnet-runtime-9.0.20-win-arm64.zip"
+sha512 = "9e8a6252d98f37fe035c7c642be479ea8b16db393e357ef248695c3f3cafb0656548d41e2e1a12d24ce62531f8190b48af02adb933bf25d5ecaa2a94415d2fc7"

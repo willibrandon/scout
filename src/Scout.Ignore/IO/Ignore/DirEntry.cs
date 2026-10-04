@@ -1,4 +1,6 @@
 using System.Text;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
 
 namespace Scout.IO.Ignore;
 
@@ -14,6 +16,7 @@ public sealed class DirEntry
     private readonly FileIdentity _identity;
     private readonly bool _deferMetadata;
     private DirEntryMetadata? _deferredMetadata;
+    private readonly WalkRunState? _runState;
 
     internal DirEntry(
         string fullPath,
@@ -27,7 +30,8 @@ public sealed class DirEntry
         string? resolvedFullPath = null,
         byte[]? unixPathBytes = null,
         byte[]? unixFileNameBytes = null,
-        bool deferMetadata = false)
+        bool deferMetadata = false,
+        WalkRunState? runState = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(fullPath);
         ArgumentOutOfRangeException.ThrowIfNegative(depth);
@@ -44,6 +48,7 @@ public sealed class DirEntry
         _unixPathBytes = unixPathBytes;
         _unixFileNameBytes = unixFileNameBytes;
         _deferMetadata = deferMetadata;
+        _runState = runState;
     }
 
     /// <summary>
@@ -127,11 +132,32 @@ public sealed class DirEntry
         DirEntryMetadata? metadata = Volatile.Read(ref _deferredMetadata);
         if (metadata is not null)
         {
+            if (metadata.Error is not null && (_runState is null || _runState.ThrowsErrors))
+            {
+                throw metadata.Error;
+            }
+
             return metadata;
         }
 
         metadata = ResolveMetadata();
-        return Interlocked.CompareExchange(ref _deferredMetadata, metadata, null) ?? metadata;
+        DirEntryMetadata? previous = Interlocked.CompareExchange(ref _deferredMetadata, metadata, null);
+        if (previous is not null)
+        {
+            return GetDeferredMetadata();
+        }
+
+        if (metadata.Error is not null)
+        {
+            if (_runState is null)
+            {
+                throw metadata.Error;
+            }
+
+            _runState.ReportError(metadata.Error);
+        }
+
+        return metadata;
     }
 
     private DirEntryMetadata ResolveMetadata()
@@ -142,7 +168,12 @@ public sealed class DirEntry
             : NativeFileSystemMetadata.TryGetUnixStatus(FullPath, followLinks: false, out status);
         if (!found)
         {
-            return new DirEntryMetadata(_length, _identity);
+            var cause = new Win32Exception(Marshal.GetLastPInvokeError());
+            var error = new WalkException(
+                IsRawUnixPath ? OsString.FromUnixBytes(UnixPathBytes) : OsString.FromText(FullPath),
+                Depth,
+                new IOException(cause.Message, cause));
+            return new DirEntryMetadata(_length, _identity, error);
         }
 
         FileIdentity identity = IsRawUnixPath

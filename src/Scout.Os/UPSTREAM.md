@@ -5,8 +5,8 @@ Scout-owned raw OS boundaries.
 
 ```text
 name = "libc"
-version = "0.2.177"
-checksum = "2874a2af47a2325c2001a6e6fad9b16a53b802102b528163885171cf92b15976"
+version = "0.2.186"
+checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
 
 name = "windows-sys"
 version = "0.61.2"
@@ -16,7 +16,7 @@ name = "winapi-util"
 version = "0.1.11"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 
-commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"
+commit = "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f"
 ```
 
 The implementation owns Unix raw byte paths, raw `getcwd`, directory iteration,

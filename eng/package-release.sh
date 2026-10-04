@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 if [ "$#" -ne 1 ]; then
-    printf 'usage: %s <osx-arm64|osx-x64|linux-x64|linux-arm64>\n' "$0" >&2
+    printf 'usage: %s <osx-arm64|osx-x64|linux-x64|linux-arm64|linux-musl-arm64>\n' "$0" >&2
     exit 2
 fi
 
@@ -17,7 +17,7 @@ HASH_FILE="$ARCHIVE.sha256"
 SCOUT_VERSION="${SCOUT_RELEASE_VERSION:-}"
 
 case "$RID" in
-    osx-arm64|osx-x64|linux-x64|linux-arm64)
+    osx-arm64|osx-x64|linux-x64|linux-arm64|linux-musl-arm64)
         ;;
     *)
         printf 'RID %s is not supported by this Unix package script.\n' "$RID" >&2
@@ -78,7 +78,7 @@ version = "$SCOUT_VERSION"
 binary = "scout"
 real_binary = "scout-real"
 rid = "$RID"
-ripgrep_commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"
+ripgrep_commit = "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f"
 nativeaot_runtime_framework = "10.0.2"
 pcre2 = "10.46"
 parity = "behavioral parity; identity is Scout-specific (see PARITY.md)"

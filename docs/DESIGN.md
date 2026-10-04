@@ -12,33 +12,26 @@
 
 ---
 
-## 0. Upstream Pin (authoritative, non-negotiable)
+## 0. Upstream release
 
-The port targets **one exact upstream revision**, not a moving tag. All behavior, tests, and data versions below are defined relative to this pin.
+Scout follows ripgrep **15.2.0**, release commit
+`e89fff89ac9af12e8d4ce9d5fd07beb408ca730f`.
 
-| Pinned artifact | Value |
-|-----------------|-------|
-| ripgrep git commit | `4857d6fa67db69a95cd4b6f2adda5d807d4d0119` (HEAD of the reference checkout at `/Users/brandon/src/ripgrep`, §0.1; the `15.1.0` tag is `af60c2de…`, and HEAD is ahead of it) |
-| Reported marketing version | 15.1.0 + post-tag commits (HEAD is **ahead** of the `15.1.0` tag) |
-| Rust edition / MSRV at pin | edition 2024 / 1.85 |
-| `Cargo.lock` | vendored verbatim into the Scout repo as `upstream/Cargo.lock`; every transitive crate version below is read from it, not guessed |
-| Unicode data | the exact UCD version that the pinned `regex-syntax` ships (see §11.1); vendored, never "current at build time" |
-| PCRE2 | Rust binding `pcre2` 0.2.11 / `pcre2-sys` 0.2.10 (from the lockfile); bundled **PCRE2 C release 10.46** (dated 2025-08-27, as vendored in `pcre2-sys` 0.2.10's `upstream/`), pinned by tag + git SHA in `native/pcre2/UPSTREAM` (§4.3) |
+The release lockfile is copied verbatim to `upstream/Cargo.lock`. Unicode data
+remains 16.0.0. Rust uses edition 2024 with MSRV 1.85. Scout retains its existing
+bundled PCRE2 10.46; the unchanged Rust `pcre2-sys` reference bundles PCRE2 10.45.
+The CLI reports `scout <version> (ripgrep 15.2.0 compatible, rev e89fff89ac)`.
 
-> **Why this matters (Codex blocker):** the previous draft cited both "15.1.0" and three commits made *after* that tag (`4519153`, `9b84e15`, `cb66736`). That is internally inconsistent. The pin above resolves it: we port HEAD and vendor its lockfile, while Scout prints its own version banner (`scout <version> (ripgrep 15.1.0 compatible, rev 4857d6fa67)`). The upstream coordinate remains provenance and compatibility metadata, not Scout's own product version.
+### 0.1 Reference sources
 
-A documented, scripted **upstream-sync policy** (`docs/UPSTREAM-SYNC.md`) governes advancing the pin: bump commit → regenerate vendored lockfile + UCD → re-run the full differential suite → record the diff. The pin never advances silently.
+`/Users/brandon/src/ripgrep` is read only. Its HEAD can advance independently;
+validation inspects the release Git object and lockfile. Reference builds use
+separate checkouts under `artifacts/`, and hosted validation restores verified
+reference archives. Vendored integration tests are in
+`upstream/ripgrep-e89fff89/tests/`.
 
-### 0.1 Reference checkout (the ripgrep source the port is done against)
-
-The port is performed against a local ripgrep checkout pinned to the §0 commit, referenced **by path** — not copied or symlinked into the Scout repo:
-
-| Reference | Value |
-|-----------|-------|
-| Reference path | `/Users/brandon/src/ripgrep` (the current ripgrep working directory) |
-| Required commit | must equal the §0 pin `4857d6fa67db69a95cd4b6f2adda5d807d4d0119` |
-
-Everything the port consumes from upstream is read from this checkout: the source to port (`/Users/brandon/src/ripgrep/crates/...`), the lockfile to vendor (`/Users/brandon/src/ripgrep/Cargo.lock` → `upstream/Cargo.lock`), the integration tests and corpus to port (`/Users/brandon/src/ripgrep/tests/...`), and the PCRE2 / UCD provenance. A preflight check asserts the checkout's `HEAD` equals the §0 pin and fails on mismatch, so the port can never drift from the reference.
+[UPSTREAM-SYNC.md](UPSTREAM-SYNC.md) describes the update workflow.
+[UPSTREAM-15.2.0.md](UPSTREAM-15.2.0.md) records this release's behavioral audit.
 
 ---
 
@@ -125,31 +118,31 @@ Every other crate in `upstream/Cargo.lock` that touches behavior, build, or repr
 
 | Upstream dependency | Disposition | Scout home / rationale |
 |---------------------|-------------|------------------------|
-| `regex-syntax` 0.8.8 | Port | `Scout.Automata.Syntax`. |
-| `regex-automata` 0.4.13 | Port | `Scout.Automata`. |
-| `aho-corasick` 1.1.3 | Port | `Scout.Automata.AhoCorasick`. |
-| `memchr` 2.7.6 | Port | `Scout.Automata.Memmem`. |
-| `bstr` 1.12.0 | Port | `Scout.Bytes`. |
+| `regex-syntax` 0.8.11 | Port | `Scout.Automata.Syntax`. |
+| `regex-automata` 0.4.15 | Port | `Scout.Automata`. |
+| `aho-corasick` 1.1.4 | Port | `Scout.Automata.AhoCorasick`. |
+| `memchr` 2.8.3 | Port | `Scout.Automata.Memmem`. |
+| `bstr` 1.13.0 | Port | `Scout.Bytes`. |
 | `encoding_rs` 0.8.35 | Port | `Scout.Encoding` (§4.4.1). |
 | `encoding_rs_io` 0.1.7 | Port | `Scout.Encoding.Io`. |
-| `memmap2` 0.9.9 | Replace | Behavior provided by `MemoryMappedFile` + `SafeMemoryMappedViewHandle` in `Scout.Searching` (§4.4); same mmap-vs-read heuristics. No separate project. |
-| `regex` 1.12.2 | Replace | The high-level `regex` crate facade; its surface (used by `globset`/`ignore` for set matching) is provided directly by `Scout.Automata`'s meta engine + `PatternSet`. No separate facade. |
+| `memmap2` 0.9.11 | Replace | Behavior provided by `MemoryMappedFile` + `SafeMemoryMappedViewHandle` in `Scout.Searching` (§4.4); same mmap-vs-read heuristics. No separate project. |
+| `regex` 1.13.0 | Replace | The high-level `regex` crate facade; its surface (used by `globset`/`ignore` for set matching) is provided directly by `Scout.Automata`'s meta engine + `PatternSet`. No separate facade. |
 | `glob` 0.3.3 | Replace/none | The standalone `glob` crate (distinct from `globset`) is only a build/dev-side path-expansion helper, not a search-behavior surface; equivalent path enumeration lives in `Scout.Os`. Documented as no runtime behavioral surface. |
 | `walkdir` 2.5.0 | Port | Inside `Scout.Ignore`. |
 | `same-file` 1.0.6 | Port | Inside `Scout.Ignore` (device+inode / file-id identity). |
-| `crossbeam-deque` 0.8.6 | Port | The work-stealing semantics, inside `Scout.Ignore` (§4.8.1). |
-| `crossbeam-channel` 0.5.15, `crossbeam-epoch` 0.9.18, `crossbeam-utils` 0.8.21 | Replace (transitive) | Pulled in *under* `crossbeam-deque`/`ignore`; their roles (MPMC channels, epoch GC, atomics/backoff) are subsumed by the managed work-stealing pool built on `System.Threading.Channels` + `System.Threading` primitives. No separate ports; the **observable** behavior (ordering, cap, forced-serial — §4.8.1) is what tests pin, and it is replicated exactly. |
+| `crossbeam-deque` 0.8.7 | Port | The work-stealing semantics, inside `Scout.Ignore` (§4.8.1). |
+| `crossbeam-channel` 0.5.16, `crossbeam-epoch` 0.9.20, `crossbeam-utils` 0.8.22 | Replace (transitive) | Pulled in *under* `crossbeam-deque`/`ignore`; their roles (MPMC channels, epoch GC, atomics/backoff) are subsumed by the managed work-stealing pool built on `System.Threading.Channels` + `System.Threading` primitives. No separate ports; the **observable** behavior (ordering, cap, forced-serial — §4.8.1) is what tests pin, and it is replicated exactly. |
 | `termcolor` 1.4.1 | Port | Inside `Scout.Cli` terminal layer. |
 | `winapi-util` 0.1.11 | Replace | Its Windows helpers (console mode, file info, stdin type) are provided by direct `LibraryImport` P/Invoke in `Scout.Os`/`Scout.Cli`. |
 | `windows-sys` 0.61.2 | Replace | Raw Win32 bindings replaced by Scout's own `LibraryImport` declarations of exactly the APIs used; no third-party binding layer. Behavioral surface = the specific Win32 calls, all enumerated in `Scout.Os`. |
-| `anyhow` 1.0.100 | Port (behavior) | **Runtime dependency** (`Cargo.toml:53`), used throughout `crates/core` to build user-facing errors. Since **stderr is part of byte-identical conformance**, this is ported as `Scout.Errors` (§4.10.1): an error type carrying a **cause chain**, whose `Display` and alternate (`{:#}`) rendering — the chain joined by `": "` — match anyhow exactly. The actual context/`bail!` message strings at every upstream call site are ported **verbatim** and pinned by the differential suite. |
-| `lexopt` 0.3.1 | Port | Argument-lexing semantics, inside `Scout.App`. |
+| `anyhow` 1.0.103 | Port (behavior) | **Runtime dependency** (`Cargo.toml:53`), used throughout `crates/core` to build user-facing errors. Since **stderr is part of byte-identical conformance**, this is ported as `Scout.Errors` (§4.10.1): an error type carrying a **cause chain**, whose `Display` and alternate (`{:#}`) rendering — the chain joined by `": "` — match anyhow exactly. The actual context/`bail!` message strings at every upstream call site are ported **verbatim** and pinned by the differential suite. |
+| `lexopt` 0.3.2 | Port | Argument-lexing semantics, inside `Scout.App`. |
 | `textwrap` 0.16.2 | Port | `--help` long-text wrapping width, inside `Scout.App`. |
-| `log` 0.4.28 | Port (behavior) | `--debug`/`--trace` message format replicated by `Scout.Diagnostics`; not a generic logging framework. |
+| `log` 0.4.33 | Port (behavior) | `--debug`/`--trace` message format replicated by `Scout.Diagnostics`; not a generic logging framework. |
 | `serde` 1.0.228 + `serde_derive` | Replace/none | Used upstream for JSON (printer) and `arbitrary`/dev. Scout's JSON is a hand-written byte writer (§4.5.1); serde has **no runtime surface** in Scout. `serde`/`serde_derive` appear only as a *test-time* concern if a fixture needs them, never in shipped code. |
-| `serde_json` 1.0.145 | Replace/none | Not used as a serializer (§4.5.1); its **exact output formatting** (escaping, number formatting) is replicated by Scout's byte writer and pinned by `tests/json.rs`. |
-| `itoa` 1.0.15, `ryu` 1.0.20 | Replace | Fast integer/float→ASCII used by `serde_json`. Scout's byte writer implements byte-identical integer formatting; the JSON schema's numbers (offsets, counts, line/byte numbers) are integers — any float (e.g. `--stats` elapsed seconds) is formatted to match upstream output exactly, verified by the differential suite. |
-| `tikv-jemallocator` 0.6.1 / `tikv-jemalloc-sys` 0.6.1 | Replace/none | A **musl-x64-only** allocator swap upstream uses for throughput on that target. Not portable to .NET (the CLR/Native AOT manages its own allocator). No port; allocation throughput is instead addressed by Scout's zero-alloc hot-path design (§5) and held to the perf gates (§9). Documented as an intentional, behavior-neutral omission (allocator choice does not change output). |
+| `serde_json` 1.0.150 | Replace/none | Not used as a serializer (§4.5.1); its **exact output formatting** (escaping, number formatting) is replicated by Scout's byte writer and pinned by `tests/json.rs`. |
+| `itoa` 1.0.18, `zmij` 1.0.23 | Replace | Fast integer/float→ASCII used by `serde_json`. Scout's byte writer implements byte-identical integer formatting; the JSON schema's numbers (offsets, counts, line/byte numbers) are integers — any float (e.g. `--stats` elapsed seconds) is formatted to match upstream output exactly, verified by the differential suite. |
+| `tikv-jemallocator` 0.7.0 / `tikv-jemalloc-sys` 0.6.1 | Replace/none | A **musl-x64-only** allocator swap upstream uses for throughput on that target. Not portable to .NET (the CLR/Native AOT manages its own allocator). No port; allocation throughput is instead addressed by Scout's zero-alloc hot-path design (§5) and held to the perf gates (§9). Documented as an intentional, behavior-neutral omission (allocator choice does not change output). |
 | `winapi`/`libc` (platform) | Replace | Direct `LibraryImport` in `Scout.Os`. |
 
 Anything in the lockfile not listed above is a pure build/test dependency of the Rust toolchain with no analog in the .NET build and no behavioral surface (e.g. `cc`, `jobserver`, `autocfg`); these are explicitly out of scope and noted in `docs/UPSTREAM-SYNC.md`.
@@ -187,7 +180,7 @@ The C-shim decision implies a concrete Native AOT link shape, defined here and *
 - **Runtime initialization (reconciled with the verified spike):** the Native AOT static library **self-initializes the runtime on the first managed entry** — the `[UnmanagedCallersOnly]` export's prologue (provided by the linked `libbootstrapperdll.o`) brings up the GC/runtime before user managed code runs, so the C driver does **not** need to call a separate init function. This is what the Appendix A spike actually does and it works (verified on osx-arm64). The earlier wording in this section claiming the driver performs an *explicit* init call was incorrect and is corrected here: for the static-lib + `UnmanagedCallersOnly` shape, init is automatic-on-first-call, not a manual step. (If a future RID is found to require an explicit initializer, the driver will call the SDK-emitted bootstrap symbol there; none was needed on osx-arm64.) On Windows the driver uses the wide entry (`wmain`/`GetCommandLineW`, §4.1) and the same single `scout_entry` dispatch.
 - **Linking** is part of the per-RID reproducible native build (§4.3): pinned C compiler/linker flags, deterministic, one script per RID, producing the final `scout` executable.
 
-**Proof-of-build spike (M0 deliverable, blocking).** A minimal program built in exactly this shape — AOT static lib exporting `scout_entry`, C driver providing Unix `main` or Windows `wmain` (the runtime self-initializes on the first managed call — §4.1.1; no explicit init step), and platform-native argument capture — that echoes the captured argument representation verbatim, **built and executed on all six RIDs**. Unix RIDs include a deliberately non-UTF-8 `argv` byte round-trip; Windows RIDs include a non-ASCII UTF-16 command-line round-trip through `GetCommandLineW`/`CommandLineToArgvW`. The complete, turnkey source for this spike (C driver, managed entry, project file, build/run script, expected output) is in **Appendix A** so it can be executed verbatim on a machine with the pinned SDK.
+**Proof-of-build spike (M0 deliverable, blocking).** A minimal program built in exactly this shape — AOT static lib exporting `scout_entry`, C driver providing Unix `main` or Windows `wmain` (the runtime self-initializes on the first managed call — §4.1.1; no explicit init step), and platform-native argument capture — that echoes the captured argument representation verbatim, **built and executed on all seven RIDs**. Unix RIDs include a deliberately non-UTF-8 `argv` byte round-trip; Windows RIDs include a non-ASCII UTF-16 command-line round-trip through `GetCommandLineW`/`CommandLineToArgvW`. The complete, turnkey source for this spike (C driver, managed entry, project file, build/run script, expected output) is in **Appendix A** so it can be executed verbatim on a machine with the pinned SDK.
 
 > **Execution status — local transcript plus CI proof.** Appendix A records the actually executed local transcripts and exact link lines for the two macOS RIDs (.NET SDK 10.0.102, clang/Rosetta):
 > - **osx-arm64 (native):** `dotnet publish -p:NativeLib=Static` → exit 0, `Scout.Entry.a` (~2.5 MB); C `main` driver linked against the static lib + NativeAOT runtime archives → exit 0, 2.2 MB executable; passing a single `0xFF` argument echoed back `ff 0a` — the non-UTF-8 byte preserved verbatim (a managed `string[] Main` would have yielded U+FFFD). **PASS.**
@@ -457,7 +450,7 @@ The earlier "20–30% initially, tightening later / tracked misses" language is 
 
 To honor "do not defer," **no milestone before full parity is described as shippable.** M0–M8 are **internal integration gates**; the **only** release is when every feature, every ported test, the differential suite, and every performance gate are green.
 
-- **M0 — Foundation (internal).** Repo, pins (§0), `global.json`, `Directory.Build.props`, analyzers + one-type-per-file rule + no-suppression enforcement (§7.1), CI matrix, `Scout.Bytes`, `Scout.Os`, `Scout.SourceGen` skeleton. **Includes the native-entry proof-of-build spike (§4.1.1):** AOT static lib + platform C entry driver + runtime init + platform-native argument round-trip, built and run on all six RIDs (raw non-UTF-8 Unix `argv` bytes; non-ASCII Windows UTF-16 command line). Gate: AOT-clean build on all RIDs **and** the entry spike green (the byte-boundary blocker is not closed until this passes).
+- **M0 — Foundation (internal).** Repo, pins (§0), `global.json`, `Directory.Build.props`, analyzers + one-type-per-file rule + no-suppression enforcement (§7.1), CI matrix, `Scout.Bytes`, `Scout.Os`, `Scout.SourceGen` skeleton. **Includes the native-entry proof-of-build spike (§4.1.1):** AOT static lib + platform C entry driver + runtime init + platform-native argument round-trip, built and run on all seven RIDs (raw non-UTF-8 Unix `argv` bytes; non-ASCII Windows UTF-16 command line). Gate: AOT-clean build on all RIDs **and** the entry spike green (the byte-boundary blocker is not closed until this passes).
 - **M1 — Regex engine (internal).** `Scout.Automata.Syntax` + `Scout.Automata`, **all engines up front**. Gate: regex conformance suite green; prefilter micro-benches at parity.
 - **M2 — Matcher + regex adapter (internal).** `Scout.Matching`, `Scout.Regex`. Gate: ported `grep-regex` unit tests green.
 - **M3 — Globbing + Ignore (internal).** Incl. exact parallelism semantics (§4.8.1). Gate: ported `globset`/`ignore` tests green.
@@ -503,7 +496,7 @@ Flag tables, help/man text, and shell completions are generated deterministicall
 
 **Settled:**
 - **Name** `Scout` (binary `scout`, **no `sc` alias**, namespace `Scout`).
-- **Upstream pin** = commit `4857d6fa67db69a95cd4b6f2adda5d807d4d0119` with vendored lockfile + UCD (§0).
+- **Upstream pin** = commit `e89fff89ac9af12e8d4ce9d5fd07beb408ca730f` with vendored lockfile + UCD (§0).
 - **Repository** = standalone; this doc is the seed artifact.
 - **Test framework** = xUnit v3.
 - **Regex engines** = all ported up front (M1).
@@ -518,7 +511,7 @@ Flag tables, help/man text, and shell completions are generated deterministicall
 - **Unix `argv`** = a single statically-linked **C entry shim** across all Unix; no `/proc` dependency (§4.1).
 - **SIMD baseline** = SSE2 + AVX2 (x64) and `AdvSimd`/NEON (arm64) as the shipped baseline; **AVX-512 paths are included and additive**, gated by `Avx512*.IsSupported`, and delivered **before** Release — not deferred past v1.
 - **Dependency dispositions** = every lockfile crate — including `anyhow` (error/stderr parity, §4.10.1) — has a port or explicit replace/none rationale (§3.2.1).
-- **Native entry** = AOT static library + platform C entry driver (runtime self-initializes on first managed call — §4.1.1). **Executed and PASSED locally on osx-arm64 and osx-x64** (0xFF argv byte round-tripped; Appendix A transcript), with the same spike reproduced by GitHub-hosted CI on all six release RIDs before the byte-boundary blocker is treated as closed for the commit under test.
+- **Native entry** = AOT static library + platform C entry driver (runtime self-initializes on first managed call — §4.1.1). **Executed and PASSED locally on osx-arm64 and osx-x64** (0xFF argv byte round-tripped; Appendix A transcript), with the same spike reproduced by GitHub-hosted CI on all seven release RIDs before the byte-boundary blocker is treated as closed for the commit under test.
 - **CI prerequisites** = digest-pinned container + `tests/PREREQS.lock` (tool versions + literal SHA-256 values or narrowly scoped finite sets), corpora by SHA-256, reference `rg` archive captured from the pinned commit with archive and binary hashes recorded (§8.5).
 - **Third-party notices** = per-dependency license reproduction in `THIRD-PARTY-NOTICES.md` (decided sufficient; ripgrep's own dual license + each ported crate's license + PCRE2 BSD).
 - **No-skip** = zero skipped/waived tests at Release (§8).
@@ -533,7 +526,7 @@ Flag tables, help/man text, and shell completions are generated deterministicall
 
 ## Appendix A — Native entry proof-of-build spike (turnkey)
 
-Drop-in sources for the M0 spike (§4.1.1). It builds `spike/Scout.Entry` as a Native AOT **static library** exporting `scout_entry`, links a platform C entry driver, and echoes each argument exactly as captured at the OS boundary — raw `argv` bytes on Unix and UTF-16 command-line code units on Windows. Builds on all six RIDs; the non-UTF-8 round-trip assertion runs on the four Unix RIDs, while `win-x64`/`win-arm64` validate the `wmain`/`GetCommandLineW` variant (same exported `scout_entry` ABI, Windows command line captured from UTF-16).
+Drop-in sources for the M0 spike (§4.1.1). It builds `spike/Scout.Entry` as a Native AOT **static library** exporting `scout_entry`, links a platform C entry driver, and echoes each argument exactly as captured at the OS boundary — raw `argv` bytes on Unix and UTF-16 command-line code units on Windows. Builds on all seven RIDs; the non-UTF-8 round-trip assertion runs on the five Unix RIDs, while `win-x64`/`win-arm64` validate the `wmain`/`GetCommandLineW` variant (same exported `scout_entry` ABI, Windows command line captured from UTF-16).
 
 **`spike/Scout.Entry/Scout.Entry.csproj`**
 ```xml

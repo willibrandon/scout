@@ -7,6 +7,32 @@ namespace Scout;
 public sealed class MemmemSearchTests
 {
     /// <summary>
+    /// Verifies searches remain bounded for oversized needles and unaligned vector tails.
+    /// </summary>
+    [Fact]
+    public void ReleaseBoundaryRegressionsStayWithinTheHaystack()
+    {
+        foreach (int length in new[] { 0, 1, 15, 16, 17, 22, 31, 32, 33, 63, 64, 65 })
+        {
+            byte[] storage = new byte[length + 3];
+            Array.Fill(storage, (byte)'.');
+            Span<byte> haystack = storage.AsSpan(1, length);
+            byte[] oversized = new byte[length + 100];
+            Array.Fill(oversized, (byte)'X');
+            Assert.Equal(-1, MemmemSearch.Find(haystack, oversized));
+            Assert.Equal(-1, MemmemSearch.FindReverse(haystack, oversized));
+            Assert.Equal(-1, new MemmemFinder(oversized).Find(haystack));
+            Assert.Equal(-1, new MemmemReverseFinder(oversized).FindReverse(haystack));
+            if (length >= 2)
+            {
+                "ab"u8.CopyTo(haystack[^2..]);
+                Assert.Equal(length - 2, MemmemSearch.Find(haystack, "ab"u8));
+                Assert.Equal(length - 2, MemmemSearch.FindReverse(haystack, "ab"u8));
+            }
+        }
+    }
+
+    /// <summary>
     /// Verifies forward substring search preserves arbitrary bytes.
     /// </summary>
     [Fact]

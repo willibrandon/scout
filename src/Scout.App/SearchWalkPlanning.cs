@@ -49,6 +49,19 @@ internal static class SearchWalkPlanning
     {
         WalkBuilder builder = new WalkBuilder(path)
             .Diagnostics(logger)
+            .ErrorHandler(error =>
+            {
+                string errorPath = error.Path.IsWindowsText
+                    ? error.Path.AsWindowsString()
+                    : Encoding.UTF8.GetString(error.Path.AsUnixBytes());
+                string detail = error.InnerException?.InnerException is System.ComponentModel.Win32Exception native
+                    ? $"{native.Message} (os error {native.NativeErrorCode})"
+                    : error.Message;
+                var cause = new ScoutError($"IO error for operation on {errorPath}: {detail}");
+                SearchApplicationDiagnostics.ReportError(lowArgs, diagnostics,
+                    cause.WithContext(ScoutErrorContext.ProgramPathContext(errorPath)));
+                return WalkState.Continue;
+            })
             .Hidden(!lowArgs.IncludeHidden)
             .FollowLinks(lowArgs.FollowLinks)
             .SameFileSystem(lowArgs.OneFileSystem)

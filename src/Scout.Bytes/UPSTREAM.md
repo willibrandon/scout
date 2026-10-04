@@ -5,9 +5,9 @@ This project ports the byte-string behavior of the Rust `bstr` crate pinned by
 
 ```text
 name = "bstr"
-version = "1.12.0"
-checksum = "234113d19d0d7d613b40e86fb654acf958910802bcceab913a4f9e7cda03b1a4"
-commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"
+version = "1.13.0"
+checksum = "1f7dc094d718f2e1c1559ad110e27eeaae14a5465d3d56dd6dbd793079fbd530"
+commit = "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f"
 ```
 
 The implementation owns byte-preserving string operations used by CLI parsing,

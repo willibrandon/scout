@@ -5,7 +5,7 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 VERSION="$(tr -d '\r\n' < "$ROOT/upstream/UNICODE-VERSION")"
 ARCHIVE="$ROOT/upstream/ucd/UCD-$VERSION.zip"
 EXPECTED_SHA256="c86dd81f2b14a43b0cc064aa5f89aa7241386801e35c59c7984e579832634eb2"
-TABLES="$ROOT/upstream/regex-syntax-0.8.8/unicode_tables"
+TABLES="$ROOT/upstream/regex-syntax-0.8.11/unicode_tables"
 
 fail() {
     printf '%s\n' "$1" >&2

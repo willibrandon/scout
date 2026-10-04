@@ -8,9 +8,13 @@ namespace Scout;
 /// </summary>
 /// <param name="path">The file path.</param>
 /// <param name="length">The mapped file length.</param>
+/// <param name="logger">The logger for nonfatal mapping advice failures.</param>
+/// <param name="advise">An optional native advice override for deterministic failure testing.</param>
 internal sealed unsafe class MemoryMappedSearchFile(
     string path,
-    long length) : IDisposable
+    long length,
+    DiagnosticLogger logger = default,
+    Func<nint, nuint, int>? advise = null) : IDisposable
 {
     private MemoryMappedFile? _mappedFile = CreateMappedFile(path);
     private MemoryMappedViewAccessor? _accessor;
@@ -78,8 +82,11 @@ internal sealed unsafe class MemoryMappedSearchFile(
     /// </summary>
     /// <param name="path">The file path.</param>
     /// <param name="mappedSearchFile">Receives the mapped file without an initial view.</param>
+    /// <param name="logger">The logger for nonfatal mapping advice failures.</param>
+    /// <param name="advise">An optional native advice override for deterministic failure testing.</param>
     /// <returns><see langword="true" /> when the file mapping was opened successfully.</returns>
-    public static bool TryOpenFile(string path, out MemoryMappedSearchFile? mappedSearchFile)
+    public static bool TryOpenFile(string path, out MemoryMappedSearchFile? mappedSearchFile, DiagnosticLogger logger = default,
+        Func<nint, nuint, int>? advise = null)
     {
         mappedSearchFile = null;
         FileStream? stream = null;
@@ -100,7 +107,7 @@ internal sealed unsafe class MemoryMappedSearchFile(
 
             stream.Dispose();
             stream = null;
-            mappedSearchFile = new MemoryMappedSearchFile(path, length);
+            mappedSearchFile = new MemoryMappedSearchFile(path, length, logger, advise);
             return true;
         }
         catch (ArgumentException)
@@ -158,6 +165,12 @@ internal sealed unsafe class MemoryMappedSearchFile(
                 MemoryMappedFileAccess.Read);
             handle = accessor.SafeMemoryMappedViewHandle;
             handle.AcquirePointer(ref pointer);
+            if (!NativeMemoryAdvice.TrySequential(pointer, checked((nuint)handle.ByteLength), out int error, advise))
+            {
+                logger.Debug("scout::searcher", "src/Scout.App/MemoryMappedSearchFile.cs",
+                    $"{path}: madvise failed: {new System.ComponentModel.Win32Exception(error).Message} (os error {error})");
+            }
+
             pointer += accessor.PointerOffset;
 
             _accessor = accessor;

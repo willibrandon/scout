@@ -17,6 +17,52 @@ env:
   LINUX_SNAPSHOT_URL: "http://snapshot.debian.org/archive/debian/20260531T000000Z"
 
 jobs:
+  library-packages:
+    name: package consumers (${{ matrix.rid }})
+    needs: validate
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: linux-x64, runner: ubuntu-24.04 }
+          - { rid: linux-arm64, runner: ubuntu-24.04-arm }
+          - { rid: osx-x64, runner: macos-26-intel }
+          - { rid: osx-arm64, runner: macos-26 }
+          - { rid: win-x64, runner: windows-2025-vs2026, vsarch: x64 }
+          - { rid: win-arm64, runner: windows-11-arm, vsarch: arm64 }
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.102
+      - name: Install Linux AOT prerequisites
+        if: runner.os == 'Linux'
+        run: eng/install-linux-host-prereqs.sh
+      - name: Execute JIT, trimmed, and AOT NuGet consumers
+        if: runner.os != 'Windows'
+        run: python3 eng/verify-library-packages.py --rid ${{ matrix.rid }} --version "${{ needs.validate.outputs.version }}"
+      - name: Execute Windows JIT, trimmed, and AOT NuGet consumers
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=* delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath`) do set "VSINSTALL=%%i"
+          if not defined VSINSTALL (
+            echo Visual Studio installation not found.
+            exit /b 1
+          )
+          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=${{ matrix.vsarch }}
+          python eng/verify-library-packages.py --rid ${{ matrix.rid }} --version "${{ needs.validate.outputs.version }}"
+      - name: Upload package consumer receipts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-consumers-${{ matrix.rid }}
+          path: artifacts/package-consumers/${{ matrix.rid }}
+
   validate:
     name: validate tag
     runs-on: ubuntu-24.04
@@ -84,6 +130,8 @@ jobs:
             ca-certificates \
             clang \
             curl \
+            fish \
+            zsh \
             git \
             gzip \
             libc6="$LINUX_LIBC_VERSION" \
@@ -110,6 +158,11 @@ jobs:
       - name: Build and package native binary
         shell: bash
         run: native/build-app-unix.sh ${{ matrix.rid }} --smoke-only
+      - name: Verify Unix shell completions
+        shell: bash
+        run: |
+          if [ "$(uname -s)" = Darwin ]; then brew list fish >/dev/null 2>&1 || brew install fish; fi
+          python3 eng/verify-completions.py --scout artifacts/bin/${{ matrix.rid }}/scout --shell bash --shell zsh --shell fish
       - name: Pack RID-specific dotnet tool
         run: python3 eng/pack-dotnet-tool.py --version "${{ needs.validate.outputs.version }}" --rid ${{ matrix.rid }} --rid-only
       - name: Pack local pointer package for install smoke
@@ -159,6 +212,31 @@ jobs:
             artifacts/tool-packages/Scout.${{ matrix.rid }}.${{ needs.validate.outputs.version }}.nupkg
             artifacts/tool-packages/Scout.${{ matrix.rid }}.${{ needs.validate.outputs.version }}.nupkg.sha256
 
+  build-musl-arm64:
+    name: native package (linux-musl-arm64)
+    needs: validate
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and validate Alpine release artifacts
+        run: |
+          docker run --rm -v "$PWD:/scout" -w /scout \
+            -e GITHUB_ACTIONS=true \
+            -e SCOUT_RELEASE_VERSION="${{ needs.validate.outputs.version }}" \
+            mcr.microsoft.com/dotnet/sdk:10.0.102-alpine3.22-arm64v8@sha256:3686e722179cbe27f0a4ade4e8677aaf4c2f64a103dc160d5ff4592ce0afed02 \
+            sh -c 'apk add --no-cache bash && bash eng/run-musl-gates.sh'
+      - name: Upload release and tool artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: scout-linux-musl-arm64
+          if-no-files-found: error
+          path: |
+            artifacts/packages/scout-linux-musl-arm64.tar.gz
+            artifacts/packages/scout-linux-musl-arm64.tar.gz.sha256
+            artifacts/tool-packages/Scout.linux-musl-arm64.${{ needs.validate.outputs.version }}.nupkg
+            artifacts/tool-packages/Scout.linux-musl-arm64.${{ needs.validate.outputs.version }}.nupkg.sha256
+
   build-macos:
     name: native package (${{ matrix.rid }})
     needs: validate
@@ -180,6 +258,11 @@ jobs:
           dotnet-version: 10.0.102
       - name: Build and package native binary
         run: native/build-app-unix.sh ${{ matrix.rid }} --smoke-only
+      - name: Verify Unix shell completions
+        shell: bash
+        run: |
+          if [ "$(uname -s)" = Darwin ]; then brew list fish >/dev/null 2>&1 || brew install fish; fi
+          python3 eng/verify-completions.py --scout artifacts/bin/${{ matrix.rid }}/scout --shell bash --shell zsh --shell fish
       - name: Pack RID-specific dotnet tool
         run: python3 eng/pack-dotnet-tool.py --version "${{ needs.validate.outputs.version }}" --rid ${{ matrix.rid }} --rid-only
       - name: Pack local pointer package for install smoke
@@ -261,6 +344,7 @@ jobs:
           )
           call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=${{ matrix.vsarch }}
           pwsh -NoProfile -ExecutionPolicy Bypass -File native/build-app-windows.ps1 ${{ matrix.rid }} -DifferentialMode SmokeOnly
+          python eng/verify-completions.py --scout artifacts/bin/${{ matrix.rid }}/scout.exe --shell powershell
       - name: Install WiX Toolset
         run: dotnet tool install --global wix --version 5.0.2
       - name: Build MSI
@@ -438,81 +522,8 @@ jobs:
           done
           mapfile -t actual < <(find artifacts/library-packages -maxdepth 1 -type f -name '*.nupkg' -printf '%f\n' | sort)
           diff -u <(printf '%s\n' "${expected[@]}" | sort) <(printf '%s\n' "${actual[@]}")
-      - name: Verify library install and AOT publish
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="${{ needs.validate.outputs.version }}"
-          consumer="$(mktemp -d)"
-          cat > "$consumer/NuGet.Config" <<EOF
-          <?xml version="1.0" encoding="utf-8"?>
-          <configuration>
-            <packageSources>
-              <clear />
-              <add key="libraries" value="$(pwd)/artifacts/library-packages" />
-              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
-            </packageSources>
-            <packageSourceMapping>
-              <packageSource key="libraries">
-                <package pattern="Scout.Text.Regex" />
-                <package pattern="Scout.IO.Globbing" />
-                <package pattern="Scout.IO.Ignore" />
-              </packageSource>
-              <packageSource key="nuget.org">
-                <package pattern="Microsoft.*" />
-              </packageSource>
-            </packageSourceMapping>
-          </configuration>
-          EOF
-          cat > "$consumer/ScoutLibraryConsumer.csproj" <<EOF
-          <Project Sdk="Microsoft.NET.Sdk">
-            <PropertyGroup>
-              <OutputType>Exe</OutputType>
-              <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
-              <ImplicitUsings>enable</ImplicitUsings>
-              <Nullable>enable</Nullable>
-            </PropertyGroup>
-            <ItemGroup>
-              <PackageReference Include="Scout.Text.Regex" Version="$version" />
-              <PackageReference Include="Scout.IO.Globbing" Version="$version" />
-              <PackageReference Include="Scout.IO.Ignore" Version="$version" />
-            </ItemGroup>
-          </Project>
-          EOF
-          cat > "$consumer/Program.cs" <<'EOF'
-          using Scout.IO.Globbing;
-          using Scout.IO.Ignore;
-          using Scout.Text.Regex;
-
-          ByteRegex regex = ByteRegex.Compile("two");
-          if (!regex.IsMatch("one two three"u8))
-          {
-              throw new InvalidOperationException("regex package did not match");
-          }
-
-          Glob glob = Glob.Parse("*.cs"u8.ToArray());
-          if (!glob.IsMatch("Program.cs"u8))
-          {
-              throw new InvalidOperationException("glob package did not match");
-          }
-
-          FileWalker walker = new(new FileWalkerOptions());
-          if (!walker.Enumerate(Environment.CurrentDirectory).Any(entry => entry.FullPath.EndsWith("Program.cs", StringComparison.Ordinal)))
-          {
-              throw new InvalidOperationException("ignore package did not walk the consumer project");
-          }
-          EOF
-          dotnet restore "$consumer" -p:TargetFramework=net9.0 --configfile "$consumer/NuGet.Config"
-          dotnet run --project "$consumer" -f net9.0 -c Release --no-restore
-          dotnet restore "$consumer" -p:TargetFramework=net10.0 -r linux-x64 --configfile "$consumer/NuGet.Config"
-          dotnet publish "$consumer" \
-            -f net10.0 \
-            -c Release \
-            -r linux-x64 \
-            --self-contained true \
-            --no-restore \
-            -p:PublishAot=true \
-            -p:PublishTrimmed=true
+      - name: Execute library package consumers
+        run: python3 eng/verify-library-packages.py --rid linux-x64 --version "${{ needs.validate.outputs.version }}" --feed artifacts/library-packages
       - name: Upload library packages
         uses: actions/upload-artifact@v7
         with:
@@ -526,10 +537,12 @@ jobs:
     needs:
       - validate
       - build-linux
+      - build-musl-arm64
       - build-macos
       - build-windows
       - pack-tool-pointer
       - pack-library-packages
+      - library-packages
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/setup-dotnet@v5
@@ -558,6 +571,7 @@ jobs:
             Scout.IO.Ignore.${version}.nupkg
             Scout.Text.Regex.${version}.nupkg
             Scout.linux-arm64.${version}.nupkg
+            Scout.linux-musl-arm64.${version}.nupkg
             Scout.linux-x64.${version}.nupkg
             Scout.osx-arm64.${version}.nupkg
             Scout.osx-x64.${version}.nupkg
@@ -606,6 +620,7 @@ jobs:
           version="${{ needs.validate.outputs.version }}"
           package_ids=(
             Scout.linux-arm64
+            Scout.linux-musl-arm64
             Scout.linux-x64
             Scout.osx-arm64
             Scout.osx-x64
@@ -698,6 +713,8 @@ jobs:
             artifacts/release/scout-linux-x64.tar.gz.sha256 \
             artifacts/release/scout-linux-arm64.tar.gz \
             artifacts/release/scout-linux-arm64.tar.gz.sha256 \
+            artifacts/release/scout-linux-musl-arm64.tar.gz \
+            artifacts/release/scout-linux-musl-arm64.tar.gz.sha256 \
             artifacts/release/scout-osx-x64.tar.gz \
             artifacts/release/scout-osx-x64.tar.gz.sha256 \
             artifacts/release/scout-osx-arm64.tar.gz \

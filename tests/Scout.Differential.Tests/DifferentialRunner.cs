@@ -51,8 +51,10 @@ internal static class DifferentialRunner
         string[] scoutArguments = testCase.GetArguments(scoutDirectory);
         string[] pinnedArguments = testCase.GetArguments(pinnedDirectory);
         DifferentialComparisonMode comparisonMode = testCase.GetComparisonMode(scoutArguments, scoutWorkingDirectory);
-        DifferentialRunResult scout = RunScout(scoutArguments, testCase.StandardInput, testCase.RelativeConfigPath, scoutWorkingDirectory);
-        DifferentialRunResult pinned = RunPinnedRipgrep(pinnedArguments, testCase.StandardInput, testCase.RelativeConfigPath, pinnedWorkingDirectory);
+        DifferentialRunResult scout = RunScout(scoutArguments, testCase.StandardInput, testCase.RelativeConfigPath, scoutWorkingDirectory,
+            testCase.EnvironmentFactory?.Invoke(scoutDirectory));
+        DifferentialRunResult pinned = RunPinnedRipgrep(pinnedArguments, testCase.StandardInput, testCase.RelativeConfigPath, pinnedWorkingDirectory,
+            testCase.EnvironmentFactory?.Invoke(pinnedDirectory));
 
         if (pinned.ExitCode != scout.ExitCode)
         {
@@ -68,9 +70,16 @@ internal static class DifferentialRunner
             DifferentialOutputNormalizer.NormalizeStderr(scout.Error, comparisonMode));
     }
 
-    private static DifferentialRunResult RunScout(string[] arguments, byte[]? standardInput, string? relativeConfigPath, string? workingDirectory)
+    private static DifferentialRunResult RunScout(string[] arguments, byte[]? standardInput, string? relativeConfigPath, string? workingDirectory,
+        IReadOnlyDictionary<string, string?>? environment = null)
     {
-        if (workingDirectory is null)
+        string? executable = Environment.GetEnvironmentVariable("SCOUT_TEST_EXECUTABLE_PATH");
+        if (!string.IsNullOrEmpty(executable))
+        {
+            return RunPinnedRipgrep(arguments, standardInput, relativeConfigPath, workingDirectory, environment, executable);
+        }
+
+        if (workingDirectory is null && environment is null)
         {
             return RunScoutInCurrentDirectory(arguments, standardInput, relativeConfigPath);
         }
@@ -78,14 +87,32 @@ internal static class DifferentialRunner
         lock (CurrentDirectoryLock)
         {
             string previousDirectory = Directory.GetCurrentDirectory();
+            var previousEnvironment = new Dictionary<string, string?>(StringComparer.Ordinal);
             try
             {
-                Directory.SetCurrentDirectory(workingDirectory);
+                if (workingDirectory is not null)
+                {
+                    Directory.SetCurrentDirectory(workingDirectory);
+                }
+
+                if (environment is not null)
+                {
+                    foreach ((string name, string? value) in environment)
+                    {
+                        previousEnvironment[name] = Environment.GetEnvironmentVariable(name);
+                        Environment.SetEnvironmentVariable(name, value);
+                    }
+                }
+
                 return RunScoutInCurrentDirectory(arguments, standardInput, relativeConfigPath);
             }
             finally
             {
                 Directory.SetCurrentDirectory(previousDirectory);
+                foreach ((string name, string? value) in previousEnvironment)
+                {
+                    Environment.SetEnvironmentVariable(name, value);
+                }
             }
         }
     }
@@ -110,9 +137,18 @@ internal static class DifferentialRunner
         return new DifferentialRunResult(exitCode, output.ToArray(), Utf8.GetString(error.ToArray()));
     }
 
-    private static DifferentialRunResult RunPinnedRipgrep(string[] arguments, byte[]? standardInput, string? relativeConfigPath, string? workingDirectory)
+    private static DifferentialRunResult RunPinnedRipgrep(string[] arguments, byte[]? standardInput, string? relativeConfigPath, string? workingDirectory,
+        IReadOnlyDictionary<string, string?>? environment = null, string? executable = null)
     {
-        ProcessStartInfo startInfo = PinnedRipgrepOracle.CreateStartInfo(redirectStandardInput: true);
+        ProcessStartInfo startInfo = executable is null
+            ? PinnedRipgrepOracle.CreateStartInfo(redirectStandardInput: true)
+            : new ProcessStartInfo(executable)
+            {
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
         if (workingDirectory is not null)
         {
             startInfo.WorkingDirectory = workingDirectory;
@@ -122,7 +158,15 @@ internal static class DifferentialRunner
         startInfo.Environment.Remove("SCOUT_CONFIG_PATH");
         if (relativeConfigPath is not null)
         {
-            startInfo.Environment["RIPGREP_CONFIG_PATH"] = relativeConfigPath;
+            startInfo.Environment[executable is null ? "RIPGREP_CONFIG_PATH" : "SCOUT_CONFIG_PATH"] = relativeConfigPath;
+        }
+
+        if (environment is not null)
+        {
+            foreach ((string name, string? value) in environment)
+            {
+                startInfo.Environment[name] = value;
+            }
         }
 
         for (int index = 0; index < arguments.Length; index++)
@@ -190,7 +234,7 @@ internal static class DifferentialRunner
         errorThread.Join();
         if (timedOut)
         {
-            Assert.Fail("Pinned ripgrep timed out for arguments: " + string.Join(" ", arguments));
+            Assert.Fail(startInfo.FileName + " timed out for arguments: " + string.Join(" ", arguments));
         }
 
         if (outputException is not null)

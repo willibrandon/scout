@@ -52,6 +52,22 @@ public static unsafe partial class RawUnixDirectory
     /// <exception cref="PlatformNotSupportedException">The current platform is Windows.</exception>
     public static RawUnixDirectoryEntry[] Enumerate(ReadOnlySpan<byte> path)
     {
+        (RawUnixDirectoryEntry[]? entries, IOException? error) = ReadEntries(path);
+        if (error is not null)
+        {
+            throw error;
+        }
+
+        return entries!;
+    }
+
+    /// <summary>
+    /// Reads entries without discarding successful reads when directory enumeration fails.
+    /// </summary>
+    /// <param name="path">The raw directory path.</param>
+    /// <returns>The entries and error; null entries indicate an opening failure.</returns>
+    internal static (RawUnixDirectoryEntry[]? Entries, IOException? Error) ReadEntries(ReadOnlySpan<byte> path)
+    {
         if (OperatingSystem.IsWindows() || (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()))
         {
             throw new PlatformNotSupportedException("Raw Unix directory enumeration is only available on Linux and macOS.");
@@ -66,7 +82,8 @@ public static unsafe partial class RawUnixDirectory
             if (directory == 0)
             {
                 int error = Marshal.GetLastPInvokeError();
-                throw new IOException(new Win32Exception(error).Message);
+                var cause = new Win32Exception(error);
+                return (null, new IOException(cause.Message, cause));
             }
 
             try
@@ -93,17 +110,21 @@ public static unsafe partial class RawUnixDirectory
         }
     }
 
-    private static RawUnixDirectoryEntry[] EnumerateOpenDirectory(nint directory, ReadOnlySpan<byte> parentPath)
+    internal static (RawUnixDirectoryEntry[] Entries, IOException? Error) EnumerateOpenDirectory(
+        nint directory,
+        ReadOnlySpan<byte> parentPath,
+        Func<nint, nint>? readEntry = null)
     {
         var entries = new List<RawUnixDirectoryEntry>();
         byte[] ownedParentPath = parentPath.ToArray();
         while (true)
         {
-            nint entryPointer = ReadDir(directory);
+            nint entryPointer = readEntry is null ? ReadDir(directory) : readEntry(directory);
             if (entryPointer == 0)
             {
-                ThrowIfReadDirectoryFailed(Marshal.GetLastPInvokeError());
-                return entries.ToArray();
+                int error = Marshal.GetLastPInvokeError();
+                Win32Exception? cause = error == 0 ? null : new Win32Exception(error);
+                return (entries.ToArray(), cause is null ? null : new IOException(cause.Message, cause));
             }
 
             byte[] name = ReadName(entryPointer, out RawUnixDirectoryEntryType fileType);

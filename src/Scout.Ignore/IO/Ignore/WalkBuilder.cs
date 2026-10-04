@@ -27,6 +27,16 @@ public sealed class WalkBuilder
     private readonly List<string> customIgnoreFileNames = [];
     private readonly IgnoreRuleSet explicitIgnoreRules = new();
     private DiagnosticLogger logger;
+    private Func<WalkException, WalkState>? errorHandler;
+
+    internal Func<DirEntry, WalkDirectoryReadResult>? DirectoryReader { get; set; }
+
+    /// <summary>
+    /// Initializes an empty builder. Building it yields no entries until paths are added.
+    /// </summary>
+    public WalkBuilder()
+    {
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WalkBuilder" /> class.
@@ -36,6 +46,35 @@ public sealed class WalkBuilder
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
         paths.Add(path);
+    }
+
+    /// <summary>
+    /// Creates a builder from a sequence of root paths, copying the sequence exactly once.
+    /// </summary>
+    /// <param name="paths">The roots to traverse. An empty sequence yields an empty walk.</param>
+    /// <returns>The configured builder.</returns>
+    public static WalkBuilder FromPaths(IEnumerable<string> paths)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        var builder = new WalkBuilder();
+        foreach (string path in paths)
+        {
+            builder.Add(path);
+        }
+
+        return builder;
+    }
+
+    /// <summary>
+    /// Sets the handler for traversal errors. Without a handler, errors are thrown.
+    /// </summary>
+    /// <param name="handler">The handler, or <see langword="null" /> to restore exception propagation.</param>
+    /// <returns>This builder.</returns>
+    /// <remarks>Continue and Skip skip the failed operation; Quit stops the walk. Parallel walks can invoke the handler concurrently.</remarks>
+    public WalkBuilder ErrorHandler(Func<WalkException, WalkState>? handler)
+    {
+        errorHandler = handler;
+        return this;
     }
 
     /// <summary>
@@ -379,7 +418,9 @@ public sealed class WalkBuilder
             fileTypes,
             explicitIgnoreRules,
             ignoreFileNames.ToArray(),
-            logger);
+            logger,
+            errorHandler,
+            DirectoryReader);
     }
 
     /// <summary>
