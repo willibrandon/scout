@@ -53,7 +53,7 @@ jobs:
           mkdir -p artifacts/bench/upstream
           git rev-parse HEAD > artifacts/bench/upstream/commit.txt
           dotnet run --project bench/Scout.Benchmarks/Scout.Benchmarks.csproj -c Release -- \
-            --filter '*Upstream*' --job short --exporters json --artifacts artifacts/bench/upstream \
+            --filter '*Upstream*' --job short --buildTimeout 600 --exporters json --artifacts artifacts/bench/upstream \
             | tee artifacts/bench/upstream/run.log
           python3 eng/verify-upstream-benchmarks.py artifacts/bench/upstream
       - name: Upload benchmark evidence
