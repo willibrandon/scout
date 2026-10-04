@@ -9,7 +9,11 @@ $ErrorActionPreference = "Stop"
 
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Out = Join-Path $Root "spike\out\$Rid"
-$Runtime = Join-Path $env:USERPROFILE ".nuget\packages\microsoft.netcore.app.runtime.nativeaot.$Rid\10.0.2\runtimes\$Rid\native"
+$NuGetPackagesRoot = $env:NUGET_PACKAGES
+if ([string]::IsNullOrWhiteSpace($NuGetPackagesRoot)) {
+    $NuGetPackagesRoot = Join-Path $env:USERPROFILE ".nuget\packages"
+}
+$Runtime = Join-Path $NuGetPackagesRoot "microsoft.netcore.app.runtime.nativeaot.$Rid\10.0.2\runtimes\$Rid\native"
 
 Push-Location $Root
 try {
