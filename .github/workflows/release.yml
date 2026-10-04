@@ -344,6 +344,7 @@ jobs:
           )
           call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=${{ matrix.vsarch }}
           pwsh -NoProfile -ExecutionPolicy Bypass -File native/build-app-windows.ps1 ${{ matrix.rid }} -DifferentialMode SmokeOnly
+          if errorlevel 1 exit /b 1
           python eng/verify-completions.py --scout artifacts/bin/${{ matrix.rid }}/scout.exe --shell powershell
       - name: Install WiX Toolset
         run: dotnet tool install --global wix --version 5.0.2

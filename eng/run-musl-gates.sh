@@ -5,6 +5,9 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 cd "$ROOT"
 export SCOUT_HOST_RID=linux-musl-arm64
 export SCOUT_ORACLE_ENVIRONMENT=github-actions
+export GIT_CONFIG_COUNT=1
+export GIT_CONFIG_KEY_0=safe.directory
+export GIT_CONFIG_VALUE_0="$ROOT"
 
 eng/install-musl-prereqs.sh
 eng/restore-ripgrep-oracle.sh
@@ -12,6 +15,10 @@ eng/fetch-corpora.sh --all
 dotnet restore Scout.slnx
 dotnet build Scout.slnx --no-restore
 eng/check-msbuild-warning-gates.sh
+dotnet format Scout.slnx --no-restore --verify-no-changes
+for mode in regex-parse glob-compile search-loop; do
+    dotnet run --project fuzz/Scout.Fuzz/Scout.Fuzz.csproj --no-build -- "$mode"
+done
 dotnet test Scout.slnx --no-restore
 spike/build-unix.sh linux-musl-arm64
 native/build-app-unix.sh linux-musl-arm64 --with-differentials

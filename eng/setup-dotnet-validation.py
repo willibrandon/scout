@@ -10,6 +10,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tarfile
+import tempfile
 import tomllib
 import urllib.request
 import zipfile
@@ -21,7 +22,7 @@ def main() -> None:
     parser.add_argument("--rid", required=True)
     args = parser.parse_args()
     lock = tomllib.loads((root / "tests/PREREQS.lock").read_text())
-    destination = root / "artifacts/validation-dotnet" / args.rid
+    destination = Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir())) / "scout-validation-dotnet" / args.rid
     destination.mkdir(parents=True, exist_ok=True)
     downloads = root / "artifacts/prereqs" / args.rid / "dotnet"
     downloads.mkdir(parents=True, exist_ok=True)
