@@ -45,8 +45,9 @@ cat > artifacts/tool-test/NuGet.Config <<EOF
 <add key="pointer" value="$ROOT/artifacts/tool-test" />
 </packageSources></configuration>
 EOF
-export NUGET_PACKAGES="$ROOT/artifacts/tool-test/nuget-packages"
-dotnet tool install Scout --tool-path artifacts/tool-test/install --configfile artifacts/tool-test/NuGet.Config
+tool_package_cache="$(mktemp -d)"
+trap 'rm -rf "$tool_package_cache"' EXIT
+NUGET_PACKAGES="$tool_package_cache" dotnet tool install Scout --tool-path artifacts/tool-test/install --configfile artifacts/tool-test/NuGet.Config
 printf 'needle\n' > artifacts/tool-test/search.txt
 artifacts/tool-test/install/scout --no-config -n needle artifacts/tool-test/search.txt > artifacts/tool-test/search.out
 printf '1:needle\n' | cmp -s - artifacts/tool-test/search.out
