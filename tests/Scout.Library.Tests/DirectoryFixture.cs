@@ -12,7 +12,8 @@ internal sealed class DirectoryFixture : IDisposable
 
     internal string Write(string path, string contents = "match\n")
     {
-        string fullPath = System.IO.Path.Combine(Root, path);
+        ArgumentNullException.ThrowIfNull(path);
+        string fullPath = System.IO.Path.Combine(Root, path.Replace('/', System.IO.Path.DirectorySeparatorChar));
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(fullPath)!);
         File.WriteAllText(fullPath, contents);
         return fullPath;

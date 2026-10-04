@@ -70,7 +70,7 @@ public sealed class BufferedWalkRegressionTests
             {
                 if (entry.Depth == 0)
                 {
-                    File.Delete(Path.Combine(root, ".rgignore"));
+                    File.WriteAllText(Path.Combine(root, ".rgignore"), "kept\n");
                 }
 
                 if (entry.IsFile)

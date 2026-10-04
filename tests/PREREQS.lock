@@ -26,6 +26,10 @@ ripgrep_pcre2_rg_path = "artifacts/preparation/issue-66/ripgrep/target/pcre2/rel
 ripgrep_pcre2_rg_sha256 = "5783a7e37d69c543be5527eaf72e385f7f79f52b9f7f0f67e1244844c371175b"
 ripgrep_pcre2_reported_version = "PCRE2 10.45 is available (JIT is available)"
 
+[musl_compress_source]
+url = "https://github.com/vapier/ncompress/archive/e77a84ca5a69f01ccfe149e48d10ac563e6c375b.tar.gz"
+sha256 = "0905f89daa94853c4c75bfe7fc9b7636a70afd7d84abdd10ee944349de3117b1"
+
 [[dotnet_sdk_archive]]
 rid = "osx-arm64"
 url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.102/dotnet-sdk-10.0.102-osx-arm64.tar.gz"
@@ -238,7 +242,7 @@ rid = "osx-arm64"
 environment = "github-actions"
 version = "Apple gzip 479"
 path = "/usr/bin/gzip"
-sha256 = ["7bd218bc6b12fced475163901547a796736f72f99533cbec60eea150ed21afa3", "c78f313867a6978148f989c8e758fb7a9ba7ff324f0b359b2053f5172f970be5"]
+sha256 = "0f655a20639414497cd4ec5f614c41ee8bf329c2daa0ade0d6ae5e549b9c6f9e"
 
 [[tool.macos]]
 name = "bzip2"
@@ -246,7 +250,7 @@ rid = "osx-arm64"
 environment = "github-actions"
 version = "1.0.8"
 path = "/usr/bin/bzip2"
-sha256 = ["14e28b6b7955cbd6cd2a8139ca41186a922143a4fa3715ddd8e331f41db8fc80", "c9c5d486ee877f9104363ee0fe20539d4c1fbbb76f2f322d5e871f40aaf6ce26"]
+sha256 = "ade8a304cfcb33d8d2f4a5355d1c078712f8228cf079bc4982c3bb2e6316f885"
 
 [[tool.macos]]
 name = "xz"
@@ -270,7 +274,7 @@ rid = "osx-arm64"
 environment = "github-actions"
 version = "1.10.0"
 path = "/opt/homebrew/bin/lz4"
-sha256 = "b7dccdc84a76f0359c26c67393a6d50b4b073f8bf85078dca7ccf877502b00e5"
+sha256 = "583969b1933b0ce5ffa808db9aa846f3acd07bf8e817c34914d89a4a59e27c7d"
 
 [[tool.macos]]
 name = "brotli"
@@ -286,7 +290,7 @@ rid = "osx-arm64"
 environment = "github-actions"
 version = "Apple compress file_cmds-479"
 path = "/usr/bin/uncompress"
-sha256 = ["aec4becd30850078aa28747caa0c76227c9e848378377e37f98d531203fe6aa4", "bf8cb1cefedfbf86fbb38dd42278fcad8fe020f3b8989897f1a0b2187aabdda5"]
+sha256 = "66da7ddde3ab1c9f93d1307bae06086570e3aed3c72827ccef22c251f5b2d874"
 
 [[tool.macos]]
 name = "hyperfine"
