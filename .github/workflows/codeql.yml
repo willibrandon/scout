@@ -76,6 +76,10 @@ jobs:
           name: codeql-results-${{ matrix.language }}-${{ github.run_attempt }}
           path: artifacts/codeql-results/**/*.sarif
           if-no-files-found: error
+      - name: Require zero findings in Scout-owned native code
+        if: ${{ !cancelled() && steps.analyze.outcome == 'success' && matrix.language == 'c-cpp' }}
+        # Keep upstream PCRE2/SLJIT intact; upload and report every finding without dismissing alerts.
+        run: python3 eng/verify-codeql-results.py artifacts/codeql-results --third-party-root native/pcre2
       - name: Require zero findings
-        if: ${{ !cancelled() && steps.analyze.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.analyze.outcome == 'success' && matrix.language != 'c-cpp' }}
         run: python3 eng/verify-codeql-results.py artifacts/codeql-results

@@ -32,6 +32,48 @@ class VerifyCodeQlResultsTests(unittest.TestCase):
             with self.subTest(run=run):
                 self.assertNotEqual(0, self.run_gate(run).returncode)
 
+    def test_third_party_findings_are_reported_without_changing_sarif(self) -> None:
+        finding = self.located_finding("native/pcre2/pcre2-10.46/src/pcre2_compile.c")
+        result = self.run_gate({"results": [finding]}, ["--third-party-root", "native/pcre2"])
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("third-party source (reported unchanged)", result.stderr)
+        self.assertIn("1 finding(s) in unchanged third-party source", result.stderr)
+        self.assertIn("GitHub code scanning", result.stderr)
+
+    def test_third_party_policy_does_not_accept_owned_unknown_or_escaping_locations(self) -> None:
+        for source in (
+            "native/entry/scout_main.c", "src/Scout.Pcre2/Pcre2Library.cs",
+            "native/pcre2-extra/example.c", "native/pcre2/../../src/example.c",
+            "native/pcre2/%2e%2e/%2e%2e/src/example.c", "/native/pcre2/example.c",
+            "file:///native/pcre2/example.c",
+        ):
+            with self.subTest(source=source):
+                finding = self.located_finding(source)
+                result = self.run_gate({"results": [finding]}, ["--third-party-root", "native/pcre2"])
+                self.assertNotEqual(0, result.returncode)
+        for finding in (
+            {"ruleId": "test/security", "message": {"text": "Unknown location"}},
+            {**self.located_finding("native/pcre2/example.c"), "locations": [
+                *self.located_finding("native/pcre2/example.c")["locations"],
+                *self.located_finding("native/entry/scout_main.c")["locations"],
+            ]},
+        ):
+            result = self.run_gate({"results": [finding]}, ["--third-party-root", "native/pcre2"])
+            self.assertNotEqual(0, result.returncode)
+
+    def test_third_party_findings_fail_without_explicit_ownership_policy(self) -> None:
+        result = self.run_gate({"results": [self.located_finding("native/pcre2/example.c")]})
+        self.assertNotEqual(0, result.returncode)
+
+    def test_mixed_owned_and_third_party_findings_fail(self) -> None:
+        result = self.run_gate({"results": [
+            self.located_finding("native/pcre2/example.c"),
+            self.located_finding("native/entry/scout_main.c"),
+        ]}, ["--third-party-root", "native/pcre2"])
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("1 finding(s) in Scout-owned code", result.stderr)
+        self.assertIn("1 finding(s) in unchanged third-party source", result.stderr)
+
     def test_large_findings_remain_failures_with_bounded_located_logs(self) -> None:
         result = self.run_gate({"results": [{
             "ruleId": "test/security",
@@ -74,16 +116,25 @@ class VerifyCodeQlResultsTests(unittest.TestCase):
         self.assertNotEqual(0, result.returncode)
         self.assertIn("Finding in second run", result.stderr)
 
-    def run_gate(self, run: dict) -> subprocess.CompletedProcess[str]:
-        return self.invoke({"scan.sarif": json.dumps({"version": "2.1.0", "runs": [run]})})
+    def located_finding(self, source: str) -> dict:
+        return {"ruleId": "test/security", "message": {"text": "Finding"}, "locations": [
+            {"physicalLocation": {"artifactLocation": {"uri": source}}},
+        ]}
 
-    def invoke(self, documents: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    def run_gate(self, run: dict, options: list[str] | None = None) -> subprocess.CompletedProcess[str]:
+        return self.invoke({"scan.sarif": json.dumps({"version": "2.1.0", "runs": [run]})}, options)
+
+    def invoke(self, documents: dict[str, str], options: list[str] | None = None) -> subprocess.CompletedProcess[str]:
         script = Path(__file__).resolve().parents[2] / "eng" / "verify-codeql-results.py"
         with tempfile.TemporaryDirectory() as directory:
             for relative_path, contents in documents.items():
                 path = Path(directory) / relative_path
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(contents, encoding="utf-8")
-            return subprocess.run(
-                [sys.executable, str(script), directory], capture_output=True, text=True, check=False,
+            result = subprocess.run(
+                [sys.executable, str(script), directory, *(options or [])],
+                capture_output=True, text=True, check=False,
             )
+            for relative_path, contents in documents.items():
+                self.assertEqual(contents, (Path(directory) / relative_path).read_text(encoding="utf-8"))
+            return result
