@@ -466,7 +466,9 @@ compare_case multiline_invert_vimgrep exact -P --vimgrep --multiline -v '(?s)foo
 compare_case multiline_invert_vimgrep_context exact -P --vimgrep --multiline -v -C1 '(?s)foo\nbar' pcre2-multiline-vimgrep
 compare_case multiline_invert_quiet exact -P --multiline -q -v '(?s)foo\nbar' pcre2-multiline-vimgrep
 
-if command -v python3 >/dev/null 2>&1; then
+if [ -n "${SCOUT_PYTHON:-}" ]; then
+    "$SCOUT_PYTHON" "$ROOT/eng/test-traversal-exit-status.py" "$SCOUT" "$RG_PCRE2"
+elif command -v python3 >/dev/null 2>&1; then
     python3 "$ROOT/eng/test-traversal-exit-status.py" "$SCOUT" "$RG_PCRE2"
 else
     python "$ROOT/eng/test-traversal-exit-status.py" "$SCOUT" "$RG_PCRE2"
