@@ -87,8 +87,10 @@ HOST_ORACLE_ENVIRONMENT=local
 EXPECTED_RIPGREP="$(read_lock_value ripgrep_commit)"
 RG_PATH="$(resolve_repo_path "$(read_oracle_value path ripgrep_rg_path)")"
 """ + _SOURCE_CHECK + _CARGO_CHECK
+        script_path = self.root / "eng/preflight.sh"
+        script_path.write_bytes(script.encode("utf-8"))
         return subprocess.run(
-            ["sh", "-c", script, (self.root / "eng/preflight.sh").as_posix()],
+            ["sh", script_path.as_posix()],
             env=environment, capture_output=True, text=True, check=False,
         )
 
@@ -112,7 +114,7 @@ RG_PATH="$(resolve_repo_path "$(read_oracle_value path ripgrep_rg_path)")"
         self.assertIn("Cargo.lock", result.stderr)
 
     def test_archive_verification_does_not_require_a_source_checkout(self) -> None:
-        shutil.rmtree(self.checkout)
+        self.checkout = self.root / "artifacts/archive-only-reference"
         result = self.run_checks(archive=True)
         self.assertEqual(0, result.returncode, result.stderr)
 
