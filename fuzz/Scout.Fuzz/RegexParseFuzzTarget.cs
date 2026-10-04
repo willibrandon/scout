@@ -11,6 +11,7 @@ internal static class RegexParseFuzzTarget
         }
         catch (FormatException)
         {
+            return;
         }
     }
 }

@@ -7,7 +7,7 @@ namespace Scout;
 /// </summary>
 public sealed partial class PortedRgTestCoverageTests
 {
-    private static readonly string UpstreamTestsRoot = Path.Combine(FindRepositoryRoot(), "upstream", "ripgrep-e89fff89", "tests");
+    private static readonly string UpstreamTestsRoot = Path.Join(FindRepositoryRoot(), "upstream", "ripgrep-e89fff89", "tests");
 
     private static readonly string[] ExpectedUnportedRgTests = [];
 
@@ -52,9 +52,9 @@ public sealed partial class PortedRgTestCoverageTests
 
     private static SortedSet<string> ReadCatalog()
     {
-        string path = Path.Combine(FindRepositoryRoot(), "tests", "Scout.Differential.Tests", "PortedRgTests.catalog");
-        string nativePcre2Path = Path.Combine(FindRepositoryRoot(), "tests", "Scout.Differential.Tests", "NativePcre2RgTests.catalog");
-        string nativeInvalidUtf8Path = Path.Combine(FindRepositoryRoot(), "tests", "Scout.Differential.Tests", "NativeInvalidUtf8RgTests.catalog");
+        string path = Path.Join(FindRepositoryRoot(), "tests", "Scout.Differential.Tests", "PortedRgTests.catalog");
+        string nativePcre2Path = Path.Join(FindRepositoryRoot(), "tests", "Scout.Differential.Tests", "NativePcre2RgTests.catalog");
+        string nativeInvalidUtf8Path = Path.Join(FindRepositoryRoot(), "tests", "Scout.Differential.Tests", "NativeInvalidUtf8RgTests.catalog");
         var tests = new SortedSet<string>(StringComparer.Ordinal);
         ReadCatalogFile(path, tests);
         ReadCatalogFile(nativePcre2Path, tests);
@@ -64,28 +64,15 @@ public sealed partial class PortedRgTestCoverageTests
 
     private static void ReadCatalogFile(string path, SortedSet<string> tests)
     {
-        foreach (string line in File.ReadLines(path))
+        foreach (string name in File.ReadLines(path).Select(static line => line.Trim()).Where(static line => line.Length > 0))
         {
-            string trimmed = line.Trim();
-            if (trimmed.Length > 0)
-            {
-                tests.Add(trimmed);
-            }
+            tests.Add(name);
         }
     }
 
     private static string[] Difference(SortedSet<string> left, SortedSet<string> right)
     {
-        var difference = new List<string>();
-        foreach (string value in left)
-        {
-            if (!right.Contains(value))
-            {
-                difference.Add(value);
-            }
-        }
-
-        return difference.ToArray();
+        return left.Except(right, StringComparer.Ordinal).ToArray();
     }
 
     private static string FindRepositoryRoot()
@@ -93,7 +80,7 @@ public sealed partial class PortedRgTestCoverageTests
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "Scout.slnx")))
+            if (File.Exists(Path.Join(directory.FullName, "Scout.slnx")))
             {
                 return directory.FullName;
             }

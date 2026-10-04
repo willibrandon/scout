@@ -43,9 +43,7 @@ public static class SearchEncodingReader
 
         byte[] rented = ArrayPool<byte>.Shared.Rent(BufferSize);
         byte[] pending = Array.Empty<byte>();
-        bool resolvedInitialEncoding = false;
-        SearchEncodingKind effectiveEncodingKind = encodingKind;
-        Iso2022JpDecoderState iso2022JpDecoderState = default;
+        SearchTranscodingState state = new() { EffectiveEncodingKind = encodingKind };
         try
         {
             while (true)
@@ -68,19 +66,15 @@ public static class SearchEncodingReader
                     buffer,
                     destination,
                     encodingKind,
-                    ref resolvedInitialEncoding,
-                    ref effectiveEncodingKind,
-                    ref iso2022JpDecoderState,
+                    ref state,
                     flush: false);
             }
 
-            pending = ProcessBuffer(
+            _ = ProcessBuffer(
                 pending,
                 destination,
                 encodingKind,
-                ref resolvedInitialEncoding,
-                ref effectiveEncodingKind,
-                ref iso2022JpDecoderState,
+                ref state,
                 flush: true);
         }
         finally
@@ -115,21 +109,19 @@ public static class SearchEncodingReader
         ReadOnlySpan<byte> buffer,
         Stream destination,
         SearchEncodingKind requestedEncodingKind,
-        ref bool resolvedInitialEncoding,
-        ref SearchEncodingKind effectiveEncodingKind,
-        ref Iso2022JpDecoderState iso2022JpDecoderState,
+        ref SearchTranscodingState state,
         bool flush)
     {
-        if (!resolvedInitialEncoding)
+        if (!state.ResolvedInitialEncoding)
         {
             if (!flush && buffer.Length < 3)
             {
                 return buffer.ToArray();
             }
 
-            int bomLength = ResolveInitialEncoding(buffer, requestedEncodingKind, out effectiveEncodingKind);
+            int bomLength = ResolveInitialEncoding(buffer, requestedEncodingKind, out state.EffectiveEncodingKind);
             buffer = buffer[bomLength..];
-            resolvedInitialEncoding = true;
+            state.ResolvedInitialEncoding = true;
         }
 
         if (buffer.IsEmpty)
@@ -137,25 +129,25 @@ public static class SearchEncodingReader
             return Array.Empty<byte>();
         }
 
-        if (effectiveEncodingKind is SearchEncodingKind.None or SearchEncodingKind.Auto)
+        if (state.EffectiveEncodingKind is SearchEncodingKind.None or SearchEncodingKind.Auto)
         {
             destination.Write(buffer);
             return Array.Empty<byte>();
         }
 
-        if (effectiveEncodingKind == SearchEncodingKind.Iso2022Jp)
+        if (state.EffectiveEncodingKind == SearchEncodingKind.Iso2022Jp)
         {
-            byte[] decoded = SearchEncoding.DecodeIso2022JpSegment(buffer, ref iso2022JpDecoderState, flush);
+            byte[] decoded = SearchEncoding.DecodeIso2022JpSegment(buffer, ref state.Iso2022JpDecoderState, flush);
             destination.Write(decoded);
             return Array.Empty<byte>();
         }
 
         int safeLength = flush
             ? buffer.Length
-            : SearchEncoding.GetStreamingSafePrefixLength(buffer, effectiveEncodingKind);
+            : SearchEncoding.GetStreamingSafePrefixLength(buffer, state.EffectiveEncodingKind);
         if (safeLength != 0)
         {
-            byte[] decoded = SearchEncoding.DecodeWithoutBom(buffer[..safeLength], effectiveEncodingKind);
+            byte[] decoded = SearchEncoding.DecodeWithoutBom(buffer[..safeLength], state.EffectiveEncodingKind);
             destination.Write(decoded);
         }
 

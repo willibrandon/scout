@@ -14,7 +14,7 @@ public sealed class MemoryMappedSearchFileTests
         string root = CreateTempDirectory();
         try
         {
-            string path = Path.Combine(root, "input.txt");
+            string path = Path.Join(root, "input.txt");
             File.WriteAllBytes(path, "alpha\nneedle\n"u8.ToArray());
 
             Assert.True(MemoryMappedSearchFile.TryOpen(path, out MemoryMappedSearchFile? mappedSearchFile));
@@ -40,18 +40,13 @@ public sealed class MemoryMappedSearchFileTests
         string root = CreateTempDirectory();
         try
         {
-            string path = Path.Combine(root, "empty.txt");
+            string path = Path.Join(root, "empty.txt");
             File.WriteAllBytes(path, []);
 
-            MemoryMappedSearchFile? mappedSearchFile = null;
-            try
+            using (var owner = new DisposableOwner<MemoryMappedSearchFile>())
             {
-                Assert.False(MemoryMappedSearchFile.TryOpen(path, out mappedSearchFile));
-                Assert.Null(mappedSearchFile);
-            }
-            finally
-            {
-                mappedSearchFile?.Dispose();
+                Assert.False(MemoryMappedSearchFile.TryOpen(path, out owner.Resource));
+                Assert.Null(owner.Resource);
             }
         }
         finally
@@ -69,7 +64,7 @@ public sealed class MemoryMappedSearchFileTests
         string root = CreateTempDirectory();
         try
         {
-            string path = Path.Combine(root, "input.txt");
+            string path = Path.Join(root, "input.txt");
             File.WriteAllBytes(path, "0123456789"u8.ToArray());
 
             Assert.True(MemoryMappedSearchFile.TryOpenFile(
@@ -107,7 +102,7 @@ public sealed class MemoryMappedSearchFileTests
         try
         {
             const int repeatedRecords = 180_000;
-            string path = Path.Combine(root, "input.txt");
+            string path = Path.Join(root, "input.txt");
             WriteRepeatedRecords(
                 path,
                 "alpha bravo charl delta echoo foxtt\r\n"u8.ToArray(),
@@ -182,7 +177,7 @@ public sealed class MemoryMappedSearchFileTests
         try
         {
             const int repeatedRecords = 180_000;
-            string path = Path.Combine(root, "input.txt");
+            string path = Path.Join(root, "input.txt");
             WriteRepeatedRecords(
                 path,
                 "alpha bravo charl delta echoo foxtt\r\n"u8.ToArray(),
@@ -234,7 +229,7 @@ public sealed class MemoryMappedSearchFileTests
         try
         {
             const int repeatedRecords = 220_000;
-            string path = Path.Combine(root, "input.txt");
+            string path = Path.Join(root, "input.txt");
             WriteRepeatedRecords(
                 path,
                 "ordinary source text\n"u8.ToArray(),
@@ -289,7 +284,7 @@ public sealed class MemoryMappedSearchFileTests
         string root = CreateTempDirectory();
         try
         {
-            string path = Path.Combine(root, "input.txt");
+            string path = Path.Join(root, "input.txt");
             File.WriteAllBytes(path, new byte[(8 * 1024 * 1024) + 1]);
             byte[][] patterns = ["needle"u8.ToArray()];
             var regexPlan = RegexSearchPlan.Create(
@@ -341,7 +336,7 @@ public sealed class MemoryMappedSearchFileTests
         string root = CreateTempDirectory();
         try
         {
-            string path = Path.Combine(root, "input.txt");
+            string path = Path.Join(root, "input.txt");
             File.WriteAllBytes(path, "foo\n"u8.ToArray());
             byte[][] patterns = [System.Text.Encoding.UTF8.GetBytes(pattern)];
             var regexPlan = RegexSearchPlan.Create(
@@ -389,7 +384,7 @@ public sealed class MemoryMappedSearchFileTests
         string root = CreateTempDirectory();
         try
         {
-            string path = Path.Combine(root, "input.txt");
+            string path = Path.Join(root, "input.txt");
             File.WriteAllBytes(path, "foo\nbar\n"u8.ToArray());
             byte[][] patterns = ["foo.*bar"u8.ToArray()];
             var regexPlan = RegexSearchPlan.Create(
@@ -453,7 +448,7 @@ public sealed class MemoryMappedSearchFileTests
 
     private static string CreateTempDirectory()
     {
-        string root = Path.Combine(Path.GetTempPath(), $"scout-mmap-{Guid.NewGuid():N}");
+        string root = Path.Join(Path.GetTempPath(), $"scout-mmap-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         return root;
     }

@@ -198,8 +198,8 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
         int offset = startOffset;
         int vectorEnd = haystack.Length - Vector256<byte>.Count - 1;
-        long total = 0;
-        int nextAllowedStart = startOffset;
+        RegexLiteralSetCountState countState = new() { Total = 0, NextAllowedStart = startOffset };
+
         RegexLiteralSetCandidate? best = null;
         while (offset <= vectorEnd)
         {
@@ -223,8 +223,7 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
                     haystack,
                     offset + bit,
                     sumSpans,
-                    ref total,
-                    ref nextAllowedStart,
+                    ref countState,
                     ref best);
                 mask &= mask - 1;
             }
@@ -236,8 +235,7 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
             haystack,
             offset,
             sumSpans,
-            total,
-            nextAllowedStart,
+            countState,
             best);
     }
 
@@ -246,8 +244,8 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
         int offset = startOffset;
         int vectorEnd = haystack.Length - Vector256<byte>.Count - 1;
-        long total = 0;
-        int nextAllowedStart = startOffset;
+        RegexLiteralSetCountState countState = new() { Total = 0, NextAllowedStart = startOffset };
+
         RegexLiteralSetCandidate? best = null;
         var asciiCaseMask = Vector256.Create((byte)0x20);
         while (offset <= vectorEnd)
@@ -272,8 +270,7 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
                         offset + lane * 8,
                         candidates.AsUInt64().GetElement(lane),
                         sumSpans,
-                        ref total,
-                        ref nextAllowedStart,
+                        ref countState,
                         ref best);
                 }
             }
@@ -285,8 +282,7 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
             haystack,
             offset,
             sumSpans,
-            total,
-            nextAllowedStart,
+            countState,
             best);
     }
 
@@ -300,8 +296,8 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
         int offset = startOffset;
         int vectorEnd = haystack.Length - Vector128<byte>.Count - 1;
-        long total = 0;
-        int nextAllowedStart = startOffset;
+        RegexLiteralSetCountState countState = new() { Total = 0, NextAllowedStart = startOffset };
+
         RegexLiteralSetCandidate? best = null;
         while (offset <= vectorEnd)
         {
@@ -325,8 +321,7 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
                     haystack,
                     offset + bit,
                     sumSpans,
-                    ref total,
-                    ref nextAllowedStart,
+                    ref countState,
                     ref best);
                 mask &= mask - 1;
             }
@@ -338,8 +333,7 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
             haystack,
             offset,
             sumSpans,
-            total,
-            nextAllowedStart,
+            countState,
             best);
     }
 
@@ -348,8 +342,8 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
         int offset = startOffset;
         int vectorEnd = haystack.Length - Vector128<byte>.Count - 1;
-        long total = 0;
-        int nextAllowedStart = startOffset;
+        RegexLiteralSetCountState countState = new() { Total = 0, NextAllowedStart = startOffset };
+
         RegexLiteralSetCandidate? best = null;
         while (offset <= vectorEnd)
         {
@@ -367,8 +361,7 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
                         offset + lane * 8,
                         candidates.AsUInt64().GetElement(lane),
                         sumSpans,
-                        ref total,
-                        ref nextAllowedStart,
+                        ref countState,
                         ref best);
                 }
             }
@@ -380,8 +373,7 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
             haystack,
             offset,
             sumSpans,
-            total,
-            nextAllowedStart,
+            countState,
             best);
     }
 
@@ -391,8 +383,7 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
             haystack,
             startOffset,
             sumSpans,
-            total: 0,
-            nextAllowedStart: startOffset,
+            countState: new() { NextAllowedStart = startOffset },
             best: null);
     }
 
@@ -400,8 +391,7 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
         ReadOnlySpan<byte> haystack,
         int searchAt,
         bool sumSpans,
-        long total,
-        int nextAllowedStart,
+        RegexLiteralSetCountState countState,
         RegexLiteralSetCandidate? best)
     {
         while (searchAt <= haystack.Length - BlockLength)
@@ -414,8 +404,7 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
                     searchAt,
                     entries,
                     sumSpans,
-                    ref total,
-                    ref nextAllowedStart,
+                    ref countState,
                     ref best);
             }
 
@@ -424,18 +413,17 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
 
         if (best.HasValue)
         {
-            AddMatch(best.Value.Match, sumSpans, ref total, ref nextAllowedStart);
+            AddMatch(best.Value.Match, sumSpans, ref countState);
         }
 
-        return total;
+        return countState.Total;
     }
 
     private void ProcessBlockCandidate(
         ReadOnlySpan<byte> haystack,
         int anchorPosition,
         bool sumSpans,
-        ref long total,
-        ref int nextAllowedStart,
+        ref RegexLiteralSetCountState countState,
         ref RegexLiteralSetCandidate? best)
     {
         ushort block = FoldedBlockKey(haystack, anchorPosition);
@@ -444,8 +432,7 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
             anchorPosition,
             entriesByBlock![block],
             sumSpans,
-            ref total,
-            ref nextAllowedStart,
+            ref countState,
             ref best);
     }
 
@@ -454,24 +441,23 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
         int anchorPosition,
         RegexAsciiCaseInsensitiveLiteralSetEntry[] entries,
         bool sumSpans,
-        ref long total,
-        ref int nextAllowedStart,
+        ref RegexLiteralSetCountState countState,
         ref RegexLiteralSetCandidate? best)
     {
         if (best.HasValue &&
             (anchorPosition >= best.Value.Match.End ||
              anchorPosition - maxAnchorIndex > best.Value.Match.Start))
         {
-            AddMatch(best.Value.Match, sumSpans, ref total, ref nextAllowedStart);
+            AddMatch(best.Value.Match, sumSpans, ref countState);
             best = null;
         }
 
-        if (anchorPosition < nextAllowedStart)
+        if (anchorPosition < countState.NextAllowedStart)
         {
             return;
         }
 
-        TryAddBestCandidate(haystack, anchorPosition, nextAllowedStart, entries, ref best);
+        TryAddBestCandidate(haystack, anchorPosition, countState.NextAllowedStart, entries, ref best);
     }
 
     private void ProcessBlockCandidateChunk(
@@ -479,8 +465,7 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
         int baseOffset,
         ulong chunk,
         bool sumSpans,
-        ref long total,
-        ref int nextAllowedStart,
+        ref RegexLiteralSetCountState countState,
         ref RegexLiteralSetCandidate? best)
     {
         while (chunk != 0)
@@ -499,8 +484,7 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
                     anchorPosition,
                     blockEntriesByMaskBit[blockIndex],
                     sumSpans,
-                    ref total,
-                    ref nextAllowedStart,
+                    ref countState,
                     ref best);
             }
         }
@@ -540,9 +524,9 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
 
     private long CountOrSumAnchor(ReadOnlySpan<byte> haystack, int startAt, bool sumSpans)
     {
-        int nextAllowedStart = Math.Clamp(startAt, 0, haystack.Length);
-        int searchAt = nextAllowedStart;
-        long total = 0;
+        RegexLiteralSetCountState countState = new() { NextAllowedStart = Math.Clamp(startAt, 0, haystack.Length), Total = 0 };
+        int searchAt = countState.NextAllowedStart;
+
         RegexLiteralSetCandidate? best = null;
         while (searchAt < haystack.Length)
         {
@@ -557,11 +541,11 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
                 (anchorPosition >= best.Value.Match.End ||
                  anchorPosition - maxAnchorIndex > best.Value.Match.Start))
             {
-                AddMatch(best.Value.Match, sumSpans, ref total, ref nextAllowedStart);
+                AddMatch(best.Value.Match, sumSpans, ref countState);
                 best = null;
-                if (anchorPosition < nextAllowedStart)
+                if (anchorPosition < countState.NextAllowedStart)
                 {
-                    searchAt = nextAllowedStart;
+                    searchAt = countState.NextAllowedStart;
                     continue;
                 }
             }
@@ -569,7 +553,7 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
             TryAddBestCandidate(
                 haystack,
                 anchorPosition,
-                nextAllowedStart,
+                countState.NextAllowedStart,
                 entriesByAnchorByte[haystack[anchorPosition]],
                 ref best);
 
@@ -578,10 +562,10 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
 
         if (best.HasValue)
         {
-            AddMatch(best.Value.Match, sumSpans, ref total, ref nextAllowedStart);
+            AddMatch(best.Value.Match, sumSpans, ref countState);
         }
 
-        return total;
+        return countState.Total;
     }
 
     private int FindBlockPosition(ReadOnlySpan<byte> haystack, int startAt)
@@ -1063,9 +1047,9 @@ internal sealed class RegexAsciiCaseInsensitiveLiteralSetScanner
         return candidate.LiteralId < current.LiteralId;
     }
 
-    private static void AddMatch(RegexMatch match, bool sumSpans, ref long total, ref int nextAllowedStart)
+    private static void AddMatch(RegexMatch match, bool sumSpans, ref RegexLiteralSetCountState countState)
     {
-        total += sumSpans ? match.Length : 1;
-        nextAllowedStart = match.End;
+        countState.Total += sumSpans ? match.Length : 1;
+        countState.NextAllowedStart = match.End;
     }
 }

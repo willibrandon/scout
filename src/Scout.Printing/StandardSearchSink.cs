@@ -9,9 +9,9 @@ internal struct StandardSearchSink : ILineSink
     private readonly OutputPath? prefix;
     private readonly ReadOnlyMemory<byte> matchSeparator;
     private readonly ReadOnlyMemory<byte> contextSeparator;
-    private readonly bool lineNumber;
+    private readonly bool _lineNumber;
     private readonly bool column;
-    private readonly bool byteOffset;
+    private readonly bool _byteOffset;
     private readonly bool trim;
     private readonly bool nullPathTerminator;
     private readonly OutputLineLimit lineLimit;
@@ -43,9 +43,9 @@ internal struct StandardSearchSink : ILineSink
         this.prefix = prefix;
         this.matchSeparator = matchSeparator;
         this.contextSeparator = contextSeparator;
-        this.lineNumber = lineNumber;
+        _lineNumber = lineNumber;
         this.column = column;
-        this.byteOffset = byteOffset;
+        _byteOffset = byteOffset;
         this.trim = trim;
         this.nullPathTerminator = nullPathTerminator;
         this.lineLimit = lineLimit;
@@ -78,9 +78,9 @@ internal struct StandardSearchSink : ILineSink
 
         ReadOnlySpan<byte> displayLine = trim ? TrimLeadingAsciiWhitespace(line) : line;
         bool linked = false;
-        bool hasLineNumber = this.lineNumber;
+        bool hasLineNumber = _lineNumber;
         bool hasColumn = column && matchColumn > 0;
-        bool hasByteOffset = this.byteOffset;
+        bool hasByteOffset = _byteOffset;
 
         if (prefix is not null)
         {
@@ -161,9 +161,9 @@ internal struct StandardSearchSink : ILineSink
         byteOffset += byteOffsetOffset;
         ReadOnlySpan<byte> displayLine = trim ? TrimLeadingAsciiWhitespace(line) : line;
         bool linked = false;
-        bool hasLineNumber = this.lineNumber;
+        bool hasLineNumber = _lineNumber;
         bool hasColumn = column && contextColumn > 0;
-        bool hasByteOffset = this.byteOffset;
+        bool hasByteOffset = _byteOffset;
 
         if (prefix is not null)
         {
@@ -231,9 +231,9 @@ internal struct StandardSearchSink : ILineSink
         int trimOffset = trim ? GetTrimOffset(line) : 0;
         ReadOnlySpan<byte> displayLine = line[trimOffset..];
         bool linked = false;
-        bool hasLineNumber = this.lineNumber;
+        bool hasLineNumber = _lineNumber;
         bool hasColumn = column && matchColumn > 0;
-        bool hasByteOffset = this.byteOffset;
+        bool hasByteOffset = _byteOffset;
 
         if (prefix is not null)
         {

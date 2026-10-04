@@ -201,14 +201,14 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
             return CountOrSumVector128(haystack, startOffset, sumSpans);
         }
 
-        return CountOrSumScalar(haystack, startOffset, sumSpans, total: 0, nextAllowedStart: startOffset, best: null);
+        return CountOrSumScalar(haystack, startOffset, sumSpans, countState: new() { NextAllowedStart = startOffset }, best: null);
     }
 
     private long CountOrSumByFirstCandidate(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
     {
-        int nextAllowedStart = startOffset;
+        RegexLiteralSetCountState countState = new() { NextAllowedStart = startOffset, Total = 0 };
         int searchAt = startOffset;
-        long total = 0;
+
         RegexLiteralSetCandidate? best = null;
         while (searchAt <= haystack.Length - BlockLength)
         {
@@ -222,11 +222,11 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
                 (anchorPosition >= best.Value.Match.End ||
                  anchorPosition - maxAnchorIndex > best.Value.Match.Start))
             {
-                AddMatch(best.Value.Match, sumSpans, ref total, ref nextAllowedStart);
+                AddMatch(best.Value.Match, sumSpans, ref countState);
                 best = null;
-                if (anchorPosition < nextAllowedStart)
+                if (anchorPosition < countState.NextAllowedStart)
                 {
-                    searchAt = nextAllowedStart;
+                    searchAt = countState.NextAllowedStart;
                     continue;
                 }
             }
@@ -234,7 +234,7 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
             RegexCaseSensitiveLiteralSetEntry[] entries = entriesByBlock[BlockKey(haystack[anchorPosition..])];
             for (int index = 0; index < entries.Length; index++)
             {
-                TryAddEntryCandidate(haystack, anchorPosition, nextAllowedStart, entries[index], ref best);
+                TryAddEntryCandidate(haystack, anchorPosition, countState.NextAllowedStart, entries[index], ref best);
             }
 
             searchAt = anchorPosition + 1;
@@ -242,10 +242,10 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
 
         if (best.HasValue)
         {
-            AddMatch(best.Value.Match, sumSpans, ref total, ref nextAllowedStart);
+            AddMatch(best.Value.Match, sumSpans, ref countState);
         }
 
-        return total;
+        return countState.Total;
     }
 
     private long CountOrSumVector256(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
@@ -253,8 +253,8 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
         int offset = startOffset;
         int vectorEnd = haystack.Length - Vector256<byte>.Count - 1;
-        long total = 0;
-        int nextAllowedStart = startOffset;
+        RegexLiteralSetCountState countState = new() { Total = 0, NextAllowedStart = startOffset };
+
         RegexLiteralSetCandidate? best = null;
         while (offset <= vectorEnd)
         {
@@ -278,8 +278,7 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
                     haystack,
                     offset + bit,
                     sumSpans,
-                    ref total,
-                    ref nextAllowedStart,
+                    ref countState,
                     ref best);
                 mask &= mask - 1;
             }
@@ -287,7 +286,8 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
             offset += Vector256<byte>.Count;
         }
 
-        return CountOrSumScalar(haystack, offset, sumSpans, total, nextAllowedStart, best);
+        return CountOrSumScalar(haystack, offset, sumSpans, countState,
+            best);
     }
 
     private long CountOrSumVector128(ReadOnlySpan<byte> haystack, int startOffset, bool sumSpans)
@@ -295,8 +295,8 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
         ref byte reference = ref MemoryMarshal.GetReference(haystack);
         int offset = startOffset;
         int vectorEnd = haystack.Length - Vector128<byte>.Count - 1;
-        long total = 0;
-        int nextAllowedStart = startOffset;
+        RegexLiteralSetCountState countState = new() { Total = 0, NextAllowedStart = startOffset };
+
         RegexLiteralSetCandidate? best = null;
         while (offset <= vectorEnd)
         {
@@ -312,7 +312,7 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
                         Sse2.CompareEqual(next, blockSecondVectors128[index])));
             }
 
-            uint mask = (uint)matches.ExtractMostSignificantBits();
+            uint mask = matches.ExtractMostSignificantBits();
             while (mask != 0)
             {
                 int bit = BitOperations.TrailingZeroCount(mask);
@@ -320,8 +320,7 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
                     haystack,
                     offset + bit,
                     sumSpans,
-                    ref total,
-                    ref nextAllowedStart,
+                    ref countState,
                     ref best);
                 mask &= mask - 1;
             }
@@ -329,15 +328,15 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
             offset += Vector128<byte>.Count;
         }
 
-        return CountOrSumScalar(haystack, offset, sumSpans, total, nextAllowedStart, best);
+        return CountOrSumScalar(haystack, offset, sumSpans, countState,
+            best);
     }
 
     private long CountOrSumScalar(
         ReadOnlySpan<byte> haystack,
         int searchAt,
         bool sumSpans,
-        long total,
-        int nextAllowedStart,
+        RegexLiteralSetCountState countState,
         RegexLiteralSetCandidate? best)
     {
         while (searchAt <= haystack.Length - BlockLength)
@@ -352,8 +351,7 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
                 haystack,
                 anchorPosition,
                 sumSpans,
-                ref total,
-                ref nextAllowedStart,
+                ref countState,
                 ref best);
 
             searchAt = anchorPosition + 1;
@@ -361,18 +359,17 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
 
         if (best.HasValue)
         {
-            AddMatch(best.Value.Match, sumSpans, ref total, ref nextAllowedStart);
+            AddMatch(best.Value.Match, sumSpans, ref countState);
         }
 
-        return total;
+        return countState.Total;
     }
 
     private void ProcessBlockCandidate(
         ReadOnlySpan<byte> haystack,
         int anchorPosition,
         bool sumSpans,
-        ref long total,
-        ref int nextAllowedStart,
+        ref RegexLiteralSetCountState countState,
         ref RegexLiteralSetCandidate? best)
     {
         RegexCaseSensitiveLiteralSetEntry[] entries = entriesByBlock[BlockKey(haystack[anchorPosition..])];
@@ -381,8 +378,7 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
             anchorPosition,
             entries,
             sumSpans,
-            ref total,
-            ref nextAllowedStart,
+            ref countState,
             ref best);
     }
 
@@ -391,26 +387,25 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
         int anchorPosition,
         RegexCaseSensitiveLiteralSetEntry[] entries,
         bool sumSpans,
-        ref long total,
-        ref int nextAllowedStart,
+        ref RegexLiteralSetCountState countState,
         ref RegexLiteralSetCandidate? best)
     {
         if (best.HasValue &&
             (anchorPosition >= best.Value.Match.End ||
              anchorPosition - maxAnchorIndex > best.Value.Match.Start))
         {
-            AddMatch(best.Value.Match, sumSpans, ref total, ref nextAllowedStart);
+            AddMatch(best.Value.Match, sumSpans, ref countState);
             best = null;
         }
 
-        if (anchorPosition < nextAllowedStart)
+        if (anchorPosition < countState.NextAllowedStart)
         {
             return;
         }
 
         for (int index = 0; index < entries.Length; index++)
         {
-            TryAddEntryCandidate(haystack, anchorPosition, nextAllowedStart, entries[index], ref best);
+            TryAddEntryCandidate(haystack, anchorPosition, countState.NextAllowedStart, entries[index], ref best);
         }
     }
 
@@ -509,7 +504,7 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
                         Sse2.CompareEqual(next, blockSecondVectors128[index])));
             }
 
-            uint mask = (uint)matches.ExtractMostSignificantBits();
+            uint mask = matches.ExtractMostSignificantBits();
             if (mask != 0)
             {
                 return offset + BitOperations.TrailingZeroCount(mask);
@@ -699,9 +694,9 @@ internal sealed class RegexCaseSensitiveLiteralSetScanner
         return candidate.LiteralId < current.LiteralId;
     }
 
-    private static void AddMatch(RegexMatch match, bool sumSpans, ref long total, ref int nextAllowedStart)
+    private static void AddMatch(RegexMatch match, bool sumSpans, ref RegexLiteralSetCountState countState)
     {
-        total += sumSpans ? match.Length : 1;
-        nextAllowedStart = match.End;
+        countState.Total += sumSpans ? match.Length : 1;
+        countState.NextAllowedStart = match.End;
     }
 }

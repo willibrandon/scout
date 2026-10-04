@@ -28,7 +28,7 @@ public sealed class ReplacementLineSinkTests
             lineTerminator: "\n"u8.ToArray(),
             streamPlainBodyDirectly: true);
 
-        try
+        using (new DisposableScope<ReplacementLineSink>(ref sink))
         {
             sink.MatchedLineWithSearchStart(
                 lineNumber: 1,
@@ -42,10 +42,6 @@ public sealed class ReplacementLineSinkTests
 
             Assert.False(sink.IsAccumulatorInitialized);
             Assert.Equal("aX\n"u8.ToArray(), output.ToArray());
-        }
-        finally
-        {
-            sink.Dispose();
         }
     }
 }

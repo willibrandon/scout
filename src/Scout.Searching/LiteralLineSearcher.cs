@@ -201,13 +201,12 @@ public static class LiteralLineSearcher
                 inspectThroughNextPositive: false);
         }
 
-        if (!invertMatch &&
-            !CanAnyIndependentRecordMatch(haystack, regexPlan, nullData))
+        if (!CanAnyIndependentRecordMatch(haystack, regexPlan, nullData))
         {
             return false;
         }
 
-        if (!invertMatch && regexPlan.HasHaystackAnchors)
+        if (regexPlan.HasHaystackAnchors)
         {
             var matchSink = new RegexPlanLineOutputMatchSink<TSink>(sink);
             bool anchorMatched = SearchRecordSelectedRegexMatchLines(
@@ -767,14 +766,14 @@ public static class LiteralLineSearcher
         bool invertMatch,
         bool requireMatchColumn)
     {
-        return CanSearchWholeHaystackWithFullMatches(regexPlan, invertMatch) ||
-            regexPlan is not null &&
-            (CanGroupAuthoritativeMatchesByEnd(
-                regexPlan,
-                invertMatch,
-                requireMatchColumn) ||
-             regexPlan.CanMatchEmpty &&
-             CanMapAuthoritativeMatchesToLines(regexPlan, invertMatch));
+        if (CanSearchWholeHaystackWithFullMatches(regexPlan, invertMatch))
+        {
+            return true;
+        }
+
+        return regexPlan is not null &&
+            (CanGroupAuthoritativeMatchesByEnd(regexPlan, invertMatch, requireMatchColumn) ||
+                regexPlan.CanMatchEmpty && CanMapAuthoritativeMatchesToLines(regexPlan, invertMatch));
     }
 
     /// <summary>
@@ -819,10 +818,13 @@ public static class LiteralLineSearcher
         RegexSearchPlan regexPlan,
         bool invertMatch)
     {
-        return !invertMatch &&
-            (!regexPlan.Options.LineRegexp ||
-                !regexPlan.Options.Multiline && !regexPlan.Options.NullData) &&
-            !regexPlan.Options.PreserveCrlfCarriageReturn &&
+        if (invertMatch ||
+            regexPlan.Options.LineRegexp && (regexPlan.Options.Multiline || regexPlan.Options.NullData))
+        {
+            return false;
+        }
+
+        return !regexPlan.Options.PreserveCrlfCarriageReturn &&
             !regexPlan.HasHaystackAnchors &&
             (!regexPlan.Options.NullData || !regexPlan.HasLineAnchors);
     }
@@ -928,9 +930,8 @@ public static class LiteralLineSearcher
         }
 
         if (useForwardMatchEnds &&
-            !regexPlan.Matcher.CanSearchWholeHaystackWithFullMatches)
-        {
-            if (RegexProjectedRecordRunSearcher.TrySearchLines(
+            !regexPlan.Matcher.CanSearchWholeHaystackWithFullMatches &&
+            RegexProjectedRecordRunSearcher.TrySearchLines(
                     haystack,
                     regexPlan,
                     ref sink,
@@ -939,10 +940,9 @@ public static class LiteralLineSearcher
                     countSearchedLines,
                     maxMatchingLines,
                     nullData))
-            {
-                searchedLines = projectedSearchedLines;
-                return projectedMatched;
-            }
+        {
+            searchedLines = projectedSearchedLines;
+            return projectedMatched;
         }
 
         if (useForwardMatchEnds)
@@ -1094,9 +1094,8 @@ public static class LiteralLineSearcher
         int lineEnd = haystack.IsEmpty ? 0 : GetLineLength(haystack, nullData);
         int reportedLineStart = -1;
         long lineNumber = 1;
-        if (!regexPlan.Matcher.CanSearchWholeHaystackWithFullMatches)
-        {
-            if (RegexProjectedRecordRunSearcher.TrySearchLinesAndCountMatches(
+        if (!regexPlan.Matcher.CanSearchWholeHaystackWithFullMatches &&
+            RegexProjectedRecordRunSearcher.TrySearchLinesAndCountMatches(
                     haystack,
                     regexPlan,
                     ref sink,
@@ -1105,11 +1104,10 @@ public static class LiteralLineSearcher
                     out long projectedMatches,
                     maxMatchingLines,
                     nullData))
-            {
-                matchedLines = projectedMatchedLines;
-                matches = projectedMatches;
-                return projectedMatched;
-            }
+        {
+            matchedLines = projectedMatchedLines;
+            matches = projectedMatches;
+            return projectedMatched;
         }
 
         RegexMatchEndRunner matchEndRunner = regexPlan.Matcher.RentMatchEndRunner(

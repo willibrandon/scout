@@ -16,11 +16,11 @@ public sealed class WalkTests
     public void WalkRecursesAndHonorsMaxDepth()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, "a", "b", "c"));
-        File.WriteAllText(Path.Combine(root, "foo"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "a", "foo"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "a", "b", "foo"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "a", "b", "c", "foo"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, "a", "b", "c"));
+        File.WriteAllText(Path.Join(root, "foo"), string.Empty);
+        File.WriteAllText(Path.Join(root, "a", "foo"), string.Empty);
+        File.WriteAllText(Path.Join(root, "a", "b", "foo"), string.Empty);
+        File.WriteAllText(Path.Join(root, "a", "b", "c", "foo"), string.Empty);
 
         Assert.Equal(
             ["a", "a/b", "a/b/c", "a/b/c/foo", "a/b/foo", "a/foo", "foo"],
@@ -38,15 +38,15 @@ public sealed class WalkTests
     public void ParallelWalkMatchesSerialWalk()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, ".git"));
-        Directory.CreateDirectory(Path.Combine(root, "a", "b"));
-        Directory.CreateDirectory(Path.Combine(root, "ignored"));
-        File.WriteAllText(Path.Combine(root, ".gitignore"), "ignored/\n*.tmp\n");
-        File.WriteAllText(Path.Combine(root, "a", "one.txt"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "a", "two.tmp"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "a", "b", "three.txt"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "ignored", "hidden.txt"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "root.txt"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, ".git"));
+        Directory.CreateDirectory(Path.Join(root, "a", "b"));
+        Directory.CreateDirectory(Path.Join(root, "ignored"));
+        File.WriteAllText(Path.Join(root, ".gitignore"), "ignored/\n*.tmp\n");
+        File.WriteAllText(Path.Join(root, "a", "one.txt"), string.Empty);
+        File.WriteAllText(Path.Join(root, "a", "two.tmp"), string.Empty);
+        File.WriteAllText(Path.Join(root, "a", "b", "three.txt"), string.Empty);
+        File.WriteAllText(Path.Join(root, "ignored", "hidden.txt"), string.Empty);
+        File.WriteAllText(Path.Join(root, "root.txt"), string.Empty);
 
         Assert.Equal(
             Collect(root, new WalkBuilder(root)),
@@ -60,7 +60,7 @@ public sealed class WalkTests
     public void WalkEntriesResolveLazyFileMetadata()
     {
         string root = CreateTempDirectory();
-        string path = Path.Combine(root, "file");
+        string path = Path.Join(root, "file");
         File.WriteAllText(path, "hello");
 
         DirEntry entry = Assert.Single(new WalkBuilder(root).Build(), static entry => entry.Depth == 1);
@@ -76,7 +76,7 @@ public sealed class WalkTests
     public void ParallelWalkCreatesVisitorPerWorker()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, "file"), string.Empty);
+        File.WriteAllText(Path.Join(root, "file"), string.Empty);
         int visitors = 0;
 
         new WalkBuilder(root).Threads(4).BuildParallel().Run(() =>
@@ -95,7 +95,7 @@ public sealed class WalkTests
     public void ParallelWalkCompletesEveryWorkerAfterExhaustion()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, "file"), string.Empty);
+        File.WriteAllText(Path.Join(root, "file"), string.Empty);
         int completions = 0;
 
         new WalkBuilder(root).Threads(4).BuildParallel().RunWithCompletion(() =>
@@ -114,7 +114,7 @@ public sealed class WalkTests
     public void ParallelWalkCompletesEveryWorkerAfterQuit()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, "file"), string.Empty);
+        File.WriteAllText(Path.Join(root, "file"), string.Empty);
         int completions = 0;
 
         new WalkBuilder(root).Threads(4).BuildParallel().RunWithCompletion(() =>
@@ -133,7 +133,7 @@ public sealed class WalkTests
     public void ParallelWalkPropagatesWorkerCompletionFailure()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, "file"), string.Empty);
+        File.WriteAllText(Path.Join(root, "file"), string.Empty);
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
             new WalkBuilder(root).Threads(1).BuildParallel().RunWithCompletion(() =>
@@ -152,7 +152,7 @@ public sealed class WalkTests
     public void ParallelWalkCompletesWorkerAfterVisitorFailure()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, "file"), string.Empty);
+        File.WriteAllText(Path.Join(root, "file"), string.Empty);
         int completions = 0;
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
@@ -173,7 +173,7 @@ public sealed class WalkTests
     public void ParallelWalkCreatesAllVisitorsBeforeStartingWorkers()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, "file"), string.Empty);
+        File.WriteAllText(Path.Join(root, "file"), string.Empty);
         int factories = 0;
         int visits = 0;
 
@@ -205,10 +205,10 @@ public sealed class WalkTests
     public void ParallelWalkSkipPreventsDescendants()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, "keep"));
-        Directory.CreateDirectory(Path.Combine(root, "skip"));
-        File.WriteAllText(Path.Combine(root, "keep", "file"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "skip", "file"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, "keep"));
+        Directory.CreateDirectory(Path.Join(root, "skip"));
+        File.WriteAllText(Path.Join(root, "keep", "file"), string.Empty);
+        File.WriteAllText(Path.Join(root, "skip", "file"), string.Empty);
 
         List<string> paths = CollectParallel(
             root,
@@ -227,9 +227,9 @@ public sealed class WalkTests
     public void WalkHonorsMinDepth()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, "a", "b", "c"));
-        File.WriteAllText(Path.Combine(root, "a", "foo"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "a", "b", "foo"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, "a", "b", "c"));
+        File.WriteAllText(Path.Join(root, "a", "foo"), string.Empty);
+        File.WriteAllText(Path.Join(root, "a", "b", "foo"), string.Empty);
 
         Assert.Equal(
             ["a/b", "a/b/c", "a/b/foo", "a/foo"],
@@ -246,10 +246,10 @@ public sealed class WalkTests
     public void HiddenEntriesAreSkippedByDefault()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, ".git"));
-        File.WriteAllText(Path.Combine(root, ".hidden"), string.Empty);
-        File.WriteAllText(Path.Combine(root, ".git", "config"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "visible"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, ".git"));
+        File.WriteAllText(Path.Join(root, ".hidden"), string.Empty);
+        File.WriteAllText(Path.Join(root, ".git", "config"), string.Empty);
+        File.WriteAllText(Path.Join(root, "visible"), string.Empty);
 
         Assert.Equal(["visible"], Collect(root, new WalkBuilder(root)));
         Assert.Equal(
@@ -264,10 +264,10 @@ public sealed class WalkTests
     public void MaxFileSizeSkipsLargeFiles()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, "a"));
-        WriteSizedFile(Path.Combine(root, "small"), 4);
-        WriteSizedFile(Path.Combine(root, "large"), 8);
-        WriteSizedFile(Path.Combine(root, "a", "nested"), 8);
+        Directory.CreateDirectory(Path.Join(root, "a"));
+        WriteSizedFile(Path.Join(root, "small"), 4);
+        WriteSizedFile(Path.Join(root, "large"), 8);
+        WriteSizedFile(Path.Join(root, "a", "nested"), 8);
 
         Assert.Equal(["a", "small"], Collect(root, new WalkBuilder(root).MaxFileSize(4)));
     }
@@ -279,11 +279,11 @@ public sealed class WalkTests
     public void FollowLinksControlsSymlinkTraversal()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, "a", "b"));
-        File.WriteAllText(Path.Combine(root, "a", "b", "foo"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "real"), string.Empty);
-        Assert.True(TryCreateDirectorySymlink(Path.Combine(root, "a", "b"), Path.Combine(root, "z")), "Required directory symlink could not be created.");
-        Assert.True(TryCreateFileSymlink(Path.Combine(root, "real"), Path.Combine(root, "file-link")), "Required file symlink could not be created.");
+        Directory.CreateDirectory(Path.Join(root, "a", "b"));
+        File.WriteAllText(Path.Join(root, "a", "b", "foo"), string.Empty);
+        File.WriteAllText(Path.Join(root, "real"), string.Empty);
+        Assert.True(TryCreateDirectorySymlink(Path.Join(root, "a", "b"), Path.Join(root, "z")), "Required directory symlink could not be created.");
+        Assert.True(TryCreateFileSymlink(Path.Join(root, "real"), Path.Join(root, "file-link")), "Required file symlink could not be created.");
 
         Assert.Equal(["a", "a/b", "a/b/foo", "real"], Collect(root, new WalkBuilder(root)));
         Assert.Equal(["a", "a/b", "a/b/foo", "file-link", "real", "z", "z/foo"], Collect(root, new WalkBuilder(root).FollowLinks(true)));
@@ -296,8 +296,8 @@ public sealed class WalkTests
     public void FollowLinksSkipsSymlinkLoops()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, "a", "b"));
-        Assert.True(TryCreateDirectorySymlink(Path.Combine(root, "a"), Path.Combine(root, "a", "b", "c")), "Required directory symlink could not be created.");
+        Directory.CreateDirectory(Path.Join(root, "a", "b"));
+        Assert.True(TryCreateDirectorySymlink(Path.Join(root, "a"), Path.Join(root, "a", "b", "c")), "Required directory symlink could not be created.");
 
         string[] expected = ["a", "a/b"];
         Assert.Equal(expected, Collect(root, new WalkBuilder(root)));
@@ -314,8 +314,8 @@ public sealed class WalkTests
     public void FileIdentityFollowsSymlinkTarget()
     {
         string root = CreateTempDirectory();
-        string target = Path.Combine(root, "target");
-        string link = Path.Combine(root, "link");
+        string target = Path.Join(root, "target");
+        string link = Path.Join(root, "link");
         File.WriteAllText(target, string.Empty);
         Assert.True(TryCreateFileSymlink(target, link), "Required file symlink could not be created.");
 
@@ -368,9 +368,9 @@ public sealed class WalkTests
         else
         {
             string root = CreateTempDirectory();
-            string directory = Path.Combine(root, "directory");
-            string file = Path.Combine(root, "file");
-            string link = Path.Combine(root, "link");
+            string directory = Path.Join(root, "directory");
+            string file = Path.Join(root, "file");
+            string link = Path.Join(root, "link");
             Directory.CreateDirectory(directory);
             File.WriteAllBytes(file, "needle"u8.ToArray());
             Assert.True(TryCreateFileSymlink(file, link), "Required file symlink could not be created.");
@@ -423,12 +423,9 @@ public sealed class WalkTests
             RawUnixFile.WriteAllBytes(childPath, "needle\n"u8);
 
             var rawPaths = new List<byte[]>();
-            foreach (DirEntry entry in new WalkBuilder(root).Hidden(false).Build())
+            foreach (DirEntry entry in new WalkBuilder(root).Hidden(false).Build().Where(entry => entry.IsRawUnixPath))
             {
-                if (entry.IsRawUnixPath)
-                {
-                    rawPaths.Add(entry.UnixPathBytes.ToArray());
-                }
+                rawPaths.Add(entry.UnixPathBytes.ToArray());
             }
 
             Assert.Contains(rawPaths, path => path.AsSpan().SequenceEqual(invalidDirectoryPath));
@@ -444,7 +441,7 @@ public sealed class WalkTests
     {
         string root = CreateTempDirectory();
         const string fileName = "valid\uFFFD.txt";
-        File.WriteAllText(Path.Combine(root, fileName), string.Empty);
+        File.WriteAllText(Path.Join(root, fileName), string.Empty);
 
         Assert.Equal([fileName], Collect(root, new WalkBuilder(root)));
     }
@@ -456,8 +453,8 @@ public sealed class WalkTests
     public void SameFileSystemAllowsSameDeviceTraversal()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, "a", "b"));
-        File.WriteAllText(Path.Combine(root, "a", "b", "file"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, "a", "b"));
+        File.WriteAllText(Path.Join(root, "a", "b", "file"), string.Empty);
 
         Assert.Equal(["a", "a/b", "a/b/file"], Collect(root, new WalkBuilder(root).SameFileSystem(true)));
     }
@@ -481,8 +478,8 @@ public sealed class WalkTests
             Assert.True(NativeFileSystemMetadata.TryGetDevice(external, out FileSystemDevice externalDevice), "Could not read external device.");
             Assert.NotEqual(rootDevice, externalDevice);
 
-            Directory.CreateDirectory(Path.Combine(root, "same_file"));
-            Assert.True(TryCreateDirectorySymlink(external, Path.Combine(root, "same_file", "alink")), "Required cross-device directory symlink could not be created.");
+            Directory.CreateDirectory(Path.Join(root, "same_file"));
+            Assert.True(TryCreateDirectorySymlink(external, Path.Join(root, "same_file", "alink")), "Required cross-device directory symlink could not be created.");
 
             List<string> baseline = Collect(
                 root,
@@ -505,12 +502,12 @@ public sealed class WalkTests
     public void IgnoreFilesApplyToDescendantsWithNegation()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, "logs"));
-        File.WriteAllText(Path.Combine(root, ".ignore"), "*.log\n!important.log\n");
-        File.WriteAllText(Path.Combine(root, "debug.log"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "important.log"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "logs", "debug.log"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "logs", "important.log"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, "logs"));
+        File.WriteAllText(Path.Join(root, ".ignore"), "*.log\n!important.log\n");
+        File.WriteAllText(Path.Join(root, "debug.log"), string.Empty);
+        File.WriteAllText(Path.Join(root, "important.log"), string.Empty);
+        File.WriteAllText(Path.Join(root, "logs", "debug.log"), string.Empty);
+        File.WriteAllText(Path.Join(root, "logs", "important.log"), string.Empty);
 
         Assert.Equal(["important.log", "logs", "logs/important.log"], Collect(root, new WalkBuilder(root)));
     }
@@ -522,10 +519,10 @@ public sealed class WalkTests
     public void IgnoreFileWildcardsDoNotCrossSeparators()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, "src", "nested"));
-        File.WriteAllText(Path.Combine(root, ".ignore"), "src/*.log\n");
-        File.WriteAllText(Path.Combine(root, "src", "debug.log"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "src", "nested", "debug.log"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, "src", "nested"));
+        File.WriteAllText(Path.Join(root, ".ignore"), "src/*.log\n");
+        File.WriteAllText(Path.Join(root, "src", "debug.log"), string.Empty);
+        File.WriteAllText(Path.Join(root, "src", "nested", "debug.log"), string.Empty);
 
         Assert.Equal(["src", "src/nested", "src/nested/debug.log"], Collect(root, new WalkBuilder(root)));
     }
@@ -537,9 +534,9 @@ public sealed class WalkTests
     public void IgnoreFilesAllowUnclosedCharacterClasses()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, ".ignore"), "[\n");
-        File.WriteAllText(Path.Combine(root, "["), string.Empty);
-        File.WriteAllText(Path.Combine(root, "keep"), string.Empty);
+        File.WriteAllText(Path.Join(root, ".ignore"), "[\n");
+        File.WriteAllText(Path.Join(root, "["), string.Empty);
+        File.WriteAllText(Path.Join(root, "keep"), string.Empty);
 
         Assert.Equal(["keep"], Collect(root, new WalkBuilder(root)));
     }
@@ -551,12 +548,12 @@ public sealed class WalkTests
     public void DirectoryOnlyIgnoreRulePrunesDirectories()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, ".git"));
-        Directory.CreateDirectory(Path.Combine(root, "target"));
-        Directory.CreateDirectory(Path.Combine(root, "src"));
-        File.WriteAllText(Path.Combine(root, ".gitignore"), "target/\n");
-        File.WriteAllText(Path.Combine(root, "target", "artifact"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "src", "target"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, ".git"));
+        Directory.CreateDirectory(Path.Join(root, "target"));
+        Directory.CreateDirectory(Path.Join(root, "src"));
+        File.WriteAllText(Path.Join(root, ".gitignore"), "target/\n");
+        File.WriteAllText(Path.Join(root, "target", "artifact"), string.Empty);
+        File.WriteAllText(Path.Join(root, "src", "target"), string.Empty);
 
         Assert.Equal(["src", "src/target"], Collect(root, new WalkBuilder(root)));
     }
@@ -568,11 +565,11 @@ public sealed class WalkTests
     public void IgnoredDirectoryDoesNotLoadItsOwnIgnoreFiles()
     {
         string root = CreateTempDirectory();
-        string ignored = Directory.CreateDirectory(Path.Combine(root, "ignored")).FullName;
-        File.WriteAllText(Path.Combine(root, ".ignore"), "ignored/\n");
-        File.WriteAllText(Path.Combine(ignored, ".ignore"), "{a,b\n");
-        File.WriteAllText(Path.Combine(ignored, "unreachable"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "keep"), string.Empty);
+        string ignored = Directory.CreateDirectory(Path.Join(root, "ignored")).FullName;
+        File.WriteAllText(Path.Join(root, ".ignore"), "ignored/\n");
+        File.WriteAllText(Path.Join(ignored, ".ignore"), "{a,b\n");
+        File.WriteAllText(Path.Join(ignored, "unreachable"), string.Empty);
+        File.WriteAllText(Path.Join(root, "keep"), string.Empty);
 
         Assert.Equal(["keep"], Collect(root, new WalkBuilder(root)));
         Assert.Equal(["keep"], CollectParallel(root, new WalkBuilder(root).Threads(4)));
@@ -588,8 +585,8 @@ public sealed class WalkTests
     public void IgnoreFileNameDirectoryDoesNotAbortTraversal(string ignoreFileName)
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, ignoreFileName));
-        File.WriteAllText(Path.Combine(root, "keep"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, ignoreFileName));
+        File.WriteAllText(Path.Join(root, "keep"), string.Empty);
 
         string[] expected = [ignoreFileName, "keep"];
         Assert.Equal(expected, Collect(root, new WalkBuilder(root).Hidden(false)));
@@ -603,13 +600,13 @@ public sealed class WalkTests
     public void NestedIgnoreFilesOverrideAncestorRules()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, ".git"));
-        Directory.CreateDirectory(Path.Combine(root, "src"));
-        File.WriteAllText(Path.Combine(root, ".gitignore"), "*.tmp\n");
-        File.WriteAllText(Path.Combine(root, "src", ".ignore"), "!keep.tmp\n");
-        File.WriteAllText(Path.Combine(root, "drop.tmp"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "src", "drop.tmp"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "src", "keep.tmp"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, ".git"));
+        Directory.CreateDirectory(Path.Join(root, "src"));
+        File.WriteAllText(Path.Join(root, ".gitignore"), "*.tmp\n");
+        File.WriteAllText(Path.Join(root, "src", ".ignore"), "!keep.tmp\n");
+        File.WriteAllText(Path.Join(root, "drop.tmp"), string.Empty);
+        File.WriteAllText(Path.Join(root, "src", "drop.tmp"), string.Empty);
+        File.WriteAllText(Path.Join(root, "src", "keep.tmp"), string.Empty);
 
         Assert.Equal(["src", "src/keep.tmp"], Collect(root, new WalkBuilder(root)));
     }
@@ -621,12 +618,12 @@ public sealed class WalkTests
     public void ParentIgnoreFilesApplyToSubtreeRoots()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, ".git"));
-        Directory.CreateDirectory(Path.Combine(root, "src"));
-        File.WriteAllText(Path.Combine(root, ".gitignore"), "foo\n");
-        File.WriteAllText(Path.Combine(root, "src", "foo"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "src", "bar"), string.Empty);
-        string subtree = Path.Combine(root, "src");
+        Directory.CreateDirectory(Path.Join(root, ".git"));
+        Directory.CreateDirectory(Path.Join(root, "src"));
+        File.WriteAllText(Path.Join(root, ".gitignore"), "foo\n");
+        File.WriteAllText(Path.Join(root, "src", "foo"), string.Empty);
+        File.WriteAllText(Path.Join(root, "src", "bar"), string.Empty);
+        string subtree = Path.Join(root, "src");
 
         Assert.Equal(["bar"], Collect(subtree, new WalkBuilder(subtree)));
         Assert.Equal(["bar", "foo"], Collect(subtree, new WalkBuilder(subtree).Parents(false)));
@@ -639,11 +636,11 @@ public sealed class WalkTests
     public void ParentIgnoreRootedPatternsStayAnchoredToParent()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, ".git"));
-        Directory.CreateDirectory(Path.Combine(root, "src", "llvm"));
-        File.WriteAllText(Path.Combine(root, ".gitignore"), "/llvm/\nfoo\n");
-        File.WriteAllText(Path.Combine(root, "src", "foo"), string.Empty);
-        string subtree = Path.Combine(root, "src");
+        Directory.CreateDirectory(Path.Join(root, ".git"));
+        Directory.CreateDirectory(Path.Join(root, "src", "llvm"));
+        File.WriteAllText(Path.Join(root, ".gitignore"), "/llvm/\nfoo\n");
+        File.WriteAllText(Path.Join(root, "src", "foo"), string.Empty);
+        string subtree = Path.Join(root, "src");
 
         Assert.Equal(["llvm"], Collect(subtree, new WalkBuilder(subtree)));
     }
@@ -655,16 +652,16 @@ public sealed class WalkTests
     public void StandardIgnoreSourcesCanBeDisabled()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, ".git"));
-        File.WriteAllText(Path.Combine(root, ".gitignore"), "git-only\n");
-        File.WriteAllText(Path.Combine(root, ".ignore"), "dot-only\n");
-        File.WriteAllText(Path.Combine(root, ".rgignore"), "rg-only\n");
-        File.WriteAllText(Path.Combine(root, ".scoutignore"), "scout-only\n");
-        File.WriteAllText(Path.Combine(root, "git-only"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "dot-only"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "rg-only"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "scout-only"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "keep"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, ".git"));
+        File.WriteAllText(Path.Join(root, ".gitignore"), "git-only\n");
+        File.WriteAllText(Path.Join(root, ".ignore"), "dot-only\n");
+        File.WriteAllText(Path.Join(root, ".rgignore"), "rg-only\n");
+        File.WriteAllText(Path.Join(root, ".scoutignore"), "scout-only\n");
+        File.WriteAllText(Path.Join(root, "git-only"), string.Empty);
+        File.WriteAllText(Path.Join(root, "dot-only"), string.Empty);
+        File.WriteAllText(Path.Join(root, "rg-only"), string.Empty);
+        File.WriteAllText(Path.Join(root, "scout-only"), string.Empty);
+        File.WriteAllText(Path.Join(root, "keep"), string.Empty);
 
         Assert.Equal(["git-only", "keep"], Collect(root, new WalkBuilder(root).GitIgnore(false)));
         Assert.Equal(["dot-only", "keep", "rg-only", "scout-only"], Collect(root, new WalkBuilder(root).Ignore(false)));
@@ -680,13 +677,13 @@ public sealed class WalkTests
     public void ScoutIgnoreOverridesRgIgnore()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, ".git"));
-        File.WriteAllText(Path.Combine(root, ".rgignore"), "conflict\nrg-only\n");
-        File.WriteAllText(Path.Combine(root, ".scoutignore"), "!conflict\nscout-only\n");
-        File.WriteAllText(Path.Combine(root, "conflict"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "rg-only"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "scout-only"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "keep"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, ".git"));
+        File.WriteAllText(Path.Join(root, ".rgignore"), "conflict\nrg-only\n");
+        File.WriteAllText(Path.Join(root, ".scoutignore"), "!conflict\nscout-only\n");
+        File.WriteAllText(Path.Join(root, "conflict"), string.Empty);
+        File.WriteAllText(Path.Join(root, "rg-only"), string.Empty);
+        File.WriteAllText(Path.Join(root, "scout-only"), string.Empty);
+        File.WriteAllText(Path.Join(root, "keep"), string.Empty);
 
         Assert.Equal(["conflict", "keep"], Collect(root, new WalkBuilder(root)));
     }
@@ -698,9 +695,9 @@ public sealed class WalkTests
     public void GitIgnoreRequiresRepositoryByDefault()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, ".gitignore"), "foo\n");
-        File.WriteAllText(Path.Combine(root, "foo"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "bar"), string.Empty);
+        File.WriteAllText(Path.Join(root, ".gitignore"), "foo\n");
+        File.WriteAllText(Path.Join(root, "foo"), string.Empty);
+        File.WriteAllText(Path.Join(root, "bar"), string.Empty);
 
         Assert.Equal(["bar", "foo"], Collect(root, new WalkBuilder(root)));
         Assert.Equal(["bar"], Collect(root, new WalkBuilder(root).RequireGit(false)));
@@ -713,10 +710,10 @@ public sealed class WalkTests
     public void GitIgnoreAppliesInsideJjRepository()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, ".jj"));
-        File.WriteAllText(Path.Combine(root, ".gitignore"), "foo\n");
-        File.WriteAllText(Path.Combine(root, "foo"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "bar"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, ".jj"));
+        File.WriteAllText(Path.Join(root, ".gitignore"), "foo\n");
+        File.WriteAllText(Path.Join(root, "foo"), string.Empty);
+        File.WriteAllText(Path.Join(root, "bar"), string.Empty);
 
         Assert.Equal(["bar"], Collect(root, new WalkBuilder(root)));
     }
@@ -728,14 +725,14 @@ public sealed class WalkTests
     public void GitExcludeHasLowestGitPrecedence()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, ".git", "info"));
-        File.WriteAllText(Path.Combine(root, ".git", "info", "exclude"), "foo\nbar\nbaz\n");
-        File.WriteAllText(Path.Combine(root, ".gitignore"), "!foo\n");
-        File.WriteAllText(Path.Combine(root, ".ignore"), "!bar\n");
-        File.WriteAllText(Path.Combine(root, "foo"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "bar"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "baz"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "keep"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, ".git", "info"));
+        File.WriteAllText(Path.Join(root, ".git", "info", "exclude"), "foo\nbar\nbaz\n");
+        File.WriteAllText(Path.Join(root, ".gitignore"), "!foo\n");
+        File.WriteAllText(Path.Join(root, ".ignore"), "!bar\n");
+        File.WriteAllText(Path.Join(root, "foo"), string.Empty);
+        File.WriteAllText(Path.Join(root, "bar"), string.Empty);
+        File.WriteAllText(Path.Join(root, "baz"), string.Empty);
+        File.WriteAllText(Path.Join(root, "keep"), string.Empty);
 
         Assert.Equal(["bar", "foo", "keep"], Collect(root, new WalkBuilder(root)));
         Assert.Equal(["bar", "baz", "foo", "keep"], Collect(root, new WalkBuilder(root).GitExclude(false)));
@@ -748,17 +745,17 @@ public sealed class WalkTests
     public void GitExcludeReadsLinkedWorktreeCommonDir()
     {
         string root = CreateTempDirectory();
-        string gitDirectory = Path.Combine(root, ".git");
-        string worktreeGitDirectory = Path.Combine(gitDirectory, "worktrees", "linked-worktree");
-        string linkedWorktree = Path.Combine(root, "linked-worktree");
-        string commonDirectoryFile = Path.Combine(worktreeGitDirectory, "commondir");
-        Directory.CreateDirectory(Path.Combine(gitDirectory, "info"));
+        string gitDirectory = Path.Join(root, ".git");
+        string worktreeGitDirectory = Path.Join(gitDirectory, "worktrees", "linked-worktree");
+        string linkedWorktree = Path.Join(root, "linked-worktree");
+        string commonDirectoryFile = Path.Join(worktreeGitDirectory, "commondir");
+        Directory.CreateDirectory(Path.Join(gitDirectory, "info"));
         Directory.CreateDirectory(worktreeGitDirectory);
         Directory.CreateDirectory(linkedWorktree);
-        File.WriteAllText(Path.Combine(gitDirectory, "info", "exclude"), "ignore_me\n");
-        File.WriteAllText(Path.Combine(linkedWorktree, ".git"), "gitdir: " + worktreeGitDirectory);
-        File.WriteAllText(Path.Combine(linkedWorktree, "ignore_me"), string.Empty);
-        File.WriteAllText(Path.Combine(linkedWorktree, "keep"), string.Empty);
+        File.WriteAllText(Path.Join(gitDirectory, "info", "exclude"), "ignore_me\n");
+        File.WriteAllText(Path.Join(linkedWorktree, ".git"), "gitdir: " + worktreeGitDirectory);
+        File.WriteAllText(Path.Join(linkedWorktree, "ignore_me"), string.Empty);
+        File.WriteAllText(Path.Join(linkedWorktree, "keep"), string.Empty);
 
         File.WriteAllText(commonDirectoryFile, "../..");
         Assert.Equal(["keep"], Collect(linkedWorktree, new WalkBuilder(linkedWorktree)));
@@ -769,7 +766,7 @@ public sealed class WalkTests
         File.Delete(commonDirectoryFile);
         Assert.Equal(["ignore_me", "keep"], Collect(linkedWorktree, new WalkBuilder(linkedWorktree)));
 
-        File.WriteAllText(Path.Combine(linkedWorktree, ".git"), "garbage");
+        File.WriteAllText(Path.Join(linkedWorktree, ".git"), "garbage");
         Assert.Equal(["ignore_me", "keep"], Collect(linkedWorktree, new WalkBuilder(linkedWorktree)));
     }
 
@@ -780,14 +777,14 @@ public sealed class WalkTests
     public void GitExcludeRequiresGitDirPrefixSpace()
     {
         string root = CreateTempDirectory();
-        string gitDirectory = Path.Combine(root, ".git");
-        string linkedWorktree = Path.Combine(root, "linked-worktree");
-        Directory.CreateDirectory(Path.Combine(gitDirectory, "info"));
+        string gitDirectory = Path.Join(root, ".git");
+        string linkedWorktree = Path.Join(root, "linked-worktree");
+        Directory.CreateDirectory(Path.Join(gitDirectory, "info"));
         Directory.CreateDirectory(linkedWorktree);
-        File.WriteAllText(Path.Combine(gitDirectory, "info", "exclude"), "ignore_me\n");
-        File.WriteAllText(Path.Combine(linkedWorktree, ".git"), "gitdir:" + gitDirectory);
-        File.WriteAllText(Path.Combine(linkedWorktree, "ignore_me"), string.Empty);
-        File.WriteAllText(Path.Combine(linkedWorktree, "keep"), string.Empty);
+        File.WriteAllText(Path.Join(gitDirectory, "info", "exclude"), "ignore_me\n");
+        File.WriteAllText(Path.Join(linkedWorktree, ".git"), "gitdir:" + gitDirectory);
+        File.WriteAllText(Path.Join(linkedWorktree, "ignore_me"), string.Empty);
+        File.WriteAllText(Path.Join(linkedWorktree, "keep"), string.Empty);
 
         Assert.Equal(["ignore_me", "keep"], Collect(linkedWorktree, new WalkBuilder(linkedWorktree)));
     }
@@ -800,16 +797,16 @@ public sealed class WalkTests
     {
         string root = CreateTempDirectory();
         string home = CreateTempDirectory();
-        string xdgConfigHome = Path.Combine(home, "xdg");
+        string xdgConfigHome = Path.Join(home, "xdg");
         string globalOnly = "global-" + Guid.NewGuid().ToString("N") + ".log";
         string gitExcludeWhitelist = "whitelist-" + Guid.NewGuid().ToString("N") + ".log";
-        Directory.CreateDirectory(Path.Combine(root, ".git", "info"));
-        Directory.CreateDirectory(Path.Combine(xdgConfigHome, "git"));
-        File.WriteAllText(Path.Combine(xdgConfigHome, "git", "ignore"), globalOnly + "\n" + gitExcludeWhitelist + "\n");
-        File.WriteAllText(Path.Combine(root, ".git", "info", "exclude"), "!" + gitExcludeWhitelist + "\n");
-        File.WriteAllText(Path.Combine(root, globalOnly), string.Empty);
-        File.WriteAllText(Path.Combine(root, gitExcludeWhitelist), string.Empty);
-        File.WriteAllText(Path.Combine(root, "keep"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, ".git", "info"));
+        Directory.CreateDirectory(Path.Join(xdgConfigHome, "git"));
+        File.WriteAllText(Path.Join(xdgConfigHome, "git", "ignore"), globalOnly + "\n" + gitExcludeWhitelist + "\n");
+        File.WriteAllText(Path.Join(root, ".git", "info", "exclude"), "!" + gitExcludeWhitelist + "\n");
+        File.WriteAllText(Path.Join(root, globalOnly), string.Empty);
+        File.WriteAllText(Path.Join(root, gitExcludeWhitelist), string.Empty);
+        File.WriteAllText(Path.Join(root, "keep"), string.Empty);
 
         string? originalHome = Environment.GetEnvironmentVariable("HOME");
         string? originalXdgConfigHome = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
@@ -835,14 +832,14 @@ public sealed class WalkTests
     public void ExplicitIgnoreFilesHaveLowestPrecedence()
     {
         string root = CreateTempDirectory();
-        string ignoreFile = Path.Combine(root, ".not-an-ignore");
-        Directory.CreateDirectory(Path.Combine(root, "a"));
+        string ignoreFile = Path.Join(root, ".not-an-ignore");
+        Directory.CreateDirectory(Path.Join(root, "a"));
         File.WriteAllText(ignoreFile, "foo\nbar\n");
-        File.WriteAllText(Path.Combine(root, ".ignore"), "!bar\n");
-        File.WriteAllText(Path.Combine(root, "foo"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "bar"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "a", "foo"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "a", "bar"), string.Empty);
+        File.WriteAllText(Path.Join(root, ".ignore"), "!bar\n");
+        File.WriteAllText(Path.Join(root, "foo"), string.Empty);
+        File.WriteAllText(Path.Join(root, "bar"), string.Empty);
+        File.WriteAllText(Path.Join(root, "a", "foo"), string.Empty);
+        File.WriteAllText(Path.Join(root, "a", "bar"), string.Empty);
 
         Assert.Equal(["a", "a/bar", "bar"], Collect(root, new WalkBuilder(root).AddIgnoreFile(ignoreFile)));
         Assert.Equal(
@@ -857,11 +854,11 @@ public sealed class WalkTests
     public void IgnoreFilesCanMatchCaseInsensitively()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, ".ignore"), "*.html\n");
-        File.WriteAllText(Path.Combine(root, "lower.html"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "upper.HTML"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "short.htm"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "wide.HTM"), string.Empty);
+        File.WriteAllText(Path.Join(root, ".ignore"), "*.html\n");
+        File.WriteAllText(Path.Join(root, "lower.html"), string.Empty);
+        File.WriteAllText(Path.Join(root, "upper.HTML"), string.Empty);
+        File.WriteAllText(Path.Join(root, "short.htm"), string.Empty);
+        File.WriteAllText(Path.Join(root, "wide.HTM"), string.Empty);
 
         Assert.Equal(["short.htm", "upper.HTML", "wide.HTM"], Collect(root, new WalkBuilder(root)));
         Assert.Equal(
@@ -877,10 +874,10 @@ public sealed class WalkTests
     {
         string root = CreateTempDirectory();
         string ignoreRoot = CreateTempDirectory();
-        string ignoreFile = Path.Combine(ignoreRoot, "ignore");
+        string ignoreFile = Path.Join(ignoreRoot, "ignore");
         File.WriteAllText(ignoreFile, "*.log\n");
-        File.WriteAllText(Path.Combine(root, "trace.LOG"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "keep.txt"), string.Empty);
+        File.WriteAllText(Path.Join(root, "trace.LOG"), string.Empty);
+        File.WriteAllText(Path.Join(root, "keep.txt"), string.Empty);
 
         Assert.Equal(
             ["keep.txt"],
@@ -894,12 +891,12 @@ public sealed class WalkTests
     public void CustomIgnoreFilesOverrideStandardIgnoreFiles()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, ".ignore"), "foo\n");
-        File.WriteAllText(Path.Combine(root, ".custom1"), "!foo\nbar\n");
-        File.WriteAllText(Path.Combine(root, ".custom2"), "!bar\n");
-        File.WriteAllText(Path.Combine(root, "foo"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "bar"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "keep"), string.Empty);
+        File.WriteAllText(Path.Join(root, ".ignore"), "foo\n");
+        File.WriteAllText(Path.Join(root, ".custom1"), "!foo\nbar\n");
+        File.WriteAllText(Path.Join(root, ".custom2"), "!bar\n");
+        File.WriteAllText(Path.Join(root, "foo"), string.Empty);
+        File.WriteAllText(Path.Join(root, "bar"), string.Empty);
+        File.WriteAllText(Path.Join(root, "keep"), string.Empty);
 
         Assert.Equal(
             ["bar", "foo", "keep"],
@@ -913,10 +910,10 @@ public sealed class WalkTests
     public void IgnoreFilesSupportEscapedLeadingMarkers()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, ".ignore"), "\\#literal\n\\!literal\n");
-        File.WriteAllText(Path.Combine(root, "#literal"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "!literal"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "other"), string.Empty);
+        File.WriteAllText(Path.Join(root, ".ignore"), "\\#literal\n\\!literal\n");
+        File.WriteAllText(Path.Join(root, "#literal"), string.Empty);
+        File.WriteAllText(Path.Join(root, "!literal"), string.Empty);
+        File.WriteAllText(Path.Join(root, "other"), string.Empty);
 
         Assert.Equal(["other"], Collect(root, new WalkBuilder(root)));
     }
@@ -928,10 +925,10 @@ public sealed class WalkTests
     public void IgnoreFilesPreserveEscapedTrailingWhitespace()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, ".ignore"), "trimmed \nliteral\\ \n");
-        File.WriteAllText(Path.Combine(root, "trimmed"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "literal "), string.Empty);
-        File.WriteAllText(Path.Combine(root, "literal"), string.Empty);
+        File.WriteAllText(Path.Join(root, ".ignore"), "trimmed \nliteral\\ \n");
+        File.WriteAllText(Path.Join(root, "trimmed"), string.Empty);
+        File.WriteAllText(Path.Join(root, "literal "), string.Empty);
+        File.WriteAllText(Path.Join(root, "literal"), string.Empty);
 
         Assert.Equal(["literal"], Collect(root, new WalkBuilder(root)));
     }
@@ -943,18 +940,18 @@ public sealed class WalkTests
     public void IgnoreFilesHonorRootedAndRecursivePatterns()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, ".git"));
-        Directory.CreateDirectory(Path.Combine(root, "child"));
-        Directory.CreateDirectory(Path.Combine(root, "a", "x", "y"));
-        File.WriteAllText(Path.Combine(root, ".gitignore"), "/root.log\n**/any.log\na/**/b\n");
-        File.WriteAllText(Path.Combine(root, "root.log"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "any.log"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "child", "root.log"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "child", "any.log"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "a", "b"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "a", "x", "b"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "a", "x", "y", "b"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "keep"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, ".git"));
+        Directory.CreateDirectory(Path.Join(root, "child"));
+        Directory.CreateDirectory(Path.Join(root, "a", "x", "y"));
+        File.WriteAllText(Path.Join(root, ".gitignore"), "/root.log\n**/any.log\na/**/b\n");
+        File.WriteAllText(Path.Join(root, "root.log"), string.Empty);
+        File.WriteAllText(Path.Join(root, "any.log"), string.Empty);
+        File.WriteAllText(Path.Join(root, "child", "root.log"), string.Empty);
+        File.WriteAllText(Path.Join(root, "child", "any.log"), string.Empty);
+        File.WriteAllText(Path.Join(root, "a", "b"), string.Empty);
+        File.WriteAllText(Path.Join(root, "a", "x", "b"), string.Empty);
+        File.WriteAllText(Path.Join(root, "a", "x", "y", "b"), string.Empty);
+        File.WriteAllText(Path.Join(root, "keep"), string.Empty);
 
         Assert.Equal(["a", "a/x", "a/x/y", "child", "child/root.log", "keep"], Collect(root, new WalkBuilder(root)));
     }
@@ -966,10 +963,10 @@ public sealed class WalkTests
     public void WhitelistedHiddenEntriesBypassHiddenFiltering()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, ".ignore"), "!.visible-hidden\n");
-        File.WriteAllText(Path.Combine(root, ".visible-hidden"), string.Empty);
-        File.WriteAllText(Path.Combine(root, ".hidden"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "visible"), string.Empty);
+        File.WriteAllText(Path.Join(root, ".ignore"), "!.visible-hidden\n");
+        File.WriteAllText(Path.Join(root, ".visible-hidden"), string.Empty);
+        File.WriteAllText(Path.Join(root, ".hidden"), string.Empty);
+        File.WriteAllText(Path.Join(root, "visible"), string.Empty);
 
         Assert.Equal([".visible-hidden", "visible"], Collect(root, new WalkBuilder(root)));
     }
@@ -981,9 +978,9 @@ public sealed class WalkTests
     public void OverrideWhitelistIgnoresUnmatchedFiles()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, "src"));
-        File.WriteAllText(Path.Combine(root, "src", "main.rs"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "src", "main.c"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, "src"));
+        File.WriteAllText(Path.Join(root, "src", "main.rs"), string.Empty);
+        File.WriteAllText(Path.Join(root, "src", "main.c"), string.Empty);
         Override overrides = new OverrideBuilder(root).Add("*.rs").Build();
 
         Assert.Equal(["src", "src/main.rs"], Collect(root, new WalkBuilder(root).Overrides(overrides)));
@@ -996,8 +993,8 @@ public sealed class WalkTests
     public void NegatedOverrideIgnoresMatchingPath()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, "keep.rs"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "drop.generated.rs"), string.Empty);
+        File.WriteAllText(Path.Join(root, "keep.rs"), string.Empty);
+        File.WriteAllText(Path.Join(root, "drop.generated.rs"), string.Empty);
         Override overrides = new OverrideBuilder(root).Add("*.rs").Add("!*.generated.rs").Build();
 
         Assert.Equal(["keep.rs"], Collect(root, new WalkBuilder(root).Overrides(overrides)));
@@ -1010,9 +1007,9 @@ public sealed class WalkTests
     public void OverrideWhitelistBeatsIgnoreAndHiddenFilters()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, ".ignore"), "*.log\n");
-        File.WriteAllText(Path.Combine(root, ".hidden.log"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "visible.log"), string.Empty);
+        File.WriteAllText(Path.Join(root, ".ignore"), "*.log\n");
+        File.WriteAllText(Path.Join(root, ".hidden.log"), string.Empty);
+        File.WriteAllText(Path.Join(root, "visible.log"), string.Empty);
         Override overrides = new OverrideBuilder(root).Add("*.log").Build();
 
         Assert.Equal([".hidden.log", "visible.log"], Collect(root, new WalkBuilder(root).Overrides(overrides)));
@@ -1025,10 +1022,10 @@ public sealed class WalkTests
     public void DirectoryOnlyOverrideIgnoresMatchingDirectories()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, "target"));
-        Directory.CreateDirectory(Path.Combine(root, "src"));
-        File.WriteAllText(Path.Combine(root, "target", "artifact"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "src", "target"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, "target"));
+        Directory.CreateDirectory(Path.Join(root, "src"));
+        File.WriteAllText(Path.Join(root, "target", "artifact"), string.Empty);
+        File.WriteAllText(Path.Join(root, "src", "target"), string.Empty);
         Override overrides = new OverrideBuilder(root).Add("!target/").Build();
 
         Assert.Equal(["src", "src/target"], Collect(root, new WalkBuilder(root).Overrides(overrides)));
@@ -1041,9 +1038,9 @@ public sealed class WalkTests
     public void SelectedFileTypeFiltersFiles()
     {
         string root = CreateTempDirectory();
-        Directory.CreateDirectory(Path.Combine(root, "src"));
-        File.WriteAllText(Path.Combine(root, "src", "main.rs"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "src", "main.c"), string.Empty);
+        Directory.CreateDirectory(Path.Join(root, "src"));
+        File.WriteAllText(Path.Join(root, "src", "main.rs"), string.Empty);
+        File.WriteAllText(Path.Join(root, "src", "main.c"), string.Empty);
         FileTypeMatcher fileTypes = new FileTypeMatcherBuilder()
             .Add("rust", "*.rs")
             .Select("rust")
@@ -1059,8 +1056,8 @@ public sealed class WalkTests
     public void NegatedFileTypeIgnoresMatchingFiles()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, "main.rs"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "main.c"), string.Empty);
+        File.WriteAllText(Path.Join(root, "main.rs"), string.Empty);
+        File.WriteAllText(Path.Join(root, "main.c"), string.Empty);
         FileTypeMatcher fileTypes = new FileTypeMatcherBuilder()
             .Add("c", "*.c")
             .Negate("c")
@@ -1076,9 +1073,9 @@ public sealed class WalkTests
     public void FileTypeIncludeDefinitionsUseExistingGlobs()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, "index.html"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "lib.rs"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "script.js"), string.Empty);
+        File.WriteAllText(Path.Join(root, "index.html"), string.Empty);
+        File.WriteAllText(Path.Join(root, "lib.rs"), string.Empty);
+        File.WriteAllText(Path.Join(root, "script.js"), string.Empty);
         FileTypeMatcher fileTypes = new FileTypeMatcherBuilder()
             .AddDefinition("html:*.html")
             .AddDefinition("rust:*.rs")
@@ -1096,9 +1093,9 @@ public sealed class WalkTests
     public void DefaultFileTypesIncludeContainer()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, "Dockerfile"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "dev.Containerfile"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "main.rs"), string.Empty);
+        File.WriteAllText(Path.Join(root, "Dockerfile"), string.Empty);
+        File.WriteAllText(Path.Join(root, "dev.Containerfile"), string.Empty);
+        File.WriteAllText(Path.Join(root, "main.rs"), string.Empty);
         FileTypeMatcher fileTypes = new FileTypeMatcherBuilder()
             .AddDefaults()
             .Select("container")
@@ -1114,8 +1111,8 @@ public sealed class WalkTests
     public void FileTypeWhitelistBypassesHiddenFiltering()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, ".main.rs"), string.Empty);
-        File.WriteAllText(Path.Combine(root, ".hidden.txt"), string.Empty);
+        File.WriteAllText(Path.Join(root, ".main.rs"), string.Empty);
+        File.WriteAllText(Path.Join(root, ".hidden.txt"), string.Empty);
         FileTypeMatcher fileTypes = new FileTypeMatcherBuilder()
             .Add("rust", "*.rs")
             .Select("rust")
@@ -1131,9 +1128,9 @@ public sealed class WalkTests
     public void FileTypesCanIgnoreIgnoreFileWhitelists()
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, ".ignore"), "*.tmp\n!keep.tmp\n");
-        File.WriteAllText(Path.Combine(root, "keep.tmp"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "main.rs"), string.Empty);
+        File.WriteAllText(Path.Join(root, ".ignore"), "*.tmp\n!keep.tmp\n");
+        File.WriteAllText(Path.Join(root, "keep.tmp"), string.Empty);
+        File.WriteAllText(Path.Join(root, "main.rs"), string.Empty);
         FileTypeMatcher fileTypes = new FileTypeMatcherBuilder()
             .Add("rust", "*.rs")
             .Select("rust")
@@ -1160,8 +1157,8 @@ public sealed class WalkTests
     public void DefaultFileTypesIncludePinnedUpstreamPatterns(string fileType, string fileName)
     {
         string root = CreateTempDirectory();
-        File.WriteAllText(Path.Combine(root, fileName), string.Empty);
-        File.WriteAllText(Path.Combine(root, "unmatched.nope"), string.Empty);
+        File.WriteAllText(Path.Join(root, fileName), string.Empty);
+        File.WriteAllText(Path.Join(root, "unmatched.nope"), string.Empty);
         FileTypeMatcher fileTypes = new FileTypeMatcherBuilder()
             .AddDefaults()
             .Select(fileType)
@@ -1172,20 +1169,12 @@ public sealed class WalkTests
 
     private static List<string> Collect(string root, WalkBuilder builder)
     {
-        List<string> paths = [];
-        foreach (DirEntry entry in builder.SortByPath().Build())
-        {
-            string relative = Path.GetRelativePath(root, entry.FullPath);
-            if (relative == ".")
-            {
-                continue;
-            }
-
-            paths.Add(relative.Replace(Path.DirectorySeparatorChar, '/'));
-        }
-
-        paths.Sort(StringComparer.Ordinal);
-        return paths;
+        return builder.SortByPath().Build()
+            .Select(entry => Path.GetRelativePath(root, entry.FullPath))
+            .Where(static relative => relative != ".")
+            .Select(static relative => relative.Replace(Path.DirectorySeparatorChar, '/'))
+            .OrderBy(static relative => relative, StringComparer.Ordinal)
+            .ToList();
     }
 
     private static List<string> CollectParallel(string root, WalkBuilder builder)
@@ -1214,7 +1203,7 @@ public sealed class WalkTests
 
     private static string CreateTempDirectory()
     {
-        string path = Path.Combine(Path.GetTempPath(), "scout-" + Guid.NewGuid().ToString("N"));
+        string path = Path.Join(Path.GetTempPath(), "scout-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
     }

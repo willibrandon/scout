@@ -105,8 +105,8 @@ public static class SearchEncoding
 
     private static bool HasBom(ReadOnlySpan<byte> bytes)
     {
-        return (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF) ||
-            (bytes.Length >= 2 && ((bytes[0] == 0xFF && bytes[1] == 0xFE) || (bytes[0] == 0xFE && bytes[1] == 0xFF)));
+        return bytes.StartsWith<byte>([0xEF, 0xBB, 0xBF]) ||
+            bytes.StartsWith<byte>([0xFF, 0xFE]) || bytes.StartsWith<byte>([0xFE, 0xFF]);
     }
 
     internal static int GetStreamingSafePrefixLength(ReadOnlySpan<byte> bytes, SearchEncodingKind encodingKind)
@@ -627,65 +627,62 @@ public static class SearchEncoding
         bool flush)
     {
         var output = new List<byte>(bytes.Length);
-        Iso2022JpState state = decoderState.State;
-        Iso2022JpState outputState = decoderState.OutputState;
-        byte lead = decoderState.Lead;
-        bool outputFlag = decoderState.OutputFlag;
+        Iso2022JpDecoderState current = decoderState;
         int index = 0;
         while (index < bytes.Length)
         {
             byte value = bytes[index];
-            switch (state)
+            switch (current.State)
             {
                 case Iso2022JpState.Ascii:
-                    DecodeIso2022JpAscii(value, output, ref state, ref outputFlag);
+                    DecodeIso2022JpAscii(value, output, ref current.State, ref current.OutputFlag);
                     index++;
                     break;
 
                 case Iso2022JpState.Roman:
-                    DecodeIso2022JpRoman(value, output, ref state, ref outputFlag);
+                    DecodeIso2022JpRoman(value, output, ref current.State, ref current.OutputFlag);
                     index++;
                     break;
 
                 case Iso2022JpState.Katakana:
-                    DecodeIso2022JpKatakana(value, output, ref state, ref outputFlag);
+                    DecodeIso2022JpKatakana(value, output, ref current.State, ref current.OutputFlag);
                     index++;
                     break;
 
                 case Iso2022JpState.LeadByte:
-                    DecodeIso2022JpLeadByte(value, output, ref state, ref lead, ref outputFlag);
+                    DecodeIso2022JpLeadByte(value, output, ref current);
                     index++;
                     break;
 
                 case Iso2022JpState.TrailByte:
-                    DecodeIso2022JpTrailByte(value, output, ref state, ref lead, ref outputFlag);
+                    DecodeIso2022JpTrailByte(value, output, ref current);
                     index++;
                     break;
 
                 case Iso2022JpState.EscapeStart:
                     if (value is (byte)'$' or (byte)'(')
                     {
-                        lead = value;
-                        state = Iso2022JpState.Escape;
+                        current.Lead = value;
+                        current.State = Iso2022JpState.Escape;
                         index++;
                     }
                     else
                     {
-                        outputFlag = false;
-                        state = outputState;
+                        current.OutputFlag = false;
+                        current.State = current.OutputState;
                         AppendUtf8Scalar(output, 0xFFFD);
                     }
 
                     break;
 
                 case Iso2022JpState.Escape:
-                    if (TryGetIso2022JpEscapeState(lead, value, out Iso2022JpState escapeState))
+                    if (TryGetIso2022JpEscapeState(current.Lead, value, out Iso2022JpState escapeState))
                     {
-                        lead = 0;
-                        state = escapeState;
-                        outputState = escapeState;
-                        bool previousOutputFlag = outputFlag;
-                        outputFlag = true;
+                        current.Lead = 0;
+                        current.State = escapeState;
+                        current.OutputState = escapeState;
+                        bool previousOutputFlag = current.OutputFlag;
+                        current.OutputFlag = true;
                         if (previousOutputFlag)
                         {
                             AppendUtf8Scalar(output, 0xFFFD);
@@ -695,12 +692,12 @@ public static class SearchEncoding
                     }
                     else
                     {
-                        byte prepended = lead;
-                        outputFlag = false;
-                        state = outputState;
-                        lead = 0;
+                        byte prepended = current.Lead;
+                        current.OutputFlag = false;
+                        current.State = current.OutputState;
+                        current.Lead = 0;
                         AppendUtf8Scalar(output, 0xFFFD);
-                        PrependIso2022JpByte(prepended, output, ref state, ref lead);
+                        PrependIso2022JpByte(prepended, output, ref current.State, ref current.Lead);
                     }
 
                     break;
@@ -709,13 +706,10 @@ public static class SearchEncoding
 
         if (flush)
         {
-            FlushIso2022JpEnd(output, ref state, outputState, ref lead);
+            FlushIso2022JpEnd(output, ref current.State, current.OutputState, ref current.Lead);
         }
 
-        decoderState.State = state;
-        decoderState.OutputState = outputState;
-        decoderState.Lead = lead;
-        decoderState.OutputFlag = outputFlag;
+        decoderState = current;
         return output.ToArray();
     }
 
@@ -800,21 +794,19 @@ public static class SearchEncoding
     private static void DecodeIso2022JpLeadByte(
         byte value,
         List<byte> output,
-        ref Iso2022JpState state,
-        ref byte lead,
-        ref bool outputFlag)
+        ref Iso2022JpDecoderState decoderState)
     {
         if (value == 0x1B)
         {
-            state = Iso2022JpState.EscapeStart;
+            decoderState.State = Iso2022JpState.EscapeStart;
             return;
         }
 
-        outputFlag = false;
+        decoderState.OutputFlag = false;
         if (value is >= 0x21 and <= 0x7E)
         {
-            lead = value;
-            state = Iso2022JpState.TrailByte;
+            decoderState.Lead = value;
+            decoderState.State = Iso2022JpState.TrailByte;
             return;
         }
 
@@ -824,20 +816,18 @@ public static class SearchEncoding
     private static void DecodeIso2022JpTrailByte(
         byte value,
         List<byte> output,
-        ref Iso2022JpState state,
-        ref byte lead,
-        ref bool outputFlag)
+        ref Iso2022JpDecoderState decoderState)
     {
         if (value == 0x1B)
         {
-            state = Iso2022JpState.EscapeStart;
+            decoderState.State = Iso2022JpState.EscapeStart;
             AppendUtf8Scalar(output, 0xFFFD);
             return;
         }
 
-        state = Iso2022JpState.LeadByte;
-        outputFlag = false;
-        int leadMinusOffset = lead - 0x21;
+        decoderState.State = Iso2022JpState.LeadByte;
+        decoderState.OutputFlag = false;
+        int leadMinusOffset = decoderState.Lead - 0x21;
         int trailMinusOffset = value - 0x21;
         if (leadMinusOffset == 0x03 && (uint)trailMinusOffset < 0x53)
         {

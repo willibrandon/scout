@@ -238,8 +238,9 @@ public sealed class RegexPrefilterStateTests
             ranges,
             state);
 
-        while (candidates.MoveNext(out _))
+        while (candidates.MoveNext(out int candidate))
         {
+            Assert.InRange(candidate, 0, haystack.Length);
         }
 
         Assert.True(state[0].IsEffective);
@@ -272,8 +273,9 @@ public sealed class RegexPrefilterStateTests
             nulDetection,
             state);
 
-        while (candidates.MoveNext(out _))
+        while (candidates.MoveNext(out int candidate))
         {
+            Assert.InRange(candidate, 0, haystack.Length);
         }
 
         Assert.True(state[0].IsInert);

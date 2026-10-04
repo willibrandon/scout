@@ -126,9 +126,11 @@ internal static class CliSearchCommandRunner
         }
         catch (IOException)
         {
+            return;
         }
         catch (InvalidOperationException)
         {
+            return;
         }
     }
 

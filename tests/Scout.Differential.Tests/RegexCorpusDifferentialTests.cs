@@ -706,7 +706,7 @@ public sealed class RegexCorpusDifferentialTests
         string root = CreateTempDirectory();
         try
         {
-            string path = Path.Combine(root, "haystack");
+            string path = Path.Join(root, "haystack");
             File.WriteAllBytes(path, corpusCase.Haystack);
 
             var differentialCase = DifferentialCase.Normalized(
@@ -775,13 +775,12 @@ public sealed class RegexCorpusDifferentialTests
 
     private static SortedSet<string> ReadSupportedCorpusCatalog()
     {
-        string path = Path.Combine(FindRepositoryRoot(), "tests", "Scout.Regex.Tests", "RegexCorpusTests.cs");
+        string path = Path.Join(FindRepositoryRoot(), "tests", "Scout.Regex.Tests", "RegexCorpusTests.cs");
         var tests = new SortedSet<string>(StringComparer.Ordinal);
         string? relativePath = null;
         bool readingNames = false;
-        foreach (string line in File.ReadLines(path))
+        foreach (string trimmed in File.ReadLines(path).Select(line => line.Trim()))
         {
-            string trimmed = line.Trim();
             if (!readingNames)
             {
                 if (TryReadCorpusRelativePath(trimmed, out string? parsedRelativePath))
@@ -853,16 +852,7 @@ public sealed class RegexCorpusDifferentialTests
 
     private static string[] Difference(SortedSet<string> left, SortedSet<string> right)
     {
-        var difference = new List<string>();
-        foreach (string value in left)
-        {
-            if (!right.Contains(value))
-            {
-                difference.Add(value);
-            }
-        }
-
-        return difference.ToArray();
+        return left.Except(right, StringComparer.Ordinal).ToArray();
     }
 
     private static (string RelativePath, int Count)[] CountByRelativePath(IEnumerable<string> keys)
@@ -935,7 +925,7 @@ public sealed class RegexCorpusDifferentialTests
 
     private static string CreateTempDirectory()
     {
-        string path = Path.Combine(Path.GetTempPath(), "scout-regex-corpus-diff-" + Guid.NewGuid().ToString("N"));
+        string path = Path.Join(Path.GetTempPath(), "scout-regex-corpus-diff-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
     }
@@ -945,7 +935,7 @@ public sealed class RegexCorpusDifferentialTests
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "Scout.slnx")))
+            if (File.Exists(Path.Join(directory.FullName, "Scout.slnx")))
             {
                 return directory.FullName;
             }

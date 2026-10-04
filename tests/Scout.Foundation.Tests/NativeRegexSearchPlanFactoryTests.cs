@@ -196,9 +196,10 @@ public sealed class NativeRegexSearchPlanFactoryTests
     public void CliDispatchCompilesOnlyAtOperationBoundary()
     {
         string root = FindRepositoryRoot();
-        string application = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "ScoutApplication.cs"));
-        string enginePlanner = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "RegexEnginePlanner.cs"));
-        string pcre2Operations = File.ReadAllText(Path.Combine(root, "src", "Scout.App", "Pcre2SearchOperations.cs"));
+        string application = File.ReadAllText(Path.Join(root, "src", "Scout.App", "ScoutApplication.cs"));
+        string enginePlanner = File.ReadAllText(Path.Join(root, "src", "Scout.App", "RegexEnginePlanner.cs"));
+        string pcre2Operations = File.ReadAllText(Path.Join(root, "src", "Scout.App", "Pcre2SearchOperations.cs"));
+        string workerRegexes = File.ReadAllText(Path.Join(root, "src", "Scout.App", "Pcre2WorkerRegexes.cs"));
         string[] downstreamFiles =
         [
             "StandardSearchOperations.cs",
@@ -215,10 +216,11 @@ public sealed class NativeRegexSearchPlanFactoryTests
         Assert.DoesNotContain("ShouldAutoUse", pcre2Operations, StringComparison.Ordinal);
         Assert.DoesNotContain("DefaultRegexCompileFails", pcre2Operations, StringComparison.Ordinal);
         Assert.Contains("plan.Regex", pcre2Operations, StringComparison.Ordinal);
-        Assert.Contains("retainedRegexClaimed", pcre2Operations, StringComparison.Ordinal);
+        Assert.Contains("new Pcre2WorkerRegexes(regex, pcre2Pattern, compileOptions)", pcre2Operations, StringComparison.Ordinal);
+        Assert.Contains("Interlocked.CompareExchange(ref borrowedClaimed, 1, 0) == 0", workerRegexes, StringComparison.Ordinal);
         for (int index = 0; index < downstreamFiles.Length; index++)
         {
-            string source = File.ReadAllText(Path.Combine(root, "src", "Scout.App", downstreamFiles[index]));
+            string source = File.ReadAllText(Path.Join(root, "src", "Scout.App", downstreamFiles[index]));
             Assert.DoesNotContain("RegexSearchPlan.Create(", source, StringComparison.Ordinal);
             Assert.DoesNotContain("CreateMultilinePlan(", source, StringComparison.Ordinal);
         }
@@ -255,7 +257,7 @@ public sealed class NativeRegexSearchPlanFactoryTests
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "Scout.slnx")))
+            if (File.Exists(Path.Join(directory.FullName, "Scout.slnx")))
             {
                 return directory.FullName;
             }

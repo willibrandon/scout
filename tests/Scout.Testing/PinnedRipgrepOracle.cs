@@ -99,13 +99,13 @@ internal static class PinnedRipgrepOracle
 
     internal static string ReadPrerequisiteValue(string key)
     {
-        string prerequisiteLock = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "tests", "PREREQS.lock"));
+        string prerequisiteLock = File.ReadAllText(Path.Join(FindRepositoryRoot(), "tests", "PREREQS.lock"));
         return ReadPrerequisiteValue(prerequisiteLock, key);
     }
 
     internal static string ReadHostOracleValue(string tableKey, string rootKey)
     {
-        string prerequisiteLock = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "tests", "PREREQS.lock"));
+        string prerequisiteLock = File.ReadAllText(Path.Join(FindRepositoryRoot(), "tests", "PREREQS.lock"));
         if (TryReadHostOracleValue(prerequisiteLock, tableKey, HostOracleEnvironment, out string value))
         {
             return value;
@@ -126,7 +126,7 @@ internal static class PinnedRipgrepOracle
 
     internal static bool TryReadHostOracleValue(string tableKey, out string value)
     {
-        string prerequisiteLock = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "tests", "PREREQS.lock"));
+        string prerequisiteLock = File.ReadAllText(Path.Join(FindRepositoryRoot(), "tests", "PREREQS.lock"));
         if (TryReadHostOracleValue(prerequisiteLock, tableKey, HostOracleEnvironment, out value))
         {
             return true;
@@ -294,7 +294,7 @@ internal static class PinnedRipgrepOracle
             return path;
         }
 
-        return Path.GetFullPath(Path.Combine(FindRepositoryRoot(), path));
+        return Path.GetFullPath(Path.Join(FindRepositoryRoot(), path));
     }
 
     private static string DeriveReferenceRoot(string executablePath)
@@ -315,7 +315,7 @@ internal static class PinnedRipgrepOracle
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "Scout.slnx")))
+            if (File.Exists(Path.Join(directory.FullName, "Scout.slnx")))
             {
                 return directory.FullName;
             }

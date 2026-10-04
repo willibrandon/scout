@@ -104,12 +104,12 @@ public sealed class PortedRgTestSourceGenerator : IIncrementalGenerator
         }
 
         int suffix = 2;
-        while (!usedTypeNames.Add(typeName + suffix.ToString()))
+        while (!usedTypeNames.Add(typeName + suffix))
         {
             suffix++;
         }
 
-        return typeName + suffix.ToString();
+        return typeName + suffix;
     }
 
     private static string ToIdentifierStem(string value)
@@ -119,7 +119,7 @@ public sealed class PortedRgTestSourceGenerator : IIncrementalGenerator
         for (int index = 0; index < value.Length; index++)
         {
             char character = value[index];
-            if ((character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || (character >= '0' && character <= '9'))
+            if (character is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9')
             {
                 if (builder.Length == 0 && character >= '0' && character <= '9')
                 {

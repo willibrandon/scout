@@ -371,10 +371,10 @@ internal sealed class RegexIpv4AddressEngine
         if (position + 2 < haystack.Length && IsDigit(haystack[position + 2]))
         {
             byte third = haystack[position + 2];
-            if (first is (byte)'0' or (byte)'1' ||
-                first == (byte)'2' &&
-                (second is >= (byte)'0' and <= (byte)'4' ||
-                    second == (byte)'5' && third is >= (byte)'0' and <= (byte)'5'))
+            if ((first, second, third) is
+                ((byte)'0' or (byte)'1', _, _) or
+                ((byte)'2', >= (byte)'0' and <= (byte)'4', _) or
+                ((byte)'2', (byte)'5', >= (byte)'0' and <= (byte)'5'))
             {
                 length = 3;
                 return true;

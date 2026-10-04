@@ -107,17 +107,19 @@ internal static class RegexPrefilterRecordSearcher
                             regexPlan.Matcher,
                             ref findRunner,
                             ref sink,
-                            requireMatchColumn,
-                            maxMatchingLines,
-                            ref matched,
-                            ref matchedLines))
+                            requireMatchColumn))
                     {
-                        if (countSearchedLines)
+                        matched = true;
+                        matchedLines++;
+                        if (maxMatchingLines is ulong limit && matchedLines >= limit)
                         {
-                            searchedLines = lineNumber;
-                        }
+                            if (countSearchedLines)
+                            {
+                                searchedLines = lineNumber;
+                            }
 
-                        return true;
+                            return true;
+                        }
                     }
 
                     recordBoundary = recordStart + recordLength;
@@ -191,17 +193,19 @@ internal static class RegexPrefilterRecordSearcher
                         regexPlan.Matcher,
                         ref findRunner,
                         ref sink,
-                        requireMatchColumn,
-                        maxMatchingLines,
-                        ref matched,
-                        ref matchedLines))
+                        requireMatchColumn))
                 {
-                    if (countSearchedLines)
+                    matched = true;
+                    matchedLines++;
+                    if (maxMatchingLines is ulong limit && matchedLines >= limit)
                     {
-                        searchedLines = lineNumber;
-                    }
+                        if (countSearchedLines)
+                        {
+                            searchedLines = lineNumber;
+                        }
 
-                    return true;
+                        return true;
+                    }
                 }
 
                 recordBoundary += remainingRecordLength;
@@ -234,10 +238,7 @@ internal static class RegexPrefilterRecordSearcher
         RegexAutomaton matcher,
         ref RegexFindRunner findRunner,
         ref TSink sink,
-        bool requireMatchColumn,
-        ulong? maxMatchingLines,
-        ref bool matched,
-        ref ulong matchedLines)
+        bool requireMatchColumn)
         where TSink : struct, ILineSink
     {
         if (record.Length < matcher.MinimumMatchLength)
@@ -246,16 +247,11 @@ internal static class RegexPrefilterRecordSearcher
         }
 
         RegexMatch? found;
-        if (candidateIsExact)
-        {
-            found = findRunner.TryMatchAt(record, candidateStart, out int length)
+        found = candidateIsExact
+            ? (findRunner.TryMatchAt(record, candidateStart, out int length)
                 ? new RegexMatch(candidateStart, length)
-                : findRunner.Find(record, candidateStart + 1);
-        }
-        else
-        {
-            found = findRunner.Find(record, startAt: 0);
-        }
+                : findRunner.Find(record, candidateStart + 1))
+            : findRunner.Find(record, startAt: 0);
 
         if (!found.HasValue)
         {
@@ -267,9 +263,7 @@ internal static class RegexPrefilterRecordSearcher
             recordStart,
             requireMatchColumn ? found.Value.Start + 1 : 0,
             record);
-        matched = true;
-        matchedLines++;
-        return maxMatchingLines is ulong limit && matchedLines >= limit;
+        return true;
     }
 
     /// <summary>

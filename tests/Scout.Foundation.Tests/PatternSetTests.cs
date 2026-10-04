@@ -279,6 +279,21 @@ public sealed class PatternSetTests
     }
 
     /// <summary>
+    /// Verifies a failed exact-start candidate does not discard later accelerated matches.
+    /// </summary>
+    [Fact]
+    public void FindsLaterLiteralAndBoundaryCandidatesAfterExactStartMiss()
+    {
+        var literals = PatternSet.Compile(["needle"u8.ToArray(), "other"u8.ToArray()]);
+        Assert.True(literals.UsesLiteralAccelerator);
+        Assert.Equal(new PatternSetMatch(0, new RegexMatch(2, 6)), literals.Find("xxneedle"u8, startAt: 1));
+
+        var boundaries = PatternSet.Compile(["\\bif\\b"u8.ToArray(), "\\belse\\b"u8.ToArray()]);
+        Assert.True(boundaries.UsesBoundaryLiteralAccelerator);
+        Assert.Equal(new PatternSetMatch(0, new RegexMatch(3, 2)), boundaries.Find("xx if"u8, startAt: 1));
+    }
+
+    /// <summary>
     /// Verifies count helpers use the same non-overlapping iteration semantics as repeated find.
     /// </summary>
     [Fact]

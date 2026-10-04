@@ -16,7 +16,7 @@ public sealed unsafe class NativeMemoryAdviceTests
         string root = Directory.CreateTempSubdirectory("scout-madvise-").FullName;
         try
         {
-            string path = Path.Combine(root, "file");
+            string path = Path.Join(root, "file");
             File.WriteAllBytes(path, "needle\n"u8.ToArray());
             using var output = new MemoryStream();
             var diagnostics = new DiagnosticMessenger(new RawByteWriter(output), new DiagnosticState());

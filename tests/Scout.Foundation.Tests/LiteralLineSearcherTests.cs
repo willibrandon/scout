@@ -1722,6 +1722,33 @@ public sealed class LiteralLineSearcherTests
     }
 
     /// <summary>
+    /// Verifies a throwing callback preserves the mutable sink while returning its runner leases.
+    /// </summary>
+    [Fact]
+    public void ProjectedRecordSearchRetainsSinkStateWhenCallbackThrows()
+    {
+        const string sourcePattern = @"\w{5}\s+\w{5}\s+\w{5}";
+        byte[] haystack = Encoding.ASCII.GetBytes(new string('!', 16 * 1024) + "\nalpha bravo charl\n");
+        RegexSearchPlan plan = CreateProjectionOnlyGeneralPlan(sourcePattern);
+        var sink = new ThrowingLineSink();
+
+        void Search() => RegexProjectedRecordRunSearcher.TrySearchLines(
+            haystack, plan, ref sink, out _, out _, countSearchedLines: false,
+            maxMatchingLines: null, nullData: false);
+
+        Assert.Throws<InvalidOperationException>(Search);
+        Assert.Equal(1, sink.Callbacks);
+
+        // A fresh operation can reuse the returned leases and still complete normally.
+        var nextSink = new CapturingLineSink();
+        Assert.True(RegexProjectedRecordRunSearcher.TrySearchLines(
+            haystack, plan, ref nextSink, out bool matched, out _, countSearchedLines: false,
+            maxMatchingLines: null, nullData: false));
+        Assert.True(matched);
+        Assert.Equal(1UL, nextSink.MatchedLines);
+    }
+
+    /// <summary>
     /// Verifies a profitable all-ASCII segment uses one projected record-run search without
     /// changing line or match counts.
     /// </summary>
@@ -1843,7 +1870,6 @@ public sealed class LiteralLineSearcherTests
     public void NonAsciiSegmentUsesCompactAuthoritativeRecordRunner()
     {
         const string sourcePattern = @"\w{5}\s+\w{5}\s+\w{5}";
-        byte[][] patterns = [Encoding.ASCII.GetBytes(sourcePattern)];
         byte[] record = Encoding.UTF8.GetBytes("αβγδε ζηθικ λμνξο\n");
         byte[] haystack = new byte[record.Length * 256];
         for (int index = 0; index < 256; index++)

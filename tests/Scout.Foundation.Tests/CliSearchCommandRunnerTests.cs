@@ -12,7 +12,7 @@ public sealed class CliSearchCommandRunnerTests
     [Fact]
     public void TryRunMissingCommandCanFallbackWithoutError()
     {
-        string program = Path.Combine(Path.GetTempPath(), "scout-missing-command-" + Guid.NewGuid().ToString("N"));
+        string program = Path.Join(Path.GetTempPath(), "scout-missing-command-" + Guid.NewGuid().ToString("N"));
 
         bool ran = CliSearchCommandRunner.TryRun(
             path: program,
@@ -34,7 +34,7 @@ public sealed class CliSearchCommandRunnerTests
     [Fact]
     public void TryRunMissingPreprocessorReportsError()
     {
-        string program = Path.Combine(Path.GetTempPath(), "scout-missing-command-" + Guid.NewGuid().ToString("N"));
+        string program = Path.Join(Path.GetTempPath(), "scout-missing-command-" + Guid.NewGuid().ToString("N"));
 
         bool ran = CliSearchCommandRunner.TryRun(
             path: program,

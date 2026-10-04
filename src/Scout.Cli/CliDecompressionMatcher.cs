@@ -119,7 +119,7 @@ public static class CliDecompressionMatcher
                 continue;
             }
 
-            string candidate = Path.Combine(paths[index], program);
+            string candidate = Path.Join(paths[index], program);
             if (fileExists(candidate))
             {
                 resolvedProgram = candidate;

@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Scout;
 
 /// <summary>
@@ -12,9 +14,10 @@ internal struct RegexPlanCountingMatchLineSink<TSink>(TSink inner) : IMatchLineS
     private long _lastMatchedLineNumber;
 
     /// <summary>
-    /// Gets the wrapped line-match sink.
+    /// Gets the wrapped line-match sink by reference so its ownership state can be updated in place.
     /// </summary>
-    public readonly TSink Inner => _inner;
+    [UnscopedRef]
+    public ref TSink Inner => ref _inner;
 
     /// <summary>
     /// Gets the number of selected lines.

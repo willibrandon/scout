@@ -193,7 +193,7 @@ public sealed class ContextSearchOperationsTests
     public void ContextOutputHasOneAuthoritativeMatcherEntryPoint()
     {
         string root = FindRepositoryRoot();
-        string source = File.ReadAllText(Path.Combine(
+        string source = File.ReadAllText(Path.Join(
             root,
             "src",
             "Scout.App",
@@ -532,7 +532,7 @@ public sealed class ContextSearchOperationsTests
         string? directory = AppContext.BaseDirectory;
         while (directory is not null)
         {
-            if (File.Exists(Path.Combine(directory, "Scout.slnx")))
+            if (File.Exists(Path.Join(directory, "Scout.slnx")))
             {
                 return directory;
             }

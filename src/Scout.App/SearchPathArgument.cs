@@ -144,7 +144,7 @@ internal readonly struct SearchPathArgument
             return "." + Path.DirectorySeparatorChar + relative;
         }
 
-        return Path.Combine(root, relative);
+        return Path.Join(root, relative);
     }
 
     public static string GetSearchDirectoryDisplayPath(string rootArgument, string fullRoot, string fullPath, bool defaultRoot)

@@ -274,15 +274,14 @@ internal static class ScoutApplication
             }
         }
 
-        RegexEnginePlan? enginePlan = null;
-        try
+        bool created = RegexEnginePlanner.TryCreate(patterns, lowArgs, out RegexEnginePlan? enginePlan, out ScoutError? engineError);
+        using (enginePlan)
         {
-            if (!RegexEnginePlanner.TryCreate(patterns, lowArgs, out enginePlan, out ScoutError? engineError))
+            if (!created)
             {
                 diagnostics.ErrorMessage(engineError!.WithContext(ScoutErrorContext.ProgramContext()));
                 return ExitCode.Error;
             }
-
             RegexEnginePlan selectedEnginePlan = enginePlan!;
             if (selectedEnginePlan.UsesPcre2)
             {
@@ -320,10 +319,6 @@ internal static class ScoutApplication
                 standardInput,
                 standardInputIsReadable,
                 standardOutputIsTerminal);
-        }
-        finally
-        {
-            enginePlan?.Dispose();
         }
     }
 }

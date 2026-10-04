@@ -5,8 +5,8 @@ namespace Scout;
 
 internal static class PortedRgTests
 {
-    private static readonly string UpstreamDataDirectory = Path.Combine(FindRepositoryRoot(), "upstream", "ripgrep-e89fff89", "tests", "data");
-    private static readonly string UpstreamSherlockNulPath = Path.Combine(UpstreamDataDirectory, "sherlock-nul.txt");
+    private static readonly string UpstreamDataDirectory = Path.Join(FindRepositoryRoot(), "upstream", "ripgrep-e89fff89", "tests", "data");
+    private static readonly string UpstreamSherlockNulPath = Path.Join(UpstreamDataDirectory, "sherlock-nul.txt");
 
     private static readonly PortedRgTestCase[] Cases =
         [
@@ -50,7 +50,7 @@ internal static class PortedRgTests
                 DifferentialCase.Exact("--path-separator", "/", "--files", "foo")
                     .WithEnvironment(dir => new Dictionary<string, string?>(StringComparer.Ordinal)
                     {
-                        ["GIT_CONFIG_GLOBAL"] = Path.Combine(dir.RootPath, "global-config-nonstandard"),
+                        ["GIT_CONFIG_GLOBAL"] = Path.Join(dir.RootPath, "global-config-nonstandard"),
                     })),
             new(
                 "tests/regression.rs",
@@ -2023,7 +2023,7 @@ internal static class PortedRgTests
                         "/",
                         "--files",
                         "--ignore-file",
-                        Path.Combine(dir.PhysicalRootPath, ".test.gitignore"),
+                        Path.Join(dir.PhysicalRootPath, ".test.gitignore"),
                         dir.PhysicalRootPath,
                     ])),
             new(
@@ -2544,7 +2544,7 @@ internal static class PortedRgTests
     {
         return command.RelativeWorkingDirectory is null
             ? directory.RootPath
-            : Path.Combine(directory.RootPath, command.RelativeWorkingDirectory);
+            : Path.Join(directory.RootPath, command.RelativeWorkingDirectory);
     }
 
     private static void CreateSherlockNul(RgTestDirectory dir)
@@ -2554,14 +2554,14 @@ internal static class PortedRgTests
 
     private static void CreateUpstreamDataFile(RgTestDirectory dir, string fileName)
     {
-        dir.CreateBytes(fileName, File.ReadAllBytes(Path.Combine(UpstreamDataDirectory, fileName)));
+        dir.CreateBytes(fileName, File.ReadAllBytes(Path.Join(UpstreamDataDirectory, fileName)));
     }
 
     private static string CreateSherlockPreprocessorScript(RgTestDirectory dir)
     {
         if (OperatingSystem.IsWindows())
         {
-            string path = Path.Combine(dir.RootPath, "preprocessor.cmd");
+            string path = Path.Join(dir.RootPath, "preprocessor.cmd");
             var builder = new StringBuilder();
             builder.AppendLine("@echo off");
             builder.AppendLine("more >NUL");
@@ -2575,7 +2575,7 @@ internal static class PortedRgTests
             return path;
         }
 
-        string unixPath = Path.Combine(dir.RootPath, "preprocessor.sh");
+        string unixPath = Path.Join(dir.RootPath, "preprocessor.sh");
         File.WriteAllText(unixPath, "#!/bin/sh\ncat >/dev/null\ncat <<'SCOUT_EOF'\n" + Sherlock + "SCOUT_EOF\n");
         MakeExecutable(unixPath);
         return unixPath;
@@ -2689,7 +2689,7 @@ internal static class PortedRgTests
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "Scout.slnx")))
+            if (File.Exists(Path.Join(directory.FullName, "Scout.slnx")))
             {
                 return directory.FullName;
             }

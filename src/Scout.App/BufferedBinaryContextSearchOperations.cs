@@ -531,7 +531,6 @@ internal static class BufferedBinaryContextSearchOperations
                 if (loadedEnd == convertedBytes.Length)
                 {
                     exposedEnd = loadedEnd;
-                    filled = true;
                     break;
                 }
 

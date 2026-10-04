@@ -89,10 +89,9 @@ internal sealed unsafe class MemoryMappedSearchFile(
         Func<nint, nuint, int>? advise = null)
     {
         mappedSearchFile = null;
-        FileStream? stream = null;
         try
         {
-            stream = new FileStream(
+            using var stream = new FileStream(
                 path,
                 FileMode.Open,
                 FileAccess.Read,
@@ -106,7 +105,6 @@ internal sealed unsafe class MemoryMappedSearchFile(
             }
 
             stream.Dispose();
-            stream = null;
             mappedSearchFile = new MemoryMappedSearchFile(path, length, logger, advise);
             return true;
         }
@@ -130,10 +128,6 @@ internal sealed unsafe class MemoryMappedSearchFile(
         {
             return false;
         }
-        finally
-        {
-            stream?.Dispose();
-        }
     }
 
     /// <summary>
@@ -153,17 +147,17 @@ internal sealed unsafe class MemoryMappedSearchFile(
         }
 
         ReleaseView();
-        MemoryMappedViewAccessor? accessor = null;
+        using var accessorOwner = new DisposableOwner<MemoryMappedViewAccessor>();
         SafeMemoryMappedViewHandle? handle = null;
         byte* pointer = null;
         try
         {
             int viewLength = checked((int)Math.Min(maximumLength, _length - offset));
-            accessor = _mappedFile.CreateViewAccessor(
+            accessorOwner.Resource = _mappedFile.CreateViewAccessor(
                 offset,
                 viewLength,
                 MemoryMappedFileAccess.Read);
-            handle = accessor.SafeMemoryMappedViewHandle;
+            handle = accessorOwner.Resource.SafeMemoryMappedViewHandle;
             handle.AcquirePointer(ref pointer);
             if (!NativeMemoryAdvice.TrySequential(pointer, checked((nuint)handle.ByteLength), out int error, advise))
             {
@@ -171,12 +165,12 @@ internal sealed unsafe class MemoryMappedSearchFile(
                     $"{path}: madvise failed: {new System.ComponentModel.Win32Exception(error).Message} (os error {error})");
             }
 
-            pointer += accessor.PointerOffset;
+            pointer += accessorOwner.Resource.PointerOffset;
 
-            _accessor = accessor;
+            _accessor = accessorOwner.Resource;
             _pointer = pointer;
             _viewLength = viewLength;
-            accessor = null;
+            accessorOwner.Release();
             handle = null;
             pointer = null;
             return true;
@@ -207,8 +201,6 @@ internal sealed unsafe class MemoryMappedSearchFile(
             {
                 handle!.ReleasePointer();
             }
-
-            accessor?.Dispose();
         }
     }
 

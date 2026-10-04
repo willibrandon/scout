@@ -81,5 +81,8 @@ jobs:
         # Keep upstream PCRE2/SLJIT intact; upload and report every finding without dismissing alerts.
         run: python3 eng/verify-codeql-results.py artifacts/codeql-results --third-party-root native/pcre2
       - name: Require zero findings
-        if: ${{ !cancelled() && steps.analyze.outcome == 'success' && matrix.language != 'c-cpp' }}
+        if: ${{ !cancelled() && steps.analyze.outcome == 'success' && matrix.language != 'c-cpp' && matrix.language != 'csharp' }}
         run: python3 eng/verify-codeql-results.py artifacts/codeql-results
+      - name: Require zero applicable C# findings
+        if: ${{ !cancelled() && steps.analyze.outcome == 'success' && matrix.language == 'csharp' }}
+        run: python3 eng/verify-codeql-results.py artifacts/codeql-results --reviewed-reports eng/codeql-reviewed-reports.json

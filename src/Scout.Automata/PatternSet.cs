@@ -532,12 +532,12 @@ public sealed class PatternSet
     /// Attempts to count exact-literal matches while the selected common-prefix scan detects NUL bytes.
     /// </summary>
     /// <param name="haystack">The complete bytes to search.</param>
-    /// <param name="count">Receives the non-overlapping match count.</param>
+    /// <param name="matchCount">Receives the non-overlapping match count.</param>
     /// <param name="containsNul">Receives whether the complete haystack contains a NUL byte.</param>
     /// <returns><see langword="true" /> when one authoritative literal scan produced both results.</returns>
     internal bool TryCountMatchesAndDetectNul(
         ReadOnlySpan<byte> haystack,
-        out long count,
+        out long matchCount,
         out bool containsNul)
     {
         if (literalAccelerator is not null &&
@@ -546,11 +546,11 @@ public sealed class PatternSet
         {
             return literalAccelerator.TryCountMatchesAndDetectNul(
                 haystack,
-                out count,
+                out matchCount,
                 out containsNul);
         }
 
-        count = 0;
+        matchCount = 0;
         containsNul = false;
         return false;
     }
@@ -614,8 +614,17 @@ public sealed class PatternSet
             return anchoredMatch;
         }
 
-        PatternSetMatch? exact = literalAccelerator?.FindAt(haystack, startOffset);
-        PatternSetMatch? boundaryExact = boundaryLiteralAccelerator?.FindAt(haystack, startOffset);
+        PatternSetMatch? exact = null;
+        if (literalAccelerator is not null)
+        {
+            exact = literalAccelerator.FindAt(haystack, startOffset);
+        }
+
+        PatternSetMatch? boundaryExact = null;
+        if (boundaryLiteralAccelerator is not null)
+        {
+            boundaryExact = boundaryLiteralAccelerator.FindAt(haystack, startOffset);
+        }
         if (boundaryExact.HasValue && IsBetter(boundaryExact.Value, exact))
         {
             exact = boundaryExact;
@@ -883,11 +892,7 @@ public sealed class PatternSet
             automataByPatternId[automataPatternIds[index]] = automata[index];
         }
 
-        var buckets = new List<PatternSetAnchoredMatcher>[256];
-        for (int index = 0; index < buckets.Length; index++)
-        {
-            buckets[index] = [];
-        }
+        List<PatternSetAnchoredMatcher>[] buckets = CreateBuckets<PatternSetAnchoredMatcher>();
 
         for (int patternId = 0; patternId < patterns.Count; patternId++)
         {
@@ -908,7 +913,23 @@ public sealed class PatternSet
             }
         }
 
-        var indexed = new PatternSetAnchoredMatcher[256][];
+        return FreezeBuckets(buckets);
+    }
+
+    private static List<T>[] CreateBuckets<T>()
+    {
+        var buckets = new List<T>[256];
+        for (int index = 0; index < buckets.Length; index++)
+        {
+            buckets[index] = [];
+        }
+
+        return buckets;
+    }
+
+    private static T[][] FreezeBuckets<T>(List<T>[] buckets)
+    {
+        var indexed = new T[buckets.Length][];
         for (int index = 0; index < indexed.Length; index++)
         {
             indexed[index] = buckets[index].ToArray();

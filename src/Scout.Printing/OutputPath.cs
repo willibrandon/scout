@@ -120,7 +120,7 @@ internal sealed class OutputPath
         string[] segments = relative.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
         for (int index = 0; index < segments.Length; index++)
         {
-            string candidate = Path.Combine(current, segments[index]);
+            string candidate = Path.Join(current, segments[index]);
             FileSystemInfo? resolved = ResolveLinkTarget(candidate);
             current = resolved?.FullName ?? candidate;
         }

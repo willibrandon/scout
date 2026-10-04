@@ -253,7 +253,7 @@ public sealed class NoSkippedTestsAnalyzerTests
 
     private static async Task<ImmutableArray<Diagnostic>> AnalyzeSourceAsync(string source)
     {
-        string filePath = Path.Combine(Path.GetTempPath(), "ScoutAnalyzerTests", "tests", "Scout.Foundation.Tests", "SampleTests.cs");
+        string filePath = Path.Join(Path.GetTempPath(), "ScoutAnalyzerTests", "tests", "Scout.Foundation.Tests", "SampleTests.cs");
         return await AnalyzeSourceAtPathAsync(filePath, source).ConfigureAwait(false);
     }
 

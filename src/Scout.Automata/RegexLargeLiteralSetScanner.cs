@@ -239,13 +239,13 @@ internal sealed class RegexLargeLiteralSetScanner
         return null;
     }
 
-    private RegexLiteralSetCandidate? FindLongLiteralTripleShift(ReadOnlySpan<byte> haystack, int startAt, byte[][] tripleShiftPages)
+    private RegexLiteralSetCandidate? FindLongLiteralTripleShift(ReadOnlySpan<byte> haystack, int startAt, byte[][] shiftPages)
     {
         int start = Math.Clamp(startAt, 0, haystack.Length);
         int position = start + tripleSuffixOffset;
         while (position <= haystack.Length - TripleBlockLength)
         {
-            int shift = TripleShift(tripleShiftPages, haystack[position..]);
+            int shift = TripleShift(shiftPages, haystack[position..]);
             if (shift != 0)
             {
                 position += shift;

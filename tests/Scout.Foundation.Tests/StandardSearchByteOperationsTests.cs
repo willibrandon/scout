@@ -683,12 +683,12 @@ public sealed class StandardSearchByteOperationsTests
     public void StatsAndMultilineRenderingHaveNoSecondTraversalEntryPoint()
     {
         string root = FindRepositoryRoot();
-        string standardSource = File.ReadAllText(Path.Combine(
+        string standardSource = File.ReadAllText(Path.Join(
             root,
             "src",
             "Scout.App",
             "StandardSearchByteOperations.cs"));
-        string multilineSource = File.ReadAllText(Path.Combine(
+        string multilineSource = File.ReadAllText(Path.Join(
             root,
             "src",
             "Scout.App",
@@ -810,7 +810,7 @@ public sealed class StandardSearchByteOperationsTests
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "Scout.slnx")))
+            if (File.Exists(Path.Join(directory.FullName, "Scout.slnx")))
             {
                 return directory.FullName;
             }

@@ -46,9 +46,9 @@ public sealed class TraversalExitStatusTests
         string root = Directory.CreateTempSubdirectory("scout-exit-").FullName;
         try
         {
-            string broken = Path.Combine(root, "broken");
+            string broken = Path.Join(root, "broken");
             File.CreateSymbolicLink(broken, broken);
-            File.WriteAllText(Path.Combine(root, "matched.txt"), "needle\n");
+            File.WriteAllText(Path.Join(root, "matched.txt"), "needle\n");
             List<string> arguments = ["--no-config", "--no-ignore", "--follow", traversal];
             arguments.AddRange(mode);
             arguments.Add(messages ? "--messages" : "--no-messages");
@@ -84,7 +84,7 @@ public sealed class TraversalExitStatusTests
             }
 
             // A failed traversal must not affect a later invocation in the same process.
-            (int nextExitCode, _, string nextError) = Run(["--no-config", "needle", Path.Combine(root, "matched.txt")]);
+            (int nextExitCode, _, string nextError) = Run(["--no-config", "needle", Path.Join(root, "matched.txt")]);
             Assert.Equal(ExitCode.Success, nextExitCode);
             Assert.Empty(nextError);
         }
@@ -108,9 +108,9 @@ public sealed class TraversalExitStatusTests
         string root = Directory.CreateTempSubdirectory("scout-exit-").FullName;
         try
         {
-            string broken = Path.Combine(root, "broken");
+            string broken = Path.Join(root, "broken");
             File.CreateSymbolicLink(broken, broken);
-            File.WriteAllText(Path.Combine(root, "miss.txt"), "haystack\n");
+            File.WriteAllText(Path.Join(root, "miss.txt"), "haystack\n");
             List<string> arguments = ["--no-config", "--no-ignore", "--follow", "--sort=path", "--quiet", "--no-messages"];
             if (mode.Length > 0)
             {

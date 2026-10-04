@@ -136,8 +136,8 @@ public sealed class DifferentialCasePolicyTests
     [Fact]
     public void ExactNormalizesRuntimeDirectoryOutput()
     {
-        string root = Path.Combine(Path.GetTempPath(), "scout-diff-policy-" + Guid.NewGuid().ToString("N"));
-        string directory = Path.Combine(root, "haystack");
+        string root = Path.Join(Path.GetTempPath(), "scout-diff-policy-" + Guid.NewGuid().ToString("N"));
+        string directory = Path.Join(root, "haystack");
         Directory.CreateDirectory(directory);
         try
         {

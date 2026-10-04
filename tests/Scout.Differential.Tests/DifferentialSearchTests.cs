@@ -15,9 +15,9 @@ public sealed class DifferentialSearchTests
         string root = CreateTempDirectory();
         try
         {
-            string first = Path.Combine(root, "first.txt");
-            string second = Path.Combine(root, "second.txt");
-            string digits = Path.Combine(root, "digits.txt");
+            string first = Path.Join(root, "first.txt");
+            string second = Path.Join(root, "second.txt");
+            string digits = Path.Join(root, "digits.txt");
             File.WriteAllText(first, "needle\nmiss\nneedle again\n");
             File.WriteAllText(second, "alpha\nneedle second\n");
             File.WriteAllText(digits, "123\n456\n789");
@@ -63,7 +63,7 @@ public sealed class DifferentialSearchTests
 
     private static string CreateTempDirectory()
     {
-        string path = Path.Combine(Path.GetTempPath(), "scout-diff-" + Guid.NewGuid().ToString("N"));
+        string path = Path.Join(Path.GetTempPath(), "scout-diff-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
     }

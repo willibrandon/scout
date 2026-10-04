@@ -115,15 +115,16 @@ internal sealed class IgnoreRuleSet
     private void AddFileLines(string baseDirectory, string path, bool asciiCaseInsensitive)
     {
         bool firstLine = true;
-        foreach (string line in File.ReadLines(path))
+        foreach (IgnoreRule rule in File.ReadLines(path).Select(line =>
         {
             string currentLine = firstLine ? line.TrimStart('\uFEFF') : line;
             firstLine = false;
-
-            if (IgnoreRule.TryParse(baseDirectory, currentLine, path, asciiCaseInsensitive, out IgnoreRule? rule) && rule is not null)
-            {
-                Add(rule);
-            }
+            return IgnoreRule.TryParse(baseDirectory, currentLine, path, asciiCaseInsensitive, out IgnoreRule? parsed)
+                ? parsed
+                : null;
+        }).OfType<IgnoreRule>())
+        {
+            Add(rule);
         }
     }
 

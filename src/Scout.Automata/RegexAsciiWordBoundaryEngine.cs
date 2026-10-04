@@ -124,7 +124,7 @@ internal sealed class RegexAsciiWordBoundaryEngine
         }
 
         if ((uint)start >= (uint)haystack.Length ||
-            unicodeWord && !RegexByteClass.IsUtf8Boundary(haystack, start) ||
+            !RegexByteClass.IsUtf8Boundary(haystack, start) ||
             IsWordBefore(haystack, start, unicodeWord) ||
             !TryGetWordLength(haystack, start, unicodeWord, out _, out int firstLength))
         {

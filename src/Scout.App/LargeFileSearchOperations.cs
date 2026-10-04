@@ -178,10 +178,9 @@ internal static unsafe class LargeFileSearchOperations
 
     private static bool HasEncodingBom(ReadOnlySpan<byte> prefix)
     {
-        return (prefix.Length >= 3 && prefix[0] == 0xEF && prefix[1] == 0xBB && prefix[2] == 0xBF) ||
-            (prefix.Length >= 2 &&
-            ((prefix[0] == 0xFF && prefix[1] == 0xFE) ||
-            (prefix[0] == 0xFE && prefix[1] == 0xFF)));
+        return prefix.StartsWith<byte>([0xEF, 0xBB, 0xBF]) ||
+            prefix.StartsWith<byte>([0xFF, 0xFE]) ||
+            prefix.StartsWith<byte>([0xFE, 0xFF]);
     }
 
     private static bool SearchStreaming(
@@ -395,7 +394,7 @@ internal static unsafe class LargeFileSearchOperations
 
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, StreamingFileStreamBufferLength, FileOptions.SequentialScan);
         using var bufferOwner = new NativeByteBuffer(bufferLength);
-        MemoryStream? pendingLine = null;
+        using var pendingLine = new PendingLineBuffer();
         long pendingLineOffset = 0;
         long absoluteOffset = 0;
         long lineNumberValue = 1;
@@ -520,7 +519,7 @@ internal static unsafe class LargeFileSearchOperations
                 }
 
                 int lineLength = terminatorOffset + 1;
-                if (pendingLine is null)
+                if (pendingLine.IsEmpty)
                 {
                     if (ProcessLine(chunk.Slice(segmentStart, lineLength), chunkOffset + segmentStart))
                     {
@@ -531,8 +530,7 @@ internal static unsafe class LargeFileSearchOperations
                 {
                     pendingLine.Write(chunk.Slice(segmentStart, lineLength));
                     byte[] line = pendingLine.ToArray();
-                    pendingLine.Dispose();
-                    pendingLine = null;
+                    pendingLine.Clear();
                     if (ProcessLine(line, pendingLineOffset))
                     {
                         return FinishSearch(output, prefix, color, searchMode, quiet, includeZero, nullPathTerminator, separators.LineTerminator, matched, count);
@@ -544,7 +542,6 @@ internal static unsafe class LargeFileSearchOperations
 
             if (segmentStart < read)
             {
-                pendingLine ??= new MemoryStream();
                 if (pendingLine.Length == 0)
                 {
                     pendingLineOffset = chunkOffset + segmentStart;
@@ -554,10 +551,10 @@ internal static unsafe class LargeFileSearchOperations
             }
         }
 
-        if (pendingLine is not null)
+        if (!pendingLine.IsEmpty)
         {
             byte[] line = pendingLine.ToArray();
-            pendingLine.Dispose();
+            pendingLine.Clear();
             if (line.Length != 0 && ProcessLine(line, pendingLineOffset))
             {
                 return FinishSearch(output, prefix, color, searchMode, quiet, includeZero, nullPathTerminator, separators.LineTerminator, matched, count);
@@ -635,7 +632,7 @@ internal static unsafe class LargeFileSearchOperations
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, StreamingFileStreamBufferLength, FileOptions.SequentialScan);
         using var bufferOwner = new NativeByteBuffer(bufferLength);
-        MemoryStream? oversizedLine = null;
+        using var oversizedLine = new PendingLineBuffer();
         long oversizedLineOffset = 0;
         long absoluteOffset = 0;
         long carriedOffset = 0;
@@ -742,8 +739,7 @@ internal static unsafe class LargeFileSearchOperations
 
         bool FinishBinary(long binaryOffset)
         {
-            oversizedLine?.Dispose();
-            oversizedLine = null;
+            oversizedLine.Clear();
             bool binaryMatched = HasConvertedBinaryMatch(
                 path,
                 pattern,
@@ -782,9 +778,8 @@ internal static unsafe class LargeFileSearchOperations
             Span<byte> buffer = bufferOwner.Span;
             if (carriedLength == buffer.Length)
             {
-                if (oversizedLine is null)
+                if (oversizedLine.IsEmpty)
                 {
-                    oversizedLine = new MemoryStream();
                     oversizedLineOffset = carriedOffset;
                 }
 
@@ -806,7 +801,7 @@ internal static unsafe class LargeFileSearchOperations
             long safeEndOffset = absoluteOffset - (absoluteOffset % BinaryDetectionBlockLength);
             int processLimit = (int)Math.Clamp(safeEndOffset - combinedOffset, 0, combinedLength);
             int processedLength = 0;
-            if (oversizedLine is not null)
+            if (!oversizedLine.IsEmpty)
             {
                 int firstTerminator = combined[..processLimit].IndexOf((byte)'\n');
                 if (firstTerminator >= 0)
@@ -814,8 +809,7 @@ internal static unsafe class LargeFileSearchOperations
                     int oversizedLineLength = firstTerminator + 1;
                     oversizedLine.Write(combined[..oversizedLineLength]);
                     byte[] line = oversizedLine.ToArray();
-                    oversizedLine.Dispose();
-                    oversizedLine = null;
+                    oversizedLine.Clear();
                     long binaryOffset = ProcessLiteralSegment(line, oversizedLineOffset);
                     if (binaryOffset >= 0)
                     {
@@ -851,7 +845,7 @@ internal static unsafe class LargeFileSearchOperations
             CarryTail(buffer, processedLength, combinedLength, combinedOffset);
         }
 
-        if (oversizedLine is not null)
+        if (!oversizedLine.IsEmpty)
         {
             if (carriedLength != 0)
             {
@@ -860,8 +854,7 @@ internal static unsafe class LargeFileSearchOperations
             }
 
             byte[] line = oversizedLine.ToArray();
-            oversizedLine.Dispose();
-            oversizedLine = null;
+            oversizedLine.Clear();
             if (line.Length != 0)
             {
                 long binaryOffset = ProcessLiteralSegment(line, oversizedLineOffset);
@@ -900,7 +893,7 @@ internal static unsafe class LargeFileSearchOperations
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, StreamingFileStreamBufferLength, FileOptions.SequentialScan);
         using var bufferOwner = new NativeByteBuffer(bufferLength);
-        MemoryStream? pendingLine = null;
+        using var pendingLine = new PendingLineBuffer();
         long count = 0;
         ulong matchedLines = 0;
         bool binarySuppressed = false;
@@ -980,7 +973,7 @@ internal static unsafe class LargeFileSearchOperations
 
             int segmentStart = 0;
             ReadOnlySpan<byte> chunk = buffer[..read];
-            if (pendingLine is not null)
+            if (!pendingLine.IsEmpty)
             {
                 int firstTerminator = GetFastCountLineTerminator(chunk, includeNulTerminator);
                 if (firstTerminator < 0)
@@ -992,8 +985,7 @@ internal static unsafe class LargeFileSearchOperations
                 int pendingLength = firstTerminator + 1;
                 pendingLine.Write(chunk[..pendingLength]);
                 byte[] line = pendingLine.ToArray();
-                pendingLine.Dispose();
-                pendingLine = null;
+                pendingLine.Clear();
                 if (ProcessSegment(line))
                 {
                     return Finish();
@@ -1019,15 +1011,15 @@ internal static unsafe class LargeFileSearchOperations
 
             if (segmentStart < read)
             {
-                pendingLine = new MemoryStream();
+                pendingLine.Clear();
                 pendingLine.Write(chunk[segmentStart..]);
             }
         }
 
-        if (pendingLine is not null)
+        if (!pendingLine.IsEmpty)
         {
             byte[] line = pendingLine.ToArray();
-            pendingLine.Dispose();
+            pendingLine.Clear();
             if (line.Length != 0 && ProcessSegment(line))
             {
                 return Finish();
@@ -1316,7 +1308,7 @@ internal static unsafe class LargeFileSearchOperations
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, StreamingFileStreamBufferLength, FileOptions.SequentialScan);
         using var bufferOwner = new NativeByteBuffer(bufferLength);
-        MemoryStream? pendingLine = null;
+        using var pendingLine = new PendingLineBuffer();
 
         bool HasMatch(ReadOnlySpan<byte> segment)
         {
@@ -1346,7 +1338,7 @@ internal static unsafe class LargeFileSearchOperations
 
             int segmentStart = 0;
             ReadOnlySpan<byte> chunk = buffer[..read];
-            if (pendingLine is not null)
+            if (!pendingLine.IsEmpty)
             {
                 int firstTerminator = IndexOfCountTerminator(chunk, includeBinaryNul: true);
                 if (firstTerminator < 0)
@@ -1358,8 +1350,7 @@ internal static unsafe class LargeFileSearchOperations
                 int pendingLength = firstTerminator + 1;
                 pendingLine.Write(chunk[..pendingLength]);
                 byte[] line = pendingLine.ToArray();
-                pendingLine.Dispose();
-                pendingLine = null;
+                pendingLine.Clear();
                 if (HasMatch(line))
                 {
                     return true;
@@ -1385,15 +1376,15 @@ internal static unsafe class LargeFileSearchOperations
 
             if (segmentStart < read)
             {
-                pendingLine = new MemoryStream();
+                pendingLine.Clear();
                 pendingLine.Write(chunk[segmentStart..]);
             }
         }
 
-        if (pendingLine is not null)
+        if (!pendingLine.IsEmpty)
         {
             byte[] line = pendingLine.ToArray();
-            pendingLine.Dispose();
+            pendingLine.Clear();
             return HasMatch(line);
         }
 
@@ -1487,7 +1478,7 @@ internal static unsafe class LargeFileSearchOperations
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, StreamingFileStreamBufferLength, FileOptions.SequentialScan);
         using var bufferOwner = new NativeByteBuffer(bufferLength);
-        MemoryStream? pendingLine = null;
+        using var pendingLine = new PendingLineBuffer();
         long count = 0;
         ulong countedMatchingLines = 0;
         bool matched = false;
@@ -1606,7 +1597,7 @@ internal static unsafe class LargeFileSearchOperations
 
             int segmentStart = 0;
             ReadOnlySpan<byte> chunk = buffer[..read];
-            if (pendingLine is not null)
+            if (!pendingLine.IsEmpty)
             {
                 int firstTerminator = IndexOfCountTerminator(chunk, convertBinaryNuls);
                 if (firstTerminator < 0)
@@ -1618,8 +1609,7 @@ internal static unsafe class LargeFileSearchOperations
                 int pendingLength = firstTerminator + 1;
                 pendingLine.Write(chunk[..pendingLength]);
                 byte[] line = pendingLine.ToArray();
-                pendingLine.Dispose();
-                pendingLine = null;
+                pendingLine.Clear();
                 if (ProcessSegment(line))
                 {
                     if (binarySuppressed)
@@ -1655,15 +1645,15 @@ internal static unsafe class LargeFileSearchOperations
 
             if (segmentStart < read)
             {
-                pendingLine = new MemoryStream();
+                pendingLine.Clear();
                 pendingLine.Write(chunk[segmentStart..]);
             }
         }
 
-        if (pendingLine is not null)
+        if (!pendingLine.IsEmpty)
         {
             byte[] line = pendingLine.ToArray();
-            pendingLine.Dispose();
+            pendingLine.Clear();
             if (line.Length != 0 && ProcessSegment(line))
             {
                 if (binarySuppressed)
@@ -1764,7 +1754,7 @@ internal static unsafe class LargeFileSearchOperations
         long? lengthLimit)
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, StreamingFileStreamBufferLength, FileOptions.SequentialScan);
-        MemoryStream? pendingLine = null;
+        using var pendingLine = new PendingLineBuffer();
         long pendingLineOffset = 0;
         long absoluteOffset = 0;
         long lineNumberValue = 1;
@@ -1888,7 +1878,7 @@ internal static unsafe class LargeFileSearchOperations
             {
                 if (!SearchModeEvaluation.SearchQuiet(segment, pattern, CliSearchMode.Standard, asciiCaseInsensitive, invertMatch, lineRegexp, wordRegexp, remainingMatches, separators.Crlf, separators.NullData, regexPlan))
                 {
-                    lineNumberValue += (long)lineCount;
+                    lineNumberValue += lineCount;
                     return false;
                 }
 
@@ -1922,7 +1912,7 @@ internal static unsafe class LargeFileSearchOperations
                 var countingSink =
                     new RegexPlanCountingMatchLineSink<ReplacementLineSink>(
                         replacementSink);
-                try
+                using (new DisposableScope<ReplacementLineSink>(ref countingSink.Inner))
                 {
                     bool replacementMatched =
                         LiteralLineSearcher.SearchMatchLinesWithRegexPlan(
@@ -1936,18 +1926,12 @@ internal static unsafe class LargeFileSearchOperations
                             remainingMatches,
                             separators.Crlf,
                             separators.NullData);
-                    ReplacementLineSink completedSink = countingSink.Inner;
-                    completedSink.Flush();
+                    countingSink.Inner.Flush();
                     matched |= replacementMatched;
                     matchedLines += countingSink.MatchedLines;
                     lineNumberValue += segmentLineCount;
                     return maxCount is ulong replacementLimit &&
                         matchedLines >= replacementLimit;
-                }
-                finally
-                {
-                    ReplacementLineSink completedSink = countingSink.Inner;
-                    completedSink.Dispose();
                 }
             }
 
@@ -2071,16 +2055,12 @@ internal static unsafe class LargeFileSearchOperations
             try
             {
                 bool segmentMatched;
-                if (fastLiteralPattern is not null)
-                {
-                    segmentMatched = SearchFastLiteralBufferedSegment(
+                segmentMatched = fastLiteralPattern is not null
+                    ? SearchFastLiteralBufferedSegment(
                         segment,
                         fastLiteralPattern.Value.Span,
-                        ref sink);
-                }
-                else
-                {
-                    segmentMatched = LiteralLineSearcher.SearchWithRegexPlan(
+                        ref sink)
+                    : LiteralLineSearcher.SearchWithRegexPlan(
                         segment,
                         pattern,
                         regexPlan,
@@ -2093,7 +2073,6 @@ internal static unsafe class LargeFileSearchOperations
                         crlf: false,
                         nullData: false,
                         requireMatchColumn: column || prefix?.HasHyperlink == true);
-                }
 
                 return new LargeFileSegmentSearchResult(
                     segmentMatched,
@@ -2396,7 +2375,7 @@ internal static unsafe class LargeFileSearchOperations
                 carriedOffset = chunkOffset + segmentStart;
                 if (tailLength == buffer.Length)
                 {
-                    pendingLine = new MemoryStream();
+                    pendingLine.Clear();
                     pendingLineOffset = carriedOffset;
                     pendingLine.Write(chunk[segmentStart..]);
                     carriedLength = 0;
@@ -2414,7 +2393,7 @@ internal static unsafe class LargeFileSearchOperations
                 {
                     Span<byte> buffer = bufferOwner.Span;
 
-                    if (pendingLine is not null)
+                    if (!pendingLine.IsEmpty)
                     {
                         int read = ReadLimited(buffer);
                         if (read == 0)
@@ -2435,8 +2414,7 @@ internal static unsafe class LargeFileSearchOperations
                         int pendingLength = firstTerminator + 1;
                         pendingLine.Write(chunk[..pendingLength]);
                         byte[] line = pendingLine.ToArray();
-                        pendingLine.Dispose();
-                        pendingLine = null;
+                        pendingLine.Clear();
                         if (DetectBinary(line, pendingLineOffset))
                         {
                             DrainAll();
@@ -2454,7 +2432,7 @@ internal static unsafe class LargeFileSearchOperations
 
                     if (carriedLength == buffer.Length)
                     {
-                        pendingLine = new MemoryStream();
+                        pendingLine.Clear();
                         pendingLineOffset = carriedOffset;
                         pendingLine.Write(buffer);
                         carriedLength = 0;
@@ -2477,10 +2455,10 @@ internal static unsafe class LargeFileSearchOperations
                     }
                 }
 
-                if (pendingLine is not null)
+                if (!pendingLine.IsEmpty)
                 {
                     byte[] line = pendingLine.ToArray();
-                    pendingLine.Dispose();
+                    pendingLine.Clear();
                     if (line.Length != 0)
                     {
                         if (DetectBinary(line, pendingLineOffset))
@@ -2551,7 +2529,7 @@ internal static unsafe class LargeFileSearchOperations
             carriedOffset = chunkOffset + segmentStart;
             if (tailLength == buffer.Length)
             {
-                pendingLine = new MemoryStream();
+                pendingLine.Clear();
                 pendingLineOffset = carriedOffset;
                 pendingLine.Write(chunk[segmentStart..]);
                 carriedLength = 0;
@@ -2567,7 +2545,7 @@ internal static unsafe class LargeFileSearchOperations
         {
             Span<byte> buffer = bufferOwner.Span;
 
-            if (pendingLine is not null)
+            if (!pendingLine.IsEmpty)
             {
                 int read = ReadLimited(buffer);
                 if (read == 0)
@@ -2588,8 +2566,7 @@ internal static unsafe class LargeFileSearchOperations
                 int pendingLength = firstTerminator + 1;
                 pendingLine.Write(chunk[..pendingLength]);
                 byte[] line = pendingLine.ToArray();
-                pendingLine.Dispose();
-                pendingLine = null;
+                pendingLine.Clear();
                 if (ProcessSegment(line, pendingLineOffset, lineCount: 1))
                 {
                     return FinishAfterStop();
@@ -2605,7 +2582,7 @@ internal static unsafe class LargeFileSearchOperations
 
             if (carriedLength == buffer.Length)
             {
-                pendingLine = new MemoryStream();
+                pendingLine.Clear();
                 pendingLineOffset = carriedOffset;
                 pendingLine.Write(buffer);
                 carriedLength = 0;
@@ -2628,10 +2605,10 @@ internal static unsafe class LargeFileSearchOperations
             }
         }
 
-        if (pendingLine is not null)
+        if (!pendingLine.IsEmpty)
         {
             byte[] line = pendingLine.ToArray();
-            pendingLine.Dispose();
+            pendingLine.Clear();
             if (line.Length != 0 && ProcessSegment(line, pendingLineOffset, lineCount: 1))
             {
                 return FinishAfterStop();

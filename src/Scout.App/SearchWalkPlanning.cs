@@ -250,16 +250,9 @@ internal static class SearchWalkPlanning
 
     private static List<DirEntry> GetSerialFileEntries(string root, CliLowArgs lowArgs, FileTypeMatcher fileTypes, DiagnosticMessenger diagnostics, DiagnosticLogger logger, DiagnosticState errors)
     {
-        List<DirEntry> entries = [];
-        foreach (DirEntry entry in CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger, errors.SetErrored).Build())
-        {
-            if (entry.IsFile)
-            {
-                entries.Add(entry);
-            }
-        }
-
-        return entries;
+        return CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger, errors.SetErrored).Build()
+            .Where(static entry => entry.IsFile)
+            .ToList();
     }
 
     private static List<DirEntry> GetParallelFileEntries(string root, CliLowArgs lowArgs, FileTypeMatcher fileTypes, DiagnosticMessenger diagnostics, DiagnosticLogger logger, int threadCount, DiagnosticState errors)

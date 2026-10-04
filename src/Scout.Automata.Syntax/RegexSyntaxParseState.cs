@@ -1362,14 +1362,9 @@ internal sealed class RegexSyntaxParseState(ReadOnlyMemory<byte> pattern)
         while (_index < Pattern.Length && IsAsciiDigitByte(Pattern[_index]))
         {
             int digit = Pattern[_index] - (byte)'0';
-            if (value > (int.MaxValue - digit) / 10)
-            {
-                value = int.MaxValue;
-            }
-            else
-            {
-                value = (value * 10) + digit;
-            }
+            value = value > (int.MaxValue - digit) / 10
+                ? int.MaxValue
+                : ((value * 10) + digit);
 
             _index++;
             if (_extendedMode)

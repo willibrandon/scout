@@ -13,6 +13,7 @@ internal static class GlobCompileFuzzTarget
         }
         catch (GlobParseException)
         {
+            return;
         }
     }
 }

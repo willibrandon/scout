@@ -175,13 +175,11 @@ internal static class ContextSearchOperations
             if (!passthru &&
                 (beforeContext > 0 || afterContext > 0) &&
                 wrote &&
-                index > previousLineIndex + 1)
+                index > previousLineIndex + 1 &&
+                separators.ContextEnabled)
             {
-                if (separators.ContextEnabled)
-                {
-                    output.Write(separators.Context.Span);
-                    output.Write(separators.LineTerminator.Span);
-                }
+                output.Write(separators.Context.Span);
+                output.Write(separators.LineTerminator.Span);
             }
 
             WriteContextOutputLine(
@@ -620,14 +618,10 @@ internal static class ContextSearchOperations
                     color,
                     separators.LineTerminator,
                     regexPlan);
-                try
+                using (new DisposableScope<ReplacementLineSink>(ref replacementLineSink))
                 {
                     ReplayMatches(lineBytes, matches, ref replacementLineSink);
                     replacementLineSink.Flush();
-                }
-                finally
-                {
-                    replacementLineSink.Dispose();
                 }
 
                 return;
@@ -719,14 +713,10 @@ internal static class ContextSearchOperations
                     color,
                     separators.LineTerminator,
                     regexPlan);
-                try
+                using (new DisposableScope<ReplacementLineSink>(ref replacementLineSink))
                 {
                     ReplayMatches(lineBytes, matches, ref replacementLineSink);
                     replacementLineSink.Flush();
-                }
-                finally
-                {
-                    replacementLineSink.Dispose();
                 }
 
                 return;
@@ -809,13 +799,9 @@ internal static class ContextSearchOperations
                 color,
                 lineTerminator,
                 regexPlan);
-            try
+            using (new DisposableScope<ReplacementMatchSink>(ref replacementMatchSink))
             {
                 ReplayMatches(lineBytes, matches, ref replacementMatchSink);
-            }
-            finally
-            {
-                replacementMatchSink.Dispose();
             }
         }
         else

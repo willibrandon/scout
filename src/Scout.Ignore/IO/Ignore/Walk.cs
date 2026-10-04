@@ -532,36 +532,36 @@ public sealed class Walk : IEnumerable<DirEntry>
             return EnumerateUnixChildren(entry);
         }
 
-        List<WalkPath> paths = [];
+        List<WalkPath> childPaths = [];
         WalkException[] errors = [];
         try
         {
             foreach (string child in Directory.EnumerateFileSystemEntries(entry.ResolvedFullPath))
             {
-                paths.Add(WalkPath.FromText(child));
+                childPaths.Add(WalkPath.FromText(child));
             }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            errors = [new WalkException(OsString.FromText(entry.FullPath), entry.Depth + (paths.Count == 0 ? 0 : 1), exception)];
+            errors = [new WalkException(OsString.FromText(entry.FullPath), entry.Depth + (childPaths.Count == 0 ? 0 : 1), exception)];
         }
 
-        Sort(paths);
+        Sort(childPaths);
         if (entry.ResolvedFullPath == entry.FullPath)
         {
-            return new WalkDirectoryReadResult(paths.ToArray(), errors);
+            return new WalkDirectoryReadResult(childPaths.ToArray(), errors);
         }
 
-        for (int index = 0; index < paths.Count; index++)
+        for (int index = 0; index < childPaths.Count; index++)
         {
-            WalkPath child = paths[index];
+            WalkPath child = childPaths[index];
             if (!child.IsRawUnixPath)
             {
-                paths[index] = WalkPath.FromText(Path.Combine(entry.FullPath, Path.GetFileName(child.TextPath)));
+                childPaths[index] = WalkPath.FromText(Path.Join(entry.FullPath, Path.GetFileName(child.TextPath)));
             }
         }
 
-        return new WalkDirectoryReadResult(paths.ToArray(), errors);
+        return new WalkDirectoryReadResult(childPaths.ToArray(), errors);
     }
 
     /// <summary>
@@ -583,22 +583,22 @@ public sealed class Walk : IEnumerable<DirEntry>
         RawUnixDirectoryEntry[] rawEntries = entries ?? [];
         WalkException[] errors = error is null ? [] : [new WalkException(
             OsString.FromUnixBytes(parentPath), entry.Depth + (entries is null ? 0 : 1), error)];
-        var paths = new List<WalkPath>(rawEntries.Length);
+        var childPaths = new List<WalkPath>(rawEntries.Length);
         for (int index = 0; index < rawEntries.Length; index++)
         {
             RawUnixDirectoryEntry rawEntry = rawEntries[index];
             if (!entry.IsRawUnixPath && TryDecodeUtf8(rawEntry.Name.Span, out string fileName))
             {
-                paths.Add(WalkPath.FromText(Path.Combine(entry.FullPath, fileName), rawEntry.FileType));
+                childPaths.Add(WalkPath.FromText(Path.Join(entry.FullPath, fileName), rawEntry.FileType));
             }
             else
             {
-                paths.Add(WalkPath.FromRawUnix(rawEntry.FullPath.Span, rawEntry.Name.Span, rawEntry.FileType));
+                childPaths.Add(WalkPath.FromRawUnix(rawEntry.FullPath.Span, rawEntry.Name.Span, rawEntry.FileType));
             }
         }
 
-        Sort(paths);
-        return new WalkDirectoryReadResult(paths.ToArray(), errors);
+        Sort(childPaths);
+        return new WalkDirectoryReadResult(childPaths.ToArray(), errors);
     }
 
     internal WalkRunState CreateRunState()
@@ -728,7 +728,7 @@ public sealed class Walk : IEnumerable<DirEntry>
 
         string resolved = Path.IsPathRooted(linkTarget)
             ? linkTarget
-            : Path.Combine(Path.GetDirectoryName(path) ?? string.Empty, linkTarget);
+            : Path.Join(Path.GetDirectoryName(path) ?? string.Empty, linkTarget);
         return Path.GetFullPath(resolved);
     }
 }

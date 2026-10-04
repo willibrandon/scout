@@ -1698,15 +1698,23 @@ public sealed class RegexAutomaton
             pikeVm?.BeginRunnerLease() ?? 0,
             onePassDfa,
             onePassDfa?.BeginRunnerLease() ?? 0,
-            (trackPrefilterState && engine.PrefilterKind != RegexPrefilterKind.None ||
-                allowUnanchoredDfa &&
-                    (engine.CanRentFindAnchoredDfa ||
-                        engine.CanRentFindUnanchoredDfa && _startPredicate?.HasRequiredStart != true))
+            NeedsFindRunnerState(trackPrefilterState, allowUnanchoredDfa)
                 ? new RegexFindRunnerState(
                     this,
                     engine.PrefilterKind != RegexPrefilterKind.None)
                 : null,
             allowUnanchoredDfa);
+    }
+
+    private bool NeedsFindRunnerState(bool trackPrefilterState, bool allowUnanchoredDfa)
+    {
+        if (trackPrefilterState && engine.PrefilterKind != RegexPrefilterKind.None)
+        {
+            return true;
+        }
+
+        return allowUnanchoredDfa && (engine.CanRentFindAnchoredDfa ||
+            engine.CanRentFindUnanchoredDfa && _startPredicate?.HasRequiredStart != true);
     }
 
     /// <summary>
@@ -2904,17 +2912,35 @@ public sealed class RegexAutomaton
 
     private static bool HasHigherPriorityFixedWidthSpecialization(RegexSyntaxNode root, RegexCompileOptions options)
     {
+        return HasHigherPriorityLiteralSpecialization(root, options) ||
+            RegexRepeatedLazyDotStarLiteralEngine.TryCreate(root, options, out _) ||
+            RegexDelimitedSpanEngine.TryCreate(root, options, out _);
+    }
+    private static bool HasHigherPriorityLiteralSpecialization(RegexSyntaxNode root, RegexCompileOptions options)
+    {
         bool allowDomainRecognizers = AllowsDomainRecognizers(options);
         bool allowBenchmarkFamilyRecognizers = AllowsBenchmarkFamilyRecognizers(options);
         if (RegexWholeLineEngine.TryCreate(root, options, out _) ||
             RegexDotStarEngine.TryCreate(root, options, out _) ||
             allowDomainRecognizers && RegexIpv4AddressEngine.TryCreate(root, options, out _) ||
-            allowDomainRecognizers && RegexEmailAddressEngine.TryCreate(root, options, out _) ||
-            allowBenchmarkFamilyRecognizers && RegexLh3EmailEngine.TryCreate(root, options, out _) ||
-            allowDomainRecognizers && RegexUriEngine.TryCreate(root, options, out _) ||
-            allowBenchmarkFamilyRecognizers && RegexLh3UriEngine.TryCreate(root, options, out _) ||
-            allowBenchmarkFamilyRecognizers && RegexLh3UriOrEmailEngine.TryCreate(root, options, out _) ||
-            RegexBoundedDigitDelimiterEngine.TryCreate(root, options, out _) ||
+            allowDomainRecognizers && RegexEmailAddressEngine.TryCreate(root, options, out _))
+        {
+            return true;
+        }
+
+        if (allowBenchmarkFamilyRecognizers && RegexLh3EmailEngine.TryCreate(root, options, out _) ||
+            allowDomainRecognizers && RegexUriEngine.TryCreate(root, options, out _))
+        {
+            return true;
+        }
+
+        if (allowBenchmarkFamilyRecognizers && RegexLh3UriEngine.TryCreate(root, options, out _) ||
+            allowBenchmarkFamilyRecognizers && RegexLh3UriOrEmailEngine.TryCreate(root, options, out _))
+        {
+            return true;
+        }
+
+        return RegexBoundedDigitDelimiterEngine.TryCreate(root, options, out _) ||
             RegexWordWhitespaceLiteralEngine.TryCreate(root, options, out _) ||
             RegexUnicodeWordWhitespaceLiteralEngine.TryCreate(root, options, out _) ||
             RegexBoundedLetterSuffixWhitespaceEngine.TryCreate(root, options, out _) ||
@@ -2923,15 +2949,9 @@ public sealed class RegexAutomaton
             RegexBoundedLiteralGapEngine.TryCreate(root, options, out _) ||
             RegexBoundedLineLiteralGapEngine.TryCreate(root, options, out _) ||
             RegexAnchoredLineLiteralGapEngine.TryCreate(root, options, out _) ||
-            RegexBoundedPrefixLiteralSetEngine.TryCreate(root, options, out _) ||
-            RegexRepeatedLazyDotStarLiteralEngine.TryCreate(root, options, out _) ||
-            RegexDelimitedSpanEngine.TryCreate(root, options, out _))
-        {
-            return true;
-        }
-
-        return false;
+            RegexBoundedPrefixLiteralSetEngine.TryCreate(root, options, out _);
     }
+
 
     private static bool CanSkipHigherPriorityFixedWidthGuards(RegexSyntaxNode root, RegexCompileOptions options)
     {
@@ -3028,34 +3048,10 @@ public sealed class RegexAutomaton
 
     private static bool HasHigherPriorityDelimitedSpanSpecialization(RegexSyntaxNode root, RegexCompileOptions options)
     {
-        bool allowDomainRecognizers = AllowsDomainRecognizers(options);
-        bool allowBenchmarkFamilyRecognizers = AllowsBenchmarkFamilyRecognizers(options);
-        if (RegexWholeLineEngine.TryCreate(root, options, out _) ||
-            RegexDotStarEngine.TryCreate(root, options, out _) ||
-            allowDomainRecognizers && RegexIpv4AddressEngine.TryCreate(root, options, out _) ||
-            allowDomainRecognizers && RegexEmailAddressEngine.TryCreate(root, options, out _) ||
-            allowBenchmarkFamilyRecognizers && RegexLh3EmailEngine.TryCreate(root, options, out _) ||
-            allowDomainRecognizers && RegexUriEngine.TryCreate(root, options, out _) ||
-            allowBenchmarkFamilyRecognizers && RegexLh3UriEngine.TryCreate(root, options, out _) ||
-            allowBenchmarkFamilyRecognizers && RegexLh3UriOrEmailEngine.TryCreate(root, options, out _) ||
-            RegexBoundedDigitDelimiterEngine.TryCreate(root, options, out _) ||
-            RegexWordWhitespaceLiteralEngine.TryCreate(root, options, out _) ||
-            RegexUnicodeWordWhitespaceLiteralEngine.TryCreate(root, options, out _) ||
-            RegexBoundedLetterSuffixWhitespaceEngine.TryCreate(root, options, out _) ||
-            RegexRunLiteralDotStarEngine.TryCreate(root, options, out _) ||
-            RegexLiteralPrefixRunEngine.TryCreate(root, options, out _) ||
-            RegexBoundedLiteralGapEngine.TryCreate(root, options, out _) ||
-            RegexBoundedLineLiteralGapEngine.TryCreate(root, options, out _) ||
-            RegexAnchoredLineLiteralGapEngine.TryCreate(root, options, out _) ||
-            RegexBoundedPrefixLiteralSetEngine.TryCreate(root, options, out _) ||
+        return HasHigherPriorityLiteralSpecialization(root, options) ||
             RegexBoundedScalarClassSequenceEngine.TryCreate(root, options, out _) ||
             RegexBoundedByteClassSequenceEngine.TryCreate(root, options, out _) ||
-            RegexRepeatedLazyDotStarLiteralEngine.TryCreate(root, options, out _))
-        {
-            return true;
-        }
-
-        return false;
+            RegexRepeatedLazyDotStarLiteralEngine.TryCreate(root, options, out _);
     }
 
     internal static int TryGetWholePatternCaptureIndex(RegexSyntaxNode root, int captureCount)

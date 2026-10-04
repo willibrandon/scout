@@ -23,10 +23,13 @@ internal static class SearchOutputFormatting
 
     internal static bool EffectiveLineNumber(CliLowArgs lowArgs, bool standardOutputIsTerminal, bool automaticLineNumberTarget)
     {
-        return lowArgs.LineNumber ||
-            (EffectiveColumn(lowArgs) && !lowArgs.LineNumberSpecified) ||
-            (lowArgs.Vimgrep && !lowArgs.LineNumberSpecified) ||
-            (standardOutputIsTerminal && automaticLineNumberTarget && lowArgs.SearchMode == CliSearchMode.Standard && !lowArgs.LineNumberSpecified);
+        if (lowArgs.LineNumber || lowArgs.LineNumberSpecified)
+        {
+            return lowArgs.LineNumber;
+        }
+
+        return EffectiveColumn(lowArgs) || lowArgs.Vimgrep ||
+            (standardOutputIsTerminal && automaticLineNumberTarget && lowArgs.SearchMode == CliSearchMode.Standard);
     }
 
     internal static bool EffectiveColumn(CliLowArgs lowArgs)

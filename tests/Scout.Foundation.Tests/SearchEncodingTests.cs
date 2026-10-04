@@ -7,7 +7,7 @@ namespace Scout;
 /// </summary>
 public sealed class SearchEncodingTests
 {
-    private static readonly string EncodingRsLabelTestsPath = Path.Combine(FindRepositoryRoot(), "upstream", "encoding_rs-0.8.35", "src", "test_labels_names.rs");
+    private static readonly string EncodingRsLabelTestsPath = Path.Join(FindRepositoryRoot(), "upstream", "encoding_rs-0.8.35", "src", "test_labels_names.rs");
 
     /// <summary>
     /// Verifies implemented WHATWG labels resolve to the expected search encoding kinds.
@@ -271,7 +271,7 @@ public sealed class SearchEncodingTests
     public void TryGetKindMatchesEncodingRsForLabelNoReplacementCatalog()
     {
         string upstream = File.ReadAllText(EncodingRsLabelTestsPath);
-        string prerequisiteLock = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "tests", "PREREQS.lock"));
+        string prerequisiteLock = File.ReadAllText(Path.Join(FindRepositoryRoot(), "tests", "PREREQS.lock"));
         Assert.Contains("name = \"encoding-rs-0.8.35-labels\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("path = \"upstream/encoding_rs-0.8.35/src/test_labels_names.rs\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("sha256 = \"23a2e11b02b3b8d15fb5613a625e3edb2c61e70e3c581abfd638719a4088200d\"", prerequisiteLock, StringComparison.Ordinal);
@@ -359,7 +359,7 @@ public sealed class SearchEncodingTests
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "Scout.slnx")))
+            if (File.Exists(Path.Join(directory.FullName, "Scout.slnx")))
             {
                 return directory.FullName;
             }

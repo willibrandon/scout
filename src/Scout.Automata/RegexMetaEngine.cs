@@ -291,12 +291,21 @@ internal sealed class RegexMetaEngine
     /// Gets a value indicating whether an operation-scoped full-match runner can use an
     /// unanchored lazy DFA.
     /// </summary>
-    internal bool CanRentFindUnanchoredDfa =>
-        !UsesExactStartRequiredLiteralPrefilter(prefilter) &&
-        (HasPrimaryUnanchoredDfaRunner &&
-                System.Threading.Volatile.Read(ref _unanchoredLazyDfaAvailability) != RunnerUnavailable ||
-            HasAsciiFastUnanchoredDfaRunner &&
-                System.Threading.Volatile.Read(ref _asciiFastUnanchoredDfaAvailability) != RunnerUnavailable);
+    internal bool CanRentFindUnanchoredDfa
+    {
+        get
+        {
+            if (UsesExactStartRequiredLiteralPrefilter(prefilter))
+            {
+                return false;
+            }
+
+            return HasPrimaryUnanchoredDfaRunner &&
+                    System.Threading.Volatile.Read(ref _unanchoredLazyDfaAvailability) != RunnerUnavailable ||
+                HasAsciiFastUnanchoredDfaRunner &&
+                    System.Threading.Volatile.Read(ref _asciiFastUnanchoredDfaAvailability) != RunnerUnavailable;
+        }
+    }
 
     /// <summary>
     /// Gets a value indicating whether exact-start prefilter candidates can share one anchored
@@ -3132,20 +3141,18 @@ internal sealed class RegexMetaEngine
             }
         }
 
-        if (allowUnanchoredDfa && !hasRequiredStart)
+        if (allowUnanchoredDfa && !hasRequiredStart &&
+            (reusableUnanchoredDfa is null ||
+                !reusableUnanchoredDfaUsesAsciiProjection))
         {
-            if (reusableUnanchoredDfa is null ||
-                !reusableUnanchoredDfaUsesAsciiProjection)
+            bool asciiFastFound = TryFindAsciiFastUnanchored(
+                haystack,
+                startOffset,
+                out RegexMatch asciiFastMatch,
+                out bool asciiFastCompleted);
+            if (asciiFastCompleted)
             {
-                bool asciiFastFound = TryFindAsciiFastUnanchored(
-                    haystack,
-                    startOffset,
-                    out RegexMatch asciiFastMatch,
-                    out bool asciiFastCompleted);
-                if (asciiFastCompleted)
-                {
-                    return asciiFastFound ? asciiFastMatch : null;
-                }
+                return asciiFastFound ? asciiFastMatch : null;
             }
         }
 
@@ -5463,12 +5470,10 @@ internal sealed class RegexMetaEngine
                 try
                 {
                     if (ShouldUseAnchoredLeftmostDfa(haystack.Length, reachabilityCache) &&
-                        TryMatchWithAnchoredLeftmostDfa(haystack, start, out bool anchoredMatched, out length, out bool anchoredHandled))
+                        TryMatchWithAnchoredLeftmostDfa(haystack, start, out bool anchoredMatched, out length, out bool anchoredHandled) &&
+                        anchoredHandled)
                     {
-                        if (anchoredHandled)
-                        {
-                            return anchoredMatched;
-                        }
+                        return anchoredMatched;
                     }
 
                     return lazyDfa.TryMatchAt(haystack, start, reachabilityCache, out length);

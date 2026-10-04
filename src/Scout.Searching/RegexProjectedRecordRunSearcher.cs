@@ -272,31 +272,25 @@ internal static class RegexProjectedRecordRunSearcher
         }
 
         byte terminator = GetTerminator(nullData);
-        RegexMatchEndRunner runner = default;
-        bool useProjection = true;
+        RegexRecordSearchState<TSink> state = new() { Sink = sink, UseProjection = true };
         long runLineNumber = 1;
-        RegexFindRunner findRunner = default;
         try
         {
             var runs = new AsciiRecordRunEnumerator(haystack, terminator);
             if (!MoveToFirstProjectedRun(ref runs, minimumProjectedRunLength))
             {
-                EnsureFindRunner(regexPlan.Matcher, ref findRunner);
+                EnsureFindRunner(regexPlan.Matcher, ref state.AuthoritativeRunner);
                 bool stopped = SearchAuthoritativeRecords(
                     haystack,
                     runOffset: 0,
                     runLineNumber,
                     regexPlan.Matcher,
-                    ref findRunner,
-                    ref sink,
+                    ref state,
                     countEveryMatch,
                     maxMatchingLines,
                     terminator,
                     startAt: 0,
                     reportedRecordStart: -1,
-                    ref matched,
-                    ref matchedLines,
-                    ref matches,
                     out long stoppingLine);
                 if (countSearchedLines)
                 {
@@ -312,22 +306,18 @@ internal static class RegexProjectedRecordRunSearcher
             if (firstProjectedRun.Offset > 0)
             {
                 ReadOnlySpan<byte> prefixRecords = haystack[..firstProjectedRun.Offset];
-                EnsureFindRunner(regexPlan.Matcher, ref findRunner);
+                EnsureFindRunner(regexPlan.Matcher, ref state.AuthoritativeRunner);
                 bool prefixStopped = SearchAuthoritativeRecords(
                     prefixRecords,
                     0,
                     runLineNumber,
                     regexPlan.Matcher,
-                    ref findRunner,
-                    ref sink,
+                    ref state,
                     countEveryMatch,
                     maxMatchingLines,
                     terminator,
                     startAt: 0,
                     reportedRecordStart: -1,
-                    ref matched,
-                    ref matchedLines,
-                    ref matches,
                     out long prefixStoppingLine);
                 if (prefixStopped)
                 {
@@ -350,77 +340,63 @@ internal static class RegexProjectedRecordRunSearcher
                 bool stopped;
                 long stoppingLine;
                 if (run.IsAscii &&
-                    useProjection &&
+                    state.UseProjection &&
                     run.Length >= minimumProjectedRunLength)
                 {
-                    if (!runner.IsAvailable)
+                    if (!state.ProjectedRunner.IsAvailable)
                     {
-                        runner = regexPlan.Matcher.RentAsciiProjectedMatchEndRunner(run.Length);
-                        if (!runner.IsAvailable)
+                        state.ProjectedRunner = regexPlan.Matcher.RentAsciiProjectedMatchEndRunner(run.Length);
+                        if (!state.ProjectedRunner.IsAvailable)
                         {
-                            runner.Dispose();
-                            useProjection = false;
+                            state.ProjectedRunner.Dispose();
+                            state.UseProjection = false;
                         }
                     }
 
-                    if (useProjection)
+                    if (state.UseProjection)
                     {
                         stopped = SearchProjectedRun(
                             records,
                             run.Offset,
                             runLineNumber,
                             regexPlan.Matcher,
-                            ref runner,
-                            ref findRunner,
-                            ref useProjection,
-                            ref sink,
+                            ref state,
                             countEveryMatch,
                             maxMatchingLines,
                             terminator,
-                            ref matched,
-                            ref matchedLines,
-                            ref matches,
                             out stoppingLine);
                     }
                     else
                     {
-                        EnsureFindRunner(regexPlan.Matcher, ref findRunner);
+                        EnsureFindRunner(regexPlan.Matcher, ref state.AuthoritativeRunner);
                         stopped = SearchAuthoritativeRecords(
                             records,
                             run.Offset,
                             runLineNumber,
                             regexPlan.Matcher,
-                            ref findRunner,
-                            ref sink,
+                            ref state,
                             countEveryMatch,
                             maxMatchingLines,
                             terminator,
                             startAt: 0,
                             reportedRecordStart: -1,
-                            ref matched,
-                            ref matchedLines,
-                            ref matches,
                             out stoppingLine);
                     }
                 }
                 else
                 {
-                    EnsureFindRunner(regexPlan.Matcher, ref findRunner);
+                    EnsureFindRunner(regexPlan.Matcher, ref state.AuthoritativeRunner);
                     stopped = SearchAuthoritativeRecords(
                         records,
                         run.Offset,
                         runLineNumber,
                         regexPlan.Matcher,
-                        ref findRunner,
-                        ref sink,
+                        ref state,
                         countEveryMatch,
                         maxMatchingLines,
                         terminator,
                         startAt: 0,
                         reportedRecordStart: -1,
-                        ref matched,
-                        ref matchedLines,
-                        ref matches,
                         out stoppingLine);
                 }
 
@@ -450,8 +426,18 @@ internal static class RegexProjectedRecordRunSearcher
         }
         finally
         {
-            runner.Dispose();
-            findRunner.Dispose();
+            try
+            {
+                state.ProjectedRunner.Dispose();
+                state.AuthoritativeRunner.Dispose();
+            }
+            finally
+            {
+                sink = state.Sink;
+                matched = state.Matched;
+                matchedLines = state.MatchedLines;
+                matches = state.Matches;
+            }
         }
     }
 
@@ -460,16 +446,10 @@ internal static class RegexProjectedRecordRunSearcher
         int runOffset,
         long runLineNumber,
         RegexAutomaton matcher,
-        ref RegexMatchEndRunner runner,
-        ref RegexFindRunner findRunner,
-        ref bool useProjection,
-        ref TSink sink,
+        ref RegexRecordSearchState<TSink> state,
         bool countEveryMatch,
         ulong? maxMatchingLines,
         byte terminator,
-        ref bool matched,
-        ref ulong matchedLines,
-        ref long matches,
         out long stoppingLine)
         where TSink : struct, ILineSink
     {
@@ -483,31 +463,27 @@ internal static class RegexProjectedRecordRunSearcher
         bool stopAfterCurrentRecord = false;
         while (searchOffset < searchLimit)
         {
-            bool found = runner.TryFindEnd(
+            bool found = state.ProjectedRunner.TryFindEnd(
                 records[..searchLimit],
                 searchOffset,
                 out int matchEnd,
                 out bool completed);
             if (!completed)
             {
-                runner.Dispose();
-                useProjection = false;
-                EnsureFindRunner(matcher, ref findRunner);
+                state.ProjectedRunner.Dispose();
+                state.UseProjection = false;
+                EnsureFindRunner(matcher, ref state.AuthoritativeRunner);
                 return SearchAuthoritativeRecords(
                     records[..searchLimit],
                     runOffset,
                     runLineNumber,
                     matcher,
-                    ref findRunner,
-                    ref sink,
+                    ref state,
                     countEveryMatch,
                     maxMatchingLines,
                     terminator,
                     searchOffset,
                     reportedRecordStart,
-                    ref matched,
-                    ref matchedLines,
-                    ref matches,
                     out stoppingLine);
             }
 
@@ -526,15 +502,15 @@ internal static class RegexProjectedRecordRunSearcher
 
             if (reportedRecordStart != recordStart)
             {
-                sink.MatchedLine(
+                state.Sink.MatchedLine(
                     runLineNumber + recordIndex,
                     runOffset + recordStart,
                     matchColumn: 0,
                     records.Slice(recordStart, recordEnd - recordStart));
                 reportedRecordStart = recordStart;
-                matched = true;
-                matchedLines++;
-                if (maxMatchingLines is ulong limit && matchedLines >= limit)
+                state.Matched = true;
+                state.MatchedLines++;
+                if (maxMatchingLines is ulong limit && state.MatchedLines >= limit)
                 {
                     if (!countEveryMatch)
                     {
@@ -547,7 +523,7 @@ internal static class RegexProjectedRecordRunSearcher
                 }
             }
 
-            matches++;
+            state.Matches++;
             searchOffset = countEveryMatch ? matchEnd : recordEnd;
         }
 
@@ -565,16 +541,12 @@ internal static class RegexProjectedRecordRunSearcher
         int runOffset,
         long runLineNumber,
         RegexAutomaton matcher,
-        ref RegexFindRunner findRunner,
-        ref TSink sink,
+        ref RegexRecordSearchState<TSink> state,
         bool countEveryMatch,
         ulong? maxMatchingLines,
         byte terminator,
         int startAt,
         int reportedRecordStart,
-        ref bool matched,
-        ref ulong matchedLines,
-        ref long matches,
         out long stoppingLine)
         where TSink : struct, ILineSink
     {
@@ -591,33 +563,28 @@ internal static class RegexProjectedRecordRunSearcher
             long recordMatches = 0;
             if (record.Length - recordStartAt >= matcher.MinimumMatchLength)
             {
-                if (countEveryMatch)
-                {
-                    recordMatches = CountMatches(record, recordStartAt, ref findRunner);
-                }
-                else
-                {
-                    recordMatches = findRunner.Find(record, recordStartAt).HasValue ? 1 : 0;
-                }
+                recordMatches = countEveryMatch
+                    ? CountMatches(record, recordStartAt, ref state.AuthoritativeRunner)
+                    : (state.AuthoritativeRunner.Find(record, recordStartAt).HasValue ? 1 : 0);
             }
 
             if (recordMatches > 0)
             {
-                matches += recordMatches;
+                state.Matches += recordMatches;
                 if (reportedRecordStart != recordStart)
                 {
-                    sink.MatchedLine(
+                    state.Sink.MatchedLine(
                         runLineNumber + recordIndex,
                         runOffset + recordStart,
                         matchColumn: 0,
                         record);
                     reportedRecordStart = recordStart;
-                    matched = true;
-                    matchedLines++;
+                    state.Matched = true;
+                    state.MatchedLines++;
                 }
             }
 
-            if (maxMatchingLines is ulong limit && matchedLines >= limit)
+            if (maxMatchingLines is ulong limit && state.MatchedLines >= limit)
             {
                 stoppingLine = runLineNumber + recordIndex;
                 return true;

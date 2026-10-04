@@ -190,7 +190,7 @@ public sealed class GitignoreTests
     public void GitignoreSkipsBomOnFirstLine()
     {
         string root = CreateTempDirectory();
-        string ignoreFile = Path.Combine(root, ".gitignore");
+        string ignoreFile = Path.Join(root, ".gitignore");
         File.WriteAllText(ignoreFile, "\uFEFFignore/this/path\n");
         IgnoreRuleSet rules = LoadRules(root, ignoreFile);
 
@@ -204,8 +204,8 @@ public sealed class GitignoreTests
     public void MatchPathOrAnyParentsRejectsPathsOutsideRoot()
     {
         string workspace = CreateTempDirectory();
-        string root = Path.Combine(workspace, "ROOT");
-        string outside = Path.Combine(workspace, "outside", "some_file");
+        string root = Path.Join(workspace, "ROOT");
+        string outside = Path.Join(workspace, "outside", "some_file");
         IgnoreRuleSet rules = LoadRulesForText(root, "some_file\n");
 
         ArgumentException exception = Assert.Throws<ArgumentException>(
@@ -220,8 +220,8 @@ public sealed class GitignoreTests
     public void DirectMatchRequiresDirectorySeparatorAfterRootPrefix()
     {
         string workspace = CreateTempDirectory();
-        string root = Path.Combine(workspace, "root");
-        string sibling = Path.Combine(workspace, "root-sibling", "target");
+        string root = Path.Join(workspace, "root");
+        string sibling = Path.Join(workspace, "root-sibling", "target");
         IgnoreRuleSet rules = LoadRulesForText(root, "/target\n");
 
         Assert.Equal(IgnoreDecision.Ignore, rules.Match(CreateEntry(root, "target", isDirectory: false)));
@@ -404,7 +404,7 @@ public sealed class GitignoreTests
 
     private static IgnoreRuleSet LoadMatchedPathRules(string root)
     {
-        string ignoreFile = Path.Combine(root, ".gitignore");
+        string ignoreFile = Path.Join(root, ".gitignore");
         File.WriteAllText(ignoreFile, MatchedPathOrAnyParentsRules);
         return LoadRules(root, ignoreFile);
     }
@@ -412,7 +412,7 @@ public sealed class GitignoreTests
     private static IgnoreRuleSet LoadRulesForText(string root, string gitignore)
     {
         Directory.CreateDirectory(root);
-        string ignoreFile = Path.Combine(root, ".gitignore");
+        string ignoreFile = Path.Join(root, ".gitignore");
         File.WriteAllText(ignoreFile, gitignore);
         return LoadRules(root, ignoreFile);
     }
@@ -426,7 +426,7 @@ public sealed class GitignoreTests
 
     private static DirEntry CreateEntry(string root, string relativePath, bool isDirectory)
     {
-        string fullPath = Path.Combine(root, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        string fullPath = Path.Join(root, relativePath.Replace('/', Path.DirectorySeparatorChar));
         return CreateAbsoluteEntry(fullPath, isDirectory);
     }
 
@@ -455,7 +455,7 @@ public sealed class GitignoreTests
             return workspace;
         }
 
-        return Path.Combine(workspace, NormalizePathSpec(rootSpec));
+        return Path.Join(workspace, NormalizePathSpec(rootSpec));
     }
 
     private static string NormalizePathSpec(string pathSpec)
@@ -476,7 +476,7 @@ public sealed class GitignoreTests
 
     private static string CreateTempDirectory()
     {
-        string path = Path.Combine(Path.GetTempPath(), "scout-" + Guid.NewGuid().ToString("N"));
+        string path = Path.Join(Path.GetTempPath(), "scout-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
     }

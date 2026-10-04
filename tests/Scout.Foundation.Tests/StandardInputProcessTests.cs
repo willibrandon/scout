@@ -65,7 +65,7 @@ public sealed class StandardInputProcessTests
         byte[] input,
         params string[] arguments)
     {
-        string hostPath = Path.Combine(
+        string hostPath = Path.Join(
             AppContext.BaseDirectory,
             "Scout.App.ProcessHost.dll");
         Assert.True(File.Exists(hostPath), hostPath);
