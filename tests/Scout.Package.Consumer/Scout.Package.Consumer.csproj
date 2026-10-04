@@ -9,6 +9,9 @@
     <MSBuildTreatWarningsAsErrors>true</MSBuildTreatWarningsAsErrors>
     <AnalysisLevel>10.0</AnalysisLevel>
     <AnalysisMode>AllEnabledByDefault</AnalysisMode>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <LangVersion>14.0</LangVersion>
     <IsAotCompatible>true</IsAotCompatible>
     <TrimMode>full</TrimMode>
     <ILLinkTreatWarningsAsErrors>true</ILLinkTreatWarningsAsErrors>

@@ -31,7 +31,7 @@ internal static class Program
             string[] paths = [Path.Combine(root, "a"), Path.Combine(root, "b")];
             DirEntry[] files = WalkBuilder.FromPaths(paths).Build().Where(entry => entry.IsFile).ToArray();
             Require(files.Length == 2 && files.All(entry => entry.Length == 6), "root context and metadata");
-            Require(WalkBuilder.FromPaths(paths.Reverse()).Build().Count(entry => entry.IsFile) == 2, "root order");
+            Require(WalkBuilder.FromPaths(Enumerable.Reverse(paths)).Build().Count(entry => entry.IsFile) == 2, "root order");
             var types = new FileTypeMatcherBuilder();
             types.AddDefaults();
             types.Select("mojo");

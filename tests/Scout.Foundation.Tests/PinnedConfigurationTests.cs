@@ -2608,7 +2608,7 @@ public sealed partial class PinnedConfigurationTests
             Assert.Contains("ripgrep_pcre2_rg_sha256 = \"" + expectedPcre2RipgrepSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
         }
 
-        Assert.Contains("ripgrep_pcre2_reported_version = \"" + expectedPcre2ReportedVersion + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("pcre2_reported_version = \"" + expectedPcre2ReportedVersion + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("compare_case f1155_auto_hybrid_regex exact --no-pcre2 --auto-hybrid-regex '(?<=the )Sherlock'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case auto_recursive_lookahead_threads sort-lines --engine=auto --threads 4 -n 'foo(?=bar)' pcre2-dir", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case issue39_auto_numbered_backreference exact --engine=auto '(Scout)\\1' issue39-auto", differentialScript, StringComparison.Ordinal);

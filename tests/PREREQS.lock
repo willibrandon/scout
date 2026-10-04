@@ -48,6 +48,7 @@ pcre2_profile = "release-lto"
 pcre2_features = "pcre2"
 pcre2_path = "artifacts/ripgrep-oracle/linux-musl-arm64/ripgrep/target/pcre2/release-lto/rg"
 pcre2_sha256 = "8c45b60e15b8a1f843fb8c08edce99c81c5119bbe55134d416f6e7e99c1ff91a"
+pcre2_reported_version = "PCRE2 10.45 is available (JIT is unavailable)"
 
 [[ripgrep_oracle]]
 rid = "osx-arm64"

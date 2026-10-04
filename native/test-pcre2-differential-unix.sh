@@ -289,7 +289,7 @@ compare_stdin_case() {
 RG_PCRE2_VALUE="$(read_ripgrep_oracle_value "pcre2_path" "ripgrep_pcre2_rg_path")" || fail "Missing ripgrep PCRE2 oracle path in tests/PREREQS.lock."
 RG_PCRE2="$(resolve_repo_path "$RG_PCRE2_VALUE")"
 RG_PCRE2_SHA256="$(read_ripgrep_oracle_value "pcre2_sha256" "ripgrep_pcre2_rg_sha256")" || fail "Missing ripgrep PCRE2 oracle sha256 in tests/PREREQS.lock."
-RG_PCRE2_REPORTED_VERSION="$(read_lock_value "ripgrep_pcre2_reported_version")" || fail "Missing ripgrep_pcre2_reported_version in tests/PREREQS.lock."
+RG_PCRE2_REPORTED_VERSION="$(read_ripgrep_oracle_value "pcre2_reported_version" "ripgrep_pcre2_reported_version")" || fail "Missing PCRE2 reported version in tests/PREREQS.lock."
 [ -x "$RG_PCRE2" ] || fail "Missing executable PCRE2 reference rg binary: $RG_PCRE2"
 expect_equal "PCRE2 reference rg sha256" "$RG_PCRE2_SHA256" "$(sha256_file "$RG_PCRE2")"
 expect_equal "PCRE2 reference rg PCRE2 version" "$RG_PCRE2_REPORTED_VERSION" "$("$RG_PCRE2" --pcre2-version | sed -n '1p')"

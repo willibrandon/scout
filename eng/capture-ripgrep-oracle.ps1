@@ -239,6 +239,7 @@ function Write-LockRow {
         "pcre2_features = ""$RgPcre2Features""",
         "pcre2_path = ""$RgPcre2PathValue""",
         "pcre2_sha256 = ""$RgPcre2Sha256""",
+        "pcre2_reported_version = ""$RgPcre2ReportedVersion""",
         "--- end ripgrep oracle row ---")
     [System.IO.File]::WriteAllLines($rowPath, $lines)
     $lines | ForEach-Object { Write-Output $_ }
@@ -305,6 +306,7 @@ if (-not (Test-Path $RgPcre2Path)) {
 }
 
 $RgPcre2Sha256 = Get-Sha256 $RgPcre2Path
+$RgPcre2ReportedVersion = (& $RgPcre2Path --version | Where-Object { $_ -like "PCRE2 *" })
 New-OracleArchive `
     -ArchivePath $OracleArchive `
     -ReferenceEntryName (Resolve-RepoRelativePath $RgPathValue) `

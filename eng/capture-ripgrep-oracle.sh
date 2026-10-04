@@ -188,6 +188,7 @@ print_lock_row() {
         printf 'pcre2_features = "%s"\n' "$RG_PCRE2_FEATURES"
         printf 'pcre2_path = "%s"\n' "$RG_PCRE2_PATH_VALUE"
         printf 'pcre2_sha256 = "%s"\n' "$RG_PCRE2_SHA256"
+        printf 'pcre2_reported_version = "%s"\n' "$RG_PCRE2_REPORTED_VERSION"
         printf '%s\n' '--- end ripgrep oracle row ---'
     } | tee "$ROW_PATH"
 }
@@ -223,6 +224,7 @@ RG_SHA256="$(sha256_file "$RG_PATH")"
 build_pcre2_ripgrep
 [ -x "$RG_PCRE2_PATH" ] || fail "Missing built PCRE2 reference rg: $RG_PCRE2_PATH"
 RG_PCRE2_SHA256="$(sha256_file "$RG_PCRE2_PATH")"
+RG_PCRE2_REPORTED_VERSION="$("$RG_PCRE2_PATH" --version | grep '^PCRE2 ')"
 
 create_oracle_archive
 print_lock_row

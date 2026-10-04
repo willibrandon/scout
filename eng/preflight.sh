@@ -540,7 +540,7 @@ RG_PCRE2_VERSION="$( ( "$RG_PCRE2_PATH" --version || true ) | sed -n '1p' )"
 expect_equal "PCRE2 reference rg version" "ripgrep 15.2.0 (rev $RG_REV)" "$RG_PCRE2_VERSION"
 RG_PCRE2_FEATURE_LINE="$( ( "$RG_PCRE2_PATH" --version || true ) | sed -n '3p' )"
 expect_equal "PCRE2 reference rg feature line" "features:+pcre2" "$RG_PCRE2_FEATURE_LINE"
-EXPECTED_PCRE2_VERSION="$(read_lock_value "ripgrep_pcre2_reported_version")" || fail "Missing ripgrep_pcre2_reported_version in tests/PREREQS.lock."
+EXPECTED_PCRE2_VERSION="$(read_oracle_value "pcre2_reported_version" "ripgrep_pcre2_reported_version")" || fail "Missing PCRE2 reported version in tests/PREREQS.lock."
 ACTUAL_PCRE2_VERSION="$( ( "$RG_PCRE2_PATH" --pcre2-version || true ) | sed -n '1p' )"
 expect_equal "PCRE2 reference rg PCRE2 version" "$EXPECTED_PCRE2_VERSION" "$ACTUAL_PCRE2_VERSION"
 
