@@ -155,23 +155,20 @@ function Ensure-Rustup {
 function Ensure-ReferenceCheckout {
     param([Parameter(Mandatory = $true)][string] $ExpectedCommit)
 
+    $artifactRoot = [System.IO.Path]::GetFullPath((Join-Path $Root "artifacts")) + [System.IO.Path]::DirectorySeparatorChar
+    $checkout = [System.IO.Path]::GetFullPath($Reference)
+    if (-not $checkout.StartsWith($artifactRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Reference builds must use a checkout under $artifactRoot."
+    }
     if (-not (Test-Path (Join-Path $Reference ".git"))) {
-        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Reference) | Out-Null
-        Remove-Item -LiteralPath $Reference -Recurse -Force -ErrorAction SilentlyContinue
         Invoke-Checked git init $Reference
         Invoke-Checked git -C $Reference remote add origin https://github.com/BurntSushi/ripgrep.git
     }
-
     $actualCommit = (& git -C $Reference rev-parse HEAD 2>$null)
     if ($LASTEXITCODE -eq 0 -and $actualCommit -eq $ExpectedCommit) {
         return
     }
-
-    & git -C $Reference fetch --depth 1 origin $ExpectedCommit
-    if ($LASTEXITCODE -ne 0) {
-        Invoke-Checked git -C $Reference fetch origin
-    }
-
+    Invoke-Checked git -C $Reference fetch --depth 1 origin $ExpectedCommit
     Invoke-Checked git -C $Reference checkout --detach $ExpectedCommit
 }
 
@@ -196,7 +193,7 @@ function Set-ReproducibleWindowsRustBuildEnvironment {
 function Build-Ripgrep {
     Push-Location $Reference
     try {
-        Invoke-Checked cargo "+$RustToolchain" build --profile $RgProfile --bin rg
+        Invoke-Checked rustup run $RustToolchain cargo build --profile $RgProfile --bin rg
     }
     finally {
         Pop-Location
@@ -210,7 +207,7 @@ function Build-Pcre2Ripgrep {
     $env:PCRE2_SYS_STATIC = "1"
     Push-Location $Reference
     try {
-        Invoke-Checked cargo "+$RustToolchain" build --profile $RgPcre2Profile --features $RgPcre2Features --bin rg
+        Invoke-Checked rustup run $RustToolchain cargo build --profile $RgPcre2Profile --features $RgPcre2Features --bin rg
     }
     finally {
         Pop-Location
@@ -255,11 +252,7 @@ $RgPcre2Features = Read-LockValue "ripgrep_pcre2_rg_features"
 $HostRid = Get-HostRid
 $HostOracleEnvironment = Get-OracleEnvironment
 
-$referenceValue = if ([string]::IsNullOrWhiteSpace($env:SCOUT_RIPGREP_REFERENCE)) {
-    "artifacts/ripgrep-oracle/$HostRid/ripgrep"
-} else {
-    $env:SCOUT_RIPGREP_REFERENCE
-}
+$referenceValue = "artifacts/ripgrep-oracle/$HostRid/ripgrep"
 
 $Reference = Resolve-RepoPath $referenceValue
 $RgPathValue = if ([string]::IsNullOrWhiteSpace($env:SCOUT_RIPGREP_RG_PATH)) {
@@ -286,7 +279,7 @@ $OracleArchive = Resolve-RepoPath $OracleArchiveValue
 
 Ensure-Rustup
 Invoke-Checked rustup toolchain install $RustToolchain --profile minimal
-$actualCargo = (& cargo "+$RustToolchain" --version).Split(" ")[1]
+$actualCargo = (& rustup run $RustToolchain cargo --version).Split(" ")[1]
 if ($actualCargo -ne $RustToolchain) {
     throw "Expected cargo $RustToolchain, got $actualCargo."
 }

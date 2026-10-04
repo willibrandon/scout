@@ -12,6 +12,27 @@ env:
   LINUX_SNAPSHOT_URL: "http://snapshot.debian.org/archive/debian/20260531T000000Z"
 
 jobs:
+  unix-linux-musl-arm64:
+    name: capture ripgrep oracle (linux-musl-arm64)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+      - name: Capture Alpine ARM64 release references
+        run: |
+          docker run --rm -v "$PWD:/scout" -w /scout \
+            -e GITHUB_ACTIONS=true \
+            -e SCOUT_HOST_RID=linux-musl-arm64 \
+            mcr.microsoft.com/dotnet/sdk:10.0.102-alpine3.22-arm64v8@sha256:3686e722179cbe27f0a4ade4e8677aaf4c2f64a103dc160d5ff4592ce0afed02 \
+            sh -c 'apk add --no-cache bash build-base clang curl git zip zlib-dev && eng/capture-ripgrep-oracle.sh'
+      - name: Upload ripgrep oracle archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: ripgrep-oracle-linux-musl-arm64
+          path: |
+            tests/oracles/ripgrep/linux-musl-arm64.zip
+            tests/oracles/ripgrep/linux-musl-arm64.lock
+
   unix-linux-x64:
     name: capture ripgrep oracle (linux-x64)
     runs-on: ubuntu-24.04

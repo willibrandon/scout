@@ -120,7 +120,7 @@ read_lock_macos_tool_value() {
 host_rid() {
     if [ -n "${SCOUT_HOST_RID:-}" ]; then
         case "$SCOUT_HOST_RID" in
-            osx-arm64|osx-x64|linux-x64|linux-arm64|win-x64|win-arm64)
+            osx-arm64|osx-x64|linux-x64|linux-arm64|linux-musl-arm64|win-x64|win-arm64)
                 printf '%s\n' "$SCOUT_HOST_RID"
                 return
                 ;;
@@ -143,7 +143,11 @@ host_rid() {
             printf 'linux-x64\n'
             ;;
         Linux:aarch64|Linux:arm64)
-            printf 'linux-arm64\n'
+            if [ -e /lib/ld-musl-aarch64.so.1 ]; then
+                printf 'linux-musl-arm64\n'
+            else
+                printf 'linux-arm64\n'
+            fi
             ;;
         MINGW*:x86_64|MSYS*:x86_64|CYGWIN*:x86_64)
             printf 'win-x64\n'
@@ -508,8 +512,7 @@ if ARCHIVE_PATH_VALUE="$(read_oracle_value "archive_path" "ripgrep_oracle_archiv
     check_file_hash "pinned ripgrep oracle archive" "$ARCHIVE_PATH" "$ARCHIVE_SHA256"
     HAS_RIPGREP_SOURCE_CHECKOUT=0
 else
-    REFERENCE="$(derive_reference_from_oracle_path "$RG_PATH")"
-    ACTUAL_RIPGREP="$(git -C "$REFERENCE" rev-parse HEAD)"
+    ACTUAL_RIPGREP="$(git -C "$REFERENCE" rev-parse "$EXPECTED_RIPGREP^{commit}")"
     expect_equal "ripgrep commit" "$EXPECTED_RIPGREP" "$ACTUAL_RIPGREP"
     HAS_RIPGREP_SOURCE_CHECKOUT=1
 fi
@@ -517,7 +520,7 @@ check_file_hash "reference rg" "$RG_PATH" "$RG_SHA256"
 
 RG_REV="$(printf '%s' "$EXPECTED_RIPGREP" | cut -c 1-10)"
 RG_VERSION="$( ( "$RG_PATH" --version || true ) | sed -n '1p' )"
-expect_equal "reference rg version" "ripgrep 15.1.0 (rev $RG_REV)" "$RG_VERSION"
+expect_equal "reference rg version" "ripgrep 15.2.0 (rev $RG_REV)" "$RG_VERSION"
 
 "$ROOT/eng/verify-generated-artifacts.sh" "$RG_PATH"
 "$ROOT/eng/verify-identity-rebrand.sh"
@@ -534,7 +537,7 @@ RG_PCRE2_SHA256="$(read_oracle_value "pcre2_sha256" "ripgrep_pcre2_rg_sha256")" 
 check_file_hash "PCRE2 reference rg" "$RG_PCRE2_PATH" "$RG_PCRE2_SHA256"
 
 RG_PCRE2_VERSION="$( ( "$RG_PCRE2_PATH" --version || true ) | sed -n '1p' )"
-expect_equal "PCRE2 reference rg version" "ripgrep 15.1.0 (rev $RG_REV)" "$RG_PCRE2_VERSION"
+expect_equal "PCRE2 reference rg version" "ripgrep 15.2.0 (rev $RG_REV)" "$RG_PCRE2_VERSION"
 RG_PCRE2_FEATURE_LINE="$( ( "$RG_PCRE2_PATH" --version || true ) | sed -n '3p' )"
 expect_equal "PCRE2 reference rg feature line" "features:+pcre2" "$RG_PCRE2_FEATURE_LINE"
 EXPECTED_PCRE2_VERSION="$(read_lock_value "ripgrep_pcre2_reported_version")" || fail "Missing ripgrep_pcre2_reported_version in tests/PREREQS.lock."
@@ -617,6 +620,9 @@ fi
 check_pinned_path_corpora
 
 if [ "$HAS_RIPGREP_SOURCE_CHECKOUT" -eq 1 ]; then
-    compare_pinned_text_file "$REFERENCE/Cargo.lock" "$ROOT/upstream/Cargo.lock" "Pinned Cargo.lock"
+    reference_lock="$ROOT/artifacts/preflight/Cargo.reference.lock"
+    mkdir -p "$(dirname -- "$reference_lock")"
+    git -C "$REFERENCE" show "$EXPECTED_RIPGREP:Cargo.lock" > "$reference_lock"
+    compare_pinned_text_file "$reference_lock" "$ROOT/upstream/Cargo.lock" "Release Cargo.lock"
 fi
 printf 'Scout preflight passed.\n'

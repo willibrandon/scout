@@ -47,7 +47,7 @@ read_lock_value() {
 host_rid() {
     if [ -n "${SCOUT_HOST_RID:-}" ]; then
         case "$SCOUT_HOST_RID" in
-            osx-arm64|osx-x64|linux-x64|linux-arm64|win-x64|win-arm64)
+            osx-arm64|osx-x64|linux-x64|linux-arm64|linux-musl-arm64|win-x64|win-arm64)
                 printf '%s\n' "$SCOUT_HOST_RID"
                 return
                 ;;
@@ -70,7 +70,11 @@ host_rid() {
             printf 'linux-x64\n'
             ;;
         Linux:aarch64|Linux:arm64)
-            printf 'linux-arm64\n'
+            if [ -e /lib/ld-musl-aarch64.so.1 ]; then
+                printf 'linux-musl-arm64\n'
+            else
+                printf 'linux-arm64\n'
+            fi
             ;;
         MINGW*:x86_64|MSYS*:x86_64|CYGWIN*:x86_64)
             printf 'win-x64\n'
