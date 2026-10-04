@@ -38,7 +38,14 @@ def verify_results(directory: Path) -> int:
                 findings += 1
                 message = result.get("message", {})
                 text = message.get("text", message.get("markdown", ""))
-                print(f"{path}: {result.get('ruleId', 'unknown rule')}: {text}", file=sys.stderr)
+                summary = " ".join(text.split())
+                if len(summary) > 500:
+                    summary = summary[:500] + "… (full message in SARIF artifact)"
+                locations = result.get("locations", [])
+                location = locations[0].get("physicalLocation", {}) if locations else {}
+                source = location.get("artifactLocation", {}).get("uri", str(path))
+                line = location.get("region", {}).get("startLine", 1)
+                print(f"{source}:{line}: {result.get('ruleId', 'unknown rule')}: {summary}", file=sys.stderr)
 
     if findings:
         print(f"CodeQL reported {findings} finding(s). Every finding must be resolved.", file=sys.stderr)

@@ -243,12 +243,12 @@ def build_rid(root: Path, output_dir: Path, rid: str, version: str, commit: str)
         write(tools_dir / "DotnetToolSettings.xml", rid_settings(rid))
         shutil.copyfile(binary, tools_dir / executable_name(rid))
         if not rid.startswith("win-"):
-            os.chmod(tools_dir / executable_name(rid), 0o755)
+            os.chmod(tools_dir / executable_name(rid), 0o700)
             scout_real = root / "artifacts" / "bin" / rid / "scout-real"
             if not scout_real.is_file():
                 raise RuntimeError(f"Missing native companion binary for {rid}: {scout_real}")
             shutil.copyfile(scout_real, tools_dir / "scout-real")
-            os.chmod(tools_dir / "scout-real", 0o755)
+            os.chmod(tools_dir / "scout-real", 0o700)
         copy_common_files(root, package_root)
         return pack(package_root, output_dir, package_id, version)
 

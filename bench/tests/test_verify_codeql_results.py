@@ -32,6 +32,21 @@ class VerifyCodeQlResultsTests(unittest.TestCase):
             with self.subTest(run=run):
                 self.assertNotEqual(0, self.run_gate(run).returncode)
 
+    def test_large_findings_remain_failures_with_bounded_located_logs(self) -> None:
+        result = self.run_gate({"results": [{
+            "ruleId": "test/security",
+            "message": {"text": "Huge message\n" + "detail " * 100_000},
+            "locations": [{"physicalLocation": {
+                "artifactLocation": {"uri": "src/Example.cs"},
+                "region": {"startLine": 42},
+            }}],
+        }]})
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("src/Example.cs:42: test/security: Huge message", result.stderr)
+        self.assertIn("full message in SARIF artifact", result.stderr)
+        self.assertIn("1 finding(s)", result.stderr)
+        self.assertLess(len(result.stderr), 1_000)
+
     def test_failed_analysis_or_error_notification_fails(self) -> None:
         for invocation in (
             {"executionSuccessful": False},

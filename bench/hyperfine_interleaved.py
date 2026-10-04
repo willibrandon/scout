@@ -28,7 +28,6 @@ _ROUND_ROLES = (
 _HYPERFINE_IGNORED_EXIT_WARNING = "  Warning: Ignoring non-zero exit code."
 _HYPERFINE_WARNING_SEPARATOR = " "
 _MAX_TIMER_RESOLUTION_REPLACEMENTS = 8
-_REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 def round_roles(round_number: int) -> tuple[str, ...]:
