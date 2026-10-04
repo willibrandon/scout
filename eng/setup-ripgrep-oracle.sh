@@ -52,7 +52,11 @@ host_rid() {
             printf 'linux-x64\n'
             ;;
         Linux:aarch64|Linux:arm64)
-            printf 'linux-arm64\n'
+            if [ -e /lib/ld-musl-aarch64.so.1 ]; then
+                printf 'linux-musl-arm64\n'
+            else
+                printf 'linux-arm64\n'
+            fi
             ;;
         *)
             fail "Unsupported host for pinned ripgrep oracle: $os $arch"
@@ -210,28 +214,7 @@ ensure_rustup() {
 }
 
 ensure_reference_checkout() {
-    expected_commit="$1"
-
-    if [ ! -d "$REFERENCE/.git" ]; then
-        ensure_directory "$(dirname -- "$REFERENCE")"
-        rm -rf "$REFERENCE"
-        git init "$REFERENCE"
-        git -C "$REFERENCE" remote add origin https://github.com/BurntSushi/ripgrep.git
-    fi
-
-    actual_commit="$(git -C "$REFERENCE" rev-parse HEAD 2>/dev/null || true)"
-    if [ "$actual_commit" = "$expected_commit" ]; then
-        return
-    fi
-
-    if [ -n "$actual_commit" ] && [ "${CI:-false}" != "true" ]; then
-        fail "$REFERENCE is at $actual_commit, expected $expected_commit. Move or update the reference checkout explicitly before running this setup locally."
-    fi
-
-    if ! git -C "$REFERENCE" fetch --depth 1 origin "$expected_commit"; then
-        git -C "$REFERENCE" fetch origin
-    fi
-    git -C "$REFERENCE" checkout --detach "$expected_commit"
+    "$ROOT/eng/checkout-ripgrep-reference.sh" "$REFERENCE" "$1"
 }
 
 hash_matches() {
@@ -267,7 +250,7 @@ REFERENCE="$(derive_reference_from_oracle_path "$RG_PATH")"
 
 ensure_rustup
 rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
-ACTUAL_CARGO="$(cargo "+$RUST_TOOLCHAIN" --version | awk '{ print $2 }')"
+ACTUAL_CARGO="$(rustup run "$RUST_TOOLCHAIN" cargo --version | awk '{ print $2 }')"
 expect_equal "cargo" "$RUST_TOOLCHAIN" "$ACTUAL_CARGO"
 
 ensure_reference_checkout "$EXPECTED_RIPGREP"
@@ -277,7 +260,7 @@ expect_equal "ripgrep commit" "$EXPECTED_RIPGREP" "$ACTUAL_RIPGREP"
 if ! hash_matches "$RG_PATH" "$RG_SHA256"; then
     (
         cd "$REFERENCE"
-        cargo "+$RUST_TOOLCHAIN" build --profile "$RG_PROFILE" --bin rg
+        rustup run "$RUST_TOOLCHAIN" cargo build --profile "$RG_PROFILE" --bin rg
     )
 fi
 verify_binary_hash "reference rg" "$RG_PATH" "$RG_SHA256"
@@ -287,7 +270,7 @@ if ! hash_matches "$RG_PCRE2_PATH" "$RG_PCRE2_SHA256"; then
         cd "$REFERENCE"
         CARGO_TARGET_DIR="$REFERENCE/target/pcre2" \
             PCRE2_SYS_STATIC=1 \
-            cargo "+$RUST_TOOLCHAIN" build --profile "$RG_PCRE2_PROFILE" --features "$RG_PCRE2_FEATURES" --bin rg
+            rustup run "$RUST_TOOLCHAIN" cargo build --profile "$RG_PCRE2_PROFILE" --features "$RG_PCRE2_FEATURES" --bin rg
     )
 fi
 verify_binary_hash "PCRE2 reference rg" "$RG_PCRE2_PATH" "$RG_PCRE2_SHA256"

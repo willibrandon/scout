@@ -1679,7 +1679,7 @@ rgtest!(r3179_global_gitignore_cwd, |dir: Dir, mut cmd: TestCommand| {
     // canonicalization. But it's not actually quite clear
     // to me how to do it. I *believe* the solution here is
     // that gitignore matching should be relative to the directory
-    // path given to `WalkBuider::{add,new}`, and *not* to the
+    // path given to `WalkBuilder::{add,new}`, and *not* to the
     // CWD. But this is a very big change to how `ignore` works
     // I think. At least conceptually. So that will need to be
     // something we do when we rewrite `ignore`. Sigh.
@@ -1716,4 +1716,29 @@ rgtest!(r3180_look_around_panic, |dir: Dir, mut cmd: TestCommand| {
         .arg("-rx")
         .stdout();
     eqnice!("xbxbx\n", got);
+});
+
+// See: https://github.com/BurntSushi/ripgrep/issues/3275
+//
+// This test doesn't seem to work on Windows for whatever reason. I haven't
+// investigated it yet, but I'm pretty sure it's just the test. I'm guessing
+// it's related to path separators. ---AG
+#[cfg(not(windows))]
+rgtest!(r3275_git_global_config_env, |dir: Dir, mut cmd: TestCommand| {
+    dir.create_dir("foo");
+    dir.create(".git", "");
+    dir.create("foo/foo1", "");
+    dir.create("foo/foo2", "");
+    dir.create("global-excludes-nonstandard", "foo2");
+    dir.create(
+        "global-config-nonstandard",
+        &format!(
+            "[core]\n\texcludesFile = {path}",
+            path = dir.path().join("global-excludes-nonstandard").display()
+        ),
+    );
+
+    let config_path = dir.path().join("global-config-nonstandard");
+    cmd.env("GIT_CONFIG_GLOBAL", config_path);
+    eqnice!("foo/foo1\n", cmd.arg("--files").arg("foo").stdout());
 });

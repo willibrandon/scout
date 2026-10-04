@@ -26,9 +26,9 @@
     <Version>$(VersionPrefix)</Version>
     <AssemblyVersion>0.6.1.0</AssemblyVersion>
     <FileVersion>0.6.1.0</FileVersion>
-    <ScoutRipgrepVersion>15.1.0</ScoutRipgrepVersion>
-    <ScoutRipgrepRevision>4857d6fa67db69a95cd4b6f2adda5d807d4d0119</ScoutRipgrepRevision>
-    <ScoutRipgrepRevisionShort>4857d6fa67</ScoutRipgrepRevisionShort>
+    <ScoutRipgrepVersion>15.2.0</ScoutRipgrepVersion>
+    <ScoutRipgrepRevision>e89fff89ac9af12e8d4ce9d5fd07beb408ca730f</ScoutRipgrepRevision>
+    <ScoutRipgrepRevisionShort>e89fff89ac</ScoutRipgrepRevisionShort>
     <AssemblyInformationalVersion>$(VersionPrefix)+ripgrep.$(ScoutRipgrepVersion).$(ScoutRipgrepRevisionShort)</AssemblyInformationalVersion>
     <Product>Scout</Product>
     <Company>willibrandon</Company>

@@ -87,11 +87,11 @@ internal static class FileListingOperations
         int threadCount = SearchWalkPlanning.GetFilesWalkThreadCount(lowArgs);
         if (threadCount > 1)
         {
-            ListDirectoryParallel(path, fullRoot, defaultRoot, lowArgs, fileTypes, color, output, diagnostics, logger, ref emitted);
+            ListDirectoryParallel(path, fullRoot, defaultRoot, lowArgs, fileTypes, color, output, diagnostics, logger, ref emitted, ref errored);
             return;
         }
 
-        ListDirectorySerial(path, fullRoot, defaultRoot, lowArgs, fileTypes, color, output, diagnostics, logger, ref emitted);
+        ListDirectorySerial(path, fullRoot, defaultRoot, lowArgs, fileTypes, color, output, diagnostics, logger, ref emitted, ref errored);
     }
 
     private static void ListDirectorySerial(
@@ -104,9 +104,12 @@ internal static class FileListingOperations
         RawByteWriter output,
         DiagnosticMessenger diagnostics,
         DiagnosticLogger logger,
-        ref bool emitted)
+        ref bool emitted,
+        ref bool errored)
     {
-        foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(path, lowArgs, fileTypes, diagnostics, logger))
+        List<DirEntry> entries = SearchWalkPlanning.GetSortedFileEntries(path, lowArgs, fileTypes, diagnostics, logger, out bool walkErrored);
+        errored |= walkErrored;
+        foreach (DirEntry entry in entries)
         {
             string displayPath = defaultRoot
                 ? SearchPathArgument.GetSearchDirectoryDisplayPath(path, fullRoot, entry.FullPath, defaultRoot: true)
@@ -134,11 +137,13 @@ internal static class FileListingOperations
         RawByteWriter output,
         DiagnosticMessenger diagnostics,
         DiagnosticLogger logger,
-        ref bool emitted)
+        ref bool emitted,
+        ref bool errored)
     {
         int threadCount = SearchWalkPlanning.GetFilesWalkThreadCount(lowArgs);
         using var entries = new BlockingCollection<DirEntry>();
         int found = 0;
+        int erroredFlag = 0;
         using var printTask = BackgroundWorkItem.Queue(() =>
         {
             foreach (DirEntry entry in entries.GetConsumingEnumerable())
@@ -156,7 +161,7 @@ internal static class FileListingOperations
 
         try
         {
-            SearchWalkPlanning.CreateWalkBuilder(path, lowArgs, fileTypes, diagnostics, logger).Threads(threadCount).BuildParallel().Run(() => entry =>
+            SearchWalkPlanning.CreateWalkBuilder(path, lowArgs, fileTypes, diagnostics, logger, () => Interlocked.Exchange(ref erroredFlag, 1)).Threads(threadCount).BuildParallel().Run(() => entry =>
             {
                 if (!entry.IsFile)
                 {
@@ -180,6 +185,7 @@ internal static class FileListingOperations
 
         printTask.Join();
         emitted |= Volatile.Read(ref found) != 0;
+        errored |= Volatile.Read(ref erroredFlag) != 0;
     }
 
     private static void WriteStandardInputPath(RawByteWriter output, OutputColor color)

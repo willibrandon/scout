@@ -6,20 +6,20 @@ JSON serializer stack with a byte-identical writer.
 ```text
 name = "grep-printer"
 version = "0.3.1"
-commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"
+commit = "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f"
 path = "crates/printer"
 
 name = "serde_json"
-version = "1.0.145"
-checksum = "402a6f66d8c709116cf22f558eab210f5a50187f702eb4d7e5ef38d9a7f1c79c"
+version = "1.0.150"
+checksum = "e8014e44b4736ed0538adeecded0fce2a272f22dc9578a7eb6b2d9993c74cfb9"
 
 name = "itoa"
-version = "1.0.15"
-checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
+version = "1.0.18"
+checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
-name = "ryu"
-version = "1.0.20"
-checksum = "28d3b2b1366ec20994f1fd18c3c594f05c5dd4bc44d8bb0c1c632c8d6829481f"
+name = "zmij"
+version = "1.0.23"
+checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
 ```
 
 The implementation owns standard, color, JSON, vimgrep, stats, replacement,

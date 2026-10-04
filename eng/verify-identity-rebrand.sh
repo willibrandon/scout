@@ -45,7 +45,7 @@ for artifact in help-short help-long man complete-bash complete-zsh complete-fis
     decode_artifact "$ARTIFACTS/$artifact.base64" > "$TMP/$artifact"
 done
 
-require_contains "$TMP/help-short" "scout 0.6.1 (ripgrep 15.1.0 compatible, rev 4857d6fa67)"
+require_contains "$TMP/help-short" "scout 0.6.1 (ripgrep 15.2.0 compatible, rev e89fff89ac)"
 require_contains "$TMP/help-short" "Scout ports ripgrep, originally authored by Andrew Gallant."
 require_contains "$TMP/help-short" "Project home page: https://github.com/willibrandon/scout"
 require_contains "$TMP/help-short" "scout [OPTIONS] PATTERN [PATH ...]"
@@ -66,7 +66,7 @@ require_contains "$TMP/complete-fish" "else if set -qx RIPGREP_CONFIG_PATH"
 require_contains "$TMP/complete-powershell" "Register-ArgumentCompleter -Native -CommandName 'scout'"
 
 for artifact in "$TMP"/help-short "$TMP"/help-long "$TMP"/man "$TMP"/complete-*; do
-    require_absent "$artifact" "ripgrep 15.1.0 (rev 4857d6fa67)"
+    require_absent "$artifact" "ripgrep 15.2.0 (rev e89fff89ac)"
     require_absent "$artifact" "Project home page: https://github.com/BurntSushi/ripgrep"
     require_absent "$artifact" "https://github.com/BurntSushi/Scout"
     require_absent "$artifact" "Andrew Gallant <jamslam@gmail.com>"

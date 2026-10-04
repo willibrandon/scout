@@ -332,7 +332,9 @@ internal static class StandardSearchTargetOperations
         bool interFileContextSeparator = StandardSearchOperations.ShouldWriteInterFileContextSeparator(lowArgs, heading, separators);
         bool wroteContextBody = false;
         var literalPrecheckState = new DirectoryLiteralPrecheckState();
-        foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics, logger))
+        List<DirEntry> entries = SearchWalkPlanning.GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics, logger, out bool walkErrored);
+        errored |= walkErrored;
+        foreach (DirEntry entry in entries)
         {
             if (interFileContextSeparator)
             {
@@ -462,7 +464,7 @@ internal static class StandardSearchTargetOperations
 
         try
         {
-            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger).Threads(threadCount).BuildParallel().RunWithCompletion(() =>
+            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger, () => Interlocked.Exchange(ref erroredFlag, 1)).Threads(threadCount).BuildParallel().RunWithCompletion(() =>
             {
                 MemoryStream buffer = directOutput
                     ? new LineFlushingMemoryStream(output, outputLock, GetParallelOutputLineFlushTerminator(separators), ParallelDirectOutputFlushThreshold)
@@ -575,7 +577,9 @@ internal static class StandardSearchTargetOperations
             SearchPathArgument.CreateDirectoryDisplayPathFormatter(root, fullRoot, defaultRoot, lowArgs.PathSeparator);
         bool interFileContextSeparator = StandardSearchOperations.ShouldWriteInterFileContextSeparator(lowArgs, heading, separators);
         bool wroteContextBody = false;
-        foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics, logger))
+        List<DirEntry> entries = SearchWalkPlanning.GetSortedFileEntries(root, lowArgs, fileTypes, diagnostics, logger, out bool walkErrored);
+        errored |= walkErrored;
+        foreach (DirEntry entry in entries)
         {
             byte[] displayPathBytes = displayPaths.GetBytes(entry);
             if (interFileContextSeparator)
@@ -706,7 +710,7 @@ internal static class StandardSearchTargetOperations
 
         try
         {
-            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger).Threads(threadCount).BuildParallel().RunWithCompletion(() =>
+            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger, () => Interlocked.Exchange(ref erroredFlag, 1)).Threads(threadCount).BuildParallel().RunWithCompletion(() =>
             {
                 MemoryStream buffer = directOutput
                     ? new LineFlushingMemoryStream(output, outputLock, GetParallelOutputLineFlushTerminator(separators), ParallelDirectOutputFlushThreshold)
@@ -1481,7 +1485,7 @@ internal static class StandardSearchTargetOperations
         MemoryMappedSearchFile? mappedSearchFile = null;
         try
         {
-            if (!MemoryMappedSearchFile.TryOpenFile(path, out mappedSearchFile))
+            if (!MemoryMappedSearchFile.TryOpenFile(path, out mappedSearchFile, logger))
             {
                 return false;
             }

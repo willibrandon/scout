@@ -37,7 +37,7 @@ case "$RID" in
             -isysroot "$SDKROOT" \
             "-mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
         ;;
-    linux-x64|linux-arm64)
+    linux-x64|linux-arm64|linux-musl-arm64)
         CC="${CC:-cc}"
         AR="${AR:-ar}"
         RANLIB="${RANLIB:-ranlib}"

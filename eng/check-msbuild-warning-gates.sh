@@ -207,6 +207,9 @@ is_runtime_aot_project() {
     project="$1"
 
     case "$project" in
+        tests/Scout.Package.Consumer/Scout.Package.Consumer.csproj)
+            return 0
+            ;;
         src/Scout.SourceGen/Scout.SourceGen.csproj|tests/*|bench/*|fuzz/*)
             return 1
             ;;
@@ -364,7 +367,8 @@ require_positive_integer "$MSBUILD_EVALUATION_TIMEOUT_SECONDS" "SCOUT_MSBUILD_WA
 scan_repository_suppression_files
 check_analyzer_severity_config
 
-find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" -name '*.csproj' -type f | sort | while IFS= read -r project; do
+find "$ROOT/src" "$ROOT/tests" "$ROOT/bench" "$ROOT/fuzz" \
+    \( -name bin -o -name obj \) -prune -o -name '*.csproj' -type f -print | sort | while IFS= read -r project; do
     relative_project="$(relative_path "$project")"
     safe_name="$(printf '%s' "$relative_project" | tr '/\\:' '___')"
     property_output="$OUT/$safe_name.properties"

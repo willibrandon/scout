@@ -40,7 +40,7 @@ read_lock_value() {
 host_rid() {
     if [ -n "${SCOUT_HOST_RID:-}" ]; then
         case "$SCOUT_HOST_RID" in
-            linux-x64|linux-arm64|osx-x64|osx-arm64)
+            linux-x64|linux-arm64|linux-musl-arm64|osx-x64|osx-arm64)
                 printf '%s\n' "$SCOUT_HOST_RID"
                 return
                 ;;
@@ -63,7 +63,11 @@ host_rid() {
             printf 'linux-x64\n'
             ;;
         Linux:aarch64|Linux:arm64)
-            printf 'linux-arm64\n'
+            if [ -e /lib/ld-musl-aarch64.so.1 ]; then
+                printf 'linux-musl-arm64\n'
+            else
+                printf 'linux-arm64\n'
+            fi
             ;;
         *)
             fail "Unsupported host for pinned ripgrep oracle archive: $os $arch"
@@ -207,7 +211,7 @@ verify_binary_hash() {
 HOST_RID="$(host_rid)"
 HOST_ORACLE_ENVIRONMENT="$(oracle_environment)"
 EXPECTED_RIPGREP="$(read_lock_value "ripgrep_commit")" || fail "Missing ripgrep_commit in tests/PREREQS.lock."
-EXPECTED_PCRE2_VERSION="$(read_lock_value "ripgrep_pcre2_reported_version")" || fail "Missing ripgrep_pcre2_reported_version in tests/PREREQS.lock."
+EXPECTED_PCRE2_VERSION="$(read_oracle_value "pcre2_reported_version" || read_lock_value "ripgrep_pcre2_reported_version")" || fail "Missing PCRE2 reported version in tests/PREREQS.lock."
 ARCHIVE_PATH_VALUE="$(read_oracle_value "archive_path")" || fail "Missing ripgrep_oracle.archive_path for $HOST_RID in tests/PREREQS.lock."
 ARCHIVE_SHA256="$(read_oracle_value "archive_sha256")" || fail "Missing ripgrep_oracle.archive_sha256 for $HOST_RID in tests/PREREQS.lock."
 RG_PATH_VALUE="$(read_oracle_value "path")" || fail "Missing ripgrep_oracle.path for $HOST_RID in tests/PREREQS.lock."

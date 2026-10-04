@@ -203,7 +203,9 @@ if ($DifferentialMode -eq "WithDifferentials") {
 
         $bashRoot = Escape-BashSingleQuoted (ConvertTo-BashPath $Root)
         $bashScout = Escape-BashSingleQuoted (ConvertTo-BashPath $OutputExe)
-        & $bash.Source -lc "cd $bashRoot && ./native/test-pcre2-differential-unix.sh '$Rid' $bashScout"
+        $python = Get-Command "python" -ErrorAction Stop
+        $bashPython = Escape-BashSingleQuoted (ConvertTo-BashPath $python.Source)
+        & $bash.Source -lc "cd $bashRoot && SCOUT_PYTHON=$bashPython ./native/test-pcre2-differential-unix.sh '$Rid' $bashScout"
         if ($LASTEXITCODE -ne 0) {
             throw "PCRE2 native Windows differentials failed for $Rid."
         }

@@ -13,7 +13,7 @@ namespace Scout;
 /// </summary>
 public sealed partial class PinnedConfigurationTests
 {
-    private const string PinnedRipgrepCommit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119";
+    private const string PinnedRipgrepCommit = "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f";
     private const string PinnedPcre2Commit = "56c87ccac13b01c3c1ecdf71e4fc2fedccea50a2";
 
     /// <summary>
@@ -139,7 +139,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("libc-bin=\"$LINUX_LIBC_VERSION\"", workflow, StringComparison.Ordinal);
         Assert.Contains("uses: actions/checkout@v6", workflow, StringComparison.Ordinal);
         Assert.Contains("uses: actions/setup-dotnet@v5", workflow, StringComparison.Ordinal);
-        Assert.Contains("dotnet-version: 10.0.102", workflow, StringComparison.Ordinal);
+        Assert.Contains("dotnet-version: |\n            9.0.x\n            10.0.102", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet build Scout.slnx --no-restore", workflow, StringComparison.Ordinal);
         Assert.Contains("Portable tests", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet test tests/Scout.Regex.Tests/Scout.Regex.Tests.csproj --no-restore", workflow, StringComparison.Ordinal);
@@ -316,7 +316,7 @@ public sealed partial class PinnedConfigurationTests
 
         Assert.True(Directory.Exists(referenceRipgrepRoot), "Missing reference checkout: " + referenceRipgrepRoot);
 
-        (int exitCode, string output, string error) = RunProcess("git", ["-C", referenceRipgrepRoot, "rev-parse", "HEAD"]);
+        (int exitCode, string output, string error) = RunProcess("git", ["-C", referenceRipgrepRoot, "rev-parse", PinnedRipgrepCommit + "^{commit}"]);
 
         Assert.True(exitCode == 0, error);
         Assert.Equal(PinnedRipgrepCommit, output.Trim());
@@ -358,8 +358,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("verify_binary_hash \"reference rg\"", script, StringComparison.Ordinal);
         Assert.Contains("verify_binary_hash \"PCRE2 reference rg\"", script, StringComparison.Ordinal);
         Assert.DoesNotContain("rustup toolchain install", script, StringComparison.Ordinal);
-        Assert.DoesNotContain("cargo \"+$RUST_TOOLCHAIN\" build", script, StringComparison.Ordinal);
-        Assert.Contains("cargo \"+$RUST_TOOLCHAIN\" build --profile \"$RG_PROFILE\" --bin rg", captureScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("rustup run \"$RUST_TOOLCHAIN\" cargo build", script, StringComparison.Ordinal);
+        Assert.Contains("rustup run \"$RUST_TOOLCHAIN\" cargo build --profile \"$RG_PROFILE\" --bin rg", captureScript, StringComparison.Ordinal);
         Assert.Contains("CARGO_TARGET_DIR=\"$REFERENCE/target/pcre2\"", captureScript, StringComparison.Ordinal);
         Assert.Contains("PCRE2_SYS_STATIC=1", captureScript, StringComparison.Ordinal);
         Assert.Contains("archive_path = \"%s\"", captureScript, StringComparison.Ordinal);
@@ -383,8 +383,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.DoesNotContain("Invoke-Checked cargo", windowsScript, StringComparison.Ordinal);
         Assert.DoesNotContain("Ensure-Rustup", windowsScript, StringComparison.Ordinal);
         Assert.DoesNotContain("PCRE2_SYS_STATIC", windowsScript, StringComparison.Ordinal);
-        Assert.Contains("Invoke-Checked cargo \"+$RustToolchain\" build --profile $RgProfile --bin rg", windowsCaptureScript, StringComparison.Ordinal);
-        Assert.Contains("Invoke-Checked cargo \"+$RustToolchain\" build --profile $RgPcre2Profile --features $RgPcre2Features --bin rg", windowsCaptureScript, StringComparison.Ordinal);
+        Assert.Contains("Invoke-Checked rustup run $RustToolchain cargo build --profile $RgProfile --bin rg", windowsCaptureScript, StringComparison.Ordinal);
+        Assert.Contains("Invoke-Checked rustup run $RustToolchain cargo build --profile $RgPcre2Profile --features $RgPcre2Features --bin rg", windowsCaptureScript, StringComparison.Ordinal);
         Assert.Contains("SCOUT_HOST_RID", preflight, StringComparison.Ordinal);
         Assert.Contains("SCOUT_ORACLE_ENVIRONMENT", preflight, StringComparison.Ordinal);
         Assert.Contains("mark_root_safe_for_git", preflight, StringComparison.Ordinal);
@@ -413,51 +413,51 @@ public sealed partial class PinnedConfigurationTests
             (
                 "osx-arm64",
                 "tests/oracles/ripgrep/osx-arm64.zip",
-                "ca957b7fca6b58fb056f030859d5b7e6414bb37936478a7320a114c73274853f",
+                "5c83fb0f4653e5c7c1ea03246656a09c1d6936321976e8ea2593f8b5d5c9dfa2",
                 "artifacts/ripgrep-oracle/osx-arm64/ripgrep/target/release-lto/rg",
-                "e73f0e779d12d2f106b814c0168fdac0ecd94d8d1b9dc9c2e413f51a5d98773c",
+                "1710e3f03da4e82bec551f5b9e2b1341646e66ae6278a762831696fbf8e3e8e7",
                 "artifacts/ripgrep-oracle/osx-arm64/ripgrep/target/pcre2/release-lto/rg",
-                "f70d897d9cd1a361f136a7f631ca01a9c693124c839656ea1a1a2fac18467363"),
+                "f840586145d1e870426227b31d4fa8086641c72801d81775058a7e0392c7efc5"),
             (
                 "osx-x64",
                 "tests/oracles/ripgrep/osx-x64.zip",
-                "8416132f8df09c234aa9eae4bda1c986d1875655c95df03e2816ae80945c5649",
+                "c043d2d1178aa10cd83ac85e0df2c915a4eaf013e9640642fd0ce0e942f66980",
                 "artifacts/ripgrep-oracle/osx-x64/ripgrep/target/release-lto/rg",
-                "c44615baad18aeb7e4ed8f145c0c74df54bffe2136b38c501a144d664dd28683",
+                "858d705aea738b018e92b1a900c2611237df2598fe2538f5630fe4b525a5a027",
                 "artifacts/ripgrep-oracle/osx-x64/ripgrep/target/pcre2/release-lto/rg",
-                "6c1306b2d604d259e5ba15478eb2742b79ff746a6763354e99f077c6c0b962ac"),
+                "026944087c35cbd437e6beaf99354b43eaeb0af0183fb5b5cf819b50e3085ec4"),
             (
                 "linux-x64",
                 "tests/oracles/ripgrep/linux-x64.zip",
-                "82ead198640ed8b34753c635ccb44b90b4f8bca69f121f682afc1215d0581610",
+                "c065c34e256f170a037508428458c3a14e579d23a155568bbf7d10d9249f59c3",
                 "artifacts/ripgrep-oracle/linux-x64/ripgrep/target/release-lto/rg",
-                "72867b9f6264ce775d3d7a9a5467f8a7eac027072556d72b09b929ada166481f",
+                "35574a03f422fc8277b071fd413d7e67278dc9cbcbbdce4188d1b0042a36d5bc",
                 "artifacts/ripgrep-oracle/linux-x64/ripgrep/target/pcre2/release-lto/rg",
-                "da2c2a9028c8c6262846e80162fa1ecfc05e9d1c1f3cea8c2f4deb3512865cd8"),
+                "b95aedd760505771e4b00a4842380d9e1a51a71a7d7be58ba84aa97d6d829c0f"),
             (
                 "linux-arm64",
                 "tests/oracles/ripgrep/linux-arm64.zip",
-                "a6d3a5bf087f0e63fd2c6e7a237b344f6dcdf72fb5c3180a1f7f4382d80db1fd",
+                "a922cb279cfe253f03f1c0b77f5c0ea4af1830bb4f9a922ef4d8d974fde67375",
                 "artifacts/ripgrep-oracle/linux-arm64/ripgrep/target/release-lto/rg",
-                "66b647fead60eb0bd793dd6ddde779e4797bb6e3160d8a7087377784b7ed372d",
+                "b9d59568a0e6cc96f5a6f3ba251cbf28d51300f614141f34c3099b28d90f4bcb",
                 "artifacts/ripgrep-oracle/linux-arm64/ripgrep/target/pcre2/release-lto/rg",
-                "6f67dc71baf7200c25f2cb70ed2c541a9b4edd93c1ae9414d076816d1e1df77b"),
+                "ba9dbdb86604a81ef1cd1f7ea97088860c8a1279f7436ba09bc45ba3f870a31c"),
             (
                 "win-x64",
                 "tests/oracles/ripgrep/win-x64.zip",
-                "d197b5a2bfe174d90d2fddf167cc65d4b2272e158cf8f6ac16b9902d613e2993",
+                "71d0e798045a5adc96e75840f1ef32ed5ad15a2648969ebf75901c86ac45e34b",
                 "artifacts/ripgrep-oracle/win-x64/ripgrep/target/release-lto/rg.exe",
-                "fe41d3c694b071f1c2b02f6bcd5e290032d13003ec303a1deab9cdf8b47353ba",
+                "8878b7f7729d30fcf388e963a92a10acf5ae44ae9b15ef597ce129346bdb1040",
                 "artifacts/ripgrep-oracle/win-x64/ripgrep/target/pcre2/release-lto/rg.exe",
-                "57153890221954c2ded22c9176f4233975cf1f10f83966539c2dcdf0ff4bc339"),
+                "6f1cb44fc9e2bd0c1801f300a24da1748070ada7e12cac55d360d7f4ddff7a1d"),
             (
                 "win-arm64",
                 "tests/oracles/ripgrep/win-arm64.zip",
-                "4d0eed840c250237718816e0f8bd5fa69102def4b824675eacb4b88d27090ce6",
+                "0bce651ae9f9315fa0c9d685ea57ea25b0ecbd006088f9a584e9cb4ad479239f",
                 "artifacts/ripgrep-oracle/win-arm64/ripgrep/target/release-lto/rg.exe",
-                "17fe68feb940d7b96031efac8094e0376c5e3d109e87d4577de493a2abe94cd2",
+                "8bf779c30a7dca98c9cbcdebbace2d305601ea19ab9f9d41d66365f53c36eb85",
                 "artifacts/ripgrep-oracle/win-arm64/ripgrep/target/pcre2/release-lto/rg.exe",
-                "a5891179d4c8aa2dc61a337f27d27cbea0349f760c696acb0d6abf4aa1f05329"),
+                "142f39beae12595f6b9b13d0b0fae08d9f48f52b2e0031c8de60891d9ad53be0"),
         ];
 
         for (int index = 0; index < rows.Length; index++)
@@ -535,7 +535,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("host_rid()", script, StringComparison.Ordinal);
         Assert.Contains("oracle_environment()", script, StringComparison.Ordinal);
         Assert.Contains("artifacts/ripgrep-oracle/$HOST_RID/ripgrep", script, StringComparison.Ordinal);
-        Assert.Contains("cargo \"+$RUST_TOOLCHAIN\" build --profile \"$RG_PROFILE\" --bin rg", script, StringComparison.Ordinal);
+        Assert.Contains("rustup run \"$RUST_TOOLCHAIN\" cargo build --profile \"$RG_PROFILE\" --bin rg", script, StringComparison.Ordinal);
         Assert.Contains("PCRE2_SYS_STATIC=1", script, StringComparison.Ordinal);
         Assert.Contains("sha256_file \"$RG_PATH\"", script, StringComparison.Ordinal);
         Assert.Contains("zip -X -q \"$ORACLE_ARCHIVE\"", script, StringComparison.Ordinal);
@@ -547,7 +547,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("Get-HostRid", windowsScript, StringComparison.Ordinal);
         Assert.Contains("artifacts/ripgrep-oracle/$HostRid/ripgrep", windowsScript, StringComparison.Ordinal);
         Assert.Contains("rg.exe", windowsScript, StringComparison.Ordinal);
-        Assert.Contains("Invoke-Checked cargo \"+$RustToolchain\" build --profile $RgProfile --bin rg", windowsScript, StringComparison.Ordinal);
+        Assert.Contains("Invoke-Checked rustup run $RustToolchain cargo build --profile $RgProfile --bin rg", windowsScript, StringComparison.Ordinal);
         Assert.Contains("PCRE2_SYS_STATIC", windowsScript, StringComparison.Ordinal);
         Assert.Contains("Get-Sha256 $RgPath", windowsScript, StringComparison.Ordinal);
         Assert.Contains("New-OracleArchive", windowsScript, StringComparison.Ordinal);
@@ -581,7 +581,7 @@ public sealed partial class PinnedConfigurationTests
         (int exitCode, string output, string error) = RunProcess(pinnedRipgrepBinaryPath, ["--version"]);
 
         Assert.True(exitCode == 0, error);
-        Assert.StartsWith("ripgrep 15.1.0 (rev 4857d6fa67)", output, StringComparison.Ordinal);
+        Assert.StartsWith("ripgrep 15.2.0 (rev e89fff89ac)", output, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -637,7 +637,7 @@ public sealed partial class PinnedConfigurationTests
 
         AssertPackageVersion(document, "Microsoft.DotNet.ILCompiler", "10.0.2");
         AssertPackageVersion(document, "Microsoft.CodeAnalysis.NetAnalyzers", "10.0.102");
-        AssertPackageVersion(document, "Microsoft.SourceLink.GitHub", "10.0.102");
+        AssertPackageVersion(document, "Microsoft.SourceLink.GitHub", "10.0.111");
         AssertPackageVersion(document, "Microsoft.VisualStudio.Threading.Analyzers", "17.14.15");
         AssertPackageVersion(document, "BenchmarkDotNet", "0.15.8");
         AssertPackageVersion(document, "SharpFuzz", "2.2.0");
@@ -1731,8 +1731,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("PARITY.md", windowsPackageScript, StringComparison.Ordinal);
         Assert.Contains("SCOUT-PACKAGE.txt", unixPackageScript, StringComparison.Ordinal);
         Assert.Contains("SCOUT-PACKAGE.txt", windowsPackageScript, StringComparison.Ordinal);
-        Assert.Contains("4857d6fa67db69a95cd4b6f2adda5d807d4d0119", unixPackageScript, StringComparison.Ordinal);
-        Assert.Contains("4857d6fa67db69a95cd4b6f2adda5d807d4d0119", windowsPackageScript, StringComparison.Ordinal);
+        Assert.Contains("e89fff89ac9af12e8d4ce9d5fd07beb408ca730f", unixPackageScript, StringComparison.Ordinal);
+        Assert.Contains("e89fff89ac9af12e8d4ce9d5fd07beb408ca730f", windowsPackageScript, StringComparison.Ordinal);
         Assert.Contains("sha256_file \"$ARCHIVE\"", unixPackageScript, StringComparison.Ordinal);
         Assert.Contains("Get-FileHash -Algorithm SHA256 -Path $Archive", windowsPackageScript, StringComparison.Ordinal);
 
@@ -1783,7 +1783,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("Scout.Text.Regex", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("Scout.IO.Globbing", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("Scout.IO.Ignore", releaseWorkflow, StringComparison.Ordinal);
-        Assert.Contains("Verify library install and AOT publish", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("Execute library package consumers", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("name: scout-library-packages", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("- pack-library-packages", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("Verify NuGet package set", releaseWorkflow, StringComparison.Ordinal);
@@ -1937,9 +1937,9 @@ public sealed partial class PinnedConfigurationTests
         string preflight = File.ReadAllText(Path.Combine(root, "eng", "preflight.sh"));
 
         Assert.Contains("name = \"regex-automata\"", cargoLock, StringComparison.Ordinal);
-        Assert.Contains("version = \"0.4.13\"", cargoLock, StringComparison.Ordinal);
+        Assert.Contains("version = \"0.4.15\"", cargoLock, StringComparison.Ordinal);
         Assert.Contains("name = \"regex-syntax\"", cargoLock, StringComparison.Ordinal);
-        Assert.Contains("version = \"0.8.8\"", cargoLock, StringComparison.Ordinal);
+        Assert.Contains("version = \"0.8.11\"", cargoLock, StringComparison.Ordinal);
         Assert.Contains("compare_pinned_text_file()", preflight, StringComparison.Ordinal);
         Assert.Contains("artifacts/preflight/text-compare", preflight, StringComparison.Ordinal);
         Assert.Contains("mkdir -p \"$text_compare_tmp\"", preflight, StringComparison.Ordinal);
@@ -1947,7 +1947,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("right_normalized=\"$(mktemp \"$text_compare_tmp/right.XXXXXX\")\"", preflight, StringComparison.Ordinal);
         Assert.Contains("normalize_windows_text_file \"$left_normalized\"", preflight, StringComparison.Ordinal);
         Assert.Contains("normalize_windows_text_file \"$right_normalized\"", preflight, StringComparison.Ordinal);
-        Assert.Contains("compare_pinned_text_file \"$REFERENCE/Cargo.lock\" \"$ROOT/upstream/Cargo.lock\" \"Pinned Cargo.lock\"", preflight, StringComparison.Ordinal);
+        Assert.Contains("compare_pinned_text_file \"$reference_lock\" \"$ROOT/upstream/Cargo.lock\" \"Release Cargo.lock\"", preflight, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1967,7 +1967,7 @@ public sealed partial class PinnedConfigurationTests
         string regexUnicodePropertyNames = File.ReadAllText(Path.Combine(root, "src", "Scout.Automata.Syntax", "RegexUnicodePropertyNames.cs"));
         string regexUnicodeTables = File.ReadAllText(Path.Combine(root, "src", "Scout.Automata", "RegexUnicodeTables.cs"));
         string ucdArchive = Path.Combine(root, "upstream", "ucd", "UCD-16.0.0.zip");
-        string tablesRoot = Path.Combine(root, "upstream", "regex-syntax-0.8.8", "unicode_tables");
+        string tablesRoot = Path.Combine(root, "upstream", "regex-syntax-0.8.11", "unicode_tables");
         string[] expectedTables =
         [
             "age.rs",
@@ -2097,51 +2097,51 @@ public sealed partial class PinnedConfigurationTests
             ("src/Scout.App/UPSTREAM.md",
             [
                 "name = \"ripgrep\"",
-                "version = \"15.1.0\"",
+                "version = \"15.2.0\"",
                 "commit = \"" + PinnedRipgrepCommit + "\"",
                 "name = \"grep\"",
                 "version = \"0.4.1\"",
                 "disposition = \"workspace facade folded into Scout project references\"",
                 "name = \"lexopt\"",
-                "version = \"0.3.1\"",
+                "version = \"0.3.2\"",
                 "name = \"textwrap\"",
                 "version = \"0.16.2\"",
             ]),
             ("src/Scout.Automata/UPSTREAM.md",
             [
                 "name = \"regex-automata\"",
-                "version = \"0.4.13\"",
-                "checksum = \"5276caf25ac86c8d810222b3dbb938e512c55c6831a10f3e6ed1c93b84041f1c\"",
+                "version = \"0.4.15\"",
+                "checksum = \"1f388202e4b80542a0921078cc23b6333bcf1409c1e3f86404cae4766a6131db\"",
                 "commit = \"" + PinnedRipgrepCommit + "\"",
                 "name = \"regex\"",
-                "version = \"1.12.2\"",
+                "version = \"1.13.0\"",
             ]),
             ("src/Scout.Automata.AhoCorasick/UPSTREAM.md",
             [
                 "name = \"aho-corasick\"",
-                "version = \"1.1.3\"",
-                "checksum = \"8e60d3430d3a69478ad0993f19238d2df97c507009a52b3c10addcd7f6bcb916\"",
+                "version = \"1.1.4\"",
+                "checksum = \"ddd31a130427c27518df266943a5308ed92d4b226cc639f5a8f1002816174301\"",
                 "commit = \"" + PinnedRipgrepCommit + "\"",
             ]),
             ("src/Scout.Automata.Memmem/UPSTREAM.md",
             [
                 "name = \"memchr\"",
-                "version = \"2.7.6\"",
-                "checksum = \"f52b00d39961fc5b2736ea853c9cc86238e165017a493d1d5c8eac6bdc4cc273\"",
+                "version = \"2.8.3\"",
+                "checksum = \"cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98\"",
                 "commit = \"" + PinnedRipgrepCommit + "\"",
             ]),
             ("src/Scout.Automata.Syntax/UPSTREAM.md",
             [
                 "name = \"regex-syntax\"",
-                "version = \"0.8.8\"",
-                "checksum = \"7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58\"",
+                "version = \"0.8.11\"",
+                "checksum = \"d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4\"",
                 "commit = \"" + PinnedRipgrepCommit + "\"",
             ]),
             ("src/Scout.Bytes/UPSTREAM.md",
             [
                 "name = \"bstr\"",
-                "version = \"1.12.0\"",
-                "checksum = \"234113d19d0d7d613b40e86fb654acf958910802bcceab913a4f9e7cda03b1a4\"",
+                "version = \"1.13.0\"",
+                "checksum = \"1f7dc094d718f2e1c1559ad110e27eeaae14a5465d3d56dd6dbd793079fbd530\"",
                 "commit = \"" + PinnedRipgrepCommit + "\"",
             ]),
             ("src/Scout.Cli/UPSTREAM.md",
@@ -2157,8 +2157,8 @@ public sealed partial class PinnedConfigurationTests
             ("src/Scout.Diagnostics/UPSTREAM.md",
             [
                 "name = \"log\"",
-                "version = \"0.4.28\"",
-                "checksum = \"34080505efa8e45a4b816c349525ebe327ceaa8559756f0356cba97ef3bf7432\"",
+                "version = \"0.4.33\"",
+                "checksum = \"0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad\"",
                 "commit = \"" + PinnedRipgrepCommit + "\"",
             ]),
             ("src/Scout.Encoding/UPSTREAM.md",
@@ -2178,20 +2178,20 @@ public sealed partial class PinnedConfigurationTests
             ("src/Scout.Errors/UPSTREAM.md",
             [
                 "name = \"anyhow\"",
-                "version = \"1.0.100\"",
-                "checksum = \"a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61\"",
+                "version = \"1.0.103\"",
+                "checksum = \"2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3\"",
                 "commit = \"" + PinnedRipgrepCommit + "\"",
             ]),
             ("src/Scout.Globbing/UPSTREAM.md",
             [
                 "name = \"globset\"",
-                "version = \"0.4.18\"",
+                "version = \"0.4.19\"",
                 "commit = \"" + PinnedRipgrepCommit + "\"",
             ]),
             ("src/Scout.Ignore/UPSTREAM.md",
             [
                 "name = \"ignore\"",
-                "version = \"0.4.25\"",
+                "version = \"0.4.29\"",
                 "commit = \"" + PinnedRipgrepCommit + "\"",
                 "name = \"walkdir\"",
                 "version = \"2.5.0\"",
@@ -2200,19 +2200,19 @@ public sealed partial class PinnedConfigurationTests
                 "version = \"1.0.6\"",
                 "checksum = \"93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502\"",
                 "name = \"crossbeam-deque\"",
-                "version = \"0.8.6\"",
-                "checksum = \"9dd111b7b7f7d55b72c0a6ae361660ee5853c9af73f70c3c2ef6858b950e2e51\"",
+                "version = \"0.8.7\"",
+                "checksum = \"5181e0de7b61eb03a81e347d6dd8797bae9da5146707b51077e2d71a54ec0ceb\"",
             ]),
             ("src/Scout.Matching/UPSTREAM.md",
             [
                 "name = \"grep-matcher\"",
-                "version = \"0.1.8\"",
+                "version = \"0.1.9\"",
                 "commit = \"" + PinnedRipgrepCommit + "\"",
             ]),
             ("src/Scout.Os/UPSTREAM.md",
             [
                 "name = \"libc\"",
-                "version = \"0.2.177\"",
+                "version = \"0.2.186\"",
                 "name = \"windows-sys\"",
                 "version = \"0.61.2\"",
                 "name = \"winapi-util\"",
@@ -2222,7 +2222,7 @@ public sealed partial class PinnedConfigurationTests
             ("src/Scout.Pcre2/UPSTREAM.md",
             [
                 "name = \"grep-pcre2\"",
-                "version = \"0.1.9\"",
+                "version = \"0.1.10\"",
                 "commit = \"" + PinnedRipgrepCommit + "\"",
                 "name = \"pcre2\"",
                 "version = \"0.2.11\"",
@@ -2236,11 +2236,11 @@ public sealed partial class PinnedConfigurationTests
                 "version = \"0.3.1\"",
                 "commit = \"" + PinnedRipgrepCommit + "\"",
                 "name = \"serde_json\"",
-                "version = \"1.0.145\"",
+                "version = \"1.0.150\"",
                 "name = \"itoa\"",
-                "version = \"1.0.15\"",
-                "name = \"ryu\"",
-                "version = \"1.0.20\"",
+                "version = \"1.0.18\"",
+                "name = \"zmij\"",
+                "version = \"1.0.23\"",
             ]),
             ("src/Scout.Regex/UPSTREAM.md",
             [
@@ -2251,11 +2251,11 @@ public sealed partial class PinnedConfigurationTests
             ("src/Scout.Searching/UPSTREAM.md",
             [
                 "name = \"grep-searcher\"",
-                "version = \"0.1.16\"",
+                "version = \"0.1.17\"",
                 "commit = \"" + PinnedRipgrepCommit + "\"",
                 "name = \"memmap2\"",
-                "version = \"0.9.9\"",
-                "checksum = \"744133e4a0e0a658e1374cf3bf8e415c4052a15a111acd372764c55b4177d490\"",
+                "version = \"0.9.11\"",
+                "checksum = \"d1219ed1b7f229ee7104d281dd01d6802fe28bb6e95d292942c4daacdeb798c0\"",
             ]),
             ("src/Scout.SourceGen/UPSTREAM.md",
             [
@@ -2357,15 +2357,15 @@ public sealed partial class PinnedConfigurationTests
         string[] requiredFragments =
         [
             "## Lockfile Entries With No Scout Port",
-            "| `arbitrary`, `derive_arbitrary` | `1.4.2` |",
-            "| `cc`, `find-msvc-tools`, `jobserver`, `pkg-config`, `shlex` | `1.2.41`, `0.1.4`, `0.1.34`, `0.3.32`, `1.3.0` |",
+            "| `arbitrary`, `derive_arbitrary` | `1.4.2`, `1.4.2` |",
+            "| `cc`, `find-msvc-tools`, `jobserver`, `pkg-config`, `shlex` | `1.2.67`, `0.1.9`, `0.1.35`, `0.3.33`, `2.0.1` |",
             "| `cfg-if` | `1.0.4` |",
-            "| `crossbeam-channel`, `crossbeam-epoch`, `crossbeam-utils` | `0.5.15`, `0.9.18`, `0.8.21` |",
-            "| `getrandom`, `r-efi`, `wasip2`, `wit-bindgen` | `0.3.4`, `5.3.0`, `1.0.1+wasi-0.2.4`, `0.46.0` |",
+            "| `crossbeam-channel`, `crossbeam-epoch`, `crossbeam-utils` | `0.5.16`, `0.9.20`, `0.8.22` |",
+            "| `getrandom`, `r-efi` | `0.4.3`, `6.0.0` |",
             "| `glob` | `0.3.3` |",
-            "| `proc-macro2`, `quote`, `syn`, `unicode-ident` | `1.0.101`, `1.0.41`, `2.0.107`, `1.0.20` |",
-            "| `serde`, `serde_core`, `serde_derive` | `1.0.228` |",
-            "| `tikv-jemallocator`, `tikv-jemalloc-sys` | `0.6.1`, `0.6.1+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7` |",
+            "| `proc-macro2`, `quote`, `syn`, `unicode-ident` | `1.0.106`, `1.0.46`, `2.0.119`, `1.0.24` |",
+            "| `serde`, `serde_core`, `serde_derive` | `1.0.228`, `1.0.228`, `1.0.228` |",
+            "| `tikv-jemallocator`, `tikv-jemalloc-sys` | `0.7.0`, `0.7.1+5.3.1-0-g81034ce1f1373e37dc865038e1bc8eeecf559ce8` |",
             "| `windows-link` | `0.2.1` |",
         ];
 
@@ -2395,25 +2395,25 @@ public sealed partial class PinnedConfigurationTests
             "| grep-searcher | 0.1.16, from pinned ripgrep workspace | MIT OR Unlicense |",
             "| globset | 0.4.18, from pinned ripgrep workspace | MIT OR Unlicense |",
             "| ignore | 0.4.25, from pinned ripgrep workspace | MIT OR Unlicense |",
-            "| regex | 1.12.2 | MIT OR Apache-2.0 |",
-            "| regex-syntax | 0.8.8 | MIT OR Apache-2.0 |",
-            "| regex-automata | 0.4.13 | MIT OR Apache-2.0 |",
-            "| aho-corasick | 1.1.3 | MIT OR Unlicense |",
-            "| memchr | 2.7.6 | MIT OR Unlicense |",
-            "| bstr | 1.12.0 | MIT OR Apache-2.0 |",
+            "| regex | 1.13.0 | MIT OR Apache-2.0 |",
+            "| regex-syntax | 0.8.11 | MIT OR Apache-2.0 |",
+            "| regex-automata | 0.4.15 | MIT OR Apache-2.0 |",
+            "| aho-corasick | 1.1.4 | MIT OR Unlicense |",
+            "| memchr | 2.8.3 | MIT OR Unlicense |",
+            "| bstr | 1.13.0 | MIT OR Apache-2.0 |",
             "| encoding_rs | 0.8.35 | MIT OR Apache-2.0; WHATWG data under BSD-3-Clause |",
             "| encoding_rs_io | 0.1.7 | MIT OR Apache-2.0 |",
             "| walkdir | 2.5.0 | MIT OR Unlicense |",
             "| same-file | 1.0.6 | MIT OR Unlicense |",
             "| termcolor | 1.4.1 | MIT OR Unlicense |",
-            "| crossbeam-deque | 0.8.6 | MIT OR Apache-2.0 |",
-            "| crossbeam-channel | 0.5.15 | MIT OR Apache-2.0 |",
-            "| crossbeam-epoch | 0.9.18 | MIT OR Apache-2.0 |",
-            "| crossbeam-utils | 0.8.21 | MIT OR Apache-2.0 |",
-            "| anyhow | 1.0.100 | MIT OR Apache-2.0 |",
-            "| lexopt | 0.3.1 | MIT |",
+            "| crossbeam-deque | 0.8.7 | MIT OR Apache-2.0 |",
+            "| crossbeam-channel | 0.5.16 | MIT OR Apache-2.0 |",
+            "| crossbeam-epoch | 0.9.20 | MIT OR Apache-2.0 |",
+            "| crossbeam-utils | 0.8.22 | MIT OR Apache-2.0 |",
+            "| anyhow | 1.0.103 | MIT OR Apache-2.0 |",
+            "| lexopt | 0.3.2 | MIT |",
             "| textwrap | 0.16.2 | MIT |",
-            "| log | 0.4.28 | MIT OR Apache-2.0 |",
+            "| log | 0.4.33 | MIT OR Apache-2.0 |",
             "| pcre2 | 0.2.11 Rust binding | MIT OR Unlicense |",
             "| pcre2-sys | 0.2.10 Rust binding | MIT OR Unlicense |",
             "| PCRE2 C library | 10.46, vendored in `native/pcre2/pcre2-10.46` | BSD-3-Clause |",
@@ -2515,7 +2515,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("/DSUPPORT_UNICODE=1", windowsBuildScript, StringComparison.Ordinal);
         Assert.Contains("/DSUPPORT_JIT=1", windowsBuildScript, StringComparison.Ordinal);
         Assert.Contains("osx-arm64|osx-x64)", toolchainScript, StringComparison.Ordinal);
-        Assert.Contains("linux-x64|linux-arm64)", toolchainScript, StringComparison.Ordinal);
+        Assert.Contains("linux-x64|linux-arm64|linux-musl-arm64)", toolchainScript, StringComparison.Ordinal);
         Assert.DoesNotContain("not implemented", appBuildScript, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("\"$ROOT/native/pcre2/build-unix.sh\" \"$RID\"", appBuildScript, StringComparison.Ordinal);
         Assert.Contains("REAL_BIN=\"$BIN/scout-real\"", appBuildScript, StringComparison.Ordinal);
@@ -2608,7 +2608,7 @@ public sealed partial class PinnedConfigurationTests
             Assert.Contains("ripgrep_pcre2_rg_sha256 = \"" + expectedPcre2RipgrepSha256 + "\"", prerequisiteLock, StringComparison.Ordinal);
         }
 
-        Assert.Contains("ripgrep_pcre2_reported_version = \"" + expectedPcre2ReportedVersion + "\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("pcre2_reported_version = \"" + expectedPcre2ReportedVersion + "\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("compare_case f1155_auto_hybrid_regex exact --no-pcre2 --auto-hybrid-regex '(?<=the )Sherlock'", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case auto_recursive_lookahead_threads sort-lines --engine=auto --threads 4 -n 'foo(?=bar)' pcre2-dir", differentialScript, StringComparison.Ordinal);
         Assert.Contains("compare_case issue39_auto_numbered_backreference exact --engine=auto '(Scout)\\1' issue39-auto", differentialScript, StringComparison.Ordinal);
@@ -2766,7 +2766,7 @@ public sealed partial class PinnedConfigurationTests
         [
             ("gzip", "Apple gzip 479", "/usr/bin/gzip", "C78F313867A6978148F989C8E758FB7A9BA7FF324F0B359B2053F5172F970BE5"),
             ("bzip2", "1.0.8", "/usr/bin/bzip2", "C9C5D486EE877F9104363EE0FE20539D4C1FBBB76F2F322D5E871F40AAF6CE26"),
-            ("xz", "5.8.2", "/opt/homebrew/bin/xz", "B7926EA19ABF39913EE064329261D03EC66271CF5EE4759E5A1A928A3E165540"),
+            ("xz", "5.8.2", "/opt/homebrew/bin/xz", "2ABC3832C2F4FC60CBD44FAC5CC242DE24F123D7FBAF18206060684F84AA5E3F"),
             ("zstd", "1.5.7", "/opt/homebrew/bin/zstd", "AFF8169FB421BB925FB16C44A7E0143FA2C7A941DC45CCE76B15062A2CE54917"),
             ("lz4", "1.10.0", "/opt/homebrew/bin/lz4", "B7DCCDC84A76F0359C26C67393A6D50B4B073F8BF85078DCA7CCF877502B00E5"),
             ("brotli", "1.2.0", "/opt/homebrew/bin/brotli", "528B0B00C1B2F8323E6185DC40D10F0324D21F9CBCCA6D8B549F6B2E49520ECF"),
@@ -2804,11 +2804,12 @@ public sealed partial class PinnedConfigurationTests
     {
         (string Rid, string Name, string Version, string Path, string[] Sha256Values)[] tools =
         [
-            ("osx-arm64", "gzip", "Apple gzip 479", "/usr/bin/gzip", ["7bd218bc6b12fced475163901547a796736f72f99533cbec60eea150ed21afa3", "c78f313867a6978148f989c8e758fb7a9ba7ff324f0b359b2053f5172f970be5"]),
-            ("osx-arm64", "bzip2", "1.0.8", "/usr/bin/bzip2", ["14e28b6b7955cbd6cd2a8139ca41186a922143a4fa3715ddd8e331f41db8fc80", "c9c5d486ee877f9104363ee0fe20539d4c1fbbb76f2f322d5e871f40aaf6ce26"]),
+            ("osx-arm64", "gzip", "Apple gzip 479", "/usr/bin/gzip", ["0f655a20639414497cd4ec5f614c41ee8bf329c2daa0ade0d6ae5e549b9c6f9e"]),
+            ("osx-arm64", "bzip2", "1.0.8", "/usr/bin/bzip2", ["ade8a304cfcb33d8d2f4a5355d1c078712f8228cf079bc4982c3bb2e6316f885"]),
             ("osx-arm64", "xz", "5.8.3", "/opt/homebrew/bin/xz", ["16b9994cca884ed2a66ba63736f1450049cbc6fd1d93076c51e5f0e7f7a71381", "995c8e2f72446f0d0e3a29f6c3d52286cfecedfc4ffb2b42d25c3ce1ad77034c"]),
             ("osx-arm64", "zstd", "1.5.7", "/opt/homebrew/bin/zstd", ["9b5676aae3cb048cf68e2b40c543d9523db3b4cb911b31861bd5f4fcb050c4b6", "aff8169fb421bb925fb16c44a7e0143fa2c7a941dc45cce76b15062a2ce54917"]),
-            ("osx-arm64", "uncompress", "Apple compress file_cmds-479", "/usr/bin/uncompress", ["aec4becd30850078aa28747caa0c76227c9e848378377e37f98d531203fe6aa4", "bf8cb1cefedfbf86fbb38dd42278fcad8fe020f3b8989897f1a0b2187aabdda5"]),
+            ("osx-arm64", "lz4", "1.10.0", "/opt/homebrew/bin/lz4", ["583969b1933b0ce5ffa808db9aa846f3acd07bf8e817c34914d89a4a59e27c7d"]),
+            ("osx-arm64", "uncompress", "Apple compress file_cmds-479", "/usr/bin/uncompress", ["66da7ddde3ab1c9f93d1307bae06086570e3aed3c72827ccef22c251f5b2d874"]),
             ("osx-x64", "gzip", "Apple gzip 479", "/usr/bin/gzip", ["7bd218bc6b12fced475163901547a796736f72f99533cbec60eea150ed21afa3", "dd440e34e25cb641b5db68cf2e14f9d1fef17c61cef984b920b8bc420c09b9dd"]),
             ("osx-x64", "bzip2", "1.0.8", "/usr/bin/bzip2", ["14e28b6b7955cbd6cd2a8139ca41186a922143a4fa3715ddd8e331f41db8fc80", "18b3c72a2ade1bf79ffe25299620aa256d17f14e74c8311dec8b984588285176"]),
             ("osx-x64", "xz", "5.8.3", "/usr/local/bin/xz", ["2ce7374ab7c6426659e3662a6a759df41e03e30bfd90898073bab1d77f7c51b2", "0b7b7bfc8f9d41b22b9a7d10ee4f56093cefea18a257c4c299a52186ac1a8921"]),
@@ -2851,11 +2852,8 @@ public sealed partial class PinnedConfigurationTests
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
         var expectedMultipleHashTables = new Dictionary<(string Rid, string Environment, string Name), int>
         {
-            [("osx-arm64", "github-actions", "gzip")] = 2,
-            [("osx-arm64", "github-actions", "bzip2")] = 2,
             [("osx-arm64", "github-actions", "xz")] = 2,
             [("osx-arm64", "github-actions", "zstd")] = 2,
-            [("osx-arm64", "github-actions", "uncompress")] = 2,
             [("osx-x64", "github-actions", "gzip")] = 2,
             [("osx-x64", "github-actions", "bzip2")] = 2,
             [("osx-x64", "github-actions", "xz")] = 2,
@@ -3233,7 +3231,7 @@ public sealed partial class PinnedConfigurationTests
         }
 
         Assert.True(assignmentCount > 0);
-        Assert.Equal(10, arrayAssignmentCount);
+        Assert.Equal(7, arrayAssignmentCount);
         Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
     }
 
@@ -3721,96 +3719,96 @@ public sealed partial class PinnedConfigurationTests
         (string Name, string RelativePath, string Sha256)[] corpora =
         [
             (
-                "regex-1.12.2-misc",
-                "upstream/regex-1.12.2/testdata/misc.toml",
+                "regex-1.13.0-misc",
+                "upstream/regex-1.13.0/testdata/misc.toml",
                 "32C9591655C6FB118DFEFCB4DE49A04820A63CB960533DFC2538CDAABF4F4047"),
             (
-                "regex-1.12.2-flags",
-                "upstream/regex-1.12.2/testdata/flags.toml",
+                "regex-1.13.0-flags",
+                "upstream/regex-1.13.0/testdata/flags.toml",
                 "9A7E001808195C84F2A7D3E18BC0A82C7386E60F03A616E99AF00C3F7F2C3FD4"),
             (
-                "regex-1.12.2-iter",
-                "upstream/regex-1.12.2/testdata/iter.toml",
+                "regex-1.13.0-iter",
+                "upstream/regex-1.13.0/testdata/iter.toml",
                 "6875460302974A5B3073A7304A865C45ABA9653C54AFEA2C4D26E1EA248A81F7"),
             (
-                "regex-1.12.2-empty",
-                "upstream/regex-1.12.2/testdata/empty.toml",
+                "regex-1.13.0-empty",
+                "upstream/regex-1.13.0/testdata/empty.toml",
                 "738DBE92FBD8971385A1CF3AFFB0E956E5B692C858B9B48439D718F10801C08E"),
             (
-                "regex-1.12.2-crazy",
-                "upstream/regex-1.12.2/testdata/crazy.toml",
+                "regex-1.13.0-crazy",
+                "upstream/regex-1.13.0/testdata/crazy.toml",
                 "A146E2D2E23F1A57168979D9B1FC193C2BA38DCA66294B61140D6D2A2958EC86"),
             (
-                "regex-1.12.2-multiline",
-                "upstream/regex-1.12.2/testdata/multiline.toml",
+                "regex-1.13.0-multiline",
+                "upstream/regex-1.13.0/testdata/multiline.toml",
                 "EB07CF5427E6DDBCF61F4CC64C2D74FF41B5EF75EF857959651B20196F3CD157"),
             (
-                "regex-1.12.2-line-terminator",
-                "upstream/regex-1.12.2/testdata/line-terminator.toml",
+                "regex-1.13.0-line-terminator",
+                "upstream/regex-1.13.0/testdata/line-terminator.toml",
                 "02148068137B69D95587966917BDF0697BF7EB41AD6D47387F2EB30F67D04FD9"),
             (
-                "regex-1.12.2-anchored",
-                "upstream/regex-1.12.2/testdata/anchored.toml",
+                "regex-1.13.0-anchored",
+                "upstream/regex-1.13.0/testdata/anchored.toml",
                 "7A1B5CD81DEED2099796A451BF764A3F9BD21F0D60C0FA46ACCD3A35666866F2"),
             (
-                "regex-1.12.2-substring",
-                "upstream/regex-1.12.2/testdata/substring.toml",
+                "regex-1.13.0-substring",
+                "upstream/regex-1.13.0/testdata/substring.toml",
                 "48122D9F3477ED81F95E3AD42C06E9BB25F849B66994601A75CEAE0693B81866"),
             (
-                "regex-1.12.2-bytes",
-                "upstream/regex-1.12.2/testdata/bytes.toml",
+                "regex-1.13.0-bytes",
+                "upstream/regex-1.13.0/testdata/bytes.toml",
                 "1D84179165FD25F3B94BD2BFBEB43FC8A162041F7BF98B717E0F85CEF7FB652B"),
             (
-                "regex-1.12.2-crlf",
-                "upstream/regex-1.12.2/testdata/crlf.toml",
+                "regex-1.13.0-crlf",
+                "upstream/regex-1.13.0/testdata/crlf.toml",
                 "D19CF22756434D145DD20946C00AF01C102A556A252070405C3C8294129D9ECE"),
             (
-                "regex-1.12.2-earliest",
-                "upstream/regex-1.12.2/testdata/earliest.toml",
+                "regex-1.13.0-earliest",
+                "upstream/regex-1.13.0/testdata/earliest.toml",
                 "D561E643623EE1889B5B049FDCF3C7CB71B0C746D7EB822DDBD09D0ACDA2620B"),
             (
-                "regex-1.12.2-expensive",
-                "upstream/regex-1.12.2/testdata/expensive.toml",
+                "regex-1.13.0-expensive",
+                "upstream/regex-1.13.0/testdata/expensive.toml",
                 "5CE2F60209C99CDD2CDCB9D3069D1D5CA13D5E08A85E913EFE57267B2F5F0E9D"),
             (
-                "regex-1.12.2-leftmost-all",
-                "upstream/regex-1.12.2/testdata/leftmost-all.toml",
+                "regex-1.13.0-leftmost-all",
+                "upstream/regex-1.13.0/testdata/leftmost-all.toml",
                 "903BFBEFF888B7664296F4D5AA367CE53D1DAFE249AB0A3359223AE94D596396"),
             (
-                "regex-1.12.2-no-unicode",
-                "upstream/regex-1.12.2/testdata/no-unicode.toml",
+                "regex-1.13.0-no-unicode",
+                "upstream/regex-1.13.0/testdata/no-unicode.toml",
                 "D209DA04506900FD5F69E48170CDDAAD0702355AC6176C3A75AB3FF96974457C"),
             (
-                "regex-1.12.2-overlapping",
-                "upstream/regex-1.12.2/testdata/overlapping.toml",
+                "regex-1.13.0-overlapping",
+                "upstream/regex-1.13.0/testdata/overlapping.toml",
                 "5D96497A7233566D40B05BA22047E483FA8662E45515A9BE86DA45CF6C28703A"),
             (
-                "regex-1.12.2-regex-lite",
-                "upstream/regex-1.12.2/testdata/regex-lite.toml",
+                "regex-1.13.0-regex-lite",
+                "upstream/regex-1.13.0/testdata/regex-lite.toml",
                 "FECCA7CC8C9CEA2E1F84F846A89FD9B3CA7011C83698211A2EEDA8924DEB900C"),
             (
-                "regex-1.12.2-regression",
-                "upstream/regex-1.12.2/testdata/regression.toml",
+                "regex-1.13.0-regression",
+                "upstream/regex-1.13.0/testdata/regression.toml",
                 "6006EF4FCFBFD7155CE5CE8B8427904F7261C5549396F20CB065C0294733686D"),
             (
-                "regex-1.12.2-set",
-                "upstream/regex-1.12.2/testdata/set.toml",
+                "regex-1.13.0-set",
+                "upstream/regex-1.13.0/testdata/set.toml",
                 "DFD265DC1AEE80026E881616840DF0236AE9ABF12467D7EC0E141A52C236128C"),
             (
-                "regex-1.12.2-unicode",
-                "upstream/regex-1.12.2/testdata/unicode.toml",
+                "regex-1.13.0-unicode",
+                "upstream/regex-1.13.0/testdata/unicode.toml",
                 "7E4B013039B0CDD85FA73F32D15D096182FE901643D4E40C0910087A736CD46D"),
             (
-                "regex-1.12.2-utf8",
-                "upstream/regex-1.12.2/testdata/utf8.toml",
+                "regex-1.13.0-utf8",
+                "upstream/regex-1.13.0/testdata/utf8.toml",
                 "2EABCE0582BCACB2073E08BBE7CA413F096D14D06E917B107949691E24F84B20"),
             (
-                "regex-1.12.2-word-boundary-special",
-                "upstream/regex-1.12.2/testdata/word-boundary-special.toml",
+                "regex-1.13.0-word-boundary-special",
+                "upstream/regex-1.13.0/testdata/word-boundary-special.toml",
                 "7D0EA2F796478D1CA2A6954430CB1CFBD04031A182F8611CB50A7C73E443CE33"),
             (
-                "regex-1.12.2-word-boundary",
-                "upstream/regex-1.12.2/testdata/word-boundary.toml",
+                "regex-1.13.0-word-boundary",
+                "upstream/regex-1.13.0/testdata/word-boundary.toml",
                 "51BC1C498AB825420340A2DD3E6623DE4054937BA6D5020FF8CD14B1C1E45271"),
         ];
 
@@ -3840,7 +3838,7 @@ public sealed partial class PinnedConfigurationTests
 
         Assert.DoesNotContain("/.cargo/registry/", prerequisiteLock, StringComparison.Ordinal);
         Assert.DoesNotContain("\\.cargo\\registry\\", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("path = \"upstream/regex-1.12.2/testdata/misc.toml\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("path = \"upstream/regex-1.13.0/testdata/misc.toml\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("path = \"upstream/encoding_rs-0.8.35/src/test_data/big5_in.txt\"", prerequisiteLock, StringComparison.Ordinal);
         Assert.Contains("path = \"upstream/encoding_rs-0.8.35/src/test_labels_names.rs\"", prerequisiteLock, StringComparison.Ordinal);
     }
@@ -3855,9 +3853,9 @@ public sealed partial class PinnedConfigurationTests
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
         string[] corpusRoots =
         [
-            Path.Combine(root, "upstream", "regex-1.12.2", "testdata"),
+            Path.Combine(root, "upstream", "regex-1.13.0", "testdata"),
             Path.Combine(root, "upstream", "encoding_rs-0.8.35", "src"),
-            Path.Combine(root, "upstream", "ripgrep-4857d6fa", "tests"),
+            Path.Combine(root, "upstream", "ripgrep-e89fff89", "tests"),
         ];
 
         foreach (string corpusRoot in corpusRoots)
@@ -3884,15 +3882,15 @@ public sealed partial class PinnedConfigurationTests
         string portedTests = File.ReadAllText(Path.Combine(root, "tests", "Scout.Differential.Tests", "PortedRgTests.cs"));
         string prerequisiteLock = File.ReadAllText(Path.Combine(root, "tests", "PREREQS.lock"));
         string attributes = File.ReadAllText(Path.Combine(root, ".gitattributes"));
-        string testsRoot = Path.Combine(root, "upstream", "ripgrep-4857d6fa", "tests");
+        string testsRoot = Path.Combine(root, "upstream", "ripgrep-e89fff89", "tests");
 
         Assert.DoesNotContain("/Users/brandon/src/ripgrep/tests", coverageTest, StringComparison.Ordinal);
         Assert.DoesNotContain("/Users/brandon/src/ripgrep/tests", portedTests, StringComparison.Ordinal);
         Assert.True(File.Exists(Path.Combine(testsRoot, "regression.rs")));
         Assert.True(File.Exists(Path.Combine(testsRoot, "data", "sherlock-nul.txt")));
-        Assert.Contains("upstream/ripgrep-4857d6fa/tests/** -whitespace", attributes, StringComparison.Ordinal);
-        Assert.Contains("path = \"upstream/ripgrep-4857d6fa/tests/regression.rs\"", prerequisiteLock, StringComparison.Ordinal);
-        Assert.Contains("path = \"upstream/ripgrep-4857d6fa/tests/data/sherlock-nul.txt\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("upstream/ripgrep-e89fff89/tests/** -whitespace", attributes, StringComparison.Ordinal);
+        Assert.Contains("path = \"upstream/ripgrep-e89fff89/tests/regression.rs\"", prerequisiteLock, StringComparison.Ordinal);
+        Assert.Contains("path = \"upstream/ripgrep-e89fff89/tests/data/sherlock-nul.txt\"", prerequisiteLock, StringComparison.Ordinal);
     }
 
     private static void AssertPackageVersion(XDocument document, string packageId, string expectedVersion)

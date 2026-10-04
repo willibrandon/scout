@@ -20,6 +20,7 @@ from xml.sax.saxutils import escape
 RIDS = (
     "linux-x64",
     "linux-arm64",
+    "linux-musl-arm64",
     "osx-x64",
     "osx-arm64",
     "win-x64",

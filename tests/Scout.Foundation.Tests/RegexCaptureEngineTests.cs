@@ -8,6 +8,40 @@ namespace Scout;
 public sealed class RegexCaptureEngineTests()
 {
     /// <summary>
+    /// Verifies the upstream zero-repetition and oversized-slot regressions against shared capture replay.
+    /// </summary>
+    /// <param name="pattern">The upstream expression.</param>
+    /// <param name="slots">The caller-owned buffer length.</param>
+    [Theory]
+    [InlineData("(abc)(ABC){0}", 6)]
+    [InlineData("(abc)(ABC){0}", 20)]
+    [InlineData("abc", 4)]
+    [InlineData("abc", 20)]
+    public void ReleaseCaptureSlotRegressionsRemainSafe(string pattern, int slots)
+    {
+        ArgumentNullException.ThrowIfNull(pattern);
+        RegexCaptureEngine engine = Compile(pattern);
+        int[] captures = new int[slots];
+        for (int iteration = 0; iteration < 8; iteration++)
+        {
+            Array.Fill(captures, 42);
+            Assert.True(engine.TryReplayCaptures("abcABC"u8, 0, 3, captures));
+            Assert.Equal(0, captures[0]);
+            Assert.Equal(3, captures[1]);
+            if (pattern[0] == '(')
+            {
+                Assert.Equal(0, captures[2]);
+                Assert.Equal(3, captures[3]);
+                Assert.All(captures[4..], static value => Assert.Equal(-1, value));
+            }
+            else
+            {
+                Assert.All(captures[2..], static value => Assert.Equal(-1, value));
+            }
+        }
+    }
+
+    /// <summary>
     /// Verifies capture search retains a later authoritative match after dense exact-prefix
     /// false candidates.
     /// </summary>

@@ -1384,6 +1384,7 @@ internal static class RegexByteClass
             nextIndex = index + 1;
         }
 
+        name = RegexUnicodePropertyNames.NormalizeComparison(name, ref negated);
         if (RegexUnicodePropertyNames.NameEquals(name, "any"))
         {
             tokenKind = RegexSyntaxKind.AnyClass;

@@ -163,7 +163,7 @@ class Sha256SetTests(unittest.TestCase):
                 "osx-arm64",
                 "local",
                 "xz",
-                "b7926ea19abf39913ee064329261d03ec66271cf5ee4759e5a1a928a3e165540\n",
+                "2abc3832c2f4fc60cbd44fac5cc242de24f123d7fbaf18206060684f84aa5e3f\n",
             ),
         )
 

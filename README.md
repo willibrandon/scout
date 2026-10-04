@@ -7,8 +7,8 @@ ignore matching, a parallel filesystem walker, static PCRE2 bindings, and the `s
 tool. The CLI is a ripgrep-compatible reference application and conformance harness for the same
 ported engine and traversal stack, not a wrapper around `rg`.
 
-> **Status:** v0.6.1, tracking ripgrep 15.1.0 (commit `4857d6fa67`). Functional and fully
-> tested — 4,580 tests pass on all six supported platforms. The release workflow publishes NuGet
+> **Status:** v0.6.1, tracking ripgrep 15.2.0 (commit `e89fff89ac`). Functional and fully
+> tested across all seven supported platforms. The release workflow publishes NuGet
 > library packages, native binaries, .NET tool packages, Homebrew, Scoop, and winget.
 
 ## Libraries
@@ -76,7 +76,7 @@ winget install willibrandon.scout
 
 Standalone archives are attached to each
 [GitHub Release](https://github.com/willibrandon/scout/releases) for `linux-x64`,
-`linux-arm64`, `osx-x64`, `osx-arm64`, `win-x64`, and `win-arm64`. Windows releases
+`linux-arm64`, `linux-musl-arm64`, `osx-x64`, `osx-arm64`, `win-x64`, and `win-arm64`. Windows releases
 also include MSI installers for `win-x64` and `win-arm64`.
 
 ## Building
@@ -105,7 +105,7 @@ The differential and conformance suites additionally need the pinned ripgrep ora
 corpora; CI restores the captured oracle via `eng/restore-ripgrep-oracle.*`, fetches corpora via
 `eng/fetch-corpora.sh --all`, and verifies the result with `eng/preflight.sh`.
 
-Supported runtimes: `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`, `win-x64`, `win-arm64`.
+Supported runtimes: `linux-x64`, `linux-arm64`, `linux-musl-arm64`, `osx-x64`, `osx-arm64`, `win-x64`, `win-arm64`.
 
 ## How it works
 
@@ -129,8 +129,8 @@ The source tree maps recognizably onto ripgrep's crates. The pieces worth knowin
 
 Scout's contract is *behavioral parity* with ripgrep, checked continuously. A differential suite
 runs Scout and the pinned `rg` over a large corpus and compares exit codes and output; ripgrep's
-own integration tests and the regex and encoding conformance corpora run alongside it — 4,580
-tests, zero skipped, on every supported platform.
+own integration tests and the regex and encoding conformance corpora run alongside it. Public
+library and regex conformance tests also run on both supported frameworks on every platform.
 
 Exit codes and deterministic search output match ripgrep exactly. The differential harness
 normalizes elapsed-time fields and nondeterministic path ordering, and has explicit presence-only

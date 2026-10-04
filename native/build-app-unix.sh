@@ -191,7 +191,7 @@ elif [ "$RID" = "osx-x64" ]; then
         -framework Foundation -framework Security -framework GSS -framework CryptoKit -framework Network \
         -o "$REAL_BIN"
     strip_macos_binary "$REAL_BIN"
-elif [ "$RID" = "linux-x64" ] || [ "$RID" = "linux-arm64" ]; then
+elif [ "$RID" = "linux-x64" ] || [ "$RID" = "linux-arm64" ] || [ "$RID" = "linux-musl-arm64" ]; then
     VXSORT_ARCHIVE=
     if [ -f "$RT/libRuntime.VxsortEnabled.a" ]; then
         VXSORT_ARCHIVE="$RT/libRuntime.VxsortEnabled.a"

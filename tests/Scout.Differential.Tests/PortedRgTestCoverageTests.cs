@@ -7,7 +7,7 @@ namespace Scout;
 /// </summary>
 public sealed partial class PortedRgTestCoverageTests
 {
-    private static readonly string UpstreamTestsRoot = Path.Combine(FindRepositoryRoot(), "upstream", "ripgrep-4857d6fa", "tests");
+    private static readonly string UpstreamTestsRoot = Path.Combine(FindRepositoryRoot(), "upstream", "ripgrep-e89fff89", "tests");
 
     private static readonly string[] ExpectedUnportedRgTests = [];
 

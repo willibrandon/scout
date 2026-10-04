@@ -5,13 +5,13 @@ memory-map dependency with .NET-native mapping primitives.
 
 ```text
 name = "grep-searcher"
-version = "0.1.16"
-commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"
+version = "0.1.17"
+commit = "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f"
 path = "crates/searcher"
 
 name = "memmap2"
-version = "0.9.9"
-checksum = "744133e4a0e0a658e1374cf3bf8e415c4052a15a111acd372764c55b4177d490"
+version = "0.9.11"
+checksum = "d1219ed1b7f229ee7104d281dd01d6802fe28bb6e95d292942c4daacdeb798c0"
 ```
 
 The implementation owns mmap-vs-read heuristics, binary detection, line

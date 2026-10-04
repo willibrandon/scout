@@ -6,6 +6,24 @@ namespace Scout;
 public static class RegexUnicodePropertyNames
 {
     /// <summary>
+    /// Combines property comparison negation with the enclosing Unicode escape.
+    /// </summary>
+    internal static ReadOnlySpan<byte> NormalizeComparison(ReadOnlySpan<byte> name, scoped ref bool negated)
+    {
+        int comparison = name.IndexOf("!="u8);
+        if (comparison < 0)
+        {
+            return name;
+        }
+
+        byte[] equalityQuery = new byte[name.Length - 1];
+        name[..comparison].CopyTo(equalityQuery);
+        name[(comparison + 1)..].CopyTo(equalityQuery.AsSpan(comparison));
+        negated = !negated;
+        return equalityQuery;
+    }
+
+    /// <summary>
     /// Resolves a Unicode property query to its generated table descriptor.
     /// </summary>
     internal static bool TryGetProperty(ReadOnlySpan<byte> name, out RegexUnicodeProperty? property)

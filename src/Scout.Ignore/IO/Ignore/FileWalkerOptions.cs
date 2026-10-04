@@ -41,6 +41,7 @@ public sealed class FileWalkerOptions
         Overrides = source.Overrides;
         FileTypes = source.FileTypes;
         Diagnostics = source.Diagnostics;
+        ErrorHandler = source.ErrorHandler;
         CustomIgnoreFileNames = new Collection<string>(source.CustomIgnoreFileNames.ToArray());
         IgnoreFiles = new Collection<string>(source.IgnoreFiles.ToArray());
     }
@@ -166,6 +167,12 @@ public sealed class FileWalkerOptions
     /// Gets or sets the diagnostic logger used while loading and applying ignore rules.
     /// </summary>
     public DiagnosticLogger Diagnostics { get; set; }
+
+    /// <summary>
+    /// Gets or sets the traversal error handler, or <see langword="null" /> to throw errors.
+    /// </summary>
+    /// <remarks>Continue and Skip skip the failed operation; Quit stops the walk. Parallel handlers can be invoked concurrently.</remarks>
+    public Func<WalkException, WalkState>? ErrorHandler { get; set; }
 
     /// <summary>
     /// Gets custom ignore file names to read in every directory.

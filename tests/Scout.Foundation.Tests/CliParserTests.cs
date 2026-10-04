@@ -8,6 +8,26 @@ namespace Scout;
 public sealed class CliParserTests
 {
     /// <summary>
+    /// Verifies the upstream option terminator preserves subsequent arguments as raw positional values.
+    /// </summary>
+    [Fact]
+    public void OptionTerminatorPreservesPositionalArguments()
+    {
+        foreach (bool unix in new[] { true, false })
+        {
+            OsString separator = unix ? OsString.FromUnixBytes("--"u8) : OsString.FromWindowsString("--");
+            var rawPath = OsString.FromUnixBytes([.. "-path-"u8, 0xFF]);
+            CliParseResult result = CliParser.Parse([
+                OsString.FromText("-n"), separator, OsString.FromText("--help"), rawPath, separator,
+            ]);
+            Assert.Equal(CliParseStatus.Ok, result.Status);
+            Assert.NotNull(result.LowArgs);
+            Assert.True(result.LowArgs.LineNumber);
+            Assert.Equal(new[] { OsString.FromText("--help"), rawPath, separator }, result.LowArgs.Positional);
+        }
+    }
+
+    /// <summary>
     /// Verifies <c>-V</c> selects the short version special mode.
     /// </summary>
     [Fact]

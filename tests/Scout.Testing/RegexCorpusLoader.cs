@@ -5,7 +5,7 @@ namespace Scout;
 
 internal static class RegexCorpusLoader
 {
-    private static readonly string CorpusRoot = Path.Combine(FindRepositoryRoot(), "upstream", "regex-1.12.2", "testdata");
+    private static readonly string CorpusRoot = Path.Combine(FindRepositoryRoot(), "upstream", "regex-1.13.0", "testdata");
 
     public static IReadOnlyList<string> EnumerateAllCaseKeys()
     {

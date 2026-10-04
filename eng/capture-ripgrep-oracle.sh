@@ -51,7 +51,11 @@ host_rid() {
             printf 'linux-x64\n'
             ;;
         Linux:aarch64|Linux:arm64)
-            printf 'linux-arm64\n'
+            if [ -e /lib/ld-musl-aarch64.so.1 ]; then
+                printf 'linux-musl-arm64\n'
+            else
+                printf 'linux-arm64\n'
+            fi
             ;;
         *)
             fail "Unsupported host for ripgrep oracle capture: $os $arch"
@@ -147,30 +151,13 @@ ensure_rustup() {
 }
 
 ensure_reference_checkout() {
-    expected_commit="$1"
-
-    if [ ! -d "$REFERENCE/.git" ]; then
-        mkdir -p "$(dirname -- "$REFERENCE")"
-        rm -rf "$REFERENCE"
-        git init "$REFERENCE"
-        git -C "$REFERENCE" remote add origin https://github.com/BurntSushi/ripgrep.git
-    fi
-
-    actual_commit="$(git -C "$REFERENCE" rev-parse HEAD 2>/dev/null || true)"
-    if [ "$actual_commit" = "$expected_commit" ]; then
-        return
-    fi
-
-    if ! git -C "$REFERENCE" fetch --depth 1 origin "$expected_commit"; then
-        git -C "$REFERENCE" fetch origin
-    fi
-    git -C "$REFERENCE" checkout --detach "$expected_commit"
+    "$ROOT/eng/checkout-ripgrep-reference.sh" "$REFERENCE" "$1"
 }
 
 build_ripgrep() {
     (
         cd "$REFERENCE"
-        cargo "+$RUST_TOOLCHAIN" build --profile "$RG_PROFILE" --bin rg
+        rustup run "$RUST_TOOLCHAIN" cargo build --profile "$RG_PROFILE" --bin rg
     )
 }
 
@@ -179,7 +166,7 @@ build_pcre2_ripgrep() {
         cd "$REFERENCE"
         CARGO_TARGET_DIR="$REFERENCE/target/pcre2" \
             PCRE2_SYS_STATIC=1 \
-            cargo "+$RUST_TOOLCHAIN" build --profile "$RG_PCRE2_PROFILE" --features "$RG_PCRE2_FEATURES" --bin rg
+            rustup run "$RUST_TOOLCHAIN" cargo build --profile "$RG_PCRE2_PROFILE" --features "$RG_PCRE2_FEATURES" --bin rg
     )
 }
 
@@ -201,6 +188,7 @@ print_lock_row() {
         printf 'pcre2_features = "%s"\n' "$RG_PCRE2_FEATURES"
         printf 'pcre2_path = "%s"\n' "$RG_PCRE2_PATH_VALUE"
         printf 'pcre2_sha256 = "%s"\n' "$RG_PCRE2_SHA256"
+        printf 'pcre2_reported_version = "%s"\n' "$RG_PCRE2_REPORTED_VERSION"
         printf '%s\n' '--- end ripgrep oracle row ---'
     } | tee "$ROW_PATH"
 }
@@ -213,7 +201,7 @@ RG_PCRE2_FEATURES="$(read_lock_value "ripgrep_pcre2_rg_features")" || fail "Miss
 HOST_RID="$(host_rid)"
 HOST_ORACLE_ENVIRONMENT="$(oracle_environment)"
 
-REFERENCE_VALUE="${SCOUT_RIPGREP_REFERENCE:-artifacts/ripgrep-oracle/$HOST_RID/ripgrep}"
+REFERENCE_VALUE="artifacts/ripgrep-oracle/$HOST_RID/ripgrep"
 REFERENCE="$(resolve_repo_path "$REFERENCE_VALUE")"
 RG_PATH_VALUE="${SCOUT_RIPGREP_RG_PATH:-$REFERENCE_VALUE/target/$RG_PROFILE/rg}"
 RG_PCRE2_PATH_VALUE="${SCOUT_RIPGREP_PCRE2_RG_PATH:-$REFERENCE_VALUE/target/pcre2/$RG_PCRE2_PROFILE/rg}"
@@ -222,7 +210,7 @@ RG_PCRE2_PATH="$(resolve_repo_path "$RG_PCRE2_PATH_VALUE")"
 
 ensure_rustup
 rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
-ACTUAL_CARGO="$(cargo "+$RUST_TOOLCHAIN" --version | awk '{ print $2 }')"
+ACTUAL_CARGO="$(rustup run "$RUST_TOOLCHAIN" cargo --version | awk '{ print $2 }')"
 expect_equal "cargo" "$RUST_TOOLCHAIN" "$ACTUAL_CARGO"
 
 ensure_reference_checkout "$EXPECTED_RIPGREP"
@@ -236,6 +224,7 @@ RG_SHA256="$(sha256_file "$RG_PATH")"
 build_pcre2_ripgrep
 [ -x "$RG_PCRE2_PATH" ] || fail "Missing built PCRE2 reference rg: $RG_PCRE2_PATH"
 RG_PCRE2_SHA256="$(sha256_file "$RG_PCRE2_PATH")"
+RG_PCRE2_REPORTED_VERSION="$("$RG_PCRE2_PATH" --version | grep '^PCRE2 ')"
 
 create_oracle_archive
 print_lock_row

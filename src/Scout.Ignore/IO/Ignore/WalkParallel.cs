@@ -45,6 +45,7 @@ public sealed class WalkParallel
 
     private void RunCore(Func<(Func<DirEntry, WalkState> Visitor, Action Complete)> visitorFactory)
     {
+        WalkRunState runState = _walk.CreateRunState();
         int threadCount = ResolveThreadCount();
         ConcurrentStack<WalkWorkItem>[] stacks = CreateStacks(threadCount, _walk.CreateInitialWorkItems());
         if (stacks.Length == 0)
@@ -56,6 +57,11 @@ public sealed class WalkParallel
         for (int index = 0; index < stacks.Length; index++)
         {
             remaining += stacks[index].Count;
+        }
+
+        if (remaining == 0)
+        {
+            return;
         }
 
         var visitors = new (Func<DirEntry, WalkState> Visit, Action Complete)[stacks.Length];
@@ -76,7 +82,7 @@ public sealed class WalkParallel
             {
                 try
                 {
-                    RunWorker(workerIndex, stacks, visitor, ref remaining, ref quit);
+                    RunWorker(workerIndex, stacks, visitor, runState, ref remaining, ref quit);
                 }
                 catch (Exception exception) when (CaptureFailure(exception))
                 {
@@ -117,10 +123,11 @@ public sealed class WalkParallel
         int workerIndex,
         ConcurrentStack<WalkWorkItem>[] stacks,
         Func<DirEntry, WalkState> visitor,
+        WalkRunState runState,
         ref int remaining,
         ref int quit)
     {
-        while (Volatile.Read(ref quit) == 0)
+        while (Volatile.Read(ref quit) == 0 && !runState.IsQuitRequested)
         {
             if (!TryPopWork(workerIndex, stacks, out WalkWorkItem? item) || item is null)
             {
@@ -135,7 +142,7 @@ public sealed class WalkParallel
 
             try
             {
-                ProcessWork(workerIndex, stacks, item, visitor, ref remaining, ref quit);
+                ProcessWork(workerIndex, stacks, item, visitor, runState, ref remaining, ref quit);
             }
             finally
             {
@@ -149,6 +156,7 @@ public sealed class WalkParallel
         ConcurrentStack<WalkWorkItem>[] stacks,
         WalkWorkItem item,
         Func<DirEntry, WalkState> visitor,
+        WalkRunState runState,
         ref int remaining,
         ref int quit)
     {
@@ -169,11 +177,23 @@ public sealed class WalkParallel
             item.IgnoreStack,
             item.RootDevice,
             item.IsRoot,
+            runState,
             out WalkEntryState state))
         {
             return;
         }
 
+        if (runState.IsQuitRequested)
+        {
+            return;
+        }
+
+        WalkDirectoryReadResult result = state.ShouldRecurse
+            ? _walk.ReadChildren(state.Entry)
+            : new WalkDirectoryReadResult([], []);
+        IgnoreStack childIgnoreStack = state.Entry.IsDirectory
+            ? _walk.CreateChildIgnoreStack(state.Entry, state.IgnoreStack, result.Entries, state.ShouldRecurse)
+            : state.IgnoreStack;
         WalkState visitState = WalkState.Continue;
         if (state.ShouldYield)
         {
@@ -199,14 +219,10 @@ public sealed class WalkParallel
             };
         }
 
-        WalkPath[] children = _walk.EnumerateChildren(state.Entry);
-        IgnoreStack childIgnoreStack = _walk.CreateChildIgnoreStack(
-            state.Entry,
-            state.IgnoreStack,
-            children);
+        WalkPath[] children = result.Entries;
         for (int index = children.Length - 1; index >= 0; index--)
         {
-            if (Volatile.Read(ref quit) != 0)
+            if (Volatile.Read(ref quit) != 0 || runState.IsQuitRequested)
             {
                 return;
             }
@@ -221,6 +237,8 @@ public sealed class WalkParallel
             Interlocked.Increment(ref remaining);
             stacks[workerIndex].Push(child);
         }
+
+        runState.ReportErrors(result.Errors);
     }
 
     private int ResolveThreadCount()

@@ -32,7 +32,8 @@ internal static class SearchFileContentReader
                 ToSearchEncodingKind(lowArgs.EncodingMode),
                 ToSearchMmapMode(lowArgs.MmapMode),
                 autoMmapEligible,
-                knownLength);
+                knownLength,
+                logger);
             bytes = result.GetBytes();
             readKind = result.Kind;
             return true;

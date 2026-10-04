@@ -5,8 +5,8 @@ repository commit pinned by `upstream/REFERENCE.md`.
 
 ```text
 name = "globset"
-version = "0.4.18"
-commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"
+version = "0.4.19"
+commit = "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f"
 ```
 
 The implementation establishes byte-preserving glob and glob-set matching for

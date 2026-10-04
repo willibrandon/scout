@@ -5,9 +5,9 @@ This project ports the Rust `regex-syntax` crate pinned by
 
 ```text
 name = "regex-syntax"
-version = "0.8.8"
-checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
-commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"
+version = "0.8.11"
+checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
+commit = "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f"
 ```
 
 The implementation establishes the parser, AST/HIR-facing syntax surface,

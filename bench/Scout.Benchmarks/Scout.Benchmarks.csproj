@@ -3,5 +3,6 @@
     <PackageReference Include="BenchmarkDotNet" />
     <ProjectReference Include="../../src/Scout.Regex/Scout.Regex.csproj" />
     <ProjectReference Include="../../src/Scout.Searching/Scout.Searching.csproj" />
+    <ProjectReference Include="../../src/Scout.Ignore/Scout.Ignore.csproj" />
   </ItemGroup>
 </Project>

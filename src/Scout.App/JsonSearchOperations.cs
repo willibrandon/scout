@@ -128,7 +128,9 @@ internal static class JsonSearchOperations
             }
 
             string fullRoot = Path.GetFullPath(path);
-            foreach (DirEntry entry in SearchWalkPlanning.GetSortedFileEntries(path, lowArgs, fileTypes, diagnostics, logger))
+            List<DirEntry> entries = SearchWalkPlanning.GetSortedFileEntries(path, lowArgs, fileTypes, diagnostics, logger, out bool walkErrored);
+            errored |= walkErrored;
+            foreach (DirEntry entry in entries)
             {
                 byte[] displayPath = SearchPathArgument.GetSearchDirectoryDisplayPathBytes(path, fullRoot, entry, defaultRoot, pathSeparator: null);
                 SearchJsonDirectoryEntryFile(entry, displayPath, pattern, regexPlan, lowArgs, asciiCaseInsensitive, summary, output, diagnostics, logger, ref matched, ref errored);
@@ -181,7 +183,7 @@ internal static class JsonSearchOperations
 
         try
         {
-            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger).Threads(threadCount).BuildParallel().Run(() => entry =>
+            SearchWalkPlanning.CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger, () => Interlocked.Exchange(ref erroredFlag, 1)).Threads(threadCount).BuildParallel().Run(() => entry =>
             {
                 if (!entry.IsFile)
                 {

@@ -14,7 +14,7 @@ internal static class PinnedPcre2RipgrepOracle
 
     internal static string ExpectedSha256 => PinnedRipgrepOracle.ReadHostOracleValue("pcre2_sha256", "ripgrep_pcre2_rg_sha256");
 
-    internal static string ReportedVersion => PinnedRipgrepOracle.ReadPrerequisiteValue("ripgrep_pcre2_reported_version");
+    internal static string ReportedVersion => PinnedRipgrepOracle.ReadHostOracleValue("pcre2_reported_version", "ripgrep_pcre2_reported_version");
 
     internal static ProcessStartInfo CreateStartInfo(bool redirectStandardInput = false)
     {

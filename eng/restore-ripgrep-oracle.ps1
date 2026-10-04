@@ -203,7 +203,7 @@ $HostRid = Get-HostRid
 $HostOracleEnvironment = Get-OracleEnvironment
 Write-Host "Using ripgrep oracle archive host RID $HostRid ($HostOracleEnvironment)."
 $ExpectedRipgrep = Read-LockValue "ripgrep_commit"
-$ExpectedPcre2Version = Read-LockValue "ripgrep_pcre2_reported_version"
+$ExpectedPcre2Version = try { Read-OracleValue "pcre2_reported_version" } catch { Read-LockValue "ripgrep_pcre2_reported_version" }
 $ArchivePathValue = Read-OracleValue "archive_path"
 $ArchiveSha256 = Read-OracleValue "archive_sha256"
 $RgPath = Resolve-RepoPath (Read-OracleValue "path")

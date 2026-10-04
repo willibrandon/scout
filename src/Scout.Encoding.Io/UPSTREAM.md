@@ -7,7 +7,7 @@ This project ports the streaming transcoder behavior of the Rust
 name = "encoding_rs_io"
 version = "0.1.7"
 checksum = "1cc3c5651fb62ab8aa3103998dade57efdd028544bd300516baa31840c252a83"
-commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"
+commit = "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f"
 ```
 
 The implementation adapts `Scout.Encoding` decoders to the searcher read loop,

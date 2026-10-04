@@ -920,7 +920,7 @@ public sealed class RegexCorpusTests
         ];
 
     /// <summary>
-    /// Verifies one supported <c>regex</c> 1.12.2 TOML corpus case.
+    /// Verifies one supported <c>regex</c> 1.13.0 TOML corpus case.
     /// </summary>
     /// <param name="relativePath">The corpus TOML file.</param>
     /// <param name="name">The corpus case name.</param>

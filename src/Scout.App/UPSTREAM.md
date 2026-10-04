@@ -5,13 +5,13 @@ checkout and owns the command-line execution flow.
 
 ```text
 name = "ripgrep"
-version = "15.1.0"
-commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"
+version = "15.2.0"
+commit = "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f"
 path = "crates/core"
 
 name = "grep"
 version = "0.4.1"
-commit = "4857d6fa67db69a95cd4b6f2adda5d807d4d0119"
+commit = "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f"
 path = "crates/grep"
 disposition = "workspace facade folded into Scout project references"
 ```
@@ -21,8 +21,8 @@ binary:
 
 ```text
 name = "lexopt"
-version = "0.3.1"
-checksum = "9fa0e2a1fcbe2f6be6c42e342259976206b383122fc152e872795338b5a3f3a7"
+version = "0.3.2"
+checksum = "803ec87c9cfb29b9d2633f20cba1f488db3fd53f2158b1024cbefb47ba05d413"
 
 name = "textwrap"
 version = "0.16.2"

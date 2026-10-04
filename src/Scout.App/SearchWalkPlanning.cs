@@ -45,10 +45,24 @@ internal static class SearchWalkPlanning
         return ExitCode.Success;
     }
 
-    internal static WalkBuilder CreateWalkBuilder(string path, CliLowArgs lowArgs, FileTypeMatcher fileTypes, DiagnosticMessenger diagnostics, DiagnosticLogger logger)
+    internal static WalkBuilder CreateWalkBuilder(string path, CliLowArgs lowArgs, FileTypeMatcher fileTypes, DiagnosticMessenger diagnostics, DiagnosticLogger logger, Action onError)
     {
         WalkBuilder builder = new WalkBuilder(path)
             .Diagnostics(logger)
+            .ErrorHandler(error =>
+            {
+                onError();
+                string errorPath = error.Path.IsWindowsText
+                    ? error.Path.AsWindowsString()
+                    : Encoding.UTF8.GetString(error.Path.AsUnixBytes());
+                string detail = error.InnerException?.InnerException is System.ComponentModel.Win32Exception native
+                    ? $"{native.Message} (os error {native.NativeErrorCode})"
+                    : error.Message;
+                var cause = new ScoutError($"IO error for operation on {errorPath}: {detail}");
+                SearchApplicationDiagnostics.ReportError(lowArgs, diagnostics,
+                    cause.WithContext(ScoutErrorContext.ProgramPathContext(errorPath)));
+                return WalkState.Continue;
+            })
             .Hidden(!lowArgs.IncludeHidden)
             .FollowLinks(lowArgs.FollowLinks)
             .SameFileSystem(lowArgs.OneFileSystem)
@@ -82,13 +96,15 @@ internal static class SearchWalkPlanning
         return builder;
     }
 
-    internal static List<DirEntry> GetSortedFileEntries(string root, CliLowArgs lowArgs, FileTypeMatcher fileTypes, DiagnosticMessenger diagnostics, DiagnosticLogger logger)
+    internal static List<DirEntry> GetSortedFileEntries(string root, CliLowArgs lowArgs, FileTypeMatcher fileTypes, DiagnosticMessenger diagnostics, DiagnosticLogger logger, out bool errored)
     {
+        var errors = new DiagnosticState();
         int threadCount = GetDirectoryWalkThreadCount(lowArgs);
         List<DirEntry> entries = threadCount > 1
-            ? GetParallelFileEntries(root, lowArgs, fileTypes, diagnostics, logger, threadCount)
-            : GetSerialFileEntries(root, lowArgs, fileTypes, diagnostics, logger);
+            ? GetParallelFileEntries(root, lowArgs, fileTypes, diagnostics, logger, threadCount, errors)
+            : GetSerialFileEntries(root, lowArgs, fileTypes, diagnostics, logger, errors);
         SortFileEntries(entries, lowArgs.SortMode);
+        errored = errors.HasErrored;
         return entries;
     }
 
@@ -232,10 +248,10 @@ internal static class SearchWalkPlanning
         return true;
     }
 
-    private static List<DirEntry> GetSerialFileEntries(string root, CliLowArgs lowArgs, FileTypeMatcher fileTypes, DiagnosticMessenger diagnostics, DiagnosticLogger logger)
+    private static List<DirEntry> GetSerialFileEntries(string root, CliLowArgs lowArgs, FileTypeMatcher fileTypes, DiagnosticMessenger diagnostics, DiagnosticLogger logger, DiagnosticState errors)
     {
         List<DirEntry> entries = [];
-        foreach (DirEntry entry in CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger).Build())
+        foreach (DirEntry entry in CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger, errors.SetErrored).Build())
         {
             if (entry.IsFile)
             {
@@ -246,11 +262,11 @@ internal static class SearchWalkPlanning
         return entries;
     }
 
-    private static List<DirEntry> GetParallelFileEntries(string root, CliLowArgs lowArgs, FileTypeMatcher fileTypes, DiagnosticMessenger diagnostics, DiagnosticLogger logger, int threadCount)
+    private static List<DirEntry> GetParallelFileEntries(string root, CliLowArgs lowArgs, FileTypeMatcher fileTypes, DiagnosticMessenger diagnostics, DiagnosticLogger logger, int threadCount, DiagnosticState errors)
     {
         List<DirEntry> entries = [];
         object entriesLock = new();
-        CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger).Threads(threadCount).BuildParallel().Run(() => entry =>
+        CreateWalkBuilder(root, lowArgs, fileTypes, diagnostics, logger, errors.SetErrored).Threads(threadCount).BuildParallel().Run(() => entry =>
         {
             if (entry.IsFile)
             {

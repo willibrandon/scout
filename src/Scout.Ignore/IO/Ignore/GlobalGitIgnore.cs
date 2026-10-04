@@ -1,8 +1,15 @@
+using System.Text;
 
 namespace Scout.IO.Ignore;
 
 internal static class GlobalGitIgnore
 {
+    private static readonly UTF8Encoding Utf8Strict = new(false, true);
+    private static readonly Lazy<RegexAutomaton> ExcludesPattern = new(static () => RegexAutomaton.Compile(
+        "(?im-u)^\\s*excludesfile\\s*=\\s*\"?\\s*(\\S+?)\\s*\"?\\s*$"u8,
+        caseInsensitive: false, multiLine: false, dotMatchesNewline: false, utf8: false,
+        specializationMode: RegexSpecializationMode.General));
+
     public static IgnoreRuleSet Load(string baseDirectory, bool asciiCaseInsensitive)
     {
         return Load(baseDirectory, asciiCaseInsensitive, default);
@@ -11,22 +18,40 @@ internal static class GlobalGitIgnore
     public static IgnoreRuleSet Load(string baseDirectory, bool asciiCaseInsensitive, DiagnosticLogger logger)
     {
         var rules = new IgnoreRuleSet();
-        string? path = ResolveFilePath();
-        if (string.IsNullOrEmpty(path) || !File.Exists(path))
+        OsString? path = ResolveOsFilePath(ProcessEnvironment.GetVariableOsString, ReadConfig);
+        if (path is null)
         {
             return rules;
         }
 
-        int startIndex = rules.Count;
-        IgnoreDiagnosticLogging.LogOpenedIgnoreFile(logger, path);
-        rules.AddFile(baseDirectory, path, asciiCaseInsensitive);
-        IgnoreDiagnosticLogging.LogBuiltGlobSet(logger, rules.GetGlobSetSummary(startIndex));
+        byte[]? contents = ReadConfig(path.Value);
+        if (contents is null)
+        {
+            return rules;
+        }
+
+        string displayPath = DisplayPath(path.Value);
+        IgnoreDiagnosticLogging.LogOpenedIgnoreFile(logger, displayPath);
+        using var reader = new StringReader(Encoding.UTF8.GetString(contents));
+        bool firstLine = true;
+        while (reader.ReadLine() is { } line)
+        {
+            string currentLine = firstLine ? line.TrimStart('\uFEFF') : line;
+            firstLine = false;
+            if (IgnoreRule.TryParse(baseDirectory, currentLine, displayPath, asciiCaseInsensitive, out IgnoreRule? rule) && rule is not null)
+            {
+                rules.Add(rule);
+            }
+        }
+
+        IgnoreDiagnosticLogging.LogBuiltGlobSet(logger, rules.GetGlobSetSummary(0));
         return rules;
     }
 
     internal static string? ResolveFilePath()
     {
-        return ResolveFilePath(ProcessEnvironment.GetVariable, File.Exists, File.ReadAllText);
+        OsString? path = ResolveOsFilePath(ProcessEnvironment.GetVariableOsString, ReadConfig);
+        return path is null ? null : DisplayPath(path.Value);
     }
 
     internal static string? ResolveFilePath(
@@ -37,141 +62,120 @@ internal static class GlobalGitIgnore
         ArgumentNullException.ThrowIfNull(getEnvironmentVariable);
         ArgumentNullException.ThrowIfNull(fileExists);
         ArgumentNullException.ThrowIfNull(readAllText);
+        OsString? path = ResolveOsFilePath(
+            name => getEnvironmentVariable(name) is { } value ? OsString.FromText(value) : null,
+            path =>
+            {
+                string text = DisplayPath(path);
+                try
+                {
+                    return fileExists(text) ? Encoding.UTF8.GetBytes(readAllText(text)) : null;
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    return null;
+                }
+            });
+        return path is null ? null : DisplayPath(path.Value);
+    }
 
-        string? home = GetHomeDirectory(getEnvironmentVariable);
-        string? homeConfig = home is null ? null : CombinePath(home, ".gitconfig");
-        string? fromHomeConfig = ResolveExcludesFile(homeConfig, home, fileExists, readAllText);
-        if (fromHomeConfig is not null)
+    internal static OsString? ResolveOsFilePath(
+        Func<string, OsString?> getEnvironmentVariable,
+        Func<OsString, byte[]?> readFile)
+    {
+        OsString? home = NonEmpty(getEnvironmentVariable("HOME")) ?? NonEmpty(getEnvironmentVariable("USERPROFILE"));
+        OsString? xdg = NonEmpty(getEnvironmentVariable("XDG_CONFIG_HOME")) ?? JoinPath(home, ".config");
+        OsString? system = NonEmpty(getEnvironmentVariable("GIT_CONFIG_SYSTEM")) ?? OsString.FromText("/etc/gitconfig");
+        OsString?[] configs =
+        [
+            NonEmpty(getEnvironmentVariable("GIT_CONFIG_GLOBAL")),
+            JoinPath(home, ".gitconfig"),
+            JoinPath(xdg, "git/config"),
+            system,
+        ];
+        string? homeText = home is null ? null : DisplayPath(home.Value);
+        foreach (OsString? config in configs)
         {
-            return fromHomeConfig;
+            if (config is { } file && readFile(file) is { } contents && ParseExcludesFile(contents, homeText) is { } excludes)
+            {
+                return OsString.FromText(excludes);
+            }
         }
 
-        string? xdgConfigHome = GetXdgConfigHome(getEnvironmentVariable, home);
-        string? xdgConfig = xdgConfigHome is null ? null : CombinePath(xdgConfigHome, "git", "config");
-        string? fromXdgConfig = ResolveExcludesFile(xdgConfig, home, fileExists, readAllText);
-        if (fromXdgConfig is not null)
-        {
-            return fromXdgConfig;
-        }
-
-        return xdgConfigHome is null ? null : CombinePath(xdgConfigHome, "git", "ignore");
+        return JoinPath(xdg, "git/ignore");
     }
 
     internal static string? ParseExcludesFile(string text, string? homeDirectory)
     {
         ArgumentNullException.ThrowIfNull(text);
-
-        using var reader = new StringReader(text);
-        while (reader.ReadLine() is { } line)
-        {
-            int separator = line.IndexOf('=');
-            if (separator < 0)
-            {
-                continue;
-            }
-
-            string key = line[..separator].Trim();
-            if (!string.Equals(key, "excludesFile", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            string value = line[(separator + 1)..].Trim();
-            if (value.Length >= 2 && value[0] == '"' && value[^1] == '"')
-            {
-                value = value[1..^1].Trim();
-            }
-
-            if (value.Length == 0 || ContainsWhitespace(value))
-            {
-                continue;
-            }
-
-            return ExpandTilde(value, homeDirectory);
-        }
-
-        return null;
+        return ParseExcludesFile(Encoding.UTF8.GetBytes(text), homeDirectory);
     }
 
-    private static string? ResolveExcludesFile(
-        string? configPath,
-        string? homeDirectory,
-        Func<string, bool> fileExists,
-        Func<string, string> readAllText)
+    internal static string? ParseExcludesFile(ReadOnlySpan<byte> contents, string? homeDirectory)
     {
-        if (string.IsNullOrEmpty(configPath) || !fileExists(configPath))
+        RegexMatch? capture = ExcludesPattern.Value.FindCaptures(contents)?.GetGroup(1);
+        if (capture is not { } span)
         {
             return null;
         }
 
         try
         {
-            return ParseExcludesFile(readAllText(configPath), homeDirectory);
+            string candidate = Utf8Strict.GetString(contents.Slice(span.Start, span.Length));
+            return string.IsNullOrEmpty(homeDirectory) ? candidate : candidate.Replace("~", homeDirectory, StringComparison.Ordinal);
         }
-        catch (IOException)
+        catch (DecoderFallbackException)
         {
             return null;
         }
-        catch (UnauthorizedAccessException)
-        {
-            return null;
-        }
     }
 
-    private static string? GetHomeDirectory(Func<string, string?> getEnvironmentVariable)
+    private static byte[]? ReadConfig(OsString path)
     {
-        string? home = getEnvironmentVariable("HOME");
-        if (!string.IsNullOrEmpty(home))
+        try
         {
-            return home;
-        }
-
-        string? userProfile = getEnvironmentVariable("USERPROFILE");
-        return string.IsNullOrEmpty(userProfile) ? null : userProfile;
-    }
-
-    private static string? GetXdgConfigHome(Func<string, string?> getEnvironmentVariable, string? homeDirectory)
-    {
-        string? xdgConfigHome = getEnvironmentVariable("XDG_CONFIG_HOME");
-        if (!string.IsNullOrEmpty(xdgConfigHome))
-        {
-            return xdgConfigHome;
-        }
-
-        return homeDirectory is null ? null : CombinePath(homeDirectory, ".config");
-    }
-
-    private static string CombinePath(string root, params string[] segments)
-    {
-        char separator = root.Contains('/') && !root.Contains('\\')
-            ? '/'
-            : Path.DirectorySeparatorChar;
-        string path = root.TrimEnd('/', '\\');
-        for (int index = 0; index < segments.Length; index++)
-        {
-            path += separator + segments[index];
-        }
-
-        return path;
-    }
-
-    private static string ExpandTilde(string path, string? homeDirectory)
-    {
-        return string.IsNullOrEmpty(homeDirectory)
-            ? path
-            : path.Replace("~", homeDirectory, StringComparison.Ordinal);
-    }
-
-    private static bool ContainsWhitespace(string text)
-    {
-        for (int index = 0; index < text.Length; index++)
-        {
-            if (char.IsWhiteSpace(text[index]))
+            if (path.IsWindowsText)
             {
-                return true;
+                return File.ReadAllBytes(path.AsWindowsString());
             }
+
+            using Microsoft.Win32.SafeHandles.SafeFileHandle handle = RawUnixFile.OpenRead(path.AsUnixBytes());
+            using var stream = new FileStream(handle, FileAccess.Read);
+            using var contents = new MemoryStream();
+            stream.CopyTo(contents);
+            return contents.ToArray();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    private static OsString? NonEmpty(OsString? value)
+    {
+        return value is { } path && (path.IsUnixBytes ? !path.AsUnixBytes().IsEmpty : path.AsWindowsString().Length != 0)
+            ? path : null;
+    }
+
+    private static OsString? JoinPath(OsString? root, string suffix)
+    {
+        if (root is not { } path)
+        {
+            return null;
         }
 
-        return false;
+        if (path.IsWindowsText)
+        {
+            string text = path.AsWindowsString();
+            char separator = text.Contains('/') && !text.Contains('\\') ? '/' : System.IO.Path.DirectorySeparatorChar;
+            return OsString.FromWindowsString(text.TrimEnd('/', '\\') + separator + suffix.Replace('/', separator));
+        }
+
+        return OsString.FromUnixBytes(RawUnixDirectory.Join(path.AsUnixBytes(), Encoding.UTF8.GetBytes(suffix)));
+    }
+
+    private static string DisplayPath(OsString path)
+    {
+        return path.IsWindowsText ? path.AsWindowsString() : Encoding.UTF8.GetString(path.AsUnixBytes());
     }
 }
