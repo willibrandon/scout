@@ -3,7 +3,7 @@ set -eu
 
 [ -e /lib/ld-musl-aarch64.so.1 ] || { printf 'This gate requires Alpine ARM64.\n' >&2; exit 1; }
 apk add --no-cache bash binutils brotli build-base bzip2 clang curl fish git gzip \
-    icu-libs lz4 openssl-dev python3 tar unzip xz zlib-dev zsh zstd
+    icu-libs lz4 openssl-dev perl python3 tar unzip xz zlib-dev zsh zstd
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 mkdir -p "$ROOT/artifacts/prereqs/linux-musl-arm64"
@@ -19,7 +19,7 @@ tar -xzf "$source_archive" --strip-components=1 -C "$source_directory"
 make -C "$source_directory" compress
 install -m 755 "$source_directory/compress" /usr/local/bin/compress
 apk info -v | sort > "$ROOT/artifacts/prereqs/linux-musl-arm64/packages.txt"
-for tool in cc clang ld ar ranlib strip nm gzip bzip2 xz lz4 brotli zstd compress uncompress unzip python3; do
+for tool in cc clang ld ar ranlib strip nm gzip bzip2 xz lz4 brotli zstd compress uncompress unzip perl python3; do
     path="$(command -v "$tool")"
     sha256sum "$path"
 done > "$ROOT/artifacts/prereqs/linux-musl-arm64/tools.sha256"
