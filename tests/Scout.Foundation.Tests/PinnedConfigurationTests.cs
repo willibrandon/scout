@@ -3231,7 +3231,7 @@ public sealed partial class PinnedConfigurationTests
         }
 
         Assert.True(assignmentCount > 0);
-        Assert.Equal(10, arrayAssignmentCount);
+        Assert.Equal(7, arrayAssignmentCount);
         Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
     }
 

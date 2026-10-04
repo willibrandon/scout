@@ -1,4 +1,6 @@
 using System.Collections;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Scout.IO.Ignore;
@@ -492,7 +494,8 @@ public sealed class Walk : IEnumerable<DirEntry>
     {
         if (!NativeFileSystemMetadata.TryGetRawUnixStatus(path.UnixPathBytes, followLinks, out NativeUnixFileStatus status))
         {
-            throw new FileNotFoundException();
+            var cause = new Win32Exception(Marshal.GetLastPInvokeError());
+            throw new IOException(cause.Message, cause);
         }
 
         var identity = FileIdentity.FromRawUnixPath(path.UnixPathBytes, status.Metadata);
