@@ -78,7 +78,7 @@ class PreflightReferenceTests(unittest.TestCase):
             digest = hashlib.sha256(archive_path.read_bytes()).hexdigest()
             lock += 'ripgrep_oracle_archive_path = "reference.zip"\n'
             lock += f'ripgrep_oracle_archive_sha256 = "{digest}"\n'
-        (self.root / "tests/PREREQS.lock").write_text(lock, encoding="utf-8")
+        (self.root / "tests/PREREQS.lock").write_bytes(lock.encode("utf-8"))
         environment = os.environ.copy()
         environment["SCOUT_RIPGREP_REFERENCE"] = (self.root / "absent-external-checkout").as_posix()
         script = _FUNCTIONS + """

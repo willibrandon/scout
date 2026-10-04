@@ -85,7 +85,7 @@ def main() -> None:
                 )
                 arguments = [
                     "--no-config", "--no-ignore", "--follow", "--color=never",
-                    "--path-separator=/", traversal, *mode,
+                    traversal, *mode,
                 ]
                 arguments.append("--messages" if messages else "--no-messages")
                 if quiet:
