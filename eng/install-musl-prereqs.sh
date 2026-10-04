@@ -13,7 +13,7 @@ source_sha256="$(printf '%s\n' "$source_record" | sed -n '2p')"
 source_archive="$ROOT/artifacts/prereqs/linux-musl-arm64/ncompress.tar.gz"
 source_directory="$ROOT/artifacts/prereqs/linux-musl-arm64/ncompress"
 curl --fail --silent --show-error --location "$source_url" --output "$source_archive"
-printf '%s  %s\n' "$source_sha256" "$source_archive" | sha256sum --check
+printf '%s  %s\n' "$source_sha256" "$source_archive" | sha256sum -c
 mkdir -p "$source_directory"
 tar -xzf "$source_archive" --strip-components=1 -C "$source_directory"
 make -C "$source_directory" compress
