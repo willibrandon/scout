@@ -545,6 +545,11 @@ jobs:
 
   publish-nuget:
     name: publish NuGet packages
+    environment: release
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
     needs:
       - validate
       - build-linux
@@ -622,10 +627,15 @@ jobs:
           printf 'needle\n' > artifacts/nuget-source/search.txt
           "$install/scout" --no-config -n needle artifacts/nuget-source/search.txt > artifacts/nuget-source/search.out
           printf '1:needle\n' | cmp -s - artifacts/nuget-source/search.out
+      - name: Authenticate to NuGet
+        id: nuget-login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: ${{ secrets.NUGET_USER }}
       - name: Push RID and library packages
         shell: bash
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
         run: |
           set -euo pipefail
           version="${{ needs.validate.outputs.version }}"
@@ -649,7 +659,7 @@ jobs:
       - name: Push pointer package
         shell: bash
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
         run: |
           set -euo pipefail
           package="$(find artifacts/nuget-source -type f -name "Scout.${{ needs.validate.outputs.version }}.nupkg" | head -1)"

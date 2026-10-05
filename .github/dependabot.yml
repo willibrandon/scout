@@ -8,3 +8,15 @@ updates:
       - willibrandon
     labels:
       - dependencies
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    assignees:
+      - willibrandon
+    labels:
+      - dependencies
+    groups:
+      actions:
+        patterns:
+          - "*"

@@ -134,11 +134,31 @@ MSBuild warning gates, build, portable tests, fuzz smoke targets, format, Native
 AOT static-library publish, and native executable smoke checks. A successful
 push to `main` dispatches `Release Gates` for that exact commit.
 
+Dotsider checks the native executable on every supported RID with a 20 MiB
+limit on Linux and 15 MiB on macOS and Windows. A 5% growth limit compares each
+build with the latest successful `main` baseline.
+On Unix it checks `scout-real`, which contains the Native AOT application;
+on Windows it checks `scout.exe`. The native build scripts place the compiler's
+`.mstat` report beside the executable for per-assembly size reports. The first
+successful `main` run establishes each baseline and enforces the absolute limit.
+CI publishes the size summaries and reports.
+
+Picket scans the checkout with its default rules, fails on findings, and
+publishes fully redacted SARIF and JSONL reports. Add reviewed false positives
+to `.picketignore` using only individual `picket:v1:` finding fingerprints,
+with a comment explaining the fixture. Do not ignore entire files or rules.
+Dependabot checks NuGet packages and GitHub Actions weekly.
+
 `Release Gates` are the release contract: pinned ripgrep oracle builds, frozen
 corpora, preflight, full tests, native differentials, native link checks on all
 six release RIDs, and the `hyperfine` performance gate. Tag-based releases then
 publish standalone archives, Windows MSIs, the RID-aware .NET tool packages,
 Homebrew, Scoop, and winget metadata.
+
+NuGet publishing uses OIDC in the GitHub `release` environment. The NuGet
+trusted publisher policy must allow `willibrandon/scout`, workflow `release.yml`,
+environment `release`, and package patterns `Scout` and `Scout.*`. Set the
+repository secret `NUGET_USER` to the publishing NuGet account's username.
 
 Most PRs do not need a full local release-gate run. They do need enough local
 evidence to show which part of the contract they affect.
