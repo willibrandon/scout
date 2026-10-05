@@ -30,4 +30,6 @@ cc "$ROOT/native/entry/verify-linux-arm64-abi.c" -o "$ROOT/artifacts/prereqs/lin
 curl --fail --silent --show-error --location https://dot.net/v1/dotnet-install.sh \
     --output "$ROOT/artifacts/prereqs/linux-musl-arm64/dotnet-install.sh"
 bash "$ROOT/artifacts/prereqs/linux-musl-arm64/dotnet-install.sh" \
+    --channel 10.0 --quality GA --install-dir /usr/share/dotnet
+bash "$ROOT/artifacts/prereqs/linux-musl-arm64/dotnet-install.sh" \
     --channel 9.0 --runtime dotnet --install-dir /usr/share/dotnet
