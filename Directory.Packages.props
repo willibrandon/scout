@@ -5,7 +5,6 @@
 
   <ItemGroup>
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
-    <PackageVersion Include="coverlet.collector" Version="10.1.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.401" />
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.401" />
@@ -13,9 +12,6 @@
     <PackageVersion Include="Microsoft.DotNet.ILCompiler"
                     Version="10.0.2"
                     Condition="'$(MSBuildProjectName)' != 'Scout.App' and '$(MSBuildProjectName)' != 'Scout.Entry'" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
     <PackageVersion Include="SharpFuzz" Version="2.3.0" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
-    <PackageVersion Include="xunit.v3.mtp-off" Version="4.0.1" />
   </ItemGroup>
 </Project>

@@ -4,6 +4,7 @@ namespace Scout;
 /// <summary>
 /// Verifies gitignore matcher edge cases ported from upstream ignore tests.
 /// </summary>
+[TestClass]
 public sealed class GitignoreTests
 {
     private const string RootSpec = "ROOT";
@@ -96,57 +97,57 @@ public sealed class GitignoreTests
     /// <param name="gitignore">The gitignore pattern text.</param>
     /// <param name="pathSpec">The upstream candidate path spec.</param>
     /// <param name="isDirectory">Whether the candidate is a directory.</param>
-    [Theory]
-    [InlineData(RootSpec, "months", "months", false)]
-    [InlineData(RootSpec, "*.lock", "Cargo.lock", false)]
-    [InlineData(RootSpec, "*.rs", "src/main.rs", false)]
-    [InlineData(RootSpec, "src/*.rs", "src/main.rs", false)]
-    [InlineData(RootSpec, "/*.c", "cat-file.c", false)]
-    [InlineData(RootSpec, "/src/*.rs", "src/main.rs", false)]
-    [InlineData(RootSpec, "!src/main.rs\n*.rs", "src/main.rs", false)]
-    [InlineData(RootSpec, "foo/", "foo", true)]
-    [InlineData(RootSpec, "**/foo", "foo", false)]
-    [InlineData(RootSpec, "**/foo", "src/foo", false)]
-    [InlineData(RootSpec, "**/foo/**", "src/foo/bar", false)]
-    [InlineData(RootSpec, "**/foo/**", "wat/src/foo/bar/baz", false)]
-    [InlineData(RootSpec, "**/foo/bar", "foo/bar", false)]
-    [InlineData(RootSpec, "**/foo/bar", "src/foo/bar", false)]
-    [InlineData(RootSpec, "abc/**", "abc/x", false)]
-    [InlineData(RootSpec, "abc/**", "abc/x/y", false)]
-    [InlineData(RootSpec, "abc/**", "abc/x/y/z", false)]
-    [InlineData(RootSpec, "a/**/b", "a/b", false)]
-    [InlineData(RootSpec, "a/**/b", "a/x/b", false)]
-    [InlineData(RootSpec, "a/**/b", "a/x/y/b", false)]
-    [InlineData(RootSpec, "\\!xy", "!xy", false)]
-    [InlineData(RootSpec, "\\#foo", "#foo", false)]
-    [InlineData(RootSpec, "foo", "./foo", false)]
-    [InlineData(RootSpec, "target", "grep/target", false)]
-    [InlineData(RootSpec, "Cargo.lock", "./tabwriter-bin/Cargo.lock", false)]
-    [InlineData(RootSpec, "/foo/bar/baz", "./foo/bar/baz", false)]
-    [InlineData(RootSpec, "foo/", "xyz/foo", true)]
-    [InlineData("./src", "/llvm/", "./src/llvm", true)]
-    [InlineData(RootSpec, "node_modules/ ", "node_modules", true)]
-    [InlineData(RootSpec, "**/", "foo/bar", true)]
-    [InlineData(RootSpec, "path1/*", "path1/foo", false)]
-    [InlineData(RootSpec, ".a/b", ".a/b", false)]
-    [InlineData("./", ".a/b", ".a/b", false)]
-    [InlineData(".", ".a/b", ".a/b", false)]
-    [InlineData("./.", ".a/b", ".a/b", false)]
-    [InlineData("././", ".a/b", ".a/b", false)]
-    [InlineData("././.", ".a/b", ".a/b", false)]
-    [InlineData(RootSpec, "\\[", "[", false)]
-    [InlineData(RootSpec, "\\?", "?", false)]
-    [InlineData(RootSpec, "\\*", "*", false)]
-    [InlineData(RootSpec, "\\a", "a", false)]
-    [InlineData(RootSpec, "s*.rs", "sfoo.rs", false)]
-    [InlineData(RootSpec, "**", "foo.rs", false)]
-    [InlineData(RootSpec, "**/**/*", "a/foo.rs", false)]
+    [TestMethod]
+    [DataRow(RootSpec, "months", "months", false)]
+    [DataRow(RootSpec, "*.lock", "Cargo.lock", false)]
+    [DataRow(RootSpec, "*.rs", "src/main.rs", false)]
+    [DataRow(RootSpec, "src/*.rs", "src/main.rs", false)]
+    [DataRow(RootSpec, "/*.c", "cat-file.c", false)]
+    [DataRow(RootSpec, "/src/*.rs", "src/main.rs", false)]
+    [DataRow(RootSpec, "!src/main.rs\n*.rs", "src/main.rs", false)]
+    [DataRow(RootSpec, "foo/", "foo", true)]
+    [DataRow(RootSpec, "**/foo", "foo", false)]
+    [DataRow(RootSpec, "**/foo", "src/foo", false)]
+    [DataRow(RootSpec, "**/foo/**", "src/foo/bar", false)]
+    [DataRow(RootSpec, "**/foo/**", "wat/src/foo/bar/baz", false)]
+    [DataRow(RootSpec, "**/foo/bar", "foo/bar", false)]
+    [DataRow(RootSpec, "**/foo/bar", "src/foo/bar", false)]
+    [DataRow(RootSpec, "abc/**", "abc/x", false)]
+    [DataRow(RootSpec, "abc/**", "abc/x/y", false)]
+    [DataRow(RootSpec, "abc/**", "abc/x/y/z", false)]
+    [DataRow(RootSpec, "a/**/b", "a/b", false)]
+    [DataRow(RootSpec, "a/**/b", "a/x/b", false)]
+    [DataRow(RootSpec, "a/**/b", "a/x/y/b", false)]
+    [DataRow(RootSpec, "\\!xy", "!xy", false)]
+    [DataRow(RootSpec, "\\#foo", "#foo", false)]
+    [DataRow(RootSpec, "foo", "./foo", false)]
+    [DataRow(RootSpec, "target", "grep/target", false)]
+    [DataRow(RootSpec, "Cargo.lock", "./tabwriter-bin/Cargo.lock", false)]
+    [DataRow(RootSpec, "/foo/bar/baz", "./foo/bar/baz", false)]
+    [DataRow(RootSpec, "foo/", "xyz/foo", true)]
+    [DataRow("./src", "/llvm/", "./src/llvm", true)]
+    [DataRow(RootSpec, "node_modules/ ", "node_modules", true)]
+    [DataRow(RootSpec, "**/", "foo/bar", true)]
+    [DataRow(RootSpec, "path1/*", "path1/foo", false)]
+    [DataRow(RootSpec, ".a/b", ".a/b", false)]
+    [DataRow("./", ".a/b", ".a/b", false)]
+    [DataRow(".", ".a/b", ".a/b", false)]
+    [DataRow("./.", ".a/b", ".a/b", false)]
+    [DataRow("././", ".a/b", ".a/b", false)]
+    [DataRow("././.", ".a/b", ".a/b", false)]
+    [DataRow(RootSpec, "\\[", "[", false)]
+    [DataRow(RootSpec, "\\?", "?", false)]
+    [DataRow(RootSpec, "\\*", "*", false)]
+    [DataRow(RootSpec, "\\a", "a", false)]
+    [DataRow(RootSpec, "s*.rs", "sfoo.rs", false)]
+    [DataRow(RootSpec, "**", "foo.rs", false)]
+    [DataRow(RootSpec, "**/**/*", "a/foo.rs", false)]
     public void UpstreamPositiveMatchedCasesMatch(string rootSpec, string gitignore, string pathSpec, bool isDirectory)
     {
         string workspace = CreateTempDirectory();
         IgnoreRuleSet rules = LoadRulesForText(GetRootPath(workspace, rootSpec), gitignore);
 
-        Assert.Equal(IgnoreDecision.Ignore, rules.Match(CreateEntryForSpec(workspace, pathSpec, isDirectory)));
+        Assert.AreEqual(IgnoreDecision.Ignore, rules.Match(CreateEntryForSpec(workspace, pathSpec, isDirectory)));
     }
 
     /// <summary>
@@ -156,37 +157,37 @@ public sealed class GitignoreTests
     /// <param name="gitignore">The gitignore pattern text.</param>
     /// <param name="pathSpec">The upstream candidate path spec.</param>
     /// <param name="isDirectory">Whether the candidate is a directory.</param>
-    [Theory]
-    [InlineData(RootSpec, "amonths", "months", false)]
-    [InlineData(RootSpec, "monthsa", "months", false)]
-    [InlineData(RootSpec, "/src/*.rs", "src/grep/src/main.rs", false)]
-    [InlineData(RootSpec, "/*.c", "mozilla-sha1/sha1.c", false)]
-    [InlineData(RootSpec, "*.rs\n!src/main.rs", "src/main.rs", false)]
-    [InlineData(RootSpec, "foo/", "foo", false)]
-    [InlineData(RootSpec, "**/foo/**", "wat/src/afoo/bar/baz", false)]
-    [InlineData(RootSpec, "**/foo/**", "wat/src/fooa/bar/baz", false)]
-    [InlineData(RootSpec, "**/foo/bar", "foo/src/bar", false)]
-    [InlineData(RootSpec, "#foo", "#foo", false)]
-    [InlineData(RootSpec, "\n\n\n", "foo", false)]
-    [InlineData(RootSpec, "foo/**", "foo", true)]
-    [InlineData("./third_party/protobuf", "m4/ltoptions.m4", "./third_party/protobuf/csharp/src/packages/repositories.config", false)]
-    [InlineData(RootSpec, "!/bar", "foo/bar", false)]
-    [InlineData(RootSpec, "*\n!**/", "foo", true)]
-    [InlineData(RootSpec, "src/*.rs", "src/grep/src/main.rs", false)]
-    [InlineData(RootSpec, "path1/*", "path2/path1/foo", false)]
-    [InlineData(RootSpec, "s*.rs", "src/foo.rs", false)]
+    [TestMethod]
+    [DataRow(RootSpec, "amonths", "months", false)]
+    [DataRow(RootSpec, "monthsa", "months", false)]
+    [DataRow(RootSpec, "/src/*.rs", "src/grep/src/main.rs", false)]
+    [DataRow(RootSpec, "/*.c", "mozilla-sha1/sha1.c", false)]
+    [DataRow(RootSpec, "*.rs\n!src/main.rs", "src/main.rs", false)]
+    [DataRow(RootSpec, "foo/", "foo", false)]
+    [DataRow(RootSpec, "**/foo/**", "wat/src/afoo/bar/baz", false)]
+    [DataRow(RootSpec, "**/foo/**", "wat/src/fooa/bar/baz", false)]
+    [DataRow(RootSpec, "**/foo/bar", "foo/src/bar", false)]
+    [DataRow(RootSpec, "#foo", "#foo", false)]
+    [DataRow(RootSpec, "\n\n\n", "foo", false)]
+    [DataRow(RootSpec, "foo/**", "foo", true)]
+    [DataRow("./third_party/protobuf", "m4/ltoptions.m4", "./third_party/protobuf/csharp/src/packages/repositories.config", false)]
+    [DataRow(RootSpec, "!/bar", "foo/bar", false)]
+    [DataRow(RootSpec, "*\n!**/", "foo", true)]
+    [DataRow(RootSpec, "src/*.rs", "src/grep/src/main.rs", false)]
+    [DataRow(RootSpec, "path1/*", "path2/path1/foo", false)]
+    [DataRow(RootSpec, "s*.rs", "src/foo.rs", false)]
     public void UpstreamNegativeMatchedCasesDoNotMatch(string rootSpec, string gitignore, string pathSpec, bool isDirectory)
     {
         string workspace = CreateTempDirectory();
         IgnoreRuleSet rules = LoadRulesForText(GetRootPath(workspace, rootSpec), gitignore);
 
-        Assert.NotEqual(IgnoreDecision.Ignore, rules.Match(CreateEntryForSpec(workspace, pathSpec, isDirectory)));
+        Assert.AreNotEqual(IgnoreDecision.Ignore, rules.Match(CreateEntryForSpec(workspace, pathSpec, isDirectory)));
     }
 
     /// <summary>
     /// Verifies a leading byte-order mark is ignored on the first gitignore line.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void GitignoreSkipsBomOnFirstLine()
     {
         string root = CreateTempDirectory();
@@ -194,13 +195,13 @@ public sealed class GitignoreTests
         File.WriteAllText(ignoreFile, "\uFEFFignore/this/path\n");
         IgnoreRuleSet rules = LoadRules(root, ignoreFile);
 
-        Assert.Equal(IgnoreDecision.Ignore, rules.Match(CreateEntry(root, "ignore/this/path", isDirectory: false)));
+        Assert.AreEqual(IgnoreDecision.Ignore, rules.Match(CreateEntry(root, "ignore/this/path", isDirectory: false)));
     }
 
     /// <summary>
     /// Verifies path-or-parent matching rejects absolute paths outside the matcher root like upstream.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MatchPathOrAnyParentsRejectsPathsOutsideRoot()
     {
         string workspace = CreateTempDirectory();
@@ -208,7 +209,7 @@ public sealed class GitignoreTests
         string outside = Path.Join(workspace, "outside", "some_file");
         IgnoreRuleSet rules = LoadRulesForText(root, "some_file\n");
 
-        ArgumentException exception = Assert.Throws<ArgumentException>(
+        ArgumentException exception = Assert.ThrowsExactly<ArgumentException>(
             () => rules.MatchPathOrAnyParents(CreateAbsoluteEntry(outside, isDirectory: false)));
         Assert.Contains("path is expected to be under the root", exception.Message, StringComparison.Ordinal);
     }
@@ -216,7 +217,7 @@ public sealed class GitignoreTests
     /// <summary>
     /// Verifies direct matching does not treat a sibling with a shared text prefix as a descendant.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DirectMatchRequiresDirectorySeparatorAfterRootPrefix()
     {
         string workspace = CreateTempDirectory();
@@ -224,14 +225,14 @@ public sealed class GitignoreTests
         string sibling = Path.Join(workspace, "root-sibling", "target");
         IgnoreRuleSet rules = LoadRulesForText(root, "/target\n");
 
-        Assert.Equal(IgnoreDecision.Ignore, rules.Match(CreateEntry(root, "target", isDirectory: false)));
-        Assert.Equal(IgnoreDecision.None, rules.Match(CreateAbsoluteEntry(sibling, isDirectory: false)));
+        Assert.AreEqual(IgnoreDecision.Ignore, rules.Match(CreateEntry(root, "target", isDirectory: false)));
+        Assert.AreEqual(IgnoreDecision.None, rules.Match(CreateAbsoluteEntry(sibling, isDirectory: false)));
     }
 
     /// <summary>
     /// Verifies parent-like path names under the matcher root are still ordinary relative paths.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MatchPathOrAnyParentsAllowsDotDotPrefixedNamesUnderRoot()
     {
         string root = CreateTempDirectory();
@@ -244,7 +245,7 @@ public sealed class GitignoreTests
     /// <summary>
     /// Verifies upstream path-or-parent matching cases for files in the matcher root.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MatchPathOrAnyParentsFilesInRootMatchesUpstream()
     {
         string root = CreateTempDirectory();
@@ -274,7 +275,7 @@ public sealed class GitignoreTests
     /// <summary>
     /// Verifies upstream path-or-parent matching cases for files below a parent directory.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MatchPathOrAnyParentsFilesInDeepDirectoryMatchesUpstream()
     {
         string root = CreateTempDirectory();
@@ -304,7 +305,7 @@ public sealed class GitignoreTests
     /// <summary>
     /// Verifies upstream path-or-parent matching cases for directories in the matcher root.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MatchPathOrAnyParentsDirectoriesInRootMatchUpstream()
     {
         string root = CreateTempDirectory();
@@ -340,7 +341,7 @@ public sealed class GitignoreTests
     /// <summary>
     /// Verifies upstream path-or-parent matching cases for directories below a parent directory.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MatchPathOrAnyParentsDirectoriesInDeepDirectoryMatchUpstream()
     {
         string root = CreateTempDirectory();
@@ -394,12 +395,12 @@ public sealed class GitignoreTests
 
     private static void AssertIgnored(IgnoreRuleSet rules, string root, string relativePath, bool isDirectory = false)
     {
-        Assert.Equal(IgnoreDecision.Ignore, rules.MatchPathOrAnyParents(CreateEntry(root, relativePath, isDirectory)));
+        Assert.AreEqual(IgnoreDecision.Ignore, rules.MatchPathOrAnyParents(CreateEntry(root, relativePath, isDirectory)));
     }
 
     private static void AssertNone(IgnoreRuleSet rules, string root, string relativePath, bool isDirectory = false)
     {
-        Assert.Equal(IgnoreDecision.None, rules.MatchPathOrAnyParents(CreateEntry(root, relativePath, isDirectory)));
+        Assert.AreEqual(IgnoreDecision.None, rules.MatchPathOrAnyParents(CreateEntry(root, relativePath, isDirectory)));
     }
 
     private static IgnoreRuleSet LoadMatchedPathRules(string root)

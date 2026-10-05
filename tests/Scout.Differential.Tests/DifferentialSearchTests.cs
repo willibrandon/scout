@@ -4,12 +4,13 @@ namespace Scout;
 /// <summary>
 /// Verifies byte-for-byte search parity against the pinned ripgrep binary.
 /// </summary>
+[TestClass]
 public sealed class DifferentialSearchTests
 {
     /// <summary>
     /// Verifies a baseline flag matrix against the pinned ripgrep binary.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BaselineSearchMatrixMatchesPinnedRipgrep()
     {
         string root = CreateTempDirectory();

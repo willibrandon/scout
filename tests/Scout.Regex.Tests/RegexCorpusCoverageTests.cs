@@ -4,6 +4,7 @@ namespace Scout;
 /// <summary>
 /// Verifies the regex corpus harness tracks the pinned regex crate corpus.
 /// </summary>
+[TestClass]
 public sealed class RegexCorpusCoverageTests
 {
     private const int ExpectedUpstreamCaseCount = 839;
@@ -66,19 +67,19 @@ public sealed class RegexCorpusCoverageTests
     /// <summary>
     /// Verifies supported regex corpus cases are unique and pinned to upstream case inventory.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CatalogDocumentsCurrentRegexCorpusCoverage()
     {
         string[] supportedKeys = RegexCorpusTests.CorpusCaseKeys();
         var upstream = new SortedSet<string>(RegexCorpusLoader.EnumerateAllCaseKeys(), StringComparer.Ordinal);
         var supported = new SortedSet<string>(supportedKeys, StringComparer.Ordinal);
 
-        Assert.Equal(ExpectedSupportedCaseCount, supportedKeys.Length);
-        Assert.Equal(supportedKeys.Length, supported.Count);
-        Assert.Equal(ExpectedUpstreamCaseCount, upstream.Count);
-        Assert.Equal(ExpectedUpstreamFileCounts, CountByRelativePath(upstream));
-        Assert.Equal(ExpectedSupportedFileCounts, CountByRelativePath(supported));
-        Assert.Empty(Difference(supported, upstream));
+        Assert.HasCount(ExpectedSupportedCaseCount, supportedKeys);
+        Assert.HasCount(supportedKeys.Length, supported);
+        Assert.HasCount(ExpectedUpstreamCaseCount, upstream);
+        Assert.AreSequenceEqual(ExpectedUpstreamFileCounts, CountByRelativePath(upstream));
+        Assert.AreSequenceEqual(ExpectedSupportedFileCounts, CountByRelativePath(supported));
+        Assert.IsEmpty(Difference(supported, upstream));
     }
 
     private static string[] Difference(SortedSet<string> left, SortedSet<string> right)

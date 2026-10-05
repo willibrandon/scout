@@ -4,32 +4,33 @@ namespace Scout;
 /// <summary>
 /// Verifies ripgrep-compatible stdout buffering mode selection.
 /// </summary>
+[TestClass]
 public sealed class OutputBufferingTests
 {
     /// <summary>
     /// Verifies automatic buffering uses line mode for terminals and block mode otherwise.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AutoBufferingTracksStdoutTerminalState()
     {
-        Assert.Equal(RawByteWriterBufferMode.Line, OutputBuffering.Resolve(CliBufferMode.Auto, standardOutputIsTerminal: true));
-        Assert.Equal(RawByteWriterBufferMode.Block, OutputBuffering.Resolve(CliBufferMode.Auto, standardOutputIsTerminal: false));
+        Assert.AreEqual(RawByteWriterBufferMode.Line, OutputBuffering.Resolve(CliBufferMode.Auto, standardOutputIsTerminal: true));
+        Assert.AreEqual(RawByteWriterBufferMode.Block, OutputBuffering.Resolve(CliBufferMode.Auto, standardOutputIsTerminal: false));
     }
 
     /// <summary>
     /// Verifies explicit buffering flags override automatic terminal detection.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ExplicitBufferingOverridesTerminalState()
     {
-        Assert.Equal(RawByteWriterBufferMode.Line, OutputBuffering.Resolve(CliBufferMode.Line, standardOutputIsTerminal: false));
-        Assert.Equal(RawByteWriterBufferMode.Block, OutputBuffering.Resolve(CliBufferMode.Block, standardOutputIsTerminal: true));
+        Assert.AreEqual(RawByteWriterBufferMode.Line, OutputBuffering.Resolve(CliBufferMode.Line, standardOutputIsTerminal: false));
+        Assert.AreEqual(RawByteWriterBufferMode.Block, OutputBuffering.Resolve(CliBufferMode.Block, standardOutputIsTerminal: true));
     }
 
     /// <summary>
     /// Verifies redirected stdout uses block buffering until the app flushes at completion.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ScoutApplicationUsesBlockBufferingForRedirectedStdout()
     {
         using MemoryStream output = new();
@@ -45,8 +46,8 @@ public sealed class OutputBufferingTests
 
         int exitCode = ScoutApplication.Run(arguments, outputWriter, errorWriter, standardOutputIsTerminal: false);
 
-        Assert.Equal(0, exitCode);
-        Assert.NotEmpty(output.ToArray());
-        Assert.Empty(error.ToArray());
+        Assert.AreEqual(0, exitCode);
+        Assert.IsNotEmpty(output.ToArray());
+        Assert.IsEmpty(error.ToArray());
     }
 }

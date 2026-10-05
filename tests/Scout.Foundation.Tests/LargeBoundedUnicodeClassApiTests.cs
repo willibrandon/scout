@@ -6,8 +6,10 @@ namespace Scout;
 /// <summary>
 /// Verifies the public byte regex facade handles large bounded Unicode classes without stalling.
 /// </summary>
-[Collection(LargeBoundedUnicodeClassTestGroup.Name)]
-public sealed class LargeBoundedUnicodeClassApiTests
+/// <param name="testContext">The context for the current test.</param>
+[DoNotParallelize]
+[TestClass]
+public sealed class LargeBoundedUnicodeClassApiTests(TestContext testContext)
 {
     private const int CandidateCount = 5000;
     private const int SearchTimeoutMilliseconds = 5000;
@@ -16,10 +18,11 @@ public sealed class LargeBoundedUnicodeClassApiTests
     /// <summary>
     /// Verifies a large bounded Unicode class compiles and rejects the issue 32 candidate set without stalling.
     /// </summary>
-    [Fact(Timeout = SearchTimeoutMilliseconds)]
+    [TestMethod]
+    [Timeout(SearchTimeoutMilliseconds, CooperativeCancellation = true)]
     public void RejectsLargeBoundedUnicodeClassCandidatesWithoutStalling()
     {
-        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        CancellationToken cancellationToken = testContext.CancellationToken;
         cancellationToken.ThrowIfCancellationRequested();
         var regex = ByteRegex.Compile(
             Pattern,
@@ -28,6 +31,6 @@ public sealed class LargeBoundedUnicodeClassApiTests
             Enumerable.Repeat(Pattern + "\n", CandidateCount)));
 
         cancellationToken.ThrowIfCancellationRequested();
-        Assert.Null(regex.Find(input));
+        Assert.IsNull(regex.Find(input));
     }
 }

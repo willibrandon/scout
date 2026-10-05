@@ -7,6 +7,7 @@ namespace Scout;
 /// <summary>
 /// Verifies release glob and file-type behavior through exported APIs.
 /// </summary>
+[TestClass]
 public sealed class UpstreamGlobRegressionTests
 {
     private static readonly string[] CandidatePaths = [
@@ -17,10 +18,10 @@ public sealed class UpstreamGlobRegressionTests
     /// <summary>
     /// Verifies MatchesAll requires every pattern, including duplicates and mixed strategies.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MatchesAllChecksEveryGlob()
     {
-        Assert.True(GlobSet.Create([]).MatchesAll("anything"u8));
+        Assert.IsTrue(GlobSet.Create([]).MatchesAll("anything"u8));
         string[][] groups =
         [
             ["src/App.cs", "src/Other.cs"],
@@ -45,8 +46,8 @@ public sealed class UpstreamGlobRegressionTests
             foreach (byte[] path in CandidatePaths.Select(candidate => Encoding.UTF8.GetBytes(candidate)))
             {
                 bool expected = globs.All(glob => glob.IsMatch(path));
-                Assert.Equal(expected, set.MatchesAll(path));
-                Assert.Equal(expected, set.MatchesAll(GlobCandidate.FromBytes(path)));
+                Assert.AreEqual(expected, set.MatchesAll(path));
+                Assert.AreEqual(expected, set.MatchesAll(GlobCandidate.FromBytes(path)));
             }
         }
 
@@ -54,10 +55,10 @@ public sealed class UpstreamGlobRegressionTests
             new GlobBuilder("c*"u8.ToArray()).WithAsciiCaseInsensitive(true).Build(),
             Glob.Parse("*{rs,c}"u8.ToArray()),
         ]);
-        Assert.True(insensitive.MatchesAll("c/main.rs"u8));
-        Assert.True(insensitive.MatchesAll("C/main.c"u8));
-        Assert.False(insensitive.MatchesAll("Ca"u8));
-        Assert.False(insensitive.MatchesAll("foo.c"u8));
+        Assert.IsTrue(insensitive.MatchesAll("c/main.rs"u8));
+        Assert.IsTrue(insensitive.MatchesAll("C/main.c"u8));
+        Assert.IsFalse(insensitive.MatchesAll("Ca"u8));
+        Assert.IsFalse(insensitive.MatchesAll("foo.c"u8));
     }
 
     /// <summary>
@@ -65,18 +66,18 @@ public sealed class UpstreamGlobRegressionTests
     /// </summary>
     /// <param name="path">The candidate path.</param>
     /// <param name="basename">The expected basename.</param>
-    [Theory]
-    [InlineData("foo/bar", "bar")]
-    [InlineData("foo", "foo")]
-    [InlineData("foo/..", "")]
-    [InlineData("", "")]
+    [TestMethod]
+    [DataRow("foo/bar", "bar")]
+    [DataRow("foo", "foo")]
+    [DataRow("foo/..", "")]
+    [DataRow("", "")]
     public void OwnedBasenameMatchesUpstream(string path, string basename)
     {
         byte[] bytes = Encoding.UTF8.GetBytes(path);
         var candidate = new GlobCandidate(bytes);
         Array.Fill(bytes, (byte)'X');
-        Assert.Equal(Encoding.UTF8.GetBytes(basename), candidate.BaseName.ToArray());
-        Assert.Equal(Encoding.UTF8.GetBytes(path), candidate.Path.ToArray());
+        Assert.AreSequenceEqual(Encoding.UTF8.GetBytes(basename), candidate.BaseName.ToArray());
+        Assert.AreSequenceEqual(Encoding.UTF8.GetBytes(path), candidate.Path.ToArray());
     }
 
     /// <summary>
@@ -84,25 +85,25 @@ public sealed class UpstreamGlobRegressionTests
     /// </summary>
     /// <param name="type">The type name or alias.</param>
     /// <param name="file">A matching file name.</param>
-    [Theory]
-    [InlineData("hurl", "request.hurl")]
-    [InlineData("mojo", "main.mojo")]
-    [InlineData("pkgbuild", "PKGBUILD")]
-    [InlineData("proto", "message.proto")]
-    [InlineData("protobuf", "message.proto")]
-    [InlineData("rocq", "proof.v")]
+    [TestMethod]
+    [DataRow("hurl", "request.hurl")]
+    [DataRow("mojo", "main.mojo")]
+    [DataRow("pkgbuild", "PKGBUILD")]
+    [DataRow("proto", "message.proto")]
+    [DataRow("protobuf", "message.proto")]
+    [DataRow("rocq", "proof.v")]
     public void NewFileTypesParticipateInNormalSelections(string type, string file)
     {
         using var fixture = new DirectoryFixture();
         string expected = fixture.Write(file);
         fixture.Write("unrelated.txt");
         FileTypeMatcherBuilder builder = new FileTypeMatcherBuilder().AddDefaults();
-        Assert.Contains(builder.Build().Definitions, definition => definition.Name == type);
+        Assert.Contains(definition => definition.Name == type, builder.Build().Definitions);
         FileTypeMatcher selected = builder.Select(type).Build();
-        Assert.Equal(expected, Assert.Single(new WalkBuilder(fixture.Root).GitGlobal(false).FileTypes(selected).Build(), static entry => entry.IsFile).FullPath);
+        Assert.AreEqual(expected, Assert.ContainsSingle(static entry => entry.IsFile, new WalkBuilder(fixture.Root).GitGlobal(false).FileTypes(selected).Build()).FullPath);
         FileTypeMatcher negated = new FileTypeMatcherBuilder().AddDefaults().Negate(type).Build();
-        Assert.DoesNotContain(new WalkBuilder(fixture.Root).GitGlobal(false).FileTypes(negated).Build(), entry => entry.FullPath == expected);
+        Assert.DoesNotContain(entry => entry.FullPath == expected, new WalkBuilder(fixture.Root).GitGlobal(false).FileTypes(negated).Build());
         FileTypeMatcher cleared = new FileTypeMatcherBuilder().AddDefaults().Clear(type).Add(type, "*.txt").Select(type).Build();
-        Assert.EndsWith("unrelated.txt", Assert.Single(new WalkBuilder(fixture.Root).GitGlobal(false).FileTypes(cleared).Build(), static entry => entry.IsFile).FullPath, StringComparison.Ordinal);
+        Assert.EndsWith("unrelated.txt", Assert.ContainsSingle(static entry => entry.IsFile, new WalkBuilder(fixture.Root).GitGlobal(false).FileTypes(cleared).Build()).FullPath, StringComparison.Ordinal);
     }
 }

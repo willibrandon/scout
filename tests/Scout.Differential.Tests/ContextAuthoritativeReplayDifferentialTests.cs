@@ -3,12 +3,13 @@ namespace Scout;
 /// <summary>
 /// Verifies context consumers replay authoritative match spans with ripgrep semantics.
 /// </summary>
+[TestClass]
 public sealed class ContextAuthoritativeReplayDifferentialTests
 {
     /// <summary>
     /// Verifies context, match, replacement, vimgrep, color, inversion, and limit consumers.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ContextConsumersReplayAuthoritativeSpans()
     {
         using var directory = RgTestDirectory.Create(
@@ -69,7 +70,7 @@ public sealed class ContextAuthoritativeReplayDifferentialTests
     /// <summary>
     /// Verifies retained context spans preserve CRLF and NUL record semantics.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ContextRecordTerminatorsReplayAuthoritativeSpans()
     {
         using var directory = RgTestDirectory.Create(
@@ -104,7 +105,7 @@ public sealed class ContextAuthoritativeReplayDifferentialTests
     /// <summary>
     /// Verifies host-stable physical-EOF replay and counting against ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AbsoluteAnchorReplayMatchesPinnedRipgrep()
     {
         using var directory = RgTestDirectory.Create(
@@ -137,7 +138,7 @@ public sealed class ContextAuthoritativeReplayDifferentialTests
     /// <summary>
     /// Verifies vimgrep renders authoritative events across streaming, long-line, context, and only-matching output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void VimgrepRendersAuthoritativeMatchEvents()
     {
         using var directory = RgTestDirectory.Create(

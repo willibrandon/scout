@@ -4,12 +4,13 @@ namespace Scout;
 /// <summary>
 /// Verifies streaming search-input transcoding.
 /// </summary>
+[TestClass]
 public sealed class SearchEncodingReaderTests
 {
     /// <summary>
     /// Verifies stream reads apply BOM sniffing and transcoding.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReadToEndAppliesSearchEncoding()
     {
         using var stream = new SegmentedReadStream(
@@ -20,52 +21,52 @@ public sealed class SearchEncodingReaderTests
 
         byte[] bytes = SearchEncodingReader.ReadToEnd(stream, SearchEncodingKind.Auto);
 
-        Assert.Equal("needle\n"u8.ToArray(), bytes);
+        Assert.AreSequenceEqual("needle\n"u8.ToArray(), bytes);
     }
 
     /// <summary>
     /// Verifies raw stream reads preserve bytes after buffering.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReadToEndPreservesRawBytes()
     {
         using var stream = new MemoryStream([0xEF, 0xBB, 0xBF, (byte)'n']);
 
         byte[] bytes = SearchEncodingReader.ReadToEnd(stream, SearchEncodingKind.None);
 
-        Assert.Equal([0xEF, 0xBB, 0xBF, (byte)'n'], bytes);
+        Assert.AreSequenceEqual<byte>([0xEF, 0xBB, 0xBF, (byte)'n'], bytes);
     }
 
     /// <summary>
     /// Verifies null streams are rejected.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReadToEndRejectsNullStream()
     {
-        Assert.Throws<ArgumentNullException>(() => SearchEncodingReader.ReadToEnd(null!, SearchEncodingKind.Auto));
+        Assert.ThrowsExactly<ArgumentNullException>(() => SearchEncodingReader.ReadToEnd(null!, SearchEncodingKind.Auto));
     }
 
     /// <summary>
     /// Verifies null destination streams are rejected.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TranscodeToRejectsNullDestination()
     {
         using var stream = new MemoryStream();
 
-        Assert.Throws<ArgumentNullException>(() => SearchEncodingReader.TranscodeTo(stream, null!, SearchEncodingKind.Auto));
+        Assert.ThrowsExactly<ArgumentNullException>(() => SearchEncodingReader.TranscodeTo(stream, null!, SearchEncodingKind.Auto));
     }
 
     /// <summary>
     /// Verifies UTF-8 and UTF-16 sequences can span stream reads.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReadToEndPreservesSplitUnicodeSequences()
     {
-        Assert.Equal(
+        Assert.AreSequenceEqual(
             "\uD83D\uDE00"u8.ToArray(),
             ReadSegmented(SearchEncodingKind.Utf8, [0xF0], [0x9F, 0x98], [0x80]));
-        Assert.Equal(
+        Assert.AreSequenceEqual(
             "\uD83D\uDE00"u8.ToArray(),
             ReadSegmented(SearchEncodingKind.Utf16Le, [0x3D], [0xD8, 0x00], [0xDE]));
     }
@@ -73,22 +74,22 @@ public sealed class SearchEncodingReaderTests
     /// <summary>
     /// Verifies multibyte legacy encodings can span stream reads.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReadToEndPreservesSplitLegacySequences()
     {
-        Assert.Equal(
+        Assert.AreSequenceEqual(
             "\u4E2D\u6587"u8.ToArray(),
             ReadSegmented(SearchEncodingKind.Big5, [0xA4], [0xA4, 0xA4], [0xE5]));
-        Assert.Equal(
+        Assert.AreSequenceEqual(
             "\uD83D\uDE00"u8.ToArray(),
             ReadSegmented(SearchEncodingKind.Gb18030, [0x94, 0x39], [0xFC], [0x36]));
-        Assert.Equal(
+        Assert.AreSequenceEqual(
             "\uAC00"u8.ToArray(),
             ReadSegmented(SearchEncodingKind.EucKr, [0xB0], [0xA1]));
-        Assert.Equal(
+        Assert.AreSequenceEqual(
             "\u3042"u8.ToArray(),
             ReadSegmented(SearchEncodingKind.EucJp, [0xA4], [0xA2]));
-        Assert.Equal(
+        Assert.AreSequenceEqual(
             "\u3042"u8.ToArray(),
             ReadSegmented(SearchEncodingKind.ShiftJis, [0x82], [0xA0]));
     }
@@ -96,18 +97,18 @@ public sealed class SearchEncodingReaderTests
     /// <summary>
     /// Verifies split malformed GB18030 prefixes preserve WHATWG byte consumption.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReadToEndPreservesSplitGb18030MalformedConsumption()
     {
         byte[] bytes = ReadSegmented(SearchEncodingKind.Gb18030, [0x81, 0x30], [(byte)'A']);
 
-        Assert.Equal("\uFFFD0A"u8.ToArray(), bytes);
+        Assert.AreSequenceEqual("\uFFFD0A"u8.ToArray(), bytes);
     }
 
     /// <summary>
     /// Verifies ISO-2022-JP decoder state survives stream read boundaries.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReadToEndPreservesIso2022JpStateAcrossReads()
     {
         byte[] bytes = ReadSegmented(
@@ -117,13 +118,13 @@ public sealed class SearchEncodingReaderTests
             [0x7C, 0x4B],
             [0x5C, 0x38, 0x6C]);
 
-        Assert.Equal("\u65E5\u672C\u8A9E"u8.ToArray(), bytes);
+        Assert.AreSequenceEqual("\u65E5\u672C\u8A9E"u8.ToArray(), bytes);
     }
 
     /// <summary>
     /// Verifies BOM-like data after the initial sniff is decoded as content.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReadToEndOnlySniffsBomAtStart()
     {
         byte[] bytes = ReadSegmented(
@@ -131,7 +132,7 @@ public sealed class SearchEncodingReaderTests
             [(byte)'A', 0, 0xFF],
             [0xFE, (byte)'B', 0]);
 
-        Assert.Equal("A\uFEFFB"u8.ToArray(), bytes);
+        Assert.AreSequenceEqual("A\uFEFFB"u8.ToArray(), bytes);
     }
 
     private static byte[] ReadSegmented(SearchEncodingKind encodingKind, params byte[][] segments)

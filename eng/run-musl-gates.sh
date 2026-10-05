@@ -19,10 +19,10 @@ dotnet format Scout.slnx --no-restore --verify-no-changes
 for mode in regex-parse glob-compile search-loop; do
     dotnet run --project fuzz/Scout.Fuzz/Scout.Fuzz.csproj --no-build -- "$mode"
 done
-dotnet test Scout.slnx --no-restore
+dotnet test --solution Scout.slnx --no-restore
 spike/build-unix.sh linux-musl-arm64
 native/build-app-unix.sh linux-musl-arm64 --with-differentials
-SCOUT_TEST_EXECUTABLE_PATH="$ROOT/artifacts/bin/linux-musl-arm64/scout" dotnet test tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore
+SCOUT_TEST_EXECUTABLE_PATH="$ROOT/artifacts/bin/linux-musl-arm64/scout" dotnet test --project tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore
 python3 eng/verify-completions.py --scout artifacts/bin/linux-musl-arm64/scout --shell bash --shell zsh --shell fish
 readelf -l artifacts/bin/linux-musl-arm64/scout-real > artifacts/prereqs/linux-musl-arm64/elf.txt
 rg_path="/lib/ld-musl-aarch64.so.1"

@@ -261,6 +261,16 @@ scan_editor_config_file() {
     project="$1"
     config="$2"
 
+    # MSTest's All preset leaves mutually exclusive fixture style rules inactive.
+    # Repository overrides are scanned separately and cannot disable diagnostics.
+    case "$config" in
+        "$ROOT"/*)
+            ;;
+        */mstest.analyzers/*/globalconfigs/mstest-all.globalconfig)
+            return
+            ;;
+    esac
+
     if grep -E 'dotnet_(analyzer_diagnostic|diagnostic)\.[^\r\n]*severity[[:space:]]*=[[:space:]]*(none|silent)($|[[:space:]#;])' "$config" >/dev/null; then
         fail "$project imports analyzer config with none/silent severity: $(relative_path "$config")."
     fi

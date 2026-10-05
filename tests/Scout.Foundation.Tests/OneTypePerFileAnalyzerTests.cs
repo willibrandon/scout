@@ -8,14 +8,16 @@ namespace Scout;
 /// <summary>
 /// Verifies Scout one-type-per-file analyzer behavior.
 /// </summary>
-public sealed class OneTypePerFileAnalyzerTests
+/// <param name="testContext">The context for the current test.</param>
+[TestClass]
+public sealed class OneTypePerFileAnalyzerTests(TestContext testContext)
 {
     private static readonly string[] SourceRootNames = ["src", "tests"];
 
     /// <summary>
     /// Verifies a single type with a matching file name is accepted.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public async Task AcceptsSingleMatchingTypeAsync()
     {
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
@@ -28,13 +30,13 @@ public sealed class OneTypePerFileAnalyzerTests
             }
             """).ConfigureAwait(true);
 
-        Assert.Empty(diagnostics);
+        Assert.IsEmpty(diagnostics);
     }
 
     /// <summary>
     /// Verifies files declaring multiple top-level types are rejected.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public async Task ReportsMultipleTopLevelTypesAsync()
     {
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
@@ -51,16 +53,16 @@ public sealed class OneTypePerFileAnalyzerTests
             }
             """).ConfigureAwait(true);
 
-        Diagnostic diagnostic = Assert.Single(diagnostics);
-        Assert.Equal("SCOUT0001", diagnostic.Id);
-        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual("SCOUT0001", diagnostic.Id);
+        Assert.AreEqual(DiagnosticSeverity.Error, diagnostic.Severity);
         Assert.Contains("declares 2 types", diagnostic.GetMessage(), StringComparison.Ordinal);
     }
 
     /// <summary>
     /// Verifies nested types count against the one-type-per-file rule.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public async Task ReportsNestedTypesAsync()
     {
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
@@ -76,16 +78,16 @@ public sealed class OneTypePerFileAnalyzerTests
             }
             """).ConfigureAwait(true);
 
-        Diagnostic diagnostic = Assert.Single(diagnostics);
-        Assert.Equal("SCOUT0001", diagnostic.Id);
-        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual("SCOUT0001", diagnostic.Id);
+        Assert.AreEqual(DiagnosticSeverity.Error, diagnostic.Severity);
         Assert.Contains("declares 2 types", diagnostic.GetMessage(), StringComparison.Ordinal);
     }
 
     /// <summary>
     /// Verifies delegates count as type declarations.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public async Task ReportsDelegatesAsTypesAsync()
     {
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
@@ -100,16 +102,16 @@ public sealed class OneTypePerFileAnalyzerTests
             public delegate void ParserFactory();
             """).ConfigureAwait(true);
 
-        Diagnostic diagnostic = Assert.Single(diagnostics);
-        Assert.Equal("SCOUT0001", diagnostic.Id);
-        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual("SCOUT0001", diagnostic.Id);
+        Assert.AreEqual(DiagnosticSeverity.Error, diagnostic.Severity);
         Assert.Contains("declares 2 types", diagnostic.GetMessage(), StringComparison.Ordinal);
     }
 
     /// <summary>
     /// Verifies a single type must match its file name.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public async Task ReportsTypeNameFileNameMismatchAsync()
     {
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
@@ -122,16 +124,16 @@ public sealed class OneTypePerFileAnalyzerTests
             }
             """).ConfigureAwait(true);
 
-        Diagnostic diagnostic = Assert.Single(diagnostics);
-        Assert.Equal("SCOUT0002", diagnostic.Id);
-        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
-        Assert.Equal("Type 'SearchParser' must live in a file named 'SearchParser.cs'", diagnostic.GetMessage());
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual("SCOUT0002", diagnostic.Id);
+        Assert.AreEqual(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.AreEqual("Type 'SearchParser' must live in a file named 'SearchParser.cs'", diagnostic.GetMessage());
     }
 
     /// <summary>
     /// Verifies generated files compare against the pre-.g file stem.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public async Task AcceptsGeneratedFileStemAsync()
     {
         ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAsync(
@@ -144,13 +146,13 @@ public sealed class OneTypePerFileAnalyzerTests
             }
             """).ConfigureAwait(true);
 
-        Assert.Empty(diagnostics);
+        Assert.IsEmpty(diagnostics);
     }
 
     /// <summary>
     /// Verifies external LibraryImport-generated files are outside Scout's structural policy.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public async Task IgnoresExternalLibraryImportGeneratedFilesAsync()
     {
         string filePath = Path.Join(
@@ -176,25 +178,26 @@ public sealed class OneTypePerFileAnalyzerTests
             }
             """).ConfigureAwait(true);
 
-        Assert.Empty(diagnostics);
+        Assert.IsEmpty(diagnostics);
     }
 
     /// <summary>
     /// Verifies checked-in sources obey the one-type-per-file rule.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public async Task RepositorySourcesUseOneTypePerFileAsync()
     {
+        CancellationToken cancellationToken = testContext.CancellationToken;
         string root = FindRepositoryRoot();
         var violations = new List<string>();
 
         foreach (string filePath in EnumerateRepositorySources(root))
         {
-            string source = await File.ReadAllTextAsync(filePath, TestContext.Current.CancellationToken).ConfigureAwait(true);
+            string source = await File.ReadAllTextAsync(filePath, cancellationToken).ConfigureAwait(true);
             SyntaxTree tree = CSharpSyntaxTree.ParseText(
                 source,
                 path: filePath,
-                cancellationToken: TestContext.Current.CancellationToken);
+                cancellationToken: cancellationToken);
             ImmutableArray<Diagnostic> diagnostics = await AnalyzeTreeAsync(tree).ConfigureAwait(true);
 
             foreach (Diagnostic diagnostic in diagnostics.Where(diagnostic => string.Equals(diagnostic.Id, "SCOUT0001", StringComparison.Ordinal) ||
@@ -204,7 +207,34 @@ public sealed class OneTypePerFileAnalyzerTests
             }
         }
 
-        Assert.Empty(violations);
+        Assert.IsEmpty(violations);
+    }
+
+    /// <summary>
+    /// Verifies MTP infrastructure generated by the test SDK is outside Scout's structural policy.
+    /// </summary>
+    /// <param name="fileName">The generated infrastructure source name.</param>
+    [TestMethod]
+    [DataRow("MicrosoftTestingPlatformEntryPoint.cs")]
+    [DataRow("SelfRegisteredExtensions.cs")]
+    public async Task IgnoresExternalTestingPlatformGeneratedFilesAsync(string fileName)
+    {
+        string filePath = Path.Join(Path.GetTempPath(), "ScoutAnalyzerTests", "obj", "Debug", "net10.0", fileName);
+        ImmutableArray<Diagnostic> diagnostics = await AnalyzeSourceAtPathAsync(
+            filePath,
+            """
+            namespace Scout;
+
+            public sealed class TestEntryPoint
+            {
+            }
+
+            public sealed class TestExtensionRegistration
+            {
+            }
+            """).ConfigureAwait(true);
+
+        Assert.IsEmpty(diagnostics);
     }
 
     private static Task<ImmutableArray<Diagnostic>> AnalyzeSourceAsync(string fileName, string source)

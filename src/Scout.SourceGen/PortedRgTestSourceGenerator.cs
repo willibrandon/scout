@@ -9,7 +9,7 @@ using Microsoft.CodeAnalysis.Text;
 namespace Scout;
 
 /// <summary>
-/// Generates one xUnit test wrapper per ported upstream ripgrep <c>rgtest!</c> case.
+/// Generates one MSTest test wrapper per ported upstream ripgrep <c>rgtest!</c> case.
 /// </summary>
 [Generator]
 public sealed class PortedRgTestSourceGenerator : IIncrementalGenerator
@@ -153,12 +153,13 @@ public sealed class PortedRgTestSourceGenerator : IIncrementalGenerator
             "/// <summary>\n" +
             "/// Runs the ported upstream ripgrep <c>" + sourceFile + "::" + name + "</c> case.\n" +
             "/// </summary>\n" +
+            "[global::Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute]\n" +
             "public sealed class " + typeName + "\n" +
             "{\n" +
             "    /// <summary>\n" +
             "    /// Verifies this upstream case against pinned ripgrep.\n" +
             "    /// </summary>\n" +
-            "    [global::Xunit.FactAttribute]\n" +
+            "    [global::Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute]\n" +
             "    public void MatchesPinnedRipgrep()\n" +
             "    {\n" +
             "        PortedRgTests.Run(\"" + sourceFile + "\", \"" + name + "\");\n" +
@@ -174,12 +175,13 @@ public sealed class PortedRgTestSourceGenerator : IIncrementalGenerator
         builder.Append("/// <summary>\n");
         builder.Append("/// Verifies the generated ported ripgrep test catalog matches the runtime catalog.\n");
         builder.Append("/// </summary>\n");
+        builder.Append("[global::Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute]\n");
         builder.Append("public sealed class PortedRgTestCatalogCompleteness\n");
         builder.Append("{\n");
         builder.Append("    /// <summary>\n");
         builder.Append("    /// Verifies all cataloged upstream cases are generated as tests.\n");
         builder.Append("    /// </summary>\n");
-        builder.Append("    [global::Xunit.FactAttribute]\n");
+        builder.Append("    [global::Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute]\n");
         builder.Append("    public void CatalogMatchesGeneratedTests()\n");
         builder.Append("    {\n");
         builder.Append("        PortedRgTests.AssertCatalog(new (string SourceFile, string Name)[]\n");

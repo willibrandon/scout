@@ -7,7 +7,9 @@ namespace Scout;
 /// <summary>
 /// Verifies malformed UTF-8 can opt into replacement-scalar matching without losing byte offsets.
 /// </summary>
-public sealed class ByteRegexInvalidUtf8Tests
+/// <param name="testContext">The context for the current test.</param>
+[TestClass]
+public sealed class ByteRegexInvalidUtf8Tests(TestContext testContext)
 {
     private const int ConcurrentIterations = 32;
     private const int OracleInputCount = 24;
@@ -22,7 +24,7 @@ public sealed class ByteRegexInvalidUtf8Tests
     /// <summary>
     /// Verifies replacement matching is opt-in and the existing default still ignores malformed bytes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MatchInvalidUtf8DefaultsToFalseAndPreservesDefaultMatching()
     {
         var options = new ByteRegexOptions();
@@ -30,19 +32,19 @@ public sealed class ByteRegexInvalidUtf8Tests
 
         var regex = ByteRegex.Compile(@"\u{FFFD}", options);
 
-        Assert.False(options.MatchInvalidUtf8);
-        Assert.True(regex.IsMatch(input));
-        Assert.Equal(new ByteRegexMatch(1, 3), regex.Find(input));
-        Assert.Equal(1, regex.Count(input));
+        Assert.IsFalse(options.MatchInvalidUtf8);
+        Assert.IsTrue(regex.IsMatch(input));
+        Assert.AreEqual(new ByteRegexMatch(1, 3), regex.Find(input));
+        Assert.AreEqual(1, regex.Count(input));
     }
 
     /// <summary>
     /// Verifies representative malformed forms expose every original byte as an individual replacement scalar.
     /// </summary>
-    [Theory]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
     public void EveryByteOfMalformedAndTruncatedUtf8MatchesAsReplacement(ByteRegexEngineMode engineMode)
     {
         byte[][] malformedInputs =
@@ -59,18 +61,18 @@ public sealed class ByteRegexInvalidUtf8Tests
 
         foreach (byte[] input in malformedInputs)
         {
-            Assert.Equal(new ByteRegexMatch(0, input.Length), regex.Find(input));
-            Assert.Equal(1, regex.Count(input));
+            Assert.AreEqual(new ByteRegexMatch(0, input.Length), regex.Find(input));
+            Assert.AreEqual(1, regex.Count(input));
         }
     }
 
     /// <summary>
     /// Verifies dot consumes each malformed byte but continues to exclude the configured newline unless dot-all is enabled.
     /// </summary>
-    [Theory]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
     public void DotMatchesInvalidBytesButStillHonorsNewlineConfiguration(ByteRegexEngineMode engineMode)
     {
         byte[] input = [0xFF, (byte)'\n', 0xE2, 0x82];
@@ -79,10 +81,10 @@ public sealed class ByteRegexInvalidUtf8Tests
             ".",
             CreateOptions(engineMode, dotMatchesNewline: true));
 
-        Assert.Equal(
+        Assert.AreSequenceEqual<ByteRegexMatch>(
             [new ByteRegexMatch(0, 1), new ByteRegexMatch(2, 1), new ByteRegexMatch(3, 1)],
             CollectMatches(dot, input));
-        Assert.Equal(
+        Assert.AreSequenceEqual<ByteRegexMatch>(
             [new ByteRegexMatch(0, 1), new ByteRegexMatch(1, 1), new ByteRegexMatch(2, 1), new ByteRegexMatch(3, 1)],
             CollectMatches(dotAll, input));
     }
@@ -90,10 +92,10 @@ public sealed class ByteRegexInvalidUtf8Tests
     /// <summary>
     /// Verifies scalar literals and classes match malformed bytes as U+FFFD while retaining the width of valid U+FFFD.
     /// </summary>
-    [Theory]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
     public void ScalarSyntaxMatchesInvalidBytesAndEncodedReplacementCharacter(ByteRegexEngineMode engineMode)
     {
         byte[] input = [0xFF, 0xEF, 0xBF, 0xBD];
@@ -101,25 +103,25 @@ public sealed class ByteRegexInvalidUtf8Tests
 
         foreach (ByteRegex regex in patterns.Select(pattern => ByteRegex.Compile(pattern, CreateOptions(engineMode))))
         {
-            Assert.Equal(new ByteRegexMatch(0, 1), regex.Find(input));
-            Assert.Equal(new ByteRegexMatch(1, 3), regex.Find(input, startAt: 1));
-            Assert.Equal(2, regex.Count(input));
+            Assert.AreEqual(new ByteRegexMatch(0, 1), regex.Find(input));
+            Assert.AreEqual(new ByteRegexMatch(1, 3), regex.Find(input, startAt: 1));
+            Assert.AreEqual(2, regex.Count(input));
         }
     }
 
     /// <summary>
     /// Verifies a scalar escape in a class does not broaden its ASCII membership.
     /// </summary>
-    [Theory]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
     public void ScalarClassKeepsUnlistedAsciiOutsideMalformedRuns(ByteRegexEngineMode engineMode)
     {
         byte[] input = [0xFF, (byte)'F', 0xEF, 0xBF, 0xBD];
         var regex = ByteRegex.Compile(@"[\u{FFFD}a-z]+", CreateOptions(engineMode));
 
-        Assert.Equal(
+        Assert.AreSequenceEqual<ByteRegexMatch>(
             [new ByteRegexMatch(0, 1), new ByteRegexMatch(2, 3)],
             CollectMatches(regex, input));
     }
@@ -127,10 +129,10 @@ public sealed class ByteRegexInvalidUtf8Tests
     /// <summary>
     /// Verifies invalid bytes have the Unicode word-boundary behavior of the non-word U+FFFD scalar.
     /// </summary>
-    [Theory]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
     public void UnicodeWordBoundariesTreatInvalidBytesAsReplacementScalars(ByteRegexEngineMode engineMode)
     {
         byte[] input = [(byte)'a', 0xFF, (byte)'b'];
@@ -138,7 +140,7 @@ public sealed class ByteRegexInvalidUtf8Tests
         var word = ByteRegex.Compile(@"\w+", CreateOptions(engineMode));
         var invalidPair = ByteRegex.Compile(@"\u{FFFD}\B\u{FFFD}", CreateOptions(engineMode));
 
-        Assert.Equal(
+        Assert.AreSequenceEqual<ByteRegexMatch>(
             [
                 new ByteRegexMatch(0, 0),
                 new ByteRegexMatch(1, 0),
@@ -146,10 +148,10 @@ public sealed class ByteRegexInvalidUtf8Tests
                 new ByteRegexMatch(3, 0),
             ],
             CollectMatches(boundary, input));
-        Assert.Equal(
+        Assert.AreSequenceEqual<ByteRegexMatch>(
             [new ByteRegexMatch(0, 1), new ByteRegexMatch(2, 1)],
             CollectMatches(word, input));
-        Assert.Equal(
+        Assert.AreEqual(
             new ByteRegexMatch(0, 2),
             invalidPair.Find(new byte[] { 0xFF, 0xC3 }));
     }
@@ -157,28 +159,28 @@ public sealed class ByteRegexInvalidUtf8Tests
     /// <summary>
     /// Verifies every Unicode word predicate evaluates malformed context without scalar consumption.
     /// </summary>
-    [Theory]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
     public void UnicodeWordPredicatesUseInPlaceMalformedContext(ByteRegexEngineMode engineMode)
     {
         byte[] mixed = [(byte)'a', 0xFF, (byte)'b'];
         ByteRegexOptions options = CreateOptions(engineMode);
 
-        Assert.Equal(
+        Assert.AreSequenceEqual<ByteRegexMatch>(
             [new ByteRegexMatch(0, 0), new ByteRegexMatch(2, 0)],
             CollectMatches(ByteRegex.Compile(@"\b{start}", options), mixed));
-        Assert.Equal(
+        Assert.AreSequenceEqual<ByteRegexMatch>(
             [new ByteRegexMatch(1, 0), new ByteRegexMatch(3, 0)],
             CollectMatches(ByteRegex.Compile(@"\b{end}", options), mixed));
-        Assert.Equal(
+        Assert.AreSequenceEqual<ByteRegexMatch>(
             [new ByteRegexMatch(0, 0), new ByteRegexMatch(2, 0)],
             CollectMatches(ByteRegex.Compile(@"\b{start-half}", options), mixed));
-        Assert.Equal(
+        Assert.AreSequenceEqual<ByteRegexMatch>(
             [new ByteRegexMatch(1, 0), new ByteRegexMatch(3, 0)],
             CollectMatches(ByteRegex.Compile(@"\b{end-half}", options), mixed));
-        Assert.Equal(
+        Assert.AreSequenceEqual<ByteRegexMatch>(
             [new ByteRegexMatch(0, 0), new ByteRegexMatch(1, 0), new ByteRegexMatch(2, 0)],
             CollectMatches(ByteRegex.Compile(@"\B", options), [0xFF, 0xC3]));
     }
@@ -186,10 +188,10 @@ public sealed class ByteRegexInvalidUtf8Tests
     /// <summary>
     /// Verifies boundary alternation keeps observable capture participation on malformed input.
     /// </summary>
-    [Theory]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
     public void BoundaryAlternationPreservesCapturesOnMalformedInput(ByteRegexEngineMode engineMode)
     {
         var regex = ByteRegex.Compile(@"(?u:(\b)|(\B))(?-u:.)", CreateOptions(engineMode));
@@ -197,23 +199,23 @@ public sealed class ByteRegexInvalidUtf8Tests
         ByteRegexCaptures? boundary = regex.FindCaptures("a"u8);
         ByteRegexCaptures? nonBoundary = regex.FindCaptures([0xFF]);
 
-        Assert.NotNull(boundary);
-        Assert.Equal(new ByteRegexMatch(0, 1), boundary.Match);
-        Assert.Equal(new ByteRegexMatch(0, 0), boundary.GetGroup(1));
-        Assert.Null(boundary.GetGroup(2));
-        Assert.NotNull(nonBoundary);
-        Assert.Equal(new ByteRegexMatch(0, 1), nonBoundary.Match);
-        Assert.Null(nonBoundary.GetGroup(1));
-        Assert.Equal(new ByteRegexMatch(0, 0), nonBoundary.GetGroup(2));
+        Assert.IsNotNull(boundary);
+        Assert.AreEqual(new ByteRegexMatch(0, 1), boundary.Match);
+        Assert.AreEqual(new ByteRegexMatch(0, 0), boundary.GetGroup(1));
+        Assert.IsNull(boundary.GetGroup(2));
+        Assert.IsNotNull(nonBoundary);
+        Assert.AreEqual(new ByteRegexMatch(0, 1), nonBoundary.Match);
+        Assert.IsNull(nonBoundary.GetGroup(1));
+        Assert.AreEqual(new ByteRegexMatch(0, 0), nonBoundary.GetGroup(2));
     }
 
     /// <summary>
     /// Verifies the reported boundary-prefixed pattern avoids false matches without losing valid matches.
     /// </summary>
-    [Theory]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
     public void Issue58BoundaryPrefixMatchesThroughSyntheticMalformedInput(ByteRegexEngineMode engineMode)
     {
         byte[] noMatch = CreateIssue58NoMatchInput(Issue58RegressionInputLength);
@@ -223,40 +225,40 @@ public sealed class ByteRegexInvalidUtf8Tests
             new ByteRegexOptions { EngineMode = engineMode });
         var optInRegex = ByteRegex.Compile(Issue58Pattern, CreateOptions(engineMode));
 
-        Assert.Null(defaultRegex.Find(noMatch));
-        Assert.Null(optInRegex.Find(noMatch));
-        Assert.Equal(0, defaultRegex.Count(noMatch));
-        Assert.Equal(defaultRegex.Count(noMatch), optInRegex.Count(noMatch));
+        Assert.IsNull(defaultRegex.Find(noMatch));
+        Assert.IsNull(optInRegex.Find(noMatch));
+        Assert.AreEqual(0, defaultRegex.Count(noMatch));
+        Assert.AreEqual(defaultRegex.Count(noMatch), optInRegex.Count(noMatch));
 
         ByteRegexMatch expected = new(1, positive.Length - 1);
-        Assert.Equal(expected, defaultRegex.Find(positive));
-        Assert.Equal(expected, optInRegex.Find(positive));
+        Assert.AreEqual(expected, defaultRegex.Find(positive));
+        Assert.AreEqual(expected, optInRegex.Find(positive));
     }
 
     /// <summary>
     /// Verifies repetition counts every malformed or truncated byte as one replacement scalar.
     /// </summary>
-    [Theory]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
     public void RepetitionConsumesEachInvalidByteAsOneScalar(ByteRegexEngineMode engineMode)
     {
         byte[] input = [0xFF, 0xC3, (byte)'(', 0xE2, 0x82];
         var regex = ByteRegex.Compile(@"(?:\u{FFFD})+", CreateOptions(engineMode));
 
-        Assert.Equal(new ByteRegexMatch(0, 2), regex.Find(input));
-        Assert.Equal(new ByteRegexMatch(3, 2), regex.Find(input, startAt: 2));
-        Assert.Equal(2, regex.Count(input));
+        Assert.AreEqual(new ByteRegexMatch(0, 2), regex.Find(input));
+        Assert.AreEqual(new ByteRegexMatch(3, 2), regex.Find(input, startAt: 2));
+        Assert.AreEqual(2, regex.Count(input));
     }
 
     /// <summary>
     /// Verifies anchors, start offsets, and empty matches observe one scalar boundary per invalid byte.
     /// </summary>
-    [Theory]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
     public void AnchorsStartAtAndEmptyMatchesUseInvalidByteScalarBoundaries(ByteRegexEngineMode engineMode)
     {
         byte[] input = [0xFF, 0xC3];
@@ -265,10 +267,10 @@ public sealed class ByteRegexInvalidUtf8Tests
         var scalar = ByteRegex.Compile(@"\u{FFFD}", options);
         var empty = ByteRegex.Compile(string.Empty, options);
 
-        Assert.Equal(new ByteRegexMatch(0, 2), anchored.Find(input));
-        Assert.Null(anchored.Find(input, startAt: 1));
-        Assert.Equal(new ByteRegexMatch(1, 1), scalar.Find(input, startAt: 1));
-        Assert.Equal(
+        Assert.AreEqual(new ByteRegexMatch(0, 2), anchored.Find(input));
+        Assert.IsNull(anchored.Find(input, startAt: 1));
+        Assert.AreEqual(new ByteRegexMatch(1, 1), scalar.Find(input, startAt: 1));
+        Assert.AreSequenceEqual<ByteRegexMatch>(
             [new ByteRegexMatch(0, 0), new ByteRegexMatch(1, 0), new ByteRegexMatch(2, 0)],
             CollectMatches(empty, input));
     }
@@ -276,10 +278,10 @@ public sealed class ByteRegexInvalidUtf8Tests
     /// <summary>
     /// Verifies captures and values point into the original malformed and valid UTF-8 bytes.
     /// </summary>
-    [Theory]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
     public void CapturesAndValuesPreserveOriginalInvalidBytes(ByteRegexEngineMode engineMode)
     {
         byte[] input = [0xFF, 0xC3, 0xEF, 0xBF, 0xBD];
@@ -287,23 +289,23 @@ public sealed class ByteRegexInvalidUtf8Tests
 
         ByteRegexCaptures? captures = regex.FindCaptures(input);
 
-        Assert.NotNull(captures);
-        Assert.Equal(new ByteRegexMatch(0, 5), captures.Match);
-        Assert.Equal(new ByteRegexMatch(0, 5), captures.GetGroup(0));
-        Assert.Equal(new ByteRegexMatch(0, 2), captures.GetGroup(1));
-        Assert.Equal(new ByteRegexMatch(2, 3), captures.GetGroup(2));
-        Assert.True(captures.Match.Value(input).SequenceEqual(input));
-        Assert.True(captures.GetGroup(1)!.Value.Value(input).SequenceEqual(new byte[] { 0xFF, 0xC3 }));
-        Assert.True(captures.GetGroup(2)!.Value.Value(input).SequenceEqual(new byte[] { 0xEF, 0xBF, 0xBD }));
+        Assert.IsNotNull(captures);
+        Assert.AreEqual(new ByteRegexMatch(0, 5), captures.Match);
+        Assert.AreEqual(new ByteRegexMatch(0, 5), captures.GetGroup(0));
+        Assert.AreEqual(new ByteRegexMatch(0, 2), captures.GetGroup(1));
+        Assert.AreEqual(new ByteRegexMatch(2, 3), captures.GetGroup(2));
+        Assert.IsTrue(captures.Match.Value(input).SequenceEqual(input));
+        Assert.IsTrue(captures.GetGroup(1)!.Value.Value(input).SequenceEqual(new byte[] { 0xFF, 0xC3 }));
+        Assert.IsTrue(captures.GetGroup(2)!.Value.Value(input).SequenceEqual(new byte[] { 0xEF, 0xBF, 0xBD }));
     }
 
     /// <summary>
     /// Verifies aggregate and callback APIs report the original byte spans for invalid and valid replacement scalars.
     /// </summary>
-    [Theory]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
     public void CountAndForEachMatchReportOriginalByteSpans(ByteRegexEngineMode engineMode)
     {
         byte[] input = [0xFF, (byte)'x', 0xC3, 0xEF, 0xBF, 0xBD];
@@ -311,22 +313,22 @@ public sealed class ByteRegexInvalidUtf8Tests
 
         List<ByteRegexMatch> matches = CollectMatches(regex, input);
 
-        Assert.Equal(3, regex.Count(input));
-        Assert.Equal(
+        Assert.AreEqual(3, regex.Count(input));
+        Assert.AreSequenceEqual<ByteRegexMatch>(
             [new ByteRegexMatch(0, 1), new ByteRegexMatch(2, 1), new ByteRegexMatch(3, 3)],
             matches);
-        Assert.True(matches[0].Value(input).SequenceEqual(new byte[] { 0xFF }));
-        Assert.True(matches[1].Value(input).SequenceEqual(new byte[] { 0xC3 }));
-        Assert.True(matches[2].Value(input).SequenceEqual(new byte[] { 0xEF, 0xBF, 0xBD }));
+        Assert.IsTrue(matches[0].Value(input).SequenceEqual(new byte[] { 0xFF }));
+        Assert.IsTrue(matches[1].Value(input).SequenceEqual(new byte[] { 0xC3 }));
+        Assert.IsTrue(matches[2].Value(input).SequenceEqual(new byte[] { 0xEF, 0xBF, 0xBD }));
     }
 
     /// <summary>
     /// Verifies ordered regex sets and individual regexes agree on invalid UTF-8 matches and aggregate counts.
     /// </summary>
-    [Theory]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
     public void RegexSetAgreesWithRegexForInvalidUtf8(ByteRegexEngineMode engineMode)
     {
         byte[] input = [0xFF, 0xC3, (byte)'x'];
@@ -338,49 +340,49 @@ public sealed class ByteRegexInvalidUtf8Tests
         ByteRegexSetMatch? setMatch = set.Find(input);
         ByteRegexCaptures? setCaptures = set.FindCaptures(input);
 
-        Assert.Equal(new ByteRegexMatch(0, 2), regexMatch);
-        Assert.True(set.IsMatch(input));
-        Assert.True(setMatch.HasValue);
-        Assert.Equal(1, setMatch.Value.PatternId);
-        Assert.Equal(regexMatch, setMatch.Value.Match);
-        Assert.Equal(regex.Count(input), set.CountMatches(input));
-        Assert.Equal(regex.Find(input, startAt: 1), set.Find(input, startAt: 1)!.Value.Match);
-        Assert.Equal(regex.Count(input, startAt: 1), set.CountMatches(input, startAt: 1));
-        Assert.NotNull(setCaptures);
-        Assert.Equal(2, setCaptures.GroupCount);
-        Assert.Equal(setMatch.Value.Match, setCaptures.Match);
-        Assert.Equal(setMatch.Value.Match, setCaptures.GetGroup(0));
-        Assert.Equal(setMatch.Value.Match, setCaptures.GetGroup(1));
-        Assert.True(setCaptures.Match.Value(input).SequenceEqual(new byte[] { 0xFF, 0xC3 }));
+        Assert.AreEqual(new ByteRegexMatch(0, 2), regexMatch);
+        Assert.IsTrue(set.IsMatch(input));
+        Assert.IsTrue(setMatch.HasValue);
+        Assert.AreEqual(1, setMatch.Value.PatternId);
+        Assert.AreEqual(regexMatch, setMatch.Value.Match);
+        Assert.AreEqual(regex.Count(input), set.CountMatches(input));
+        Assert.AreEqual(regex.Find(input, startAt: 1), set.Find(input, startAt: 1)!.Value.Match);
+        Assert.AreEqual(regex.Count(input, startAt: 1), set.CountMatches(input, startAt: 1));
+        Assert.IsNotNull(setCaptures);
+        Assert.AreEqual(2, setCaptures.GroupCount);
+        Assert.AreEqual(setMatch.Value.Match, setCaptures.Match);
+        Assert.AreEqual(setMatch.Value.Match, setCaptures.GetGroup(0));
+        Assert.AreEqual(setMatch.Value.Match, setCaptures.GetGroup(1));
+        Assert.IsTrue(setCaptures.Match.Value(input).SequenceEqual(new byte[] { 0xFF, 0xC3 }));
     }
 
     /// <summary>
     /// Verifies valid two-, three-, and four-byte UTF-8 scalars remain indivisible.
     /// </summary>
-    [Theory]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
     public void ValidMultibyteScalarsAreNeverSplit(ByteRegexEngineMode engineMode)
     {
         byte[] input = [0xC3, 0xA9, 0xE2, 0x82, 0xAC, 0xF0, 0x9F, 0x92, 0xA9];
         var regex = ByteRegex.Compile(".", CreateOptions(engineMode, dotMatchesNewline: true));
 
-        Assert.Equal(
+        Assert.AreSequenceEqual<ByteRegexMatch>(
             [new ByteRegexMatch(0, 2), new ByteRegexMatch(2, 3), new ByteRegexMatch(5, 4)],
             CollectMatches(regex, input));
-        Assert.Equal(new ByteRegexMatch(2, 3), regex.Find(input, startAt: 1));
-        Assert.Equal(new ByteRegexMatch(5, 4), regex.Find(input, startAt: 3));
-        Assert.Null(regex.Find(input, startAt: 6));
+        Assert.AreEqual(new ByteRegexMatch(2, 3), regex.Find(input, startAt: 1));
+        Assert.AreEqual(new ByteRegexMatch(5, 4), regex.Find(input, startAt: 3));
+        Assert.IsNull(regex.Find(input, startAt: 6));
     }
 
     /// <summary>
     /// Verifies raw byte mode is byte-for-byte identical when replacement matching is enabled.
     /// </summary>
-    [Theory]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
     public void RawByteModeIsUnaffectedByMatchInvalidUtf8(ByteRegexEngineMode engineMode)
     {
         byte[] pattern = [0xFF, (byte)'.'];
@@ -388,34 +390,34 @@ public sealed class ByteRegexInvalidUtf8Tests
         var disabled = ByteRegex.Compile(pattern, CreateRawOptions(engineMode, matchInvalidUtf8: false));
         var enabled = ByteRegex.Compile(pattern, CreateRawOptions(engineMode, matchInvalidUtf8: true));
 
-        Assert.Equal(new ByteRegexMatch(1, 2), disabled.Find(input));
-        Assert.Equal(disabled.Find(input), enabled.Find(input));
-        Assert.Equal(disabled.Count(input), enabled.Count(input));
+        Assert.AreEqual(new ByteRegexMatch(1, 2), disabled.Find(input));
+        Assert.AreEqual(disabled.Find(input), enabled.Find(input));
+        Assert.AreEqual(disabled.Count(input), enabled.Count(input));
     }
 
     /// <summary>
     /// Verifies an inline Unicode disable takes precedence and can split valid UTF-8 into raw bytes.
     /// </summary>
-    [Theory]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
     public void InlineRawByteModeTakesPrecedenceOverMatchInvalidUtf8(ByteRegexEngineMode engineMode)
     {
         byte[] input = [0xF0, 0x9F, 0x92, 0xA9];
         var regex = ByteRegex.Compile(@"(?-u:.)", CreateOptions(engineMode));
 
-        Assert.Equal(new ByteRegexMatch(1, 1), regex.Find(input, startAt: 1));
-        Assert.Equal(4, regex.Count(input));
+        Assert.AreEqual(new ByteRegexMatch(1, 1), regex.Find(input, startAt: 1));
+        Assert.AreEqual(4, regex.Count(input));
     }
 
     /// <summary>
     /// Verifies direct invalid-byte matching agrees with a seeded valid-UTF-8 expansion and byte-offset oracle.
     /// </summary>
-    [Theory]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
     public void SeededExpandedReplacementOracleAgreesWithDirectMatching(ByteRegexEngineMode engineMode)
     {
         string[] patterns =
@@ -448,8 +450,8 @@ public sealed class ByteRegexInvalidUtf8Tests
                     .Select(match => MapExpandedMatch(match, boundaryMap))
                     .ToList();
 
-                Assert.Equal(expected, CollectMatches(direct, input));
-                Assert.Equal(oracle.Count(bytes), direct.Count(input));
+                Assert.AreSequenceEqual(expected, CollectMatches(direct, input));
+                Assert.AreEqual(oracle.Count(bytes), direct.Count(input));
             }
 
             AssertMappedCapturesEqual(
@@ -462,13 +464,14 @@ public sealed class ByteRegexInvalidUtf8Tests
     /// <summary>
     /// Verifies warmed Count and callback iteration allocations remain independent of input size.
     /// </summary>
-    [Theory(Timeout = 30000)]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
+    [Timeout(30000, CooperativeCancellation = true)]
     public void AggregateAllocationsDoNotScaleWithInputLength(ByteRegexEngineMode engineMode)
     {
-        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        CancellationToken cancellationToken = testContext.CancellationToken;
         cancellationToken.ThrowIfCancellationRequested();
         byte[] small = CreateSparseInvalidInput(InvalidByteStride);
         byte[] large = CreateSparseInvalidInput(LargeAllocationInputLength);
@@ -487,21 +490,21 @@ public sealed class ByteRegexInvalidUtf8Tests
         (long largeIterationCount, long largeIterationBytes) = MeasureIterationAllocations(regex, large);
 
         cancellationToken.ThrowIfCancellationRequested();
-        Assert.Equal(1, smallCount);
-        Assert.Equal(LargeAllocationInputLength / InvalidByteStride, largeCount);
-        Assert.Equal(smallCount, smallIterationCount);
-        Assert.Equal(largeCount, largeIterationCount);
-        Assert.InRange(largeCountBytes, 0, smallCountBytes + AllocationScalingSlack);
-        Assert.InRange(largeIterationBytes, 0, smallIterationBytes + AllocationScalingSlack);
+        Assert.AreEqual(1, smallCount);
+        Assert.AreEqual(LargeAllocationInputLength / InvalidByteStride, largeCount);
+        Assert.AreEqual(smallCount, smallIterationCount);
+        Assert.AreEqual(largeCount, largeIterationCount);
+        Assert.IsInRange(0, smallCountBytes + AllocationScalingSlack, largeCountBytes);
+        Assert.IsInRange(0, smallIterationBytes + AllocationScalingSlack, largeIterationBytes);
     }
 
     /// <summary>
     /// Verifies compiled regex and set instances safely reuse their invalid-UTF-8 matching state across threads.
     /// </summary>
-    [Theory]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
     public void CompiledRegexAndSetCanBeReusedConcurrently(ByteRegexEngineMode engineMode)
     {
         ByteRegexOptions options = CreateOptions(engineMode);
@@ -518,13 +521,13 @@ public sealed class ByteRegexInvalidUtf8Tests
         {
             foreach ((byte[] input, ByteRegexMatch expected) in cases)
             {
-                Assert.Equal(expected, regex.Find(input));
-                Assert.Equal(expected, regex.FindCaptures(input)!.Match);
+                Assert.AreEqual(expected, regex.Find(input));
+                Assert.AreEqual(expected, regex.FindCaptures(input)!.Match);
 
                 ByteRegexSetMatch? setMatch = set.Find(input);
-                Assert.True(setMatch.HasValue);
-                Assert.Equal(0, setMatch.Value.PatternId);
-                Assert.Equal(expected, setMatch.Value.Match);
+                Assert.IsTrue(setMatch.HasValue);
+                Assert.AreEqual(0, setMatch.Value.PatternId);
+                Assert.AreEqual(expected, setMatch.Value.Match);
             }
         });
     }
@@ -560,7 +563,7 @@ public sealed class ByteRegexInvalidUtf8Tests
 
         int count = regex.ForEachMatch(input, ref matches, AddMatch);
 
-        Assert.Equal(matches.Count, count);
+        Assert.AreEqual(matches.Count, count);
         return matches;
     }
 
@@ -636,20 +639,20 @@ public sealed class ByteRegexInvalidUtf8Tests
     {
         if (oracle is null)
         {
-            Assert.Null(direct);
+            Assert.IsNull(direct);
             return;
         }
 
-        Assert.NotNull(direct);
-        Assert.Equal(oracle.GroupCount, direct.GroupCount);
-        Assert.Equal(MapExpandedMatch(oracle.Match, boundaryMap), direct.Match);
+        Assert.IsNotNull(direct);
+        Assert.AreEqual(oracle.GroupCount, direct.GroupCount);
+        Assert.AreEqual(MapExpandedMatch(oracle.Match, boundaryMap), direct.Match);
         for (int groupIndex = 0; groupIndex < oracle.GroupCount; groupIndex++)
         {
             ByteRegexMatch? oracleGroup = oracle.GetGroup(groupIndex);
             ByteRegexMatch? expected = oracleGroup.HasValue
                 ? MapExpandedMatch(oracleGroup.Value, boundaryMap)
                 : null;
-            Assert.Equal(expected, direct.GetGroup(groupIndex));
+            Assert.AreEqual(expected, direct.GetGroup(groupIndex));
         }
     }
 
@@ -705,7 +708,7 @@ public sealed class ByteRegexInvalidUtf8Tests
         long before = GC.GetAllocatedBytesForCurrentThread();
         int count = regex.ForEachMatch(input, ref state, CountMatch);
         long allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - before;
-        Assert.Equal(state, count);
+        Assert.AreEqual(state, count);
         return (count, allocatedBytes);
     }
 

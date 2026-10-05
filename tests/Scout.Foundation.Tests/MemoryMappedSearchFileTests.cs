@@ -3,12 +3,13 @@ namespace Scout;
 /// <summary>
 /// Verifies zero-copy mapped search-file ownership and lifetime behavior.
 /// </summary>
+[TestClass]
 public sealed class MemoryMappedSearchFileTests
 {
     /// <summary>
     /// Verifies a non-empty file is exposed directly until its mapping is disposed.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TryOpenExposesMappedBytesUntilDisposed()
     {
         string root = CreateTempDirectory();
@@ -17,13 +18,13 @@ public sealed class MemoryMappedSearchFileTests
             string path = Path.Join(root, "input.txt");
             File.WriteAllBytes(path, "alpha\nneedle\n"u8.ToArray());
 
-            Assert.True(MemoryMappedSearchFile.TryOpen(path, out MemoryMappedSearchFile? mappedSearchFile));
-            Assert.NotNull(mappedSearchFile);
-            Assert.True(mappedSearchFile.Bytes.SequenceEqual("alpha\nneedle\n"u8));
+            Assert.IsTrue(MemoryMappedSearchFile.TryOpen(path, out MemoryMappedSearchFile? mappedSearchFile));
+            Assert.IsNotNull(mappedSearchFile);
+            Assert.IsTrue(mappedSearchFile.Bytes.SequenceEqual("alpha\nneedle\n"u8));
 
             mappedSearchFile.Dispose();
 
-            Assert.Throws<ObjectDisposedException>(() => mappedSearchFile.Bytes.Length);
+            Assert.ThrowsExactly<ObjectDisposedException>(() => mappedSearchFile.Bytes.Length);
         }
         finally
         {
@@ -34,7 +35,7 @@ public sealed class MemoryMappedSearchFileTests
     /// <summary>
     /// Verifies an empty file declines mapping so the buffered empty-input path remains authoritative.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TryOpenDeclinesEmptyFile()
     {
         string root = CreateTempDirectory();
@@ -45,8 +46,8 @@ public sealed class MemoryMappedSearchFileTests
 
             using (var owner = new DisposableOwner<MemoryMappedSearchFile>())
             {
-                Assert.False(MemoryMappedSearchFile.TryOpen(path, out owner.Resource));
-                Assert.Null(owner.Resource);
+                Assert.IsFalse(MemoryMappedSearchFile.TryOpen(path, out owner.Resource));
+                Assert.IsNull(owner.Resource);
             }
         }
         finally
@@ -58,7 +59,7 @@ public sealed class MemoryMappedSearchFileTests
     /// <summary>
     /// Verifies bounded views can advance without retaining the preceding mapped pages.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void TryMapViewReplacesCurrentView()
     {
         string root = CreateTempDirectory();
@@ -67,19 +68,19 @@ public sealed class MemoryMappedSearchFileTests
             string path = Path.Join(root, "input.txt");
             File.WriteAllBytes(path, "0123456789"u8.ToArray());
 
-            Assert.True(MemoryMappedSearchFile.TryOpenFile(
+            Assert.IsTrue(MemoryMappedSearchFile.TryOpenFile(
                 path,
                 out MemoryMappedSearchFile? mappedSearchFile));
             using (mappedSearchFile)
             {
-                Assert.NotNull(mappedSearchFile);
-                Assert.Equal(10, mappedSearchFile.Length);
-                Assert.True(mappedSearchFile.TryMapView(offset: 0, maximumLength: 4));
-                Assert.True(mappedSearchFile.Bytes.SequenceEqual("0123"u8));
-                Assert.True(mappedSearchFile.TryMapView(offset: 4, maximumLength: 4));
-                Assert.True(mappedSearchFile.Bytes.SequenceEqual("4567"u8));
-                Assert.True(mappedSearchFile.TryMapView(offset: 8, maximumLength: 4));
-                Assert.True(mappedSearchFile.Bytes.SequenceEqual("89"u8));
+                Assert.IsNotNull(mappedSearchFile);
+                Assert.AreEqual(10, mappedSearchFile.Length);
+                Assert.IsTrue(mappedSearchFile.TryMapView(offset: 0, maximumLength: 4));
+                Assert.IsTrue(mappedSearchFile.Bytes.SequenceEqual("0123"u8));
+                Assert.IsTrue(mappedSearchFile.TryMapView(offset: 4, maximumLength: 4));
+                Assert.IsTrue(mappedSearchFile.Bytes.SequenceEqual("4567"u8));
+                Assert.IsTrue(mappedSearchFile.TryMapView(offset: 8, maximumLength: 4));
+                Assert.IsTrue(mappedSearchFile.Bytes.SequenceEqual("89"u8));
             }
         }
         finally
@@ -93,9 +94,9 @@ public sealed class MemoryMappedSearchFileTests
     /// expressions, including a final record without a terminator.
     /// </summary>
     /// <param name="searchMode">Whether matching records or individual matches are counted.</param>
-    [Theory]
-    [InlineData(CliSearchMode.Count)]
-    [InlineData(CliSearchMode.CountMatches)]
+    [TestMethod]
+    [DataRow(CliSearchMode.Count)]
+    [DataRow(CliSearchMode.CountMatches)]
     public void BoundedCountHandlesGeneralExpressionsAcrossViews(CliSearchMode searchMode)
     {
         string root = CreateTempDirectory();
@@ -111,12 +112,12 @@ public sealed class MemoryMappedSearchFileTests
             using RegexSpecializationModeScope scope =
                 RegexSpecializationModeDefaults.Use(RegexSpecializationMode.General);
 
-            Assert.True(MemoryMappedSearchFile.TryOpenFile(
+            Assert.IsTrue(MemoryMappedSearchFile.TryOpenFile(
                 path,
                 out MemoryMappedSearchFile? mappedSearchFile));
             using (mappedSearchFile)
             {
-                Assert.NotNull(mappedSearchFile);
+                Assert.IsNotNull(mappedSearchFile);
                 var cases = new (byte[] Pattern, int MatchesPerRecord)[]
                 {
                     (@"\b\w{5}\s+\w{5}\s+\w{5}\b"u8.ToArray(), 2),
@@ -128,7 +129,7 @@ public sealed class MemoryMappedSearchFileTests
                     var regexPlan = RegexSearchPlan.Create(
                         patterns,
                         new RegexSearchPlanOptions(asciiCaseInsensitive: false, crlf: true));
-                    Assert.True(StandardSearchTargetOperations.TryCountMemoryMappedWindows(
+                    Assert.IsTrue(StandardSearchTargetOperations.TryCountMemoryMappedWindows(
                         mappedSearchFile,
                         patterns,
                         regexPlan,
@@ -148,9 +149,9 @@ public sealed class MemoryMappedSearchFileTests
                         expectedCount *= matchesPerRecord;
                     }
 
-                    Assert.Equal(expectedCount, count);
-                    Assert.False(containsNul);
-                    Assert.NotNull(regexPlan);
+                    Assert.AreEqual(expectedCount, count);
+                    Assert.IsFalse(containsNul);
+                    Assert.IsNotNull(regexPlan);
                 }
             }
         }
@@ -166,9 +167,9 @@ public sealed class MemoryMappedSearchFileTests
     /// </summary>
     /// <param name="searchMode">Whether matching records or individual matches are counted.</param>
     /// <param name="matchesPerRecord">The expected contribution from each matching record.</param>
-    [Theory]
-    [InlineData(CliSearchMode.Count, 1)]
-    [InlineData(CliSearchMode.CountMatches, 2)]
+    [TestMethod]
+    [DataRow(CliSearchMode.Count, 1)]
+    [DataRow(CliSearchMode.CountMatches, 2)]
     public void BoundedCountReportsLateNul(
         CliSearchMode searchMode,
         int matchesPerRecord)
@@ -188,13 +189,13 @@ public sealed class MemoryMappedSearchFileTests
                 patterns,
                 new RegexSearchPlanOptions(asciiCaseInsensitive: false, crlf: true));
 
-            Assert.True(MemoryMappedSearchFile.TryOpenFile(
+            Assert.IsTrue(MemoryMappedSearchFile.TryOpenFile(
                 path,
                 out MemoryMappedSearchFile? mappedSearchFile));
             using (mappedSearchFile)
             {
-                Assert.NotNull(mappedSearchFile);
-                Assert.True(StandardSearchTargetOperations.TryCountMemoryMappedWindows(
+                Assert.IsNotNull(mappedSearchFile);
+                Assert.IsTrue(StandardSearchTargetOperations.TryCountMemoryMappedWindows(
                     mappedSearchFile,
                     patterns,
                     regexPlan,
@@ -208,8 +209,8 @@ public sealed class MemoryMappedSearchFileTests
                     multilineDotall: false,
                     out long count,
                     out bool containsNul));
-                Assert.Equal((repeatedRecords + 1L) * matchesPerRecord, count);
-                Assert.True(containsNul);
+                Assert.AreEqual((repeatedRecords + 1L) * matchesPerRecord, count);
+                Assert.IsTrue(containsNul);
             }
         }
         finally
@@ -222,7 +223,7 @@ public sealed class MemoryMappedSearchFileTests
     /// Verifies bounded mapped counting carries an exact common-prefix literal set across views
     /// while its authoritative candidate scan reports a late NUL.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BoundedMatchCountFusesCommonPrefixLiteralsAndLateNul()
     {
         string root = CreateTempDirectory();
@@ -244,13 +245,13 @@ public sealed class MemoryMappedSearchFileTests
                 patterns,
                 asciiCaseInsensitive: false);
 
-            Assert.True(MemoryMappedSearchFile.TryOpenFile(
+            Assert.IsTrue(MemoryMappedSearchFile.TryOpenFile(
                 path,
                 out MemoryMappedSearchFile? mappedSearchFile));
             using (mappedSearchFile)
             {
-                Assert.NotNull(mappedSearchFile);
-                Assert.True(StandardSearchTargetOperations.TryCountMemoryMappedWindows(
+                Assert.IsNotNull(mappedSearchFile);
+                Assert.IsTrue(StandardSearchTargetOperations.TryCountMemoryMappedWindows(
                     mappedSearchFile,
                     patterns,
                     regexPlan,
@@ -264,8 +265,8 @@ public sealed class MemoryMappedSearchFileTests
                     multilineDotall: false,
                     out long count,
                     out bool containsNul));
-                Assert.Equal(1, count);
-                Assert.True(containsNul);
+                Assert.AreEqual(1, count);
+                Assert.IsTrue(containsNul);
             }
         }
         finally
@@ -278,7 +279,7 @@ public sealed class MemoryMappedSearchFileTests
     /// Verifies a record larger than the bounded carry limit declines the optimization before
     /// unbounded memory is retained.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BoundedCountDeclinesOversizedRecord()
     {
         string root = CreateTempDirectory();
@@ -291,13 +292,13 @@ public sealed class MemoryMappedSearchFileTests
                 patterns,
                 asciiCaseInsensitive: false);
 
-            Assert.True(MemoryMappedSearchFile.TryOpenFile(
+            Assert.IsTrue(MemoryMappedSearchFile.TryOpenFile(
                 path,
                 out MemoryMappedSearchFile? mappedSearchFile));
             using (mappedSearchFile)
             {
-                Assert.NotNull(mappedSearchFile);
-                Assert.False(StandardSearchTargetOperations.TryCountMemoryMappedWindows(
+                Assert.IsNotNull(mappedSearchFile);
+                Assert.IsFalse(StandardSearchTargetOperations.TryCountMemoryMappedWindows(
                     mappedSearchFile,
                     patterns,
                     regexPlan,
@@ -324,11 +325,11 @@ public sealed class MemoryMappedSearchFileTests
     /// </summary>
     /// <param name="pattern">The boundary-dependent expression.</param>
     /// <param name="searchMode">Whether matching records or individual matches would be counted.</param>
-    [Theory]
-    [InlineData("a*", CliSearchMode.Count)]
-    [InlineData("a*", CliSearchMode.CountMatches)]
-    [InlineData(@"\Afoo", CliSearchMode.Count)]
-    [InlineData(@"\Afoo", CliSearchMode.CountMatches)]
+    [TestMethod]
+    [DataRow("a*", CliSearchMode.Count)]
+    [DataRow("a*", CliSearchMode.CountMatches)]
+    [DataRow(@"\Afoo", CliSearchMode.Count)]
+    [DataRow(@"\Afoo", CliSearchMode.CountMatches)]
     public void BoundedCountDeclinesBoundaryDependentExpression(
         string pattern,
         CliSearchMode searchMode)
@@ -343,13 +344,13 @@ public sealed class MemoryMappedSearchFileTests
                 patterns,
                 asciiCaseInsensitive: false);
 
-            Assert.True(MemoryMappedSearchFile.TryOpenFile(
+            Assert.IsTrue(MemoryMappedSearchFile.TryOpenFile(
                 path,
                 out MemoryMappedSearchFile? mappedSearchFile));
             using (mappedSearchFile)
             {
-                Assert.NotNull(mappedSearchFile);
-                Assert.False(StandardSearchTargetOperations.TryCountMemoryMappedWindows(
+                Assert.IsNotNull(mappedSearchFile);
+                Assert.IsFalse(StandardSearchTargetOperations.TryCountMemoryMappedWindows(
                     mappedSearchFile,
                     patterns,
                     regexPlan,
@@ -363,7 +364,7 @@ public sealed class MemoryMappedSearchFileTests
                     multilineDotall: false,
                     out _,
                     out _));
-                Assert.NotNull(regexPlan);
+                Assert.IsNotNull(regexPlan);
             }
         }
         finally
@@ -376,9 +377,9 @@ public sealed class MemoryMappedSearchFileTests
     /// Verifies multiline semantics decline record-aligned bounded counting before a view is read.
     /// </summary>
     /// <param name="searchMode">Whether matching records or individual matches would be counted.</param>
-    [Theory]
-    [InlineData(CliSearchMode.Count)]
-    [InlineData(CliSearchMode.CountMatches)]
+    [TestMethod]
+    [DataRow(CliSearchMode.Count)]
+    [DataRow(CliSearchMode.CountMatches)]
     public void BoundedCountDeclinesMultilineSearch(CliSearchMode searchMode)
     {
         string root = CreateTempDirectory();
@@ -391,13 +392,13 @@ public sealed class MemoryMappedSearchFileTests
                 patterns,
                 asciiCaseInsensitive: false);
 
-            Assert.True(MemoryMappedSearchFile.TryOpenFile(
+            Assert.IsTrue(MemoryMappedSearchFile.TryOpenFile(
                 path,
                 out MemoryMappedSearchFile? mappedSearchFile));
             using (mappedSearchFile)
             {
-                Assert.NotNull(mappedSearchFile);
-                Assert.False(StandardSearchTargetOperations.TryCountMemoryMappedWindows(
+                Assert.IsNotNull(mappedSearchFile);
+                Assert.IsFalse(StandardSearchTargetOperations.TryCountMemoryMappedWindows(
                     mappedSearchFile,
                     patterns,
                     regexPlan,

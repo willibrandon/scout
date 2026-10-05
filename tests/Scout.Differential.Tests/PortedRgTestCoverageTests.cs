@@ -5,6 +5,7 @@ namespace Scout;
 /// <summary>
 /// Verifies the ported ripgrep test catalog tracks upstream rgtest coverage.
 /// </summary>
+[TestClass]
 public sealed partial class PortedRgTestCoverageTests
 {
     private static readonly string UpstreamTestsRoot = Path.Join(FindRepositoryRoot(), "upstream", "ripgrep-e89fff89", "tests");
@@ -24,14 +25,14 @@ public sealed partial class PortedRgTestCoverageTests
     /// <summary>
     /// Verifies every upstream rgtest is either ported or explicitly documented as blocked.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CatalogDocumentsCurrentUpstreamRgtestGaps()
     {
         SortedSet<string> upstream = ReadUpstreamRgTests();
         SortedSet<string> catalog = ReadCatalog();
 
-        Assert.Equal(ExpectedUnportedRgTests, Difference(upstream, catalog));
-        Assert.Equal(ExpectedCatalogSplitRgTests, Difference(catalog, upstream));
+        Assert.AreSequenceEqual(ExpectedUnportedRgTests, Difference(upstream, catalog));
+        Assert.AreSequenceEqual(ExpectedCatalogSplitRgTests, Difference(catalog, upstream));
     }
 
     private static SortedSet<string> ReadUpstreamRgTests()

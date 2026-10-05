@@ -3,12 +3,13 @@ namespace Scout;
 /// <summary>
 /// Verifies combined ordered regex plans across repeated pattern sources and output consumers.
 /// </summary>
+[TestClass]
 public sealed class AuthoritativePatternSetDifferentialTests
 {
     /// <summary>
     /// Verifies character-class intersections drive matching-line, match-count, and only-match output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CharacterClassIntersectionConsumersMatchPinnedRipgrep()
     {
         using var directory = RgTestDirectory.Create("authoritative-intersection");
@@ -25,29 +26,29 @@ public sealed class AuthoritativePatternSetDifferentialTests
     /// </summary>
     /// <param name="pattern">The reported regex expression.</param>
     /// <param name="contents">The input text.</param>
-    [Theory]
-    [InlineData(@"\bGeneratedRecord\b", "GeneratedRecords\nGeneratedRecord\nx GeneratedRecord y\n")]
-    [InlineData(@"^internal sealed class GeneratedRecord\r?$", "other\r\ninternal sealed class GeneratedRecord\r\n")]
-    [InlineData(@"^[A-Za-z_]{70,90}$", "short\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n")]
-    [InlineData(@"(?m)^Scout.*$", "other\nScout is authoritative\n")]
-    [InlineData(@"(?:Generated|Paladin(?:Record|Value))", "Generated\nPaladinRecord\nPaladinValue\nPaladin\n")]
-    [InlineData(@"(?:Absent|Missing(?:Two|Three))", "Absent\nMissingTwo\nMissingThree\nMissing\n")]
-    [InlineData(@"[a-z--aeiou]+", "aeiou\nbcdf\nScout\n")]
-    [InlineData(@"[a-f~~d-z]+", "abc\ndef\ngxyz\n")]
-    [InlineData(@"[a-c[0-2]]+", "abc\n012\ndef\n")]
-    [InlineData(@"\u{3B4}+", "δδ\nlambda λ\n")]
-    [InlineData(@"\x{100}+", "ĀĀ\nA\n")]
-    [InlineData(@"^t{1,2}+$", "t\ntt\nttt\ntttt\nx\n")]
-    [InlineData(@"^Scout++$", "Scout\nScouttt\nScou\nScoutx\n")]
-    [InlineData(@"^Scout{1,2}+$", "Scout\nScoutt\nScouttt\nScoutttt\nScoutx\n")]
-    [InlineData(@"\p{Latin}+", "Latin\nΕλληνικά\n漢字\n")]
-    [InlineData(@"[\w&&\p{Latin}]+", "Latin_123\nΕλληνικά\n漢字\n")]
-    [InlineData(@"\p{Han}+", "Latin\nΕλληνικά\n漢字\n")]
-    [InlineData(@"\p{sc=Latin}+", "abc\ń\nδ\n")]
-    [InlineData(@"\p{scx=Latin}+", "abc\ń\nδ\n")]
-    [InlineData(@"\P{Latin}+", "Latin\nΕλληνικά\n漢字\n")]
-    [InlineData(@"[^\p{Latin}]+", "Latin\nΕλληνικά\n漢字\n")]
-    [InlineData(@"\p{Zanb}+", "𑨀\nA\n")]
+    [TestMethod]
+    [DataRow(@"\bGeneratedRecord\b", "GeneratedRecords\nGeneratedRecord\nx GeneratedRecord y\n")]
+    [DataRow(@"^internal sealed class GeneratedRecord\r?$", "other\r\ninternal sealed class GeneratedRecord\r\n")]
+    [DataRow(@"^[A-Za-z_]{70,90}$", "short\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n")]
+    [DataRow(@"(?m)^Scout.*$", "other\nScout is authoritative\n")]
+    [DataRow(@"(?:Generated|Paladin(?:Record|Value))", "Generated\nPaladinRecord\nPaladinValue\nPaladin\n")]
+    [DataRow(@"(?:Absent|Missing(?:Two|Three))", "Absent\nMissingTwo\nMissingThree\nMissing\n")]
+    [DataRow(@"[a-z--aeiou]+", "aeiou\nbcdf\nScout\n")]
+    [DataRow(@"[a-f~~d-z]+", "abc\ndef\ngxyz\n")]
+    [DataRow(@"[a-c[0-2]]+", "abc\n012\ndef\n")]
+    [DataRow(@"\u{3B4}+", "δδ\nlambda λ\n")]
+    [DataRow(@"\x{100}+", "ĀĀ\nA\n")]
+    [DataRow(@"^t{1,2}+$", "t\ntt\nttt\ntttt\nx\n")]
+    [DataRow(@"^Scout++$", "Scout\nScouttt\nScou\nScoutx\n")]
+    [DataRow(@"^Scout{1,2}+$", "Scout\nScoutt\nScouttt\nScoutttt\nScoutx\n")]
+    [DataRow(@"\p{Latin}+", "Latin\nΕλληνικά\n漢字\n")]
+    [DataRow(@"[\w&&\p{Latin}]+", "Latin_123\nΕλληνικά\n漢字\n")]
+    [DataRow(@"\p{Han}+", "Latin\nΕλληνικά\n漢字\n")]
+    [DataRow(@"\p{sc=Latin}+", "abc\ń\nδ\n")]
+    [DataRow(@"\p{scx=Latin}+", "abc\ń\nδ\n")]
+    [DataRow(@"\P{Latin}+", "Latin\nΕλληνικά\n漢字\n")]
+    [DataRow(@"[^\p{Latin}]+", "Latin\nΕλληνικά\n漢字\n")]
+    [DataRow(@"\p{Zanb}+", "𑨀\nA\n")]
     public void ReportedGeneralRegexConsumersMatchPinnedRipgrep(string pattern, string contents)
     {
         using var directory = RgTestDirectory.Create("authoritative-reported-regex");
@@ -62,7 +63,7 @@ public sealed class AuthoritativePatternSetDifferentialTests
     /// <summary>
     /// Verifies multiline analysis lowers non-ASCII scalar escapes without changing their matches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MultilineScalarEscapeConsumersMatchPinnedRipgrep()
     {
         using var directory = RgTestDirectory.Create("authoritative-multiline-scalar-escape");
@@ -78,7 +79,7 @@ public sealed class AuthoritativePatternSetDifferentialTests
     /// <summary>
     /// Verifies automatic engine selection retains regex-syntax nested-repetition semantics.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void AutoEngineChainedQuantifiersMatchPinnedRipgrep()
     {
         using var directory = RgTestDirectory.Create("authoritative-auto-chained-quantifiers");
@@ -104,7 +105,7 @@ public sealed class AuthoritativePatternSetDifferentialTests
     /// <summary>
     /// Verifies multiline and byte modes preserve character-class set algebra.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CharacterClassAlgebraModesMatchPinnedRipgrep()
     {
         using var directory = RgTestDirectory.Create("authoritative-class-algebra-modes");
@@ -130,7 +131,7 @@ public sealed class AuthoritativePatternSetDifferentialTests
     /// <summary>
     /// Verifies fixed hexadecimal escapes retain one-byte semantics when Unicode mode is disabled.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ByteModeHexEscapeConsumersMatchPinnedRipgrep()
     {
         using var directory = RgTestDirectory.Create("authoritative-byte-hex");
@@ -146,14 +147,14 @@ public sealed class AuthoritativePatternSetDifferentialTests
     /// Verifies repeated expression and pattern-file sources preserve ripgrep semantics as the set grows.
     /// </summary>
     /// <param name="patternCount">The number of ordered source patterns.</param>
-    [Theory]
-    [InlineData(1)]
-    [InlineData(2)]
-    [InlineData(4)]
-    [InlineData(8)]
-    [InlineData(16)]
-    [InlineData(32)]
-    [InlineData(64)]
+    [TestMethod]
+    [DataRow(1)]
+    [DataRow(2)]
+    [DataRow(4)]
+    [DataRow(8)]
+    [DataRow(16)]
+    [DataRow(32)]
+    [DataRow(64)]
     public void RepeatedPatternSourcesMatchPinnedRipgrep(int patternCount)
     {
         using var directory = RgTestDirectory.Create("authoritative-pattern-set");
@@ -212,7 +213,7 @@ public sealed class AuthoritativePatternSetDifferentialTests
     /// <summary>
     /// Verifies every line-oriented output consumer observes the same combined authoritative matcher.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CombinedPatternConsumersMatchPinnedRipgrep()
     {
         using var directory = RgTestDirectory.Create("authoritative-consumers");

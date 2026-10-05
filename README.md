@@ -94,7 +94,7 @@ Prerequisites:
 
 ```sh
 # Managed unit tests:
-dotnet test Scout.slnx
+dotnet test --solution Scout.slnx
 
 # Build the scout binary for your platform:
 native/build-app-unix.sh osx-arm64     # -> artifacts/bin/osx-arm64/ (scout + scout-real)

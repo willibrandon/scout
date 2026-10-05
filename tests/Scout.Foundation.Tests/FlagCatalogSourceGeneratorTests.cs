@@ -7,12 +7,13 @@ namespace Scout;
 /// <summary>
 /// Verifies Scout flag catalog source generation diagnostics.
 /// </summary>
+[TestClass]
 public sealed class FlagCatalogSourceGeneratorTests
 {
     /// <summary>
     /// Verifies flag definitions without pinned order metadata are rejected.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReportsMissingFlagOrder()
     {
         ImmutableArray<Diagnostic> diagnostics = RunGenerator(
@@ -32,16 +33,16 @@ public sealed class FlagCatalogSourceGeneratorTests
             }
             """);
 
-        Diagnostic diagnostic = Assert.Single(diagnostics);
-        Assert.Equal("SCOUT0005", diagnostic.Id);
-        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
-        Assert.Equal("Flag definition 'FirstFlag' must be annotated with [FlagOrder(<pinned upstream index>)]", diagnostic.GetMessage());
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual("SCOUT0005", diagnostic.Id);
+        Assert.AreEqual(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.AreEqual("Flag definition 'FirstFlag' must be annotated with [FlagOrder(<pinned upstream index>)]", diagnostic.GetMessage());
     }
 
     /// <summary>
     /// Verifies duplicate pinned order metadata is rejected before catalog generation.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReportsDuplicateFlagOrder()
     {
         ImmutableArray<Diagnostic> diagnostics = RunGenerator(
@@ -75,10 +76,10 @@ public sealed class FlagCatalogSourceGeneratorTests
             }
             """);
 
-        Diagnostic diagnostic = Assert.Single(diagnostics);
-        Assert.Equal("SCOUT0006", diagnostic.Id);
-        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
-        Assert.Equal("Flag definitions 'FirstFlag' and 'SecondFlag' both declare pinned upstream order 0", diagnostic.GetMessage());
+        Diagnostic diagnostic = Assert.ContainsSingle(diagnostics);
+        Assert.AreEqual("SCOUT0006", diagnostic.Id);
+        Assert.AreEqual(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.AreEqual("Flag definitions 'FirstFlag' and 'SecondFlag' both declare pinned upstream order 0", diagnostic.GetMessage());
     }
 
     private static ImmutableArray<Diagnostic> RunGenerator(string source)

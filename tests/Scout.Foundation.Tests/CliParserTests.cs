@@ -5,12 +5,13 @@ namespace Scout;
 /// <summary>
 /// Verifies low-level CLI parsing behavior.
 /// </summary>
+[TestClass]
 public sealed class CliParserTests
 {
     /// <summary>
     /// Verifies the upstream option terminator preserves subsequent arguments as raw positional values.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void OptionTerminatorPreservesPositionalArguments()
     {
         foreach (bool unix in new[] { true, false })
@@ -20,54 +21,54 @@ public sealed class CliParserTests
             CliParseResult result = CliParser.Parse([
                 OsString.FromText("-n"), separator, OsString.FromText("--help"), rawPath, separator,
             ]);
-            Assert.Equal(CliParseStatus.Ok, result.Status);
-            Assert.NotNull(result.LowArgs);
-            Assert.True(result.LowArgs.LineNumber);
-            Assert.Equal(new[] { OsString.FromText("--help"), rawPath, separator }, result.LowArgs.Positional);
+            Assert.AreEqual(CliParseStatus.Ok, result.Status);
+            Assert.IsNotNull(result.LowArgs);
+            Assert.IsTrue(result.LowArgs.LineNumber);
+            Assert.AreSequenceEqual(new[] { OsString.FromText("--help"), rawPath, separator }, result.LowArgs.Positional);
         }
     }
 
     /// <summary>
     /// Verifies <c>-V</c> selects the short version special mode.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesShortVersionSpecialMode()
     {
         CliParseResult result = CliParser.Parse([OsString.FromUnixBytes("-V"u8)]);
 
-        Assert.Equal(CliParseStatus.Special, result.Status);
-        Assert.Equal(CliSpecialMode.VersionShort, result.SpecialMode);
+        Assert.AreEqual(CliParseStatus.Special, result.Status);
+        Assert.AreEqual(CliSpecialMode.VersionShort, result.SpecialMode);
     }
 
     /// <summary>
     /// Verifies <c>--version</c> selects the long version special mode.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesLongVersionSpecialMode()
     {
         CliParseResult result = CliParser.Parse([OsString.FromUnixBytes("--version"u8)]);
 
-        Assert.Equal(CliParseStatus.Special, result.Status);
-        Assert.Equal(CliSpecialMode.VersionLong, result.SpecialMode);
+        Assert.AreEqual(CliParseStatus.Special, result.Status);
+        Assert.AreEqual(CliSpecialMode.VersionLong, result.SpecialMode);
     }
 
     /// <summary>
     /// Verifies positional arguments are retained as operating-system strings.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void PreservesPositionalArguments()
     {
         CliParseResult result = CliParser.Parse([OsString.FromUnixBytes([0xff, 0x80])]);
 
-        Assert.Equal(CliParseStatus.Ok, result.Status);
-        Assert.Single(result.LowArgs!.Positional);
-        Assert.Equal([0xff, 0x80], result.LowArgs.Positional[0].AsUnixBytes().ToArray());
+        Assert.AreEqual(CliParseStatus.Ok, result.Status);
+        Assert.ContainsSingle(result.LowArgs!.Positional);
+        Assert.AreSequenceEqual<byte>([0xff, 0x80], result.LowArgs.Positional[0].AsUnixBytes().ToArray());
     }
 
     /// <summary>
     /// Verifies explicit regexp flags are parsed independently from positional paths.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesRegexpFlags()
     {
         CliParseResult separate = CliParser.Parse(
@@ -79,24 +80,24 @@ public sealed class CliParserTests
         CliParseResult dashValue = CliParser.Parse(
             [OsString.FromUnixBytes("--regexp"u8), OsString.FromUnixBytes("-needle"u8), OsString.FromUnixBytes("path.txt"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, separate.Status);
-        Assert.Equal([OsString.FromUnixBytes("needle"u8)], separate.LowArgs!.Patterns);
-        Assert.Equal([OsString.FromUnixBytes("path.txt"u8)], separate.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, inline.Status);
-        Assert.Equal([OsString.FromUnixBytes("alpha"u8), OsString.FromUnixBytes("beta"u8)], inline.LowArgs!.Patterns);
-        Assert.Equal([OsString.FromUnixBytes("path.txt"u8)], inline.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, empty.Status);
-        Assert.Equal([OsString.FromUnixBytes(""u8)], empty.LowArgs!.Patterns);
-        Assert.Equal([OsString.FromUnixBytes("path.txt"u8)], empty.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, dashValue.Status);
-        Assert.Equal([OsString.FromUnixBytes("-needle"u8)], dashValue.LowArgs!.Patterns);
-        Assert.Equal([OsString.FromUnixBytes("path.txt"u8)], dashValue.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, separate.Status);
+        Assert.AreSequenceEqual<OsString>([OsString.FromUnixBytes("needle"u8)], separate.LowArgs!.Patterns);
+        Assert.AreSequenceEqual<OsString>([OsString.FromUnixBytes("path.txt"u8)], separate.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, inline.Status);
+        Assert.AreSequenceEqual<OsString>([OsString.FromUnixBytes("alpha"u8), OsString.FromUnixBytes("beta"u8)], inline.LowArgs!.Patterns);
+        Assert.AreSequenceEqual<OsString>([OsString.FromUnixBytes("path.txt"u8)], inline.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, empty.Status);
+        Assert.AreSequenceEqual<OsString>([OsString.FromUnixBytes(""u8)], empty.LowArgs!.Patterns);
+        Assert.AreSequenceEqual<OsString>([OsString.FromUnixBytes("path.txt"u8)], empty.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, dashValue.Status);
+        Assert.AreSequenceEqual<OsString>([OsString.FromUnixBytes("-needle"u8)], dashValue.LowArgs!.Patterns);
+        Assert.AreSequenceEqual<OsString>([OsString.FromUnixBytes("path.txt"u8)], dashValue.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies combined short flags are parsed with ripgrep-compatible value consumption.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesCombinedShortFlags()
     {
         CliParseResult switches = CliParser.Parse(
@@ -112,32 +113,32 @@ public sealed class CliParserTests
         CliParseResult unknown = CliParser.Parse(
             [OsString.FromUnixBytes("-ny"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, switches.Status);
-        Assert.True(switches.LowArgs!.LineNumber);
-        Assert.True(switches.LowArgs.WithFilename);
-        Assert.True(switches.LowArgs.InvertMatch);
-        Assert.Equal(CliCaseMode.Insensitive, switches.LowArgs.CaseMode);
-        Assert.Equal([OsString.FromUnixBytes("needle"u8)], switches.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, inlineValue.Status);
-        Assert.True(inlineValue.LowArgs!.LineNumber);
-        Assert.Equal(2UL, inlineValue.LowArgs.AfterContext);
-        Assert.Equal(CliParseStatus.Ok, followingValue.Status);
-        Assert.True(followingValue.LowArgs!.LineNumber);
-        Assert.Equal([OsString.FromUnixBytes("needle"u8)], followingValue.LowArgs.Patterns);
-        Assert.Equal([OsString.FromUnixBytes("path.txt"u8)], followingValue.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, unrestricted.Status);
-        Assert.Equal(3, unrestricted.LowArgs!.UnrestrictedCount);
-        Assert.True(unrestricted.LowArgs.LineNumber);
-        Assert.Equal(CliParseStatus.Error, invalidValue.Status);
-        Assert.Equal("error parsing flag -m: value is not a valid number: invalid digit found in string", invalidValue.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, unknown.Status);
-        Assert.Equal("unrecognized flag -y", unknown.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Ok, switches.Status);
+        Assert.IsTrue(switches.LowArgs!.LineNumber);
+        Assert.IsTrue(switches.LowArgs.WithFilename);
+        Assert.IsTrue(switches.LowArgs.InvertMatch);
+        Assert.AreEqual(CliCaseMode.Insensitive, switches.LowArgs.CaseMode);
+        Assert.AreSequenceEqual<OsString>([OsString.FromUnixBytes("needle"u8)], switches.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, inlineValue.Status);
+        Assert.IsTrue(inlineValue.LowArgs!.LineNumber);
+        Assert.AreEqual(2UL, inlineValue.LowArgs.AfterContext);
+        Assert.AreEqual(CliParseStatus.Ok, followingValue.Status);
+        Assert.IsTrue(followingValue.LowArgs!.LineNumber);
+        Assert.AreSequenceEqual<OsString>([OsString.FromUnixBytes("needle"u8)], followingValue.LowArgs.Patterns);
+        Assert.AreSequenceEqual<OsString>([OsString.FromUnixBytes("path.txt"u8)], followingValue.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, unrestricted.Status);
+        Assert.AreEqual(3, unrestricted.LowArgs!.UnrestrictedCount);
+        Assert.IsTrue(unrestricted.LowArgs.LineNumber);
+        Assert.AreEqual(CliParseStatus.Error, invalidValue.Status);
+        Assert.AreEqual("error parsing flag -m: value is not a valid number: invalid digit found in string", invalidValue.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, unknown.Status);
+        Assert.AreEqual("unrecognized flag -y", unknown.Error!.FormatAlternate());
     }
 
     /// <summary>
     /// Verifies explicit pattern-file flags are parsed as ordered pattern sources.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesPatternFileFlags()
     {
         CliParseResult separate = CliParser.Parse(
@@ -155,35 +156,35 @@ public sealed class CliParserTests
         CliParseResult dashValue = CliParser.Parse(
             [OsString.FromUnixBytes("--file"u8), OsString.FromUnixBytes("-patterns"u8), OsString.FromUnixBytes("path.txt"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, separate.Status);
-        Assert.Equal([CliPatternSource.File(OsString.FromUnixBytes("patterns.txt"u8))], separate.LowArgs!.PatternSources);
-        Assert.Equal([OsString.FromUnixBytes("path.txt"u8)], separate.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, inline.Status);
-        Assert.Equal(
+        Assert.AreEqual(CliParseStatus.Ok, separate.Status);
+        Assert.AreSequenceEqual<CliPatternSource>([CliPatternSource.File(OsString.FromUnixBytes("patterns.txt"u8))], separate.LowArgs!.PatternSources);
+        Assert.AreSequenceEqual<OsString>([OsString.FromUnixBytes("path.txt"u8)], separate.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, inline.Status);
+        Assert.AreSequenceEqual<CliPatternSource>(
             [
                 CliPatternSource.File(OsString.FromUnixBytes("first.txt"u8)),
                 CliPatternSource.File(OsString.FromUnixBytes("second.txt"u8)),
             ],
             inline.LowArgs!.PatternSources);
-        Assert.Equal([OsString.FromUnixBytes("path.txt"u8)], inline.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, ordered.Status);
-        Assert.Equal(
+        Assert.AreSequenceEqual<OsString>([OsString.FromUnixBytes("path.txt"u8)], inline.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, ordered.Status);
+        Assert.AreSequenceEqual<CliPatternSource>(
             [
                 CliPatternSource.Pattern(OsString.FromUnixBytes("alpha"u8)),
                 CliPatternSource.File(OsString.FromUnixBytes("patterns.txt"u8)),
             ],
             ordered.LowArgs!.PatternSources);
-        Assert.Equal([OsString.FromUnixBytes("alpha"u8)], ordered.LowArgs.Patterns);
-        Assert.Equal([OsString.FromUnixBytes("path.txt"u8)], ordered.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, dashValue.Status);
-        Assert.Equal([CliPatternSource.File(OsString.FromUnixBytes("-patterns"u8))], dashValue.LowArgs!.PatternSources);
-        Assert.Equal([OsString.FromUnixBytes("path.txt"u8)], dashValue.LowArgs.Positional);
+        Assert.AreSequenceEqual<OsString>([OsString.FromUnixBytes("alpha"u8)], ordered.LowArgs.Patterns);
+        Assert.AreSequenceEqual<OsString>([OsString.FromUnixBytes("path.txt"u8)], ordered.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, dashValue.Status);
+        Assert.AreSequenceEqual<CliPatternSource>([CliPatternSource.File(OsString.FromUnixBytes("-patterns"u8))], dashValue.LowArgs!.PatternSources);
+        Assert.AreSequenceEqual<OsString>([OsString.FromUnixBytes("path.txt"u8)], dashValue.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies regexp parser diagnostics match ripgrep wording.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReportsRegexpParseErrors()
     {
         CliParseResult shortMissing = CliParser.Parse([OsString.FromUnixBytes("-e"u8)]);
@@ -193,48 +194,48 @@ public sealed class CliParserTests
         CliParseResult longInvalidUtf8 = CliParser.Parse(
             [OsString.FromUnixBytes("--regexp"u8), OsString.FromUnixBytes([(byte)'(', (byte)'?', (byte)'-', (byte)'u', (byte)')', 0xff])]);
 
-        Assert.Equal(CliParseStatus.Error, shortMissing.Status);
-        Assert.Equal("missing value for flag -e: missing argument for option '-e'", shortMissing.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, longMissing.Status);
-        Assert.Equal("missing value for flag --regexp: missing argument for option '--regexp'", longMissing.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, shortInvalidUtf8.Status);
-        Assert.Equal("error parsing flag -e: value is not valid UTF-8", shortInvalidUtf8.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, longInvalidUtf8.Status);
-        Assert.Equal("error parsing flag --regexp: value is not valid UTF-8", longInvalidUtf8.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, shortMissing.Status);
+        Assert.AreEqual("missing value for flag -e: missing argument for option '-e'", shortMissing.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, longMissing.Status);
+        Assert.AreEqual("missing value for flag --regexp: missing argument for option '--regexp'", longMissing.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, shortInvalidUtf8.Status);
+        Assert.AreEqual("error parsing flag -e: value is not valid UTF-8", shortInvalidUtf8.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, longInvalidUtf8.Status);
+        Assert.AreEqual("error parsing flag --regexp: value is not valid UTF-8", longInvalidUtf8.Error!.FormatAlternate());
     }
 
     /// <summary>
     /// Verifies pattern-file parser diagnostics match ripgrep wording.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReportsPatternFileParseErrors()
     {
         CliParseResult shortMissing = CliParser.Parse([OsString.FromUnixBytes("-f"u8)]);
         CliParseResult longMissing = CliParser.Parse([OsString.FromUnixBytes("--file"u8)]);
 
-        Assert.Equal(CliParseStatus.Error, shortMissing.Status);
-        Assert.Equal("missing value for flag -f: missing argument for option '-f'", shortMissing.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, longMissing.Status);
-        Assert.Equal("missing value for flag --file: missing argument for option '--file'", longMissing.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, shortMissing.Status);
+        Assert.AreEqual("missing value for flag -f: missing argument for option '-f'", shortMissing.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, longMissing.Status);
+        Assert.AreEqual("missing value for flag --file: missing argument for option '--file'", longMissing.Error!.FormatAlternate());
     }
 
     /// <summary>
     /// Verifies <c>--no-config</c> is accepted as a no-op after startup expansion.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesNoConfigFlag()
     {
         CliParseResult result = CliParser.Parse(
             [OsString.FromUnixBytes("--no-config"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, result.Status);
-        Assert.Equal([OsString.FromUnixBytes("needle"u8)], result.LowArgs!.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, result.Status);
+        Assert.AreSequenceEqual<OsString>([OsString.FromUnixBytes("needle"u8)], result.LowArgs!.Positional);
     }
 
     /// <summary>
     /// Verifies <c>--generate</c> selects generated artifact modes with ripgrep's mode override behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesGenerateFlags()
     {
         CliParseResult man = CliParser.Parse([OsString.FromUnixBytes("--generate"u8), OsString.FromUnixBytes("man"u8)]);
@@ -249,45 +250,45 @@ public sealed class CliParserTests
         CliParseResult jsonResetWins = CliParser.Parse(
             [OsString.FromUnixBytes("--generate"u8), OsString.FromUnixBytes("man"u8), OsString.FromUnixBytes("--json"u8), OsString.FromUnixBytes("--no-json"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, man.Status);
-        Assert.Equal(CliGenerateMode.Man, man.LowArgs!.GenerateMode);
-        Assert.Equal(CliParseStatus.Ok, bash.Status);
-        Assert.Equal(CliGenerateMode.CompleteBash, bash.LowArgs!.GenerateMode);
-        Assert.Equal(CliParseStatus.Ok, zsh.Status);
-        Assert.Equal(CliGenerateMode.CompleteZsh, zsh.LowArgs!.GenerateMode);
-        Assert.Equal(CliParseStatus.Ok, fish.Status);
-        Assert.Equal(CliGenerateMode.CompleteFish, fish.LowArgs!.GenerateMode);
-        Assert.Equal(CliParseStatus.Ok, powershell.Status);
-        Assert.Equal(CliGenerateMode.CompletePowerShell, powershell.LowArgs!.GenerateMode);
-        Assert.Equal(CliParseStatus.Ok, lastGenerateWins.Status);
-        Assert.Equal(CliGenerateMode.Man, lastGenerateWins.LowArgs!.GenerateMode);
-        Assert.Equal(CliParseStatus.Ok, searchWins.Status);
-        Assert.Null(searchWins.LowArgs!.GenerateMode);
-        Assert.Equal(CliSearchMode.FilesWithMatches, searchWins.LowArgs.SearchMode);
-        Assert.Equal(CliParseStatus.Ok, jsonResetWins.Status);
-        Assert.Null(jsonResetWins.LowArgs!.GenerateMode);
-        Assert.Equal(CliSearchMode.Standard, jsonResetWins.LowArgs.SearchMode);
+        Assert.AreEqual(CliParseStatus.Ok, man.Status);
+        Assert.AreEqual(CliGenerateMode.Man, man.LowArgs!.GenerateMode);
+        Assert.AreEqual(CliParseStatus.Ok, bash.Status);
+        Assert.AreEqual(CliGenerateMode.CompleteBash, bash.LowArgs!.GenerateMode);
+        Assert.AreEqual(CliParseStatus.Ok, zsh.Status);
+        Assert.AreEqual(CliGenerateMode.CompleteZsh, zsh.LowArgs!.GenerateMode);
+        Assert.AreEqual(CliParseStatus.Ok, fish.Status);
+        Assert.AreEqual(CliGenerateMode.CompleteFish, fish.LowArgs!.GenerateMode);
+        Assert.AreEqual(CliParseStatus.Ok, powershell.Status);
+        Assert.AreEqual(CliGenerateMode.CompletePowerShell, powershell.LowArgs!.GenerateMode);
+        Assert.AreEqual(CliParseStatus.Ok, lastGenerateWins.Status);
+        Assert.AreEqual(CliGenerateMode.Man, lastGenerateWins.LowArgs!.GenerateMode);
+        Assert.AreEqual(CliParseStatus.Ok, searchWins.Status);
+        Assert.IsNull(searchWins.LowArgs!.GenerateMode);
+        Assert.AreEqual(CliSearchMode.FilesWithMatches, searchWins.LowArgs.SearchMode);
+        Assert.AreEqual(CliParseStatus.Ok, jsonResetWins.Status);
+        Assert.IsNull(jsonResetWins.LowArgs!.GenerateMode);
+        Assert.AreEqual(CliSearchMode.Standard, jsonResetWins.LowArgs.SearchMode);
     }
 
     /// <summary>
     /// Verifies <c>--generate</c> parser diagnostics match ripgrep wording.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReportsGenerateParseErrors()
     {
         CliParseResult missing = CliParser.Parse([OsString.FromUnixBytes("--generate"u8)]);
         CliParseResult invalid = CliParser.Parse([OsString.FromUnixBytes("--generate=foo"u8)]);
 
-        Assert.Equal(CliParseStatus.Error, missing.Status);
-        Assert.Equal("missing value for flag --generate: missing argument for option '--generate'", missing.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, invalid.Status);
-        Assert.Equal("error parsing flag --generate: choice 'foo' is unrecognized", invalid.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, missing.Status);
+        Assert.AreEqual("missing value for flag --generate: missing argument for option '--generate'", missing.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, invalid.Status);
+        Assert.AreEqual("error parsing flag --generate: choice 'foo' is unrecognized", invalid.Error!.FormatAlternate());
     }
 
     /// <summary>
     /// Verifies remaining non-generate upstream flags are represented in low arguments.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesRemainingNonGenerateFlags()
     {
         CliParseResult search = CliParser.Parse(
@@ -317,28 +318,28 @@ public sealed class CliParserTests
         CliParseResult debugWins = CliParser.Parse(
             [OsString.FromUnixBytes("--trace"u8), OsString.FromUnixBytes("--debug"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, search.Status);
-        Assert.False(search.LowArgs!.FixedStrings);
-        Assert.Equal(9UL * 1024UL * 1024UL * 1024UL, search.LowArgs.DfaSizeLimit);
-        Assert.Equal(2UL * 1024UL * 1024UL, search.LowArgs.RegexSizeLimit);
-        Assert.Equal(["match:fg:magenta", "line:bg:yellow"], search.LowArgs.ColorSpecs);
-        Assert.Equal("hostname", search.LowArgs.HostnameBin);
-        Assert.Equal("file://{host}{path}", search.LowArgs.HyperlinkFormat);
-        Assert.False(search.LowArgs.StopOnNonmatch);
-        Assert.False(search.LowArgs.Multiline);
-        Assert.False(search.LowArgs.MultilineDotall);
-        Assert.True(search.LowArgs.Unicode);
-        Assert.Single(search.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, traceWins.Status);
-        Assert.Equal(CliLoggingMode.Trace, traceWins.LowArgs!.LoggingMode);
-        Assert.Equal(CliParseStatus.Ok, debugWins.Status);
-        Assert.Equal(CliLoggingMode.Debug, debugWins.LowArgs!.LoggingMode);
+        Assert.AreEqual(CliParseStatus.Ok, search.Status);
+        Assert.IsFalse(search.LowArgs!.FixedStrings);
+        Assert.AreEqual(9UL * 1024UL * 1024UL * 1024UL, search.LowArgs.DfaSizeLimit);
+        Assert.AreEqual(2UL * 1024UL * 1024UL, search.LowArgs.RegexSizeLimit);
+        Assert.AreSequenceEqual<string>(["match:fg:magenta", "line:bg:yellow"], search.LowArgs.ColorSpecs);
+        Assert.AreEqual("hostname", search.LowArgs.HostnameBin);
+        Assert.AreEqual("file://{host}{path}", search.LowArgs.HyperlinkFormat);
+        Assert.IsFalse(search.LowArgs.StopOnNonmatch);
+        Assert.IsFalse(search.LowArgs.Multiline);
+        Assert.IsFalse(search.LowArgs.MultilineDotall);
+        Assert.IsTrue(search.LowArgs.Unicode);
+        Assert.ContainsSingle(search.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, traceWins.Status);
+        Assert.AreEqual(CliLoggingMode.Trace, traceWins.LowArgs!.LoggingMode);
+        Assert.AreEqual(CliParseStatus.Ok, debugWins.Status);
+        Assert.AreEqual(CliLoggingMode.Debug, debugWins.LowArgs!.LoggingMode);
     }
 
     /// <summary>
     /// Verifies size limit parser diagnostics match ripgrep wording.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReportsSizeLimitParseErrors()
     {
         byte[] invalidDfaValue = [.. "--dfa-size-limit="u8, 0xFF];
@@ -352,18 +353,18 @@ public sealed class CliParserTests
         CliParseResult regexInvalidUtf8 = CliParser.Parse(
             [OsString.FromUnixBytes(invalidRegexValue), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Error, dfaInvalidSuffix.Status);
-        Assert.Equal(
+        Assert.AreEqual(CliParseStatus.Error, dfaInvalidSuffix.Status);
+        Assert.AreEqual(
             "error parsing flag --dfa-size-limit: invalid size: invalid format for size '1k', which should be a non-empty sequence of digits followed by an optional 'K', 'M' or 'G' suffix",
             dfaInvalidSuffix.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, regexInvalidSuffix.Status);
-        Assert.Equal(
+        Assert.AreEqual(CliParseStatus.Error, regexInvalidSuffix.Status);
+        Assert.AreEqual(
             "error parsing flag --regex-size-limit: invalid size: invalid format for size '1T', which should be a non-empty sequence of digits followed by an optional 'K', 'M' or 'G' suffix",
             regexInvalidSuffix.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, dfaInvalidUtf8.Status);
-        Assert.Equal("error parsing flag --dfa-size-limit: value is not valid UTF-8", dfaInvalidUtf8.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, regexInvalidUtf8.Status);
-        Assert.Equal("error parsing flag --regex-size-limit: value is not valid UTF-8", regexInvalidUtf8.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, dfaInvalidUtf8.Status);
+        Assert.AreEqual("error parsing flag --dfa-size-limit: value is not valid UTF-8", dfaInvalidUtf8.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, regexInvalidUtf8.Status);
+        Assert.AreEqual("error parsing flag --regex-size-limit: value is not valid UTF-8", regexInvalidUtf8.Error!.FormatAlternate());
     }
 
     /// <summary>
@@ -371,27 +372,27 @@ public sealed class CliParserTests
     /// </summary>
     /// <param name="spec">The invalid color specification.</param>
     /// <param name="expected">The expected diagnostic text.</param>
-    [Theory]
-    [InlineData("bad", "error parsing flag --colors: invalid color spec format: 'bad'. Valid format is '(path|line|column|match|highlight):(fg|bg|style):(value)'.")]
-    [InlineData("foo:fg:red", "error parsing flag --colors: unrecognized output type 'foo'. Choose from: path, line, column, match, highlight.")]
-    [InlineData("match:what:red", "error parsing flag --colors: unrecognized spec type 'what'. Choose from: fg, bg, style, none.")]
-    [InlineData("match:fg:bogus", "error parsing flag --colors: unrecognized color name 'bogus'. Choose from: black, blue, green, red, cyan, magenta, yellow, white")]
-    [InlineData("match:style:bad", "error parsing flag --colors: unrecognized style attribute 'bad'. Choose from: nobold, bold, nointense, intense, nounderline, underline, noitalic, italic.")]
-    [InlineData("match:fg", "error parsing flag --colors: invalid color spec format: 'match:fg'. Valid format is '(path|line|column|match|highlight):(fg|bg|style):(value)'.")]
-    [InlineData("match:fg:999", "error parsing flag --colors: unrecognized ansi256 color number, should be '[0-255]' (or a hex number), but is '999'")]
-    [InlineData("match:fg:1,2", "error parsing flag --colors: unrecognized RGB color triple, should be '[0-255],[0-255],[0-255]' (or a hex triple), but is '1,2'")]
+    [TestMethod]
+    [DataRow("bad", "error parsing flag --colors: invalid color spec format: 'bad'. Valid format is '(path|line|column|match|highlight):(fg|bg|style):(value)'.")]
+    [DataRow("foo:fg:red", "error parsing flag --colors: unrecognized output type 'foo'. Choose from: path, line, column, match, highlight.")]
+    [DataRow("match:what:red", "error parsing flag --colors: unrecognized spec type 'what'. Choose from: fg, bg, style, none.")]
+    [DataRow("match:fg:bogus", "error parsing flag --colors: unrecognized color name 'bogus'. Choose from: black, blue, green, red, cyan, magenta, yellow, white")]
+    [DataRow("match:style:bad", "error parsing flag --colors: unrecognized style attribute 'bad'. Choose from: nobold, bold, nointense, intense, nounderline, underline, noitalic, italic.")]
+    [DataRow("match:fg", "error parsing flag --colors: invalid color spec format: 'match:fg'. Valid format is '(path|line|column|match|highlight):(fg|bg|style):(value)'.")]
+    [DataRow("match:fg:999", "error parsing flag --colors: unrecognized ansi256 color number, should be '[0-255]' (or a hex number), but is '999'")]
+    [DataRow("match:fg:1,2", "error parsing flag --colors: unrecognized RGB color triple, should be '[0-255],[0-255],[0-255]' (or a hex triple), but is '1,2'")]
     public void ReportsColorSpecParseErrors(string spec, string expected)
     {
         CliParseResult result = CliParser.Parse([OsString.FromText("--colors"), OsString.FromText(spec), OsString.FromText("needle")]);
 
-        Assert.Equal(CliParseStatus.Error, result.Status);
-        Assert.Equal(expected, result.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, result.Status);
+        Assert.AreEqual(expected, result.Error!.FormatAlternate());
     }
 
     /// <summary>
     /// Verifies <c>--hyperlink-format</c> aliases normalize like ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesHyperlinkFormatAliases()
     {
         CliParseResult none = CliParser.Parse([OsString.FromText("--hyperlink-format"), OsString.FromText("none"), OsString.FromText("needle")]);
@@ -406,14 +407,14 @@ public sealed class CliParserTests
             ]);
         string expectedDefault = OperatingSystem.IsWindows() ? "file://{path}" : "file://{host}{path}";
 
-        Assert.Equal(CliParseStatus.Ok, none.Status);
-        Assert.Equal(string.Empty, none.LowArgs!.HyperlinkFormat);
-        Assert.Equal(CliParseStatus.Ok, defaultAlias.Status);
-        Assert.Equal(expectedDefault, defaultAlias.LowArgs!.HyperlinkFormat);
-        Assert.Equal(CliParseStatus.Ok, file.Status);
-        Assert.Equal("file://{host}{path}", file.LowArgs!.HyperlinkFormat);
-        Assert.Equal(CliParseStatus.Ok, lastWins.Status);
-        Assert.Equal("grep+://{path}:{line}", lastWins.LowArgs!.HyperlinkFormat);
+        Assert.AreEqual(CliParseStatus.Ok, none.Status);
+        Assert.AreEqual(string.Empty, none.LowArgs!.HyperlinkFormat);
+        Assert.AreEqual(CliParseStatus.Ok, defaultAlias.Status);
+        Assert.AreEqual(expectedDefault, defaultAlias.LowArgs!.HyperlinkFormat);
+        Assert.AreEqual(CliParseStatus.Ok, file.Status);
+        Assert.AreEqual("file://{host}{path}", file.LowArgs!.HyperlinkFormat);
+        Assert.AreEqual(CliParseStatus.Ok, lastWins.Status);
+        Assert.AreEqual("grep+://{path}:{line}", lastWins.LowArgs!.HyperlinkFormat);
     }
 
     /// <summary>
@@ -421,29 +422,29 @@ public sealed class CliParserTests
     /// </summary>
     /// <param name="format">The invalid hyperlink format.</param>
     /// <param name="expected">The expected diagnostic text.</param>
-    [Theory]
-    [InlineData("foo://bar", "error parsing flag --hyperlink-format: invalid hyperlink format: at least a {path} variable is required in a hyperlink format, or otherwise use a valid alias: default, none, cursor, file, grep+, kitty, macvim, textmate, vscode, vscode-insiders, vscodium")]
-    [InlineData("foo://{line}", "error parsing flag --hyperlink-format: invalid hyperlink format: the {path} variable is required in a hyperlink format")]
-    [InlineData("foo://{path", "error parsing flag --hyperlink-format: invalid hyperlink format: unclosed variable: found '{' without a corresponding '}' following it")]
-    [InlineData("foo://{path}:{column}", "error parsing flag --hyperlink-format: invalid hyperlink format: the hyperlink format contains a {column} variable, but no {line} variable is present")]
-    [InlineData("{path}", "error parsing flag --hyperlink-format: invalid hyperlink format: the hyperlink format must start with a valid URL scheme, i.e., [0-9A-Za-z+-.]+:")]
-    [InlineData(":{path}", "error parsing flag --hyperlink-format: invalid hyperlink format: the hyperlink format must start with a valid URL scheme, i.e., [0-9A-Za-z+-.]+:")]
-    [InlineData("f*:{path}", "error parsing flag --hyperlink-format: invalid hyperlink format: the hyperlink format must start with a valid URL scheme, i.e., [0-9A-Za-z+-.]+:")]
-    [InlineData("foo://{bar}", "error parsing flag --hyperlink-format: invalid hyperlink format: invalid hyperlink format variable: 'bar', choose from: path, line, column, host, wslprefix")]
-    [InlineData("foo://{}}bar}", "error parsing flag --hyperlink-format: invalid hyperlink format: invalid hyperlink format variable: '', choose from: path, line, column, host, wslprefix")]
-    [InlineData("foo://{{bar}", "error parsing flag --hyperlink-format: invalid hyperlink format: unopened variable: found '}' without a corresponding '{' preceding it")]
+    [TestMethod]
+    [DataRow("foo://bar", "error parsing flag --hyperlink-format: invalid hyperlink format: at least a {path} variable is required in a hyperlink format, or otherwise use a valid alias: default, none, cursor, file, grep+, kitty, macvim, textmate, vscode, vscode-insiders, vscodium")]
+    [DataRow("foo://{line}", "error parsing flag --hyperlink-format: invalid hyperlink format: the {path} variable is required in a hyperlink format")]
+    [DataRow("foo://{path", "error parsing flag --hyperlink-format: invalid hyperlink format: unclosed variable: found '{' without a corresponding '}' following it")]
+    [DataRow("foo://{path}:{column}", "error parsing flag --hyperlink-format: invalid hyperlink format: the hyperlink format contains a {column} variable, but no {line} variable is present")]
+    [DataRow("{path}", "error parsing flag --hyperlink-format: invalid hyperlink format: the hyperlink format must start with a valid URL scheme, i.e., [0-9A-Za-z+-.]+:")]
+    [DataRow(":{path}", "error parsing flag --hyperlink-format: invalid hyperlink format: the hyperlink format must start with a valid URL scheme, i.e., [0-9A-Za-z+-.]+:")]
+    [DataRow("f*:{path}", "error parsing flag --hyperlink-format: invalid hyperlink format: the hyperlink format must start with a valid URL scheme, i.e., [0-9A-Za-z+-.]+:")]
+    [DataRow("foo://{bar}", "error parsing flag --hyperlink-format: invalid hyperlink format: invalid hyperlink format variable: 'bar', choose from: path, line, column, host, wslprefix")]
+    [DataRow("foo://{}}bar}", "error parsing flag --hyperlink-format: invalid hyperlink format: invalid hyperlink format variable: '', choose from: path, line, column, host, wslprefix")]
+    [DataRow("foo://{{bar}", "error parsing flag --hyperlink-format: invalid hyperlink format: unopened variable: found '}' without a corresponding '{' preceding it")]
     public void ReportsHyperlinkFormatParseErrors(string format, string expected)
     {
         CliParseResult result = CliParser.Parse([OsString.FromText("--hyperlink-format"), OsString.FromText(format), OsString.FromText("needle")]);
 
-        Assert.Equal(CliParseStatus.Error, result.Status);
-        Assert.Equal(expected, result.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, result.Status);
+        Assert.AreEqual(expected, result.Error!.FormatAlternate());
     }
 
     /// <summary>
     /// Verifies binary text-mode flags are parsed with ripgrep's order-sensitive behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesBinaryTextModeFlags()
     {
         CliParseResult enabledShort = CliParser.Parse(
@@ -459,24 +460,24 @@ public sealed class CliParserTests
         CliParseResult noBinary = CliParser.Parse(
             [OsString.FromUnixBytes("-a"u8), OsString.FromUnixBytes("--no-binary"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, enabledShort.Status);
-        Assert.True(enabledShort.LowArgs!.TextMode);
-        Assert.Equal(CliParseStatus.Ok, enabledLong.Status);
-        Assert.True(enabledLong.LowArgs!.TextMode);
-        Assert.Equal(CliParseStatus.Ok, binaryWins.Status);
-        Assert.False(binaryWins.LowArgs!.TextMode);
-        Assert.Equal(CliParseStatus.Ok, textWins.Status);
-        Assert.True(textWins.LowArgs!.TextMode);
-        Assert.Equal(CliParseStatus.Ok, noText.Status);
-        Assert.False(noText.LowArgs!.TextMode);
-        Assert.Equal(CliParseStatus.Ok, noBinary.Status);
-        Assert.False(noBinary.LowArgs!.TextMode);
+        Assert.AreEqual(CliParseStatus.Ok, enabledShort.Status);
+        Assert.IsTrue(enabledShort.LowArgs!.TextMode);
+        Assert.AreEqual(CliParseStatus.Ok, enabledLong.Status);
+        Assert.IsTrue(enabledLong.LowArgs!.TextMode);
+        Assert.AreEqual(CliParseStatus.Ok, binaryWins.Status);
+        Assert.IsFalse(binaryWins.LowArgs!.TextMode);
+        Assert.AreEqual(CliParseStatus.Ok, textWins.Status);
+        Assert.IsTrue(textWins.LowArgs!.TextMode);
+        Assert.AreEqual(CliParseStatus.Ok, noText.Status);
+        Assert.IsFalse(noText.LowArgs!.TextMode);
+        Assert.AreEqual(CliParseStatus.Ok, noBinary.Status);
+        Assert.IsFalse(noBinary.LowArgs!.TextMode);
     }
 
     /// <summary>
     /// Verifies preprocessing and compressed-search flags use ripgrep's override behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesPreprocessorAndSearchZipFlags()
     {
         CliParseResult zip = CliParser.Parse(
@@ -498,34 +499,34 @@ public sealed class CliParserTests
         CliParseResult preGlob = CliParser.Parse(
             [OsString.FromUnixBytes("--pre-glob"u8), OsString.FromUnixBytes("*.xz"u8), OsString.FromUnixBytes("--pre-glob=*.gz"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, zip.Status);
-        Assert.True(zip.LowArgs!.SearchZip);
-        Assert.Null(zip.LowArgs.Preprocessor);
-        Assert.Equal(CliParseStatus.Ok, noZip.Status);
-        Assert.False(noZip.LowArgs!.SearchZip);
-        Assert.Equal(CliParseStatus.Ok, pre.Status);
-        Assert.Equal("cat", pre.LowArgs!.Preprocessor);
-        Assert.False(pre.LowArgs.SearchZip);
-        Assert.Equal(CliParseStatus.Ok, emptyPre.Status);
-        Assert.Null(emptyPre.LowArgs!.Preprocessor);
-        Assert.Equal(CliParseStatus.Ok, noPre.Status);
-        Assert.Null(noPre.LowArgs!.Preprocessor);
-        Assert.Equal(CliParseStatus.Ok, preAfterNoPre.Status);
-        Assert.Equal("cat", preAfterNoPre.LowArgs!.Preprocessor);
-        Assert.Equal(CliParseStatus.Ok, zipOverridesPre.Status);
-        Assert.True(zipOverridesPre.LowArgs!.SearchZip);
-        Assert.Null(zipOverridesPre.LowArgs.Preprocessor);
-        Assert.Equal(CliParseStatus.Ok, preOverridesZip.Status);
-        Assert.False(preOverridesZip.LowArgs!.SearchZip);
-        Assert.Equal("cat", preOverridesZip.LowArgs.Preprocessor);
-        Assert.Equal(CliParseStatus.Ok, preGlob.Status);
-        Assert.Equal(["*.xz", "*.gz"], preGlob.LowArgs!.PreprocessorGlobs);
+        Assert.AreEqual(CliParseStatus.Ok, zip.Status);
+        Assert.IsTrue(zip.LowArgs!.SearchZip);
+        Assert.IsNull(zip.LowArgs.Preprocessor);
+        Assert.AreEqual(CliParseStatus.Ok, noZip.Status);
+        Assert.IsFalse(noZip.LowArgs!.SearchZip);
+        Assert.AreEqual(CliParseStatus.Ok, pre.Status);
+        Assert.AreEqual("cat", pre.LowArgs!.Preprocessor);
+        Assert.IsFalse(pre.LowArgs.SearchZip);
+        Assert.AreEqual(CliParseStatus.Ok, emptyPre.Status);
+        Assert.IsNull(emptyPre.LowArgs!.Preprocessor);
+        Assert.AreEqual(CliParseStatus.Ok, noPre.Status);
+        Assert.IsNull(noPre.LowArgs!.Preprocessor);
+        Assert.AreEqual(CliParseStatus.Ok, preAfterNoPre.Status);
+        Assert.AreEqual("cat", preAfterNoPre.LowArgs!.Preprocessor);
+        Assert.AreEqual(CliParseStatus.Ok, zipOverridesPre.Status);
+        Assert.IsTrue(zipOverridesPre.LowArgs!.SearchZip);
+        Assert.IsNull(zipOverridesPre.LowArgs.Preprocessor);
+        Assert.AreEqual(CliParseStatus.Ok, preOverridesZip.Status);
+        Assert.IsFalse(preOverridesZip.LowArgs!.SearchZip);
+        Assert.AreEqual("cat", preOverridesZip.LowArgs.Preprocessor);
+        Assert.AreEqual(CliParseStatus.Ok, preGlob.Status);
+        Assert.AreSequenceEqual<string>(["*.xz", "*.gz"], preGlob.LowArgs!.PreprocessorGlobs);
     }
 
     /// <summary>
     /// Verifies thread-count flags accept ripgrep's separate and inline value forms.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesThreadsFlags()
     {
         CliParseResult separate = CliParser.Parse(
@@ -535,39 +536,39 @@ public sealed class CliParserTests
         CliParseResult inline = CliParser.Parse(
             [OsString.FromUnixBytes("--threads=0"u8), OsString.FromUnixBytes("-j2"u8), OsString.FromUnixBytes("-j=4"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, separate.Status);
-        Assert.Equal(2UL, separate.LowArgs!.Threads);
-        Assert.Single(separate.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, zero.Status);
-        Assert.Null(zero.LowArgs!.Threads);
-        Assert.Single(zero.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, inline.Status);
-        Assert.Equal(4UL, inline.LowArgs!.Threads);
-        Assert.Single(inline.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, separate.Status);
+        Assert.AreEqual(2UL, separate.LowArgs!.Threads);
+        Assert.ContainsSingle(separate.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, zero.Status);
+        Assert.IsNull(zero.LowArgs!.Threads);
+        Assert.ContainsSingle(zero.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, inline.Status);
+        Assert.AreEqual(4UL, inline.LowArgs!.Threads);
+        Assert.ContainsSingle(inline.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies thread-count diagnostics match ripgrep wording.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReportsThreadsParseErrors()
     {
         CliParseResult missing = CliParser.Parse([OsString.FromUnixBytes("--threads"u8)]);
         CliParseResult invalid = CliParser.Parse([OsString.FromUnixBytes("--threads=abc"u8), OsString.FromUnixBytes("needle"u8)]);
         CliParseResult shortInvalid = CliParser.Parse([OsString.FromUnixBytes("-j"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Error, missing.Status);
-        Assert.Equal("missing value for flag --threads: missing argument for option '--threads'", missing.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, invalid.Status);
-        Assert.Equal("error parsing flag --threads: value is not a valid number: invalid digit found in string", invalid.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, shortInvalid.Status);
-        Assert.Equal("error parsing flag -j: value is not a valid number: invalid digit found in string", shortInvalid.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, missing.Status);
+        Assert.AreEqual("missing value for flag --threads: missing argument for option '--threads'", missing.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, invalid.Status);
+        Assert.AreEqual("error parsing flag --threads: value is not a valid number: invalid digit found in string", invalid.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, shortInvalid.Status);
+        Assert.AreEqual("error parsing flag -j: value is not a valid number: invalid digit found in string", shortInvalid.Error!.FormatAlternate());
     }
 
     /// <summary>
     /// Verifies buffering and memory-map switches use ripgrep's mode-setting behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesBufferingAndMmapFlags()
     {
         CliParseResult defaultModes = CliParser.Parse([OsString.FromUnixBytes("needle"u8)]);
@@ -586,21 +587,21 @@ public sealed class CliParserTests
                 OsString.FromUnixBytes("needle"u8),
             ]);
 
-        Assert.Equal(CliParseStatus.Ok, defaultModes.Status);
-        Assert.Equal(CliBufferMode.Auto, defaultModes.LowArgs!.BufferMode);
-        Assert.Equal(CliMmapMode.Auto, defaultModes.LowArgs.MmapMode);
-        Assert.Equal(CliParseStatus.Ok, buffered.Status);
-        Assert.Equal(CliBufferMode.Auto, buffered.LowArgs!.BufferMode);
-        Assert.Single(buffered.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, mmap.Status);
-        Assert.Equal(CliMmapMode.AlwaysTryMmap, mmap.LowArgs!.MmapMode);
-        Assert.Single(mmap.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, defaultModes.Status);
+        Assert.AreEqual(CliBufferMode.Auto, defaultModes.LowArgs!.BufferMode);
+        Assert.AreEqual(CliMmapMode.Auto, defaultModes.LowArgs.MmapMode);
+        Assert.AreEqual(CliParseStatus.Ok, buffered.Status);
+        Assert.AreEqual(CliBufferMode.Auto, buffered.LowArgs!.BufferMode);
+        Assert.ContainsSingle(buffered.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, mmap.Status);
+        Assert.AreEqual(CliMmapMode.AlwaysTryMmap, mmap.LowArgs!.MmapMode);
+        Assert.ContainsSingle(mmap.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies message switches use ripgrep's last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesMessageFlags()
     {
         CliParseResult disabled = CliParser.Parse(
@@ -608,32 +609,32 @@ public sealed class CliParserTests
         CliParseResult enabled = CliParser.Parse(
             [OsString.FromUnixBytes("--no-messages"u8), OsString.FromUnixBytes("--messages"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, disabled.Status);
-        Assert.False(disabled.LowArgs!.Messages);
-        Assert.Single(disabled.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, enabled.Status);
-        Assert.True(enabled.LowArgs!.Messages);
-        Assert.Single(enabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, disabled.Status);
+        Assert.IsFalse(disabled.LowArgs!.Messages);
+        Assert.ContainsSingle(disabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, enabled.Status);
+        Assert.IsTrue(enabled.LowArgs!.Messages);
+        Assert.ContainsSingle(enabled.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies stop-on-nonmatch is parsed as a search switch.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesStopOnNonmatchFlag()
     {
         CliParseResult result = CliParser.Parse(
             [OsString.FromUnixBytes("--stop-on-nonmatch"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, result.Status);
-        Assert.True(result.LowArgs!.StopOnNonmatch);
-        Assert.Single(result.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, result.Status);
+        Assert.IsTrue(result.LowArgs!.StopOnNonmatch);
+        Assert.ContainsSingle(result.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies CRLF mode flags use ripgrep's last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesCrlfFlags()
     {
         CliParseResult enabled = CliParser.Parse(
@@ -649,36 +650,36 @@ public sealed class CliParserTests
         CliParseResult nullDataThenNoCrlf = CliParser.Parse(
             [OsString.FromUnixBytes("--null-data"u8), OsString.FromUnixBytes("--no-crlf"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, enabled.Status);
-        Assert.True(enabled.LowArgs!.Crlf);
-        Assert.False(enabled.LowArgs.NullData);
-        Assert.Single(enabled.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, disabled.Status);
-        Assert.False(disabled.LowArgs!.Crlf);
-        Assert.False(disabled.LowArgs.NullData);
-        Assert.Single(disabled.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, nullData.Status);
-        Assert.True(nullData.LowArgs!.NullData);
-        Assert.False(nullData.LowArgs.Crlf);
-        Assert.Single(nullData.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, crlfThenNullData.Status);
-        Assert.True(crlfThenNullData.LowArgs!.NullData);
-        Assert.False(crlfThenNullData.LowArgs.Crlf);
-        Assert.Single(crlfThenNullData.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, nullDataThenCrlf.Status);
-        Assert.True(nullDataThenCrlf.LowArgs!.Crlf);
-        Assert.False(nullDataThenCrlf.LowArgs.NullData);
-        Assert.Single(nullDataThenCrlf.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, nullDataThenNoCrlf.Status);
-        Assert.True(nullDataThenNoCrlf.LowArgs!.NullData);
-        Assert.False(nullDataThenNoCrlf.LowArgs.Crlf);
-        Assert.Single(nullDataThenNoCrlf.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, enabled.Status);
+        Assert.IsTrue(enabled.LowArgs!.Crlf);
+        Assert.IsFalse(enabled.LowArgs.NullData);
+        Assert.ContainsSingle(enabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, disabled.Status);
+        Assert.IsFalse(disabled.LowArgs!.Crlf);
+        Assert.IsFalse(disabled.LowArgs.NullData);
+        Assert.ContainsSingle(disabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, nullData.Status);
+        Assert.IsTrue(nullData.LowArgs!.NullData);
+        Assert.IsFalse(nullData.LowArgs.Crlf);
+        Assert.ContainsSingle(nullData.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, crlfThenNullData.Status);
+        Assert.IsTrue(crlfThenNullData.LowArgs!.NullData);
+        Assert.IsFalse(crlfThenNullData.LowArgs.Crlf);
+        Assert.ContainsSingle(crlfThenNullData.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, nullDataThenCrlf.Status);
+        Assert.IsTrue(nullDataThenCrlf.LowArgs!.Crlf);
+        Assert.IsFalse(nullDataThenCrlf.LowArgs.NullData);
+        Assert.ContainsSingle(nullDataThenCrlf.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, nullDataThenNoCrlf.Status);
+        Assert.IsTrue(nullDataThenNoCrlf.LowArgs!.NullData);
+        Assert.IsFalse(nullDataThenNoCrlf.LowArgs.Crlf);
+        Assert.ContainsSingle(nullDataThenNoCrlf.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies regex engine switches use ripgrep's last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesRegexEngineFlags()
     {
         CliParseResult pcre2 = CliParser.Parse(
@@ -696,46 +697,46 @@ public sealed class CliParserTests
         CliParseResult pcre2ThenNoHybrid = CliParser.Parse(
             [OsString.FromUnixBytes("--engine=pcre2"u8), OsString.FromUnixBytes("--no-auto-hybrid-regex"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, pcre2.Status);
-        Assert.Equal(CliRegexEngine.Pcre2, pcre2.LowArgs!.RegexEngine);
-        Assert.Single(pcre2.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, defaultEngine.Status);
-        Assert.Equal(CliRegexEngine.Default, defaultEngine.LowArgs!.RegexEngine);
-        Assert.Single(defaultEngine.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, hybrid.Status);
-        Assert.False(hybrid.LowArgs!.AutoHybridRegex);
-        Assert.Equal(CliRegexEngine.Default, hybrid.LowArgs.RegexEngine);
-        Assert.Single(hybrid.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, pcre2Unicode.Status);
-        Assert.True(pcre2Unicode.LowArgs!.Pcre2Unicode);
-        Assert.Single(pcre2Unicode.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, pcre2ThenHybrid.Status);
-        Assert.Equal(CliRegexEngine.Auto, pcre2ThenHybrid.LowArgs!.RegexEngine);
-        Assert.Equal(CliParseStatus.Ok, hybridThenPcre2.Status);
-        Assert.Equal(CliRegexEngine.Pcre2, hybridThenPcre2.LowArgs!.RegexEngine);
-        Assert.Equal(CliParseStatus.Ok, pcre2ThenNoHybrid.Status);
-        Assert.Equal(CliRegexEngine.Default, pcre2ThenNoHybrid.LowArgs!.RegexEngine);
+        Assert.AreEqual(CliParseStatus.Ok, pcre2.Status);
+        Assert.AreEqual(CliRegexEngine.Pcre2, pcre2.LowArgs!.RegexEngine);
+        Assert.ContainsSingle(pcre2.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, defaultEngine.Status);
+        Assert.AreEqual(CliRegexEngine.Default, defaultEngine.LowArgs!.RegexEngine);
+        Assert.ContainsSingle(defaultEngine.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, hybrid.Status);
+        Assert.IsFalse(hybrid.LowArgs!.AutoHybridRegex);
+        Assert.AreEqual(CliRegexEngine.Default, hybrid.LowArgs.RegexEngine);
+        Assert.ContainsSingle(hybrid.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, pcre2Unicode.Status);
+        Assert.IsTrue(pcre2Unicode.LowArgs!.Pcre2Unicode);
+        Assert.ContainsSingle(pcre2Unicode.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, pcre2ThenHybrid.Status);
+        Assert.AreEqual(CliRegexEngine.Auto, pcre2ThenHybrid.LowArgs!.RegexEngine);
+        Assert.AreEqual(CliParseStatus.Ok, hybridThenPcre2.Status);
+        Assert.AreEqual(CliRegexEngine.Pcre2, hybridThenPcre2.LowArgs!.RegexEngine);
+        Assert.AreEqual(CliParseStatus.Ok, pcre2ThenNoHybrid.Status);
+        Assert.AreEqual(CliRegexEngine.Default, pcre2ThenNoHybrid.LowArgs!.RegexEngine);
     }
 
     /// <summary>
     /// Verifies regex engine parser diagnostics match ripgrep wording.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReportsRegexEngineParseErrors()
     {
         CliParseResult missing = CliParser.Parse([OsString.FromUnixBytes("--engine"u8)]);
         CliParseResult invalid = CliParser.Parse([OsString.FromUnixBytes("--engine=bogus"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Error, missing.Status);
-        Assert.Equal("missing value for flag --engine: missing argument for option '--engine'", missing.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, invalid.Status);
-        Assert.Equal("error parsing flag --engine: unrecognized regex engine 'bogus'", invalid.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, missing.Status);
+        Assert.AreEqual("missing value for flag --engine: missing argument for option '--engine'", missing.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, invalid.Status);
+        Assert.AreEqual("error parsing flag --engine: unrecognized regex engine 'bogus'", invalid.Error!.FormatAlternate());
     }
 
     /// <summary>
     /// Verifies encoding flags use ripgrep's last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesEncodingFlags()
     {
         CliParseResult none = CliParser.Parse(
@@ -829,147 +830,147 @@ public sealed class CliParserTests
         CliParseResult xUserDefined = CliParser.Parse(
             [OsString.FromUnixBytes("-E"u8), OsString.FromUnixBytes("x-user-defined"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, none.Status);
-        Assert.Equal(CliEncodingMode.None, none.LowArgs!.EncodingMode);
-        Assert.Single(none.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, inlineNone.Status);
-        Assert.Equal(CliEncodingMode.None, inlineNone.LowArgs!.EncodingMode);
-        Assert.Single(inlineNone.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, shortNone.Status);
-        Assert.Equal(CliEncodingMode.None, shortNone.LowArgs!.EncodingMode);
-        Assert.Single(shortNone.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, noEncoding.Status);
-        Assert.Equal(CliEncodingMode.Auto, noEncoding.LowArgs!.EncodingMode);
-        Assert.Single(noEncoding.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, lastEncoding.Status);
-        Assert.Equal(CliEncodingMode.Utf16, lastEncoding.LowArgs!.EncodingMode);
-        Assert.Single(lastEncoding.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, windows1252.Status);
-        Assert.Equal(CliEncodingMode.Windows1252, windows1252.LowArgs!.EncodingMode);
-        Assert.Single(windows1252.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, iso88591.Status);
-        Assert.Equal(CliEncodingMode.Windows1252, iso88591.LowArgs!.EncodingMode);
-        Assert.Single(iso88591.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, utf8Alias.Status);
-        Assert.Equal(CliEncodingMode.Utf8, utf8Alias.LowArgs!.EncodingMode);
-        Assert.Single(utf8Alias.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, utf16LeAlias.Status);
-        Assert.Equal(CliEncodingMode.Utf16Le, utf16LeAlias.LowArgs!.EncodingMode);
-        Assert.Single(utf16LeAlias.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, utf16BeAlias.Status);
-        Assert.Equal(CliEncodingMode.Utf16Be, utf16BeAlias.LowArgs!.EncodingMode);
-        Assert.Single(utf16BeAlias.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, eucKr.Status);
-        Assert.Equal(CliEncodingMode.EucKr, eucKr.LowArgs!.EncodingMode);
-        Assert.Single(eucKr.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, eucJp.Status);
-        Assert.Equal(CliEncodingMode.EucJp, eucJp.LowArgs!.EncodingMode);
-        Assert.Single(eucJp.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, big5.Status);
-        Assert.Equal(CliEncodingMode.Big5, big5.LowArgs!.EncodingMode);
-        Assert.Single(big5.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, gb18030.Status);
-        Assert.Equal(CliEncodingMode.Gb18030, gb18030.LowArgs!.EncodingMode);
-        Assert.Single(gb18030.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, gbk.Status);
-        Assert.Equal(CliEncodingMode.Gbk, gbk.LowArgs!.EncodingMode);
-        Assert.Single(gbk.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, shiftJis.Status);
-        Assert.Equal(CliEncodingMode.ShiftJis, shiftJis.LowArgs!.EncodingMode);
-        Assert.Single(shiftJis.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, ibm866.Status);
-        Assert.Equal(CliEncodingMode.Ibm866, ibm866.LowArgs!.EncodingMode);
-        Assert.Single(ibm866.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, iso88592.Status);
-        Assert.Equal(CliEncodingMode.Iso88592, iso88592.LowArgs!.EncodingMode);
-        Assert.Single(iso88592.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, iso88593.Status);
-        Assert.Equal(CliEncodingMode.Iso88593, iso88593.LowArgs!.EncodingMode);
-        Assert.Single(iso88593.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, iso88594.Status);
-        Assert.Equal(CliEncodingMode.Iso88594, iso88594.LowArgs!.EncodingMode);
-        Assert.Single(iso88594.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, iso88595.Status);
-        Assert.Equal(CliEncodingMode.Iso88595, iso88595.LowArgs!.EncodingMode);
-        Assert.Single(iso88595.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, iso88596.Status);
-        Assert.Equal(CliEncodingMode.Iso88596, iso88596.LowArgs!.EncodingMode);
-        Assert.Single(iso88596.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, iso88597.Status);
-        Assert.Equal(CliEncodingMode.Iso88597, iso88597.LowArgs!.EncodingMode);
-        Assert.Single(iso88597.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, iso88598.Status);
-        Assert.Equal(CliEncodingMode.Iso88598, iso88598.LowArgs!.EncodingMode);
-        Assert.Single(iso88598.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, iso88598I.Status);
-        Assert.Equal(CliEncodingMode.Iso88598I, iso88598I.LowArgs!.EncodingMode);
-        Assert.Single(iso88598I.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, iso885910.Status);
-        Assert.Equal(CliEncodingMode.Iso885910, iso885910.LowArgs!.EncodingMode);
-        Assert.Single(iso885910.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, iso885913.Status);
-        Assert.Equal(CliEncodingMode.Iso885913, iso885913.LowArgs!.EncodingMode);
-        Assert.Single(iso885913.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, iso885914.Status);
-        Assert.Equal(CliEncodingMode.Iso885914, iso885914.LowArgs!.EncodingMode);
-        Assert.Single(iso885914.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, iso885915.Status);
-        Assert.Equal(CliEncodingMode.Iso885915, iso885915.LowArgs!.EncodingMode);
-        Assert.Single(iso885915.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, iso885916.Status);
-        Assert.Equal(CliEncodingMode.Iso885916, iso885916.LowArgs!.EncodingMode);
-        Assert.Single(iso885916.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, iso2022Jp.Status);
-        Assert.Equal(CliEncodingMode.Iso2022Jp, iso2022Jp.LowArgs!.EncodingMode);
-        Assert.Single(iso2022Jp.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, koi8r.Status);
-        Assert.Equal(CliEncodingMode.Koi8R, koi8r.LowArgs!.EncodingMode);
-        Assert.Single(koi8r.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, koi8u.Status);
-        Assert.Equal(CliEncodingMode.Koi8U, koi8u.LowArgs!.EncodingMode);
-        Assert.Single(koi8u.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, macintosh.Status);
-        Assert.Equal(CliEncodingMode.Macintosh, macintosh.LowArgs!.EncodingMode);
-        Assert.Single(macintosh.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, windows874.Status);
-        Assert.Equal(CliEncodingMode.Windows874, windows874.LowArgs!.EncodingMode);
-        Assert.Single(windows874.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, windows1250.Status);
-        Assert.Equal(CliEncodingMode.Windows1250, windows1250.LowArgs!.EncodingMode);
-        Assert.Single(windows1250.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, windows1251.Status);
-        Assert.Equal(CliEncodingMode.Windows1251, windows1251.LowArgs!.EncodingMode);
-        Assert.Single(windows1251.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, windows1253.Status);
-        Assert.Equal(CliEncodingMode.Windows1253, windows1253.LowArgs!.EncodingMode);
-        Assert.Single(windows1253.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, windows1254.Status);
-        Assert.Equal(CliEncodingMode.Windows1254, windows1254.LowArgs!.EncodingMode);
-        Assert.Single(windows1254.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, windows1255.Status);
-        Assert.Equal(CliEncodingMode.Windows1255, windows1255.LowArgs!.EncodingMode);
-        Assert.Single(windows1255.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, windows1256.Status);
-        Assert.Equal(CliEncodingMode.Windows1256, windows1256.LowArgs!.EncodingMode);
-        Assert.Single(windows1256.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, windows1257.Status);
-        Assert.Equal(CliEncodingMode.Windows1257, windows1257.LowArgs!.EncodingMode);
-        Assert.Single(windows1257.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, windows1258.Status);
-        Assert.Equal(CliEncodingMode.Windows1258, windows1258.LowArgs!.EncodingMode);
-        Assert.Single(windows1258.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, xMacCyrillic.Status);
-        Assert.Equal(CliEncodingMode.XMacCyrillic, xMacCyrillic.LowArgs!.EncodingMode);
-        Assert.Single(xMacCyrillic.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, xUserDefined.Status);
-        Assert.Equal(CliEncodingMode.XUserDefined, xUserDefined.LowArgs!.EncodingMode);
-        Assert.Single(xUserDefined.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, none.Status);
+        Assert.AreEqual(CliEncodingMode.None, none.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(none.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, inlineNone.Status);
+        Assert.AreEqual(CliEncodingMode.None, inlineNone.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(inlineNone.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, shortNone.Status);
+        Assert.AreEqual(CliEncodingMode.None, shortNone.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(shortNone.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, noEncoding.Status);
+        Assert.AreEqual(CliEncodingMode.Auto, noEncoding.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(noEncoding.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, lastEncoding.Status);
+        Assert.AreEqual(CliEncodingMode.Utf16, lastEncoding.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(lastEncoding.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, windows1252.Status);
+        Assert.AreEqual(CliEncodingMode.Windows1252, windows1252.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(windows1252.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, iso88591.Status);
+        Assert.AreEqual(CliEncodingMode.Windows1252, iso88591.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(iso88591.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, utf8Alias.Status);
+        Assert.AreEqual(CliEncodingMode.Utf8, utf8Alias.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(utf8Alias.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, utf16LeAlias.Status);
+        Assert.AreEqual(CliEncodingMode.Utf16Le, utf16LeAlias.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(utf16LeAlias.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, utf16BeAlias.Status);
+        Assert.AreEqual(CliEncodingMode.Utf16Be, utf16BeAlias.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(utf16BeAlias.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, eucKr.Status);
+        Assert.AreEqual(CliEncodingMode.EucKr, eucKr.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(eucKr.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, eucJp.Status);
+        Assert.AreEqual(CliEncodingMode.EucJp, eucJp.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(eucJp.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, big5.Status);
+        Assert.AreEqual(CliEncodingMode.Big5, big5.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(big5.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, gb18030.Status);
+        Assert.AreEqual(CliEncodingMode.Gb18030, gb18030.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(gb18030.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, gbk.Status);
+        Assert.AreEqual(CliEncodingMode.Gbk, gbk.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(gbk.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, shiftJis.Status);
+        Assert.AreEqual(CliEncodingMode.ShiftJis, shiftJis.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(shiftJis.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, ibm866.Status);
+        Assert.AreEqual(CliEncodingMode.Ibm866, ibm866.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(ibm866.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, iso88592.Status);
+        Assert.AreEqual(CliEncodingMode.Iso88592, iso88592.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(iso88592.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, iso88593.Status);
+        Assert.AreEqual(CliEncodingMode.Iso88593, iso88593.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(iso88593.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, iso88594.Status);
+        Assert.AreEqual(CliEncodingMode.Iso88594, iso88594.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(iso88594.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, iso88595.Status);
+        Assert.AreEqual(CliEncodingMode.Iso88595, iso88595.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(iso88595.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, iso88596.Status);
+        Assert.AreEqual(CliEncodingMode.Iso88596, iso88596.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(iso88596.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, iso88597.Status);
+        Assert.AreEqual(CliEncodingMode.Iso88597, iso88597.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(iso88597.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, iso88598.Status);
+        Assert.AreEqual(CliEncodingMode.Iso88598, iso88598.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(iso88598.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, iso88598I.Status);
+        Assert.AreEqual(CliEncodingMode.Iso88598I, iso88598I.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(iso88598I.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, iso885910.Status);
+        Assert.AreEqual(CliEncodingMode.Iso885910, iso885910.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(iso885910.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, iso885913.Status);
+        Assert.AreEqual(CliEncodingMode.Iso885913, iso885913.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(iso885913.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, iso885914.Status);
+        Assert.AreEqual(CliEncodingMode.Iso885914, iso885914.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(iso885914.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, iso885915.Status);
+        Assert.AreEqual(CliEncodingMode.Iso885915, iso885915.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(iso885915.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, iso885916.Status);
+        Assert.AreEqual(CliEncodingMode.Iso885916, iso885916.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(iso885916.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, iso2022Jp.Status);
+        Assert.AreEqual(CliEncodingMode.Iso2022Jp, iso2022Jp.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(iso2022Jp.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, koi8r.Status);
+        Assert.AreEqual(CliEncodingMode.Koi8R, koi8r.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(koi8r.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, koi8u.Status);
+        Assert.AreEqual(CliEncodingMode.Koi8U, koi8u.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(koi8u.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, macintosh.Status);
+        Assert.AreEqual(CliEncodingMode.Macintosh, macintosh.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(macintosh.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, windows874.Status);
+        Assert.AreEqual(CliEncodingMode.Windows874, windows874.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(windows874.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, windows1250.Status);
+        Assert.AreEqual(CliEncodingMode.Windows1250, windows1250.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(windows1250.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, windows1251.Status);
+        Assert.AreEqual(CliEncodingMode.Windows1251, windows1251.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(windows1251.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, windows1253.Status);
+        Assert.AreEqual(CliEncodingMode.Windows1253, windows1253.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(windows1253.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, windows1254.Status);
+        Assert.AreEqual(CliEncodingMode.Windows1254, windows1254.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(windows1254.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, windows1255.Status);
+        Assert.AreEqual(CliEncodingMode.Windows1255, windows1255.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(windows1255.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, windows1256.Status);
+        Assert.AreEqual(CliEncodingMode.Windows1256, windows1256.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(windows1256.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, windows1257.Status);
+        Assert.AreEqual(CliEncodingMode.Windows1257, windows1257.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(windows1257.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, windows1258.Status);
+        Assert.AreEqual(CliEncodingMode.Windows1258, windows1258.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(windows1258.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, xMacCyrillic.Status);
+        Assert.AreEqual(CliEncodingMode.XMacCyrillic, xMacCyrillic.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(xMacCyrillic.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, xUserDefined.Status);
+        Assert.AreEqual(CliEncodingMode.XUserDefined, xUserDefined.LowArgs!.EncodingMode);
+        Assert.ContainsSingle(xUserDefined.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies encoding parser diagnostics match ripgrep wording.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReportsEncodingParseErrors()
     {
         CliParseResult missing = CliParser.Parse([OsString.FromUnixBytes("--encoding"u8)]);
@@ -977,20 +978,20 @@ public sealed class CliParserTests
         CliParseResult upperAuto = CliParser.Parse([OsString.FromUnixBytes("-E"u8), OsString.FromUnixBytes("AUTO"u8), OsString.FromUnixBytes("needle"u8)]);
         CliParseResult trimmedNone = CliParser.Parse([OsString.FromUnixBytes("-E"u8), OsString.FromUnixBytes(" none "u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Error, missing.Status);
-        Assert.Equal("missing value for flag --encoding: missing argument for option '--encoding'", missing.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, invalid.Status);
-        Assert.Equal("error parsing flag -E: grep config error: unknown encoding: foo", invalid.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, upperAuto.Status);
-        Assert.Equal("error parsing flag -E: grep config error: unknown encoding: AUTO", upperAuto.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, trimmedNone.Status);
-        Assert.Equal("error parsing flag -E: grep config error: unknown encoding:  none ", trimmedNone.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, missing.Status);
+        Assert.AreEqual("missing value for flag --encoding: missing argument for option '--encoding'", missing.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, invalid.Status);
+        Assert.AreEqual("error parsing flag -E: grep config error: unknown encoding: foo", invalid.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, upperAuto.Status);
+        Assert.AreEqual("error parsing flag -E: grep config error: unknown encoding: AUTO", upperAuto.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, trimmedNone.Status);
+        Assert.AreEqual("error parsing flag -E: grep config error: unknown encoding:  none ", trimmedNone.Error!.FormatAlternate());
     }
 
     /// <summary>
     /// Verifies line-number flags are parsed with the same last-wins behavior as ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesLineNumberFlags()
     {
         CliParseResult enabled = CliParser.Parse(
@@ -998,18 +999,18 @@ public sealed class CliParserTests
         CliParseResult disabled = CliParser.Parse(
             [OsString.FromUnixBytes("-n"u8), OsString.FromUnixBytes("--no-line-number"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, enabled.Status);
-        Assert.True(enabled.LowArgs!.LineNumber);
-        Assert.Single(enabled.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, disabled.Status);
-        Assert.False(disabled.LowArgs!.LineNumber);
-        Assert.Single(disabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, enabled.Status);
+        Assert.IsTrue(enabled.LowArgs!.LineNumber);
+        Assert.ContainsSingle(enabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, disabled.Status);
+        Assert.IsFalse(disabled.LowArgs!.LineNumber);
+        Assert.ContainsSingle(disabled.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies byte-offset flags are parsed with the same last-wins behavior as ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesByteOffsetFlags()
     {
         CliParseResult enabled = CliParser.Parse(
@@ -1017,18 +1018,18 @@ public sealed class CliParserTests
         CliParseResult disabled = CliParser.Parse(
             [OsString.FromUnixBytes("--byte-offset"u8), OsString.FromUnixBytes("--no-byte-offset"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, enabled.Status);
-        Assert.True(enabled.LowArgs!.ByteOffset);
-        Assert.Single(enabled.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, disabled.Status);
-        Assert.False(disabled.LowArgs!.ByteOffset);
-        Assert.Single(disabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, enabled.Status);
+        Assert.IsTrue(enabled.LowArgs!.ByteOffset);
+        Assert.ContainsSingle(enabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, disabled.Status);
+        Assert.IsFalse(disabled.LowArgs!.ByteOffset);
+        Assert.ContainsSingle(disabled.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies column flags are parsed with last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesColumnFlags()
     {
         CliParseResult enabled = CliParser.Parse(
@@ -1036,18 +1037,18 @@ public sealed class CliParserTests
         CliParseResult disabled = CliParser.Parse(
             [OsString.FromUnixBytes("--column"u8), OsString.FromUnixBytes("--no-column"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, enabled.Status);
-        Assert.True(enabled.LowArgs!.Column);
-        Assert.Single(enabled.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, disabled.Status);
-        Assert.False(disabled.LowArgs!.Column);
-        Assert.Single(disabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, enabled.Status);
+        Assert.IsTrue(enabled.LowArgs!.Column);
+        Assert.ContainsSingle(enabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, disabled.Status);
+        Assert.IsFalse(disabled.LowArgs!.Column);
+        Assert.ContainsSingle(disabled.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies count mode flags are parsed with the same last-wins behavior as ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesCountModeFlags()
     {
         CliParseResult count = CliParser.Parse(
@@ -1055,18 +1056,18 @@ public sealed class CliParserTests
         CliParseResult countMatches = CliParser.Parse(
             [OsString.FromUnixBytes("--count"u8), OsString.FromUnixBytes("--count-matches"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, count.Status);
-        Assert.Equal(CliSearchMode.Count, count.LowArgs!.SearchMode);
-        Assert.Single(count.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, countMatches.Status);
-        Assert.Equal(CliSearchMode.CountMatches, countMatches.LowArgs!.SearchMode);
-        Assert.Single(countMatches.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, count.Status);
+        Assert.AreEqual(CliSearchMode.Count, count.LowArgs!.SearchMode);
+        Assert.ContainsSingle(count.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, countMatches.Status);
+        Assert.AreEqual(CliSearchMode.CountMatches, countMatches.LowArgs!.SearchMode);
+        Assert.ContainsSingle(countMatches.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies include-zero flags are parsed with last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesIncludeZeroFlags()
     {
         CliParseResult enabled = CliParser.Parse(
@@ -1074,18 +1075,18 @@ public sealed class CliParserTests
         CliParseResult disabled = CliParser.Parse(
             [OsString.FromUnixBytes("--include-zero"u8), OsString.FromUnixBytes("--no-include-zero"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, enabled.Status);
-        Assert.True(enabled.LowArgs!.IncludeZero);
-        Assert.Single(enabled.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, disabled.Status);
-        Assert.False(disabled.LowArgs!.IncludeZero);
-        Assert.Single(disabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, enabled.Status);
+        Assert.IsTrue(enabled.LowArgs!.IncludeZero);
+        Assert.ContainsSingle(enabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, disabled.Status);
+        Assert.IsFalse(disabled.LowArgs!.IncludeZero);
+        Assert.ContainsSingle(disabled.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies max-count flags accept separate and inline values with last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesMaxCountFlags()
     {
         CliParseResult shortSeparate = CliParser.Parse(
@@ -1095,36 +1096,36 @@ public sealed class CliParserTests
         CliParseResult longInline = CliParser.Parse(
             [OsString.FromUnixBytes("-m"u8), OsString.FromUnixBytes("5"u8), OsString.FromUnixBytes("--max-count=10"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, shortSeparate.Status);
-        Assert.Equal(5UL, shortSeparate.LowArgs!.MaxCount);
-        Assert.Single(shortSeparate.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, shortInline.Status);
-        Assert.Equal(5UL, shortInline.LowArgs!.MaxCount);
-        Assert.Single(shortInline.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, longInline.Status);
-        Assert.Equal(10UL, longInline.LowArgs!.MaxCount);
-        Assert.Single(longInline.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, shortSeparate.Status);
+        Assert.AreEqual(5UL, shortSeparate.LowArgs!.MaxCount);
+        Assert.ContainsSingle(shortSeparate.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, shortInline.Status);
+        Assert.AreEqual(5UL, shortInline.LowArgs!.MaxCount);
+        Assert.ContainsSingle(shortInline.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, longInline.Status);
+        Assert.AreEqual(10UL, longInline.LowArgs!.MaxCount);
+        Assert.ContainsSingle(longInline.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies max-count parse errors use ripgrep-style wording.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReportsMaxCountParseErrors()
     {
         CliParseResult missing = CliParser.Parse([OsString.FromUnixBytes("-m"u8)]);
         CliParseResult invalid = CliParser.Parse([OsString.FromUnixBytes("--max-count=x"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Error, missing.Status);
-        Assert.Equal("missing value for flag -m: missing argument for option '-m'", missing.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, invalid.Status);
-        Assert.Equal("error parsing flag --max-count: value is not a valid number: invalid digit found in string", invalid.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, missing.Status);
+        Assert.AreEqual("missing value for flag -m: missing argument for option '-m'", missing.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, invalid.Status);
+        Assert.AreEqual("error parsing flag --max-count: value is not a valid number: invalid digit found in string", invalid.Error!.FormatAlternate());
     }
 
     /// <summary>
     /// Verifies max-columns flags accept separate and inline values with last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesMaxColumnsFlags()
     {
         CliParseResult shortSeparate = CliParser.Parse(
@@ -1134,21 +1135,21 @@ public sealed class CliParserTests
         CliParseResult longInline = CliParser.Parse(
             [OsString.FromUnixBytes("-M"u8), OsString.FromUnixBytes("12"u8), OsString.FromUnixBytes("--max-columns=16"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, shortSeparate.Status);
-        Assert.Equal(12UL, shortSeparate.LowArgs!.MaxColumns);
-        Assert.Single(shortSeparate.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, shortInline.Status);
-        Assert.Equal(12UL, shortInline.LowArgs!.MaxColumns);
-        Assert.Single(shortInline.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, longInline.Status);
-        Assert.Equal(16UL, longInline.LowArgs!.MaxColumns);
-        Assert.Single(longInline.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, shortSeparate.Status);
+        Assert.AreEqual(12UL, shortSeparate.LowArgs!.MaxColumns);
+        Assert.ContainsSingle(shortSeparate.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, shortInline.Status);
+        Assert.AreEqual(12UL, shortInline.LowArgs!.MaxColumns);
+        Assert.ContainsSingle(shortInline.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, longInline.Status);
+        Assert.AreEqual(16UL, longInline.LowArgs!.MaxColumns);
+        Assert.ContainsSingle(longInline.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies max-columns preview toggles use last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesMaxColumnsPreviewFlags()
     {
         CliParseResult enabled = CliParser.Parse(
@@ -1156,33 +1157,33 @@ public sealed class CliParserTests
         CliParseResult disabled = CliParser.Parse(
             [OsString.FromUnixBytes("--max-columns-preview"u8), OsString.FromUnixBytes("--no-max-columns-preview"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, enabled.Status);
-        Assert.True(enabled.LowArgs!.MaxColumnsPreview);
-        Assert.Single(enabled.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, disabled.Status);
-        Assert.False(disabled.LowArgs!.MaxColumnsPreview);
-        Assert.Single(disabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, enabled.Status);
+        Assert.IsTrue(enabled.LowArgs!.MaxColumnsPreview);
+        Assert.ContainsSingle(enabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, disabled.Status);
+        Assert.IsFalse(disabled.LowArgs!.MaxColumnsPreview);
+        Assert.ContainsSingle(disabled.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies max-columns parse errors use ripgrep-style wording.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReportsMaxColumnsParseErrors()
     {
         CliParseResult missing = CliParser.Parse([OsString.FromUnixBytes("--max-columns"u8)]);
         CliParseResult invalid = CliParser.Parse([OsString.FromUnixBytes("-Mx"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Error, missing.Status);
-        Assert.Equal("missing value for flag --max-columns: missing argument for option '--max-columns'", missing.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, invalid.Status);
-        Assert.Equal("error parsing flag -M: value is not a valid number: invalid digit found in string", invalid.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, missing.Status);
+        Assert.AreEqual("missing value for flag --max-columns: missing argument for option '--max-columns'", missing.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, invalid.Status);
+        Assert.AreEqual("error parsing flag -M: value is not a valid number: invalid digit found in string", invalid.Error!.FormatAlternate());
     }
 
     /// <summary>
     /// Verifies replacement flags accept separate, inline and empty byte values.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesReplacementFlags()
     {
         CliParseResult shortSeparate = CliParser.Parse(
@@ -1192,33 +1193,33 @@ public sealed class CliParserTests
         CliParseResult empty = CliParser.Parse(
             [OsString.FromUnixBytes("--replace="u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, shortSeparate.Status);
-        Assert.Equal("X"u8.ToArray(), shortSeparate.LowArgs!.Replacement!.Value.ToArray());
-        Assert.Single(shortSeparate.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, shortInline.Status);
-        Assert.Equal("Y"u8.ToArray(), shortInline.LowArgs!.Replacement!.Value.ToArray());
-        Assert.Single(shortInline.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, empty.Status);
-        Assert.Empty(empty.LowArgs!.Replacement!.Value.ToArray());
-        Assert.Single(empty.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, shortSeparate.Status);
+        Assert.AreSequenceEqual("X"u8.ToArray(), shortSeparate.LowArgs!.Replacement!.Value.ToArray());
+        Assert.ContainsSingle(shortSeparate.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, shortInline.Status);
+        Assert.AreSequenceEqual("Y"u8.ToArray(), shortInline.LowArgs!.Replacement!.Value.ToArray());
+        Assert.ContainsSingle(shortInline.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, empty.Status);
+        Assert.IsEmpty(empty.LowArgs!.Replacement!.Value.ToArray());
+        Assert.ContainsSingle(empty.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies replacement parse errors use ripgrep-style wording.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReportsReplacementParseErrors()
     {
         CliParseResult missing = CliParser.Parse([OsString.FromUnixBytes("-r"u8)]);
 
-        Assert.Equal(CliParseStatus.Error, missing.Status);
-        Assert.Equal("missing value for flag -r: missing argument for option '-r'", missing.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, missing.Status);
+        Assert.AreEqual("missing value for flag -r: missing argument for option '-r'", missing.Error!.FormatAlternate());
     }
 
     /// <summary>
     /// Verifies color flags accept ripgrep's supported choices.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesColorFlags()
     {
         CliParseResult always = CliParser.Parse(
@@ -1228,21 +1229,21 @@ public sealed class CliParserTests
         CliParseResult ansi = CliParser.Parse(
             [OsString.FromUnixBytes("--color=ansi"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, always.Status);
-        Assert.Equal(CliColorMode.Always, always.LowArgs!.ColorMode);
-        Assert.Single(always.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, separate.Status);
-        Assert.Equal(CliColorMode.Never, separate.LowArgs!.ColorMode);
-        Assert.Single(separate.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, ansi.Status);
-        Assert.Equal(CliColorMode.Ansi, ansi.LowArgs!.ColorMode);
-        Assert.Single(ansi.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, always.Status);
+        Assert.AreEqual(CliColorMode.Always, always.LowArgs!.ColorMode);
+        Assert.ContainsSingle(always.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, separate.Status);
+        Assert.AreEqual(CliColorMode.Never, separate.LowArgs!.ColorMode);
+        Assert.ContainsSingle(separate.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, ansi.Status);
+        Assert.AreEqual(CliColorMode.Ansi, ansi.LowArgs!.ColorMode);
+        Assert.ContainsSingle(ansi.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies pretty output is parsed as ripgrep's color, heading and line-number alias.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesPrettyFlag()
     {
         CliParseResult pretty = CliParser.Parse(
@@ -1250,24 +1251,24 @@ public sealed class CliParserTests
         CliParseResult overridden = CliParser.Parse(
             [OsString.FromUnixBytes("--pretty"u8), OsString.FromUnixBytes("--color=never"u8), OsString.FromUnixBytes("--no-heading"u8), OsString.FromUnixBytes("-N"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, pretty.Status);
-        Assert.Equal(CliColorMode.Always, pretty.LowArgs!.ColorMode);
-        Assert.True(pretty.LowArgs.Heading);
-        Assert.True(pretty.LowArgs.LineNumber);
-        Assert.True(pretty.LowArgs.LineNumberSpecified);
-        Assert.Single(pretty.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, overridden.Status);
-        Assert.Equal(CliColorMode.Never, overridden.LowArgs!.ColorMode);
-        Assert.False(overridden.LowArgs.Heading);
-        Assert.False(overridden.LowArgs.LineNumber);
-        Assert.True(overridden.LowArgs.LineNumberSpecified);
-        Assert.Single(overridden.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, pretty.Status);
+        Assert.AreEqual(CliColorMode.Always, pretty.LowArgs!.ColorMode);
+        Assert.IsTrue(pretty.LowArgs.Heading);
+        Assert.IsTrue(pretty.LowArgs.LineNumber);
+        Assert.IsTrue(pretty.LowArgs.LineNumberSpecified);
+        Assert.ContainsSingle(pretty.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, overridden.Status);
+        Assert.AreEqual(CliColorMode.Never, overridden.LowArgs!.ColorMode);
+        Assert.IsFalse(overridden.LowArgs.Heading);
+        Assert.IsFalse(overridden.LowArgs.LineNumber);
+        Assert.IsTrue(overridden.LowArgs.LineNumberSpecified);
+        Assert.ContainsSingle(overridden.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies unrestricted flags apply ripgrep's repeated filtering levels.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesUnrestrictedFlags()
     {
         CliParseResult one = CliParser.Parse(
@@ -1277,32 +1278,32 @@ public sealed class CliParserTests
         CliParseResult three = CliParser.Parse(
             [OsString.FromUnixBytes("-uuu"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, one.Status);
-        Assert.Equal(1, one.LowArgs!.UnrestrictedCount);
-        Assert.False(one.LowArgs.RespectIgnoreFiles);
-        Assert.True(one.LowArgs.RespectExplicitIgnoreFiles);
-        Assert.False(one.LowArgs.IncludeHidden);
-        Assert.False(one.LowArgs.SearchBinaryFiles);
-        Assert.Single(one.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, two.Status);
-        Assert.Equal(2, two.LowArgs!.UnrestrictedCount);
-        Assert.False(two.LowArgs.RespectIgnoreFiles);
-        Assert.True(two.LowArgs.IncludeHidden);
-        Assert.False(two.LowArgs.SearchBinaryFiles);
-        Assert.Single(two.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, three.Status);
-        Assert.Equal(3, three.LowArgs!.UnrestrictedCount);
-        Assert.False(three.LowArgs.RespectIgnoreFiles);
-        Assert.True(three.LowArgs.IncludeHidden);
-        Assert.True(three.LowArgs.SearchBinaryFiles);
-        Assert.False(three.LowArgs.TextMode);
-        Assert.Single(three.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, one.Status);
+        Assert.AreEqual(1, one.LowArgs!.UnrestrictedCount);
+        Assert.IsFalse(one.LowArgs.RespectIgnoreFiles);
+        Assert.IsTrue(one.LowArgs.RespectExplicitIgnoreFiles);
+        Assert.IsFalse(one.LowArgs.IncludeHidden);
+        Assert.IsFalse(one.LowArgs.SearchBinaryFiles);
+        Assert.ContainsSingle(one.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, two.Status);
+        Assert.AreEqual(2, two.LowArgs!.UnrestrictedCount);
+        Assert.IsFalse(two.LowArgs.RespectIgnoreFiles);
+        Assert.IsTrue(two.LowArgs.IncludeHidden);
+        Assert.IsFalse(two.LowArgs.SearchBinaryFiles);
+        Assert.ContainsSingle(two.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, three.Status);
+        Assert.AreEqual(3, three.LowArgs!.UnrestrictedCount);
+        Assert.IsFalse(three.LowArgs.RespectIgnoreFiles);
+        Assert.IsTrue(three.LowArgs.IncludeHidden);
+        Assert.IsTrue(three.LowArgs.SearchBinaryFiles);
+        Assert.IsFalse(three.LowArgs.TextMode);
+        Assert.ContainsSingle(three.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies unrestricted repeat-limit diagnostics match ripgrep wording.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReportsUnrestrictedRepeatErrors()
     {
         CliParseResult shortError = CliParser.Parse([OsString.FromUnixBytes("-uuuu"u8), OsString.FromUnixBytes("needle"u8)]);
@@ -1315,31 +1316,31 @@ public sealed class CliParserTests
                 OsString.FromUnixBytes("needle"u8),
             ]);
 
-        Assert.Equal(CliParseStatus.Error, shortError.Status);
-        Assert.Equal("error parsing flag -u: flag can only be repeated up to 3 times", shortError.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, longError.Status);
-        Assert.Equal("error parsing flag --unrestricted: flag can only be repeated up to 3 times", longError.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, shortError.Status);
+        Assert.AreEqual("error parsing flag -u: flag can only be repeated up to 3 times", shortError.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, longError.Status);
+        Assert.AreEqual("error parsing flag --unrestricted: flag can only be repeated up to 3 times", longError.Error!.FormatAlternate());
     }
 
     /// <summary>
     /// Verifies color parse errors use ripgrep-style wording.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReportsColorParseErrors()
     {
         CliParseResult missing = CliParser.Parse([OsString.FromUnixBytes("--color"u8)]);
         CliParseResult invalid = CliParser.Parse([OsString.FromUnixBytes("--color=true"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Error, missing.Status);
-        Assert.Equal("missing value for flag --color: missing argument for option '--color'", missing.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, invalid.Status);
-        Assert.Equal("error parsing flag --color: choice 'true' is unrecognized", invalid.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, missing.Status);
+        Assert.AreEqual("missing value for flag --color: missing argument for option '--color'", missing.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, invalid.Status);
+        Assert.AreEqual("error parsing flag --color: choice 'true' is unrecognized", invalid.Error!.FormatAlternate());
     }
 
     /// <summary>
     /// Verifies context flags accept separate and inline values.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesContextFlags()
     {
         CliParseResult after = CliParser.Parse(
@@ -1349,24 +1350,24 @@ public sealed class CliParserTests
         CliParseResult context = CliParser.Parse(
             [OsString.FromUnixBytes("-C"u8), OsString.FromUnixBytes("2"u8), OsString.FromUnixBytes("--context=3"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, after.Status);
-        Assert.Equal(3UL, after.LowArgs!.AfterContext);
-        Assert.Equal(0UL, after.LowArgs.BeforeContext);
-        Assert.Single(after.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, before.Status);
-        Assert.Equal(3UL, before.LowArgs!.BeforeContext);
-        Assert.Equal(0UL, before.LowArgs.AfterContext);
-        Assert.Single(before.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, context.Status);
-        Assert.Equal(3UL, context.LowArgs!.BeforeContext);
-        Assert.Equal(3UL, context.LowArgs.AfterContext);
-        Assert.Single(context.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, after.Status);
+        Assert.AreEqual(3UL, after.LowArgs!.AfterContext);
+        Assert.AreEqual(0UL, after.LowArgs.BeforeContext);
+        Assert.ContainsSingle(after.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, before.Status);
+        Assert.AreEqual(3UL, before.LowArgs!.BeforeContext);
+        Assert.AreEqual(0UL, before.LowArgs.AfterContext);
+        Assert.ContainsSingle(before.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, context.Status);
+        Assert.AreEqual(3UL, context.LowArgs!.BeforeContext);
+        Assert.AreEqual(3UL, context.LowArgs.AfterContext);
+        Assert.ContainsSingle(context.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies before and after context flags override context defaults regardless of order.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesContextFlagPrecedence()
     {
         CliParseResult afterWins = CliParser.Parse(
@@ -1374,20 +1375,20 @@ public sealed class CliParserTests
         CliParseResult beforeWins = CliParser.Parse(
             [OsString.FromUnixBytes("-C1"u8), OsString.FromUnixBytes("-B2"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, afterWins.Status);
-        Assert.Equal(1UL, afterWins.LowArgs!.BeforeContext);
-        Assert.Equal(2UL, afterWins.LowArgs.AfterContext);
-        Assert.Single(afterWins.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, beforeWins.Status);
-        Assert.Equal(2UL, beforeWins.LowArgs!.BeforeContext);
-        Assert.Equal(1UL, beforeWins.LowArgs.AfterContext);
-        Assert.Single(beforeWins.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, afterWins.Status);
+        Assert.AreEqual(1UL, afterWins.LowArgs!.BeforeContext);
+        Assert.AreEqual(2UL, afterWins.LowArgs.AfterContext);
+        Assert.ContainsSingle(afterWins.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, beforeWins.Status);
+        Assert.AreEqual(2UL, beforeWins.LowArgs!.BeforeContext);
+        Assert.AreEqual(1UL, beforeWins.LowArgs.AfterContext);
+        Assert.ContainsSingle(beforeWins.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies passthrough flags use ripgrep's order-sensitive context precedence.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesPassthruPrecedence()
     {
         CliParseResult passthruWins = CliParser.Parse(
@@ -1395,35 +1396,35 @@ public sealed class CliParserTests
         CliParseResult contextWins = CliParser.Parse(
             [OsString.FromUnixBytes("--passthru"u8), OsString.FromUnixBytes("-A1"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, passthruWins.Status);
-        Assert.True(passthruWins.LowArgs!.Passthru);
-        Assert.Equal(1UL, passthruWins.LowArgs.AfterContext);
-        Assert.Single(passthruWins.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, contextWins.Status);
-        Assert.False(contextWins.LowArgs!.Passthru);
-        Assert.Equal(1UL, contextWins.LowArgs.AfterContext);
-        Assert.Single(contextWins.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, passthruWins.Status);
+        Assert.IsTrue(passthruWins.LowArgs!.Passthru);
+        Assert.AreEqual(1UL, passthruWins.LowArgs.AfterContext);
+        Assert.ContainsSingle(passthruWins.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, contextWins.Status);
+        Assert.IsFalse(contextWins.LowArgs!.Passthru);
+        Assert.AreEqual(1UL, contextWins.LowArgs.AfterContext);
+        Assert.ContainsSingle(contextWins.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies context parser diagnostics match ripgrep wording.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReportsContextParseErrors()
     {
         CliParseResult missing = CliParser.Parse([OsString.FromUnixBytes("--context"u8)]);
         CliParseResult invalid = CliParser.Parse([OsString.FromUnixBytes("-Ax"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Error, missing.Status);
-        Assert.Equal("missing value for flag --context: missing argument for option '--context'", missing.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, invalid.Status);
-        Assert.Equal("error parsing flag -A: value is not a valid number: invalid digit found in string", invalid.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, missing.Status);
+        Assert.AreEqual("missing value for flag --context: missing argument for option '--context'", missing.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, invalid.Status);
+        Assert.AreEqual("error parsing flag -A: value is not a valid number: invalid digit found in string", invalid.Error!.FormatAlternate());
     }
 
     /// <summary>
     /// Verifies printer separator flags accept separate, inline, empty, and escaped byte values.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesOutputSeparatorFlags()
     {
         CliParseResult result = CliParser.Parse(
@@ -1439,25 +1440,25 @@ public sealed class CliParserTests
         CliParseResult literalInvalidEscape = CliParser.Parse(
             [OsString.FromUnixBytes("--field-match-separator=\\x0"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, result.Status);
-        Assert.Equal([(byte)'|'], result.LowArgs!.FieldMatchSeparator.ToArray());
-        Assert.Equal([(byte)'\t'], result.LowArgs.FieldContextSeparator.ToArray());
-        Assert.Equal([(byte)0x7f], result.LowArgs.ContextSeparator.ToArray());
-        Assert.True(result.LowArgs.ContextSeparatorEnabled);
-        Assert.Single(result.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, empty.Status);
-        Assert.Empty(empty.LowArgs!.ContextSeparator.ToArray());
-        Assert.True(empty.LowArgs.ContextSeparatorEnabled);
-        Assert.Single(empty.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, literalInvalidEscape.Status);
-        Assert.Equal([(byte)'\\', (byte)'x', (byte)'0'], literalInvalidEscape.LowArgs!.FieldMatchSeparator.ToArray());
-        Assert.Single(literalInvalidEscape.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, result.Status);
+        Assert.AreSequenceEqual<byte>([(byte)'|'], result.LowArgs!.FieldMatchSeparator.ToArray());
+        Assert.AreSequenceEqual<byte>([(byte)'\t'], result.LowArgs.FieldContextSeparator.ToArray());
+        Assert.AreSequenceEqual<byte>([(byte)0x7f], result.LowArgs.ContextSeparator.ToArray());
+        Assert.IsTrue(result.LowArgs.ContextSeparatorEnabled);
+        Assert.ContainsSingle(result.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, empty.Status);
+        Assert.IsEmpty(empty.LowArgs!.ContextSeparator.ToArray());
+        Assert.IsTrue(empty.LowArgs.ContextSeparatorEnabled);
+        Assert.ContainsSingle(empty.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, literalInvalidEscape.Status);
+        Assert.AreSequenceEqual<byte>([(byte)'\\', (byte)'x', (byte)'0'], literalInvalidEscape.LowArgs!.FieldMatchSeparator.ToArray());
+        Assert.ContainsSingle(literalInvalidEscape.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies path separator flags accept separate, inline, empty, and escaped byte values.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesPathSeparatorFlags()
     {
         CliParseResult separate = CliParser.Parse(
@@ -1469,24 +1470,24 @@ public sealed class CliParserTests
         CliParseResult empty = CliParser.Parse(
             [OsString.FromUnixBytes("--path-separator=Z"u8), OsString.FromUnixBytes("--path-separator="u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, separate.Status);
-        Assert.Equal((byte)'\\', separate.LowArgs!.PathSeparator);
-        Assert.Single(separate.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, inline.Status);
-        Assert.Equal((byte)'/', inline.LowArgs!.PathSeparator);
-        Assert.Single(inline.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, escaped.Status);
-        Assert.Equal((byte)0, escaped.LowArgs!.PathSeparator);
-        Assert.Single(escaped.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, empty.Status);
-        Assert.Null(empty.LowArgs!.PathSeparator);
-        Assert.Single(empty.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, separate.Status);
+        Assert.AreEqual((byte)'\\', separate.LowArgs!.PathSeparator);
+        Assert.ContainsSingle(separate.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, inline.Status);
+        Assert.AreEqual((byte)'/', inline.LowArgs!.PathSeparator);
+        Assert.ContainsSingle(inline.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, escaped.Status);
+        Assert.AreEqual((byte)0, escaped.LowArgs!.PathSeparator);
+        Assert.ContainsSingle(escaped.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, empty.Status);
+        Assert.IsNull(empty.LowArgs!.PathSeparator);
+        Assert.ContainsSingle(empty.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies context separator toggles use last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesContextSeparatorTogglePrecedence()
     {
         CliParseResult enabled = CliParser.Parse(
@@ -1494,20 +1495,20 @@ public sealed class CliParserTests
         CliParseResult disabled = CliParser.Parse(
             [OsString.FromUnixBytes("--context-separator=XX"u8), OsString.FromUnixBytes("--no-context-separator"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, enabled.Status);
-        Assert.True(enabled.LowArgs!.ContextSeparatorEnabled);
-        Assert.Equal("XX"u8.ToArray(), enabled.LowArgs.ContextSeparator.ToArray());
-        Assert.Single(enabled.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, disabled.Status);
-        Assert.False(disabled.LowArgs!.ContextSeparatorEnabled);
-        Assert.Equal("XX"u8.ToArray(), disabled.LowArgs.ContextSeparator.ToArray());
-        Assert.Single(disabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, enabled.Status);
+        Assert.IsTrue(enabled.LowArgs!.ContextSeparatorEnabled);
+        Assert.AreSequenceEqual("XX"u8.ToArray(), enabled.LowArgs.ContextSeparator.ToArray());
+        Assert.ContainsSingle(enabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, disabled.Status);
+        Assert.IsFalse(disabled.LowArgs!.ContextSeparatorEnabled);
+        Assert.AreSequenceEqual("XX"u8.ToArray(), disabled.LowArgs.ContextSeparator.ToArray());
+        Assert.ContainsSingle(disabled.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies printer separator diagnostics match ripgrep-style missing-value wording.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReportsOutputSeparatorParseErrors()
     {
         CliParseResult missingField = CliParser.Parse([OsString.FromUnixBytes("--field-match-separator"u8)]);
@@ -1516,20 +1517,20 @@ public sealed class CliParserTests
         CliParseResult invalidPath = CliParser.Parse(
             [OsString.FromUnixBytes("--path-separator=foo"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Error, missingField.Status);
-        Assert.Equal(
+        Assert.AreEqual(CliParseStatus.Error, missingField.Status);
+        Assert.AreEqual(
             "missing value for flag --field-match-separator: missing argument for option '--field-match-separator'",
             missingField.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, missingContext.Status);
-        Assert.Equal(
+        Assert.AreEqual(CliParseStatus.Error, missingContext.Status);
+        Assert.AreEqual(
             "missing value for flag --context-separator: missing argument for option '--context-separator'",
             missingContext.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, missingPath.Status);
-        Assert.Equal(
+        Assert.AreEqual(CliParseStatus.Error, missingPath.Status);
+        Assert.AreEqual(
             "missing value for flag --path-separator: missing argument for option '--path-separator'",
             missingPath.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, invalidPath.Status);
-        Assert.Equal(
+        Assert.AreEqual(CliParseStatus.Error, invalidPath.Status);
+        Assert.AreEqual(
             "error parsing flag --path-separator: A path separator must be exactly one byte, but the given separator is 3 bytes: foo\nIn some shells on Windows '/' is automatically expanded. Use '//' instead.",
             invalidPath.Error!.FormatAlternate());
     }
@@ -1537,7 +1538,7 @@ public sealed class CliParserTests
     /// <summary>
     /// Verifies max-depth flags accept separate, inline and alias values with last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesMaxDepthFlags()
     {
         CliParseResult shortSeparate = CliParser.Parse(
@@ -1547,36 +1548,36 @@ public sealed class CliParserTests
         CliParseResult alias = CliParser.Parse(
             [OsString.FromUnixBytes("--max-depth"u8), OsString.FromUnixBytes("1"u8), OsString.FromUnixBytes("--maxdepth=2"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, shortSeparate.Status);
-        Assert.Equal(1UL, shortSeparate.LowArgs!.MaxDepth);
-        Assert.Single(shortSeparate.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, shortInline.Status);
-        Assert.Equal(1UL, shortInline.LowArgs!.MaxDepth);
-        Assert.Single(shortInline.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, alias.Status);
-        Assert.Equal(2UL, alias.LowArgs!.MaxDepth);
-        Assert.Single(alias.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, shortSeparate.Status);
+        Assert.AreEqual(1UL, shortSeparate.LowArgs!.MaxDepth);
+        Assert.ContainsSingle(shortSeparate.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, shortInline.Status);
+        Assert.AreEqual(1UL, shortInline.LowArgs!.MaxDepth);
+        Assert.ContainsSingle(shortInline.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, alias.Status);
+        Assert.AreEqual(2UL, alias.LowArgs!.MaxDepth);
+        Assert.ContainsSingle(alias.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies max-depth parse errors use ripgrep-style wording.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReportsMaxDepthParseErrors()
     {
         CliParseResult missing = CliParser.Parse([OsString.FromUnixBytes("--max-depth"u8)]);
         CliParseResult invalid = CliParser.Parse([OsString.FromUnixBytes("-dx"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Error, missing.Status);
-        Assert.Equal("missing value for flag --max-depth: missing argument for option '--max-depth'", missing.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, invalid.Status);
-        Assert.Equal("error parsing flag -d: value is not a valid number: invalid digit found in string", invalid.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, missing.Status);
+        Assert.AreEqual("missing value for flag --max-depth: missing argument for option '--max-depth'", missing.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, invalid.Status);
+        Assert.AreEqual("error parsing flag -d: value is not a valid number: invalid digit found in string", invalid.Error!.FormatAlternate());
     }
 
     /// <summary>
     /// Verifies max-filesize flags accept byte values and uppercase binary suffixes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesMaxFileSizeFlags()
     {
         CliParseResult bytes = CliParser.Parse(
@@ -1588,24 +1589,24 @@ public sealed class CliParserTests
         CliParseResult gigabytes = CliParser.Parse(
             [OsString.FromUnixBytes("--max-filesize=4G"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, bytes.Status);
-        Assert.Equal(4UL, bytes.LowArgs!.MaxFileSize);
-        Assert.Single(bytes.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, kilobytes.Status);
-        Assert.Equal(2048UL, kilobytes.LowArgs!.MaxFileSize);
-        Assert.Single(kilobytes.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, megabytes.Status);
-        Assert.Equal(3UL * 1024UL * 1024UL, megabytes.LowArgs!.MaxFileSize);
-        Assert.Single(megabytes.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, gigabytes.Status);
-        Assert.Equal(4UL * 1024UL * 1024UL * 1024UL, gigabytes.LowArgs!.MaxFileSize);
-        Assert.Single(gigabytes.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, bytes.Status);
+        Assert.AreEqual(4UL, bytes.LowArgs!.MaxFileSize);
+        Assert.ContainsSingle(bytes.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, kilobytes.Status);
+        Assert.AreEqual(2048UL, kilobytes.LowArgs!.MaxFileSize);
+        Assert.ContainsSingle(kilobytes.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, megabytes.Status);
+        Assert.AreEqual(3UL * 1024UL * 1024UL, megabytes.LowArgs!.MaxFileSize);
+        Assert.ContainsSingle(megabytes.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, gigabytes.Status);
+        Assert.AreEqual(4UL * 1024UL * 1024UL * 1024UL, gigabytes.LowArgs!.MaxFileSize);
+        Assert.ContainsSingle(gigabytes.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies max-filesize parser diagnostics match ripgrep wording.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReportsMaxFileSizeParseErrors()
     {
         CliParseResult missing = CliParser.Parse([OsString.FromUnixBytes("--max-filesize"u8)]);
@@ -1618,28 +1619,28 @@ public sealed class CliParserTests
         CliParseResult invalidUtf8 = CliParser.Parse(
             [OsString.FromUnixBytes(invalidUtf8Value), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Error, missing.Status);
-        Assert.Equal("missing value for flag --max-filesize: missing argument for option '--max-filesize'", missing.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, invalid.Status);
-        Assert.Equal(
+        Assert.AreEqual(CliParseStatus.Error, missing.Status);
+        Assert.AreEqual("missing value for flag --max-filesize: missing argument for option '--max-filesize'", missing.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, invalid.Status);
+        Assert.AreEqual(
             "error parsing flag --max-filesize: invalid size: invalid format for size '1k', which should be a non-empty sequence of digits followed by an optional 'K', 'M' or 'G' suffix",
             invalid.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, overflow.Status);
-        Assert.Equal(
+        Assert.AreEqual(CliParseStatus.Error, overflow.Status);
+        Assert.AreEqual(
             "error parsing flag --max-filesize: invalid size: invalid integer found in size '18446744073709551616': number too large to fit in target type",
             overflow.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, suffixOverflow.Status);
-        Assert.Equal(
+        Assert.AreEqual(CliParseStatus.Error, suffixOverflow.Status);
+        Assert.AreEqual(
             "error parsing flag --max-filesize: invalid size: size too big in '9999999999999999G'",
             suffixOverflow.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, invalidUtf8.Status);
-        Assert.Equal("error parsing flag --max-filesize: value is not valid UTF-8", invalidUtf8.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, invalidUtf8.Status);
+        Assert.AreEqual("error parsing flag --max-filesize: value is not valid UTF-8", invalidUtf8.Error!.FormatAlternate());
     }
 
     /// <summary>
     /// Verifies glob flags accept separate and inline values.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesGlobFlags()
     {
         CliParseResult separate = CliParser.Parse(
@@ -1649,23 +1650,23 @@ public sealed class CliParserTests
         CliParseResult dashValue = CliParser.Parse(
             [OsString.FromUnixBytes("--glob"u8), OsString.FromUnixBytes("-foo"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, separate.Status);
-        Assert.Equal([new CliGlobPattern("*.cs", caseInsensitive: false)], separate.LowArgs!.GlobPatterns);
-        Assert.Single(separate.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, inline.Status);
-        Assert.Equal(
+        Assert.AreEqual(CliParseStatus.Ok, separate.Status);
+        Assert.AreSequenceEqual<CliGlobPattern>([new CliGlobPattern("*.cs", caseInsensitive: false)], separate.LowArgs!.GlobPatterns);
+        Assert.ContainsSingle(separate.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, inline.Status);
+        Assert.AreSequenceEqual<CliGlobPattern>(
             [new CliGlobPattern("!*.log", caseInsensitive: false), new CliGlobPattern("*.txt", caseInsensitive: false)],
             inline.LowArgs!.GlobPatterns);
-        Assert.Single(inline.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, dashValue.Status);
-        Assert.Equal([new CliGlobPattern("-foo", caseInsensitive: false)], dashValue.LowArgs!.GlobPatterns);
-        Assert.Single(dashValue.LowArgs.Positional);
+        Assert.ContainsSingle(inline.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, dashValue.Status);
+        Assert.AreSequenceEqual<CliGlobPattern>([new CliGlobPattern("-foo", caseInsensitive: false)], dashValue.LowArgs!.GlobPatterns);
+        Assert.ContainsSingle(dashValue.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies case-insensitive glob flags and toggles are parsed.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesCaseInsensitiveGlobFlags()
     {
         CliParseResult insensitive = CliParser.Parse(
@@ -1681,22 +1682,22 @@ public sealed class CliParserTests
                 OsString.FromUnixBytes("needle"u8),
             ]);
 
-        Assert.Equal(CliParseStatus.Ok, insensitive.Status);
-        Assert.Equal([new CliGlobPattern("*.CS", caseInsensitive: true)], insensitive.LowArgs!.GlobPatterns);
-        Assert.Single(insensitive.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, inline.Status);
-        Assert.Equal([new CliGlobPattern("*.TXT", caseInsensitive: true)], inline.LowArgs!.GlobPatterns);
-        Assert.Single(inline.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, toggle.Status);
-        Assert.False(toggle.LowArgs!.GlobCaseInsensitive);
-        Assert.Equal([new CliGlobPattern("*.CS", caseInsensitive: false)], toggle.LowArgs.GlobPatterns);
-        Assert.Single(toggle.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, insensitive.Status);
+        Assert.AreSequenceEqual<CliGlobPattern>([new CliGlobPattern("*.CS", caseInsensitive: true)], insensitive.LowArgs!.GlobPatterns);
+        Assert.ContainsSingle(insensitive.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, inline.Status);
+        Assert.AreSequenceEqual<CliGlobPattern>([new CliGlobPattern("*.TXT", caseInsensitive: true)], inline.LowArgs!.GlobPatterns);
+        Assert.ContainsSingle(inline.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, toggle.Status);
+        Assert.IsFalse(toggle.LowArgs!.GlobCaseInsensitive);
+        Assert.AreSequenceEqual<CliGlobPattern>([new CliGlobPattern("*.CS", caseInsensitive: false)], toggle.LowArgs.GlobPatterns);
+        Assert.ContainsSingle(toggle.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies explicit ignore-file flags accept separate and inline values.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesIgnoreFileFlags()
     {
         CliParseResult separate = CliParser.Parse(
@@ -1706,21 +1707,21 @@ public sealed class CliParserTests
         CliParseResult dashValue = CliParser.Parse(
             [OsString.FromUnixBytes("--ignore-file"u8), OsString.FromUnixBytes("-rules"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, separate.Status);
-        Assert.Equal(["first.ignore"], separate.LowArgs!.IgnoreFiles);
-        Assert.Single(separate.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, inline.Status);
-        Assert.Equal(["second.ignore"], inline.LowArgs!.IgnoreFiles);
-        Assert.Single(inline.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, dashValue.Status);
-        Assert.Equal(["-rules"], dashValue.LowArgs!.IgnoreFiles);
-        Assert.Single(dashValue.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, separate.Status);
+        Assert.AreSequenceEqual<string>(["first.ignore"], separate.LowArgs!.IgnoreFiles);
+        Assert.ContainsSingle(separate.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, inline.Status);
+        Assert.AreSequenceEqual<string>(["second.ignore"], inline.LowArgs!.IgnoreFiles);
+        Assert.ContainsSingle(inline.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, dashValue.Status);
+        Assert.AreSequenceEqual<string>(["-rules"], dashValue.LowArgs!.IgnoreFiles);
+        Assert.ContainsSingle(dashValue.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies explicit ignore-file toggles use ripgrep's last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesIgnoreFilesToggles()
     {
         CliParseResult disabled = CliParser.Parse(
@@ -1728,44 +1729,44 @@ public sealed class CliParserTests
         CliParseResult enabled = CliParser.Parse(
             [OsString.FromUnixBytes("--no-ignore-files"u8), OsString.FromUnixBytes("--ignore-file=a"u8), OsString.FromUnixBytes("--ignore-files"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, disabled.Status);
-        Assert.False(disabled.LowArgs!.RespectExplicitIgnoreFiles);
-        Assert.Equal(["a", "b"], disabled.LowArgs.IgnoreFiles);
-        Assert.Single(disabled.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, enabled.Status);
-        Assert.True(enabled.LowArgs!.RespectExplicitIgnoreFiles);
-        Assert.Equal(["a"], enabled.LowArgs.IgnoreFiles);
-        Assert.Single(enabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, disabled.Status);
+        Assert.IsFalse(disabled.LowArgs!.RespectExplicitIgnoreFiles);
+        Assert.AreSequenceEqual<string>(["a", "b"], disabled.LowArgs.IgnoreFiles);
+        Assert.ContainsSingle(disabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, enabled.Status);
+        Assert.IsTrue(enabled.LowArgs!.RespectExplicitIgnoreFiles);
+        Assert.AreSequenceEqual<string>(["a"], enabled.LowArgs.IgnoreFiles);
+        Assert.ContainsSingle(enabled.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies explicit ignore-file parser diagnostics match ripgrep wording.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReportsIgnoreFileParseErrors()
     {
         CliParseResult missing = CliParser.Parse([OsString.FromUnixBytes("--ignore-file"u8)]);
 
-        Assert.Equal(CliParseStatus.Error, missing.Status);
-        Assert.Equal("missing value for flag --ignore-file: missing argument for option '--ignore-file'", missing.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, missing.Status);
+        Assert.AreEqual("missing value for flag --ignore-file: missing argument for option '--ignore-file'", missing.Error!.FormatAlternate());
     }
 
     /// <summary>
     /// Verifies iglob parser diagnostics match ripgrep wording.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReportsInsensitiveGlobParseErrors()
     {
         CliParseResult missing = CliParser.Parse([OsString.FromUnixBytes("--iglob"u8)]);
 
-        Assert.Equal(CliParseStatus.Error, missing.Status);
-        Assert.Equal("missing value for flag --iglob: missing argument for option '--iglob'", missing.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, missing.Status);
+        Assert.AreEqual("missing value for flag --iglob: missing argument for option '--iglob'", missing.Error!.FormatAlternate());
     }
 
     /// <summary>
     /// Verifies sort flags accept separate and inline values with last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesSortFlags()
     {
         CliParseResult ascending = CliParser.Parse(
@@ -1775,25 +1776,25 @@ public sealed class CliParserTests
         CliParseResult disabled = CliParser.Parse(
             [OsString.FromUnixBytes("--sortr"u8), OsString.FromUnixBytes("created"u8), OsString.FromUnixBytes("--sort=none"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, ascending.Status);
-        Assert.NotNull(ascending.LowArgs!.SortMode);
-        Assert.False(ascending.LowArgs.SortMode.Value.Reverse);
-        Assert.Equal(CliSortKind.Path, ascending.LowArgs.SortMode.Value.Kind);
-        Assert.Single(ascending.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, descending.Status);
-        Assert.NotNull(descending.LowArgs!.SortMode);
-        Assert.True(descending.LowArgs.SortMode.Value.Reverse);
-        Assert.Equal(CliSortKind.LastModified, descending.LowArgs.SortMode.Value.Kind);
-        Assert.Single(descending.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, disabled.Status);
-        Assert.Null(disabled.LowArgs!.SortMode);
-        Assert.Single(disabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, ascending.Status);
+        Assert.IsNotNull(ascending.LowArgs!.SortMode);
+        Assert.IsFalse(ascending.LowArgs.SortMode.Value.Reverse);
+        Assert.AreEqual(CliSortKind.Path, ascending.LowArgs.SortMode.Value.Kind);
+        Assert.ContainsSingle(ascending.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, descending.Status);
+        Assert.IsNotNull(descending.LowArgs!.SortMode);
+        Assert.IsTrue(descending.LowArgs.SortMode.Value.Reverse);
+        Assert.AreEqual(CliSortKind.LastModified, descending.LowArgs.SortMode.Value.Kind);
+        Assert.ContainsSingle(descending.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, disabled.Status);
+        Assert.IsNull(disabled.LowArgs!.SortMode);
+        Assert.ContainsSingle(disabled.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies deprecated sort-files flags map to path sorting and can be disabled.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesSortFilesFlags()
     {
         CliParseResult enabled = CliParser.Parse(
@@ -1801,35 +1802,35 @@ public sealed class CliParserTests
         CliParseResult disabled = CliParser.Parse(
             [OsString.FromUnixBytes("--sort-files"u8), OsString.FromUnixBytes("--no-sort-files"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, enabled.Status);
-        Assert.NotNull(enabled.LowArgs!.SortMode);
-        Assert.False(enabled.LowArgs.SortMode.Value.Reverse);
-        Assert.Equal(CliSortKind.Path, enabled.LowArgs.SortMode.Value.Kind);
-        Assert.Single(enabled.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, disabled.Status);
-        Assert.Null(disabled.LowArgs!.SortMode);
-        Assert.Single(disabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, enabled.Status);
+        Assert.IsNotNull(enabled.LowArgs!.SortMode);
+        Assert.IsFalse(enabled.LowArgs.SortMode.Value.Reverse);
+        Assert.AreEqual(CliSortKind.Path, enabled.LowArgs.SortMode.Value.Kind);
+        Assert.ContainsSingle(enabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, disabled.Status);
+        Assert.IsNull(disabled.LowArgs!.SortMode);
+        Assert.ContainsSingle(disabled.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies sort parse errors use ripgrep-style wording.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReportsSortParseErrors()
     {
         CliParseResult missing = CliParser.Parse([OsString.FromUnixBytes("--sort"u8)]);
         CliParseResult invalid = CliParser.Parse([OsString.FromUnixBytes("--sortr=bogus"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Error, missing.Status);
-        Assert.Equal("missing value for flag --sort: missing argument for option '--sort'", missing.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, invalid.Status);
-        Assert.Equal("error parsing flag --sortr: choice 'bogus' is unrecognized", invalid.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, missing.Status);
+        Assert.AreEqual("missing value for flag --sort: missing argument for option '--sort'", missing.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, invalid.Status);
+        Assert.AreEqual("error parsing flag --sortr: choice 'bogus' is unrecognized", invalid.Error!.FormatAlternate());
     }
 
     /// <summary>
     /// Verifies file type selection flags accept separate and inline values.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesTypeSelectionFlags()
     {
         CliParseResult result = CliParser.Parse(
@@ -1842,8 +1843,8 @@ public sealed class CliParserTests
                 OsString.FromUnixBytes("needle"u8),
             ]);
 
-        Assert.Equal(CliParseStatus.Ok, result.Status);
-        Assert.Equal(
+        Assert.AreEqual(CliParseStatus.Ok, result.Status);
+        Assert.AreSequenceEqual<CliTypeChange>(
             [
                 new CliTypeChange(CliTypeChangeKind.Select, "cs"),
                 new CliTypeChange(CliTypeChangeKind.Select, "txt"),
@@ -1851,13 +1852,13 @@ public sealed class CliParserTests
                 new CliTypeChange(CliTypeChangeKind.Negate, "xml"),
             ],
             result.LowArgs!.TypeChanges);
-        Assert.Single(result.LowArgs.Positional);
+        Assert.ContainsSingle(result.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies file type definition flags preserve ordered changes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesTypeDefinitionFlags()
     {
         CliParseResult result = CliParser.Parse(
@@ -1868,36 +1869,36 @@ public sealed class CliParserTests
                 OsString.FromUnixBytes("--type-list"u8),
             ]);
 
-        Assert.Equal(CliParseStatus.Ok, result.Status);
-        Assert.True(result.LowArgs!.TypeList);
-        Assert.Equal(
+        Assert.AreEqual(CliParseStatus.Ok, result.Status);
+        Assert.IsTrue(result.LowArgs!.TypeList);
+        Assert.AreSequenceEqual<CliTypeChange>(
             [
                 new CliTypeChange(CliTypeChangeKind.Clear, "foo"),
                 new CliTypeChange(CliTypeChangeKind.Add, "foo:*.foo"),
             ],
             result.LowArgs.TypeChanges);
-        Assert.Empty(result.LowArgs.Positional);
+        Assert.IsEmpty(result.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies type parser missing-value diagnostics match ripgrep wording.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReportsTypeParseErrors()
     {
         CliParseResult missingType = CliParser.Parse([OsString.FromUnixBytes("-t"u8)]);
         CliParseResult missingTypeAdd = CliParser.Parse([OsString.FromUnixBytes("--type-add"u8)]);
 
-        Assert.Equal(CliParseStatus.Error, missingType.Status);
-        Assert.Equal("missing value for flag -t: missing argument for option '-t'", missingType.Error!.FormatAlternate());
-        Assert.Equal(CliParseStatus.Error, missingTypeAdd.Status);
-        Assert.Equal("missing value for flag --type-add: missing argument for option '--type-add'", missingTypeAdd.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, missingType.Status);
+        Assert.AreEqual("missing value for flag -t: missing argument for option '-t'", missingType.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, missingTypeAdd.Status);
+        Assert.AreEqual("missing value for flag --type-add: missing argument for option '--type-add'", missingTypeAdd.Error!.FormatAlternate());
     }
 
     /// <summary>
     /// Verifies trim flags use last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesTrimFlags()
     {
         CliParseResult enabled = CliParser.Parse(
@@ -1905,18 +1906,18 @@ public sealed class CliParserTests
         CliParseResult disabled = CliParser.Parse(
             [OsString.FromUnixBytes("--trim"u8), OsString.FromUnixBytes("--no-trim"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, enabled.Status);
-        Assert.True(enabled.LowArgs!.Trim);
-        Assert.Single(enabled.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, disabled.Status);
-        Assert.False(disabled.LowArgs!.Trim);
-        Assert.Single(disabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, enabled.Status);
+        Assert.IsTrue(enabled.LowArgs!.Trim);
+        Assert.ContainsSingle(enabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, disabled.Status);
+        Assert.IsFalse(disabled.LowArgs!.Trim);
+        Assert.ContainsSingle(disabled.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies heading flags use last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesHeadingFlags()
     {
         CliParseResult enabled = CliParser.Parse(
@@ -1924,32 +1925,32 @@ public sealed class CliParserTests
         CliParseResult disabled = CliParser.Parse(
             [OsString.FromUnixBytes("--heading"u8), OsString.FromUnixBytes("--no-heading"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, enabled.Status);
-        Assert.True(enabled.LowArgs!.Heading);
-        Assert.Single(enabled.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, disabled.Status);
-        Assert.False(disabled.LowArgs!.Heading);
-        Assert.Single(disabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, enabled.Status);
+        Assert.IsTrue(enabled.LowArgs!.Heading);
+        Assert.ContainsSingle(enabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, disabled.Status);
+        Assert.IsFalse(disabled.LowArgs!.Heading);
+        Assert.ContainsSingle(disabled.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies files mode treats positional arguments as paths.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesFilesMode()
     {
         CliParseResult result = CliParser.Parse(
             [OsString.FromUnixBytes("--files"u8), OsString.FromUnixBytes("src"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, result.Status);
-        Assert.Equal(CliSearchMode.Files, result.LowArgs!.SearchMode);
-        Assert.Single(result.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, result.Status);
+        Assert.AreEqual(CliSearchMode.Files, result.LowArgs!.SearchMode);
+        Assert.ContainsSingle(result.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies file-list mode flags are parsed with the same last-wins behavior as ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesFileListModeFlags()
     {
         CliParseResult withMatches = CliParser.Parse(
@@ -1961,24 +1962,24 @@ public sealed class CliParserTests
         CliParseResult withMatchesThenFiles = CliParser.Parse(
             [OsString.FromUnixBytes("-l"u8), OsString.FromUnixBytes("--files"u8), OsString.FromUnixBytes("src"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, withMatches.Status);
-        Assert.Equal(CliSearchMode.FilesWithMatches, withMatches.LowArgs!.SearchMode);
-        Assert.Single(withMatches.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, withoutMatch.Status);
-        Assert.Equal(CliSearchMode.FilesWithoutMatch, withoutMatch.LowArgs!.SearchMode);
-        Assert.Single(withoutMatch.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, filesThenWithMatches.Status);
-        Assert.Equal(CliSearchMode.FilesWithMatches, filesThenWithMatches.LowArgs!.SearchMode);
-        Assert.Single(filesThenWithMatches.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, withMatchesThenFiles.Status);
-        Assert.Equal(CliSearchMode.Files, withMatchesThenFiles.LowArgs!.SearchMode);
-        Assert.Single(withMatchesThenFiles.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, withMatches.Status);
+        Assert.AreEqual(CliSearchMode.FilesWithMatches, withMatches.LowArgs!.SearchMode);
+        Assert.ContainsSingle(withMatches.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, withoutMatch.Status);
+        Assert.AreEqual(CliSearchMode.FilesWithoutMatch, withoutMatch.LowArgs!.SearchMode);
+        Assert.ContainsSingle(withoutMatch.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, filesThenWithMatches.Status);
+        Assert.AreEqual(CliSearchMode.FilesWithMatches, filesThenWithMatches.LowArgs!.SearchMode);
+        Assert.ContainsSingle(filesThenWithMatches.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, withMatchesThenFiles.Status);
+        Assert.AreEqual(CliSearchMode.Files, withMatchesThenFiles.LowArgs!.SearchMode);
+        Assert.ContainsSingle(withMatchesThenFiles.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies JSON mode flags follow ripgrep mode precedence.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesJsonModeFlags()
     {
         CliParseResult json = CliParser.Parse(
@@ -1994,24 +1995,24 @@ public sealed class CliParserTests
         CliParseResult jsonThenFiles = CliParser.Parse(
             [OsString.FromUnixBytes("--json"u8), OsString.FromUnixBytes("--files"u8), OsString.FromUnixBytes("src"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, json.Status);
-        Assert.Equal(CliSearchMode.Json, json.LowArgs!.SearchMode);
-        Assert.Equal(CliParseStatus.Ok, disabled.Status);
-        Assert.Equal(CliSearchMode.Standard, disabled.LowArgs!.SearchMode);
-        Assert.Equal(CliParseStatus.Ok, countThenJson.Status);
-        Assert.Equal(CliSearchMode.Json, countThenJson.LowArgs!.SearchMode);
-        Assert.Equal(CliParseStatus.Ok, jsonThenCount.Status);
-        Assert.Equal(CliSearchMode.Count, jsonThenCount.LowArgs!.SearchMode);
-        Assert.Equal(CliParseStatus.Ok, filesThenJson.Status);
-        Assert.Equal(CliSearchMode.Json, filesThenJson.LowArgs!.SearchMode);
-        Assert.Equal(CliParseStatus.Ok, jsonThenFiles.Status);
-        Assert.Equal(CliSearchMode.Files, jsonThenFiles.LowArgs!.SearchMode);
+        Assert.AreEqual(CliParseStatus.Ok, json.Status);
+        Assert.AreEqual(CliSearchMode.Json, json.LowArgs!.SearchMode);
+        Assert.AreEqual(CliParseStatus.Ok, disabled.Status);
+        Assert.AreEqual(CliSearchMode.Standard, disabled.LowArgs!.SearchMode);
+        Assert.AreEqual(CliParseStatus.Ok, countThenJson.Status);
+        Assert.AreEqual(CliSearchMode.Json, countThenJson.LowArgs!.SearchMode);
+        Assert.AreEqual(CliParseStatus.Ok, jsonThenCount.Status);
+        Assert.AreEqual(CliSearchMode.Count, jsonThenCount.LowArgs!.SearchMode);
+        Assert.AreEqual(CliParseStatus.Ok, filesThenJson.Status);
+        Assert.AreEqual(CliSearchMode.Json, filesThenJson.LowArgs!.SearchMode);
+        Assert.AreEqual(CliParseStatus.Ok, jsonThenFiles.Status);
+        Assert.AreEqual(CliSearchMode.Files, jsonThenFiles.LowArgs!.SearchMode);
     }
 
     /// <summary>
     /// Verifies fixed-string mode flags are parsed.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesFixedStringsFlags()
     {
         CliParseResult shortFlag = CliParser.Parse(
@@ -2019,18 +2020,18 @@ public sealed class CliParserTests
         CliParseResult longFlag = CliParser.Parse(
             [OsString.FromUnixBytes("--fixed-strings"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, shortFlag.Status);
-        Assert.True(shortFlag.LowArgs!.FixedStrings);
-        Assert.Single(shortFlag.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, longFlag.Status);
-        Assert.True(longFlag.LowArgs!.FixedStrings);
-        Assert.Single(longFlag.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, shortFlag.Status);
+        Assert.IsTrue(shortFlag.LowArgs!.FixedStrings);
+        Assert.ContainsSingle(shortFlag.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, longFlag.Status);
+        Assert.IsTrue(longFlag.LowArgs!.FixedStrings);
+        Assert.ContainsSingle(longFlag.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies quiet mode flags are parsed.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesQuietFlags()
     {
         CliParseResult shortFlag = CliParser.Parse(
@@ -2038,18 +2039,18 @@ public sealed class CliParserTests
         CliParseResult longFlag = CliParser.Parse(
             [OsString.FromUnixBytes("--quiet"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, shortFlag.Status);
-        Assert.True(shortFlag.LowArgs!.Quiet);
-        Assert.Single(shortFlag.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, longFlag.Status);
-        Assert.True(longFlag.LowArgs!.Quiet);
-        Assert.Single(longFlag.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, shortFlag.Status);
+        Assert.IsTrue(shortFlag.LowArgs!.Quiet);
+        Assert.ContainsSingle(shortFlag.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, longFlag.Status);
+        Assert.IsTrue(longFlag.LowArgs!.Quiet);
+        Assert.ContainsSingle(longFlag.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies stats flags use last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesStatsFlags()
     {
         CliParseResult enabled = CliParser.Parse(
@@ -2057,18 +2058,18 @@ public sealed class CliParserTests
         CliParseResult disabled = CliParser.Parse(
             [OsString.FromUnixBytes("--stats"u8), OsString.FromUnixBytes("--no-stats"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, enabled.Status);
-        Assert.True(enabled.LowArgs!.Stats);
-        Assert.Single(enabled.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, disabled.Status);
-        Assert.False(disabled.LowArgs!.Stats);
-        Assert.Single(disabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, enabled.Status);
+        Assert.IsTrue(enabled.LowArgs!.Stats);
+        Assert.ContainsSingle(enabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, disabled.Status);
+        Assert.IsFalse(disabled.LowArgs!.Stats);
+        Assert.ContainsSingle(disabled.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies only-matching flags are parsed.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesOnlyMatchingFlags()
     {
         CliParseResult shortFlag = CliParser.Parse(
@@ -2076,32 +2077,32 @@ public sealed class CliParserTests
         CliParseResult longFlag = CliParser.Parse(
             [OsString.FromUnixBytes("--only-matching"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, shortFlag.Status);
-        Assert.True(shortFlag.LowArgs!.OnlyMatching);
-        Assert.Single(shortFlag.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, longFlag.Status);
-        Assert.True(longFlag.LowArgs!.OnlyMatching);
-        Assert.Single(longFlag.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, shortFlag.Status);
+        Assert.IsTrue(shortFlag.LowArgs!.OnlyMatching);
+        Assert.ContainsSingle(shortFlag.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, longFlag.Status);
+        Assert.IsTrue(longFlag.LowArgs!.OnlyMatching);
+        Assert.ContainsSingle(longFlag.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies vimgrep output mode is parsed.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesVimgrepFlag()
     {
         CliParseResult result = CliParser.Parse(
             [OsString.FromUnixBytes("--vimgrep"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, result.Status);
-        Assert.True(result.LowArgs!.Vimgrep);
-        Assert.Single(result.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, result.Status);
+        Assert.IsTrue(result.LowArgs!.Vimgrep);
+        Assert.ContainsSingle(result.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies null path terminator flags are parsed.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesNullPathTerminatorFlags()
     {
         CliParseResult shortFlag = CliParser.Parse(
@@ -2109,18 +2110,18 @@ public sealed class CliParserTests
         CliParseResult longFlag = CliParser.Parse(
             [OsString.FromUnixBytes("--null"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, shortFlag.Status);
-        Assert.True(shortFlag.LowArgs!.NullPathTerminator);
-        Assert.Single(shortFlag.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, longFlag.Status);
-        Assert.True(longFlag.LowArgs!.NullPathTerminator);
-        Assert.Single(longFlag.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, shortFlag.Status);
+        Assert.IsTrue(shortFlag.LowArgs!.NullPathTerminator);
+        Assert.ContainsSingle(shortFlag.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, longFlag.Status);
+        Assert.IsTrue(longFlag.LowArgs!.NullPathTerminator);
+        Assert.ContainsSingle(longFlag.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies invert-match flags are parsed with last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesInvertMatchFlags()
     {
         CliParseResult enabled = CliParser.Parse(
@@ -2128,18 +2129,18 @@ public sealed class CliParserTests
         CliParseResult disabled = CliParser.Parse(
             [OsString.FromUnixBytes("-v"u8), OsString.FromUnixBytes("--no-invert-match"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, enabled.Status);
-        Assert.True(enabled.LowArgs!.InvertMatch);
-        Assert.Single(enabled.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, disabled.Status);
-        Assert.False(disabled.LowArgs!.InvertMatch);
-        Assert.Single(disabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, enabled.Status);
+        Assert.IsTrue(enabled.LowArgs!.InvertMatch);
+        Assert.ContainsSingle(enabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, disabled.Status);
+        Assert.IsFalse(disabled.LowArgs!.InvertMatch);
+        Assert.ContainsSingle(disabled.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies line-regexp flags are parsed.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesLineRegexpFlags()
     {
         CliParseResult shortFlag = CliParser.Parse(
@@ -2147,18 +2148,18 @@ public sealed class CliParserTests
         CliParseResult longFlag = CliParser.Parse(
             [OsString.FromUnixBytes("--line-regexp"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, shortFlag.Status);
-        Assert.True(shortFlag.LowArgs!.LineRegexp);
-        Assert.Single(shortFlag.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, longFlag.Status);
-        Assert.True(longFlag.LowArgs!.LineRegexp);
-        Assert.Single(longFlag.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, shortFlag.Status);
+        Assert.IsTrue(shortFlag.LowArgs!.LineRegexp);
+        Assert.ContainsSingle(shortFlag.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, longFlag.Status);
+        Assert.IsTrue(longFlag.LowArgs!.LineRegexp);
+        Assert.ContainsSingle(longFlag.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies word-regexp flags are parsed and use last-wins behavior with line-regexp.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesWordRegexpFlags()
     {
         CliParseResult shortFlag = CliParser.Parse(
@@ -2170,28 +2171,28 @@ public sealed class CliParserTests
         CliParseResult lineWins = CliParser.Parse(
             [OsString.FromUnixBytes("-w"u8), OsString.FromUnixBytes("-x"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, shortFlag.Status);
-        Assert.True(shortFlag.LowArgs!.WordRegexp);
-        Assert.False(shortFlag.LowArgs.LineRegexp);
-        Assert.Single(shortFlag.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, longFlag.Status);
-        Assert.True(longFlag.LowArgs!.WordRegexp);
-        Assert.False(longFlag.LowArgs.LineRegexp);
-        Assert.Single(longFlag.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, wordWins.Status);
-        Assert.True(wordWins.LowArgs!.WordRegexp);
-        Assert.False(wordWins.LowArgs.LineRegexp);
-        Assert.Single(wordWins.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, lineWins.Status);
-        Assert.False(lineWins.LowArgs!.WordRegexp);
-        Assert.True(lineWins.LowArgs.LineRegexp);
-        Assert.Single(lineWins.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, shortFlag.Status);
+        Assert.IsTrue(shortFlag.LowArgs!.WordRegexp);
+        Assert.IsFalse(shortFlag.LowArgs.LineRegexp);
+        Assert.ContainsSingle(shortFlag.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, longFlag.Status);
+        Assert.IsTrue(longFlag.LowArgs!.WordRegexp);
+        Assert.IsFalse(longFlag.LowArgs.LineRegexp);
+        Assert.ContainsSingle(longFlag.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, wordWins.Status);
+        Assert.IsTrue(wordWins.LowArgs!.WordRegexp);
+        Assert.IsFalse(wordWins.LowArgs.LineRegexp);
+        Assert.ContainsSingle(wordWins.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, lineWins.Status);
+        Assert.IsFalse(lineWins.LowArgs!.WordRegexp);
+        Assert.IsTrue(lineWins.LowArgs.LineRegexp);
+        Assert.ContainsSingle(lineWins.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies filename-prefix flags are parsed with last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesFilenameFlags()
     {
         CliParseResult shortWith = CliParser.Parse(
@@ -2205,27 +2206,27 @@ public sealed class CliParserTests
         CliParseResult withWins = CliParser.Parse(
             [OsString.FromUnixBytes("--no-filename"u8), OsString.FromUnixBytes("-H"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, shortWith.Status);
-        Assert.True(shortWith.LowArgs!.WithFilename);
-        Assert.Single(shortWith.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, longWith.Status);
-        Assert.True(longWith.LowArgs!.WithFilename);
-        Assert.Single(longWith.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, shortWithout.Status);
-        Assert.False(shortWithout.LowArgs!.WithFilename);
-        Assert.Single(shortWithout.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, withoutWins.Status);
-        Assert.False(withoutWins.LowArgs!.WithFilename);
-        Assert.Single(withoutWins.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, withWins.Status);
-        Assert.True(withWins.LowArgs!.WithFilename);
-        Assert.Single(withWins.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, shortWith.Status);
+        Assert.IsTrue(shortWith.LowArgs!.WithFilename);
+        Assert.ContainsSingle(shortWith.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, longWith.Status);
+        Assert.IsTrue(longWith.LowArgs!.WithFilename);
+        Assert.ContainsSingle(longWith.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, shortWithout.Status);
+        Assert.IsFalse(shortWithout.LowArgs!.WithFilename);
+        Assert.ContainsSingle(shortWithout.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, withoutWins.Status);
+        Assert.IsFalse(withoutWins.LowArgs!.WithFilename);
+        Assert.ContainsSingle(withoutWins.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, withWins.Status);
+        Assert.IsTrue(withWins.LowArgs!.WithFilename);
+        Assert.ContainsSingle(withWins.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies case mode flags are parsed with the same last-wins behavior as ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesCaseModeFlags()
     {
         CliParseResult sensitive = CliParser.Parse(
@@ -2235,21 +2236,21 @@ public sealed class CliParserTests
         CliParseResult smart = CliParser.Parse(
             [OsString.FromUnixBytes("--smart-case"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, sensitive.Status);
-        Assert.Equal(CliCaseMode.Sensitive, sensitive.LowArgs!.CaseMode);
-        Assert.Single(sensitive.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, insensitive.Status);
-        Assert.Equal(CliCaseMode.Insensitive, insensitive.LowArgs!.CaseMode);
-        Assert.Single(insensitive.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, smart.Status);
-        Assert.Equal(CliCaseMode.Smart, smart.LowArgs!.CaseMode);
-        Assert.Single(smart.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, sensitive.Status);
+        Assert.AreEqual(CliCaseMode.Sensitive, sensitive.LowArgs!.CaseMode);
+        Assert.ContainsSingle(sensitive.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, insensitive.Status);
+        Assert.AreEqual(CliCaseMode.Insensitive, insensitive.LowArgs!.CaseMode);
+        Assert.ContainsSingle(insensitive.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, smart.Status);
+        Assert.AreEqual(CliCaseMode.Smart, smart.LowArgs!.CaseMode);
+        Assert.ContainsSingle(smart.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies hidden traversal flags are parsed with last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesHiddenFlags()
     {
         CliParseResult enabled = CliParser.Parse(
@@ -2257,18 +2258,18 @@ public sealed class CliParserTests
         CliParseResult disabled = CliParser.Parse(
             [OsString.FromUnixBytes("-."u8), OsString.FromUnixBytes("--no-hidden"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, enabled.Status);
-        Assert.True(enabled.LowArgs!.IncludeHidden);
-        Assert.Single(enabled.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, disabled.Status);
-        Assert.False(disabled.LowArgs!.IncludeHidden);
-        Assert.Single(disabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, enabled.Status);
+        Assert.IsTrue(enabled.LowArgs!.IncludeHidden);
+        Assert.ContainsSingle(enabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, disabled.Status);
+        Assert.IsFalse(disabled.LowArgs!.IncludeHidden);
+        Assert.ContainsSingle(disabled.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies follow flags are parsed with last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesFollowFlags()
     {
         CliParseResult enabled = CliParser.Parse(
@@ -2276,18 +2277,18 @@ public sealed class CliParserTests
         CliParseResult disabled = CliParser.Parse(
             [OsString.FromUnixBytes("--follow"u8), OsString.FromUnixBytes("--no-follow"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, enabled.Status);
-        Assert.True(enabled.LowArgs!.FollowLinks);
-        Assert.Single(enabled.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, disabled.Status);
-        Assert.False(disabled.LowArgs!.FollowLinks);
-        Assert.Single(disabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, enabled.Status);
+        Assert.IsTrue(enabled.LowArgs!.FollowLinks);
+        Assert.ContainsSingle(enabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, disabled.Status);
+        Assert.IsFalse(disabled.LowArgs!.FollowLinks);
+        Assert.ContainsSingle(disabled.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies ignore-file flags are parsed with last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesIgnoreFlags()
     {
         CliParseResult disabled = CliParser.Parse(
@@ -2295,18 +2296,18 @@ public sealed class CliParserTests
         CliParseResult enabled = CliParser.Parse(
             [OsString.FromUnixBytes("--no-ignore"u8), OsString.FromUnixBytes("--ignore"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, disabled.Status);
-        Assert.False(disabled.LowArgs!.RespectIgnoreFiles);
-        Assert.Single(disabled.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, enabled.Status);
-        Assert.True(enabled.LowArgs!.RespectIgnoreFiles);
-        Assert.Single(enabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, disabled.Status);
+        Assert.IsFalse(disabled.LowArgs!.RespectIgnoreFiles);
+        Assert.ContainsSingle(disabled.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, enabled.Status);
+        Assert.IsTrue(enabled.LowArgs!.RespectIgnoreFiles);
+        Assert.ContainsSingle(enabled.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies ignore source flags are parsed independently with last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesIgnoreSourceFlags()
     {
         CliParseResult result = CliParser.Parse(
@@ -2322,21 +2323,21 @@ public sealed class CliParserTests
                 OsString.FromUnixBytes("needle"u8),
             ]);
 
-        Assert.Equal(CliParseStatus.Ok, result.Status);
-        Assert.False(result.LowArgs!.RespectIgnoreFiles);
-        Assert.True(result.LowArgs.RespectDotIgnoreFiles);
-        Assert.True(result.LowArgs.RespectGitIgnoreFiles);
-        Assert.False(result.LowArgs.RespectGitExcludeFiles);
-        Assert.False(result.LowArgs.RespectGlobalIgnoreFiles);
-        Assert.True(result.LowArgs.RespectParentIgnoreFiles);
-        Assert.False(result.LowArgs.IgnoreMessages);
-        Assert.Single(result.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, result.Status);
+        Assert.IsFalse(result.LowArgs!.RespectIgnoreFiles);
+        Assert.IsTrue(result.LowArgs.RespectDotIgnoreFiles);
+        Assert.IsTrue(result.LowArgs.RespectGitIgnoreFiles);
+        Assert.IsFalse(result.LowArgs.RespectGitExcludeFiles);
+        Assert.IsFalse(result.LowArgs.RespectGlobalIgnoreFiles);
+        Assert.IsTrue(result.LowArgs.RespectParentIgnoreFiles);
+        Assert.IsFalse(result.LowArgs.IgnoreMessages);
+        Assert.ContainsSingle(result.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies traversal ignore modifiers are parsed with last-wins behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParsesTraversalIgnoreModifiers()
     {
         CliParseResult requireGit = CliParser.Parse(
@@ -2346,38 +2347,38 @@ public sealed class CliParserTests
         CliParseResult fileSystem = CliParser.Parse(
             [OsString.FromUnixBytes("--no-one-file-system"u8), OsString.FromUnixBytes("--one-file-system"u8), OsString.FromUnixBytes("needle"u8)]);
 
-        Assert.Equal(CliParseStatus.Ok, requireGit.Status);
-        Assert.True(requireGit.LowArgs!.RequireGitRepository);
-        Assert.Single(requireGit.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, ignoreCase.Status);
-        Assert.False(ignoreCase.LowArgs!.IgnoreFileCaseInsensitive);
-        Assert.Single(ignoreCase.LowArgs.Positional);
-        Assert.Equal(CliParseStatus.Ok, fileSystem.Status);
-        Assert.True(fileSystem.LowArgs!.OneFileSystem);
-        Assert.Single(fileSystem.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, requireGit.Status);
+        Assert.IsTrue(requireGit.LowArgs!.RequireGitRepository);
+        Assert.ContainsSingle(requireGit.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, ignoreCase.Status);
+        Assert.IsFalse(ignoreCase.LowArgs!.IgnoreFileCaseInsensitive);
+        Assert.ContainsSingle(ignoreCase.LowArgs.Positional);
+        Assert.AreEqual(CliParseStatus.Ok, fileSystem.Status);
+        Assert.IsTrue(fileSystem.LowArgs!.OneFileSystem);
+        Assert.ContainsSingle(fileSystem.LowArgs.Positional);
     }
 
     /// <summary>
     /// Verifies unrecognized long flags match ripgrep's low-level message.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReportsUnrecognizedLongFlag()
     {
         CliParseResult result = CliParser.Parse([OsString.FromUnixBytes("--bogus"u8)]);
 
-        Assert.Equal(CliParseStatus.Error, result.Status);
-        Assert.Equal("unrecognized flag --bogus", result.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, result.Status);
+        Assert.AreEqual("unrecognized flag --bogus", result.Error!.FormatAlternate());
     }
 
     /// <summary>
     /// Verifies invalid UTF-8 in flag names is rejected before text replacement can occur.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void RejectsInvalidUtf8FlagName()
     {
         CliParseResult result = CliParser.Parse([OsString.FromUnixBytes([0x2d, 0x2d, 0xff])]);
 
-        Assert.Equal(CliParseStatus.Error, result.Status);
-        Assert.Equal("invalid CLI arguments", result.Error!.FormatAlternate());
+        Assert.AreEqual(CliParseStatus.Error, result.Status);
+        Assert.AreEqual("invalid CLI arguments", result.Error!.FormatAlternate());
     }
 }

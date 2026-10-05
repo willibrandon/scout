@@ -6,8 +6,10 @@ namespace Scout;
 /// <summary>
 /// Verifies the public byte regex facade reuses capture state for bounded URL matches.
 /// </summary>
-[Collection(BoundedUrlCaptureTestGroup.Name)]
-public sealed class BoundedUrlCaptureApiTests()
+/// <param name="testContext">The context for the current test.</param>
+[DoNotParallelize]
+[TestClass]
+public sealed class BoundedUrlCaptureApiTests(TestContext testContext)
 {
     private const long CaptureAllocationLimit = 64 * 1024;
     private const int CaptureSearchTimeoutMilliseconds = 30_000;
@@ -19,13 +21,14 @@ public sealed class BoundedUrlCaptureApiTests()
     /// Verifies warmed bounded URL capture searches do not clone capture state for every NFA transition.
     /// </summary>
     /// <param name="engineMode">The public regex engine mode under test.</param>
-    [Theory(Timeout = CaptureSearchTimeoutMilliseconds)]
-    [InlineData(ByteRegexEngineMode.Optimized)]
-    [InlineData(ByteRegexEngineMode.General)]
-    [InlineData(ByteRegexEngineMode.AutomataOnly)]
+    [TestMethod]
+    [DataRow(ByteRegexEngineMode.Optimized)]
+    [DataRow(ByteRegexEngineMode.General)]
+    [DataRow(ByteRegexEngineMode.AutomataOnly)]
+    [Timeout(CaptureSearchTimeoutMilliseconds, CooperativeCancellation = true)]
     public void ReusesCaptureStateForBoundedUrlMatch(ByteRegexEngineMode engineMode)
     {
-        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        CancellationToken cancellationToken = testContext.CancellationToken;
         cancellationToken.ThrowIfCancellationRequested();
         var regex = ByteRegex.Compile(
             Pattern,
@@ -33,8 +36,8 @@ public sealed class BoundedUrlCaptureApiTests()
         byte[] input = Encoding.UTF8.GetBytes(Input);
 
         cancellationToken.ThrowIfCancellationRequested();
-        Assert.Equal(104, input.Length);
-        Assert.Equal(new ByteRegexMatch(14, 90), regex.Find(input));
+        Assert.HasCount(104, input);
+        Assert.AreEqual(new ByteRegexMatch(14, 90), regex.Find(input));
         AssertBoundedUrlCaptures(regex.FindCaptures(input), input);
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -48,20 +51,20 @@ public sealed class BoundedUrlCaptureApiTests()
         long capturesAllocated = GC.GetAllocatedBytesForCurrentThread() - capturesBefore;
 
         cancellationToken.ThrowIfCancellationRequested();
-        Assert.Equal(new ByteRegexMatch(14, 90), match);
+        Assert.AreEqual(new ByteRegexMatch(14, 90), match);
         AssertBoundedUrlCaptures(captures, input);
-        Assert.InRange(findAllocated, 0, CaptureAllocationLimit);
-        Assert.InRange(capturesAllocated, 0, CaptureAllocationLimit);
+        Assert.IsInRange(0, CaptureAllocationLimit, findAllocated);
+        Assert.IsInRange(0, CaptureAllocationLimit, capturesAllocated);
     }
 
     private static void AssertBoundedUrlCaptures(ByteRegexCaptures? captures, byte[] input)
     {
-        Assert.NotNull(captures);
-        Assert.Equal(2, captures.GroupCount);
-        Assert.Equal(new ByteRegexMatch(14, 90), captures.Match);
-        Assert.Equal(captures.Match, captures.GetGroup(0));
+        Assert.IsNotNull(captures);
+        Assert.AreEqual(2, captures.GroupCount);
+        Assert.AreEqual(new ByteRegexMatch(14, 90), captures.Match);
+        Assert.AreEqual(captures.Match, captures.GetGroup(0));
         ByteRegexMatch? secret = captures.GetGroup(1);
-        Assert.Equal(new ByteRegexMatch(14, 89), secret);
-        Assert.Equal(ConnectionUrl, Encoding.UTF8.GetString(secret!.Value.Value(input)));
+        Assert.AreEqual(new ByteRegexMatch(14, 89), secret);
+        Assert.AreEqual(ConnectionUrl, Encoding.UTF8.GetString(secret!.Value.Value(input)));
     }
 }

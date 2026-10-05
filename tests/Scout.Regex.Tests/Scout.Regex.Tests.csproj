@@ -1,23 +1,13 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="MSTest.Sdk">
 
   <PropertyGroup>
     <TargetFramework />
     <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
-    <IsPackable>false</IsPackable>
-    <IsTestProject>true</IsTestProject>
     <IsAotCompatible>false</IsAotCompatible>
-    <OutputType>Exe</OutputType>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="coverlet.collector" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
-    <PackageReference Include="xunit.v3.mtp-off" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Using Include="Xunit" />
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
   </ItemGroup>
 
   <ItemGroup>

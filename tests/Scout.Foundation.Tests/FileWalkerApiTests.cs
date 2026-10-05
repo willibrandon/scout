@@ -3,12 +3,13 @@ namespace Scout;
 /// <summary>
 /// Verifies the supported public file walker facade.
 /// </summary>
+[TestClass]
 public sealed class FileWalkerApiTests
 {
     /// <summary>
     /// Verifies default walking applies ripgrep-compatible ignore and hidden-file rules.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FileWalkerAppliesDefaultIgnoreRules()
     {
         string root = CreateTempDirectory();
@@ -23,13 +24,13 @@ public sealed class FileWalkerApiTests
 
         var walker = new FileWalker(new FileWalkerOptions { Sort = FileWalkSort.FileName });
 
-        Assert.Equal(["src", "src/main.cs"], Collect(root, walker));
+        Assert.AreSequenceEqual<string>(["src", "src/main.cs"], Collect(root, walker));
     }
 
     /// <summary>
     /// Verifies walker options expose the expected public knobs.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FileWalkerOptionsControlFiltering()
     {
         string root = CreateTempDirectory();
@@ -48,13 +49,13 @@ public sealed class FileWalkerApiTests
             Sort = FileWalkSort.FileName,
         };
 
-        Assert.Equal([".git", ".gitignore", ".hidden", "ignored", "ignored/file.txt", "src", "src/main.cs"], Collect(root, new FileWalker(options)));
+        Assert.AreSequenceEqual<string>([".git", ".gitignore", ".hidden", "ignored", "ignored/file.txt", "src", "src/main.cs"], Collect(root, new FileWalker(options)));
     }
 
     /// <summary>
     /// Verifies file walker entries expose file metadata without leaking lower-level walker types.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FileWalkEntryExposesMetadata()
     {
         string root = CreateTempDirectory();
@@ -62,17 +63,17 @@ public sealed class FileWalkerApiTests
         File.WriteAllText(path, "hello");
         var walker = new FileWalker();
 
-        FileWalkEntry entry = Assert.Single(walker.Enumerate(root));
+        FileWalkEntry entry = Assert.ContainsSingle(walker.Enumerate(root));
 
-        Assert.Equal(path, entry.FullPath);
-        Assert.Equal("file.txt", entry.FileName);
-        Assert.Equal(1, entry.Depth);
-        Assert.True(entry.IsFile);
-        Assert.False(entry.IsDirectory);
-        Assert.False(entry.IsSymbolicLink);
-        Assert.False(entry.IsStdin);
-        Assert.Equal(5, entry.Length);
-        Assert.Equal(path, entry.ToString());
+        Assert.AreEqual(path, entry.FullPath);
+        Assert.AreEqual("file.txt", entry.FileName);
+        Assert.AreEqual(1, entry.Depth);
+        Assert.IsTrue(entry.IsFile);
+        Assert.IsFalse(entry.IsDirectory);
+        Assert.IsFalse(entry.IsSymbolicLink);
+        Assert.IsFalse(entry.IsStdin);
+        Assert.AreEqual(5, entry.Length);
+        Assert.AreEqual(path, entry.ToString());
     }
 
     private static List<string> Collect(string root, FileWalker walker)

@@ -5,12 +5,13 @@ namespace Scout;
 /// <summary>
 /// Verifies that standard-search statistics are produced by the output traversal.
 /// </summary>
+[TestClass]
 public sealed class StandardSearchByteOperationsTests
 {
     /// <summary>
     /// Verifies line, match, summary, suppression, and replay modes satisfy the one-traversal invariant.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void StatsModesUseOneAuthoritativeTraversal()
     {
         AssertSingleTraversal();
@@ -54,9 +55,9 @@ public sealed class StandardSearchByteOperationsTests
     /// <summary>
     /// Verifies mapped after-context searches retain matches on either side of an early binary byte.
     /// </summary>
-    [Theory]
-    [InlineData("a\0b\nneedle\n", 1)]
-    [InlineData("needle\0binary\nafter\n", 6)]
+    [TestMethod]
+    [DataRow("a\0b\nneedle\n", 1UL)]
+    [DataRow("needle\0binary\nafter\n", 6UL)]
     public void MmapAfterContextPreservesMatchesAcrossBinaryOffset(
         string contents,
         ulong binaryOffset)
@@ -71,17 +72,17 @@ public sealed class StandardSearchByteOperationsTests
             expectedMatchedLines: 1,
             expectedMatches: 1);
 
-        Assert.True(matched);
-        Assert.Equal(
+        Assert.IsTrue(matched);
+        Assert.AreEqual(
             $"binary file matches (found \"\\0\" byte around offset {binaryOffset})\n",
             Encoding.UTF8.GetString(output));
-        Assert.Equal(binaryOffset, stats.BytesSearched);
+        Assert.AreEqual(binaryOffset, stats.BytesSearched);
     }
 
     /// <summary>
     /// Verifies max-count cannot expand a searched extent already bounded by an mmap binary offset.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MmapMaxCountKeepsBinaryBoundedStatsExtent()
     {
         (bool matched, byte[] output, SearchStats stats) = AssertSingleTraversal(
@@ -94,17 +95,17 @@ public sealed class StandardSearchByteOperationsTests
             expectedMatchedLines: 1,
             expectedMatches: 1);
 
-        Assert.True(matched);
-        Assert.Equal(
+        Assert.IsTrue(matched);
+        Assert.AreEqual(
             "binary file matches (found \"\\0\" byte around offset 1)\n",
             Encoding.UTF8.GetString(output));
-        Assert.Equal(1UL, stats.BytesSearched);
+        Assert.AreEqual(1UL, stats.BytesSearched);
     }
 
     /// <summary>
     /// Verifies late binary bytes are detected in every physical line emitted by mapped replay.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MmapReplayDetectsLateBinaryBytesInIncludedLines()
     {
         byte[] afterContext = CreateLateBinaryInput(
@@ -118,8 +119,8 @@ public sealed class StandardSearchByteOperationsTests
             binaryDetectionScope: StandardBinaryDetectionScope.SelectedLines,
             expectedMatchedLines: 1,
             expectedMatches: 1);
-        Assert.True(afterMatched);
-        Assert.Equal(
+        Assert.IsTrue(afterMatched);
+        Assert.AreEqual(
             "1:needle\nbinary file matches (found \"\\0\" byte around offset 69000)\n",
             Encoding.UTF8.GetString(afterOutput));
 
@@ -134,8 +135,8 @@ public sealed class StandardSearchByteOperationsTests
             binaryDetectionScope: StandardBinaryDetectionScope.SelectedLines,
             expectedMatchedLines: 2,
             expectedMatches: 2);
-        Assert.True(beforeMatched);
-        Assert.Equal(
+        Assert.IsTrue(beforeMatched);
+        Assert.AreEqual(
             "1:needle\nbinary file matches " +
             "(found \"\\0\" byte around offset 69000)\n",
             Encoding.UTF8.GetString(beforeOutput));
@@ -149,8 +150,8 @@ public sealed class StandardSearchByteOperationsTests
             binaryDetectionScope: StandardBinaryDetectionScope.SelectedLines,
             expectedMatchedLines: 1,
             expectedMatches: 1);
-        Assert.True(passthruMatched);
-        Assert.Equal(
+        Assert.IsTrue(passthruMatched);
+        Assert.AreEqual(
             "1:needle\nbinary file matches " +
             "(found \"\\0\" byte around offset 69000)\n",
             Encoding.UTF8.GetString(passthruOutput));
@@ -159,7 +160,7 @@ public sealed class StandardSearchByteOperationsTests
     /// <summary>
     /// Verifies max-count excludes context belonging only to later selected lines from mapped binary detection.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MmapReplayBinaryDetectionUsesMaxCountInclusionMap()
     {
         (bool matched, byte[] output, SearchStats stats) = AssertSingleTraversal(
@@ -173,15 +174,15 @@ public sealed class StandardSearchByteOperationsTests
             expectedMatchedLines: 1,
             expectedMatches: 1);
 
-        Assert.True(matched);
-        Assert.Equal("1:needle\n", Encoding.UTF8.GetString(output));
-        Assert.Equal(7UL, stats.BytesSearched);
+        Assert.IsTrue(matched);
+        Assert.AreEqual("1:needle\n", Encoding.UTF8.GetString(output));
+        Assert.AreEqual(7UL, stats.BytesSearched);
     }
 
     /// <summary>
     /// Verifies buffered context search does not treat the fragment before an early NUL as a complete line.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BufferedContextSearchRejectsTruncatedBinaryLine()
     {
         (bool matched, byte[] output, _) = AssertSingleTraversal(
@@ -193,14 +194,14 @@ public sealed class StandardSearchByteOperationsTests
             expectedMatchedLines: 0,
             expectedMatches: 0);
 
-        Assert.False(matched);
-        Assert.Empty(output);
+        Assert.IsFalse(matched);
+        Assert.IsEmpty(output);
     }
 
     /// <summary>
     /// Verifies buffered context search replays complete selected lines before a binary byte in a later buffer.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BufferedContextSearchReplaysCompletePrefixBeforeLateBinaryByte()
     {
         (bool matched, byte[] output, SearchStats stats) = AssertSingleTraversal(
@@ -211,17 +212,17 @@ public sealed class StandardSearchByteOperationsTests
             expectedMatchedLines: 1,
             expectedMatches: 1);
 
-        Assert.True(matched);
-        Assert.Equal(
+        Assert.IsTrue(matched);
+        Assert.AreEqual(
             "1:needle\nbinary file matches (found \"\\0\" byte around offset 69000)\n",
             Encoding.UTF8.GetString(output));
-        Assert.Equal(7UL, stats.BytesSearched);
+        Assert.AreEqual(7UL, stats.BytesSearched);
     }
 
     /// <summary>
     /// Verifies binary notification suppresses the same early match and context callbacks as ripgrep's buffered reader.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BufferedBinaryReplayMatchesRipgrepBeforeFirstReportedMatch()
     {
         byte[] bytes = "binary\0data\nneedle\n"u8.ToArray();
@@ -235,9 +236,9 @@ public sealed class StandardSearchByteOperationsTests
                 textMode: false,
                 expectedMatchedLines: 1,
                 expectedMatches: 1);
-        Assert.True(plainMatched);
-        Assert.Equal(BinaryMessage, Encoding.UTF8.GetString(plainOutput));
-        Assert.Equal(19UL, plainStats.BytesSearched);
+        Assert.IsTrue(plainMatched);
+        Assert.AreEqual(BinaryMessage, Encoding.UTF8.GetString(plainOutput));
+        Assert.AreEqual(19UL, plainStats.BytesSearched);
 
         (bool afterMatched, byte[] afterOutput, SearchStats afterStats) =
             AssertSingleTraversal(
@@ -247,9 +248,9 @@ public sealed class StandardSearchByteOperationsTests
                 afterContext: 1,
                 expectedMatchedLines: 1,
                 expectedMatches: 1);
-        Assert.True(afterMatched);
-        Assert.Equal(BinaryMessage, Encoding.UTF8.GetString(afterOutput));
-        Assert.Equal(19UL, afterStats.BytesSearched);
+        Assert.IsTrue(afterMatched);
+        Assert.AreEqual(BinaryMessage, Encoding.UTF8.GetString(afterOutput));
+        Assert.AreEqual(19UL, afterStats.BytesSearched);
 
         (bool beforeMatched, byte[] beforeOutput, SearchStats beforeStats) =
             AssertSingleTraversal(
@@ -259,9 +260,9 @@ public sealed class StandardSearchByteOperationsTests
                 beforeContext: 1,
                 expectedMatchedLines: 0,
                 expectedMatches: 0);
-        Assert.False(beforeMatched);
-        Assert.Empty(beforeOutput);
-        Assert.Equal(0UL, beforeStats.BytesSearched);
+        Assert.IsFalse(beforeMatched);
+        Assert.IsEmpty(beforeOutput);
+        Assert.AreEqual(0UL, beforeStats.BytesSearched);
 
         (bool contextMatched, byte[] contextOutput, SearchStats contextStats) =
             AssertSingleTraversal(
@@ -272,9 +273,9 @@ public sealed class StandardSearchByteOperationsTests
                 afterContext: 1,
                 expectedMatchedLines: 0,
                 expectedMatches: 0);
-        Assert.False(contextMatched);
-        Assert.Empty(contextOutput);
-        Assert.Equal(0UL, contextStats.BytesSearched);
+        Assert.IsFalse(contextMatched);
+        Assert.IsEmpty(contextOutput);
+        Assert.AreEqual(0UL, contextStats.BytesSearched);
 
         (bool passthruMatched, byte[] passthruOutput, SearchStats passthruStats) =
             AssertSingleTraversal(
@@ -284,15 +285,15 @@ public sealed class StandardSearchByteOperationsTests
                 passthru: true,
                 expectedMatchedLines: 0,
                 expectedMatches: 0);
-        Assert.False(passthruMatched);
-        Assert.Empty(passthruOutput);
-        Assert.Equal(7UL, passthruStats.BytesSearched);
+        Assert.IsFalse(passthruMatched);
+        Assert.IsEmpty(passthruOutput);
+        Assert.AreEqual(7UL, passthruStats.BytesSearched);
     }
 
     /// <summary>
     /// Verifies buffered binary replay preserves ripgrep's callback order after an earlier printed match.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BufferedBinaryReplayMatchesRipgrepAfterReportedMatch()
     {
         byte[] bytes = CreateLateBinaryInput(includeTrailingMatch: true);
@@ -308,11 +309,11 @@ public sealed class StandardSearchByteOperationsTests
                 beforeContext: 1,
                 expectedMatchedLines: 1,
                 expectedMatches: 1);
-        Assert.True(beforeMatched);
-        Assert.Equal(
+        Assert.IsTrue(beforeMatched);
+        Assert.AreEqual(
             MatchLine + "--\n" + BinaryMessage,
             Encoding.UTF8.GetString(beforeOutput));
-        Assert.Equal(7UL, beforeStats.BytesSearched);
+        Assert.AreEqual(7UL, beforeStats.BytesSearched);
 
         (bool widerBeforeMatched, byte[] widerBeforeOutput, SearchStats widerBeforeStats) =
             AssertSingleTraversal(
@@ -322,11 +323,11 @@ public sealed class StandardSearchByteOperationsTests
                 beforeContext: 2,
                 expectedMatchedLines: 1,
                 expectedMatches: 1);
-        Assert.True(widerBeforeMatched);
-        Assert.Equal(
+        Assert.IsTrue(widerBeforeMatched);
+        Assert.AreEqual(
             MatchLine + BinaryMessage,
             Encoding.UTF8.GetString(widerBeforeOutput));
-        Assert.Equal(7UL, widerBeforeStats.BytesSearched);
+        Assert.AreEqual(7UL, widerBeforeStats.BytesSearched);
 
         (bool contextMatched, byte[] contextOutput, SearchStats contextStats) =
             AssertSingleTraversal(
@@ -337,11 +338,11 @@ public sealed class StandardSearchByteOperationsTests
                 afterContext: 1,
                 expectedMatchedLines: 1,
                 expectedMatches: 1);
-        Assert.True(contextMatched);
-        Assert.Equal(
+        Assert.IsTrue(contextMatched);
+        Assert.AreEqual(
             MatchLine + BinaryMessage,
             Encoding.UTF8.GetString(contextOutput));
-        Assert.Equal(7UL, contextStats.BytesSearched);
+        Assert.AreEqual(7UL, contextStats.BytesSearched);
 
         (bool passthruMatched, byte[] passthruOutput, SearchStats passthruStats) =
             AssertSingleTraversal(
@@ -351,11 +352,11 @@ public sealed class StandardSearchByteOperationsTests
                 passthru: true,
                 expectedMatchedLines: 1,
                 expectedMatches: 1);
-        Assert.True(passthruMatched);
-        Assert.Equal(
+        Assert.IsTrue(passthruMatched);
+        Assert.AreEqual(
             MatchLine + BinaryMessage,
             Encoding.UTF8.GetString(passthruOutput));
-        Assert.Equal(69_001UL, passthruStats.BytesSearched);
+        Assert.AreEqual(69_001UL, passthruStats.BytesSearched);
 
         (bool beforeMaxMatched, byte[] beforeMaxOutput, SearchStats beforeMaxStats) =
             AssertSingleTraversal(
@@ -366,9 +367,9 @@ public sealed class StandardSearchByteOperationsTests
                 maxCount: 1,
                 expectedMatchedLines: 1,
                 expectedMatches: 1);
-        Assert.True(beforeMaxMatched);
-        Assert.Equal(MatchLine, Encoding.UTF8.GetString(beforeMaxOutput));
-        Assert.Equal(7UL, beforeMaxStats.BytesSearched);
+        Assert.IsTrue(beforeMaxMatched);
+        Assert.AreEqual(MatchLine, Encoding.UTF8.GetString(beforeMaxOutput));
+        Assert.AreEqual(7UL, beforeMaxStats.BytesSearched);
 
         (bool afterMaxMatched, byte[] afterMaxOutput, SearchStats afterMaxStats) =
             AssertSingleTraversal(
@@ -379,11 +380,11 @@ public sealed class StandardSearchByteOperationsTests
                 maxCount: 1,
                 expectedMatchedLines: 1,
                 expectedMatches: 1);
-        Assert.True(afterMaxMatched);
-        Assert.Equal(
+        Assert.IsTrue(afterMaxMatched);
+        Assert.AreEqual(
             MatchLine + BinaryMessage,
             Encoding.UTF8.GetString(afterMaxOutput));
-        Assert.Equal(7UL, afterMaxStats.BytesSearched);
+        Assert.AreEqual(7UL, afterMaxStats.BytesSearched);
 
         (bool stoppedMatched, byte[] stoppedOutput, SearchStats stoppedStats) =
             AssertSingleTraversal(
@@ -394,17 +395,17 @@ public sealed class StandardSearchByteOperationsTests
                 stopOnNonmatch: true,
                 expectedMatchedLines: 1,
                 expectedMatches: 1);
-        Assert.True(stoppedMatched);
-        Assert.Equal(
+        Assert.IsTrue(stoppedMatched);
+        Assert.AreEqual(
             MatchLine + BinaryMessage,
             Encoding.UTF8.GetString(stoppedOutput));
-        Assert.Equal(69_001UL, stoppedStats.BytesSearched);
+        Assert.AreEqual(69_001UL, stoppedStats.BytesSearched);
     }
 
     /// <summary>
     /// Verifies converted binary output keeps discontiguous matches adjacent when no context was requested.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void BufferedBinarySearchOmitsContextSeparatorsBetweenMatches()
     {
         byte[] bytes = new byte[70_002];
@@ -421,8 +422,8 @@ public sealed class StandardSearchByteOperationsTests
             expectedMatchedLines: 2,
             expectedMatches: 2);
 
-        Assert.True(matched);
-        Assert.Equal(
+        Assert.IsTrue(matched);
+        Assert.AreEqual(
             "1:needle\n3:needle\nbinary file matches (found \"\\0\" byte around offset 70000)\n",
             Encoding.UTF8.GetString(output));
     }
@@ -431,9 +432,9 @@ public sealed class StandardSearchByteOperationsTests
     /// Verifies multiline max-count retains every authoritative match on the selected line prefix.
     /// </summary>
     /// <param name="convertedBinary">Whether the input uses converted binary handling.</param>
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
     public void MultilineMaxCountCountsMatchesOnRetainedLines(
         bool convertedBinary)
     {
@@ -460,7 +461,7 @@ public sealed class StandardSearchByteOperationsTests
             expectedMatchedLines: 1,
             expectedMatches: 2);
 
-        Assert.True(matched);
+        Assert.IsTrue(matched);
         Assert.StartsWith("1:foo foo\n", Encoding.UTF8.GetString(output));
         Assert.DoesNotContain("2:foo", Encoding.UTF8.GetString(output), StringComparison.Ordinal);
     }
@@ -469,9 +470,9 @@ public sealed class StandardSearchByteOperationsTests
     /// Verifies one retained multiline discovery hit emits and counts every physical line it touches.
     /// </summary>
     /// <param name="convertedBinary">Whether the input uses converted binary handling.</param>
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
     public void MultilineMaxCountRetainsCompleteMatchBlock(
         bool convertedBinary)
     {
@@ -499,7 +500,7 @@ public sealed class StandardSearchByteOperationsTests
             expectedMatches: 1);
 
         string outputText = Encoding.UTF8.GetString(output);
-        Assert.True(matched);
+        Assert.IsTrue(matched);
         Assert.StartsWith("1:foo\n2:bar\n", outputText);
         Assert.DoesNotContain("3:foo", outputText, StringComparison.Ordinal);
     }
@@ -507,7 +508,7 @@ public sealed class StandardSearchByteOperationsTests
     /// <summary>
     /// Verifies stop-on-nonmatch excludes non-empty matches beginning at its exclusive boundary.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MultilineStopExcludesBoundaryMatchAcrossRenderers()
     {
         const string Contents = "hit\nmiss\nnext\n";
@@ -536,19 +537,19 @@ public sealed class StandardSearchByteOperationsTests
             expectedMatchedLines: 1,
             expectedMatches: 1);
 
-        Assert.True(plainMatched);
-        Assert.True(colorMatched);
-        Assert.True(replacementMatched);
-        Assert.Equal("1:hit\n", Encoding.UTF8.GetString(plainOutput));
+        Assert.IsTrue(plainMatched);
+        Assert.IsTrue(colorMatched);
+        Assert.IsTrue(replacementMatched);
+        Assert.AreEqual("1:hit\n", Encoding.UTF8.GetString(plainOutput));
         Assert.Contains("hit", Encoding.UTF8.GetString(colorOutput), StringComparison.Ordinal);
         Assert.DoesNotContain("next", Encoding.UTF8.GetString(colorOutput), StringComparison.Ordinal);
-        Assert.Equal("1:X\n", Encoding.UTF8.GetString(replacementOutput));
+        Assert.AreEqual("1:X\n", Encoding.UTF8.GetString(replacementOutput));
     }
 
     /// <summary>
     /// Verifies stop-on-nonmatch retains a valid empty match at the actual end of input.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MultilineStopRetainsUnterminatedEofEmptyMatch()
     {
         (bool matched, byte[] output, _) = AssertSingleTraversal(
@@ -559,14 +560,14 @@ public sealed class StandardSearchByteOperationsTests
             expectedMatchedLines: 1,
             expectedMatches: 1);
 
-        Assert.True(matched);
-        Assert.Equal("1:value\n", Encoding.UTF8.GetString(output));
+        Assert.IsTrue(matched);
+        Assert.AreEqual("1:value\n", Encoding.UTF8.GetString(output));
     }
 
     /// <summary>
     /// Verifies inverted max-count statistics retain the traversal through the next matching line.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void InvertedMaxCountPreservesContextTraversalExtent()
     {
         (bool matched, _, SearchStats stats) = AssertSingleTraversal(
@@ -578,14 +579,14 @@ public sealed class StandardSearchByteOperationsTests
             expectedMatchedLines: 1,
             expectedMatches: 0);
 
-        Assert.True(matched);
-        Assert.Equal(16UL, stats.BytesSearched);
+        Assert.IsTrue(matched);
+        Assert.AreEqual(16UL, stats.BytesSearched);
     }
 
     /// <summary>
     /// Verifies direct inverted max-count statistics include the next positive record inspected by the matcher.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void InvertedMaxCountDirectPathIncludesNextPositiveRecordInStats()
     {
         (bool matched, byte[] output, SearchStats stats) = AssertSingleTraversal(
@@ -596,16 +597,16 @@ public sealed class StandardSearchByteOperationsTests
             expectedMatchedLines: 1,
             expectedMatches: 0);
 
-        Assert.True(matched);
-        Assert.Equal("2:bar\n", Encoding.UTF8.GetString(output));
-        Assert.Equal(6UL, stats.BytesPrinted);
-        Assert.Equal(16UL, stats.BytesSearched);
+        Assert.IsTrue(matched);
+        Assert.AreEqual("2:bar\n", Encoding.UTF8.GetString(output));
+        Assert.AreEqual(6UL, stats.BytesPrinted);
+        Assert.AreEqual(16UL, stats.BytesSearched);
     }
 
     /// <summary>
     /// Verifies inverted count output uses the same inspected extent as direct line output.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void InvertedMaxCountCountPathIncludesNextPositiveRecordInStats()
     {
         (bool matched, byte[] output, SearchStats stats) = AssertSingleTraversal(
@@ -617,17 +618,17 @@ public sealed class StandardSearchByteOperationsTests
             expectedMatchedLines: 1,
             expectedMatches: 0);
 
-        Assert.True(matched);
-        Assert.Equal("1\n", Encoding.UTF8.GetString(output));
-        Assert.Equal(16UL, stats.BytesSearched);
+        Assert.IsTrue(matched);
+        Assert.AreEqual("1\n", Encoding.UTF8.GetString(output));
+        Assert.AreEqual(16UL, stats.BytesSearched);
     }
 
     /// <summary>
     /// Verifies inverted max-count scans a long gap through the next positive record, or through EOF.
     /// </summary>
-    [Theory]
-    [InlineData("foo\nbar\none\ntwo\nthree\nfoo\nlast\n", 26)]
-    [InlineData("foo\nbar\none\ntwo\n", 16)]
+    [TestMethod]
+    [DataRow("foo\nbar\none\ntwo\nthree\nfoo\nlast\n", 26UL)]
+    [DataRow("foo\nbar\none\ntwo\n", 16UL)]
     public void InvertedMaxCountDirectPathRetainsLookaheadExtent(
         string contents,
         ulong bytesSearched)
@@ -640,15 +641,15 @@ public sealed class StandardSearchByteOperationsTests
             expectedMatchedLines: 1,
             expectedMatches: 0);
 
-        Assert.True(matched);
-        Assert.Equal("2:bar\n", Encoding.UTF8.GetString(output));
-        Assert.Equal(bytesSearched, stats.BytesSearched);
+        Assert.IsTrue(matched);
+        Assert.AreEqual("2:bar\n", Encoding.UTF8.GetString(output));
+        Assert.AreEqual(bytesSearched, stats.BytesSearched);
     }
 
     /// <summary>
     /// Verifies inverted direct statistics retain full traversal without a limit and skip traversal at zero.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void InvertedDirectPathPreservesLimitBoundaryExtents()
     {
         const string Contents = "foo foo\nbar\nfoo\nlast\n";
@@ -668,18 +669,18 @@ public sealed class StandardSearchByteOperationsTests
                 expectedMatchedLines: 0,
                 expectedMatches: 0);
 
-        Assert.True(unlimitedMatched);
-        Assert.Equal("2:bar\n4:last\n", Encoding.UTF8.GetString(unlimitedOutput));
-        Assert.Equal(21UL, unlimitedStats.BytesSearched);
-        Assert.False(zeroMatched);
-        Assert.Empty(zeroOutput);
-        Assert.Equal(0UL, zeroStats.BytesSearched);
+        Assert.IsTrue(unlimitedMatched);
+        Assert.AreEqual("2:bar\n4:last\n", Encoding.UTF8.GetString(unlimitedOutput));
+        Assert.AreEqual(21UL, unlimitedStats.BytesSearched);
+        Assert.IsFalse(zeroMatched);
+        Assert.IsEmpty(zeroOutput);
+        Assert.AreEqual(0UL, zeroStats.BytesSearched);
     }
 
     /// <summary>
     /// Verifies the stats path has no independent collection traversal and multiline renderers consume retained matches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void StatsAndMultilineRenderingHaveNoSecondTraversalEntryPoint()
     {
         string root = FindRepositoryRoot();
@@ -783,9 +784,9 @@ public sealed class StandardSearchByteOperationsTests
             binaryDetectionScope);
         writer.Flush();
 
-        Assert.Equal(expectedMatchedLines, stats.MatchedLines);
-        Assert.Equal(expectedMatches, stats.Matches);
-        Assert.Equal(1UL, stats.Searches);
+        Assert.AreEqual(expectedMatchedLines, stats.MatchedLines);
+        Assert.AreEqual(expectedMatches, stats.Matches);
+        Assert.AreEqual(1UL, stats.Searches);
         return (matched, output.ToArray(), stats);
     }
 

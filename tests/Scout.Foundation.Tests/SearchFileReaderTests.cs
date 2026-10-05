@@ -5,12 +5,13 @@ namespace Scout;
 /// <summary>
 /// Verifies search-file reader mmap selection and decoding.
 /// </summary>
+[TestClass]
 public sealed class SearchFileReaderTests
 {
     /// <summary>
     /// Verifies explicit no-mmap mode uses buffered reads and still applies search encoding.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReadNeverUsesBufferedReaderAndDecodes()
     {
         string root = CreateTempDirectory();
@@ -21,8 +22,8 @@ public sealed class SearchFileReaderTests
 
             SearchFileReadResult result = SearchFileReader.Read(path, SearchEncodingKind.Auto, SearchMmapMode.Never, allowMemoryMap: true);
 
-            Assert.Equal(SearchFileReadKind.Buffered, result.Kind);
-            Assert.Equal("needle\n"u8.ToArray(), result.GetBytes());
+            Assert.AreEqual(SearchFileReadKind.Buffered, result.Kind);
+            Assert.AreSequenceEqual("needle\n"u8.ToArray(), result.GetBytes());
         }
         finally
         {
@@ -33,7 +34,7 @@ public sealed class SearchFileReaderTests
     /// <summary>
     /// Verifies forced mmap mode uses the platform-compatible mmap strategy.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReadAlwaysTryMmapUsesPlatformStrategy()
     {
         string root = CreateTempDirectory();
@@ -44,8 +45,8 @@ public sealed class SearchFileReaderTests
 
             SearchFileReadResult result = SearchFileReader.Read(path, SearchEncodingKind.None, SearchMmapMode.AlwaysTryMmap, allowMemoryMap: false);
 
-            Assert.Equal(GetExpectedMemoryMappedKind(), result.Kind);
-            Assert.Equal("needle\n"u8.ToArray(), result.GetBytes());
+            Assert.AreEqual(GetExpectedMemoryMappedKind(), result.Kind);
+            Assert.AreSequenceEqual("needle\n"u8.ToArray(), result.GetBytes());
         }
         finally
         {
@@ -56,7 +57,7 @@ public sealed class SearchFileReaderTests
     /// <summary>
     /// Verifies automatic mmap mode honors the caller's upstream path eligibility decision.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReadAutoHonorsEligibility()
     {
         string root = CreateTempDirectory();
@@ -68,10 +69,10 @@ public sealed class SearchFileReaderTests
             SearchFileReadResult disallowed = SearchFileReader.Read(path, SearchEncodingKind.None, SearchMmapMode.Auto, allowMemoryMap: false);
             SearchFileReadResult allowed = SearchFileReader.Read(path, SearchEncodingKind.None, SearchMmapMode.Auto, allowMemoryMap: true);
 
-            Assert.Equal(SearchFileReadKind.Buffered, disallowed.Kind);
-            Assert.Equal(GetExpectedMemoryMappedKind(), allowed.Kind);
-            Assert.Equal("needle\n"u8.ToArray(), disallowed.GetBytes());
-            Assert.Equal("needle\n"u8.ToArray(), allowed.GetBytes());
+            Assert.AreEqual(SearchFileReadKind.Buffered, disallowed.Kind);
+            Assert.AreEqual(GetExpectedMemoryMappedKind(), allowed.Kind);
+            Assert.AreSequenceEqual("needle\n"u8.ToArray(), disallowed.GetBytes());
+            Assert.AreSequenceEqual("needle\n"u8.ToArray(), allowed.GetBytes());
         }
         finally
         {
@@ -82,7 +83,7 @@ public sealed class SearchFileReaderTests
     /// <summary>
     /// Verifies empty files fall back to buffered reads.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReadEmptyFileUsesBufferedReader()
     {
         string root = CreateTempDirectory();
@@ -93,8 +94,8 @@ public sealed class SearchFileReaderTests
 
             SearchFileReadResult result = SearchFileReader.Read(path, SearchEncodingKind.None, SearchMmapMode.AlwaysTryMmap, allowMemoryMap: true);
 
-            Assert.Equal(SearchFileReadKind.Buffered, result.Kind);
-            Assert.Empty(result.GetBytes());
+            Assert.AreEqual(SearchFileReadKind.Buffered, result.Kind);
+            Assert.IsEmpty(result.GetBytes());
         }
         finally
         {
@@ -105,7 +106,7 @@ public sealed class SearchFileReaderTests
     /// <summary>
     /// Verifies buffered reads can reuse directory-walk length metadata.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReadBufferedUsesKnownLength()
     {
         string root = CreateTempDirectory();
@@ -117,8 +118,8 @@ public sealed class SearchFileReaderTests
 
             SearchFileReadResult result = SearchFileReader.Read(path, SearchEncodingKind.None, SearchMmapMode.Never, allowMemoryMap: true, knownLength: expected.Length);
 
-            Assert.Equal(SearchFileReadKind.Buffered, result.Kind);
-            Assert.Equal(expected, result.GetBytes());
+            Assert.AreEqual(SearchFileReadKind.Buffered, result.Kind);
+            Assert.AreSequenceEqual(expected, result.GetBytes());
         }
         finally
         {
@@ -129,12 +130,12 @@ public sealed class SearchFileReaderTests
     /// <summary>
     /// Verifies Unix raw-byte path reads bypass text path APIs.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReadUnixPathUsesRawBytePath()
     {
         if (OperatingSystem.IsWindows())
         {
-            Assert.Throws<PlatformNotSupportedException>(() => SearchFileReader.ReadUnixPath("unused"u8, SearchEncodingKind.None));
+            Assert.ThrowsExactly<PlatformNotSupportedException>(() => SearchFileReader.ReadUnixPath("unused"u8, SearchEncodingKind.None));
         }
         else
         {
@@ -147,8 +148,8 @@ public sealed class SearchFileReaderTests
 
                 SearchFileReadResult result = SearchFileReader.ReadUnixPath(pathBytes, SearchEncodingKind.None);
 
-                Assert.Equal(SearchFileReadKind.Buffered, result.Kind);
-                Assert.Equal("needle\n"u8.ToArray(), result.GetBytes());
+                Assert.AreEqual(SearchFileReadKind.Buffered, result.Kind);
+                Assert.AreSequenceEqual("needle\n"u8.ToArray(), result.GetBytes());
             }
             finally
             {

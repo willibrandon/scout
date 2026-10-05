@@ -4,12 +4,13 @@ namespace Scout;
 /// <summary>
 /// Verifies native argv capture behavior.
 /// </summary>
+[TestClass]
 public sealed unsafe class NativeArgumentReaderTests
 {
     /// <summary>
     /// Verifies Unix argv capture preserves non-UTF-8 argument bytes.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CaptureUnixPreservesRawArgumentBytes()
     {
         byte[] executable = [0x73, 0x63, 0x6f, 0x75, 0x74, 0x00];
@@ -27,17 +28,17 @@ public sealed unsafe class NativeArgumentReaderTests
 
             OsString[] arguments = NativeArgumentReader.CaptureUnix(3, argv);
 
-            Assert.Equal(3, arguments.Length);
-            Assert.Equal([0x73, 0x63, 0x6f, 0x75, 0x74], arguments[0].AsUnixBytes().ToArray());
-            Assert.Equal([0x2d, 0x56], arguments[1].AsUnixBytes().ToArray());
-            Assert.Equal([0xff, 0x80], arguments[2].AsUnixBytes().ToArray());
+            Assert.HasCount(3, arguments);
+            Assert.AreSequenceEqual<byte>([0x73, 0x63, 0x6f, 0x75, 0x74], arguments[0].AsUnixBytes().ToArray());
+            Assert.AreSequenceEqual<byte>([0x2d, 0x56], arguments[1].AsUnixBytes().ToArray());
+            Assert.AreSequenceEqual<byte>([0xff, 0x80], arguments[2].AsUnixBytes().ToArray());
         }
     }
 
     /// <summary>
     /// Verifies Windows argv capture preserves UTF-16 argument text.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CaptureWindowsWidePreservesArgumentText()
     {
         fixed (char* executablePointer = "scout\0")
@@ -51,17 +52,17 @@ public sealed unsafe class NativeArgumentReaderTests
 
             OsString[] arguments = NativeArgumentReader.CaptureWindowsWide(3, argv);
 
-            Assert.Equal(3, arguments.Length);
-            Assert.Equal("scout", arguments[0].AsWindowsString());
-            Assert.Equal("-V", arguments[1].AsWindowsString());
-            Assert.Equal("C:\\tmp\\file.txt", arguments[2].AsWindowsString());
+            Assert.HasCount(3, arguments);
+            Assert.AreEqual("scout", arguments[0].AsWindowsString());
+            Assert.AreEqual("-V", arguments[1].AsWindowsString());
+            Assert.AreEqual("C:\\tmp\\file.txt", arguments[2].AsWindowsString());
         }
     }
 
     /// <summary>
     /// Verifies Unix environment capture preserves raw entries and resolves UTF-8 values without lossy fallback.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CaptureUnixEnvironmentPreservesRawEntries()
     {
         byte[] config = [.. "RIPGREP_CONFIG_PATH=/tmp/rg.conf"u8, 0x00];
@@ -77,15 +78,15 @@ public sealed unsafe class NativeArgumentReaderTests
 
             byte[][] environment = ProcessEnvironment.CaptureUnix(envp);
 
-            Assert.Equal(2, environment.Length);
-            Assert.Equal("RIPGREP_CONFIG_PATH=/tmp/rg.conf"u8.ToArray(), environment[0]);
-            Assert.Equal([.. "SCOUT_INVALID="u8, 0xFF], environment[1]);
-            Assert.Equal("/tmp/rg.conf", ProcessEnvironment.GetVariable(environment, "RIPGREP_CONFIG_PATH"));
-            Assert.Equal("/tmp/rg.conf"u8.ToArray(), ProcessEnvironment.GetVariableOsString(environment, "RIPGREP_CONFIG_PATH")!.Value.AsUnixBytes().ToArray());
-            Assert.Null(ProcessEnvironment.GetVariable(environment, "SCOUT_INVALID"));
-            Assert.Equal([0xFF], ProcessEnvironment.GetVariableOsString(environment, "SCOUT_INVALID")!.Value.AsUnixBytes().ToArray());
-            Assert.Null(ProcessEnvironment.GetVariable(environment, "MISSING"));
-            Assert.Null(ProcessEnvironment.GetVariableOsString(environment, "MISSING"));
+            Assert.HasCount(2, environment);
+            Assert.AreSequenceEqual("RIPGREP_CONFIG_PATH=/tmp/rg.conf"u8.ToArray(), environment[0]);
+            Assert.AreSequenceEqual<byte>([.. "SCOUT_INVALID="u8, 0xFF], environment[1]);
+            Assert.AreEqual("/tmp/rg.conf", ProcessEnvironment.GetVariable(environment, "RIPGREP_CONFIG_PATH"));
+            Assert.AreSequenceEqual("/tmp/rg.conf"u8.ToArray(), ProcessEnvironment.GetVariableOsString(environment, "RIPGREP_CONFIG_PATH")!.Value.AsUnixBytes().ToArray());
+            Assert.IsNull(ProcessEnvironment.GetVariable(environment, "SCOUT_INVALID"));
+            Assert.AreSequenceEqual<byte>([0xFF], ProcessEnvironment.GetVariableOsString(environment, "SCOUT_INVALID")!.Value.AsUnixBytes().ToArray());
+            Assert.IsNull(ProcessEnvironment.GetVariable(environment, "MISSING"));
+            Assert.IsNull(ProcessEnvironment.GetVariableOsString(environment, "MISSING"));
         }
     }
 }

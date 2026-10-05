@@ -35,7 +35,7 @@ public sealed class OneTypePerFileAnalyzer : DiagnosticAnalyzer
 
     private static void AnalyzeSyntaxTree(SyntaxTreeAnalysisContext context)
     {
-        if (IsExternalGeneratedInterop(context.Tree.FilePath))
+        if (IsExternalGeneratedSource(context.Tree.FilePath))
         {
             return;
         }
@@ -98,9 +98,12 @@ public sealed class OneTypePerFileAnalyzer : DiagnosticAnalyzer
         return stem;
     }
 
-    private static bool IsExternalGeneratedInterop(string filePath)
+    private static bool IsExternalGeneratedSource(string filePath)
     {
         string normalizedPath = filePath.Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/');
-        return normalizedPath.Contains("/Microsoft.Interop.LibraryImportGenerator/", StringComparison.Ordinal);
+        return normalizedPath.Contains("/Microsoft.Interop.LibraryImportGenerator/", StringComparison.Ordinal) ||
+            (normalizedPath.Contains("/obj/", StringComparison.Ordinal) &&
+             (normalizedPath.EndsWith("/MicrosoftTestingPlatformEntryPoint.cs", StringComparison.Ordinal) ||
+              normalizedPath.EndsWith("/SelfRegisteredExtensions.cs", StringComparison.Ordinal)));
     }
 }

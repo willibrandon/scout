@@ -2488,10 +2488,10 @@ internal static class PortedRgTests
 
     internal static void AssertCatalog((string SourceFile, string Name)[] expected)
     {
-        Assert.Equal(expected.Length, Cases.Length);
+        Assert.HasCount(expected.Length, Cases);
         for (int index = 0; index < expected.Length; index++)
         {
-            Assert.NotNull(TryFind(expected[index].SourceFile, expected[index].Name));
+            Assert.IsNotNull(TryFind(expected[index].SourceFile, expected[index].Name));
         }
 
         for (int index = 0; index < Cases.Length; index++)
@@ -2506,7 +2506,7 @@ internal static class PortedRgTests
                 }
             }
 
-            Assert.True(found, Cases[index].SourceFile + "::" + Cases[index].Name + " is missing from the generated test catalog.");
+            Assert.IsTrue(found, Cases[index].SourceFile + "::" + Cases[index].Name + " is missing from the generated test catalog.");
         }
     }
 
@@ -2596,10 +2596,10 @@ internal static class PortedRgTests
         {
             StartInfo = startInfo,
         };
-        Assert.True(process.Start());
+        Assert.IsTrue(process.Start());
         string error = process.StandardError.ReadToEnd();
         process.WaitForExit();
-        Assert.True(process.ExitCode == 0, error);
+        Assert.AreEqual(0, process.ExitCode, error);
     }
 
     private static void CreateUtf16Sherlock(RgTestDirectory dir)

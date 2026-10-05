@@ -3,12 +3,13 @@ namespace Scout;
 /// <summary>
 /// Verifies parallel direct-output line flushing behavior.
 /// </summary>
+[TestClass]
 public sealed class LineFlushingMemoryStreamTests
 {
     /// <summary>
     /// Verifies threshold flushing writes only complete records.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ThresholdFlushesCompleteLinesOnly()
     {
         using MemoryStream output = new();
@@ -18,19 +19,19 @@ public sealed class LineFlushingMemoryStreamTests
 
         buffer.Write("aa\nbb"u8);
 
-        Assert.Equal("aa\n"u8.ToArray(), output.ToArray());
-        Assert.Equal(2, buffer.Length);
+        Assert.AreSequenceEqual("aa\n"u8.ToArray(), output.ToArray());
+        Assert.AreEqual(2, buffer.Length);
 
         buffer.Flush();
 
-        Assert.Equal("aa\nbb"u8.ToArray(), output.ToArray());
-        Assert.Equal(0, buffer.Length);
+        Assert.AreSequenceEqual("aa\nbb"u8.ToArray(), output.ToArray());
+        Assert.AreEqual(0, buffer.Length);
     }
 
     /// <summary>
     /// Verifies threshold flushing keeps the worker buffer reusable for output-heavy parallel searches.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ThresholdFlushKeepsReusableCapacity()
     {
         using MemoryStream output = new();
@@ -40,15 +41,15 @@ public sealed class LineFlushingMemoryStreamTests
 
         buffer.Write("aa\nbb\n"u8);
 
-        Assert.Equal("aa\nbb\n"u8.ToArray(), output.ToArray());
-        Assert.Equal(0, buffer.Length);
-        Assert.True(buffer.Capacity > 0);
+        Assert.AreSequenceEqual("aa\nbb\n"u8.ToArray(), output.ToArray());
+        Assert.AreEqual(0, buffer.Length);
+        Assert.IsGreaterThan(0, buffer.Capacity);
     }
 
     /// <summary>
     /// Verifies a partial record cannot force the reusable buffer above its configured threshold.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ThresholdCrossingFlushesBeforeGrowingReusableCapacity()
     {
         using MemoryStream output = new();
@@ -70,11 +71,11 @@ public sealed class LineFlushingMemoryStreamTests
         buffer.Write(third);
         buffer.Write(fourth);
 
-        Assert.InRange(buffer.Capacity, 1, 256);
+        Assert.IsInRange(1, 256, buffer.Capacity);
 
         buffer.Flush();
 
-        Assert.Equal(
+        Assert.AreSequenceEqual(
             first.Concat(second).Concat(third).Concat(fourth).ToArray(),
             output.ToArray());
     }

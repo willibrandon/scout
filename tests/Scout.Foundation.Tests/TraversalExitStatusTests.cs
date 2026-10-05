@@ -5,14 +5,15 @@ namespace Scout;
 /// <summary>
 /// Verifies CLI exit status after real traversal failures with otherwise searchable files.
 /// </summary>
-[Collection(ApplicationProcessStateGroup.Name)]
+[DoNotParallelize]
+[TestClass]
 public sealed class TraversalExitStatusTests
 {
     /// <summary>
     /// Supplies search modes, traversal modes, and diagnostic policies.
     /// </summary>
     /// <returns>The CLI scenarios to exercise.</returns>
-    public static IEnumerable<TheoryDataRow<string[], string, bool, bool>> FailureCases()
+    public static IEnumerable<(string[] Mode, string Traversal, bool Messages, bool Quiet)> FailureCases()
     {
         string[][] modes = [[], ["--files"], ["--json"], ["--stats"]];
         foreach (string[] mode in modes)
@@ -23,7 +24,7 @@ public sealed class TraversalExitStatusTests
                 {
                     foreach (bool quiet in new[] { false, true })
                     {
-                        yield return new(mode, traversal, messages, quiet);
+                        yield return (mode, traversal, messages, quiet);
                     }
                 }
             }
@@ -37,8 +38,8 @@ public sealed class TraversalExitStatusTests
     /// <param name="traversal">The traversal worker or sorting option.</param>
     /// <param name="messages">Whether error messages are enabled.</param>
     /// <param name="quiet">Whether a match overrides errors.</param>
-    [Theory]
-    [MemberData(nameof(FailureCases))]
+    [TestMethod]
+    [DynamicData(nameof(FailureCases))]
     public void TraversalFailureAffectsExitStatus(string[] mode, string traversal, bool messages, bool quiet)
     {
         ArgumentNullException.ThrowIfNull(mode);
@@ -64,10 +65,10 @@ public sealed class TraversalExitStatusTests
 
             arguments.Add(root);
             (int exitCode, string output, string error) = Run(arguments);
-            Assert.Equal(quiet ? ExitCode.Success : ExitCode.Error, exitCode);
+            Assert.AreEqual(quiet ? ExitCode.Success : ExitCode.Error, exitCode);
             if (quiet && !mode.Contains("--stats") && !mode.Contains("--json"))
             {
-                Assert.Empty(output);
+                Assert.IsEmpty(output);
             }
             else if (!quiet)
             {
@@ -80,13 +81,13 @@ public sealed class TraversalExitStatusTests
 
             if (!messages)
             {
-                Assert.Empty(error);
+                Assert.IsEmpty(error);
             }
 
             // A failed traversal must not affect a later invocation in the same process.
             (int nextExitCode, _, string nextError) = Run(["--no-config", "needle", Path.Join(root, "matched.txt")]);
-            Assert.Equal(ExitCode.Success, nextExitCode);
-            Assert.Empty(nextError);
+            Assert.AreEqual(ExitCode.Success, nextExitCode);
+            Assert.IsEmpty(nextError);
         }
         finally
         {
@@ -98,10 +99,10 @@ public sealed class TraversalExitStatusTests
     /// Verifies quiet mode still reports failure when there is no match to override it.
     /// </summary>
     /// <param name="mode">The search mode.</param>
-    [Theory]
-    [InlineData("")]
-    [InlineData("--json")]
-    [InlineData("--stats")]
+    [TestMethod]
+    [DataRow("")]
+    [DataRow("--json")]
+    [DataRow("--stats")]
     public void QuietWithoutMatchPreservesTraversalFailure(string mode)
     {
         ArgumentNullException.ThrowIfNull(mode);
@@ -119,8 +120,8 @@ public sealed class TraversalExitStatusTests
 
             arguments.AddRange(["needle", root]);
             (int exitCode, _, string error) = Run(arguments);
-            Assert.Equal(ExitCode.Error, exitCode);
-            Assert.Empty(error);
+            Assert.AreEqual(ExitCode.Error, exitCode);
+            Assert.IsEmpty(error);
         }
         finally
         {

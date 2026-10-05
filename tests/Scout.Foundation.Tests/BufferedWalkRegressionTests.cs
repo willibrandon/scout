@@ -7,13 +7,14 @@ namespace Scout;
 /// <summary>
 /// Exercises buffered traversal failure ordering and descent decisions with real entries.
 /// </summary>
+[TestClass]
 public sealed class BufferedWalkRegressionTests
 {
     private static readonly string[] OpeningFailureEvents = ["directory", "error"];
     /// <summary>
     /// Verifies a directory entry is delivered before an opening error is reported.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParallelOpeningFailureFollowsDirectoryVisitor()
     {
         string root = Directory.CreateTempSubdirectory("scout-walk-").FullName;
@@ -22,7 +23,7 @@ public sealed class BufferedWalkRegressionTests
             List<string> events = [];
             WalkBuilder builder = new WalkBuilder(root).GitGlobal(false).Threads(1).ErrorHandler(error =>
             {
-                Assert.Equal(0, error.Depth);
+                Assert.AreEqual(0, error.Depth);
                 events.Add("error");
                 return WalkState.Continue;
             });
@@ -30,11 +31,11 @@ public sealed class BufferedWalkRegressionTests
                 OsString.FromText(entry.FullPath), entry.Depth, new UnauthorizedAccessException())]);
             builder.BuildParallel().Run(() => entry =>
             {
-                Assert.True(entry.IsDirectory);
+                Assert.IsTrue(entry.IsDirectory);
                 events.Add("directory");
                 return WalkState.Continue;
             });
-            Assert.Equal(OpeningFailureEvents, events);
+            Assert.AreSequenceEqual(OpeningFailureEvents, events);
         }
         finally
         {
@@ -45,7 +46,7 @@ public sealed class BufferedWalkRegressionTests
     /// <summary>
     /// Verifies buffered valid entries survive enumeration errors and ignore discovery precedes the visitor.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParallelPartialFailureRetainsEntriesAndDiscoveredIgnores()
     {
         string root = Directory.CreateTempSubdirectory("scout-walk-").FullName;
@@ -82,8 +83,8 @@ public sealed class BufferedWalkRegressionTests
 
                 return WalkState.Continue;
             });
-            Assert.Equal("kept", Assert.Single(visited));
-            Assert.Equal(1, Assert.Single(errors).Depth);
+            Assert.AreEqual("kept", Assert.ContainsSingle(visited));
+            Assert.AreEqual(1, Assert.ContainsSingle(errors).Depth);
         }
         finally
         {
@@ -94,7 +95,7 @@ public sealed class BufferedWalkRegressionTests
     /// <summary>
     /// Verifies depth limits avoid directory enumeration.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParallelDepthLimitsAvoidDirectoryReads()
     {
         string root = Directory.CreateTempSubdirectory("scout-walk-").FullName;
@@ -114,9 +115,9 @@ public sealed class BufferedWalkRegressionTests
     /// Verifies a disappearing byte-path entry retains the real native status error.
     /// </summary>
     /// <param name="parallel">Whether to traverse with parallel workers.</param>
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
     public void DisappearingBytePathsRetainNativeErrorCause(bool parallel)
     {
         if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
@@ -137,7 +138,7 @@ public sealed class BufferedWalkRegressionTests
                 builder.DirectoryReader = entry =>
                 {
                     WalkDirectoryReadResult read = actualReader.ReadChildren(entry);
-                    Assert.Equal(path, Assert.Single(read.Entries).TextPath);
+                    Assert.AreEqual(path, Assert.ContainsSingle(read.Entries).TextPath);
                     File.Delete(path);
                     return new WalkDirectoryReadResult(
                         [WalkPath.FromRawUnix(bytes, "vanishes"u8, RawUnixDirectoryEntryType.RegularFile)], read.Errors);
@@ -147,20 +148,20 @@ public sealed class BufferedWalkRegressionTests
                 {
                     builder.BuildParallel().Run(() => entry =>
                     {
-                        Assert.True(entry.IsDirectory);
+                        Assert.IsTrue(entry.IsDirectory);
                         return WalkState.Continue;
                     });
                 }
                 else
                 {
-                    Assert.True(Assert.Single(builder.Build()).IsDirectory);
+                    Assert.IsTrue(Assert.ContainsSingle(builder.Build()).IsDirectory);
                 }
 
-                WalkException failure = Assert.Single(errors);
-                Assert.Equal(1, failure.Depth);
-                Assert.Equal(bytes, failure.Path.AsUnixBytes().ToArray());
-                IOException ioError = Assert.IsType<IOException>(failure.InnerException);
-                Assert.Equal(2, Assert.IsType<Win32Exception>(ioError.InnerException).NativeErrorCode);
+                WalkException failure = Assert.ContainsSingle(errors);
+                Assert.AreEqual(1, failure.Depth);
+                Assert.AreSequenceEqual(bytes, failure.Path.AsUnixBytes().ToArray());
+                IOException ioError = Assert.IsExactInstanceOfType<IOException>(failure.InnerException);
+                Assert.AreEqual(2, Assert.IsExactInstanceOfType<Win32Exception>(ioError.InnerException).NativeErrorCode);
             }
             finally
             {
@@ -169,14 +170,14 @@ public sealed class BufferedWalkRegressionTests
         }
         else
         {
-            Assert.False(NativeFileSystemMetadata.TryGetRawUnixStatus("unused"u8, followLinks: true, out _));
+            Assert.IsFalse(NativeFileSystemMetadata.TryGetRawUnixStatus("unused"u8, followLinks: true, out _));
         }
     }
 
     /// <summary>
     /// Verifies concurrent workers visit every buffered entry once and all complete across multiple roots.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParallelBufferedRootsVisitEveryEntryExactlyOnce()
     {
         string root = Directory.CreateTempSubdirectory("scout-walk-").FullName;
@@ -209,11 +210,11 @@ public sealed class BufferedWalkRegressionTests
             WalkBuilder.FromPaths(roots).GitGlobal(false).Threads(8).BuildParallel().RunWithCompletion(() =>
                 (entry =>
                 {
-                    Assert.True(visited.TryAdd(entry.FullPath, 0), "Duplicate entry: " + entry.FullPath);
+                    Assert.IsTrue(visited.TryAdd(entry.FullPath, 0), "Duplicate entry: " + entry.FullPath);
                     return WalkState.Continue;
                 }, () => Interlocked.Increment(ref completed)));
-            Assert.Equal(8, completed);
-            Assert.True(expected.SetEquals(visited.Keys));
+            Assert.AreEqual(8, completed);
+            Assert.IsTrue(expected.SetEquals(visited.Keys));
         }
         finally
         {

@@ -3,12 +3,13 @@ namespace Scout;
 /// <summary>
 /// Verifies SIMD-gated byte counting behavior.
 /// </summary>
+[TestClass]
 public sealed class ByteCounterTests
 {
     /// <summary>
     /// Counts bytes across scalar and vector-sized boundaries.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CountScansAcrossVectorBoundaries()
     {
         byte[] haystack = new byte[173];
@@ -23,36 +24,36 @@ public sealed class ByteCounterTests
         haystack[128] = 0x2a;
         haystack[172] = 0x2a;
 
-        Assert.Equal(10, ByteCounter.Count(haystack, 0x2a));
-        Assert.Equal(0, ByteCounter.Count(haystack, 0x7f));
+        Assert.AreEqual(10, ByteCounter.Count(haystack, 0x2a));
+        Assert.AreEqual(0, ByteCounter.Count(haystack, 0x7f));
     }
 
     /// <summary>
     /// Counts empty and short inputs through the scalar fallback.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CountHandlesEmptyAndShortInputs()
     {
-        Assert.Equal(0, ByteCounter.Count([], 0x00));
-        Assert.Equal(2, ByteCounter.Count([0x00, 0xff, 0x00], 0x00));
+        Assert.AreEqual(0, ByteCounter.Count([], 0x00));
+        Assert.AreEqual(2, ByteCounter.Count([0x00, 0xff, 0x00], 0x00));
     }
 
     /// <summary>
     /// Counts large all-match inputs without overflowing vector accumulators.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CountHandlesLargeAllMatchInput()
     {
         byte[] haystack = new byte[(1024 * 1024) + 123];
         Array.Fill(haystack, (byte)'\n');
 
-        Assert.Equal(haystack.Length, ByteCounter.Count(haystack, (byte)'\n'));
+        Assert.AreEqual(haystack.Length, ByteCounter.Count(haystack, (byte)'\n'));
     }
 
     /// <summary>
     /// Counts one byte while returning the first position of another byte.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CountAndFindFirstScansAcrossVectorBoundaries()
     {
         byte[] haystack = new byte[257];
@@ -66,16 +67,16 @@ public sealed class ByteCounterTests
 
         long count = ByteCounter.CountAndFindFirst(haystack, (byte)'\n', 0, out int firstFound);
 
-        Assert.Equal(4, count);
-        Assert.Equal(32, firstFound);
-        Assert.Equal(4, ByteCounter.CountAndFindFirst(haystack, (byte)'\n', (byte)'x', out int missing));
-        Assert.Equal(-1, missing);
+        Assert.AreEqual(4, count);
+        Assert.AreEqual(32, firstFound);
+        Assert.AreEqual(4, ByteCounter.CountAndFindFirst(haystack, (byte)'\n', (byte)'x', out int missing));
+        Assert.AreEqual(-1, missing);
     }
 
     /// <summary>
     /// Counts a large input while locating a find byte in the scalar tail.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CountAndFindFirstHandlesLargeInputAndScalarTail()
     {
         byte[] haystack = new byte[(1024 * 1024) + 3];
@@ -84,7 +85,7 @@ public sealed class ByteCounterTests
 
         long count = ByteCounter.CountAndFindFirst(haystack, (byte)'\n', 0, out int firstFound);
 
-        Assert.Equal((long)haystack.Length - 1, count);
-        Assert.Equal(haystack.Length - 1, firstFound);
+        Assert.AreEqual((long)haystack.Length - 1, count);
+        Assert.AreEqual(haystack.Length - 1, firstFound);
     }
 }

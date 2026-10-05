@@ -5,6 +5,7 @@ namespace Scout;
 /// <summary>
 /// Runs selected regex crate corpus cases through Scout and pinned ripgrep.
 /// </summary>
+[TestClass]
 public sealed class RegexCorpusDifferentialTests
 {
     private const int ExpectedDifferentialCaseCount = 633;
@@ -696,8 +697,8 @@ public sealed class RegexCorpusDifferentialTests
     /// </summary>
     /// <param name="relativePath">The regex corpus TOML file.</param>
     /// <param name="name">The regex corpus case name.</param>
-    [Theory]
-    [MemberData(nameof(CorpusCases))]
+    [TestMethod]
+    [DynamicData(nameof(CorpusCases))]
     public void CorpusCaseMatchesPinnedRipgrep(string relativePath, string name)
     {
         RegexCorpusCase corpusCase = RegexCorpusLoader.Load(relativePath, name);
@@ -723,7 +724,7 @@ public sealed class RegexCorpusDifferentialTests
     /// <summary>
     /// Verifies the rg-backed regex corpus differential catalog stays intentional.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CatalogDocumentsCurrentDifferentialCoverage()
     {
         string[] keys = CorpusCaseKeys();
@@ -732,13 +733,13 @@ public sealed class RegexCorpusDifferentialTests
         var differential = new SortedSet<string>(keys, StringComparer.Ordinal);
         var supportedOnly = new SortedSet<string>(Difference(supported, differential), StringComparer.Ordinal);
 
-        Assert.Equal(ExpectedDifferentialCaseCount, keys.Length);
-        Assert.Equal(keys.Length, differential.Count);
-        Assert.Equal(ExpectedDifferentialFileCounts, CountByRelativePath(differential));
-        Assert.Equal(ExpectedSupportedOnlyCaseCount, supportedOnly.Count);
-        Assert.Equal(ExpectedSupportedOnlyFileCounts, CountByRelativePath(supportedOnly));
-        Assert.Empty(Difference(differential, upstream));
-        Assert.Empty(Difference(differential, supported));
+        Assert.HasCount(ExpectedDifferentialCaseCount, keys);
+        Assert.HasCount(keys.Length, differential);
+        Assert.AreSequenceEqual(ExpectedDifferentialFileCounts, CountByRelativePath(differential));
+        Assert.HasCount(ExpectedSupportedOnlyCaseCount, supportedOnly);
+        Assert.AreSequenceEqual(ExpectedSupportedOnlyFileCounts, CountByRelativePath(supportedOnly));
+        Assert.IsEmpty(Difference(differential, upstream));
+        Assert.IsEmpty(Difference(differential, supported));
 
         for (int index = 0; index < DifferentialCases.Length; index++)
         {
@@ -751,15 +752,12 @@ public sealed class RegexCorpusDifferentialTests
     /// Gets regex corpus cases that currently exercise supported CLI-facing regex behavior.
     /// </summary>
     /// <returns>The corpus case parameters.</returns>
-    public static TheoryData<string, string> CorpusCases()
+    public static IEnumerable<(string RelativePath, string Name)> CorpusCases()
     {
-        var data = new TheoryData<string, string>();
         for (int index = 0; index < DifferentialCases.Length; index++)
         {
-            data.Add(DifferentialCases[index].RelativePath, DifferentialCases[index].Name);
+            yield return (DifferentialCases[index].RelativePath, DifferentialCases[index].Name);
         }
-
-        return data;
     }
 
     private static string[] CorpusCaseKeys()
@@ -879,15 +877,15 @@ public sealed class RegexCorpusDifferentialTests
 
     private static void AssertSearchCompatible(RegexCorpusCase corpusCase, string relativePath)
     {
-        Assert.True(corpusCase.Compiles, relativePath + "::" + corpusCase.Name + " is expected to compile.");
-        Assert.False(corpusCase.Anchored, relativePath + "::" + corpusCase.Name + " uses anchored engine-only semantics.");
-        Assert.Null(corpusCase.MatchLimit);
-        Assert.Equal(0, corpusCase.BoundsStart);
-        Assert.Equal(corpusCase.Haystack.Length, corpusCase.BoundsEnd);
-        Assert.True(
+        Assert.IsTrue(corpusCase.Compiles, relativePath + "::" + corpusCase.Name + " is expected to compile.");
+        Assert.IsFalse(corpusCase.Anchored, relativePath + "::" + corpusCase.Name + " uses anchored engine-only semantics.");
+        Assert.IsNull(corpusCase.MatchLimit);
+        Assert.AreEqual(0, corpusCase.BoundsStart);
+        Assert.AreEqual(corpusCase.Haystack.Length, corpusCase.BoundsEnd);
+        Assert.IsTrue(
             corpusCase.LineTerminator is (byte)'\n' or 0,
             relativePath + "::" + corpusCase.Name + " uses an unsupported line terminator.");
-        Assert.NotEmpty(corpusCase.Patterns);
+        Assert.IsNotEmpty(corpusCase.Patterns);
     }
 
     private static string[] BuildArguments(RegexCorpusCase corpusCase, string relativePath, string path)

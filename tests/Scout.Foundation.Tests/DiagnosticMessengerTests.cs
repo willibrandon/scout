@@ -5,12 +5,13 @@ namespace Scout;
 /// <summary>
 /// Verifies raw diagnostic message output.
 /// </summary>
+[TestClass]
 public sealed class DiagnosticMessengerTests
 {
     /// <summary>
     /// Verifies informational diagnostics do not set the error flag.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MessageWritesUtf8WithoutErroredFlag()
     {
         using MemoryStream stream = new();
@@ -18,14 +19,14 @@ public sealed class DiagnosticMessengerTests
 
         messenger.Message("debug: snowman \u2603");
 
-        Assert.False(messenger.HasErrored);
-        Assert.Equal(Encoding.UTF8.GetBytes("debug: snowman \u2603\n"), stream.ToArray());
+        Assert.IsFalse(messenger.HasErrored);
+        Assert.AreSequenceEqual(Encoding.UTF8.GetBytes("debug: snowman \u2603\n"), stream.ToArray());
     }
 
     /// <summary>
     /// Verifies error diagnostics set the error flag.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ErrorMessageWritesChainAndSetsErroredFlag()
     {
         using MemoryStream stream = new();
@@ -35,15 +36,15 @@ public sealed class DiagnosticMessengerTests
 
         messenger.ErrorMessage(error);
 
-        Assert.True(messenger.HasErrored);
-        Assert.True(state.HasErrored);
-        Assert.Equal("root: leaf\n"u8.ToArray(), stream.ToArray());
+        Assert.IsTrue(messenger.HasErrored);
+        Assert.IsTrue(state.HasErrored);
+        Assert.AreSequenceEqual("root: leaf\n"u8.ToArray(), stream.ToArray());
     }
 
     /// <summary>
     /// Verifies the error flag can be reset between command invocations.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ResetErroredClearsFlag()
     {
         using MemoryStream stream = new();
@@ -52,13 +53,13 @@ public sealed class DiagnosticMessengerTests
         messenger.ErrorMessage("error");
         messenger.ResetErrored();
 
-        Assert.False(messenger.HasErrored);
+        Assert.IsFalse(messenger.HasErrored);
     }
 
     /// <summary>
     /// Verifies messengers can share process-wide error state.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MessengersCanShareGlobalState()
     {
         using MemoryStream first = new();
@@ -69,7 +70,7 @@ public sealed class DiagnosticMessengerTests
 
         firstMessenger.ErrorMessage("error");
 
-        Assert.True(secondMessenger.HasErrored);
+        Assert.IsTrue(secondMessenger.HasErrored);
         DiagnosticMessenger.ProcessState.Reset();
     }
 }

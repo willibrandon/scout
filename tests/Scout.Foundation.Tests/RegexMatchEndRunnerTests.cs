@@ -3,13 +3,14 @@ namespace Scout;
 /// <summary>
 /// Verifies operation-scoped match-end runner ownership.
 /// </summary>
+[TestClass]
 public sealed class RegexMatchEndRunnerTests
 {
     /// <summary>
     /// Verifies copied values cannot use or return the same mutable DFA after one copy ends the
     /// shared generation lease.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CopiedValueCannotUseOrReturnDfaTwice()
     {
         RegexUnanchoredLazyDfa CreateRunner()
@@ -23,7 +24,7 @@ public sealed class RegexMatchEndRunnerTests
                 utf8: false,
                 unicodeClasses: false,
                 excludeLineTerminators: true);
-            Assert.True(RegexUnanchoredLazyDfa.TryCreate(
+            Assert.IsTrue(RegexUnanchoredLazyDfa.TryCreate(
                 tree.Root,
                 options,
                 dfaSizeLimit: 1024 * 1024,
@@ -33,7 +34,7 @@ public sealed class RegexMatchEndRunnerTests
 
         RegexUnanchoredLazyDfa initial = CreateRunner();
         var pool = new RegexRunnerPool<RegexUnanchoredLazyDfa>(initial, CreateRunner);
-        RegexUnanchoredLazyDfa rented = Assert.IsType<RegexUnanchoredLazyDfa>(pool.Rent());
+        RegexUnanchoredLazyDfa rented = Assert.IsExactInstanceOfType<RegexUnanchoredLazyDfa>(pool.Rent());
         var runner = new RegexMatchEndRunner(
             pool,
             rented,
@@ -41,11 +42,11 @@ public sealed class RegexMatchEndRunnerTests
             denseDfa: null,
             usesAsciiProjection: false);
         RegexMatchEndRunner copy = runner;
-        Assert.True(runner.SharesPooledStateWith(copy));
+        Assert.IsTrue(runner.SharesPooledStateWith(copy));
 
         runner.Dispose();
 
-        Assert.False(copy.IsAvailable);
+        Assert.IsFalse(copy.IsAvailable);
         ObjectDisposedException? exception = null;
         try
         {
@@ -56,14 +57,14 @@ public sealed class RegexMatchEndRunnerTests
             exception = caught;
         }
 
-        Assert.NotNull(exception);
+        Assert.IsNotNull(exception);
         copy.Dispose();
 
-        RegexUnanchoredLazyDfa first = Assert.IsType<RegexUnanchoredLazyDfa>(pool.Rent());
-        RegexUnanchoredLazyDfa second = Assert.IsType<RegexUnanchoredLazyDfa>(pool.Rent());
+        RegexUnanchoredLazyDfa first = Assert.IsExactInstanceOfType<RegexUnanchoredLazyDfa>(pool.Rent());
+        RegexUnanchoredLazyDfa second = Assert.IsExactInstanceOfType<RegexUnanchoredLazyDfa>(pool.Rent());
         try
         {
-            Assert.NotSame(first, second);
+            Assert.AreNotSame(first, second);
         }
         finally
         {

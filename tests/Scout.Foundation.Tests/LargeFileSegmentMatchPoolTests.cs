@@ -3,12 +3,13 @@ namespace Scout;
 /// <summary>
 /// Verifies bounded reuse of large-file segment match buffers.
 /// </summary>
+[TestClass]
 public sealed class LargeFileSegmentMatchPoolTests
 {
     /// <summary>
     /// Verifies that returned buffers are cleared before they are reused.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReturnClearsAndReusesMatchBuffer()
     {
         var pool = new LargeFileSegmentMatchPool(maximumRetainedCount: 1);
@@ -18,14 +19,14 @@ public sealed class LargeFileSegmentMatchPoolTests
         pool.Return(first);
         List<LargeFileSegmentMatch> second = pool.Rent();
 
-        Assert.Same(first, second);
-        Assert.Empty(second);
+        Assert.AreSame(first, second);
+        Assert.IsEmpty(second);
     }
 
     /// <summary>
     /// Verifies that the pool does not retain more buffers than its configured bound.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ReturnRetainsAtMostConfiguredBufferCount()
     {
         var pool = new LargeFileSegmentMatchPool(maximumRetainedCount: 1);
@@ -37,8 +38,8 @@ public sealed class LargeFileSegmentMatchPoolTests
 
         List<LargeFileSegmentMatch> retained = pool.Rent();
         List<LargeFileSegmentMatch> replacement = pool.Rent();
-        Assert.Same(first, retained);
-        Assert.NotSame(first, replacement);
-        Assert.NotSame(second, replacement);
+        Assert.AreSame(first, retained);
+        Assert.AreNotSame(first, replacement);
+        Assert.AreNotSame(second, replacement);
     }
 }

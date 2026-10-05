@@ -31,6 +31,7 @@ public sealed class NoSkippedTestsAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(AnalyzeAttribute, SyntaxKind.Attribute);
         context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
         context.RegisterSyntaxNodeAction(AnalyzeObjectCreation, SyntaxKind.ObjectCreationExpression);
+        context.RegisterSyntaxNodeAction(AnalyzeAssignment, SyntaxKind.SimpleAssignmentExpression);
         context.RegisterSyntaxNodeAction(AnalyzeReturn, SyntaxKind.ReturnStatement);
     }
 
@@ -43,25 +44,23 @@ public sealed class NoSkippedTestsAnalyzer : DiagnosticAnalyzer
 
         var attribute = (AttributeSyntax)context.Node;
         string name = GetSimpleAttributeName(attribute.Name);
-        if ((string.Equals(name, "Fact", StringComparison.Ordinal) ||
-            string.Equals(name, "Theory", StringComparison.Ordinal)) &&
+        if (string.Equals(name, "DataRow", StringComparison.Ordinal) &&
             TryFindNamedArgument(attribute, out string argumentName))
         {
             Report(context, attribute, name + "." + argumentName);
             return;
         }
 
-        if (string.Equals(name, "Ignore", StringComparison.Ordinal) ||
-            string.Equals(name, "Explicit", StringComparison.Ordinal))
+        if (string.Equals(name, "Ignore", StringComparison.Ordinal))
         {
             Report(context, attribute, name);
             return;
         }
 
-        if (string.Equals(name, "Trait", StringComparison.Ordinal) &&
-            ContainsForbiddenTraitValue(attribute))
+        if (string.Equals(name, "TestCategory", StringComparison.Ordinal) &&
+            ContainsForbiddenCategoryValue(attribute))
         {
-            Report(context, attribute, "Trait");
+            Report(context, attribute, "TestCategory");
         }
     }
 
@@ -74,10 +73,10 @@ public sealed class NoSkippedTestsAnalyzer : DiagnosticAnalyzer
 
         var invocation = (InvocationExpressionSyntax)context.Node;
         if (invocation.Expression is MemberAccessExpressionSyntax memberAccess &&
-            string.Equals(memberAccess.Name.Identifier.ValueText, "Skip", StringComparison.Ordinal) &&
+            string.Equals(memberAccess.Name.Identifier.ValueText, "Inconclusive", StringComparison.Ordinal) &&
             IsAssertExpression(memberAccess.Expression))
         {
-            Report(context, invocation, "Assert.Skip");
+            Report(context, invocation, "Assert.Inconclusive");
         }
     }
 
@@ -90,9 +89,29 @@ public sealed class NoSkippedTestsAnalyzer : DiagnosticAnalyzer
 
         var creation = (ObjectCreationExpressionSyntax)context.Node;
         string typeName = GetSimpleTypeName(creation.Type);
-        if (string.Equals(typeName, "SkipException", StringComparison.Ordinal))
+        if (string.Equals(typeName, "AssertInconclusiveException", StringComparison.Ordinal))
         {
-            Report(context, creation, "SkipException");
+            Report(context, creation, "AssertInconclusiveException");
+        }
+    }
+
+    private static void AnalyzeAssignment(SyntaxNodeAnalysisContext context)
+    {
+        if (!IsTestSource(context))
+        {
+            return;
+        }
+
+        var assignment = (AssignmentExpressionSyntax)context.Node;
+        string name = assignment.Left switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+            MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
+            _ => string.Empty,
+        };
+        if (string.Equals(name, "IgnoreMessage", StringComparison.Ordinal))
+        {
+            Report(context, assignment, "test data IgnoreMessage");
         }
     }
 
@@ -135,8 +154,7 @@ public sealed class NoSkippedTestsAnalyzer : DiagnosticAnalyzer
         foreach (AttributeArgumentSyntax argument in attribute.ArgumentList.Arguments)
         {
             string name = argument.NameEquals?.Name.Identifier.ValueText ?? string.Empty;
-            if (string.Equals(name, "Skip", StringComparison.Ordinal) ||
-                string.Equals(name, "Explicit", StringComparison.Ordinal))
+            if (string.Equals(name, "IgnoreMessage", StringComparison.Ordinal))
             {
                 argumentName = name;
                 return true;
@@ -146,7 +164,7 @@ public sealed class NoSkippedTestsAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
-    private static bool ContainsForbiddenTraitValue(AttributeSyntax attribute)
+    private static bool ContainsForbiddenCategoryValue(AttributeSyntax attribute)
     {
         if (attribute.ArgumentList is null)
         {

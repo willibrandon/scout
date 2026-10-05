@@ -3,12 +3,13 @@ namespace Scout;
 /// <summary>
 /// Verifies the scoped and unscoped multiline forms from issue 37 through the command-line pipeline.
 /// </summary>
+[TestClass]
 public sealed class Issue37InlineFlagControlDifferentialTests
 {
     /// <summary>
     /// Verifies a leading unscoped multiline flag and its scoped control select the same records as ripgrep.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ScopedAndUnscopedMultilineControlsMatchPinnedRipgrep()
     {
         using var directory = RgTestDirectory.Create("issue-37-inline-multiline-control");

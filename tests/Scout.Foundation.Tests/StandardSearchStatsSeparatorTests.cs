@@ -5,6 +5,7 @@ namespace Scout;
 /// <summary>
 /// Verifies context separators at the boundary between standard-search output and statistics.
 /// </summary>
+[TestClass]
 public sealed class StandardSearchStatsSeparatorTests
 {
     /// <summary>
@@ -13,28 +14,28 @@ public sealed class StandardSearchStatsSeparatorTests
     /// <param name="contextOption">The context option to exercise.</param>
     /// <param name="scenario">The search subject and execution-mode scenario.</param>
     /// <param name="expectsSeparator">Whether parallel buffering requires a separator before stats.</param>
-    [Theory]
-    [InlineData("-A1", "one-file-j2", false)]
-    [InlineData("-A1", "files-j1", false)]
-    [InlineData("-A1", "directory-j1", false)]
-    [InlineData("-A1", "files-sort", false)]
-    [InlineData("-A1", "directory-sort", false)]
-    [InlineData("-A1", "files-j2", true)]
-    [InlineData("-A1", "directory-j2", true)]
-    [InlineData("-B1", "one-file-j2", false)]
-    [InlineData("-B1", "files-j1", false)]
-    [InlineData("-B1", "directory-j1", false)]
-    [InlineData("-B1", "files-sort", false)]
-    [InlineData("-B1", "directory-sort", false)]
-    [InlineData("-B1", "files-j2", true)]
-    [InlineData("-B1", "directory-j2", true)]
-    [InlineData("-C1", "one-file-j2", false)]
-    [InlineData("-C1", "files-j1", false)]
-    [InlineData("-C1", "directory-j1", false)]
-    [InlineData("-C1", "files-sort", false)]
-    [InlineData("-C1", "directory-sort", false)]
-    [InlineData("-C1", "files-j2", true)]
-    [InlineData("-C1", "directory-j2", true)]
+    [TestMethod]
+    [DataRow("-A1", "one-file-j2", false)]
+    [DataRow("-A1", "files-j1", false)]
+    [DataRow("-A1", "directory-j1", false)]
+    [DataRow("-A1", "files-sort", false)]
+    [DataRow("-A1", "directory-sort", false)]
+    [DataRow("-A1", "files-j2", true)]
+    [DataRow("-A1", "directory-j2", true)]
+    [DataRow("-B1", "one-file-j2", false)]
+    [DataRow("-B1", "files-j1", false)]
+    [DataRow("-B1", "directory-j1", false)]
+    [DataRow("-B1", "files-sort", false)]
+    [DataRow("-B1", "directory-sort", false)]
+    [DataRow("-B1", "files-j2", true)]
+    [DataRow("-B1", "directory-j2", true)]
+    [DataRow("-C1", "one-file-j2", false)]
+    [DataRow("-C1", "files-j1", false)]
+    [DataRow("-C1", "directory-j1", false)]
+    [DataRow("-C1", "files-sort", false)]
+    [DataRow("-C1", "directory-sort", false)]
+    [DataRow("-C1", "files-j2", true)]
+    [DataRow("-C1", "directory-j2", true)]
     public void ContextStatsBoundaryFollowsEffectiveOutputMode(
         string contextOption,
         string scenario,
@@ -56,10 +57,10 @@ public sealed class StandardSearchStatsSeparatorTests
 
             (int exitCode, string output, string error) = RunScout(arguments);
 
-            Assert.Equal(0, exitCode);
-            Assert.Equal(string.Empty, error);
+            Assert.AreEqual(0, exitCode);
+            Assert.AreEqual(string.Empty, error);
             string body = GetSearchBody(output);
-            Assert.Equal(expectsSeparator, body.EndsWith("--\n", StringComparison.Ordinal));
+            Assert.AreEqual(expectsSeparator, body.EndsWith("--\n", StringComparison.Ordinal));
         }
         finally
         {
@@ -70,7 +71,7 @@ public sealed class StandardSearchStatsSeparatorTests
     /// <summary>
     /// Verifies a configured context separator is used at a parallel stats buffer boundary.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParallelStatsBoundaryUsesConfiguredContextSeparator()
     {
         string root = CreateSearchDirectory();
@@ -91,8 +92,8 @@ public sealed class StandardSearchStatsSeparatorTests
                 firstPath,
                 secondPath);
 
-            Assert.Equal(0, exitCode);
-            Assert.Equal(string.Empty, error);
+            Assert.AreEqual(0, exitCode);
+            Assert.AreEqual(string.Empty, error);
             Assert.EndsWith("boundary\n", GetSearchBody(output), StringComparison.Ordinal);
         }
         finally
@@ -104,7 +105,7 @@ public sealed class StandardSearchStatsSeparatorTests
     /// <summary>
     /// Verifies disabling context separators also disables the parallel stats boundary separator.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DisabledContextSeparatorIsNotWrittenBeforeStats()
     {
         string root = CreateSearchDirectory();
@@ -125,8 +126,8 @@ public sealed class StandardSearchStatsSeparatorTests
                 firstPath,
                 secondPath);
 
-            Assert.Equal(0, exitCode);
-            Assert.Equal(string.Empty, error);
+            Assert.AreEqual(0, exitCode);
+            Assert.AreEqual(string.Empty, error);
             Assert.DoesNotContain("--\n", GetSearchBody(output), StringComparison.Ordinal);
         }
         finally
@@ -138,7 +139,7 @@ public sealed class StandardSearchStatsSeparatorTests
     /// <summary>
     /// Verifies a parallel search with no output does not add a context separator before statistics.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParallelNoMatchDoesNotWriteContextSeparatorBeforeStats()
     {
         string root = CreateSearchDirectory();
@@ -158,8 +159,8 @@ public sealed class StandardSearchStatsSeparatorTests
                 firstPath,
                 secondPath);
 
-            Assert.Equal(1, exitCode);
-            Assert.Equal(string.Empty, error);
+            Assert.AreEqual(1, exitCode);
+            Assert.AreEqual(string.Empty, error);
             Assert.StartsWith("\n0 matches\n", output, StringComparison.Ordinal);
             Assert.DoesNotContain("--\n", output, StringComparison.Ordinal);
         }
@@ -211,9 +212,9 @@ public sealed class StandardSearchStatsSeparatorTests
     private static string GetSearchBody(string output)
     {
         int statsIndex = output.IndexOf(" matches\n", StringComparison.Ordinal);
-        Assert.True(statsIndex > 0, output);
+        Assert.IsGreaterThan(0, statsIndex, output);
         int statsLineStart = output.LastIndexOf('\n', statsIndex - 1) + 1;
-        Assert.True(statsLineStart > 0, output);
+        Assert.IsGreaterThan(0, statsLineStart, output);
         return output[..(statsLineStart - 1)];
     }
 

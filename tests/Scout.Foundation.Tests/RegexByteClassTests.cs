@@ -6,6 +6,7 @@ namespace Scout;
 /// <summary>
 /// Verifies byte-class scalar and predicate behavior.
 /// </summary>
+[TestClass]
 public sealed class RegexByteClassTests
 {
     private static readonly RegexSyntaxKind[] s_wordBoundaryKinds =
@@ -22,7 +23,7 @@ public sealed class RegexByteClassTests
     /// Verifies ASCII boundary fast paths agree with scalar decoding at edges and around valid,
     /// incomplete, and malformed UTF-8 sequences.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void UnicodeWordBoundaryAsciiFastPathsMatchScalarReference()
     {
         byte[][] haystacks =
@@ -49,7 +50,7 @@ public sealed class RegexByteClassTests
         {
             for (int position = 0; position <= haystack.Length; position++)
             {
-                Assert.Equal(
+                Assert.AreEqual(
                     ReferenceIsUtf8Boundary(haystack, position),
                     RegexByteClass.IsUtf8Boundary(haystack, position));
 
@@ -66,7 +67,7 @@ public sealed class RegexByteClassTests
                         utf8: true,
                         unicodeClasses: true);
 
-                    Assert.Equal(expected, actual);
+                    Assert.AreEqual(expected, actual);
                 }
             }
         }

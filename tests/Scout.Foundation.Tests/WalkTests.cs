@@ -7,12 +7,13 @@ namespace Scout;
 /// <summary>
 /// Verifies the initial recursive walker port surface.
 /// </summary>
+[TestClass]
 public sealed class WalkTests
 {
     /// <summary>
     /// Verifies recursive walking and maximum depth behavior.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void WalkRecursesAndHonorsMaxDepth()
     {
         string root = CreateTempDirectory();
@@ -22,19 +23,19 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "a", "b", "foo"), string.Empty);
         File.WriteAllText(Path.Join(root, "a", "b", "c", "foo"), string.Empty);
 
-        Assert.Equal(
+        Assert.AreSequenceEqual<string>(
             ["a", "a/b", "a/b/c", "a/b/c/foo", "a/b/foo", "a/foo", "foo"],
             Collect(root, new WalkBuilder(root)));
 
-        Assert.Empty(Collect(root, new WalkBuilder(root).MaxDepth(0)));
-        Assert.Equal(["a", "foo"], Collect(root, new WalkBuilder(root).MaxDepth(1)));
-        Assert.Equal(["a", "a/b", "a/foo", "foo"], Collect(root, new WalkBuilder(root).MaxDepth(2)));
+        Assert.IsEmpty(Collect(root, new WalkBuilder(root).MaxDepth(0)));
+        Assert.AreSequenceEqual<string>(["a", "foo"], Collect(root, new WalkBuilder(root).MaxDepth(1)));
+        Assert.AreSequenceEqual<string>(["a", "a/b", "a/foo", "foo"], Collect(root, new WalkBuilder(root).MaxDepth(2)));
     }
 
     /// <summary>
     /// Verifies parallel walking yields the same filtered paths as the serial walker.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParallelWalkMatchesSerialWalk()
     {
         string root = CreateTempDirectory();
@@ -48,7 +49,7 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "ignored", "hidden.txt"), string.Empty);
         File.WriteAllText(Path.Join(root, "root.txt"), string.Empty);
 
-        Assert.Equal(
+        Assert.AreSequenceEqual(
             Collect(root, new WalkBuilder(root)),
             CollectParallel(root, new WalkBuilder(root).Threads(4)));
     }
@@ -56,23 +57,23 @@ public sealed class WalkTests
     /// <summary>
     /// Verifies entries expose exact file metadata when native directory records permit a lazy status query.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void WalkEntriesResolveLazyFileMetadata()
     {
         string root = CreateTempDirectory();
         string path = Path.Join(root, "file");
         File.WriteAllText(path, "hello");
 
-        DirEntry entry = Assert.Single(new WalkBuilder(root).Build(), static entry => entry.Depth == 1);
+        DirEntry entry = Assert.ContainsSingle(static entry => entry.Depth == 1, new WalkBuilder(root).Build());
 
-        Assert.Equal(5, entry.Length);
-        Assert.Equal(FileIdentity.FromPath(path, followLinks: false), entry.Identity);
+        Assert.AreEqual(5, entry.Length);
+        Assert.AreEqual(FileIdentity.FromPath(path, followLinks: false), entry.Identity);
     }
 
     /// <summary>
     /// Verifies parallel walking creates one visitor per configured worker.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParallelWalkCreatesVisitorPerWorker()
     {
         string root = CreateTempDirectory();
@@ -85,13 +86,13 @@ public sealed class WalkTests
             return static _ => WalkState.Continue;
         });
 
-        Assert.Equal(4, visitors);
+        Assert.AreEqual(4, visitors);
     }
 
     /// <summary>
     /// Verifies parallel walking completes every worker after exhausting the work queue.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParallelWalkCompletesEveryWorkerAfterExhaustion()
     {
         string root = CreateTempDirectory();
@@ -104,13 +105,13 @@ public sealed class WalkTests
             return (visitor, () => Interlocked.Increment(ref completions));
         });
 
-        Assert.Equal(4, completions);
+        Assert.AreEqual(4, completions);
     }
 
     /// <summary>
     /// Verifies parallel walking completes every worker after an early quit.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParallelWalkCompletesEveryWorkerAfterQuit()
     {
         string root = CreateTempDirectory();
@@ -123,53 +124,53 @@ public sealed class WalkTests
             return (visitor, () => Interlocked.Increment(ref completions));
         });
 
-        Assert.Equal(4, completions);
+        Assert.AreEqual(4, completions);
     }
 
     /// <summary>
     /// Verifies failures raised while completing a parallel worker propagate to the caller.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParallelWalkPropagatesWorkerCompletionFailure()
     {
         string root = CreateTempDirectory();
         File.WriteAllText(Path.Join(root, "file"), string.Empty);
 
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+        InvalidOperationException error = Assert.ThrowsExactly<InvalidOperationException>(() =>
             new WalkBuilder(root).Threads(1).BuildParallel().RunWithCompletion(() =>
             {
                 Func<DirEntry, WalkState> visitor = static _ => WalkState.Continue;
                 return (visitor, static () => throw new InvalidOperationException("completion failed"));
             }));
 
-        Assert.Equal("completion failed", error.Message);
+        Assert.AreEqual("completion failed", error.Message);
     }
 
     /// <summary>
     /// Verifies parallel walking completes a worker after its visitor fails.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParallelWalkCompletesWorkerAfterVisitorFailure()
     {
         string root = CreateTempDirectory();
         File.WriteAllText(Path.Join(root, "file"), string.Empty);
         int completions = 0;
 
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+        InvalidOperationException error = Assert.ThrowsExactly<InvalidOperationException>(() =>
             new WalkBuilder(root).Threads(1).BuildParallel().RunWithCompletion(() =>
             {
                 Func<DirEntry, WalkState> visitor = static _ => throw new InvalidOperationException("visitor failed");
                 return (visitor, () => Interlocked.Increment(ref completions));
             }));
 
-        Assert.Equal("visitor failed", error.Message);
-        Assert.Equal(1, completions);
+        Assert.AreEqual("visitor failed", error.Message);
+        Assert.AreEqual(1, completions);
     }
 
     /// <summary>
     /// Verifies a visitor-factory failure occurs before any parallel worker starts.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParallelWalkCreatesAllVisitorsBeforeStartingWorkers()
     {
         string root = CreateTempDirectory();
@@ -177,7 +178,7 @@ public sealed class WalkTests
         int factories = 0;
         int visits = 0;
 
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+        InvalidOperationException error = Assert.ThrowsExactly<InvalidOperationException>(() =>
             new WalkBuilder(root).Threads(4).BuildParallel().RunWithCompletion(() =>
             {
                 if (Interlocked.Increment(ref factories) == 2)
@@ -193,15 +194,15 @@ public sealed class WalkTests
                 return (visitor, static () => { });
             }));
 
-        Assert.Equal("factory failed", error.Message);
-        Assert.Equal(2, factories);
-        Assert.Equal(0, visits);
+        Assert.AreEqual("factory failed", error.Message);
+        Assert.AreEqual(2, factories);
+        Assert.AreEqual(0, visits);
     }
 
     /// <summary>
     /// Verifies parallel visitors can skip descending into a visited directory.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParallelWalkSkipPreventsDescendants()
     {
         string root = CreateTempDirectory();
@@ -223,7 +224,7 @@ public sealed class WalkTests
     /// <summary>
     /// Verifies minimum depth follows the upstream clamp behavior with maximum depth.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void WalkHonorsMinDepth()
     {
         string root = CreateTempDirectory();
@@ -231,10 +232,10 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "a", "foo"), string.Empty);
         File.WriteAllText(Path.Join(root, "a", "b", "foo"), string.Empty);
 
-        Assert.Equal(
+        Assert.AreSequenceEqual<string>(
             ["a/b", "a/b/c", "a/b/foo", "a/foo"],
             Collect(root, new WalkBuilder(root).MinDepth(2)));
-        Assert.Equal(
+        Assert.AreSequenceEqual<string>(
             ["a/b", "a/foo"],
             Collect(root, new WalkBuilder(root).MinDepth(2).MaxDepth(1)));
     }
@@ -242,7 +243,7 @@ public sealed class WalkTests
     /// <summary>
     /// Verifies hidden entries are skipped by default and can be included.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void HiddenEntriesAreSkippedByDefault()
     {
         string root = CreateTempDirectory();
@@ -251,8 +252,8 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, ".git", "config"), string.Empty);
         File.WriteAllText(Path.Join(root, "visible"), string.Empty);
 
-        Assert.Equal(["visible"], Collect(root, new WalkBuilder(root)));
-        Assert.Equal(
+        Assert.AreSequenceEqual<string>(["visible"], Collect(root, new WalkBuilder(root)));
+        Assert.AreSequenceEqual<string>(
             [".git", ".git/config", ".hidden", "visible"],
             Collect(root, new WalkBuilder(root).Hidden(false)));
     }
@@ -260,7 +261,7 @@ public sealed class WalkTests
     /// <summary>
     /// Verifies maximum file size skips only files, not directories.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void MaxFileSizeSkipsLargeFiles()
     {
         string root = CreateTempDirectory();
@@ -269,40 +270,40 @@ public sealed class WalkTests
         WriteSizedFile(Path.Join(root, "large"), 8);
         WriteSizedFile(Path.Join(root, "a", "nested"), 8);
 
-        Assert.Equal(["a", "small"], Collect(root, new WalkBuilder(root).MaxFileSize(4)));
+        Assert.AreSequenceEqual<string>(["a", "small"], Collect(root, new WalkBuilder(root).MaxFileSize(4)));
     }
 
     /// <summary>
     /// Verifies symbolic links are skipped by default and traversed when requested.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FollowLinksControlsSymlinkTraversal()
     {
         string root = CreateTempDirectory();
         Directory.CreateDirectory(Path.Join(root, "a", "b"));
         File.WriteAllText(Path.Join(root, "a", "b", "foo"), string.Empty);
         File.WriteAllText(Path.Join(root, "real"), string.Empty);
-        Assert.True(TryCreateDirectorySymlink(Path.Join(root, "a", "b"), Path.Join(root, "z")), "Required directory symlink could not be created.");
-        Assert.True(TryCreateFileSymlink(Path.Join(root, "real"), Path.Join(root, "file-link")), "Required file symlink could not be created.");
+        Assert.IsTrue(TryCreateDirectorySymlink(Path.Join(root, "a", "b"), Path.Join(root, "z")), "Required directory symlink could not be created.");
+        Assert.IsTrue(TryCreateFileSymlink(Path.Join(root, "real"), Path.Join(root, "file-link")), "Required file symlink could not be created.");
 
-        Assert.Equal(["a", "a/b", "a/b/foo", "real"], Collect(root, new WalkBuilder(root)));
-        Assert.Equal(["a", "a/b", "a/b/foo", "file-link", "real", "z", "z/foo"], Collect(root, new WalkBuilder(root).FollowLinks(true)));
+        Assert.AreSequenceEqual<string>(["a", "a/b", "a/b/foo", "real"], Collect(root, new WalkBuilder(root)));
+        Assert.AreSequenceEqual<string>(["a", "a/b", "a/b/foo", "file-link", "real", "z", "z/foo"], Collect(root, new WalkBuilder(root).FollowLinks(true)));
     }
 
     /// <summary>
     /// Verifies symbolic-link loops are not yielded or recursed when following links.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FollowLinksSkipsSymlinkLoops()
     {
         string root = CreateTempDirectory();
         Directory.CreateDirectory(Path.Join(root, "a", "b"));
-        Assert.True(TryCreateDirectorySymlink(Path.Join(root, "a"), Path.Join(root, "a", "b", "c")), "Required directory symlink could not be created.");
+        Assert.IsTrue(TryCreateDirectorySymlink(Path.Join(root, "a"), Path.Join(root, "a", "b", "c")), "Required directory symlink could not be created.");
 
         string[] expected = ["a", "a/b"];
-        Assert.Equal(expected, Collect(root, new WalkBuilder(root)));
-        Assert.Equal(expected, Collect(root, new WalkBuilder(root).FollowLinks(true)));
-        Assert.Equal(
+        Assert.AreSequenceEqual(expected, Collect(root, new WalkBuilder(root)));
+        Assert.AreSequenceEqual(expected, Collect(root, new WalkBuilder(root).FollowLinks(true)));
+        Assert.AreSequenceEqual(
             expected,
             CollectParallel(root, new WalkBuilder(root).FollowLinks(true).Threads(4)));
     }
@@ -310,46 +311,46 @@ public sealed class WalkTests
     /// <summary>
     /// Verifies file identities resolve symbolic links to their final target.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FileIdentityFollowsSymlinkTarget()
     {
         string root = CreateTempDirectory();
         string target = Path.Join(root, "target");
         string link = Path.Join(root, "link");
         File.WriteAllText(target, string.Empty);
-        Assert.True(TryCreateFileSymlink(target, link), "Required file symlink could not be created.");
+        Assert.IsTrue(TryCreateFileSymlink(target, link), "Required file symlink could not be created.");
 
-        Assert.Equal(FileIdentity.FromPath(target), FileIdentity.FromPath(link));
-        Assert.NotEqual(FileIdentity.FromPath(target), FileIdentity.FromPath(link, followLinks: false));
+        Assert.AreEqual(FileIdentity.FromPath(target), FileIdentity.FromPath(link));
+        Assert.AreNotEqual(FileIdentity.FromPath(target), FileIdentity.FromPath(link, followLinks: false));
     }
 
     /// <summary>
     /// Verifies supported Unix architectures prefer their native <c>stat</c> layout without a second metadata probe.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void UnixStatLayoutPrefersCurrentArchitecture()
     {
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
         {
-            Assert.True(OperatingSystem.IsWindows());
+            Assert.IsTrue(OperatingSystem.IsWindows());
         }
         else
         {
             UnixStatLayout layout = UnixStatLayout.ForCurrentPlatform[0];
             if (OperatingSystem.IsMacOS())
             {
-                Assert.Equal(RuntimeInformation.ProcessArchitecture == Architecture.X64 ? 8 : 4, layout.ModeOffset);
+                Assert.AreEqual(RuntimeInformation.ProcessArchitecture == Architecture.X64 ? 8 : 4, layout.ModeOffset);
             }
             else
             {
-                Assert.True(OperatingSystem.IsLinux());
+                Assert.IsTrue(OperatingSystem.IsLinux());
                 int expectedModeOffset = RuntimeInformation.ProcessArchitecture switch
                 {
                     Architecture.X64 => 24,
                     Architecture.Arm64 => 16,
                     _ => 16,
                 };
-                Assert.Equal(expectedModeOffset, layout.ModeOffset);
+                Assert.AreEqual(expectedModeOffset, layout.ModeOffset);
             }
         }
     }
@@ -357,13 +358,13 @@ public sealed class WalkTests
     /// <summary>
     /// Verifies native Unix status decoding preserves file, directory, and symbolic-link metadata.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NativeUnixStatusDecodesFilesystemEntries()
     {
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
         {
-            Assert.True(OperatingSystem.IsWindows());
-            Assert.False(NativeFileSystemMetadata.TryGetUnixStatus("unused", followLinks: false, out _));
+            Assert.IsTrue(OperatingSystem.IsWindows());
+            Assert.IsFalse(NativeFileSystemMetadata.TryGetUnixStatus("unused", followLinks: false, out _));
         }
         else
         {
@@ -373,38 +374,38 @@ public sealed class WalkTests
             string link = Path.Join(root, "link");
             Directory.CreateDirectory(directory);
             File.WriteAllBytes(file, "needle"u8.ToArray());
-            Assert.True(TryCreateFileSymlink(file, link), "Required file symlink could not be created.");
+            Assert.IsTrue(TryCreateFileSymlink(file, link), "Required file symlink could not be created.");
 
-            Assert.True(NativeFileSystemMetadata.TryGetUnixStatus(directory, followLinks: false, out NativeUnixFileStatus directoryStatus));
-            Assert.True(directoryStatus.IsDirectory);
-            Assert.False(directoryStatus.IsSymbolicLink);
-            Assert.Null(directoryStatus.Length);
-            Assert.False(directoryStatus.Metadata.IsEmpty);
+            Assert.IsTrue(NativeFileSystemMetadata.TryGetUnixStatus(directory, followLinks: false, out NativeUnixFileStatus directoryStatus));
+            Assert.IsTrue(directoryStatus.IsDirectory);
+            Assert.IsFalse(directoryStatus.IsSymbolicLink);
+            Assert.IsNull(directoryStatus.Length);
+            Assert.IsFalse(directoryStatus.Metadata.IsEmpty);
 
-            Assert.True(NativeFileSystemMetadata.TryGetUnixStatus(file, followLinks: false, out NativeUnixFileStatus fileStatus));
-            Assert.False(fileStatus.IsDirectory);
-            Assert.False(fileStatus.IsSymbolicLink);
-            Assert.Equal(6, fileStatus.Length);
-            Assert.False(fileStatus.Metadata.IsEmpty);
+            Assert.IsTrue(NativeFileSystemMetadata.TryGetUnixStatus(file, followLinks: false, out NativeUnixFileStatus fileStatus));
+            Assert.IsFalse(fileStatus.IsDirectory);
+            Assert.IsFalse(fileStatus.IsSymbolicLink);
+            Assert.AreEqual(6, fileStatus.Length);
+            Assert.IsFalse(fileStatus.Metadata.IsEmpty);
 
-            Assert.True(NativeFileSystemMetadata.TryGetUnixStatus(link, followLinks: false, out NativeUnixFileStatus linkStatus));
-            Assert.False(linkStatus.IsDirectory);
-            Assert.True(linkStatus.IsSymbolicLink);
-            Assert.Null(linkStatus.Length);
-            Assert.False(linkStatus.Metadata.IsEmpty);
+            Assert.IsTrue(NativeFileSystemMetadata.TryGetUnixStatus(link, followLinks: false, out NativeUnixFileStatus linkStatus));
+            Assert.IsFalse(linkStatus.IsDirectory);
+            Assert.IsTrue(linkStatus.IsSymbolicLink);
+            Assert.IsNull(linkStatus.Length);
+            Assert.IsFalse(linkStatus.Metadata.IsEmpty);
 
-            Assert.True(NativeFileSystemMetadata.TryGetUnixStatus(link, followLinks: true, out NativeUnixFileStatus targetStatus));
-            Assert.False(targetStatus.IsDirectory);
-            Assert.True(targetStatus.IsSymbolicLink);
-            Assert.Equal(6, targetStatus.Length);
-            Assert.Equal(fileStatus.Metadata, targetStatus.Metadata);
+            Assert.IsTrue(NativeFileSystemMetadata.TryGetUnixStatus(link, followLinks: true, out NativeUnixFileStatus targetStatus));
+            Assert.IsFalse(targetStatus.IsDirectory);
+            Assert.IsTrue(targetStatus.IsSymbolicLink);
+            Assert.AreEqual(6, targetStatus.Length);
+            Assert.AreEqual(fileStatus.Metadata, targetStatus.Metadata);
         }
     }
 
     /// <summary>
     /// Verifies raw Unix traversal stays byte-based after discovering an invalid UTF-8 directory.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void WalkRecursesIntoRawUnixInvalidUtf8Directories()
     {
         if (!OperatingSystem.IsLinux())
@@ -428,77 +429,77 @@ public sealed class WalkTests
                 rawPaths.Add(entry.UnixPathBytes.ToArray());
             }
 
-            Assert.Contains(rawPaths, path => path.AsSpan().SequenceEqual(invalidDirectoryPath));
-            Assert.Contains(rawPaths, path => path.AsSpan().SequenceEqual(childPath));
+            Assert.Contains(path => path.AsSpan().SequenceEqual(invalidDirectoryPath), rawPaths);
+            Assert.Contains(path => path.AsSpan().SequenceEqual(childPath), rawPaths);
         }
     }
 
     /// <summary>
     /// Verifies a valid replacement character in a file name is yielded only once.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void WalkDoesNotDuplicateValidUnicodeReplacementCharacterFileName()
     {
         string root = CreateTempDirectory();
         const string fileName = "valid\uFFFD.txt";
         File.WriteAllText(Path.Join(root, fileName), string.Empty);
 
-        Assert.Equal([fileName], Collect(root, new WalkBuilder(root)));
+        Assert.AreSequenceEqual<string>([fileName], Collect(root, new WalkBuilder(root)));
     }
 
     /// <summary>
     /// Verifies same-file-system traversal still descends through the root file system.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SameFileSystemAllowsSameDeviceTraversal()
     {
         string root = CreateTempDirectory();
         Directory.CreateDirectory(Path.Join(root, "a", "b"));
         File.WriteAllText(Path.Join(root, "a", "b", "file"), string.Empty);
 
-        Assert.Equal(["a", "a/b", "a/b/file"], Collect(root, new WalkBuilder(root).SameFileSystem(true)));
+        Assert.AreSequenceEqual<string>(["a", "a/b", "a/b/file"], Collect(root, new WalkBuilder(root).SameFileSystem(true)));
     }
 
     /// <summary>
     /// Verifies same-file-system traversal yields but does not descend into followed cross-device symlinks.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SameFileSystemSkipsDifferentDeviceSymlinkDescendants()
     {
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
         {
-            Assert.True(OperatingSystem.IsWindows());
+            Assert.IsTrue(OperatingSystem.IsWindows());
         }
         else
         {
             string root = CreateTempDirectory();
             string external = OperatingSystem.IsLinux() ? "/sys" : "/dev";
-            Assert.True(Directory.Exists(external), "Required cross-device fixture does not exist: " + external);
-            Assert.True(NativeFileSystemMetadata.TryGetDevice(root, out FileSystemDevice rootDevice), "Could not read root device.");
-            Assert.True(NativeFileSystemMetadata.TryGetDevice(external, out FileSystemDevice externalDevice), "Could not read external device.");
-            Assert.NotEqual(rootDevice, externalDevice);
+            Assert.IsTrue(Directory.Exists(external), "Required cross-device fixture does not exist: " + external);
+            Assert.IsTrue(NativeFileSystemMetadata.TryGetDevice(root, out FileSystemDevice rootDevice), "Could not read root device.");
+            Assert.IsTrue(NativeFileSystemMetadata.TryGetDevice(external, out FileSystemDevice externalDevice), "Could not read external device.");
+            Assert.AreNotEqual(rootDevice, externalDevice);
 
             Directory.CreateDirectory(Path.Join(root, "same_file"));
-            Assert.True(TryCreateDirectorySymlink(external, Path.Join(root, "same_file", "alink")), "Required cross-device directory symlink could not be created.");
+            Assert.IsTrue(TryCreateDirectorySymlink(external, Path.Join(root, "same_file", "alink")), "Required cross-device directory symlink could not be created.");
 
             List<string> baseline = Collect(
                 root,
                 new WalkBuilder(root).Hidden(false).FollowLinks(true).MaxDepth(3));
-            Assert.Contains(baseline, static path => path.StartsWith("same_file/alink/", StringComparison.Ordinal));
+            Assert.Contains(static path => path.StartsWith("same_file/alink/", StringComparison.Ordinal), baseline);
 
             List<string> paths = Collect(
                 root,
                 new WalkBuilder(root).Hidden(false).FollowLinks(true).SameFileSystem(true).MaxDepth(3));
 
             Assert.Contains("same_file/alink", paths);
-            Assert.DoesNotContain(paths, static path => path.StartsWith("same_file/alink/", StringComparison.Ordinal));
+            Assert.DoesNotContain(static path => path.StartsWith("same_file/alink/", StringComparison.Ordinal), paths);
         }
     }
 
     /// <summary>
     /// Verifies ignore files apply to descendants and support negation.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void IgnoreFilesApplyToDescendantsWithNegation()
     {
         string root = CreateTempDirectory();
@@ -509,13 +510,13 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "logs", "debug.log"), string.Empty);
         File.WriteAllText(Path.Join(root, "logs", "important.log"), string.Empty);
 
-        Assert.Equal(["important.log", "logs", "logs/important.log"], Collect(root, new WalkBuilder(root)));
+        Assert.AreSequenceEqual<string>(["important.log", "logs", "logs/important.log"], Collect(root, new WalkBuilder(root)));
     }
 
     /// <summary>
     /// Verifies ignore-file globs opt into literal-separator matching.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void IgnoreFileWildcardsDoNotCrossSeparators()
     {
         string root = CreateTempDirectory();
@@ -524,13 +525,13 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "src", "debug.log"), string.Empty);
         File.WriteAllText(Path.Join(root, "src", "nested", "debug.log"), string.Empty);
 
-        Assert.Equal(["src", "src/nested", "src/nested/debug.log"], Collect(root, new WalkBuilder(root)));
+        Assert.AreSequenceEqual<string>(["src", "src/nested", "src/nested/debug.log"], Collect(root, new WalkBuilder(root)));
     }
 
     /// <summary>
     /// Verifies ignore files treat unclosed character classes as literals.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void IgnoreFilesAllowUnclosedCharacterClasses()
     {
         string root = CreateTempDirectory();
@@ -538,13 +539,13 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "["), string.Empty);
         File.WriteAllText(Path.Join(root, "keep"), string.Empty);
 
-        Assert.Equal(["keep"], Collect(root, new WalkBuilder(root)));
+        Assert.AreSequenceEqual<string>(["keep"], Collect(root, new WalkBuilder(root)));
     }
 
     /// <summary>
     /// Verifies directory-only ignore rules prune matching directories.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DirectoryOnlyIgnoreRulePrunesDirectories()
     {
         string root = CreateTempDirectory();
@@ -555,13 +556,13 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "target", "artifact"), string.Empty);
         File.WriteAllText(Path.Join(root, "src", "target"), string.Empty);
 
-        Assert.Equal(["src", "src/target"], Collect(root, new WalkBuilder(root)));
+        Assert.AreSequenceEqual<string>(["src", "src/target"], Collect(root, new WalkBuilder(root)));
     }
 
     /// <summary>
     /// Verifies a directory ignored by its parent is pruned before its own ignore files are parsed.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void IgnoredDirectoryDoesNotLoadItsOwnIgnoreFiles()
     {
         string root = CreateTempDirectory();
@@ -571,17 +572,17 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(ignored, "unreachable"), string.Empty);
         File.WriteAllText(Path.Join(root, "keep"), string.Empty);
 
-        Assert.Equal(["keep"], Collect(root, new WalkBuilder(root)));
-        Assert.Equal(["keep"], CollectParallel(root, new WalkBuilder(root).Threads(4)));
+        Assert.AreSequenceEqual<string>(["keep"], Collect(root, new WalkBuilder(root)));
+        Assert.AreSequenceEqual<string>(["keep"], CollectParallel(root, new WalkBuilder(root).Threads(4)));
     }
 
     /// <summary>
     /// Verifies directories named like standard ignore files are traversed instead of parsed as files.
     /// </summary>
     /// <param name="ignoreFileName">The standard ignore file name to use for the directory.</param>
-    [Theory]
-    [InlineData(".ignore")]
-    [InlineData(".gitignore")]
+    [TestMethod]
+    [DataRow(".ignore")]
+    [DataRow(".gitignore")]
     public void IgnoreFileNameDirectoryDoesNotAbortTraversal(string ignoreFileName)
     {
         string root = CreateTempDirectory();
@@ -589,14 +590,14 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "keep"), string.Empty);
 
         string[] expected = [ignoreFileName, "keep"];
-        Assert.Equal(expected, Collect(root, new WalkBuilder(root).Hidden(false)));
-        Assert.Equal(expected, CollectParallel(root, new WalkBuilder(root).Hidden(false).Threads(4)));
+        Assert.AreSequenceEqual(expected, Collect(root, new WalkBuilder(root).Hidden(false)));
+        Assert.AreSequenceEqual(expected, CollectParallel(root, new WalkBuilder(root).Hidden(false).Threads(4)));
     }
 
     /// <summary>
     /// Verifies nested ignore files override ancestor rules.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NestedIgnoreFilesOverrideAncestorRules()
     {
         string root = CreateTempDirectory();
@@ -608,13 +609,13 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "src", "drop.tmp"), string.Empty);
         File.WriteAllText(Path.Join(root, "src", "keep.tmp"), string.Empty);
 
-        Assert.Equal(["src", "src/keep.tmp"], Collect(root, new WalkBuilder(root)));
+        Assert.AreSequenceEqual<string>(["src", "src/keep.tmp"], Collect(root, new WalkBuilder(root)));
     }
 
     /// <summary>
     /// Verifies parent ignore files apply when walking below the repository root.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParentIgnoreFilesApplyToSubtreeRoots()
     {
         string root = CreateTempDirectory();
@@ -625,14 +626,14 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "src", "bar"), string.Empty);
         string subtree = Path.Join(root, "src");
 
-        Assert.Equal(["bar"], Collect(subtree, new WalkBuilder(subtree)));
-        Assert.Equal(["bar", "foo"], Collect(subtree, new WalkBuilder(subtree).Parents(false)));
+        Assert.AreSequenceEqual<string>(["bar"], Collect(subtree, new WalkBuilder(subtree)));
+        Assert.AreSequenceEqual<string>(["bar", "foo"], Collect(subtree, new WalkBuilder(subtree).Parents(false)));
     }
 
     /// <summary>
     /// Verifies rooted patterns in parent ignore files remain anchored to their original directory.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ParentIgnoreRootedPatternsStayAnchoredToParent()
     {
         string root = CreateTempDirectory();
@@ -642,13 +643,13 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "src", "foo"), string.Empty);
         string subtree = Path.Join(root, "src");
 
-        Assert.Equal(["llvm"], Collect(subtree, new WalkBuilder(subtree)));
+        Assert.AreSequenceEqual<string>(["llvm"], Collect(subtree, new WalkBuilder(subtree)));
     }
 
     /// <summary>
     /// Verifies standard ignore sources can be toggled independently.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void StandardIgnoreSourcesCanBeDisabled()
     {
         string root = CreateTempDirectory();
@@ -663,9 +664,9 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "scout-only"), string.Empty);
         File.WriteAllText(Path.Join(root, "keep"), string.Empty);
 
-        Assert.Equal(["git-only", "keep"], Collect(root, new WalkBuilder(root).GitIgnore(false)));
-        Assert.Equal(["dot-only", "keep", "rg-only", "scout-only"], Collect(root, new WalkBuilder(root).Ignore(false)));
-        Assert.Equal(
+        Assert.AreSequenceEqual<string>(["git-only", "keep"], Collect(root, new WalkBuilder(root).GitIgnore(false)));
+        Assert.AreSequenceEqual<string>(["dot-only", "keep", "rg-only", "scout-only"], Collect(root, new WalkBuilder(root).Ignore(false)));
+        Assert.AreSequenceEqual<string>(
             [".git", ".gitignore", ".ignore", ".rgignore", ".scoutignore", "dot-only", "git-only", "keep", "rg-only", "scout-only"],
             Collect(root, new WalkBuilder(root).StandardFilters(false)));
     }
@@ -673,7 +674,7 @@ public sealed class WalkTests
     /// <summary>
     /// Verifies Scout-native ignore rules override matching .rgignore rules.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ScoutIgnoreOverridesRgIgnore()
     {
         string root = CreateTempDirectory();
@@ -685,13 +686,13 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "scout-only"), string.Empty);
         File.WriteAllText(Path.Join(root, "keep"), string.Empty);
 
-        Assert.Equal(["conflict", "keep"], Collect(root, new WalkBuilder(root)));
+        Assert.AreSequenceEqual<string>(["conflict", "keep"], Collect(root, new WalkBuilder(root)));
     }
 
     /// <summary>
     /// Verifies git-specific ignore files require a repository marker by default.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void GitIgnoreRequiresRepositoryByDefault()
     {
         string root = CreateTempDirectory();
@@ -699,14 +700,14 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "foo"), string.Empty);
         File.WriteAllText(Path.Join(root, "bar"), string.Empty);
 
-        Assert.Equal(["bar", "foo"], Collect(root, new WalkBuilder(root)));
-        Assert.Equal(["bar"], Collect(root, new WalkBuilder(root).RequireGit(false)));
+        Assert.AreSequenceEqual<string>(["bar", "foo"], Collect(root, new WalkBuilder(root)));
+        Assert.AreSequenceEqual<string>(["bar"], Collect(root, new WalkBuilder(root).RequireGit(false)));
     }
 
     /// <summary>
     /// Verifies JJ repository markers enable gitignore semantics.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void GitIgnoreAppliesInsideJjRepository()
     {
         string root = CreateTempDirectory();
@@ -715,13 +716,13 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "foo"), string.Empty);
         File.WriteAllText(Path.Join(root, "bar"), string.Empty);
 
-        Assert.Equal(["bar"], Collect(root, new WalkBuilder(root)));
+        Assert.AreSequenceEqual<string>(["bar"], Collect(root, new WalkBuilder(root)));
     }
 
     /// <summary>
     /// Verifies git exclude files have lower precedence than .gitignore and .ignore files.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void GitExcludeHasLowestGitPrecedence()
     {
         string root = CreateTempDirectory();
@@ -734,14 +735,14 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "baz"), string.Empty);
         File.WriteAllText(Path.Join(root, "keep"), string.Empty);
 
-        Assert.Equal(["bar", "foo", "keep"], Collect(root, new WalkBuilder(root)));
-        Assert.Equal(["bar", "baz", "foo", "keep"], Collect(root, new WalkBuilder(root).GitExclude(false)));
+        Assert.AreSequenceEqual<string>(["bar", "foo", "keep"], Collect(root, new WalkBuilder(root)));
+        Assert.AreSequenceEqual<string>(["bar", "baz", "foo", "keep"], Collect(root, new WalkBuilder(root).GitExclude(false)));
     }
 
     /// <summary>
     /// Verifies linked worktree <c>.git/info/exclude</c> discovery follows the upstream common-dir rules.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void GitExcludeReadsLinkedWorktreeCommonDir()
     {
         string root = CreateTempDirectory();
@@ -758,22 +759,22 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(linkedWorktree, "keep"), string.Empty);
 
         File.WriteAllText(commonDirectoryFile, "../..");
-        Assert.Equal(["keep"], Collect(linkedWorktree, new WalkBuilder(linkedWorktree)));
+        Assert.AreSequenceEqual<string>(["keep"], Collect(linkedWorktree, new WalkBuilder(linkedWorktree)));
 
         File.WriteAllText(commonDirectoryFile, gitDirectory);
-        Assert.Equal(["keep"], Collect(linkedWorktree, new WalkBuilder(linkedWorktree)));
+        Assert.AreSequenceEqual<string>(["keep"], Collect(linkedWorktree, new WalkBuilder(linkedWorktree)));
 
         File.Delete(commonDirectoryFile);
-        Assert.Equal(["ignore_me", "keep"], Collect(linkedWorktree, new WalkBuilder(linkedWorktree)));
+        Assert.AreSequenceEqual<string>(["ignore_me", "keep"], Collect(linkedWorktree, new WalkBuilder(linkedWorktree)));
 
         File.WriteAllText(Path.Join(linkedWorktree, ".git"), "garbage");
-        Assert.Equal(["ignore_me", "keep"], Collect(linkedWorktree, new WalkBuilder(linkedWorktree)));
+        Assert.AreSequenceEqual<string>(["ignore_me", "keep"], Collect(linkedWorktree, new WalkBuilder(linkedWorktree)));
     }
 
     /// <summary>
     /// Verifies malformed linked-worktree <c>.git</c> files do not activate git exclude rules.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void GitExcludeRequiresGitDirPrefixSpace()
     {
         string root = CreateTempDirectory();
@@ -786,13 +787,14 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(linkedWorktree, "ignore_me"), string.Empty);
         File.WriteAllText(Path.Join(linkedWorktree, "keep"), string.Empty);
 
-        Assert.Equal(["ignore_me", "keep"], Collect(linkedWorktree, new WalkBuilder(linkedWorktree)));
+        Assert.AreSequenceEqual<string>(["ignore_me", "keep"], Collect(linkedWorktree, new WalkBuilder(linkedWorktree)));
     }
 
     /// <summary>
     /// Verifies global gitignore files apply below repository ignore sources and can be disabled.
     /// </summary>
-    [Fact]
+    [TestMethod]
+    [DoNotParallelize]
     public void GlobalGitIgnoreRulesApplyAfterRepositoryIgnoreSources()
     {
         string root = CreateTempDirectory();
@@ -815,8 +817,8 @@ public sealed class WalkTests
             Environment.SetEnvironmentVariable("HOME", home);
             Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", xdgConfigHome);
 
-            Assert.Equal(["keep", gitExcludeWhitelist], Collect(root, new WalkBuilder(root)));
-            Assert.Equal([globalOnly, "keep", gitExcludeWhitelist], Collect(root, new WalkBuilder(root).GitGlobal(false)));
+            Assert.AreSequenceEqual<string>(["keep", gitExcludeWhitelist], Collect(root, new WalkBuilder(root)));
+            Assert.AreSequenceEqual<string>([globalOnly, "keep", gitExcludeWhitelist], Collect(root, new WalkBuilder(root).GitGlobal(false)));
         }
         finally
         {
@@ -828,7 +830,7 @@ public sealed class WalkTests
     /// <summary>
     /// Verifies explicit ignore files apply below all directory-local ignore sources.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ExplicitIgnoreFilesHaveLowestPrecedence()
     {
         string root = CreateTempDirectory();
@@ -841,8 +843,8 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "a", "foo"), string.Empty);
         File.WriteAllText(Path.Join(root, "a", "bar"), string.Empty);
 
-        Assert.Equal(["a", "a/bar", "bar"], Collect(root, new WalkBuilder(root).AddIgnoreFile(ignoreFile)));
-        Assert.Equal(
+        Assert.AreSequenceEqual<string>(["a", "a/bar", "bar"], Collect(root, new WalkBuilder(root).AddIgnoreFile(ignoreFile)));
+        Assert.AreSequenceEqual<string>(
             [".ignore", ".not-an-ignore", "a"],
             Collect(root, new WalkBuilder(root).StandardFilters(false).AddIgnoreFile(ignoreFile)));
     }
@@ -850,7 +852,7 @@ public sealed class WalkTests
     /// <summary>
     /// Verifies ignore files are case-sensitive by default and can be matched ASCII case-insensitively.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void IgnoreFilesCanMatchCaseInsensitively()
     {
         string root = CreateTempDirectory();
@@ -860,8 +862,8 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "short.htm"), string.Empty);
         File.WriteAllText(Path.Join(root, "wide.HTM"), string.Empty);
 
-        Assert.Equal(["short.htm", "upper.HTML", "wide.HTM"], Collect(root, new WalkBuilder(root)));
-        Assert.Equal(
+        Assert.AreSequenceEqual<string>(["short.htm", "upper.HTML", "wide.HTM"], Collect(root, new WalkBuilder(root)));
+        Assert.AreSequenceEqual<string>(
             ["short.htm", "wide.HTM"],
             Collect(root, new WalkBuilder(root).IgnoreCaseInsensitive(true)));
     }
@@ -869,7 +871,7 @@ public sealed class WalkTests
     /// <summary>
     /// Verifies explicit ignore files honor case-insensitive matching.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void ExplicitIgnoreFilesCanMatchCaseInsensitively()
     {
         string root = CreateTempDirectory();
@@ -879,7 +881,7 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "trace.LOG"), string.Empty);
         File.WriteAllText(Path.Join(root, "keep.txt"), string.Empty);
 
-        Assert.Equal(
+        Assert.AreSequenceEqual<string>(
             ["keep.txt"],
             Collect(root, new WalkBuilder(root).IgnoreCaseInsensitive(true).AddIgnoreFile(ignoreFile)));
     }
@@ -887,7 +889,7 @@ public sealed class WalkTests
     /// <summary>
     /// Verifies custom ignore files override standard ignore files and preserve insertion precedence.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void CustomIgnoreFilesOverrideStandardIgnoreFiles()
     {
         string root = CreateTempDirectory();
@@ -898,7 +900,7 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "bar"), string.Empty);
         File.WriteAllText(Path.Join(root, "keep"), string.Empty);
 
-        Assert.Equal(
+        Assert.AreSequenceEqual<string>(
             ["bar", "foo", "keep"],
             Collect(root, new WalkBuilder(root).AddCustomIgnoreFileName(".custom1").AddCustomIgnoreFileName(".custom2")));
     }
@@ -906,7 +908,7 @@ public sealed class WalkTests
     /// <summary>
     /// Verifies escaped leading comment and negation markers are literal patterns.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void IgnoreFilesSupportEscapedLeadingMarkers()
     {
         string root = CreateTempDirectory();
@@ -915,13 +917,13 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "!literal"), string.Empty);
         File.WriteAllText(Path.Join(root, "other"), string.Empty);
 
-        Assert.Equal(["other"], Collect(root, new WalkBuilder(root)));
+        Assert.AreSequenceEqual<string>(["other"], Collect(root, new WalkBuilder(root)));
     }
 
     /// <summary>
     /// Verifies escaped trailing whitespace remains part of ignore patterns.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void IgnoreFilesPreserveEscapedTrailingWhitespace()
     {
         string root = CreateTempDirectory();
@@ -930,13 +932,13 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "literal "), string.Empty);
         File.WriteAllText(Path.Join(root, "literal"), string.Empty);
 
-        Assert.Equal(["literal"], Collect(root, new WalkBuilder(root)));
+        Assert.AreSequenceEqual<string>(["literal"], Collect(root, new WalkBuilder(root)));
     }
 
     /// <summary>
     /// Verifies rooted and recursive gitignore patterns follow upstream matching semantics.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void IgnoreFilesHonorRootedAndRecursivePatterns()
     {
         string root = CreateTempDirectory();
@@ -953,13 +955,13 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "a", "x", "y", "b"), string.Empty);
         File.WriteAllText(Path.Join(root, "keep"), string.Empty);
 
-        Assert.Equal(["a", "a/x", "a/x/y", "child", "child/root.log", "keep"], Collect(root, new WalkBuilder(root)));
+        Assert.AreSequenceEqual<string>(["a", "a/x", "a/x/y", "child", "child/root.log", "keep"], Collect(root, new WalkBuilder(root)));
     }
 
     /// <summary>
     /// Verifies whitelisted hidden entries bypass hidden filtering.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void WhitelistedHiddenEntriesBypassHiddenFiltering()
     {
         string root = CreateTempDirectory();
@@ -968,13 +970,13 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, ".hidden"), string.Empty);
         File.WriteAllText(Path.Join(root, "visible"), string.Empty);
 
-        Assert.Equal([".visible-hidden", "visible"], Collect(root, new WalkBuilder(root)));
+        Assert.AreSequenceEqual<string>([".visible-hidden", "visible"], Collect(root, new WalkBuilder(root)));
     }
 
     /// <summary>
     /// Verifies whitelist overrides include matching files and ignore unmatched files.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void OverrideWhitelistIgnoresUnmatchedFiles()
     {
         string root = CreateTempDirectory();
@@ -983,13 +985,13 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "src", "main.c"), string.Empty);
         Override overrides = new OverrideBuilder(root).Add("*.rs").Build();
 
-        Assert.Equal(["src", "src/main.rs"], Collect(root, new WalkBuilder(root).Overrides(overrides)));
+        Assert.AreSequenceEqual<string>(["src", "src/main.rs"], Collect(root, new WalkBuilder(root).Overrides(overrides)));
     }
 
     /// <summary>
     /// Verifies negated overrides exclude matching paths.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NegatedOverrideIgnoresMatchingPath()
     {
         string root = CreateTempDirectory();
@@ -997,13 +999,13 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "drop.generated.rs"), string.Empty);
         Override overrides = new OverrideBuilder(root).Add("*.rs").Add("!*.generated.rs").Build();
 
-        Assert.Equal(["keep.rs"], Collect(root, new WalkBuilder(root).Overrides(overrides)));
+        Assert.AreSequenceEqual<string>(["keep.rs"], Collect(root, new WalkBuilder(root).Overrides(overrides)));
     }
 
     /// <summary>
     /// Verifies override whitelists take precedence over ignore-file rules and hidden filtering.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void OverrideWhitelistBeatsIgnoreAndHiddenFilters()
     {
         string root = CreateTempDirectory();
@@ -1012,13 +1014,13 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "visible.log"), string.Empty);
         Override overrides = new OverrideBuilder(root).Add("*.log").Build();
 
-        Assert.Equal([".hidden.log", "visible.log"], Collect(root, new WalkBuilder(root).Overrides(overrides)));
+        Assert.AreSequenceEqual<string>([".hidden.log", "visible.log"], Collect(root, new WalkBuilder(root).Overrides(overrides)));
     }
 
     /// <summary>
     /// Verifies directory-only overrides ignore matching directories.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DirectoryOnlyOverrideIgnoresMatchingDirectories()
     {
         string root = CreateTempDirectory();
@@ -1028,13 +1030,13 @@ public sealed class WalkTests
         File.WriteAllText(Path.Join(root, "src", "target"), string.Empty);
         Override overrides = new OverrideBuilder(root).Add("!target/").Build();
 
-        Assert.Equal(["src", "src/target"], Collect(root, new WalkBuilder(root).Overrides(overrides)));
+        Assert.AreSequenceEqual<string>(["src", "src/target"], Collect(root, new WalkBuilder(root).Overrides(overrides)));
     }
 
     /// <summary>
     /// Verifies selected file types whitelist matching files and ignore other files.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SelectedFileTypeFiltersFiles()
     {
         string root = CreateTempDirectory();
@@ -1046,13 +1048,13 @@ public sealed class WalkTests
             .Select("rust")
             .Build();
 
-        Assert.Equal(["src", "src/main.rs"], Collect(root, new WalkBuilder(root).FileTypes(fileTypes)));
+        Assert.AreSequenceEqual<string>(["src", "src/main.rs"], Collect(root, new WalkBuilder(root).FileTypes(fileTypes)));
     }
 
     /// <summary>
     /// Verifies negated file types ignore matching files and leave other files alone.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void NegatedFileTypeIgnoresMatchingFiles()
     {
         string root = CreateTempDirectory();
@@ -1063,13 +1065,13 @@ public sealed class WalkTests
             .Negate("c")
             .Build();
 
-        Assert.Equal(["main.rs"], Collect(root, new WalkBuilder(root).FileTypes(fileTypes)));
+        Assert.AreSequenceEqual<string>(["main.rs"], Collect(root, new WalkBuilder(root).FileTypes(fileTypes)));
     }
 
     /// <summary>
     /// Verifies include definitions inherit globs from existing file types.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FileTypeIncludeDefinitionsUseExistingGlobs()
     {
         string root = CreateTempDirectory();
@@ -1083,13 +1085,13 @@ public sealed class WalkTests
             .Select("combo")
             .Build();
 
-        Assert.Equal(["index.html", "lib.rs"], Collect(root, new WalkBuilder(root).FileTypes(fileTypes)));
+        Assert.AreSequenceEqual<string>(["index.html", "lib.rs"], Collect(root, new WalkBuilder(root).FileTypes(fileTypes)));
     }
 
     /// <summary>
     /// Verifies default file types include the pinned container type.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void DefaultFileTypesIncludeContainer()
     {
         string root = CreateTempDirectory();
@@ -1101,13 +1103,13 @@ public sealed class WalkTests
             .Select("container")
             .Build();
 
-        Assert.Equal(["Dockerfile", "dev.Containerfile"], Collect(root, new WalkBuilder(root).FileTypes(fileTypes)));
+        Assert.AreSequenceEqual<string>(["Dockerfile", "dev.Containerfile"], Collect(root, new WalkBuilder(root).FileTypes(fileTypes)));
     }
 
     /// <summary>
     /// Verifies file type whitelists bypass hidden filtering.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FileTypeWhitelistBypassesHiddenFiltering()
     {
         string root = CreateTempDirectory();
@@ -1118,13 +1120,13 @@ public sealed class WalkTests
             .Select("rust")
             .Build();
 
-        Assert.Equal([".main.rs"], Collect(root, new WalkBuilder(root).FileTypes(fileTypes)));
+        Assert.AreSequenceEqual<string>([".main.rs"], Collect(root, new WalkBuilder(root).FileTypes(fileTypes)));
     }
 
     /// <summary>
     /// Verifies file type ignores still apply after ignore-file whitelists.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FileTypesCanIgnoreIgnoreFileWhitelists()
     {
         string root = CreateTempDirectory();
@@ -1136,7 +1138,7 @@ public sealed class WalkTests
             .Select("rust")
             .Build();
 
-        Assert.Equal(["main.rs"], Collect(root, new WalkBuilder(root).FileTypes(fileTypes)));
+        Assert.AreSequenceEqual<string>(["main.rs"], Collect(root, new WalkBuilder(root).FileTypes(fileTypes)));
     }
 
     /// <summary>
@@ -1144,16 +1146,16 @@ public sealed class WalkTests
     /// </summary>
     /// <param name="fileType">The default file type to select.</param>
     /// <param name="fileName">The file name expected to match.</param>
-    [Theory]
-    [InlineData("bazel", "WORKSPACE.bazel")]
-    [InlineData("dockercompose", "docker-compose.prod.yml")]
-    [InlineData("license", "COPYING")]
-    [InlineData("msbuild", "solution.slnf")]
-    [InlineData("ruby", "Gemfile")]
-    [InlineData("tf", "prod.tfvars.json")]
-    [InlineData("typescript", "source.cts")]
-    [InlineData("vim", ".vimrc")]
-    [InlineData("zstd", "archive.zstd")]
+    [TestMethod]
+    [DataRow("bazel", "WORKSPACE.bazel")]
+    [DataRow("dockercompose", "docker-compose.prod.yml")]
+    [DataRow("license", "COPYING")]
+    [DataRow("msbuild", "solution.slnf")]
+    [DataRow("ruby", "Gemfile")]
+    [DataRow("tf", "prod.tfvars.json")]
+    [DataRow("typescript", "source.cts")]
+    [DataRow("vim", ".vimrc")]
+    [DataRow("zstd", "archive.zstd")]
     public void DefaultFileTypesIncludePinnedUpstreamPatterns(string fileType, string fileName)
     {
         string root = CreateTempDirectory();
@@ -1164,7 +1166,7 @@ public sealed class WalkTests
             .Select(fileType)
             .Build();
 
-        Assert.Equal([fileName], Collect(root, new WalkBuilder(root).FileTypes(fileTypes)));
+        Assert.AreSequenceEqual<string>([fileName], Collect(root, new WalkBuilder(root).FileTypes(fileTypes)));
     }
 
     private static List<string> Collect(string root, WalkBuilder builder)
@@ -1225,7 +1227,7 @@ public sealed class WalkTests
                 byte[] invalidDirectoryName = [(byte)'d', 0xff, (byte)'i', (byte)'r'];
                 byte[] invalidDirectoryPath = JoinRawUnixPath(rootBytes, invalidDirectoryName);
 
-                Assert.Throws<IOException>(() => RawUnixDirectory.Create(invalidDirectoryPath));
+                Assert.ThrowsExactly<IOException>(() => RawUnixDirectory.Create(invalidDirectoryPath));
             }
             finally
             {
@@ -1234,7 +1236,7 @@ public sealed class WalkTests
         }
         else
         {
-            Assert.Throws<PlatformNotSupportedException>(() => RawUnixDirectory.Create("unused"u8));
+            Assert.ThrowsExactly<PlatformNotSupportedException>(() => RawUnixDirectory.Create("unused"u8));
         }
     }
 

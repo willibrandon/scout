@@ -4,28 +4,29 @@ namespace Scout;
 /// <summary>
 /// Verifies the regex adapter over Scout's matcher ABI.
 /// </summary>
+[TestClass]
 public sealed class RegexMatcherTests
 {
     /// <summary>
     /// Verifies the adapter returns a by-value matcher span.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void FindsFirstMatch()
     {
         var matcher = RegexMatcher.Compile(@"(?i)[[:alpha:]]+\d+"u8);
 
         MatcherMatch? match = matcher.Find("11ABC123 yy"u8);
 
-        Assert.True(match.HasValue);
-        Assert.Equal(new MatcherMatch(2, 6), match.Value);
-        Assert.True(matcher.IsMatch("ABC123"u8));
-        Assert.False(matcher.IsMatch("ABC"u8));
+        Assert.IsTrue(match.HasValue);
+        Assert.AreEqual(new MatcherMatch(2, 6), match.Value);
+        Assert.IsTrue(matcher.IsMatch("ABC123"u8));
+        Assert.IsFalse(matcher.IsMatch("ABC"u8));
     }
 
     /// <summary>
     /// Verifies generic struct-sink iteration reports non-overlapping matches without delegates.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void IteratesMatchesThroughStructSink()
     {
         var matcher = RegexMatcher.Compile(@"\w+"u8);
@@ -33,20 +34,20 @@ public sealed class RegexMatcherTests
 
         int count = matcher.ForEachMatch("one two 3"u8, ref sink);
 
-        Assert.Equal(3, count);
-        Assert.Equal(3, sink.Count);
-        Assert.Equal(0, sink.Starts[0]);
-        Assert.Equal(4, sink.Starts[1]);
-        Assert.Equal(8, sink.Starts[2]);
-        Assert.Equal(3, sink.Lengths[0]);
-        Assert.Equal(3, sink.Lengths[1]);
-        Assert.Equal(1, sink.Lengths[2]);
+        Assert.AreEqual(3, count);
+        Assert.AreEqual(3, sink.Count);
+        Assert.AreEqual(0, sink.Starts[0]);
+        Assert.AreEqual(4, sink.Starts[1]);
+        Assert.AreEqual(8, sink.Starts[2]);
+        Assert.AreEqual(3, sink.Lengths[0]);
+        Assert.AreEqual(3, sink.Lengths[1]);
+        Assert.AreEqual(1, sink.Lengths[2]);
     }
 
     /// <summary>
     /// Verifies a sink can stop iteration synchronously.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public void SinkCanStopIteration()
     {
         var matcher = RegexMatcher.Compile(@"\w+"u8);
@@ -54,14 +55,14 @@ public sealed class RegexMatcherTests
 
         int count = matcher.ForEachMatch("one two"u8, ref sink);
 
-        Assert.Equal(0, count);
-        Assert.Equal(new MatcherMatch(0, 3), sink.Match);
+        Assert.AreEqual(0, count);
+        Assert.AreEqual(new MatcherMatch(0, 3), sink.Match);
     }
 
     /// <summary>
     /// Verifies function-pointer iteration passes explicit stack-rooted state.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public unsafe void IteratesMatchesThroughFunctionPointer()
     {
         var matcher = RegexMatcher.Compile(@"\w+"u8);
@@ -69,21 +70,21 @@ public sealed class RegexMatcherTests
 
         int count = matcher.ForEachMatch("one two 3"u8, &CollectCallback, state);
 
-        Assert.Equal(3, count);
-        Assert.Equal(3, state[0]);
-        Assert.Equal(0, state[1]);
-        Assert.Equal(3, state[2]);
-        Assert.Equal(4, state[3]);
-        Assert.Equal(3, state[4]);
-        Assert.Equal(8, state[5]);
-        Assert.Equal(1, state[6]);
-        Assert.Equal(9, state[7]);
+        Assert.AreEqual(3, count);
+        Assert.AreEqual(3, state[0]);
+        Assert.AreEqual(0, state[1]);
+        Assert.AreEqual(3, state[2]);
+        Assert.AreEqual(4, state[3]);
+        Assert.AreEqual(3, state[4]);
+        Assert.AreEqual(8, state[5]);
+        Assert.AreEqual(1, state[6]);
+        Assert.AreEqual(9, state[7]);
     }
 
     /// <summary>
     /// Verifies function-pointer iteration can stop synchronously.
     /// </summary>
-    [Fact]
+    [TestMethod]
     public unsafe void FunctionPointerCanStopIteration()
     {
         var matcher = RegexMatcher.Compile(@"\w+"u8);
@@ -91,10 +92,10 @@ public sealed class RegexMatcherTests
 
         int count = matcher.ForEachMatch("one two"u8, &StopCallback, state);
 
-        Assert.Equal(0, count);
-        Assert.Equal(0, state[0]);
-        Assert.Equal(3, state[1]);
-        Assert.Equal(7, state[2]);
+        Assert.AreEqual(0, count);
+        Assert.AreEqual(0, state[0]);
+        Assert.AreEqual(3, state[1]);
+        Assert.AreEqual(7, state[2]);
     }
 
     private static unsafe bool CollectCallback(void* state, ReadOnlySpan<byte> haystack, MatcherMatch match)
