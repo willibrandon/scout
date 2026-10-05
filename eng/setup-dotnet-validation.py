@@ -21,10 +21,34 @@ def extract_archive(archive: Path, destination: Path) -> None:
         with zipfile.ZipFile(archive) as source:
             source.extractall(destination)
     else:
-        if not callable(getattr(tarfile, "data_filter", None)):
-            raise RuntimeError("Safe tar extraction is unavailable in this Python installation.")
         with tarfile.open(archive) as source:
-            source.extractall(destination, filter="data")
+            if callable(getattr(tarfile, "data_filter", None)):
+                source.extractall(destination, filter="data")
+            else:
+                extract_tar_files(source, destination)
+
+
+def extract_tar_files(source: tarfile.TarFile, destination: Path) -> None:
+    """Copy only files and directories when the system Python lacks extraction filters."""
+    root = destination.resolve()
+    for member in source:
+        target = (root / member.name).resolve()
+        if Path(member.name).is_absolute() or not target.is_relative_to(root):
+            raise ValueError(f"Tar member escapes the destination: {member.name}")
+        if member.isdir():
+            target.mkdir(parents=True, exist_ok=True)
+        elif member.isfile():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with source.extractfile(member) as contents, target.open("wb") as output:
+                shutil.copyfileobj(contents, output)
+            # Match data_filter's file permissions without restoring ownership or special bits.
+            mode = member.mode & 0o755
+            if not mode & 0o100:
+                mode &= ~0o111
+            target.chmod(mode | 0o600)
+            os.utime(target, (member.mtime, member.mtime))
+        else:
+            raise ValueError(f"Tar links and special files require extraction filters: {member.name}")
 
 
 def main() -> None:
