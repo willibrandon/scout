@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Capture Alpine ARM64 release references
         run: |
           docker run --rm -v "$PWD:/scout" -w /scout \
@@ -60,7 +60,7 @@ jobs:
             pkg-config \
             zip \
             zlib1g-dev
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Capture ripgrep oracle row
         shell: sh
         run: eng/capture-ripgrep-oracle.sh
@@ -98,7 +98,7 @@ jobs:
             pkg-config \
             zip \
             zlib1g-dev
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Capture ripgrep oracle row
         shell: sh
         run: eng/capture-ripgrep-oracle.sh
@@ -123,7 +123,7 @@ jobs:
           - rid: osx-arm64
             runner: macos-26
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Capture ripgrep oracle row
         run: eng/capture-ripgrep-oracle.sh
       - name: Upload ripgrep oracle archive
@@ -147,7 +147,7 @@ jobs:
           - rid: win-arm64
             runner: windows-11-arm
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Capture ripgrep oracle row
         shell: pwsh
         run: eng/capture-ripgrep-oracle.ps1
@@ -172,6 +172,6 @@ jobs:
           - rid: osx-arm64
             runner: macos-26
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Capture macOS tool rows
         run: eng/capture-macos-tools.sh
