@@ -42,7 +42,7 @@ jobs:
         with:
           dotnet-version: |
             9.0.x
-            10.0.102
+            10.0.x
       - name: Install Linux AOT prerequisites
         if: runner.os == 'Linux'
         run: eng/install-linux-host-prereqs.sh
@@ -96,9 +96,11 @@ jobs:
           if [[ "$version" == *-* ]]; then
             prerelease=true
           fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "version_core=$version_core" >> "$GITHUB_OUTPUT"
-          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          {
+            echo "version=$version"
+            echo "version_core=$version_core"
+            echo "prerelease=$prerelease"
+          } >> "$GITHUB_OUTPUT"
 
   build-linux:
     name: native package (${{ matrix.rid }})
@@ -158,7 +160,7 @@ jobs:
         run: eng/verify-linux-prereqs.sh ${{ matrix.rid }}
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: 10.0.102
+          dotnet-version: 10.0.x
       - name: Build and package native binary
         shell: bash
         run: native/build-app-unix.sh ${{ matrix.rid }} --smoke-only
@@ -228,7 +230,7 @@ jobs:
           docker run --rm -v "$PWD:/scout" -w /scout \
             -e GITHUB_ACTIONS=true \
             -e SCOUT_RELEASE_VERSION="${{ needs.validate.outputs.version }}" \
-            mcr.microsoft.com/dotnet/sdk:10.0.102-alpine3.22-arm64v8@sha256:3686e722179cbe27f0a4ade4e8677aaf4c2f64a103dc160d5ff4592ce0afed02 \
+            mcr.microsoft.com/dotnet/sdk:10.0-alpine3.22-arm64v8 \
             sh -c 'apk add --no-cache bash && bash eng/run-musl-gates.sh'
       - name: Upload release and tool artifacts
         uses: actions/upload-artifact@v7
@@ -259,7 +261,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: 10.0.102
+          dotnet-version: 10.0.x
       - name: Build and package native binary
         run: native/build-app-unix.sh ${{ matrix.rid }} --smoke-only
       - name: Verify Unix shell completions
@@ -341,7 +343,7 @@ jobs:
         run: eng/setup-windows-nuget-cache.ps1
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: 10.0.102
+          dotnet-version: 10.0.x
       - name: Build and package native binary
         shell: cmd
         run: |
@@ -492,7 +494,7 @@ jobs:
         with:
           dotnet-version: |
             9.0.x
-            10.0.102
+            10.0.x
       - name: Restore
         run: dotnet restore Scout.slnx
       - name: Pack libraries
@@ -558,7 +560,7 @@ jobs:
         with:
           dotnet-version: |
             9.0.x
-            10.0.102
+            10.0.x
       - uses: actions/download-artifact@v8
         with:
           path: artifacts/downloaded
@@ -575,17 +577,17 @@ jobs:
           set -euo pipefail
           version="${{ needs.validate.outputs.version }}"
           expected=(
-            Scout.${version}.nupkg
-            Scout.IO.Globbing.${version}.nupkg
-            Scout.IO.Ignore.${version}.nupkg
-            Scout.Text.Regex.${version}.nupkg
-            Scout.linux-arm64.${version}.nupkg
-            Scout.linux-musl-arm64.${version}.nupkg
-            Scout.linux-x64.${version}.nupkg
-            Scout.osx-arm64.${version}.nupkg
-            Scout.osx-x64.${version}.nupkg
-            Scout.win-arm64.${version}.nupkg
-            Scout.win-x64.${version}.nupkg
+            "Scout.${version}.nupkg"
+            "Scout.IO.Globbing.${version}.nupkg"
+            "Scout.IO.Ignore.${version}.nupkg"
+            "Scout.Text.Regex.${version}.nupkg"
+            "Scout.linux-arm64.${version}.nupkg"
+            "Scout.linux-musl-arm64.${version}.nupkg"
+            "Scout.linux-x64.${version}.nupkg"
+            "Scout.osx-arm64.${version}.nupkg"
+            "Scout.osx-x64.${version}.nupkg"
+            "Scout.win-arm64.${version}.nupkg"
+            "Scout.win-x64.${version}.nupkg"
           )
           mapfile -t actual < <(find artifacts/nuget-source -maxdepth 1 -type f -name '*.nupkg' -printf '%f\n' | sort)
           diff -u <(printf '%s\n' "${expected[@]}" | sort) <(printf '%s\n' "${actual[@]}")
@@ -686,15 +688,17 @@ jobs:
           set -euo pipefail
           cd artifacts/release
           read_hash() { awk '{ print $1 }' "$1.sha256"; }
-          echo "sha256_linux_x64=$(read_hash scout-linux-x64.tar.gz)" >> "$GITHUB_OUTPUT"
-          echo "sha256_linux_arm64=$(read_hash scout-linux-arm64.tar.gz)" >> "$GITHUB_OUTPUT"
-          echo "sha256_osx_x64=$(read_hash scout-osx-x64.tar.gz)" >> "$GITHUB_OUTPUT"
-          echo "sha256_osx_arm64=$(read_hash scout-osx-arm64.tar.gz)" >> "$GITHUB_OUTPUT"
-          echo "sha256_win_x64=$(read_hash scout-win-x64.zip)" >> "$GITHUB_OUTPUT"
-          echo "sha256_win_arm64=$(read_hash scout-win-arm64.zip)" >> "$GITHUB_OUTPUT"
-          echo "sha256_win_x64_msi=$(read_hash scout-win-x64.msi)" >> "$GITHUB_OUTPUT"
-          echo "sha256_win_arm64_msi=$(read_hash scout-win-arm64.msi)" >> "$GITHUB_OUTPUT"
-          cat *.sha256
+          {
+            echo "sha256_linux_x64=$(read_hash scout-linux-x64.tar.gz)"
+            echo "sha256_linux_arm64=$(read_hash scout-linux-arm64.tar.gz)"
+            echo "sha256_osx_x64=$(read_hash scout-osx-x64.tar.gz)"
+            echo "sha256_osx_arm64=$(read_hash scout-osx-arm64.tar.gz)"
+            echo "sha256_win_x64=$(read_hash scout-win-x64.zip)"
+            echo "sha256_win_arm64=$(read_hash scout-win-arm64.zip)"
+            echo "sha256_win_x64_msi=$(read_hash scout-win-x64.msi)"
+            echo "sha256_win_arm64_msi=$(read_hash scout-win-arm64.msi)"
+          } >> "$GITHUB_OUTPUT"
+          cat -- ./*.sha256
       - name: Create GitHub Release
         shell: bash
         env:

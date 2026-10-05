@@ -11,7 +11,7 @@ commit = "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f"
 role = "source generators and repository policy analyzers"
 
 name = "Microsoft.CodeAnalysis.CSharp"
-version = "5.0.0"
+version_source = "Directory.Packages.props"
 ```
 
 The generated flag catalog is ordered from the pinned upstream flag definition
