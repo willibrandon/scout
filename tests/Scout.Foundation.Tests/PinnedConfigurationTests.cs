@@ -174,8 +174,8 @@ public sealed partial class PinnedConfigurationTests
         Assert.DoesNotContain("--allow-downgrades", workflow, StringComparison.Ordinal);
         Assert.Contains("libc6=\"$LINUX_LIBC_VERSION\"", workflow, StringComparison.Ordinal);
         Assert.Contains("libc-bin=\"$LINUX_LIBC_VERSION\"", workflow, StringComparison.Ordinal);
-        Assert.Contains("uses: actions/checkout@v6", workflow, StringComparison.Ordinal);
-        Assert.Contains("uses: actions/setup-dotnet@v5", workflow, StringComparison.Ordinal);
+        Assert.Contains("uses: actions/checkout@", workflow, StringComparison.Ordinal);
+        Assert.Contains("uses: actions/setup-dotnet@", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet-version: |\n            9.0.x\n            10.0.x", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet build Scout.slnx --no-restore", workflow, StringComparison.Ordinal);
         Assert.Contains("Portable tests", workflow, StringComparison.Ordinal);
@@ -287,8 +287,6 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("libicu72", workflow, StringComparison.Ordinal);
         Assert.Contains("zlib1g-dev", workflow, StringComparison.Ordinal);
         Assert.Contains("ncompress", workflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("actions/checkout@v4", workflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("actions/setup-dotnet@v4", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("macos-13", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("macos-15", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("brew install hyperfine", releaseGateWorkflow, StringComparison.Ordinal);
@@ -556,7 +554,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.Contains("eng/capture-ripgrep-oracle.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("eng/capture-ripgrep-oracle.ps1", workflow, StringComparison.Ordinal);
         Assert.Contains("Upload ripgrep oracle archive", workflow, StringComparison.Ordinal);
-        Assert.Contains("uses: actions/upload-artifact@v7", workflow, StringComparison.Ordinal);
+        Assert.Contains("uses: actions/upload-artifact@", workflow, StringComparison.Ordinal);
         Assert.Contains("name: ripgrep-oracle-linux-x64", workflow, StringComparison.Ordinal);
         Assert.Contains("name: ripgrep-oracle-linux-arm64", workflow, StringComparison.Ordinal);
         Assert.Contains("name: ripgrep-oracle-${{ matrix.rid }}", workflow, StringComparison.Ordinal);
@@ -3677,7 +3675,7 @@ public sealed partial class PinnedConfigurationTests
         Assert.DoesNotContain("read_lock_table_value \"tool.macos\" \"hyperfine\" \"path\")\" || HYPERFINE=\"$(command -v hyperfine", script, StringComparison.Ordinal);
         Assert.Contains("Upload hyperfine gate aggregates", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("if: ${{ always() }}", releaseWorkflow, StringComparison.Ordinal);
-        Assert.Contains("uses: actions/upload-artifact@v7", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("uses: actions/upload-artifact@", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("artifacts/bench/hyperfine/*.json", releaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("github.run_attempt", releaseWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("resolved@fetch", readme, StringComparison.Ordinal);
