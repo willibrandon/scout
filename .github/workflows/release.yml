@@ -33,12 +33,12 @@ jobs:
           - { rid: win-x64, runner: windows-2025-vs2026, vsarch: x64 }
           - { rid: win-arm64, runner: windows-11-arm, vsarch: arm64 }
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Use the Windows build drive for NuGet caches
         if: matrix.rid == 'win-x64'
         shell: pwsh
         run: eng/setup-windows-nuget-cache.ps1
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
             9.0.x
@@ -75,7 +75,7 @@ jobs:
       version_core: ${{ steps.version.outputs.version_core }}
       prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Validate release tag
         id: version
         shell: bash
@@ -154,11 +154,11 @@ jobs:
             zlib1g \
             zlib1g-dev \
             zstd
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Verify Linux prerequisites
         shell: sh
         run: eng/verify-linux-prereqs.sh ${{ matrix.rid }}
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
       - name: Build and package native binary
@@ -224,7 +224,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 360
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Build and validate Alpine release artifacts
         run: |
           docker run --rm -v "$PWD:/scout" -w /scout \
@@ -258,8 +258,8 @@ jobs:
     env:
       SCOUT_RELEASE_VERSION: ${{ needs.validate.outputs.version }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
       - name: Build and package native binary
@@ -336,12 +336,12 @@ jobs:
     env:
       SCOUT_RELEASE_VERSION: ${{ needs.validate.outputs.version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Use the Windows build drive for NuGet caches
         if: matrix.rid == 'win-x64'
         shell: pwsh
         run: eng/setup-windows-nuget-cache.ps1
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
       - name: Build and package native binary
@@ -471,7 +471,7 @@ jobs:
     needs: validate
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Pack pointer dotnet tool
         run: python3 eng/pack-dotnet-tool.py --version "${{ needs.validate.outputs.version }}" --pointer-only
       - name: Upload pointer package
@@ -489,8 +489,8 @@ jobs:
     needs: validate
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
             9.0.x
@@ -561,7 +561,7 @@ jobs:
       - library-packages
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
             9.0.x
@@ -975,7 +975,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Check if package exists in winget-pkgs
         id: check
         shell: pwsh
