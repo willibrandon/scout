@@ -48,17 +48,6 @@ def reviewed_reason(result: dict, policy: dict | None, repository: Path) -> str 
     native = policy["required_native_interop"]
     if result.get("ruleId") in native["rules"] and source in native["sources"]:
         return native["reason"]
-    parts = source.split("/")
-    external = policy["external_generators"]
-    # Accept only the SDK output layout inside a repository project. Scout's own
-    # source generators remain subject to the gate, including generated output.
-    if (result.get("ruleId") in external["rules"] and len(parts) >= 6
-            and parts[0] in ("src", "tests", "bench", "fuzz") and parts[2] == "obj"):
-        output = parts[5:]
-        if len(output) == 1 and output[0] in external["files"]:
-            return external["reason"]
-        if len(output) >= 4 and output[0] == "generated" and output[1] in external["directories"]:
-            return external["reason"]
     for review in policy["false_positives"]:
         if (result.get("ruleId") == review["rule"] and source == review["source"]
                 and result.get("message", {}).get("text") == review["message"]):
