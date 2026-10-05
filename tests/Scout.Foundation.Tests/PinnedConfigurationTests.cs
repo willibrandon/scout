@@ -697,6 +697,33 @@ public sealed partial class PinnedConfigurationTests
     }
 
     /// <summary>
+    /// Verifies framework-specific restores cannot overwrite shared project intermediates.
+    /// </summary>
+    [Theory]
+    [InlineData("", "", "true")]
+    [InlineData("Build", "Build", "true")]
+    [InlineData("RestorePackages", "Build", "true")]
+    [InlineData("Restore;ResolveProjectReferences;GenerateBuildDependencyFile", "Build", "false")]
+    [InlineData("Build", "Restore;ResolveProjectReferences;GenerateBuildDependencyFile", "false")]
+    [InlineData("restore", "", "false")]
+    public void SharedProjectRestoresRunSequentially(string innerTargets, string referenceTargets, string expected)
+    {
+        string root = FindRepositoryRoot();
+        string project = Path.Join(root, "src", "Scout.Regex", "Scout.Regex.csproj");
+        (int exitCode, string output, string error) = RunProcess("dotnet", [
+            "msbuild",
+            project,
+            "-nologo",
+            "-getProperty:BuildInParallel",
+            "-property:InnerTargets=\"" + innerTargets + "\"",
+            "-property:ProjectReferenceBuildTargets=\"" + referenceTargets + "\"",
+        ]);
+
+        Assert.True(exitCode == 0, output + error);
+        Assert.Equal(expected, output.Trim());
+    }
+
+    /// <summary>
     /// Verifies Native AOT and trimming policy is explicit instead of SDK-defaulted.
     /// </summary>
     [Fact]

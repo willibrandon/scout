@@ -1,5 +1,6 @@
 version: 2
 updates:
+  # Directory.Build.props serializes NuGet discovery restores of shared projects.
   - package-ecosystem: nuget
     directory: /
     schedule:

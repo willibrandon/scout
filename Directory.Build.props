@@ -44,6 +44,13 @@
     <PackageTags>regex;search;ripgrep;glob;gitignore;nativeaot;aot;bytes</PackageTags>
   </PropertyGroup>
 
+  <!-- NuGet cannot restore shared project intermediates concurrently.
+       Dependabot includes Restore in its framework and project-reference targets.
+       https://github.com/NuGet/Home/issues/7648 -->
+  <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(InnerTargets);$(ProjectReferenceBuildTargets)', '(?i)(^|;)Restore(;|$)'))">
+    <BuildInParallel>false</BuildInParallel>
+  </PropertyGroup>
+
   <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Scout.SourceGen'">
     <TargetFramework>netstandard2.0</TargetFramework>
     <ImplicitUsings>disable</ImplicitUsings>
