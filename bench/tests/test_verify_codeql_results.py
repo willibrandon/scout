@@ -86,7 +86,7 @@ class VerifyCodeQlResultsTests(unittest.TestCase):
         finding["ruleId"] = "cs/null-dereference"
         self.assertNotEqual(0, self.run_gate({"results": [finding]}, policy=policy).returncode)
 
-    def test_only_external_generated_sources_are_reviewed(self) -> None:
+    def test_generated_findings_still_fail_when_present_in_scoped_results(self) -> None:
         policy = self.review_policy()
         for source in (
             "src/Scout.Pcre2/obj/Debug/net10.0/generated/Microsoft.Interop.LibraryImportGenerator/Microsoft.Interop.LibraryImportGenerator/LibraryImports.g.cs",
@@ -97,7 +97,7 @@ class VerifyCodeQlResultsTests(unittest.TestCase):
                 finding = self.located_finding(source)
                 finding["ruleId"] = "cs/useless-assignment-to-local"
                 result = self.run_gate({"results": [finding]}, policy=policy)
-                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertNotEqual(0, result.returncode)
                 finding["ruleId"] = "cs/null-dereference"
                 self.assertNotEqual(0, self.run_gate({"results": [finding]}, policy=policy).returncode)
         for source in (
