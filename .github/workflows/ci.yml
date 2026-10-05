@@ -419,6 +419,8 @@ jobs:
           pwsh -NoProfile -ExecutionPolicy Bypass -File native/build-app-windows.ps1 ${{ matrix.rid }} -DifferentialMode SmokeOnly
           if errorlevel 1 exit /b 1
           python eng/verify-completions.py --scout artifacts/bin/${{ matrix.rid }}/scout.exe --shell powershell
+      - name: Build and run the Windows differential test host
+        run: dotnet test tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --filter "FullyQualifiedName~DifferentialCasePolicyTests|FullyQualifiedName~DifferentialOutputNormalizerTests"
 
   release-gates:
     name: release gates dispatch
