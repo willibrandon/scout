@@ -1,6 +1,6 @@
 ripgrep_commit = "e89fff89ac9af12e8d4ce9d5fd07beb408ca730f"
-dotnet_sdk = "10.0.102"
-dotnet_host_runtime = "10.0.10"
+dotnet_sdk = "10.0.401"
+dotnet_host_runtime = "10.0.12"
 nativeaot_runtime_framework = "10.0.2"
 macos_host = "macOS 26 arm64"
 xcode_version = "26.3"
@@ -32,13 +32,13 @@ sha256 = "0905f89daa94853c4c75bfe7fc9b7636a70afd7d84abdd10ee944349de3117b1"
 
 [[dotnet_sdk_archive]]
 rid = "osx-arm64"
-url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.102/dotnet-sdk-10.0.102-osx-arm64.tar.gz"
-sha512 = "5adb12a72ccfd327fe94ce99104ee7b9b56dbe40e354440a0b28313a4996ff34cc8560d605c1f30c247d364ae429de55d8c3b30ea19da04a716a059eb62b98ed"
+url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.401/dotnet-sdk-10.0.401-osx-arm64.tar.gz"
+sha512 = "69f64eb00dc045398755c440b152225d544301a345a146a16e86a56a0c52b7c94b2c331520e976dbb821f18d31930aafbd25bb85961e3517e0665414ce0cbcff"
 
 [[dotnet_runtime_archive]]
 rid = "osx-arm64"
-url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.10/dotnet-runtime-10.0.10-osx-arm64.tar.gz"
-sha512 = "79cbc64bfeb806d5f2a9e0a2a2ed336c7aa275b0438bbd88d36236a1b6203950546b49ff307cc5067c89434ffe22c021a594b2f8adad71146a5ece825652bd85"
+url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.12/dotnet-runtime-10.0.12-osx-arm64.tar.gz"
+sha512 = "d1b422c2afecb5e741430584c3e1887d5e0f2df321a80d492fdd13d8c7f99579f0dbbf34e348bc512cb276f0f86b4645423a032ded52808b74ab8eb0d7bf2a6d"
 
 [[ripgrep_oracle]]
 rid = "linux-musl-arm64"
@@ -949,63 +949,63 @@ sha256 = "23a2e11b02b3b8d15fb5613a625e3edb2c61e70e3c581abfd638719a4088200d"
 
 [[dotnet_sdk_archive]]
 rid = "linux-x64"
-url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.102/dotnet-sdk-10.0.102-linux-x64.tar.gz"
-sha512 = "7adf40e8e5547970391cfbe474c3874c6918ce3575ac398f376c78502134e1c8a2fa3da9aca281fdaeda81671f56c851ebe9e74c5b57c5a298bd45deba63565d"
+url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.401/dotnet-sdk-10.0.401-linux-x64.tar.gz"
+sha512 = "51c8b999af9e8dd9998c9edc5944e19a90788862068acd38694e098889054ce8c23d4f0c5cccfa16bf187d044562359e5ee69a9f8ad0bbe913ba90311fbce25b"
 
 [[dotnet_sdk_archive]]
 rid = "linux-arm64"
-url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.102/dotnet-sdk-10.0.102-linux-arm64.tar.gz"
-sha512 = "1254141153d29b5b926e0e7b0b172a25f9c096b8ed6a182f54062c5e0b41384b30e10e2bf1ebe86ed0f58f4ff762203acd83bcf23fefb59c07af45332d794700"
+url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.401/dotnet-sdk-10.0.401-linux-arm64.tar.gz"
+sha512 = "58ace73ced6b4360754689a686bdfb8a317f4da6cb8bb416dbc7d0ba9f47e43e3c09f5eb1f1a1cfaacbd10df9558da4882bf2a5e195d6ab56a02c1f9f76102ed"
 
 [[dotnet_sdk_archive]]
 rid = "linux-musl-arm64"
-url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.102/dotnet-sdk-10.0.102-linux-musl-arm64.tar.gz"
-sha512 = "10be1f3f2516fbc1049ad8fcb00bd12bbb16a2d20f708b6cd0177cd8775d01e9dec10ec1fbe4b570d7c82b158cb745d77e8ec66ff0b9f56327778562ba1a77be"
+url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.401/dotnet-sdk-10.0.401-linux-musl-arm64.tar.gz"
+sha512 = "01ea3f0b673ef1745140754f91a500ecfd37f2342d778995ff4c7df9c9d415211c724c0d02ed73da3bcf858e9074fbadbf6f07f0067b58072bca1cabb31aa88b"
 
 [[dotnet_sdk_archive]]
 rid = "osx-x64"
-url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.102/dotnet-sdk-10.0.102-osx-x64.tar.gz"
-sha512 = "5420d5cabdb7aa4c0e1a85907474dac873d20ccc5bf2810680f0a4d1fc9de948e9b7be15f3464fcde6be811c85b4ce290ecb6585f892077f10f40daaed03249e"
+url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.401/dotnet-sdk-10.0.401-osx-x64.tar.gz"
+sha512 = "33401b4a2da8554e3306db6072ea8569d9fcc608509c271e0aa4b39e7cc432da3631f14e7e1e2445d67d72550d18ce44a8bbd2382a756867ad2edab6b1c963c0"
 
 [[dotnet_sdk_archive]]
 rid = "win-x64"
-url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.102/dotnet-sdk-10.0.102-win-x64.zip"
-sha512 = "086bb7cfced5d2f531233307502fc8ce3de08850d3891e4d812542314904e1edf4b313a1a3710be1fc2ac9fecea8d511766346a6ac9f24c2b81a2ea0bedeaf16"
+url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.401/dotnet-sdk-10.0.401-win-x64.zip"
+sha512 = "24b670ad3d923bfcf47df6c3b034152398b42f6dbc388e10d783aee1cfb5e5817d399fc0ae2a12cfa822a55e61d34830ccb15c50ef6efee437ab874bb7c79430"
 
 [[dotnet_sdk_archive]]
 rid = "win-arm64"
-url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.102/dotnet-sdk-10.0.102-win-arm64.zip"
-sha512 = "a68c5c855ba81c6898cf40225ece3e5c0f93cd3c3c2b5451e6acd39de87d2a896ca7ca5e718dc46ce0daf171903dd18bfd9c684dd51813a3f47b2bd886ccddcc"
+url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.401/dotnet-sdk-10.0.401-win-arm64.zip"
+sha512 = "8272eaab6f06ad658b1976e19d88beed287a601f968b71d5c26b75d10587cf087665c599d2e136a911002f955c97f59aa8692581bbf6b8e7af5f82604c810256"
 
 [[dotnet_runtime_archive]]
 rid = "linux-x64"
-url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.10/dotnet-runtime-10.0.10-linux-x64.tar.gz"
-sha512 = "74b2b41ee177fe72da02741d5ba30e8a3c5ead44151d7a72a04ed81a0a933e827f5f8cfcc048ba4e8de5aeb7651953761b7586277d0bcce2e01323ca29ccb813"
+url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.12/dotnet-runtime-10.0.12-linux-x64.tar.gz"
+sha512 = "58388fdde4f13bd703c7a6f7defb3300b17e42ba5fe8bca50066f80f64ac7406620dcdfb4acc1eff7992750c8cc5cff8369dd12d09730c8a9e8760d6032f7f6e"
 
 [[dotnet_runtime_archive]]
 rid = "linux-arm64"
-url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.10/dotnet-runtime-10.0.10-linux-arm64.tar.gz"
-sha512 = "3ea2ac626fdb0f26bb52f02584ae5e68ee88c275e740b34d93918ad380985d0dbfa1632c017658dfddc5fba396114b62748efc11b25897877814a4a4c5022edc"
+url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.12/dotnet-runtime-10.0.12-linux-arm64.tar.gz"
+sha512 = "ac1e0090391085ba70c7457adaaa8f6cc20dc216b9b368b4227a427de271708d783380c7b955b7be4897ff24849fbe5c3b7ec1cb1c38345a725de9a3812280eb"
 
 [[dotnet_runtime_archive]]
 rid = "linux-musl-arm64"
-url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.10/dotnet-runtime-10.0.10-linux-musl-arm64.tar.gz"
-sha512 = "1e97ed072922547b5849a9693beee47d30bce255c944769499fe2865ba9fe5f8d38b1896de2fb6d339017298dca118a744a52815c78a8cd36fb96c7118e18bef"
+url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.12/dotnet-runtime-10.0.12-linux-musl-arm64.tar.gz"
+sha512 = "8f369a9ff84e06b570b91baf11038d6751a223500131477080f03e473bb5d3c75d39f3b83a5af7949ef838468d7e1beb46529cd654702e4d98e17e34b4038744"
 
 [[dotnet_runtime_archive]]
 rid = "osx-x64"
-url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.10/dotnet-runtime-10.0.10-osx-x64.tar.gz"
-sha512 = "4269fde5d17bee092f47fb63387c0bb1ab58b21d4af8eb0ead118b51d677fc7dada9b8f46cf3d1e25449c07f7e0350938cd741e882ed43bf6ab1541dccd489da"
+url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.12/dotnet-runtime-10.0.12-osx-x64.tar.gz"
+sha512 = "c5019357c9d8fbe30b49ec8f81ae85be56a784d8b4b75f470e931583c39e082773c089b39785b322770a298ab08636c6b30e695a2397fc311060f73c98743b48"
 
 [[dotnet_runtime_archive]]
 rid = "win-x64"
-url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.10/dotnet-runtime-10.0.10-win-x64.zip"
-sha512 = "2161dfa1cf027cdc074de7195b5f206b17ebd829ae415b9e7c9ee5f06d3952b6583030022dbe0d6e9221b5c577c411d7cd5322241f6d2299d9c886641215699b"
+url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.12/dotnet-runtime-10.0.12-win-x64.zip"
+sha512 = "844fa99e16fd6f44e0a7c29def7a82d7846902334d6a955248a9519a4dddb3f5acceb9c9223bef69f8c83b8ae2417537e5b76dddf79fb7117dc85b5039bc1297"
 
 [[dotnet_runtime_archive]]
 rid = "win-arm64"
-url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.10/dotnet-runtime-10.0.10-win-arm64.zip"
-sha512 = "69f575e8a612adcb360689b0c4099c097e58ce48905b9ab2c109855513e0acda0e688cd40326b7ba3eef8b26b793589cf2a4c68423f73d3d4c8f9e3dc4c254c4"
+url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.12/dotnet-runtime-10.0.12-win-arm64.zip"
+sha512 = "1f939a42c52919e789038fed6d410771eb41b5d0ff65c6dd117b200a5623a734cb6b2a25e00d4932d779b3bbe200f165977633d18fdb8dec03f9307527169c04"
 
 [[dotnet_library_runtime_archive]]
 rid = "linux-x64"
