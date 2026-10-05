@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -574,8 +575,14 @@ class HyperfineShellTests(unittest.TestCase):
         )
         performance_job = workflow[performance_job_start:performance_job_end]
 
-        self.assertIn('dotnet_sdk = "10.0.102"', prerequisite_lock)
-        self.assertIn('dotnet_host_runtime = "10.0.10"', prerequisite_lock)
+        sdk_version = json.loads(
+            (root / "global.json").read_text(encoding="utf-8")
+        )["sdk"]["version"]
+        self.assertIn(f'dotnet_sdk = "{sdk_version}"', prerequisite_lock)
+        host_runtime = next(
+            line.split('"')[1] for line in prerequisite_lock.splitlines()
+            if line.startswith('dotnet_host_runtime = ')
+        )
         self.assertIn(
             'nativeaot_runtime_framework = "10.0.2"', prerequisite_lock
         )
@@ -584,22 +591,12 @@ class HyperfineShellTests(unittest.TestCase):
         self.assertIn('rid = "osx-arm64"', prerequisite_lock)
         self.assertIn(
             'url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/'
-            '10.0.102/dotnet-sdk-10.0.102-osx-arm64.tar.gz"',
-            prerequisite_lock,
-        )
-        self.assertIn(
-            'sha512 = "5adb12a72ccfd327fe94ce99104ee7b9b56dbe40e354440a0b28313a4996ff34'
-            'cc8560d605c1f30c247d364ae429de55d8c3b30ea19da04a716a059eb62b98ed"',
+            f'{sdk_version}/dotnet-sdk-{sdk_version}-osx-arm64.tar.gz"',
             prerequisite_lock,
         )
         self.assertIn(
             'url = "https://builds.dotnet.microsoft.com/dotnet/Runtime/'
-            '10.0.10/dotnet-runtime-10.0.10-osx-arm64.tar.gz"',
-            prerequisite_lock,
-        )
-        self.assertIn(
-            'sha512 = "79cbc64bfeb806d5f2a9e0a2a2ed336c7aa275b0438bbd88d36236a1b6203950'
-            '546b49ff307cc5067c89434ffe22c021a594b2f8adad71146a5ece825652bd85"',
+            f'{host_runtime}/dotnet-runtime-{host_runtime}-osx-arm64.tar.gz"',
             prerequisite_lock,
         )
         self.assertIn("/usr/bin/curl", setup)

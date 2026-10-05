@@ -5,7 +5,7 @@ set -eu
 apk add --no-cache bash binutils brotli build-base bzip2 clang curl fish git gzip \
     icu-libs lz4 openssl-dev perl python3 tar unzip xz zlib-dev zsh zstd
 
-ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+ROOT="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 mkdir -p "$ROOT/artifacts/prereqs/linux-musl-arm64"
 source_record="$(python3 -c 'import sys,tomllib; r=tomllib.load(open(sys.argv[1], "rb"))["musl_compress_source"]; print(r["url"]); print(r["sha256"])' "$ROOT/tests/PREREQS.lock")"
 source_url="$(printf '%s\n' "$source_record" | sed -n '1p')"
@@ -26,8 +26,11 @@ done > "$ROOT/artifacts/prereqs/linux-musl-arm64/tools.sha256"
 cc "$ROOT/native/entry/verify-linux-arm64-abi.c" -o "$ROOT/artifacts/prereqs/linux-musl-arm64/verify-abi"
 "$ROOT/artifacts/prereqs/linux-musl-arm64/verify-abi" > "$ROOT/artifacts/prereqs/linux-musl-arm64/abi.txt"
 
-# The SDK image supplies .NET 10; the library tests also execute on .NET 9.
+# Install current SDK feature updates even when the Alpine image stops advancing.
+# The library tests also execute on .NET 9.
 curl --fail --silent --show-error --location https://dot.net/v1/dotnet-install.sh \
     --output "$ROOT/artifacts/prereqs/linux-musl-arm64/dotnet-install.sh"
+bash "$ROOT/artifacts/prereqs/linux-musl-arm64/dotnet-install.sh" \
+    --channel 10.0 --quality GA --install-dir /usr/share/dotnet
 bash "$ROOT/artifacts/prereqs/linux-musl-arm64/dotnet-install.sh" \
     --channel 9.0 --runtime dotnet --install-dir /usr/share/dotnet

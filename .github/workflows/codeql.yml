@@ -31,7 +31,7 @@ jobs:
           - { language: c-cpp, build-mode: manual }
           - { language: csharp, build-mode: manual }
           - { language: python, build-mode: none }
-          - { language: rust, build-mode: none }
+          # upstream/*.rs are reference snippets, not a buildable Rust project.
     steps:
       - uses: actions/checkout@v6
         with:
@@ -41,7 +41,7 @@ jobs:
         with:
           dotnet-version: |
             9.0.x
-            10.0.102
+            10.0.x
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
