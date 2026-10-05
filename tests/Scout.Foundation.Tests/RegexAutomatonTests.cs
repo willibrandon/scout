@@ -5983,6 +5983,8 @@ public sealed class RegexAutomatonTests
     [Fact(Timeout = PathologicalNoMatchTimeoutMilliseconds)]
     public void SharedExactStartPrefixBoundsHugeEmptyRepetitionAnalysis()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         RegexSyntaxTree tree = RegexSyntaxParser.Parse(
             "abcdefgh(?:){1000000000}|abcdefgh(?:){1000000000}"u8);
         var options = new RegexCompileOptions(
@@ -5991,8 +5993,10 @@ public sealed class RegexAutomatonTests
             multiLine: false,
             dotMatchesNewline: false);
 
+        cancellationToken.ThrowIfCancellationRequested();
         var prefilter = RegexPrefilter.Compile(tree.Root, options);
 
+        cancellationToken.ThrowIfCancellationRequested();
         Assert.NotNull(prefilter);
         Assert.Equal(RegexPrefilterKind.RequiredLiteral, prefilter.Kind);
         Assert.Equal(0, prefilter.RequiredLiteralWindow);
@@ -7263,6 +7267,8 @@ public sealed class RegexAutomatonTests
     [Fact(Timeout = PathologicalNoMatchTimeoutMilliseconds)]
     public void BoundedAcyclicBranchWorkBudgetPreventsExponentialNoMatch()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         string pattern = string.Concat(Enumerable.Repeat("a?", 40)) + "a{40}b";
         RegexNfa nfa = CompileNfa(System.Text.Encoding.UTF8.GetBytes(pattern));
         Assert.True(RegexBoundedBacktracker.CanCompile(nfa));
@@ -7270,6 +7276,7 @@ public sealed class RegexAutomatonTests
         var pikeVm = new PikeVm(nfa);
         var bounded = new RegexBoundedBacktracker(nfa);
 
+        cancellationToken.ThrowIfCancellationRequested();
         Assert.False(pikeVm.TryMatchAt(haystack, start: 0, out int expectedLength));
         Assert.False(bounded.TryMatchAt(haystack, start: 0, out int actualLength));
         Assert.Equal(expectedLength, actualLength);
@@ -9103,6 +9110,8 @@ public sealed class RegexAutomatonTests
     [Fact(Timeout = PathologicalNoMatchTimeoutMilliseconds)]
     public void RejectsUnterminatedRepeatedRegexSignatureWithoutStalling()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         var automaton = RegexAutomaton.Compile(
             @"(?:public|private|protected|internal)[^;={}]*\([^)]*(?:,[^)]*){8,}\)"u8,
             multiLine: true,
@@ -9114,10 +9123,12 @@ public sealed class RegexAutomatonTests
             dotMatchesNewline: false,
             dfaSizeLimit: 0);
 
+        cancellationToken.ThrowIfCancellationRequested();
         byte[] haystack = System.Text.Encoding.UTF8.GetBytes(
             "internal static bool Foo(" +
             string.Concat(Enumerable.Repeat("ReadOnlyMemory<byte>? replacement,", 20)));
 
+        cancellationToken.ThrowIfCancellationRequested();
         Assert.Null(automaton.Find(haystack));
         Assert.Null(fallbackAutomaton.Find(haystack));
     }
@@ -9128,14 +9139,18 @@ public sealed class RegexAutomatonTests
     [Fact(Timeout = PathologicalNoMatchTimeoutMilliseconds)]
     public void RejectsManyFailedSignaturePrefixesWithoutRescanningRemainder()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         var automaton = RegexAutomaton.Compile(
             @"(?:public|private|protected|internal)[^;={}]*\([^)]*(?:,[^)]*){8,}\)"u8,
             multiLine: true,
             dotMatchesNewline: false);
 
+        cancellationToken.ThrowIfCancellationRequested();
         byte[] haystack = System.Text.Encoding.UTF8.GetBytes(
             string.Concat(Enumerable.Repeat("public nope;\n", 20_000)));
 
+        cancellationToken.ThrowIfCancellationRequested();
         Assert.Null(automaton.Find(haystack));
     }
 
@@ -9538,6 +9553,8 @@ public sealed class RegexAutomatonTests
     [Fact(Timeout = PathologicalNoMatchTimeoutMilliseconds)]
     public void RejectsDisjointByteRunSuffixBoundaryNoMatchWithoutRescanning()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         var automaton = RegexAutomaton.Compile(
             @"[0-24-68-9A-CE-GI-KM-OQ-SU-WY-Za-ce-gi-km-oq-su-wy-z]{100,}(?-u:[\x00-\x29])\b"u8,
             caseInsensitive: false,
@@ -9547,6 +9564,7 @@ public sealed class RegexAutomatonTests
             "💩" +
             string.Concat(Enumerable.Repeat("01245689ABCEFGIJKMNOQRSUVWYZabcefgijkmnoqrsuvwyz", 2_000)));
 
+        cancellationToken.ThrowIfCancellationRequested();
         Assert.Equal(RegexEngineKind.SimpleSequence, GetEngineKind(automaton));
         Assert.Null(automaton.Find(haystack));
         Assert.Equal(0, automaton.CountMatches(haystack));

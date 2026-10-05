@@ -40,17 +40,17 @@
 
   <ItemGroup>
     <ScoutSuppressionScanFile Include="$(MSBuildThisFileDirectory)**/*.cs"
-                              Exclude="$(MSBuildThisFileDirectory)**/bin/**" />
+                              Exclude="$(MSBuildThisFileDirectory)**/bin/**;$(MSBuildThisFileDirectory)**/obj/**" />
     <ScoutSuppressionScanFile Include="$(MSBuildThisFileDirectory)**/*.props"
-                              Exclude="$(MSBuildThisFileDirectory)**/bin/**" />
+                              Exclude="$(MSBuildThisFileDirectory)**/bin/**;$(MSBuildThisFileDirectory)**/obj/**" />
     <ScoutSuppressionScanFile Include="$(MSBuildThisFileDirectory)**/*.targets"
-                              Exclude="$(MSBuildThisFileDirectory)**/bin/**" />
+                              Exclude="$(MSBuildThisFileDirectory)**/bin/**;$(MSBuildThisFileDirectory)**/obj/**" />
     <ScoutSuppressionScanFile Include="$(MSBuildThisFileDirectory)**/.editorconfig"
-                              Exclude="$(MSBuildThisFileDirectory)**/bin/**" />
+                              Exclude="$(MSBuildThisFileDirectory)**/bin/**;$(MSBuildThisFileDirectory)**/obj/**" />
     <ScoutSuppressionScanFile Include="$(MSBuildThisFileDirectory)**/.globalconfig"
-                              Exclude="$(MSBuildThisFileDirectory)**/bin/**" />
+                              Exclude="$(MSBuildThisFileDirectory)**/bin/**;$(MSBuildThisFileDirectory)**/obj/**" />
     <ScoutGlobalSuppressionsFile Include="$(MSBuildThisFileDirectory)**/GlobalSuppressions.cs"
-                                 Exclude="$(MSBuildThisFileDirectory)**/bin/**" />
+                                 Exclude="$(MSBuildThisFileDirectory)**/bin/**;$(MSBuildThisFileDirectory)**/obj/**" />
     <ScoutSkippedTestScanFile Include="$(MSBuildThisFileDirectory)tests/**/*.cs"
                               Exclude="$(MSBuildThisFileDirectory)**/bin/**;$(MSBuildThisFileDirectory)**/obj/**" />
   </ItemGroup>

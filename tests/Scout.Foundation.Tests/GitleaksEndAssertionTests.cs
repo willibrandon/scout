@@ -48,6 +48,8 @@ public sealed class GitleaksEndAssertionTests
     [InlineData(true)]
     public void ExactRuleRejectsFourMiBCandidateCorpusThroughDfaFastPath(bool invalid)
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
         var regex = ByteRegex.Compile(
             Pattern,
             new ByteRegexOptions
@@ -58,6 +60,7 @@ public sealed class GitleaksEndAssertionTests
         byte[] input = CreateCandidateCorpus(invalid);
         RegexAutomaton automaton = GetAutomaton(regex);
 
+        cancellationToken.ThrowIfCancellationRequested();
         Assert.Equal(RegexEngineKind.PikeVm, automaton.EngineKind);
         Assert.True(HasPrimaryUnanchoredDfaRunner(automaton));
         Assert.Null(regex.FindCaptures(input));

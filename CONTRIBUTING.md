@@ -56,6 +56,10 @@ dotnet test tests/Scout.Regex.Tests/Scout.Regex.Tests.csproj --no-restore
 dotnet test tests/Scout.Differential.Tests/Scout.Differential.Tests.csproj --no-restore
 ```
 
+The test projects use VSTest and Coverlet. `xunit.v3.mtp-off` is xUnit's
+supported package for this setup on .NET 10; it keeps `dotnet test`, the Visual
+Studio adapter, and the coverage collector working together.
+
 The full solution test run is expected before release-grade changes, but it
 requires the pinned oracle setup:
 
