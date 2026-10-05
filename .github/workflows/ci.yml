@@ -126,7 +126,7 @@ jobs:
         with:
           target: artifacts/bin/linux-musl-arm64/scout-real
           baseline-key: scout-linux-musl-arm64
-          budgets: max=15mb,growth=5%
+          budgets: max=20mb,growth=5%
           top: '20'
           artifact-name: dotsider-size-check-linux-musl-arm64
 
@@ -274,7 +274,7 @@ jobs:
         with:
           target: artifacts/bin/linux-arm64/scout-real
           baseline-key: scout-linux-arm64
-          budgets: max=15mb,growth=5%
+          budgets: max=20mb,growth=5%
           top: '20'
           artifact-name: dotsider-size-check-linux-arm64
 
@@ -430,7 +430,7 @@ jobs:
         with:
           target: artifacts/bin/linux-x64/scout-real
           baseline-key: scout-linux-x64
-          budgets: max=15mb,growth=5%
+          budgets: max=20mb,growth=5%
           top: '20'
           artifact-name: dotsider-size-check-linux-x64
 

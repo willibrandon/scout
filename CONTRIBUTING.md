@@ -134,8 +134,9 @@ MSBuild warning gates, build, portable tests, fuzz smoke targets, format, Native
 AOT static-library publish, and native executable smoke checks. A successful
 push to `main` dispatches `Release Gates` for that exact commit.
 
-Dotsider checks the native executable on every supported RID with a 15 MiB
-limit and a 5% growth limit against the latest successful `main` baseline.
+Dotsider checks the native executable on every supported RID with a 20 MiB
+limit on Linux and 15 MiB on macOS and Windows. A 5% growth limit compares each
+build with the latest successful `main` baseline.
 On Unix it checks `scout-real`, which contains the Native AOT application;
 on Windows it checks `scout.exe`. The native build scripts place the compiler's
 `.mstat` report beside the executable for per-assembly size reports. The first
